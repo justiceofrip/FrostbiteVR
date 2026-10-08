@@ -50,13 +50,14 @@ Known visual issues include the floating optic dot and some LOD/animation artifa
 ## Build without a game or headset
 
 On Windows, install Visual Studio C++ x86/x64 tools and the Windows SDK,
-CMake 3.24+, Ninja, PowerShell 7 and Python 3.10+:
+CMake 3.24+, Ninja, PowerShell 7 and Python 3.11+:
 
 ```powershell
 git clone https://github.com/justiceofrip/FrostbiteVR.git
 cd FrostbiteVR
 .\Build.ps1 -Architecture x86 -Jobs 2
 .\Build.ps1 -Architecture x64 -Jobs 2
+python -m pip install -r requirements-dev.txt
 python -B -m unittest discover -s tests -p 'test_*.py'
 ```
 

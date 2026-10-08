@@ -1,7 +1,7 @@
 # Building the developer snapshot
 
 Use 64-bit Windows, PowerShell 7, Visual Studio C++ tools with x86/x64 support and
-the Windows SDK, CMake 3.24+, Ninja, and Python 3.10+. CMake, Ninja and Python must
+the Windows SDK, CMake 3.24+, Ninja, and Python 3.11+. CMake, Ninja and Python must
 be on PATH. `Build.ps1` imports the installed Visual Studio compiler environment.
 
 ## Default source build
@@ -9,6 +9,7 @@ be on PATH. `Build.ps1` imports the installed Visual Studio compiler environment
 ```powershell
 .\Build.ps1 -Architecture x86 -Jobs 2
 .\Build.ps1 -Architecture x64 -Jobs 2
+python -m pip install -r requirements-dev.txt
 python -B -m unittest discover -s tests -p 'test_*.py'
 ```
 
@@ -16,6 +17,9 @@ Builds and logs go to ignored `build/` and `reports/` directories. Ordinary CTes
 does not launch BC2, select the installed XR runtime or run optional hardware GPU
 probes. The x86 native module matches BC2's architecture; the x64 OpenXR host is a
 separate process. A successful x64 build does not provide a native BF3/BF4 adapter.
+
+`requirements-dev.txt` pins NumPy and Pillow for offline geometry and image tests.
+Use a virtual environment if you keep other projects' Python dependencies separate.
 
 ## Current checkpoint configuration (203)
 

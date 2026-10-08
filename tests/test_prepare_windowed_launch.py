@@ -8,6 +8,8 @@ mod = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(mod)
 
 
+# CI can expose TEMP through an 8.3 alias. Canonicalize the TEST fixture;
+# production still rejects redirected/unapproved settings paths.
 class WindowedPreparationTests(unittest.TestCase):
     def test_preserves_unrelated_text_encoding_and_newlines(self):
         text = "; native prefs\r\n[WindowSettings]\r\nWidth=1920\r\n Fullscreen = TRUE ; keep\r\nVSync=true\r\n[Graphics]\nFullscreen=true\nTexture=high"
@@ -39,7 +41,7 @@ class WindowedPreparationTests(unittest.TestCase):
 
     def test_dry_run_then_backup_atomic_apply_then_idempotence(self):
         with tempfile.TemporaryDirectory() as folder:
-            path = Path(folder) / "settings.ini"
+            path = Path(folder).resolve() / "settings.ini"
             original = b"[WindowSettings]\r\nWidth=1920\r\nFullscreen=true\r\n[Graphics]\r\nMSAA=3\r\n"
             path.write_bytes(original)
             report = mod.prepare(path, path, lambda: [])
@@ -55,7 +57,7 @@ class WindowedPreparationTests(unittest.TestCase):
 
     def test_live_game_and_wrong_path_refuse_without_writes(self):
         with tempfile.TemporaryDirectory() as folder:
-            path = Path(folder) / "settings.ini"
+            path = Path(folder).resolve() / "settings.ini"
             original = b"[WindowSettings]\nFullscreen=true"
             path.write_bytes(original)
             with self.assertRaises(mod.PreparationError):
@@ -67,7 +69,7 @@ class WindowedPreparationTests(unittest.TestCase):
 
     def test_launch_during_preparation_preserves_original(self):
         with tempfile.TemporaryDirectory() as folder:
-            path = Path(folder) / "settings.ini"
+            path = Path(folder).resolve() / "settings.ini"
             original = b"[WindowSettings]\nFullscreen=true"
             path.write_bytes(original)
             calls = []
@@ -84,7 +86,7 @@ class WindowedPreparationTests(unittest.TestCase):
 
     def test_concurrent_settings_edit_is_not_overwritten(self):
         with tempfile.TemporaryDirectory() as folder:
-            path = Path(folder) / "settings.ini"
+            path = Path(folder).resolve() / "settings.ini"
             original = b"[WindowSettings]\nFullscreen=true"
             path.write_bytes(original)
             calls = []
