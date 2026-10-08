@@ -1,0 +1,338 @@
+{
+  "schema": "fvr.bc2.zero-bolt-batch-prerequisite-review.v1",
+  "status": "proposed_private_diagnostic_compiled_prerequisites",
+  "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+  "conclusion": "These12 exact configurations share the already-reviewed AutomaticFire2/rtMagazine1 executable route; no new asset-name ABI or helper implementation is introduced.",
+  "review_basis": [
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\magazine-family-proof-20261003-review\\review.json",
+      "sha256": "1865ac3e6a14b8918931b5d03e08aa2be25ce8db99cc018fb923e642030f661d"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\pipeline-runtime-20261005\\root-monitor\\resource-hands225-01\\resource-driver-audit-v3.json",
+      "sha256": "b0e8b36ce90bc9dd9462075b3f861c7d2513d273b735ad78da6e99cff3026124",
+      "scope": "Actual scoped-XM8 resource return and replacement only; does not assert12variant native runs."
+    }
+  ],
+  "current_sources": [
+    {
+      "path": "src/games/bc2/Bc2MagazineNativeProfile.h",
+      "sha256": "4b000b54eb61794d5aa4344c8003351a02a143424de2bc9328722a11e7d56f32"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadConfigDescriptor.h",
+      "sha256": "10445a3c10491f0a12d226b6b8cdff2f6d0d1f8a066b393012ecd0021f6c8d81"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadFlowRuntime.cpp",
+      "sha256": "bc93586e9a68a777e0a933bb0d020b9d55932c91fcaf19ada3dabdbcc8d9ddda"
+    },
+    {
+      "path": "src/games/bc2/Bc2MagazineAmmoNative.h",
+      "sha256": "8c05243d84ff5395bed641949b13cdb6ca0840bc5604d9537dd143dd26427f62"
+    },
+    {
+      "path": "src/games/bc2/Bc2NativeAmmoRefillBinding.h",
+      "sha256": "02b41c25d31525d785413bcb474321a87c1fec04bc48a85a04bea7745cdb937a"
+    },
+    {
+      "path": "src/games/bc2/Bc2NativeAmmoRefill.h",
+      "sha256": "1d403d772d0ebad1a5b379910d6cc6ef8365323398a3f569d5d19dd600cf985e"
+    },
+    {
+      "path": "src/games/bc2/Bc2MagazineResourceAdapter.h",
+      "sha256": "ae0ce444a1c3e8bfff7c0f7eab861d0e837caabf756448748bb57e69d950e0a9"
+    },
+    {
+      "path": "src/games/bc2/Bc2AmmoResourceEvidence.h",
+      "sha256": "aad69a382b8217b2a2c24b1eb969461216154429e72bad3bb4913cf0c1ab219e"
+    }
+  ],
+  "exact_jobs_sha256": "5c852d96c7ed905b131426fd4bc17e97ccac41fe696189e101818d824dc313d1",
+  "geometry_manifest_sha256": "b50abf6f4925c3e34625b2fb354dde4c61a7dc19d8c8eb37a689209640916076",
+  "observed_control_flow_differences": [],
+  "configuration_differences": [
+    {
+      "key": "bc2:magazine-descriptor:13b8aa537cdea0a5730562015bdc9961ba66018aa17f3a0abae4ab4d1c6c45cd",
+      "asset": "XM8C",
+      "path": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Scoped",
+      "values": {
+        "fireLogicType": 2,
+        "reloadType": 1,
+        "fireInputAction": 8,
+        "reloadInputAction": 29,
+        "baseCapacity": 30,
+        "numberOfMagazines": 4,
+        "reloadDelay": 0.0,
+        "reloadTime": 2.700000047683716,
+        "reloadThreshold": 0.75,
+        "postReloadTime": 0.0,
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "descriptor_digest": "c31431276522dd4999abdcc4971d4949ebbd54591b7f9a4eb77cda89fc2640e6"
+    },
+    {
+      "key": "bc2:magazine-descriptor:34570b13cfb1c6fe0dc4f0db73a6604346ac190a95161f7156d8a4e07521f601",
+      "asset": "M416",
+      "path": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416",
+      "values": {
+        "fireLogicType": 2,
+        "reloadType": 1,
+        "fireInputAction": 8,
+        "reloadInputAction": 29,
+        "baseCapacity": 30,
+        "numberOfMagazines": 4,
+        "reloadDelay": 0.0,
+        "reloadTime": 2.9000000953674316,
+        "reloadThreshold": 0.699999988079071,
+        "postReloadTime": 0.0,
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "descriptor_digest": "8bb5e63dbaaebf9716d63d3125845a7858eb679bdede467dabb276acb88b3fda"
+    },
+    {
+      "key": "bc2:magazine-descriptor:3c24d2117441df6d2392d17ef4239457e04defd13eaf277d5409cece3c9bf3aa",
+      "asset": "XM8 LMG",
+      "path": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg",
+      "values": {
+        "fireLogicType": 2,
+        "reloadType": 1,
+        "fireInputAction": 8,
+        "reloadInputAction": 29,
+        "baseCapacity": 100,
+        "numberOfMagazines": 3,
+        "reloadDelay": 0.0,
+        "reloadTime": 6.400000095367432,
+        "reloadThreshold": 0.6399999856948853,
+        "postReloadTime": 0.0,
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "descriptor_digest": "62233fb7106ed7bf272e0f3b3a14d9c082497290a8b757d3216becca23779634"
+    },
+    {
+      "key": "bc2:magazine-descriptor:568ad04d9a3d0a2f6ca6d72fdd2ebf64dc7271ba5c3e5457b85cc9d6b05ba912",
+      "asset": "XM8 LMG",
+      "path": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Scoped",
+      "values": {
+        "fireLogicType": 2,
+        "reloadType": 1,
+        "fireInputAction": 8,
+        "reloadInputAction": 29,
+        "baseCapacity": 100,
+        "numberOfMagazines": 3,
+        "reloadDelay": 0.0,
+        "reloadTime": 6.400000095367432,
+        "reloadThreshold": 0.6399999856948853,
+        "postReloadTime": 0.0,
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "descriptor_digest": "7e0f35786784c13cae277d30a139facb9ee4d998c2126756d755220caf4fffad"
+    },
+    {
+      "key": "bc2:magazine-descriptor:63cff9a8d31c5d9fb6b8b88a1567c244eb70457fd41f44c18cae0d8ae474cabf",
+      "asset": "XM8 LMG",
+      "path": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Kobra",
+      "values": {
+        "fireLogicType": 2,
+        "reloadType": 1,
+        "fireInputAction": 8,
+        "reloadInputAction": 29,
+        "baseCapacity": 100,
+        "numberOfMagazines": 3,
+        "reloadDelay": 0.0,
+        "reloadTime": 6.400000095367432,
+        "reloadThreshold": 0.6399999856948853,
+        "postReloadTime": 0.0,
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "descriptor_digest": "9019ab03e6002f09b01e7f74abb43596997d0f87c6f75f79c7f4fd2453361168"
+    },
+    {
+      "key": "bc2:magazine-descriptor:69eaf910273974736249debf309231a418eb5556bcc628cdac68d7f50253add3",
+      "asset": "MG36",
+      "path": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Kobra",
+      "values": {
+        "fireLogicType": 2,
+        "reloadType": 1,
+        "fireInputAction": 8,
+        "reloadInputAction": 29,
+        "baseCapacity": 100,
+        "numberOfMagazines": 3,
+        "reloadDelay": 0.0,
+        "reloadTime": 6.400000095367432,
+        "reloadThreshold": 0.5799999833106995,
+        "postReloadTime": 0.0,
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "descriptor_digest": "8fd9d1d1a7c105387dbbffb7288b87b002b304b0ecfacaf5740e552e4485db62"
+    },
+    {
+      "key": "bc2:magazine-descriptor:7cb01a7dbb019b587085e89663a7e303a0cebd4eaab01656a87765b9ce66265a",
+      "asset": "M416",
+      "path": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Scoped",
+      "values": {
+        "fireLogicType": 2,
+        "reloadType": 1,
+        "fireInputAction": 8,
+        "reloadInputAction": 29,
+        "baseCapacity": 30,
+        "numberOfMagazines": 4,
+        "reloadDelay": 0.0,
+        "reloadTime": 2.9000000953674316,
+        "reloadThreshold": 0.699999988079071,
+        "postReloadTime": 0.0,
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "descriptor_digest": "e709f4794b278af91ffeaa6a65fc83c759dc8acb8d81ddf1ec0af97db274465b"
+    },
+    {
+      "key": "bc2:magazine-descriptor:a4f45301ab39a17b5c246787eff61d1b26e2eff7ed57a4c934f6390caad3a1df",
+      "asset": "M416",
+      "path": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Kobra",
+      "values": {
+        "fireLogicType": 2,
+        "reloadType": 1,
+        "fireInputAction": 8,
+        "reloadInputAction": 29,
+        "baseCapacity": 30,
+        "numberOfMagazines": 4,
+        "reloadDelay": 0.0,
+        "reloadTime": 2.9000000953674316,
+        "reloadThreshold": 0.699999988079071,
+        "postReloadTime": 0.0,
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "descriptor_digest": "e801a3c6d44d9fad7c70479121f8169f873365140dbe0009e7e4ef53b405e06d"
+    },
+    {
+      "key": "bc2:magazine-descriptor:c03287be1d2c19ecf5e56f62721282876919a4d87ef237d2cdf5bdc0acd0ffb3",
+      "asset": "MG36",
+      "path": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36",
+      "values": {
+        "fireLogicType": 2,
+        "reloadType": 1,
+        "fireInputAction": 8,
+        "reloadInputAction": 29,
+        "baseCapacity": 100,
+        "numberOfMagazines": 3,
+        "reloadDelay": 0.0,
+        "reloadTime": 6.400000095367432,
+        "reloadThreshold": 0.5799999833106995,
+        "postReloadTime": 0.0,
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "descriptor_digest": "abac4ca3208fe701d7add2d9dc01d07c6489ae7476f24819cb2dfb612e0b40ec"
+    },
+    {
+      "key": "bc2:magazine-descriptor:de895a89d3dfd4d24e665efa52fbe7c3c840db75e7df0d5e1becd95886534659",
+      "asset": "XM8C",
+      "path": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Kobra",
+      "values": {
+        "fireLogicType": 2,
+        "reloadType": 1,
+        "fireInputAction": 8,
+        "reloadInputAction": 29,
+        "baseCapacity": 30,
+        "numberOfMagazines": 4,
+        "reloadDelay": 0.0,
+        "reloadTime": 2.700000047683716,
+        "reloadThreshold": 0.75,
+        "postReloadTime": 0.0,
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "descriptor_digest": "ef134a49b04b447e18d89c1fb8cd0676d7d40e219555004fd1046111e3337d16"
+    },
+    {
+      "key": "bc2:magazine-descriptor:f684d060c479c89c9d961fef083e541224e14c7a11371fdc2b41776fe73343ab",
+      "asset": "MG36",
+      "path": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Scope",
+      "values": {
+        "fireLogicType": 2,
+        "reloadType": 1,
+        "fireInputAction": 8,
+        "reloadInputAction": 29,
+        "baseCapacity": 100,
+        "numberOfMagazines": 3,
+        "reloadDelay": 0.0,
+        "reloadTime": 6.400000095367432,
+        "reloadThreshold": 0.5799999833106995,
+        "postReloadTime": 0.0,
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "descriptor_digest": "c8d1702eddc33cc6cec78899c028b0900c38a97b97ffbe1b6bbf358b3de2a6da"
+    },
+    {
+      "key": "bc2:magazine-descriptor:f82cc516cde83c58df2ce57e6f7c84bbdbc8b643630b96c9a9ea8a14592bb324",
+      "asset": "XM8C",
+      "path": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c",
+      "values": {
+        "fireLogicType": 2,
+        "reloadType": 1,
+        "fireInputAction": 8,
+        "reloadInputAction": 29,
+        "baseCapacity": 30,
+        "numberOfMagazines": 4,
+        "reloadDelay": 0.0,
+        "reloadTime": 2.700000047683716,
+        "reloadThreshold": 0.75,
+        "postReloadTime": 0.0,
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "descriptor_digest": "529f0b745a0b4ede187dbfdb021f554b1b1e660b800570bc8d8eacab9e72b3fa"
+    }
+  ],
+  "reasoning": [
+    "Existing AEK prerequisite admission explicitly rests on shared executable AutomaticFire2/rtMagazine1, exact firing vtable and transfer/abort implementation, rather than an individual weapon run.",
+    "Every selected descriptor preserves exact configuration path/hash/GUID and2/1/8/29 dispatch; all bolt fields are zero and runtime ReloadLogic0 is double-read.",
+    "Capacity30or100, magazines3or4, bounded reload time/threshold and measured geometry are data. Native helper selection in TryAmmoResourceHands depends on operation and current rtMagazine, with no asset-name or weapon-class switch.",
+    "Remove/return verifies the same71byte helper,171byte rounding routine, secondary vtable slot and primary/secondary identity. Refill verifies the same254byte Transfer/trampoline and finite reserve multiplier.",
+    "Fresh runtime exact configuration, actual native/physical mapping, server owning invocation, neutral contexts, current all-three capacities/counts and independent completion Updates still gate every operation.",
+    "Current225 shared resource/SupportGrip/HandInteraction regressions cover all12 configurations; mocked native receipts prove shared policy behavior only."
+  ],
+  "boundaries": {
+    "normal_default_changed": false,
+    "new_profiles_natively_executed": false,
+    "headset_accepted": false,
+    "native_writes_permitted_by_header_alone": false,
+    "compiled_profile_prerequisite_rows": 12,
+    "excluded": "9stock-bolt rows remain outside the exporter zero-bolt review boundary; separate known static proof exists but needs its own admission route.",
+    "geometry": "CombinedGeometry preserves baselineAEK and builtinXM8; per-frame selected mesh/rig/hand leases remain required.",
+    "historical_raw_code": "The historical review references reload-native-code-20261001.json, which is not present in the current workspace; no new raw disassembly verification is claimed. Current immutable runtime byte/vtable/trampoline checks and successful225 scoped-XM8 receipts remain independently enforced."
+  }
+}

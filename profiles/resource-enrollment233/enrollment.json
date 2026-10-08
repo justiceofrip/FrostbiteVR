@@ -1,0 +1,1397 @@
+{
+  "schema": "fvr.bc2.exact-resource-visibility-body-enrollment.v1",
+  "family": "bc2.automatic-magazine-zero-bolt.v1",
+  "activation": "explicit compiled reviewed registry + geometry; ordinary resource backend switch",
+  "runtime_requirements": [
+    "exact coherent native config and selected-carried identity",
+    "current native operation binding and source-bound review",
+    "all required installed whole-weapon/attachment geometry",
+    "ordinary body custody and hand arbitration",
+    "independent native ammunition receipts"
+  ],
+  "native_constructor_permission": false,
+  "profiles": [
+    {
+      "key": "bc2:magazine-descriptor:13b8aa537cdea0a5730562015bdc9961ba66018aa17f3a0abae4ab4d1c6c45cd",
+      "native_id": "c31431276522dd49",
+      "descriptor_digest": "c31431276522dd4999abdcc4971d4949ebbd54591b7f9a4eb77cda89fc2640e6",
+      "identity": {
+        "assetName": "XM8C",
+        "assetPath": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Scoped",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Scoped.dbx",
+          "sha256": "ae12d9803482f3846993ea46e0a4afc19495e4b76cd847ea78a45c616092d970",
+          "guid": "9f5ab2bd-cd9e-4830-927c-c91953f70092"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Firing.dbx",
+          "sha256": "d24c625727cc4214213234eda5c0a952acaf72b2ae5902f7a7d1ea1c5e4361b2",
+          "guid": "4e1092a5-dcbc-4a7a-b6c9-029d17408821"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Firing.dbx",
+          "sha256": "d24c625727cc4214213234eda5c0a952acaf72b2ae5902f7a7d1ea1c5e4361b2",
+          "guid": "46b83929-b1f3-4bfd-90fe-afe48eae4397"
+        }
+      },
+      "configuration": {
+        "assetName": "XM8C",
+        "assetPath": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Scoped",
+        "values": {
+          "fireLogicType": 2,
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 30,
+          "numberOfMagazines": 4,
+          "reloadDelay": 0.0,
+          "reloadTime": 2.700000047683716,
+          "reloadThreshold": 0.75,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1061158912,
+            "expected_bits": "3f400000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1076677837,
+            "expected_bits": "402ccccd",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 2,
+            "expected_bits": "00000002",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "source_class": "wcSmg",
+      "family": "bc2.automatic-magazine-zero-bolt.v1",
+      "configured_meshes": [
+        "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Mesh",
+        "Objects/Weapons/Unlock/ACOG_4X/US_ACOG_4X_Mesh"
+      ],
+      "weighted_names": [
+        "jntWpnwpnJnt_16",
+        "jntWpn_10",
+        "jntWpn_17",
+        "jntWpn_2",
+        "jntWpn_1",
+        "jntWpn_6",
+        "jntWpn_5"
+      ],
+      "rig_fingerprint": "a7f219a1426216ab",
+      "magazine_part": "jntWpn_6",
+      "body_part": "body_holstered_c393cfe6d6c2811b",
+      "body_anchor_evaluation": {
+        "RightHand": "static_authored_pose",
+        "jntWpn_Flash": "static_authored_pose"
+      },
+      "required_archives": [
+        "Dist/win32/async/weapon/us_rif_xm8c-00.fbrb",
+        "Dist/win32/levels/mp_common/level-00.fbrb"
+      ],
+      "native_per_variant_tested": false,
+      "headset_tested": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:34570b13cfb1c6fe0dc4f0db73a6604346ac190a95161f7156d8a4e07521f601",
+      "native_id": "8bb5e63dbaaebf97",
+      "descriptor_digest": "8bb5e63dbaaebf9716d63d3125845a7858eb679bdede467dabb276acb88b3fda",
+      "identity": {
+        "assetName": "M416",
+        "assetPath": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416.dbx",
+          "sha256": "0bd854517cadef34c6eef85698736eca2c05c797fb5ed2f3dec35c2a2b61326a",
+          "guid": "ca69bfba-0f21-42e3-bbe9-fa2902600563"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Firing.dbx",
+          "sha256": "b6fce14fb5c5926d220797c53396ad2edc7ce70a0df604695b1ba31b956ff9b7",
+          "guid": "c65586af-708c-4b71-ba83-6eb3fe2c7b0e"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Firing.dbx",
+          "sha256": "b6fce14fb5c5926d220797c53396ad2edc7ce70a0df604695b1ba31b956ff9b7",
+          "guid": "b9e95d1d-8792-4668-b5b1-0293bf61b37e"
+        }
+      },
+      "configuration": {
+        "assetName": "M416",
+        "assetPath": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416",
+        "values": {
+          "fireLogicType": 2,
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 30,
+          "numberOfMagazines": 4,
+          "reloadDelay": 0.0,
+          "reloadTime": 2.9000000953674316,
+          "reloadThreshold": 0.699999988079071,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1060320051,
+            "expected_bits": "3f333333",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1077516698,
+            "expected_bits": "4039999a",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 2,
+            "expected_bits": "00000002",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "source_class": "wcAssault",
+      "family": "bc2.automatic-magazine-zero-bolt.v1",
+      "configured_meshes": [
+        "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh"
+      ],
+      "weighted_names": [
+        "jntWpn_12",
+        "jntWpn_13",
+        "jntWpn_11",
+        "jntWpn_17",
+        "jntWpn_3",
+        "jntWpn_2",
+        "jntWpn_1",
+        "jntWpn_7",
+        "jntWpn_6",
+        "jntWpn_5",
+        "jntWpn_4",
+        "jntWpn_9",
+        "jntWpn_8"
+      ],
+      "rig_fingerprint": "a7f219a1426216ab",
+      "magazine_part": "jntWpn_6",
+      "body_part": "body_holstered_c20dade10fe1be11",
+      "body_anchor_evaluation": {
+        "RightHand": "static_authored_pose",
+        "jntWpn_Flash": "static_authored_pose"
+      },
+      "required_archives": [
+        "Dist/win32/async/weapon/ul_rgl_hk416-00.fbrb",
+        "Dist/win32/async/weapon/ul_rif_hk416-00.fbrb",
+        "Dist/win32/levels/mp_common/level-00.fbrb"
+      ],
+      "native_per_variant_tested": false,
+      "headset_tested": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:3c24d2117441df6d2392d17ef4239457e04defd13eaf277d5409cece3c9bf3aa",
+      "native_id": "62233fb7106ed7bf",
+      "descriptor_digest": "62233fb7106ed7bf272e0f3b3a14d9c082497290a8b757d3216becca23779634",
+      "identity": {
+        "assetName": "XM8 LMG",
+        "assetPath": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg.dbx",
+          "sha256": "515f82d772129e026d2c713ef33b0cc665f86f364ac4a754d52c7c465b7046ef",
+          "guid": "16ff338b-657b-4966-8a9e-bba5d3c40834"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Firing.dbx",
+          "sha256": "c8ba3919155beb16fd721112c7aa3f5c39ffaf9728d5bfe4f75b0d75e4936468",
+          "guid": "3dd3c6d6-ba08-407d-90c0-34a34c7ba401"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Firing.dbx",
+          "sha256": "c8ba3919155beb16fd721112c7aa3f5c39ffaf9728d5bfe4f75b0d75e4936468",
+          "guid": "51313d71-9671-47a7-882c-154dde309549"
+        }
+      },
+      "configuration": {
+        "assetName": "XM8 LMG",
+        "assetPath": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg",
+        "values": {
+          "fireLogicType": 2,
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 100,
+          "numberOfMagazines": 3,
+          "reloadDelay": 0.0,
+          "reloadTime": 6.400000095367432,
+          "reloadThreshold": 0.6399999856948853,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1059313418,
+            "expected_bits": "3f23d70a",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1087163597,
+            "expected_bits": "40cccccd",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 2,
+            "expected_bits": "00000002",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "source_class": "wcLmg",
+      "family": "bc2.automatic-magazine-zero-bolt.v1",
+      "configured_meshes": [
+        "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Mesh"
+      ],
+      "weighted_names": [
+        "jntWpnwpnJnt_16",
+        "jntWpn_11",
+        "jntWpn_17",
+        "jntWpn_3",
+        "jntWpn_2",
+        "jntWpn_1",
+        "jntWpn_6",
+        "jntWpn_5",
+        "jntWpn_9"
+      ],
+      "rig_fingerprint": "a7f219a1426216ab",
+      "magazine_part": "jntWpn_6",
+      "body_part": "body_holstered_86c6d1fb6bdfde3f",
+      "body_anchor_evaluation": {
+        "RightHand": "static_authored_pose",
+        "jntWpn_Flash": "static_authored_pose"
+      },
+      "required_archives": [
+        "Dist/win32/async/weapon/us_rif_xm8lmg-00.fbrb",
+        "Dist/win32/levels/mp_common/level-00.fbrb"
+      ],
+      "native_per_variant_tested": false,
+      "headset_tested": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:568ad04d9a3d0a2f6ca6d72fdd2ebf64dc7271ba5c3e5457b85cc9d6b05ba912",
+      "native_id": "7e0f35786784c13c",
+      "descriptor_digest": "7e0f35786784c13cae277d30a139facb9ee4d998c2126756d755220caf4fffad",
+      "identity": {
+        "assetName": "XM8 LMG",
+        "assetPath": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Scoped",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Scoped.dbx",
+          "sha256": "9a560d44b3f4d0ed000635bcd4eaa912960db12eb53ecc3bb1fd7bc8e1a00914",
+          "guid": "e5e3ba16-ae7a-4172-889f-3a6c0a397349"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Scoped_Firing.dbx",
+          "sha256": "b551f13d766774a6a2d25d655ffeb90c6aa1ff10fb601ed2bc42f97b32db5259",
+          "guid": "91d8f9d9-d1b8-4d72-b1a8-79598f3378f1"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Scoped_Firing.dbx",
+          "sha256": "b551f13d766774a6a2d25d655ffeb90c6aa1ff10fb601ed2bc42f97b32db5259",
+          "guid": "70e3d2b9-e324-4177-9056-6dbe8430d9e9"
+        }
+      },
+      "configuration": {
+        "assetName": "XM8 LMG",
+        "assetPath": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Scoped",
+        "values": {
+          "fireLogicType": 2,
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 100,
+          "numberOfMagazines": 3,
+          "reloadDelay": 0.0,
+          "reloadTime": 6.400000095367432,
+          "reloadThreshold": 0.6399999856948853,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1059313418,
+            "expected_bits": "3f23d70a",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1087163597,
+            "expected_bits": "40cccccd",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 2,
+            "expected_bits": "00000002",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "source_class": "wcLmg",
+      "family": "bc2.automatic-magazine-zero-bolt.v1",
+      "configured_meshes": [
+        "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Mesh",
+        "Objects/Weapons/Unlock/ACOG_4X/US_ACOG_4X_Mesh"
+      ],
+      "weighted_names": [
+        "jntWpnwpnJnt_16",
+        "jntWpn_10",
+        "jntWpn_11",
+        "jntWpn_17",
+        "jntWpn_3",
+        "jntWpn_2",
+        "jntWpn_1",
+        "jntWpn_6",
+        "jntWpn_5",
+        "jntWpn_9"
+      ],
+      "rig_fingerprint": "a7f219a1426216ab",
+      "magazine_part": "jntWpn_6",
+      "body_part": "body_holstered_f6bda92dc2426fba",
+      "body_anchor_evaluation": {
+        "RightHand": "static_authored_pose",
+        "jntWpn_Flash": "static_authored_pose"
+      },
+      "required_archives": [
+        "Dist/win32/async/weapon/us_rif_xm8lmg-00.fbrb",
+        "Dist/win32/levels/mp_common/level-00.fbrb"
+      ],
+      "native_per_variant_tested": false,
+      "headset_tested": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:63cff9a8d31c5d9fb6b8b88a1567c244eb70457fd41f44c18cae0d8ae474cabf",
+      "native_id": "9019ab03e6002f09",
+      "descriptor_digest": "9019ab03e6002f09b01e7f74abb43596997d0f87c6f75f79c7f4fd2453361168",
+      "identity": {
+        "assetName": "XM8 LMG",
+        "assetPath": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Kobra",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Kobra.dbx",
+          "sha256": "c49132975819d3fd9a6163f6466aa2f8bfa194f084e53bd14ef77185d1c36965",
+          "guid": "294f6305-dcdf-4be8-81cd-f5f62ed333c2"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Firing.dbx",
+          "sha256": "c8ba3919155beb16fd721112c7aa3f5c39ffaf9728d5bfe4f75b0d75e4936468",
+          "guid": "3dd3c6d6-ba08-407d-90c0-34a34c7ba401"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Firing.dbx",
+          "sha256": "c8ba3919155beb16fd721112c7aa3f5c39ffaf9728d5bfe4f75b0d75e4936468",
+          "guid": "51313d71-9671-47a7-882c-154dde309549"
+        }
+      },
+      "configuration": {
+        "assetName": "XM8 LMG",
+        "assetPath": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Kobra",
+        "values": {
+          "fireLogicType": 2,
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 100,
+          "numberOfMagazines": 3,
+          "reloadDelay": 0.0,
+          "reloadTime": 6.400000095367432,
+          "reloadThreshold": 0.6399999856948853,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1059313418,
+            "expected_bits": "3f23d70a",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1087163597,
+            "expected_bits": "40cccccd",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 2,
+            "expected_bits": "00000002",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "source_class": "wcLmg",
+      "family": "bc2.automatic-magazine-zero-bolt.v1",
+      "configured_meshes": [
+        "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Mesh",
+        "Objects/Weapons/Unlock/RU_Scope_RedDot_Kobra/RU_Scope_RedDot_Kobra_Mesh"
+      ],
+      "weighted_names": [
+        "jntWpnwpnJnt_16",
+        "jntWpn_10",
+        "jntWpn_11",
+        "jntWpn_17",
+        "jntWpn_3",
+        "jntWpn_2",
+        "jntWpn_1",
+        "jntWpn_6",
+        "jntWpn_5",
+        "jntWpn_9"
+      ],
+      "rig_fingerprint": "a7f219a1426216ab",
+      "magazine_part": "jntWpn_6",
+      "body_part": "body_holstered_13e33c6a40ba00ab",
+      "body_anchor_evaluation": {
+        "RightHand": "static_authored_pose",
+        "jntWpn_Flash": "static_authored_pose"
+      },
+      "required_archives": [
+        "Dist/win32/async/weapon/us_rif_xm8lmg-00.fbrb",
+        "Dist/win32/levels/mp_common/level-00.fbrb"
+      ],
+      "native_per_variant_tested": false,
+      "headset_tested": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:69eaf910273974736249debf309231a418eb5556bcc628cdac68d7f50253add3",
+      "native_id": "8fd9d1d1a7c10538",
+      "descriptor_digest": "8fd9d1d1a7c105387dbbffb7288b87b002b304b0ecfacaf5740e552e4485db62",
+      "identity": {
+        "assetName": "MG36",
+        "assetPath": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Kobra",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Kobra.dbx",
+          "sha256": "d0e44f08b2e86ab0e99a890f8a4d8af4adbb4c6ccbc0a2d98a8349f643b664fb",
+          "guid": "75e08cb5-f9fd-4d99-9adc-5c172db310fc"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Firing.dbx",
+          "sha256": "ea5b53e08f9be293910676e9518019a89baa39703a62f2d018dff1521a4b7db9",
+          "guid": "c4e4519d-52fe-4115-b631-4d97aff32235"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Firing.dbx",
+          "sha256": "ea5b53e08f9be293910676e9518019a89baa39703a62f2d018dff1521a4b7db9",
+          "guid": "9a10db03-2fcb-4995-868f-a966b0769799"
+        }
+      },
+      "configuration": {
+        "assetName": "MG36",
+        "assetPath": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Kobra",
+        "values": {
+          "fireLogicType": 2,
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 100,
+          "numberOfMagazines": 3,
+          "reloadDelay": 0.0,
+          "reloadTime": 6.400000095367432,
+          "reloadThreshold": 0.5799999833106995,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1058306785,
+            "expected_bits": "3f147ae1",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1087163597,
+            "expected_bits": "40cccccd",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 2,
+            "expected_bits": "00000002",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "source_class": "wcLmg",
+      "family": "bc2.automatic-magazine-zero-bolt.v1",
+      "configured_meshes": [
+        "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Mesh"
+      ],
+      "weighted_names": [
+        "jntWpn_12",
+        "jntWpn_13",
+        "jntWpn_2",
+        "jntWpn_1",
+        "jntWpn_6",
+        "jntWpn_5",
+        "jntWpn_4"
+      ],
+      "rig_fingerprint": "a7f219a1426216ab",
+      "magazine_part": "jntWpn_6",
+      "body_part": "body_holstered_8fcee8942dcb8453",
+      "body_anchor_evaluation": {
+        "RightHand": "decoded_spline_candidate",
+        "jntWpn_Flash": "static_authored_pose"
+      },
+      "required_archives": [
+        "Dist/win32/async/weapon/bu_lmg_mg36-00.fbrb",
+        "Dist/win32/levels/mp_common/level-00.fbrb"
+      ],
+      "native_per_variant_tested": false,
+      "headset_tested": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:7cb01a7dbb019b587085e89663a7e303a0cebd4eaab01656a87765b9ce66265a",
+      "native_id": "e709f4794b278af9",
+      "descriptor_digest": "e709f4794b278af91ffeaa6a65fc83c759dc8acb8d81ddf1ec0af97db274465b",
+      "identity": {
+        "assetName": "M416",
+        "assetPath": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Scoped",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Scoped.dbx",
+          "sha256": "6a4dd608be0432b022795d44bfbd55c8939c5d0fd6d95c7b421a740ab192c247",
+          "guid": "796cab59-65bc-4d59-b868-983681809062"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Firing_Scoped.dbx",
+          "sha256": "f329e152305f97bba6d292e0b939a99598ec31777dcd30d8ef4a39dde3be1b51",
+          "guid": "a754432c-cc71-4a05-9c67-6c03fc53756e"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Firing_Scoped.dbx",
+          "sha256": "f329e152305f97bba6d292e0b939a99598ec31777dcd30d8ef4a39dde3be1b51",
+          "guid": "79885644-bdda-4e65-a9bc-9efc071531d7"
+        }
+      },
+      "configuration": {
+        "assetName": "M416",
+        "assetPath": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Scoped",
+        "values": {
+          "fireLogicType": 2,
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 30,
+          "numberOfMagazines": 4,
+          "reloadDelay": 0.0,
+          "reloadTime": 2.9000000953674316,
+          "reloadThreshold": 0.699999988079071,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1060320051,
+            "expected_bits": "3f333333",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1077516698,
+            "expected_bits": "4039999a",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 2,
+            "expected_bits": "00000002",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "source_class": "wcAssault",
+      "family": "bc2.automatic-magazine-zero-bolt.v1",
+      "configured_meshes": [
+        "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh",
+        "Objects/Weapons/Unlock/ACOG_4X/US_ACOG_4X_Mesh"
+      ],
+      "weighted_names": [
+        "jntWpn_12",
+        "jntWpn_13",
+        "jntWpn_10",
+        "jntWpn_11",
+        "jntWpn_17",
+        "jntWpn_3",
+        "jntWpn_2",
+        "jntWpn_1",
+        "jntWpn_7",
+        "jntWpn_6",
+        "jntWpn_5",
+        "jntWpn_4",
+        "jntWpn_9",
+        "jntWpn_8"
+      ],
+      "rig_fingerprint": "a7f219a1426216ab",
+      "magazine_part": "jntWpn_6",
+      "body_part": "body_holstered_bc2a0e84ad8a4f69",
+      "body_anchor_evaluation": {
+        "RightHand": "static_authored_pose",
+        "jntWpn_Flash": "static_authored_pose"
+      },
+      "required_archives": [
+        "Dist/win32/async/weapon/ul_rgl_hk416-00.fbrb",
+        "Dist/win32/async/weapon/ul_rif_hk416-00.fbrb",
+        "Dist/win32/levels/mp_common/level-00.fbrb"
+      ],
+      "native_per_variant_tested": false,
+      "headset_tested": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:a4f45301ab39a17b5c246787eff61d1b26e2eff7ed57a4c934f6390caad3a1df",
+      "native_id": "e801a3c6d44d9fad",
+      "descriptor_digest": "e801a3c6d44d9fad7c70479121f8169f873365140dbe0009e7e4ef53b405e06d",
+      "identity": {
+        "assetName": "M416",
+        "assetPath": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Kobra",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Kobra.dbx",
+          "sha256": "6a7232f70141053111da71246e385861f1e5d0e50e02cfcd28fe2947d8d34ad5",
+          "guid": "c8e7f199-d0c4-44d7-a44b-ad221c23cb9c"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Firing.dbx",
+          "sha256": "b6fce14fb5c5926d220797c53396ad2edc7ce70a0df604695b1ba31b956ff9b7",
+          "guid": "c65586af-708c-4b71-ba83-6eb3fe2c7b0e"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Firing.dbx",
+          "sha256": "b6fce14fb5c5926d220797c53396ad2edc7ce70a0df604695b1ba31b956ff9b7",
+          "guid": "b9e95d1d-8792-4668-b5b1-0293bf61b37e"
+        }
+      },
+      "configuration": {
+        "assetName": "M416",
+        "assetPath": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Kobra",
+        "values": {
+          "fireLogicType": 2,
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 30,
+          "numberOfMagazines": 4,
+          "reloadDelay": 0.0,
+          "reloadTime": 2.9000000953674316,
+          "reloadThreshold": 0.699999988079071,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1060320051,
+            "expected_bits": "3f333333",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1077516698,
+            "expected_bits": "4039999a",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 2,
+            "expected_bits": "00000002",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "source_class": "wcAssault",
+      "family": "bc2.automatic-magazine-zero-bolt.v1",
+      "configured_meshes": [
+        "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh",
+        "Objects/Weapons/Unlock/RU_Scope_RedDot_Kobra/RU_Scope_RedDot_Kobra_Mesh"
+      ],
+      "weighted_names": [
+        "jntWpn_12",
+        "jntWpn_13",
+        "jntWpn_10",
+        "jntWpn_11",
+        "jntWpn_17",
+        "jntWpn_3",
+        "jntWpn_2",
+        "jntWpn_1",
+        "jntWpn_7",
+        "jntWpn_6",
+        "jntWpn_5",
+        "jntWpn_4",
+        "jntWpn_9",
+        "jntWpn_8"
+      ],
+      "rig_fingerprint": "a7f219a1426216ab",
+      "magazine_part": "jntWpn_6",
+      "body_part": "body_holstered_8c293274c79272ad",
+      "body_anchor_evaluation": {
+        "RightHand": "static_authored_pose",
+        "jntWpn_Flash": "static_authored_pose"
+      },
+      "required_archives": [
+        "Dist/win32/async/weapon/ul_rgl_hk416-00.fbrb",
+        "Dist/win32/async/weapon/ul_rif_hk416-00.fbrb",
+        "Dist/win32/levels/mp_common/level-00.fbrb"
+      ],
+      "native_per_variant_tested": false,
+      "headset_tested": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:c03287be1d2c19ecf5e56f62721282876919a4d87ef237d2cdf5bdc0acd0ffb3",
+      "native_id": "abac4ca3208fe701",
+      "descriptor_digest": "abac4ca3208fe701d7add2d9dc01d07c6489ae7476f24819cb2dfb612e0b40ec",
+      "identity": {
+        "assetName": "MG36",
+        "assetPath": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36.dbx",
+          "sha256": "7a564c7726be97924e36db02ec6a218f6b1500c057dffe004b3df549a60a15c1",
+          "guid": "b5101354-a431-45c0-b640-2f2339ac9e86"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Firing.dbx",
+          "sha256": "ea5b53e08f9be293910676e9518019a89baa39703a62f2d018dff1521a4b7db9",
+          "guid": "c4e4519d-52fe-4115-b631-4d97aff32235"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Firing.dbx",
+          "sha256": "ea5b53e08f9be293910676e9518019a89baa39703a62f2d018dff1521a4b7db9",
+          "guid": "9a10db03-2fcb-4995-868f-a966b0769799"
+        }
+      },
+      "configuration": {
+        "assetName": "MG36",
+        "assetPath": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36",
+        "values": {
+          "fireLogicType": 2,
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 100,
+          "numberOfMagazines": 3,
+          "reloadDelay": 0.0,
+          "reloadTime": 6.400000095367432,
+          "reloadThreshold": 0.5799999833106995,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1058306785,
+            "expected_bits": "3f147ae1",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1087163597,
+            "expected_bits": "40cccccd",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 2,
+            "expected_bits": "00000002",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "source_class": "wcLmg",
+      "family": "bc2.automatic-magazine-zero-bolt.v1",
+      "configured_meshes": [
+        "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Mesh"
+      ],
+      "weighted_names": [
+        "jntWpn_12",
+        "jntWpn_13",
+        "jntWpn_2",
+        "jntWpn_1",
+        "jntWpn_6",
+        "jntWpn_5",
+        "jntWpn_4"
+      ],
+      "rig_fingerprint": "a7f219a1426216ab",
+      "magazine_part": "jntWpn_6",
+      "body_part": "body_holstered_7d443f5b39c6289a",
+      "body_anchor_evaluation": {
+        "RightHand": "decoded_spline_candidate",
+        "jntWpn_Flash": "static_authored_pose"
+      },
+      "required_archives": [
+        "Dist/win32/async/weapon/bu_lmg_mg36-00.fbrb",
+        "Dist/win32/levels/mp_common/level-00.fbrb"
+      ],
+      "native_per_variant_tested": false,
+      "headset_tested": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:de895a89d3dfd4d24e665efa52fbe7c3c840db75e7df0d5e1becd95886534659",
+      "native_id": "ef134a49b04b447e",
+      "descriptor_digest": "ef134a49b04b447e18d89c1fb8cd0676d7d40e219555004fd1046111e3337d16",
+      "identity": {
+        "assetName": "XM8C",
+        "assetPath": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Kobra",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Kobra.dbx",
+          "sha256": "b3a2b0b87554e994332c9e4d5819c6dd327afb26ab718a2b0161c5313464f6a6",
+          "guid": "461cfafc-f0df-4323-ac58-57fbcb733d6f"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Firing.dbx",
+          "sha256": "d24c625727cc4214213234eda5c0a952acaf72b2ae5902f7a7d1ea1c5e4361b2",
+          "guid": "4e1092a5-dcbc-4a7a-b6c9-029d17408821"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Firing.dbx",
+          "sha256": "d24c625727cc4214213234eda5c0a952acaf72b2ae5902f7a7d1ea1c5e4361b2",
+          "guid": "46b83929-b1f3-4bfd-90fe-afe48eae4397"
+        }
+      },
+      "configuration": {
+        "assetName": "XM8C",
+        "assetPath": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Kobra",
+        "values": {
+          "fireLogicType": 2,
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 30,
+          "numberOfMagazines": 4,
+          "reloadDelay": 0.0,
+          "reloadTime": 2.700000047683716,
+          "reloadThreshold": 0.75,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1061158912,
+            "expected_bits": "3f400000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1076677837,
+            "expected_bits": "402ccccd",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 2,
+            "expected_bits": "00000002",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "source_class": "wcSmg",
+      "family": "bc2.automatic-magazine-zero-bolt.v1",
+      "configured_meshes": [
+        "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Mesh",
+        "Objects/Weapons/Unlock/RU_Scope_RedDot_Kobra/RU_Scope_RedDot_Kobra_Mesh"
+      ],
+      "weighted_names": [
+        "jntWpnwpnJnt_16",
+        "jntWpn_10",
+        "jntWpn_17",
+        "jntWpn_2",
+        "jntWpn_1",
+        "jntWpn_6",
+        "jntWpn_5"
+      ],
+      "rig_fingerprint": "a7f219a1426216ab",
+      "magazine_part": "jntWpn_6",
+      "body_part": "body_holstered_420525bd2eae3278",
+      "body_anchor_evaluation": {
+        "RightHand": "static_authored_pose",
+        "jntWpn_Flash": "static_authored_pose"
+      },
+      "required_archives": [
+        "Dist/win32/async/weapon/us_rif_xm8c-00.fbrb",
+        "Dist/win32/levels/mp_common/level-00.fbrb"
+      ],
+      "native_per_variant_tested": false,
+      "headset_tested": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:f684d060c479c89c9d961fef083e541224e14c7a11371fdc2b41776fe73343ab",
+      "native_id": "c8d1702eddc33cc6",
+      "descriptor_digest": "c8d1702eddc33cc6cec78899c028b0900c38a97b97ffbe1b6bbf358b3de2a6da",
+      "identity": {
+        "assetName": "MG36",
+        "assetPath": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Scope",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Scope.dbx",
+          "sha256": "6f2c2e40d3efc9a3f143ea2b89d9e08f0e617eaa9f831b51ea64bbd3367ff63d",
+          "guid": "d7c9100e-a312-4084-871e-2471b63da284"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Firing.dbx",
+          "sha256": "ea5b53e08f9be293910676e9518019a89baa39703a62f2d018dff1521a4b7db9",
+          "guid": "c4e4519d-52fe-4115-b631-4d97aff32235"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Firing.dbx",
+          "sha256": "ea5b53e08f9be293910676e9518019a89baa39703a62f2d018dff1521a4b7db9",
+          "guid": "9a10db03-2fcb-4995-868f-a966b0769799"
+        }
+      },
+      "configuration": {
+        "assetName": "MG36",
+        "assetPath": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Scope",
+        "values": {
+          "fireLogicType": 2,
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 100,
+          "numberOfMagazines": 3,
+          "reloadDelay": 0.0,
+          "reloadTime": 6.400000095367432,
+          "reloadThreshold": 0.5799999833106995,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1058306785,
+            "expected_bits": "3f147ae1",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1087163597,
+            "expected_bits": "40cccccd",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 2,
+            "expected_bits": "00000002",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "source_class": "wcLmg",
+      "family": "bc2.automatic-magazine-zero-bolt.v1",
+      "configured_meshes": [
+        "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Mesh"
+      ],
+      "weighted_names": [
+        "jntWpn_12",
+        "jntWpn_13",
+        "jntWpn_2",
+        "jntWpn_1",
+        "jntWpn_6",
+        "jntWpn_5",
+        "jntWpn_4"
+      ],
+      "rig_fingerprint": "a7f219a1426216ab",
+      "magazine_part": "jntWpn_6",
+      "body_part": "body_holstered_ed9b9dc75b289d37",
+      "body_anchor_evaluation": {
+        "RightHand": "decoded_spline_candidate",
+        "jntWpn_Flash": "static_authored_pose"
+      },
+      "required_archives": [
+        "Dist/win32/async/weapon/bu_lmg_mg36-00.fbrb",
+        "Dist/win32/levels/mp_common/level-00.fbrb"
+      ],
+      "native_per_variant_tested": false,
+      "headset_tested": false
+    },
+    {
+      "key": "bc2:magazine-descriptor:f82cc516cde83c58df2ce57e6f7c84bbdbc8b643630b96c9a9ea8a14592bb324",
+      "native_id": "529f0b745a0b4ede",
+      "descriptor_digest": "529f0b745a0b4ede187dbfdb021f554b1b1e660b800570bc8d8eacab9e72b3fa",
+      "identity": {
+        "assetName": "XM8C",
+        "assetPath": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c.dbx",
+          "sha256": "21a6b56404b4ade896da5cd9b08a89db4db710c33ba0d99bff33f0acbcad4d9c",
+          "guid": "93e2a23e-b8d6-490b-8468-0b789da8e35c"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Firing.dbx",
+          "sha256": "d24c625727cc4214213234eda5c0a952acaf72b2ae5902f7a7d1ea1c5e4361b2",
+          "guid": "4e1092a5-dcbc-4a7a-b6c9-029d17408821"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Firing.dbx",
+          "sha256": "d24c625727cc4214213234eda5c0a952acaf72b2ae5902f7a7d1ea1c5e4361b2",
+          "guid": "46b83929-b1f3-4bfd-90fe-afe48eae4397"
+        }
+      },
+      "configuration": {
+        "assetName": "XM8C",
+        "assetPath": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c",
+        "values": {
+          "fireLogicType": 2,
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 30,
+          "numberOfMagazines": 4,
+          "reloadDelay": 0.0,
+          "reloadTime": 2.700000047683716,
+          "reloadThreshold": 0.75,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1061158912,
+            "expected_bits": "3f400000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1076677837,
+            "expected_bits": "402ccccd",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 2,
+            "expected_bits": "00000002",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "source_class": "wcSmg",
+      "family": "bc2.automatic-magazine-zero-bolt.v1",
+      "configured_meshes": [
+        "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Mesh"
+      ],
+      "weighted_names": [
+        "jntWpnwpnJnt_16",
+        "jntWpn_17",
+        "jntWpn_2",
+        "jntWpn_1",
+        "jntWpn_6",
+        "jntWpn_5"
+      ],
+      "rig_fingerprint": "a7f219a1426216ab",
+      "magazine_part": "jntWpn_6",
+      "body_part": "body_holstered_f8bf8478b318e24e",
+      "body_anchor_evaluation": {
+        "RightHand": "static_authored_pose",
+        "jntWpn_Flash": "static_authored_pose"
+      },
+      "required_archives": [
+        "Dist/win32/async/weapon/us_rif_xm8c-00.fbrb",
+        "Dist/win32/levels/mp_common/level-00.fbrb"
+      ],
+      "native_per_variant_tested": false,
+      "headset_tested": false
+    }
+  ],
+  "input_sha256": {
+    "jobs": "5c852d96c7ed905b131426fd4bc17e97ccac41fe696189e101818d824dc313d1",
+    "reviews": "6e8bbe9f1d1c8d323c5ca807a45f2635e77e9f21fdf9db52dfeba59fe1f60998",
+    "geometry": "07101dbf6c8673f466d9974d9b387317ae7241e77b9c8c383ea431b287895101",
+    "visibility": "ffab98836dc703192430289be08ea23f3b969e367e847f53377857efa59897f8",
+    "catalog": "a0f02cb27ba4b7c2a53cd799aebe3257da712520444466227a45027743b0a67f"
+  },
+  "review_evidence_sha256": "2eaea517e41aef193aee9b337aa02fb5ab283d665fd6fbeda00c147fe4755ca2",
+  "required_compiled_headers": {
+    "profiles/resource-enrollment233/ReviewedResourceRegistry.h": "49a9f9008bb72a821d1c8752aa9028ca007fa5473667169853c81c65180b4279",
+    "profiles/resource-batch227/zero-bolt-batch/CombinedGeometry.h": "040b4ec52a9de2b49340318dd196d20140bd92fb0064a381ad9e6f3088682c3a",
+    "profiles/resource-batch227/zero-bolt-batch/BaselineGeometry.h": "52a571282e3e9bd2214f25ff5331d48e0a7f1543f278b0fa9e645e0914f03c98",
+    "profiles/resource-batch227/zero-bolt-batch/ZeroBoltGeometry.h": "17c019a405bc373b66ab804b237b2c4c814f507ba4bdce00f9f628754f1e7654",
+    "src/games/bc2/Bc2VisibilityDescriptorData.h": "1f548ad35de03d0e12315d8299f061b76f6eda9d96e9b19b4b37d2ebc274e880",
+    "src/games/bc2/Bc2BodyEquipmentProfiles.h": "dd4afd33e3a7e71ee8ba9ae55b10ebd9f6aabbfd7fbae0219a21f615030d706a",
+    "src/games/bc2/Bc2BodyAmmoAssetProfiles.h": "08bb9015ae6c1710b142e4eb761b23c3050ed03c2fbbf7e17dbb5c375b2f2883"
+  },
+  "private_cache": {
+    "bytes": 15152465,
+    "sha256": "b6c196f50b3612a636ac1fddc67a71f0ffe13ae61ba088da78f017fbf9a8293b",
+    "rows": 38,
+    "preserved_baseline_sha256": "7d9e418af563af88aab079d8f5646f5c521a5c6d5072007ddb3ba9d45eebd2d8",
+    "preserved_baseline_record_bytes": 10528188,
+    "private_installed_assets_only": true,
+    "native_calls": false
+  }
+}

@@ -1,0 +1,74 @@
+[
+  {
+    "key": "bc2:magazine-descriptor:13b8aa537cdea0a5730562015bdc9961ba66018aa17f3a0abae4ab4d1c6c45cd",
+    "descriptor_digest": "c31431276522dd4999abdcc4971d4949ebbd54591b7f9a4eb77cda89fc2640e6",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "96dcd4704755c4863f32d61a356c647d664bbeb428500396bf4d13c33633ffbd"
+  },
+  {
+    "key": "bc2:magazine-descriptor:34570b13cfb1c6fe0dc4f0db73a6604346ac190a95161f7156d8a4e07521f601",
+    "descriptor_digest": "8bb5e63dbaaebf9716d63d3125845a7858eb679bdede467dabb276acb88b3fda",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "96dcd4704755c4863f32d61a356c647d664bbeb428500396bf4d13c33633ffbd"
+  },
+  {
+    "key": "bc2:magazine-descriptor:3c24d2117441df6d2392d17ef4239457e04defd13eaf277d5409cece3c9bf3aa",
+    "descriptor_digest": "62233fb7106ed7bf272e0f3b3a14d9c082497290a8b757d3216becca23779634",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "96dcd4704755c4863f32d61a356c647d664bbeb428500396bf4d13c33633ffbd"
+  },
+  {
+    "key": "bc2:magazine-descriptor:568ad04d9a3d0a2f6ca6d72fdd2ebf64dc7271ba5c3e5457b85cc9d6b05ba912",
+    "descriptor_digest": "7e0f35786784c13cae277d30a139facb9ee4d998c2126756d755220caf4fffad",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "96dcd4704755c4863f32d61a356c647d664bbeb428500396bf4d13c33633ffbd"
+  },
+  {
+    "key": "bc2:magazine-descriptor:63cff9a8d31c5d9fb6b8b88a1567c244eb70457fd41f44c18cae0d8ae474cabf",
+    "descriptor_digest": "9019ab03e6002f09b01e7f74abb43596997d0f87c6f75f79c7f4fd2453361168",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "96dcd4704755c4863f32d61a356c647d664bbeb428500396bf4d13c33633ffbd"
+  },
+  {
+    "key": "bc2:magazine-descriptor:69eaf910273974736249debf309231a418eb5556bcc628cdac68d7f50253add3",
+    "descriptor_digest": "8fd9d1d1a7c105387dbbffb7288b87b002b304b0ecfacaf5740e552e4485db62",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "96dcd4704755c4863f32d61a356c647d664bbeb428500396bf4d13c33633ffbd"
+  },
+  {
+    "key": "bc2:magazine-descriptor:7cb01a7dbb019b587085e89663a7e303a0cebd4eaab01656a87765b9ce66265a",
+    "descriptor_digest": "e709f4794b278af91ffeaa6a65fc83c759dc8acb8d81ddf1ec0af97db274465b",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "96dcd4704755c4863f32d61a356c647d664bbeb428500396bf4d13c33633ffbd"
+  },
+  {
+    "key": "bc2:magazine-descriptor:a4f45301ab39a17b5c246787eff61d1b26e2eff7ed57a4c934f6390caad3a1df",
+    "descriptor_digest": "e801a3c6d44d9fad7c70479121f8169f873365140dbe0009e7e4ef53b405e06d",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "96dcd4704755c4863f32d61a356c647d664bbeb428500396bf4d13c33633ffbd"
+  },
+  {
+    "key": "bc2:magazine-descriptor:c03287be1d2c19ecf5e56f62721282876919a4d87ef237d2cdf5bdc0acd0ffb3",
+    "descriptor_digest": "abac4ca3208fe701d7add2d9dc01d07c6489ae7476f24819cb2dfb612e0b40ec",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "96dcd4704755c4863f32d61a356c647d664bbeb428500396bf4d13c33633ffbd"
+  },
+  {
+    "key": "bc2:magazine-descriptor:de895a89d3dfd4d24e665efa52fbe7c3c840db75e7df0d5e1becd95886534659",
+    "descriptor_digest": "ef134a49b04b447e18d89c1fb8cd0676d7d40e219555004fd1046111e3337d16",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "96dcd4704755c4863f32d61a356c647d664bbeb428500396bf4d13c33633ffbd"
+  },
+  {
+    "key": "bc2:magazine-descriptor:f684d060c479c89c9d961fef083e541224e14c7a11371fdc2b41776fe73343ab",
+    "descriptor_digest": "c8d1702eddc33cc6cec78899c028b0900c38a97b97ffbe1b6bbf358b3de2a6da",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "96dcd4704755c4863f32d61a356c647d664bbeb428500396bf4d13c33633ffbd"
+  },
+  {
+    "key": "bc2:magazine-descriptor:f82cc516cde83c58df2ce57e6f7c84bbdbc8b643630b96c9a9ea8a14592bb324",
+    "descriptor_digest": "529f0b745a0b4ede187dbfdb021f554b1b1e660b800570bc8d8eacab9e72b3fa",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "96dcd4704755c4863f32d61a356c647d664bbeb428500396bf4d13c33633ffbd"
+  }
+]

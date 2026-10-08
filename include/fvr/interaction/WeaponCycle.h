@@ -9,6 +9,10 @@ namespace fvr::interaction {
 enum class WeaponCycleFamily : unsigned { Pump, Bolt };
 enum class WeaponCyclePhase : unsigned { Idle, AwaitingGrip, Unlock, Rear, Forward, Lock, AwaitingNative, Complete, Cancelled };
 enum class WeaponCycleFailure : unsigned { None, Invalid, Expired, Owner, Evidence, Tracking, Released, Geometry, NativeRejected };
+struct WeaponCycleHandAssignment {
+    InteractionHand mechanism=InteractionHand::Left,gun=InteractionHand::Right;
+    bool operator==(const WeaponCycleHandAssignment&)const=default;
+};
 struct WeaponCycleProfile {
     std::uint64_t id=0,revision=0;
     WeaponCycleFamily family=WeaponCycleFamily::Pump;
@@ -19,6 +23,9 @@ struct WeaponCycleProfile {
     float stroke=0,rearTolerance=0,frontTolerance=0,contactRadius=0,lateralTolerance=0;
     float unlockRadians=0,rotationTolerance=0,maxStepMeters=0;
     std::int64_t endpointDwellNs=0,maximumCycleNs=0;
+    // Fixed for the whole cycle. Adapters must transfer custody explicitly;
+    // selecting right-hand manipulation never creates a left GunHold.
+    WeaponCycleHandAssignment hands{};
 };
 struct WeaponCycleLease {
     HandInteractionOwner owner{};HandInteractionKey item{},mechanism{};
@@ -57,6 +64,11 @@ struct WeaponCycleResult {
     std::optional<WeaponCycleRelease> release;
 };
 namespace weapon_cycle_detail {
+inline bool Hands(WeaponCycleHandAssignment h){
+    return (h.mechanism==InteractionHand::Left||h.mechanism==InteractionHand::Right)&&
+        (h.gun==InteractionHand::Left||h.gun==InteractionHand::Right)&&h.mechanism!=h.gun;
+}
+inline std::size_t HandIndex(InteractionHand h){return static_cast<std::size_t>(h);}
 inline bool Key(HandInteractionKey k){return k.id&&k.generation;}
 inline bool Owner(HandInteractionOwner o){return o.actor&&o.actorGeneration&&o.equipGeneration&&o.space;}
 inline bool Window(std::int64_t observed,std::int64_t deadline,std::int64_t now){
@@ -76,7 +88,7 @@ inline bool Lease(const WeaponCycleLease& p,std::int64_t now){
     return Owner(p.owner)&&Key(p.item)&&Key(p.mechanism)&&p.cycle&&p.sequence&&p.held&&Window(p.observedNs,p.deadlineNs,now);
 }
 inline bool Profile(const WeaponCycleProfile& p){
-    if(!p.id||!p.revision||(p.family!=WeaponCycleFamily::Pump&&p.family!=WeaponCycleFamily::Bolt)||
+    if(!p.id||!p.revision||!Hands(p.hands)||(p.family!=WeaponCycleFamily::Pump&&p.family!=WeaponCycleFamily::Bolt)||
         !feed_mechanism_detail::Pose(p.closedContact)||!std::isfinite(Dot(p.axis,p.axis))||std::abs(Dot(p.axis,p.axis)-1)>1e-5||
         !std::isfinite(p.stroke)||p.stroke<=0||p.stroke>.5f||!std::isfinite(p.rearTolerance)||p.rearTolerance<0||p.rearTolerance>=p.stroke*.25f||
         !std::isfinite(p.frontTolerance)||p.frontTolerance<0||p.frontTolerance>=p.stroke*.25f||
@@ -115,27 +127,68 @@ public:
     // a held controller bit or an old support token alone is not admission.
     bool BeginHeld(const WeaponCycleProfile& profile,const WeaponCycleLease& lease,
         const WeaponCycleInput& input,const HandClaim& mechanism,const HandClaim& gun)noexcept {
+        if(!HeldInput(profile,lease,input,mechanism,gun)||!Begin(profile,lease,input.source.nowNs))return false;
+        return AdoptHeld(lease,input,mechanism,gun);
+    }
+    // Only an exact current arbiter transfer can bypass neutral acquisition.
+    bool AdoptHeld(const WeaponCycleLease& lease,const WeaponCycleInput& input,
+        const HandClaim& mechanism,const HandClaim& gun,const HandInteractionSample* currentSafety=nullptr)noexcept {
         using namespace weapon_cycle_detail;const auto& s=input.source;
+        if(phase_!=WeaponCyclePhase::AwaitingGrip||s.nowNs>=deadline_||!Same(identity_,lease)||
+           !CurrentLease(lease,s.nowNs)||!HeldInput(profile_,lease,input,mechanism,gun,currentSafety))return false;
+        latest_=lease;grabbed_=previous_=input.rawContact;lastSequence_=s.sequence;lastObserved_=s.observedNs;neutral_=true;
+        phase_=profile_.family==WeaponCycleFamily::Pump?WeaponCyclePhase::Rear:WeaponCyclePhase::Unlock;return true;
+    }
+    // Physical interruption does not retire an adapter's still-held native
+    // cycle. Restart the entire gesture only after fresh neutral evidence,
+    // preserving the original cycle deadline and request high-water mark.
+    bool Regrip(const WeaponCycleInput& input,const WeaponCycleLease& lease)noexcept {
+        using namespace weapon_cycle_detail;const auto& s=input.source;
+        if(phase_!=WeaponCyclePhase::Cancelled||release_||
+           (failure_!=WeaponCycleFailure::Tracking&&failure_!=WeaponCycleFailure::Released&&failure_!=WeaponCycleFailure::Geometry)||
+           s.nowNs>=deadline_||!Same(identity_,lease)||!CurrentLease(lease,s.nowNs)||s.owner!=identity_.owner||
+           !s.focused||!s.tracked[0]||!s.tracked[1]||input.grip||!s.released[HandIndex(profile_.hands.mechanism)]||
+           s.sequence<=lastSequence_||s.observedNs<=lastObserved_||!Window(s.observedNs,s.deadlineNs,s.nowNs)||
+           !feed_mechanism_detail::Pose(input.rawContact)||Distance(input.rawContact,profile_.closedContact)>profile_.contactRadius)return false;
+        latest_=lease;lastSequence_=s.sequence;lastObserved_=s.observedNs;endpoint_=0;travel_=rotation_=0;neutral_=true;
+        phase_=WeaponCyclePhase::AwaitingGrip;failure_=WeaponCycleFailure::None;return true;
+    }
+    // Once submitted, release/ready is a native transaction, independent of
+    // whether a hand remains tracked or a native held lease is still published.
+    // This cannot acknowledge completion or extend its original timeout.
+    WeaponCycleResult PollNative(std::int64_t now)noexcept {
+        if(phase_==WeaponCyclePhase::AwaitingNative&&now>=deadline_)return Cancel(WeaponCycleFailure::Expired);
+        return Result();
+    }
+private:
+    static bool HeldInput(const WeaponCycleProfile& profile,const WeaponCycleLease& lease,
+        const WeaponCycleInput& input,const HandClaim& mechanism,const HandClaim& gun,const HandInteractionSample* currentSafety=nullptr)noexcept {
+        using namespace weapon_cycle_detail;const auto& s=input.source;const auto& current=currentSafety?*currentSafety:s;
+        if(current.owner!=s.owner||current.sequence<s.sequence||current.observedNs<s.observedNs||current.nowNs!=s.nowNs||
+           !current.focused||!current.tracked[0]||!current.tracked[1]||current.released[0]||current.released[1]||
+           !Window(current.observedNs,current.deadlineNs,current.nowNs))return false;
         if(!Profile(profile)||!Lease(lease,s.nowNs)||s.owner!=lease.owner||!s.sequence||!s.focused||!s.tracked[0]||!s.tracked[1]||
            !Window(s.observedNs,s.deadlineNs,s.nowNs)||!input.grip||!input.mechanismClaim||!feed_mechanism_detail::Pose(input.rawContact)||
            Distance(input.rawContact,profile.closedContact)>profile.contactRadius||
            !mechanism.token.id||!gun.token.id||mechanism.token.owner!=s.owner||gun.token.owner!=s.owner||
            mechanism.token.item!=lease.item||gun.token.item!=lease.item||mechanism.token.contact!=lease.mechanism||
-           mechanism.token.hand!=InteractionHand::Left||mechanism.token.kind!=HandClaimKind::Mechanism||
-           gun.token.hand!=InteractionHand::Right||gun.token.kind!=HandClaimKind::GunHold||
-           mechanism.token.prerequisiteClaim!=gun.token.id||mechanism.inputSequence!=s.sequence||gun.inputSequence!=s.sequence||
-           mechanism.deadlineNs<=s.nowNs||gun.deadlineNs<=s.nowNs||mechanism.deadlineNs>s.deadlineNs||gun.deadlineNs>s.deadlineNs)return false;
-        if(!Begin(profile,lease,s.nowNs))return false;
-        grabbed_=previous_=input.rawContact;lastSequence_=s.sequence;lastObserved_=s.observedNs;neutral_=true;
-        phase_=profile.family==WeaponCycleFamily::Pump?WeaponCyclePhase::Rear:WeaponCyclePhase::Unlock;return true;
+           mechanism.token.hand!=profile.hands.mechanism||mechanism.token.kind!=HandClaimKind::Mechanism||
+           gun.token.hand!=profile.hands.gun||gun.token.kind!=HandClaimKind::GunHold||
+           mechanism.token.prerequisiteClaim!=gun.token.id||mechanism.inputSequence!=s.sequence||gun.inputSequence!=current.sequence||
+           mechanism.deadlineNs<=s.nowNs||gun.deadlineNs<=s.nowNs||mechanism.deadlineNs>s.deadlineNs||gun.deadlineNs>current.deadlineNs)return false;
+        return true;
     }
+    bool CurrentLease(const WeaponCycleLease& lease,std::int64_t now)const noexcept {
+        return weapon_cycle_detail::Lease(lease,now)&&lease.sequence>=latest_.sequence&&lease.observedNs>=latest_.observedNs&&
+            (lease.sequence!=latest_.sequence||(lease.observedNs==latest_.observedNs&&lease.deadlineNs==latest_.deadlineNs));
+    }
+public:
     WeaponCycleResult Update(const WeaponCycleInput& in,const WeaponCycleLease& lease)noexcept {
         using namespace weapon_cycle_detail;const auto& s=in.source;
         if(phase_==WeaponCyclePhase::Idle||phase_==WeaponCyclePhase::Complete||phase_==WeaponCyclePhase::Cancelled)return Result();
         if(s.nowNs>=deadline_)return Cancel(WeaponCycleFailure::Expired);
         if(!Same(identity_,lease)||s.owner!=identity_.owner)return Cancel(WeaponCycleFailure::Owner);
-        if(!Lease(lease,s.nowNs)||lease.sequence<latest_.sequence||lease.observedNs<latest_.observedNs||
-           (lease.sequence==latest_.sequence&&(lease.observedNs!=latest_.observedNs||lease.deadlineNs!=latest_.deadlineNs)))return Cancel(WeaponCycleFailure::Evidence);
+        if(!CurrentLease(lease,s.nowNs))return Cancel(WeaponCycleFailure::Evidence);
         if(!Window(s.observedNs,s.deadlineNs,s.nowNs)||!s.sequence||!s.focused||!s.tracked[0]||!s.tracked[1])return Cancel(WeaponCycleFailure::Tracking);
         latest_=lease;
         if(phase_==WeaponCyclePhase::AwaitingNative)return Result();
@@ -143,7 +196,7 @@ public:
         if(s.sequence<lastSequence_||s.observedNs<lastObserved_||
            (lastObserved_&&s.observedNs-lastObserved_>MaximumInputGapNs))return Cancel(WeaponCycleFailure::Tracking);
         // A duplicate cannot accrue endpoint dwell or mutate a gesture.
-        if(s.sequence==lastSequence_)return Result();
+        if(s.sequence==lastSequence_)return Result(phase_!=WeaponCyclePhase::AwaitingGrip);
         lastSequence_=s.sequence;lastObserved_=s.observedNs;
         if(phase_==WeaponCyclePhase::AwaitingGrip){
             if(!in.grip){neutral_=true;return Result();}
@@ -200,6 +253,19 @@ public:
            ready.release!=*release_||
            ready.sequence<=release_->cycle.sequence||ready.observedNs<release_->observedNs||!Window(ready.observedNs,ready.deadlineNs,now))return false;
         phase_=WeaponCyclePhase::Complete;return true;
+    }
+    // A retained immutable completion is an outcome, not a current native
+    // lease. The adapter must retain the exact submitted request and original
+    // completion timestamps. This resolves even a local polling timeout; it
+    // cannot create/renew a target or accept a completion after that deadline.
+    bool ReconcileReady(const WeaponCycleReady& ready,const WeaponCycleRelease& submitted,std::int64_t now)noexcept {
+        using namespace weapon_cycle_detail;
+        if((phase_!=WeaponCyclePhase::AwaitingNative&&!(phase_==WeaponCyclePhase::Cancelled&&failure_==WeaponCycleFailure::Expired))||
+           ready.release!=submitted||!submitted.request||submitted.request!=nextRequest_||!Same(submitted.cycle,identity_)||
+           !ready.nativeReady||!ready.unchangedAmmunition||ready.sequence<=submitted.cycle.sequence||
+           ready.observedNs<submitted.observedNs||ready.observedNs>=deadline_||now<ready.observedNs||
+           !Window(ready.observedNs,ready.deadlineNs,ready.observedNs))return false;
+        phase_=WeaponCyclePhase::Complete;failure_=WeaponCycleFailure::None;return true;
     }
     WeaponCycleResult Cancel(WeaponCycleFailure why)noexcept {phase_=WeaponCyclePhase::Cancelled;failure_=why;release_.reset();return Result();}
     WeaponCyclePhase Phase()const noexcept{return phase_;}

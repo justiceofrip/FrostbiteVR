@@ -1,8 +1,9 @@
 """Compile immutable optional magazine rows from exact descriptor jobs.
 
 No row is enabled without a separate exact-key/digest review list. The only
-currently supported review is the existing AutomaticFire/rtMagazine/zero-bolt
-implementation. Unknown dispatch remains data, never guessed C++ enum values.
+supported reviews are independent AutomaticFire and SingleFire magazine
+families. SingleFire additionally requires its exact reflected instruction
+proof. Unknown dispatch remains data, never guessed C++ enum values.
 This tool performs no process, game, geometry, ammo or native operations.
 """
 from __future__ import annotations
@@ -12,6 +13,7 @@ from pathlib import Path
 import bc2_magazine_descriptor_manifest as descriptor
 
 FAMILY = 'bc2.automatic-magazine-zero-bolt.v1'
+SINGLE_FIRE_FAMILY = 'bc2.singlefire-magazine-zero-bolt.v1'
 ORDER = ('fireLogicType','reloadType','fireInputAction','reloadInputAction','baseCapacity','numberOfMagazines',
          'reloadDelay','reloadTime','reloadThreshold','postReloadTime','boltDelay','boltTime',
          'holdBoltUntilFireRelease','holdBoltUntilZoomRelease')
@@ -26,7 +28,9 @@ def eligible(row):
     c=row['configuration'];v=c['values']
     if c.get('admission')!='Candidate' or set(v)!=set(ORDER):return False
     if any(type(v[k]) is not int for k in ORDER[:6]) or any(type(v[k]) is not bool for k in ORDER[-2:]):return False
-    if [v[k] for k in ORDER[:4]]!=[2,1,8,29]:return False
+    if [v[k] for k in ORDER[:4]]!=[2,1,8,29]:
+        from bc2_singlefire_magazine_proof import candidate_dispatch
+        if not candidate_dispatch(row):return False
     if not 0<v['baseCapacity']<=1000000 or not 0<v['numberOfMagazines']<=1000000:return False
     if any(descriptor.f32(v[k])!=v[k] for k in ORDER[6:12]):return False
     if any(v[k]!=0 for k in ('boltDelay','boltTime','holdBoltUntilFireRelease','holdBoltUntilZoomRelease')):
@@ -34,7 +38,7 @@ def eligible(row):
         if not candidate_dispatch(row):return False
     if not 0<v['reloadTime']<=10 or not 0<v['reloadThreshold']<=1 or not 0<=v['reloadDelay']<=10 or not 0<=v['postReloadTime']<=10:return False
     expected=[(0x10,int(descriptor.bits(v['reloadThreshold']),16)),(0x14,int(descriptor.bits(v['reloadDelay']),16)),
-              (0x18,int(descriptor.bits(v['reloadTime']),16)),(0x20,1),(0x24,2),(0x2c,0)]
+              (0x18,int(descriptor.bits(v['reloadTime']),16)),(0x20,1),(0x24,v['fireLogicType']),(0x2c,0)]
     if c['timing']!=[dict(offset=o,expected=w,expected_bits=f'{w:08x}',comparison='Bits') for o,w in expected]:return False
     deadline=row['proposed_completion_deadline_ns']
     expected_deadline=descriptor.math.ceil((v['reloadDelay']+v['reloadTime']+v['postReloadTime'])*1e9)+700000000
@@ -46,10 +50,14 @@ def build(jobs,reviews=None):
     if not isinstance(rows,list) or len(rows)>256 or not isinstance(reviews,list) or len(reviews)>256:raise ValueError('Registry row bound')
     approved={}
     for review in reviews:
-        if not isinstance(review,dict) or review.get('family_proof')!=FAMILY:raise ValueError('Unreviewed dispatch family')
+        if not isinstance(review,dict) or review.get('family_proof') not in (FAMILY,SINGLE_FIRE_FAMILY):raise ValueError('Unreviewed dispatch family')
+        family=review['family_proof']
+        if family==SINGLE_FIRE_FAMILY:
+            from bc2_singlefire_magazine_proof import PROOF_DIGEST
+            if review.get('instruction_proof_digest')!=PROOF_DIGEST:raise ValueError('SingleFire instruction proof differs')
         key=descriptor.text(review.get('key'),256)
         if key in approved:raise ValueError('Duplicate review')
-        approved[key]=(descriptor.sha(review.get('descriptor_digest')),descriptor.sha(review.get('evidence_sha256')))
+        approved[key]=(descriptor.sha(review.get('descriptor_digest')),descriptor.sha(review.get('evidence_sha256')),family)
     emitted=[];seen_id={};seen_path=set();seen_key=set();matched=set()
     for row in rows:
         key=descriptor.text(row.get('key'),256);c=row['configuration'];digest=descriptor.sha(row.get('descriptor_digest'))
@@ -65,6 +73,12 @@ def build(jobs,reviews=None):
         seen_id[id_]=digest
         requested=key in approved
         if requested:
+            single=bool(row.get('singlefire_magazine_proof_digest'))
+            if single and approved[key][2]!=SINGLE_FIRE_FAMILY:
+                raise ValueError('SingleFire candidates cannot use an AutomaticFire family review')
+            if approved[key][2]==SINGLE_FIRE_FAMILY:
+                from bc2_singlefire_magazine_proof import candidate_dispatch
+                if not single or not candidate_dispatch(row):raise ValueError('SingleFire review does not match the exact dispatch proof')
             if row.get('automatic_stock_bolt_proof_digest'):
                 raise ValueError('Stock-bolt candidates cannot be enabled by a zero-bolt family review')
             if approved[key][0]!=digest or not eligible(row):raise ValueError('Review does not match eligible exact descriptor')
@@ -85,7 +99,8 @@ def build(jobs,reviews=None):
             return str(x)
         words=','.join('{0x%x,0x%08xu}'%(w['offset'],w['expected']) for w in c['timing'])
         lines.append(f'inline constexpr std::array<ReloadTimingWord,6> RegistryTiming{index}{{{{{words}}}}};')
-        admission='ReviewedNative' if enabled else 'Candidate';cycle='ReviewedReload11Transfer12' if enabled else 'Candidate'
+        admission='ReviewedNative' if enabled else 'Candidate'
+        cycle=('ReviewedSingleFireReload11Transfer12' if row.get('singlefire_magazine_proof_digest') else 'ReviewedReload11Transfer12') if enabled else 'Candidate'
         values=','.join(literal(k) for k in ORDER)
         lines.append(f'inline constexpr MagazineNativeProfile RegistryProfile{index}{{{{{json.dumps(c["assetName"])},{json.dumps(c["assetPath"])},{{{values}}},RegistryTiming{index},ReloadDescriptorAdmission::{admission}}},MagazineIdentityRoute::SelectedCarriedItem,MagazineCycleAdmission::{cycle},{row["proposed_completion_deadline_ns"]}ll}};')
     lines.append(f'inline constexpr std::array<MagazineNativeRegistration,{len(emitted)}> MagazineNativeRegistrations{{{{')

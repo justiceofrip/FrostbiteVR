@@ -1,0 +1,35 @@
+{
+  "results": [
+    {
+      "architecture": "x86",
+      "groups": 10,
+      "reports": [
+        {
+          "name": "bolt-cancellation-synthetic.json",
+          "sha256": "0d4c5ace3a9649db41d4842b3d40f13245327a57967dc1f09e42dddf7477e21b"
+        },
+        {
+          "name": "bolt-cancellation-raw-invalid.json",
+          "sha256": "68e24c6101fe563e656e33cdc2122f40c637ae83c208e087a77e5c54cb58a36e"
+        }
+      ]
+    },
+    {
+      "architecture": "x64",
+      "groups": 10,
+      "reports": [
+        {
+          "name": "bolt-cancellation-synthetic.json",
+          "sha256": "0d4c5ace3a9649db41d4842b3d40f13245327a57967dc1f09e42dddf7477e21b"
+        },
+        {
+          "name": "bolt-cancellation-raw-invalid.json",
+          "sha256": "68e24c6101fe563e656e33cdc2122f40c637ae83c208e087a77e5c54cb58a36e"
+        }
+      ]
+    }
+  ],
+  "main_originals_unchanged": true,
+  "native_actions": false,
+  "checkpoint244_changed": false
+}

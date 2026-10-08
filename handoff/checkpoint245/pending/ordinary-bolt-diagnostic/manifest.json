@@ -1,0 +1,30 @@
+{
+  "purpose": "Bounded first shared physical cancellation observation only; no authority or limits changed; outside checkpoint244.",
+  "files": [
+    {
+      "path": "src/games/bc2/Bc2PhysicalBolt.h",
+      "original_sha256": "443902a01951e285294802a1a071bcc280a987e8d78709f310eb6006d916e3dd",
+      "sha256": "b802587f43dea2d84ee1ada84b1bc875895ec2620d2960fbd038b4300c6f26f4"
+    },
+    {
+      "path": "src/games/bc2/Bc2PhysicalBolt.cpp",
+      "original_sha256": "65ff26b9399925115996fbf668b810b9f2edcb20dbc69bac419e3f19e1819d1c",
+      "sha256": "e6c9f66050825c6c056eb12a93f3c5b81235928598792a5d0c7694de7d5b29b9"
+    },
+    {
+      "path": "src/games/bc2/Bc2BoltControllerProbe.h",
+      "original_sha256": "4962cee4598ec8703fd18bafe7ce9275877871183487ddc940d02773ca6c75a2",
+      "sha256": "7be5f991b8d24c301f4f21dbc67ce98e3b6c3869c2ae0c4f45e76ffb94cdae11"
+    },
+    {
+      "path": "src/games/bc2/Bc2BoltControllerProbe.cpp",
+      "original_sha256": "3f6fab2b196ed5f47d071c221f695db08857f7bccf76e6e8510521ca39e83caa",
+      "sha256": "b3edb02fd0dcaeaa8e0692829741c492d08f2a7e4f279f25633f3fef9545917f"
+    },
+    {
+      "path": "tests/Bc2PhysicalBoltTests.cpp",
+      "original_sha256": "2f8efb2802e63ab2057d380a2019b95682093644a3fbd0147526661596190734",
+      "sha256": "b7ef7d74ec20f3f3c827a03334ff5043602e50eeb8c37ad8bb0ca069269d89c0"
+    }
+  ]
+}

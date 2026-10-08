@@ -137,7 +137,83 @@ inline constexpr std::array<BeltPropSectionProfile,4> BodyAmmoAssetSections21{{
 {"SCAR_sp","Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL_Mesh","body_holstered_weapon","jntWpn_6_Ammo",{402,20,1,0,graphics::RigidPropPosition::Float3,0xd4bed94db35ad1b5ull,0xfb8b202dbca32ebdull,134}},
 {"SCAR_sp","Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL_Mesh","body_holstered_weapon","export1p|lod0|UL_rif_FNSCARL_Base|UL_rif_FNSCARL_BaseShape_Plastic",{1605,20,1,0,graphics::RigidPropPosition::Float3,0x0936a60bb2d50a65ull,0x8de8c4d7b5c398c2ull,535}},
 }};
-inline constexpr std::array<BodyAmmoAssetProfile,22> BodyAmmoAssetProfiles{{
+inline constexpr std::array<BeltPropSectionProfile,2> BodyAmmoAssetSections22{{
+{"M416","Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh","jntWpn_6","export1p|lod0|UL_rif_HK416_Base|UL_rif_HK416_BaseShape_FlatMetal",{5076,64,5,2,graphics::RigidPropPosition::Float3,0xacd092d1814660c0ull,0x13f4222275495fb0ull,188}},
+{"M416","Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh","jntWpn_6","jntWpn_12_Ammo",{1032,64,3,2,graphics::RigidPropPosition::Float3,0x4617013295312421ull,0x61313b0d5316d79dull,104}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,4> BodyAmmoAssetSections23{{
+{"MG36","Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Mesh","jntWpn_6","jntWpn_1_BrushedMetal",{5634,48,7,1,graphics::RigidPropPosition::Half4,0x5253d401d7d937b7ull,0xa6a38dd9cac46f07ull,64}},
+{"MG36","Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Mesh","jntWpn_6","jntWpn_1_Plastic",{2784,48,2,1,graphics::RigidPropPosition::Half4,0x4a16eac85a6c90acull,0x18e9c4b1ddbb4408ull,401}},
+{"MG36","Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Mesh","jntWpn_6","jntWpn_1_Composite",{14268,48,3,1,graphics::RigidPropPosition::Half4,0xadf8dabd02598a2aull,0x22edd5e0065d2472ull,883}},
+{"MG36","Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Mesh","jntWpn_6","jntWpn_6_Ammo",{6,48,1,0,graphics::RigidPropPosition::Half4,0xf39f19a9a3c5a659ull,0x0af1695a142b95cdull,2}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,2> BodyAmmoAssetSections24{{
+{"XM8 LMG","Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Mesh","jntWpn_6","jntWpn_3_BrushedMetal",{11490,64,8,6,graphics::RigidPropPosition::Float3,0xe7a6d6f39a29468aull,0xfb584d5fbd018106ull,1140}},
+{"XM8 LMG","Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Mesh","jntWpn_6","jntWpn_6_Ammo",{6,64,1,0,graphics::RigidPropPosition::Float3,0x19772c583fa55669ull,0xc23ceb301531755dull,2}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,3> BodyAmmoAssetSections25{{
+{"XM8C","Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Mesh","jntWpn_6","jntWpn_1_Composite",{6708,48,3,2,graphics::RigidPropPosition::Half4,0x351d0e52646acc10ull,0xb73d51cc06269160ull,56}},
+{"XM8C","Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Mesh","jntWpn_6","jntWpn_6_Plastic",{1212,48,1,0,graphics::RigidPropPosition::Half4,0xaf984af83d8df2c3ull,0xb82681d6e59c39efull,404}},
+{"XM8C","Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Mesh","jntWpn_6","jntWpn_6_Ammo",{126,48,1,0,graphics::RigidPropPosition::Half4,0xed1f8cf22d0da77bull,0x26eb4e7ec8224137ull,42}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections26{{
+{"MG36","Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Mesh","body_holstered_ed9b9dc75b289d37","closed_configuration",{23094,20,1,0,graphics::RigidPropPosition::Float3,0xbb763bc4d2973b9dull,0x5c2888c30f3ccd19ull,7698}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections27{{
+{"XM8C","Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Mesh","body_holstered_c393cfe6d6c2811b","closed_configuration",{23070,20,1,0,graphics::RigidPropPosition::Float3,0x528cb36daaebefe0ull,0xc1e9b26f5d533060ull,7690}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections28{{
+{"M416","Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh","body_holstered_bc2a0e84ad8a4f69","closed_configuration",{29238,20,1,0,graphics::RigidPropPosition::Float3,0xa176c3d798d4a31eull,0x362e1a34fe04fc02ull,9746}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections29{{
+{"XM8C","Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Mesh","body_holstered_420525bd2eae3278","closed_configuration",{22101,20,1,0,graphics::RigidPropPosition::Float3,0x451b6e4361ba1877ull,0x84688127f5da65c0ull,7367}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections30{{
+{"MG36","Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Mesh","body_holstered_7d443f5b39c6289a","closed_configuration",{23094,20,1,0,graphics::RigidPropPosition::Float3,0xbb763bc4d2973b9dull,0x5c2888c30f3ccd19ull,7698}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections31{{
+{"XM8C","Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Mesh","body_holstered_f8bf8478b318e24e","closed_configuration",{17727,20,1,0,graphics::RigidPropPosition::Float3,0x5918101f059638c7ull,0x63f67a702b1f0500ull,5909}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections32{{
+{"XM8 LMG","Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Mesh","body_holstered_86c6d1fb6bdfde3f","closed_configuration",{25521,20,1,0,graphics::RigidPropPosition::Float3,0x048804a614211800ull,0xae426f526fbb5a73ull,8507}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections33{{
+{"M416","Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh","body_holstered_c20dade10fe1be11","closed_configuration",{23895,20,1,0,graphics::RigidPropPosition::Float3,0x1720d16045fa0a63ull,0x22afe31b1f5de3e4ull,7965}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections34{{
+{"MG36","Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Mesh","body_holstered_8fcee8942dcb8453","closed_configuration",{23094,20,1,0,graphics::RigidPropPosition::Float3,0xbb763bc4d2973b9dull,0x5c2888c30f3ccd19ull,7698}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections35{{
+{"M416","Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh","body_holstered_8c293274c79272ad","closed_configuration",{28269,20,1,0,graphics::RigidPropPosition::Float3,0x11544e20ff7fdd89ull,0x62f7c5af4dfecea6ull,9423}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections36{{
+{"XM8 LMG","Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Mesh","body_holstered_f6bda92dc2426fba","closed_configuration",{30864,20,1,0,graphics::RigidPropPosition::Float3,0x0be903785760c937ull,0xbff9a546b778fd23ull,10288}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections37{{
+{"XM8 LMG","Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Mesh","body_holstered_13e33c6a40ba00ab","closed_configuration",{29895,20,1,0,graphics::RigidPropPosition::Float3,0x90507990489044ceull,0x541469af30981621ull,9965}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,2> BodyAmmoAssetSections38{{
+{"SCAR_sp_s","Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL_Mesh","jntWpn_6","jntWpn_6_BrushedMetal",{8553,48,3,0,graphics::RigidPropPosition::Half4,0x46f758e19202bae8ull,0xfb7ccef7f56d5f13ull,292}},
+{"SCAR_sp_s","Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL_Mesh","jntWpn_6","jntWpn_6_Ammo",{402,48,1,0,graphics::RigidPropPosition::Half4,0xfb76703f8000c9b0ull,0x948e49823baab234ull,134}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,2> BodyAmmoAssetSections39{{
+{"SCAR_sp","Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL_Mesh","jntWpn_6","jntWpn_6_BrushedMetal",{8553,48,3,0,graphics::RigidPropPosition::Half4,0x46f758e19202bae8ull,0xfb7ccef7f56d5f13ull,292}},
+{"SCAR_sp","Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL_Mesh","jntWpn_6","jntWpn_6_Ammo",{402,48,1,0,graphics::RigidPropPosition::Half4,0xfb76703f8000c9b0ull,0x948e49823baab234ull,134}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections40{{
+{"SCAR_sp_s","Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL_Mesh","body_holstered_c13e82368fd8da28","closed_configuration",{26400,20,1,0,graphics::RigidPropPosition::Float3,0xe1af9a1b75c6c8c4ull,0x1e5aadd51eb98340ull,8800}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections41{{
+{"SCAR_sp","Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL_Mesh","body_holstered_7e49edcc2bd6f727","closed_configuration",{21057,20,1,0,graphics::RigidPropPosition::Float3,0x7c54656b12cefa7full,0x9073421bca1add88ull,7019}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,2> BodyAmmoAssetSections42{{
+{"F2000_sp","Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Mesh","jntWpnwpnJnt_16","jntWpn_17_Ammo",{354,20,1,0,graphics::RigidPropPosition::Float3,0x161a04eddac2ed6cull,0xcab0fde637a98638ull,118}},
+{"F2000_sp","Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Mesh","jntWpnwpnJnt_16","jntWpn_5_metal",{528,20,1,0,graphics::RigidPropPosition::Float3,0x03c61aaa7f72733cull,0xb5c04d95789220ecull,176}},
+}};
+inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections43{{
+{"F2000_sp","Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Mesh","body_holstered_254679ad4dcfefdd","closed_configuration",{23433,20,1,0,graphics::RigidPropPosition::Float3,0xe6db619307034b09ull,0xf6dd42a93ea4d28eull,7811}},
+}};
+inline constexpr std::array<BodyAmmoAssetProfile,44> BodyAmmoAssetProfiles{{
 {"XM8_sp_s","Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Mesh","jntWpn_6",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections0},
 {"SPAS12_sp","Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Mesh","jntWpn_7",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections1},
 {"AEK971_sp","Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Mesh","jntWpn_6",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections2},
@@ -160,5 +236,27 @@ inline constexpr std::array<BodyAmmoAssetProfile,22> BodyAmmoAssetProfiles{{
 {"F2000_sp","Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Mesh","body_holstered_weapon",0xa7f219a1426216abull,{{{{1.f,0.f,0.f,0.f},{0.f,1.f,0.f,0.f},{0.f,0.f,1.f,0.f},{0.f,0.f,0.f,1.f}}}},BodyAmmoAssetSections19},
 {"XM8_sp","Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Mesh","body_holstered_weapon",0xa7f219a1426216abull,{{{{1.f,0.f,0.f,0.f},{0.f,1.f,0.f,0.f},{0.f,0.f,1.f,0.f},{0.f,0.f,0.f,1.f}}}},BodyAmmoAssetSections20},
 {"SCAR_sp","Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL_Mesh","body_holstered_weapon",0xa7f219a1426216abull,{{{{1.f,0.f,0.f,0.f},{0.f,1.f,0.f,0.f},{0.f,0.f,1.f,0.f},{0.f,0.f,0.f,1.f}}}},BodyAmmoAssetSections21},
+{"M416","Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh","jntWpn_6",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections22},
+{"MG36","Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Mesh","jntWpn_6",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections23},
+{"XM8 LMG","Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Mesh","jntWpn_6",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections24},
+{"XM8C","Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Mesh","jntWpn_6",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections25},
+{"MG36","Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Mesh","body_holstered_ed9b9dc75b289d37",0xa7f219a1426216abull,{{{{1.f,0.f,0.f,0.f},{0.f,1.f,0.f,0.f},{0.f,0.f,1.f,0.f},{0.f,0.f,0.f,1.f}}}},BodyAmmoAssetSections26},
+{"XM8C","Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Mesh","body_holstered_c393cfe6d6c2811b",0xa7f219a1426216abull,{{{{1.f,0.f,0.f,0.f},{0.f,1.f,0.f,0.f},{0.f,0.f,1.f,0.f},{0.f,0.f,0.f,1.f}}}},BodyAmmoAssetSections27},
+{"M416","Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh","body_holstered_bc2a0e84ad8a4f69",0xa7f219a1426216abull,{{{{1.f,0.f,0.f,0.f},{0.f,1.f,0.f,0.f},{0.f,0.f,1.f,0.f},{0.f,0.f,0.f,1.f}}}},BodyAmmoAssetSections28},
+{"XM8C","Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Mesh","body_holstered_420525bd2eae3278",0xa7f219a1426216abull,{{{{1.f,0.f,0.f,0.f},{0.f,1.f,0.f,0.f},{0.f,0.f,1.f,0.f},{0.f,0.f,0.f,1.f}}}},BodyAmmoAssetSections29},
+{"MG36","Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Mesh","body_holstered_7d443f5b39c6289a",0xa7f219a1426216abull,{{{{1.f,0.f,0.f,0.f},{0.f,1.f,0.f,0.f},{0.f,0.f,1.f,0.f},{0.f,0.f,0.f,1.f}}}},BodyAmmoAssetSections30},
+{"XM8C","Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Mesh","body_holstered_f8bf8478b318e24e",0xa7f219a1426216abull,{{{{1.f,0.f,0.f,0.f},{0.f,1.f,0.f,0.f},{0.f,0.f,1.f,0.f},{0.f,0.f,0.f,1.f}}}},BodyAmmoAssetSections31},
+{"XM8 LMG","Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Mesh","body_holstered_86c6d1fb6bdfde3f",0xa7f219a1426216abull,{{{{1.f,0.f,0.f,0.f},{0.f,1.f,0.f,0.f},{0.f,0.f,1.f,0.f},{0.f,0.f,0.f,1.f}}}},BodyAmmoAssetSections32},
+{"M416","Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh","body_holstered_c20dade10fe1be11",0xa7f219a1426216abull,{{{{1.f,0.f,0.f,0.f},{0.f,1.f,0.f,0.f},{0.f,0.f,1.f,0.f},{0.f,0.f,0.f,1.f}}}},BodyAmmoAssetSections33},
+{"MG36","Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Mesh","body_holstered_8fcee8942dcb8453",0xa7f219a1426216abull,{{{{1.f,0.f,0.f,0.f},{0.f,1.f,0.f,0.f},{0.f,0.f,1.f,0.f},{0.f,0.f,0.f,1.f}}}},BodyAmmoAssetSections34},
+{"M416","Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh","body_holstered_8c293274c79272ad",0xa7f219a1426216abull,{{{{1.f,0.f,0.f,0.f},{0.f,1.f,0.f,0.f},{0.f,0.f,1.f,0.f},{0.f,0.f,0.f,1.f}}}},BodyAmmoAssetSections35},
+{"XM8 LMG","Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Mesh","body_holstered_f6bda92dc2426fba",0xa7f219a1426216abull,{{{{1.f,0.f,0.f,0.f},{0.f,1.f,0.f,0.f},{0.f,0.f,1.f,0.f},{0.f,0.f,0.f,1.f}}}},BodyAmmoAssetSections36},
+{"XM8 LMG","Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Mesh","body_holstered_13e33c6a40ba00ab",0xa7f219a1426216abull,{{{{1.f,0.f,0.f,0.f},{0.f,1.f,0.f,0.f},{0.f,0.f,1.f,0.f},{0.f,0.f,0.f,1.f}}}},BodyAmmoAssetSections37},
+{"SCAR_sp_s","Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL_Mesh","jntWpn_6",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections38},
+{"SCAR_sp","Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL_Mesh","jntWpn_6",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections39},
+{"SCAR_sp_s","Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL_Mesh","body_holstered_c13e82368fd8da28",0xa7f219a1426216abull,{{{{1.f,0.f,0.f,0.f},{0.f,1.f,0.f,0.f},{0.f,0.f,1.f,0.f},{0.f,0.f,0.f,1.f}}}},BodyAmmoAssetSections40},
+{"SCAR_sp","Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL_Mesh","body_holstered_7e49edcc2bd6f727",0xa7f219a1426216abull,{{{{1.f,0.f,0.f,0.f},{0.f,1.f,0.f,0.f},{0.f,0.f,1.f,0.f},{0.f,0.f,0.f,1.f}}}},BodyAmmoAssetSections41},
+{"F2000_sp","Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Mesh","jntWpnwpnJnt_16",0xa7f219a1426216abull,{{{{1.f,0.f,0.f,0.f},{0.f,1.f,0.f,0.f},{0.f,0.f,1.f,0.f},{0.f,0.f,0.f,1.f}}}},BodyAmmoAssetSections42},
+{"F2000_sp","Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Mesh","body_holstered_254679ad4dcfefdd",0xa7f219a1426216abull,{{{{1.f,0.f,0.f,0.f},{0.f,1.f,0.f,0.f},{0.f,0.f,1.f,0.f},{0.f,0.f,0.f,1.f}}}},BodyAmmoAssetSections43},
 }};
 }

@@ -1,0 +1,14 @@
+[
+  {
+    "key": "bc2:magazine-descriptor:c3c22709659be930c6dc7a831b565ded925abe64ccb68b7f68f9ebc5ad5c567e",
+    "descriptor_digest": "924645a13919d598e325db8cac9cadff5e9996171cb87bf765d39de39e9a9fd0",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "c4cc47a5921ed5c441a531f9b44c7293cf09575c8cf49a0551821a1571a55a59"
+  },
+  {
+    "key": "bc2:magazine-descriptor:b31aebfb1fa3bd62b92e52020688c97af446cc1e60aa41559ac9e3dc8e59f575",
+    "descriptor_digest": "c73120ea25cc6946e03ecaa270c96fe81fc89bf3878d9269a03f60131406c2f7",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "c4cc47a5921ed5c441a531f9b44c7293cf09575c8cf49a0551821a1571a55a59"
+  }
+]

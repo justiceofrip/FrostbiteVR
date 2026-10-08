@@ -1,0 +1,43 @@
+{
+  "schema": "fvr.bc2.same-family-assembly-review.v1",
+  "family": "bc2.automatic-magazine-zero-bolt.v1",
+  "basis": "Exact SP AutomaticFire2/rtMagazine1/zero-bolt configuration reuses the reviewed native family and ordinary consumer. Rigid assembly rendering is separately measured, with unchanged accepted stock contact.",
+  "prior_family_review": {
+    "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\profiles\\resource-enrollment233\\review-evidence.json",
+    "sha256": "2eaea517e41aef193aee9b337aa02fb5ab283d665fd6fbeda00c147fe4755ca2"
+  },
+  "actual232_audit": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\resource-held234-audit-candidate\\actual232-exact-family-v3.json",
+    "sha256": "6e0f364223f64ac628e1937f59151a70d2e67f8b02e806b562b0617acfcb1986"
+  },
+  "configuration": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\resource-sp235-candidate\\sp-common-configurations.json",
+    "sha256": "b7f8426148d3ba25a071f28f64450ae19130c523fb0cf561605be8c017259015"
+  },
+  "assembly_measurement": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\resource-assembly238-candidate\\installed-inspection-final.json",
+    "sha256": "052638977ff4f7c39cd0c56e553cdd618446f2097428848f34df54401f8848e8"
+  },
+  "geometry": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\resource-f2000240-candidate\\derived\\geometry.json",
+    "sha256": "db24428f5c3c662dc59265be1486905077d09ea94c3874e214f0d8690247b9d5"
+  },
+  "private_cache": {
+    "rows": 44,
+    "bytes": 16363677,
+    "maximum_bytes": 16777216,
+    "sha256": "ad189a784d1a637eef62e919a7346441aa2204e3203a87414536a44df0b8e735",
+    "preserved_baseline_sha256": "154d78ec7f9207ae8882139f56bfd7af5219efd4f166e6b3304e0b57e94a7e60",
+    "preserved_baseline_record_bytes": 16101693,
+    "assembly_bytes": 19572,
+    "body_bytes": 242400,
+    "private_installed_assets_only": true,
+    "native_calls": false
+  },
+  "native_per_variant_tested": false,
+  "headset_tested": false,
+  "global232_observer_complete": false,
+  "chamber_state_inferred": false,
+  "new_native_abi": false,
+  "activation": "Explicit reviewed configuration + geometry headers; newly source-bound operation capability review required after integration."
+}

@@ -58,11 +58,23 @@ void Bc2PhysicalReloadProbe::PhaseTo(Phase phase,std::int64_t now)noexcept {
     if(rowsCount_<rows_.size())rows_[rowsCount_++]={unsigned(phase),failure_,now};
 }
 void Bc2PhysicalReloadProbe::Fail(unsigned reason,std::int64_t now)noexcept {failure_=reason;PhaseTo(Phase::Failed,now);}
+bool Bc2PhysicalReloadProbe::Episode(const BodyAnchorConfig& anchors,std::int64_t warmup)noexcept {
+    if(first_||episode_||!ValidBodyAnchors(anchors)||warmup<0||warmup>6000000000ll)return false;
+    episode_=true;warmupNs_=warmup;pouchPosition_={anchors.chest.center.x,anchors.chest.center.y,-anchors.chest.center.z};return true;
+}
+std::optional<PhysicalReloadProbeState> Bc2PhysicalReloadProbe::EpisodeState(const PhysicalReloadProbeState& source)const noexcept {
+    auto out=source;if(!episode_)return out;
+    if(!baseline_||source.acquired<acquiredBase_||source.submitted<submittedBase_||source.completed<completedBase_)return {};
+    out.acquired-=acquiredBase_;out.submitted-=submittedBase_;out.completed-=completedBase_;return out;
+}
 void Bc2PhysicalReloadProbe::Prepare(interaction::InputFrame& input,const ReloadStateOwner& owner,std::string_view asset,const ReloadRawContact& raw,
-    const PhysicalReloadProbeState& state,std::int64_t observed,std::int64_t deadline,std::int64_t now)noexcept {
+    const PhysicalReloadProbeState& source,std::int64_t observed,std::int64_t deadline,std::int64_t now)noexcept {
     if(!enabled_)return;
     if(CancelConsumer()){input.hands[0].grip=command_;input.hands[0].aim=command_;input.hands[0].squeeze=0;return;}
-    if(!first_){first_=phaseAt_=now;owner_=owner;command_.position={-.23f,-.55f,-.02f};}
+    if(!first_){first_=phaseAt_=now;owner_=owner;command_.position=pouchPosition_;
+        if(episode_){if(source.active||source.held||source.pending||source.submitted!=source.completed){Fail(17,now);return;}
+            acquiredBase_=source.acquired;submittedBase_=source.submitted;completedBase_=source.completed;baseline_=true;}}
+    const auto episode=EpisodeState(source);if(!episode){Fail(17,now);return;}const auto& state=*episode;
     if(rounds_<1||rounds_>2)Fail(13,now);
     if(now<lastNow_||now-first_>=30000000000ll){Fail(1,now);}lastNow_=now;
     if(owner_!=owner||asset!=SpasReloadAsset||!ValidInput(input)||!input.focused||!input.headValid||!StaticReference(input)||
@@ -73,7 +85,7 @@ void Bc2PhysicalReloadProbe::Prepare(interaction::InputFrame& input,const Reload
         input.hands[0].squeeze=CancelConsumer()?0:last_->hands[0].squeeze;return;
     }
     if(state.submitted>rounds_||state.completed>rounds_||state.completed>state.submitted)Fail(4,now);
-    if(phase_==Phase::Warmup&&now-first_>=6000000000ll){
+    if(phase_==Phase::Warmup&&now-first_>=warmupNs_){
         // A trigger command is not proof that native firing consumed a round.
         // Start only from fresh actual counts, independently of prep scheduling.
         preparationReserveFresh_=state.reserve&&state.reserve->verified&&state.reserve->identity.owner==owner&&
@@ -95,12 +107,12 @@ void Bc2PhysicalReloadProbe::Prepare(interaction::InputFrame& input,const Reload
         // A successful receipt leaves the actual native cycle held. Release and
         // return using NEW controller packets; never reuse the first shell's
         // press, claim, contact or receipt to manufacture the next insertion.
-        math::Pose pouch;pouch.position={-.23f,-.55f,-.02f};command_=Step(command_,pouch);
+        math::Pose pouch;pouch.position=pouchPosition_;command_=Step(command_,pouch);
         const Input* neutral=nullptr;
         for(const auto& h:history_)if(h&&h->owner==owner&&h->frame.generation==raw.inputEvidence.sequence&&
             h->observed==raw.inputEvidence.observedNs&&h->deadline==raw.inputEvidence.deadlineNs&&h->deadline>now&&
             h->frame.hands[0].squeeze<=.35f&&h->observed>=phaseAt_){neutral=&*h;break;}
-        const auto actual=neutral&&raw.valid&&raw.owner==owner?PhysicalReloadPouchPose(neutral->frame):std::nullopt;
+        const auto actual=neutral&&raw.valid&&raw.owner==owner?(episode_?BodyAnchorHandPose(neutral->frame,InteractionHand::Left):PhysicalReloadPouchPose(neutral->frame)):std::nullopt;
         const auto desired=Controller(pouch);
         const bool atPouch=actual&&desired&&Distance(*actual,*desired)<.02f&&Angle(*actual,*desired)<.05f;
         const bool fresh=state.reserve&&state.reserve->verified&&state.reserve->identity.owner==owner&&
@@ -153,8 +165,9 @@ void Bc2PhysicalReloadProbe::Prepare(interaction::InputFrame& input,const Reload
     input.hands[0].squeeze=phase_>=Phase::Grab&&phase_<=Phase::WaitAck?1.f:0.f;
     last_=input;history_[next_]=Input{input,observed,deadline,owner};next_=(next_+1)%history_.size();
 }
-void Bc2PhysicalReloadProbe::Observe(const PhysicalReloadProbeState& s,std::int64_t now)noexcept {
-    if(!enabled_||CancelConsumer())return;submitted_=s.submitted;
+void Bc2PhysicalReloadProbe::Observe(const PhysicalReloadProbeState& source,std::int64_t now)noexcept {
+    if(!enabled_||CancelConsumer()||(episode_&&!baseline_))return;
+    const auto episode=EpisodeState(source);if(!episode){Fail(17,now);return;}const auto& s=*episode;submitted_=s.submitted;
     if(s.completed>completed_){
         if(s.completed!=completed_+1||s.completed>rounds_||s.submitted!=s.completed||!s.reserve||!s.reserve->verified||
             s.reserve->identity.owner!=owner_||s.reserve->observedNs>now||s.reserve->deadlineNs<=now||
@@ -172,6 +185,7 @@ void Bc2PhysicalReloadProbe::Report(std::ostream& o)const {
     o<<"{\"enabled\":"<<(enabled_?"true":"false")<<",\"synthetic_input\":true,\"headset_verified\":false,\"phase\":"<<unsigned(phase_)
         <<",\"failure\":"<<failure_<<",\"actual_consumer_completed\":"<<(phase_==Phase::Done?"true":"false")
         <<",\"submitted\":"<<submitted_<<",\"completed\":"<<completed_<<",\"requested_rounds\":"<<rounds_
+        <<",\"episode\":"<<(episode_?"true":"false")<<",\"counter_baseline\":{\"acquired\":"<<acquiredBase_<<",\"submitted\":"<<submittedBase_<<",\"completed\":"<<completedBase_<<'}'
         <<",\"loaded_before\":"<<loadedBefore_<<",\"reserve_before\":"<<reserveBefore_
         <<",\"preparation\":{\"reserve_fresh\":"<<(preparationReserveFresh_?"true":"false")
         <<",\"raw_contact_valid\":"<<(preparationRaw_?"true":"false")<<",\"loaded\":"<<preparationLoaded_

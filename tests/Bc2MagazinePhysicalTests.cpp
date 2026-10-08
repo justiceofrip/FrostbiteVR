@@ -169,7 +169,9 @@ int SeatedMagazineStaysAttachedThroughNativeContinuation(){
 }
 int SubmittedMagazineReleasesSupportWithoutCompletingNativeReload(){
  Fixture f;CHECK(f.Insert());const auto submitted=*f.submitted;
- CHECK(f.result.blocksWeaponActions&&MagazineBlocksSupport(f.result,f.now));
+ CHECK(f.result.blocksWeaponActions&&!f.result.ownsLeftHand&&!f.hands.Current(InteractionHand::Left));
+ CHECK(!MagazineBlocksSupport(f.result,f.now)&&f.result.tracking.target&&
+  f.result.tracking.target->role==MagazinePropRole::Attached&&!f.result.tracking.target->handTarget);
  // Successful physical submission transfers the prop to the gun. Continuing
  // squeeze cannot retain a second invisible AmmoObject until native completion.
  f.Send(true,false,.7f);CHECK(!f.result.ownsLeftHand&&!f.hands.Current(InteractionHand::Left));
@@ -391,6 +393,8 @@ int DistinctFamilyMappingAndExpiry(){
 int NativeStartRejectionAndUnknownRecovery(){
  for(bool deferred:{false,true}){Fixture f;f.startResult=deferred?MagazineCycleStartResult::Unknown:MagazineCycleStartResult::NotStarted;
   f.Send();f.Send(true);CHECK(f.starts==1&&!f.result.reloadHeld&&f.submits==0&&f.cancels==0);
+  CHECK(f.Report().find(deferred?"\"stage\":8":"\"stage\":6")!=std::string::npos);
+  CHECK(f.Report().find("\"identity_present\":1,\"identity_matches\":1")!=std::string::npos);
   if(deferred){CHECK(f.policy->BlocksEquipment());for(unsigned n=0;n<4;++n)f.Send(true);
    CHECK(f.starts==1&&f.inspections==4&&f.policy->BlocksEquipment()&&f.cancels==0);
    f.inspectResult=MagazineCycleStartResult::NotStarted;f.Send(true);}
@@ -407,6 +411,7 @@ int NativeStartRejectionAndUnknownRecovery(){
  CHECK(direct.cancels==1&&direct.policy->BlocksEquipment()&&!direct.result.reloadHeld);return 0;
 }
 int NativeTransferGapKeepsOnlySubmittedCycle(){Fixture f;CHECK(f.Insert());const auto original=f.result.tracking.target;
+ CHECK(!f.result.ownsLeftHand&&!f.hands.Current(InteractionHand::Left));
  CHECK(original&&f.submits==1);f.source=false;f.Send(true);CHECK(f.cancels==0&&f.policy->BlocksEquipment()&&!f.result.reloadHeld);
  CHECK(f.result.completed==0&&f.submits==1&&f.Report().find("\"transfer_read_deferrals\":1")!=std::string::npos);
  CHECK(f.result.tracking.target&&f.result.tracking.target->observedNs==original->observedNs&&f.result.tracking.target->deadlineNs==original->deadlineNs);
@@ -492,7 +497,9 @@ int RemovedMagazineHandUsesAuthoredGraspWithoutMovingRawContact(){
  CHECK(f.submits==0&&f.reserve.loaded==27&&f.reserve.reserve==83&&f.result.acquired==0);
  return 0;
 }
-int PaletteIsolationAndCurrentGuard(){Fixture f;CHECK(f.Insert());const auto original=f.result.tracking;CHECK(MagazineTargetFresh(original,f.now));
+int PaletteIsolationAndCurrentGuard(){Fixture f;CHECK(f.Eject());f.Send();f.s.bodyFromHand=Pose();f.Send(true,false,-.055f);
+ const auto original=f.result.tracking;CHECK(MagazineTargetFresh(original,f.now));
+ CHECK(original.target->role==MagazinePropRole::Replacement&&original.target->handTarget&&f.submits==0);
  RigSnapshot rig;rig.names={"root","jntWpn_1","jntWpn_6","LeftHand"};rig.parents={-1,0,1,0};rig.weaponBone=1;
  for(const char* digit:{"Thumb","Index","Middle","Ring","Pinky"})for(unsigned j=1;j<=3;++j){rig.parents.push_back(j==1?3:int(rig.names.size()-1));rig.names.push_back(std::string("LeftHand")+digit+std::to_string(j));}
  rig.names.push_back("unrelated");rig.parents.push_back(0);const auto count=unsigned(rig.names.size());
@@ -941,8 +948,9 @@ int DeferredPresentationExpiryAndSafety(){
 }
 int DeferredSeatedPresentationPreservesSupportPhase(){
  for(unsigned mode=0;mode<3;++mode){Fixture f;CHECK(f.Insert());SetPresentationDeferral(f,mode);f.Send(true,false,.7f);
-  const auto hand=f.hands.Current(InteractionHand::Left);CHECK(hand&&hand->token.kind==HandClaimKind::AmmoObject);
-  CHECK(f.result.ownsLeftHand&&MagazineBlocksSupport(f.result,f.now)&&f.submits==1&&f.result.completed==0);
+  CHECK(!f.hands.Current(InteractionHand::Left));
+  CHECK(!f.result.ownsLeftHand&&!MagazineBlocksSupport(f.result,f.now)&&f.submits==1&&f.result.completed==0);
+  CHECK(f.policy->ProbeState(f.now).pending&&f.reserve.loaded==27&&f.reserve.reserve==83);
  }
  for(unsigned mode=0;mode<3;++mode)for(bool grip:{false,true}){Fixture f;CHECK(f.Insert());f.Send(true,false,.7f);
   CHECK(f.result.tracking.target&&f.result.tracking.target->role==MagazinePropRole::Attached);

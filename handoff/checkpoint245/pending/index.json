@@ -1,0 +1,26 @@
+[
+  {
+    "name": "physical-recovery",
+    "manifest_sha256": "8568bb941310ea7a0883ebe3db17e401b446e478fcfc8caf9e3b8d168d2a8dbc",
+    "integrated": false,
+    "headset_verified": false
+  },
+  {
+    "name": "native-recovery",
+    "manifest_sha256": "9e7591461e5f5356e4a859952ac06de42f95d7c07c1422cb7152920af3235fd1",
+    "integrated": false,
+    "headset_verified": false
+  },
+  {
+    "name": "sampled-magazine-rails",
+    "manifest_sha256": "c0ee6557e53f1ae53a7bd3ecfef8dd7d3dc71a7a8ea53292ca5a8be88f9564d9",
+    "integrated": false,
+    "headset_verified": false
+  },
+  {
+    "name": "ordinary-bolt-diagnostic",
+    "manifest_sha256": "4b68730d132d213bedbba9f46b883983d87e5f5f6b9fb80756a51e003e4cafa8",
+    "integrated": false,
+    "headset_verified": false
+  }
+]

@@ -1,14 +1,30 @@
 #include "Bc2MagazinePresentation.h"
 #include "Bc2SightContact.h"
 #include "Bc2WeaponVisibility.h"
+#include "Bc2MagazineAssembly.h"
 #include <algorithm>
 namespace fvr::bc2 {
 namespace {
 using namespace interaction;using namespace reload_insertion_detail;
 math::Matrix4 Units(math::Matrix4 m,float units)noexcept{for(unsigned n=0;n<3;++n)m.values[3][n]*=units;return m;}
+// Native animation may change a declared child outside the authored reload.
+// Reject that packet instead of making a rigid assembly erase native motion.
+bool AssemblyVisibleRigid(const RigSnapshot& rig,const MagazinePresentationBinding& b,float units)noexcept{
+ if(!b.assemblyCount)return true;
+ const auto hidden=[&](unsigned n){return std::find(rig.nativeHiddenLeaves.begin(),rig.nativeHiddenLeaves.end(),n)!=rig.nativeHiddenLeaves.end();};
+ if(hidden(b.magazine)||!Rigid(rig.evaluatedWorld[b.magazine]))return false;
+ const auto inverse=InverseRigid(rig.evaluatedWorld[b.magazine]);if(!inverse)return false;
+ for(unsigned n=0;n<b.assemblyCount;++n){const auto bone=b.assembly[n];
+  if(hidden(bone)||!Rigid(rig.evaluatedWorld[bone]))return false;
+  const auto relative=Units(Multiply(rig.evaluatedWorld[bone],*inverse),1/units);
+  if(Distance(relative,b.geometry->assembly[n].itemFromBone)>.001f||Angle(relative,b.geometry->assembly[n].itemFromBone)>.01f)return false;
+ }return true;
+}
 }
 bool MagazineTrackingFresh(const MagazineTracking& t,std::int64_t now)noexcept {
  const auto& in=t.inputEvidence;
+ if(t.resource&&(t.detach||t.retainedVisualSuppression||!MagazineResourcePresentationFresh(*t.resource,t.family,t.reserve,
+     in.owner,t.family.binding.weapon,now)))return false;
  if(t.retainedVisualSuppression){
   if(!t.detach||t.detach->restoring||!t.target||t.target->role!=MagazinePropRole::Removed)return false;
   const auto& r=*t.retainedVisualSuppression;const auto& original=t.detach->suppression;
@@ -34,6 +50,7 @@ bool MagazineTrackingFresh(const MagazineTracking& t,std::int64_t now)noexcept {
 bool MagazineTargetFresh(const MagazineTracking& t,std::int64_t now)noexcept {
  if(!MagazineTrackingFresh(t,now)||!t.target)return false;
  const auto& v=*t.target;const auto p=t.family.binding.profile->geometry->interaction.insertion;const auto& g=v.gunClaim;
+ if(t.resource&&!MagazineResourceRoleAllowed(*t.resource,v.role,t.cycle,now))return false;
  if(t.replacementFrame&&t.removalFrame)return false;
  const auto& carry=t.removalFrame?t.removalFrame:t.replacementFrame;
  if(carry){const auto& f=*carry;
@@ -63,6 +80,10 @@ bool MagazineTargetRetained(const MagazineTracking& old,const MagazineTracking& 
  old.family.binding!=current.family.binding||old.cycle!=current.cycle||old.reserve.identity!=current.reserve.identity||old.inputEvidence.owner!=current.inputEvidence.owner||
  old.inputEvidence.sequence>current.inputEvidence.sequence||old.inputEvidence.observedNs>current.inputEvidence.observedNs)return false;
  const auto& a=*old.target;const auto& b=*current.target;
+ if(bool(old.resource)!=bool(current.resource)||(old.resource&&
+    (old.resource->resource.snapshot.context!=current.resource->resource.snapshot.context||
+     old.resource->resource.wellEmpty!=current.resource->resource.wellEmpty||
+     old.resource->resource.original!=current.resource->resource.original)))return false;
  if(bool(old.replacementFrame)!=bool(current.replacementFrame)||bool(old.removalFrame)!=bool(current.removalFrame))return false;
  const auto& oldFrame=old.removalFrame?old.removalFrame:old.replacementFrame;
  const auto& currentFrame=current.removalFrame?current.removalFrame:current.replacementFrame;
@@ -91,10 +112,18 @@ std::optional<MagazinePresentationBinding> Derive(const RigSnapshot& rig,const M
  std::copy(profile.bones.fingers.begin(),profile.bones.fingers.end(),roles.begin()+3);
  for(std::size_t n=0;n<roles.size();++n)if(roles[n].empty()||std::find(roles.begin(),roles.begin()+n,roles[n])!=roles.begin()+n)return {};
  const auto root=named(profile.bones.weapon),mag=named(profile.bones.magazine),wrist=named(profile.bones.wrist);
- if(!root||!mag||!wrist||rig.weaponBone!=*root||rig.parents[*mag]!=int(*root)||
- std::find(rig.parents.begin(),rig.parents.end(),int(*mag))!=rig.parents.end())return {};
+ if(!root||!mag||!wrist||rig.weaponBone!=*root||rig.parents[*mag]!=int(*root)||!MagazineAssemblyShape(profile))return {};
  for(std::size_t n=0;n<count;++n){auto at=int(n);std::size_t steps=0;while(at!=-1){if(at<0||std::size_t(at)>=count||++steps>count)return {};at=rig.parents[at];}}
  MagazinePresentationBinding out;out.geometry=&profile;out.weapon=*root;out.magazine=*mag;out.wrist=*wrist;unsigned slot=0;
+ out.assemblyCount=profile.assemblyCount;
+ for(unsigned n=0;n<out.assemblyCount;++n){
+  const auto bone=named(profile.assembly[n].bone),parent=named(profile.assembly[n].parent);
+  if(!bone||!parent||rig.parents[*bone]!=int(*parent))return {};out.assembly[n]=*bone;
+ }
+ // Every descendant, including unweighted intermediary bones, must be declared.
+ for(std::size_t n=0;n<count;++n){auto at=rig.parents[n];while(at!=-1&&at!=int(*mag))at=rig.parents[at];
+  if(at==int(*mag)&&std::find(out.assembly.begin(),out.assembly.begin()+out.assemblyCount,n)==out.assembly.begin()+out.assemblyCount)return {};
+ }
  for(unsigned digit=0;digit<5;++digit){auto parent=*wrist;for(unsigned j=0;j<3;++j){
  const auto bone=named(profile.bones.fingers[digit*3+j]);if(!bone||rig.parents[*bone]!=int(parent))return {};
  out.fingers[slot++]=*bone;parent=*bone;}}
@@ -119,7 +148,7 @@ MagazineRawContact BuildMagazineRawContact(const MagazineTracking& t,const RigSn
  const auto& geometry=*t.family.binding.profile->geometry;
  const auto binding=magazine_presentation_detail::Derive(rig,geometry);
  if(asset!=geometry.asset||!binding||binding->fingerprint!=geometry.rigFingerprint||rig.identity.soldier!=t.owner.soldier||rig.identity.weak!=t.owner.weak||
- !std::isfinite(units)||units<=0||!Rigid(wrist)||!Rigid(weapon))return out;
+ !std::isfinite(units)||units<=0||!Rigid(wrist)||!Rigid(weapon)||!AssemblyVisibleRigid(rig,*binding,units))return out;
  out.valid=true;out.owner=t.owner;out.rig=rig.identity;out.rigFingerprint=binding->fingerprint;out.inputEvidence=t.inputEvidence;
  out.rawLeftWristWorldMeters=Units(wrist,1/units);out.weaponWorldMeters=Units(weapon,1/units);
  if(trackingBody&&Rigid(*trackingBody))out.trackingBodyWorldMeters=Units(*trackingBody,1/units);
@@ -135,13 +164,16 @@ MagazinePresentationPlan BuildMagazinePresentation(const RigSnapshot& rig,const 
  const auto& geometry=*t.family.binding.profile->geometry;
  const auto actual=magazine_presentation_detail::Derive(rig,geometry);
  if(!actual||*actual!=binding||!MagazineTargetFresh(t,now)||rig.identity.soldier!=t.owner.soldier||rig.identity.weak!=t.owner.weak||
- !std::isfinite(units)||units<=0||!Rigid(weapon)||
+ !std::isfinite(units)||units<=0||!Rigid(weapon)||!AssemblyVisibleRigid(rig,binding,units)||
  std::find(rig.nativeHiddenLeaves.begin(),rig.nativeHiddenLeaves.end(),binding.magazine)!=rig.nativeHiddenLeaves.end())return out;
  const auto& v=*t.target;if(!Rigid(v.weaponFromItemMeters)||(v.handTarget&&!Rigid(v.weaponFromHandMeters)))return out;
  out.binding=binding;out.hideMagazine=v.role==MagazinePropRole::Hidden;if(out.hideMagazine)return out;
  const auto& carry=t.removalFrame?t.removalFrame:t.replacementFrame;
  const auto frame=carry?Units(carry->weaponWorldMeters,units):weapon;
- out.writes.push_back({binding.magazine,Multiply(Units(v.weaponFromItemMeters,units),frame)});
+ const auto itemWorld=Multiply(Units(v.weaponFromItemMeters,units),frame);
+ out.writes.push_back({binding.magazine,itemWorld});
+ for(unsigned n=0;n<binding.assemblyCount;++n)out.writes.push_back({binding.assembly[n],
+  Multiply(Units(geometry.assembly[n].itemFromBone,units),itemWorld)});
  if(v.handTarget){
  // Removal motion/contact keeps its independently sampled raw wrist. The
  // displayed hand must use the SAME authored magazine grasp as these fingers,
@@ -157,7 +189,9 @@ std::optional<std::vector<std::array<std::byte,64>>> HideMagazinePackedPalette(c
  const MagazinePresentationBinding& binding,std::span<const std::array<std::byte,64>> ordinary){
  if(!binding.geometry)return {};
  const auto actual=magazine_presentation_detail::Derive(rig,*binding.geometry);if(!actual||*actual!=binding||ordinary.size()!=rig.names.size())return {};
- const std::array<std::uint32_t,1> index{binding.magazine};return weapon_visibility_detail::CollapseWeightedPalette(ordinary,index);
+ std::array<std::uint32_t,1+MagazineAssemblyLimit> indices{binding.magazine};
+ std::copy_n(binding.assembly.begin(),binding.assemblyCount,indices.begin()+1);
+ return weapon_visibility_detail::CollapseWeightedPalette(ordinary,std::span(indices).first(1+binding.assemblyCount));
 }
 ReloadPackedPaletteChoice SelectMagazinePackedPalette(const MagazineTracking& old,const MagazineTracking* current,std::int64_t now,
  std::span<const std::array<std::byte,64>> posed,std::span<const std::array<std::byte,64>> ordinary,bool coherent)noexcept{

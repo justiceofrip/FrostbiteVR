@@ -1,5 +1,6 @@
 #pragma once
 #include "Bc2PhysicalReload.h"
+#include "fvr/interaction/BodyAnchors.h"
 namespace fvr::bc2 {
 // Diagnostic-only inverse of the existing TrackedRig mapping. The coherent raw
 // wrist/body sample and its original controller input are both required.
@@ -10,12 +11,16 @@ public:
     // Two rounds is a separate bounded fixture; the verified one-round default
     // keeps its original motion and completion behavior.
     explicit Bc2PhysicalReloadProbe(bool enabled=false,unsigned rounds=1)noexcept:enabled_(enabled),rounds_(rounds){}
+    // Explicit input-only episode configuration; ordinary consumers are retained.
+    bool Episode(const interaction::BodyAnchorConfig&,std::int64_t warmupNs=200000000)noexcept;
     // Edits only a private synthetic-fixture input copy before hand ownership.
     // Never publishes geometry or invokes native reload dispatch/ack functions.
     void Prepare(interaction::InputFrame&,const ReloadStateOwner&,std::string_view asset,const ReloadRawContact&,
         const PhysicalReloadProbeState&,std::int64_t observedNs,std::int64_t deadlineNs,std::int64_t nowNs)noexcept;
     void Observe(const PhysicalReloadProbeState&,std::int64_t nowNs)noexcept;
     bool CancelConsumer()const noexcept{return phase_==Phase::Done||phase_==Phase::Failed;}
+    bool Completed()const noexcept{return phase_==Phase::Done;}
+    bool Failed()const noexcept{return phase_==Phase::Failed;}
     void Report(std::ostream&)const;
 private:
     enum class Phase:unsigned {Warmup,Grab,WaitHold,Approach,Enter,Stroke,WaitAck,Done,Failed,Rearm};
@@ -28,6 +33,9 @@ private:
     ReloadStateOwner owner_{};std::optional<interaction::InputFrame> last_;
     math::Pose command_{};int loadedBefore_=-1,reserveBefore_=-1;
     unsigned completed_=0,submitted_=0,rounds_=1;
+    bool episode_=false,baseline_=false;unsigned acquiredBase_=0,submittedBase_=0,completedBase_=0;
+    math::Vec3 pouchPosition_{-.23f,-.55f,-.02f};std::int64_t warmupNs_=6000000000ll;
+    std::optional<PhysicalReloadProbeState> EpisodeState(const PhysicalReloadProbeState&)const noexcept;
     bool preparationReserveFresh_=false,preparationRaw_=false;
     int preparationLoaded_=-1,preparationReserve_=-1,preparationCapacity_=-1;
     std::uint64_t lastRaw_=0,neutralFirst_=0,neutralLast_=0;

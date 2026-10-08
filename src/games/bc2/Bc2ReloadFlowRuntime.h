@@ -12,6 +12,9 @@
 #include "Bc2MagazineStart.h"
 #include "Bc2MagazineEmptyDiagnostic.h"
 #include "Bc2ReloadRetirement.h"
+#include "Bc2AmmoResourceBinding.h"
+#include "Bc2AmmoResourceService.h"
+#include <atomic>
 #include <memory>
 #include <ostream>
 namespace fvr::bc2 {
@@ -71,11 +74,19 @@ struct ReloadFlowEventEnd {
 // True only for a fully captured owner-retained restore whose output matches
 // the captured source fields and whose source bytes did not change. No authority
 // or gameplay acknowledgement is inferred from this observation.
-bool ReloadRestoreMatched(const struct ReloadFlowRecord&)noexcept;
 struct ReloadFlowRecord {
     std::uint64_t id=0;ReloadFlowEventInput entry{};ReloadFlowEventEnd exit{};
     bool finished=false,identityRetained=false;
 };
+// Pure captured-data comparison: consumers need no executable-hook runtime.
+inline bool ReloadRestoreMatched(const ReloadFlowRecord& record)noexcept{
+    if(record.entry.kind!=ReloadFlowEvent::Restore||!record.finished||!record.identityRetained||!record.exit.boundary||
+       !record.entry.snapshotCopied||!record.exit.snapshotCopied||record.entry.copiedSnapshot!=record.exit.copiedSnapshot)return false;
+    const auto source=DecodeReloadFiringSnapshot(record.entry.copiedSnapshot);if(!source)return false;
+    const auto& after=*record.exit.boundary;
+    return after.current==source->current&&after.next==source->next&&after.previous==record.entry.boundary.current&&
+        after.timer==source->phaseTimer&&after.loaded==source->loaded&&after.reserve==source->reserve;
+}
 // Independent callback evidence: no recording window, capacity, or slot ID.
 // One object lives on each original invocation's stack. The native TLS caller
 // supplies only the actual still-open parent from the same owned firing chain.
@@ -100,10 +111,12 @@ class ReloadFlowRecords {
 public:
     static constexpr unsigned Capacity=20480;
     static constexpr unsigned RecoveryCapacity=2*Capacity;
+    static constexpr unsigned PumpCapacity=3*Capacity;
     ReloadFlowRecords()noexcept;
     // Configuration only, before the first callback. Ordinary runs keep their
     // original capacity; the explicit 40-second recovery recorder gets twice it.
     bool EnableRecoveryCapacity()noexcept;
+    bool EnablePumpCapacity()noexcept;
     unsigned Limit()const noexcept{return limit_;}
     std::uint64_t Begin(const ReloadFlowEventInput&)noexcept;
     bool End(std::uint64_t,const ReloadFlowEventEnd&)noexcept;
@@ -116,13 +129,102 @@ private:
     // translation unit that includes this header.
     std::unique_ptr<ReloadFlowRecord[]> records_;unsigned limit_=0,count_=0,dropped_=0,rejected_=0;
 };
+// Presentation-only copy of an existing reserve observation. A render read
+// cannot enter native invocation exclusion, perform memory reads, or cancel a
+// reload. Invalidations also reject publications from reads already in flight.
+class ReloadReservePublication {
+    struct Snapshot {std::uint64_t epoch;Bc2AmmoReserveLease lease;};
+    std::atomic<std::uint64_t> epoch_{1};
+    std::atomic<std::shared_ptr<const Snapshot>> snapshot_;
+    void Invalidate(std::uint64_t epoch)noexcept {
+        epoch_.compare_exchange_strong(epoch,epoch+1,std::memory_order_acq_rel);
+    }
+public:
+    std::uint64_t Begin()const noexcept{return epoch_.load(std::memory_order_acquire);}
+    void Clear()noexcept{epoch_.fetch_add(1,std::memory_order_acq_rel);}
+    void Observe(std::uint64_t epoch,const ReloadReserveObservation& observation)noexcept {
+        if(observation.result==ReloadObservationResult::Deferred)return;
+        if(observation.result!=ReloadObservationResult::Available||!observation.lease||
+           !observation.lease->verified||!observation.lease->sequence){Invalidate(epoch);return;}
+        try{
+            const std::shared_ptr<const Snapshot> next=std::make_shared<const Snapshot>(Snapshot{epoch,*observation.lease});
+            auto current=snapshot_.load(std::memory_order_acquire);
+            for(unsigned attempt=0;attempt<4;++attempt){
+                if(epoch!=Begin()||(current&&current->epoch==epoch&&current->lease.sequence>=next->lease.sequence))return;
+                if(snapshot_.compare_exchange_strong(current,next,std::memory_order_acq_rel,std::memory_order_acquire))return;
+            }
+        }catch(...){Invalidate(epoch);}
+    }
+    std::optional<Bc2AmmoReserveLease> Read()const noexcept {
+        const auto current=snapshot_.load(std::memory_order_acquire);
+        if(current&&current->epoch==Begin())return current->lease;
+        return {};
+    }
+};
+struct MagazineStartAttempt {
+    ReloadCycleControl requested{};
+    interaction::ManualReloadRequest unseat{};
+    ReloadStateOwner nativeOwner{};
+    std::int64_t beginNs=0,endNs=0,checkNs=0,pulseEndNs=0;
+    std::uint64_t profile=0,nativeCycle=0,nativePending=0,revisionBefore=0,revisionAfter=0;
+    std::uint64_t ownerRevisionBefore=0,ownerRevisionAfter=0,cancelBefore=0,cancelAfter=0;
+    unsigned thread=0,activeBefore=0,activeAfter=0,nativePhase=0;
+    bool policyObserved=false,entryHeld=false,policyEntered=false,policyDelivered=false,registered=false;
+    MagazineCycleStartResult result=MagazineCycleStartResult::Unknown;
+    // Literal stage names only. No strings/allocations or new native evidence.
+    const char* gate="not_entered";
+    const char* identityGate="not_checked";
+};
+// Dedicated immutable slots: ordinary reload callbacks cannot fill this journal
+// before the user's later start attempts. Release publication makes a drained
+// report safe even if a Start's final diagnostic write trails native drain.
+class MagazineStartJournal {
+    struct Slot {MagazineStartAttempt value{};std::atomic<bool> ready=false;};
+    std::array<Slot,128> rows_{};std::atomic<unsigned> total_=0;
+public:
+    void Observe(const MagazineStartAttempt& value)noexcept {
+        const auto n=total_.fetch_add(1,std::memory_order_relaxed);
+        if(n<rows_.size()){rows_[n].value=value;rows_[n].ready.store(true,std::memory_order_release);}
+    }
+    void Report(std::ostream& out,bool drained)const {
+        const auto total=total_.load();out<<"{\"capacity\":128,\"total\":"<<total<<",\"dropped\":"<<(total>128?total-128:0)
+            <<",\"drained\":"<<(drained?"true":"false")<<",\"rows\":[";
+        const auto owner=[&](const ReloadStateOwner& o){out<<'['<<o.player<<','<<o.soldier<<','<<o.weak<<','<<o.weapon<<','
+            <<o.actorGeneration<<','<<o.equipGeneration<<','<<o.space<<']';};
+        bool comma=false;
+        if(drained)for(unsigned n=0;n<rows_.size()&&n<total;++n)if(rows_[n].ready.load(std::memory_order_acquire)){
+            const auto& e=rows_[n].value;const auto& c=e.requested;if(comma)out<<',';comma=true;
+            out<<"{\"attempt\":"<<n+1<<",\"thread\":"<<e.thread<<",\"input\":"<<c.sequence<<",\"cycle\":"<<c.cycle
+                <<",\"request\":"<<e.unseat.id<<",\"profile\":"<<e.profile<<",\"owner\":";owner(c.identity.owner);
+            const auto& u=e.unseat.owner;out<<",\"request_owner\":["<<u.actor<<','<<u.actorGeneration<<','<<u.weapon<<','<<u.equipGeneration<<','<<u.space<<']';
+            out<<",\"firing\":["<<c.identity.firing[0]<<','<<c.identity.firing[1]<<','<<c.identity.firing[2]
+                <<"],\"server\":["<<c.identity.serverPlayer<<','<<c.identity.serverSoldier<<','<<c.identity.serverItem<<']'
+                <<",\"begin_ns\":"<<e.beginNs<<",\"end_ns\":"<<e.endNs<<",\"check_ns\":"<<e.checkNs
+                <<",\"input_observed_ns\":"<<c.observedNs<<",\"input_deadline_ns\":"<<c.deadlineNs<<",\"permitted\":"<<c.permitted
+                <<",\"pulse_end_ns\":"<<e.pulseEndNs<<",\"result\":"<<unsigned(e.result)<<",\"gate\":\""<<e.gate
+                <<"\",\"identity_gate\":\""<<e.identityGate<<"\",\"native_policy_observed\":"<<e.policyObserved
+                <<",\"native_cycle\":"<<e.nativeCycle<<",\"native_phase\":"<<e.nativePhase<<",\"native_pending\":"<<e.nativePending
+                <<",\"native_owner\":";owner(e.nativeOwner);
+            out<<",\"entry_held\":"<<e.entryHeld<<",\"policy_entered\":"<<e.policyEntered<<",\"policy_delivered\":"<<e.policyDelivered
+                <<",\"registered\":"<<e.registered<<",\"active_before\":"<<e.activeBefore<<",\"active_after\":"<<e.activeAfter
+                <<",\"revision_before\":"<<e.revisionBefore<<",\"revision_after\":"<<e.revisionAfter
+                <<",\"owner_revision_before\":"<<e.ownerRevisionBefore<<",\"owner_revision_after\":"<<e.ownerRevisionAfter
+                <<",\"cancel_before\":"<<e.cancelBefore<<",\"cancel_after\":"<<e.cancelAfter<<'}';
+        }out<<"]}";
+    }
+};
 namespace reloadFlowRuntime {
 // Cached existing owned-Update observation only, no native read or renewal.
 std::optional<ReloadPreholdEntryObservation> ReadPreholdEntry(const ReloadHoldIdentity&,std::uint64_t cycle,std::int64_t now)noexcept;
 // Fresh coherent reserve before Start; no cycle/held state is invented.
 std::optional<Bc2AmmoReserveLease> ReadReserve()noexcept;
+// Pure published copy for rendering. No native reads, policy entry, clock
+// renewal or cancellation. Consumers must validate original identity/expiry.
+std::optional<Bc2AmmoReserveLease> ReadPublishedReserve()noexcept;
 // Opt-in diagnostic observer only; native request policy selection is unchanged.
 std::optional<Bc2AmmoReserveLease> ReadDiagnosticFireReserve()noexcept;
+// Exact stock M95 observation only; grants no manual-cycle or reload authority.
+std::optional<Bc2AmmoReserveLease> ReadM95StockShotReserve()noexcept;
 ReloadReserveObservation ReadReserveObserved()noexcept;
 // Read-only diagnostic snapshot; sequential branch reads are not atomic.
 struct RequestProbeSnapshot {
@@ -136,6 +238,20 @@ struct RequestProbeSnapshot {
     bool unresolved=false;unsigned family=~0u; // Existing policy snapshot only; no new native authority.
 };
 std::optional<RequestProbeSnapshot> ReadRequestProbeSnapshot()noexcept;
+// Read-only, exact-config pump diagnostic state bracket. No normal backend or
+// gameplay authority. Original owner/server deadline remains unchanged.
+struct PumpPartNativeSample {
+    ReloadHoldIdentity identity{};
+    ReloadObservedConfig config{};
+    std::array<ReloadFlowBoundary,3> branches{};
+    std::int64_t observedNs=0,completedNs=0,deadlineNs=0;
+    std::uint64_t callbackRevision=0;
+    unsigned holdPhase=0;
+};
+std::optional<PumpPartNativeSample> ReadPumpPartDiagnosticSnapshot()noexcept;
+// Passive exact-M95 original state bracket. No callback activity/state mutation.
+std::optional<PumpPartNativeSample> ReadM95ShotPartDiagnosticSnapshot()noexcept;
+
 // x86 only. MinHook must already be initialized. Creates disabled hooks only;
 // caller performs its existing global enable after all modules install.
 // Copy/type callbacks must be bounded, exception-safe and remain alive through
@@ -203,6 +319,13 @@ std::optional<ReloadCycleRetirement> RetireRequestCycle(const ReloadHoldIdentity
 OwnerPublicationResult PublishOwnerObserved(const ReloadStateSnapshot&,std::int64_t deadlineNs)noexcept;
 bool PublishOwner(const ReloadStateSnapshot&,std::int64_t deadlineNs)noexcept;
 void ClearOwner()noexcept;
+// Private resource backend consumes the body's native lifetime, independently
+// of rendering or active hand claims. Normal builds do not dispatch from it.
+void PublishAmmoResourceBinding(const std::optional<AmmoResourceBinding>&)noexcept;
+bool ResourceHandsEnabled()noexcept;
+std::optional<AmmoResourceView> ReadAmmoResourceView(const ReloadStateOwner&,std::int64_t now)noexcept;
+bool SubmitAmmoResourceRequest(const AmmoResourceRequest&)noexcept;
+std::optional<AmmoResourceOutcome> ReadAmmoResourceOutcome(std::uint64_t,const interaction::AmmoResourceContext&)noexcept;
 // One bounded recording session, at most20 seconds; no automatic reset/rearm.
 void Start()noexcept;
 // Disables only these hooks, drains for at most2s, retains trampolines/module.

@@ -1,4 +1,5 @@
 #include "Bc2AmmoCounterHost.h"
+#include "Bc2ReloadFlowRuntime.h"
 #include "Test.h"
 #include <iostream>
 #include <string_view>
@@ -27,6 +28,58 @@ int NativeReadOnlyAdmission(){const auto a=Reserve();const auto o=Owner();auto s
     }
     auto empty=a;empty.loaded=empty.reserve=0;CHECK(AmmoCounterHostSample(empty,o,Now).sequence);
     CHECK(!AmmoCounterHostSample(a,o,Now+100000000).sequence);
+    return 0;
+}
+int NativeReadClockOrdering(){
+    auto current=Owner();auto native=Reserve();std::int64_t clock=Now;
+    const auto read=[&]()noexcept->std::optional<Bc2AmmoReserveLease>{
+        // Model ReadReserve: counts are observed after the caller enters, and
+        // ownership/cohort validation finishes after those actual count reads.
+        clock+=1000000;++native.sequence;native.observedNs=clock;native.deadlineNs=clock+200000000;
+        clock+=1000000;return native;
+    };
+    const auto now=[&]()noexcept{return clock;};
+    const auto entered=now();const auto readAfterEntry=read();
+    CHECK(!AmmoCounterHostSample(readAfterEntry,current,entered).sequence); // Checkpoint207 composition rejected every fresh read.
+    const auto first=ReadAmmoCounterHostSample(current,read,now);
+    CHECK(first.sequence==native.sequence&&first.loaded==20&&first.reserve==180);
+    CHECK(first.observedNs==native.observedNs&&first.observedNs<clock);
+    CHECK(first.deadlineNs==native.observedNs+AmmoCounterMaxAgeNs);
+    const auto second=ReadAmmoCounterHostSample(current,read,now);
+    AmmoCounterPresentation presentation;CHECK(presentation.Receive(first,second,current.owner.space,clock));
+    CHECK(presentation.Select(current.owner.space,clock));CHECK(!presentation.Select(current.owner.space,first.deadlineNs));
+    // A slow read must not renew held ownership or old count data to obtain a HUD.
+    current.deadlineNs=clock+1000000;
+    CHECK(!ReadAmmoCounterHostSample(current,read,now).sequence);
+    current=Owner();const auto old=native;clock=old.observedNs+AmmoCounterMaxAgeNs;
+    CHECK(!ReadAmmoCounterHostSample(current,[&]()noexcept{return std::optional{old};},now).sequence);
+    auto future=native;future.observedNs=clock+1;future.deadlineNs=future.observedNs+200000000;
+    CHECK(!ReadAmmoCounterHostSample(current,[&]()noexcept{return std::optional{future};},now).sequence);
+    CHECK(!ReadAmmoCounterHostSample(current,[]()noexcept{return std::optional<Bc2AmmoReserveLease>{};},now).sequence);
+    return 0;
+}
+int PublishedReserveIsPassiveAndBounded(){
+    ReloadReservePublication cache;CHECK(!cache.Read());const auto original=Reserve();
+    const auto epoch=cache.Begin();cache.Observe(epoch,{ReloadObservationResult::Available,original});
+    const auto copy=cache.Read();CHECK(copy&&copy->identity==original.identity&&copy->sequence==original.sequence);
+    CHECK(copy->observedNs==original.observedNs&&copy->deadlineNs==original.deadlineNs);
+    auto clock=Now+1000000;
+    const auto render=[&]()noexcept{return ReadAmmoCounterHostSample(Owner(),[&]()noexcept{return cache.Read();},[&]()noexcept{return clock;});};
+    const auto first=render();CHECK(first.sequence==original.sequence&&first.loaded==original.loaded&&first.reserve==original.reserve);
+    clock+=1000000;CHECK(render()==first); // Repeated eye reads have no observation/sequence/deadline side effects.
+    cache.Observe(epoch,{ReloadObservationResult::Deferred,{}});CHECK(render()==first);
+    clock=Now+AmmoCounterMaxAgeNs;CHECK(!render().sequence);CHECK(cache.Read()->deadlineNs==original.deadlineNs);
+    // A rejected observation/owner clear wins against an earlier in-flight read.
+    auto newer=original;++newer.sequence;newer.observedNs+=1000000;newer.deadlineNs+=1000000;
+    cache.Observe(epoch,{ReloadObservationResult::Rejected,{}});CHECK(!cache.Read());
+    cache.Observe(epoch,{ReloadObservationResult::Available,newer});CHECK(!cache.Read());
+    const auto nextEpoch=cache.Begin();cache.Observe(nextEpoch,{ReloadObservationResult::Available,newer});CHECK(cache.Read());
+    cache.Observe(nextEpoch,{ReloadObservationResult::Available,original});CHECK(cache.Read()->sequence==newer.sequence);
+    cache.Clear();CHECK(!cache.Read());cache.Observe(nextEpoch,{ReloadObservationResult::Available,newer});CHECK(!cache.Read());
+    cache.Observe(cache.Begin(),{ReloadObservationResult::Available,original});CHECK(cache.Read());
+    cache.Observe(cache.Begin(),{ReloadObservationResult::CohortGap,{}});CHECK(!cache.Read());
+    cache.Observe(cache.Begin(),{ReloadObservationResult::Available,original});CHECK(cache.Read());
+    cache.Observe(cache.Begin(),{ReloadObservationResult::Available,{}});CHECK(!cache.Read());
     return 0;
 }
 int PairAndFreshness(){const auto a=Sample();CHECK(AmmoCounterPair(a,a,30,Now));
@@ -65,6 +118,6 @@ int BitmapContents(){
     return 0;
 }
 }
-int main(){if(NativeReadOnlyAdmission()||PairAndFreshness()||BitmapContents())return 1;
+int main(){if(NativeReadOnlyAdmission()||NativeReadClockOrdering()||PublishedReserveIsPassiveAndBounded()||PairAndFreshness()||BitmapContents())return 1;
     std::cout<<"AmmoCounter: native identity/freshness, paired telemetry and bitmap checks passed; no native acceptance\n";
 }

@@ -1,0 +1,1918 @@
+--- a/include/fvr/interaction/BoltWeaponCustody.h
++++ b/include/fvr/interaction/BoltWeaponCustody.h
+@@ -4,9 +4,9 @@
+ 
+ namespace fvr::interaction {
+ enum class BoltCustodyPhase:unsigned {Idle,AwaitingCustody,Manipulating,Returned};
+-struct BoltCustodySample {
++template<class Authority> struct BoltCustodySampleT {
+     HandInteractionSample source{};
+-    WeaponCycleLease lease{};
++    Authority lease{};
+     // Current custody-hand wrist in world; mechanism wrist in canonical weapon
+     // space from original raw controller evidence, never a guided hand target.
+     math::Matrix4 gunWristInWorld{},mechanismWristInWeapon{};
+@@ -32,9 +32,9 @@
+         target.observedNs==input.observedNs&&Window(target.observedNs,target.deadlineNs,input.nowNs)&&
+         target.deadlineNs<=gun.deadlineNs&&gun.deadlineNs<=input.deadlineNs&&feed_mechanism_detail::Pose(target.weaponInWorld);
+ }
+-struct BoltCustodyResult {
++template<class Authority> struct BoltCustodyResultT {
+     BoltCustodyPhase custody=BoltCustodyPhase::Idle;
+-    PhysicalWeaponCycleResult physical{};
++    PhysicalWeaponCycleResultT<Authority> physical{};
+     std::optional<BoltCustodyWeaponTarget> weapon;
+     bool blocksFire=false;
+ };
+@@ -42,8 +42,16 @@
+ // Portable custody/gesture coordinator, not native admission or a rig writer.
+ // The adapter supplies a held native cycle and verified calibration. Offline
+ // authored fixtures may exercise this API without claiming live calibration.
+-class BoltWeaponCustody {
++template<class Authority> class BoltWeaponCustodyT {
++    template<class> friend class BoltWeaponCustodyT;
+ public:
++    using WeaponCycleLease=Authority;
++    using WeaponCycleRelease=WeaponCycleReleaseT<Authority>;
++    using WeaponCycleReady=WeaponCycleReadyT<Authority>;
++    using PhysicalWeaponCycle=PhysicalWeaponCycleT<Authority>;
++    using PhysicalWeaponCycleSample=PhysicalWeaponCycleSampleT<Authority>;
++    using BoltCustodySample=BoltCustodySampleT<Authority>;
++    using BoltCustodyResult=BoltCustodyResultT<Authority>;
+     bool Arm(const WeaponCycleProfile& profile,const WeaponCycleLease& lease,
+         const math::Matrix4& contactFromMechanismWrist,std::int64_t now)noexcept {
+         if((phase_!=BoltCustodyPhase::Idle&&!(phase_==BoltCustodyPhase::Returned&&cycle_.Phase()==WeaponCyclePhase::Complete))||
+@@ -52,6 +60,32 @@
+         profile_=profile;identity_=lease;contactFromWrist_=contactFromMechanismWrist;
+         phase_=BoltCustodyPhase::AwaitingCustody;gun_.reset();submitted_.reset();returnNeutral_=0;
+         deadline_=now+profile.maximumCycleNs;return true;
++    }
++    // Transfer only still-live physical custody when a retained debt changes
++    // its authority kind. This neither mints a hand claim nor accepts a native
++    // completion. Expired/lost custody must return through ordinary gun/support
++    // acquisition and the normal atomic exchange instead.
++    template<class Previous> bool AdoptRetainedCustody(BoltWeaponCustodyT<Previous>& previous,
++        const HandInteractionSample& source,const math::Matrix4& wrist,
++        const HandContactProof& contact,HandInteraction& hands)noexcept {
++        using namespace weapon_cycle_detail;
++        if(phase_!=BoltCustodyPhase::AwaitingCustody||source.nowNs>=deadline_||previous.submitted_||
++           previous.phase_!=BoltCustodyPhase::Manipulating||!previous.gun_||
++           profile_.hands!=previous.profile_.hands||source.owner!=identity_.owner||
++           identity_.owner!=previous.identity_.owner||identity_.item!=previous.identity_.item||
++           identity_.mechanism!=previous.identity_.mechanism||identity_.cycle!=previous.identity_.cycle||
++           identity_.shot!=previous.identity_.shot||!source.released[HandIndex(profile_.hands.mechanism)]||
++           source.released[HandIndex(profile_.hands.gun)]||!feed_mechanism_detail::Pose(wrist)||
++           hands.Current(profile_.hands.mechanism)||!source.focused||!source.tracked[0]||!source.tracked[1]||
++           !Window(source.observedNs,source.deadlineNs,source.nowNs))return false;
++        const auto gun=hands.Current(profile_.hands.gun);
++        if(!gun||gun->token!=*previous.gun_||gun->token.item!=identity_.item||
++           contact.key!=gun->token.contact||!contact.eligible||contact.inputSequence!=source.sequence||
++           !hands.Renew(source,gun->token,contact).accepted)return false;
++        gun_=previous.gun_;attachment_=previous.attachment_;
++        originalGunContact_=previous.originalGunContact_;originalSupportContact_=previous.originalSupportContact_;
++        phase_=BoltCustodyPhase::Manipulating;previous.gun_.reset();previous.phase_=BoltCustodyPhase::Idle;
++        return true;
+     }
+     HandGunCustodyResult EnterCustody(const HandInteractionSample& current,const HandGunCustodyTransfer& transfer,
+         const math::Matrix4& weaponInWorld,const math::Matrix4& receivingWristInWorld,HandInteraction& hands)noexcept {
+@@ -150,4 +184,10 @@
+     std::int64_t deadline_=0;
+     BoltCustodyPhase phase_=BoltCustodyPhase::Idle;
+ };
++using BoltCustodySample=BoltCustodySampleT<WeaponCycleLease>;
++using BoltCustodyResult=BoltCustodyResultT<WeaponCycleLease>;
++using BoltWeaponCustody=BoltWeaponCustodyT<WeaponCycleLease>;
++using BoltCustodyIdleDebtSample=BoltCustodySampleT<WeaponCycleIdleDebtLease>;
++using BoltCustodyIdleDebtResult=BoltCustodyResultT<WeaponCycleIdleDebtLease>;
++using BoltWeaponIdleDebtCustody=BoltWeaponCustodyT<WeaponCycleIdleDebtLease>;
+ }
+--- a/include/fvr/interaction/PhysicalWeaponCycle.h
++++ b/include/fvr/interaction/PhysicalWeaponCycle.h
+@@ -2,9 +2,9 @@
+ #include "fvr/interaction/WeaponCycle.h"
+ 
+ namespace fvr::interaction {
+-struct PhysicalWeaponCycleSample {
++template<class Authority> struct PhysicalWeaponCycleSampleT {
+     HandInteractionSample source{};
+-    WeaponCycleLease lease{};
++    Authority lease{};
+     math::Matrix4 rawContact{};
+     bool grip=false;
+     HandClaimToken gun{};
+@@ -18,8 +18,8 @@
+     // The arbiter validates this packet from its history via *From APIs.
+     std::optional<HandInteractionSample> contactSource;
+ };
+-struct PhysicalWeaponCycleTarget {
+-    WeaponCycleLease lease{};
++template<class Authority> struct PhysicalWeaponCycleTargetT {
++    Authority lease{};
+     HandClaimToken mechanism{},gun{};
+     std::uint64_t profile=0,revision=0,inputSequence=0;
+     std::int64_t observedNs=0,deadlineNs=0;
+@@ -27,19 +27,19 @@
+     float travel=0,rotation=0;
+     WeaponCycleHandAssignment hands{};
+ };
+-struct PhysicalWeaponCycleResult {
+-    WeaponCycleResult cycle{};
+-    std::optional<PhysicalWeaponCycleTarget> target;
++template<class Authority> struct PhysicalWeaponCycleResultT {
++    WeaponCycleResultT<Authority> cycle{};
++    std::optional<PhysicalWeaponCycleTargetT<Authority>> target;
+     // Emitted once. A failed adapter submission must explicitly reject the
+     // transaction; repeated controller packets never reissue a native call.
+-    std::optional<WeaponCycleRelease> release;
++    std::optional<WeaponCycleReleaseT<Authority>> release;
+     bool ownsMechanism=false;
+ };
+-inline bool CurrentPhysicalWeaponCycleTarget(const PhysicalWeaponCycleTarget& target,
+-    const WeaponCycleLease& lease,const HandInteractionSample& input,const HandClaim& mechanism,const HandClaim& gun,
++template<class Authority> inline bool CurrentPhysicalWeaponCycleTarget(const PhysicalWeaponCycleTargetT<Authority>& target,
++    const Authority& lease,const HandInteractionSample& input,const HandClaim& mechanism,const HandClaim& gun,
+     WeaponCycleHandAssignment expectedHands={})noexcept {
+     using namespace weapon_cycle_detail;
+-    return Hands(expectedHands)&&target.hands==expectedHands&&target.profile&&target.revision&&Same(target.lease,lease)&&Lease(target.lease,input.nowNs)&&Lease(lease,input.nowNs)&&
++    return Hands(expectedHands)&&AuthorityForHands(lease,expectedHands)&&AuthorityForHands(target.lease,expectedHands)&&target.hands==expectedHands&&target.profile&&target.revision&&Same(target.lease,lease)&&Lease(target.lease,input.nowNs)&&Lease(lease,input.nowNs)&&
+         lease.sequence>=target.lease.sequence&&lease.observedNs>=target.lease.observedNs&&
+         (lease.sequence!=target.lease.sequence||(lease.observedNs==target.lease.observedNs&&lease.deadlineNs==target.lease.deadlineNs))&&
+         input.owner==lease.owner&&input.focused&&input.tracked[0]&&input.tracked[1]&&!input.released[0]&&!input.released[1]&&
+@@ -60,14 +60,22 @@
+ // geometry and current GunHold are adapter inputs. This owns only its assigned
+ // Mechanism claim. It never writes ammunition, invokes native code or decides
+ // that an unsupported weapon is admitted.
+-class PhysicalWeaponCycle {
++template<class Authority> class PhysicalWeaponCycleT {
+ public:
+-    PhysicalWeaponCycle()=default;
+-    PhysicalWeaponCycle(const PhysicalWeaponCycle&)=delete;
+-    PhysicalWeaponCycle& operator=(const PhysicalWeaponCycle&)=delete;
++    using WeaponCycleLease=Authority;
++    using WeaponCycleRelease=WeaponCycleReleaseT<Authority>;
++    using WeaponCycleReady=WeaponCycleReadyT<Authority>;
++    using WeaponCycleResult=WeaponCycleResultT<Authority>;
++    using WeaponCycle=WeaponCycleT<Authority>;
++    using PhysicalWeaponCycleSample=PhysicalWeaponCycleSampleT<Authority>;
++    using PhysicalWeaponCycleTarget=PhysicalWeaponCycleTargetT<Authority>;
++    using PhysicalWeaponCycleResult=PhysicalWeaponCycleResultT<Authority>;
++    PhysicalWeaponCycleT()=default;
++    PhysicalWeaponCycleT(const PhysicalWeaponCycleT&)=delete;
++    PhysicalWeaponCycleT& operator=(const PhysicalWeaponCycleT&)=delete;
+     bool Begin(const WeaponCycleProfile& profile,const WeaponCycleLease& lease,std::int64_t now)noexcept {
+         if(mechanism_||awaitingOutcome_||!policy_.Begin(profile,lease,now))return false;
+-        profile_=profile;identity_=lease;target_.reset();submitted_=false;adoptSupport_=true;
++        profile_=profile;identity_=lease;target_.reset();submitted_=false;adoptSupport_=weapon_cycle_detail::InitialHeldAdoption(lease);
+         previousGrip_=true;lastInput_=0;return true;
+     }
+     bool ObserveReady(const WeaponCycleReady& ready,std::int64_t now)noexcept {
+@@ -212,4 +220,12 @@
+     std::uint64_t lastInput_=0;
+     bool previousGrip_=true,submitted_=false,adoptSupport_=false,awaitingOutcome_=false;
+ };
++using PhysicalWeaponCycleSample=PhysicalWeaponCycleSampleT<WeaponCycleLease>;
++using PhysicalWeaponCycleTarget=PhysicalWeaponCycleTargetT<WeaponCycleLease>;
++using PhysicalWeaponCycleResult=PhysicalWeaponCycleResultT<WeaponCycleLease>;
++using PhysicalWeaponCycle=PhysicalWeaponCycleT<WeaponCycleLease>;
++using PhysicalWeaponCycleIdleDebtSample=PhysicalWeaponCycleSampleT<WeaponCycleIdleDebtLease>;
++using PhysicalWeaponCycleIdleDebtTarget=PhysicalWeaponCycleTargetT<WeaponCycleIdleDebtLease>;
++using PhysicalWeaponCycleIdleDebtResult=PhysicalWeaponCycleResultT<WeaponCycleIdleDebtLease>;
++using PhysicalWeaponCycleIdleDebt=PhysicalWeaponCycleT<WeaponCycleIdleDebtLease>;
+ }
+--- a/include/fvr/interaction/WeaponCycle.h
++++ b/include/fvr/interaction/WeaponCycle.h
+@@ -2,6 +2,7 @@
+ #include "fvr/interaction/HandInteraction.h"
+ #include "fvr/interaction/FeedMechanism.h"
+ #include <numbers>
++#include "fvr/interaction/WeaponCycleRecoveryAuthority.h"
+ 
+ namespace fvr::interaction {
+ // A physical gesture and a native cycle are separate authorities. This policy
+@@ -41,19 +42,19 @@
+     math::Matrix4 rawContact{};
+     bool grip=false,mechanismClaim=false;
+ };
+-struct WeaponCycleRelease {
+-    WeaponCycleLease cycle{};
++template<class Authority> struct WeaponCycleReleaseT {
++    Authority cycle{};
+     std::uint64_t request=0,inputSequence=0;
+     std::int64_t observedNs=0,deadlineNs=0;
+-    bool operator==(const WeaponCycleRelease&)const=default;
+-};
+-struct WeaponCycleReady {
+-    WeaponCycleRelease release{};
++    bool operator==(const WeaponCycleReleaseT&)const=default;
++};
++template<class Authority> struct WeaponCycleReadyT {
++    WeaponCycleReleaseT<Authority> release{};
+     std::uint64_t sequence=0;
+     std::int64_t observedNs=0,deadlineNs=0;
+     bool nativeReady=false,unchangedAmmunition=false;
+ };
+-struct WeaponCycleResult {
++template<class Authority> struct WeaponCycleResultT {
+     WeaponCyclePhase phase=WeaponCyclePhase::Idle;
+     WeaponCycleFailure failure=WeaponCycleFailure::None;
+     bool blocksFire=false;
+@@ -61,8 +62,14 @@
+     // Presentation only; adapters must validate current native part identity
+     // and their renderer receipts independently before using this target.
+     std::optional<math::Matrix4> contact;
+-    std::optional<WeaponCycleRelease> release;
+-};
++    std::optional<WeaponCycleReleaseT<Authority>> release;
++};
++using WeaponCycleRelease=WeaponCycleReleaseT<WeaponCycleLease>;
++using WeaponCycleReady=WeaponCycleReadyT<WeaponCycleLease>;
++using WeaponCycleResult=WeaponCycleResultT<WeaponCycleLease>;
++using WeaponCycleIdleDebtRelease=WeaponCycleReleaseT<WeaponCycleIdleDebtLease>;
++using WeaponCycleIdleDebtReady=WeaponCycleReadyT<WeaponCycleIdleDebtLease>;
++using WeaponCycleIdleDebtResult=WeaponCycleResultT<WeaponCycleIdleDebtLease>;
+ namespace weapon_cycle_detail {
+ inline bool Hands(WeaponCycleHandAssignment h){
+     return (h.mechanism==InteractionHand::Left||h.mechanism==InteractionHand::Right)&&
+@@ -87,6 +94,25 @@
+ inline bool Lease(const WeaponCycleLease& p,std::int64_t now){
+     return Owner(p.owner)&&Key(p.item)&&Key(p.mechanism)&&p.cycle&&p.sequence&&p.held&&Window(p.observedNs,p.deadlineNs,now);
+ }
++inline bool Same(const WeaponCycleIdleDebtLease& a,const WeaponCycleIdleDebtLease& b){
++    return a.owner==b.owner&&a.item==b.item&&a.mechanism==b.mechanism&&a.cycle==b.cycle&&a.shot==b.shot&&a.grant==b.grant;
++}
++inline bool Lease(const WeaponCycleIdleDebtLease& p,std::int64_t now){
++    const auto& g=p.grant;const auto& d=g.debt;const auto& n=g.neutral;
++    if(!Owner(p.owner)||!Key(p.item)||!Key(p.mechanism)||!p.cycle||!p.shot||!p.sequence||
++       !Window(p.observedNs,p.deadlineNs,now)||!g.nonce||!d.guardEpoch||d.loaded<0||d.reserve<0||d.capacity<=0||d.loaded>=d.capacity||
++       d.owner!=p.owner||d.item!=p.item||d.mechanism!=p.mechanism||d.cycle!=p.cycle||d.shot!=p.shot||
++       n.owner!=p.owner||!n.sequence||!n.focused||!n.tracked[0]||!n.tracked[1]||
++       !Window(n.observedNs,n.deadlineNs,n.nowNs)||n.observedNs>p.observedNs)return false;
++    for(unsigned b=0;b<3;++b)if(!p.first[b]||p.second[b]<=p.first[b]||p.second[b]>p.sequence)return false;
++    return true;
++}
++inline bool AuthorityForHands(const WeaponCycleLease&,WeaponCycleHandAssignment){return true;}
++inline bool AuthorityForHands(const WeaponCycleIdleDebtLease& a,WeaponCycleHandAssignment h){
++    return Hands(h)&&a.grant.neutral.released[HandIndex(h.mechanism)]&&!a.grant.neutral.released[HandIndex(h.gun)];
++}
++inline bool InitialHeldAdoption(const WeaponCycleLease&){return true;}
++inline bool InitialHeldAdoption(const WeaponCycleIdleDebtLease&){return false;}
+ inline bool Profile(const WeaponCycleProfile& p){
+     if(!p.id||!p.revision||!Hands(p.hands)||(p.family!=WeaponCycleFamily::Pump&&p.family!=WeaponCycleFamily::Bolt)||
+         !feed_mechanism_detail::Pose(p.closedContact)||!std::isfinite(Dot(p.axis,p.axis))||std::abs(Dot(p.axis,p.axis)-1)>1e-5||
+@@ -110,13 +136,17 @@
+     return result;
+ }
+ }
+-class WeaponCycle {
++template<class Authority> class WeaponCycleT {
+ public:
++    using WeaponCycleLease=Authority;
++    using WeaponCycleRelease=WeaponCycleReleaseT<Authority>;
++    using WeaponCycleReady=WeaponCycleReadyT<Authority>;
++    using WeaponCycleResult=WeaponCycleResultT<Authority>;
+     static constexpr std::int64_t MaximumInputGapNs=150000000;
+     bool Begin(const WeaponCycleProfile& profile,const WeaponCycleLease& lease,std::int64_t now)noexcept {
+         using namespace weapon_cycle_detail;
+         if((phase_!=WeaponCyclePhase::Idle&&phase_!=WeaponCyclePhase::Complete&&phase_!=WeaponCyclePhase::Cancelled)||
+-           !Profile(profile)||!Lease(lease,now)||now>INT64_MAX-profile.maximumCycleNs||
++           !Profile(profile)||!Lease(lease,now)||!AuthorityForHands(lease,profile.hands)||now>INT64_MAX-profile.maximumCycleNs||
+            (identity_.cycle&&Same(identity_,lease)))return false;
+         profile_=profile;identity_=lease;latest_=lease;deadline_=now+profile.maximumCycleNs;
+         phase_=WeaponCyclePhase::AwaitingGrip;failure_=WeaponCycleFailure::None;neutral_=false;
+@@ -284,4 +314,6 @@
+     std::int64_t deadline_=0,lastObserved_=0,endpoint_=0;
+     bool neutral_=false;float travel_=0,rotation_=0;
+ };
+-}
++using WeaponCycle=WeaponCycleT<WeaponCycleLease>;
++using WeaponCycleIdleDebt=WeaponCycleT<WeaponCycleIdleDebtLease>;
++}
+--- a/include/fvr/interaction/WeaponCycleConvergence.h
++++ b/include/fvr/interaction/WeaponCycleConvergence.h
+@@ -0,0 +1,178 @@
++#pragma once
++#include "fvr/interaction/WeaponCycle.h"
++#include <algorithm>
++#include <variant>
++
++namespace fvr::interaction {
++// Candidate policy, not native admission. Scope is an adapter's EXACT structural
++// owner/configuration identity, compared by value (not a name or lossy hash).
++// The adapter must retain a continuously enforced fire/ammunition-operation
++// guard for guardEpoch. Losing that guarantee calls LoseGuard, never Begin.
++// Only construct after validating the original own Update, exact native scope,
++// neutral context and restoration, and idle BEFORE AND AFTER with zero timer.
++// A copied prediction snapshot, Commit, counter, or phase label is not this type.
++struct WeaponCycleIdleUpdate {
++    unsigned branch=3;
++    std::uint64_t invocation=0,guardEpoch=0;
++    std::int64_t beginNs=0,endNs=0,deadlineNs=0;
++    int loaded=0,reserve=0,capacity=0;
++};
++struct WeaponCycleConvergedIdle {
++    WeaponCycleDebt debt{};
++    std::array<std::uint64_t,3> first{},second{};
++    std::int64_t observedNs=0,deadlineNs=0;
++};
++// This is deliberately NOT WeaponCycleLease{held=true}. Native idle never
++// masquerades as a frozen native cycling boundary. The physical adapters bind
++// this permit to the same ordered gesture/contact/hand policy.
++using WeaponCycleRecoveredRelease=WeaponCycleIdleDebtRelease;
++using WeaponCycleConvergenceRelease=std::variant<WeaponCycleRelease,WeaponCycleRecoveredRelease>;
++struct WeaponCycleConvergenceOutcome {
++    WeaponCycleConvergenceRelease release{};
++    WeaponCycleConvergedIdle native{};
++};
++enum class WeaponCycleConvergencePhase {Empty,Debt,Released,Ready,Uncertain};
++
++template<class Scope> class WeaponCycleConvergence {
++public:
++    static constexpr std::int64_t MaximumFreshNs=100000000,MaximumRoundSpanNs=50000000;
++    bool Begin(const Scope& scope,const WeaponCycleDebt& debt,std::int64_t observed)noexcept {
++        if(phase_!=WeaponCycleConvergencePhase::Empty||!weapon_cycle_detail::Owner(debt.owner)||
++           !weapon_cycle_detail::Key(debt.item)||!weapon_cycle_detail::Key(debt.mechanism)||
++           !debt.cycle||!debt.shot||!debt.guardEpoch||debt.loaded<0||debt.reserve<0||
++           debt.capacity<=0||debt.loaded>=debt.capacity||observed<=0)return false;
++        scope_=scope;debt_=debt;began_=floor_=observed;phase_=WeaponCycleConvergencePhase::Debt;return true;
++    }
++    bool BeginHold(const Scope& scope,unsigned branch,std::uint64_t invocation,
++        std::int64_t begin,std::int64_t deadline)noexcept {
++        if(!Bound(scope)||phase_!=WeaponCycleConvergencePhase::Debt||branch>=3||holds_[branch]||
++           !invocation||invocation<=last_[branch]||begin<began_||deadline<=begin||deadline-begin>MaximumFreshNs)return false;
++        holds_[branch]={invocation,begin,deadline};last_[branch]=invocation;
++        ClearEvidence(begin);grant_.reset();return true;
++    }
++    bool RestoreHold(const Scope& scope,unsigned branch,std::uint64_t invocation,std::int64_t end,
++        bool exactOriginalRestored)noexcept {
++        if(!Bound(scope)||branch>=3||!holds_[branch]||holds_[branch]->invocation!=invocation)return false;
++        const auto receipt=*holds_[branch];holds_[branch].reset();
++        if(!exactOriginalRestored||end<receipt.begin||end>=receipt.deadline){LoseGuard(scope);return false;}
++        // An original call already admitted before submission may finish later.
++        // This drain point invalidates all earlier idle observations.
++        ClearEvidence(end);return true;
++    }
++    bool Submit(const Scope& scope,const WeaponCycleRelease& release,std::int64_t accepted)noexcept {
++        if(release_){return Bound(scope)&&phase_!=WeaponCycleConvergencePhase::Uncertain&&*release_==WeaponCycleConvergenceRelease{release};}
++        if(!Bound(scope)||phase_!=WeaponCycleConvergencePhase::Debt||!Matches(release.cycle)||
++           !weapon_cycle_detail::Lease(release.cycle,accepted)||!release.request||!release.inputSequence||
++           !weapon_cycle_detail::Window(release.observedNs,release.deadlineNs,accepted)||
++           release.deadlineNs>release.cycle.deadlineNs)return false;
++        release_=release;phase_=WeaponCycleConvergencePhase::Released;grant_.reset();ClearEvidence(accepted);return true;
++    }
++    // Called for an interruption of physical custody. It cannot discard a
++    // submitted release or terminal outcome and does not expire retained debt.
++    void Interrupt(const Scope& scope,std::int64_t now)noexcept {
++        if(!Bound(scope))return;grant_.reset();
++        if(phase_==WeaponCycleConvergencePhase::Debt){issued_={};ClearEvidence(now);}
++    }
++    std::optional<WeaponCycleRecoveryGrant> ArmRecovery(const Scope& scope,
++        const HandInteractionSample& neutral,WeaponCycleHandAssignment hands={})noexcept {
++        if(!Bound(scope)||phase_!=WeaponCycleConvergencePhase::Debt||!Recovery(neutral.nowNs)||
++           !weapon_cycle_detail::Hands(hands)||neutral.owner!=debt_.owner||!neutral.sequence||
++           !neutral.focused||!neutral.tracked[0]||!neutral.tracked[1]||
++           !neutral.released[weapon_cycle_detail::HandIndex(hands.mechanism)]||
++           neutral.released[weapon_cycle_detail::HandIndex(hands.gun)]||
++           neutral.observedNs<idle_->observedNs||
++           !weapon_cycle_detail::Window(neutral.observedNs,neutral.deadlineNs,neutral.nowNs)||nonce_==UINT64_MAX)return {};
++        if(grant_)return grant_;
++        grant_=WeaponCycleRecoveryGrant{debt_,neutral,++nonce_};return grant_;
++    }
++    std::optional<WeaponCycleIdleDebtLease> RecoveryAuthority(const Scope& scope,
++        const WeaponCycleRecoveryGrant& grant,std::int64_t now)noexcept {
++        if(!Bound(scope)||!grant_||grant!=*grant_||!Recovery(now)||grant.neutral.observedNs>idle_->observedNs)return {};
++        const auto sequence=*std::max_element(idle_->second.begin(),idle_->second.end());
++        WeaponCycleIdleDebtLease authority{debt_.owner,debt_.item,debt_.mechanism,debt_.cycle,debt_.shot,
++            sequence,idle_->observedNs,idle_->deadlineNs,grant,idle_->first,idle_->second};
++        if(!weapon_cycle_detail::Lease(authority,now))return {};
++        if(std::find(issued_.begin(),issued_.end(),authority)==issued_.end()){
++            issued_[issueAt_]=authority;issueAt_=(issueAt_+1)%issued_.size();}
++        return authority;
++    }
++    bool SubmitRecovered(const Scope& scope,const WeaponCycleRecoveredRelease& release,std::int64_t accepted)noexcept {
++        if(release_){return Bound(scope)&&phase_!=WeaponCycleConvergencePhase::Uncertain&&*release_==WeaponCycleConvergenceRelease{release};}
++        if(!Bound(scope)||phase_!=WeaponCycleConvergencePhase::Debt||!grant_||release.cycle.grant!=*grant_||
++           !weapon_cycle_detail::Lease(release.cycle,accepted)||
++           std::find(issued_.begin(),issued_.end(),release.cycle)==issued_.end()||
++           !Recovery(accepted)||!release.request||release.inputSequence<=grant_->neutral.sequence||
++           release.observedNs<=grant_->neutral.observedNs||
++           !weapon_cycle_detail::Window(release.observedNs,release.deadlineNs,accepted)||
++           release.deadlineNs>release.cycle.deadlineNs)return false;
++        release_=release;phase_=WeaponCycleConvergencePhase::Released;grant_.reset();ClearEvidence(accepted);return true;
++    }
++    bool ObserveIdle(const Scope& scope,const WeaponCycleIdleUpdate& receipt,std::int64_t now)noexcept {
++        if(!Bound(scope)||(phase_!=WeaponCycleConvergencePhase::Debt&&phase_!=WeaponCycleConvergencePhase::Released)||
++           receipt.branch>=3||!receipt.invocation||receipt.invocation<=last_[receipt.branch]||
++           receipt.guardEpoch!=debt_.guardEpoch||receipt.beginNs<floor_||receipt.endNs<=receipt.beginNs||
++           receipt.endNs>now||receipt.deadlineNs<=now||receipt.deadlineNs-receipt.endNs>MaximumFreshNs||
++           std::any_of(holds_.begin(),holds_.end(),[](const auto& value){return value.has_value();}))return false;
++        if(receipt.loaded!=debt_.loaded||receipt.reserve!=debt_.reserve||receipt.capacity!=debt_.capacity){LoseGuard(scope);return false;}
++        if(std::find(last_.begin(),last_.end(),receipt.invocation)!=last_.end())return false;
++        last_[receipt.branch]=receipt.invocation;round_[receipt.branch]=receipt;
++        if(std::any_of(round_.begin(),round_.end(),[](const auto& value){return !value;}))return true;
++        auto first=round_[0]->beginNs,last=round_[0]->endNs,deadline=round_[0]->deadlineNs;
++        for(const auto& value:round_){first=std::min(first,value->beginNs);last=std::max(last,value->endNs);deadline=std::min(deadline,value->deadlineNs);}
++        if(now>=deadline||last-first>MaximumRoundSpanNs){
++            for(auto& value:round_)if(value->deadlineNs<=now||last-value->beginNs>MaximumRoundSpanNs)value.reset();
++            return true;
++        }
++        std::array<std::uint64_t,3> invocations{};
++        for(unsigned b=0;b<3;++b)invocations[b]=round_[b]->invocation;
++        if(!firstRound_||now>=firstDeadline_){firstRound_=invocations;firstDeadline_=deadline;floor_=last;round_={};return true;}
++        idle_=WeaponCycleConvergedIdle{debt_,*firstRound_,invocations,last,deadline};
++        firstRound_=invocations;firstDeadline_=deadline;floor_=last;round_={};
++        if(release_){outcome_=WeaponCycleConvergenceOutcome{*release_,*idle_};phase_=WeaponCycleConvergencePhase::Ready;}
++        return true;
++    }
++    void LoseGuard(const Scope& scope)noexcept {
++        if(!Bound(scope))return;
++        phase_=WeaponCycleConvergencePhase::Uncertain;idle_.reset();outcome_.reset();grant_.reset();
++        // Retain the exact debt/release and outstanding holds for diagnostics
++        // and restoration. Rebinding another selection cannot clear them.
++    }
++    std::optional<WeaponCycleConvergedIdle> Recovery(std::int64_t now)const noexcept {
++        if(phase_!=WeaponCycleConvergencePhase::Debt||!idle_||
++           now<idle_->observedNs||now>=idle_->deadlineNs)return {};
++        return idle_;
++    }
++    const std::optional<WeaponCycleConvergenceOutcome>& Outcome()const noexcept{return outcome_;}
++    const std::optional<WeaponCycleConvergenceRelease>& Pending()const noexcept{return release_;}
++    WeaponCycleConvergencePhase Phase()const noexcept{return phase_;}
++    bool BlocksFire()const noexcept{return phase_!=WeaponCycleConvergencePhase::Empty&&(!outcome_||!acknowledged_);}
++    bool Acknowledge(const WeaponCycleConvergenceOutcome& outcome)noexcept {
++        if(!outcome_||outcome.release!=outcome_->release||outcome.native.debt!=outcome_->native.debt||
++           outcome.native.first!=outcome_->native.first||outcome.native.second!=outcome_->native.second||
++           outcome.native.observedNs!=outcome_->native.observedNs||outcome.native.deadlineNs!=outcome_->native.deadlineNs)return false;
++        acknowledged_=true;return true;
++    }
++private:
++    struct Hold {std::uint64_t invocation;std::int64_t begin,deadline;};
++    bool Bound(const Scope& scope)const noexcept{return phase_!=WeaponCycleConvergencePhase::Empty&&scope_==scope;}
++    bool Matches(const WeaponCycleLease& cycle)const noexcept {
++        return cycle.owner==debt_.owner&&cycle.item==debt_.item&&cycle.mechanism==debt_.mechanism&&cycle.cycle==debt_.cycle&&cycle.shot==debt_.shot;
++    }
++    void ClearEvidence(std::int64_t now)noexcept{floor_=std::max(floor_,now);round_={};firstRound_.reset();firstDeadline_=0;idle_.reset();}
++    Scope scope_{};WeaponCycleDebt debt_{};
++    WeaponCycleConvergencePhase phase_=WeaponCycleConvergencePhase::Empty;
++    std::array<std::optional<Hold>,3> holds_{};
++    std::array<std::optional<WeaponCycleIdleUpdate>,3> round_{};
++    std::array<std::uint64_t,3> last_{};
++    std::optional<std::array<std::uint64_t,3>> firstRound_;
++    std::optional<WeaponCycleConvergedIdle> idle_;
++    std::optional<WeaponCycleRecoveryGrant> grant_;
++    std::array<WeaponCycleIdleDebtLease,32> issued_{};
++    unsigned issueAt_=0;
++    std::optional<WeaponCycleConvergenceRelease> release_;
++    std::optional<WeaponCycleConvergenceOutcome> outcome_;
++    std::int64_t began_=0,floor_=0,firstDeadline_=0;
++    std::uint64_t nonce_=0;
++    bool acknowledged_=false;
++};
++}
+--- a/include/fvr/interaction/WeaponCycleRecoveryAuthority.h
++++ b/include/fvr/interaction/WeaponCycleRecoveryAuthority.h
+@@ -0,0 +1,32 @@
++#pragma once
++#include "fvr/interaction/HandInteraction.h"
++namespace fvr::interaction {
++struct WeaponCycleDebt {
++    HandInteractionOwner owner{};
++    HandInteractionKey item{},mechanism{};
++    std::uint64_t cycle=0,shot=0,guardEpoch=0;
++    int loaded=0,reserve=0,capacity=0;
++    bool operator==(const WeaponCycleDebt&)const=default;
++};
++struct WeaponCycleRecoveryGrant {
++    WeaponCycleDebt debt{};
++    HandInteractionSample neutral{};
++    std::uint64_t nonce=0;
++    bool operator==(const WeaponCycleRecoveryGrant& other)const noexcept {
++        const auto& a=neutral;const auto& b=other.neutral;
++        return debt==other.debt&&nonce==other.nonce&&a.owner==b.owner&&a.sequence==b.sequence&&
++            a.observedNs==b.observedNs&&a.deadlineNs==b.deadlineNs&&a.nowNs==b.nowNs&&
++            a.focused==b.focused&&a.tracked==b.tracked&&a.released==b.released;
++    }
++};
++// Distinct authority for an unfinished physical debt whose native copies
++// have independently converged to idle. No native-held flag or conversion.
++struct WeaponCycleIdleDebtLease {
++    HandInteractionOwner owner{};HandInteractionKey item{},mechanism{};
++    std::uint64_t cycle=0,shot=0,sequence=0;
++    std::int64_t observedNs=0,deadlineNs=0;
++    WeaponCycleRecoveryGrant grant{};
++    std::array<std::uint64_t,3> first{},second{};
++    bool operator==(const WeaponCycleIdleDebtLease&)const=default;
++};
++}
+--- a/src/games/bc2/Bc2BoltPart.cpp
++++ b/src/games/bc2/Bc2BoltPart.cpp
+@@ -37,12 +37,13 @@
+ }
+ std::optional<Bc2BoltPresentation> BuildBoltPresentation(const Bc2BoltTracking& t,const RigSnapshot& rig,
+     const math::Matrix4& placed,float units,std::int64_t now)noexcept {
+-    if(!Base(t,rig,now)||!Units(units)||!t.target||!t.held||!t.mechanism||!t.gun||!t.weapon||
++    if(!Base(t,rig,now)||!Units(units)||!t.mechanism||!t.gun||!t.weapon||
+         t.custody!=BoltCustodyPhase::Manipulating||!feed_mechanism_detail::Pose(placed))return {};
+-    const auto& p=t.calibration->profile;const auto& target=*t.target;
++    const auto& p=t.calibration->profile;
+     auto input=t.input;input.nowNs=now;
+-    if(!CurrentPhysicalWeaponCycleTarget(target,*t.held,input,*t.mechanism,*t.gun,p.hands)||
+-       t.held->item!=HandInteractionKey{t.nativeOwner.weapon,t.input.owner.equipGeneration}||
++    const auto build=[&](const auto& target,const auto& authority)->std::optional<Bc2BoltPresentation>{
++    if(!CurrentPhysicalWeaponCycleTarget(target,authority,input,*t.mechanism,*t.gun,p.hands)||
++       authority.item!=HandInteractionKey{t.nativeOwner.weapon,t.input.owner.equipGeneration}||
+        !CurrentBoltCustodyWeaponTarget(*t.weapon,input,*t.gun)||target.profile!=p.id||target.revision!=p.revision||
+        target.travel>p.stroke||target.rotation<std::min(0.f,p.unlockRadians)||target.rotation>std::max(0.f,p.unlockRadians))return {};
+     const auto binding=DeriveBoltPart(rig,t.calibration->partName);
+@@ -55,6 +56,10 @@
+     for(unsigned n=0;n<3;++n){part.values[3][n]*=units;wrist.values[3][n]*=units;}
+     // Absolute closed-reference target; animated native poses are never added.
+     return Bc2BoltPresentation{{binding->part,Multiply(part,placed)},Multiply(wrist,placed)};
++    };
++    if(t.target&&t.held&&!t.recoveryTarget&&!t.recovery)return build(*t.target,*t.held);
++    if(t.recoveryTarget&&t.recovery&&!t.target&&!t.held)return build(*t.recoveryTarget,*t.recovery);
++    return {};
+ }
+ std::optional<RigPosePlan> BuildBoltPartPlan(const Bc2BoltTracking& t,const RigSnapshot& rig,
+     const math::Matrix4& placed,float units,std::int64_t now){
+--- a/src/games/bc2/Bc2BoltRuntimeGeometry.h
++++ b/src/games/bc2/Bc2BoltRuntimeGeometry.h
+@@ -39,16 +39,24 @@
+     auto input=t.input;input.nowNs=now;return interaction::CurrentBoltCustodyWeaponTarget(*t.weapon,input,*t.gun);
+ }
+ inline bool BoltTargetFresh(const Bc2BoltTracking& t,std::int64_t now)noexcept {
+-    if(!BoltCustodyFresh(t,now)||!t.target||!t.held||!t.mechanism)return false;
++    if(!BoltCustodyFresh(t,now)||!t.mechanism)return false;
+     auto input=t.input;input.nowNs=now;
+-    return interaction::CurrentPhysicalWeaponCycleTarget(*t.target,*t.held,input,*t.mechanism,*t.gun,t.calibration->profile.hands);
++    if(t.target&&t.held&&!t.recoveryTarget&&!t.recovery)
++        return interaction::CurrentPhysicalWeaponCycleTarget(*t.target,*t.held,input,*t.mechanism,*t.gun,t.calibration->profile.hands);
++    if(t.recoveryTarget&&t.recovery&&!t.target&&!t.held)
++        return interaction::CurrentPhysicalWeaponCycleTarget(*t.recoveryTarget,*t.recovery,input,*t.mechanism,*t.gun,t.calibration->profile.hands);
++    return false;
+ }
+ inline bool BoltCustodyRetained(const Bc2BoltTracking& old,const Bc2BoltTracking& current,std::int64_t now)noexcept {
+     if(!BoltCustodyFresh(old,now)||!BoltCustodyFresh(current,now)||old.nativeOwner!=current.nativeOwner||
+        old.calibration!=current.calibration||old.input.sequence>current.input.sequence||old.gun->token!=current.gun->token)return false;
+-    if(!old.target)return true;
++    if(!old.target&&!old.recoveryTarget)return true;
+     if(!BoltTargetFresh(old,now)||!BoltTargetFresh(current,now)||old.mechanism->token!=current.mechanism->token)return false;
+     auto input=current.input;input.nowNs=now;
+-    return interaction::CurrentPhysicalWeaponCycleTarget(*old.target,*current.held,input,*current.mechanism,*current.gun,current.calibration->profile.hands);
++    if(old.target&&current.held&&!current.recovery)
++        return interaction::CurrentPhysicalWeaponCycleTarget(*old.target,*current.held,input,*current.mechanism,*current.gun,current.calibration->profile.hands);
++    if(old.recoveryTarget&&current.recovery&&!current.held)
++        return interaction::CurrentPhysicalWeaponCycleTarget(*old.recoveryTarget,*current.recovery,input,*current.mechanism,*current.gun,current.calibration->profile.hands);
++    return false;
+ }
+ }
+--- a/src/games/bc2/Bc2NativeCycleRecovery.cpp
++++ b/src/games/bc2/Bc2NativeCycleRecovery.cpp
+@@ -0,0 +1,7 @@
++#include "Bc2NativeCycleRecovery.h"
++namespace fvr::bc2::reloadFlowRuntime {
++// Deliberately unavailable until original callback convergence and continuous
++// native fire/ammunition guard ownership are integrated. Consumer/renderer
++// tests supply their own explicitly mocked adapter channel.
++std::optional<Bc2NativeCycleRecoveryView> ReadNativeCycleRecoveryView(std::int64_t)noexcept{return {};}
++}
+--- a/src/games/bc2/Bc2NativeCycleRecovery.h
++++ b/src/games/bc2/Bc2NativeCycleRecovery.h
+@@ -0,0 +1,22 @@
++#pragma once
++#include "Bc2NativeCycleService.h"
++namespace fvr::bc2 {
++// Separate, exact native convergence channel. This cannot renew a held timer
++// lease or make a pending normal/native-held release disappear.
++struct Bc2NativeCycleRecoveryView {
++    ReloadHoldIdentity native{};
++    std::optional<interaction::WeaponCycleIdleDebtLease> authority;
++    std::optional<interaction::WeaponCycleIdleDebtReady> ready;
++    bool blocksFire=true;
++};
++struct Bc2PhysicalCycleRecoveryApi {
++    std::optional<Bc2NativeCycleRecoveryView> (*view)(void*,std::int64_t)noexcept=nullptr;
++    bool (*submit)(void*,const interaction::WeaponCycleIdleDebtRelease&,
++        const interaction::HandInteractionSample&)noexcept=nullptr;
++    bool (*ack)(void*,const interaction::WeaponCycleIdleDebtReady&)noexcept=nullptr;
++    bool Complete()const noexcept{return view&&submit&&ack;}
++};
++namespace reloadFlowRuntime {
++std::optional<Bc2NativeCycleRecoveryView> ReadNativeCycleRecoveryView(std::int64_t now)noexcept;
++}
++}
+--- a/src/games/bc2/Bc2PhysicalBolt.cpp
++++ b/src/games/bc2/Bc2PhysicalBolt.cpp
+@@ -21,8 +21,9 @@
+     calibration_(std::move(c)),api_(api){}
+ void Bc2PhysicalBolt::Cancel(const HandInteractionSample& input,HandInteraction& hands)noexcept {
+     if(api_.cancel)api_.cancel(api_.context);
+-    hands.Update(input);blocks_=blocks_||bool(cycle_)||bool(pending_);
+-    if(cycle_){BoltCustodySample loss;loss.source=input;loss.lease=*cycle_;custody_.Update(loss,hands);}
++    hands.Update(input);blocks_=blocks_||bool(cycle_)||bool(pending_)||bool(recoveryCycle_)||bool(recoveryPending_);
++    if(recoveryCustody_&&recoveryCycle_){BoltCustodyIdleDebtSample loss;loss.source=input;loss.lease=*recoveryCycle_;recoveryCustody_->Update(loss,hands);}
++    if(cycle_){BoltCustodySample loss;loss.source=input;loss.lease=*cycle_;custody_->Update(loss,hands);}
+ }
+ Bc2PhysicalBoltResult Bc2PhysicalBolt::Tick(const Bc2PhysicalBoltSample& s,HandInteraction& hands,std::uint64_t& intent)noexcept {
+     Bc2PhysicalBoltResult out;
+@@ -36,17 +37,68 @@
+     // A ready receipt settles only its exact previously submitted transaction.
+     // It remains consumable after the physical owner or tracking has changed.
+     if(view&&view->ready){
+-        if(!acknowledged_&&custody_.ReconcileReady(*view->ready,s.input.nowNs))acknowledged_=view->ready;
++        if(!acknowledged_&&custody_->ReconcileReady(*view->ready,s.input.nowNs))acknowledged_=view->ready;
+         if(acknowledged_&&api_.ack(api_.context,*acknowledged_)){
+             out.settled=acknowledged_;acknowledged_.reset();pending_.reset();settled_=true;
+         }
+         view=api_.view(api_.context,s.input.nowNs);
+     }
+-    const auto existingGun=custody_.Gun();
++    auto recovery=api_.recovery.Complete()?api_.recovery.view(api_.context,s.input.nowNs):std::nullopt;
++    if(recovery&&recovery->ready&&recoveryCustody_){
++        if(!recoveryAcknowledged_&&recoveryPending_&&recovery->ready->release==*recoveryPending_&&
++           recoveryCustody_->ReconcileReady(*recovery->ready,s.input.nowNs))recoveryAcknowledged_=recovery->ready;
++        if(recoveryAcknowledged_&&api_.recovery.ack(api_.context,*recoveryAcknowledged_)){
++            out.recovered=recoveryAcknowledged_;recoveryAcknowledged_.reset();recoveryPending_.reset();recoverySettled_=true;
++        }
++        recovery=api_.recovery.view(api_.context,s.input.nowNs);
++        if(recoverySettled_){
++            const auto token=recoveryCustody_->Gun();
++            const auto gun=token?hands.Current(token->hand):std::nullopt;
++            const bool live=gun&&token&&gun->token==*token&&gun->deadlineNs>s.input.nowNs&&
++                s.input.owner==token->owner&&s.input.focused&&s.input.tracked[weapon_cycle_detail::HandIndex(token->hand)]&&
++                !s.input.released[weapon_cycle_detail::HandIndex(token->hand)];
++            if(!live){
++                // The exact native transaction is acknowledged, and expired
++                // physical custody has no attachment left to return. Ordinary
++                // gun acquisition is now allowed; no old hand claim is revived.
++                hands.Update(s.input);recoveryCustody_.reset();recoveryCycle_.reset();
++                recoveryPlacement_=false;recoverySettled_=false;cycle_.reset();custody_=std::make_unique<BoltWeaponCustody>();
++                blocks_=recovery?recovery->blocksFire:true;out.blocksFire=blocks_;return out;
++            }
++        }
++    }
++    if(!pending_&&!acknowledged_&&api_.recovery.Complete()&&
++       (recoveryPending_||recoveryCycle_||recoveryPlacement_||
++        (recovery&&(!view||!view->held)))){
++        // A completed returned attachment remains current until a real new
++        // shot and explicit exchange. Native readiness cannot discard custody.
++        bool exchanged=false;
++        if(recoveryPlacement_&&view&&view->held&&s.custodyTransfer&&view->native.owner==s.nativeOwner&&
++           view->held->owner==s.input.owner&&view->held->item==s.item&&view->held->mechanism==HandInteractionKey{p.id,s.item.generation}){
++            auto next=std::make_unique<BoltWeaponCustody>();
++            if(next->Arm(p,*view->held,calibration_->wristFromPart,s.input.nowNs)){
++                const auto transfer=next->EnterCustody(s.input,*s.custodyTransfer,s.weaponWorld,
++                    s.wristWorld[weapon_cycle_detail::HandIndex(p.hands.gun)],hands);
++                if(transfer.transaction.accepted){
++                    custody_=std::move(next);cycle_=view->held;owner_=s.nativeOwner;out.custodyChange=transfer;
++                    recoveryPlacement_=false;recoveryCycle_.reset();exchanged=true;
++                }
++            }
++        }
++        if(!exchanged){
++            const auto settled=out.recovered;
++            auto fallback=Bc2NativeCycleRecoveryView{};
++            if(recoveryPlacement_&&view&&view->native.owner==s.nativeOwner){fallback.native=view->native;fallback.blocksFire=view->blocksFire;}
++            auto result=TickRecovery(s,recovery.value_or(fallback),hands,intent);
++            if(recoveryPlacement_){result.blocksFire=result.blocksFire||!view||view->blocksFire;blocks_=result.blocksFire;}
++            result.recovered=settled;return result;
++        }
++    }
++    const auto existingGun=custody_->Gun();
+     const auto gunHand=existingGun?existingGun->hand:p.hands.mechanism;
+     const bool releaseExchange=s.custodyTransfer&&s.custodyTransfer->releaseDepartingGun&&
+-        (!existingGun||custody_.Custody()==BoltCustodyPhase::AwaitingCustody||
+-         (!cycle_&&custody_.Custody()==BoltCustodyPhase::Returned))&&view&&view->held&&
++        (!existingGun||custody_->Custody()==BoltCustodyPhase::AwaitingCustody||
++         (!cycle_&&custody_->Custody()==BoltCustodyPhase::Returned))&&view&&view->held&&
+         view->native.owner==s.nativeOwner&&view->held->owner==s.input.owner&&view->held->item==s.item&&
+         view->held->mechanism==HandInteractionKey{p.id,s.item.generation}&&
+         weapon_cycle_detail::Window(view->held->observedNs,view->held->deadlineNs,s.input.nowNs)&&
+@@ -59,7 +111,7 @@
+         feed_mechanism_detail::Pose(s.wristWorld[weapon_cycle_detail::HandIndex(gunHand)]);
+     if(!safe){
+         api_.cancel(api_.context);hands.Update(s.input);
+-        if(cycle_){BoltCustodySample loss;loss.source=s.input;loss.lease=*cycle_;custody_.Update(loss,hands);}
++        if(cycle_){BoltCustodySample loss;loss.source=s.input;loss.lease=*cycle_;custody_->Update(loss,hands);}
+         blocks_=blocks_||bool(cycle_)||bool(pending_)||(view&&view->blocksFire);
+         out.blocksFire=blocks_;out.ownsGunCustody=bool(existingGun);return out;
+     }
+@@ -86,17 +138,17 @@
+     // exchange. Merely observing the next held shot cannot move the gun back
+     // to an unrelated calibrated-rig attachment for an intervening frame.
+     if(!cycle_&&view&&view->held&&(!existingGun||s.custodyTransfer)){
+-        if(!custody_.Arm(p,*view->held,calibration_->wristFromPart,s.input.nowNs)){
++        if(!custody_->Arm(p,*view->held,calibration_->wristFromPart,s.input.nowNs)){
+             blocks_=true;out.blocksFire=true;return out;
+         }
+         cycle_=view->held;owner_=s.nativeOwner;
+     }
+     if(!cycle_){
+         blocks_=!view||view->blocksFire;
+-        if(existingGun&&custody_.Custody()==BoltCustodyPhase::Returned){
++        if(existingGun&&custody_->Custody()==BoltCustodyPhase::Returned){
+             const auto hand=weapon_cycle_detail::HandIndex(existingGun->hand);
+             const auto contact=s.gunContacts[hand].eligible?s.gunContacts[hand]:s.gunContact;
+-            const auto retained=custody_.MaintainReturned(s.input,s.wristWorld[hand],contact,hands);
++            const auto retained=custody_->MaintainReturned(s.input,s.wristWorld[hand],contact,hands);
+             out.tracking.weapon=retained.weapon;out.tracking.custody=retained.custody;
+             out.tracking.mechanismPhase=retained.physical.cycle.phase;
+             out.tracking.gun=hands.Current(existingGun->hand);
+@@ -107,12 +159,12 @@
+     if(view&&view->held&&!weapon_cycle_detail::Same(*cycle_,*view->held)){
+         api_.cancel(api_.context);blocks_=true;out.blocksFire=true;out.ownsGunCustody=bool(existingGun);return out;
+     }
+-    if(s.custodyTransfer){
+-        if(custody_.Custody()==BoltCustodyPhase::AwaitingCustody)
+-            out.custodyChange=custody_.EnterCustody(s.input,*s.custodyTransfer,s.weaponWorld,
++    if(s.custodyTransfer&&!out.custodyChange){
++        if(custody_->Custody()==BoltCustodyPhase::AwaitingCustody)
++            out.custodyChange=custody_->EnterCustody(s.input,*s.custodyTransfer,s.weaponWorld,
+                 s.wristWorld[weapon_cycle_detail::HandIndex(p.hands.gun)],hands);
+-        else if(custody_.Custody()==BoltCustodyPhase::Manipulating)
+-            out.custodyChange=custody_.ReturnCustody(s.input,*s.custodyTransfer,
++        else if(custody_->Custody()==BoltCustodyPhase::Manipulating)
++            out.custodyChange=custody_->ReturnCustody(s.input,*s.custodyTransfer,
+                 s.wristWorld[weapon_cycle_detail::HandIndex(p.hands.gun)],
+                 s.wristWorld[weapon_cycle_detail::HandIndex(p.hands.mechanism)],hands);
+     }
+@@ -123,14 +175,14 @@
+         feed_mechanism_detail::Pose(raw.mechanismWristInWeapon);
+     BoltCustodySample sample;sample.source=s.input;sample.lease=view&&view->held?*view->held:*cycle_;
+     sample.mechanismGrip=s.grip;sample.gunContact=s.gunContact;
+-    const auto currentGun=custody_.Gun();
++    const auto currentGun=custody_->Gun();
+     if(currentGun&&s.gunContacts[weapon_cycle_detail::HandIndex(currentGun->hand)].eligible)
+         sample.gunContact=s.gunContacts[weapon_cycle_detail::HandIndex(currentGun->hand)];
+     sample.gunWristInWorld=s.wristWorld[weapon_cycle_detail::HandIndex(currentGun?currentGun->hand:p.hands.mechanism)];
+     if(rawOkay){sample.contactSource=raw.input;sample.mechanismWristInWeapon=raw.mechanismWristInWeapon;
+         sample.mechanismContact={sample.lease.mechanism,raw.input.sequence,raw.input.deadlineNs,true};}
+     if(intent!=UINT64_MAX)sample.acquireIntent=++intent;
+-    const auto result=custody_.Update(sample,hands);
++    const auto result=custody_->Update(sample,hands);
+     out.tracking.held=sample.lease;out.tracking.target=result.physical.target;out.tracking.weapon=result.weapon;
+     out.tracking.custody=result.custody;
+     out.tracking.mechanismPhase=result.physical.cycle.phase;
+@@ -150,4 +202,99 @@
+     if(settled_&&result.custody==BoltCustodyPhase::Returned){cycle_.reset();settled_=false;}
+     return out;
+ }
+-}
++
++Bc2PhysicalBoltResult Bc2PhysicalBolt::TickRecovery(const Bc2PhysicalBoltSample& s,const Bc2NativeCycleRecoveryView& initial,
++    HandInteraction& hands,std::uint64_t& intent)noexcept {
++    Bc2PhysicalBoltResult out;out.blocksFire=blocks_=true;
++    const auto& p=calibration_->profile;
++    auto existing=recoveryCustody_?recoveryCustody_->Gun():custody_->Gun();
++    if(existing){const auto live=hands.Current(existing->hand);if(!live||live->token!=*existing)existing.reset();}
++    const auto gunHand=existing?existing->hand:p.hands.mechanism;
++    const bool departing=s.custodyTransfer&&s.custodyTransfer->releaseDepartingGun&&
++        (!recoveryCustody_||recoveryCustody_->Custody()==BoltCustodyPhase::AwaitingCustody)&&
++        s.input.released[weapon_cycle_detail::HandIndex(p.hands.mechanism)]&&
++        !s.input.released[weapon_cycle_detail::HandIndex(p.hands.gun)];
++    const bool safe=!s.cancel&&s.asset==calibration_->asset&&s.mesh==calibration_->mesh&&
++        Mapped(s.nativeOwner,s.input,s.item)&&s.input.focused&&s.input.tracked[0]&&s.input.tracked[1]&&
++        (!existing||!s.input.released[weapon_cycle_detail::HandIndex(gunHand)]||departing)&&
++        weapon_cycle_detail::Window(s.input.observedNs,s.input.deadlineNs,s.input.nowNs)&&
++        feed_mechanism_detail::Pose(s.wristWorld[weapon_cycle_detail::HandIndex(gunHand)])&&
++        (!(cycle_||recoveryCycle_)||owner_==s.nativeOwner);
++    if(!safe){Cancel(s.input,hands);out.ownsGunCustody=bool(existing);return out;}
++    const Bc2NativeCycleControl control{s.nativeOwner,s.input,s.item,{p.id,s.item.generation},{},true};
++    if(!api_.control(api_.context,control)){hands.Update(s.input);out.ownsGunCustody=bool(existing);return out;}
++    const auto refreshed=api_.recovery.view(api_.context,s.input.nowNs);
++    const auto& view=refreshed?*refreshed:initial;
++    out.tracking={true,s.nativeOwner,s.input,calibration_};
++    if(recoveryPlacement_&&recoveryCustody_&&existing){
++        const auto h=weapon_cycle_detail::HandIndex(existing->hand);
++        const auto contact=s.gunContacts[h].eligible?s.gunContacts[h]:s.gunContact;
++        const auto retained=recoveryCustody_->MaintainReturned(s.input,s.wristWorld[h],contact,hands);
++        out.tracking.weapon=retained.weapon;out.tracking.custody=retained.custody;
++        out.tracking.mechanismPhase=retained.physical.cycle.phase;out.tracking.gun=hands.Current(existing->hand);
++        out.ownsGunCustody=bool(retained.weapon);out.blocksFire=blocks_=view.blocksFire||retained.blocksFire;
++        return out;
++    }
++    if(view.authority){const auto& authority=*view.authority;
++        if(view.native.owner!=s.nativeOwner||authority.owner!=s.input.owner||authority.item!=s.item||
++           authority.mechanism!=control.mechanism||!weapon_cycle_detail::Lease(authority,s.input.nowNs)||
++           (cycle_&&(cycle_->cycle!=authority.cycle||cycle_->shot!=authority.shot))||
++           (recoveryCycle_&&recoveryCycle_->grant.debt!=authority.grant.debt)){
++            api_.cancel(api_.context);out.tracking.enabled=false;return out;
++        }
++        if(!recoveryCycle_||(!recoveryPending_&&!recoveryAcknowledged_&&recoveryCustody_&&
++           recoveryCustody_->CyclePhase()==WeaponCyclePhase::Cancelled&&
++           recoveryCycle_->grant.nonce!=authority.grant.nonce)){
++            auto next=std::make_unique<BoltWeaponIdleDebtCustody>();
++            if(!next->Arm(p,authority,calibration_->wristFromPart,s.input.nowNs))return out;
++            const auto h=weapon_cycle_detail::HandIndex(p.hands.gun);
++            const auto contact=s.gunContacts[h].eligible?s.gunContacts[h]:s.gunContact;
++            if(existing&&existing->hand==p.hands.gun){
++                const bool adopted=recoveryCustody_?next->AdoptRetainedCustody(*recoveryCustody_,s.input,s.wristWorld[h],contact,hands):
++                    next->AdoptRetainedCustody(*custody_,s.input,s.wristWorld[h],contact,hands);
++                if(!adopted)return out;
++            }
++            recoveryCustody_=std::move(next);recoveryCycle_=authority;owner_=s.nativeOwner;
++        }
++    }
++    if(!recoveryCycle_||!recoveryCustody_)return out;
++    if(view.authority&&!weapon_cycle_detail::Same(*recoveryCycle_,*view.authority))return out;
++    if(s.custodyTransfer){
++        if(recoveryCustody_->Custody()==BoltCustodyPhase::AwaitingCustody)
++            out.custodyChange=recoveryCustody_->EnterCustody(s.input,*s.custodyTransfer,s.weaponWorld,
++                s.wristWorld[weapon_cycle_detail::HandIndex(p.hands.gun)],hands);
++        else if(recoveryCustody_->Custody()==BoltCustodyPhase::Manipulating)
++            out.custodyChange=recoveryCustody_->ReturnCustody(s.input,*s.custodyTransfer,
++                s.wristWorld[weapon_cycle_detail::HandIndex(p.hands.gun)],s.wristWorld[weapon_cycle_detail::HandIndex(p.hands.mechanism)],hands);
++    }
++    const auto& raw=s.raw;
++    const bool rawOkay=raw.valid&&raw.nativeOwner==s.nativeOwner&&raw.rig.soldier==s.nativeOwner.soldier&&raw.rig.weak==s.nativeOwner.weak&&
++        raw.rigFingerprint==calibration_->rigFingerprint&&raw.input.owner==s.input.owner&&raw.input.sequence<=s.input.sequence&&
++        raw.input.observedNs<=s.input.observedNs&&weapon_cycle_detail::Window(raw.input.observedNs,raw.input.deadlineNs,s.input.nowNs)&&
++        feed_mechanism_detail::Pose(raw.mechanismWristInWeapon);
++    BoltCustodyIdleDebtSample sample;sample.source=s.input;sample.lease=view.authority?*view.authority:*recoveryCycle_;
++    sample.mechanismGrip=s.grip;sample.gunContact=s.gunContact;
++    const auto currentGun=recoveryCustody_->Gun();
++    const auto h=weapon_cycle_detail::HandIndex(currentGun?currentGun->hand:p.hands.mechanism);
++    if(s.gunContacts[h].eligible)sample.gunContact=s.gunContacts[h];sample.gunWristInWorld=s.wristWorld[h];
++    if(rawOkay){sample.contactSource=raw.input;sample.mechanismWristInWeapon=raw.mechanismWristInWeapon;
++        sample.mechanismContact={sample.lease.mechanism,raw.input.sequence,raw.input.deadlineNs,true};}
++    if(intent!=UINT64_MAX)sample.acquireIntent=++intent;
++    const auto prior=recoveryCustody_->CyclePhase();
++    const auto result=recoveryCustody_->Update(sample,hands);
++    if(prior!=WeaponCyclePhase::Cancelled&&result.physical.cycle.phase==WeaponCyclePhase::Cancelled&&!recoveryPending_)
++        api_.cancel(api_.context);
++    out.tracking.recovery=sample.lease;out.tracking.recoveryTarget=result.physical.target;
++    out.tracking.weapon=result.weapon;out.tracking.custody=result.custody;out.tracking.mechanismPhase=result.physical.cycle.phase;
++    out.tracking.mechanism=hands.Current(p.hands.mechanism);out.tracking.gun=currentGun?hands.Current(currentGun->hand):std::nullopt;
++    out.ownsMechanism=result.physical.ownsMechanism;out.ownsGunCustody=bool(result.weapon);
++    out.blocksFire=blocks_=view.blocksFire||result.blocksFire||bool(recoveryPending_)||bool(recoveryAcknowledged_);
++    if(result.physical.release){recoveryPending_=result.physical.release;
++        api_.recovery.submit(api_.context,*recoveryPending_,s.input);
++        out.tracking.recoveryTarget.reset();out.ownsMechanism=false;}
++    if(recoverySettled_&&result.custody==BoltCustodyPhase::Returned){
++        recoveryCycle_.reset();cycle_.reset();recoverySettled_=false;recoveryPlacement_=true;
++    }
++    return out;
++}
++}
+--- a/src/games/bc2/Bc2PhysicalBolt.h
++++ b/src/games/bc2/Bc2PhysicalBolt.h
+@@ -1,5 +1,6 @@
+ #pragma once
+ #include "Bc2NativeCycleService.h"
++#include "Bc2NativeCycleRecovery.h"
+ #include "Bc2Rig.h"
+ #include "fvr/interaction/BoltWeaponCustody.h"
+ #include <memory>
+@@ -33,6 +34,8 @@
+     std::optional<interaction::HandClaim> mechanism,gun;
+     interaction::BoltCustodyPhase custody=interaction::BoltCustodyPhase::Idle;
+     interaction::WeaponCyclePhase mechanismPhase=interaction::WeaponCyclePhase::Idle;
++    std::optional<interaction::WeaponCycleIdleDebtLease> recovery;
++    std::optional<interaction::PhysicalWeaponCycleIdleDebtTarget> recoveryTarget;
+ };
+ struct Bc2PhysicalBoltApi {
+     void* context=nullptr;
+@@ -40,6 +43,7 @@
+     std::optional<Bc2NativeCycleView> (*view)(void*,std::int64_t)noexcept=nullptr;
+     bool (*ack)(void*,const interaction::WeaponCycleReady&)noexcept=nullptr;
+     void (*cancel)(void*)noexcept=nullptr;
++    Bc2PhysicalCycleRecoveryApi recovery{};
+ };
+ struct Bc2PhysicalBoltSample {
+     ReloadStateOwner nativeOwner{};
+@@ -64,6 +68,7 @@
+     bool blocksFire=false,ownsGunCustody=false,ownsMechanism=false;
+     std::optional<interaction::HandGunCustodyResult> custodyChange;
+     std::optional<interaction::WeaponCycleReady> settled;
++    std::optional<interaction::WeaponCycleIdleDebtReady> recovered;
+ };
+ // One instance per interaction domain. The ordinary gun/support adapter must
+ // yield its claims while ownsGunCustody is true and adopt custodyChange claims
+@@ -75,12 +80,19 @@
+     bool BlocksFire()const noexcept{return blocks_;}
+     void Cancel(const interaction::HandInteractionSample&,interaction::HandInteraction&)noexcept;
+ private:
++    Bc2PhysicalBoltResult TickRecovery(const Bc2PhysicalBoltSample&,const Bc2NativeCycleRecoveryView&,
++        interaction::HandInteraction&,std::uint64_t& intent)noexcept;
+     std::shared_ptr<const Bc2BoltCalibration> calibration_;
+     Bc2PhysicalBoltApi api_{};
+-    interaction::BoltWeaponCustody custody_;
++    std::unique_ptr<interaction::BoltWeaponCustody> custody_=std::make_unique<interaction::BoltWeaponCustody>();
+     std::optional<interaction::WeaponCycleLease> cycle_;
+     std::optional<interaction::WeaponCycleRelease> pending_;
+     std::optional<interaction::WeaponCycleReady> acknowledged_;
++    std::unique_ptr<interaction::BoltWeaponIdleDebtCustody> recoveryCustody_;
++    std::optional<interaction::WeaponCycleIdleDebtLease> recoveryCycle_;
++    std::optional<interaction::WeaponCycleIdleDebtRelease> recoveryPending_;
++    std::optional<interaction::WeaponCycleIdleDebtReady> recoveryAcknowledged_;
++    bool recoverySettled_=false,recoveryPlacement_=false;
+     ReloadStateOwner owner_{};
+     bool blocks_=false,settled_=false;
+ };
+--- a/src/games/bc2/Bc2PhysicalPump.cpp
++++ b/src/games/bc2/Bc2PhysicalPump.cpp
+@@ -31,20 +31,23 @@
+         weapon_cycle_detail::Window(t.input.observedNs,t.input.deadlineNs,now);
+ }
+ bool PumpTargetFresh(const Bc2PumpTracking& t,std::int64_t now)noexcept {
+-    if(!PumpTrackingFresh(t,now)||!t.target||!t.held||!t.mechanism||!t.gun||!Point(t.pointWrist)||t.input.released[0])return false;
+-    auto input=t.input;input.nowNs=now;
+-    const auto expected=Profile(*t.calibration,t.pointWrist);
+-    return CurrentPhysicalWeaponCycleTarget(*t.target,*t.held,input,*t.mechanism,*t.gun)&&
+-        t.profile.id==expected.id&&t.profile.revision==expected.revision&&t.target->profile==expected.id&&
+-        t.target->revision==expected.revision&&t.profile.axis==expected.axis&&t.profile.stroke==expected.stroke&&
+-        t.profile.family==expected.family&&t.profile.closedContact.values==expected.closedContact.values&&t.target->travel<=expected.stroke;
++    if(!PumpTrackingFresh(t,now)||!t.mechanism||!t.gun||!Point(t.pointWrist)||t.input.released[0])return false;
++    auto input=t.input;input.nowNs=now;const auto expected=Profile(*t.calibration,t.pointWrist);
++    const auto valid=[&](const auto& target,const auto& authority){
++        return CurrentPhysicalWeaponCycleTarget(target,authority,input,*t.mechanism,*t.gun)&&
++            t.profile.id==expected.id&&t.profile.revision==expected.revision&&target.profile==expected.id&&
++            target.revision==expected.revision&&t.profile.axis==expected.axis&&t.profile.stroke==expected.stroke&&
++            t.profile.family==expected.family&&t.profile.closedContact.values==expected.closedContact.values&&target.travel<=expected.stroke;};
++    if(t.target&&t.held&&!t.recoveryTarget&&!t.recovery)return valid(*t.target,*t.held);
++    return !t.target&&!t.held&&t.recoveryTarget&&t.recovery&&valid(*t.recoveryTarget,*t.recovery);
+ }
+ bool PumpTargetRetained(const Bc2PumpTracking& old,const Bc2PumpTracking& current,std::int64_t now)noexcept {
+     if(!PumpTargetFresh(old,now)||!PumpTargetFresh(current,now)||old.nativeOwner!=current.nativeOwner||
+        old.calibration!=current.calibration||!SamePoint(old.pointWrist,current.pointWrist)||old.input.sequence>current.input.sequence||
+        old.mechanism->token!=current.mechanism->token||old.gun->token!=current.gun->token)return false;
+     auto input=current.input;input.nowNs=now;
+-    return CurrentPhysicalWeaponCycleTarget(*old.target,*current.held,input,*current.mechanism,*current.gun);
++    if(old.target&&current.held)return CurrentPhysicalWeaponCycleTarget(*old.target,*current.held,input,*current.mechanism,*current.gun);
++    return old.recoveryTarget&&current.recovery&&CurrentPhysicalWeaponCycleTarget(*old.recoveryTarget,*current.recovery,input,*current.mechanism,*current.gun);
+ }
+ Bc2PumpRawContact BuildPumpRawContact(const Bc2PumpTracking& t,const RigSnapshot& rig,const math::Matrix4& rawWrist,
+     const math::Matrix4& placed,math::Vec3 point,float units,std::int64_t now,const math::Matrix4* body)noexcept {
+@@ -68,15 +71,21 @@
+     if(!PumpTargetFresh(t,now)||!std::isfinite(units)||units<=0||units>1000)return {};
+     const auto binding=bc2_pump_detail::DerivePart(rig);
+     if(!binding||binding->fingerprint!=t.calibration->rigFingerprint)return {};
+-    Bc2PumpPartSource source{t.target->lease,rig.identity,t.calibration->closedPart,t.calibration->rearDirection,
+-        t.target->mechanism,t.target->gun,t.target->inputSequence,t.target->observedNs,t.target->deadlineNs,true};
+-    auto input=t.input;input.nowNs=now;
+-    const auto proof=BuildSpasPumpCyclePart(rig,*binding,source,t.profile,*t.target,*t.held,input,*t.mechanism,*t.gun,placed,units);
+-    if(!proof||proof->edits.size()!=1)return {};
+-    auto wrist=Contact(t.target->contact,t.pointWrist,-1);for(unsigned n=0;n<3;++n)wrist.values[3][n]*=units;
+-    auto part=t.calibration->closedPart;part.values[3][2]+=t.calibration->rearDirection*t.target->travel;
+-    for(unsigned n=0;n<3;++n)part.values[3][n]*=units;
+-    return {Multiply(wrist,placed),BoneWrite{binding->part,Multiply(part,placed)}};
++    const auto build=[&]<class Authority>(const PhysicalWeaponCycleTargetT<Authority>& target,const Authority& authority)->Bc2PumpPresentation {
++        Bc2PumpPartSourceT<Authority> source{target.lease,rig.identity,t.calibration->closedPart,t.calibration->rearDirection,
++            target.mechanism,target.gun,target.inputSequence,target.observedNs,target.deadlineNs,true};
++        auto input=t.input;input.nowNs=now;
++        std::optional<RigPosePlan> proof;
++        if constexpr(std::is_same_v<Authority,WeaponCycleLease>)
++            proof=BuildSpasPumpCyclePart(rig,*binding,source,t.profile,target,authority,input,*t.mechanism,*t.gun,placed,units);
++        else proof=BuildSpasPumpRecoveryPart(rig,*binding,source,t.profile,target,authority,input,*t.mechanism,*t.gun,placed,units);
++        if(!proof||proof->edits.size()!=1)return {};
++        auto wrist=Contact(target.contact,t.pointWrist,-1);for(unsigned n=0;n<3;++n)wrist.values[3][n]*=units;
++        auto part=t.calibration->closedPart;part.values[3][2]+=t.calibration->rearDirection*target.travel;
++        for(unsigned n=0;n<3;++n)part.values[3][n]*=units;
++        return {Multiply(wrist,placed),BoneWrite{binding->part,Multiply(part,placed)}};
++    };
++    return t.target?build(*t.target,*t.held):build(*t.recoveryTarget,*t.recovery);
+ }
+ Bc2PhysicalPump::Bc2PhysicalPump(std::shared_ptr<const Bc2PumpCalibration> calibration,Bc2PhysicalPumpApi api)noexcept:
+     calibration_(std::move(calibration)),api_(api){}
+@@ -84,13 +93,16 @@
+     ++cancels_;supportReturn_.reset();supportCapture_.reset();
+     if(api_.cancel)api_.cancel(api_.context);
+     // Physical loss cannot settle an outstanding native transaction.
+-    blocks_=blocks_||bool(cycle_)||bool(pending_)||bool(acknowledged_);
++    blocks_=blocks_||bool(cycle_)||bool(pending_)||bool(acknowledged_)||bool(recoveryCycle_)||bool(recoveryPending_);
+     DropPhysical(source,hands);
+ }
+ void Bc2PhysicalPump::DropPhysical(const HandInteractionSample& source,HandInteraction& hands)noexcept {
+     PhysicalWeaponCycleSample sample;sample.source=source;
+     if(cycle_)sample.lease=*cycle_;
+     physical_.Update(sample,hands);
++    PhysicalWeaponCycleIdleDebtSample recovery;recovery.source=source;
++    if(recoveryCycle_)recovery.lease=*recoveryCycle_;
++    recoveryPhysical_.Update(recovery,hands);
+ }
+ Bc2PhysicalPumpResult Bc2PhysicalPump::Tick(const Bc2PhysicalPumpSample& s,HandInteraction& hands,std::uint64_t& intent)noexcept {
+     ++ticks_;
+@@ -101,8 +113,8 @@
+     supportRaw_=s.raw;
+     if(supportReturn_){
+         const auto& old=*supportReturn_;const auto gun=hands.Current(InteractionHand::Right);
+-        if(s.cancel||s.asset!=SpasReloadAsset||!Mapped(s.nativeOwner,s.input)||s.input.owner!=old.release.cycle.owner||
+-           s.item!=old.release.cycle.item||s.nativeOwner!=old.nativeOwner||!s.input.focused||!s.input.tracked[0]||!s.input.tracked[1]||
++        if(s.cancel||s.asset!=SpasReloadAsset||!Mapped(s.nativeOwner,s.input)||s.input.owner!=std::visit([](const auto& r){return r.cycle.owner;},old.release)||
++           s.item!=std::visit([](const auto& r){return r.cycle.item;},old.release)||s.nativeOwner!=old.nativeOwner||!s.input.focused||!s.input.tracked[0]||!s.input.tracked[1]||
+            s.input.released[0]||s.input.released[1]||s.input.sequence<old.last.sequence||
+            s.input.observedNs<old.last.observedNs||s.input.nowNs>=old.last.deadlineNs||
+            !weapon_cycle_detail::Window(s.input.observedNs,s.input.deadlineNs,s.input.nowNs)||
+@@ -116,9 +128,21 @@
+     if(view&&view->ready){
+         if(!acknowledged_&&physical_.ReconcileReady(*view->ready,s.input.nowNs))acknowledged_=view->ready;
+         if(acknowledged_&&api_.ack(api_.context,*acknowledged_)){++acks_;out.settled=acknowledged_;
+-            if(supportReturn_&&supportReturn_->release==acknowledged_->release)supportReturn_->readyNs=acknowledged_->observedNs;
++            if(supportReturn_&&supportReturn_->release==decltype(supportReturn_->release){acknowledged_->release})supportReturn_->readyNs=acknowledged_->observedNs;
+             acknowledged_.reset();pending_.reset();cycle_.reset();}
+         view=api_.view(api_.context,s.input.nowNs);
++    }
++    if(api_.recovery.Complete()){
++        const auto recovered=api_.recovery.view(api_.context,s.input.nowNs);
++        if(recovered&&recovered->ready){
++            if(!recoveryAcknowledged_&&recoveryPhysical_.ReconcileReady(*recovered->ready,s.input.nowNs))recoveryAcknowledged_=recovered->ready;
++            if(recoveryAcknowledged_&&api_.recovery.ack(api_.context,*recoveryAcknowledged_)){
++                ++acks_;out.recovered=recoveryAcknowledged_;
++                if(supportReturn_&&supportReturn_->release==decltype(supportReturn_->release){recoveryAcknowledged_->release})
++                    supportReturn_->readyNs=recoveryAcknowledged_->observedNs;
++                recoveryAcknowledged_.reset();recoveryPending_.reset();recoveryCycle_.reset();cycle_.reset();
++            }
++        }
+     }
+     const auto gun=hands.Current(InteractionHand::Right);
+     const bool safe=!s.cancel&&s.asset==SpasReloadAsset&&Mapped(s.nativeOwner,s.input)&&gun&&
+@@ -140,6 +164,12 @@
+     out.tracking={true,s.nativeOwner,s.input,calibration_};
+     view=api_.view(api_.context,s.input.nowNs);blocks_=!view||view->blocksFire||bool(cycle_)||bool(pending_);
+     out.blocksFire=blocks_;
++    if(api_.recovery.Complete()&&!pending_&&!acknowledged_&&(!view||!view->held)){
++        const auto recovery=api_.recovery.view(api_.context,s.input.nowNs);
++        if(recovery&&(recovery->authority||recoveryCycle_||recoveryPending_)){
++            auto next=TickRecovery(s,*recovery,hands,intent);next.recovered=out.recovered;return next;
++        }
++    }
+     if(!view||!view->held){DropPhysical(s.input,hands);return out;}
+     const auto& raw=s.raw;
+     const bool rawOkay=raw.valid&&raw.nativeOwner==s.nativeOwner&&raw.rigFingerprint==calibration_->rigFingerprint&&
+@@ -169,6 +199,50 @@
+     }
+     return out;
+ }
++Bc2PhysicalPumpResult Bc2PhysicalPump::TickRecovery(const Bc2PhysicalPumpSample& s,const Bc2NativeCycleRecoveryView& view,
++    HandInteraction& hands,std::uint64_t& intent)noexcept {
++    Bc2PhysicalPumpResult out;out.blocksFire=blocks_=true;out.tracking={true,s.nativeOwner,s.input,calibration_};
++    if(recoveryPending_){PhysicalWeaponCycleIdleDebtSample pending;pending.source=s.input;
++        if(recoveryCycle_)pending.lease=*recoveryCycle_;recoveryPhysical_.Update(pending,hands);return out;}
++    const auto gun=hands.Current(InteractionHand::Right);
++    const auto& raw=s.raw;
++    if(!view.authority||view.native.owner!=s.nativeOwner||!gun||
++       view.authority->owner!=s.input.owner||view.authority->item!=s.item||
++       view.authority->mechanism!=HandInteractionKey{0x5350415350554d50ull,s.item.generation}||
++       !weapon_cycle_detail::Lease(*view.authority,s.input.nowNs)||
++       (cycle_&&(cycle_->owner!=view.authority->owner||cycle_->item!=view.authority->item||
++        cycle_->mechanism!=view.authority->mechanism||cycle_->cycle!=view.authority->cycle||cycle_->shot!=view.authority->shot))||
++       !raw.valid||raw.nativeOwner!=s.nativeOwner||raw.rigFingerprint!=calibration_->rigFingerprint||
++       raw.input.owner!=s.input.owner||raw.input.sequence>s.input.sequence||raw.input.observedNs>s.input.observedNs||
++       !weapon_cycle_detail::Window(raw.input.observedNs,raw.input.deadlineNs,s.input.nowNs)||!Point(raw.pointWrist)||
++       ((cycle_||recoveryCycle_)&&!SamePoint(pointWrist_,raw.pointWrist))){DropPhysical(s.input,hands);return out;}
++    if(recoveryCycle_&&!weapon_cycle_detail::Same(*recoveryCycle_,*view.authority)){
++        if(recoveryPhysical_.Phase()!=WeaponCyclePhase::Cancelled||recoveryCycle_->cycle!=view.authority->cycle||
++           recoveryCycle_->shot!=view.authority->shot||recoveryCycle_->grant.debt!=view.authority->grant.debt){DropPhysical(s.input,hands);return out;}
++        recoveryCycle_.reset();
++    }
++    if(!recoveryCycle_){profile_=Profile(*calibration_,raw.pointWrist);
++        if(!recoveryPhysical_.Begin(profile_,*view.authority,s.input.nowNs))return out;
++        recoveryCycle_=view.authority;pointWrist_=raw.pointWrist;++begins_;}
++    if(!weapon_cycle_detail::Same(*recoveryCycle_,*view.authority)){DropPhysical(s.input,hands);return out;}
++    PhysicalWeaponCycleIdleDebtSample sample;sample.source=s.input;sample.contactSource=raw.input;sample.lease=*view.authority;
++    sample.rawContact=raw.contact;sample.grip=s.grip;sample.gun=gun->token;
++    sample.contact={sample.lease.mechanism,raw.input.sequence,raw.input.deadlineNs,true};
++    if(intent==UINT64_MAX)return out;sample.acquireIntent=++intent;
++    if(const auto left=hands.Current(InteractionHand::Left);left&&left->token.kind==HandClaimKind::WeaponSupport)sample.support=left->token;
++    const auto previous=recoveryPhysical_.Phase();
++    const auto result=recoveryPhysical_.Update(sample,hands);out.ownsHand=result.ownsMechanism;
++    if(result.cycle.phase==WeaponCyclePhase::Cancelled&&previous!=WeaponCyclePhase::Cancelled)api_.cancel(api_.context);
++    out.tracking.profile=profile_;out.tracking.recovery=view.authority;out.tracking.pointWrist=pointWrist_;out.tracking.recoveryTarget=result.target;
++    out.tracking.mechanism=hands.Current(InteractionHand::Left);out.tracking.gun=gun;
++    if(result.target)++targets_;
++    if(result.release){++releases_;recoveryPending_=result.release;supportCapture_.reset();
++        if(!s.input.released[0])supportReturn_=SupportReturn{*result.release,gun->token,s.nativeOwner,s.input,0,s.input.sequence};
++        if(!api_.recovery.submit(api_.context,*result.release,s.input))++controlRejected_;
++        out.tracking.recoveryTarget.reset();out.ownsHand=false;
++    }
++    return out;
++}
+ std::optional<SupportGripResult> Bc2PhysicalPump::ContinueSupport(const SupportGripOwner& owner,const InputFrame& input,
+     const SupportGripContact& contact,const HandInteractionSample& original,HandInteractionKey contactKey,
+     HandInteraction& hands,SupportGrip& support,std::uint64_t& intent,bool cancel)noexcept {
+@@ -192,7 +266,7 @@
+     // history rejects it. New geometry cannot retry a rejected held gesture.
+     supportReturn_.reset();
+     if(intent==UINT64_MAX)return {};
+-    const HandClaimRequest request{current.owner,InteractionHand::Left,HandClaimKind::WeaponSupport,grant.release.cycle.item,
++    const HandClaimRequest request{current.owner,InteractionHand::Left,HandClaimKind::WeaponSupport,std::visit([](const auto& r){return r.cycle.item;},grant.release),
+         {contactKey,original.sequence,original.deadlineNs,true},++intent,gun->token.id};
+     const auto acquired=hands.AcquireFrom(current,original,request);
+     if(!acquired.claim){++supportReturnLost_;return {};}
+--- a/src/games/bc2/Bc2PhysicalPump.h
++++ b/src/games/bc2/Bc2PhysicalPump.h
+@@ -1,10 +1,12 @@
+ #pragma once
+ #include "Bc2NativeCycleService.h"
++#include "Bc2NativeCycleRecovery.h"
+ #include "Bc2PumpPart.h"
+ #include "fvr/interaction/SupportGrip.h"
+ #include <atomic>
+ #include <memory>
+ #include <iosfwd>
++#include <variant>
+ namespace fvr::bc2 {
+ // Explicit measured calibration; there is deliberately no default accepted row.
+ // Canonical weapon-local metres, from the original state-labelled native rig.
+@@ -39,6 +41,8 @@
+     std::optional<interaction::HandClaim> mechanism,gun;
+     math::Vec3 pointWrist{};
+     std::optional<Bc2PumpSupportCapture> supportCapture;
++    std::optional<interaction::WeaponCycleIdleDebtLease> recovery;
++    std::optional<interaction::PhysicalWeaponCycleIdleDebtTarget> recoveryTarget;
+ };
+ // Returned support is a new current support claim, never the expired mechanism.
+ std::optional<math::Matrix4> ResolvePumpSupportWrist(const Bc2PumpTracking&,const RigSnapshot&,
+@@ -61,6 +65,7 @@
+     std::optional<Bc2NativeCycleView> (*view)(void*,std::int64_t)noexcept=nullptr;
+     bool (*ack)(void*,const interaction::WeaponCycleReady&)noexcept=nullptr;
+     void (*cancel)(void*)noexcept=nullptr;
++    Bc2PhysicalCycleRecoveryApi recovery{};
+ };
+ struct Bc2PhysicalPumpSample {
+     ReloadStateOwner nativeOwner{};
+@@ -76,6 +81,7 @@
+     // Observational copy emitted only after exact physical reconciliation and
+     // successful acknowledgement by the real native API.
+     std::optional<interaction::WeaponCycleReady> settled;
++    std::optional<interaction::WeaponCycleIdleDebtReady> recovered;
+ };
+ struct Bc2PumpPackCounters {unsigned contacts=0,poses=0,copies=0,pairs=0,fallbacks=0;};
+ class Bc2PhysicalPump {
+@@ -91,15 +97,22 @@
+     void Report(std::ostream&)const;
+ private:
+     void DropPhysical(const interaction::HandInteractionSample&,interaction::HandInteraction&)noexcept;
++    Bc2PhysicalPumpResult TickRecovery(const Bc2PhysicalPumpSample&,const Bc2NativeCycleRecoveryView&,
++        interaction::HandInteraction&,std::uint64_t& intent)noexcept;
+     std::shared_ptr<const Bc2PumpCalibration> calibration_;
+     Bc2PhysicalPumpApi api_{};interaction::PhysicalWeaponCycle physical_;
+     interaction::WeaponCycleProfile profile_{};
+     std::optional<interaction::WeaponCycleLease> cycle_;
+     std::optional<interaction::WeaponCycleRelease> pending_;
+     std::optional<interaction::WeaponCycleReady> acknowledged_;
++    interaction::PhysicalWeaponCycleIdleDebt recoveryPhysical_;
++    std::optional<interaction::WeaponCycleIdleDebtLease> recoveryCycle_;
++    std::optional<interaction::WeaponCycleIdleDebtRelease> recoveryPending_;
++    std::optional<interaction::WeaponCycleIdleDebtReady> recoveryAcknowledged_;
+     math::Vec3 pointWrist_{};
+     struct SupportReturn {
+-        interaction::WeaponCycleRelease release{};interaction::HandClaimToken gun{};ReloadStateOwner nativeOwner{};
++        std::variant<interaction::WeaponCycleRelease,interaction::WeaponCycleIdleDebtRelease> release{};
++        interaction::HandClaimToken gun{};ReloadStateOwner nativeOwner{};
+         interaction::HandInteractionSample last{};std::int64_t readyNs=0;std::uint64_t releasedAtSequence=0;
+     };
+     std::optional<SupportReturn> supportReturn_;
+--- a/src/games/bc2/Bc2PumpPart.cpp
++++ b/src/games/bc2/Bc2PumpPart.cpp
+@@ -19,8 +19,8 @@
+ std::optional<Bc2PumpPartBinding> BindSpasPumpPart(const RigSnapshot& rig,std::string_view asset,std::string_view mesh){
+     if(!BindBc2ReloadPresentation(rig,asset,mesh))return {};return bc2_pump_detail::DerivePart(rig);
+ }
+-std::optional<RigPosePlan> BuildSpasPumpPart(const RigSnapshot& rig,const Bc2PumpPartBinding& binding,
+-    const Bc2PumpPartSource& source,const WeaponCycleLease& current,const HandInteractionSample& input,const HandClaim& mechanism,const HandClaim& gun,
++template<class Authority> std::optional<RigPosePlan> BuildSpasPumpPartImpl(const RigSnapshot& rig,const Bc2PumpPartBinding& binding,
++    const Bc2PumpPartSourceT<Authority>& source,const Authority& current,const HandInteractionSample& input,const HandClaim& mechanism,const HandClaim& gun,
+     const math::Matrix4& weapon,float units,float travel){
+     using namespace weapon_cycle_detail;
+     const auto derived=bc2_pump_detail::DerivePart(rig);
+@@ -50,9 +50,9 @@
+     const std::array<BoneWrite,1> writes{{{binding.part,Multiply(local,weapon)}}};
+     return BuildRigPosePlan(rig,writes);
+ }
+-std::optional<RigPosePlan> BuildSpasPumpCyclePart(const RigSnapshot& rig,const Bc2PumpPartBinding& binding,
+-    const Bc2PumpPartSource& source,const WeaponCycleProfile& profile,const PhysicalWeaponCycleTarget& target,
+-    const WeaponCycleLease& current,const HandInteractionSample& input,const HandClaim& mechanism,const HandClaim& gun,
++template<class Authority> std::optional<RigPosePlan> BuildSpasPumpCyclePartImpl(const RigSnapshot& rig,const Bc2PumpPartBinding& binding,
++    const Bc2PumpPartSourceT<Authority>& source,const WeaponCycleProfile& profile,const PhysicalWeaponCycleTargetT<Authority>& target,
++    const Authority& current,const HandInteractionSample& input,const HandClaim& mechanism,const HandClaim& gun,
+     const math::Matrix4& weapon,float units){
+     if(!weapon_cycle_detail::Profile(profile)||profile.family!=WeaponCycleFamily::Pump||
+        profile.id!=target.profile||profile.revision!=target.revision||
+@@ -64,6 +64,20 @@
+     const auto expected=weapon_cycle_detail::Target(profile,target.travel,target.rotation);
+     for(unsigned row=0;row<4;++row)for(unsigned column=0;column<4;++column)
+         if(std::abs(expected.values[row][column]-target.contact.values[row][column])>1e-5f)return {};
+-    return BuildSpasPumpPart(rig,binding,source,current,input,mechanism,gun,weapon,units,target.travel);
++    return BuildSpasPumpPartImpl(rig,binding,source,current,input,mechanism,gun,weapon,units,target.travel);
+ }
++
++std::optional<RigPosePlan> BuildSpasPumpPart(const RigSnapshot& rig,const Bc2PumpPartBinding& binding,
++    const Bc2PumpPartSource& source,const WeaponCycleLease& current,const HandInteractionSample& input,
++    const HandClaim& mechanism,const HandClaim& gun,const math::Matrix4& weapon,float units,float travel){
++    return BuildSpasPumpPartImpl(rig,binding,source,current,input,mechanism,gun,weapon,units,travel);
+ }
++std::optional<RigPosePlan> BuildSpasPumpCyclePart(const RigSnapshot& rig,const Bc2PumpPartBinding& binding,
++    const Bc2PumpPartSource& source,const WeaponCycleProfile& profile,const PhysicalWeaponCycleTarget& target,
++    const WeaponCycleLease& current,const HandInteractionSample& input,const HandClaim& mechanism,const HandClaim& gun,
++    const math::Matrix4& weapon,float units){return BuildSpasPumpCyclePartImpl(rig,binding,source,profile,target,current,input,mechanism,gun,weapon,units);}
++std::optional<RigPosePlan> BuildSpasPumpRecoveryPart(const RigSnapshot& rig,const Bc2PumpPartBinding& binding,
++    const Bc2PumpRecoveryPartSource& source,const WeaponCycleProfile& profile,const PhysicalWeaponCycleIdleDebtTarget& target,
++    const WeaponCycleIdleDebtLease& current,const HandInteractionSample& input,const HandClaim& mechanism,const HandClaim& gun,
++    const math::Matrix4& weapon,float units){return BuildSpasPumpCyclePartImpl(rig,binding,source,profile,target,current,input,mechanism,gun,weapon,units);}
++}
+--- a/src/games/bc2/Bc2PumpPart.h
++++ b/src/games/bc2/Bc2PumpPart.h
+@@ -10,10 +10,11 @@
+ struct Bc2PumpPartBinding {std::uint64_t fingerprint=0;std::uint32_t weapon=0,part=0;};
+ namespace bc2_pump_detail {
+ std::optional<Bc2PumpPartBinding> DerivePart(const RigSnapshot&);
++
+ }
+ std::optional<Bc2PumpPartBinding> BindSpasPumpPart(const RigSnapshot&,std::string_view asset,std::string_view mesh);
+-struct Bc2PumpPartSource {
+-    interaction::WeaponCycleLease lease{};
++template<class Authority> struct Bc2PumpPartSourceT {
++    Authority lease{};
+     RigIdentity rig{};
+     // Immutable closed part captured at the held native7->8 boundary. A
+     // renderer must not substitute its latest animated/snap-guided part here.
+@@ -24,6 +25,8 @@
+     std::int64_t observedNs=0,deadlineNs=0;
+     bool nativeBoundaryVerified=false;
+ };
++using Bc2PumpPartSource=Bc2PumpPartSourceT<interaction::WeaponCycleLease>;
++using Bc2PumpRecoveryPartSource=Bc2PumpPartSourceT<interaction::WeaponCycleIdleDebtLease>;
+ // Private one-part palette plan. No installation/calls/native writes exist.
+ // Normal rendering never calls this until the native fired-cohort test and
+ // closed-part/hand binding are accepted. The ordinary animation remains source.
+@@ -40,4 +43,9 @@
+     const interaction::WeaponCycleLease& current,const interaction::HandInteractionSample&,
+     const interaction::HandClaim& currentMechanism,const interaction::HandClaim& currentGun,
+     const math::Matrix4& placedWeapon,float unitsPerMetre);
++std::optional<RigPosePlan> BuildSpasPumpRecoveryPart(const RigSnapshot&,const Bc2PumpPartBinding&,
++    const Bc2PumpRecoveryPartSource&,const interaction::WeaponCycleProfile&,const interaction::PhysicalWeaponCycleIdleDebtTarget&,
++    const interaction::WeaponCycleIdleDebtLease& current,const interaction::HandInteractionSample&,
++    const interaction::HandClaim& currentMechanism,const interaction::HandClaim& currentGun,
++    const math::Matrix4& placedWeapon,float unitsPerMetre);
+ }
+--- a/src/games/bc2/Bc2RigPublication.cpp
++++ b/src/games/bc2/Bc2RigPublication.cpp
+@@ -4,6 +4,7 @@
+ #include <MinHook.h>
+ #include "Bc2RigPublication.h"
+ #include "Bc2NativeCycleRuntime.h"
++#include "Bc2NativeCycleRecovery.h"
+ #include "Bc2PumpCapture.h"
+ #include "Bc2M95ShotPartCapture.h"
+ #include "Bc2WeaponFrameAccess.h"
+@@ -401,11 +402,16 @@
+     if(scope.pump){
+         const auto now=ReloadNanos();const auto current=pumpGuard.load(std::memory_order_acquire);
+         const auto native=reloadFlowRuntime::ReadNativeCycleView(now);const auto shot=shotGuard.load(std::memory_order_acquire);
+-        const bool valid=current&&native&&native->held&&shot&&shot->valid&&shot->leftTracked&&
++        const auto recovery=current&&current->recoveryTarget?reloadFlowRuntime::ReadNativeCycleRecoveryView(now):std::nullopt;
++        const bool authority=current&&((current->target&&current->held&&native&&native->held&&
++            native->native.owner==current->nativeOwner&&interaction::weapon_cycle_detail::Same(*native->held,*current->held))||
++            (current->recoveryTarget&&current->recovery&&recovery&&recovery->authority&&
++             recovery->native.owner==current->nativeOwner&&interaction::weapon_cycle_detail::Lease(*recovery->authority,now)&&interaction::weapon_cycle_detail::Same(*recovery->authority,*current->recovery)));
++        const bool valid=authority&&shot&&shot->valid&&shot->leftTracked&&
+             shot->generation==current->input.sequence&&shot->soldier==scope.soldier&&shot->weak==scope.weak&&
+             shot->weapon==current->nativeOwner.weapon&&shot->owner==current->nativeOwner.actorGeneration&&
+             shot->space==current->nativeOwner.space&&Fresh(shot->deadline)&&
+-            PumpTargetRetained(*scope.pump,*current,now)&&interaction::weapon_cycle_detail::Same(*native->held,*current->held);
++            PumpTargetRetained(*scope.pump,*current,now);
+         std::vector<std::array<std::byte,64>> actual(count);
+         if(!Read(reinterpret_cast<unsigned>(source),actual.data(),count*64)||actual!=scope.before){scope.changed=false;scope.pump.reset();scope.pumpMask=0;++pumpSourceRejects;}
+         else if(!valid){
+@@ -416,11 +422,17 @@
+     if(scope.bolt){
+         const auto now=ReloadNanos();const auto current=boltGuard.load(std::memory_order_acquire);
+         const auto native=reloadFlowRuntime::ReadNativeCycleView(now);const auto shot=shotGuard.load(std::memory_order_acquire);
+-        bool valid=current&&native&&shot&&shot->valid&&shot->leftTracked&&native->native.owner==current->nativeOwner&&
++        const auto recovery=current&&current->recoveryTarget?reloadFlowRuntime::ReadNativeCycleRecoveryView(now):std::nullopt;
++        const bool owner=current&&((native&&native->native.owner==current->nativeOwner)||
++            (recovery&&recovery->native.owner==current->nativeOwner));
++        bool valid=owner&&shot&&shot->valid&&shot->leftTracked&&
+             shot->generation==current->input.sequence&&shot->soldier==scope.soldier&&shot->weak==scope.weak&&
+             shot->weapon==current->nativeOwner.weapon&&shot->owner==current->nativeOwner.actorGeneration&&
+             shot->space==current->nativeOwner.space&&Fresh(shot->deadline)&&BoltCustodyRetained(*scope.bolt,*current,now);
+-        if(valid&&scope.bolt->target)valid=native->held&&current->held&&interaction::weapon_cycle_detail::Same(*native->held,*current->held);
++        if(valid&&scope.bolt->target)valid=native&&native->held&&current->held&&interaction::weapon_cycle_detail::Same(*native->held,*current->held);
++        if(valid&&scope.bolt->recoveryTarget)valid=recovery&&recovery->authority&&current->recovery&&
++            interaction::weapon_cycle_detail::Lease(*recovery->authority,now)&&
++            interaction::weapon_cycle_detail::Same(*recovery->authority,*current->recovery);
+         std::vector<std::array<std::byte,64>> actual(count);
+         if(!Read(reinterpret_cast<unsigned>(source),actual.data(),count*64)||actual!=scope.before){scope.changed=false;valid=false;}
+         if(!valid){if(scope.boltBase.size()==count)scope.posed=scope.boltBase;else scope.changed=false;
+@@ -1219,7 +1231,7 @@
+         if(!freePose){RejectTracking(15);return;}merge(freePose->writes);++freeRightPoses;
+     }else if(!poseTrigger()){RejectTracking(15);return;}
+     auto plan=BuildRigPosePlan(*rig,writes);if(!plan){RejectTracking(15);published.reset();return;}
+-    if(boltCustody&&input.bolt.target){
++    if(boltCustody&&(input.bolt.target||input.bolt.recoveryTarget)){
+         const auto presentation=BuildBoltPresentation(input.bolt,*rig,placed,input.input.worldUnitsPerMeter,ReloadNanos());
+         if(!presentation){published.reset();return;}
+         const auto boltSolved=interaction::SolveTrackedArms(rig->parents,armNative,rig->left,rig->right,
+@@ -1236,7 +1248,7 @@
+         ++boltPoses;
+     }
+     std::vector<std::array<std::byte,64>> pumpBase;bool pumpAttached=false;
+-    if(handRoleReady&&input.pump.target&&!input.supportHolding&&!input.sightPreview.valid&&!input.reload.preview&&
++    if(handRoleReady&&(input.pump.target||input.pump.recoveryTarget)&&!input.supportHolding&&!input.sightPreview.valid&&!input.reload.preview&&
+        !input.magazine.target&&!targets->weaponAttachmentPending){
+         ++pumpPlanAttempts;const auto presentation=BuildPumpPresentation(input.pump,*rig,placed,input.input.worldUnitsPerMeter,ReloadNanos());
+         if(presentation.wrist&&presentation.part){
+--- a/tests/Bc2PhysicalBoltRecoveryTests.cpp
++++ b/tests/Bc2PhysicalBoltRecoveryTests.cpp
+@@ -0,0 +1,226 @@
++#include "Bc2BoltPart.h"
++#include "Bc2M95BoltCalibration.h"
++#include "Test.h"
++#include <cstring>
++#include "fvr/interaction/WeaponCycleConvergence.h"
++using namespace fvr;using namespace fvr::bc2;using namespace fvr::interaction;
++namespace {
++constexpr std::int64_t ms=1000000;constexpr auto left=InteractionHand::Left,right=InteractionHand::Right;
++math::Matrix4 Identity(){math::Matrix4 m{};for(unsigned n=0;n<4;++n)m.values[n][n]=1;return m;}
++bool Equal(const math::Matrix4& a,const math::Matrix4& b){for(unsigned r=0;r<4;++r)for(unsigned c=0;c<4;++c)if(std::abs(a.values[r][c]-b.values[r][c])>1e-5f)return false;return true;}
++struct NativeBase {
++    Bc2NativeCycleView view{};unsigned controls=0,releases=0,acks=0,cancels=0;bool rejectRelease=false;
++    std::optional<WeaponCycleRelease> release;
++    Bc2PhysicalBoltApi Api(){return {this,
++        [](void* p,const Bc2NativeCycleControl& c)noexcept{auto& n=*static_cast<NativeBase*>(p);++n.controls;
++            if(c.release){++n.releases;n.release=c.release;n.view.phase=Bc2NativeCyclePhase::Releasing;n.view.held.reset();return !n.rejectRelease;}return true;},
++        [](void* p,std::int64_t)noexcept->std::optional<Bc2NativeCycleView>{return static_cast<NativeBase*>(p)->view;},
++        [](void* p,const WeaponCycleReady& r)noexcept{auto& n=*static_cast<NativeBase*>(p);if(!n.view.ready||n.view.ready->release!=r.release||n.view.ready->sequence!=r.sequence)return false;
++            ++n.acks;n.view.ready.reset();n.view.phase=Bc2NativeCyclePhase::Complete;n.view.blocksFire=false;return true;},
++        [](void* p)noexcept{++static_cast<NativeBase*>(p)->cancels;}};}
++};
++struct Native:NativeBase {
++    bool recoveryMode=false,blockRecoveryAck=false;unsigned recoveryReleased=0,recoveryAcked=0;
++    WeaponCycleConvergence<ReloadHoldIdentity> convergence;
++    WeaponCycleDebt debt{};std::optional<WeaponCycleRecoveryGrant> grant;
++    std::uint64_t invocation=1000;std::int64_t clock=0;
++    void Recover(const Bc2PhysicalBoltSample& s){
++        recoveryMode=true;view.native.owner=s.nativeOwner;view.held.reset();view.phase=Bc2NativeCyclePhase::Cancelled;view.blocksFire=true;
++        debt={s.input.owner,s.item,{M95AuthoredBoltCalibration(1).profile.id,s.item.generation},1,1,999,4,45,5};
++        convergence.Begin(view.native,debt,s.input.nowNs);clock=s.input.nowNs;
++    }
++    void Originals(const Bc2NativeCycleControl& c){
++        clock=c.input.nowNs;
++        // Explicit mocked original neutral idle boundary, preserving all three
++        // copy counts. This callback never alters the real gesture or grants it.
++        for(unsigned round=0;round<2;++round)for(unsigned branch=0;branch<3;++branch){
++            const auto at=clock-2000000+round*1000000+branch*100000;
++            convergence.ObserveIdle(view.native,{branch,++invocation,debt.guardEpoch,at,at+50000,at+80000000,
++                debt.loaded,debt.reserve,debt.capacity},clock);
++        }
++        if(!grant)grant=convergence.ArmRecovery(view.native,c.input,{right,left});
++    }
++    Bc2PhysicalBoltApi Api(){auto api=NativeBase::Api();api.context=this;
++        api.control=[](void* p,const Bc2NativeCycleControl& c)noexcept{auto& n=*static_cast<Native*>(p);
++            if(!n.recoveryMode){const auto base=n.NativeBase::Api();return base.control(base.context,c);}
++            ++n.controls;if(c.release)return false;n.Originals(c);return true;};
++        api.cancel=[](void* p)noexcept{auto& n=*static_cast<Native*>(p);++n.cancels;
++            if(n.recoveryMode){n.convergence.Interrupt(n.view.native,n.clock);n.grant.reset();}};
++        api.recovery={
++            [](void* p,std::int64_t now)noexcept->std::optional<Bc2NativeCycleRecoveryView>{auto& n=*static_cast<Native*>(p);if(!n.recoveryMode)return {};
++                Bc2NativeCycleRecoveryView out;out.native=n.view.native;out.blocksFire=n.convergence.BlocksFire();
++                if(n.grant)out.authority=n.convergence.RecoveryAuthority(n.view.native,*n.grant,now);
++                if(const auto& ready=n.convergence.Outcome();ready&&std::holds_alternative<WeaponCycleIdleDebtRelease>(ready->release))
++                    out.ready=WeaponCycleIdleDebtReady{std::get<WeaponCycleIdleDebtRelease>(ready->release),
++                        *std::max_element(ready->native.second.begin(),ready->native.second.end()),ready->native.observedNs,ready->native.deadlineNs,true,true};
++                return out;},
++            [](void* p,const WeaponCycleIdleDebtRelease& r,const HandInteractionSample& input)noexcept{auto& n=*static_cast<Native*>(p);
++                if(!n.convergence.SubmitRecovered(n.view.native,r,input.nowNs))return false;++n.recoveryReleased;return true;},
++            [](void* p,const WeaponCycleIdleDebtReady& r)noexcept{auto& n=*static_cast<Native*>(p);const auto& outcome=n.convergence.Outcome();
++                if(n.blockRecoveryAck||!outcome||!std::holds_alternative<WeaponCycleIdleDebtRelease>(outcome->release)||
++                   std::get<WeaponCycleIdleDebtRelease>(outcome->release)!=r.release||!n.convergence.Acknowledge(*outcome))return false;
++                ++n.recoveryAcked;n.view.blocksFire=false;n.view.phase=Bc2NativeCyclePhase::Complete;return true;}};
++        return api;
++    }
++};
++struct Fixture {
++    Native native;HandInteraction hands;RigSnapshot rig;std::shared_ptr<Bc2BoltCalibration> calibration;
++    std::unique_ptr<Bc2PhysicalBolt> bolt;Bc2PhysicalBoltSample sample;Bc2PhysicalBoltResult last;
++    HandClaimToken originalGun{},originalSupport{};std::uint64_t intent=10;bool entered=false;
++    Fixture(){
++        rig.names={"root","jntWpn_1","jntWpn_3","other"};rig.parents={-1,0,1,0};rig.weaponBone=1;
++        rig.identity={0x20000,0x30000,0x50000,0x60000,0x70000,0x80000,0x90000,0xa0000,0xb0000,4,false};
++        rig.world.assign(4,Identity());rig.inverseBind.assign(4,Identity());rig.evaluatedWorld.assign(4,Identity());rig.nativeEvaluated.resize(4);
++        for(auto& bytes:rig.nativeEvaluated)bytes.fill(std::byte{0x5a});
++        calibration=std::make_shared<Bc2BoltCalibration>(M95AuthoredBoltCalibration(1));
++        // Synthetic callback/rig fixture only: this does not promote the actual
++        // M95 authored reference to a runtime calibration or native admission.
++        calibration->nativeJoined=true;calibration->rigFingerprint=DeriveBoltPart(rig,"jntWpn_3")->fingerprint;
++        sample.nativeOwner={0x10000,0x20000,0x30000,0x40000,2,7,4};
++        sample.input={{(std::uint64_t(0x30000)<<32)|0x20000,2,3,4},1,1000*ms,1150*ms,1000*ms,true,{true,true},{false,false}};
++        sample.item={0x40000,3};sample.asset=calibration->asset;sample.mesh=calibration->mesh;
++        sample.weaponWorld=Identity();sample.weaponWorld.values[3][1]=1.2f;sample.weaponWorld.values[3][2]=-.3f;
++        sample.wristWorld={Identity(),Identity()};sample.wristWorld[0].values[3][0]=-.2f;sample.wristWorld[1].values[3][0]=.1f;
++        auto gun=hands.Acquire(sample.input,Request(right,HandClaimKind::GunHold,1));originalGun=gun.claim->token;
++        auto support=hands.Acquire(sample.input,Request(left,HandClaimKind::WeaponSupport,2,originalGun.id));originalSupport=support.claim->token;
++        native.view.phase=Bc2NativeCyclePhase::Held;native.view.blocksFire=true;
++        native.view.native.owner=sample.nativeOwner;
++        native.view.held=WeaponCycleLease{sample.input.owner,sample.item,{calibration->profile.id,3},1,1,1,sample.input.observedNs,sample.input.deadlineNs,true};
++        bolt=std::make_unique<Bc2PhysicalBolt>(calibration,native.Api());
++    }
++    HandClaimRequest Request(InteractionHand hand,HandClaimKind kind,std::uint64_t contact,std::uint64_t parent=0){return
++        {sample.input.owner,hand,kind,sample.item,{{contact,3},sample.input.sequence,sample.input.deadlineNs,true},++intent,parent};}
++    void Next(){auto& s=sample.input;++s.sequence;s.nowNs+=10*ms;s.observedNs=s.nowNs;s.deadlineNs=s.nowNs+150*ms;
++        if(native.view.held){++native.view.held->sequence;native.view.held->observedNs=s.observedNs;native.view.held->deadlineNs=s.deadlineNs;}}
++    Bc2PhysicalBoltResult Tick(const math::Matrix4& part,bool grip=true,bool advance=true){
++        if(advance)Next();sample.grip=grip;sample.input.released[1]=!grip;
++        sample.raw={sample.nativeOwner,rig.identity,calibration->rigFingerprint,sample.input,M95BoltWristFromPart(part),true};
++        const auto hand=last.tracking.custody==BoltCustodyPhase::Returned?right:left;
++        const auto gun=hands.Current(entered?hand:right);
++        const auto contact=sample.custodyTransfer?sample.custodyTransfer->nextGun.request.contact.key:gun?gun->token.contact:HandInteractionKey{};
++        sample.gunContact={contact,sample.input.sequence,sample.input.deadlineNs,true};
++        if(!entered&&gun)hands.Renew(sample.input,gun->token,sample.gunContact);
++        last=bolt->Tick(sample,hands,intent);sample.custodyTransfer.reset();return last;
++    }
++    int Enter(){
++        sample.custodyTransfer=HandGunCustodyTransfer{originalGun,originalSupport,{Request(left,HandClaimKind::GunHold,2),sample.input},{}};
++        const auto r=Tick(calibration->profile.closedContact,true,false);
++        CHECK(r.custodyChange&&r.custodyChange->transaction.accepted&&r.ownsGunCustody&&!hands.Current(right)&&hands.Current(left));entered=true;return 0;
++    }
++    int Stroke(){
++        auto r=Tick(calibration->profile.closedContact,false);CHECK(r.blocksFire&&r.tracking.weapon&&!r.ownsMechanism); for(unsigned n=0;n<5;++n)r=Tick(calibration->profile.closedContact,false);
++        r=Tick(calibration->profile.closedContact);CHECK(r.ownsMechanism&&(r.tracking.target||r.tracking.recoveryTarget));
++        const auto& p=calibration->profile;
++        auto step=[&](float travel,float angle){return Tick(weapon_cycle_detail::Target(p,travel,angle));};
++        for(unsigned n=1;n<=4;++n)step(0,p.unlockRadians*float(n)/4);
++        for(unsigned n=0;n<5;++n)step(0,p.unlockRadians);
++        for(unsigned n=1;n<=8;++n)step(p.stroke*float(n)/8,p.unlockRadians);
++        for(unsigned n=0;n<5;++n)step(p.stroke,p.unlockRadians);
++        for(unsigned n=1;n<=8;++n)step(p.stroke*(1.f-float(n)/8),p.unlockRadians);
++        for(unsigned n=0;n<5;++n)step(0,p.unlockRadians);
++        for(unsigned n=1;n<=4;++n)step(0,p.unlockRadians*(1.f-float(n)/4));
++        for(unsigned n=0;n<5;++n)step(0,0);
++        CHECK(native.recoveryReleased==1&&!native.releases&&!hands.Current(right)&&hands.Current(left)&&last.blocksFire);return 0;
++    }
++    int Return(){
++        Tick(calibration->profile.closedContact,false);Next();sample.input.released[1]=false;
++        sample.custodyTransfer=HandGunCustodyTransfer{hands.Current(left)->token,{},
++            {Request(right,HandClaimKind::GunHold,1),sample.input},HandCustodyTarget{Request(left,HandClaimKind::WeaponSupport,2),sample.input}};
++        auto r=Tick(calibration->profile.closedContact,true,false);
++        CHECK(r.custodyChange&&r.custodyChange->transaction.accepted&&r.custodyChange->companion&&r.tracking.weapon);
++        CHECK(hands.Current(right)->token.kind==HandClaimKind::GunHold&&hands.Current(left)->token.prerequisiteClaim==hands.Current(right)->token.id);return 0;
++    }
++    void Ready(){native.view.ready=WeaponCycleReady{*native.release,sample.input.sequence+1,sample.input.nowNs,sample.input.nowNs+50*ms,true,true};}
++};
++
++int RecoveryRetainsCurrentLeftGunAndRequiresWholeBoltGesture(){
++    Fixture f;CHECK(f.Enter()==0);f.Tick(f.calibration->profile.closedContact,false);f.Tick(f.calibration->profile.closedContact);
++    const auto originalLeft=f.hands.Current(left)->token;
++    f.sample.input.tracked[1]=false;f.Tick(f.calibration->profile.closedContact);
++    CHECK(f.last.blocksFire&&!f.last.tracking.target&&!f.hands.Current(right)&&f.hands.Current(left));
++    f.sample.input.tracked[1]=true;f.native.Recover(f.sample);
++    for(unsigned n=0;n<5;++n)f.Tick(f.calibration->profile.closedContact,false);
++    CHECK(f.native.grant&&f.last.ownsGunCustody&&f.hands.Current(left)->token==originalLeft&&!f.native.recoveryReleased);
++    auto r=f.Tick(f.calibration->profile.closedContact);CHECK(r.ownsMechanism&&r.tracking.recoveryTarget&&!r.tracking.target&&!r.tracking.held);
++    const auto before=f.rig.nativeEvaluated;
++    CHECK(BuildBoltPartPlan(r.tracking,f.rig,r.tracking.weapon->weaponInWorld,1,f.sample.input.nowNs));
++    CHECK(f.rig.nativeEvaluated==before);
++    // A partial rear motion without real unlocking cannot discharge debt.
++    r=f.Tick(weapon_cycle_detail::Target(f.calibration->profile,.01f,0));
++    CHECK(!f.native.recoveryReleased&&!f.native.recoveryAcked&&r.blocksFire);
++    CHECK(f.Stroke()==0);
++    CHECK(f.Return()==0);
++    for(unsigned n=0;n<8;++n)f.Tick(f.calibration->profile.closedContact);
++    CHECK(f.native.recoveryReleased==1&&f.native.recoveryAcked==1&&!f.native.releases&&!f.native.acks&&!f.last.blocksFire);
++    CHECK(f.last.tracking.weapon&&f.last.tracking.custody==BoltCustodyPhase::Returned&&f.native.debt.loaded==4&&f.native.debt.reserve==45);
++    const auto returned=f.last.tracking.weapon->weaponInWorld;
++    for(unsigned n=0;n<25;++n){f.sample.wristWorld[1].values[3][0]+=.001f;r=f.Tick(f.calibration->profile.closedContact);
++        CHECK(r.tracking.weapon&&!r.tracking.recoveryTarget&&!r.tracking.target&&!r.blocksFire);
++        CHECK(Near(r.tracking.weapon->weaponInWorld.values[3][0],returned.values[3][0]+.001f*float(n+1)));}
++    f.native.recoveryMode=false;f.native.view.blocksFire=true;f.native.view.phase=Bc2NativeCyclePhase::Held;
++    f.native.view.held=WeaponCycleLease{f.sample.input.owner,f.sample.item,{f.calibration->profile.id,3},2,2,200,
++        f.sample.input.observedNs,f.sample.input.deadlineNs,true};
++    r=f.Tick(f.calibration->profile.closedContact);
++    CHECK(r.blocksFire&&r.tracking.weapon&&r.tracking.custody==BoltCustodyPhase::Returned&&!r.tracking.target&&!r.tracking.recoveryTarget);
++    const auto rightToken=f.hands.Current(right)->token;
++    f.sample.custodyTransfer=HandGunCustodyTransfer{rightToken,f.originalSupport,
++        {f.Request(right,HandClaimKind::GunHold,1),f.sample.input},{}};
++    r=f.Tick(f.calibration->profile.closedContact);
++    CHECK(r.tracking.weapon&&r.tracking.custody==BoltCustodyPhase::Returned&&f.hands.Current(right)->token==rightToken&&r.blocksFire);
++    f.Next();f.hands.Update(f.sample.input);
++    auto support=f.hands.Acquire(f.sample.input,f.Request(left,HandClaimKind::WeaponSupport,2,rightToken.id));CHECK(support.accepted&&support.claim);
++    f.originalGun=rightToken;f.originalSupport=support.claim->token;f.entered=false;
++    CHECK(f.Enter()==0);CHECK(f.last.tracking.held&&f.last.tracking.held->cycle==2&&!f.last.tracking.recovery);
++    return 0;
++}
++int ExpiredCustodyRequiresActualFreshGunAndAtomicExchange(){
++    Fixture f;CHECK(f.Enter()==0);f.Tick(f.calibration->profile.closedContact,false);f.Tick(f.calibration->profile.closedContact);
++    const auto old=f.hands.Current(left)->token;f.sample.input.tracked={false,false};f.Tick(f.calibration->profile.closedContact,false);
++    f.sample.input.nowNs+=61000000000ll;f.Tick(f.calibration->profile.closedContact,false);
++    CHECK(!f.hands.Current(left)&&!f.hands.Current(right)&&f.last.blocksFire);
++    f.sample.input.tracked={true,true};f.native.Recover(f.sample);
++    for(unsigned n=0;n<5;++n)f.Tick(f.calibration->profile.closedContact,false);
++    CHECK(!f.last.ownsGunCustody&&!f.last.tracking.weapon&&!f.native.recoveryReleased);
++    // This is ordinary physical reacquisition, not a synthetic restoration of
++    // the expired token. New claim ids and real exchange are mandatory.
++    f.Next();f.sample.input.released={false,false};f.hands.Update(f.sample.input);
++    auto gun=f.hands.Acquire(f.sample.input,f.Request(right,HandClaimKind::GunHold,1));CHECK(gun.accepted&&gun.claim);
++    auto support=f.hands.Acquire(f.sample.input,f.Request(left,HandClaimKind::WeaponSupport,2,gun.claim->token.id));CHECK(support.accepted&&support.claim);
++    f.originalGun=gun.claim->token;f.originalSupport=support.claim->token;f.entered=false;
++    CHECK(f.Enter()==0);CHECK(f.hands.Current(left)->token!=old);
++    CHECK(f.Stroke()==0&&f.Return()==0);
++    for(unsigned n=0;n<8;++n)f.Tick(f.calibration->profile.closedContact);
++    CHECK(f.native.recoveryReleased==1&&f.native.recoveryAcked==1&&!f.last.blocksFire&&f.native.debt.shot==1);return 0;
++}
++int SubmittedOutcomeSurvivesLongTrackingLossWithoutRevivingClaims(){
++    Fixture f;CHECK(f.Enter()==0);f.Tick(f.calibration->profile.closedContact,false);
++    f.sample.input.tracked[1]=false;f.Tick(f.calibration->profile.closedContact);f.sample.input.tracked[1]=true;
++    f.native.Recover(f.sample);for(unsigned n=0;n<5;++n)f.Tick(f.calibration->profile.closedContact,false);
++    f.native.blockRecoveryAck=true;CHECK(f.Stroke()==0);CHECK(f.native.convergence.Outcome()&&!f.native.recoveryAcked);
++    const auto outcome=*f.native.convergence.Outcome();
++    f.sample.input.tracked={false,false};f.sample.input.nowNs+=61000000000ll;f.Tick(f.calibration->profile.closedContact);
++    CHECK(f.native.convergence.Outcome()->native.observedNs==outcome.native.observedNs&&!f.hands.Current(left)&&!f.hands.Current(right));
++    f.native.blockRecoveryAck=false;auto result=f.Tick(f.calibration->profile.closedContact);
++    CHECK(result.recovered&&f.native.recoveryAcked==1&&result.recovered->observedNs==outcome.native.observedNs);
++    CHECK(!result.ownsGunCustody&&!result.tracking.weapon&&!f.hands.Current(left)&&!f.hands.Current(right));
++    CHECK(f.native.convergence.Pending()==std::optional<WeaponCycleConvergenceRelease>{outcome.release});return 0;
++}
++int RecoveryNeedsActualRightNeutralAndExactTypedPrivateTarget(){
++    Fixture f;CHECK(f.Enter()==0);f.Tick(f.calibration->profile.closedContact,false);f.Tick(f.calibration->profile.closedContact);
++    f.sample.input.tracked[1]=false;f.Tick(f.calibration->profile.closedContact);f.sample.input.tracked[1]=true;f.native.Recover(f.sample);
++    for(unsigned n=0;n<8;++n)f.Tick(f.calibration->profile.closedContact);
++    CHECK(!f.native.grant&&!f.last.tracking.recoveryTarget&&!f.native.recoveryReleased);
++    for(unsigned n=0;n<5;++n)f.Tick(f.calibration->profile.closedContact,false);
++    auto result=f.Tick(f.calibration->profile.closedContact);CHECK(result.tracking.recoveryTarget&&result.tracking.weapon);
++    for(unsigned mutation=0;mutation<5;++mutation){auto bad=result.tracking;
++        switch(mutation){case 0:++bad.recoveryTarget->lease.grant.nonce;break;
++        case 1:++bad.recovery->grant.debt.shot;break;case 2:bad.held=WeaponCycleLease{};break;
++        case 3:bad.input.tracked[1]=false;break;case 4:bad.gun->token.hand=right;break;}
++        CHECK(!BuildBoltPartPlan(bad,f.rig,bad.weapon->weaponInWorld,1,f.sample.input.nowNs));}
++    CHECK(!BuildBoltPartPlan(result.tracking,f.rig,result.tracking.weapon->weaponInWorld,1,result.tracking.recovery->deadlineNs));
++    return 0;
++}
++
++}
++int main(){if(SubmittedOutcomeSurvivesLongTrackingLossWithoutRevivingClaims()||RecoveryNeedsActualRightNeutralAndExactTypedPrivateTarget()||RecoveryRetainsCurrentLeftGunAndRequiresWholeBoltGesture()||ExpiredCustodyRequiresActualFreshGunAndAtomicExchange())return 1;
++    std::puts("Bolt recovery: 4 groups; exact live custody or fresh physical exchange, full ordered gesture, private part, native ack and returned placement; native convergence mocked.");}
+--- a/tests/Bc2PhysicalPumpRecoveryTests.cpp
++++ b/tests/Bc2PhysicalPumpRecoveryTests.cpp
+@@ -0,0 +1,187 @@
++#include "Bc2PhysicalPump.h"
++#include "Bc2PumpCalibration225.h"
++#include "Test.h"
++#include "fvr/interaction/WeaponCycleConvergence.h"
++#include "fvr/interaction/GripAttachment.h"
++#include <cstdio>
++#include <limits>
++
++using namespace fvr;using namespace fvr::bc2;using namespace fvr::interaction;
++namespace {
++math::Matrix4 Pose(float z=0){math::Matrix4 m{};for(unsigned n=0;n<4;++n)m.values[n][n]=1;m.values[3][2]=z;return m;}
++struct NativeBase {
++    Bc2NativeCycleView state;unsigned controls=0,released=0,acked=0,cancelled=0;bool unavailable=false,rejectControl=false,deferReady=false;std::optional<WeaponCycleReady> pendingReady;
++    void Finish(std::int64_t now){state.ready=pendingReady;state.ready->observedNs=now;state.ready->deadlineNs=now+50000000;state.phase=Bc2NativeCyclePhase::Complete;}
++    Bc2PhysicalPumpApi Api(){return {this,
++        [](void* p,const Bc2NativeCycleControl& c)noexcept{auto& n=*static_cast<NativeBase*>(p);
++            ++n.controls;if(n.rejectControl)return false;
++            if(c.release){++n.released;n.state.ready=WeaponCycleReady{*c.release,c.release->cycle.sequence+1,c.input.nowNs,c.input.nowNs+50000000,true,true};
++                n.state.held.reset();n.state.phase=Bc2NativeCyclePhase::Complete;
++                if(n.deferReady){n.pendingReady=n.state.ready;n.state.ready.reset();n.state.phase=Bc2NativeCyclePhase::Releasing;}}return true;},
++        [](void* p,std::int64_t)noexcept->std::optional<Bc2NativeCycleView>{auto& n=*static_cast<NativeBase*>(p);if(n.unavailable)return {};return n.state;},
++        [](void* p,const WeaponCycleReady& r)noexcept{auto& n=*static_cast<NativeBase*>(p);if(!n.state.ready||n.state.ready->release!=r.release)return false;
++            ++n.acked;n.state.ready.reset();n.state.blocksFire=false;return true;},
++        [](void* p)noexcept{++static_cast<NativeBase*>(p)->cancelled;}};}
++};
++struct Native:NativeBase {
++    bool recoveryMode=false,stopEvidence=false,wrongOwner=false;unsigned recoveryReleased=0,recoveryAcked=0;
++    WeaponCycleConvergence<ReloadHoldIdentity> convergence;
++    WeaponCycleDebt debt{};std::optional<WeaponCycleRecoveryGrant> grant;
++    std::uint64_t invocation=1000;std::int64_t clock=0;
++    void Recover(const Bc2PhysicalPumpSample& s){
++        recoveryMode=true;state.native.owner=s.nativeOwner;state.held.reset();state.phase=Bc2NativeCyclePhase::Cancelled;state.blocksFire=true;
++        debt={s.input.owner,s.item,{0x5350415350554d50ull,s.item.generation},1,1,999,7,24,8};
++        convergence.Begin(state.native,debt,s.input.nowNs);clock=s.input.nowNs;
++    }
++    void Originals(const Bc2NativeCycleControl& c){
++        clock=c.input.nowNs;if(stopEvidence)return;
++        // Explicit mocked original neutral idle boundary, preserving all three
++        // copy counts. This callback never alters the real gesture or grants it.
++        for(unsigned round=0;round<2;++round)for(unsigned branch=0;branch<3;++branch){
++            const auto at=clock-2000000+round*1000000+branch*100000;
++            convergence.ObserveIdle(state.native,{branch,++invocation,debt.guardEpoch,at,at+50000,at+80000000,
++                debt.loaded,debt.reserve,debt.capacity},clock);
++        }
++        if(!grant)grant=convergence.ArmRecovery(state.native,c.input);
++    }
++    Bc2PhysicalPumpApi Api(){auto api=NativeBase::Api();api.context=this;
++        api.control=[](void* p,const Bc2NativeCycleControl& c)noexcept{auto& n=*static_cast<Native*>(p);
++            if(!n.recoveryMode){const auto base=n.NativeBase::Api();return base.control(base.context,c);}
++            ++n.controls;if(c.release)return false;n.Originals(c);return true;};
++        api.cancel=[](void* p)noexcept{auto& n=*static_cast<Native*>(p);++n.cancelled;
++            if(n.recoveryMode){n.convergence.Interrupt(n.state.native,n.clock);n.grant.reset();}};
++        api.recovery={
++            [](void* p,std::int64_t now)noexcept->std::optional<Bc2NativeCycleRecoveryView>{auto& n=*static_cast<Native*>(p);if(!n.recoveryMode)return {};
++                Bc2NativeCycleRecoveryView out;out.native=n.state.native;if(n.wrongOwner)++out.native.owner.weapon;out.blocksFire=n.convergence.BlocksFire();
++                if(n.grant)out.authority=n.convergence.RecoveryAuthority(n.state.native,*n.grant,now);
++                if(const auto& ready=n.convergence.Outcome();ready&&std::holds_alternative<WeaponCycleIdleDebtRelease>(ready->release))
++                    out.ready=WeaponCycleIdleDebtReady{std::get<WeaponCycleIdleDebtRelease>(ready->release),
++                        *std::max_element(ready->native.second.begin(),ready->native.second.end()),ready->native.observedNs,ready->native.deadlineNs,true,true};
++                return out;},
++            [](void* p,const WeaponCycleIdleDebtRelease& r,const HandInteractionSample& input)noexcept{auto& n=*static_cast<Native*>(p);
++                if(!n.convergence.SubmitRecovered(n.state.native,r,input.nowNs))return false;++n.recoveryReleased;return true;},
++            [](void* p,const WeaponCycleIdleDebtReady& r)noexcept{auto& n=*static_cast<Native*>(p);const auto& outcome=n.convergence.Outcome();
++                if(!outcome||!std::holds_alternative<WeaponCycleIdleDebtRelease>(outcome->release)||
++                   std::get<WeaponCycleIdleDebtRelease>(outcome->release)!=r.release||!n.convergence.Acknowledge(*outcome))return false;
++                ++n.recoveryAcked;n.state.blocksFire=false;n.state.phase=Bc2NativeCyclePhase::Complete;return true;}};
++        return api;
++    }
++};
++struct Fixture {
++    RigSnapshot rig;std::shared_ptr<Bc2PumpCalibration> calibration=std::make_shared<Bc2PumpCalibration>();Native native;
++    HandInteraction hands;Bc2PhysicalPumpSample sample;Bc2PhysicalPump pump;Bc2PhysicalPumpResult result;
++    std::uint64_t intent=0,lease=0;Bc2PumpRawContact prior{};std::optional<Bc2PumpTracking> lastTarget;
++    SupportGrip support;SupportGripResult supported;bool useSupport=false;float pressure=.5f;
++    SupportGripContact contact{true,.01f,{}};
++    InputFrame Input()const {InputFrame in;in.generation=sample.input.sequence;in.spaceGeneration=sample.input.owner.space;in.predictedNs=sample.input.nowNs;in.focused=in.headValid=sample.input.focused;
++        for(unsigned h=0;h<2;++h){in.hands[h].gripTracked=in.hands[h].aimTracked=sample.input.tracked[h];in.hands[h].active=Components;}
++        in.hands[0].grip.position.z=-.4f;in.hands[0].squeeze=sample.input.released[0]?0:pressure;return in;}
++    SupportGripOwner SupportOwner()const{return {sample.input.owner.actor,sample.input.owner.actorGeneration,sample.nativeOwner.weapon};}
++    void SupportTick(){
++        auto continued=pump.ContinueSupport(SupportOwner(),Input(),contact,sample.raw.input,{2,sample.nativeOwner.weapon},hands,support,intent,sample.cancel||result.ownsHand);
++        supported=continued?*continued:support.Update(SupportOwner(),Input(),contact,sample.cancel,result.ownsHand);
++        if(supported.holding){auto held=hands.Current(InteractionHand::Left);if(held&&held->token.kind==HandClaimKind::WeaponSupport)
++            hands.RenewFrom(sample.input,sample.raw.input,held->token,{{2,sample.nativeOwner.weapon},sample.raw.input.sequence,sample.raw.input.deadlineNs,true});}
++        pump.BindSupport(result.tracking,supported,hands);
++    }
++    void EnableSupport(){useSupport=true;support.Update(SupportOwner(),Input(),contact,false,true);}
++    Fixture():pump(calibration,native.Api()){
++        rig.names={"root","jntWpn_1","jntWpn_4","LeftHand"};rig.parents={-1,0,1,0};rig.weaponBone=1;
++        rig.identity={0x11000,0x12000,0x30000,0x40000,0x50000,0x60000,0x70000,0x80000,0x90000,4,false};
++        rig.world.assign(4,Pose());rig.inverseBind.assign(4,Pose());rig.evaluatedWorld.assign(4,Pose());rig.nativeEvaluated.resize(4);
++        for(auto& b:rig.nativeEvaluated)b.fill(std::byte{0x5a});
++        calibration->revision=1;calibration->rigFingerprint=bc2_pump_detail::DerivePart(rig)->fingerprint;
++        calibration->closedPart=Pose(-.84f);calibration->closedWrist=Pose();calibration->rearDirection=1;calibration->measured=true;
++        sample.nativeOwner={0x10000,0x11000,0x12000,0x13000,1,2,3};sample.item={sample.nativeOwner.weapon,4};
++        sample.input.owner={(std::uint64_t(sample.nativeOwner.weak)<<32)|sample.nativeOwner.soldier,1,4,3};sample.asset=SpasReloadAsset;
++        sample.input.nowNs=1000000000;sample.input.focused=true;sample.input.tracked={true,true};
++    }
++    void Shot(){native.state.phase=Bc2NativeCyclePhase::Held;native.state.blocksFire=true;native.state.cycle=native.state.shot=1;}
++    Bc2PhysicalPumpResult Tick(float travel,bool grip=true){
++        auto& s=sample.input;++s.sequence;s.nowNs+=10000000;s.observedNs=s.nowNs;s.deadlineNs=s.nowNs+100000000;s.released[0]=!grip;sample.grip=grip;
++        hands.Update(s);auto gun=hands.Current(InteractionHand::Right);
++        if(gun)hands.Renew(s,gun->token,{{1,4},s.sequence,s.deadlineNs,true});
++        else hands.Acquire(s,{s.owner,InteractionHand::Right,HandClaimKind::GunHold,sample.item,{{1,4},s.sequence,s.deadlineNs,true},++intent,0});
++        if(native.state.phase==Bc2NativeCyclePhase::Held)native.state.held=WeaponCycleLease{s.owner,sample.item,{0x5350415350554d50ull,4},1,1,++lease,s.nowNs,s.deadlineNs,true};
++        sample.raw=prior;result=pump.Tick(sample,hands,intent);
++        if(useSupport)SupportTick();
++        prior=BuildPumpRawContact(result.tracking,rig,Pose(travel),Pose(),{.02f,0,0},1,s.nowNs);
++        if(result.tracking.target)lastTarget=result.tracking;return result;
++    }
++    bool Grip(){Tick(0,false);Tick(0,false);Shot();Tick(0,false);Tick(0);Tick(0);return result.ownsHand&&result.tracking.target.has_value();}
++};
++int DisconnectedPumpRetainsDebtThenRealRecoveredStroke(){
++    Fixture f;CHECK(f.Grip());f.Tick(.02f);f.sample.input.tracked[0]=false;f.Tick(.04f);
++    CHECK(f.result.blocksFire&&!f.result.ownsHand&&!f.native.released);
++    f.sample.input.nowNs+=61000000000ll;f.Tick(0,false);CHECK(f.result.blocksFire&&!f.native.acked);
++    f.sample.input.tracked[0]=true;f.native.Recover(f.sample);
++    for(unsigned n=0;n<6;++n)f.Tick(0,false);
++    CHECK(f.native.grant&&f.native.convergence.Recovery(f.sample.input.nowNs));
++    CHECK(!f.native.recoveryReleased&&!f.native.recoveryAcked&&!f.result.ownsHand&&f.result.blocksFire);
++    f.Tick(0);f.Tick(0);CHECK(f.result.ownsHand&&f.result.tracking.recoveryTarget&&!f.result.tracking.target&&!f.result.tracking.held);
++    f.EnableSupport();unsigned targets=0;const auto original=f.rig.nativeEvaluated;
++    for(float t:{.02f,.04f,.06f,.08f,SpasObservedForeEndStroke,SpasObservedForeEndStroke,SpasObservedForeEndStroke,SpasObservedForeEndStroke,
++                 .075f,.055f,.035f,.015f,0.f,0.f,0.f,0.f,0.f,0.f}){
++        f.Tick(t);
++        if(f.result.tracking.recoveryTarget){++targets;CHECK(!f.result.tracking.target&&!f.result.tracking.held);
++            const auto part=BuildPumpPresentation(f.result.tracking,f.rig,Pose(),1,f.sample.input.nowNs);
++            CHECK(part.part&&part.wrist&&part.part->index==2);
++            CHECK(Near(part.part->transform.values[3][2],-.84f+f.result.tracking.recoveryTarget->travel));}
++    }
++    for(unsigned n=0;n<6;++n)f.Tick(0);
++    CHECK(targets>8&&f.native.recoveryReleased==1&&f.native.recoveryAcked==1&&!f.native.released&&!f.native.acked);
++    CHECK(!f.result.blocksFire&&f.supported.holding&&f.hands.Current(InteractionHand::Left));
++    CHECK(f.native.debt.loaded==7&&f.native.debt.reserve==24&&f.native.debt.shot==1);
++    CHECK(f.rig.nativeEvaluated==original);return 0;
++}
++int RecoveryCannotBorrowSqueezedOrExpiredOrForeignAuthority(){
++    for(unsigned failure=0;failure<3;++failure){Fixture f;CHECK(f.Grip());
++        f.sample.input.tracked[0]=false;f.Tick(.02f);f.sample.input.tracked[0]=true;f.native.Recover(f.sample);
++        if(failure==0){for(unsigned n=0;n<10;++n)f.Tick(0);
++            CHECK(!f.native.grant&&!f.result.ownsHand&&!f.result.tracking.recoveryTarget);}
++        else {
++            for(unsigned n=0;n<6;++n)f.Tick(0,false);f.Tick(0);f.Tick(0);
++            CHECK(f.result.tracking.recoveryTarget);
++            const auto original=f.result.tracking;
++            if(failure==1){f.native.stopEvidence=true;f.sample.input.nowNs+=100000000;}
++            else f.native.wrongOwner=true;
++            f.Tick(.02f);CHECK(!f.result.tracking.recoveryTarget);
++            if(failure==1)CHECK(!BuildPumpPresentation(original,f.rig,Pose(),1,f.sample.input.nowNs).part);
++        }
++        CHECK(!f.native.recoveryReleased&&!f.native.recoveryAcked&&!f.native.released&&f.result.blocksFire);
++    }return 0;
++}
++int RecoveryInterruptionRequiresNewGrantAndFreshStroke(){
++    Fixture f;CHECK(f.Grip());f.sample.input.tracked[0]=false;f.Tick(.02f);
++    f.sample.input.tracked[0]=true;f.native.Recover(f.sample);
++    for(unsigned n=0;n<6;++n)f.Tick(0,false);f.Tick(0);f.Tick(0);CHECK(f.result.tracking.recoveryTarget);
++    const auto old=f.result.tracking;const auto nonce=f.native.grant->nonce;
++    f.Tick(.03f);f.Tick(.04f,false);CHECK(!f.result.ownsHand&&!f.native.recoveryReleased);
++    for(unsigned n=0;n<6;++n)f.Tick(0,false);
++    CHECK(f.native.grant&&f.native.grant->nonce>nonce);
++    f.Tick(0);f.Tick(0);CHECK(f.result.tracking.recoveryTarget);
++    CHECK(!PumpTargetRetained(old,f.result.tracking,f.sample.input.nowNs));
++    for(float t:{.02f,.04f,.06f,.08f,SpasObservedForeEndStroke,SpasObservedForeEndStroke,SpasObservedForeEndStroke,SpasObservedForeEndStroke,
++                 .075f,.055f,.035f,.015f,0.f,0.f,0.f,0.f,0.f,0.f})f.Tick(t);
++    for(unsigned n=0;n<6;++n)f.Tick(0);
++    CHECK(f.native.recoveryReleased==1&&f.native.recoveryAcked==1&&f.native.debt.shot==1);return 0;
++}
++int OriginalNativeIdleWithoutAnyHeldLeaseStillOwesRealStroke(){
++    Fixture f;f.Tick(0,false);f.Tick(0,false);
++    // Mock a genuine shot debt whose native work already converged normally.
++    // No WeaponCycleLease{held=true} is supplied anywhere on this path.
++    f.native.Recover(f.sample);
++    for(unsigned n=0;n<6;++n)f.Tick(0,false);
++    CHECK(f.native.grant&&f.result.blocksFire&&!f.native.recoveryAcked&&!f.native.state.held);
++    f.Tick(0);f.Tick(0);CHECK(f.result.tracking.recoveryTarget&&!f.result.tracking.held);
++    for(float t:{.02f,.04f,.06f,.08f,SpasObservedForeEndStroke,SpasObservedForeEndStroke,SpasObservedForeEndStroke,SpasObservedForeEndStroke,
++                 .075f,.055f,.035f,.015f,0.f,0.f,0.f,0.f,0.f,0.f})f.Tick(t);
++    for(unsigned n=0;n<6;++n)f.Tick(0);
++    CHECK(f.native.recoveryReleased==1&&f.native.recoveryAcked==1&&!f.native.released&&!f.native.acked&&!f.result.blocksFire);
++    CHECK(f.native.debt.shot==1&&f.native.debt.loaded==7&&f.native.debt.reserve==24);return 0;
++}
++
++}
++int main(){if(OriginalNativeIdleWithoutAnyHeldLeaseStillOwesRealStroke()||DisconnectedPumpRetainsDebtThenRealRecoveredStroke()||RecoveryCannotBorrowSqueezedOrExpiredOrForeignAuthority()||
++    RecoveryInterruptionRequiresNewGrantAndFreshStroke())return 1;
++    std::puts("Pump disconnect recovery: 4 groups; shared gesture, hand arbitration, private part and support return; native convergence mocked.");}
+--- a/tests/WeaponCycleConvergenceTests.cpp
++++ b/tests/WeaponCycleConvergenceTests.cpp
+@@ -0,0 +1,182 @@
++#include "fvr/interaction/WeaponCycleConvergence.h"
++#include <iostream>
++#define CHECK(value) do {if(!(value)){std::cerr<<__func__<<":"<<__LINE__<<" " #value "\n";return false;}}while(false)
++using namespace fvr::interaction;
++constexpr std::int64_t Ms=1000000;
++struct Scope {
++    std::array<std::uint64_t,6> owners{1,2,3,4,5,6};
++    std::array<std::uint64_t,3> copies{7,8,9};
++    std::array<std::uint8_t,16> config{1,2,3};
++    bool operator==(const Scope&)const=default;
++};
++struct Fixture {
++    Scope scope{};
++    WeaponCycleDebt debt{{1,2,3,4},{5,3},{6,3},7,8,9,4,45,5};
++    WeaponCycleConvergence<Scope> policy;
++    std::uint64_t invocation=100;
++    std::int64_t now=110*Ms;
++    Fixture(int loaded=4){debt.loaded=loaded;policy.Begin(scope,debt,Ms);}
++    WeaponCycleRelease Release()const {
++        return {{debt.owner,debt.item,debt.mechanism,debt.cycle,debt.shot,10,100*Ms,180*Ms,true},11,12,100*Ms,180*Ms};
++    }
++    WeaponCycleIdleUpdate Idle(unsigned branch,std::int64_t begin){
++        return {branch,++invocation,debt.guardEpoch,begin,begin+Ms,begin+81*Ms,debt.loaded,debt.reserve,debt.capacity};
++    }
++    bool Round(std::int64_t begin,std::array<unsigned,3> order={0,1,2}){
++        for(auto branch:order){auto r=Idle(branch,begin);now=r.endNs;if(!policy.ObserveIdle(scope,r,now))return false;begin+=2*Ms;}
++        return true;
++    }
++    HandInteractionSample Neutral()const {
++        return {debt.owner,100,now+Ms,now+81*Ms,now+Ms,true,{true,true},{true,false}};
++    }
++};
++bool TwoRoundsAreIndependentOfPredictionAndBranchOrder(){
++    std::array<unsigned,3> order{0,1,2};unsigned cases=0;
++    do {for(int loaded:{0,4}){
++        Fixture f(loaded);CHECK(f.policy.Submit(f.scope,f.Release(),f.now));
++        CHECK(f.Round(120*Ms,order));CHECK(!f.policy.Outcome()&&f.policy.BlocksFire());
++        CHECK(f.Round(140*Ms,order));CHECK(f.policy.Outcome()&&f.policy.BlocksFire());
++        const auto saved=*f.policy.Outcome();CHECK(saved.native.debt.loaded==loaded);
++        CHECK(f.policy.Acknowledge(saved)&&!f.policy.BlocksFire());
++        // Acknowledgement settles this immutable transaction, never a new item.
++        CHECK(!f.policy.Begin(f.scope,f.debt,200*Ms));++cases;
++    }}while(std::next_permutation(order.begin(),order.end()));CHECK(cases==12);return true;
++}
++bool CopiedReadyOrOneBranchCannotComplete(){
++    Fixture f;CHECK(f.policy.Submit(f.scope,f.Release(),f.now));
++    for(unsigned n=0;n<30;++n){auto r=f.Idle(0,(120+n*2)*Ms);CHECK(f.policy.ObserveIdle(f.scope,r,r.endNs));}
++    CHECK(!f.policy.Outcome()&&f.policy.BlocksFire());
++    // Copied snapshots and local Commit phases have no API capable of voting.
++    CHECK(f.Round(190*Ms));CHECK(!f.policy.Outcome());CHECK(f.Round(210*Ms));CHECK(f.policy.Outcome());return true;
++}
++bool ExpiredFirstRoundCannotJoinFreshSecond(){
++    Fixture f;CHECK(f.policy.Submit(f.scope,f.Release(),f.now));CHECK(f.Round(120*Ms));
++    CHECK(f.Round(400*Ms));CHECK(!f.policy.Outcome());CHECK(f.Round(420*Ms));CHECK(f.policy.Outcome());return true;
++}
++bool HoldsDrainAfterQueuedPhysicalSubmission(){
++    Fixture f;CHECK(f.policy.BeginHold(f.scope,0,1,105*Ms,150*Ms));
++    // A different branch may enter earlier while its policy callback arrives later.
++    CHECK(f.policy.BeginHold(f.scope,1,2,104*Ms,150*Ms));
++    CHECK(f.policy.Submit(f.scope,f.Release(),110*Ms));
++    CHECK(!f.policy.BeginHold(f.scope,2,3,111*Ms,151*Ms));
++    auto premature=f.Idle(2,112*Ms);CHECK(!f.policy.ObserveIdle(f.scope,premature,premature.endNs));
++    CHECK(f.policy.RestoreHold(f.scope,0,1,113*Ms,true));CHECK(f.policy.RestoreHold(f.scope,1,2,114*Ms,true));
++    CHECK(!f.policy.ObserveIdle(f.scope,premature,115*Ms));
++    CHECK(f.Round(120*Ms));CHECK(f.Round(140*Ms));CHECK(f.policy.Outcome());return true;
++}
++bool WrongAndUnrestoredHoldReceiptsCannotComplete(){
++    for(unsigned variant=0;variant<3;++variant){Fixture f;CHECK(f.policy.BeginHold(f.scope,0,1,105*Ms,150*Ms));
++        CHECK(f.policy.Submit(f.scope,f.Release(),110*Ms));
++        CHECK(!f.policy.RestoreHold(f.scope,0,variant==0?2:1,variant==1?150*Ms:115*Ms,variant!=2));
++        CHECK(!f.Round(160*Ms));CHECK(!f.policy.Outcome()&&f.policy.BlocksFire());
++        CHECK(f.policy.Pending()&&std::get<WeaponCycleRelease>(*f.policy.Pending())==f.Release());
++    }return true;
++}
++bool TrackingLossRetainsSubmittedOutcomeAndItsOriginalBounds(){
++    Fixture f;const auto release=f.Release();CHECK(f.policy.Submit(f.scope,release,110*Ms));
++    f.policy.Interrupt(f.scope,115*Ms);CHECK(f.Round(120*Ms));CHECK(f.Round(140*Ms));
++    const auto saved=*f.policy.Outcome();f.policy.Interrupt(f.scope,60000*Ms);
++    CHECK(f.policy.Outcome()->native.observedNs==saved.native.observedNs);
++    CHECK(std::get<WeaponCycleRelease>(f.policy.Outcome()->release)==release);
++    auto changed=saved;changed.native.deadlineNs++;CHECK(!f.policy.Acknowledge(changed));
++    CHECK(f.policy.Acknowledge(saved));return true;
++}
++bool IdleAfterLongInterruptionDoesNotEraseUnfinishedGesture(){
++    Fixture f;f.policy.Interrupt(f.scope,60000*Ms);CHECK(f.Round(60010*Ms));CHECK(f.Round(60030*Ms));
++    CHECK(f.policy.Recovery(f.now)&&!f.policy.Outcome()&&f.policy.BlocksFire());
++    auto neutral=f.Neutral();const auto grant=f.policy.ArmRecovery(f.scope,neutral);CHECK(grant);
++    // Fresh convergence while the real gesture would run cannot become Ready.
++    CHECK(f.Round(62000*Ms));CHECK(f.Round(62020*Ms));CHECK(!f.policy.Outcome());
++    const auto authority=f.policy.RecoveryAuthority(f.scope,*grant,f.now);CHECK(authority);
++    WeaponCycleRecoveredRelease stroke{*authority,55,101,f.now+Ms,authority->deadlineNs};
++    CHECK(f.policy.SubmitRecovered(f.scope,stroke,f.now+2*Ms));CHECK(!f.policy.Outcome());
++    CHECK(f.Round(62050*Ms));CHECK(f.Round(62070*Ms));CHECK(f.policy.Outcome());
++    CHECK(std::get<WeaponCycleRecoveredRelease>(f.policy.Outcome()->release)==stroke);
++    CHECK(f.policy.Outcome()->native.debt==f.debt);return true;
++}
++bool RecoveryRequiresNewNeutralAndCurrentOriginalEvidence(){
++    for(unsigned variant=0;variant<5;++variant){Fixture f;CHECK(f.Round(120*Ms));CHECK(f.Round(140*Ms));auto n=f.Neutral();
++        if(variant==0)n.released[0]=false;
++        if(variant==1)n.released[1]=true;
++        if(variant==2)n.tracked[1]=false;
++        if(variant==3)n.observedNs-=20*Ms;
++        if(variant==4)n.nowNs=n.deadlineNs;
++        CHECK(!f.policy.ArmRecovery(f.scope,n));CHECK(!f.policy.Outcome());
++    }
++    Fixture f;CHECK(f.Round(120*Ms));CHECK(f.Round(140*Ms));auto grant=f.policy.ArmRecovery(f.scope,f.Neutral());CHECK(grant);
++    CHECK(f.Round(160*Ms));CHECK(f.Round(180*Ms));
++    const auto authority=f.policy.RecoveryAuthority(f.scope,*grant,f.now);CHECK(authority);
++    WeaponCycleRecoveredRelease stroke{*authority,55,101,190*Ms,authority->deadlineNs};
++    f.policy.Interrupt(f.scope,187*Ms);CHECK(f.Round(190*Ms));CHECK(f.Round(200*Ms));
++    CHECK(!f.policy.SubmitRecovered(f.scope,stroke,200*Ms));CHECK(f.policy.BlocksFire());return true;
++}
++bool ExpiredRecoveryOfferCannotRenewOldNativeOrInputEvidence(){
++    Fixture f;CHECK(f.Round(120*Ms));CHECK(f.Round(140*Ms));const auto offer=*f.policy.Recovery(f.now);
++    CHECK(!f.policy.Recovery(offer.deadlineNs));
++    auto neutral=f.Neutral();neutral.nowNs=offer.deadlineNs;CHECK(!f.policy.ArmRecovery(f.scope,neutral));
++    CHECK(f.policy.BlocksFire()&&!f.policy.Outcome());return true;
++}
++bool AmmunitionAndGuardContradictionsRetainUncertainty(){
++    for(unsigned variant=0;variant<4;++variant){Fixture f;const auto release=f.Release();CHECK(f.policy.Submit(f.scope,release,110*Ms));
++        auto r=f.Idle(0,120*Ms);
++        if(variant==0)++r.loaded;if(variant==1)--r.reserve;if(variant==2)++r.capacity;
++        if(variant==3)f.policy.LoseGuard(f.scope);
++        CHECK(!f.policy.ObserveIdle(f.scope,r,r.endNs));CHECK(f.policy.Phase()==WeaponCycleConvergencePhase::Uncertain);
++        CHECK(f.policy.BlocksFire()&&!f.policy.Outcome()&&f.policy.Pending());
++        CHECK(!f.policy.Submit(f.scope,release,120*Ms));CHECK(!f.policy.Begin(f.scope,f.debt,130*Ms));
++    }return true;
++}
++bool NewOwnerOrConfigurationCannotBorrowOrRetireOldDebt(){
++    for(unsigned variant=0;variant<3;++variant){Fixture f;Scope foreign=f.scope;
++        if(variant==0)foreign.owners[0]++;if(variant==1)foreign.copies[1]++;if(variant==2)foreign.config[15]++;
++        CHECK(!f.policy.Begin(foreign,f.debt,200*Ms));CHECK(!f.policy.Submit(foreign,f.Release(),110*Ms));
++        auto r=f.Idle(0,120*Ms);CHECK(!f.policy.ObserveIdle(foreign,r,r.endNs));
++        CHECK(f.policy.Phase()==WeaponCycleConvergencePhase::Debt&&f.policy.BlocksFire());
++        CHECK(f.Round(140*Ms));CHECK(f.Round(160*Ms));CHECK(f.policy.Recovery(f.now));
++    }return true;
++}
++bool ReplayedOrOverlappingRoundsCannotGrantReadiness(){
++    Fixture f;CHECK(f.policy.Submit(f.scope,f.Release(),110*Ms));auto r=f.Idle(0,120*Ms);
++    CHECK(f.policy.ObserveIdle(f.scope,r,r.endNs));CHECK(!f.policy.ObserveIdle(f.scope,r,r.endNs));
++    r.branch=1;CHECK(!f.policy.ObserveIdle(f.scope,r,r.endNs));
++    CHECK(f.Round(140*Ms));auto old=f.Idle(0,142*Ms);CHECK(!f.policy.ObserveIdle(f.scope,old,150*Ms));
++    CHECK(!f.policy.Outcome());CHECK(f.Round(160*Ms));CHECK(f.policy.Outcome());return true;
++}
++bool GuardTokenFreshnessAndSkewCannotBeRestamped(){
++    for(unsigned variant=0;variant<5;++variant){Fixture f;CHECK(f.policy.Submit(f.scope,f.Release(),110*Ms));auto r=f.Idle(0,120*Ms);
++        if(variant==0)r.guardEpoch++;if(variant==1)r.beginNs=109*Ms;if(variant==2)r.endNs=r.beginNs;
++        if(variant==3)r.deadlineNs=r.endNs;if(variant==4)r.deadlineNs=r.endNs+101*Ms;
++        CHECK(!f.policy.ObserveIdle(f.scope,r,125*Ms));CHECK(!f.policy.Outcome());
++    }
++    Fixture f;CHECK(f.policy.Submit(f.scope,f.Release(),110*Ms));auto a=f.Idle(0,120*Ms),b=f.Idle(1,121*Ms),c=f.Idle(2,180*Ms);
++    CHECK(f.policy.ObserveIdle(f.scope,a,a.endNs));CHECK(f.policy.ObserveIdle(f.scope,b,b.endNs));CHECK(f.policy.ObserveIdle(f.scope,c,c.endNs));
++    CHECK(!f.policy.Outcome());CHECK(f.Round(190*Ms));CHECK(!f.policy.Outcome());
++    // The retained fresh branch2 sample is the start of the next round; it
++    // cannot reuse the prior round's branch2 invocation.
++    a=f.Idle(0,210*Ms);b=f.Idle(1,212*Ms);
++    CHECK(f.policy.ObserveIdle(f.scope,a,a.endNs));CHECK(!f.policy.Outcome());
++    CHECK(f.policy.ObserveIdle(f.scope,b,b.endNs));CHECK(f.policy.Outcome());return true;
++}
++bool IssuedRecoveryAuthorityCannotBeInventedOrExtended(){
++    for(unsigned mutation=0;mutation<8;++mutation){Fixture f;CHECK(f.Round(120*Ms));CHECK(f.Round(140*Ms));
++        auto grant=f.policy.ArmRecovery(f.scope,f.Neutral());CHECK(grant);
++        CHECK(f.Round(160*Ms));CHECK(f.Round(180*Ms));
++        auto authority=f.policy.RecoveryAuthority(f.scope,*grant,f.now);CHECK(authority);
++        WeaponCycleRecoveredRelease release{*authority,55,101,190*Ms,authority->deadlineNs};
++        switch(mutation){case 0:++release.cycle.sequence;break;case 1:++release.cycle.grant.nonce;break;
++        case 2:++release.cycle.first[0];break;case 3:++release.cycle.second[2];break;
++        case 4:++release.deadlineNs;break;case 5:++release.cycle.grant.debt.shot;break;
++        case 6:release.inputSequence=grant->neutral.sequence;break;case 7:release.observedNs=grant->neutral.observedNs;break;}
++        CHECK(!f.policy.SubmitRecovered(f.scope,release,191*Ms));CHECK(f.policy.BlocksFire()&&!f.policy.Pending());
++    }return true;
++}
++int main(){
++    if(!IssuedRecoveryAuthorityCannotBeInventedOrExtended()||!TwoRoundsAreIndependentOfPredictionAndBranchOrder()||!CopiedReadyOrOneBranchCannotComplete()||
++       !ExpiredFirstRoundCannotJoinFreshSecond()||!HoldsDrainAfterQueuedPhysicalSubmission()||
++       !WrongAndUnrestoredHoldReceiptsCannotComplete()||!TrackingLossRetainsSubmittedOutcomeAndItsOriginalBounds()||
++       !IdleAfterLongInterruptionDoesNotEraseUnfinishedGesture()||!RecoveryRequiresNewNeutralAndCurrentOriginalEvidence()||
++       !ExpiredRecoveryOfferCannotRenewOldNativeOrInputEvidence()||!AmmunitionAndGuardContradictionsRetainUncertainty()||
++       !NewOwnerOrConfigurationCannotBorrowOrRetireOldDebt()||!ReplayedOrOverlappingRoundsCannotGrantReadiness()||
++       !GuardTokenFreshnessAndSkewCannotBeRestamped())return 1;
++    std::cout<<"14 convergence/recovery groups passed; evidence adapters mocked; no native admission\n";
++}

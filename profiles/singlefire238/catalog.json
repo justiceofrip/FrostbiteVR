@@ -1,0 +1,298 @@
+{
+  "schema": "fvr.bc2.manual_reload_catalog",
+  "schema_version": 1,
+  "configurations": [
+    {
+      "native_name": "MP443",
+      "weapon_class": "wcSmg",
+      "resource": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach.dbx",
+      "resource_sha256": "e2057d4456fc5619b556c5db67716d5fd2f0c91eb07e7a27276811e8e670f412",
+      "instance_guid": "A1617BA1-B5EF-4A8C-94D2-79CD1AFD7B8A",
+      "firing_resource": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach_Firing.dbx",
+      "firing_sha256": "f710972b07146ff6ded2783fc2a2b6ee37fadb5a839c6cccee8a0e0deee18cbf",
+      "firing_guid": "1B728E67-AA8B-48CC-89C1-C36E73BA2B6F",
+      "function_resource": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach_Firing.dbx",
+      "function_sha256": "f710972b07146ff6ded2783fc2a2b6ee37fadb5a839c6cccee8a0e0deee18cbf",
+      "function_guid": "BE85ABFB-65C7-4097-9E23-0881EA334FBB",
+      "fields": {
+        "FireLogic.ReloadLogic": {
+          "value": "rlWeaponSwitchCancelsUnfinishedReload",
+          "encoding": "string",
+          "offset": 7512
+        },
+        "FireLogic.ReloadType": {
+          "value": "rtMagazine",
+          "encoding": "string",
+          "offset": 7517
+        },
+        "FireLogic.ReloadTime": {
+          "value": 3.75,
+          "encoding": "float32",
+          "offset": 7436
+        },
+        "FireLogic.ReloadDelay": {
+          "value": 0.0,
+          "encoding": "float32",
+          "offset": 7426
+        },
+        "FireLogic.ReloadThreshold": {
+          "value": 0.5,
+          "encoding": "float32",
+          "offset": 7456
+        },
+        "FireLogic.PostReloadSequenceTime": {
+          "value": 0.0,
+          "encoding": "float32",
+          "offset": 7446
+        },
+        "FireLogic.RateOfFire": {
+          "value": 450.0,
+          "encoding": "float32",
+          "offset": 7405
+        },
+        "FireLogic.FireLogicType": {
+          "value": "fltSingleFire",
+          "encoding": "string",
+          "offset": 7522
+        },
+        "FireLogic.FireInputAction": {
+          "value": "EiaFire",
+          "encoding": "string",
+          "offset": 7374
+        },
+        "FireLogic.ReloadInputAction": {
+          "value": "EiaReload",
+          "encoding": "string",
+          "offset": 7388
+        },
+        "FireLogic.BoltAction.BoltActionDelay": {
+          "value": 0.0,
+          "encoding": "float32",
+          "offset": 7237
+        },
+        "FireLogic.BoltAction.BoltActionTime": {
+          "value": 0.0,
+          "encoding": "float32",
+          "offset": 7248
+        },
+        "FireLogic.BoltAction.HoldBoltActionUntilFireRelease": {
+          "value": false,
+          "encoding": "bool",
+          "offset": 7259
+        },
+        "FireLogic.BoltAction.HoldBoltActionUntilZoomRelease": {
+          "value": false,
+          "encoding": "bool",
+          "offset": 7266
+        },
+        "Ammo.MagazineCapacity": {
+          "value": 17,
+          "encoding": "int32",
+          "offset": 7534
+        },
+        "Ammo.NumberOfMagazines": {
+          "value": 3,
+          "encoding": "int32",
+          "offset": 7545
+        },
+        "Ammo.AmmoPickupMinAmount": {
+          "value": 5,
+          "encoding": "int32",
+          "offset": 7567
+        },
+        "Ammo.AmmoPickupMaxAmount": {
+          "value": 10,
+          "encoding": "int32",
+          "offset": 7577
+        },
+        "Ammo.AutoReplenishMagazine": {
+          "value": false,
+          "encoding": "bool",
+          "offset": 7587
+        },
+        "Shot.NumberOfBulletsPerShell": {
+          "value": 1,
+          "encoding": "int32",
+          "offset": 7104
+        },
+        "Shot.NumberOfBulletsPerShot": {
+          "value": 1,
+          "encoding": "int32",
+          "offset": 7115
+        }
+      },
+      "weapon_states": [
+        {
+          "index": 0,
+          "mesh_asset_references": [
+            "objects/weapons/handheld/ru_hg_mp443grach/ru_hg_mp443grach_mesh/a2f5a385-64cf-11db-962b-86e865e73fbb"
+          ],
+          "animation_tree_references": {
+            "AnimTree1p": "objects/weapons/handheld/ru_hg_mp443grach/ru_hg_mp443grach_animtree1p/02bd776e-e07c-42bd-ba59-46e3ec4229fa",
+            "AnimTree3p": "objects/weapons/handheld/ru_hg_mp443grach/ru_hg_mp443grach_animtree3p/b482b1b5-0714-4a73-8610-93b8a02bdc87"
+          },
+          "fields": {
+            "IsPumpAction": false,
+            "IsOneHanded": true,
+            "AnimatedFireType": "AnimatedFireSingle",
+            "AnimatedAimingType": "AnimatedAimingTwoHanded",
+            "SkipReloadAnimation": false
+          },
+          "missing": []
+        }
+      ],
+      "abort_reload_on_sprint": false,
+      "missing_fields": [],
+      "runtime_admitted": false,
+      "scope": "Exact authored data/reference chain, not a native object ABI or current live configuration",
+      "origin_archive": "Dist/win32/levels/sp_common/level-00.fbrb",
+      "origin_index_sha256": "57835d6ace174f83eeb46ec8bbfe3acf8a3e7fde5cb8c8e49f084950e975a842"
+    },
+    {
+      "native_name": "MP443_sp",
+      "weapon_class": "wcSmg",
+      "resource": "Objects/Weapons/Handheld/RU_hg_MP443Grach/SP_hg_MP443Grach.dbx",
+      "resource_sha256": "e16f5713854ca38ab58d61bd3c568e2f87533c0e82032d71d61f27449d5484cc",
+      "instance_guid": "58098858-821B-4406-A19C-AE62E5D38BDF",
+      "firing_resource": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach_Firing.dbx",
+      "firing_sha256": "f710972b07146ff6ded2783fc2a2b6ee37fadb5a839c6cccee8a0e0deee18cbf",
+      "firing_guid": "1B728E67-AA8B-48CC-89C1-C36E73BA2B6F",
+      "function_resource": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach_Firing.dbx",
+      "function_sha256": "f710972b07146ff6ded2783fc2a2b6ee37fadb5a839c6cccee8a0e0deee18cbf",
+      "function_guid": "BE85ABFB-65C7-4097-9E23-0881EA334FBB",
+      "fields": {
+        "FireLogic.ReloadLogic": {
+          "value": "rlWeaponSwitchCancelsUnfinishedReload",
+          "encoding": "string",
+          "offset": 7512
+        },
+        "FireLogic.ReloadType": {
+          "value": "rtMagazine",
+          "encoding": "string",
+          "offset": 7517
+        },
+        "FireLogic.ReloadTime": {
+          "value": 3.75,
+          "encoding": "float32",
+          "offset": 7436
+        },
+        "FireLogic.ReloadDelay": {
+          "value": 0.0,
+          "encoding": "float32",
+          "offset": 7426
+        },
+        "FireLogic.ReloadThreshold": {
+          "value": 0.5,
+          "encoding": "float32",
+          "offset": 7456
+        },
+        "FireLogic.PostReloadSequenceTime": {
+          "value": 0.0,
+          "encoding": "float32",
+          "offset": 7446
+        },
+        "FireLogic.RateOfFire": {
+          "value": 450.0,
+          "encoding": "float32",
+          "offset": 7405
+        },
+        "FireLogic.FireLogicType": {
+          "value": "fltSingleFire",
+          "encoding": "string",
+          "offset": 7522
+        },
+        "FireLogic.FireInputAction": {
+          "value": "EiaFire",
+          "encoding": "string",
+          "offset": 7374
+        },
+        "FireLogic.ReloadInputAction": {
+          "value": "EiaReload",
+          "encoding": "string",
+          "offset": 7388
+        },
+        "FireLogic.BoltAction.BoltActionDelay": {
+          "value": 0.0,
+          "encoding": "float32",
+          "offset": 7237
+        },
+        "FireLogic.BoltAction.BoltActionTime": {
+          "value": 0.0,
+          "encoding": "float32",
+          "offset": 7248
+        },
+        "FireLogic.BoltAction.HoldBoltActionUntilFireRelease": {
+          "value": false,
+          "encoding": "bool",
+          "offset": 7259
+        },
+        "FireLogic.BoltAction.HoldBoltActionUntilZoomRelease": {
+          "value": false,
+          "encoding": "bool",
+          "offset": 7266
+        },
+        "Ammo.MagazineCapacity": {
+          "value": 17,
+          "encoding": "int32",
+          "offset": 7534
+        },
+        "Ammo.NumberOfMagazines": {
+          "value": 3,
+          "encoding": "int32",
+          "offset": 7545
+        },
+        "Ammo.AmmoPickupMinAmount": {
+          "value": 5,
+          "encoding": "int32",
+          "offset": 7567
+        },
+        "Ammo.AmmoPickupMaxAmount": {
+          "value": 10,
+          "encoding": "int32",
+          "offset": 7577
+        },
+        "Ammo.AutoReplenishMagazine": {
+          "value": false,
+          "encoding": "bool",
+          "offset": 7587
+        },
+        "Shot.NumberOfBulletsPerShell": {
+          "value": 1,
+          "encoding": "int32",
+          "offset": 7104
+        },
+        "Shot.NumberOfBulletsPerShot": {
+          "value": 1,
+          "encoding": "int32",
+          "offset": 7115
+        }
+      },
+      "weapon_states": [
+        {
+          "index": 0,
+          "mesh_asset_references": [
+            "objects/weapons/handheld/ru_hg_mp443grach/ru_hg_mp443grach_mesh/a2f5a385-64cf-11db-962b-86e865e73fbb"
+          ],
+          "animation_tree_references": {
+            "AnimTree1p": "objects/weapons/handheld/ru_hg_mp443grach/ru_hg_mp443grach_animtree1p/02bd776e-e07c-42bd-ba59-46e3ec4229fa",
+            "AnimTree3p": "objects/weapons/handheld/ru_hg_mp443grach/ru_hg_mp443grach_animtree3p/b482b1b5-0714-4a73-8610-93b8a02bdc87"
+          },
+          "fields": {
+            "IsPumpAction": false,
+            "IsOneHanded": true,
+            "AnimatedFireType": "AnimatedFireSingle",
+            "AnimatedAimingType": "AnimatedAimingTwoHanded",
+            "SkipReloadAnimation": false
+          },
+          "missing": []
+        }
+      ],
+      "abort_reload_on_sprint": false,
+      "missing_fields": [],
+      "runtime_admitted": false,
+      "scope": "Exact authored data/reference chain, not a native object ABI or current live configuration",
+      "origin_archive": "Dist/win32/levels/sp_common/level-00.fbrb",
+      "origin_index_sha256": "57835d6ace174f83eeb46ec8bbfe3acf8a3e7fde5cb8c8e49f084950e975a842"
+    }
+  ]
+}

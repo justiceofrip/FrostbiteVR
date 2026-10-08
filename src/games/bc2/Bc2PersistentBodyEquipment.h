@@ -28,10 +28,8 @@ inline const BodyEquipmentProfile* Profile(const BodyInventoryDisplay& d,const B
        s.stateCount!=1||!s.soleConfiguredArray||s.states[0].array!=s.soleConfiguredArray||s.states[0].count>8||
        c.weapon==d.selectedOwner.weapon||slot.assignment.item==d.physicalSelected)return nullptr;
     const auto asset=body_equipment_detail::Text(s.weaponName);const BodyEquipmentProfile* found=nullptr;
-    for(const auto& p:BodyEquipmentProfiles)if(asset==p.asset){
-        unsigned matches=0;
-        for(unsigned n=0;n<s.states[0].count;++n)if(body_equipment_detail::Text(s.states[0].meshes[n].assetPath)==p.mesh)++matches;
-        if(matches!=1||found||!interaction::reload_insertion_detail::Rigid(p.modelToAnchor))return nullptr;found=&p;
+    for(const auto& p:BodyEquipmentProfiles)if(asset==p.asset&&body_equipment_detail::ProfileMatchesSelected(p,s)){
+        if(found||!interaction::reload_insertion_detail::Rigid(p.modelToAnchor))return nullptr;found=&p;
     }return found;
 }
 inline bool SameConfig(const CarriedMeshesSnapshot& a,const CarriedMeshesSnapshot& b)noexcept {
@@ -39,7 +37,8 @@ inline bool SameConfig(const CarriedMeshesSnapshot& a,const CarriedMeshesSnapsho
     return a.weapon==b.weapon&&a.nativeSlot==b.nativeSlot&&a.persistence==b.persistence&&x.owner==y.owner&&
         x.weaponData==y.weaponData&&x.inventory==y.inventory&&x.selectedSlot==y.selectedSlot&&x.weaponName==y.weaponName&&
         x.stateTypeInfo==y.stateTypeInfo&&x.meshTypeInfo==y.meshTypeInfo&&x.stateCount==y.stateCount&&
-        x.soleConfiguredArray==y.soleConfiguredArray&&x.states==y.states;
+        x.soleConfiguredArray==y.soleConfiguredArray&&x.states==y.states&&
+        x.configurationPathVerified==y.configurationPathVerified&&x.configurationPath==y.configurationPath;
 }
 }
 inline bool BodyCarriedBatchFresh(const BodyCarriedRenderBatch& b,std::int64_t now)noexcept {

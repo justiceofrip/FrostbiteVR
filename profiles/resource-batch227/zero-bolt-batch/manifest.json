@@ -1,0 +1,258 @@
+{
+  "schema": "fvr.bc2.disabled-resource-magazine-batch.v1",
+  "runtime_enabled": false,
+  "native_execution_proven": false,
+  "headset_accepted": false,
+  "inputs": [
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\automatic-magazine-stock-bolt-20261003-candidate\\extended-descriptor-jobs.json",
+      "sha256": "ff4e5adab0bf3ed046f648bc96503254f7a3887dedfe21c742f846fcf13571c6"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\weapon-pipeline206-variant-extraction\\derived-variants.json",
+      "sha256": "0ea1f240e5a2860f25c96c898ee33d87b261cf6fecd552c4cc1e49da5409bd2d"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\arsmg-paired-contact-batch-candidate\\private-candidates.json",
+      "sha256": "faa8623a1b4fc5548364a0dadd30880df1c4ee059e255d8b3b1dd2bea8d4d586"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\lmg-drum-followup-120602-candidate\\private-candidates.json",
+      "sha256": "5ca19502bdbcb412347f6c8709c600fdf6220bf757aedb1d522dd8b35f9837cb"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\arsmg-paired-contact-batch-candidate\\all\\grip-bindings.json",
+      "sha256": "9c027340e204ec5b979fe3dc5be1e6501e2e4d2c3b545bcc228d299ed7d22903"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\lmg-authored-mechanisms-candidate\\all\\reference-bindings.json",
+      "sha256": "0cbe8ed392eb9cda5feb6f3676bc3881ee4c6638ff287ad85e099fd40c12584e"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\profiles\\checkpoint202\\Bc2ExperimentalMagazineGeometry.h",
+      "sha256": "52a571282e3e9bd2214f25ff5331d48e0a7f1543f278b0fa9e645e0914f03c98"
+    }
+  ],
+  "tools": [
+    {
+      "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\tools\\bc2_magazine_pipeline_coverage.py",
+      "sha256": "d00029de86e15c36881ba30699b0ff75e916f48e490a82982aff1212dde6ff1c"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\tools\\bc2_magazine_registry_header.py",
+      "sha256": "71dc87e3270053f8c58d08c639fca51464fc288c7097f61086b4ef5999d8805c"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\tools\\bc2_authored_magazine_geometry.py",
+      "sha256": "c2cff53fedcf3cf55b9d1737e5a3d60043b46c295c24182d03cb9e998b8f66df"
+    }
+  ],
+  "emitter_sha256": "f7c67e105005a781f196c7e831b7a365aed113025752852ca2a223a455f34443",
+  "summary": {
+    "rows": 12,
+    "enabled": 0,
+    "omitted_unreviewed_or_builtin": 0
+  },
+  "preserved": "Baseline geometry bytes unchanged; scoped XM8 remains immutable builtin native/geometry registration.",
+  "rows": [
+    {
+      "key": "bc2:magazine-descriptor:13b8aa537cdea0a5730562015bdc9961ba66018aa17f3a0abae4ab4d1c6c45cd",
+      "asset": "XM8C",
+      "path": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Scoped",
+      "descriptor_digest": "c31431276522dd4999abdcc4971d4949ebbd54591b7f9a4eb77cda89fc2640e6",
+      "geometry_digest": "37442b9fe39e5b5ffda67481e4cc535b2eda9d191a2f20b0d665257d03684c51",
+      "geometry_source_digest": "930c185312a178513a60c1e741e52cd0eed22b52f49f214952058019b463b439",
+      "grip_binding_digest": "3463e664e2b93f591ecaa22d2ec1c7c5a2f20ccffc6fb1314a6db7ab1fa724ca"
+    },
+    {
+      "key": "bc2:magazine-descriptor:34570b13cfb1c6fe0dc4f0db73a6604346ac190a95161f7156d8a4e07521f601",
+      "asset": "M416",
+      "path": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416",
+      "descriptor_digest": "8bb5e63dbaaebf9716d63d3125845a7858eb679bdede467dabb276acb88b3fda",
+      "geometry_digest": "8688af8b5967450caba1cbeb81b76010be495832930e56ec45fb434fcce79004",
+      "geometry_source_digest": "f7693652e7381b307bb85d9c90618448e9f886a7e6dce9a8fc44adc070395293",
+      "grip_binding_digest": "61c4598400e7efea4a7f96ddfc210811b977b1efdad8e18636c4a3edb277fb38"
+    },
+    {
+      "key": "bc2:magazine-descriptor:3c24d2117441df6d2392d17ef4239457e04defd13eaf277d5409cece3c9bf3aa",
+      "asset": "XM8 LMG",
+      "path": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg",
+      "descriptor_digest": "62233fb7106ed7bf272e0f3b3a14d9c082497290a8b757d3216becca23779634",
+      "geometry_digest": "fdcca0fca647ce63b6bb661096316cab6d766fee68752ed35c47eb1034733027",
+      "geometry_source_digest": "1b4157cff5adddcd1985bf910da831f328786ce9221e4d5beffeb11581f8fa55",
+      "grip_binding_digest": "8898d58013ad09a6d90fbed1ed199436dd1281add600ba7f28dc9b08ca0798c3"
+    },
+    {
+      "key": "bc2:magazine-descriptor:568ad04d9a3d0a2f6ca6d72fdd2ebf64dc7271ba5c3e5457b85cc9d6b05ba912",
+      "asset": "XM8 LMG",
+      "path": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Scoped",
+      "descriptor_digest": "7e0f35786784c13cae277d30a139facb9ee4d998c2126756d755220caf4fffad",
+      "geometry_digest": "026f65a2dcf494e3287c7f29fb0534be56d1d47cf005a6c67f23ca89558dc0b2",
+      "geometry_source_digest": "5fbd9ff21e0022091f8b608b2d29ed3a330826a963a7a6e666e463156aa2b752",
+      "grip_binding_digest": "f4890310f0d5d22a1076fa1a011044f43bc21ffb70f9f4a1a6eb0b303a080fe8"
+    },
+    {
+      "key": "bc2:magazine-descriptor:63cff9a8d31c5d9fb6b8b88a1567c244eb70457fd41f44c18cae0d8ae474cabf",
+      "asset": "XM8 LMG",
+      "path": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Kobra",
+      "descriptor_digest": "9019ab03e6002f09b01e7f74abb43596997d0f87c6f75f79c7f4fd2453361168",
+      "geometry_digest": "8c1551a381e71ba76f7452057cffc67cb2c30a2ef557fe0bc07f85d1a520ac0c",
+      "geometry_source_digest": "f93898be3e882887bfd0ae74a8ad427619b840fe6c4252ebb4b0a52dd6835c77",
+      "grip_binding_digest": "e01fd251afc87dec2ee81e54d588d56072143e5f5c1d4320110101c80338f5f6"
+    },
+    {
+      "key": "bc2:magazine-descriptor:69eaf910273974736249debf309231a418eb5556bcc628cdac68d7f50253add3",
+      "asset": "MG36",
+      "path": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Kobra",
+      "descriptor_digest": "8fd9d1d1a7c105387dbbffb7288b87b002b304b0ecfacaf5740e552e4485db62",
+      "geometry_digest": "6baffc36ef78c9efc67d5e8e7fec8dee701412ad3a6f5be1559266d31bf747b7",
+      "geometry_source_digest": "fc795caaa27d6d02208bd08effad3a1b094db3cb2d7d45f40645daeedca21056",
+      "grip_binding_digest": "60025d2a77c7c866a6e53102cb6b5ebd5bee155435c953377be5ccf2e180280c"
+    },
+    {
+      "key": "bc2:magazine-descriptor:7cb01a7dbb019b587085e89663a7e303a0cebd4eaab01656a87765b9ce66265a",
+      "asset": "M416",
+      "path": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Scoped",
+      "descriptor_digest": "e709f4794b278af91ffeaa6a65fc83c759dc8acb8d81ddf1ec0af97db274465b",
+      "geometry_digest": "a80c249e14204cecadea677bbda6477bd8edf1d35164670118fec6bfb293ab48",
+      "geometry_source_digest": "1d94ea9b80839bfdcb7f4da4f4a3fefbe556a9ec7a5daf6500faed93c8c7cc71",
+      "grip_binding_digest": "7d3408b2aad787d1f5157804ab48ac1120f3a2142a5bb139f2beba75fef261ef"
+    },
+    {
+      "key": "bc2:magazine-descriptor:a4f45301ab39a17b5c246787eff61d1b26e2eff7ed57a4c934f6390caad3a1df",
+      "asset": "M416",
+      "path": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Kobra",
+      "descriptor_digest": "e801a3c6d44d9fad7c70479121f8169f873365140dbe0009e7e4ef53b405e06d",
+      "geometry_digest": "cc1c5c856074ce21891be1ac309e7edcd0524b2c25f071e5b184cf757bd5c873",
+      "geometry_source_digest": "bb2a1f2ee49efc2d04adca08149072262de2a8056db94daf92aa8f92b73f2cde",
+      "grip_binding_digest": "73e93aa5ffeb9297b2f109f52fae0ab6aea6aa067b20ef027c352ee9f841fee5"
+    },
+    {
+      "key": "bc2:magazine-descriptor:c03287be1d2c19ecf5e56f62721282876919a4d87ef237d2cdf5bdc0acd0ffb3",
+      "asset": "MG36",
+      "path": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36",
+      "descriptor_digest": "abac4ca3208fe701d7add2d9dc01d07c6489ae7476f24819cb2dfb612e0b40ec",
+      "geometry_digest": "85abef35bcfc0e2ca79b6d86e575b8f1f07e62c2d62a8adfdcc0b1a2a1ed2d7f",
+      "geometry_source_digest": "1b8b8f439cd2332d67d2377dd0a7fc94859c1030ba5853cd5408641c290d3bbd",
+      "grip_binding_digest": "9545846471ee762e027521573cb64455f71583ab9d9fc8b954cc7419060a12de"
+    },
+    {
+      "key": "bc2:magazine-descriptor:de895a89d3dfd4d24e665efa52fbe7c3c840db75e7df0d5e1becd95886534659",
+      "asset": "XM8C",
+      "path": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Kobra",
+      "descriptor_digest": "ef134a49b04b447e18d89c1fb8cd0676d7d40e219555004fd1046111e3337d16",
+      "geometry_digest": "db07d3309660d45cdbddb1c6a0afd9c4c2b866493139e69b8162821a3b672f11",
+      "geometry_source_digest": "ac1f96f6020b9664d82446b259aa37c42a1a1febfb2952e03d9856d3e220af17",
+      "grip_binding_digest": "9da3af7c7ee53383506efccacbba3bec0eff241a5f042ccccda0c5a4dfc33c35"
+    },
+    {
+      "key": "bc2:magazine-descriptor:f684d060c479c89c9d961fef083e541224e14c7a11371fdc2b41776fe73343ab",
+      "asset": "MG36",
+      "path": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Scope",
+      "descriptor_digest": "c8d1702eddc33cc6cec78899c028b0900c38a97b97ffbe1b6bbf358b3de2a6da",
+      "geometry_digest": "47ae587d36b53bc57e4e2476a869e3a3b457c2cfa1ed8889b494096a42c0ae7c",
+      "geometry_source_digest": "d6b15a51a33527e048a015f08f627986a20e66a66de368c331edeaf01b0eb6af",
+      "grip_binding_digest": "ebb05754d66af735f96bba957f26c65b3614728370bc397ea5ec4074e9a25782"
+    },
+    {
+      "key": "bc2:magazine-descriptor:f82cc516cde83c58df2ce57e6f7c84bbdbc8b643630b96c9a9ea8a14592bb324",
+      "asset": "XM8C",
+      "path": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c",
+      "descriptor_digest": "529f0b745a0b4ede187dbfdb021f554b1b1e660b800570bc8d8eacab9e72b3fa",
+      "geometry_digest": "f640435825b7a21a41d7225b7b3f19da33976961be4ea98adf78c7c6f6bb5799",
+      "geometry_source_digest": "70eb387197620ec034205fd1b6621d76d0d0e8a0d54d90e0f036d1eaa6f51b82",
+      "grip_binding_digest": "0422d5a93731c072bc094132285d22f7486d92a234181f3ce257eee07f40b1d7"
+    }
+  ],
+  "excluded_stock_bolt": [
+    {
+      "key": "bc2:magazine-descriptor:137333396af845c526e0c4133d7b1ebef35b6e6b88afeee86dcf4eca2e23ca12",
+      "asset": "AKS74u",
+      "path": "Objects/Weapons/Handheld/RU_rif_AKS74u/RU_rif_AKS74u",
+      "reason": "stock_bolt_requires_separate_runtime_evidence"
+    },
+    {
+      "key": "bc2:magazine-descriptor:1e83842f6aa6f5f5f41423710b85c69ca25b2613bb1f0b208e7b6e09940f8670",
+      "asset": "UZI",
+      "path": "Objects/Weapons/Handheld/BU_smg_IMIUZI/BU_smg_IMIUZI_Scoped",
+      "reason": "stock_bolt_requires_separate_runtime_evidence"
+    },
+    {
+      "key": "bc2:magazine-descriptor:2f12ae7620d188380483d36e391c24f5d98899b9bfee0afcf69dab5f810f44ed",
+      "asset": "UZI",
+      "path": "Objects/Weapons/Handheld/BU_smg_IMIUZI/BU_smg_IMIUZI_Kobra",
+      "reason": "stock_bolt_requires_separate_runtime_evidence"
+    },
+    {
+      "key": "bc2:magazine-descriptor:54aea2c982ef3d9305f89d21cf188f4eb646ca844736a5e3e7f804b229385888",
+      "asset": "9A91",
+      "path": "Objects/Weapons/Handheld/MEC_rif_9A91/MEC_rif_9A91",
+      "reason": "stock_bolt_requires_separate_runtime_evidence"
+    },
+    {
+      "key": "bc2:magazine-descriptor:9c0e1d6ef3b018b3449d16b5835731f0473e504a20d0c330c5db747d0ce94882",
+      "asset": "AKS74u",
+      "path": "Objects/Weapons/Handheld/RU_rif_AKS74u/RU_rif_AKS74U_Scoped",
+      "reason": "stock_bolt_requires_separate_runtime_evidence"
+    },
+    {
+      "key": "bc2:magazine-descriptor:c607fff81b24f15b148070723fccedf2649d4fb685bbd1ddc815d2b825852203",
+      "asset": "9A91",
+      "path": "Objects/Weapons/Handheld/MEC_rif_9A91/MEC_rif_9A91_Scoped",
+      "reason": "stock_bolt_requires_separate_runtime_evidence"
+    },
+    {
+      "key": "bc2:magazine-descriptor:d7526d6782bf33307bf98410184fe08f6480ceff5377df4047c7c917e60a21b9",
+      "asset": "AKS74u",
+      "path": "Objects/Weapons/Handheld/RU_rif_AKS74u/RU_rif_AKS74u_Kobra",
+      "reason": "stock_bolt_requires_separate_runtime_evidence"
+    },
+    {
+      "key": "bc2:magazine-descriptor:dc48ab96e370e3bd6b60d02fd97e6d3d2597f8290320692ffd9b7b7cf8e63565",
+      "asset": "UZI",
+      "path": "Objects/Weapons/Handheld/BU_smg_IMIUZI/BU_smg_IMIUZI",
+      "reason": "stock_bolt_requires_separate_runtime_evidence"
+    },
+    {
+      "key": "bc2:magazine-descriptor:e0eb4b211e7e45faa687c0998e8c55d1dd849a75e8fbb01379afc8be01b56862",
+      "asset": "9A91",
+      "path": "Objects/Weapons/Handheld/MEC_rif_9A91/MEC_rif_9A91_Kobra",
+      "reason": "stock_bolt_requires_separate_runtime_evidence"
+    }
+  ],
+  "outputs": [
+    {
+      "path": "BaselineGeometry.h",
+      "sha256": "52a571282e3e9bd2214f25ff5331d48e0a7f1543f278b0fa9e645e0914f03c98"
+    },
+    {
+      "path": "ZeroBoltGeometry.h",
+      "sha256": "17c019a405bc373b66ab804b237b2c4c814f507ba4bdce00f9f628754f1e7654"
+    },
+    {
+      "path": "CombinedGeometry.h",
+      "sha256": "040b4ec52a9de2b49340318dd196d20140bd92fb0064a381ad9e6f3088682c3a"
+    },
+    {
+      "path": "DisabledRegistry.h",
+      "sha256": "f1f5b90277db7cfb20e221961521939651778fe230d0f4938a47e31cb6ec94fd"
+    },
+    {
+      "path": "selected-jobs.json",
+      "sha256": "5c852d96c7ed905b131426fd4bc17e97ccac41fe696189e101818d824dc313d1"
+    },
+    {
+      "path": "exact-geometry.json",
+      "sha256": "07101dbf6c8673f466d9974d9b387317ae7241e77b9c8c383ea431b287895101"
+    },
+    {
+      "path": "coverage.json",
+      "sha256": "74ddf4f9731a5985a1806c644d7690445ff10dd2b1e0e63436be10d0db68e2f5"
+    }
+  ],
+  "limits": [
+    "No reviewed registration is emitted. Candidate geometry does not grant current native resource enrollment.",
+    "Preserves authored evidence and exact resource/hash/GUID joins; complete package closure and native/render/headset acceptance remain required.",
+    "Carry and rail remain the exporter-documented geometry-based design estimates."
+  ]
+}

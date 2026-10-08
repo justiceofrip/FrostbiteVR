@@ -1,5 +1,11 @@
 # Reload presentation and live ammo counter — 207
 
+Update: this checkpoint subsequently ran in the headset and was not accepted.
+Its counter produced zero valid samples; chest flicker, full-magazine discard
+recovery and reload/grip failures were reported. See [208 investigation](RELOAD-FEEDBACK-208.md)
+for the final run evidence and current fixes. The preparation record below
+describes validation available before that run.
+
 ## Actual headset evidence
 
 The October 8 test ran frozen **206d**, not the new fixes below. The user

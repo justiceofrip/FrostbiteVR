@@ -28,4 +28,15 @@ inline graphics::AmmoCounterSample AmmoCounterHostSample(const std::optional<Bc2
                                       a.loaded,a.reserve,a.capacity};
     return graphics::AmmoCounterFresh(result,now)?result:graphics::AmmoCounterSample{};
 }
+// The reserve reader may perform fresh native reads. Capture validation time
+// afterward: a timestamp taken by the caller before read() makes every new
+// observation appear future-dated. Never change either source's original
+// observation/deadline. The caller still verifies owner-publication stability.
+template<class Read,class Clock>
+graphics::AmmoCounterSample ReadAmmoCounterHostSample(const AmmoCounterOwner& current,
+    Read&& read,Clock&& clock)noexcept {
+    const auto ammo=read();
+    const auto validatedNs=clock();
+    return AmmoCounterHostSample(ammo,current,validatedNs);
+}
 } // namespace fvr::bc2

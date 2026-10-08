@@ -1,0 +1,97 @@
+FROZEN isolated native recovery candidate, based on main243/244 plus adapter242.
+No main files, game process, input, injection, or root build outputs were changed.
+Do not merge during the active headset245 check. Root owns activation and live proof.
+
+DEPENDENCY / COMPOSITION
+Apply cycle242-physical-recovery-candidate first, manifest SHA256
+8568bb941310ea7a0883ebe3db17e401b446e478fcfc8caf9e3b8d168d2a8dbc.
+Then apply only this manifest's files. original_base identifies that dependency
+versus exact main originals. recovery.patch carries exact hunks. The unchanged
+PhysicalPump/PhysicalBolt implementation copies are intentionally omitted.
+Preserve bolt agent ordinary244 first-cancellation telemetry hunks separately.
+Runtime explicitly preserves root EnableOrdinaryBoltInputRecording and
+EnableOrdinaryResourceInputRecording plus x64/default stubs. Gameplay originals
+already include root ordinary resource input-only fixture. No driver/CLI changes.
+
+ACTIVATION
+Proposed compile macro FVR_BC2_NATIVE_CYCLE_RECOVERY must be default OFF. Root may
+add a CMake option requiring ordinary manual cycles and manual-cycle candidate.
+EnableNativeCycleRecovery is pre-Start, requires installed exact code proof and
+an already enabled native manual-cycle service. Ordinary EnableManualCycles calls
+it only under this macro. No existing private fixture activates it automatically.
+The ordinary APIs now expose actual typed recovery view/submit/ack callbacks;
+the reader's earlier empty stub has been replaced by the serialized runtime.
+Disabled recovery adds no new per-Step/Update policy-lock acquisition.
+Full consistent rebuild required: ReloadFlowEventEnd gains guard telemetry and
+PlayerInput/private coordinator layout changes. Register new tests
+Bc2NativeCycleInputGuardTests and Bc2NativeCycleRecoveryServiceTests. Existing
+Bc2BoltPlayerCustodyTests gains one group. The prior bundle registers its own new
+adapter/portable tests and the otherwise empty Bc2NativeCycleRecovery.cpp TU.
+
+BEHAVIOUR
+Only an established all-three Held shot debt can convert to Converging on
+physical interruption or expired controller publication. Last native holds must
+still be recently proven; already running exact held originals drain first.
+Normal held/release/commit paths stay unchanged. Existing ordinary fore-end
+release/regrip retains its held debt and still requires a new full stroke.
+Guarded originals run with positive original delta and unchanged multiplier.
+Only caller-stack context+28 inhibition and +2c input flags are scoped; exact
+compare-exchange restoration preserves padding. Native timer/state/ammo objects
+are never written. Step's real direct-parent context and remaining delta are
+verified; timer-only busy Updates legitimately have no Step. Every original
+Commit must be an exact child of an open guarded Update with conserved counts.
+An unexpected unguarded selected Step or Transfer loses guard continuity.
+Own identity/config/capacity reads stay fresh independently from XR. No native
+watch renews old hand/controller evidence. Two independent all-three own Updates
+that begin AND end idle grant convergence; busy/snapshot rows never vote idle.
+Conserved original prediction restores may cross the configured post-shot path,
+but invalidate stale idle votes/grants. Actual physical neutral and real ordered
+stroke are required by the distinct idle-debt authority. N-1 renderer release
+provenance remains original while submission uses current processing time.
+Exact submitted release and completed receipt survive presentation interruption;
+acknowledgement additionally requires drained callbacks and fresh native idle.
+The original completion timestamp is never restamped. Guard, owner, config or
+ammo contradictions retain unresolved debt and cannot silently clear firing.
+Ordinary M95 coordinator recovery retains only previously captured original
+references and the SAME still-live left gun claim under a new matching typed
+idle-debt authority. It does not resurrect expired claims or cross owner/space.
+
+VALIDATION (ALL OFFLINE)
+x86 and x64: 11 new native recovery service groups, including actual
+Bc2PhysicalPump -> service partial-stroke/tracking-loss/regrab/full-stroke flow,
+61 seconds of retained debt with continued own native observations, exact
+inherited-hold drain, M95 and SPAS authority, empty SPAS debt, delayed immutable
+ready, busy-restore invalidation, and guard/Commit/context/count/scope mutations.
+Both actual existing native service executables pass (52 core groups including
+180 repeated same-weapon cycles plus M95/queued-release/dispatch/progression
+coverage). Initial legacy-wrapper targeting error was caught; Build-Legacy.ps1
+now compiles the actual main Bc2NativeCycleServiceTests.cpp, and the final logs
+contain both existing-suite summaries. Earlier wrapper output was not evidence.
+Both: 15 pump adapter, 4 pump recovery, 8 bolt adapter, 4 bolt recovery groups;
+7 ordinary bolt mapping/reference/typed-recovery/adapter groups. These use
+synthetic native receipts, explicitly not live game authority. Both runtime,
+Gameplay and renderer TUs compile with the native recovery macro enabled.
+Guard helper's four x86/x64 groups prove original-once, exact restore/rollback,
+padding conservation, unexpected native write rejection and disabled behaviour.
+Original executable experiment native-input-guard-03.json: 60 positive and 3
+negative cases, 150 genuine Commit callbacks, 2465 timer-only Update calls and
+135 remaining-delta Step calls. Full original Update/Step/Commit proofs checked,
+empty listener lists explicitly mocked. Positive/empty SPAS and positive M95
+retain ammo and reach idle under scoped input suppression. Step-only M95 guard
+fails to clear the native fire latch; unguarded explicit reload enters stock
+reload. These do NOT emulate live native ownership, scheduling, or a real shot.
+Version01 is explicitly invalidated; version02 and corrected03 are retained.
+
+LIVE / PRODUCT LIMITS
+No recovery path has run in the game or headset. Current headset245 is separate.
+Native recovery still needs a finite original-controller trial and raw guard,
+renderer/contact, gesture and acknowledgement evidence. There is no global
+recording-completeness claim. Converting before all-three Held, a gap before
+conversion beyond proven native freshness, real guard loss, foreign owner,
+tracked-space changes and expired BOTH M95 gun claims remain unresolved.
+M95 last-round native path remains unadmitted by the existing service.
+Normal cycles still use held timers and their post-stroke stock tail. This
+recovery slice does not eliminate normal M95's extra tail delay or add closed
+part presentation while guarded native timing overlaps a normal gesture.
+The next coherent slice must address that separately; never call busy native
+state an idle-debt authority. No profile is newly declared supported here.

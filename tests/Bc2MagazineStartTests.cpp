@@ -2,7 +2,9 @@
 #include "Bc2ReloadNativePolicy.h"
 #include "Bc2ReloadInvocationEntry.h"
 #include "Bc2ReloadRetirement.h"
+#include "Bc2ReloadFlowRuntime.h"
 #include "Test.h"
+#include <sstream>
 using namespace fvr::bc2;using Result=MagazineCycleStartResult;
 namespace {
 constexpr std::int64_t Now=1000000000;
@@ -39,6 +41,23 @@ int BusyThenQuietResolution(){
  {ReloadInvocationExclusion barrier(gate,active,revision);CHECK(barrier.Quiet());CHECK(Inspect(p,1,barrier.Quiet())==Result::NotStarted);}
  ExitReloadInvocation(active,revision);return 0;
 }
+int StartJournalKeepsBoundedExactAttempts(){
+ MagazineStartJournal journal;MagazineStartAttempt e;e.requested=Control(9);e.unseat=Unseat();
+ e.requested.sequence=7199;e.beginNs=Now;e.endNs=Now+1000;e.profile=2;
+ e.gate="identity_unavailable";e.identityGate="owner_lock";e.result=Result::NotStarted;
+ e.revisionBefore=101;e.revisionAfter=103;e.cancelBefore=e.cancelAfter=7;
+ for(unsigned n=0;n<130;++n){e.unseat.id=n+1;journal.Observe(e);}
+ std::ostringstream live;journal.Report(live,false);CHECK(live.str().find("\"rows\":[]")!=std::string::npos);
+ std::ostringstream drained;journal.Report(drained,true);const auto text=drained.str();
+ CHECK(text.find("\"total\":130,\"dropped\":2")!=std::string::npos);
+ CHECK(text.find("\"attempt\":1,")!=std::string::npos&&text.find("\"attempt\":128,")!=std::string::npos);
+ CHECK(text.find("\"attempt\":129,")==std::string::npos);
+ CHECK(text.find("\"input\":7199,\"cycle\":9,\"request\":1,\"profile\":2")!=std::string::npos);
+ CHECK(text.find("\"gate\":\"identity_unavailable\",\"identity_gate\":\"owner_lock\"")!=std::string::npos);
+ CHECK(text.find("\"revision_before\":101,\"revision_after\":103")!=std::string::npos);
+ CHECK(text.find("\"cancel_before\":7,\"cancel_after\":7")!=std::string::npos);
+ return 0;
 }
-int main(){if(RejectedDoesNotInventCycle()||AcceptedThenCancelledRemainsRegistered()||NoGuessAfterCollisionOrWrongFamily()||BusyThenQuietResolution())return 1;
- std::puts("Four magazine startup registration, rejection, retirement and contention groups passed");return 0;}
+}
+int main(){if(RejectedDoesNotInventCycle()||AcceptedThenCancelledRemainsRegistered()||NoGuessAfterCollisionOrWrongFamily()||BusyThenQuietResolution()||StartJournalKeepsBoundedExactAttempts())return 1;
+ std::puts("Magazine startup registration, rejection, retirement, contention and bounded evidence groups passed");return 0;}

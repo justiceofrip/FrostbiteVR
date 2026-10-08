@@ -83,6 +83,11 @@ struct CarriedMeshConfiguration {
     std::uint32_t weaponData=0,stateTypeInfo=0,meshTypeInfo=0,inventory=0,selectedSlot=0;
     std::array<char,128> weaponName{};std::array<SelectedMeshState,8> states{};
     std::uint8_t stateCount=0;std::uint32_t soleConfiguredArray=0;
+    // Copied from the same repeated Config read as meshes. Remains a carried
+    // display identity and is deliberately not selected-operation evidence.
+    std::array<char,512> configurationPath{};
+    bool configurationPathVerified=false;
+    std::uint32_t configurationPathPointer=0;
     static constexpr bool activeStateVerified=false,renderSuppressionAllowed=false;
 };
 struct CarriedMeshesSnapshot {

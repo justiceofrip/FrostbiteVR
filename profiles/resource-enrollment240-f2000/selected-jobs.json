@@ -1,0 +1,110 @@
+{
+  "schema": "fvr.bc2.magazine_descriptor_jobs",
+  "schema_version": 1,
+  "descriptors": [
+    {
+      "key": "bc2:magazine-descriptor:b62512a8b03688d4d94af267154496ca57934e0d620e170c9cf2255bbd3dfc32",
+      "identity": {
+        "assetName": "F2000_sp",
+        "assetPath": "Objects/Weapons/Handheld/BU_rif_F2000/SP_rif_F2000",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/BU_rif_F2000/SP_rif_F2000.dbx",
+          "sha256": "62d1514ab5eb00161f763e67d73768d9ef8a2ee611027a2a41b6deacefa86925",
+          "guid": "46404a9e-9e38-43a7-831e-fb4b2f2692c6"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Firing.dbx",
+          "sha256": "84329145dc831e8eb2f28c48ff56e9fc3a17e6b41747361304c302f249b48971",
+          "guid": "a6cf1629-15ba-470c-b3c8-6175166ee976"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Firing.dbx",
+          "sha256": "84329145dc831e8eb2f28c48ff56e9fc3a17e6b41747361304c302f249b48971",
+          "guid": "82546e7b-fbf4-410c-a2d8-5f2b2a16d04d"
+        }
+      },
+      "configuration": {
+        "assetName": "F2000_sp",
+        "assetPath": "Objects/Weapons/Handheld/BU_rif_F2000/SP_rif_F2000",
+        "values": {
+          "fireLogicType": 2,
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 30,
+          "numberOfMagazines": 4,
+          "reloadDelay": 0.0,
+          "reloadTime": 3.0999999046325684,
+          "reloadThreshold": 0.75,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1061158912,
+            "expected_bits": "3f400000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1078355558,
+            "expected_bits": "40466666",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 2,
+            "expected_bits": "00000002",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltAutomaticFire",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcAssault",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/sp_common/level-00.fbrb",
+          "index_sha256": "57835d6ace174f83eeb46ec8bbfe3acf8a3e7fde5cb8c8e49f084950e975a842"
+        }
+      ],
+      "same_reviewed_dispatch_shape": true,
+      "deferred_reasons": [],
+      "proposed_completion_deadline_ns": 3799999905,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "a83a3c5288dee2d4f5c7d1ddc7033380f5e935cc15574d23f29e43a27a047a17"
+    }
+  ],
+  "runtime_enabled": false
+}

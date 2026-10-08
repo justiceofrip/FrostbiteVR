@@ -250,6 +250,8 @@ CarriedMeshesResult ReadCarriedMeshes1p(const ReloadStateMemory& memory,const Se
     auto& s=out.configured;s.owner=owner;s.sequence=sequence;s.observedNs=observed;s.deadlineNs=deadline;
     s.weaponData=a.data;s.stateTypeInfo=a.reflection.stateInfo;s.meshTypeInfo=a.reflection.meshInfo;
     s.inventory=before.inventory;s.selectedSlot=before.slot;s.weaponName=a.name;s.states=a.states;s.stateCount=a.count;
+    s.configurationPath=a.configurationPath;s.configurationPathVerified=a.configurationPathPointer!=0;
+    s.configurationPathPointer=a.configurationPathPointer;
     if(s.stateCount==1)s.soleConfiguredArray=s.states[0].array;
     return {SelectedMeshesStatus::Observed,out};
 }

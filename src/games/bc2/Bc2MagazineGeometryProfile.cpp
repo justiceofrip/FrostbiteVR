@@ -1,6 +1,7 @@
 #include "Bc2MagazineGeometryProfile.h"
 #include "Bc2Xm8MagazineCalibration.h"
 #include "Bc2MagazineNativeProfile.h"
+#include "Bc2MagazineAssembly.h"
 #include <algorithm>
 #ifdef FVR_BC2_EXPERIMENTAL_MAGAZINE_HEADER
 #include FVR_BC2_EXPERIMENTAL_MAGAZINE_HEADER
@@ -37,7 +38,7 @@ bool ExperimentalShape(const MagazineGeometryProfile& g)noexcept {
   !interaction::DetachableMagazine(g.interaction).ValidConfig())return false;
  const auto matrix=[](const math::Matrix4& m){return interaction::reload_insertion_detail::Rigid(m)&&
   std::hypot(m.values[3][0],m.values[3][1],m.values[3][2])<=1.5f;};
- if(!matrix(g.attachedItem))return false;
+ if(!matrix(g.attachedItem)||!MagazineAssemblyShape(g))return false;
  for(const auto& finger:g.wristFromFinger)if(!matrix(finger))return false;
  std::array<std::string_view,18> names{g.bones.weapon,g.bones.magazine,g.bones.wrist};
  std::copy(g.bones.fingers.begin(),g.bones.fingers.end(),names.begin()+3);

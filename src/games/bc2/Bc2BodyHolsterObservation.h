@@ -21,6 +21,7 @@ struct BodyHolsterProbeSample {
     interaction::BodyAnchorConfig anchors{};
     std::optional<interaction::HandClaim> left,right;
     BodyHolsterResult outcome;
+    std::optional<BodyVisibleRig> ordinaryVisible; // Original read-only presentation; no hide/show authority.
     std::optional<WeaponVisibilityReceipt> visibility;
     std::optional<HolsterSuppressionReceipt> suppression;
     std::uint32_t queuedTarget=0;
@@ -29,4 +30,11 @@ struct BodyHolsterProbeSample {
     std::uint64_t fireTickMs=0;bool fireRequested=false,fireCacheRead=false;float fireCache=0;
     static constexpr bool productionVisibilityAccepted=false,productionInputAccepted=false;
 };
+// TickHolster consumes its command sample by value. Original rig visibility
+// belongs to BodyDrawSample, including the unsupported-profile ordinary route;
+// copying the caller's unfilled command sample would discard genuine evidence.
+inline void CaptureBodyHolsterProbeSource(BodyHolsterProbeSample& out,const BodyDrawSample& source)noexcept {
+    out.nativeOwner=source.owner;out.input=source.input;out.hand=source.hand;
+    out.physicalGun=source.gun;out.ordinaryVisible=source.visible;
+}
 }

@@ -141,6 +141,24 @@ int DiagnosticCannotChangeEmptyAdmissionOrGrantReceipts(){
  MagazineEmptyControlReceipts receipts;CHECK(!receipts.EmptyDeadline(before.identity,before.profile,before.ownerRevision,before.before.reserve,T+1));
  return 0;
 }
-int main(){if(DiagnosticOriginalInputAndOwnerLease()||DiagnosticBoundedTransitionsNotTimeRenewal()||DiagnosticCannotChangeEmptyAdmissionOrGrantReceipts()||ScopedReadiness()||StrictBoundaries()||ExactByteAndExceptionalRestore()||LastShotInputLoopAndExplicitReload()||OriginalReceiptIntersection()||ServerLeaseCannotRenewWithOwner()||EmptyNativeHoldAndConservedTransfer()||EmptyCancellationNeedsScopedAdapter()||NestedStepAdmissionAndDrain())return 1;
- std::cout<<"12 empty native-control/diagnostic groups passed\n";}
+int BoundedHitchKeepsOriginalAuthority(){
+ auto sample=Sample();auto input=test::Input();
+ for(float hitch:{.0596221f,.1f})for(unsigned branch=0;branch<3;++branch){
+  sample=Sample(branch);input.context.deltaSeconds=hitch;
+  CHECK(MagazineEmptyStepEligible(sample,input.config,ReloadRequestCyclePhase::Idle,input.context,T+1));
+  CHECK(!MagazineEmptyStepEligible(sample,input.config,ReloadRequestCyclePhase::Idle,input.context,sample.deadlineNs));
+  auto other=sample;++other.identity.owner.space;other.before.address+=4;
+  CHECK(!MagazineEmptyStepEligible(other,input.config,ReloadRequestCyclePhase::Idle,input.context,T+1));
+  CHECK(!MagazineEmptyStepEligible(sample,input.config,ReloadRequestCyclePhase::Holding,input.context,T+1));
+  auto reload=input.context;reload.reloadRequested=true;reload.inputFlags=4;
+  CHECK(!MagazineEmptyStepEligible(sample,input.config,ReloadRequestCyclePhase::Arming,reload,T+1));
+ }
+ for(float invalid:{0.f,-.01f,std::nextafter(.1f,1.f),std::numeric_limits<float>::infinity(),std::numeric_limits<float>::quiet_NaN()}){
+  input.context.deltaSeconds=invalid;
+  CHECK(!MagazineEmptyStepEligible(sample,input.config,ReloadRequestCyclePhase::Idle,input.context,T+1));
+ }
+ return 0;
+}
+int main(){if(BoundedHitchKeepsOriginalAuthority()||DiagnosticOriginalInputAndOwnerLease()||DiagnosticBoundedTransitionsNotTimeRenewal()||DiagnosticCannotChangeEmptyAdmissionOrGrantReceipts()||ScopedReadiness()||StrictBoundaries()||ExactByteAndExceptionalRestore()||LastShotInputLoopAndExplicitReload()||OriginalReceiptIntersection()||ServerLeaseCannotRenewWithOwner()||EmptyNativeHoldAndConservedTransfer()||EmptyCancellationNeedsScopedAdapter()||NestedStepAdmissionAndDrain())return 1;
+ std::cout<<"13 empty native-control/diagnostic groups passed\n";}
 

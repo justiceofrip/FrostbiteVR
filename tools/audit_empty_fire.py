@@ -12,7 +12,8 @@ LIMITS = [
 ]
 
 
-def audit(document):
+def audit(document, delta_policy="legacy50"):
+    step.delta_limit(delta_policy)
     reasons = []
     def require(ok, reason):
         if not ok:
@@ -45,7 +46,7 @@ def audit(document):
     branches = set()
     families = set()
     try:
-        report = step.analyze(document)
+        report = step.analyze(document, delta_policy)
         require(bool(report["journals"]), "journal_missing")
         for journal in report["journals"]:
             require(journal["status"] == "analyzed", "journal_invalid_or_undrained")
@@ -69,7 +70,7 @@ def audit(document):
                         and before["loaded"] == after["loaded"] == 0
                         and before["reserve"] == after["reserve"] > 0
                         and 0 < row["observed_ns"] <= row["now_ns"] < row["deadline_ns"]
-                        and not step.observed_predicate_mismatches(row)):
+                        and not step.observed_predicate_mismatches(row, delta_policy)):
                     continue
                 branches.add(row["branch"])
                 families.add(row["family"])
@@ -78,6 +79,7 @@ def audit(document):
     except (ValueError, TypeError, KeyError) as error:
         reasons.append("journal_decode: " + str(error))
     return {"schema": 1, "status": "bounded_monitor_verified" if not reasons else "inconclusive",
+            "delta_policy": delta_policy,
             "reasons": reasons, "verified_branches": sorted(branches), "families": sorted(families),
             "receipt_rejections": receipt_rejections,
             "receipt_rejection_note": "Informational: ordinary shot count/state changes reject receipt observations; final owned zero pairs are required separately.",
@@ -88,6 +90,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("trace", type=Path)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--delta-policy", choices=("legacy50", "bounded100"), default="legacy50",
+                        help="Match the frozen producer build; 212 uses bounded100")
     args = parser.parse_args(argv)
     if args.output and (args.output.resolve() == args.trace.resolve()
                         or (args.output.exists() and args.output.samefile(args.trace))):
@@ -95,7 +99,7 @@ def main(argv=None):
     try:
         raw = args.trace.read_bytes()
         document = json.loads(raw.decode("utf-8-sig"), parse_constant=lambda x: (_ for _ in ()).throw(ValueError(x)))
-        result = audit(document)
+        result = audit(document, args.delta_policy)
         result["source"] = {"path": str(args.trace.resolve()), "sha256": hashlib.sha256(raw).hexdigest()}
         encoded = json.dumps(result, indent=2, allow_nan=False) + "\n"
         if args.output:

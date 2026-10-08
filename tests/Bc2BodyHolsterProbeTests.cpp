@@ -49,6 +49,9 @@ struct Driver {
         for(auto& hand:original.hands){hand.gripTracked=hand.aimTracked=true;hand.active=Components;}
         original.hands[0].grip.position={-.2f,-.25f,-.45f};original.hands[1].grip.position={.2f,-.25f,-.45f};Publish(original);}
     void ExactMetadata(){if(!configuredMode)return;auto copy=std::make_shared<SelectedMeshesSnapshot>(*f.s.selected);copy->stateTypeInfo=0xc0000;copy->meshTypeInfo=0xa0000;
+        // The configured diagnostic uses the same exact resource-path evidence as the native reader.
+        constexpr char path[]="Objects/Weapons/Handheld/US_rgl_XM8/SP_rgl_XM8_Scoped";
+        std::memcpy(copy->configurationPath.data(),path,sizeof(path));copy->configurationPathVerified=true;copy->configurationPathPointer=0xd0000;
         for(unsigned n=0;n<copy->states[0].count;++n)copy->states[0].meshes[n].typeInfo=copy->meshTypeInfo;f.s.selected=copy;}
     void Publish(const InputFrame& input){state=std::make_shared<BodyHolsterProbeSample>();state->sampledNs=f.s.hand.nowNs;
         state->trialStartNs=1000000000;state->trialDeadlineNs=16000000000ll;state->nativeOwner=f.s.nativeOwner;state->input=input;
@@ -224,7 +227,8 @@ void PresentationGap(Driver& d){d.state->outcome.blockWeaponActions=true;d.state
     d.state->outcome.inventoryEvaluation=BodyInventoryEvaluation::NotEvaluated;d.state->outcome.visibility={};d.state->outcome.freeRight.reset();d.state->outcome.inventory.request.reset();d.state->outcome.ordinaryDraw.command.reset();}
 int MissingAmmoDuplicateCannotKeepCachedFire(){
     Driver d(true,false,BodyHolsterDiagnosticProfile::ExactConfiguredTableFire);
-    while(!d.firePackets&&!d.probe.Failed())CHECK(d.Tick());CHECK(!d.probe.Failed());
+    while(!d.firePackets&&!d.probe.Failed())CHECK(d.Tick());
+    if(d.probe.Failed())d.probe.Report(std::cerr);CHECK(!d.probe.Failed());
     auto input=d.original;input.predictedNs=d.f.s.hand.nowNs;
     d.probe.Prepare(input,d.f.s.nativeOwner,"XM8_sp_s",d.state,d.f.s.hand.observedNs,d.f.s.hand.deadlineNs,d.f.s.hand.nowNs+1000000,{});
     CHECK(!d.probe.Failed()&&input.hands[1].trigger==0&&d.probe.NeedsNeutralFire()&&d.probe.Phase()==BodyHolsterFixturePhase::FireReleased);

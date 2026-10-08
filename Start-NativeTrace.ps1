@@ -128,9 +128,13 @@ $traceExit=$LASTEXITCODE
 $stability=[Diagnostics.Stopwatch]::StartNew()
 while($stability.Elapsed.TotalSeconds -lt 15 -and -not $target.HasExited){Start-Sleep -Milliseconds 250;$target.Refresh()}
 $newCrash=(Test-Path -LiteralPath $crashPath) -and ((Get-Item -LiteralPath $crashPath).LastWriteTimeUtc -gt $crashBefore)
-if($newCrash){Copy-Item -LiteralPath $crashPath -Destination (Join-Path $folder 'crashreport-after.xml')}
+$crashCopyError=$null
+if($newCrash){
+    try {Copy-Item -LiteralPath $crashPath -Destination (Join-Path $folder 'crashreport-after.xml')}
+    catch {$crashCopyError=$_.Exception.Message}
+}
 $target.Refresh()
-[ordered]@{completed_utc=[DateTime]::UtcNow.ToString('o');bootstrap_exit=$traceExit;stability_observation_ms=$stability.ElapsedMilliseconds;new_crash_report=$newCrash;game_exited=$target.HasExited;game_exit_code=$(if($target.HasExited){$target.ExitCode}else{$null});game_responding=$(if(-not $target.HasExited){$target.Responding}else{$false});module_resident_until_game_exit=$true} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $folder 'completion.json')
+[ordered]@{completed_utc=[DateTime]::UtcNow.ToString('o');bootstrap_exit=$traceExit;stability_observation_ms=$stability.ElapsedMilliseconds;new_crash_report=$newCrash;crash_copy_error=$crashCopyError;game_exited=$target.HasExited;game_exit_code=$(if($target.HasExited){$target.ExitCode}else{$null});game_responding=$(if(-not $target.HasExited){$target.Responding}else{$false});module_resident_until_game_exit=$true} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $folder 'completion.json')
 Write-Output $folder
 Get-Content -LiteralPath (Join-Path $folder 'bootstrap.json')
 Get-Content -LiteralPath (Join-Path $folder 'completion.json')

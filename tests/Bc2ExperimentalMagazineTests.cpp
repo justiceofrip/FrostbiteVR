@@ -86,7 +86,14 @@ RigSnapshot Rig(const MagazineGeometryProfile& p,const ReloadStateOwner& owner){
  r.names={"test-scene",std::string(p.bones.weapon),std::string(p.bones.wrist),std::string(p.bones.magazine)};
  r.parents={-1,0,0,1};r.weaponBone=1;r.identity.soldier=owner.soldier;r.identity.weak=owner.weak;
  for(unsigned n=0;n<15;++n){r.parents.push_back(n%3?int(r.names.size()-1):2);r.names.push_back(std::string(p.bones.fingers[n]));}
- r.inverseBind.assign(r.names.size(),Identity());r.evaluatedWorld=r.inverseBind;return r;
+ r.inverseBind.assign(r.names.size(),Identity());r.evaluatedWorld=r.inverseBind;
+ r.evaluatedWorld[3]=p.attachedItem;
+ for(unsigned n=0;n<p.assemblyCount;++n){const auto& member=p.assembly[n];
+  const auto parent=std::find(r.names.begin(),r.names.end(),member.parent);
+  r.parents.push_back(int(parent-r.names.begin()));r.names.emplace_back(member.bone);
+  r.inverseBind.push_back(Identity());r.evaluatedWorld.push_back(Multiply(member.itemFromBone,p.attachedItem));
+ }
+ return r;
 }
 bool ReturnOriginal(Fixture& f,const math::Matrix4& offset){const auto& c=f.profile->geometry->interaction;const auto travel=c.insertion.travelMeters;
  RawSend(f,false,travel,offset);RawSend(f,true,travel,offset);if(f.starts!=1)return false;f.held=true;f.reserve.reloadInputReady=false;

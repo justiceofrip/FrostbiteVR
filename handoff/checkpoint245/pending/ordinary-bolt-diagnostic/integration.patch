@@ -1,0 +1,175 @@
+--- a/src/games/bc2/Bc2PhysicalBolt.h
++++ b/src/games/bc2/Bc2PhysicalBolt.h
+@@ -59,11 +59,26 @@
+     std::optional<interaction::HandGunCustodyTransfer> custodyTransfer;
+     bool grip=false,cancel=false;
+ };
++// Observation only: retain original evidence at the first shared recognizer
++// cancellation. This cannot renew a claim, grant a target or settle native debt.
++struct Bc2BoltPhysicalCancellation {
++    ReloadStateOwner nativeOwner{};
++    interaction::HandInteractionSample input{};
++    Bc2BoltRawContact raw{};
++    interaction::WeaponCycleLease lease{};
++    interaction::HandContactProof gunContact{};
++    math::Matrix4 gunWristInWorld{};
++    std::array<std::optional<interaction::HandClaim>,2> before{},after{};
++    interaction::WeaponCycleFailure failure=interaction::WeaponCycleFailure::None;
++    float travel=0,rotation=0;
++    bool rawAdmitted=false,grip=false;
++};
+ struct Bc2PhysicalBoltResult {
+     Bc2BoltTracking tracking{};
+     bool blocksFire=false,ownsGunCustody=false,ownsMechanism=false;
+     std::optional<interaction::HandGunCustodyResult> custodyChange;
+     std::optional<interaction::WeaponCycleReady> settled;
++    std::optional<Bc2BoltPhysicalCancellation> firstCancellation;
+ };
+ // One instance per interaction domain. The ordinary gun/support adapter must
+ // yield its claims while ownsGunCustody is true and adopt custodyChange claims
+@@ -82,6 +97,7 @@
+     std::optional<interaction::WeaponCycleRelease> pending_;
+     std::optional<interaction::WeaponCycleReady> acknowledged_;
+     ReloadStateOwner owner_{};
++    std::optional<Bc2BoltPhysicalCancellation> firstCancellation_;
+     bool blocks_=false,settled_=false;
+ };
+ }
+--- a/src/games/bc2/Bc2PhysicalBolt.cpp
++++ b/src/games/bc2/Bc2PhysicalBolt.cpp
+@@ -130,7 +130,16 @@
+     if(rawOkay){sample.contactSource=raw.input;sample.mechanismWristInWeapon=raw.mechanismWristInWeapon;
+         sample.mechanismContact={sample.lease.mechanism,raw.input.sequence,raw.input.deadlineNs,true};}
+     if(intent!=UINT64_MAX)sample.acquireIntent=++intent;
++    const std::array<std::optional<HandClaim>,2> before{
++        hands.Current(InteractionHand::Left),hands.Current(InteractionHand::Right)};
+     const auto result=custody_.Update(sample,hands);
++    if(!firstCancellation_&&result.physical.cycle.phase==WeaponCyclePhase::Cancelled){
++        firstCancellation_=Bc2BoltPhysicalCancellation{s.nativeOwner,s.input,raw,sample.lease,
++            sample.gunContact,sample.gunWristInWorld,before,
++            {hands.Current(InteractionHand::Left),hands.Current(InteractionHand::Right)},
++            result.physical.cycle.failure,result.physical.cycle.travel,result.physical.cycle.rotation,rawOkay,s.grip};
++    }
++    out.firstCancellation=firstCancellation_;
+     out.tracking.held=sample.lease;out.tracking.target=result.physical.target;out.tracking.weapon=result.weapon;
+     out.tracking.custody=result.custody;
+     out.tracking.mechanismPhase=result.physical.cycle.phase;
+--- a/src/games/bc2/Bc2BoltControllerProbe.h
++++ b/src/games/bc2/Bc2BoltControllerProbe.h
+@@ -52,6 +52,7 @@
+     math::Matrix4 originalGunWristInWeapon_{};
+     std::array<math::Matrix4,2> originalGripReferences_{};
+     Bc2PhysicalBoltResult physical_{};Bc2BoltPackCounters packs_{};
++    std::optional<Bc2BoltPhysicalCancellation> firstCancellation_;
+     std::uint64_t lastRaw_=0,inputs_=0,rawMatches_=0,poses_=0;
+     int loaded_=0,reserve_=0;unsigned baselinePairs_=0;
+     std::optional<interaction::WeaponCycleLease> held_;
+--- a/src/games/bc2/Bc2BoltControllerProbe.cpp
++++ b/src/games/bc2/Bc2BoltControllerProbe.cpp
+@@ -1,4 +1,5 @@
+ #include "Bc2BoltControllerProbe.h"
++#include <iomanip>
+ #include <ostream>
+ #include <algorithm>
+ #include <cmath>
+@@ -164,7 +165,9 @@
+ }
+ void Bc2BoltControllerProbe::Observe(const Bc2PhysicalBoltResult& physical,const std::optional<Bc2NativeCycleView>& native,
+     Bc2BoltPackCounters packs,std::int64_t now)noexcept {
+-    physical_=physical;packs_=packs;if(Failed()||Completed())return;
++    physical_=physical;packs_=packs;
++    if(!firstCancellation_&&physical.firstCancellation)firstCancellation_=physical.firstCancellation;
++    if(Failed()||Completed())return;
+     const auto& t=physical.tracking;
+     if(physical.custodyChange&&physical.custodyChange->transaction.accepted){
+         if(custodyReceiptCount_<custodyReceipts_.size())custodyReceipts_[custodyReceiptCount_++]={t.input,t.custody,*physical.custodyChange};else ++custodyDrops_;}
+@@ -219,7 +222,32 @@
+            <<",\"deadline_ns\":"<<c.input.deadlineNs<<",\"now_ns\":"<<c.input.nowNs<<",\"gun\":";claim(c.result.transaction.claim);
+         out<<",\"companion\":";claim(c.result.companion);out<<",\"released_ids\":[";
+         for(unsigned h=0;h<2;++h){if(h)out<<',';out<<(c.result.transaction.released[h]?c.result.transaction.released[h]->token.id:0);}out<<"]}";}
+-    out<<"],\"startup_draw\":";startup_.Report(out);
++    out<<"],\"first_physical_cancellation\":";
++    if(!firstCancellation_)out<<"null";
++    else {
++        const auto& f=*firstCancellation_;
++        const auto packet=[&](const HandInteractionSample& s){
++            out<<"{\"sequence\":"<<s.sequence<<",\"observed_ns\":"<<s.observedNs<<",\"deadline_ns\":"<<s.deadlineNs<<",\"now_ns\":"<<s.nowNs
++               <<",\"actor\":"<<s.owner.actor<<",\"actor_generation\":"<<s.owner.actorGeneration<<",\"equipment_generation\":"<<s.owner.equipGeneration<<",\"space\":"<<s.owner.space
++               <<",\"focused\":"<<(s.focused?"true":"false")<<",\"tracked\":["<<s.tracked[0]<<','<<s.tracked[1]<<"],\"released\":["<<s.released[0]<<','<<s.released[1]<<"]}";};
++        const auto matrix=[&](const math::Matrix4& m){const auto precision=out.precision();out<<std::setprecision(std::numeric_limits<float>::max_digits10)<<'[';
++            for(unsigned r=0;r<4;++r)for(unsigned c=0;c<4;++c){if(r||c)out<<',';if(std::isfinite(m.values[r][c]))out<<m.values[r][c];else out<<"null";}out<<']';out.precision(precision);};
++        const auto owner=[&](const ReloadStateOwner& o){out<<"{\"player\":"<<o.player<<",\"soldier\":"<<o.soldier<<",\"weak\":"<<o.weak<<",\"weapon\":"<<o.weapon
++            <<",\"actor_generation\":"<<o.actorGeneration<<",\"equipment_generation\":"<<o.equipGeneration<<",\"space\":"<<o.space<<'}';};
++        out<<"{\"failure\":"<<unsigned(f.failure)<<",\"travel\":"<<f.travel<<",\"rotation\":"<<f.rotation
++           <<",\"raw_admitted\":"<<(f.rawAdmitted?"true":"false")<<",\"raw_valid\":"<<(f.raw.valid?"true":"false")<<",\"grip\":"<<(f.grip?"true":"false")
++           <<",\"input\":";packet(f.input);out<<",\"raw_input\":";packet(f.raw.input);
++        out<<",\"native_owner\":";owner(f.nativeOwner);out<<",\"raw_native_owner\":";owner(f.raw.nativeOwner);
++        const auto& l=f.lease;
++        out<<",\"lease\":{\"cycle\":"<<l.cycle<<",\"shot\":"<<l.shot<<",\"sequence\":"<<l.sequence<<",\"observed_ns\":"<<l.observedNs<<",\"deadline_ns\":"<<l.deadlineNs
++           <<",\"actor\":"<<l.owner.actor<<",\"actor_generation\":"<<l.owner.actorGeneration<<",\"equipment_generation\":"<<l.owner.equipGeneration<<",\"space\":"<<l.owner.space
++           <<",\"item\":"<<l.item.id<<",\"item_generation\":"<<l.item.generation<<",\"mechanism\":"<<l.mechanism.id<<",\"mechanism_generation\":"<<l.mechanism.generation<<'}'
++           <<",\"gun_contact\":{\"id\":"<<f.gunContact.key.id<<",\"generation\":"<<f.gunContact.key.generation<<",\"sequence\":"<<f.gunContact.inputSequence
++           <<",\"deadline_ns\":"<<f.gunContact.deadlineNs<<",\"eligible\":"<<(f.gunContact.eligible?"true":"false")<<'}';
++        out<<",\"raw_wrist_in_weapon\":";matrix(f.raw.mechanismWristInWeapon);out<<",\"gun_wrist_world\":";matrix(f.gunWristInWorld);
++        out<<",\"claims_before\":[";claim(f.before[0]);out<<',';claim(f.before[1]);out<<"],\"claims_after\":[";claim(f.after[0]);out<<',';claim(f.after[1]);out<<"]}";
++    }
++    out<<",\"startup_draw\":";startup_.Report(out);
+     out<<",\"input_edges\":[";for(unsigned n=0;n<edgeCount_;++n){if(n)out<<',';const auto& e=edges_[n];
+         out<<"{\"sequence\":"<<e.sequence<<",\"observed_ns\":"<<e.observed<<",\"deadline_ns\":"<<e.deadline
+            <<",\"phase\":"<<unsigned(e.phase)<<",\"left_grip\":"<<(e.left?"true":"false")
+--- a/tests/Bc2PhysicalBoltTests.cpp
++++ b/tests/Bc2PhysicalBoltTests.cpp
+@@ -1,5 +1,8 @@
+ #include "Bc2BoltPart.h"
+ #include "Bc2M95BoltCalibration.h"
++#include "Bc2BoltControllerProbe.h"
++#include <sstream>
++#include <fstream>
+ #include "Test.h"
+ #include <cstring>
+ using namespace fvr;using namespace fvr::bc2;using namespace fvr::interaction;
+@@ -162,9 +165,41 @@
+         CHECK(f.hands.Current(right)->token==f.originalGun&&f.hands.Current(left)->token==f.originalSupport);
+     }return 0;
+ }
++int CancellationRetainsOriginalEvidence(){
++    Fixture f;CHECK(f.Enter()==0);f.Tick(f.calibration->profile.closedContact,false);
++    const auto held=f.Tick(f.calibration->profile.closedContact);CHECK(held.ownsMechanism&&!held.firstCancellation);
++    auto bad=f.calibration->profile.closedContact;bad.values[3][0]+=.02f;
++    const auto failed=f.Tick(bad);CHECK(failed.firstCancellation);
++    const auto& evidence=*failed.firstCancellation;
++    CHECK(evidence.failure==WeaponCycleFailure::Geometry&&evidence.rawAdmitted&&evidence.grip);
++    CHECK(evidence.input.sequence==f.sample.input.sequence&&evidence.raw.input.sequence==f.sample.raw.input.sequence);
++    CHECK(evidence.before[0]&&evidence.before[1]&&evidence.after[0]&&!evidence.after[1]);
++    CHECK(evidence.after[0]->token==evidence.before[0]->token&&failed.blocksFire&&!f.native.releases&&!f.native.acks);
++    const auto original=evidence.input;
++    Bc2BoltControllerProbe probe(*f.calibration);probe.Observe(failed,f.native.view,{},f.sample.input.nowNs);
++    for(unsigned n=0;n<10;++n){const auto later=f.Tick(f.calibration->profile.closedContact);
++        CHECK(later.firstCancellation&&later.firstCancellation->input.sequence==original.sequence&&later.firstCancellation->input.deadlineNs==original.deadlineNs);
++        probe.Observe(later,f.native.view,{},f.sample.input.nowNs);}
++    std::ostringstream report;probe.Report(report);const auto text=report.str();
++    CHECK(text.find("\"first_physical_cancellation\":{\"failure\":7")!=std::string::npos);
++    CHECK(text.find("\"claims_after\":[{")!=std::string::npos&&text.find("\"raw_admitted\":true")!=std::string::npos);
++    std::ofstream("bolt-cancellation-synthetic.json")<<text;
++    CHECK(!f.native.releases&&!f.native.acks);return 0;
++}
++int MissingRawCancellationIsDiagnosticOnly(){
++    Fixture f;CHECK(f.Enter()==0);f.Tick(f.calibration->profile.closedContact,false);CHECK(f.Tick(f.calibration->profile.closedContact).ownsMechanism);
++    f.Next();f.sample.raw.valid=false;f.sample.raw.mechanismWristInWeapon.values[0][0]=std::numeric_limits<float>::quiet_NaN();
++    f.sample.gunContact.inputSequence=f.sample.input.sequence;f.sample.gunContact.deadlineNs=f.sample.input.deadlineNs;
++    const auto failed=f.bolt->Tick(f.sample,f.hands,f.intent);
++    CHECK(failed.firstCancellation&&!failed.firstCancellation->rawAdmitted&&!failed.firstCancellation->raw.valid);
++    CHECK(failed.blocksFire&&!failed.ownsMechanism&&!f.native.releases&&!f.native.acks);
++    Bc2BoltControllerProbe probe(*f.calibration);probe.Observe(failed,f.native.view,{},f.sample.input.nowNs);
++    std::ofstream report("bolt-cancellation-raw-invalid.json");probe.Report(report);
++    return 0;
++}
+ }
+ int main(){
+-    if(CompletedCycleRetainsOnlyCurrentGunPlacement()||AdmissionRemainsDisabled()||OrderedPhysicalNativeHandshake()||NativeReadyDoesNotReturnCustody()||AmbiguousSubmissionNeverRetries()||
++    if(CancellationRetainsOriginalEvidence()||MissingRawCancellationIsDiagnosticOnly()||CompletedCycleRetainsOnlyCurrentGunPlacement()||AdmissionRemainsDisabled()||OrderedPhysicalNativeHandshake()||NativeReadyDoesNotReturnCustody()||AmbiguousSubmissionNeverRetries()||
+        PrivatePartAndRawMapping()||PhysicalLossNeverSettlesDebt()||NativeOwnerAndHandOwnerStaySeparate())return 1;
+-    std::puts("Physical bolt adapter: 8 groups passed; real custody/cycle, synthetic native receipts, private one-leaf palette, admission OFF.");return 0;
+-}
++    std::puts("Physical bolt adapter: 10 groups passed; real custody/cycle, synthetic native receipts, private one-leaf palette, admission OFF.");return 0;
++}

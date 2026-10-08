@@ -27,7 +27,7 @@ bool Control(const ReloadCycleControl &c, std::int64_t now)
 }
 bool Safe(const ReloadUpdateContext &c)
 {
-    return std::isfinite(c.deltaSeconds) && c.deltaSeconds > 0 && c.deltaSeconds <= .05f &&
+    return ValidManualReloadDelta(c.deltaSeconds) &&
            c.reloadTimeMultiplier == 1 && !c.inputFlags && !c.fireRequested && !c.orderRequested &&
            !c.reloadRequested && !c.flags24Through28[2] && !c.flags24Through28[3] && !c.flags24Through28[4];
 }

@@ -1,3 +1,240 @@
+## October 8: processing time, submitted work and visible custody —239–241
+
+A queued hand-ownership operation needs its actual processing time even when
+its controller packet is unchanged. The combined shell/support test reproduced
+a stale renewal after consumer adoption; updating only processing time fixes
+it without renewing the original controller or contact deadline.
+
+An accepted native insertion can outlive the short observation lease that
+authorized submission. BC2's ammo copies need not change simultaneously. Retain
+the exact pending operation under its original deadline while validating fresh
+input and the same gun; issue no new claim, pose, command or completion during
+a typed count gap. Later coherent counts and a real native receipt are required.
+The reproduced complete-sequence regression passes; actual241 SCAR/SPAS also
+completed magazines, pump, shell, support return and holster switching. Its
+recording has one missing held callback, so full recording completeness remains
+unverified despite functional completion.
+
+Visible gun custody also outlives a completed native bolt transaction. Keep its
+current claim-derived placement after readiness; retiring the native hold must
+not make the renderer fall back to a different attachment. The synthetic test
+must model that fallback to reproduce the actual jump. Actual M95 241 now
+returns custody/support and fires again; its second-cycle native prediction
+failure remains separate.
+
+Shared rigid magazine assemblies now support complete measured descendant
+subtrees. Root-only caches miss visible pieces; indiscriminate subtree movement
+can move an unrelated animated part. Require measured rigid transforms and exact
+topology, then apply/hide every member through the same presentation operation.
+Existing leaf profiles remain byte-identical. Authored finger movement is a
+separate question from wrist-to-magazine attachment stability.
+
+## October 8: concurrent publication and shared family geometry — 237
+
+The combined native test exposed a race hidden by the shorter isolated pump
+fixture: a native callback could publish after Gather saved its processing time.
+The newest lease then looked like a future observation, erasing a still-valid
+gesture. Keep only an already-issued, unexpired lease for that exact cycle;
+never renew its deadline or use it after suspension, release or cancellation.
+The actual adapter regression reproduces the old failure without headset input.
+
+Emulated controller poses must also obey actual IK reach. The combined script
+placed the closed SPAS pump beyond the arm reach; it now smoothly approaches the
+previously measured reachable controller pose. Geometry and reach limits stay
+unchanged. Native combined acceptance remains a separate check.
+
+SCAR campaign configurations reuse the existing resource consumer and native
+operation class. Shared extraction now handles thin magazines through measured
+axial extent and independently observed withdrawal direction. Two exact SP rows
+join registry, hand contact, visibility and body geometry together. A descriptor
+or generated profile alone never proves native or headset acceptance.
+
+## October 8: empty completion and detachment have different contracts —234
+
+An eight-shot simulated-player test caught a final-round path missed by two-shot
+testing: the scoped Step empty-control reader rejected the finite pump because
+ordinary combined families were disabled. Admit the exact active cycle explicitly,
+retaining native identity, configuration and restoration checks. Verify empty idle
+while the mod is active; restoring stock behavior on detach can reload afterward.
+Also keep recorder row ids separate from native invocation ids across dropped rows.
+
+## October 8: validate the phase actually used by the native player — 233
+
+Disassembly identified a plausible server seat callback, but it received zero
+calls in active single-player gameplay. A constructor-disabled observer recorded
+the actual outer dispatch at0x6b0830 from0x697b44. Exact code, owner, thread and
+idle-state checks then passed repeatedly; one native M95 equip and restoration
+of the original rifle both converged across client/server copies. This is test
+setup evidence, not a manual-bolt result or ammunition rollback guarantee.
+
+The live two-cycle SPAS pump also passed with actual shots, restored holds,
+controller strokes, native tails and support-hand return. Last-round cycling is
+separate: its native6→1→2 tail bypasses positive-ammunition7→8 states. Treat that
+as an explicit mechanism boundary rather than broadening positive-state checks.
+
+## October 8: mirror actual hand arbitration in gesture tests — 232
+
+Actual231 native pumping survived overlapping client/server callbacks but failed
+when ordinary support acquired the hand before delayed pump contact arrived.
+The earlier test only renewed support claims and missed this competition. A
+fixture performing real Acquire/Transfer/Renew reproduced it. Transfer now accepts
+the exact live original press and recorded support history; held-bit retries,
+expired claims and restamped evidence remain rejected. Offline checks pass;
+actual232 subsequently passed two complete pump strokes and support returns.
+
+## October 8: callback and renderer timing are separate ownership domains — 230
+
+Real BC2 client and server firing Updates overlap normally. A global callback
+count is therefore not evidence that a selected weapon changed ownership.
+Keep invocation-local mutation/restoration, exact structural owner checks and
+per-firing collision detection separate from unrelated branch activity. The
+230 actual pump trial exposed this false cancellation; the branch-scoped fix
+survived904 holds in actual231; that run did not complete the physical gesture.
+
+Likewise, an existing support claim can retain the original renderer N-1 input
+while Gather has controller N. Transfer through the arbiter using that original
+recorded evidence and current safety; do not require or fabricate a current-frame
+renewal before the support pass runs. The realistic regression now passes on
+both architectures while stale/restamped history still fails.
+
+## October 8: terminal results outlive physical custody — 223–224
+
+An interrupted hand or changed selection must not lose a submitted ammunition
+operation. Retain its exact native outcome and settle its original supply token
+without creating a fresh source. Native uncertainty remains distinct from
+pre-dispatch rejection. Shared pump/bolt gestures can use the same hand arbiter,
+but engine state boundaries differ even inside BC2; the sniper cycle does not
+use the SPAS positive-delay boundary. Executing the original instructions and
+recording state-labelled rig samples reduces guesswork before headset feedback.
+
+The first live resource-hand run also exposed a distinction absent from the
+initial mocks: a terminal native receipt can arrive before the next coherent
+count publication. Tests must schedule those events separately.
+
+## October 8: distinguish physical seating from native completion — 222
+
+Rendering and support-hand admission must cover the exact submitted seat before
+the server publishes its acknowledgement, as well as the interval after counts
+change but before completion is proven. Retain the original request as bounded
+visual evidence. Never turn it into an ammo receipt or refresh its deadline.
+Tests must inspect the submission frame itself and delay owning Updates; only
+testing the eventual stable frame missed both failures in the BC2 adapter.
+
+## Earlier: keep engine and physical identities separate — 221
+
+BC2's physical actor combines a weak reference and soldier identity; its held
+weapon can be a persistent attachment-family alias. Native ammunition instead
+belongs to a specific inventory weapon and independent equip generation. The
+adapter now verifies that mapping explicitly while retaining the original native
+receipt. A superficial ID equality would reject valid hands or misroute results.
+
+Connect physical policy through a bounded request/result API, and give rendering
+its own resource-custody evidence. Neither an animation hold nor a copied client
+count substitutes for the owning native Update and convergence receipt. A settled
+empty well can restore a seat-only gesture plan without repeating native removal.
+This does not settle interrupted in-flight writes or establish all-weapon support.
+
+## Earlier: separate selected context from retained magazines — 220
+
+The shared command inventory owns one ledger per stable weapon lifetime.
+Selecting another gun cancels admission, not the removed magazine's identity or
+rounds. Late native completion targets the original weapon, never the selected
+one. Fifty synthetic item lifetimes test this shared accounting independently
+of BC2 model coverage.
+
+Reuse physical geometry and hand ownership while replacing the authority
+contract explicitly. The same detachable-magazine rails now run with verified
+resource receipts in deterministic tests, without synthetic animation holds.
+Native BC2 command tests pass through the inventory-backed queue; player hand
+and renderer adapters still need migration. These results do not imply that
+Refractor animation or server ownership rules apply to Frostbite.
+
+## October 8: resource completion and inventory lifetime — 218–219
+
+Retain the exact native callback completion before attempting a contended
+observer gate. A later count sample cannot replace proof that the helper ran;
+conversely, a delayed helper receipt must not overwrite newer count timestamps.
+Checkpoint 218 verifies both delayed completions in the actual game and passes
+195 suites on both architectures.
+
+Use the existing carried-item lifetime domain for ammunition ownership. The
+219 binding comes from the body inventory's coherent native read, including
+weapon data/persistence identity. It remains separate from selected-equipment
+and XR reference-space generations, rendering, hand claims and ammunition
+authority. Interactions may suspend while native identity continues to be read.
+An unobserved lifetime gap or replacement retires that key; never transfer an
+old magazine to a reused pointer based only on the weapon name.
+
+## October 8: separate physical ammunition from reload animation — 216
+
+Follow-up 217 connects the ledger to real native dispatch in a private rifle
+diagnostic. The two operations require actual callback/cohort receipts and pass
+the live resource audit. This single-owner check uses a provisional equip-bound
+resource identity; it does not establish durable inventory identity or player
+hand dispatch. Preserve exact server completion through observer contention when
+turning the diagnostic path into the general backend.
+
+Use shared resource accounting with engine-specific authority evidence. BC2's
+signed loaded-ammo helper and native Transfer can change finite counts on the
+owning server Update while normal replication updates both client copies. Live
+diagnostics verify original-round return, shell refill and magazine refill in
+idle state. A finite reserve multiplier of two on XM8 required inspecting and
+emulating the native multiplier semantics; do not assume the first gun's value.
+
+Stable physical magazine identity must survive equip/reference-space changes;
+individual native commands still bind the exact current context. Dropping a
+magazine does not credit reserve, and ambiguous dispatched work cannot be retried
+or rolled back by timeout. The new portable ledger and BC2 completion bridge
+pass recorded-native-data replay, but player integration remains pending. Do
+not relabel an empty-state receipt as an animation hold. See [216](NATIVE-AMMUNITION-216.md).
+
+## Earlier October 8: execute real native instructions in isolated reload tests — 212
+
+Capture typed weapon configuration privately and run the installed engine's
+reload instructions in an x86 emulator. Explicitly mark mocked effect/listener
+boundaries and scheduling that is not represented. This reproduced an automatic
+reload bypass in the inner Step's 50 ms guard after the outer Update policy had
+already been corrected. The shared 100 ms bound fixes that isolated failure
+while preserving explicit reload and stock underbarrel behavior. Negative
+controls must still reproduce the old bug. Native signed ammo adjustment also
+needs server/prediction ordering: replaying an older native snapshot restores
+the removed rounds. Portable arithmetic and local function success cannot grant
+live engine authority. See [212 evidence and limits](RELOAD-EMULATION-212.md).
+
+## October 8: separate simulation delta from evidence age — 211
+
+A 59.6 ms native frame cancelled a valid manual magazine hold because the adapter
+reused a 50 ms delta limit. Ordinary magazine and shell cycles now share bounded
+hitch admission while keeping context-read age, input expiry and native identity
+checks separate. Fresh branch completions must rebuild positive hold evidence.
+Do not count conserved final ammo as a successful gesture: this failed run filled
+through native fallback after cancellation. The explicit seat, transfer and
+completion sequence remains the acceptance criterion. See [211](RELOAD-FRAME-HITCH-211.md).
+
+## October 8: observe delivered presentation without a headset — 209
+
+Synthetic controller tests can verify the real IPC body-prop and HUD data before
+requesting headset time. Record both eyes' original times, owner generations and
+counts at delivery, then use the production freshness policy. Successful stereo
+images alone do not establish present body props. A background SPAS run produced
+valid ammo HUD samples and reproduced missing chest props while keeping desktop
+focus unchanged. Native loaded-code and settled-state evidence remain separate
+from headset visibility or comfort. See [209](MONITOR-PRESENTATION-209.md).
+
+## October 8: render observations cannot enter gameplay coordination — 208
+
+A display query that reads counts can still affect native coordination. The
+207 per-eye reserve read entered reload invocation exclusion; presentation now
+consumes a saved immutable observation and validates its original identity and
+deadline after the read. Owner invalidation defeats older reads finishing late.
+Do not regenerate freshness in the renderer. Likewise, body props must derive
+from the final shared interaction publication, not disappear solely because
+full magazines choose a different controller. Consume a squeeze used for an
+ammo object before allowing a later support grab. Release an inserted item's
+hand independently from its still-pending native ammo receipt. These changes
+do not supply the missing persistent discard/accounting operation for a full
+magazine. See [208 evidence and limits](RELOAD-FEEDBACK-208.md).
+
 ## October 8: reload authority and visual/hand lifetime — 207
 
 A pending native ammo transfer must not implicitly hide support contact or keep
@@ -2088,3 +2325,15 @@ hold check, although ordinary ammo transfer completed. No Refractor offsets,
 
 rig topology or server authority assumptions were transferred to Frostbite.
 
+
+##243 cross-engine lessons
+
+Native prediction can progress before a cycle hold is first applied; validate
+immutable owner/configuration, exact snapshot and real shot debt while allowing
+measured original transitions. Do not treat every changing state number as a
+new owner. Test ordinary input-only release/regrip separately from a fixture
+that directly requests custody. Preserve first failures before shutdown polling
+can overwrite them. Functional completion and complete callback recordings
+remain separate evidence. Multi-part magazine assemblies and sampled authored
+withdrawal paths belong in shared geometry policy; exact native enrollment stays
+inside each engine adapter.

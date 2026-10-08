@@ -159,7 +159,16 @@ def boundary_details(row):
                             "context_input_flags", "context_flag_bytes")} if row.get("raw_context_known") else None}
 
 
-def observed_predicate_mismatches(row):
+def delta_limit(policy):
+    # Select from the frozen build receipt, never infer a newer policy because
+    # an old trace would otherwise fail. Match the C++ binary32 boundary.
+    import struct
+    if policy not in ("legacy50", "bounded100"):
+        raise ReportError("unknown simulation-delta policy")
+    return struct.unpack('<f', struct.pack('<f', .05 if policy == "legacy50" else .1))[0]
+
+
+def observed_predicate_mismatches(row, delta_policy="legacy50"):
     """Describe visible predicate values without recreating an incomplete gate."""
     facts = []
     before, context = row["before"], row.get("context")
@@ -171,7 +180,7 @@ def observed_predicate_mismatches(row):
         if before["timer"] < 0:
             facts.append("negative_phase_timer")
     if context:
-        if not 0 < context["delta"] <= 0.05:
+        if not 0 < context["delta"] <= delta_limit(delta_policy):
             facts.append("delta_outside_gate_range")
         if context["reload_multiplier"] != 1:
             facts.append("reload_multiplier_not_one")
@@ -187,7 +196,7 @@ def observed_predicate_mismatches(row):
     return facts
 
 
-def analyze_journal(journal, path):
+def analyze_journal(journal, path, delta_policy="legacy50"):
     if not isinstance(journal, dict) or type(journal.get("schema")) is not int or journal["schema"] != 1:
         raise ReportError(f"{path}: unsupported journal schema")
     if journal.get("diagnostic_only") is not True or type(journal.get("drained")) is not bool:
@@ -200,7 +209,9 @@ def analyze_journal(journal, path):
     for key in LOSS_COUNTERS:
         if key in journal and (not integer(journal[key]) or journal[key] < 0):
             raise ReportError(f"{path}: invalid {key}")
-    if journal["capacity"] != 128 or not isinstance(journal.get("rows"), list) or len(journal["rows"]) > 128:
+    # The producer added three protected Arming receipts to its former
+    # 128-entry layout. Both are schema 1; no other capacity is understood.
+    if journal["capacity"] not in (128, 131) or not isinstance(journal.get("rows"), list) or len(journal["rows"]) > journal["capacity"]:
         raise ReportError(f"{path}: invalid rolling journal size")
     counts = journal.get("counts")
     if (not isinstance(counts, list) or any(not integer(x) or x < 0 for x in counts)
@@ -253,7 +264,7 @@ def analyze_journal(journal, path):
             "family_known": family_known, "family": family, "family_label": family_label,
             "stage": STAGES[row["stage"]], "interaction": support, "before": before, "after": after,
             "context": context, "boundary": boundary, "requested": row["requested"], "applied": row["applied"],
-            "restored": row["restored"], "visible_predicate_mismatches": observed_predicate_mismatches(row),
+            "restored": row["restored"], "visible_predicate_mismatches": observed_predicate_mismatches(row, delta_policy),
             "explicit_reload_input": bool(context["input_flags"] & 4) if context else None}
         retained = (row["owner_retained"] and all(row["owner"]) and row["branch"] < 3
                     and row["owner_revision"] > 0 and row["input_sequence"] > 0
@@ -275,16 +286,20 @@ def analyze_journal(journal, path):
     return result
 
 
-def analyze(document):
+def analyze(document, delta_policy="legacy50"):
+    delta_limit(delta_policy)
     journals = list(find_journals(document))
     return {"schema": 1, "status": "analyzed" if journals else "missing_diagnostic",
-            "journals": [analyze_journal(value, path) for path, value in journals], "limits": LIMITS}
+            "delta_policy": delta_policy,
+            "journals": [analyze_journal(value, path, delta_policy) for path, value in journals], "limits": LIMITS}
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("trace", type=Path)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--delta-policy", choices=("legacy50", "bounded100"), default="legacy50",
+                        help="Match the frozen producer build: 212 uses bounded100; older journals default to legacy50")
     args = parser.parse_args(argv)
     if args.output and (args.output.resolve() == args.trace.resolve()
                         or (args.output.exists() and args.trace.exists() and args.output.samefile(args.trace))):
@@ -292,7 +307,7 @@ def main(argv=None):
     try:
         raw = args.trace.read_bytes()
         document = json.loads(raw.decode("utf-8-sig"), parse_constant=lambda x: (_ for _ in ()).throw(ReportError(f"nonfinite JSON value: {x}")))
-        report = analyze(document)
+        report = analyze(document, args.delta_policy)
         report["source"] = {"path": str(args.trace.resolve()), "sha256": hashlib.sha256(raw).hexdigest()}
         encoded = json.dumps(report, indent=2, allow_nan=False) + "\n"
         if args.output:

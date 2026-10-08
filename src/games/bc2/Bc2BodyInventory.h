@@ -2,6 +2,7 @@
 #include "fvr/interaction/BodyGripApproach.h"
 #include "fvr/interaction/BodyGripRelease.h"
 #include "Bc2ReloadState.h"
+#include "Bc2AmmoResourceBinding.h"
 #include "Bc2WeaponMode.h"
 #include "fvr/interaction/BodyAnchors.h"
 #include "fvr/interaction/BodyInventory.h"
@@ -94,6 +95,9 @@ public:
     BodyHolsterResult TickHolster(const WeaponModeMemory&,const BodyDrawSample&,BodyHolsterSample,
         Bc2BodyHolster&,interaction::HandInteraction&,std::uint64_t& intent)noexcept;
     bool Pending()const noexcept{return pending_.has_value();}
+    // Same lifetime domain as shoulders; equip and reference-space changes do
+    // not mint a new physical weapon. Available during interaction suspension.
+    std::optional<AmmoResourceBinding> ResourceBinding(const ReloadStateOwner&,std::int64_t now)const noexcept;
     std::optional<interaction::BodySlotAssignment> AssignedSlot(std::uint32_t weapon)const noexcept {
         const auto found=std::find_if(slots_.begin(),slots_.end(),[&](const auto& slot){return slot.item.id==weapon;});
         return found==slots_.end()?std::nullopt:std::optional(*found);
@@ -139,6 +143,7 @@ private:
     std::uint32_t inventory_=0,switching_=0;
     std::uint64_t generation_=0,revision_=0,sequence_=0,lastInput_=0,lastHolsterInput_=0;
     std::int64_t lastNow_=0,nativeProofNs_=0;
+    ReloadStateOwner nativeOwner_{};
     std::optional<interaction::BodyInventoryRequest> pending_;
     std::uint64_t requests_=0,commits_=0,cancels_=0,blocked_=0,unavailable_=0;
     struct Event {unsigned kind=0;std::uint64_t request=0,input=0;std::int64_t now=0;unsigned from=0,to=0,action=0;};

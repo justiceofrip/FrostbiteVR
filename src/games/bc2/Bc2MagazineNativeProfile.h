@@ -8,7 +8,9 @@ namespace fvr::bc2 {
 // digest-derived keys; adding a descriptor never adds another named enum case.
 enum class NativeMagazineProfileId : std::uint64_t {ScopedXm8=0,AuthoredAek=1};
 enum class MagazineIdentityRoute : std::uint8_t { LinkedLauncherAlias, SelectedCarriedItem };
-enum class MagazineCycleAdmission : std::uint8_t { Candidate, ReviewedReload11Transfer12 };
+enum class MagazineCycleAdmission : std::uint8_t {
+ Candidate, ReviewedReload11Transfer12, ReviewedSingleFireReload11Transfer12
+};
 // Native reload policy data only. Geometry, hand contacts and render receipts
 // are independent capabilities. Authored timing does not prove this cycle.
 struct MagazineNativeProfile {
@@ -16,12 +18,21 @@ struct MagazineNativeProfile {
  MagazineIdentityRoute identityRoute=MagazineIdentityRoute::SelectedCarriedItem;
  MagazineCycleAdmission cycleAdmission=MagazineCycleAdmission::Candidate;
  std::int64_t completionDeadlineNs=0;
+ constexpr bool ReviewedDispatch()const noexcept {
+  const auto& v=configuration.values;
+  if(v.reloadType!=1||v.fireInputAction!=8||v.reloadInputAction!=29)return false;
+  if(cycleAdmission==MagazineCycleAdmission::ReviewedReload11Transfer12)return v.fireLogicType==2;
+  // The separately reviewed SingleFire instruction path covers magazine
+  // reload/empty inhibition only. It grants no slide or chamber authority.
+  return cycleAdmission==MagazineCycleAdmission::ReviewedSingleFireReload11Transfer12&&
+   v.fireLogicType==0&&v.boltDelay==0&&v.boltTime==0&&
+   !v.holdBoltUntilFireRelease&&!v.holdBoltUntilZoomRelease;
+ }
  constexpr bool Reviewed()const noexcept {
   return configuration.admission==ReloadDescriptorAdmission::ReviewedNative&&
    !configuration.assetName.empty()&&!configuration.assetPath.empty()&&
    !configuration.timing.empty()&&configuration.timing.size()<=6&&
-   cycleAdmission==MagazineCycleAdmission::ReviewedReload11Transfer12&&
-   configuration.values.reloadType==1&&
+   ReviewedDispatch()&&
    completionDeadlineNs>0&&completionDeadlineNs<=10000000000ll&&
    configuration.values.reloadTime>0&&configuration.values.reloadTime<=10&&
    configuration.values.reloadThreshold>0&&configuration.values.reloadThreshold<=1;

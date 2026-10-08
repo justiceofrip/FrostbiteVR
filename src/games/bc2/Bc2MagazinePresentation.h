@@ -2,6 +2,7 @@
 #include "Bc2MagazineInteraction.h"
 #include "Bc2ReloadPreview.h"
 #include "Bc2MagazineDetachEvidence.h"
+#include "Bc2MagazineResourceAdapter.h"
 namespace fvr::bc2 {
 // Free replacement carry was measured relative to this exact sampled weapon.
 // Reusing its local pose with a newer weapon would move the loading hand/prop.
@@ -27,6 +28,9 @@ struct MagazineTracking {
  // native/input/target leases stay unchanged; this current suppression may
  // neither generate contact nor acknowledge a return.
  std::optional<HolsterSuppressionReceipt> retainedVisualSuppression;
+ // Resource-backed gameplay carries exact ammunition custody separately from
+ // the legacy reload/animation leases. Null preserves the legacy consumer.
+ std::shared_ptr<const MagazineResourcePresentation> resource;
 };
 bool MagazineTrackingFresh(const MagazineTracking&,std::int64_t now)noexcept;
 bool MagazineTargetFresh(const MagazineTracking&,std::int64_t now)noexcept;
@@ -40,6 +44,7 @@ MagazineRawContact BuildMagazineRawContact(const MagazineTracking&,const RigSnap
 struct MagazinePresentationBinding {
  std::uint64_t fingerprint=0;std::uint32_t weapon=0,magazine=0,wrist=0;
  std::array<std::uint32_t,15> fingers{};
+ std::array<std::uint32_t,MagazineAssemblyLimit> assembly{};unsigned assemblyCount=0;
  const MagazineGeometryProfile* geometry=nullptr; // Immutable profile used to derive these exact roles.
  bool operator==(const MagazinePresentationBinding&)const=default;
 };

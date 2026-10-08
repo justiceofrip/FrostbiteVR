@@ -21,6 +21,26 @@ template<std::size_t N> inline std::string_view Text(const std::array<char,N>& a
     const auto end=std::find(a.begin(),a.end(),'\0');
     return end==a.end()?std::string_view{}:std::string_view(a.data(),std::size_t(end-a.begin()));
 }
+// Exact data rows bind the complete configured mesh set; geometry eligibility
+// alone grants no ownership, native hide, or draw receipt.
+template<class Configuration> inline bool ProfileMatchesSelected(const BodyEquipmentProfile& p,const Configuration& s)noexcept {
+    if(!p.asset||!p.mesh||!p.part||!p.rig||Text(s.weaponName)!=p.asset||s.stateCount!=1||s.states[0].count>8)return false;
+    if(p.configurationPath){
+        if(!*p.configurationPath||!s.configurationPathVerified||Text(s.configurationPath)!=p.configurationPath||
+           p.configuredMeshes.empty()||p.configuredMeshes.size()>8||s.states[0].count!=p.configuredMeshes.size()||
+           s.stateTypeInfo<0x10000||s.meshTypeInfo<0x10000||s.soleConfiguredArray<0x10000||s.states[0].array!=s.soleConfiguredArray)return false;
+        for(const auto& wanted:p.configuredMeshes){
+            if(wanted.empty()||std::count(p.configuredMeshes.begin(),p.configuredMeshes.end(),wanted)!=1)return false;
+            unsigned matches=0;for(unsigned n=0;n<s.states[0].count;++n){const auto& m=s.states[0].meshes[n];
+                if(m.address<0x10000||m.namePointer<0x10000||m.typeInfo!=s.meshTypeInfo)return false;
+                for(unsigned k=0;k<n;++k)if(m.address==s.states[0].meshes[k].address)return false;
+                if(Text(m.assetPath)==wanted)++matches;
+            }if(matches!=1)return false;
+        }
+    }else if(!p.configuredMeshes.empty())return false;
+    unsigned base=0;for(unsigned n=0;n<s.states[0].count;++n)if(Text(s.states[0].meshes[n].assetPath)==p.mesh)++base;
+    return base==1;
+}
 inline const BodyEquipmentProfile* Profile(const BodyFreeRightEvidence& p,const WeaponEquipmentIdentity& e,
     std::int64_t now)noexcept {
     const auto& selected=p.visibility.selected;
@@ -31,13 +51,7 @@ inline const BodyEquipmentProfile* Profile(const BodyFreeRightEvidence& p,const 
     for(const auto& profile:BodyEquipmentProfiles){
         if(!profile.asset||!profile.mesh||!profile.part||!profile.rig||e.Asset()!=profile.asset||
            !interaction::reload_insertion_detail::Rigid(profile.modelToAnchor))continue;
-        unsigned matched=0;
-        for(unsigned n=0;n<selected->states[0].count;++n){const auto& mesh=selected->states[0].meshes[n];
-            const auto end=std::find(mesh.assetPath.begin(),mesh.assetPath.end(),'\0');
-            if(end==mesh.assetPath.end())return nullptr;
-            if(std::string_view(mesh.assetPath.data(),std::size_t(end-mesh.assetPath.begin()))==profile.mesh)++matched;
-        }
-        if(matched!=1)continue;
+        if(!ProfileMatchesSelected(profile,*selected))continue;
         if(found)return nullptr;
         found=&profile;
     }

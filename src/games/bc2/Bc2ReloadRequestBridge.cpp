@@ -214,6 +214,30 @@ void Bc2ReloadRequestBridge::UpdatePresentation(const Bc2ReloadInteractionSample
     }
     presentation_ = pose;
 }
+Bc2ReloadBridgeResult Bc2ReloadRequestBridge::ObservePendingInput(const Bc2ReloadInteractionSample &sample) noexcept
+{
+    using namespace interaction;
+    const auto &s = sample.insertion;
+    if (phase_ != Bc2ReloadBridgePhase::Pending)
+        return Snapshot();
+    if (s.nowNs < lastNow_ || s.sequence < lastSequence_ || s.observedNs < lastObserved_)
+        return Cancel(Bc2ReloadBridgeReason::SequenceRollback);
+    if (s.nowNs >= deadline_)
+        return Cancel(Bc2ReloadBridgeReason::Expired);
+    if (s.identity.owner != owners_.physical || s.identity.weapon != owners_.weapon ||
+        s.identity.trackingEpoch != trackingEpoch_)
+        return Cancel(Bc2ReloadBridgeReason::OwnerChanged);
+    if (!Input(s) || !Profile(sample))
+        return Cancel(Bc2ReloadBridgeReason::TrackingLost);
+    if (s.weaponClaim.token != gunClaim_ ||
+        !Claim(s.weaponClaim, s, InteractionHand::Right, HandClaimKind::GunHold, owners_.weapon))
+        return Cancel(Bc2ReloadBridgeReason::InvalidClaim);
+    lastSequence_ = s.sequence;
+    lastNow_ = s.nowNs;
+    lastObserved_ = s.observedNs;
+    presentation_.reset();
+    return Snapshot();
+}
 Bc2ReloadBridgeResult Bc2ReloadRequestBridge::Update(const Bc2ReloadInteractionSample &sample,
                                                      const ReloadRoundLease &native,
                                                      const std::optional<Bc2ReloadAckEvidence> &evidence) noexcept

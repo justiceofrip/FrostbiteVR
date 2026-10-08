@@ -16,6 +16,35 @@ bool SameGeometryEvidence(const HandInteractionSample& a,const HandInteractionSa
     return a.owner==b.owner&&a.sequence==b.sequence&&a.observedNs==b.observedNs&&a.deadlineNs==b.deadlineNs&&
         a.focused==b.focused&&a.tracked==b.tracked&&a.released==b.released;
 }
+bool ResourceOwner(const MagazineResourceObservation& r,const HandInteractionOwner& h,HandInteractionKey weapon,std::int64_t now)noexcept {
+    const auto& c=r.snapshot.context;
+    if(r.ownerBinding){const auto& b=*r.ownerBinding;
+        return b.verified&&b.physical==h&&b.weapon==weapon&&b.native==c&&
+            b.observedNs>0&&b.observedNs<=now&&b.deadlineNs>now&&b.deadlineNs-b.observedNs<=100000000&&
+            b.native.resource.actorGeneration==h.actorGeneration&&b.native.equipGeneration&&b.native.space==h.space;
+    }
+    return c.resource.actor==h.actor&&c.resource.actorGeneration==h.actorGeneration&&c.resource.weapon==weapon.id&&
+        c.resource.weaponGeneration&&c.equipGeneration==h.equipGeneration&&c.space==h.space;
+}
+bool ResourceReceipt(const AmmunitionReceipt& r,const AmmoResourceContext& context,AmmunitionOperation operation,
+                     std::int64_t requested,std::int64_t now)noexcept {
+    const auto& c=r.command;
+    if(c.context!=context||c.operation!=operation||!c.id||!c.sourceSequence||!r.authorityInvocation||
+       !r.authorityVerified||!r.copiesVerified||c.requestedNs<requested||c.requestedNs<=0||
+       r.beganNs<c.requestedNs||r.completedNs<r.beganNs||r.completedNs>now||now>=c.deadlineNs||
+       c.deadlineNs-c.requestedNs>2000000000ll||c.admissionDeadlineNs<=r.beganNs||
+       c.admissionDeadlineNs-c.requestedNs>100000000||r.before!=c.before||r.after!=c.after||
+       c.mutationRequired!=(c.before!=c.after))return false;
+    const auto& a=c.before;const auto& b=c.after;
+    if(a.capacity<=0||a.capacity>1000000||a.loaded<0||a.loaded>a.capacity||a.reserve<0||a.reserve>1000000||b.capacity!=a.capacity)return false;
+    if(operation==AmmunitionOperation::RemoveMagazine)return !c.original&&b.loaded==0&&b.reserve==a.reserve;
+    if(operation==AmmunitionOperation::ReturnMagazine)return c.original&&c.original->owner==c.context.resource&&
+        c.original->id&&c.original->capacity==a.capacity&&c.original->rounds>=0&&c.original->rounds<=a.capacity&&
+        a.loaded==0&&b.loaded==c.original->rounds&&b.reserve==a.reserve;
+    if(operation==AmmunitionOperation::RefillMagazine)return !c.original&&a.loaded==0&&a.reserve>0&&
+        b.loaded==std::min(a.capacity,a.reserve)&&b.reserve==a.reserve-b.loaded;
+    return false;
+}
 }
 DetachableMagazine::DetachableMagazine(DetachableMagazineConfig c)noexcept:config_(c),insertion_(c.insertion),transaction_(TransactionConfig(c)){}
 bool DetachableMagazine::ValidConfig()const noexcept {
@@ -25,7 +54,8 @@ bool DetachableMagazine::ValidConfig()const noexcept {
         (c.hand==InteractionHand::Left||c.hand==InteractionHand::Right)&&
         std::isfinite(c.grabRadiusMeters)&&c.grabRadiusMeters>0&&std::isfinite(c.pullMeters)&&c.pullMeters>0&&
         std::isfinite(c.pullReleaseMeters)&&c.pullReleaseMeters>c.grabRadiusMeters&&
-        std::isfinite(c.maxPullStepMeters)&&c.maxPullStepMeters>0&&c.maxPullStepMeters<c.pullMeters&&transaction_.ValidConfig();
+        std::isfinite(c.maxPullStepMeters)&&c.maxPullStepMeters>0&&c.maxPullStepMeters<c.pullMeters&&transaction_.ValidConfig()&&
+        (c.backend==MagazineControlBackend::AnimationHold||c.backend==MagazineControlBackend::AmmunitionResource);
 }
 DetachableMagazineResult DetachableMagazine::Snapshot()const noexcept {
     auto out=cached_;out.transaction.request.reset();out.transaction.acknowledged=out.transaction.completed=out.transaction.cancelled=false;
@@ -45,7 +75,7 @@ DetachableMagazineResult DetachableMagazine::Cancel(const HandInteractionSample&
 }
 bool DetachableMagazine::ResetAttached()noexcept {
     if(cached_.phase!=DetachableMagazinePhase::Attached||pending_||removal_||gateAccepted_||cycle_)return false;
-    transaction_.Reset();insertion_.Reset();original_.reset();originalInsertion_.reset();originalSeat_.reset();cached_={};seen_=neutral_=false;lastGeometry_=0;history_={};historyNext_=0;return true;
+    transaction_.Reset();insertion_.Reset();original_.reset();originalInsertion_.reset();originalSeat_.reset();cached_={};seen_=neutral_=false;lastGeometry_=0;history_={};historyNext_=0;resourceOwner_.reset();return true;
 }
 bool DetachableMagazine::Reconfigure(DetachableMagazineConfig config)noexcept {
     if(!DetachableMagazine(config).ValidConfig()||!ResetAttached())return false;
@@ -59,9 +89,10 @@ bool DetachableMagazine::RejectUnstarted(const HandInteractionSample& in,HandInt
        pending_->operation!=ReloadOperation::UnseatMagazine||r.operation!=pending_->operation||gateAccepted_||cycle_||in.nowNs<lastNow_)return false;
     if(removal_)hands.Release(in,removal_->token);removal_.reset();transaction_.Reset();insertion_.Reset();
     pending_.reset();original_.reset();originalInsertion_.reset();originalSeat_.reset();cached_={};seen_=neutral_=ejectMode_=pulled_=gateAccepted_=false;
-    cycle_=cancelledRequest_=lastGeometry_=0;history_={};historyNext_=0;return true;
+    cycle_=cancelledRequest_=lastGeometry_=0;history_={};historyNext_=0;resourceOwner_.reset();return true;
 }
 bool DetachableMagazine::Rebaseline(const HandInteractionSample& in,HandInteraction& hands,const MagazineRebaseline& r)noexcept {
+    if(config_.backend!=MagazineControlBackend::AnimationHold)return false;
     if((cached_.phase!=DetachableMagazinePhase::Cancelled&&cached_.phase!=DetachableMagazinePhase::Complete)||!r.verified||!r.retirement||r.retirement<=lastRetirement_||
        r.retiredOwner!=owner_||r.retiredWeapon!=weapon_||r.retiredCycle!=cycle_||r.cancelledRequest!=cancelledRequest_||
        r.observedNs<cancelledNs_||r.observedNs>in.nowNs||r.deadlineNs<=in.nowNs||r.deadlineNs-r.observedNs>200000000||
@@ -72,6 +103,7 @@ bool DetachableMagazine::Rebaseline(const HandInteractionSample& in,HandInteract
 }
 bool DetachableMagazine::CompleteOriginalReturn(const HandInteractionSample& in,HandInteraction& hands,
  const OriginalMagazineReturnReceipt& r)noexcept {
+ if(config_.backend!=MagazineControlBackend::AnimationHold)return false;
  if(cached_.phase!=DetachableMagazinePhase::AwaitingOriginalReturn||!original_||!originalSeat_||!r.verified||
     r.original!=*original_||r.cycle!=cycle_||r.seat!=originalSeat_->id||!r.retirement||r.retirement<=lastRetirement_||
     r.observedNs<originalSeatNs_||r.observedNs>in.nowNs||r.deadlineNs<=in.nowNs||r.deadlineNs-r.observedNs>200000000||
@@ -81,6 +113,49 @@ bool DetachableMagazine::CompleteOriginalReturn(const HandInteractionSample& in,
  lastRetirement_=r.retirement;original_.reset();originalInsertion_.reset();originalSeat_.reset();cached_={};
  seen_=neutral_=ejectMode_=pulled_=gateAccepted_=false;pending_.reset();cycle_=cancelledRequest_=lastGeometry_=0;
  history_={};historyNext_=0;return true;
+}
+bool DetachableMagazine::CompleteOriginalResourceReturn(const HandInteractionSample& in,HandInteraction& hands,
+                                                       const AmmunitionReceipt& receipt)noexcept {
+ if(config_.backend!=MagazineControlBackend::AmmunitionResource||!resourceOwner_||
+    cached_.phase!=DetachableMagazinePhase::AwaitingOriginalReturn||!original_||!originalSeat_||
+    !ResourceReceipt(receipt,*resourceOwner_,AmmunitionOperation::ReturnMagazine,originalSeatNs_,in.nowNs)||
+    receipt.command.id<=cycle_||receipt.command.original->id!=cycle_||receipt.command.original->rounds!=int(original_->rounds)||
+    receipt.command.original->capacity!=int(original_->capacity)||in.owner!=owner_||in.nowNs<lastNow_||
+    !in.focused||!in.tracked[0]||!in.tracked[1]||in.released[1]||in.sequence<sequence_||!in.sequence||in.observedNs<=0||
+    in.observedNs>in.nowNs||in.deadlineNs<=in.nowNs||in.deadlineNs-in.observedNs>200000000)return false;
+ if(removal_)hands.Release(in,removal_->token);removal_.reset();transaction_.Reset();insertion_.Reset();
+ original_.reset();originalInsertion_.reset();originalSeat_.reset();cached_={};
+ seen_=neutral_=ejectMode_=pulled_=gateAccepted_=false;pending_.reset();cycle_=cancelledRequest_=lastGeometry_=0;
+ history_={};historyNext_=0;resourceOwner_.reset();return true;
+}
+bool DetachableMagazine::FinishResourceCycle()noexcept {
+ if(config_.backend!=MagazineControlBackend::AmmunitionResource||cached_.phase!=DetachableMagazinePhase::Complete||pending_||removal_)return false;
+ transaction_.Reset();insertion_.Reset();original_.reset();originalInsertion_.reset();originalSeat_.reset();cached_={};
+ seen_=neutral_=ejectMode_=pulled_=gateAccepted_=false;cycle_=cancelledRequest_=lastGeometry_=0;
+ history_={};historyNext_=0;resourceOwner_.reset();return transaction_.Reconfigure(TransactionConfig(config_));
+}
+bool DetachableMagazine::RestoreResource(const DetachableMagazineSample& s,HandInteraction& hands,std::optional<DetachableMagazineConfig> config)noexcept {
+ const auto& in=s.input;
+ if(config_.backend!=MagazineControlBackend::AmmunitionResource||!s.resource||!s.resource->settled||
+    (cached_.phase!=DetachableMagazinePhase::Cancelled&&cached_.phase!=DetachableMagazinePhase::Attached)||
+    !Owner(in.owner)||!Key(s.weapon)||!s.trackingEpoch||!in.sequence||!in.focused||!in.tracked[0]||!in.tracked[1]||in.released[1]||
+    in.nowNs<lastNow_||in.observedNs<=0||in.observedNs>in.nowNs||in.deadlineNs<=in.nowNs||in.deadlineNs-in.observedNs>100000000||
+    !ResourceOwner(*s.resource,in.owner,s.weapon,in.nowNs))return false;
+ const auto& r=*s.resource;AmmunitionLedger validation;
+ if(!validation.Bind(r.snapshot,in.nowNs)||r.originalState==MagazineResourceState::Held)return false;
+ if(r.wellEmpty&&(!r.original||r.originalState!=MagazineResourceState::Discarded||r.snapshot.counts.loaded!=0||
+    r.original->owner!=r.snapshot.context.resource||!r.original->id||r.original->capacity!=r.snapshot.counts.capacity))return false;
+ if(config&&(!DetachableMagazine(*config).ValidConfig()||config->backend!=MagazineControlBackend::AmmunitionResource))return false;
+ if(removal_)hands.Release(in,removal_->token);
+ removal_.reset();transaction_.Reset();insertion_.Reset();original_.reset();originalInsertion_.reset();originalSeat_.reset();pending_.reset();
+ if(config){config_=*config;if(!insertion_.Reconfigure(config_.insertion))return false;}
+ auto plan=TransactionConfig(config_);if(r.wellEmpty){plan.steps[0]={ReloadOperation::SeatMagazine,1};plan.stepCount=1;}
+ if(!transaction_.Reconfigure(plan))return false;
+ cached_={};cached_.phase=r.wellEmpty?DetachableMagazinePhase::WellEmpty:DetachableMagazinePhase::Attached;
+ cycle_=r.wellEmpty?r.original->id:0;cached_.nativeCycle=cycle_;gateAccepted_=pulled_=r.wellEmpty;
+ owner_=in.owner;weapon_=s.weapon;epoch_=s.trackingEpoch;resourceOwner_=r.snapshot.context;
+ seen_=neutral_=ejectMode_=false;cancelledRequest_=lastGeometry_=0;history_={};historyNext_=0;
+ return true;
 }
 MagazinePropTarget DetachableMagazine::Target(const DetachableMagazineSample& s,const HandClaim& gun,MagazinePropRole role,
     const math::Matrix4& item,const math::Matrix4& hand,std::optional<HandClaim> claim)const noexcept {
@@ -116,6 +191,14 @@ DetachableMagazineResult DetachableMagazine::Update(const DetachableMagazineSamp
     const auto& native=s.native;
     if(!native.bindingsVerified||native.owner!=in.owner||native.weapon!=s.weapon||(!s.nativeObservationDeferred&&(native.observedNs<=0||native.observedNs>in.nowNs||
        native.deadlineNs<=in.nowNs||native.deadlineNs-native.observedNs>200000000)))return failNative(MagazineNativeFailureCheck::Observation);
+    const bool resourceBackend=config_.backend==MagazineControlBackend::AmmunitionResource;
+    if(resourceBackend&&!s.nativeObservationDeferred){
+        if(!s.resource)return failNative(MagazineNativeFailureCheck::Observation);
+        const auto& r=*s.resource;AmmunitionLedger validation;
+        if(!ResourceOwner(r,in.owner,s.weapon,in.nowNs)||!validation.Bind(r.snapshot,in.nowNs)||
+           (resourceOwner_&&*resourceOwner_!=r.snapshot.context))return failNative(MagazineNativeFailureCheck::Observation);
+        resourceOwner_=r.snapshot.context;
+    }
     if(gateAccepted_&&native.cycle!=cycle_)return fail(DetachableMagazineReason::NativeCycleChanged);
     const auto other=config_.hand==InteractionHand::Left?InteractionHand::Right:InteractionHand::Left;
     const auto gun=hands.Current(other);
@@ -237,10 +320,27 @@ DetachableMagazineResult DetachableMagazine::Update(const DetachableMagazineSamp
     }
     const bool matchingAck=pending_&&physical.acknowledgement.request==pending_->id&&physical.acknowledgement.owner==pending_->owner&&
         physical.acknowledgement.operation==pending_->operation;
+    const auto resourceAck=[&](AmmunitionOperation op){
+        if(!s.resource||!s.resource->receipt)return false;
+        const auto& resource=*s.resource;const auto& receipt=*resource.receipt;
+        if(!ResourceReceipt(receipt,resource.snapshot.context,op,pendingRequestedNs_,in.nowNs)||
+           receipt.after!=resource.snapshot.counts||resource.snapshot.observedNs<receipt.completedNs)return false;
+        if(op==AmmunitionOperation::RemoveMagazine)return resource.original&&resource.original->owner==resource.snapshot.context.resource&&
+            resource.original->id==native.cycle&&receipt.command.id==native.cycle&&
+            resource.original->rounds==receipt.before.loaded&&resource.original->capacity==receipt.before.capacity&&
+            (!original_||(original_->rounds==unsigned(receipt.before.loaded)&&original_->capacity==unsigned(receipt.before.capacity)));
+        return receipt.command.id>cycle_;
+    };
     if(matchingAck&&physical.acknowledgement.status==ReloadAcknowledgement::Applied&&pending_->operation==ReloadOperation::UnseatMagazine&&
-       (!native.allThreeHeld||!native.cycle))return failNative(MagazineNativeFailureCheck::UnseatAcknowledgement);
-    if(gateAccepted_&&phase!=DetachableMagazinePhase::AwaitingSeat&&phase!=DetachableMagazinePhase::AwaitingOriginalReturn&&phase!=DetachableMagazinePhase::Complete&&!native.allThreeHeld)
-        return failNative(MagazineNativeFailureCheck::HeldCycle);
+       (!native.cycle||(resourceBackend?!resourceAck(AmmunitionOperation::RemoveMagazine):!native.allThreeHeld)))
+        return failNative(MagazineNativeFailureCheck::UnseatAcknowledgement);
+    if(resourceBackend&&matchingAck&&physical.acknowledgement.status==ReloadAcknowledgement::Applied&&
+       pending_->operation==ReloadOperation::SeatMagazine&&!resourceAck(AmmunitionOperation::RefillMagazine))return failNative(MagazineNativeFailureCheck::UnseatAcknowledgement);
+    if(gateAccepted_&&phase!=DetachableMagazinePhase::AwaitingSeat&&phase!=DetachableMagazinePhase::AwaitingOriginalReturn&&phase!=DetachableMagazinePhase::Complete&&
+       (resourceBackend||!native.allThreeHeld))
+        if(!resourceBackend||!s.resource||s.resource->snapshot.counts.loaded!=0||!s.resource->original||
+           s.resource->original->owner!=resourceOwner_->resource||s.resource->original->id!=cycle_)
+            return failNative(MagazineNativeFailureCheck::HeldCycle);
     if(phase==DetachableMagazinePhase::AwaitingSeat){
         // Physical seating transfers presentation to the gun, so releasing the
         // loading hand cannot hide the inserted magazine during native reload.
@@ -306,8 +406,14 @@ DetachableMagazineResult DetachableMagazine::Update(const DetachableMagazineSamp
         out.nativeCycle=cycle_;out.original=original_;cached_=out;return out;}
     out.transaction=transaction_.Update(physical);
     if(out.transaction.cancelled||out.transaction.reason!=ManualReloadCancel::None)return fail(DetachableMagazineReason::NativeRejected);
-    if(out.transaction.request){pending_=out.transaction.request;
-        if(pending_->operation==ReloadOperation::SeatMagazine)out.phase=DetachableMagazinePhase::AwaitingSeat;}
+    if(out.transaction.request){pending_=out.transaction.request;pendingRequestedNs_=in.nowNs;
+        if(pending_->operation==ReloadOperation::SeatMagazine){
+            out.phase=DetachableMagazinePhase::AwaitingSeat;
+            // The same packet that emits the seat must present the attached
+            // item. Waiting for another native observation leaves a hand target
+            // behind after the adapter accepts submission and frees that hand.
+            out.prop=Target(s,*gun,MagazinePropRole::Attached,attached,attachedHand);
+        }}
     if(out.transaction.acknowledged){
         const auto operation=pending_?pending_->operation:ReloadOperation::None;pending_.reset();
         if(operation==ReloadOperation::UnseatMagazine){gateAccepted_=true;cycle_=native.cycle;

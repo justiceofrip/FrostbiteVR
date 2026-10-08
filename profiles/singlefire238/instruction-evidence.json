@@ -1,0 +1,1275 @@
+{
+  "schema": "fvr.bc2.singlefire-magazine-instruction-experiment.v1",
+  "passed": true,
+  "executable_sha256": "3911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258",
+  "configuration_sha256": "b7f8426148d3ba25a071f28f64450ae19130c523fb0cf561605be8c017259015",
+  "reflection": {
+    "enum": "FireLogicType",
+    "metadata_rva": 25147952,
+    "table_rva": 25298032,
+    "fields": [
+      {
+        "name": "fltSingleFire",
+        "value": 0
+      },
+      {
+        "name": "fltSingleFireWithBoltAction",
+        "value": 1
+      },
+      {
+        "name": "fltAutomaticFire",
+        "value": 2
+      },
+      {
+        "name": "fltHoldAndRelease",
+        "value": 3
+      },
+      {
+        "name": "fltDetonatedFiring",
+        "value": 4
+      }
+    ],
+    "metadata_sha256": "65e4574abc7d2f053377345798732758fa03e4f37f74b07bfe3033f2d9f4a8c2",
+    "table_sha256": "9e4b986196f18dc51dc02e17148a56e42e2590e9a9f973d53fd64104e1f470fa"
+  },
+  "functions": {
+    "Update": {
+      "rva": 3051520,
+      "size": 397,
+      "sha256": "0babdb25cdcc8f494a544d27cdf628c67f495215872b1ff5fa90f62fd5ca426e"
+    },
+    "Step": {
+      "rva": 3039952,
+      "size": 1732,
+      "sha256": "122c98fefa4503c8c98688477f9cf5a1bfbbccb47e84ce6b303898c199ad908d"
+    }
+  },
+  "cases": [
+    {
+      "asset": "MP443",
+      "mode": "stock",
+      "first_delta": 0.016666666666666666,
+      "manual_pulse": false,
+      "transitions": [
+        {
+          "frame": 0,
+          "state": 11,
+          "next": 12,
+          "loaded": 0,
+          "reserve": 51
+        },
+        {
+          "frame": 112,
+          "state": 12,
+          "next": 1,
+          "loaded": 17,
+          "reserve": 34
+        },
+        {
+          "frame": 225,
+          "state": 2,
+          "next": 2,
+          "loaded": 17,
+          "reserve": 34
+        }
+      ],
+      "step_calls": 200,
+      "patches": 0,
+      "restores": 0,
+      "original_context_restored": true,
+      "observed_step_deltas": [
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.008332228288054466,
+        0.016664480790495872,
+        0.016664480790495872,
+        0.01666666753590107,
+        0.01666666753590107
+      ],
+      "final_loaded": 17,
+      "final_reserve": 34,
+      "zero_input_steps": 0,
+      "initial_state": 2,
+      "initial_next": 2,
+      "initial_timer": 0.0,
+      "adjustments": [],
+      "configuration_path": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach.dbx"
+    },
+    {
+      "asset": "MP443",
+      "mode": "stock",
+      "first_delta": 0.0596221,
+      "manual_pulse": false,
+      "transitions": [
+        {
+          "frame": 0,
+          "state": 11,
+          "next": 12,
+          "loaded": 0,
+          "reserve": 51
+        },
+        {
+          "frame": 109,
+          "state": 12,
+          "next": 1,
+          "loaded": 17,
+          "reserve": 34
+        },
+        {
+          "frame": 222,
+          "state": 2,
+          "next": 2,
+          "loaded": 17,
+          "reserve": 34
+        }
+      ],
+      "step_calls": 203,
+      "patches": 0,
+      "restores": 0,
+      "original_context_restored": true,
+      "observed_step_deltas": [
+        0.05962210148572922,
+        0.05962210148572922,
+        0.05962210148572922,
+        0.0012876726686954498,
+        0.009619927033782005,
+        0.009619927033782005,
+        0.01666666753590107,
+        0.01666666753590107
+      ],
+      "final_loaded": 17,
+      "final_reserve": 34,
+      "zero_input_steps": 0,
+      "initial_state": 2,
+      "initial_next": 2,
+      "initial_timer": 0.0,
+      "adjustments": [],
+      "configuration_path": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach.dbx"
+    },
+    {
+      "asset": "MP443",
+      "mode": "stock",
+      "first_delta": 0.1,
+      "manual_pulse": false,
+      "transitions": [
+        {
+          "frame": 0,
+          "state": 11,
+          "next": 12,
+          "loaded": 0,
+          "reserve": 51
+        },
+        {
+          "frame": 107,
+          "state": 12,
+          "next": 1,
+          "loaded": 17,
+          "reserve": 34
+        },
+        {
+          "frame": 220,
+          "state": 2,
+          "next": 2,
+          "loaded": 17,
+          "reserve": 34
+        }
+      ],
+      "step_calls": 205,
+      "patches": 0,
+      "restores": 0,
+      "original_context_restored": true,
+      "observed_step_deltas": [
+        0.10000000149011612,
+        0.10000000149011612,
+        0.10000000149011612,
+        0.008332347497344017,
+        0.016664599999785423,
+        0.016664599999785423,
+        0.01666666753590107,
+        0.01666666753590107
+      ],
+      "final_loaded": 17,
+      "final_reserve": 34,
+      "zero_input_steps": 0,
+      "initial_state": 2,
+      "initial_next": 2,
+      "initial_timer": 0.0,
+      "adjustments": [],
+      "configuration_path": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach.dbx"
+    },
+    {
+      "asset": "MP443",
+      "mode": "bounded",
+      "first_delta": 0.016666666666666666,
+      "manual_pulse": false,
+      "transitions": [
+        {
+          "frame": 0,
+          "state": 2,
+          "next": 2,
+          "loaded": 0,
+          "reserve": 51
+        }
+      ],
+      "step_calls": 420,
+      "patches": 420,
+      "restores": 420,
+      "original_context_restored": true,
+      "observed_step_deltas": [
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107
+      ],
+      "final_loaded": 0,
+      "final_reserve": 51,
+      "zero_input_steps": 0,
+      "initial_state": 2,
+      "initial_next": 2,
+      "initial_timer": 0.0,
+      "adjustments": [],
+      "configuration_path": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach.dbx"
+    },
+    {
+      "asset": "MP443",
+      "mode": "bounded",
+      "first_delta": 0.0596221,
+      "manual_pulse": false,
+      "transitions": [
+        {
+          "frame": 0,
+          "state": 2,
+          "next": 2,
+          "loaded": 0,
+          "reserve": 51
+        }
+      ],
+      "step_calls": 420,
+      "patches": 420,
+      "restores": 420,
+      "original_context_restored": true,
+      "observed_step_deltas": [
+        0.05962210148572922,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107
+      ],
+      "final_loaded": 0,
+      "final_reserve": 51,
+      "zero_input_steps": 0,
+      "initial_state": 2,
+      "initial_next": 2,
+      "initial_timer": 0.0,
+      "adjustments": [],
+      "configuration_path": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach.dbx"
+    },
+    {
+      "asset": "MP443",
+      "mode": "bounded",
+      "first_delta": 0.1,
+      "manual_pulse": false,
+      "transitions": [
+        {
+          "frame": 0,
+          "state": 2,
+          "next": 2,
+          "loaded": 0,
+          "reserve": 51
+        }
+      ],
+      "step_calls": 420,
+      "patches": 420,
+      "restores": 420,
+      "original_context_restored": true,
+      "observed_step_deltas": [
+        0.10000000149011612,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107
+      ],
+      "final_loaded": 0,
+      "final_reserve": 51,
+      "zero_input_steps": 0,
+      "initial_state": 2,
+      "initial_next": 2,
+      "initial_timer": 0.0,
+      "adjustments": [],
+      "configuration_path": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach.dbx"
+    },
+    {
+      "asset": "MP443",
+      "mode": "bounded",
+      "first_delta": 0.0596221,
+      "manual_pulse": false,
+      "transitions": [
+        {
+          "frame": 0,
+          "state": 2,
+          "next": 2,
+          "loaded": 0,
+          "reserve": 0
+        },
+        {
+          "frame": 180,
+          "state": 2,
+          "next": 2,
+          "loaded": 8,
+          "reserve": 0
+        }
+      ],
+      "step_calls": 420,
+      "patches": 420,
+      "restores": 420,
+      "original_context_restored": true,
+      "observed_step_deltas": [
+        0.05962210148572922,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107
+      ],
+      "final_loaded": 8,
+      "final_reserve": 0,
+      "zero_input_steps": 0,
+      "initial_state": 2,
+      "initial_next": 2,
+      "initial_timer": 0.0,
+      "adjustments": [
+        {
+          "frame": -1,
+          "delta": -8,
+          "loaded": 0,
+          "reserve": 0
+        },
+        {
+          "frame": 180,
+          "delta": 8,
+          "loaded": 8,
+          "reserve": 0
+        }
+      ],
+      "configuration_path": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach.dbx",
+      "scenario": "remove_return_original",
+      "requested_rounds": 8,
+      "initial_reserve": 0
+    },
+    {
+      "asset": "MP443",
+      "mode": "bounded",
+      "first_delta": 0.0596221,
+      "manual_pulse": false,
+      "transitions": [
+        {
+          "frame": 0,
+          "state": 2,
+          "next": 2,
+          "loaded": 0,
+          "reserve": 51
+        },
+        {
+          "frame": 180,
+          "state": 2,
+          "next": 2,
+          "loaded": 8,
+          "reserve": 51
+        }
+      ],
+      "step_calls": 420,
+      "patches": 420,
+      "restores": 420,
+      "original_context_restored": true,
+      "observed_step_deltas": [
+        0.05962210148572922,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107
+      ],
+      "final_loaded": 8,
+      "final_reserve": 51,
+      "zero_input_steps": 0,
+      "initial_state": 2,
+      "initial_next": 2,
+      "initial_timer": 0.0,
+      "adjustments": [
+        {
+          "frame": -1,
+          "delta": -8,
+          "loaded": 0,
+          "reserve": 51
+        },
+        {
+          "frame": 180,
+          "delta": 8,
+          "loaded": 8,
+          "reserve": 51
+        }
+      ],
+      "configuration_path": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach.dbx",
+      "scenario": "remove_return_original",
+      "requested_rounds": 8,
+      "initial_reserve": 51
+    },
+    {
+      "asset": "MP443",
+      "mode": "bounded",
+      "first_delta": 0.0596221,
+      "manual_pulse": false,
+      "transitions": [
+        {
+          "frame": 0,
+          "state": 2,
+          "next": 2,
+          "loaded": 0,
+          "reserve": 0
+        },
+        {
+          "frame": 180,
+          "state": 2,
+          "next": 2,
+          "loaded": 17,
+          "reserve": 0
+        }
+      ],
+      "step_calls": 420,
+      "patches": 420,
+      "restores": 420,
+      "original_context_restored": true,
+      "observed_step_deltas": [
+        0.05962210148572922,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107
+      ],
+      "final_loaded": 17,
+      "final_reserve": 0,
+      "zero_input_steps": 0,
+      "initial_state": 2,
+      "initial_next": 2,
+      "initial_timer": 0.0,
+      "adjustments": [
+        {
+          "frame": -1,
+          "delta": -17,
+          "loaded": 0,
+          "reserve": 0
+        },
+        {
+          "frame": 180,
+          "delta": 17,
+          "loaded": 17,
+          "reserve": 0
+        }
+      ],
+      "configuration_path": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach.dbx",
+      "scenario": "remove_return_original",
+      "requested_rounds": 17,
+      "initial_reserve": 0
+    },
+    {
+      "asset": "MP443",
+      "mode": "bounded",
+      "first_delta": 0.0596221,
+      "manual_pulse": false,
+      "transitions": [
+        {
+          "frame": 0,
+          "state": 2,
+          "next": 2,
+          "loaded": 0,
+          "reserve": 51
+        },
+        {
+          "frame": 180,
+          "state": 2,
+          "next": 2,
+          "loaded": 17,
+          "reserve": 51
+        }
+      ],
+      "step_calls": 420,
+      "patches": 420,
+      "restores": 420,
+      "original_context_restored": true,
+      "observed_step_deltas": [
+        0.05962210148572922,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107
+      ],
+      "final_loaded": 17,
+      "final_reserve": 51,
+      "zero_input_steps": 0,
+      "initial_state": 2,
+      "initial_next": 2,
+      "initial_timer": 0.0,
+      "adjustments": [
+        {
+          "frame": -1,
+          "delta": -17,
+          "loaded": 0,
+          "reserve": 51
+        },
+        {
+          "frame": 180,
+          "delta": 17,
+          "loaded": 17,
+          "reserve": 51
+        }
+      ],
+      "configuration_path": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach.dbx",
+      "scenario": "remove_return_original",
+      "requested_rounds": 17,
+      "initial_reserve": 51
+    },
+    {
+      "asset": "MP443",
+      "mode": "bounded",
+      "first_delta": 0.0596221,
+      "manual_pulse": true,
+      "transitions": [
+        {
+          "frame": 0,
+          "state": 2,
+          "next": 2,
+          "loaded": 0,
+          "reserve": 51
+        },
+        {
+          "frame": 180,
+          "state": 11,
+          "next": 12,
+          "loaded": 0,
+          "reserve": 51
+        },
+        {
+          "frame": 292,
+          "state": 12,
+          "next": 1,
+          "loaded": 17,
+          "reserve": 34
+        },
+        {
+          "frame": 405,
+          "state": 2,
+          "next": 2,
+          "loaded": 17,
+          "reserve": 34
+        }
+      ],
+      "step_calls": 200,
+      "patches": 195,
+      "restores": 195,
+      "original_context_restored": true,
+      "observed_step_deltas": [
+        0.05962210148572922,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107
+      ],
+      "final_loaded": 17,
+      "final_reserve": 34,
+      "zero_input_steps": 0,
+      "initial_state": 2,
+      "initial_next": 2,
+      "initial_timer": 0.0,
+      "adjustments": [],
+      "configuration_path": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach.dbx",
+      "scenario": "explicit_stock_reload"
+    },
+    {
+      "asset": "MP443_sp",
+      "mode": "stock",
+      "first_delta": 0.016666666666666666,
+      "manual_pulse": false,
+      "transitions": [
+        {
+          "frame": 0,
+          "state": 11,
+          "next": 12,
+          "loaded": 0,
+          "reserve": 51
+        },
+        {
+          "frame": 112,
+          "state": 12,
+          "next": 1,
+          "loaded": 17,
+          "reserve": 34
+        },
+        {
+          "frame": 225,
+          "state": 2,
+          "next": 2,
+          "loaded": 17,
+          "reserve": 34
+        }
+      ],
+      "step_calls": 200,
+      "patches": 0,
+      "restores": 0,
+      "original_context_restored": true,
+      "observed_step_deltas": [
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.008332228288054466,
+        0.016664480790495872,
+        0.016664480790495872,
+        0.01666666753590107,
+        0.01666666753590107
+      ],
+      "final_loaded": 17,
+      "final_reserve": 34,
+      "zero_input_steps": 0,
+      "initial_state": 2,
+      "initial_next": 2,
+      "initial_timer": 0.0,
+      "adjustments": [],
+      "configuration_path": "Objects/Weapons/Handheld/RU_hg_MP443Grach/SP_hg_MP443Grach.dbx"
+    },
+    {
+      "asset": "MP443_sp",
+      "mode": "stock",
+      "first_delta": 0.0596221,
+      "manual_pulse": false,
+      "transitions": [
+        {
+          "frame": 0,
+          "state": 11,
+          "next": 12,
+          "loaded": 0,
+          "reserve": 51
+        },
+        {
+          "frame": 109,
+          "state": 12,
+          "next": 1,
+          "loaded": 17,
+          "reserve": 34
+        },
+        {
+          "frame": 222,
+          "state": 2,
+          "next": 2,
+          "loaded": 17,
+          "reserve": 34
+        }
+      ],
+      "step_calls": 203,
+      "patches": 0,
+      "restores": 0,
+      "original_context_restored": true,
+      "observed_step_deltas": [
+        0.05962210148572922,
+        0.05962210148572922,
+        0.05962210148572922,
+        0.0012876726686954498,
+        0.009619927033782005,
+        0.009619927033782005,
+        0.01666666753590107,
+        0.01666666753590107
+      ],
+      "final_loaded": 17,
+      "final_reserve": 34,
+      "zero_input_steps": 0,
+      "initial_state": 2,
+      "initial_next": 2,
+      "initial_timer": 0.0,
+      "adjustments": [],
+      "configuration_path": "Objects/Weapons/Handheld/RU_hg_MP443Grach/SP_hg_MP443Grach.dbx"
+    },
+    {
+      "asset": "MP443_sp",
+      "mode": "stock",
+      "first_delta": 0.1,
+      "manual_pulse": false,
+      "transitions": [
+        {
+          "frame": 0,
+          "state": 11,
+          "next": 12,
+          "loaded": 0,
+          "reserve": 51
+        },
+        {
+          "frame": 107,
+          "state": 12,
+          "next": 1,
+          "loaded": 17,
+          "reserve": 34
+        },
+        {
+          "frame": 220,
+          "state": 2,
+          "next": 2,
+          "loaded": 17,
+          "reserve": 34
+        }
+      ],
+      "step_calls": 205,
+      "patches": 0,
+      "restores": 0,
+      "original_context_restored": true,
+      "observed_step_deltas": [
+        0.10000000149011612,
+        0.10000000149011612,
+        0.10000000149011612,
+        0.008332347497344017,
+        0.016664599999785423,
+        0.016664599999785423,
+        0.01666666753590107,
+        0.01666666753590107
+      ],
+      "final_loaded": 17,
+      "final_reserve": 34,
+      "zero_input_steps": 0,
+      "initial_state": 2,
+      "initial_next": 2,
+      "initial_timer": 0.0,
+      "adjustments": [],
+      "configuration_path": "Objects/Weapons/Handheld/RU_hg_MP443Grach/SP_hg_MP443Grach.dbx"
+    },
+    {
+      "asset": "MP443_sp",
+      "mode": "bounded",
+      "first_delta": 0.016666666666666666,
+      "manual_pulse": false,
+      "transitions": [
+        {
+          "frame": 0,
+          "state": 2,
+          "next": 2,
+          "loaded": 0,
+          "reserve": 51
+        }
+      ],
+      "step_calls": 420,
+      "patches": 420,
+      "restores": 420,
+      "original_context_restored": true,
+      "observed_step_deltas": [
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107
+      ],
+      "final_loaded": 0,
+      "final_reserve": 51,
+      "zero_input_steps": 0,
+      "initial_state": 2,
+      "initial_next": 2,
+      "initial_timer": 0.0,
+      "adjustments": [],
+      "configuration_path": "Objects/Weapons/Handheld/RU_hg_MP443Grach/SP_hg_MP443Grach.dbx"
+    },
+    {
+      "asset": "MP443_sp",
+      "mode": "bounded",
+      "first_delta": 0.0596221,
+      "manual_pulse": false,
+      "transitions": [
+        {
+          "frame": 0,
+          "state": 2,
+          "next": 2,
+          "loaded": 0,
+          "reserve": 51
+        }
+      ],
+      "step_calls": 420,
+      "patches": 420,
+      "restores": 420,
+      "original_context_restored": true,
+      "observed_step_deltas": [
+        0.05962210148572922,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107
+      ],
+      "final_loaded": 0,
+      "final_reserve": 51,
+      "zero_input_steps": 0,
+      "initial_state": 2,
+      "initial_next": 2,
+      "initial_timer": 0.0,
+      "adjustments": [],
+      "configuration_path": "Objects/Weapons/Handheld/RU_hg_MP443Grach/SP_hg_MP443Grach.dbx"
+    },
+    {
+      "asset": "MP443_sp",
+      "mode": "bounded",
+      "first_delta": 0.1,
+      "manual_pulse": false,
+      "transitions": [
+        {
+          "frame": 0,
+          "state": 2,
+          "next": 2,
+          "loaded": 0,
+          "reserve": 51
+        }
+      ],
+      "step_calls": 420,
+      "patches": 420,
+      "restores": 420,
+      "original_context_restored": true,
+      "observed_step_deltas": [
+        0.10000000149011612,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107
+      ],
+      "final_loaded": 0,
+      "final_reserve": 51,
+      "zero_input_steps": 0,
+      "initial_state": 2,
+      "initial_next": 2,
+      "initial_timer": 0.0,
+      "adjustments": [],
+      "configuration_path": "Objects/Weapons/Handheld/RU_hg_MP443Grach/SP_hg_MP443Grach.dbx"
+    },
+    {
+      "asset": "MP443_sp",
+      "mode": "bounded",
+      "first_delta": 0.0596221,
+      "manual_pulse": false,
+      "transitions": [
+        {
+          "frame": 0,
+          "state": 2,
+          "next": 2,
+          "loaded": 0,
+          "reserve": 0
+        },
+        {
+          "frame": 180,
+          "state": 2,
+          "next": 2,
+          "loaded": 8,
+          "reserve": 0
+        }
+      ],
+      "step_calls": 420,
+      "patches": 420,
+      "restores": 420,
+      "original_context_restored": true,
+      "observed_step_deltas": [
+        0.05962210148572922,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107
+      ],
+      "final_loaded": 8,
+      "final_reserve": 0,
+      "zero_input_steps": 0,
+      "initial_state": 2,
+      "initial_next": 2,
+      "initial_timer": 0.0,
+      "adjustments": [
+        {
+          "frame": -1,
+          "delta": -8,
+          "loaded": 0,
+          "reserve": 0
+        },
+        {
+          "frame": 180,
+          "delta": 8,
+          "loaded": 8,
+          "reserve": 0
+        }
+      ],
+      "configuration_path": "Objects/Weapons/Handheld/RU_hg_MP443Grach/SP_hg_MP443Grach.dbx",
+      "scenario": "remove_return_original",
+      "requested_rounds": 8,
+      "initial_reserve": 0
+    },
+    {
+      "asset": "MP443_sp",
+      "mode": "bounded",
+      "first_delta": 0.0596221,
+      "manual_pulse": false,
+      "transitions": [
+        {
+          "frame": 0,
+          "state": 2,
+          "next": 2,
+          "loaded": 0,
+          "reserve": 51
+        },
+        {
+          "frame": 180,
+          "state": 2,
+          "next": 2,
+          "loaded": 8,
+          "reserve": 51
+        }
+      ],
+      "step_calls": 420,
+      "patches": 420,
+      "restores": 420,
+      "original_context_restored": true,
+      "observed_step_deltas": [
+        0.05962210148572922,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107
+      ],
+      "final_loaded": 8,
+      "final_reserve": 51,
+      "zero_input_steps": 0,
+      "initial_state": 2,
+      "initial_next": 2,
+      "initial_timer": 0.0,
+      "adjustments": [
+        {
+          "frame": -1,
+          "delta": -8,
+          "loaded": 0,
+          "reserve": 51
+        },
+        {
+          "frame": 180,
+          "delta": 8,
+          "loaded": 8,
+          "reserve": 51
+        }
+      ],
+      "configuration_path": "Objects/Weapons/Handheld/RU_hg_MP443Grach/SP_hg_MP443Grach.dbx",
+      "scenario": "remove_return_original",
+      "requested_rounds": 8,
+      "initial_reserve": 51
+    },
+    {
+      "asset": "MP443_sp",
+      "mode": "bounded",
+      "first_delta": 0.0596221,
+      "manual_pulse": false,
+      "transitions": [
+        {
+          "frame": 0,
+          "state": 2,
+          "next": 2,
+          "loaded": 0,
+          "reserve": 0
+        },
+        {
+          "frame": 180,
+          "state": 2,
+          "next": 2,
+          "loaded": 17,
+          "reserve": 0
+        }
+      ],
+      "step_calls": 420,
+      "patches": 420,
+      "restores": 420,
+      "original_context_restored": true,
+      "observed_step_deltas": [
+        0.05962210148572922,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107
+      ],
+      "final_loaded": 17,
+      "final_reserve": 0,
+      "zero_input_steps": 0,
+      "initial_state": 2,
+      "initial_next": 2,
+      "initial_timer": 0.0,
+      "adjustments": [
+        {
+          "frame": -1,
+          "delta": -17,
+          "loaded": 0,
+          "reserve": 0
+        },
+        {
+          "frame": 180,
+          "delta": 17,
+          "loaded": 17,
+          "reserve": 0
+        }
+      ],
+      "configuration_path": "Objects/Weapons/Handheld/RU_hg_MP443Grach/SP_hg_MP443Grach.dbx",
+      "scenario": "remove_return_original",
+      "requested_rounds": 17,
+      "initial_reserve": 0
+    },
+    {
+      "asset": "MP443_sp",
+      "mode": "bounded",
+      "first_delta": 0.0596221,
+      "manual_pulse": false,
+      "transitions": [
+        {
+          "frame": 0,
+          "state": 2,
+          "next": 2,
+          "loaded": 0,
+          "reserve": 51
+        },
+        {
+          "frame": 180,
+          "state": 2,
+          "next": 2,
+          "loaded": 17,
+          "reserve": 51
+        }
+      ],
+      "step_calls": 420,
+      "patches": 420,
+      "restores": 420,
+      "original_context_restored": true,
+      "observed_step_deltas": [
+        0.05962210148572922,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107
+      ],
+      "final_loaded": 17,
+      "final_reserve": 51,
+      "zero_input_steps": 0,
+      "initial_state": 2,
+      "initial_next": 2,
+      "initial_timer": 0.0,
+      "adjustments": [
+        {
+          "frame": -1,
+          "delta": -17,
+          "loaded": 0,
+          "reserve": 51
+        },
+        {
+          "frame": 180,
+          "delta": 17,
+          "loaded": 17,
+          "reserve": 51
+        }
+      ],
+      "configuration_path": "Objects/Weapons/Handheld/RU_hg_MP443Grach/SP_hg_MP443Grach.dbx",
+      "scenario": "remove_return_original",
+      "requested_rounds": 17,
+      "initial_reserve": 51
+    },
+    {
+      "asset": "MP443_sp",
+      "mode": "bounded",
+      "first_delta": 0.0596221,
+      "manual_pulse": true,
+      "transitions": [
+        {
+          "frame": 0,
+          "state": 2,
+          "next": 2,
+          "loaded": 0,
+          "reserve": 51
+        },
+        {
+          "frame": 180,
+          "state": 11,
+          "next": 12,
+          "loaded": 0,
+          "reserve": 51
+        },
+        {
+          "frame": 292,
+          "state": 12,
+          "next": 1,
+          "loaded": 17,
+          "reserve": 34
+        },
+        {
+          "frame": 405,
+          "state": 2,
+          "next": 2,
+          "loaded": 17,
+          "reserve": 34
+        }
+      ],
+      "step_calls": 200,
+      "patches": 195,
+      "restores": 195,
+      "original_context_restored": true,
+      "observed_step_deltas": [
+        0.05962210148572922,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107,
+        0.01666666753590107
+      ],
+      "final_loaded": 17,
+      "final_reserve": 34,
+      "zero_input_steps": 0,
+      "initial_state": 2,
+      "initial_next": 2,
+      "initial_timer": 0.0,
+      "adjustments": [],
+      "configuration_path": "Objects/Weapons/Handheld/RU_hg_MP443Grach/SP_hg_MP443Grach.dbx",
+      "scenario": "explicit_stock_reload"
+    }
+  ],
+  "game_process_opened": false,
+  "native_owner_or_scheduler_verified": false,
+  "effects_listener_boundary": "empty mock",
+  "chamber_knowledge_proved": false,
+  "actual_shot_verified": false,
+  "native_admitted": false,
+  "shot_negative_controls": [
+    {
+      "asset": "MP443",
+      "configuration": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach.dbx",
+      "before": {
+        "state": 6,
+        "previous": 5,
+        "next": 6,
+        "timer": 0.0,
+        "loaded": 1,
+        "reserve": 20
+      },
+      "after": {
+        "state": 6,
+        "previous": 5,
+        "next": 1,
+        "timer": 0.11666667461395264,
+        "loaded": 1,
+        "reserve": 20
+      },
+      "shot_receipt": false,
+      "chamber_knowledge": "Unknown",
+      "reason": "Empty native effect listeners cannot prove an actual shot or chamber transition"
+    },
+    {
+      "asset": "MP443",
+      "configuration": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach.dbx",
+      "before": {
+        "state": 6,
+        "previous": 5,
+        "next": 6,
+        "timer": 0.0,
+        "loaded": 17,
+        "reserve": 20
+      },
+      "after": {
+        "state": 6,
+        "previous": 5,
+        "next": 1,
+        "timer": 0.11666667461395264,
+        "loaded": 17,
+        "reserve": 20
+      },
+      "shot_receipt": false,
+      "chamber_knowledge": "Unknown",
+      "reason": "Empty native effect listeners cannot prove an actual shot or chamber transition"
+    },
+    {
+      "asset": "MP443_sp",
+      "configuration": "Objects/Weapons/Handheld/RU_hg_MP443Grach/SP_hg_MP443Grach.dbx",
+      "before": {
+        "state": 6,
+        "previous": 5,
+        "next": 6,
+        "timer": 0.0,
+        "loaded": 1,
+        "reserve": 20
+      },
+      "after": {
+        "state": 6,
+        "previous": 5,
+        "next": 1,
+        "timer": 0.11666667461395264,
+        "loaded": 1,
+        "reserve": 20
+      },
+      "shot_receipt": false,
+      "chamber_knowledge": "Unknown",
+      "reason": "Empty native effect listeners cannot prove an actual shot or chamber transition"
+    },
+    {
+      "asset": "MP443_sp",
+      "configuration": "Objects/Weapons/Handheld/RU_hg_MP443Grach/SP_hg_MP443Grach.dbx",
+      "before": {
+        "state": 6,
+        "previous": 5,
+        "next": 6,
+        "timer": 0.0,
+        "loaded": 17,
+        "reserve": 20
+      },
+      "after": {
+        "state": 6,
+        "previous": 5,
+        "next": 1,
+        "timer": 0.11666667461395264,
+        "loaded": 17,
+        "reserve": 20
+      },
+      "shot_receipt": false,
+      "chamber_knowledge": "Unknown",
+      "reason": "Empty native effect listeners cannot prove an actual shot or chamber transition"
+    }
+  ]
+}

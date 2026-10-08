@@ -13,13 +13,17 @@ class Format(unittest.TestCase):
     def test_reviewed_catalog_reproduces_compiled_header(self):
         root=TOOLS.parent;rows=json.loads((root/'config/body-ammo-assets.json').read_text())['profiles']
         self.assertEqual(assets.catalog_header(rows),(root/'src/games/bc2/Bc2BodyAmmoAssetProfiles.h').read_text())
-        self.assertEqual({r['asset'] for r in rows if not r.get('display_only')},{'XM8_sp_s','SPAS12_sp','AEK971_sp'})
-        self.assertEqual(sum(s['part_triangles'] for r in rows if not r.get('display_only') for s in r['sections']),1146)
+        self.assertEqual({r['asset'] for r in rows if not r.get('display_only')},{'XM8_sp_s','SPAS12_sp','AEK971_sp','XM8C','M416','MG36','XM8 LMG','SCAR_sp','SCAR_sp_s','F2000_sp'})
+        self.assertEqual(sum(s['part_triangles'] for r in rows if r['asset'] in {'XM8_sp_s','SPAS12_sp','AEK971_sp'} and not r.get('display_only') for s in r['sections']),1146)
         equipment=[r for r in rows if r.get('display_only')]
-        identities=[(r['asset'],r['archive'],r['mesh'],r['closed_clip']) for r in equipment]
+        identities=[(r['asset'],r['archive'],r['mesh'],r['closed_clip']) for r in equipment if not r.get('configuration_path')]
         self.assertEqual(set(identities),set(EQUIPMENT_SPECS))
         self.assertEqual(len(identities),len(set(identities)))
         self.assertTrue(all(r['closed_pose']=='static_authored_pose' for r in equipment))
+        exact=[r for r in equipment if r.get('configuration_path')]
+        self.assertEqual(len(exact),15)
+        self.assertEqual(len({r['configuration_path'] for r in exact}),15)
+        self.assertTrue(all(sorted(s['mesh'] for s in r['sources'])==r['configured_meshes'] for r in exact))
     def test_archive_escape_rejected_before_access(self):
         with self.assertRaises(ValueError):assets.archive(Path('G:/example/installation'),'../../outside.fbrb')
 if __name__=='__main__':unittest.main()

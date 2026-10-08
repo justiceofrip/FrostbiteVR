@@ -1,3 +1,5 @@
+> **Latest: checkpoint245 failed headset acceptance.** Start with [the receiving-agent handoff](docs/CHECKPOINT-245-HANDOFF.md). Source builds pass, but a SPAS interaction lock and subsequent checkpoint-reload crash remain open. This is a developer handoff, not a release.
+
 # FrostbiteVR
 
 An experimental, modular VR framework for Frostbite games, with **Battlefield:
@@ -22,21 +24,27 @@ not supported games.
 
 ## Where the project stands
 
-Local checkpoint **206** fixes a shared hand-grab failure with delayed renderer
-poses and adds a native interruption/recovery diagnostic. The rebuilt x86 and
-x64 compositions pass all 186 suites after the PC crash. The corrected binary's
-actual-game check remains pending. See [evidence and limits](docs/RELOAD-RECOVERY-206.md).
+Local checkpoint **227** passes all 212 suites on both x86 and x64. The private
+resource backend has completed actual BC2 simulated-hand magazine removal,
+original return, discard and chest replacement with conserved ammunition.
+Ordinary equipment activation and cross-family transitions are still being
+integrated; normal builds retain the earlier backend. See
+[native evidence and limits](docs/RESOURCE-PLAYER-223.md).
 
-Checkpoint **205** adds repeated reload diagnostics and 30 offline
-input-loss/recovery cases through persistent consumers, with mocked native and
-renderer boundaries. See [coverage and remaining live work](docs/RELOAD-RECOVERY-205.md).
+The shared tests now cover 12 additional exact configurations across M416,
+XM8 Compact, MG36 and XM8 LMG. Their native responses are mocked; these are
+not 12 headset-accepted guns. Physical pump Gameplay/render integration and
+measured M24/SV98 bolt-custody sequences are implemented, with native pump
+gesture testing and sniper binding still in progress. See the
+[current coverage](docs/WEAPON-COVERAGE-CURRENT.md).
 
-The latest actual-game acceptance, **204**, passes a combined shoulder-switch
-and chest-reload sequence through persistent normal consumers. All 186 C++ suites
-pass on each architecture; the strict native audit confirms conserved ammo, no
-reload cancellations or magazine visual fallbacks, and clean restoration. See
-[the evidence and limits](docs/COMBINED-INVENTORY-RELOAD-204.md). This local work
-does not automatically update the published fork snapshot.
+Checkpoint **211** passes a combined shoulder-switch, original-magazine return
+and chest-replacement sequence through persistent normal consumers, with
+conserved ammunition and no cancellations. See [the native result](docs/RELOAD-FRAME-HITCH-211.md).
+Full-magazine discard remains unresolved in the ordinary player interaction;
+the new native operations have bounded server/client convergence evidence but
+have not replaced that older interaction contract. This local development does
+not automatically update the published fork snapshot.
 
 Earlier headset tests demonstrated native stereo, tracked weapons and support
 hands, roomscale/recentering, controller menu interaction, chest ammunition,

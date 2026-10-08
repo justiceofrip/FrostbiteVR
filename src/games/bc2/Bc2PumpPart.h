@@ -1,6 +1,7 @@
 #pragma once
 #include "Bc2ReloadPresentation.h"
 #include "fvr/interaction/WeaponCycle.h"
+#include "fvr/interaction/PhysicalWeaponCycle.h"
 namespace fvr::bc2 {
 // Derived from 96 native SPAS poses in trace041114. This is a candidate part
 // measurement, not a runtime feature gate or a grab-point calibration.
@@ -31,4 +32,12 @@ std::optional<RigPosePlan> BuildSpasPumpPart(const RigSnapshot&,const Bc2PumpPar
     const interaction::HandInteractionSample&,const interaction::HandClaim& currentMechanism,
     const interaction::HandClaim& currentGun,const math::Matrix4& placedWeapon,
     float unitsPerMetre,float travelMetres);
+// Consumer-facing path: presentation must originate from the current shared
+// physical cycle, not an unrelated travel float. Native boundary/contact
+// calibration remains an explicit adapter prerequisite, disabled by default.
+std::optional<RigPosePlan> BuildSpasPumpCyclePart(const RigSnapshot&,const Bc2PumpPartBinding&,
+    const Bc2PumpPartSource&,const interaction::WeaponCycleProfile&,const interaction::PhysicalWeaponCycleTarget&,
+    const interaction::WeaponCycleLease& current,const interaction::HandInteractionSample&,
+    const interaction::HandClaim& currentMechanism,const interaction::HandClaim& currentGun,
+    const math::Matrix4& placedWeapon,float unitsPerMetre);
 }

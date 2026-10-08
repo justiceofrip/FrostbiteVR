@@ -88,6 +88,17 @@ struct AmmoSupplyRebaseline {
     std::int64_t observedNs=0,deadlineNs=0; // time old cycle was proved drained
     bool verifiedNativeCycleDrained=false;
 };
+// Durable completion of the original reservation after its hand/context ended.
+// The adapter must prove the exact native terminal outcome. This releases only
+// local custody; it supplies no current reserve and cannot create another item.
+struct AmmoSupplyTerminalReceipt {
+    AmmoSupplyReservation reservation{};
+    ManualReloadAck acknowledgement{};
+    std::uint64_t event=0;
+    std::int64_t completedNs=0;
+    std::uint32_t reserveBefore=0,reserveAfter=0;
+    bool nativeFinalVerified=false;
+};
 enum class AmmoSupplyReason:std::uint8_t {
     None,InvalidConfig,InvalidInput,StaleInput,InvalidSource,SourceChanged,
     TrackingLost,Released,NeedNeutral,OutsidePouch,ReserveExhausted,
@@ -130,6 +141,8 @@ public:
         const AmmoSupplyReceipt&)noexcept;
     AmmoSupplyResolution Rebaseline(const HandInteractionSample& currentSafety,HandInteraction&,
         const AmmoSupplyRebaseline&)noexcept;
+    AmmoSupplyResolution SettleTerminal(const HandInteractionSample&,HandInteraction&,
+        const AmmoSupplyTerminalReceipt&)noexcept;
     // Drops presentation; pending native work stays quarantined indefinitely.
     // Explicit confirmed receipt or verified post-drain baseline is required to
     // clear it. IDs are not reset.
@@ -154,7 +167,7 @@ private:
     std::array<std::optional<RetainedEvidence>,32> history_{};
     std::size_t historyNext_=0;
     std::uint64_t nextItem_=0,lastSeat_=0,lastRequest_=0,lastRetirement_=0;
-    std::int64_t lastNow_=0;
+    std::int64_t lastNow_=0,terminalCutoffNs_=0;
     bool seen_=false,armed_=false,blocked_=false,packetGripPressed_=false;
 };
 } // namespace fvr::interaction

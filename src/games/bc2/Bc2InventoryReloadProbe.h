@@ -7,10 +7,10 @@ namespace fvr::bc2 {
 // persistent inventory/hand/reload consumers. No native calls or fake receipts.
 class Bc2InventoryReloadProbe {
 public:
- explicit Bc2InventoryReloadProbe(bool interrupt=false)noexcept:interrupt_(interrupt){}
+ explicit Bc2InventoryReloadProbe(bool interrupt=false,bool inventoryOnly=false)noexcept:interrupt_(interrupt),inventoryOnly_(inventoryOnly){}
  enum class Phase:unsigned {Warmup,ReachInitial,DrawInitial,ClearInitial,ReachStow,Stow,ClearEmpty,
      ReachOther,DrawOther,ClearOther,ReachOtherStow,StowOther,ClearOtherEmpty,
-     ReachOriginal,DrawOriginal,ClearOriginal,Reload,Done,Failed,Recovery};
+     ReachOriginal,DrawOriginal,ClearOriginal,Reload,Done,Failed,Recovery,InitialHeld,OtherHeld};
  void Prepare(interaction::InputFrame&,const ReloadStateOwner&,std::string_view,
      std::shared_ptr<const BodyHolsterProbeSample>,const std::optional<BodyInventoryDisplay>&,
      const MagazineRawContact&,const MagazinePhysicalProbeState&,
@@ -20,6 +20,9 @@ public:
  bool CancelConsumer()const noexcept{return phase_==Phase::Failed;}
  bool Completed()const noexcept{return phase_==Phase::Done;}
  Phase State()const noexcept{return phase_;}
+ // Script progression only. No native command, receipt or consumer reset.
+ bool ResumeInitial(std::int64_t now)noexcept {if(!inventoryOnly_||phase_!=Phase::InitialHeld)return false;To(Phase::ReachStow,now);return true;}
+ bool ResumeOther(std::int64_t now)noexcept {if(!inventoryOnly_||phase_!=Phase::OtherHeld)return false;To(Phase::ReachOtherStow,now);return true;}
  void Report(std::ostream&)const;
 private:
  void To(Phase,std::int64_t)noexcept;
@@ -34,6 +37,7 @@ private:
  interaction::BodyAnchorConfig anchors_{};math::Pose command_{};float squeeze_=0;
  Bc2MagazinePhysicalProbe reload_{true,false,true,true,true};
  bool interrupt_=false,recoveryBegun_=false;Bc2ReloadInterruptionProbe recovery_;
+ bool inventoryOnly_=false;
  MagazinePackCounters packs_{};MagazineRawContact recoveryRaw_{};std::string interruptedReport_;
  struct Row {unsigned phase=0,reason=0,weapon=0,bodyPhase=0,slot=0;
   std::int64_t now=0;std::uint64_t input=0,request=0,claim=0,committed=0;};

@@ -1,0 +1,142 @@
+{
+  "schema": "fvr.bc2.magazine_descriptor_jobs",
+  "schema_version": 1,
+  "descriptors": [
+    {
+      "key": "bc2:magazine-descriptor:2d6471a03056b3b2e4e13f2a59baf212565aefa56dccc33895ee43c076b5abb0",
+      "identity": {
+        "assetName": "MP443",
+        "assetPath": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach.dbx",
+          "sha256": "e2057d4456fc5619b556c5db67716d5fd2f0c91eb07e7a27276811e8e670f412",
+          "guid": "a1617ba1-b5ef-4a8c-94d2-79cd1afd7b8a"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach_Firing.dbx",
+          "sha256": "f710972b07146ff6ded2783fc2a2b6ee37fadb5a839c6cccee8a0e0deee18cbf",
+          "guid": "1b728e67-aa8b-48cc-89c1-c36e73ba2b6f"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach_Firing.dbx",
+          "sha256": "f710972b07146ff6ded2783fc2a2b6ee37fadb5a839c6cccee8a0e0deee18cbf",
+          "guid": "be85abfb-65c7-4097-9e23-0881ea334fbb"
+        }
+      },
+      "configuration": {
+        "assetName": "MP443",
+        "assetPath": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 17,
+          "numberOfMagazines": 3,
+          "reloadDelay": 0.0,
+          "reloadTime": 3.75,
+          "reloadThreshold": 0.5,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false
+        },
+        "timing": [],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltSingleFire",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcSmg",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/sp_common/level-00.fbrb",
+          "index_sha256": "57835d6ace174f83eeb46ec8bbfe3acf8a3e7fde5cb8c8e49f084950e975a842"
+        }
+      ],
+      "same_reviewed_dispatch_shape": false,
+      "deferred_reasons": [
+        "unreviewed_dispatch_symbol:FireLogic.FireLogicType:fltSingleFire"
+      ],
+      "proposed_completion_deadline_ns": 4450000000,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "8912038301025442ebfe473decfba3dab63fa73a5c26ec75bbc27c042ba814f6"
+    },
+    {
+      "key": "bc2:magazine-descriptor:52bfa481c525136589096989304d8b22ec43cc3d684f36b42a97846a54cb5e4a",
+      "identity": {
+        "assetName": "MP443_sp",
+        "assetPath": "Objects/Weapons/Handheld/RU_hg_MP443Grach/SP_hg_MP443Grach",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/RU_hg_MP443Grach/SP_hg_MP443Grach.dbx",
+          "sha256": "e16f5713854ca38ab58d61bd3c568e2f87533c0e82032d71d61f27449d5484cc",
+          "guid": "58098858-821b-4406-a19c-ae62e5d38bdf"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach_Firing.dbx",
+          "sha256": "f710972b07146ff6ded2783fc2a2b6ee37fadb5a839c6cccee8a0e0deee18cbf",
+          "guid": "1b728e67-aa8b-48cc-89c1-c36e73ba2b6f"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach_Firing.dbx",
+          "sha256": "f710972b07146ff6ded2783fc2a2b6ee37fadb5a839c6cccee8a0e0deee18cbf",
+          "guid": "be85abfb-65c7-4097-9e23-0881ea334fbb"
+        }
+      },
+      "configuration": {
+        "assetName": "MP443_sp",
+        "assetPath": "Objects/Weapons/Handheld/RU_hg_MP443Grach/SP_hg_MP443Grach",
+        "values": {
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 17,
+          "numberOfMagazines": 3,
+          "reloadDelay": 0.0,
+          "reloadTime": 3.75,
+          "reloadThreshold": 0.5,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false
+        },
+        "timing": [],
+        "admission": "Candidate"
+      },
+      "authored_symbols": {
+        "FireLogic.FireLogicType": "fltSingleFire",
+        "FireLogic.ReloadType": "rtMagazine",
+        "FireLogic.FireInputAction": "EiaFire",
+        "FireLogic.ReloadInputAction": "EiaReload",
+        "FireLogic.ReloadLogic": "rlWeaponSwitchCancelsUnfinishedReload"
+      },
+      "source_class": "wcSmg",
+      "origins": [
+        {
+          "archive": "Dist/win32/levels/sp_common/level-00.fbrb",
+          "index_sha256": "57835d6ace174f83eeb46ec8bbfe3acf8a3e7fde5cb8c8e49f084950e975a842"
+        }
+      ],
+      "same_reviewed_dispatch_shape": false,
+      "deferred_reasons": [
+        "unreviewed_dispatch_symbol:FireLogic.FireLogicType:fltSingleFire"
+      ],
+      "proposed_completion_deadline_ns": 4450000000,
+      "completion_margin_ns": 700000000,
+      "cycle_admission": "Candidate",
+      "runtime_enabled": false,
+      "registry_change": false,
+      "descriptor_digest": "dadac7056f60266195f92be9d56fed1c433ce5fa6c61424c0a063b24eeca994b"
+    }
+  ],
+  "runtime_enabled": false,
+  "registry_change": false
+}

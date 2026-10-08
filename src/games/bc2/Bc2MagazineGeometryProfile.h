@@ -9,6 +9,11 @@ inline constexpr std::string_view Xm8MagazineAsset="XM8_sp_s";
 inline constexpr std::string_view Xm8MagazineMesh="Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Mesh";
 inline constexpr std::uint64_t Xm8MagazineRig=0xa7f219a1426216abull;
 
+inline constexpr unsigned MagazineAssemblyLimit=8;
+struct MagazineAssemblyMember {
+ std::string_view bone,parent;
+ math::Matrix4 itemFromBone; // Bone-local to root magazine-local, metres.
+};
 struct MagazineBoneRoles {
  std::string_view weapon,magazine,wrist;
  // Three authored joints for each of thumb/index/middle/ring/pinky, in order.
@@ -29,6 +34,10 @@ struct MagazineGeometryProfile {
  // Exact authored weapon configuration path, independent from display name.
  // Empty is retained only for the two immutable legacy builtin descriptors.
  std::string_view configurationPath;
+ // Optional complete rigid subtree, parent before child. Zero retains the
+ // existing leaf contract and the exact legacy pose/hide write sequence.
+ std::array<MagazineAssemblyMember,MagazineAssemblyLimit> assembly{};
+ unsigned assemblyCount=0;
 };
 const MagazineGeometryProfile& Xm8MagazineGeometry()noexcept;
 // Exact registered assets only; there is no category, prefix or rig-only fallback.

@@ -1,0 +1,102 @@
+{
+  "manifest_sha256": "c0ee6557e53f1ae53a7bd3ecfef8dd7d3dc71a7a8ea53292ca5a8be88f9564d9",
+  "python": {
+    "test_groups": 63,
+    "all_passed": true,
+    "preserved": [
+      {
+        "header": "resource-batch227/zero-bolt-batch/ZeroBoltGeometry.h",
+        "profiles": 12,
+        "text_identical": true,
+        "sha256": "17c019a405bc373b66ab804b237b2c4c814f507ba4bdce00f9f628754f1e7654"
+      },
+      {
+        "header": "resource-enrollment235-scar/ScarGeometry.h",
+        "profiles": 2,
+        "text_identical": true,
+        "sha256": "9a6bd64fefc9fa7d41b1ff812df1151d6b104d45391dd33e92e5271b82b1faaf"
+      },
+      {
+        "header": "resource-enrollment240-f2000/F2000Geometry.h",
+        "profiles": 1,
+        "text_identical": true,
+        "sha256": "05cb4eb5ff6b4fe0c0578bb929e9c91176108e83a8914b244196e3667be5ae09"
+      }
+    ],
+    "measured": [
+      {
+        "asset": "M9",
+        "configuration": {
+          "resource": "Objects/Weapons/Handheld/US_hg_M9Beretta/US_hg_M9Beretta.dbx",
+          "sha256": "5e671d40c30fa8d718c16e75fb22220e47e7b40325eba4be6a95cbfefcb29f91",
+          "instance_guid": "f4692ba9-a65b-420e-86e3-b34693fa384d",
+          "type": "GameSharedResources.SoldierWeaponData"
+        },
+        "profile_digest": "74ab9090f8d9930adba38dee8c126161e1a1c1f848835a957c85f1680e32cf81",
+        "path_digest": "5043b212fdc6d62c1cae8acb4cf5a55f25b3d18027be06bf93c44e4eaa0c9aad",
+        "points": 12,
+        "travel_m": 0.10323893846445792,
+        "last_source_time_s": 0.8,
+        "native_admitted": false
+      },
+      {
+        "asset": "MP443_sp",
+        "configuration": {
+          "resource": "Objects/Weapons/Handheld/RU_hg_MP443Grach/SP_hg_MP443Grach.dbx",
+          "sha256": "e16f5713854ca38ab58d61bd3c568e2f87533c0e82032d71d61f27449d5484cc",
+          "instance_guid": "58098858-821b-4406-a19c-ae62e5d38bdf",
+          "type": "GameSharedResources.SoldierWeaponData"
+        },
+        "profile_digest": "56e7616fafda35a6178962a60f25b06a0feb8c470986f097ed98a8c740c31521",
+        "path_digest": "cff51ec103f0b73f44df7d251875af352ba7cc9f853d04ab81001b3a9a4ead81",
+        "points": 12,
+        "travel_m": 0.10323820888207678,
+        "last_source_time_s": 0.8,
+        "native_admitted": false
+      }
+    ],
+    "exact_geometry_sha256": "418e0aaa795788095b7a6eaed7565f915b13ffbc58795da3d23fde2fbce12437",
+    "header_sha256": "b48c96afd1ade4268399dc6e6f8f392af8646e02add04df2d6c43eac26047d85"
+  },
+  "cpp": {
+    "x86": {
+      "ReloadSampledPath": {
+        "status": "PASS",
+        "log_sha256": "01c9ca0fd09d8dab70ab4b270603b9525a457255929b12d97379fea556049843"
+      },
+      "ReloadInsertion": {
+        "status": "PASS",
+        "log_sha256": "e4c51f0764de723bdf2fbbe0b48d7eb1e8b7c4778c0e3443204c6322763d9136"
+      },
+      "DetachableSampledPath": {
+        "status": "PASS",
+        "log_sha256": "1747f94d72ab72b088ead79e4e81d917e17b080f58bee4bcdcc67a32012a6838"
+      },
+      "DetachableMagazine": {
+        "status": "PASS",
+        "log_sha256": "d8594cdc272aa93a072590d2d97c845dd0e7a171776bb839b475d4682c558f1c"
+      }
+    },
+    "x64": {
+      "ReloadSampledPath": {
+        "status": "PASS",
+        "log_sha256": "01c9ca0fd09d8dab70ab4b270603b9525a457255929b12d97379fea556049843"
+      },
+      "ReloadInsertion": {
+        "status": "PASS",
+        "log_sha256": "e4c51f0764de723bdf2fbbe0b48d7eb1e8b7c4778c0e3443204c6322763d9136"
+      },
+      "DetachableSampledPath": {
+        "status": "PASS",
+        "log_sha256": "1747f94d72ab72b088ead79e4e81d917e17b080f58bee4bcdcc67a32012a6838"
+      },
+      "DetachableMagazine": {
+        "status": "PASS",
+        "log_sha256": "d8594cdc272aa93a072590d2d97c845dd0e7a171776bb839b475d4682c558f1c"
+      }
+    }
+  },
+  "native_operations": false,
+  "headset_verified": false,
+  "packaging_dependency_requires_root_composition": true
+}

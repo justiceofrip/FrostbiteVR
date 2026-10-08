@@ -1,0 +1,158 @@
+{
+  "schema": "fvr.bc2.exact-resource-visibility-body-enrollment.v1",
+  "family": "bc2.automatic-magazine-zero-bolt.v1",
+  "activation": "explicit compiled reviewed registry + geometry; ordinary resource backend switch",
+  "runtime_requirements": [
+    "exact coherent native config and selected-carried identity",
+    "current native operation binding and source-bound review",
+    "all required installed whole-weapon/attachment geometry",
+    "ordinary body custody and hand arbitration",
+    "independent native ammunition receipts"
+  ],
+  "native_constructor_permission": false,
+  "profiles": [
+    {
+      "key": "bc2:magazine-descriptor:b62512a8b03688d4d94af267154496ca57934e0d620e170c9cf2255bbd3dfc32",
+      "native_id": "a83a3c5288dee2d4",
+      "descriptor_digest": "a83a3c5288dee2d4f5c7d1ddc7033380f5e935cc15574d23f29e43a27a047a17",
+      "identity": {
+        "assetName": "F2000_sp",
+        "assetPath": "Objects/Weapons/Handheld/BU_rif_F2000/SP_rif_F2000",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/BU_rif_F2000/SP_rif_F2000.dbx",
+          "sha256": "62d1514ab5eb00161f763e67d73768d9ef8a2ee611027a2a41b6deacefa86925",
+          "guid": "46404a9e-9e38-43a7-831e-fb4b2f2692c6"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Firing.dbx",
+          "sha256": "84329145dc831e8eb2f28c48ff56e9fc3a17e6b41747361304c302f249b48971",
+          "guid": "a6cf1629-15ba-470c-b3c8-6175166ee976"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Firing.dbx",
+          "sha256": "84329145dc831e8eb2f28c48ff56e9fc3a17e6b41747361304c302f249b48971",
+          "guid": "82546e7b-fbf4-410c-a2d8-5f2b2a16d04d"
+        }
+      },
+      "configuration": {
+        "assetName": "F2000_sp",
+        "assetPath": "Objects/Weapons/Handheld/BU_rif_F2000/SP_rif_F2000",
+        "values": {
+          "fireLogicType": 2,
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 30,
+          "numberOfMagazines": 4,
+          "reloadDelay": 0.0,
+          "reloadTime": 3.0999999046325684,
+          "reloadThreshold": 0.75,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.0,
+          "boltTime": 0.0,
+          "holdBoltUntilFireRelease": false,
+          "holdBoltUntilZoomRelease": false
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1061158912,
+            "expected_bits": "3f400000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1078355558,
+            "expected_bits": "40466666",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 2,
+            "expected_bits": "00000002",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "source_class": "wcAssault",
+      "family": "bc2.automatic-magazine-zero-bolt.v1",
+      "configured_meshes": [
+        "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Mesh"
+      ],
+      "weighted_names": [
+        "jntWpnwpnJnt_16",
+        "jntWpn_12",
+        "jntWpn_13",
+        "jntWpn_17",
+        "jntWpn_3",
+        "jntWpn_2",
+        "jntWpn_1",
+        "jntWpn_7",
+        "jntWpn_6",
+        "jntWpn_5",
+        "jntWpn_4",
+        "jntWpn_8"
+      ],
+      "rig_fingerprint": "a7f219a1426216ab",
+      "magazine_part": "jntWpnwpnJnt_16",
+      "body_part": "body_holstered_254679ad4dcfefdd",
+      "body_anchor_evaluation": {
+        "RightHand": "static_authored_pose",
+        "jntWpn_Flash": "static_authored_pose"
+      },
+      "required_archives": [
+        "Dist/win32/async/weapon/ai_rgl_f2000-00.fbrb",
+        "Dist/win32/async/weapon/ai_rif_f2000-00.fbrb",
+        "Dist/win32/levels/sp_common/level-00.fbrb"
+      ],
+      "native_per_variant_tested": false,
+      "headset_tested": false
+    }
+  ],
+  "required_compiled_headers": {
+    "profiles/resource-enrollment240-f2000/CombinedRegistry.h": "b33397a3bc9a8df2a7ee59e2d3b4b227740e70586d33b91e3507b9bdfe0265f3",
+    "profiles/resource-enrollment240-f2000/F2000Registry.h": "ee53f501d2fca908a16d186cb191412c90790f4b9b3b309058079ee086e778cb",
+    "profiles/resource-enrollment240-f2000/CombinedGeometry.h": "cd35eb9c5294c21ebca954a68fc663120404b048855ff56329730158ddc34c14",
+    "profiles/resource-enrollment240-f2000/F2000Geometry.h": "05cb4eb5ff6b4fe0c0578bb929e9c91176108e83a8914b244196e3667be5ae09",
+    "profiles/resource-enrollment235-scar/ScarRegistry.h": "da30782bf99adc2908d737683df0e557dbb09c0780a693da33ca3c742f28eb06",
+    "profiles/resource-enrollment235-scar/ScarGeometry.h": "9a6bd64fefc9fa7d41b1ff812df1151d6b104d45391dd33e92e5271b82b1faaf",
+    "profiles/resource-enrollment233/ReviewedResourceRegistry.h": "49a9f9008bb72a821d1c8752aa9028ca007fa5473667169853c81c65180b4279",
+    "profiles/resource-batch227/zero-bolt-batch/BaselineGeometry.h": "52a571282e3e9bd2214f25ff5331d48e0a7f1543f278b0fa9e645e0914f03c98",
+    "profiles/resource-batch227/zero-bolt-batch/ZeroBoltGeometry.h": "17c019a405bc373b66ab804b237b2c4c814f507ba4bdce00f9f628754f1e7654",
+    "src/games/bc2/Bc2BodyAmmoAssetProfiles.h": "4b85b20eaf8c060083ebcfc078746918a8a56f1e8436aa21ea03ee532ed3b65f",
+    "src/games/bc2/Bc2BodyEquipmentProfiles.h": "ebaf5e92d3b9feb55f75aab83f4331df08729317e22cedf7d14831f42cc35adb",
+    "src/games/bc2/Bc2VisibilityDescriptorData.h": "1f548ad35de03d0e12315d8299f061b76f6eda9d96e9b19b4b37d2ebc274e880",
+    "src/games/bc2/Bc2MagazineAssembly.h": "7ef844c1a8c98c33aaa4ffd5eede2c5280f5e4e8e6630c5243bae65d4c75ba18"
+  },
+  "private_cache": {
+    "rows": 44,
+    "bytes": 16363677,
+    "maximum_bytes": 16777216,
+    "sha256": "ad189a784d1a637eef62e919a7346441aa2204e3203a87414536a44df0b8e735",
+    "preserved_baseline_sha256": "154d78ec7f9207ae8882139f56bfd7af5219efd4f166e6b3304e0b57e94a7e60",
+    "preserved_baseline_record_bytes": 16101693,
+    "assembly_bytes": 19572,
+    "body_bytes": 242400,
+    "private_installed_assets_only": true,
+    "native_calls": false
+  }
+}

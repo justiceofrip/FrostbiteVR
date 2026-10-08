@@ -1,0 +1,32 @@
+{
+  "schema": "fvr.bc2.same-family-scar-review.v1",
+  "family": "bc2.automatic-magazine-zero-bolt.v1",
+  "basis": "Two exact SP configs use existing AutomaticFire2/rtMagazine1 zero-bolt class. No new ABI or native backend. Measured rig/contact and full configured body/visibility joins remain independent data.",
+  "prior_family_review": {
+    "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\profiles\\resource-enrollment233\\review-evidence.json",
+    "sha256": "2eaea517e41aef193aee9b337aa02fb5ab283d665fd6fbeda00c147fe4755ca2"
+  },
+  "actual232_audit": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\resource-held234-audit-candidate\\actual232-exact-family-v3.json",
+    "sha256": "6e0f364223f64ac628e1937f59151a70d2e67f8b02e806b562b0617acfcb1986"
+  },
+  "installed_configuration": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\resource-sp235-candidate\\sp-common-configurations.json",
+    "sha256": "b7f8426148d3ba25a071f28f64450ae19130c523fb0cf561605be8c017259015"
+  },
+  "geometry": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\resource-sp235-candidate\\withdrawal-fix\\scar-geometry-projected.json",
+    "sha256": "ca1080f29251d1a03b6f7486ddf265ec31c5e40a9ef61e2ed8c1fca8d2c1c818"
+  },
+  "native_per_variant_tested": false,
+  "headset_tested": false,
+  "global232_observer_complete": false,
+  "contact": {
+    "source": "same authored frame complete wrist+magazine+15fingers",
+    "thresholds_unchanged": true,
+    "rigid_leaf": true,
+    "extraction_fix": "Initial withdrawal follows projected axial extent; measured direction resolves only existing receiver-near endpoint ties.",
+    "native_axis_verified": false
+  },
+  "runtime": "Explicit reviewed registry+geometry and ordinary resource backend; new source-bound operation capability receipt required after integration."
+}

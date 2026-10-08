@@ -1,4 +1,6 @@
 #include "Bc2MagazinePhysicalReload.h"
+#include "Bc2MagazineBodyAmmo.h"
+#include "Bc2MagazineResourceReload.h"
 #include <limits>
 namespace fvr::bc2 {
 namespace {
@@ -15,7 +17,26 @@ interaction::AmmoSupplyConfig Bc2MagazinePhysicalReload::DefaultPouch()noexcept 
  return {InteractionHand::Left,0x4243324d41474full,{0x4243324d504f55ull,1},{-.23f,-.55f,.02f},.18f,200000000};
 }
 Bc2MagazinePhysicalReload::Bc2MagazinePhysicalReload(bool enabled,MagazinePhysicalApi api,AmmoSupplyConfig pouch)noexcept
- :supply_(pouch),pouch_(pouch),api_(api),enabled_(enabled){}
+ :supply_(pouch),pouch_(pouch),api_(api),enabled_(enabled){
+ if(enabled&&api.resourceRead&&api.resourceSubmit)resource_=std::make_unique<Bc2MagazineResourceReload>(
+     MagazineResourceApi{api.context,api.resourceRead,api.resourceSubmit,api.resourceOutcome},pouch);
+ }
+Bc2MagazinePhysicalReload::~Bc2MagazinePhysicalReload()=default;
+MagazineResourceProbeState Bc2MagazinePhysicalReload::ResourceProbeState(std::int64_t now)const noexcept {
+ return resource_?resource_->ProbeState(now):MagazineResourceProbeState{};
+}
+bool Bc2MagazinePhysicalReload::BlocksEquipment()const noexcept{return resource_?resource_->BlocksEquipment():active_||blocksCurrent_;}
+void Bc2MagazinePhysicalReload::EnableBodyAmmo(bool enabled,interaction::SupplyAnchorFrame frame)noexcept {
+ bodyAmmoEnabled_=enabled;bodyAmmoFrame_=frame;if(resource_)resource_->EnableBodyAmmo(enabled,frame);
+}
+std::optional<interaction::AmmoSupplyVisualSample> Bc2MagazinePhysicalReload::BodyAmmoDisplay(
+ const MagazineTracking& tracking,const std::optional<interaction::HandClaim>& currentGun,std::int64_t now)const noexcept {
+ if(!enabled_||!bodyAmmoEnabled_||retiring_||startupUnknown_||supply_.Held()||supply_.Pending()||last_.removalClaim||
+    (active_?(tracking.cycle!=owners_.cycle):bool(tracking.cycle)))return {};
+ return BuildMagazineBodyAmmo(tracking,currentGun,
+  pouch_.alternateContact.value_or(AmmoSupplyContact{pouch_.pouchCenterMeters,pouch_.pouchRadiusMeters}),bodyAmmoFrame_,now,
+  active_&&lease_?&*lease_:nullptr);
+}
 ReloadKeepAliveResult Bc2MagazinePhysicalReload::Keep(const ReloadCycleControl& c,std::int64_t now)noexcept {
  const auto result=api_.keepObserved?api_.keepObserved(api_.context,c):
   api_.keep(api_.context,c)?ReloadKeepAliveResult::Accepted:ReloadKeepAliveResult::Rejected;
@@ -82,6 +103,7 @@ bool Bc2MagazinePhysicalReload::RollbackUnstarted(const HandInteractionSample& i
  return true;
 }
 void Bc2MagazinePhysicalReload::Cancel(const HandInteractionSample& in,HandInteraction& hands,MagazineCancelCause cause)noexcept {
+ if(resource_){resource_->Cancel(in,hands);return;}
  emittedPresentation_.reset();
  if(!enabled_||retiring_)return;
  if(startupUnknown_){pulseUntil_=0;blocksCurrent_=true;return;} // No global native cancellation before ownership is known.
@@ -93,6 +115,7 @@ void Bc2MagazinePhysicalReload::Cancel(const HandInteractionSample& in,HandInter
 }
 MagazinePhysicalResult Bc2MagazinePhysicalReload::Tick(const MagazinePhysicalSample& supplied,HandInteraction& hands,
  std::uint64_t& sharedIntent)noexcept {
+ if(resource_)return resource_->Tick(supplied,hands,sharedIntent);
  retainedPresentationThisTick_=false;
  auto out=TickImpl(supplied,hands,sharedIntent);
  if(!retainedPresentationThisTick_){
@@ -221,16 +244,7 @@ MagazinePhysicalResult Bc2MagazinePhysicalReload::TickImpl(const MagazinePhysica
  if(active_&&*map!=owners_)cancel(MagazineCancelCause::Mapping);
  if(active_&&*map==owners_)owners_.family=map->family; // Renew only freshly proven mapping, not native request evidence.
  const auto publishBodyAmmo=[&]{
-  if(!bodyAmmoEnabled_||retiring_||startupUnknown_||supply_.Held()||supply_.Pending()||last_.removalClaim||
-   (out.tracking.target&&out.tracking.target->handTarget)||reserve->loaded<0||reserve->loaded>reserve->capacity||reserve->reserve<=0)return;
-  if(active_){if(!lease_||!lease_->nativeBindingVerified||!lease_->allThreeHeld||lease_->identity!=reserve->identity||
-    lease_->cycle!=owners_.cycle||lease_->loaded!=reserve->loaded||lease_->reserve!=reserve->reserve||lease_->capacity!=reserve->capacity||
-    !Fresh(lease_->observedNs,lease_->deadlineNs,s.input.nowNs))return;}
-  else if(!reserve->reloadInputReady&&!reserve->allThreeIdle)return;
-  const auto source=MagazineBodySupply(*map,*reserve,s.trackingEpoch,s.input.nowNs);if(!source)return;
-  AmmoSupplyVisualSample v;v.enabled=true;v.source=*source;v.input=s.input;v.gun=*gun;
-  v.contact=pouch_.alternateContact.value_or(AmmoSupplyContact{pouch_.pouchCenterMeters,pouch_.pouchRadiusMeters});v.frame=bodyAmmoFrame_;
-  if(AmmoSupplyVisualFresh(v,Now(s.input.nowNs)))out.bodyAmmo=v;
+  out.bodyAmmo=BodyAmmoDisplay(out.tracking,gun,Now(s.input.nowNs));
  };
  // Retirement belongs to old identity; fresh source may be the new owner.
  if(!active_&&!retiring_){
@@ -447,19 +461,28 @@ MagazinePhysicalResult Bc2MagazinePhysicalReload::TickImpl(const MagazinePhysica
  if(last_.transaction.request){const auto& r=*last_.transaction.request;
   if(r.operation==ReloadOperation::UnseatMagazine){
    const auto identity=api_.identity(api_.context);
+   const auto startEvidence=[&](unsigned stage){
+    if(startAttemptCount_==startAttempts_.size()){++startAttemptDropped_;return;}
+    startAttempts_[startAttemptCount_++]={s.input.sequence,r.id,owners_.cycle,Now(s.input.nowNs),
+     s.input.observedNs,s.input.deadlineNs,stage,bool(identity),identity&&*identity==reserve->identity,reserve->loaded,reserve->reserve};
+   };
    if(active_){cancel();return out;}
    if(!identity||*identity!=reserve->identity||nextCycle_==std::numeric_limits<std::uint64_t>::max()){
     // No native Start was called, so this exact local pre-gate intent can be
     // abandoned without inventing retirement for an unregistered cycle.
+    startEvidence(!identity?1u:*identity!=reserve->identity?2u:3u);
     unseat_=r;RollbackUnstarted(s.input,hands);out.tracking.target.reset();out.reloadHeld=false;return out;}
    owners_=*map;owners_.cycle=++nextCycle_;originalMagazine_=last_.original;originalReserve_=*reserve;originalReceipt_.reset();drained_=false;retirement_.reset();unseat_=r;auto request=r;request.owner=MagazineNativeOwner(owners_);
    startOrigin_={s.actionFlagsKnown,s.gripPressed,s.ejectPressed,s.input.sequence,s.actionHeld,s.actionPressed};
    if(s.input.deadlineNs-s.input.observedNs<100000000ll){
+    startEvidence(4);
     unseat_=r;RollbackUnstarted(s.input,hands);out.tracking.target.reset();out.reloadHeld=false;return out;}
    const ReloadCycleControl control{owners_.native,owners_.cycle,s.input.sequence,s.input.observedNs,s.input.deadlineNs,true};
    const ReloadMagazineStartupPulse pulse{control,s.input.observedNs+100000000ll};
-   if(pulse.endNs<=Now(s.input.nowNs)){unseat_=r;RollbackUnstarted(s.input,hands);out.tracking.target.reset();out.reloadHeld=false;return out;}
+   if(pulse.endNs<=Now(s.input.nowNs)){startEvidence(5);unseat_=r;RollbackUnstarted(s.input,hands);out.tracking.target.reset();out.reloadHeld=false;return out;}
    startupPulse_=pulse;startupResult_=api_.start(api_.context,control,request,pulse);
+   startEvidence(startupResult_==MagazineCycleStartResult::Started?9u:
+    startupResult_==MagazineCycleStartResult::NotStarted?6u:startupResult_==MagazineCycleStartResult::RegisteredCancelled?7u:8u);
    if(startupResult_!=MagazineCycleStartResult::Started){
     out.tracking.target.reset();out.reloadHeld=false;
     if(startupResult_==MagazineCycleStartResult::NotStarted){
@@ -475,6 +498,10 @@ MagazinePhysicalResult Bc2MagazinePhysicalReload::TickImpl(const MagazinePhysica
    const auto request=reservation?MagazineSeatRequest(owners_,*lease_,*reservation,r,s.input.nowNs):std::nullopt;
    if(!request||!api_.submit(api_.context,*request)){cancel(MagazineCancelCause::SeatSubmission);return out;}
    submittedLease_=*lease_;++submitted_;
+   // Native acknowledgement may arrive several seconds later. The accepted
+   // physical seat has already moved the object into the gun; retain its ammo
+   // reservation, but release only the inserted magazine's exact hand token.
+   supply_.ReleaseSubmitted(s.input,hands,*reservation);
   }
  }
  if(last_.transaction.completed){Record(6,s.input);api_.cancel(api_.context);active_=false;retiring_=true;blocksCurrent_=true;pulseUntil_=0;}
@@ -486,6 +513,7 @@ MagazinePhysicalResult Bc2MagazinePhysicalReload::TickImpl(const MagazinePhysica
  publishBodyAmmo();return out;
 }
 void Bc2MagazinePhysicalReload::Report(std::ostream& o)const {
+ if(resource_){resource_->Report(o);return;}
  o<<"\"magazine_physical\":{\"active\":"<<active_<<",\"retiring\":"<<retiring_<<",\"drained\":"<<drained_<<",\"blocks_current\":"<<blocksCurrent_<<",\"cycle\":"<<owners_.cycle
   <<",\"phase\":"<<unsigned(last_.phase)<<",\"reason\":"<<unsigned(last_.reason)<<",\"transaction_reason\":"<<unsigned(last_.transaction.reason)<<",\"acquired\":"<<acquired_
   <<",\"started\":"<<started_<<",\"submitted\":"<<submitted_<<",\"completed\":"<<completed_
@@ -535,6 +563,12 @@ void Bc2MagazinePhysicalReload::Report(std::ostream& o)const {
     <<",\"observed_ns\":"<<l.observedNs<<",\"deadline_ns\":"<<l.deadlineNs<<'}';};
    lease("prior_lease",b.prior);lease("returned_lease",b.returned);lease("accepted_lease",b.accepted);o<<'}';}
   o<<'}';}
+ o<<"],\"start_attempt_dropped\":"<<startAttemptDropped_<<",\"start_attempt_stage_names\":[\"none\",\"identity_missing\",\"identity_mismatch\",\"cycle_exhausted\",\"input_lifetime_short\",\"pulse_expired\",\"native_not_started\",\"native_registered_cancelled\",\"native_unknown\",\"native_started\"],\"start_attempts\":[";
+ for(unsigned n=0;n<startAttemptCount_;++n){const auto& e=startAttempts_[n];if(n)o<<',';
+  o<<"{\"input\":"<<e.input<<",\"request\":"<<e.request<<",\"cycle\":"<<e.cycle<<",\"stage\":"<<e.stage
+   <<",\"now_ns\":"<<e.now<<",\"observed_ns\":"<<e.observed<<",\"deadline_ns\":"<<e.deadline
+   <<",\"identity_present\":"<<e.identityPresent<<",\"identity_matches\":"<<e.identityMatches
+   <<",\"loaded\":"<<e.loaded<<",\"reserve\":"<<e.reserve<<'}';}
  o<<"]}";
 }
 } // namespace fvr::bc2

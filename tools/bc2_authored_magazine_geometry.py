@@ -38,7 +38,7 @@ def bounds(points):
     if not points or not all(math.isfinite(x) for p in points for x in p):raise ValueError('Invalid part points')
     return [min(p[i] for p in points) for i in range(3)],[max(p[i] for p in points) for i in range(3)]
 
-def rigid_parts(mesh_data,lod,skeleton):
+def rigid_parts(mesh_data,lod,skeleton,strict_assembly_skin=False):
     """Decode already-validated skin triangles into canonical bone-local points."""
     known={bone_hash(n):n for n in skeleton.names}
     if len(known)!=len(skeleton.names):raise ValueError('Rig bone-name hash collision')
@@ -48,12 +48,13 @@ def rigid_parts(mesh_data,lod,skeleton):
     inverse={name:canonical(b['InverseWorldTransform']) for name,b in zip(skeleton.names,skeleton.bones)}
     parts={};mixed=collections.Counter()
     for s in sections:
-        vertices=[];owners=[];raw=[]
+        vertices=[];owners=[];raw=[];influences=[]
         for n in range(s['vertices']):
             at=start+s['vertex_offset']+n*s['stride'];half=s['stride'] in (16,48);posbytes=8 if half else 12
             p=struct.unpack_from('<3e' if half else '<3f',mesh_data,at)
             ids=mesh_data[at+posbytes:at+posbytes+4];weights=mesh_data[at+posbytes+4:at+posbytes+8]
             active=[k for k,w in enumerate(weights) if w]
+            influences.append({known[lod['palette'][s['palette'][ids[k]]]] for k in active} if strict_assembly_skin else set())
             owner=None
             if len(active)==1 and weights[active[0]]==255:
                 h=lod['palette'][s['palette'][ids[active[0]]]];owner=known.get(h)
@@ -65,7 +66,8 @@ def rigid_parts(mesh_data,lod,skeleton):
         for n in range(0,len(indices),3):
             tri=indices[n:n+3];names={owners[i] for i in tri}
             if len(names)!=1 or None in names:
-                for name in names:
+                affected=set().union(*(influences[i] for i in tri)) if strict_assembly_skin else names
+                for name in affected:
                     if name:mixed[name]+=1
                 continue
             name=next(iter(names));selected.setdefault(name,[]).extend(tri)
@@ -76,12 +78,14 @@ def rigid_parts(mesh_data,lod,skeleton):
                'vertex_skin_sha256':sha(b''.join(raw[i] for i in unique)),
                'indices_sha256':sha(struct.pack('<'+'H'*len(indices_for_part),*indices_for_part)),
                'bone_hash':f'{bone_hash(name):08x}'})
+    if strict_assembly_skin:
+        for name in mixed:parts.setdefault(name,{'points':[],'sections':[],'triangles':0})
     for name,p in parts.items():
-        p['mixed_triangles']=mixed[name];p['minimum'],p['maximum']=bounds(p['points'])
+        p['mixed_triangles']=mixed[name];p['minimum'],p['maximum']=bounds(p['points']) if p['points'] else ([0.,0.,0.],[0.,0.,0.])
         p['extent']=[b-a for a,b in zip(p['minimum'],p['maximum'])]
     return parts
 
-def role_candidates(parts,skeleton,closed,reload_clip,weapon='jntWpn_1'):
+def role_candidates(parts,skeleton,closed,reload_clip,weapon='jntWpn_1',assemblies=None):
     """Conservative geometric candidates, not semantic/native authority."""
     parents={n:skeleton.names[p] if p>=0 else None for n,p in zip(skeleton.names,skeleton.parents)}
     children=collections.Counter(v for v in parents.values() if v)
@@ -90,7 +94,7 @@ def role_candidates(parts,skeleton,closed,reload_clip,weapon='jntWpn_1'):
         reasons=[];extent=sorted(part['extent']);curves=reload_clip.tracks.get(name)
         displacement=0.
         if curves:displacement=norm([max(v[k] for v in curves[0].controls)-min(v[k] for v in curves[0].controls) for k in range(3)])
-        if parents.get(name)!=weapon or children[name]:reasons.append('not a rigid direct leaf of the weapon root')
+        if parents.get(name)!=weapon or (children[name] and name not in (assemblies or {})):reasons.append('not a rigid direct leaf of the weapon root')
         if part['mixed_triangles']:reasons.append('cross-part weighted triangles')
         if part['triangles']<24 or not (.015<=extent[0]<=.1 and .06<=extent[-1]<=.4 and extent[-1]>2*extent[0]):reasons.append('outside explicit box-magazine shape candidate bounds')
         if displacement<.04:reasons.append('no substantial authored reload-position control displacement')
@@ -98,6 +102,7 @@ def role_candidates(parts,skeleton,closed,reload_clip,weapon='jntWpn_1'):
         row={'bone':name,'parent':parents.get(name),'child_count':children[name],'bone_hash':f'{bone_hash(name):08x}',
              'extent_m':part['extent'],'triangles':part['triangles'],'reload_control_extent_m':displacement,
              'role':'geometric_detachable_magazine_candidate','native_role_verified':False}
+        if name in (assemblies or {}):row['rigid_assembly_digest']=assemblies[name]['assembly_digest']
         if reasons:row['reasons']=reasons;rejected.append(row)
         else:candidates.append(row)
     return candidates,rejected
@@ -161,7 +166,7 @@ def grasp_separation(a,b):
     trace=sum(a[r*4+c]*b[r*4+c] for r in range(3) for c in range(3))
     return distance,math.acos(max(-1.,min(1.,(trace-1.)/2)))
 
-def paired_reload_grasp(clip,skeleton,magazine,attached,part):
+def paired_reload_grasp(clip,skeleton,magazine,attached,part,diagnostics=None):
     """One authored frame's wrist/item/fingers; no mixed-pose transplant.
 
     Stable relative motion identifies an experimental contact frame. The full
@@ -191,6 +196,7 @@ def paired_reload_grasp(clip,skeleton,magazine,attached,part):
         samples.append({'time':t,'hand':hand,'fingers':fingers,'contact_distance':contact_distance,
                         'motion':grasp_separation(item,attached)[0],'item':item})
     width=round(PAIRED_GRASP['window_seconds']*PAIRED_GRASP['sample_hz']);windows=[];coupled=[]
+    if diagnostics is not None:diagnostics.update(bone=magazine,criteria=dict(PAIRED_GRASP),sample_count=len(samples),windows=[],runtime_admitted=False)
     for begin in range(len(samples)-width):
         group=samples[begin:begin+width+1];center=group[width//2]
         if group[-1]['time']-group[0]['time']<PAIRED_GRASP['window_seconds']-1e-8:continue
@@ -198,6 +204,12 @@ def paired_reload_grasp(clip,skeleton,magazine,attached,part):
         translation=max(e[0] for e in errors);angle=max(e[1] for e in errors)
         finger_angle=max(grasp_separation(s['fingers'][bone],center['fingers'][bone])[1] for s in group for bone in FINGERS)
         contact=max(s['contact_distance'] for s in group);motion=min(s['motion'] for s in group)
+        if diagnostics is not None:
+            travel=grasp_separation(group[0]['item'],group[-1]['item'])[0]
+            metrics={'wrist_translation_m':translation,'wrist_angle_rad':angle,'finger_angle_rad':finger_angle,'contact_distance_m':contact}
+            failed=[key for key,value in metrics.items() if value>=PAIRED_GRASP['max_'+key]]
+            if motion<=PAIRED_GRASP['min_item_motion_m'] and travel<=4*PAIRED_GRASP['max_wrist_translation_m']:failed.append('item_motion')
+            diagnostics['windows'].append(dict(begin_seconds=group[0]['time'],end_seconds=group[-1]['time'],metrics=metrics,minimum_item_motion_m=motion,co_motion_travel_m=travel,failed=failed))
         if (translation>=PAIRED_GRASP['max_wrist_translation_m'] or
             angle>=PAIRED_GRASP['max_wrist_angle_rad'] or finger_angle>=PAIRED_GRASP['max_finger_angle_rad'] or
             contact>=PAIRED_GRASP['max_contact_distance_m']):continue
@@ -212,6 +224,9 @@ def paired_reload_grasp(clip,skeleton,magazine,attached,part):
                 evidence['co_motion_travel_m']=travel;coupled.append(candidate)
     legacy=bool(windows)
     eligible=windows if legacy else coupled
+    if diagnostics is not None:
+        diagnostics['eligible_windows']=len(eligible)
+        diagnostics['failure_counts']=dict(collections.Counter(reason for w in diagnostics['windows'] for reason in w['failed']))
     if not eligible:raise ValueError('No stable authored magazine contact interval')
     best=min(eligible,key=lambda row:row[:3]);center=best[3]
     result={'item_from_hand':center['hand'],'wrist_from_fingers':center['fingers']}
@@ -227,11 +242,9 @@ def paired_reload_grasp(clip,skeleton,magazine,attached,part):
     return result
 
 
-def initial_withdrawal(samples,attached,part):
-    """Near-seat motion evidence, independent of widest mesh dimension."""
+def _initial_withdrawal_probe(samples,attached,maximum):
     baseline_distance,baseline_angle=grasp_separation(samples[0]['item'],attached)
     if baseline_distance>.01 or baseline_angle>PAIRED_GRASP['max_wrist_angle_rad']:raise ValueError('Authored reload baseline differs from closed part')
-    lo,hi=bounds(part['points']);maximum=min(PAIRED_GRASP['min_item_motion_m'],min(sub(hi,lo)))
     inverse=inverse_rigid(attached);probe=[]
     for sample in samples:
         distance,angle=grasp_separation(sample['item'],attached)
@@ -250,6 +263,53 @@ def initial_withdrawal(samples,attached,part):
             'maximum_probe_m':maximum,'native_trajectory_verified':False}
 
 
+def initial_withdrawal(samples,attached,part):
+    """Bound withdrawal along measured travel, not across magazine thickness.
+
+    Existing successful witnesses retain their exact data. Thin rigid parts may
+    need a larger axial probe; this must fit the measured projected part extent
+    and still end before the first100mm excursion. Direction, rotation, cadence,
+    travel and later independent receiver-near-end checks remain mandatory.
+    """
+    lo,hi=bounds(part['points']);extent=sub(hi,lo)
+    legacy_maximum=min(PAIRED_GRASP['min_item_motion_m'],min(extent))
+    try:return _initial_withdrawal_probe(samples,attached,legacy_maximum)
+    except ValueError as exc:
+        if str(exc) not in ('No bounded initial withdrawal witness','Insufficient initial withdrawal travel'):raise
+    candidate=_initial_withdrawal_probe(samples,attached,PAIRED_GRASP['min_item_motion_m'])
+    projected=sum(abs(axis)*size for axis,size in zip(candidate['outward_in_item'],extent))
+    maximum=min(PAIRED_GRASP['min_item_motion_m'],projected)
+    result=_initial_withdrawal_probe(samples,attached,maximum)
+    # Recompute projection for the final bounded witness; never retain a wider
+    # exploratory direction if shortening the probe changes its support extent.
+    actual=sum(abs(axis)*size for axis,size in zip(result['outward_in_item'],extent))
+    if any(p['distance_m']>actual+1e-9 for p in result['samples']):raise ValueError('Withdrawal exceeds projected rigid part extent')
+    result.update(maximum_probe_basis='projected_rigid_extent_along_measured_withdrawal',
+                  legacy_maximum_probe_m=legacy_maximum,projected_extent_m=actual)
+    return result
+
+
+def select_withdrawal_entry_end(ends,outward):
+    """Resolve only a receiver-near tie with independently measured direction."""
+    if len(ends)!=6 or {(e['axis'],e['sign']) for e in ends}!={(a,s) for a in range(3) for s in (-1,1)}:
+        raise ValueError('Complete unique principal endpoint evidence required')
+    if any(type(e['distance_to_body_m']) not in (int,float) or not math.isfinite(e['distance_to_body_m']) or e['distance_to_body_m']<0 for e in ends):
+        raise ValueError('Invalid receiver endpoint distances')
+    ordered=sorted(ends,key=lambda e:e['distance_to_body_m']);best=ordered[0];resolved_tie=False
+    if ordered[1]['distance_to_body_m']-best['distance_to_body_m']<.01:
+        # A rectangular magazine's side/end corners can be equally close to
+        # receiver geometry. Only the independently measured initial stroke
+        # chooses among those existing near endpoints; a farther axis cannot win.
+        aligned=[e for e in ordered if e['distance_to_body_m']-best['distance_to_body_m']<.01 and -outward[e['axis']]*e['sign']>=.95]
+        if len(aligned)!=1:raise ValueError('Receiver-near tie has no unique measured withdrawal axis')
+        best=aligned[0];opposite=next(e for e in ordered if e['axis']==best['axis'] and e['sign']==-best['sign'])
+        if opposite['distance_to_body_m']-best['distance_to_body_m']<.01:raise ValueError('Measured axis has no unique receiver-near end')
+        resolved_tie=True
+    agreement=-outward[best['axis']]*best['sign']
+    if agreement<.95:raise ValueError('Receiver end disagrees with authored withdrawal')
+    return best,agreement,resolved_tie
+
+
 def entry_axis_from_withdrawal(part,attached,body_points,probe):
     """Unique receiver-near end corroborated by actual authored withdrawal."""
     if not body_points:raise ValueError('Exact rigid weapon body geometry required')
@@ -260,12 +320,9 @@ def entry_axis_from_withdrawal(part,attached,body_points,probe):
             tip=[statistics.median(p[k] for p in band) for k in range(3)];tip[axis]=end
             distance=min(norm(sub(point(tip,attached),b)) for b in body_points)
             ends.append({'axis':axis,'sign':sign,'distance_to_body_m':distance,'tip_in_item':tip})
-    ends.sort(key=lambda e:e['distance_to_body_m']);best=ends[0]
-    if ends[1]['distance_to_body_m']-best['distance_to_body_m']<.01:raise ValueError('Receiver-near insertion end ambiguous across axes')
-    agreement=-outward[best['axis']]*best['sign']
-    if agreement<.95:raise ValueError('Receiver end disagrees with authored withdrawal')
+    ends.sort(key=lambda e:e['distance_to_body_m']);best,agreement,resolved_tie=select_withdrawal_entry_end(ends,outward)
     return {'axis':best['axis'],'inward_sign':best['sign'],'direction_agreement':agreement,'ends':ends,
-            'source':'unique_body_near_end_and_authored_initial_withdrawal','native_axis_verified':False}
+            'source':'receiver_near_tie_resolved_by_authored_withdrawal' if resolved_tie else 'unique_body_near_end_and_authored_initial_withdrawal','native_axis_verified':False}
 
 
 def apply_paired_reload_grasp(geometry,paired):
@@ -304,7 +361,7 @@ def contact_proposal(part,attached,body_points,closed,paired=None):
     if paired is not None:apply_paired_reload_grasp(proposal,paired)
     return proposal
 
-def select_paired_role(candidates,parts,closed,clip,skeleton):
+def select_paired_role(candidates,parts,closed,clip,skeleton,diagnostics=None):
     """Resolve geometric ambiguity only with unique complete same-frame contact.
 
     A bolt and a magazine can both satisfy size/motion bounds. No name or bone
@@ -316,7 +373,9 @@ def select_paired_role(candidates,parts,closed,clip,skeleton):
     qualified=[];rejected=[]
     for role in candidates:
         bone=role['bone']
-        try:paired=paired_reload_grasp(clip,skeleton,bone,closed['weapon_relative'][bone],parts[bone])
+        detail={} if diagnostics is not None else None
+        if detail is not None:diagnostics.append(detail)
+        try:paired=paired_reload_grasp(clip,skeleton,bone,closed['weapon_relative'][bone],parts[bone],detail)
         except (ValueError,KeyError) as exc:
             rejected.append({**role,'reasons':['no complete stable paired contact: '+str(exc)]});continue
         qualified.append((role,paired))
@@ -342,15 +401,24 @@ def mesh_weapon_matches(weapon,profile):
     return (weapon['native_name']==profile['native_asset_name'] and guid(weapon['instance_guid'])==guid(profile['weapon']['instance_guid']) and
             path_key(weapon['resource'])==path_key(profile['weapon']['resource']) and weapon['resource_sha256']==profile['weapon']['sha256'])
 
-def derive(game,bindings,mesh_bindings,assets,evidence_sink=None,paired_grasp_assets=(),mechanism_sink=None):
+def derive(game,bindings,mesh_bindings,assets,evidence_sink=None,paired_grasp_assets=(),mechanism_sink=None,rigid_assembly_assets=(),reviewed_contacts=()):
     if bindings.get('schema') not in ('fvr.bc2.authored_grip_bindings','fvr.bc2.authored_reload_reference_bindings') or bindings.get('schema_version')!=1:raise ValueError('Grip binding schema')
     if bindings['schema']=='fvr.bc2.authored_reload_reference_bindings' and set(paired_grasp_assets)!=set(assets):raise ValueError('Reload-only references require complete paired grasp extraction')
     if mesh_bindings.get('schema')!='fvr.bc2.authored_weapon_mesh_bindings':raise ValueError('Mesh binding schema')
     if not assets or len(assets)>128 or len(bindings['profiles'])>2048:raise ValueError('Asset selection bound')
     if not set(paired_grasp_assets)<=set(assets):raise ValueError('Paired grasp assets must be explicitly inspected')
-    output=[];gaps=[]
+    if not set(rigid_assembly_assets)<=set(paired_grasp_assets):raise ValueError('Rigid assembly requires explicitly paired contact assets')
+    from bc2_reviewed_magazine_contact import index_reviews,verify_context,select_reviewed_pair
+    reviews=index_reviews(reviewed_contacts,set(paired_grasp_assets))
+    if not set(reviews)<={p['weapon']['resource'] for p in bindings['profiles'] if p['native_asset_name'] in assets}:
+        raise ValueError('Reviewed contact exact configuration absent from selected bindings')
+    output=[];gaps=[];assembly_reports=[];reviewed_candidates=[]
     for profile in bindings['profiles']:
         if profile['native_asset_name'] not in assets:continue
+        assembly_report=None
+        if profile['native_asset_name'] in rigid_assembly_assets:
+            assembly_report={'asset':profile['native_asset_name'],'weapon':profile['weapon'],'state_index':profile['state_index'],'assemblies':[],'rejected_assemblies':[],'contacts':[],'runtime_admitted':False}
+            assembly_reports.append(assembly_report)
         try:
             if digest({k:v for k,v in profile.items() if k!='binding_digest'})!=profile['binding_digest']:raise ValueError('Grip binding digest mismatch')
             selected=[m for m in profile['meshes'] if m['configured_mesh_path']==profile['configured_mesh_path']]
@@ -405,18 +473,34 @@ def derive(game,bindings,mesh_bindings,assets,evidence_sink=None,paired_grasp_as
             if len(reload_assets)!=1:raise ValueError('Exact authored reload role missing/ambiguous')
             reload_name,reload_doc_hash,reload_guid,reload_document,reload_skeleton_ref=reload_assets[0]
             reload_raw=exact_resource(clip_archive,reload_name,'GrannyAnimation');reload_clip=Clip(reload_raw)
-            parts=rigid_parts(lod_data,metadata(mesh_raw)[0],skeleton)
+            parts=rigid_parts(lod_data,metadata(mesh_raw)[0],skeleton,assembly_report is not None)
             if mechanism_sink is not None:
                 mechanism_sink(profile,parts,closed,reload_clip,skeleton,{
                     'resource':reload_name,'sha256':reload_clip.sha256,'archive':clip_source['archive'],
                     'asset_document':reload_document,'asset_document_sha256':reload_doc_hash,'asset_guid':reload_guid,
                     'skeleton_reference':reload_skeleton_ref,'mesh_sha256':variant['mesh_sha256'],'lod_sha256':lods[0]['data_sha256'],
                     'skin_sections':geometry(lod_data,metadata(mesh_raw)[0],{bone_hash(n):n for n in skeleton.names})})
-            candidates,rejected=role_candidates(parts,skeleton,closed,reload_clip)
+            assemblies={}
+            if assembly_report is not None:
+                from bc2_magazine_assembly import derive_assembly
+                parts=dict(parts)
+                for bone in skeleton.names:
+                    if parents.get(bone)!='jntWpn_1' or bone not in parents.values():continue
+                    try:
+                        merged,assembly=derive_assembly(parts,skeleton,closed,reload_clip,bone)
+                        parts[bone]=merged;assemblies[bone]=assembly;assembly_report['assemblies'].append(assembly)
+                    except (ValueError,KeyError,TypeError) as exc:assembly_report['rejected_assemblies'].append({'bone':bone,'reason':str(exc)})
+            candidates,rejected=role_candidates(parts,skeleton,closed,reload_clip,assemblies=assemblies)
+            if assembly_report is not None:assembly_report.update(role_candidates=candidates,rejected_parts=rejected)
             if evidence_sink is not None:evidence_sink(profile,parts,closed,candidates)
             paired=None
-            if len(candidates)>1 and profile['native_asset_name'] in paired_grasp_assets:
-                role,paired,contact_rejections=select_paired_role(candidates,parts,closed,reload_clip,skeleton)
+            review=reviews.get(profile['weapon']['resource'])
+            if review is not None:
+                verify_context(review,profile,reload_clip,skeleton,reload_name,variant['mesh_sha256'],lods[0]['data_sha256'])
+                role,paired,contact_rejections=select_reviewed_pair(review,candidates,parts,closed,reload_clip,skeleton)
+                rejected.extend(contact_rejections)
+            elif len(candidates)>1 and profile['native_asset_name'] in paired_grasp_assets:
+                role,paired,contact_rejections=select_paired_role(candidates,parts,closed,reload_clip,skeleton,assembly_report['contacts'] if assembly_report is not None else None)
                 rejected.extend(contact_rejections)
             else:
                 if len(candidates)!=1:raise ValueError('Magazine geometric role candidate is not unique: '+','.join(c['bone'] for c in candidates))
@@ -424,8 +508,26 @@ def derive(game,bindings,mesh_bindings,assets,evidence_sink=None,paired_grasp_as
             bone=role['bone'];part=parts[bone]
             weapon_points=[point(p,closed['weapon_relative']['jntWpn_1']) for p in parts['jntWpn_1']['points']]
             if paired is None and profile['native_asset_name'] in paired_grasp_assets:
-                paired=paired_reload_grasp(reload_clip,skeleton,bone,closed['weapon_relative'][bone],part)
-            proposal=contact_proposal(part,closed['weapon_relative'][bone],weapon_points,closed,paired)
+                detail={} if assembly_report is not None else None
+                if detail is not None:assembly_report['contacts'].append(detail)
+                paired=paired_reload_grasp(reload_clip,skeleton,bone,closed['weapon_relative'][bone],part,detail)
+            contact=None
+            if review is not None:
+                contact=dict(schema='fvr.bc2.reviewed-contact-candidate.v1',native_asset_name=profile['native_asset_name'],weapon=dict(profile['weapon']),
+                    grip_binding_digest=profile['binding_digest'],configured_mesh_path=profile['configured_mesh_path'],
+                    mesh_sha256=variant['mesh_sha256'],lod_sha256=lods[0]['data_sha256'],skeleton_sha256=skeleton.sha256,rig_fingerprint=skeleton.fingerprint,
+                    static_clip_sha256=static.sha256,reload_clip=dict(resource=reload_name,sha256=reload_clip.sha256),role_evidence=role,
+                    bones=dict(weapon='jntWpn_1',magazine=bone,wrist='LeftHand',fingers=FINGERS),closed_item=closed['weapon_relative'][bone],pair=paired,
+                    rail_status='unresolved',runtime_admitted=False,native_role_verified=False)
+                if bone in assemblies:contact['assembly']=assemblies[bone]
+                reviewed_candidates.append(contact)
+            try:proposal=contact_proposal(part,closed['weapon_relative'][bone],weapon_points,closed,paired)
+            except (ValueError,KeyError,TypeError) as exc:
+                if contact is not None:
+                    contact['rail_failure']=str(exc);contact['candidate_digest']=digest(contact)
+                raise
+            if contact is not None:
+                contact['rail_status']='separately_derived_experimental_geometry';contact['candidate_digest']=digest(contact)
             row={'native_asset_name':profile['native_asset_name'],'configured_mesh_path':profile['configured_mesh_path'],
                  'weapon':dict(profile['weapon']),
                  'grip_binding_digest':profile['binding_digest'],'mesh_sha256':variant['mesh_sha256'],'lod_sha256':lods[0]['data_sha256'],
@@ -435,10 +537,17 @@ def derive(game,bindings,mesh_bindings,assets,evidence_sink=None,paired_grasp_as
                     'asset_archive':sk_source['archive'],'asset_archive_index_sha256':sk_archive.index_sha256,'skeleton_reference':reload_skeleton_ref},
                  'role_evidence':role,'rejected_parts':rejected,'bones':{'weapon':'jntWpn_1','magazine':bone,'wrist':'LeftHand','fingers':FINGERS},
                  'geometry':proposal,'runtime_admitted':False,'status':'experimental_geometry_ready_for_review'}
+            if bone in assemblies:row['assembly']=assemblies[bone]
             row['profile_digest']=digest(row);output.append(row)
-        except (ValueError,KeyError,TypeError) as exc:gaps.append({'native_asset_name':profile['native_asset_name'],'reason':str(exc)})
-    return {'schema':'fvr.bc2.authored_magazine_geometry','schema_version':1,'profiles':output,'gaps':gaps,
+            if assembly_report is not None:assembly_report['profile_digest']=row['profile_digest']
+        except (ValueError,KeyError,TypeError) as exc:
+            gaps.append({'native_asset_name':profile['native_asset_name'],'reason':str(exc)})
+            if assembly_report is not None:assembly_report['failure']=str(exc)
+    result={'schema':'fvr.bc2.authored_magazine_geometry','schema_version':1,'profiles':output,'gaps':gaps,
             'runtime_admission':False,'geometry_based_grasp_not_native_calibration':True}
+    if rigid_assembly_assets:result['assembly_reports']=assembly_reports
+    if reviews:result['reviewed_contact_candidates']=reviewed_candidates
+    return result
 
 def cpp_header(result,assets):
     if result.get('schema')!='fvr.bc2.authored_magazine_geometry' or result.get('schema_version')!=1:raise ValueError('Magazine geometry schema')
@@ -479,17 +588,24 @@ def cpp_header(result,assets):
         if p['bones']['fingers']!=FINGERS:raise ValueError('Exact authored finger topology required')
         if p['geometry']['design'].get('authored_reload_grasp'):
             paired=p['geometry']['design'].get('paired_reload_grasp',{})
-            if paired.get('selection_mode') not in (None,'stable_relative_co_motion'):raise ValueError('Unknown paired contact selection')
+            if paired.get('selection_mode') not in (None,'stable_relative_co_motion','reviewed_authored_frame'):raise ValueError('Unknown paired contact selection')
+            if paired.get('selection_mode')=='reviewed_authored_frame':
+                from bc2_reviewed_magazine_contact import validate_export
+                validate_export(p,paired)
             if paired.get('selection_mode')=='stable_relative_co_motion':
                 entry=p['geometry']['design'].get('entry_evidence',{})
                 probe=paired.get('entry_probe',{})
                 if (paired.get('co_motion_error_multiple')!=4 or paired['window'].get('co_motion_travel_m',0)<=4*PAIRED_GRASP['max_wrist_translation_m'] or
                     paired.get('criteria')!=PAIRED_GRASP or probe.get('source')!='same_exact_authored_reload_before_first100mm_excursion' or
                     probe.get('direction_method')!='first_to_last_probe_displacement' or not 2<=len(probe.get('samples',[]))<=601 or
-                    entry.get('source')!='unique_body_near_end_and_authored_initial_withdrawal' or entry.get('direction_agreement',0)<.95 or
+                    entry.get('source') not in ('unique_body_near_end_and_authored_initial_withdrawal','receiver_near_tie_resolved_by_authored_withdrawal') or entry.get('direction_agreement',0)<.95 or
                     entry.get('native_axis_verified') is not False or paired.get('entry_probe',{}).get('native_trajectory_verified') is not False):
                     raise ValueError('Incomplete co-motion contact/entry evidence')
                 direction=unit(sub(probe['samples'][-1]['position_in_closed_item'],probe['samples'][0]['position_in_closed_item']))
+                if entry.get('source')=='receiver_near_tie_resolved_by_authored_withdrawal':
+                    selected,agreement,resolved=select_withdrawal_entry_end(entry.get('ends',[]),direction)
+                    if not resolved or selected['axis']!=entry.get('axis') or selected['sign']!=entry.get('inward_sign') or abs(agreement-entry.get('direction_agreement',0))>1e-6:
+                        raise ValueError('Incomplete independently resolved receiver-near tie')
                 if (norm(sub(direction,probe['outward_in_item']))>1e-6 or entry.get('axis') not in (0,1,2) or entry.get('inward_sign') not in (-1,1) or
                     abs(entry['direction_agreement']+direction[entry['axis']]*entry['inward_sign'])>1e-6):
                     raise ValueError('Incoherent co-motion entry direction')
@@ -534,6 +650,12 @@ def cpp_header(result,assets):
                 '  g.bones={'+','.join(json.dumps(bones[k]) for k in ('weapon','magazine','wrist'))+',{'+','.join(json.dumps(f) for f in FINGERS)+'}};',
                 '  g.attachedItem='+transform(g['attached_item'])+';']
         for i,name in enumerate(FINGERS):lines.append(f'  g.wristFromFinger[{i}]='+transform(g['wrist_from_fingers'][name])+';')
+        if 'assembly' in p:
+            from bc2_magazine_assembly import validate_receipt
+            validate_receipt(p['assembly'],p)
+            lines.append(f"  g.assemblyCount={len(p['assembly']['members'])};")
+            for i,member in enumerate(p['assembly']['members']):
+                lines.append(f'  g.assembly[{i}]={{'+json.dumps(member['bone'])+','+json.dumps(member['parent'])+','+transform(member['item_from_bone'])+'};')
         lines+=[' }']
     lines+=[' return out;','}();','}'];return '\n'.join(lines)+'\n'
 
@@ -544,8 +666,12 @@ def main(argv=None):
     p.add_argument('--header',type=Path,help='Optional private experimental registry')
     p.add_argument('--header-asset',action='append',default=[],help='Explicit registry allowlist, independent of inspection assets')
     p.add_argument('--paired-reload-grasp',action='append',default=[],help='Explicit experimental same-frame authored carry pose asset; default keeps geometric estimate')
+    p.add_argument('--rigid-assembly',action='append',default=[],help='Explicit complete rigid child-subtree extraction; paired contact remains mandatory')
+    p.add_argument('--reviewed-contacts',type=Path,help='Explicit exact semantic root and complete authored frame annotations; never native admission')
     args=p.parse_args(argv);bindings,bh=read_json(args.grip_bindings);meshes,mh=read_json(args.mesh_bindings)
-    result=derive(args.game,bindings,meshes,set(args.asset),paired_grasp_assets=set(args.paired_reload_grasp));result['input_sha256']={'grip_bindings':bh,'mesh_bindings':mh}
+    reviews,rh=read_json(args.reviewed_contacts) if args.reviewed_contacts else ([],None)
+    result=derive(args.game,bindings,meshes,set(args.asset),paired_grasp_assets=set(args.paired_reload_grasp),rigid_assembly_assets=set(args.rigid_assembly),reviewed_contacts=reviews);result['input_sha256']={'grip_bindings':bh,'mesh_bindings':mh}
+    if rh is not None:result['input_sha256']['reviewed_contacts']=rh
     args.output.parent.mkdir(parents=True,exist_ok=True);args.output.write_text(json.dumps(result,indent=2,allow_nan=False)+'\n',encoding='utf-8')
     if args.header:
         data=cpp_header(result,set(args.header_asset));args.header.parent.mkdir(parents=True,exist_ok=True);args.header.write_text(data,encoding='utf-8')

@@ -66,7 +66,11 @@ int main(){
  const auto send=[&](float squeeze,bool busy=false,bool hardCancel=false){++recover.generation;recover.predictedNs+=11000000;recover.hands[0].squeeze=squeeze;return recovering.Update(live,recover,available,hardCancel,busy);};
  CHECK(!send(0,true).holding);CHECK(send(1).engaged);
  CHECK(send(0,true).released);CHECK(!recovering.Update(live,recover,available,false,true).holding);
- CHECK(!send(1,true).holding);CHECK(send(1).engaged); // Genuine neutral survives temporary owner.
+ CHECK(!send(1,true).holding);CHECK(!send(1).engaged); // Squeeze belongs to the magazine, not a queued support grab.
+ CHECK(!send(1).holding); // Native completion cannot turn that squeeze into support.
+ CHECK(!send(0).holding);CHECK(send(1).engaged); // Immediate explicit regrip still works.
+ CHECK(send(0,true).released);CHECK(!send(.5f,true).holding);CHECK(!send(1).holding);
+ CHECK(!send(0,true).holding);CHECK(send(1).engaged); // Neutral at handoff permits next squeeze.
  available.valid=false;CHECK(!send(0).holding);available.valid=true;CHECK(send(1).engaged);
  CHECK(send(0,false,true).released);CHECK(!send(1).holding); // Hard cancel cannot arm.
  CHECK(!send(0,true).holding);++recover.spaceGeneration;CHECK(!send(1).holding);

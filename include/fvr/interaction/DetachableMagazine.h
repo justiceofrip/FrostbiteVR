@@ -1,13 +1,34 @@
 #pragma once
 #include "fvr/interaction/AmmoSupply.h"
+#include "fvr/interaction/AmmunitionLedger.h"
 
 namespace fvr::interaction {
+enum class MagazineControlBackend:std::uint8_t {AnimationHold,AmmunitionResource};
 struct DetachableMagazineConfig {
     ReloadInsertionProfile insertion{};
     HandInteractionKey removalContact{};
     InteractionHand hand=InteractionHand::Left;
     float grabRadiusMeters=.09f,pullMeters=.06f,pullReleaseMeters=.15f,maxPullStepMeters=.05f;
     std::int64_t ackTimeoutNs=4000000000,transactionTimeoutNs=30000000000;
+    MagazineControlBackend backend=MagazineControlBackend::AnimationHold;
+};
+// Resource backend: fresh, adapter-verified counts plus the exact completed
+// ledger operation. No stock animation hold, animation timer or synthetic ack.
+struct MagazineResourceOwnerBinding {
+    HandInteractionOwner physical{};HandInteractionKey weapon{};
+    AmmoResourceContext native{};
+    std::int64_t observedNs=0,deadlineNs=0;
+    bool verified=false;
+};
+struct MagazineResourceObservation {
+    AmmunitionSnapshot snapshot{};
+    std::optional<RemovedMagazineResource> original;
+    std::optional<AmmunitionReceipt> receipt;
+    // Engines may use distinct hand/family and native inventory namespaces.
+    // Keep the receipt intact; an adapter proves the mapping separately.
+    std::optional<MagazineResourceOwnerBinding> ownerBinding;
+    bool settled=false,wellEmpty=false;
+    MagazineResourceState originalState=MagazineResourceState::None;
 };
 // Adapter evidence. Unseat Applied means that native reload is safely gated,
 // NOT that loaded rounds were removed from native inventory. Seat Applied must
@@ -19,6 +40,7 @@ struct MagazineNativeObservation {
     bool bindingsVerified=false,allThreeHeld=false,acknowledgementVerified=false;
     ManualReloadAck acknowledgement{};
 };
+static_assert(sizeof(MagazineNativeObservation)<=160,"Keep repeated animation diagnostics compact; resource receipts belong to the input sample.");
 // Immutable fact captured before this exact removal. The original magazine is
 // not replacement ammunition and is never admitted into the reserve provider.
 struct OriginalMagazine {
@@ -51,6 +73,9 @@ struct DetachableMagazineSample {
     // represented here: they cannot replenish reserve or become replacement ammo.
     std::optional<AmmoSupplyObject> replacement{};
     std::optional<OriginalMagazine> original{};
+    // Separate payload: the animation observer's bounded diagnostic history
+    // must not duplicate a full resource receipt in every legacy record.
+    std::optional<MagazineResourceObservation> resource;
 };
 enum class DetachableMagazinePhase:std::uint8_t {
     Attached,PreparingRemoval,Pulling,RemovedHeld,WellEmpty,ReplacementHeld,Guided,AwaitingSeat,Complete,Cancelled,AwaitingOriginalReturn
@@ -134,6 +159,15 @@ public:
     // native work. This only abandons local intent; it acknowledges nothing.
     bool RejectUnstarted(const HandInteractionSample&,HandInteraction&,const ManualReloadRequest&)noexcept;
     bool CompleteOriginalReturn(const HandInteractionSample&,HandInteraction&,const OriginalMagazineReturnReceipt&)noexcept;
+    // Actual return of the retained rounds; separate from animation retirement.
+    bool CompleteOriginalResourceReturn(const HandInteractionSample&,HandInteraction&,const AmmunitionReceipt&)noexcept;
+    // The exact refill already completed through Update. This resets gesture
+    // state only; it cannot finish an unacknowledged operation or mint ammo.
+    bool FinishResourceCycle()noexcept;
+    // Rebind gesture state to a settled inventory resource after tracking/equip
+    // loss. An empty well resumes with a seat-only plan; no fake unseat ack or
+    // ammunition write. A still-held original must be resolved by its owner.
+    bool RestoreResource(const DetachableMagazineSample&,HandInteraction&,std::optional<DetachableMagazineConfig> = {})noexcept;
 private:
     DetachableMagazineResult Snapshot()const noexcept;
     DetachableMagazineResult Reject(const HandInteractionSample&,HandInteraction&,DetachableMagazineReason)noexcept;
@@ -153,5 +187,7 @@ private:
     std::uint64_t lastGeometry_=0;
     std::int64_t observed_=0,deadline_=0,lastNow_=0,cancelledNs_=0;
     bool seen_=false,neutral_=false,ejectMode_=false,pulled_=false,gateAccepted_=false;
+    std::optional<AmmoResourceContext> resourceOwner_;
+    std::int64_t pendingRequestedNs_=0;
 };
 } // namespace fvr::interaction

@@ -37,7 +37,7 @@ std::optional<RigPosePlan> BuildSpasPumpPart(const RigSnapshot& rig,const Bc2Pum
         source.mechanism.kind!=HandClaimKind::Mechanism||source.mechanism.hand!=InteractionHand::Left||
         source.gun.kind!=HandClaimKind::GunHold||source.gun.hand!=InteractionHand::Right||
         source.mechanism.item!=source.lease.item||source.gun.item!=source.lease.item||source.mechanism.contact!=source.lease.mechanism||source.mechanism.prerequisiteClaim!=source.gun.id||
-        mechanism.token!=source.mechanism||gun.token!=source.gun||mechanism.inputSequence!=input.sequence||gun.inputSequence!=input.sequence||
+        mechanism.token!=source.mechanism||gun.token!=source.gun||mechanism.inputSequence<source.inputSequence||mechanism.inputSequence>input.sequence||gun.inputSequence!=input.sequence||
         mechanism.deadlineNs<=input.nowNs||gun.deadlineNs<=input.nowNs||mechanism.deadlineNs>input.deadlineNs||gun.deadlineNs>input.deadlineNs||
         !reload_insertion_detail::Rigid(source.closedPartFromWeapon)||!reload_insertion_detail::Rigid(weapon)||
         (source.rearDirection!=1&&source.rearDirection!=-1)||
@@ -49,5 +49,21 @@ std::optional<RigPosePlan> BuildSpasPumpPart(const RigSnapshot& rig,const Bc2Pum
     local.values[3][2]+=source.rearDirection*travel;for(unsigned k=0;k<3;++k)local.values[3][k]*=units;
     const std::array<BoneWrite,1> writes{{{binding.part,Multiply(local,weapon)}}};
     return BuildRigPosePlan(rig,writes);
+}
+std::optional<RigPosePlan> BuildSpasPumpCyclePart(const RigSnapshot& rig,const Bc2PumpPartBinding& binding,
+    const Bc2PumpPartSource& source,const WeaponCycleProfile& profile,const PhysicalWeaponCycleTarget& target,
+    const WeaponCycleLease& current,const HandInteractionSample& input,const HandClaim& mechanism,const HandClaim& gun,
+    const math::Matrix4& weapon,float units){
+    if(!weapon_cycle_detail::Profile(profile)||profile.family!=WeaponCycleFamily::Pump||
+       profile.id!=target.profile||profile.revision!=target.revision||
+       std::abs(profile.stroke-SpasObservedForeEndStroke)>1e-6f||profile.axis[0]!=0||profile.axis[1]!=0||profile.axis[2]!=source.rearDirection||
+       !CurrentPhysicalWeaponCycleTarget(target,current,input,mechanism,gun)||
+       source.lease!=target.lease||source.mechanism!=target.mechanism||source.gun!=target.gun||
+       source.inputSequence!=target.inputSequence||source.observedNs!=target.observedNs||source.deadlineNs!=target.deadlineNs||
+       target.travel>profile.stroke||std::abs(target.rotation)>profile.rotationTolerance)return {};
+    const auto expected=weapon_cycle_detail::Target(profile,target.travel,target.rotation);
+    for(unsigned row=0;row<4;++row)for(unsigned column=0;column<4;++column)
+        if(std::abs(expected.values[row][column]-target.contact.values[row][column])>1e-5f)return {};
+    return BuildSpasPumpPart(rig,binding,source,current,input,mechanism,gun,weapon,units,target.travel);
 }
 }

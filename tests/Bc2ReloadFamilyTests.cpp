@@ -67,7 +67,8 @@ int SessionIsolation(){
     CHECK(!ValidMagazineReloadSession(3,physical,999)&&!ValidMagazineReloadSession(3,physical,60001));
     CHECK(!ValidMagazineReloadSession(3,physical|0x400u,0));
     CHECK(ValidMagazineReloadSession(4,physical|0x200u,30000));CHECK(!ValidMagazineReloadSession(4,physical,15000));
-    for(auto bad:{0x400u,0x200000u,0x10000000u})CHECK(!ValidMagazineReloadSession(4,physical|bad,30000));
+    CHECK(ValidMagazineReloadSession(4,physical|0x10000000u,30000));
+    for(auto bad:{0x400u,0x200000u})CHECK(!ValidMagazineReloadSession(4,physical|bad,30000));
     for(auto mode:{3u,4u,5u,6u}){
         for(auto bad:{0x100u,0x8000u,0x20000u,0x40000u,0x400000u,0x800000u,0x1000000u,0x4000000u,0x8000000u,0x20000000u,0x40000000u,0x80000000u})
             CHECK(!ValidMagazineReloadSession(mode,physical|bad,30000));
@@ -76,7 +77,12 @@ int SessionIsolation(){
     }
     CHECK(ValidMagazineReloadSession(5,physical,30000)&&ValidMagazineReloadSession(5,physical|0x200u,30000));
     for(auto duration:{0u,15000u,29999u,30001u,60000u})CHECK(!ValidMagazineReloadSession(5,physical,duration));
-    for(auto bad:{0x400u,0x200000u,0x10000000u})CHECK(!ValidMagazineReloadSession(5,physical|bad,30000));
+    CHECK(ValidMagazineReloadSession(5,physical|0x10000000u,30000));
+    for(auto bad:{0x400u,0x200000u})CHECK(!ValidMagazineReloadSession(5,physical|bad,30000));
+    for(auto mode:{4u,5u}){
+        for(auto duration:{0u,29999u,30001u,60000u})CHECK(!ValidMagazineReloadSession(mode,physical|0x10000000u,duration));
+        for(auto bad:{0x400u,0x200000u,0x4000000u})CHECK(!ValidMagazineReloadSession(mode,physical|0x10000000u|bad,30000));
+    }
     CHECK(ValidMagazineReloadSession(6,physical,30000)&&ValidMagazineReloadSession(6,physical|0x200u,30000));
     for(auto duration:{0u,15000u,29999u,30001u,60000u})CHECK(!ValidMagazineReloadSession(6,physical,duration));
     for(auto bad:{0x400u,0x200000u,0x10000000u})CHECK(!ValidMagazineReloadSession(6,physical|bad,30000));

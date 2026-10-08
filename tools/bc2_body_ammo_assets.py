@@ -102,7 +102,12 @@ def main(argv=None):
     parser.add_argument('--derive-catalog',type=Path,help='Developer-only metadata derivation output')
     parser.add_argument('--header',type=Path,help='Developer-only generated metadata header')
     parser.add_argument('--body-equipment',action='store_true',help='Include reviewed closed weapons for back display')
-    args=parser.parse_args(argv);rows,payload=derive_all(args.game,args.body_equipment)
+    args=parser.parse_args(argv)
+    reviewed=json.loads(args.catalog.read_text())['profiles'] if args.catalog else None
+    if args.body_equipment and reviewed and any(r.get('configuration_path') for r in reviewed):
+        from bc2_configured_body_assets import derive_catalog
+        rows,payload=derive_catalog(args.game,reviewed)
+    else:rows,payload=derive_all(args.game,args.body_equipment)
     if args.catalog and json.loads(args.catalog.read_text())['profiles']!=rows:raise ValueError('Installed profile data differs from reviewed catalog')
     if not args.catalog and not args.derive_catalog:raise ValueError('Require reviewed catalog or explicit developer derivation')
     args.output.parent.mkdir(parents=True,exist_ok=True);args.output.write_bytes(payload)

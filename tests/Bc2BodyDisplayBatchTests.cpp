@@ -10,6 +10,11 @@ int main(int argc,char** argv){CHECK(argc<=2);if(PersistentRegressionMain())retu
   auto c=std::make_shared<CarriedMeshesSnapshot>(*Mesh(*d,i));
   strcpy_s(c->configured.weaponName.data(),128,profile.asset);
   strcpy_s(c->configured.states[0].meshes[0].assetPath.data(),512,profile.mesh);
+  if(profile.configurationPath){auto& s=c->configured;s.configurationPathVerified=true;
+   strcpy_s(s.configurationPath.data(),512,profile.configurationPath);s.stateTypeInfo=0x160000;s.meshTypeInfo=0x170000;
+   s.states[0].count=std::uint8_t(profile.configuredMeshes.size());s.states[0].meshes={};
+   for(unsigned n=0;n<s.states[0].count;++n){auto& m=s.states[0].meshes[n];m.address=0x90000+n*0x100;m.namePointer=0xb0000+n*0x100;
+    m.typeInfo=s.meshTypeInfo;std::copy(profile.configuredMeshes[n].begin(),profile.configuredMeshes[n].end(),m.assetPath.begin());}}
   std::array<std::shared_ptr<const CarriedMeshesSnapshot>,8> configs{};configs[i]=c;
   auto b=BuildBodyCarriedBatch(std::make_shared<const BodyInventoryDisplay>(*d),configs,r.s.input,Identity(),{},r.s.hand.nowNs);
   CHECK(b&&b->count==1);CHECK(b->instances[0].geometry==MakeBodyAmmoGeometryKey(profile.asset,profile.mesh,profile.part,profile.rig));

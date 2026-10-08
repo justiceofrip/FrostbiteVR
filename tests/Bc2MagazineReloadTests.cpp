@@ -81,6 +81,27 @@ struct Simulation {
     bool Settle(){for(auto& b:input.branches){b.currentState=b.nextState=2;b.phaseTimer=0;}
         if(!Tick())return false;const auto d=Begin(0);return !d.tracked&&policy.Phase()==ReloadRequestCyclePhase::Finished;}
 };
+int CurrentHoldSurvivesBoundedFrameHitch(){
+    for(float delta:{.0596221f,.1f}){
+        Simulation s;CHECK(s.Arm());const auto loaded=s.input.branches[0].loaded;
+        CHECK(s.Tick(60000000));s.input.context.deltaSeconds=delta;
+        CHECK(s.HoldAll());
+        // The first cohort finishes after its publication. It must not borrow
+        // the pre-hitch receipts; publish again only after every branch held.
+        const auto waiting=s.policy.ObserveLease(s.input.identity,s.control.cycle,s.input.nowNs);
+        CHECK(waiting.result==ReloadMagazineObservationResult::Deferred&&!waiting.lease);
+        CHECK(s.HoldAll());const auto lease=s.Lease();
+        CHECK(lease&&lease->allThreeHeld&&lease->loaded==loaded);
+        CHECK(s.policy.Phase()==ReloadRequestCyclePhase::Holding);
+    }
+    for(float delta:{.100001f,0.f,-.01f,std::numeric_limits<float>::infinity(),std::numeric_limits<float>::quiet_NaN()}){
+        Simulation s;CHECK(s.Arm()&&s.Tick());s.input.context.deltaSeconds=delta;
+        CHECK(!s.Begin(0).hold&&s.policy.Failure()==ReloadRequestCycleFailure::Timing);
+    }
+    Simulation expired;CHECK(expired.Arm());expired.input.context.deltaSeconds=.0596221f;
+    CHECK(!expired.Tick(100000000)&&expired.policy.Failure()==ReloadRequestCycleFailure::Control);
+    return 0;
+}
 int HeldAndNativeCompletion(){
     static_assert(!Bc2MagazineReloadCycle::DefaultRuntimeDispatchEnabled);
     Simulation f;CHECK(f.Arm());const auto lease=f.Lease();CHECK(lease&&lease->allThreeHeld);
@@ -283,6 +304,6 @@ int ImmutableStartupPulseGate(){
  CHECK(!fire.Begin(0).hold&&fire.policy.Failure()==ReloadRequestCycleFailure::Timing);
  return 0;
 }
-int main(){if(EstablishedPulseRequiresGenuineContext()||ImmutableStartupPulseGate())return 1;if(HoldingMissingPositiveReceiptIsDeferred())return 1;if(TypedMagazineCycleObservation())return 1;if(HeldAndNativeCompletion()||ResourceCounts()||EvidenceFailures()||IdentityAndGates()||TimingReads()||NativeDispatchAndAbortScope())return 1;
+int main(){if(CurrentHoldSurvivesBoundedFrameHitch())return 1;if(EstablishedPulseRequiresGenuineContext()||ImmutableStartupPulseGate())return 1;if(HoldingMissingPositiveReceiptIsDeferred())return 1;if(TypedMagazineCycleObservation())return 1;if(HeldAndNativeCompletion()||ResourceCounts()||EvidenceFailures()||IdentityAndGates()||TimingReads()||NativeDispatchAndAbortScope())return 1;
     std::puts("Magazine cycle: ten deterministic groups passed; existing launch paths remain disabled");return 0;}
 

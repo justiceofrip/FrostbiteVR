@@ -43,7 +43,13 @@ int RecordWindow(){ReloadRecordWindow normal;CHECK(!normal.OpenDeferred(1));norm
  ReloadRecordWindow recovery;CHECK(recovery.Defer(true)&&!recovery.Defer());recovery.Start(1000);
  CHECK(recovery.DurationNs()==40000000000ll&&recovery.OpenDeferred(5000000000ll));
  CHECK(recovery.Contains(25000000000ll)&&!recovery.Contains(45000000000ll));
- CHECK(recovery.OpenDeferred(44000000000ll)&&recovery.StartNs()==5000000000ll&&!recovery.Defer(true));return 0;}
+ CHECK(recovery.OpenDeferred(44000000000ll)&&recovery.StartNs()==5000000000ll&&!recovery.Defer(true));
+ ReloadRecordWindow combo;CHECK(!combo.CombinedPump());CHECK(combo.Defer(true)&&combo.CombinedPump());
+ CHECK(combo.DurationNs()==60000000000ll&&!combo.CombinedPump()&&!combo.Pump(8));
+ combo.Start(1000);CHECK(!combo.CombinedPump()&&!combo.Contains(9000));CHECK(combo.OpenDeferred(5000000000ll));
+ CHECK(combo.Contains(64000000000ll)&&!combo.Contains(65000000000ll));
+ CHECK(combo.OpenDeferred(64000000000ll)&&combo.StartNs()==5000000000ll&&!combo.CombinedPump());
+ ReloadRecordWindow shortDeferred;CHECK(shortDeferred.Defer()&&!shortDeferred.CombinedPump());return 0;}
 int MissingNativeAcknowledgement(){Driver d;d.Start();CHECK(d.probe.State()==Bc2InventoryReloadProbe::Phase::ReachStow);
  for(unsigned n=0;n<700&&!d.probe.CancelConsumer();++n)d.Tick();
  CHECK(d.probe.CancelConsumer()&&!d.probe.Completed());std::ostringstream o;d.probe.Report(o);

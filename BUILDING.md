@@ -1,3 +1,7 @@
+# Latest checkpoint245
+
+The current script uses profiles/checkpoint245. See [checkpoint245 handoff](docs/CHECKPOINT-245-HANDOFF.md) for commands and known failures. Use -OrdinaryManualCycles only to reproduce the experimental pump/bolt player composition. This build failed headset acceptance. The older configuration description below is historical.
+
 # Building the developer snapshot
 
 Use 64-bit Windows, PowerShell 7, Visual Studio C++ tools with x86/x64 support and

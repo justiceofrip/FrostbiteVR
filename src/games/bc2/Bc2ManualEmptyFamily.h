@@ -12,7 +12,7 @@ inline bool ManualEmptyFamilyConfig(ReloadNativeFamily family,NativeMagazineProf
     if(family==ReloadNativeFamily::SpasTube)return MatchesReloadDescriptor(config,SpasReloadDescriptor);
     if(family!=ReloadNativeFamily::Xm8Magazine)return false;
     const auto* profile=ResolveMagazineNativeProfile(id);
-    return profile&&profile->Matches(config)&&config.fireLogicType==2&&config.reloadType==1;
+    return profile&&profile->Matches(config)&&profile->ReviewedDispatch();
 }
 inline bool ReadManualEmptyFamilyTiming(const ReloadStateMemory& memory,ReloadNativeFamily family,
     NativeMagazineProfileId id,const ReloadObservedConfig& config)noexcept {

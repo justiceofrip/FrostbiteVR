@@ -114,15 +114,24 @@ def derive_equipment(game,specs=SPECS,strict_anchors=False):
     return rows,bytes(payload)
 
 def equipment_header(rows):
-    lines=['#pragma once','#include "fvr/math/StereoMath.h"','#include <array>','#include <cstdint>',
+    # Exact complete configurations supersede legacy asset/base-mesh display
+    # rows. Legacy cache records remain available for older compatible clients.
+    exact={(r['asset'],r['mesh']) for r in rows if r.get('configuration_path')}
+    rows=[r for r in rows if r.get('configuration_path') or (r['asset'],r['mesh']) not in exact]
+    lines=['#pragma once','#include "fvr/math/StereoMath.h"','#include <array>','#include <cstdint>','#include <span>','#include <string_view>',
         'namespace fvr::bc2 {',
         '// Render-only installed closed-pose identities, never gameplay capability.',
-        'struct BodyEquipmentProfile {const char* asset;const char* mesh;const char* part;std::uint64_t rig;math::Matrix4 modelToAnchor;};',
-        f'inline constexpr std::array<BodyEquipmentProfile,{len(rows)}> BodyEquipmentProfiles'+'{{']
+        'struct BodyEquipmentProfile {const char* asset;const char* mesh;const char* part;std::uint64_t rig;math::Matrix4 modelToAnchor;const char* configurationPath=nullptr;std::span<const std::string_view> configuredMeshes{};};',
+        ]
+    for n,row in enumerate(rows):
+        if row.get('configuration_path'):
+            values=','.join(json.dumps(x) for x in row['configured_meshes'])
+            lines.append(f'inline constexpr std::array<std::string_view,{len(row["configured_meshes"])}> BodyEquipmentMeshes{n}{{{values}}};')
+    lines.append(f'inline constexpr std::array<BodyEquipmentProfile,{len(rows)}> BodyEquipmentProfiles'+'{{')
     def number(x):
         value=format(x,'.9g');return value+('f' if any(c in value for c in '.eE') else '.f')
-    for row in rows:
+    for n,row in enumerate(rows):
         matrix='{{{'+','.join('{'+','.join(number(x) for x in row['holster_from_weapon'][r*4:r*4+4])+'}' for r in range(4))+'}}}'
-        lines.append('{'+','.join(json.dumps(row[k]) for k in ('asset','mesh','part'))+',0x'+f"{row['rig_fingerprint']:016x}"+'ull,'+matrix+'},')
+        lines.append('{'+','.join(json.dumps(row[k]) for k in ('asset','mesh','part'))+',0x'+f"{row['rig_fingerprint']:016x}"+'ull,'+matrix+(','+json.dumps(row['configuration_path'])+',BodyEquipmentMeshes'+str(n) if row.get('configuration_path') else '')+'},')
     return '\n'.join(lines+['}};','}'])+'\n'
 

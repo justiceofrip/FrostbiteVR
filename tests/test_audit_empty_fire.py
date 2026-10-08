@@ -75,6 +75,22 @@ class AuditTests(unittest.TestCase):
         d = fixture(); d["gameplay"]["empty_fire_probe"]["consumed"] = 7
         self.assertIn("full_depletion_not_verified", audit.audit(d)["reasons"])
 
+    def test_hitch_policy_is_explicit_and_does_not_renew_evidence(self):
+        d = fixture()
+        rows = d["gameplay"]["reload_flow"]["empty_step_diagnostic"]["rows"]
+        for delta in (.0596221, step.delta_limit("bounded100")):
+            for r in rows:
+                r["context"]["delta"] = delta
+            self.assertEqual(audit.audit(d)["status"], "inconclusive")
+            self.assertEqual(audit.audit(d, "bounded100")["status"], "bounded_monitor_verified")
+        rows[0]["context"]["delta"] = .10001
+        self.assertEqual(audit.audit(d, "bounded100")["status"], "inconclusive")
+        rows[0]["context"]["delta"] = .06
+        rows[0]["deadline_ns"] = rows[0]["now_ns"]
+        self.assertEqual(audit.audit(d, "bounded100")["status"], "inconclusive")
+        with self.assertRaises(step.ReportError):
+            audit.audit(d, "unbounded")
+
     def test_normal_receipt_rejection_is_informational(self):
         d = fixture(); d["gameplay"]["reload_flow"]["empty_magazine_control"]["receipt_failures"] = 22
         self.assertEqual(audit.audit(d)["status"], "bounded_monitor_verified")

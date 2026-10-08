@@ -3,16 +3,17 @@
 #include <array>
 namespace fvr::bc2 {
 // Diagnostic only. These facts never authorize a native patch or hand claim.
-inline bool ManualEmptyDiagnosticAdmitted(bool combined,bool requestMode,bool requestTarget,bool currentLocal)noexcept {
- return combined&&requestMode&&(requestTarget||currentLocal);
+inline bool ManualEmptyDiagnosticAdmitted(bool combined,bool requestMode,bool requestTarget,bool currentLocal,bool nativeCycleTarget=false)noexcept {
+ return (combined||nativeCycleTarget)&&requestMode&&(requestTarget||currentLocal||nativeCycleTarget);
 }
 struct ManualEmptyDiagnosticContextBoundary {
  bool combined=false,request=false,codeVerified=false,entryAllowed=false,parentPresent=false,parentIsUpdate=false;
  unsigned parentDepth=0,firing=0,parentFiring=0,context=0,parentContext=0,caller=0,expectedCaller=0;
  std::uint64_t parentInvocation=0,stackLow=0,stackHigh=0;
+ bool nativeCycleTarget=false;
 };
 inline bool ManualEmptyDiagnosticContextReadAllowed(const ManualEmptyDiagnosticContextBoundary& b)noexcept {
- return b.combined&&b.request&&b.codeVerified&&b.entryAllowed&&b.parentPresent&&b.parentDepth==1&&
+ return (b.combined||b.nativeCycleTarget)&&b.request&&b.codeVerified&&b.entryAllowed&&b.parentPresent&&b.parentDepth==1&&
   b.parentFiring==b.firing&&b.parentInvocation&&b.parentIsUpdate&&b.parentContext==b.context&&
   b.caller==b.expectedCaller&&b.context>=b.stackLow&&std::uint64_t(b.context)+0x30<=b.stackHigh&&!(b.context&3);
 }
@@ -25,10 +26,10 @@ inline ManualEmptyBoundaryDiagnosticReason ManualEmptyBoundaryControlReason(floa
  const std::optional<ReloadUpdateContext>& context)noexcept {
  if(!std::isfinite(step))return ManualEmptyBoundaryDiagnosticReason::StepDeltaNonFinite;
  if(step<=0)return ManualEmptyBoundaryDiagnosticReason::StepDeltaNonPositive;
- if(step>.05f)return ManualEmptyBoundaryDiagnosticReason::StepDeltaTooLarge;
+ if(!ValidManualReloadDelta(step))return ManualEmptyBoundaryDiagnosticReason::StepDeltaTooLarge;
  if(!context)return ManualEmptyBoundaryDiagnosticReason::ContextDecodeFailed;
  if(step>context->deltaSeconds)return ManualEmptyBoundaryDiagnosticReason::StepDeltaExceedsContext;
- if(context->deltaSeconds>.05f)return ManualEmptyBoundaryDiagnosticReason::ContextDeltaTooLarge;
+ if(!ValidManualReloadDelta(context->deltaSeconds))return ManualEmptyBoundaryDiagnosticReason::ContextDeltaTooLarge;
  if(context->reloadTimeMultiplier!=1)return ManualEmptyBoundaryDiagnosticReason::ContextMultiplierNotOne;
  if(context->orderRequested||(context->inputFlags&~5u))return ManualEmptyBoundaryDiagnosticReason::UnsupportedInput;
  if(!context->flags24Through28[0]||context->flags24Through28[2]||context->flags24Through28[4])return ManualEmptyBoundaryDiagnosticReason::UnsupportedContextFlags;

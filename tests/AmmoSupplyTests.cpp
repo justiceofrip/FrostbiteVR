@@ -354,7 +354,24 @@ int ReleaseSubmittedPreservesPendingResourceAndOtherClaims(){
  CHECK(f.supply.Resolve(f.s.input,f.hands,receipt).consumed==reservation);
  CHECK(f.hands.Current(InteractionHand::Left)->token==replacement);return 0;
 }
-int main(){CHECK(ReleaseSubmittedPreservesPendingResourceAndOtherClaims()==0);if(PhysicalCarrySurvivesFreshShortSourceObservations()||FreshSourceNeverRevivesExpiredPhysicalClaim())return 1;
+int TerminalOutcomeDoesNotRenewResource(){
+ for(bool applied:{false,true})for(unsigned bad=0;bad<8;++bad){Fixture f;CHECK(f.Grab().held);const auto reservation=f.Reserve();CHECK(reservation);
+    CHECK(f.supply.ReleaseSubmitted(f.s.input,f.hands,*reservation));
+    const auto old=f.Receipt(*reservation,applied?ReloadAcknowledgement::Applied:ReloadAcknowledgement::Rejected);
+    AmmoSupplyTerminalReceipt outcome{*reservation,old.acknowledgement,200,f.s.input.nowNs,4,applied?3u:4u,true};
+    f.s.input.nowNs+=500*Ms;f.supply.Cancel(f.s.input,f.hands);
+    if(bad==1)outcome.nativeFinalVerified=false;if(bad==2)++outcome.reservation.request;
+    if(bad==3)++outcome.acknowledgement.owner.equipGeneration;if(bad==4)outcome.completedNs=f.s.input.nowNs+1;
+    if(bad==5)++outcome.reserveAfter;if(bad==6)outcome.event=0;if(bad==7)outcome.acknowledgement.status=ReloadAcknowledgement::None;
+    const auto result=f.supply.SettleTerminal(f.s.input,f.hands,outcome);
+    CHECK(result.accepted==(bad==0));CHECK(bool(f.supply.Pending())==(bad!=0));
+    if(bad)continue;
+    CHECK(bool(result.consumed)==applied);CHECK(!f.supply.SettleTerminal(f.s.input,f.hands,outcome).accepted);
+    CHECK(!f.supply.Held());f.Next(false);f.s.source.reserveUnits=applied?3:4;CHECK(!f.Tick().held);
+    f.Next(true);CHECK(f.Tick().held);
+ }return 0;
+}
+int main(){CHECK(TerminalOutcomeDoesNotRenewResource()==0);CHECK(ReleaseSubmittedPreservesPendingResourceAndOtherClaims()==0);if(PhysicalCarrySurvivesFreshShortSourceObservations()||FreshSourceNeverRevivesExpiredPhysicalClaim())return 1;
     if(AlternateContactSharesProvider()||AlternateContactCannotBypassReservation()||AlternateContactsKeepExactGeometryAndEdge()||RealEdgeBodyPouchAndReserve()||ContactFailureNeedsNewEdge()||NoStealingSupportOrSight()||IdentityAndSafetyInvalidation()||
         DuplicateAndStalePackets()||ReservationReplacementAndExactConsumption()||ExhaustionAndUnresolvedCannotMint()||
         PendingEquipChangeAndWrongReceipts()||MagazineExplicitUnitsAndNoEffect()||ActualInsertionConsumesSuppliedClaim()||

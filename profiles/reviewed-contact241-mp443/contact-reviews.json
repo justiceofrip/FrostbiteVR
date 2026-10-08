@@ -1,0 +1,31 @@
+[
+  {
+    "schema": "fvr.bc2.reviewed-authored-magazine-contact.v1",
+    "native_asset_name": "MP443_sp",
+    "weapon": {
+      "resource": "Objects/Weapons/Handheld/RU_hg_MP443Grach/SP_hg_MP443Grach.dbx",
+      "sha256": "e16f5713854ca38ab58d61bd3c568e2f87533c0e82032d71d61f27449d5484cc",
+      "instance_guid": "58098858-821b-4406-a19c-ae62e5d38bdf",
+      "type": "GameSharedResources.SoldierWeaponData"
+    },
+    "binding_digest": "27d24e0477d010c64a8e835bb55bf874d3a2ae5499114833c7dae583dd038d30",
+    "mesh_sha256": "205b298bb56bf12eec807fc015c3ea95ba02ef20d51c5a58f449fb225242e1b5",
+    "lod_sha256": "9fe633a30f8f2be2d7e59478e3f61edf10fb3d2c1e12d3eff251c672d6414636",
+    "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+    "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+    "clip_resource": "Animations/Weapons/Handheld/RU_hg_MP443Grach/1P/1P_Reload.res",
+    "clip_sha256": "db48a882545cb352a0178a10e6838bc37d461c717c21b97d928b0b10040b2232",
+    "semantic_role": "detachable_magazine",
+    "magazine_bone": "jntWpn_12",
+    "contact": "complete_same_authored_frame",
+    "frame_seconds": 1.3666666666666667,
+    "pose_digest": "ac6aeb7341f81d2cca929ee33e8a2a65ed91ff376e359fe4d3022a144b35f530",
+    "render_receipt_sha256": "b2948c108d6bdb152fff1ad4c6001696642878165f12a25239848d29684fa21c",
+    "contact_sheet_sha256": "bd31f0a3d9b2153caeee9a650c603f33ebf25dadf0509e06fcc2b156ebb5b563",
+    "review_basis": "Project review of exact installed contact sheet: detached box magazine between thumb/fingers; alternate jntWpn_3 is slide on receiver.",
+    "review_scope": "Exact MP443_sp asset/clip semantic role and complete authored frame only. No geometry edits, native or headset acceptance.",
+    "native_role_verified": false,
+    "headset_tested": false,
+    "review_digest": "d76b8bcaea407eb858a35b197c2278d9b4a4f287d468102d055e250603666d97"
+  }
+]

@@ -53,14 +53,26 @@ int PumpRejectsUnprovedCohorts(){
     ReloadHoldProbe p;auto i=PumpInput();CHECK(ArmPump(p,i));i.branches[1].currentState=8;
     CHECK(!p.Evaluate(i)&&p.Phase()==ReloadHoldPhase::Aborted);return 0;
 }
+int PumpPredictionRestoreQualification(){
+    auto i=PumpInput();i.branches[0].previousState=i.branches[1].previousState=7;
+    {ReloadHoldProbe p;CHECK(p.Enable(ReloadHoldTarget::SpasPump));for(unsigned n=0;n<3;++n){i.branch=n;CHECK(!p.Evaluate(i));}}
+    i.clientRestoreMask=3;ReloadHoldProbe p;CHECK(ArmPump(p,i));
+    i.branches[2].previousState=7;i.clientRestoreMask=7;CHECK(!p.Evaluate(i));
+    CHECK(p.Phase()==ReloadHoldPhase::Aborted);return 0;
+}
 int PumpSchemaAndTriggerIsolation(){
-    NativeProbeConfig c;CHECK(sizeof(c)==1184&&c.bytes==1184&&c.pumpHoldDiagnostic==PumpHoldDiagnostic::Disabled);
+    NativeProbeConfig c;CHECK(sizeof(c)==1200&&c.bytes==1200&&c.ordinaryResourceInput==0&&c.m95OrdinaryBoltInputCycles==0&&c.m95StockShot==0&&c.m95PhysicalBoltCycles==0&&c.pumpHoldDiagnostic==PumpHoldDiagnostic::Disabled);
     constexpr auto mode=PumpHoldDiagnostic::SpasOneShot;constexpr unsigned flags=9u|0x197800u|0x400000u;
     CHECK(ValidPumpHoldDiagnostic(mode,flags,15000));
     for(unsigned bit=0;bit<32;++bit)if(!(flags&(1u<<bit))&&bit!=9)CHECK(!ValidPumpHoldDiagnostic(mode,flags|(1u<<bit),15000));
     CHECK(!ValidPumpHoldDiagnostic(mode,flags,30000)&&!ValidPumpHoldDiagnostic(PumpHoldDiagnostic(2),flags,15000));
     CHECK(PumpDiagnosticTrigger(2999)==0&&PumpDiagnosticTrigger(3000)==1&&PumpDiagnosticTrigger(3079)==1&&PumpDiagnosticTrigger(3080)==0);
     CHECK(PumpDiagnosticTrigger(5999)==0&&PumpDiagnosticTrigger(6000)==1&&PumpDiagnosticTrigger(6080)==0&&PumpDiagnosticTrigger(UINT64_MAX)==0);
+    for(auto at:{0ull,399ull,400ull,499ull,500ull,3000ull,6000ull,UINT64_MAX}){
+        CHECK(!PumpDiagnosticUse(at,false));
+        CHECK(PumpDiagnosticUse(at,true)==(at>=400&&at<500));
+        CHECK(!(PumpDiagnosticUse(at,true)&&PumpDiagnosticTrigger(at)>0));
+    }
     return 0;
 }
 
@@ -115,6 +127,20 @@ struct DeltaFixture {
         previous=f.words[6];f.words[6]=value;return true;}};}
 };
 void Original(void* raw){auto& f=*static_cast<DeltaFixture*>(raw);++f.calls;f.matched=f.expectZero?f.words[6]==0:f.words[6]!=0;f.words[5]=0xdeadbeef;}
+int HitchDeltaOriginalOnce(){
+    for(float delta:{.0596221f,.1f}){
+        DeltaFixture f;std::memcpy(&f.words[6],&delta,4);const auto expected=f.Bits();ReloadDeltaOverride t;
+        RunReloadDeltaOverride(f.Access(),expected,true,Original,&f,t);
+        CHECK(f.calls==1&&f.matched&&t.applied&&t.restored&&!t.unexpectedNativeWrite);
+        CHECK(f.Bits()==expected&&f.words[4]==123&&f.words[5]==0xdeadbeef&&f.words[7]==789);
+    }
+    for(float delta:{.100001f,0.f,-.01f,std::numeric_limits<float>::infinity(),std::numeric_limits<float>::quiet_NaN()}){
+        DeltaFixture f;std::memcpy(&f.words[6],&delta,4);const auto expected=f.Bits();ReloadDeltaOverride t;
+        RunReloadDeltaOverride(f.Access(),expected,true,Original,&f,t);
+        CHECK(f.calls==1&&!t.applied&&!t.restored&&f.Bits()==expected);
+    }
+    return 0;
+}
 int ExactDeltaOriginalOnce(){
     for(bool request:{false,true}){DeltaFixture f;f.expectZero=request;const auto expected=f.Bits();auto access=f.Access();ReloadDeltaOverride t;
         RunReloadDeltaOverride(access,expected,request,Original,&f,t);
@@ -137,7 +163,7 @@ int SehCleanup(){
 }
 #endif
 }
-int main(){if(PumpTargetSeparateAndBounded()||PumpRejectsUnprovedCohorts()||PumpSchemaAndTriggerIsolation()||DefaultOffAndOneShot()||RequiresThreeFreshSafeBranches()||UnsafeConditionsAbortWithoutRearm()||ArmingWindowAndOwnerReset()||SharedDeadlineAcrossThreads()||ExactDeltaOriginalOnce())return 1;
+int main(){if(HitchDeltaOriginalOnce()||PumpTargetSeparateAndBounded()||PumpRejectsUnprovedCohorts()||PumpPredictionRestoreQualification()||PumpSchemaAndTriggerIsolation()||DefaultOffAndOneShot()||RequiresThreeFreshSafeBranches()||UnsafeConditionsAbortWithoutRearm()||ArmingWindowAndOwnerReset()||SharedDeadlineAcrossThreads()||ExactDeltaOriginalOnce())return 1;
 #if defined(_MSC_VER)
     if(SehCleanup())return 1;
 #endif

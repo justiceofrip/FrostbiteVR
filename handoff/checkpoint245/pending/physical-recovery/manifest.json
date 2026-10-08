@@ -1,0 +1,110 @@
+{
+  "schema": 1,
+  "name": "cycle242-physical-recovery",
+  "status": "frozen",
+  "files": [
+    {
+      "path": "include/fvr/interaction/BoltWeaponCustody.h",
+      "original_sha256": "61f63a4beb027c32b72d53bf12e190fa9e3fbf4d0334954cab169f11460f6e2d",
+      "candidate_sha256": "4c9a042d76073df820ece19216b10ed08bdc8da0791585aa742c9fbb8881211f"
+    },
+    {
+      "path": "include/fvr/interaction/PhysicalWeaponCycle.h",
+      "original_sha256": "adb7d69538e085b58a5d9777ac41c2510d8bcc2e9fad2c0f96ff16a1bb729844",
+      "candidate_sha256": "d59a29d884a1538d63c51eb1f80a4a09ba818d8b5bbb36ea89bcf63c5472901f"
+    },
+    {
+      "path": "include/fvr/interaction/WeaponCycle.h",
+      "original_sha256": "68b5b7c4f3fb1767f0aaf57216f9bc789cf9151aee6244e51becd5413ec07e96",
+      "candidate_sha256": "db8ee095b139e09c7613d534753222fe69a0d74b05184e76198024e8b5d0f0ca"
+    },
+    {
+      "path": "include/fvr/interaction/WeaponCycleConvergence.h",
+      "original_sha256": null,
+      "candidate_sha256": "bacba4ad1ff0cc01e93a0e0cdbb1d908d12fd45c1f4df5f1186bb5496414d4a0"
+    },
+    {
+      "path": "include/fvr/interaction/WeaponCycleRecoveryAuthority.h",
+      "original_sha256": null,
+      "candidate_sha256": "0a45f6fcbb5314c474a30a85af15b9178ee6f7e7246bbf1f40091a3903739958"
+    },
+    {
+      "path": "src/games/bc2/Bc2BoltPart.cpp",
+      "original_sha256": "b0d474dd4e17f9ecd285ba94439e715b2cbedd3ad6799efc2d5a4d61e9710d86",
+      "candidate_sha256": "9c432bffbd305af5537ac26ee4dac4e5baedef2158b5e9f8affde9da922a644b"
+    },
+    {
+      "path": "src/games/bc2/Bc2BoltRuntimeGeometry.h",
+      "original_sha256": "e36f23c31d52c0a105f4ab2dccf00f25e737aaf67bcf66074df09be41de532f9",
+      "candidate_sha256": "e49babb084fb0a15542138afee18f75c87b9a92ba106319257b8cb876f6d2a9b"
+    },
+    {
+      "path": "src/games/bc2/Bc2NativeCycleRecovery.cpp",
+      "original_sha256": null,
+      "candidate_sha256": "d9b6b52873f0fe148ed18b9bd4c5f51b5dc4ee95a37a663b19db7c37a88fe371"
+    },
+    {
+      "path": "src/games/bc2/Bc2NativeCycleRecovery.h",
+      "original_sha256": null,
+      "candidate_sha256": "f71677c6074e9355ccf21bdb680391668afd03dd6fc969725e35de6fda728c43"
+    },
+    {
+      "path": "src/games/bc2/Bc2PhysicalBolt.cpp",
+      "original_sha256": "65ff26b9399925115996fbf668b810b9f2edcb20dbc69bac419e3f19e1819d1c",
+      "candidate_sha256": "28e24eef8cb00df17ab5c0cb346124a8109b0a2cc5f38fef506ca65be19296dc"
+    },
+    {
+      "path": "src/games/bc2/Bc2PhysicalBolt.h",
+      "original_sha256": "443902a01951e285294802a1a071bcc280a987e8d78709f310eb6006d916e3dd",
+      "candidate_sha256": "268c8a570a68f35b059fbd5809317ba3a1051c1459e299400b50a94ae87471ea"
+    },
+    {
+      "path": "src/games/bc2/Bc2PhysicalPump.cpp",
+      "original_sha256": "4fb74a6b883b0260b3d62e30c2c3e93089fafbf4b4060734bb385dad44aa6bdc",
+      "candidate_sha256": "af32ae071b2c76fe0d1a875325b1aeada4204d2dd7069e7d16f9da177b950b3a"
+    },
+    {
+      "path": "src/games/bc2/Bc2PhysicalPump.h",
+      "original_sha256": "5cd08741b75389733cec057c2d66fb565415675e4c95951146fb3a1a202d0c95",
+      "candidate_sha256": "2eedb26f647d1089102c4a860fd4fd5c4e407c435056d92980631a05b9623f1d"
+    },
+    {
+      "path": "src/games/bc2/Bc2PumpPart.cpp",
+      "original_sha256": "7ab7bae37e3e397155a8f324fc5cd240aa6b60bdd914481395739f7e85f48758",
+      "candidate_sha256": "e42a065821f1adb8db5dd30a389df30863127a71710e693b3876fe13f9e8109d"
+    },
+    {
+      "path": "src/games/bc2/Bc2PumpPart.h",
+      "original_sha256": "b8b0539b5eb82b4c01a5906240c96acbf0526f9a9963989bf49649523f0c2b36",
+      "candidate_sha256": "231f5452b0f81debeb39ee732a5609b0e245af8336655328fb667c815bd4c1b3"
+    },
+    {
+      "path": "src/games/bc2/Bc2RigPublication.cpp",
+      "original_sha256": "e638e79c76bd3d6b66fed8a84801897dd670412c55067ef50e6f3d54a8d4e5ab",
+      "candidate_sha256": "7a1f6a45a200b40535b45cc40da0a0b1f2ff5a54a3e0ffbc22a1baa7f7215f6e"
+    },
+    {
+      "path": "tests/Bc2PhysicalBoltRecoveryTests.cpp",
+      "original_sha256": null,
+      "candidate_sha256": "74bcf5cac37f6a05d698f3610e3940841a16ac8621529d44e4a5cb2d2b58165e"
+    },
+    {
+      "path": "tests/Bc2PhysicalPumpRecoveryTests.cpp",
+      "original_sha256": null,
+      "candidate_sha256": "391a27de4e8e0ab73701ae7ee3e9c8e7ba04794b850f648461cf875536dee01b"
+    },
+    {
+      "path": "tests/WeaponCycleConvergenceTests.cpp",
+      "original_sha256": null,
+      "candidate_sha256": "630eab5e211f0f2fbac483abb7cd31e6868aac5e528534c641f39a2eebace3c6"
+    }
+  ],
+  "checks": {
+    "x86": "92 C++ groups PASS; renderer and empty reader compile PASS",
+    "x64": "92 C++ groups PASS; renderer and empty reader compile PASS",
+    "native_admission": false
+  },
+  "integration_notes": "INTEGRATION.txt",
+  "notes_sha256": "d617e61e100e9f38e4f3b2682418f3df79f400f5ca0bc37848131ae670f2cfc0",
+  "patch_sha256": "2c993fe1b864e6fca1d7da95538f005253a1c590fd38bda81635a7da376c434c"
+}

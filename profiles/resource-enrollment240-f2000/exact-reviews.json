@@ -1,0 +1,8 @@
+[
+  {
+    "key": "bc2:magazine-descriptor:b62512a8b03688d4d94af267154496ca57934e0d620e170c9cf2255bbd3dfc32",
+    "descriptor_digest": "a83a3c5288dee2d4f5c7d1ddc7033380f5e935cc15574d23f29e43a27a047a17",
+    "family_proof": "bc2.automatic-magazine-zero-bolt.v1",
+    "evidence_sha256": "8f1e5ce428584e3a25898aa7f0fff0ac677523becc248e1f3a69223f4a4fb567"
+  }
+]

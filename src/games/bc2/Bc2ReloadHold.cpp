@@ -23,7 +23,8 @@ bool States(const ReloadHoldInput& in,bool arm,ReloadHoldTarget target){
     const bool pump=target==ReloadHoldTarget::SpasPump;
     for(unsigned n=0;n<3;++n){const auto& b=in.branches[n];
         if(b.address!=in.identity.firing[n]||b.wrapperOffset!=(n==0?0x3cu:n==1?0x40u:0x10u)||
-           b.currentState!=(pump?7u:11u)||b.nextState!=(pump?8u:12u)||(pump&&b.previousState!=6)||!std::isfinite(b.phaseTimer)||b.phaseTimer<=0||
+           b.currentState!=(pump?7u:11u)||b.nextState!=(pump?8u:12u)||
+           (pump&&b.previousState!=6&&!(n<2&&(in.clientRestoreMask&(1u<<n))&&b.previousState==7))||!std::isfinite(b.phaseTimer)||b.phaseTimer<=0||
            (arm&&(b.phaseTimer<.1f||b.phaseTimer>.25f))||b.phaseTimer>(pump?.5f:1.f)||b.loaded<(pump?1:0)||b.reserve<(pump?0:1)||
            in.capacities[n]<=0||in.capacities[n]>1000000||b.loaded>=in.capacities[n]||(b.flagsA8&(8|16))||
            b.loaded!=in.branches[0].loaded||b.reserve!=in.branches[0].reserve||in.capacities[n]!=in.capacities[0])return false;
@@ -93,7 +94,7 @@ bool ReloadHoldProbe::Evaluate(const ReloadHoldInput& in)noexcept {
 }
 bool ReloadDeltaOverride::Apply(const ReloadDeltaAccess& a,std::uint32_t expected)noexcept {
     if(applied||!a.compareExchange||!a.restore)return false;
-    float dt=0;std::memcpy(&dt,&expected,4);if(!std::isfinite(dt)||dt<=0||dt>.05f)return false;
+    float dt=0;std::memcpy(&dt,&expected,4);if(!ValidManualReloadDelta(dt))return false;
     std::uint32_t observed=0;if(!a.compareExchange(a.context,expected,0u,observed)||observed!=expected)return false;
     original=expected;applied=true;return true;
 }

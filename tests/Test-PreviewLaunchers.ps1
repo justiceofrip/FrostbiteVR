@@ -83,6 +83,20 @@ try {
     [IO.File]::WriteAllText($fakeExe,'incompatible test data')
     $rejected=$false;try{$null=& $setup -GamePath $fakeGame}catch{$rejected=$true}
     if(-not $rejected -or [Convert]::ToBase64String($before) -ne [Convert]::ToBase64String([IO.File]::ReadAllBytes($local))){throw 'Unsupported executable did not preserve config'}
+    # A crash reporter can still own its XML when the game exits. Failure to
+    # copy that optional artifact must not prevent the terminal process report.
+    $nativeSource=Get-Content -LiteralPath (Join-Path $root 'Start-NativeTrace.ps1') -Raw
+    $copyStart=$nativeSource.IndexOf('$crashCopyError=$null')
+    $copyEnd=$nativeSource.IndexOf('$target.Refresh()',$copyStart)
+    if($copyStart -lt 0 -or $copyEnd -le $copyStart){throw 'Crash collection boundary missing'}
+    $copyHarness=[scriptblock]::Create($nativeSource.Substring($copyStart,$copyEnd-$copyStart)+'; $crashCopyError')
+    $folder=$fixture;$newCrash=$true;$crashPath=Join-Path $fixture 'crashreport.xml'
+    [IO.File]::WriteAllText($crashPath,'<crash>fixture</crash>')
+    $locked=[IO.File]::Open($crashPath,[IO.FileMode]::Open,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
+    try {if(-not (& $copyHarness)){throw 'Locked crash report did not retain its copy error'}}
+    finally {$locked.Dispose()}
+    if(& $copyHarness){throw 'Readable crash report retained a false copy error'}
+    if([IO.File]::ReadAllText((Join-Path $folder 'crashreport-after.xml')) -ne '<crash>fixture</crash>'){throw 'Crash report contents changed'}
 } finally {
     $resolved=[IO.Path]::GetFullPath($fixture)
     $allowed=[IO.Path]::GetFullPath($tempRoot).TrimEnd('\')+'\'

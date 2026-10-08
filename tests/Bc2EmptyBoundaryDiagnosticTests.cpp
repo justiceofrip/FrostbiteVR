@@ -17,12 +17,13 @@ int Reads(){auto b=Boundary();CHECK(ManualEmptyDiagnosticContextReadAllowed(b));
 }
 int Reasons(){using R=ManualEmptyBoundaryDiagnosticReason;ReloadUpdateContext ctx;ctx.deltaSeconds=.05f;ctx.reloadTimeMultiplier=1;ctx.flags24Through28[0]=true;
  CHECK(ManualEmptyBoundaryControlReason(.01f,ctx)==R::None);CHECK(ManualEmptyBoundaryControlReason(.05f,ctx)==R::None);
- CHECK(ManualEmptyBoundaryControlReason(std::nextafter(.05f,1.f),ctx)==R::StepDeltaTooLarge);
+ CHECK(ManualEmptyBoundaryControlReason(std::nextafter(.1f,1.f),ctx)==R::StepDeltaTooLarge);
  CHECK(ManualEmptyBoundaryControlReason(0,ctx)==R::StepDeltaNonPositive);CHECK(ManualEmptyBoundaryControlReason(-.01f,ctx)==R::StepDeltaNonPositive);
  CHECK(ManualEmptyBoundaryControlReason(std::numeric_limits<float>::quiet_NaN(),ctx)==R::StepDeltaNonFinite);
  CHECK(ManualEmptyBoundaryControlReason(std::numeric_limits<float>::infinity(),ctx)==R::StepDeltaNonFinite);
  CHECK(ManualEmptyBoundaryControlReason(.01f,{})==R::ContextDecodeFailed);ctx.deltaSeconds=.005f;CHECK(ManualEmptyBoundaryControlReason(.01f,ctx)==R::StepDeltaExceedsContext);
- ctx.deltaSeconds=.1f;CHECK(ManualEmptyBoundaryControlReason(.01f,ctx)==R::ContextDeltaTooLarge);
+ for(float hitch:{.0596221f,.1f}){ctx.deltaSeconds=hitch;CHECK(ManualEmptyBoundaryControlReason(hitch,ctx)==R::None);}
+ ctx.deltaSeconds=std::nextafter(.1f,1.f);CHECK(ManualEmptyBoundaryControlReason(.01f,ctx)==R::ContextDeltaTooLarge);
  ctx.deltaSeconds=.02f;ctx.reloadTimeMultiplier=2;CHECK(ManualEmptyBoundaryControlReason(.01f,ctx)==R::ContextMultiplierNotOne);
  ctx.reloadTimeMultiplier=1;ctx.inputFlags=2;ctx.orderRequested=true;CHECK(ManualEmptyBoundaryControlReason(.01f,ctx)==R::UnsupportedInput);
  ctx.inputFlags=0;ctx.orderRequested=false;ctx.flags24Through28[2]=true;CHECK(ManualEmptyBoundaryControlReason(.01f,ctx)==R::UnsupportedContextFlags);
@@ -31,8 +32,8 @@ int Reasons(){using R=ManualEmptyBoundaryDiagnosticReason;ReloadUpdateContext ct
 struct Native {unsigned calls=0,writes=0;std::uint8_t flag=0;};
 bool Exchange(void* context,std::uint8_t expected,std::uint8_t replacement,std::uint8_t& observed){auto& n=*static_cast<Native*>(context);observed=n.flag;if(observed!=expected)return false;n.flag=replacement;++n.writes;return true;}
 int OriginalUnchanged(){Native n;MagazineEmptyByteOverride patch;ReloadUpdateContext ctx;ctx.deltaSeconds=.05f;ctx.reloadTimeMultiplier=1;ctx.flags24Through28[0]=true;ctx.reloadTimeMultiplier=1;ctx.flags24Through28[0]=true;
- // Production retains this exact explicit native-control delta predicate.
- const float delta=.06f;const bool control=std::isfinite(delta)&&delta>0&&delta<=.05f&&delta<=ctx.deltaSeconds;
+ // A Step still cannot claim more elapsed time than its actual parent context.
+ const float delta=.06f;const bool control=ValidManualReloadDelta(delta)&&delta<=ctx.deltaSeconds;
  CHECK(!control&&ManualEmptyDiagnosticContextReadAllowed(Boundary()));
  RunMagazineEmptyByteOverride({&n,Exchange},n.flag,control,[](void* context){++static_cast<Native*>(context)->calls;},&n,patch);
  CHECK(n.calls==1&&n.writes==0&&n.flag==0&&!patch.applied&&!patch.restored);return 0;
@@ -55,4 +56,22 @@ int Retention(){MagazineEmptyDiagnosticJournal j;MagazineEmptyDiagnosticRecord r
  CHECK(j.Row(0).boundaryReasonKnown&&j.Row(0).rawContextKnown&&j.Row(0).stepDeltaBits!=0);return 0;
 }
 }
-int main(){CHECK(Reads()==0);CHECK(Reasons()==0);CHECK(OriginalUnchanged()==0);CHECK(Retention()==0);std::cout<<"4 Step boundary diagnostic groups passed; no native control widening\n";}
+int SelectedPumpUsesSameStrictStepBoundary(){
+ auto b=Boundary();b.combined=false;
+ CHECK(!ManualEmptyDiagnosticContextReadAllowed(b)); // Actual233 finite-mode omission.
+ CHECK(!ManualEmptyDiagnosticAdmitted(false,true,false,false));
+ b.nativeCycleTarget=true;CHECK(ManualEmptyDiagnosticContextReadAllowed(b));
+ CHECK(ManualEmptyDiagnosticAdmitted(false,true,false,false,true));
+ CHECK(!ManualEmptyDiagnosticAdmitted(false,false,false,false,true));
+ for(auto flag:{&ManualEmptyDiagnosticContextBoundary::request,&ManualEmptyDiagnosticContextBoundary::codeVerified,
+   &ManualEmptyDiagnosticContextBoundary::entryAllowed,&ManualEmptyDiagnosticContextBoundary::parentPresent,
+   &ManualEmptyDiagnosticContextBoundary::parentIsUpdate,&ManualEmptyDiagnosticContextBoundary::nativeCycleTarget}){
+  auto bad=b;bad.*flag=false;CHECK(!ManualEmptyDiagnosticContextReadAllowed(bad));}
+ for(unsigned mutation=0;mutation<8;++mutation){auto bad=b;switch(mutation){
+  case 0:bad.parentDepth=2;break;case 1:bad.parentFiring+=4;break;case 2:bad.parentInvocation=0;break;
+  case 3:bad.parentContext+=4;break;case 4:bad.caller++;break;case 5:bad.stackLow=bad.context+1;break;
+  case 6:bad.stackHigh=bad.context+0x2f;break;case 7:bad.context=bad.parentContext=0xfffffffcu;break;}
+  CHECK(!ManualEmptyDiagnosticContextReadAllowed(bad));}
+ return 0;
+}
+int main(){CHECK(SelectedPumpUsesSameStrictStepBoundary()==0);CHECK(Reads()==0);CHECK(Reasons()==0);CHECK(OriginalUnchanged()==0);CHECK(Retention()==0);std::cout<<"5 Step boundary diagnostic groups passed; bounded simulation delta, original evidence lifetime\n";}

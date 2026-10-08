@@ -232,7 +232,16 @@ bool Bc2BodyInventory::Observe(const BodyNativeInventory& native,const BodyDrawS
         const auto item=std::find_if(items.begin(),items.end(),[&](const auto& current){return current.key==slot.item;});
         return item==items.end()||std::find(item->preferredSlots.begin(),item->preferredSlots.begin()+item->preferenceCount,slot.slot)==item->preferredSlots.begin()+item->preferenceCount;
     });
-    owner_=owner;inventory_=native.inventory;switching_=native.switching;life_=std::move(next);items_=std::move(items);return true;
+    owner_=owner;nativeOwner_=native.owner;inventory_=native.inventory;switching_=native.switching;life_=std::move(next);items_=std::move(items);return true;
+}
+std::optional<AmmoResourceBinding> Bc2BodyInventory::ResourceBinding(const ReloadStateOwner& owner,std::int64_t now)const noexcept {
+    if(!enabled_||owner!=nativeOwner_||nativeProofNs_<=0||nativeProofNs_>INT64_MAX-100000000)return {};
+    const auto item=std::find_if(life_.begin(),life_.end(),[&](const Life& l){return l.native.weapon==owner.weapon;});
+    if(item==life_.end())return {};
+    AmmoResourceBinding result{nativeOwner_,{{owner.soldier,owner.actorGeneration,item->key.id,item->key.generation},
+        owner.equipGeneration,owner.space},inventory_,switching_,item->native.data,item->native.persistence,
+        nativeProofNs_,nativeProofNs_+100000000};
+    return AmmoResourceBindingFresh(result,owner,now)?std::optional(result):std::nullopt;
 }
 BodyDrawResult Bc2BodyInventory::Tick(const WeaponModeMemory& memory,const BodyDrawSample& s,HandInteraction& hands,std::uint64_t& sharedIntent)noexcept {
     return TickDraw(memory,s,hands,sharedIntent,std::nullopt);

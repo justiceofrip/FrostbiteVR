@@ -1,4 +1,52 @@
+# Latest checkpoint245 coverage
+
+See [the current handoff](CHECKPOINT-245-HANDOFF.md):17 compiled magazine configuration prerequisites are not17 accepted weapons. The latest headset test failed; M95, pistols and belt-fed mechanisms remain unaccepted. Older entries below retain their original dates and limits.
+
 # Current weapon coverage — October 8, 2026
+
+## Active integration: checkpoints242–243
+
+The full normal242 build passed229 C++ suites per architecture, with17 exact
+magazine prerequisites: scoped XM8 and AEK campaign baselines,12 multiplayer
+configurations across M416, XM8 Compact, MG36 and XM8 LMG, two campaign SCAR
+configurations, and F2000_sp. These are configuration prerequisites, not17
+headset approvals. Multiplayer data does not establish campaign compatibility.
+Current243 adds ordinary controller-input testing and first-failure retention.
+See [current evidence and limits](CHECKPOINT-243-INTEGRATION.md).
+
+| System | Implemented and observed | Remaining acceptance |
+| --- | --- | --- |
+| Magazine rifles/SMGs | Shared original return, discard/replacement and conservation. SCAR241 completed three magazine cycles and holster/shotgun transitions. | Current ordinary/headset acceptance across enrolled variants. |
+| SPAS shell loading and pump | Actual234 eight physical pumps; SCAR/SPAS241 combined shot, pump, shell, immediate support and return. | Ordinary combined input; tracking interruption recovery and native timing polish. |
+| Bolt action | M95242 completed two native physical cycles and custody/support returns with conserved reserve. Ordinary family dispatch/player wiring merged. | Ordinary input-only native run; last round, M95 holsters, interruption recovery and stock timing overlap. |
+| Multi-part magazines | F2000 exact assembly and runtime enrollment merged242; actual removal/renderer succeeded. | Original-return View cancellation under investigation. |
+| Pistols | MP443 measured hand contact; MP443/M9 reveal a common curved-path requirement. | Sampled rail, exact native admission and slide/chamber route. |
+| Belt-fed LMGs | Prepared mechanism/contact data and portable feed policy. | Player cover/feed coordinator and native completion adapter; not completed by magazine-fed LMG profiles. |
+| Launchers/attachments | XM8 sight/mode route; native automatic loading retained by request. | AEK horizontal sight and physical loading remain separate. |
+
+Older sections below are historical, including their backend and registry counts.
+
+## Historical227 and225 coverage
+
+Checkpoint227 integrates five permanent family-batch regression suites and
+passes212 full suites per architecture. Twelve exact configurations across
+M416, XM8 Compact, MG36 and XM8 LMG exercise the common resource consumer with
+mock native receipts. Optional reviewed private profiles are preserved under
+`profiles/resource-batch227`; ordinary builds still enable only the two prior
+magazine registrations. Physical pump and bolt custody implementation does not
+yet constitute enabled native pump/sniper coverage. See [status](STATUS.md).
+
+Checkpoint225 adds **zero newly enabled weapons**. Its private resource-backed
+XM8 consumer now passes actual BC2 simulated-controller removal/original return
+and discard/chest replacement, with native command and render-publication
+receipts. Headset appearance and additional configurations remain unverified.
+Normal builds still use the previous backend. See [current evidence and limits](RESOURCE-PLAYER-223.md).
+
+The detailed extraction audit below records prepared data and earlier consumer
+tests. It is not acceptance of that whole batch against the new resource backend.
+The225 followup candidate tests12 exact zero-bolt variants across M416, XM8
+Compact, MG36 and XM8 LMG through the current shared consumer. Native responses
+in that batch are mocked; proposed family-based registration review is separate.
 
 **The current checkpoint integrates two detachable-magazine profiles: scoped
 XM8 and AEK971_sp. It does not enable manual magazine reloads for the whole gun
@@ -26,9 +74,13 @@ belongs to [checkpoint 206](RELOAD-RECOVERY-206.md). Its shared hand-geometry fi
 repairs existing interactions; it adds no weapon profiles. No all-gun percentage
 is meaningful until exact configurations and independent capabilities are joined.
 
-## What the current checkpoint selects
+## Historical206 configuration audit
 
-[Build-Checkpoint.ps1](../Build-Checkpoint.ps1) selects the calibration headers
+[Build-Checkpoint.ps1](../Build-Checkpoint.ps1) now selects operation receipt225
+and calibration headers202, with private native candidates OFF. The following
+paragraph and cache counts describe the earlier206 audit.
+
+The206 build selected the calibration headers
 from `profiles/checkpoint202` and the operation receipt from `profiles/checkpoint206`.
 The inspected `build/x86-checkpoint206/CMakeCache.txt` and
 `build/x64/CMakeCache.txt` agree with these inputs. Cache inspection establishes

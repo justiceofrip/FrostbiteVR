@@ -1,0 +1,2436 @@
+{
+  "schema": "fvr.bc2.visibility-descriptors.v1",
+  "assets_exported": false,
+  "native_actions": false,
+  "native_admission_granted": false,
+  "native_rig_proof": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\pipeline-runtime-20261005\\root-monitor\\resource-inventory232-01\\native-trace.json",
+    "sha256": "f0866319af60e015ced3bfed809f24be5c5b845b8df10542a433846c72f53dd3"
+  },
+  "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+  "arm_weighted_hashes": [
+    79920928,
+    312136294,
+    435141155,
+    492936830,
+    502284489,
+    502284490,
+    502284491,
+    549535493,
+    549535494,
+    549535495,
+    716527121,
+    716527122,
+    716527123,
+    881281168,
+    881281169,
+    881281170,
+    895194811,
+    990875232,
+    1264827749,
+    2069394396,
+    2069394397,
+    2069394398,
+    2122026331,
+    2146054198,
+    2146054199,
+    2351332865,
+    2351332866,
+    2351332867,
+    2637160093,
+    2813238056,
+    2824596152,
+    2865450109,
+    2939241432,
+    2939241433,
+    2939241434,
+    3000935590,
+    3478459432,
+    3478459433,
+    3478459434,
+    3635700905,
+    3635700906,
+    3635700907,
+    3772134182,
+    3996306288,
+    3996306289,
+    3996306290
+  ],
+  "arms": [
+    {
+      "mesh": "Characters/US/US_FP_Arms/US_FP_ArmsStandard_Mesh",
+      "archive": "Dist/win32/levels/sp_common/level-00.fbrb",
+      "index_sha256": "57835d6ace174f83eeb46ec8bbfe3acf8a3e7fde5cb8c8e49f084950e975a842",
+      "metadata_sha256": "6cfa1b295e7c6db281e7a711ed49091913688ce0b4e60248ec530cb0bcd3f6f9",
+      "lods": [
+        {
+          "lod": 0,
+          "resource": "Characters/Us/US_FP_Arms/US_FP_ArmsStandard_Mesh_lod0_data.res",
+          "sha256": "6a9e83c77b51f172705b1f17cecb6f5d0068e1e53f0a2e8601b1eb53e0ab7d62",
+          "sections": [
+            {
+              "name": "export|arm_left|arm_leftShape_ArmStandard",
+              "weighted_hashes": [
+                "04c37f20",
+                "129ad266",
+                "19efba23",
+                "1d619e7e",
+                "355b96bb",
+                "3b0f8e60",
+                "4b63bd65",
+                "7e7b8d5b",
+                "7fea3036",
+                "7fea3037",
+                "a85beab8",
+                "aacb4c7d"
+              ],
+              "vertices": 1092,
+              "triangles": 1598,
+              "normalized": true
+            },
+            {
+              "name": "export|arm_left|arm_leftShape_MOLLE",
+              "weighted_hashes": [
+                "04c37f20",
+                "129ad266",
+                "1d619e7e",
+                "355b96bb",
+                "3b0f8e60",
+                "4b63bd65",
+                "7e7b8d5b",
+                "7fea3036",
+                "7fea3037",
+                "aacb4c7d"
+              ],
+              "vertices": 283,
+              "triangles": 340,
+              "normalized": true
+            },
+            {
+              "name": "export|hand_left|hand_leftShape_Gloves",
+              "weighted_hashes": [
+                "19efba23",
+                "1df040c9",
+                "1df040ca",
+                "1df040cb",
+                "20c13f05",
+                "20c13f06",
+                "20c13f07",
+                "2ab55611",
+                "2ab55612",
+                "2ab55613",
+                "34874890",
+                "34874891",
+                "34874892",
+                "4b63bd65",
+                "7b5873dc",
+                "7b5873dd",
+                "7b5873de",
+                "8c267e01",
+                "8c267e02",
+                "8c267e03",
+                "9d2fde9d",
+                "a85beab8",
+                "af3143d8",
+                "af3143d9",
+                "af3143da",
+                "cf551428",
+                "cf551429",
+                "cf55142a",
+                "d8b464a9",
+                "d8b464aa",
+                "d8b464ab",
+                "e0d63326",
+                "ee32cb70",
+                "ee32cb71",
+                "ee32cb72"
+              ],
+              "vertices": 1968,
+              "triangles": 3388,
+              "normalized": true
+            },
+            {
+              "name": "export|arm_left|arm_leftShape_ArmStandard_ZOnly",
+              "weighted_hashes": [
+                "04c37f20",
+                "129ad266",
+                "19efba23",
+                "1d619e7e",
+                "1df040c9",
+                "1df040ca",
+                "1df040cb",
+                "20c13f05",
+                "20c13f06",
+                "20c13f07",
+                "2ab55611",
+                "2ab55612",
+                "2ab55613",
+                "34874890",
+                "34874891",
+                "34874892",
+                "355b96bb",
+                "3b0f8e60",
+                "4b63bd65",
+                "7b5873dc",
+                "7b5873dd",
+                "7b5873de",
+                "7e7b8d5b",
+                "7fea3036",
+                "7fea3037",
+                "8c267e01",
+                "8c267e02",
+                "8c267e03",
+                "9d2fde9d",
+                "a85beab8",
+                "aacb4c7d",
+                "af3143d8",
+                "af3143d9",
+                "af3143da",
+                "cf551428",
+                "cf551429",
+                "cf55142a",
+                "d8b464a9",
+                "d8b464aa",
+                "d8b464ab",
+                "e0d63326",
+                "ee32cb70",
+                "ee32cb71",
+                "ee32cb72"
+              ],
+              "vertices": 2698,
+              "triangles": 5326,
+              "normalized": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "mesh": "Characters/US/US_FP_Arms/US_FP_Assault_Mesh",
+      "archive": "Dist/win32/levels/sp_common/level-00.fbrb",
+      "index_sha256": "57835d6ace174f83eeb46ec8bbfe3acf8a3e7fde5cb8c8e49f084950e975a842",
+      "metadata_sha256": "5452834a115b97b3c004e589998a35c9f9fa2da462249f34937cf9e1c3d26bfc",
+      "lods": [
+        {
+          "lod": 0,
+          "resource": "Characters/Us/US_FP_Arms/US_FP_Assault_Mesh_lod0_data.res",
+          "sha256": "16524df6e7dafb060697e64769d370f1e2a016c4f5af50f88f6d14a3e02ac5b3",
+          "sections": [
+            {
+              "name": "handLeft_geoShape_Gloves",
+              "weighted_hashes": [
+                "1d619e7e",
+                "1df040c9",
+                "1df040ca",
+                "1df040cb",
+                "20c13f05",
+                "20c13f06",
+                "20c13f07",
+                "2ab55611",
+                "2ab55612",
+                "2ab55613",
+                "34874890",
+                "34874891",
+                "34874892",
+                "4b63bd65",
+                "7b5873dc",
+                "7b5873dd",
+                "7b5873de",
+                "8c267e01",
+                "8c267e02",
+                "8c267e03",
+                "9d2fde9d",
+                "a7ae9b28",
+                "af3143d8",
+                "af3143d9",
+                "af3143da",
+                "cf551428",
+                "cf551429",
+                "cf55142a",
+                "d8b464a9",
+                "d8b464aa",
+                "d8b464ab",
+                "e0d63326",
+                "ee32cb70",
+                "ee32cb71",
+                "ee32cb72"
+              ],
+              "vertices": 1188,
+              "triangles": 1630,
+              "normalized": true
+            },
+            {
+              "name": "armLeft_geoShape_ArmStandard",
+              "weighted_hashes": [
+                "04c37f20",
+                "1d619e7e",
+                "355b96bb",
+                "3b0f8e60",
+                "4b63bd65",
+                "7e7b8d5b",
+                "aacb4c7d",
+                "b2dea4a6"
+              ],
+              "vertices": 544,
+              "triangles": 656,
+              "normalized": true
+            },
+            {
+              "name": "armLeft_geoShape_MOLLE",
+              "weighted_hashes": [
+                "04c37f20",
+                "1d619e7e",
+                "355b96bb",
+                "3b0f8e60",
+                "4b63bd65",
+                "7e7b8d5b",
+                "aacb4c7d",
+                "b2dea4a6"
+              ],
+              "vertices": 284,
+              "triangles": 352,
+              "normalized": true
+            },
+            {
+              "name": "handLeft_geoShape_Gloves_ZOnly",
+              "weighted_hashes": [
+                "04c37f20",
+                "1d619e7e",
+                "1df040c9",
+                "1df040ca",
+                "1df040cb",
+                "20c13f05",
+                "20c13f06",
+                "20c13f07",
+                "2ab55611",
+                "2ab55612",
+                "2ab55613",
+                "34874890",
+                "34874891",
+                "34874892",
+                "355b96bb",
+                "3b0f8e60",
+                "4b63bd65",
+                "7b5873dc",
+                "7b5873dd",
+                "7b5873de",
+                "7e7b8d5b",
+                "8c267e01",
+                "8c267e02",
+                "8c267e03",
+                "9d2fde9d",
+                "a7ae9b28",
+                "aacb4c7d",
+                "af3143d8",
+                "af3143d9",
+                "af3143da",
+                "b2dea4a6",
+                "cf551428",
+                "cf551429",
+                "cf55142a",
+                "d8b464a9",
+                "d8b464aa",
+                "d8b464ab",
+                "e0d63326",
+                "ee32cb70",
+                "ee32cb71",
+                "ee32cb72"
+              ],
+              "vertices": 1368,
+              "triangles": 2638,
+              "normalized": true
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "rows": [
+    {
+      "asset": "MG36",
+      "meshes": [
+        "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Mesh"
+      ],
+      "weighted_names": [
+        "jntWpn_12",
+        "jntWpn_13",
+        "jntWpn_2",
+        "jntWpn_1",
+        "jntWpn_6",
+        "jntWpn_5",
+        "jntWpn_4"
+      ],
+      "rig_fingerprint": "a7f219a1426216ab",
+      "native_admitted": false,
+      "native_configured_set_proven": false,
+      "weighted_section_data_verified": true,
+      "authored_configuration": {
+        "resource": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Scope.dbx",
+        "sha256": "6f2c2e40d3efc9a3f143ea2b89d9e08f0e617eaa9f831b51ea64bbd3367ff63d",
+        "instance_guid": "D7C9100E-A312-4084-871E-2471B63DA284",
+        "mesh_references": [
+          {
+            "reference": "objects/weapons/handheld/bu_lmg_mg36/bu_lmg_mg36_mesh/f5dd70bb-22cf-4cb9-bdf7-fd42f0ada967",
+            "resource": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Mesh.dbx",
+            "sha256": "7a2921be5a17a6679e379c355e2142c09ce42e87bfb39d13584dbdaf8864ed14",
+            "instance_guid": "f5dd70bb-22cf-4cb9-bdf7-fd42f0ada967"
+          }
+        ]
+      },
+      "resources": [
+        {
+          "mesh": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Mesh",
+          "archive": "Dist/win32/async/weapon/bu_lmg_mg36-00.fbrb",
+          "index_sha256": "9ee8e253d36bf18fd9a0b7c0828e7555e2122f8675b255a220e4e51423977905",
+          "metadata_sha256": "de8980c038159fe89f4a7d16d41aa662652c2cd1938a08d4fbc83c50728e64b5",
+          "lods": [
+            {
+              "lod": 0,
+              "resource": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Mesh_lod0_data.res",
+              "sha256": "16e2e4ed8fc8050574ac7e29bff114b8e1c82693394701515f1f80fff3ba8195",
+              "sections": [
+                {
+                  "name": "jntWpn_1_Glass",
+                  "weighted_hashes": [
+                    "f7f9bcd2"
+                  ],
+                  "vertices": 134,
+                  "triangles": 126,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_1_decal_decal",
+                  "weighted_hashes": [
+                    "f7f9bcd2"
+                  ],
+                  "vertices": 16,
+                  "triangles": 8,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_1_BrushedMetal",
+                  "weighted_hashes": [
+                    "f7315720",
+                    "f7315721",
+                    "f7f9bcd1",
+                    "f7f9bcd2",
+                    "f7f9bcd5",
+                    "f7f9bcd6",
+                    "f7f9bcd7"
+                  ],
+                  "vertices": 2334,
+                  "triangles": 1878,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_1_Plastic",
+                  "weighted_hashes": [
+                    "f7f9bcd2",
+                    "f7f9bcd5"
+                  ],
+                  "vertices": 960,
+                  "triangles": 928,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_1_Composite",
+                  "weighted_hashes": [
+                    "f7315721",
+                    "f7f9bcd2",
+                    "f7f9bcd5"
+                  ],
+                  "vertices": 5677,
+                  "triangles": 4756,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_6_Ammo",
+                  "weighted_hashes": [
+                    "f7f9bcd5"
+                  ],
+                  "vertices": 4,
+                  "triangles": 2,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_1_Glass_ZOnly",
+                  "weighted_hashes": [
+                    "f7315720",
+                    "f7315721",
+                    "f7f9bcd1",
+                    "f7f9bcd2",
+                    "f7f9bcd5",
+                    "f7f9bcd6",
+                    "f7f9bcd7"
+                  ],
+                  "vertices": 4068,
+                  "triangles": 7690,
+                  "normalized": true
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "asset": "XM8C",
+      "meshes": [
+        "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Mesh",
+        "Objects/Weapons/Unlock/ACOG_4X/US_ACOG_4X_Mesh"
+      ],
+      "weighted_names": [
+        "jntWpnwpnJnt_16",
+        "jntWpn_10",
+        "jntWpn_17",
+        "jntWpn_2",
+        "jntWpn_1",
+        "jntWpn_6",
+        "jntWpn_5"
+      ],
+      "rig_fingerprint": "a7f219a1426216ab",
+      "native_admitted": false,
+      "native_configured_set_proven": false,
+      "weighted_section_data_verified": true,
+      "authored_configuration": {
+        "resource": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Scoped.dbx",
+        "sha256": "ae12d9803482f3846993ea46e0a4afc19495e4b76cd847ea78a45c616092d970",
+        "instance_guid": "9F5AB2BD-CD9E-4830-927C-C91953F70092",
+        "mesh_references": [
+          {
+            "reference": "objects/weapons/handheld/us_rif_xm8c/us_rif_xm8c_mesh/e59613a4-8615-11db-bba1-fac2f0768b16",
+            "resource": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Mesh.dbx",
+            "sha256": "177a4a5a0d7ba908665c3c5ff358a8f28a5888a30b20c31c4704f0b49c27ccdb",
+            "instance_guid": "e59613a4-8615-11db-bba1-fac2f0768b16"
+          },
+          {
+            "reference": "objects/weapons/unlock/acog_4x/us_acog_4x_mesh/62360b4a-8ee5-11dd-9ccd-dde5da16fae6",
+            "resource": "Objects/Weapons/Unlock/ACOG_4X/US_ACOG_4X_Mesh.dbx",
+            "sha256": "09929af7de9cd7f7b971ed05f47941046daacd6627728249a0059352ddb6b69b",
+            "instance_guid": "62360b4a-8ee5-11dd-9ccd-dde5da16fae6"
+          }
+        ]
+      },
+      "resources": [
+        {
+          "mesh": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Mesh",
+          "archive": "Dist/win32/async/weapon/us_rif_xm8c-00.fbrb",
+          "index_sha256": "a34b0dd36780f790fd6cd6d8df27f432b2cb8f82b276e8d0a93a61a4308025c5",
+          "metadata_sha256": "e7e8b8ca1e8d2f03cd67e28f3abc307a88bd9c35f2df609bad46896e7c2559d7",
+          "lods": [
+            {
+              "lod": 0,
+              "resource": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Mesh_lod0_data.res",
+              "sha256": "2a4e6ec920a128dc264e4912e0b75f9ee79fc1e49e703cca67cefc91c4491b7c",
+              "sections": [
+                {
+                  "name": "jntWpn_1_Rubber",
+                  "weighted_hashes": [
+                    "f7315725",
+                    "f7f9bcd2"
+                  ],
+                  "vertices": 1851,
+                  "triangles": 1203,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_1_Composite",
+                  "weighted_hashes": [
+                    "f7f9bcd2",
+                    "f7f9bcd5",
+                    "f7f9bcd6"
+                  ],
+                  "vertices": 4454,
+                  "triangles": 2236,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_1_BrushedMetal",
+                  "weighted_hashes": [
+                    "f2519cbd",
+                    "f7315725",
+                    "f7f9bcd1",
+                    "f7f9bcd2"
+                  ],
+                  "vertices": 3890,
+                  "triangles": 2024,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_6_Plastic",
+                  "weighted_hashes": [
+                    "f7f9bcd5"
+                  ],
+                  "vertices": 580,
+                  "triangles": 404,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_6_Ammo",
+                  "weighted_hashes": [
+                    "f7f9bcd5"
+                  ],
+                  "vertices": 56,
+                  "triangles": 42,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_1_Rubber_ZOnly",
+                  "weighted_hashes": [
+                    "f2519cbd",
+                    "f7315725",
+                    "f7f9bcd1",
+                    "f7f9bcd2",
+                    "f7f9bcd5",
+                    "f7f9bcd6"
+                  ],
+                  "vertices": 3089,
+                  "triangles": 5505,
+                  "normalized": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "mesh": "Objects/Weapons/Unlock/ACOG_4X/US_ACOG_4X_Mesh",
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965",
+          "metadata_sha256": "bb534cd5cdd40d0a32c845ae31926a9e37f6cbdadd1f15681dc890b0e24aee43",
+          "lods": [
+            {
+              "lod": 0,
+              "resource": "Objects/Weapons/Unlock/ACOG_4X/US_ACOG_4X_Mesh_lod0_data.res",
+              "sha256": "801361ce3160ef3392a7bb3317d77ed70b8631fb9abc661b67517314059a36a9",
+              "sections": [
+                {
+                  "name": "jntWpn_10_ACOG4X_Standard",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 2412,
+                  "triangles": 1761,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_10_ACOG_4X_Glass",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 18,
+                  "triangles": 16,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_10_ACOG_RedDot",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 8,
+                  "triangles": 4,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_10_ACOG4X_Standard_ZOnly",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 1006,
+                  "triangles": 1761,
+                  "normalized": true
+                }
+              ]
+            },
+            {
+              "lod": 1,
+              "resource": "Objects/Weapons/Unlock/ACOG_4X/US_ACOG_4X_Mesh_lod1_data.res",
+              "sha256": "4cca2361d14139724cc64b9e6b85f5b2729ae130c308da62ab19a0f0b91e192f",
+              "sections": [
+                {
+                  "name": "jntWpn_10_ACOG4X_Standard",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 1862,
+                  "triangles": 1382,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_10_ACOG4X_Standard_ZOnly",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 834,
+                  "triangles": 1382,
+                  "normalized": true
+                }
+              ]
+            },
+            {
+              "lod": 2,
+              "resource": "Objects/Weapons/Unlock/ACOG_4X/US_ACOG_4X_Mesh_lod2_data.res",
+              "sha256": "6ee6af1bd9ee7cd3ffe5bf78e93ddb1b91456465bf86ba2496b0e95d7f061334",
+              "sections": [
+                {
+                  "name": "jntWpn_10_ACOG4X_Standard",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 1204,
+                  "triangles": 849,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_10_ACOG4X_Standard_ZOnly",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 543,
+                  "triangles": 849,
+                  "normalized": true
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "asset": "M416",
+      "meshes": [
+        "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh",
+        "Objects/Weapons/Unlock/ACOG_4X/US_ACOG_4X_Mesh"
+      ],
+      "weighted_names": [
+        "jntWpn_12",
+        "jntWpn_13",
+        "jntWpn_10",
+        "jntWpn_11",
+        "jntWpn_17",
+        "jntWpn_3",
+        "jntWpn_2",
+        "jntWpn_1",
+        "jntWpn_7",
+        "jntWpn_6",
+        "jntWpn_5",
+        "jntWpn_4",
+        "jntWpn_9",
+        "jntWpn_8"
+      ],
+      "rig_fingerprint": "a7f219a1426216ab",
+      "native_admitted": false,
+      "native_configured_set_proven": false,
+      "weighted_section_data_verified": true,
+      "authored_configuration": {
+        "resource": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Scoped.dbx",
+        "sha256": "6a4dd608be0432b022795d44bfbd55c8939c5d0fd6d95c7b421a740ab192c247",
+        "instance_guid": "796CAB59-65BC-4D59-B868-983681809062",
+        "mesh_references": [
+          {
+            "reference": "objects/weapons/handheld/ul_rif_hk416/ul_rif_hk416_mesh/2d38fc69-8e6f-11db-8d63-dc48e2dbe34b",
+            "resource": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh.dbx",
+            "sha256": "907f2bf03cf04c58da8d246fb5be6183f60aca45a7688907ce9c7001417c18f5",
+            "instance_guid": "2d38fc69-8e6f-11db-8d63-dc48e2dbe34b"
+          },
+          {
+            "reference": "objects/weapons/unlock/acog_4x/us_acog_4x_mesh/62360b4a-8ee5-11dd-9ccd-dde5da16fae6",
+            "resource": "Objects/Weapons/Unlock/ACOG_4X/US_ACOG_4X_Mesh.dbx",
+            "sha256": "09929af7de9cd7f7b971ed05f47941046daacd6627728249a0059352ddb6b69b",
+            "instance_guid": "62360b4a-8ee5-11dd-9ccd-dde5da16fae6"
+          }
+        ]
+      },
+      "resources": [
+        {
+          "mesh": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh",
+          "archive": "Dist/win32/async/weapon/ul_rgl_hk416-00.fbrb",
+          "index_sha256": "fae27003405ac15ee916e753228910d0e8559e5964b0033354d162bfdb188508",
+          "metadata_sha256": "d2acc4490d3c585fd6adc6a304f0f08758d066605dfc5fa0cea83a7d85a4b5ac",
+          "lods": [
+            {
+              "lod": 0,
+              "resource": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh_lod0_data.res",
+              "sha256": "55a13bb1563c73205a8de3a45865b6e747acf5458b5ccd95ec1dddf9d3855fd7",
+              "sections": [
+                {
+                  "name": "export1p|lod0|UL_rif_HK416_Base|UL_rif_HK416_BaseShape_Plastic",
+                  "weighted_hashes": [
+                    "f7f9bcd2",
+                    "f7f9bcda"
+                  ],
+                  "vertices": 2173,
+                  "triangles": 1654,
+                  "normalized": true
+                },
+                {
+                  "name": "export1p|lod0|UL_rif_HK416_Base|UL_rif_HK416_BaseShape_decal_decal",
+                  "weighted_hashes": [
+                    "f7f9bcd2",
+                    "f7f9bcd7",
+                    "f7f9bcdb"
+                  ],
+                  "vertices": 27,
+                  "triangles": 15,
+                  "normalized": true
+                },
+                {
+                  "name": "export1p|lod0|UL_rif_HK416_Base|UL_rif_HK416_BaseShape_BrushedMetal",
+                  "weighted_hashes": [
+                    "f7315723",
+                    "f7f9bcd0",
+                    "f7f9bcd1",
+                    "f7f9bcd2",
+                    "f7f9bcd6",
+                    "f7f9bcd7",
+                    "f7f9bcda",
+                    "f7f9bcdb"
+                  ],
+                  "vertices": 5681,
+                  "triangles": 4260,
+                  "normalized": true
+                },
+                {
+                  "name": "export1p|lod0|UL_rif_HK416_Base|UL_rif_HK416_BaseShape_FlatMetal",
+                  "weighted_hashes": [
+                    "f7315723",
+                    "f7315725",
+                    "f7f9bcd2",
+                    "f7f9bcd4",
+                    "f7f9bcd5"
+                  ],
+                  "vertices": 2936,
+                  "triangles": 1692,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_12_Ammo",
+                  "weighted_hashes": [
+                    "f7315720",
+                    "f7315721",
+                    "f7f9bcd5"
+                  ],
+                  "vertices": 336,
+                  "triangles": 344,
+                  "normalized": true
+                },
+                {
+                  "name": "export1p|lod0|UL_rif_HK416_Base|UL_rif_HK416_BaseShape_Plastic_ZOnly",
+                  "weighted_hashes": [
+                    "f7315720",
+                    "f7315721",
+                    "f7315723",
+                    "f7315725",
+                    "f7f9bcd0",
+                    "f7f9bcd1",
+                    "f7f9bcd2",
+                    "f7f9bcd4",
+                    "f7f9bcd5",
+                    "f7f9bcd6",
+                    "f7f9bcd7",
+                    "f7f9bcda",
+                    "f7f9bcdb"
+                  ],
+                  "vertices": 4976,
+                  "triangles": 7950,
+                  "normalized": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "mesh": "Objects/Weapons/Unlock/ACOG_4X/US_ACOG_4X_Mesh",
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965",
+          "metadata_sha256": "bb534cd5cdd40d0a32c845ae31926a9e37f6cbdadd1f15681dc890b0e24aee43",
+          "lods": [
+            {
+              "lod": 0,
+              "resource": "Objects/Weapons/Unlock/ACOG_4X/US_ACOG_4X_Mesh_lod0_data.res",
+              "sha256": "801361ce3160ef3392a7bb3317d77ed70b8631fb9abc661b67517314059a36a9",
+              "sections": [
+                {
+                  "name": "jntWpn_10_ACOG4X_Standard",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 2412,
+                  "triangles": 1761,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_10_ACOG_4X_Glass",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 18,
+                  "triangles": 16,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_10_ACOG_RedDot",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 8,
+                  "triangles": 4,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_10_ACOG4X_Standard_ZOnly",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 1006,
+                  "triangles": 1761,
+                  "normalized": true
+                }
+              ]
+            },
+            {
+              "lod": 1,
+              "resource": "Objects/Weapons/Unlock/ACOG_4X/US_ACOG_4X_Mesh_lod1_data.res",
+              "sha256": "4cca2361d14139724cc64b9e6b85f5b2729ae130c308da62ab19a0f0b91e192f",
+              "sections": [
+                {
+                  "name": "jntWpn_10_ACOG4X_Standard",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 1862,
+                  "triangles": 1382,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_10_ACOG4X_Standard_ZOnly",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 834,
+                  "triangles": 1382,
+                  "normalized": true
+                }
+              ]
+            },
+            {
+              "lod": 2,
+              "resource": "Objects/Weapons/Unlock/ACOG_4X/US_ACOG_4X_Mesh_lod2_data.res",
+              "sha256": "6ee6af1bd9ee7cd3ffe5bf78e93ddb1b91456465bf86ba2496b0e95d7f061334",
+              "sections": [
+                {
+                  "name": "jntWpn_10_ACOG4X_Standard",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 1204,
+                  "triangles": 849,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_10_ACOG4X_Standard_ZOnly",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 543,
+                  "triangles": 849,
+                  "normalized": true
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "asset": "XM8C",
+      "meshes": [
+        "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Mesh",
+        "Objects/Weapons/Unlock/RU_Scope_RedDot_Kobra/RU_Scope_RedDot_Kobra_Mesh"
+      ],
+      "weighted_names": [
+        "jntWpnwpnJnt_16",
+        "jntWpn_10",
+        "jntWpn_17",
+        "jntWpn_2",
+        "jntWpn_1",
+        "jntWpn_6",
+        "jntWpn_5"
+      ],
+      "rig_fingerprint": "a7f219a1426216ab",
+      "native_admitted": false,
+      "native_configured_set_proven": false,
+      "weighted_section_data_verified": true,
+      "authored_configuration": {
+        "resource": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Kobra.dbx",
+        "sha256": "b3a2b0b87554e994332c9e4d5819c6dd327afb26ab718a2b0161c5313464f6a6",
+        "instance_guid": "461CFAFC-F0DF-4323-AC58-57FBCB733D6F",
+        "mesh_references": [
+          {
+            "reference": "objects/weapons/handheld/us_rif_xm8c/us_rif_xm8c_mesh/e59613a4-8615-11db-bba1-fac2f0768b16",
+            "resource": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Mesh.dbx",
+            "sha256": "177a4a5a0d7ba908665c3c5ff358a8f28a5888a30b20c31c4704f0b49c27ccdb",
+            "instance_guid": "e59613a4-8615-11db-bba1-fac2f0768b16"
+          },
+          {
+            "reference": "objects/weapons/unlock/ru_scope_reddot_kobra/ru_scope_reddot_kobra_mesh/f11b5955-e6dd-44b5-84a8-9345c574c211",
+            "resource": "Objects/Weapons/Unlock/RU_Scope_RedDot_Kobra/RU_Scope_RedDot_Kobra_Mesh.dbx",
+            "sha256": "dfcba00ee1d9cbcca2354daa7b562ec6c579218a55c4a76f7f591276124c8f9a",
+            "instance_guid": "f11b5955-e6dd-44b5-84a8-9345c574c211"
+          }
+        ]
+      },
+      "resources": [
+        {
+          "mesh": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Mesh",
+          "archive": "Dist/win32/async/weapon/us_rif_xm8c-00.fbrb",
+          "index_sha256": "a34b0dd36780f790fd6cd6d8df27f432b2cb8f82b276e8d0a93a61a4308025c5",
+          "metadata_sha256": "e7e8b8ca1e8d2f03cd67e28f3abc307a88bd9c35f2df609bad46896e7c2559d7",
+          "lods": [
+            {
+              "lod": 0,
+              "resource": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Mesh_lod0_data.res",
+              "sha256": "2a4e6ec920a128dc264e4912e0b75f9ee79fc1e49e703cca67cefc91c4491b7c",
+              "sections": [
+                {
+                  "name": "jntWpn_1_Rubber",
+                  "weighted_hashes": [
+                    "f7315725",
+                    "f7f9bcd2"
+                  ],
+                  "vertices": 1851,
+                  "triangles": 1203,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_1_Composite",
+                  "weighted_hashes": [
+                    "f7f9bcd2",
+                    "f7f9bcd5",
+                    "f7f9bcd6"
+                  ],
+                  "vertices": 4454,
+                  "triangles": 2236,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_1_BrushedMetal",
+                  "weighted_hashes": [
+                    "f2519cbd",
+                    "f7315725",
+                    "f7f9bcd1",
+                    "f7f9bcd2"
+                  ],
+                  "vertices": 3890,
+                  "triangles": 2024,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_6_Plastic",
+                  "weighted_hashes": [
+                    "f7f9bcd5"
+                  ],
+                  "vertices": 580,
+                  "triangles": 404,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_6_Ammo",
+                  "weighted_hashes": [
+                    "f7f9bcd5"
+                  ],
+                  "vertices": 56,
+                  "triangles": 42,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_1_Rubber_ZOnly",
+                  "weighted_hashes": [
+                    "f2519cbd",
+                    "f7315725",
+                    "f7f9bcd1",
+                    "f7f9bcd2",
+                    "f7f9bcd5",
+                    "f7f9bcd6"
+                  ],
+                  "vertices": 3089,
+                  "triangles": 5505,
+                  "normalized": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "mesh": "Objects/Weapons/Unlock/RU_Scope_RedDot_Kobra/RU_Scope_RedDot_Kobra_Mesh",
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965",
+          "metadata_sha256": "11e09f461090fd8db68e6b568f3eeb1304f533c0ac0198c410f08a17c3b0c334",
+          "lods": [
+            {
+              "lod": 0,
+              "resource": "Objects/Weapons/Unlock/RU_Scope_RedDot_Kobra/RU_Scope_RedDot_Kobra_Mesh_lod0_data.res",
+              "sha256": "e6b2b49ebfd812be9dedf401697b2cf277586fee4edb3bd061348c9d94c1d5b5",
+              "sections": [
+                {
+                  "name": "jntWpn_10__Standard",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 2042,
+                  "triangles": 1426,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_10__Glass",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 18,
+                  "triangles": 16,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_10_Reddot1",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 18,
+                  "triangles": 16,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_10__Standard_ZOnly",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 871,
+                  "triangles": 1426,
+                  "normalized": true
+                }
+              ]
+            },
+            {
+              "lod": 1,
+              "resource": "Objects/Weapons/Unlock/RU_Scope_RedDot_Kobra/RU_Scope_RedDot_Kobra_Mesh_lod1_data.res",
+              "sha256": "1c96b57b8d54d7c19b935f2b50302a39e31c064507c8fb8313660a0900c398a4",
+              "sections": [
+                {
+                  "name": "jntWpn_10__Standard",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 674,
+                  "triangles": 522,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_10__Glass",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 18,
+                  "triangles": 16,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_10__Standard_ZOnly",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 359,
+                  "triangles": 522,
+                  "normalized": true
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "asset": "MG36",
+      "meshes": [
+        "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Mesh"
+      ],
+      "weighted_names": [
+        "jntWpn_12",
+        "jntWpn_13",
+        "jntWpn_2",
+        "jntWpn_1",
+        "jntWpn_6",
+        "jntWpn_5",
+        "jntWpn_4"
+      ],
+      "rig_fingerprint": "a7f219a1426216ab",
+      "native_admitted": false,
+      "native_configured_set_proven": false,
+      "weighted_section_data_verified": true,
+      "authored_configuration": {
+        "resource": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36.dbx",
+        "sha256": "7a564c7726be97924e36db02ec6a218f6b1500c057dffe004b3df549a60a15c1",
+        "instance_guid": "B5101354-A431-45C0-B640-2F2339AC9E86",
+        "mesh_references": [
+          {
+            "reference": "objects/weapons/handheld/bu_lmg_mg36/bu_lmg_mg36_mesh/f5dd70bb-22cf-4cb9-bdf7-fd42f0ada967",
+            "resource": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Mesh.dbx",
+            "sha256": "7a2921be5a17a6679e379c355e2142c09ce42e87bfb39d13584dbdaf8864ed14",
+            "instance_guid": "f5dd70bb-22cf-4cb9-bdf7-fd42f0ada967"
+          }
+        ]
+      },
+      "resources": [
+        {
+          "mesh": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Mesh",
+          "archive": "Dist/win32/async/weapon/bu_lmg_mg36-00.fbrb",
+          "index_sha256": "9ee8e253d36bf18fd9a0b7c0828e7555e2122f8675b255a220e4e51423977905",
+          "metadata_sha256": "de8980c038159fe89f4a7d16d41aa662652c2cd1938a08d4fbc83c50728e64b5",
+          "lods": [
+            {
+              "lod": 0,
+              "resource": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Mesh_lod0_data.res",
+              "sha256": "16e2e4ed8fc8050574ac7e29bff114b8e1c82693394701515f1f80fff3ba8195",
+              "sections": [
+                {
+                  "name": "jntWpn_1_Glass",
+                  "weighted_hashes": [
+                    "f7f9bcd2"
+                  ],
+                  "vertices": 134,
+                  "triangles": 126,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_1_decal_decal",
+                  "weighted_hashes": [
+                    "f7f9bcd2"
+                  ],
+                  "vertices": 16,
+                  "triangles": 8,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_1_BrushedMetal",
+                  "weighted_hashes": [
+                    "f7315720",
+                    "f7315721",
+                    "f7f9bcd1",
+                    "f7f9bcd2",
+                    "f7f9bcd5",
+                    "f7f9bcd6",
+                    "f7f9bcd7"
+                  ],
+                  "vertices": 2334,
+                  "triangles": 1878,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_1_Plastic",
+                  "weighted_hashes": [
+                    "f7f9bcd2",
+                    "f7f9bcd5"
+                  ],
+                  "vertices": 960,
+                  "triangles": 928,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_1_Composite",
+                  "weighted_hashes": [
+                    "f7315721",
+                    "f7f9bcd2",
+                    "f7f9bcd5"
+                  ],
+                  "vertices": 5677,
+                  "triangles": 4756,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_6_Ammo",
+                  "weighted_hashes": [
+                    "f7f9bcd5"
+                  ],
+                  "vertices": 4,
+                  "triangles": 2,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_1_Glass_ZOnly",
+                  "weighted_hashes": [
+                    "f7315720",
+                    "f7315721",
+                    "f7f9bcd1",
+                    "f7f9bcd2",
+                    "f7f9bcd5",
+                    "f7f9bcd6",
+                    "f7f9bcd7"
+                  ],
+                  "vertices": 4068,
+                  "triangles": 7690,
+                  "normalized": true
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "asset": "XM8C",
+      "meshes": [
+        "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Mesh"
+      ],
+      "weighted_names": [
+        "jntWpnwpnJnt_16",
+        "jntWpn_17",
+        "jntWpn_2",
+        "jntWpn_1",
+        "jntWpn_6",
+        "jntWpn_5"
+      ],
+      "rig_fingerprint": "a7f219a1426216ab",
+      "native_admitted": false,
+      "native_configured_set_proven": false,
+      "weighted_section_data_verified": true,
+      "authored_configuration": {
+        "resource": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c.dbx",
+        "sha256": "21a6b56404b4ade896da5cd9b08a89db4db710c33ba0d99bff33f0acbcad4d9c",
+        "instance_guid": "93E2A23E-B8D6-490B-8468-0B789DA8E35C",
+        "mesh_references": [
+          {
+            "reference": "objects/weapons/handheld/us_rif_xm8c/us_rif_xm8c_mesh/e59613a4-8615-11db-bba1-fac2f0768b16",
+            "resource": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Mesh.dbx",
+            "sha256": "177a4a5a0d7ba908665c3c5ff358a8f28a5888a30b20c31c4704f0b49c27ccdb",
+            "instance_guid": "e59613a4-8615-11db-bba1-fac2f0768b16"
+          }
+        ]
+      },
+      "resources": [
+        {
+          "mesh": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Mesh",
+          "archive": "Dist/win32/async/weapon/us_rif_xm8c-00.fbrb",
+          "index_sha256": "a34b0dd36780f790fd6cd6d8df27f432b2cb8f82b276e8d0a93a61a4308025c5",
+          "metadata_sha256": "e7e8b8ca1e8d2f03cd67e28f3abc307a88bd9c35f2df609bad46896e7c2559d7",
+          "lods": [
+            {
+              "lod": 0,
+              "resource": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Mesh_lod0_data.res",
+              "sha256": "2a4e6ec920a128dc264e4912e0b75f9ee79fc1e49e703cca67cefc91c4491b7c",
+              "sections": [
+                {
+                  "name": "jntWpn_1_Rubber",
+                  "weighted_hashes": [
+                    "f7315725",
+                    "f7f9bcd2"
+                  ],
+                  "vertices": 1851,
+                  "triangles": 1203,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_1_Composite",
+                  "weighted_hashes": [
+                    "f7f9bcd2",
+                    "f7f9bcd5",
+                    "f7f9bcd6"
+                  ],
+                  "vertices": 4454,
+                  "triangles": 2236,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_1_BrushedMetal",
+                  "weighted_hashes": [
+                    "f2519cbd",
+                    "f7315725",
+                    "f7f9bcd1",
+                    "f7f9bcd2"
+                  ],
+                  "vertices": 3890,
+                  "triangles": 2024,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_6_Plastic",
+                  "weighted_hashes": [
+                    "f7f9bcd5"
+                  ],
+                  "vertices": 580,
+                  "triangles": 404,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_6_Ammo",
+                  "weighted_hashes": [
+                    "f7f9bcd5"
+                  ],
+                  "vertices": 56,
+                  "triangles": 42,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_1_Rubber_ZOnly",
+                  "weighted_hashes": [
+                    "f2519cbd",
+                    "f7315725",
+                    "f7f9bcd1",
+                    "f7f9bcd2",
+                    "f7f9bcd5",
+                    "f7f9bcd6"
+                  ],
+                  "vertices": 3089,
+                  "triangles": 5505,
+                  "normalized": true
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "asset": "XM8 LMG",
+      "meshes": [
+        "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Mesh"
+      ],
+      "weighted_names": [
+        "jntWpnwpnJnt_16",
+        "jntWpn_11",
+        "jntWpn_17",
+        "jntWpn_3",
+        "jntWpn_2",
+        "jntWpn_1",
+        "jntWpn_6",
+        "jntWpn_5",
+        "jntWpn_9"
+      ],
+      "rig_fingerprint": "a7f219a1426216ab",
+      "native_admitted": false,
+      "native_configured_set_proven": false,
+      "weighted_section_data_verified": true,
+      "authored_configuration": {
+        "resource": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg.dbx",
+        "sha256": "515f82d772129e026d2c713ef33b0cc665f86f364ac4a754d52c7c465b7046ef",
+        "instance_guid": "16FF338B-657B-4966-8A9E-BBA5D3C40834",
+        "mesh_references": [
+          {
+            "reference": "objects/weapons/handheld/us_rif_xm8lmg/us_rif_xm8lmg_mesh/33970e69-8164-11db-84f6-f5cdea1d71b5",
+            "resource": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Mesh.dbx",
+            "sha256": "5bd4140f925a799c9374b872045fbcbc95621bdf98dcd04e19490190451c360d",
+            "instance_guid": "33970e69-8164-11db-84f6-f5cdea1d71b5"
+          }
+        ]
+      },
+      "resources": [
+        {
+          "mesh": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Mesh",
+          "archive": "Dist/win32/async/weapon/us_rif_xm8lmg-00.fbrb",
+          "index_sha256": "772d37bbb21e87c85c152ffd2097152fd394941f75c0fa381d27ef18121f901d",
+          "metadata_sha256": "b019321d9a47bb078997b98e6c9174396e955b0d82f6ee02af6884086d97a7c8",
+          "lods": [
+            {
+              "lod": 0,
+              "resource": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Mesh_lod0_data.res",
+              "sha256": "1ef5f57dfc88e70ffcaedec39822d9475ba0577b7556917d01078ca91b2de5ef",
+              "sections": [
+                {
+                  "name": "jntWpn_3_BrushedMetal",
+                  "weighted_hashes": [
+                    "f2519cbd",
+                    "f7315723",
+                    "f7315725",
+                    "f7f9bcd0",
+                    "f7f9bcd1",
+                    "f7f9bcd2",
+                    "f7f9bcd5",
+                    "f7f9bcd6"
+                  ],
+                  "vertices": 4610,
+                  "triangles": 3830,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_3_Rubber",
+                  "weighted_hashes": [
+                    "f7315723",
+                    "f7315725",
+                    "f7f9bcd0",
+                    "f7f9bcd2",
+                    "f7f9bcda"
+                  ],
+                  "vertices": 2225,
+                  "triangles": 1983,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_1_Composite",
+                  "weighted_hashes": [
+                    "f7f9bcd2",
+                    "f7f9bcda"
+                  ],
+                  "vertices": 3293,
+                  "triangles": 2692,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_6_Ammo",
+                  "weighted_hashes": [
+                    "f7f9bcd5"
+                  ],
+                  "vertices": 4,
+                  "triangles": 2,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_3_BrushedMetal_ZOnly",
+                  "weighted_hashes": [
+                    "f2519cbd",
+                    "f7315723",
+                    "f7315725",
+                    "f7f9bcd0",
+                    "f7f9bcd1",
+                    "f7f9bcd2",
+                    "f7f9bcd5",
+                    "f7f9bcd6",
+                    "f7f9bcda"
+                  ],
+                  "vertices": 4645,
+                  "triangles": 8507,
+                  "normalized": true
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "asset": "M416",
+      "meshes": [
+        "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh"
+      ],
+      "weighted_names": [
+        "jntWpn_12",
+        "jntWpn_13",
+        "jntWpn_11",
+        "jntWpn_17",
+        "jntWpn_3",
+        "jntWpn_2",
+        "jntWpn_1",
+        "jntWpn_7",
+        "jntWpn_6",
+        "jntWpn_5",
+        "jntWpn_4",
+        "jntWpn_9",
+        "jntWpn_8"
+      ],
+      "rig_fingerprint": "a7f219a1426216ab",
+      "native_admitted": false,
+      "native_configured_set_proven": false,
+      "weighted_section_data_verified": true,
+      "authored_configuration": {
+        "resource": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416.dbx",
+        "sha256": "0bd854517cadef34c6eef85698736eca2c05c797fb5ed2f3dec35c2a2b61326a",
+        "instance_guid": "CA69BFBA-0F21-42E3-BBE9-FA2902600563",
+        "mesh_references": [
+          {
+            "reference": "objects/weapons/handheld/ul_rif_hk416/ul_rif_hk416_mesh/2d38fc69-8e6f-11db-8d63-dc48e2dbe34b",
+            "resource": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh.dbx",
+            "sha256": "907f2bf03cf04c58da8d246fb5be6183f60aca45a7688907ce9c7001417c18f5",
+            "instance_guid": "2d38fc69-8e6f-11db-8d63-dc48e2dbe34b"
+          }
+        ]
+      },
+      "resources": [
+        {
+          "mesh": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh",
+          "archive": "Dist/win32/async/weapon/ul_rgl_hk416-00.fbrb",
+          "index_sha256": "fae27003405ac15ee916e753228910d0e8559e5964b0033354d162bfdb188508",
+          "metadata_sha256": "d2acc4490d3c585fd6adc6a304f0f08758d066605dfc5fa0cea83a7d85a4b5ac",
+          "lods": [
+            {
+              "lod": 0,
+              "resource": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh_lod0_data.res",
+              "sha256": "55a13bb1563c73205a8de3a45865b6e747acf5458b5ccd95ec1dddf9d3855fd7",
+              "sections": [
+                {
+                  "name": "export1p|lod0|UL_rif_HK416_Base|UL_rif_HK416_BaseShape_Plastic",
+                  "weighted_hashes": [
+                    "f7f9bcd2",
+                    "f7f9bcda"
+                  ],
+                  "vertices": 2173,
+                  "triangles": 1654,
+                  "normalized": true
+                },
+                {
+                  "name": "export1p|lod0|UL_rif_HK416_Base|UL_rif_HK416_BaseShape_decal_decal",
+                  "weighted_hashes": [
+                    "f7f9bcd2",
+                    "f7f9bcd7",
+                    "f7f9bcdb"
+                  ],
+                  "vertices": 27,
+                  "triangles": 15,
+                  "normalized": true
+                },
+                {
+                  "name": "export1p|lod0|UL_rif_HK416_Base|UL_rif_HK416_BaseShape_BrushedMetal",
+                  "weighted_hashes": [
+                    "f7315723",
+                    "f7f9bcd0",
+                    "f7f9bcd1",
+                    "f7f9bcd2",
+                    "f7f9bcd6",
+                    "f7f9bcd7",
+                    "f7f9bcda",
+                    "f7f9bcdb"
+                  ],
+                  "vertices": 5681,
+                  "triangles": 4260,
+                  "normalized": true
+                },
+                {
+                  "name": "export1p|lod0|UL_rif_HK416_Base|UL_rif_HK416_BaseShape_FlatMetal",
+                  "weighted_hashes": [
+                    "f7315723",
+                    "f7315725",
+                    "f7f9bcd2",
+                    "f7f9bcd4",
+                    "f7f9bcd5"
+                  ],
+                  "vertices": 2936,
+                  "triangles": 1692,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_12_Ammo",
+                  "weighted_hashes": [
+                    "f7315720",
+                    "f7315721",
+                    "f7f9bcd5"
+                  ],
+                  "vertices": 336,
+                  "triangles": 344,
+                  "normalized": true
+                },
+                {
+                  "name": "export1p|lod0|UL_rif_HK416_Base|UL_rif_HK416_BaseShape_Plastic_ZOnly",
+                  "weighted_hashes": [
+                    "f7315720",
+                    "f7315721",
+                    "f7315723",
+                    "f7315725",
+                    "f7f9bcd0",
+                    "f7f9bcd1",
+                    "f7f9bcd2",
+                    "f7f9bcd4",
+                    "f7f9bcd5",
+                    "f7f9bcd6",
+                    "f7f9bcd7",
+                    "f7f9bcda",
+                    "f7f9bcdb"
+                  ],
+                  "vertices": 4976,
+                  "triangles": 7950,
+                  "normalized": true
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "asset": "MG36",
+      "meshes": [
+        "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Mesh"
+      ],
+      "weighted_names": [
+        "jntWpn_12",
+        "jntWpn_13",
+        "jntWpn_2",
+        "jntWpn_1",
+        "jntWpn_6",
+        "jntWpn_5",
+        "jntWpn_4"
+      ],
+      "rig_fingerprint": "a7f219a1426216ab",
+      "native_admitted": false,
+      "native_configured_set_proven": false,
+      "weighted_section_data_verified": true,
+      "authored_configuration": {
+        "resource": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Kobra.dbx",
+        "sha256": "d0e44f08b2e86ab0e99a890f8a4d8af4adbb4c6ccbc0a2d98a8349f643b664fb",
+        "instance_guid": "75E08CB5-F9FD-4D99-9ADC-5C172DB310FC",
+        "mesh_references": [
+          {
+            "reference": "objects/weapons/handheld/bu_lmg_mg36/bu_lmg_mg36_mesh/f5dd70bb-22cf-4cb9-bdf7-fd42f0ada967",
+            "resource": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Mesh.dbx",
+            "sha256": "7a2921be5a17a6679e379c355e2142c09ce42e87bfb39d13584dbdaf8864ed14",
+            "instance_guid": "f5dd70bb-22cf-4cb9-bdf7-fd42f0ada967"
+          }
+        ]
+      },
+      "resources": [
+        {
+          "mesh": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Mesh",
+          "archive": "Dist/win32/async/weapon/bu_lmg_mg36-00.fbrb",
+          "index_sha256": "9ee8e253d36bf18fd9a0b7c0828e7555e2122f8675b255a220e4e51423977905",
+          "metadata_sha256": "de8980c038159fe89f4a7d16d41aa662652c2cd1938a08d4fbc83c50728e64b5",
+          "lods": [
+            {
+              "lod": 0,
+              "resource": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Mesh_lod0_data.res",
+              "sha256": "16e2e4ed8fc8050574ac7e29bff114b8e1c82693394701515f1f80fff3ba8195",
+              "sections": [
+                {
+                  "name": "jntWpn_1_Glass",
+                  "weighted_hashes": [
+                    "f7f9bcd2"
+                  ],
+                  "vertices": 134,
+                  "triangles": 126,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_1_decal_decal",
+                  "weighted_hashes": [
+                    "f7f9bcd2"
+                  ],
+                  "vertices": 16,
+                  "triangles": 8,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_1_BrushedMetal",
+                  "weighted_hashes": [
+                    "f7315720",
+                    "f7315721",
+                    "f7f9bcd1",
+                    "f7f9bcd2",
+                    "f7f9bcd5",
+                    "f7f9bcd6",
+                    "f7f9bcd7"
+                  ],
+                  "vertices": 2334,
+                  "triangles": 1878,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_1_Plastic",
+                  "weighted_hashes": [
+                    "f7f9bcd2",
+                    "f7f9bcd5"
+                  ],
+                  "vertices": 960,
+                  "triangles": 928,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_1_Composite",
+                  "weighted_hashes": [
+                    "f7315721",
+                    "f7f9bcd2",
+                    "f7f9bcd5"
+                  ],
+                  "vertices": 5677,
+                  "triangles": 4756,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_6_Ammo",
+                  "weighted_hashes": [
+                    "f7f9bcd5"
+                  ],
+                  "vertices": 4,
+                  "triangles": 2,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_1_Glass_ZOnly",
+                  "weighted_hashes": [
+                    "f7315720",
+                    "f7315721",
+                    "f7f9bcd1",
+                    "f7f9bcd2",
+                    "f7f9bcd5",
+                    "f7f9bcd6",
+                    "f7f9bcd7"
+                  ],
+                  "vertices": 4068,
+                  "triangles": 7690,
+                  "normalized": true
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "asset": "M416",
+      "meshes": [
+        "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh",
+        "Objects/Weapons/Unlock/RU_Scope_RedDot_Kobra/RU_Scope_RedDot_Kobra_Mesh"
+      ],
+      "weighted_names": [
+        "jntWpn_12",
+        "jntWpn_13",
+        "jntWpn_10",
+        "jntWpn_11",
+        "jntWpn_17",
+        "jntWpn_3",
+        "jntWpn_2",
+        "jntWpn_1",
+        "jntWpn_7",
+        "jntWpn_6",
+        "jntWpn_5",
+        "jntWpn_4",
+        "jntWpn_9",
+        "jntWpn_8"
+      ],
+      "rig_fingerprint": "a7f219a1426216ab",
+      "native_admitted": false,
+      "native_configured_set_proven": false,
+      "weighted_section_data_verified": true,
+      "authored_configuration": {
+        "resource": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Kobra.dbx",
+        "sha256": "6a7232f70141053111da71246e385861f1e5d0e50e02cfcd28fe2947d8d34ad5",
+        "instance_guid": "C8E7F199-D0C4-44D7-A44B-AD221C23CB9C",
+        "mesh_references": [
+          {
+            "reference": "objects/weapons/handheld/ul_rif_hk416/ul_rif_hk416_mesh/2d38fc69-8e6f-11db-8d63-dc48e2dbe34b",
+            "resource": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh.dbx",
+            "sha256": "907f2bf03cf04c58da8d246fb5be6183f60aca45a7688907ce9c7001417c18f5",
+            "instance_guid": "2d38fc69-8e6f-11db-8d63-dc48e2dbe34b"
+          },
+          {
+            "reference": "objects/weapons/unlock/ru_scope_reddot_kobra/ru_scope_reddot_kobra_mesh/f11b5955-e6dd-44b5-84a8-9345c574c211",
+            "resource": "Objects/Weapons/Unlock/RU_Scope_RedDot_Kobra/RU_Scope_RedDot_Kobra_Mesh.dbx",
+            "sha256": "dfcba00ee1d9cbcca2354daa7b562ec6c579218a55c4a76f7f591276124c8f9a",
+            "instance_guid": "f11b5955-e6dd-44b5-84a8-9345c574c211"
+          }
+        ]
+      },
+      "resources": [
+        {
+          "mesh": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh",
+          "archive": "Dist/win32/async/weapon/ul_rgl_hk416-00.fbrb",
+          "index_sha256": "fae27003405ac15ee916e753228910d0e8559e5964b0033354d162bfdb188508",
+          "metadata_sha256": "d2acc4490d3c585fd6adc6a304f0f08758d066605dfc5fa0cea83a7d85a4b5ac",
+          "lods": [
+            {
+              "lod": 0,
+              "resource": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh_lod0_data.res",
+              "sha256": "55a13bb1563c73205a8de3a45865b6e747acf5458b5ccd95ec1dddf9d3855fd7",
+              "sections": [
+                {
+                  "name": "export1p|lod0|UL_rif_HK416_Base|UL_rif_HK416_BaseShape_Plastic",
+                  "weighted_hashes": [
+                    "f7f9bcd2",
+                    "f7f9bcda"
+                  ],
+                  "vertices": 2173,
+                  "triangles": 1654,
+                  "normalized": true
+                },
+                {
+                  "name": "export1p|lod0|UL_rif_HK416_Base|UL_rif_HK416_BaseShape_decal_decal",
+                  "weighted_hashes": [
+                    "f7f9bcd2",
+                    "f7f9bcd7",
+                    "f7f9bcdb"
+                  ],
+                  "vertices": 27,
+                  "triangles": 15,
+                  "normalized": true
+                },
+                {
+                  "name": "export1p|lod0|UL_rif_HK416_Base|UL_rif_HK416_BaseShape_BrushedMetal",
+                  "weighted_hashes": [
+                    "f7315723",
+                    "f7f9bcd0",
+                    "f7f9bcd1",
+                    "f7f9bcd2",
+                    "f7f9bcd6",
+                    "f7f9bcd7",
+                    "f7f9bcda",
+                    "f7f9bcdb"
+                  ],
+                  "vertices": 5681,
+                  "triangles": 4260,
+                  "normalized": true
+                },
+                {
+                  "name": "export1p|lod0|UL_rif_HK416_Base|UL_rif_HK416_BaseShape_FlatMetal",
+                  "weighted_hashes": [
+                    "f7315723",
+                    "f7315725",
+                    "f7f9bcd2",
+                    "f7f9bcd4",
+                    "f7f9bcd5"
+                  ],
+                  "vertices": 2936,
+                  "triangles": 1692,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_12_Ammo",
+                  "weighted_hashes": [
+                    "f7315720",
+                    "f7315721",
+                    "f7f9bcd5"
+                  ],
+                  "vertices": 336,
+                  "triangles": 344,
+                  "normalized": true
+                },
+                {
+                  "name": "export1p|lod0|UL_rif_HK416_Base|UL_rif_HK416_BaseShape_Plastic_ZOnly",
+                  "weighted_hashes": [
+                    "f7315720",
+                    "f7315721",
+                    "f7315723",
+                    "f7315725",
+                    "f7f9bcd0",
+                    "f7f9bcd1",
+                    "f7f9bcd2",
+                    "f7f9bcd4",
+                    "f7f9bcd5",
+                    "f7f9bcd6",
+                    "f7f9bcd7",
+                    "f7f9bcda",
+                    "f7f9bcdb"
+                  ],
+                  "vertices": 4976,
+                  "triangles": 7950,
+                  "normalized": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "mesh": "Objects/Weapons/Unlock/RU_Scope_RedDot_Kobra/RU_Scope_RedDot_Kobra_Mesh",
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965",
+          "metadata_sha256": "11e09f461090fd8db68e6b568f3eeb1304f533c0ac0198c410f08a17c3b0c334",
+          "lods": [
+            {
+              "lod": 0,
+              "resource": "Objects/Weapons/Unlock/RU_Scope_RedDot_Kobra/RU_Scope_RedDot_Kobra_Mesh_lod0_data.res",
+              "sha256": "e6b2b49ebfd812be9dedf401697b2cf277586fee4edb3bd061348c9d94c1d5b5",
+              "sections": [
+                {
+                  "name": "jntWpn_10__Standard",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 2042,
+                  "triangles": 1426,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_10__Glass",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 18,
+                  "triangles": 16,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_10_Reddot1",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 18,
+                  "triangles": 16,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_10__Standard_ZOnly",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 871,
+                  "triangles": 1426,
+                  "normalized": true
+                }
+              ]
+            },
+            {
+              "lod": 1,
+              "resource": "Objects/Weapons/Unlock/RU_Scope_RedDot_Kobra/RU_Scope_RedDot_Kobra_Mesh_lod1_data.res",
+              "sha256": "1c96b57b8d54d7c19b935f2b50302a39e31c064507c8fb8313660a0900c398a4",
+              "sections": [
+                {
+                  "name": "jntWpn_10__Standard",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 674,
+                  "triangles": 522,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_10__Glass",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 18,
+                  "triangles": 16,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_10__Standard_ZOnly",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 359,
+                  "triangles": 522,
+                  "normalized": true
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "asset": "XM8 LMG",
+      "meshes": [
+        "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Mesh",
+        "Objects/Weapons/Unlock/ACOG_4X/US_ACOG_4X_Mesh"
+      ],
+      "weighted_names": [
+        "jntWpnwpnJnt_16",
+        "jntWpn_10",
+        "jntWpn_11",
+        "jntWpn_17",
+        "jntWpn_3",
+        "jntWpn_2",
+        "jntWpn_1",
+        "jntWpn_6",
+        "jntWpn_5",
+        "jntWpn_9"
+      ],
+      "rig_fingerprint": "a7f219a1426216ab",
+      "native_admitted": false,
+      "native_configured_set_proven": false,
+      "weighted_section_data_verified": true,
+      "authored_configuration": {
+        "resource": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Scoped.dbx",
+        "sha256": "9a560d44b3f4d0ed000635bcd4eaa912960db12eb53ecc3bb1fd7bc8e1a00914",
+        "instance_guid": "E5E3BA16-AE7A-4172-889F-3A6C0A397349",
+        "mesh_references": [
+          {
+            "reference": "objects/weapons/handheld/us_rif_xm8lmg/us_rif_xm8lmg_mesh/33970e69-8164-11db-84f6-f5cdea1d71b5",
+            "resource": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Mesh.dbx",
+            "sha256": "5bd4140f925a799c9374b872045fbcbc95621bdf98dcd04e19490190451c360d",
+            "instance_guid": "33970e69-8164-11db-84f6-f5cdea1d71b5"
+          },
+          {
+            "reference": "objects/weapons/unlock/acog_4x/us_acog_4x_mesh/62360b4a-8ee5-11dd-9ccd-dde5da16fae6",
+            "resource": "Objects/Weapons/Unlock/ACOG_4X/US_ACOG_4X_Mesh.dbx",
+            "sha256": "09929af7de9cd7f7b971ed05f47941046daacd6627728249a0059352ddb6b69b",
+            "instance_guid": "62360b4a-8ee5-11dd-9ccd-dde5da16fae6"
+          }
+        ]
+      },
+      "resources": [
+        {
+          "mesh": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Mesh",
+          "archive": "Dist/win32/async/weapon/us_rif_xm8lmg-00.fbrb",
+          "index_sha256": "772d37bbb21e87c85c152ffd2097152fd394941f75c0fa381d27ef18121f901d",
+          "metadata_sha256": "b019321d9a47bb078997b98e6c9174396e955b0d82f6ee02af6884086d97a7c8",
+          "lods": [
+            {
+              "lod": 0,
+              "resource": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Mesh_lod0_data.res",
+              "sha256": "1ef5f57dfc88e70ffcaedec39822d9475ba0577b7556917d01078ca91b2de5ef",
+              "sections": [
+                {
+                  "name": "jntWpn_3_BrushedMetal",
+                  "weighted_hashes": [
+                    "f2519cbd",
+                    "f7315723",
+                    "f7315725",
+                    "f7f9bcd0",
+                    "f7f9bcd1",
+                    "f7f9bcd2",
+                    "f7f9bcd5",
+                    "f7f9bcd6"
+                  ],
+                  "vertices": 4610,
+                  "triangles": 3830,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_3_Rubber",
+                  "weighted_hashes": [
+                    "f7315723",
+                    "f7315725",
+                    "f7f9bcd0",
+                    "f7f9bcd2",
+                    "f7f9bcda"
+                  ],
+                  "vertices": 2225,
+                  "triangles": 1983,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_1_Composite",
+                  "weighted_hashes": [
+                    "f7f9bcd2",
+                    "f7f9bcda"
+                  ],
+                  "vertices": 3293,
+                  "triangles": 2692,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_6_Ammo",
+                  "weighted_hashes": [
+                    "f7f9bcd5"
+                  ],
+                  "vertices": 4,
+                  "triangles": 2,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_3_BrushedMetal_ZOnly",
+                  "weighted_hashes": [
+                    "f2519cbd",
+                    "f7315723",
+                    "f7315725",
+                    "f7f9bcd0",
+                    "f7f9bcd1",
+                    "f7f9bcd2",
+                    "f7f9bcd5",
+                    "f7f9bcd6",
+                    "f7f9bcda"
+                  ],
+                  "vertices": 4645,
+                  "triangles": 8507,
+                  "normalized": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "mesh": "Objects/Weapons/Unlock/ACOG_4X/US_ACOG_4X_Mesh",
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965",
+          "metadata_sha256": "bb534cd5cdd40d0a32c845ae31926a9e37f6cbdadd1f15681dc890b0e24aee43",
+          "lods": [
+            {
+              "lod": 0,
+              "resource": "Objects/Weapons/Unlock/ACOG_4X/US_ACOG_4X_Mesh_lod0_data.res",
+              "sha256": "801361ce3160ef3392a7bb3317d77ed70b8631fb9abc661b67517314059a36a9",
+              "sections": [
+                {
+                  "name": "jntWpn_10_ACOG4X_Standard",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 2412,
+                  "triangles": 1761,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_10_ACOG_4X_Glass",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 18,
+                  "triangles": 16,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_10_ACOG_RedDot",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 8,
+                  "triangles": 4,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_10_ACOG4X_Standard_ZOnly",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 1006,
+                  "triangles": 1761,
+                  "normalized": true
+                }
+              ]
+            },
+            {
+              "lod": 1,
+              "resource": "Objects/Weapons/Unlock/ACOG_4X/US_ACOG_4X_Mesh_lod1_data.res",
+              "sha256": "4cca2361d14139724cc64b9e6b85f5b2729ae130c308da62ab19a0f0b91e192f",
+              "sections": [
+                {
+                  "name": "jntWpn_10_ACOG4X_Standard",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 1862,
+                  "triangles": 1382,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_10_ACOG4X_Standard_ZOnly",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 834,
+                  "triangles": 1382,
+                  "normalized": true
+                }
+              ]
+            },
+            {
+              "lod": 2,
+              "resource": "Objects/Weapons/Unlock/ACOG_4X/US_ACOG_4X_Mesh_lod2_data.res",
+              "sha256": "6ee6af1bd9ee7cd3ffe5bf78e93ddb1b91456465bf86ba2496b0e95d7f061334",
+              "sections": [
+                {
+                  "name": "jntWpn_10_ACOG4X_Standard",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 1204,
+                  "triangles": 849,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_10_ACOG4X_Standard_ZOnly",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 543,
+                  "triangles": 849,
+                  "normalized": true
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "asset": "XM8 LMG",
+      "meshes": [
+        "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Mesh",
+        "Objects/Weapons/Unlock/RU_Scope_RedDot_Kobra/RU_Scope_RedDot_Kobra_Mesh"
+      ],
+      "weighted_names": [
+        "jntWpnwpnJnt_16",
+        "jntWpn_10",
+        "jntWpn_11",
+        "jntWpn_17",
+        "jntWpn_3",
+        "jntWpn_2",
+        "jntWpn_1",
+        "jntWpn_6",
+        "jntWpn_5",
+        "jntWpn_9"
+      ],
+      "rig_fingerprint": "a7f219a1426216ab",
+      "native_admitted": false,
+      "native_configured_set_proven": false,
+      "weighted_section_data_verified": true,
+      "authored_configuration": {
+        "resource": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Kobra.dbx",
+        "sha256": "c49132975819d3fd9a6163f6466aa2f8bfa194f084e53bd14ef77185d1c36965",
+        "instance_guid": "294F6305-DCDF-4BE8-81CD-F5F62ED333C2",
+        "mesh_references": [
+          {
+            "reference": "objects/weapons/handheld/us_rif_xm8lmg/us_rif_xm8lmg_mesh/33970e69-8164-11db-84f6-f5cdea1d71b5",
+            "resource": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Mesh.dbx",
+            "sha256": "5bd4140f925a799c9374b872045fbcbc95621bdf98dcd04e19490190451c360d",
+            "instance_guid": "33970e69-8164-11db-84f6-f5cdea1d71b5"
+          },
+          {
+            "reference": "objects/weapons/unlock/ru_scope_reddot_kobra/ru_scope_reddot_kobra_mesh/f11b5955-e6dd-44b5-84a8-9345c574c211",
+            "resource": "Objects/Weapons/Unlock/RU_Scope_RedDot_Kobra/RU_Scope_RedDot_Kobra_Mesh.dbx",
+            "sha256": "dfcba00ee1d9cbcca2354daa7b562ec6c579218a55c4a76f7f591276124c8f9a",
+            "instance_guid": "f11b5955-e6dd-44b5-84a8-9345c574c211"
+          }
+        ]
+      },
+      "resources": [
+        {
+          "mesh": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Mesh",
+          "archive": "Dist/win32/async/weapon/us_rif_xm8lmg-00.fbrb",
+          "index_sha256": "772d37bbb21e87c85c152ffd2097152fd394941f75c0fa381d27ef18121f901d",
+          "metadata_sha256": "b019321d9a47bb078997b98e6c9174396e955b0d82f6ee02af6884086d97a7c8",
+          "lods": [
+            {
+              "lod": 0,
+              "resource": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Mesh_lod0_data.res",
+              "sha256": "1ef5f57dfc88e70ffcaedec39822d9475ba0577b7556917d01078ca91b2de5ef",
+              "sections": [
+                {
+                  "name": "jntWpn_3_BrushedMetal",
+                  "weighted_hashes": [
+                    "f2519cbd",
+                    "f7315723",
+                    "f7315725",
+                    "f7f9bcd0",
+                    "f7f9bcd1",
+                    "f7f9bcd2",
+                    "f7f9bcd5",
+                    "f7f9bcd6"
+                  ],
+                  "vertices": 4610,
+                  "triangles": 3830,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_3_Rubber",
+                  "weighted_hashes": [
+                    "f7315723",
+                    "f7315725",
+                    "f7f9bcd0",
+                    "f7f9bcd2",
+                    "f7f9bcda"
+                  ],
+                  "vertices": 2225,
+                  "triangles": 1983,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_1_Composite",
+                  "weighted_hashes": [
+                    "f7f9bcd2",
+                    "f7f9bcda"
+                  ],
+                  "vertices": 3293,
+                  "triangles": 2692,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_6_Ammo",
+                  "weighted_hashes": [
+                    "f7f9bcd5"
+                  ],
+                  "vertices": 4,
+                  "triangles": 2,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_3_BrushedMetal_ZOnly",
+                  "weighted_hashes": [
+                    "f2519cbd",
+                    "f7315723",
+                    "f7315725",
+                    "f7f9bcd0",
+                    "f7f9bcd1",
+                    "f7f9bcd2",
+                    "f7f9bcd5",
+                    "f7f9bcd6",
+                    "f7f9bcda"
+                  ],
+                  "vertices": 4645,
+                  "triangles": 8507,
+                  "normalized": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "mesh": "Objects/Weapons/Unlock/RU_Scope_RedDot_Kobra/RU_Scope_RedDot_Kobra_Mesh",
+          "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+          "index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965",
+          "metadata_sha256": "11e09f461090fd8db68e6b568f3eeb1304f533c0ac0198c410f08a17c3b0c334",
+          "lods": [
+            {
+              "lod": 0,
+              "resource": "Objects/Weapons/Unlock/RU_Scope_RedDot_Kobra/RU_Scope_RedDot_Kobra_Mesh_lod0_data.res",
+              "sha256": "e6b2b49ebfd812be9dedf401697b2cf277586fee4edb3bd061348c9d94c1d5b5",
+              "sections": [
+                {
+                  "name": "jntWpn_10__Standard",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 2042,
+                  "triangles": 1426,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_10__Glass",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 18,
+                  "triangles": 16,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_10_Reddot1",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 18,
+                  "triangles": 16,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_10__Standard_ZOnly",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 871,
+                  "triangles": 1426,
+                  "normalized": true
+                }
+              ]
+            },
+            {
+              "lod": 1,
+              "resource": "Objects/Weapons/Unlock/RU_Scope_RedDot_Kobra/RU_Scope_RedDot_Kobra_Mesh_lod1_data.res",
+              "sha256": "1c96b57b8d54d7c19b935f2b50302a39e31c064507c8fb8313660a0900c398a4",
+              "sections": [
+                {
+                  "name": "jntWpn_10__Standard",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 674,
+                  "triangles": 522,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_10__Glass",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 18,
+                  "triangles": 16,
+                  "normalized": true
+                },
+                {
+                  "name": "jntWpn_10__Standard_ZOnly",
+                  "weighted_hashes": [
+                    "f7315722"
+                  ],
+                  "vertices": 359,
+                  "triangles": 522,
+                  "normalized": true
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "excluded": []
+}

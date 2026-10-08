@@ -11,3 +11,5 @@ The supplied OpenXR loader also contains JsonCpp, copyright (c) 2007-2010 Baptis
 Windows, Direct3D, an OpenXR runtime, Python, and a legally installed copy of Battlefield: Bad Company 2 are external prerequisites. They are not supplied or installed by this package. Current project executables use the static MSVC runtime; the packaged binaries' imported DLL names are recorded in `binary-manifest.json`. The current loader imports only Windows system DLLs. No general Visual C++ redistributable, DirectX redistributable, SteamVR, game assets, or Python runtime is bundled.
 
 Battlefield and Frostbite names identify compatibility. The mod is an independent project and is not an EA/DICE product. The project license does not grant rights to the game or its assets.
+
+The Granny curve format decoder in `tools/bc2_granny_curves.py` adapts quantized curve layouts from Norbyte's LSLib. Its MIT license and copyright are retained in `licenses/LSLib-MIT.txt`. Upstream: https://github.com/Norbyte/lslib/tree/master/LSLib/Granny/Model/CurveData. Game resources used as local calibration input are not redistributed.

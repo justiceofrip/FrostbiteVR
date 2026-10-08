@@ -1,5 +1,101 @@
 # Engine boundaries
 
+## Persistent interaction state versus temporary native overrides —244
+
+The restoration rule in AGENTS.md applies to temporary camera matrices, private
+pose overrides and callback arguments. It does not require returning a manual
+interaction to stock behavior after each frame. Magazine custody, committed
+ammunition changes, holster assignments, queued outcomes and owed mechanism
+steps retain their own lifetime. Cleanup of a temporary write cannot undo a
+committed transfer, discard an undelivered receipt, clear shot debt or reattach
+a removed magazine. Repeated controller packets are not new interactions.
+
+BC2's observed client firing copies and server copy must converge for native
+ammunition operations. Their prediction snapshots do not own the persistent VR
+gesture. Validate exact native object/configuration and original state transitions;
+do not equate a predicted state change with a new weapon or completed gesture.
+An accepted native operation remains pending until its actual outcome can be
+consumed by the original interaction, independently of input packet frequency.
+
+Unrelated native animation remains intact. Manual reload, pump and bolt behavior
+may replace conflicting stock presentation and suppress automatic actions through
+the engine adapter. Neither playing the stock animation nor waiting for it a
+second time is a product requirement. Normal native time can progress under
+retained physical-cycle debt, provided firing/reload suppression and eventual
+completion are verified. The shared convergence work implements that distinction;
+it does not permit speculative ammunition edits or treating native idle as a
+completed physical gesture.
+
+## Resource outcomes and shared weapon cycles — 223–224
+
+The native ammunition service retains the original terminal request independently
+of selected equipment. A cancelled physical consumer can settle only its exact
+pending supply reservation after proven application or pre-dispatch rejection.
+This does not renew source/input evidence or resolve an uncertain native write.
+See [resource player testing](RESOURCE-PLAYER-223.md).
+
+`PhysicalWeaponCycle` shares hand arbitration and ordered mechanism gestures;
+the BC2 native adapter supplies distinct pump/bolt boundaries. Passive SPAS
+calibration brackets original rig reads with native state observations. These
+parts are integrated for testing; ordinary pump/bolt gameplay is still disabled.
+See [pump capture](PUMP-CAPTURE-222.md) and
+[native cycle evidence](NATIVE-CYCLE-EVIDENCE-222.md).
+
+## Magazine seat publication — 222
+
+Resource presentation retains a submitted seat independently from native
+completion. Exact original admission bounds cover the gather/server gap;
+matching in-flight command/count evidence covers delayed completion. These
+grant an attached magazine visual and free support-hand eligibility, never
+ammunition or firing authority. See [the reproduced transitions](RESOURCE-SEAT-HANDOFF-222.md).
+
+## BC2 resource adapter connection — 221
+
+`AmmoResourceService` serializes the per-item ledger and own-Update completion
+observer. `AmmoResourceChannel` transfers one-shot requests and bounded fresh
+views without a native call on the gather thread. Physical/native owner mapping
+is explicit: BC2's compound actor, persistent weapon alias and hand generation
+are not rewritten into the native receipt.
+
+The existing `Bc2MagazinePhysicalReload` entry point selects a separate resource
+consumer only with a supplied resource API. That consumer reuses hand ownership,
+supply, measured geometry and rails; presentation carries separate ammunition
+custody. `BC2_AMMO_RESOURCE_HANDS` wires a private native candidate. It remains
+OFF in normal builds. Pending cancellation and render/native handoff validation
+are outstanding; see [221](RESOURCE-ADAPTERS-221.md).
+
+## Earlier inventory command admission and physical resource backend — 220
+
+`AmmunitionInventory` stores independent ledgers by stable item lifetime and
+consumes one-shot physical intents. Selection controls admission, while exact
+late receipts route to their original ledger. No selection event transfers or
+replenishes ammunition. Bounded storage has no implicit eviction or reset of
+ambiguous operations; actor retirement remains an adapter responsibility.
+
+`DetachableMagazine` supports an explicit resource backend alongside the current
+animation-hold backend. Both use the same measured profile, hand ownership,
+extraction and magnetic insertion code. The new backend requires actual
+ammunition receipts for removal/refill and a separate original-round return
+receipt. Neither pose nor `allThreeHeld` grants resource completion. Normal BC2
+hand/render consumers still use the old backend; see
+[migration and test limits](RESOURCE-HANDOFF-220.md).
+
+## Ammunition identity and completion — 218–219
+
+`AmmunitionLedger` owns ammunition counts and removed-magazine custody. BC2
+completion evidence requires the helper-owning server Update and independent
+client Updates. `AmmoResourceHandoff` retains the one critical completion
+without callback waits or fresh native reads. Delayed provenance is distinct
+from freshness of the latest counts.
+
+`Bc2BodyInventory::ResourceBinding` exposes the same native item generation
+used by holsters. This identity-only publication does not depend on rendering
+or a held controller claim and grants no ammunition operation. The resource
+adapter still needs current native configuration, context and completion
+evidence. Native metadata replacement or a lifetime observation gap retires
+the key. The new resource dispatcher is currently a private diagnostic path;
+normal physical reload consumers still use their earlier animation contract.
+
 ## Exact configuration geometry preparation — 206
 
 The offline magazine batch tool joins content-hashed source bindings to exact

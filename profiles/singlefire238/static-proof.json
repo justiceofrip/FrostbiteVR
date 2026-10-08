@@ -1,0 +1,61 @@
+{
+  "schema": "fvr.bc2.singlefire_magazine_static.v1",
+  "executable_sha256": "3911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258",
+  "enum": {
+    "enum": "FireLogicType",
+    "metadata_rva": 25147952,
+    "table_rva": 25298032,
+    "fields": [
+      {
+        "name": "fltSingleFire",
+        "value": 0
+      },
+      {
+        "name": "fltSingleFireWithBoltAction",
+        "value": 1
+      },
+      {
+        "name": "fltAutomaticFire",
+        "value": 2
+      },
+      {
+        "name": "fltHoldAndRelease",
+        "value": 3
+      },
+      {
+        "name": "fltDetonatedFiring",
+        "value": 4
+      }
+    ],
+    "metadata_sha256": "65e4574abc7d2f053377345798732758fa03e4f37f74b07bfe3033f2d9f4a8c2",
+    "table_sha256": "9e4b986196f18dc51dc02e17148a56e42e2590e9a9f973d53fd64104e1f470fa"
+  },
+  "functions": {
+    "Update": {
+      "rva": 3051520,
+      "size": 397,
+      "sha256": "0babdb25cdcc8f494a544d27cdf628c67f495215872b1ff5fa90f62fd5ca426e"
+    },
+    "Step": {
+      "rva": 3039952,
+      "size": 1732,
+      "sha256": "122c98fefa4503c8c98688477f9cf5a1bfbbccb47e84ce6b303898c199ad908d"
+    }
+  },
+  "instruction_evidence_sha256": "76c083751b0fb33bc2161b0158673ca1fa0d3d1d31f7296a31e5d4a389a90351",
+  "fire_logic": 0,
+  "reload_type": 1,
+  "input_fire": 8,
+  "input_reload": 29,
+  "ordinary_reload_states": [
+    11,
+    12,
+    1,
+    2
+  ],
+  "scoped_empty_inhibition": true,
+  "original_round_conservation": true,
+  "chamber_knowledge": "Unknown",
+  "native_runtime_admission": false,
+  "slide_ready_admission": false
+}

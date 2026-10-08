@@ -78,6 +78,29 @@ struct HandInteractionResult {
     std::optional<HandClaim> claim;
     std::array<std::optional<HandClaimRelease>,2> released{};
 };
+// Each destination retains its own original geometry packet. A custody exchange
+// does not restamp contact, synthesize a grip edge, or transfer gesture progress.
+struct HandCustodyTarget {HandClaimRequest request{};HandInteractionSample evidence{};};
+struct HandGunCustodyTransfer {
+    HandClaimToken gun{};
+    // Required exactly when the other hand is occupied. Only this gun's current
+    // WeaponSupport or Mechanism claim can participate; no implicit steal.
+    std::optional<HandClaimToken> companion;
+    HandCustodyTarget nextGun{};
+    // Absent means the old gun hand becomes empty while it travels. A supplied
+    // support/mechanism request must have prerequisiteClaim=0: the transaction
+    // links it to the newly minted gun token only after all checks pass.
+    std::optional<HandCustodyTarget> nextCompanion;
+    // Explicit real release-edge exchange before Update consumes the old hold.
+    // Only Gun+Support -> other Gun+empty; failure processes the real release.
+    bool releaseDepartingGun=false;
+};
+struct HandGunCustodyResult {
+    // On success transaction.claim is the new GunHold; released reports both
+    // superseded tokens. Consumers publish both new claims together.
+    HandInteractionResult transaction{};
+    std::optional<HandClaim> companion;
+};
 struct HandInteractionConfig {
     std::int64_t maxInputLifetimeNs=150000000;
 };
@@ -102,6 +125,13 @@ public:
     HandInteractionResult AcquireFrom(const HandInteractionSample& currentSafety,const HandInteractionSample& originalEvidence,const HandClaimRequest&)noexcept;
     HandInteractionResult TransferFrom(const HandInteractionSample& currentSafety,const HandInteractionSample& originalEvidence,const HandClaimToken&,const HandClaimRequest&)noexcept;
     HandInteractionResult RenewFrom(const HandInteractionSample& currentSafety,const HandInteractionSample& originalEvidence,const HandClaimToken&,const HandContactProof&)noexcept;
+    // Exchanges gun custody between hands in one serialized commit. Invoke an
+    // explicit handoff while the old hold is still valid, before its real
+    // release is processed. An explicit releaseDepartingGun exchange may carry
+    // that real release edge atomically. Already released/expired custody never resurrects.
+    // Supports Gun+Support -> other Gun+empty, Gun+Support -> other Gun+Mechanism,
+    // and Gun+(Mechanism or empty) -> other Gun+Support, in either handedness.
+    HandGunCustodyResult TransferGunCustody(const HandInteractionSample& currentSafety,const HandGunCustodyTransfer&)noexcept;
     HandInteractionResult Release(const HandInteractionSample&,const HandClaimToken&)noexcept;
     HandInteractionResult Reset()noexcept;
     // Inspect only after Update with the current clock/input. This is not a
@@ -126,7 +156,8 @@ private:
     bool Evidence(const HandInteractionSample&,InteractionHand,HandInteractionResult&)const noexcept;
     void Remember(const HandInteractionSample& s)noexcept {history_[historyNext_]=s;historyNext_=(historyNext_+1)%history_.size();}
     bool Exact(const HandClaimToken&)const noexcept;
-    HandInteractionResult Prepare(const HandInteractionSample&)noexcept;
+    HandInteractionResult UpdateImpl(const HandInteractionSample&,const HandClaimToken* deferredGun=nullptr)noexcept;
+    HandInteractionResult Prepare(const HandInteractionSample&,const HandClaimToken* deferredGun=nullptr)noexcept;
     HandInteractionResult Change(const HandInteractionSample&,const HandClaimToken*,const HandClaimRequest&,const HandInteractionSample* evidence=nullptr)noexcept;
     HandInteractionResult Refresh(const HandInteractionSample&,const HandClaimToken&,const HandContactProof&,const HandInteractionSample* evidence)noexcept;
     HandInteractionConfig config_{};
@@ -163,7 +194,8 @@ inline HandInteractionResult HandInteraction::Reset()noexcept {
     blocked_=true;sample_.focused=false;sample_.tracked={};
     invalidationBarrier_.fill(sample_.sequence);history_={};historyNext_=0;return out;
 }
-inline HandInteractionResult HandInteraction::Update(const HandInteractionSample& s)noexcept {
+inline HandInteractionResult HandInteraction::Update(const HandInteractionSample& s)noexcept {return UpdateImpl(s);}
+inline HandInteractionResult HandInteraction::UpdateImpl(const HandInteractionSample& s,const HandClaimToken* deferredGun)noexcept {
     HandInteractionResult out;
     const auto reject=[&](HandInteractionReason reason){
         out.reason=reason;DropAll(reason,out);blocked_=true;
@@ -205,7 +237,8 @@ inline HandInteractionResult HandInteraction::Update(const HandInteractionSample
             // next grip. Exact history, invalidation barriers and original
             // deadlines still apply; failed intents are never retried here.
             if(newOwner||!previouslyReleased[h])releaseBarrier_[h]=sample_.sequence;
-            Drop(h,HandInteractionReason::Released,out);
+            if(!deferredGun||!claims_[h]||claims_[h]->token!=*deferredGun)
+                Drop(h,HandInteractionReason::Released,out);
         }
         else if(claims_[h]&&s.nowNs>=claims_[h]->deadlineNs)Drop(h,HandInteractionReason::LeaseExpired,out);
     }
@@ -247,7 +280,7 @@ inline bool HandInteraction::Contact(const HandContactProof& proof,HandInteracti
 inline bool HandInteraction::Exact(const HandClaimToken& token)const noexcept {
     return token.id&&ValidHand(token.hand)&&claims_[Index(token.hand)]&&claims_[Index(token.hand)]->token==token;
 }
-inline HandInteractionResult HandInteraction::Prepare(const HandInteractionSample& s)noexcept {
+inline HandInteractionResult HandInteraction::Prepare(const HandInteractionSample& s,const HandClaimToken* deferredGun)noexcept {
     // A queued operation cannot roll back the authoritative input or invalidate
     // a newer claim. Update remains the explicit lifecycle/clock-loss entrypoint.
     if(initialized_&&(s.nowNs<lastNow_||s.observedNs<sample_.observedNs||
@@ -255,7 +288,7 @@ inline HandInteractionResult HandInteraction::Prepare(const HandInteractionSampl
        (s.owner!=sample_.owner&&s.observedNs<=sample_.observedNs))){
         HandInteractionResult out;out.reason=HandInteractionReason::StaleInput;return out;
     }
-    return Update(s);
+    return UpdateImpl(s,deferredGun);
 }
 inline HandInteractionResult HandInteraction::Change(const HandInteractionSample& s,const HandClaimToken* old,const HandClaimRequest& r,const HandInteractionSample* evidence)noexcept {
     if(old&&!Exact(*old)){HandInteractionResult out;out.reason=HandInteractionReason::StaleToken;return out;}
@@ -327,6 +360,81 @@ inline HandInteractionResult HandInteraction::TransferFrom(const HandInteraction
 }
 inline HandInteractionResult HandInteraction::RenewFrom(const HandInteractionSample& current,const HandInteractionSample& source,const HandClaimToken& token,const HandContactProof& proof)noexcept {
     return Refresh(current,token,proof,&source);
+}
+inline HandGunCustodyResult HandInteraction::TransferGunCustody(const HandInteractionSample& current,const HandGunCustodyTransfer& transfer)noexcept {
+    HandGunCustodyResult result;auto& out=result.transaction;
+    if(!Exact(transfer.gun)||(transfer.companion&&!Exact(*transfer.companion))){out.reason=HandInteractionReason::StaleToken;return result;}
+    const auto oldHand=Index(transfer.gun.hand),receiver=1-oldHand;
+    const bool defer=transfer.releaseDepartingGun&&initialized_&&!blocked_&&
+        current.owner==sample_.owner&&current.sequence>sample_.sequence&&current.observedNs>sample_.observedNs&&
+        current.nowNs>=lastNow_&&current.nowNs>=current.observedNs&&current.deadlineNs>current.nowNs&&
+        current.focused&&current.tracked[0]&&current.tracked[1]&&current.released[oldHand]&&!current.released[receiver]&&
+        !sample_.released[oldHand]&&claims_[oldHand]->deadlineNs>current.nowNs&&
+        transfer.gun.kind==HandClaimKind::GunHold&&!transfer.gun.prerequisiteClaim&&
+        transfer.companion&&transfer.companion->kind==HandClaimKind::WeaponSupport&&
+        transfer.companion->hand!=transfer.gun.hand&&transfer.companion->prerequisiteClaim==transfer.gun.id&&
+        transfer.companion->owner==transfer.gun.owner&&transfer.companion->item==transfer.gun.item&&
+        transfer.nextGun.request.hand==transfer.companion->hand&&!transfer.nextCompanion;
+    // The actual released packet is recorded unchanged. Only this serialized
+    // transaction may retain its departing token until the atomic commit.
+    const auto attempt=[&]()noexcept {
+        out=Prepare(current,defer?&transfer.gun:nullptr);
+        if(transfer.releaseDepartingGun&&!defer){out.reason=HandInteractionReason::InvalidRequest;return;}
+        if(!out.inputValid)return;
+        const auto& gun=transfer.nextGun.request;
+        if(!ValidHand(gun.hand)||(transfer.nextCompanion&&!ValidHand(transfer.nextCompanion->request.hand))){out.reason=HandInteractionReason::InvalidRequest;return;}
+        const auto h=Index(gun.hand),other=1-h;
+        // Consume all valid destination intents even if the other intent or later
+        // validation fails, matching single-hand acquisition replay protection.
+        bool fresh=gun.intent&&gun.intent>intents_[h];
+        if(fresh)intents_[h]=gun.intent;
+        if(transfer.nextCompanion){
+            const auto& request=transfer.nextCompanion->request;const auto index=Index(request.hand);
+            const bool companionFresh=request.intent&&request.intent>intents_[index];
+            if(companionFresh)intents_[index]=request.intent;
+            fresh=fresh&&companionFresh;
+        }
+        if(!fresh){out.reason=HandInteractionReason::StaleIntent;return;}
+        if(!Available(gun.hand,out))return;
+        if(transfer.nextCompanion&&!Available(transfer.nextCompanion->request.hand,out))return;
+        if(!Exact(transfer.gun)||(transfer.companion&&!Exact(*transfer.companion))){out.reason=HandInteractionReason::StaleToken;return;}
+        const auto& old=transfer.gun;
+        if(old.kind!=HandClaimKind::GunHold||old.prerequisiteClaim||old.hand==gun.hand||gun.kind!=HandClaimKind::GunHold||gun.prerequisiteClaim||
+           gun.owner!=old.owner||gun.owner!=sample_.owner||gun.item!=old.item){out.reason=HandInteractionReason::InvalidRequest;return;}
+        const auto& occupant=claims_[h];
+        if(occupant){
+            if(!transfer.companion||occupant->token!=*transfer.companion){out.reason=HandInteractionReason::HandOccupied;return;}
+            const auto& token=occupant->token;
+            if((token.kind!=HandClaimKind::WeaponSupport&&token.kind!=HandClaimKind::Mechanism)||token.prerequisiteClaim!=old.id||token.owner!=old.owner||token.item!=old.item){out.reason=HandInteractionReason::MissingPrerequisite;return;}
+        }else if(transfer.companion){out.reason=HandInteractionReason::StaleToken;return;}
+        if(!Evidence(transfer.nextGun.evidence,gun.hand,out)||!Contact(gun.contact,out,&transfer.nextGun.evidence))return;
+        if(transfer.nextCompanion){
+            const auto& next=transfer.nextCompanion->request;
+            if(next.hand!=old.hand||(next.kind!=HandClaimKind::WeaponSupport&&next.kind!=HandClaimKind::Mechanism)||
+               next.prerequisiteClaim||next.owner!=gun.owner||next.item!=gun.item){out.reason=HandInteractionReason::InvalidRequest;return;}
+            if(next.contact.key==gun.contact.key){out.reason=HandInteractionReason::MissingPrerequisite;return;}
+            if(!Evidence(transfer.nextCompanion->evidence,next.hand,out)||!Contact(next.contact,out,&transfer.nextCompanion->evidence))return;
+        }
+        const std::uint64_t count=transfer.nextCompanion?2:1;
+        if(nextClaim_>std::numeric_limits<std::uint64_t>::max()-count){out.reason=HandInteractionReason::TokenExhausted;return;}
+        const HandClaim nextGun{{nextClaim_+1,gun.owner,gun.hand,HandClaimKind::GunHold,gun.item,gun.contact.key,0},gun.contact.deadlineNs,gun.contact.inputSequence};
+        std::optional<HandClaim> nextCompanion;
+        if(transfer.nextCompanion){
+            const auto& next=transfer.nextCompanion->request;
+            nextCompanion=HandClaim{{nextClaim_+2,next.owner,next.hand,next.kind,next.item,next.contact.key,nextGun.token.id},next.contact.deadlineNs,next.contact.inputSequence};
+        }
+        // All validation has passed. No dependent-drop pass can observe the gap
+        // between parent replacement and child reparenting in this serialized API.
+        Drop(other,HandInteractionReason::Transferred,out);Drop(h,HandInteractionReason::Transferred,out);
+        claims_[h]=nextGun;claims_[other]=nextCompanion;nextClaim_+=count;
+        if(!nextCompanion)invalidationBarrier_[other]=sample_.sequence;
+        out.accepted=true;out.reason=HandInteractionReason::None;out.claim=nextGun;result.companion=nextCompanion;return;
+    };
+    attempt();
+    if(defer&&!out.accepted&&Exact(transfer.gun)){
+        Drop(oldHand,HandInteractionReason::Released,out);DropDependents(out);
+    }
+    return result;
 }
 inline HandInteractionResult HandInteraction::Release(const HandInteractionSample& s,const HandClaimToken& token)noexcept {
     if(!Exact(token)){HandInteractionResult out;out.reason=HandInteractionReason::StaleToken;return out;}

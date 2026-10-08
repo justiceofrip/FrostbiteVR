@@ -276,7 +276,7 @@ int OwnerControlAndTimingCancel()
             s.input.context.reloadTimeMultiplier = .5f;
             break;
         case 3:
-            s.input.context.deltaSeconds = .051f;
+            s.input.context.deltaSeconds = .100001f;
             break;
         case 4:
             s.input.config.reloadTime = .73f;
@@ -701,8 +701,24 @@ int PolicyWaitCannotExtendLeaseOrAuthorizeAnOverlappingOriginal()
         CHECK(!overlap.Begin(0).tracked&&overlap.gate.Failure()==ReloadRequestCycleFailure::Overlap);}
     CHECK(!gate.test());return 0;
 }
+int CurrentShellHoldSurvivesBoundedFrameHitch()
+{
+    for(float delta:{.0596221f,.1f}){
+        Simulation s;CHECK(s.Arm());const auto loaded=s.input.branches[0].loaded;
+        CHECK(s.Tick(60000000));s.input.context.deltaSeconds=delta;
+        CHECK(s.HoldAll());const auto waiting=s.Lease();
+        CHECK(waiting&&!waiting->allThreeHeld);
+        CHECK(s.HoldAll());const auto lease=s.Lease();
+        CHECK(lease&&lease->allThreeHeld&&lease->loaded==loaded);
+        CHECK(s.gate.Phase()==ReloadRequestCyclePhase::Holding);
+    }
+    Simulation expired;CHECK(expired.Arm());expired.input.context.deltaSeconds=.0596221f;
+    CHECK(!expired.Tick(100000000)&&expired.gate.Failure()==ReloadRequestCycleFailure::Control);
+    return 0;
+}
 int main()
 {
+    if(CurrentShellHoldSurvivesBoundedFrameHitch())return 1;
     if (ExplicitRequestOnlyAndTruthfulHold() || RealRequestTwoRoundsAndFinalAck() || QuietCohortAndActualReholds() ||
         NoBorrowedLeaseDuringOriginal() || OwnerControlAndTimingCancel() || DeadmanAndExactDuplicateControl() ||
         PatchFailureAndNativeTransferMismatch() || ExpiredAckCannotBeRestampedOrReplayed() ||

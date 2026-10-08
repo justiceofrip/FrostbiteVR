@@ -9,6 +9,7 @@
 #include "Bc2ReloadRetirement.h"
 #include "fvr/interaction/ControllerInput.h"
 #include "fvr/interaction/Feedback.h"
+#include "fvr/interaction/HeldActionSupportReturn.h"
 #include <ostream>
 
 namespace fvr::bc2 {
@@ -79,6 +80,12 @@ public:
         interaction::AmmoSupplyConfig pouch=DefaultPouch())noexcept;
     void EnableBeltAmmo(bool enabled=true,interaction::SupplyAnchorFrame frame=interaction::SupplyAnchorFrame::HeadYaw)noexcept {beltEnabled_=enabled;beltFrame_=frame;}
     PhysicalReloadResult Tick(const PhysicalReloadSample&,interaction::HandInteraction&,std::uint64_t& sharedIntent)noexcept;
+    std::optional<interaction::SupportGripResult> ContinueSupport(const interaction::SupportGripOwner& owner,
+        const interaction::InputFrame& input,const interaction::SupportGripContact& contact,
+        const interaction::HandInteractionSample& original,interaction::HandInteractionKey key,
+        interaction::HandInteraction& hands,interaction::SupportGrip& support,std::uint64_t& intent,bool cancel)noexcept {
+        return supportReturn_.Continue(owner,input,contact,original,key,hands,support,intent,cancel);
+    }
     void Cancel(const interaction::HandInteractionSample&,interaction::HandInteraction&,
         PhysicalReloadCancelReason reason=PhysicalReloadCancelReason::External,unsigned sourceFlags=0)noexcept;
     void Report(std::ostream&)const;
@@ -102,6 +109,7 @@ private:
     void Retire(const PhysicalReloadSample&,interaction::HandInteraction&,const std::optional<interaction::AmmoSupplySource>&)noexcept;
     Bc2ReloadInteractionSample Interaction(const PhysicalReloadSample&,const Evidence*,const ReloadRoundLease&,std::int64_t)const noexcept;
     bool enabled_=false,active_=false,retiring_=false,beltEnabled_=false;
+    interaction::HeldActionSupportReturn supportReturn_;
     // Durable exact callback-drain fact, not a native ammo/pose receipt. Pending
     // resource credit stays quarantined until the ordinary fresh rebaseline.
     bool retirementDrained_=false,blocksCurrent_=true;

@@ -55,7 +55,32 @@ int OwnershipAndNoFakeGate(){for(unsigned mode=0;mode<3;++mode){Mock::Reset();Bc
 int DefaultScheduleAndSchema(){Mock::Reset();Bc2MagazineReloadProbe p;Tick(p,5800);CHECK(!Mock::starts);
     unsigned reload=0,seats=0;for(unsigned ms=0;ms<30000;++ms){auto s=MagazineProbeSchedule(ms);reload+=s.reload;seats+=s.marker==1;}
     CHECK(reload==200&&seats==200&&MagazineProbeSchedule(14000).marker==0);
-    NativeProbeConfig c;CHECK(c.bytes==1184&&sizeof(c)==1184&&c.magazineReloadSession==0&&c.boatHeadAim==BoatHeadAimMode::Disabled&&c.bodyHolsterDiagnostic==BodyHolsterDiagnosticProfile::Disabled);
+    NativeProbeConfig c;CHECK(c.bytes==1200&&sizeof(c)==1200&&c.ordinaryResourceInput==0&&c.m95OrdinaryBoltInputCycles==0&&c.m95StockShot==0&&c.m95PhysicalBoltCycles==0&&c.magazineReloadSession==0&&c.boatHeadAim==BoatHeadAimMode::Disabled&&c.bodyHolsterDiagnostic==BodyHolsterDiagnosticProfile::Disabled);
+    CHECK(ValidOrdinaryResourceInputSession(0,0,0,0,0,0,0,0,0,0));
+    CHECK(ValidOrdinaryResourceInputSession(1,0x12197809u,60000,3,0,0,0,0,0,0));
+    for(unsigned bit=0;bit<32;++bit)CHECK(!ValidOrdinaryResourceInputSession(1,0x12197809u^(1u<<bit),60000,3,0,0,0,0,0,0));
+    CHECK(!ValidOrdinaryResourceInputSession(2,0x12197809u,60000,3,0,0,0,0,0,0));
+    CHECK(!ValidOrdinaryResourceInputSession(1,0x12197809u,30000,3,0,0,0,0,0,0));
+    CHECK(!ValidOrdinaryResourceInputSession(1,0x12197809u,60000,7,0,0,0,0,0,0));
+    for(unsigned n=0;n<6;++n){unsigned x[6]={};x[n]=1;
+        CHECK(!ValidOrdinaryResourceInputSession(1,0x12197809u,60000,3,x[0],x[1],x[2],x[3],x[4],x[5]));}
+    CHECK(ValidM95OrdinaryBoltInputSession(0,0,0,0,0,0,0,0,0));
+    for(auto cycles:{1u,2u}){
+        CHECK(ValidM95OrdinaryBoltInputSession(cycles,0x12197809u,30000,3,0,0,0,0,0));
+        for(unsigned bit=0;bit<32;++bit)CHECK(!ValidM95OrdinaryBoltInputSession(cycles,0x12197809u^(1u<<bit),30000,3,0,0,0,0,0));
+        for(unsigned conflict=0;conflict<8;++conflict)CHECK(!ValidM95OrdinaryBoltInputSession(
+            conflict==0?3u:cycles,0x12197809u,conflict==1?15000u:30000u,conflict==2?7u:3u,
+            conflict==3,conflict==4,conflict==5,conflict==6,conflict==7));
+    }
+    CHECK(ValidM95PhysicalBoltSession(0,0,0,0,0,0,0,0));
+    for(auto cycles:{1u,2u}){
+        CHECK(ValidM95PhysicalBoltSession(cycles,0x197809u,30000,0,0,0,0,0));
+        CHECK(!ValidM95PhysicalBoltSession(cycles,0x197809u,15000,0,0,0,0,0));
+        CHECK(!ValidM95PhysicalBoltSession(cycles,0x197809u,30000,3,0,0,0,0));
+        CHECK(!ValidM95PhysicalBoltSession(cycles,0x197809u,30000,0,0,0,0,1));
+        for(unsigned bit=0;bit<32;++bit)CHECK(!ValidM95PhysicalBoltSession(cycles,0x197809u^(1u<<bit),30000,0,0,0,0,0));
+    }
+    CHECK(!ValidM95PhysicalBoltSession(3,0x197809u,30000,0,0,0,0,0));
     constexpr auto flags=9u|0x197800u;CHECK(ValidMagazineReloadSession(1,flags,30000)&&ValidMagazineReloadSession(2,flags|0x200u,30000));
     CHECK(!ValidMagazineReloadSession(3,flags,30000)&&!ValidMagazineReloadSession(1,flags,15000));
     for(auto bad:{0x400u,0x1000000u,0x2000000u,0x200000u,0x10000000u,0x80000000u})CHECK(!ValidMagazineReloadSession(1,flags|bad,30000));

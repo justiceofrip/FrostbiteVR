@@ -94,7 +94,7 @@ inline constexpr std::array<std::string_view,1> VisibilityMeshes44{"Objects/Weap
 inline constexpr std::array<std::string_view,7> VisibilityBones44{"jntWpn_12","jntWpn_13","jntWpn_3","jntWpn_2","jntWpn_1","jntWpn_6","jntWpn_4"};
 inline constexpr std::array<std::string_view,1> VisibilityMeshes45{"Objects/Weapons/Handheld/BU_smg_UMP/BU_smg_UMP_Mesh"};
 inline constexpr std::array<std::string_view,7> VisibilityBones45{"jntWpn_12","jntWpn_13","jntWpn_3","jntWpn_2","jntWpn_1","jntWpn_5","jntWpn_4"};
-inline constexpr std::array<VisibilityDescriptor,46> VisibilityDescriptors{{
+inline constexpr std::array<VisibilityDescriptor,44> BaselineVisibilityDescriptors{{
 {"AN94",VisibilityMeshes0,VisibilityBones0,0xa7f219a1426216abull,false,"Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Kobra",false,false,true},
 {"AEK971_sp",VisibilityMeshes1,VisibilityBones1,0xa7f219a1426216abull,false,"Objects/Weapons/Handheld/RU_rgl_AEK971/SP_rgl_AEK971",false,false,true},
 {"AEK971",VisibilityMeshes2,VisibilityBones2,0xa7f219a1426216abull,false,"Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971",false,false,true},
@@ -132,8 +132,6 @@ inline constexpr std::array<VisibilityDescriptor,46> VisibilityDescriptors{{
 {"UZI",VisibilityMeshes34,VisibilityBones34,0xa7f219a1426216abull,false,"Objects/Weapons/Handheld/BU_smg_IMIUZI/BU_smg_IMIUZI_Kobra",false,false,true},
 {"XM8_sp_s",VisibilityMeshes35,VisibilityBones35,0xa7f219a1426216abull,false,"",false,false,true},
 {"SPAS12_sp",VisibilityMeshes36,VisibilityBones36,0xa7f219a1426216abull,false,"",false,false,true},
-{"XM8C",VisibilityMeshes37,VisibilityBones37,0xa7f219a1426216abull,false,"",false,false,true},
-{"M416",VisibilityMeshes38,VisibilityBones38,0xa7f219a1426216abull,false,"",false,false,true},
 {"Mk14EBR",VisibilityMeshes39,VisibilityBones39,0xa7f219a1426216abull,false,"",false,false,true},
 {"M16",VisibilityMeshes40,VisibilityBones40,0xa7f219a1426216abull,false,"",false,false,true},
 {"M16k",VisibilityMeshes41,VisibilityBones41,0xa7f219a1426216abull,false,"",false,false,true},
@@ -142,4 +140,57 @@ inline constexpr std::array<VisibilityDescriptor,46> VisibilityDescriptors{{
 {"9A91",VisibilityMeshes44,VisibilityBones44,0xa7f219a1426216abull,false,"",false,false,true},
 {"UMPk",VisibilityMeshes45,VisibilityBones45,0xa7f219a1426216abull,false,"",false,false,true},
 }};
+}
+
+#pragma once
+#include "Bc2VisibilityProfiles.h"
+#include <array>
+namespace fvr::bc2 {
+inline constexpr std::array<std::string_view,1> ResourceVisibilityMeshes0{"Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Mesh"};
+inline constexpr std::array<std::string_view,7> ResourceVisibilityBones0{"jntWpn_12","jntWpn_13","jntWpn_2","jntWpn_1","jntWpn_6","jntWpn_5","jntWpn_4"};
+inline constexpr std::array<std::string_view,2> ResourceVisibilityMeshes1{"Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Mesh","Objects/Weapons/Unlock/ACOG_4X/US_ACOG_4X_Mesh"};
+inline constexpr std::array<std::string_view,7> ResourceVisibilityBones1{"jntWpnwpnJnt_16","jntWpn_10","jntWpn_17","jntWpn_2","jntWpn_1","jntWpn_6","jntWpn_5"};
+inline constexpr std::array<std::string_view,2> ResourceVisibilityMeshes2{"Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh","Objects/Weapons/Unlock/ACOG_4X/US_ACOG_4X_Mesh"};
+inline constexpr std::array<std::string_view,14> ResourceVisibilityBones2{"jntWpn_12","jntWpn_13","jntWpn_10","jntWpn_11","jntWpn_17","jntWpn_3","jntWpn_2","jntWpn_1","jntWpn_7","jntWpn_6","jntWpn_5","jntWpn_4","jntWpn_9","jntWpn_8"};
+inline constexpr std::array<std::string_view,2> ResourceVisibilityMeshes3{"Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Mesh","Objects/Weapons/Unlock/RU_Scope_RedDot_Kobra/RU_Scope_RedDot_Kobra_Mesh"};
+inline constexpr std::array<std::string_view,7> ResourceVisibilityBones3{"jntWpnwpnJnt_16","jntWpn_10","jntWpn_17","jntWpn_2","jntWpn_1","jntWpn_6","jntWpn_5"};
+inline constexpr std::array<std::string_view,1> ResourceVisibilityMeshes4{"Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Mesh"};
+inline constexpr std::array<std::string_view,7> ResourceVisibilityBones4{"jntWpn_12","jntWpn_13","jntWpn_2","jntWpn_1","jntWpn_6","jntWpn_5","jntWpn_4"};
+inline constexpr std::array<std::string_view,1> ResourceVisibilityMeshes5{"Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Mesh"};
+inline constexpr std::array<std::string_view,6> ResourceVisibilityBones5{"jntWpnwpnJnt_16","jntWpn_17","jntWpn_2","jntWpn_1","jntWpn_6","jntWpn_5"};
+inline constexpr std::array<std::string_view,1> ResourceVisibilityMeshes6{"Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Mesh"};
+inline constexpr std::array<std::string_view,9> ResourceVisibilityBones6{"jntWpnwpnJnt_16","jntWpn_11","jntWpn_17","jntWpn_3","jntWpn_2","jntWpn_1","jntWpn_6","jntWpn_5","jntWpn_9"};
+inline constexpr std::array<std::string_view,1> ResourceVisibilityMeshes7{"Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh"};
+inline constexpr std::array<std::string_view,13> ResourceVisibilityBones7{"jntWpn_12","jntWpn_13","jntWpn_11","jntWpn_17","jntWpn_3","jntWpn_2","jntWpn_1","jntWpn_7","jntWpn_6","jntWpn_5","jntWpn_4","jntWpn_9","jntWpn_8"};
+inline constexpr std::array<std::string_view,1> ResourceVisibilityMeshes8{"Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Mesh"};
+inline constexpr std::array<std::string_view,7> ResourceVisibilityBones8{"jntWpn_12","jntWpn_13","jntWpn_2","jntWpn_1","jntWpn_6","jntWpn_5","jntWpn_4"};
+inline constexpr std::array<std::string_view,2> ResourceVisibilityMeshes9{"Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh","Objects/Weapons/Unlock/RU_Scope_RedDot_Kobra/RU_Scope_RedDot_Kobra_Mesh"};
+inline constexpr std::array<std::string_view,14> ResourceVisibilityBones9{"jntWpn_12","jntWpn_13","jntWpn_10","jntWpn_11","jntWpn_17","jntWpn_3","jntWpn_2","jntWpn_1","jntWpn_7","jntWpn_6","jntWpn_5","jntWpn_4","jntWpn_9","jntWpn_8"};
+inline constexpr std::array<std::string_view,2> ResourceVisibilityMeshes10{"Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Mesh","Objects/Weapons/Unlock/ACOG_4X/US_ACOG_4X_Mesh"};
+inline constexpr std::array<std::string_view,10> ResourceVisibilityBones10{"jntWpnwpnJnt_16","jntWpn_10","jntWpn_11","jntWpn_17","jntWpn_3","jntWpn_2","jntWpn_1","jntWpn_6","jntWpn_5","jntWpn_9"};
+inline constexpr std::array<std::string_view,2> ResourceVisibilityMeshes11{"Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Mesh","Objects/Weapons/Unlock/RU_Scope_RedDot_Kobra/RU_Scope_RedDot_Kobra_Mesh"};
+inline constexpr std::array<std::string_view,10> ResourceVisibilityBones11{"jntWpnwpnJnt_16","jntWpn_10","jntWpn_11","jntWpn_17","jntWpn_3","jntWpn_2","jntWpn_1","jntWpn_6","jntWpn_5","jntWpn_9"};
+inline constexpr std::array<VisibilityDescriptor,12> ResourceVisibilityDescriptors{{
+{"MG36",ResourceVisibilityMeshes0,ResourceVisibilityBones0,0xa7f219a1426216abull,false,"Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Scope",false,false,true},
+{"XM8C",ResourceVisibilityMeshes1,ResourceVisibilityBones1,0xa7f219a1426216abull,false,"Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Scoped",false,false,true},
+{"M416",ResourceVisibilityMeshes2,ResourceVisibilityBones2,0xa7f219a1426216abull,false,"Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Scoped",false,false,true},
+{"XM8C",ResourceVisibilityMeshes3,ResourceVisibilityBones3,0xa7f219a1426216abull,false,"Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Kobra",false,false,true},
+{"MG36",ResourceVisibilityMeshes4,ResourceVisibilityBones4,0xa7f219a1426216abull,false,"Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36",false,false,true},
+{"XM8C",ResourceVisibilityMeshes5,ResourceVisibilityBones5,0xa7f219a1426216abull,false,"Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c",false,false,true},
+{"XM8 LMG",ResourceVisibilityMeshes6,ResourceVisibilityBones6,0xa7f219a1426216abull,false,"Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg",false,false,true},
+{"M416",ResourceVisibilityMeshes7,ResourceVisibilityBones7,0xa7f219a1426216abull,false,"Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416",false,false,true},
+{"MG36",ResourceVisibilityMeshes8,ResourceVisibilityBones8,0xa7f219a1426216abull,false,"Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Kobra",false,false,true},
+{"M416",ResourceVisibilityMeshes9,ResourceVisibilityBones9,0xa7f219a1426216abull,false,"Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Kobra",false,false,true},
+{"XM8 LMG",ResourceVisibilityMeshes10,ResourceVisibilityBones10,0xa7f219a1426216abull,false,"Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Scoped",false,false,true},
+{"XM8 LMG",ResourceVisibilityMeshes11,ResourceVisibilityBones11,0xa7f219a1426216abull,false,"Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Kobra",false,false,true},
+}};
+}
+
+namespace fvr::bc2 {
+inline constexpr auto VisibilityDescriptors=[] {
+ std::array<VisibilityDescriptor,BaselineVisibilityDescriptors.size()+ResourceVisibilityDescriptors.size()> out{};
+ std::size_t n=0;for(const auto& p:BaselineVisibilityDescriptors)out[n++]=p;
+ for(const auto& p:ResourceVisibilityDescriptors)out[n++]=p;
+ return out;
+}();
 }

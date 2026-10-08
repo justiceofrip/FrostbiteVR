@@ -1,0 +1,1301 @@
+--- a/include/fvr/interaction/WeaponCycleConvergence.h
++++ b/include/fvr/interaction/WeaponCycleConvergence.h
+@@ -131,6 +131,13 @@
+         if(release_){outcome_=WeaponCycleConvergenceOutcome{*release_,*idle_};phase_=WeaponCycleConvergencePhase::Ready;}
+         return true;
+     }
++    // A native busy observation is never idle. Invalidate outstanding voting
++    // rounds and unsubmitted authority, but retain an exact submitted outcome.
++    void NativeBusy(const Scope& scope,std::int64_t now)noexcept {
++        if(!Bound(scope))return;
++        if(phase_==WeaponCycleConvergencePhase::Debt){grant_.reset();issued_={};}
++        if(phase_==WeaponCycleConvergencePhase::Debt||phase_==WeaponCycleConvergencePhase::Released)ClearEvidence(now);
++    }
+     void LoseGuard(const Scope& scope)noexcept {
+         if(!Bound(scope))return;
+         phase_=WeaponCycleConvergencePhase::Uncertain;idle_.reset();outcome_.reset();grant_.reset();
+--- a/src/games/bc2/Bc2BoltPlayerCustody.cpp
++++ b/src/games/bc2/Bc2BoltPlayerCustody.cpp
+@@ -2,6 +2,7 @@
+ namespace fvr::bc2 {
+ using namespace interaction;
+ void Bc2BoltPlayerCustody::Invalidate()noexcept {
++    if(debt_&&references_)recoveryReferences_=references_;
+     references_.reset();candidate_.reset();stableAt_=0;lastRaw_=0;previous_={};returnPress_=0;neutral_=0;rightArmed_=rightHeld_=false;
+     if(debt_)retirementRequired_=true;
+ }
+@@ -36,7 +37,7 @@
+     if(!calibration_||!BoltCalibrationValid(*calibration_)||!controls)return {};
+     if(in.native&&in.native->blocksFire)debt_=true;
+     const bool identity=owner_==in.owner&&item_==in.item&&units_==controls->worldUnitsPerMeter;
+-    if(!identity){Invalidate();owner_=in.owner;item_=in.item;units_=controls->worldUnitsPerMeter;selectedAt_=s.nowNs;}
++    if(!identity){Invalidate();recoveryReferences_.reset();leftCustody_.reset();owner_=in.owner;item_=in.item;units_=controls->worldUnitsPerMeter;selectedAt_=s.nowNs;}
+     const bool exact=in.asset==calibration_->asset&&in.mesh==calibration_->mesh&&
+         in.contact.raw.nativeOwner==in.owner&&in.contact.raw.rigFingerprint==calibration_->rigFingerprint&&
+         in.owner.actorGeneration==s.owner.actorGeneration&&in.owner.space==s.owner.space&&
+@@ -51,6 +52,18 @@
+         Invalidate();lastNow_=std::max(lastNow_,s.nowNs);return {};
+     }
+     lastNow_=s.nowNs;
++    const auto recovering=in.recovery&&in.recovery->native.owner==in.owner&&in.recovery->authority?
++        in.recovery->authority:std::nullopt;
++    const auto left=hands.Current(InteractionHand::Left);
++    if(retirementRequired_&&recovering&&debtLease_&&recoveryReferences_&&leftCustody_&&left&&
++       left->token==*leftCustody_&&left->deadlineNs>s.nowNs&&left->token.owner==s.owner&&left->token.item==in.item&&
++       recovering->owner==debtLease_->owner&&recovering->item==debtLease_->item&&
++       recovering->mechanism==debtLease_->mechanism&&recovering->cycle==debtLease_->cycle&&recovering->shot==debtLease_->shot&&
++       recovering->owner==s.owner&&recovering->item==in.item&&
++       weapon_cycle_detail::Lease(*recovering,s.nowNs)){
++        references_=recoveryReferences_;retirementRequired_=false;custody_=BoltCustodyPhase::Manipulating;
++        submitted_=neutral_=returnPress_=0;
++    }
+     const auto wrists=MapBoltTrackedWrists(in.contact,*controls,s,in.body);
+     if(!wrists)return {};
+     Capture(in);
+@@ -94,7 +107,11 @@
+ void Bc2BoltPlayerCustody::Observe(const Bc2PhysicalBoltResult& result)noexcept {
+     // Startup admission/backpressure can block Fire before a shot exists.
+     // Only actual held/gesture/custody evidence may create physical debt.
+-    if(result.tracking.held||result.settled||result.tracking.custody==BoltCustodyPhase::Manipulating)debt_=true;
++    if(result.tracking.held)debtLease_=result.tracking.held;
++    if(result.tracking.gun&&result.tracking.gun->token.hand==InteractionHand::Left&&
++       result.tracking.gun->token.kind==HandClaimKind::GunHold)leftCustody_=result.tracking.gun->token;
++    if(result.tracking.held||result.tracking.recovery||result.settled||result.recovered||
++       result.tracking.custody==BoltCustodyPhase::Manipulating)debt_=true;
+     if(result.tracking.enabled){
+         custody_=result.tracking.custody;
+         if(result.tracking.mechanismPhase==WeaponCyclePhase::AwaitingNative&&!submitted_)
+@@ -102,9 +119,9 @@
+     }
+     if(result.custodyChange&&result.custodyChange->transaction.accepted&&custody_==BoltCustodyPhase::Returned)
+         returnPress_=0;
+-    if(result.settled)ready_=true;
++    if(result.settled||result.recovered)ready_=true;
+     if(ready_&&custody_==BoltCustodyPhase::Returned&&!retirementRequired_){
+-        debt_=false;ready_=false;submitted_=0;neutral_=0;returnPress_=0;
++        debt_=false;ready_=false;submitted_=0;neutral_=0;returnPress_=0;debtLease_.reset();leftCustody_.reset();recoveryReferences_.reset();
+     }
+ }
+ }
+--- a/src/games/bc2/Bc2BoltPlayerCustody.h
++++ b/src/games/bc2/Bc2BoltPlayerCustody.h
+@@ -18,6 +18,7 @@
+     Bc2BoltControllerContact contact{};
+     std::optional<Bc2NativeCycleView> native;
+     std::optional<Bc2AmmoReserveLease> ammunition;
++    std::optional<Bc2NativeCycleRecoveryView> recovery;
+ };
+ class Bc2BoltPlayerCustody {
+ public:
+@@ -36,6 +37,11 @@
+     ReloadStateOwner owner_{};interaction::HandInteractionKey item_{};float units_=0;
+     std::optional<std::array<math::Matrix4,2>> references_,candidate_;
+     interaction::HandInteractionSample previous_{};
++    // Retained original geometry/identity only. Restoring player coordination
++    // still requires a new typed idle-debt grant and the SAME live left gun.
++    std::optional<std::array<math::Matrix4,2>> recoveryReferences_;
++    std::optional<interaction::WeaponCycleLease> debtLease_;
++    std::optional<interaction::HandClaimToken> leftCustody_;
+     std::int64_t selectedAt_=0,stableAt_=0,lastNow_=0;
+     std::uint64_t lastRaw_=0,submitted_=0,neutral_=0,returnPress_=0;
+     interaction::BoltCustodyPhase custody_=interaction::BoltCustodyPhase::Idle;
+--- a/src/games/bc2/Bc2Gameplay.cpp
++++ b/src/games/bc2/Bc2Gameplay.cpp
+@@ -144,14 +144,22 @@
+         [](void*,const Bc2NativeCycleControl& c)noexcept{return reloadFlowRuntime::PublishNativeCycleControl(c);},
+         [](void*,std::int64_t now)noexcept{return reloadFlowRuntime::ReadNativeCycleView(now);},
+         [](void*,const interaction::WeaponCycleReady& r)noexcept{return reloadFlowRuntime::AcknowledgeNativeCycleReady(r);},
+-        [](void*)noexcept{reloadFlowRuntime::CancelNativeCycle();}};
++        [](void*)noexcept{reloadFlowRuntime::CancelNativeCycle();},
++        {[](void*,std::int64_t now)noexcept{return reloadFlowRuntime::ReadNativeCycleRecoveryView(now);},
++         [](void*,const interaction::WeaponCycleIdleDebtRelease& r,const interaction::HandInteractionSample& input)noexcept{
++             return reloadFlowRuntime::SubmitNativeCycleRecovery(r,input);},
++         [](void*,const interaction::WeaponCycleIdleDebtReady& r)noexcept{return reloadFlowRuntime::AcknowledgeNativeCycleRecovery(r);}}};
+ }
+ Bc2PhysicalPumpApi OrdinaryPumpApi()noexcept {
+     return {nullptr,
+         [](void*,const Bc2NativeCycleControl& c)noexcept{return reloadFlowRuntime::PublishNativeCycleControl(c);},
+         [](void*,std::int64_t now)noexcept{return reloadFlowRuntime::ReadNativeCycleView(now);},
+         [](void*,const interaction::WeaponCycleReady& r)noexcept{return reloadFlowRuntime::AcknowledgeNativeCycleReady(r);},
+-        [](void*)noexcept{reloadFlowRuntime::CancelNativeCycle();}};
++        [](void*)noexcept{reloadFlowRuntime::CancelNativeCycle();},
++        {[](void*,std::int64_t now)noexcept{return reloadFlowRuntime::ReadNativeCycleRecoveryView(now);},
++         [](void*,const interaction::WeaponCycleIdleDebtRelease& r,const interaction::HandInteractionSample& input)noexcept{
++             return reloadFlowRuntime::SubmitNativeCycleRecovery(r,input);},
++         [](void*,const interaction::WeaponCycleIdleDebtReady& r)noexcept{return reloadFlowRuntime::AcknowledgeNativeCycleRecovery(r);}}};
+ }
+ std::optional<Bc2PumpControllerProbe> physicalPumpFixture;
+ std::optional<Bc2M95StockShotProbe> m95StockShotFixture;
+@@ -724,6 +732,7 @@
+     player.mesh=physicalBoltCalibration->mesh;player.controls=&input;player.safety=handSample;
+     player.body={current,handSample,input.referenceHead,*body,input.worldUnitsPerMeter};player.contact=ordinaryBoltContact;
+     player.native=reloadFlowRuntime::ReadNativeCycleView(handSample.nowNs);player.ammunition=ammo;
++    player.recovery=reloadFlowRuntime::ReadNativeCycleRecoveryView(handSample.nowNs);
+     ordinaryBoltSample=ordinaryBoltPlayer->Prepare(player,handOwnership,handIntent);
+     if(!ordinaryBoltSample)return;
+     ordinaryBoltSample->cancel=cancelling||ordinaryBoltSample->cancel;
+@@ -2235,6 +2244,9 @@
+     const auto calibration=M95OrdinaryBoltCalibration235();
+     if(!calibration||!BoltCalibrationValid(*calibration)||!PumpCalibrationValid(MeasuredSpasPump225())||
+        !reloadFlowRuntime::EnableNativeCycleDispatcher())return false;
++#ifdef FVR_BC2_NATIVE_CYCLE_RECOVERY
++    if(!reloadFlowRuntime::EnableNativeCycleRecovery())return false;
++#endif
+     physicalBoltCalibration=std::make_shared<const Bc2BoltCalibration>(*calibration);
+     physicalBolt.emplace(physicalBoltCalibration,OrdinaryBoltApi());ordinaryBoltPlayer.emplace(physicalBoltCalibration);
+     physicalPump.emplace(std::make_shared<const Bc2PumpCalibration>(MeasuredSpasPump225()),OrdinaryPumpApi());
+--- a/src/games/bc2/Bc2NativeCycleEvidence.cpp
++++ b/src/games/bc2/Bc2NativeCycleEvidence.cpp
+@@ -59,6 +59,52 @@
+     return r.entry.kind==ReloadFlowEvent::Update&&r.entry.depth==1&&!r.entry.parent&&!r.entry.nativeParent&&
+         r.entry.update==r.id&&r.entry.nativeUpdate==r.id&&Basic(r,identity,branch,true);
+ }
++bool CycleConvergencePhase(unsigned current,unsigned next,float timer,bool m95,bool empty)noexcept {
++    if(!std::isfinite(timer)||timer<0)return false;
++    if(current==2)return next==2&&timer==0;
++    if(current==1)return (next==1||next==2)&&timer==0;
++    if(empty)return current==6&&next==1&&timer>0&&timer<=1;
++    if(current==6)return next==7&&timer>0&&timer<=1;
++    if(current==7)return (next==7||next==8)&&timer>=0&&timer<=.5f;
++    return current==8&&next==1&&timer>=0&&timer<=(m95?2.3f:1.f);
++}
++bool CycleGuardedUpdate(const ReloadFlowRecord& r,const ReloadHoldIdentity& identity,unsigned branch,
++    const NativeCycleInputGuard& guard,unsigned guardedSteps,unsigned rejectedSteps,bool m95,bool empty)noexcept {
++    if(!ValidateCycleUpdate(r,identity,branch)||!Unheld(r)||!guard.Exact()||rejectedSteps)return false;
++    std::array<std::uint32_t,2> original{};std::memcpy(original.data(),r.entry.copiedContext.data()+0x28,8);
++    if(guard.original!=original||guard.effective!=std::array<std::uint32_t,2>{(original[0]&~255u)|1u,0})return false;
++    const auto context=DecodeReloadUpdateContext(r.entry.copiedContext);
++    const auto& before=r.entry.boundary;const auto& after=*r.exit.boundary;
++    return context&&!context->flags24Through28[2]&&
++        (!(before.current==2&&before.next==2&&after.current==2&&after.next==2)||guardedSteps)&&
++        CycleConvergencePhase(before.current,before.next,before.timer,m95,empty)&&
++        CycleConvergencePhase(after.current,after.next,after.timer,m95,empty)&&
++        before.loaded==after.loaded&&before.reserve==after.reserve&&
++        (after.flagsA8==before.flagsA8||after.flagsA8==(before.flagsA8&~2u));
++}
++bool CycleGuardedCommit(const ReloadFlowRecord& r,const ReloadHoldIdentity& identity,unsigned branch,std::uint64_t parent,bool m95,bool empty)noexcept {
++    (void)m95;const auto& e=r.entry;
++    if(!parent||r.id<=parent||e.kind!=ReloadFlowEvent::Commit||e.depth!=2||e.parent!=parent||e.nativeParent!=parent||
++       e.update!=parent||e.nativeUpdate!=parent||!Basic(r,identity,branch,false)||!Unheld(r))return false;
++    const auto c=DecodeReloadUpdateContext(e.copiedContext);const auto& a=e.boundary;const auto& z=*r.exit.boundary;
++    return c&&!c->inputFlags&&!c->flags24Through28[2]&&c->flags24Through28[4]&&
++        (a.timer==0)&&((a.current==7&&a.next==8&&!empty)||(a.current==8&&a.next==1&&!empty)||(a.current==6&&a.next==1&&empty)||(a.current==1&&a.next==2))&&
++        z.previous==a.current&&z.current==a.next&&z.next==a.next&&z.timer==a.timer&&
++        z.loaded==a.loaded&&z.reserve==a.reserve&&z.flagsA8==a.flagsA8;
++}
++bool CycleConvergenceRestore(const ReloadFlowRecord& r,const ReloadHoldIdentity& identity,unsigned branch,bool m95,bool empty)noexcept {
++    const auto& a=r.entry;const auto& e=r.exit;
++    if(!Identity(identity)||branch>=2||a.kind!=ReloadFlowEvent::Restore||!r.id||a.nativeInvocation!=r.id||
++       a.depth!=1||a.parent||a.nativeParent||a.update||a.nativeUpdate||!r.finished||!r.identityRetained||
++       !e.boundary||!a.thread||a.thread!=e.thread||a.nowNs<=0||e.nowNs<a.nowNs||a.caller<0x10000||a.context<0x10000||
++       a.contextCopied||e.contextCopied||!Unheld(r)||!Boundary(a.boundary,identity,branch)||!Boundary(*e.boundary,identity,branch)||
++       a.boundary.snapshotSequence!=e.boundary->snapshotSequence||a.boundary.soldierFlags!=e.boundary->soldierFlags||
++       !ReloadRestoreMatched(r))return false;
++    const auto& b=a.boundary;const auto& v=*e.boundary;
++    return CycleConvergencePhase(b.current,b.next,b.timer,m95,empty)&&
++        CycleConvergencePhase(v.current,v.next,v.timer,m95,empty)&&
++        b.loaded==v.loaded&&b.reserve==v.reserve&&b.flagsA8==v.flagsA8;
++}
+ bool CycleM95PreHoldRewind(const ReloadFlowRecord& r,const ReloadHoldIdentity& identity,unsigned branch)noexcept {
+     const auto& a=r.entry;const auto& e=r.exit;
+     if(!Identity(identity)||branch>=2||a.kind!=ReloadFlowEvent::Restore||!r.id||a.nativeInvocation!=r.id||
+--- a/src/games/bc2/Bc2NativeCycleEvidence.h
++++ b/src/games/bc2/Bc2NativeCycleEvidence.h
+@@ -1,8 +1,16 @@
+ #pragma once
+ #include "Bc2ReloadHold.h"
++#include "Bc2NativeCycleInputGuard.h"
+ 
+ namespace fvr::bc2 {
+ struct ReloadFlowRecord;
++// Guarded convergence is a distinct path. Original context must be restored,
++// own Update/Step provenance exact, counts conserved. Busy never votes idle.
++bool CycleConvergencePhase(unsigned current,unsigned next,float timer,bool m95,bool empty)noexcept;
++bool CycleGuardedUpdate(const ReloadFlowRecord&,const ReloadHoldIdentity&,unsigned branch,
++    const NativeCycleInputGuard&,unsigned guardedSteps,unsigned rejectedSteps,bool m95,bool empty)noexcept;
++bool CycleGuardedCommit(const ReloadFlowRecord&,const ReloadHoldIdentity&,unsigned branch,std::uint64_t parent,bool m95,bool empty)noexcept;
++bool CycleConvergenceRestore(const ReloadFlowRecord&,const ReloadHoldIdentity&,unsigned branch,bool m95,bool empty)noexcept;
+ // Exact original M95 client prediction rewind observed in stock234. This is
+ // usable only before any native hold; it never grants or completes a lease.
+ bool CycleM95PreHoldRewind(const ReloadFlowRecord&,const ReloadHoldIdentity&,unsigned branch)noexcept;
+--- /dev/null
++++ b/src/games/bc2/Bc2NativeCycleInputGuard.h
+@@ -0,0 +1,49 @@
++#pragma once
++#include <array>
++#include <cstdint>
++namespace fvr::bc2 {
++// Only the original invocation's caller-owned stack context is writable. The
++// native firing object, time fields and ammunition never enter this access API.
++// words[0] is context+28 (bool plus untouched padding), words[1] is context+2c.
++struct NativeCycleInputAccess {
++    void* context=nullptr;
++    bool (*compareExchange)(void*,unsigned index,std::uint32_t expected,
++        std::uint32_t replacement,std::uint32_t& observed)noexcept=nullptr;
++};
++struct NativeCycleInputGuard {
++    std::array<std::uint32_t,2> original{},effective{},beforeRestore{};
++    bool requested=false,applied=false,restored=false,rollback=false,unexpectedWrite=false;
++    bool operator==(const NativeCycleInputGuard&)const noexcept=default;
++    bool Apply(const NativeCycleInputAccess& access,const std::array<std::uint32_t,2>& source)noexcept {
++        requested=true;
++        if(applied||!access.compareExchange||(source[0]&255u)>1||(source[1]&~7u))return false;
++        original=source;effective={(source[0]&~255u)|1u,0};std::uint32_t observed=0;
++        if(!access.compareExchange(access.context,1,original[1],effective[1],observed)||observed!=original[1])return false;
++        if(!access.compareExchange(access.context,0,original[0],effective[0],observed)||observed!=original[0]){
++            rollback=access.compareExchange(access.context,1,effective[1],original[1],observed)&&observed==effective[1];
++            unexpectedWrite=!rollback;return false;
++        }
++        applied=true;return true;
++    }
++    bool Restore(const NativeCycleInputAccess& access)noexcept {
++        if(!applied||restored||!access.compareExchange)return false;
++        const bool flags=access.compareExchange(access.context,1,effective[1],original[1],beforeRestore[1])&&beforeRestore[1]==effective[1];
++        const bool inhibit=access.compareExchange(access.context,0,effective[0],original[0],beforeRestore[0])&&beforeRestore[0]==effective[0];
++        restored=flags&&inhibit;unexpectedWrite=!restored;return restored;
++    }
++    bool Exact()const noexcept{return requested&&applied&&restored&&!unexpectedWrite&&beforeRestore==effective;}
++};
++inline void RunNativeCycleInputGuard(const NativeCycleInputAccess& access,
++    const std::array<std::uint32_t,2>& originalWords,bool requested,
++    void (*original)(void*),void* context,NativeCycleInputGuard& receipt){
++    if(requested)receipt.Apply(access,originalWords);
++#if defined(_MSC_VER)
++    __try {original(context);}
++    __finally {if(receipt.applied)receipt.Restore(access);}
++#else
++    struct Restore {const NativeCycleInputAccess& access;NativeCycleInputGuard& receipt;
++        ~Restore(){if(receipt.applied)receipt.Restore(access);}} restore{access,receipt};
++    original(context);
++#endif
++}
++}
+--- a/src/games/bc2/Bc2NativeCycleRecovery.cpp
++++ b/src/games/bc2/Bc2NativeCycleRecovery.cpp
+@@ -1,7 +1,3 @@
+ #include "Bc2NativeCycleRecovery.h"
+-namespace fvr::bc2::reloadFlowRuntime {
+-// Deliberately unavailable until original callback convergence and continuous
+-// native fire/ammunition guard ownership are integrated. Consumer/renderer
+-// tests supply their own explicitly mocked adapter channel.
+-std::optional<Bc2NativeCycleRecoveryView> ReadNativeCycleRecoveryView(std::int64_t)noexcept{return {};}
+-}
++// The real reader/submission/acknowledgement channel is implemented alongside
++// its serialized native service in Bc2ReloadFlowRuntime.cpp (with platform stubs).
+--- a/src/games/bc2/Bc2NativeCycleRecovery.h
++++ b/src/games/bc2/Bc2NativeCycleRecovery.h
+@@ -1,5 +1,6 @@
+ #pragma once
+-#include "Bc2NativeCycleService.h"
++#include "Bc2ReloadHold.h"
++#include "fvr/interaction/WeaponCycle.h"
+ namespace fvr::bc2 {
+ // Separate, exact native convergence channel. This cannot renew a held timer
+ // lease or make a pending normal/native-held release disappear.
+@@ -18,5 +19,8 @@
+ };
+ namespace reloadFlowRuntime {
+ std::optional<Bc2NativeCycleRecoveryView> ReadNativeCycleRecoveryView(std::int64_t now)noexcept;
++bool SubmitNativeCycleRecovery(const interaction::WeaponCycleIdleDebtRelease&,const interaction::HandInteractionSample&)noexcept;
++bool AcknowledgeNativeCycleRecovery(const interaction::WeaponCycleIdleDebtReady&)noexcept;
++bool EnableNativeCycleRecovery()noexcept;
+ }
+ }
+--- /dev/null
++++ b/src/games/bc2/Bc2NativeCycleRecoveryState.h
+@@ -0,0 +1,146 @@
++#pragma once
++#include "Bc2NativeCycleRecovery.h"
++#include "Bc2NativeCycleEvidence.h"
++#include "Bc2ReloadFlowRuntime.h"
++#include "fvr/interaction/WeaponCycleConvergence.h"
++
++namespace fvr::bc2 {
++struct NativeCycleRecoveryScope {
++    ReloadHoldIdentity identity{};ReloadObservedConfig config{};
++    bool operator==(const NativeCycleRecoveryScope&)const noexcept=default;
++};
++struct NativeCycleRecoveryDecision {
++    std::uint64_t invocation=0,epoch=0;unsigned branch=3;
++    int capacity=0;std::int64_t deadlineNs=0;
++    explicit operator bool()const noexcept{return invocation&&epoch&&branch<3;}
++};
++// Serialized captured-evidence consumer. Runtime alone supplies current own
++// boundaries and an actual scoped Update guard; this object has no memory API.
++class Bc2NativeCycleRecoveryState {
++public:
++    using Policy=interaction::WeaponCycleConvergence<NativeCycleRecoveryScope>;
++    bool Begin(const NativeCycleRecoveryScope& scope,const interaction::WeaponCycleDebt& debt,
++        std::int64_t began,bool m95,bool empty)noexcept {
++        if(active_||!policy_.Begin(scope,debt,began))return false;
++        scope_=scope;debt_=debt;began_=began;m95_=m95;empty_=empty;active_=true;return true;
++    }
++    bool BeginHold(unsigned branch,std::uint64_t invocation,std::int64_t begin,std::int64_t deadline)noexcept {
++        if(!active_||branch>=3||open_[branch]||!policy_.BeginHold(scope_,branch,invocation,begin,deadline))return false;
++        open_[branch]=last_[branch]=invocation;return true;
++    }
++    bool RestoreHold(unsigned branch,std::uint64_t invocation,std::int64_t end,bool exact)noexcept {
++        if(branch>=3||open_[branch]!=invocation)return false;
++        open_[branch]=0;return policy_.RestoreHold(scope_,branch,invocation,end,exact);
++    }
++    NativeCycleRecoveryDecision Evaluate(const NativeCycleRecoveryScope& scope,const ReloadFlowEventInput& entry,
++        int capacity,std::int64_t deadline)noexcept {
++        NativeCycleRecoveryDecision out;
++        const auto branch=entry.boundary.branch;const auto decoded=DecodeReloadUpdateContext(entry.copiedContext);
++        if(!active_||Uncertain()||scope!=scope_||branch>=3||open_[branch]||!entry.nativeInvocation||
++           entry.nativeInvocation<=last_[branch]||entry.kind!=ReloadFlowEvent::Update||entry.depth!=1||
++           entry.nativeParent||entry.nativeUpdate!=entry.nativeInvocation||entry.nowNs<began_||
++           !entry.contextCopied||!decoded||!ValidManualReloadDelta(decoded->deltaSeconds)||
++           decoded->reloadTimeMultiplier<=0||decoded->reloadTimeMultiplier>4||decoded->flags24Through28[2]||
++           entry.boundary.firing!=scope_.identity.firing[branch]||entry.boundary.owner!=scope_.identity.owner||
++           entry.boundary.loaded!=debt_.loaded||entry.boundary.reserve!=debt_.reserve||capacity!=debt_.capacity||
++           !CycleConvergencePhase(entry.boundary.current,entry.boundary.next,entry.boundary.timer,m95_,empty_)||
++           deadline<=entry.nowNs||deadline-entry.nowNs>Policy::MaximumFreshNs){LoseGuard();return out;}
++        open_[branch]=last_[branch]=entry.nativeInvocation;
++        return {entry.nativeInvocation,debt_.guardEpoch,branch,capacity,deadline};
++    }
++    bool Finish(const NativeCycleRecoveryDecision& d,const ReloadFlowRecord& record,const NativeCycleInputGuard& guard,
++        unsigned steps,unsigned rejected)noexcept {
++        if(!d||d.branch>=3||open_[d.branch]!=d.invocation){LoseGuard();return false;}
++        open_[d.branch]=0;
++        if(Uncertain()||record.id!=d.invocation||d.epoch!=debt_.guardEpoch||record.exit.nowNs>=d.deadlineNs||
++           record.exit.cycleGuardEpoch!=d.epoch||record.exit.cycleGuard!=guard||
++           record.exit.cycleGuardSteps!=steps||record.exit.cycleGuardRejected!=rejected||
++           !CycleGuardedUpdate(record,scope_.identity,d.branch,guard,steps,rejected,m95_,empty_)||
++           record.exit.boundary->loaded!=debt_.loaded||record.exit.boundary->reserve!=debt_.reserve){LoseGuard();return false;}
++        ++guardedUpdates_;guardedSteps_+=steps;
++        const auto idle=[](const ReloadFlowBoundary& b){return b.current==2&&b.next==2&&b.timer==0;};
++        if(idle(record.entry.boundary)&&idle(*record.exit.boundary)){
++            currentIdle_[d.branch]={record.exit.nowNs,d.deadlineNs};
++            // A valid callback can overlap the preceding voting-round boundary.
++            // The policy rejects it as a vote without treating it as guard loss.
++            policy_.ObserveIdle(scope_,{d.branch,d.invocation,debt_.guardEpoch,record.entry.nowNs,
++                record.exit.nowNs,d.deadlineNs,debt_.loaded,debt_.reserve,debt_.capacity},record.exit.nowNs);
++            if(!ready_&&policy_.Outcome()){
++                const auto& result=*policy_.Outcome();
++                if(const auto* release=std::get_if<interaction::WeaponCycleIdleDebtRelease>(&result.release))
++                    ready_=interaction::WeaponCycleIdleDebtReady{*release,*std::max_element(result.native.second.begin(),result.native.second.end()),
++                        result.native.observedNs,result.native.deadlineNs,true,true};
++            }
++        }else {currentIdle_={};policy_.NativeBusy(scope_,record.exit.nowNs);grant_.reset();}
++        return true;
++    }
++    bool Commit(const ReloadFlowRecord& record)noexcept {
++        const auto branch=record.entry.boundary.branch;
++        if(!active_||Uncertain()||branch>=3||!open_[branch]||
++           !CycleGuardedCommit(record,scope_.identity,branch,open_[branch],m95_,empty_)||
++           record.exit.boundary->loaded!=debt_.loaded||record.exit.boundary->reserve!=debt_.reserve){LoseGuard();return false;}
++        return true;
++    }
++    bool Restore(const ReloadFlowRecord& record)noexcept {
++        const auto b=record.entry.boundary.branch;
++        if(!active_||Uncertain()||b>=2||open_[b]||record.id<=last_[b]||record.entry.nowNs<began_||
++           !CycleConvergenceRestore(record,scope_.identity,b,m95_,empty_)||
++           record.exit.boundary->loaded!=debt_.loaded||record.exit.boundary->reserve!=debt_.reserve){LoseGuard();return false;}
++        last_[b]=record.id;
++        const auto& before=record.entry.boundary;const auto& after=*record.exit.boundary;
++        if(before.current!=2||before.next!=2||before.timer!=0||after.current!=2||after.next!=2||after.timer!=0){
++            currentIdle_={};policy_.NativeBusy(scope_,record.exit.nowNs);grant_.reset();}
++        return true; // A Restore itself never supplies an idle vote.
++    }
++    bool Control(const interaction::HandInteractionSample& input)noexcept {
++        if(!active_||Uncertain()||input.owner!=debt_.owner)return false;
++        if(!grant_)grant_=policy_.ArmRecovery(scope_,input,m95_?interaction::WeaponCycleHandAssignment{
++            interaction::InteractionHand::Right,interaction::InteractionHand::Left}:interaction::WeaponCycleHandAssignment{});
++        return true;
++    }
++    void Interrupt(std::int64_t now)noexcept {
++        if(!active_)return;policy_.Interrupt(scope_,now);grant_.reset();
++    }
++    std::optional<Bc2NativeCycleRecoveryView> View(std::int64_t now)noexcept {
++        if(!active_)return {};
++        Bc2NativeCycleRecoveryView view{scope_.identity,{},{},policy_.BlocksFire()};
++        if(!Uncertain()&&grant_)view.authority=policy_.RecoveryAuthority(scope_,*grant_,now);
++        // Retained exact outcome has its original completion time. Tracking
++        // loss and polling never extend the authority or restamp readiness.
++        if(!Uncertain())view.ready=ready_;return view;
++    }
++    bool Submit(const interaction::WeaponCycleIdleDebtRelease& release,const interaction::HandInteractionSample& input)noexcept {
++        if(!active_||Uncertain()||input.owner!=debt_.owner||!release.inputSequence||release.inputSequence>input.sequence||
++           release.observedNs>input.observedNs||release.deadlineNs>input.deadlineNs||
++           !input.focused||!input.tracked[0]||!input.tracked[1]||
++           !interaction::weapon_cycle_detail::Window(input.observedNs,input.deadlineNs,input.nowNs))return false;
++        return policy_.SubmitRecovered(scope_,release,input.nowNs);
++    }
++    bool Acknowledge(const interaction::WeaponCycleIdleDebtReady& ready,std::int64_t now)noexcept {
++        if(!active_||Uncertain()||!ready_||ready_->release!=ready.release||ready_->sequence!=ready.sequence||
++           ready_->observedNs!=ready.observedNs||ready_->deadlineNs!=ready.deadlineNs||
++           ready_->nativeReady!=ready.nativeReady||ready_->unchangedAmmunition!=ready.unchangedAmmunition||!policy_.Outcome()||
++           std::any_of(open_.begin(),open_.end(),[](auto id){return id!=0;}))return false;
++        for(const auto& idle:currentIdle_)if(!idle.first||now<idle.first||now>=idle.second)return false;
++        if(!policy_.Acknowledge(*policy_.Outcome()))return false;ready_.reset();return true;
++    }
++    void LoseGuard()noexcept {if(active_)policy_.LoseGuard(scope_);currentIdle_={};grant_.reset();ready_.reset();}
++    bool Active()const noexcept{return active_;}
++    bool Uncertain()const noexcept{return policy_.Phase()==interaction::WeaponCycleConvergencePhase::Uncertain;}
++    bool BlocksFire()const noexcept{return active_&&policy_.BlocksFire();}
++    bool Drained()const noexcept{return std::none_of(open_.begin(),open_.end(),[](auto id){return id!=0;});}
++    std::uint64_t Epoch()const noexcept{return debt_.guardEpoch;}
++    std::int64_t Began()const noexcept{return began_;}
++    const NativeCycleRecoveryScope& Scope()const noexcept{return scope_;}
++    std::uint64_t GuardedUpdates()const noexcept{return guardedUpdates_;}
++    std::uint64_t GuardedSteps()const noexcept{return guardedSteps_;}
++private:
++    NativeCycleRecoveryScope scope_{};interaction::WeaponCycleDebt debt_{};Policy policy_{};
++    bool active_=false,m95_=false,empty_=false;std::int64_t began_=0;
++    std::array<std::uint64_t,3> open_{},last_{};
++    std::array<std::pair<std::int64_t,std::int64_t>,3> currentIdle_{};
++    std::optional<interaction::WeaponCycleRecoveryGrant> grant_;
++    std::optional<interaction::WeaponCycleIdleDebtReady> ready_;
++    std::uint64_t guardedUpdates_=0,guardedSteps_=0;
++};
++}
+--- a/src/games/bc2/Bc2NativeCycleService.cpp
++++ b/src/games/bc2/Bc2NativeCycleService.cpp
+@@ -24,6 +24,49 @@
+ bool Active(Bc2NativeCyclePhase phase)noexcept {
+     return phase!=Bc2NativeCyclePhase::Watching&&phase!=Bc2NativeCyclePhase::Complete;
+ }
++}
++bool Bc2NativeCycleService::EnableRecovery()noexcept {
++    if(control_.input.sequence||cycle_||phase_!=Bc2NativeCyclePhase::Watching)return false;
++    recoveryEnabled_=true;return true;
++}
++bool Bc2NativeCycleService::BeginRecovery(std::int64_t now)noexcept {
++    if(Recovering()){recovery_.Interrupt(now);return !recovery_.Uncertain();}
++    if(!recoveryEnabled_||phase_!=Bc2NativeCyclePhase::Held||release_||ready_||firedMask_!=7||heldMask_!=7||
++       now<began_||guardEpoch_==UINT64_MAX)return false;
++    // Conversion must occur while the native callbacks still prove established
++    // holds. A long unobserved gap cannot acquire a continuous guard retroactively.
++    for(unsigned b=0;b<3;++b){
++        if(!heldAt_[b]||now<heldAt_[b]||now-heldAt_[b]>100000000)return false;
++        if(openUpdate_[b]&&!openHold_[b])return false;
++    }
++    Bc2NativeCycleRecoveryState candidate;
++    if(!candidate.Begin({native_,config_},{control_.input.owner,control_.item,control_.mechanism,
++        cycle_,shot_,guardEpoch_+1,loaded_,reserve_,capacity_},began_,mode_==Bc2NativeCycleMode::M95,emptyCycle_))return false;
++    for(unsigned b=0;b<3;++b)if(openUpdate_[b]&&!candidate.BeginHold(b,openUpdate_[b],before_[b].nowNs,openDeadline_[b]))return false;
++    recovery_=std::move(candidate);++guardEpoch_;phase_=Bc2NativeCyclePhase::Converging;
++    held_.reset();issued_={};suspendedAt_=suspendedUntil_=0;return true;
++}
++NativeCycleRecoveryDecision Bc2NativeCycleService::EvaluateRecovery(const NativeCycleRecoveryScope& scope,
++    const ReloadFlowEventInput& entry,int capacity,std::int64_t deadline)noexcept {
++    lastEvent_=entry.nativeInvocation;
++    if(!Recovering())return {};
++    const auto result=recovery_.Evaluate(scope,entry,capacity,deadline);
++    if(!result)Cancel(Bc2NativeCycleFailure::Owner);return result;
++}
++void Bc2NativeCycleService::FinishRecovery(const NativeCycleRecoveryDecision& d,const ReloadFlowRecord& r,
++    const NativeCycleInputGuard& guard,unsigned steps,unsigned rejected)noexcept {
++    lastEvent_=r.id;
++    if(!Recovering())return;
++    if(!recovery_.Finish(d,r,guard,steps,rejected))Cancel(Bc2NativeCycleFailure::Completion);
++}
++bool Bc2NativeCycleService::SubmitRecovery(const WeaponCycleIdleDebtRelease& release,const HandInteractionSample& input)noexcept {
++    return Recovering()&&input.owner==control_.input.owner&&input.sequence==control_.input.sequence&&
++        input.observedNs==control_.input.observedNs&&input.deadlineNs==control_.input.deadlineNs&&
++        input.nowNs>=control_.input.nowNs&&recovery_.Submit(release,input);
++}
++bool Bc2NativeCycleService::AcknowledgeRecovery(const WeaponCycleIdleDebtReady& ready,std::int64_t now)noexcept {
++    if(!Recovering()||!recovery_.Acknowledge(ready,now))return false;
++    phase_=Bc2NativeCyclePhase::Complete;return true;
+ }
+ bool Bc2NativeCycleService::Configure(Bc2NativeCycleMode mode)noexcept {
+     if((mode!=Bc2NativeCycleMode::Spas&&mode!=Bc2NativeCycleMode::M95)||control_.input.sequence||native_.owner.player||
+@@ -81,13 +124,14 @@
+     if(suspendedAt_&&c.input.observedNs>suspendedAt_&&c.input.sequence>control_.input.sequence&&
+        c.input.released[mechanismHand]&&!c.input.released[1u-mechanismHand]&&!c.release){suspendedAt_=suspendedUntil_=0;++heldResumptions_;}
+     control_=c;
++    if(Recovering())return !c.release&&recovery_.Control(c.input);
+     return !c.release||Release(*c.release,c.input.nowNs);
+ }
+ bool Bc2NativeCycleService::YieldForReload()noexcept {
+     if(Active(phase_)||ready_||std::any_of(openUpdate_.begin(),openUpdate_.end(),[](auto id){return id!=0;}))return false;
+     Cancel(Bc2NativeCycleFailure::None);
+     phase_=Bc2NativeCyclePhase::Watching;firedMask_=heldMask_=readyMask_=0;
+-    release_.reset();releaseSubmittedNs_=0;forwardReadyAt_=0;selection_.reset();return true;
++    release_.reset();releaseSubmittedNs_=0;forwardReadyAt_=0;selection_.reset();recovery_={};return true;
+ }
+ bool Bc2NativeCycleService::SuspendCompletion()noexcept {
+     if(phase_!=Bc2NativeCyclePhase::Releasing||!release_)return false;
+@@ -109,6 +153,8 @@
+     return Bc2NativeCycleCompletionWatch{native_,config_,cycle_,suspendedAt_,suspendedUntil_,true};
+ }
+ std::optional<Bc2NativeCycleCompletionWatch> Bc2NativeCycleService::ObservationWatch(std::int64_t now)const noexcept {
++    if(Recovering()&&!recovery_.Uncertain()&&now>=recovery_.Began()&&now<=INT64_MAX-100000000)
++        return Bc2NativeCycleCompletionWatch{native_,config_,cycle_,recovery_.Began(),now+100000000,false};
+     if(const auto completion=CompletionWatch(now))return completion;
+     return HeldWatch(now);
+ }
+@@ -142,7 +188,7 @@
+ }
+ Bc2NativeCycleDecision Bc2NativeCycleService::Evaluate(const ReloadHoldInput& in,std::uint64_t invocation)noexcept {
+     Bc2NativeCycleDecision out;
+-    if(phase_==Bc2NativeCyclePhase::Cancelled)return out;
++    if(phase_==Bc2NativeCyclePhase::Cancelled||Recovering())return out;
+     lastEvent_=invocation;
+     if(suspendedAt_&&in.nowNs>=suspendedUntil_){Cancel(Bc2NativeCycleFailure::Expired);return out;}
+     // Same-branch reentry must not overwrite the pending own-Update receipt.
+@@ -155,7 +201,7 @@
+         if(Active(phase_)){Cancel(Bc2NativeCycleFailure::Owner);return out;}
+         firedMask_=heldMask_=readyMask_=0;
+     }
+-    native_=in.identity;config_=in.config;lastInvocation_[in.branch]=invocation;openUpdate_[in.branch]=invocation;before_[in.branch]=in;
++    native_=in.identity;config_=in.config;lastInvocation_[in.branch]=invocation;openUpdate_[in.branch]=invocation;openHold_[in.branch]=false;before_[in.branch]=in;
+     out={invocation,cycle_,in.branch,true,false,in.leaseDeadlineNs};
+     if(phase_==Bc2NativeCyclePhase::Watching||phase_==Bc2NativeCyclePhase::Complete)return out;
+     if(in.nowNs>=deadline_){Cancel(Bc2NativeCycleFailure::Expired);return out;}
+@@ -176,14 +222,23 @@
+     if(!heldMask_)for(const auto& branch:in.branches)if(branch.phaseTimer<Boundary(mode_,emptyCycle_).minArmTimer)return out;
+     phase_=heldMask_==7?Bc2NativeCyclePhase::Held:Bc2NativeCyclePhase::Arming;
+     out.hold=true;out.cycle=cycle_;
+-    out.deadlineNs=std::min({deadline_,in.leaseDeadlineNs,suspendedAt_?suspendedUntil_:control_.input.deadlineNs});return out;
++    out.deadlineNs=std::min({deadline_,in.leaseDeadlineNs,suspendedAt_?suspendedUntil_:control_.input.deadlineNs});
++    openHold_[in.branch]=true;openDeadline_[in.branch]=out.deadlineNs;return out;
+ }
+ void Bc2NativeCycleService::Finish(const Bc2NativeCycleDecision& d,const ReloadFlowRecord& record)noexcept {
+     if(!d.tracked||d.branch>=3||record.id!=d.invocation||openUpdate_[d.branch]!=d.invocation)return;
+-    openUpdate_[d.branch]=0;
++    openUpdate_[d.branch]=0;openHold_[d.branch]=false;
+     if(phase_==Bc2NativeCyclePhase::Cancelled)return;
+     lastEvent_=record.id;
+     const auto& in=before_[d.branch];
++    if(Recovering()){
++        auto boundary=Boundary(mode_,emptyCycle_);
++        if(d.branch<2&&restoredAt_[d.branch]>=began_&&restoredAt_[d.branch]<=record.entry.nowNs&&
++           record.entry.boundary.previous==restoredPrevious_[d.branch])boundary.previous=restoredPrevious_[d.branch];
++        const bool exact=d.hold&&d.cycle==cycle_&&CycleHold(record,native_,d.branch,boundary,false)&&record.exit.nowNs<d.deadlineNs;
++        if(!recovery_.RestoreHold(d.branch,d.invocation,record.exit.nowNs,exact))Cancel(Bc2NativeCycleFailure::Hold);
++        return;
++    }
+     if(!ValidateCycleUpdate(record,native_,d.branch)){if(Active(phase_))Cancel(Bc2NativeCycleFailure::Completion);return;}
+     const auto& shotAfter=*record.exit.boundary;
+     const bool emptyShot=mode_==Bc2NativeCycleMode::Spas&&CycleEmptyShot(record,native_,d.branch);
+@@ -208,7 +263,7 @@
+         const auto& after=*record.exit.boundary;
+         if(phase_!=Bc2NativeCyclePhase::ShotObserved){
+             if(cycle_==UINT64_MAX||shot_==UINT64_MAX||record.exit.nowNs>INT64_MAX-MaximumCycleNs){Cancel(Bc2NativeCycleFailure::Shot);return;}
+-            ++cycle_;++shot_;began_=record.exit.nowNs;deadline_=began_+MaximumCycleNs;
++            recovery_={};++cycle_;++shot_;began_=record.exit.nowNs;deadline_=began_+MaximumCycleNs;
+             emptyCycle_=emptyShot;loaded_=after.loaded;reserve_=after.reserve;capacity_=in.capacities[d.branch];
+             firedMask_=heldMask_=readyMask_=0;contexts_={};heldAt_={};finishedAt_={};restoredAt_={};restoredPrevious_={};preRestoredAt_={};preRewindAt_={};cycleState_={};tail_={};issued_={};held_.reset();ready_.reset();release_.reset();releaseSubmittedNs_=0;forwardReadyAt_=0;
+             phase_=Bc2NativeCyclePhase::ShotObserved;
+@@ -260,6 +315,7 @@
+     }
+ }
+ void Bc2NativeCycleService::Commit(const ReloadFlowRecord& record)noexcept {
++    if(Recovering()){lastEvent_=record.id;if(!recovery_.Commit(record))Cancel(Bc2NativeCycleFailure::Completion);return;}
+     if(phase_!=Bc2NativeCyclePhase::Releasing||!release_||record.entry.boundary.branch>=3)return;
+     lastEvent_=record.id;
+     const auto branch=record.entry.boundary.branch;
+@@ -273,6 +329,8 @@
+     if(phase_==Bc2NativeCyclePhase::Watching||phase_==Bc2NativeCyclePhase::Cancelled||!native_.owner.player)return;
+     lastEvent_=record.id;
+     const auto branch=record.entry.boundary.branch;
++    if(Recovering()||(phase_==Bc2NativeCyclePhase::Complete&&recovery_.Active())){
++        if(!recovery_.Restore(record)){ContradictoryRestore();}return;}
+     // No selected-server Restore contract is established. An unrelated actor
+     // never reaches this service; runtime filters it before taking the gate.
+     if(branch>=2){ContradictoryRestore();return;}
+@@ -364,6 +422,7 @@
+     // Cleanup repeats cancellation after the first rejected native event. Keep
+     // that first cause and invocation instead of reporting the later teardown.
+     if(phase_==Bc2NativeCyclePhase::Cancelled)return;
++    if(recovery_.Active())recovery_.LoseGuard();
+     suspendedAt_=suspendedUntil_=0;
+     // Cancellation is also a barrier for an Update evaluated before an owner
+     // disappeared. Its later completion cannot create a cycle in a new owner.
+--- a/src/games/bc2/Bc2NativeCycleService.h
++++ b/src/games/bc2/Bc2NativeCycleService.h
+@@ -1,6 +1,7 @@
+ #pragma once
+ #include "Bc2ReloadFlowRuntime.h"
+ #include "Bc2AmmoReserve.h"
++#include "Bc2NativeCycleRecoveryState.h"
+ #include "fvr/interaction/PhysicalWeaponCycle.h"
+ 
+ namespace fvr::bc2 {
+@@ -13,7 +14,7 @@
+     std::optional<interaction::WeaponCycleRelease> release;
+     bool permitted=false;
+ };
+-enum class Bc2NativeCyclePhase:unsigned {Watching,ShotObserved,Arming,Held,Releasing,Complete,Cancelled};
++enum class Bc2NativeCyclePhase:unsigned {Watching,ShotObserved,Arming,Held,Releasing,Complete,Cancelled,Converging};
+ enum class Bc2NativeCycleFailure:unsigned {None,Control,Owner,Input,State,Shot,Hold,Restore,Expired,Completion};
+ enum class Bc2NativeCycleMode:unsigned {Spas,M95};
+ // Selection uses original coherent native reads, not a completion substitute.
+@@ -59,6 +60,17 @@
+     // Explicit pre-control private operating class. Default remains SPAS;
+     // changing a configured or previously observed service is forbidden.
+     bool Configure(Bc2NativeCycleMode)noexcept;
++    bool EnableRecovery()noexcept;
++    bool RecoveryEnabled()const noexcept{return recoveryEnabled_;}
++    bool BeginRecovery(std::int64_t now)noexcept;
++    bool Recovering()const noexcept{return phase_==Bc2NativeCyclePhase::Converging;}
++    NativeCycleRecoveryDecision EvaluateRecovery(const NativeCycleRecoveryScope&,const ReloadFlowEventInput&,int capacity,std::int64_t deadline)noexcept;
++    void FinishRecovery(const NativeCycleRecoveryDecision&,const ReloadFlowRecord&,const NativeCycleInputGuard&,unsigned steps,unsigned rejected)noexcept;
++    std::optional<Bc2NativeCycleRecoveryView> RecoveryView(std::int64_t now)noexcept{return recovery_.View(now);}
++    bool SubmitRecovery(const interaction::WeaponCycleIdleDebtRelease&,const interaction::HandInteractionSample&)noexcept;
++    bool AcknowledgeRecovery(const interaction::WeaponCycleIdleDebtReady&,std::int64_t now)noexcept;
++    std::uint64_t RecoveryUpdates()const noexcept{return recovery_.GuardedUpdates();}
++    std::uint64_t RecoverySteps()const noexcept{return recovery_.GuardedSteps();}
+     // Host must exclude new callback decisions and drain all original calls.
+     // Never discards debt/Ready or resets sequence high-water marks.
+     bool Select(const Bc2NativeCycleSelection&)noexcept;
+@@ -122,7 +134,11 @@
+     std::int64_t suspendedAt_=0,suspendedUntil_=0;
+     std::uint64_t heldSuspensions_=0,heldResumptions_=0;
+     int loaded_=0,reserve_=0,capacity_=0;
+-    bool emptyCycle_=false;
++    bool emptyCycle_=false,recoveryEnabled_=false;
++    std::uint64_t guardEpoch_=0;
++    Bc2NativeCycleRecoveryState recovery_{};
++    std::array<bool,3> openHold_{};
++    std::array<std::int64_t,3> openDeadline_{};
+     std::optional<interaction::WeaponCycleLease> held_;
+     // Processing time of the first accepted submission; original release
+     // source bounds stay immutable and remain the completion envelope.
+--- a/src/games/bc2/Bc2ReloadFlowRuntime.cpp
++++ b/src/games/bc2/Bc2ReloadFlowRuntime.cpp
+@@ -3,6 +3,7 @@
+ #include "Bc2PreholdOperationJournal.h"
+ #include "Bc2ReloadFlowRuntime.h"
+ #include "Bc2NativeCycleRuntime.h"
++#include "Bc2NativeCycleRecovery.h"
+ #include "Bc2NativeCycleDispatch.h"
+ #include "Bc2NativeCycleEvidence.h"
+ #include "Bc2NativeCycleCallbacks.h"
+@@ -448,6 +449,7 @@
+ ReloadHoldProbe holdProbe;
+ bool nativePumpCandidate=false;
+ std::atomic<bool> nativeBoltCandidate=false;
++bool nativeCycleRecoveryEnabled=false; // Pre-Start opt-in; immutable during callbacks.
+ bool nativeCycleDispatcher=false;
+ // Serializes routing publication/handoff only. No original callback holds it.
+ std::atomic_flag nativeCycleRoutingGate=ATOMIC_FLAG_INIT;
+@@ -636,7 +638,12 @@
+     // Exact completion or a bounded already-held interruption watch supplies
+     // native-only authority. Each native read keeps its own original freshness;
+     // neither path renews an XR packet or grants physical hand custody.
+-    if(!NativeCycleTarget(firing)||!nativeCycleCompletionId.load(std::memory_order_acquire))return regular;
++    if(!NativeCycleTarget(firing))return regular;
++    // The first native callback after packet expiry can convert a still-proven
++    // Held debt before normal owner publication loss cancels it. No XR bounds
++    // are renewed; subsequent native reads are independently fresh.
++    if(!regular&&nativeCycleRecoveryEnabled)WithNativeCycle([&]{if(!nativeCycle.Recovering())nativeCycle.BeginRecovery(now);});
++    if(!nativeCycleCompletionId.load(std::memory_order_acquire))return regular;
+     std::optional<Bc2NativeCycleCompletionWatch> watch;
+     WithNativeCycle([&]{watch=nativeCycle.ObservationWatch(Now());});
+     // Ending suspension keeps only already-issued original-deadline reads
+@@ -708,6 +715,7 @@
+ struct Observation {
+     Frame frame{};std::optional<Lease> lease;unsigned context=0,snapshot=0;
+     ReloadDeltaOverride hold{};bool holdRequested=false,finished=false;ReloadFlowEventInput entry{};RequestBoundaryEvidence evidence{};
++    NativeCycleInputGuard cycleGuard{};std::uint64_t cycleGuardEpoch=0;unsigned cycleGuardSteps=0,cycleGuardRejected=0;
+     Observation(ReloadFlowEvent kind,unsigned firing,unsigned caller,unsigned ctx,unsigned argument)noexcept{
+         frame.previous=currentFrame;frame.firing=firing;frame.depth=frame.previous?frame.previous->depth+1:1;currentFrame=&frame;
+         if(!enabled.load(std::memory_order_acquire))return;
+@@ -762,6 +770,7 @@
+             if(context){out.contextCopied=Context(context,out.copiedContext);if(!out.contextCopied)++contextMisses;}
+             if(snapshot){out.snapshotCopied=Context(snapshot,out.copiedSnapshot);if(!out.snapshotCopied)++contextMisses;}
+             out.hold=hold;out.holdRequested=holdRequested;
++            out.cycleGuard=cycleGuard;out.cycleGuardEpoch=cycleGuardEpoch;out.cycleGuardSteps=cycleGuardSteps;out.cycleGuardRejected=cycleGuardRejected;
+             const auto independent=(requestMode||pumpDiagnostic)?frame.invocation.Finish(out):std::nullopt;
+             if(frame.id){Gate gate(recordGate);if(!gate.held){++recordBusy;++recordEndBusy;
+                     recordCompletions.Publish(frame.id,out);if(!requestMode&&!pumpDiagnostic)return {};}
+@@ -1296,8 +1305,36 @@
+     Gate gate(emptyDiagnosticGate);if(!gate.held){++emptyDiagnosticLockDrops;return;}
+     emptyDiagnosticJournal.Observe(row);
+ }
++struct NativeGuardFrame {
++    NativeGuardFrame* previous=nullptr;Observation* observation=nullptr;
++    unsigned firing=0,context=0;std::uint64_t invocation=0;
++    explicit NativeGuardFrame(Observation& source,unsigned f,unsigned c)noexcept;
++    ~NativeGuardFrame();
++};
++thread_local NativeGuardFrame* nativeGuardFrame=nullptr;
++NativeGuardFrame::NativeGuardFrame(Observation& source,unsigned f,unsigned c)noexcept:
++    previous(nativeGuardFrame),observation(&source),firing(f),context(c),invocation(source.entry.nativeInvocation){nativeGuardFrame=this;}
++NativeGuardFrame::~NativeGuardFrame(){nativeGuardFrame=previous;}
++bool NativeInputCompare(void* context,unsigned index,unsigned expected,unsigned replacement,unsigned& observed)noexcept {
++    if(index>1)return false;
++    return DeltaCompare(reinterpret_cast<void*>(unsigned(context)+0x28+4*index),expected,replacement,observed);
++}
+ void __fastcall Step(void* self,void*,void* context,float delta){
+     Active activeScope;const auto firing=unsigned(self),caller=unsigned(_ReturnAddress());
++    if(nativeGuardFrame){
++        auto& frame=*nativeGuardFrame;auto& observed=*frame.observation;
++        std::array<std::byte,0x30> bytes{};const auto parent=currentFrame;
++        const bool exact=frame.firing==firing&&frame.context==unsigned(context)&&parent&&parent->depth==1&&
++            parent->invocation.Record().id==frame.invocation&&parent->invocation.Record().entry.kind==ReloadFlowEvent::Update&&
++            parent->firing==firing&&caller==base+binding.code[0].rva+0x168&&holdCodeVerified&&
++            observed.cycleGuard.applied&&Context(unsigned(context),bytes)&&
++            Word<unsigned>(bytes.data(),0x28)==observed.cycleGuard.effective[0]&&
++            Word<unsigned>(bytes.data(),0x2c)==observed.cycleGuard.effective[1]&&
++            ValidManualReloadDelta(delta)&&delta<=Word<float>(observed.entry.copiedContext.data(),0x18);
++        if(exact)++observed.cycleGuardSteps;else ++observed.cycleGuardRejected;
++        originalStep(self,context,delta);return;
++    }
++    if(nativeCycleRecoveryEnabled&&NativeCycleTarget(firing))WithNativeCycle([&]{if(nativeCycle.Recovering())nativeCycle.Missing(firing,0);});
+     MagazineEmptyStep sample;MagazineEmptyByteOverride patch;bool requested=false,magazineControl=false;
+     MagazineEmptyDiagnosticRecord diagnostic;diagnostic.sample.before.address=firing;diagnostic.sample.branch=3;diagnostic.stepDeltaBits=std::bit_cast<unsigned>(delta);
+     const bool cycleTarget=NativeCycleTarget(firing);
+@@ -1427,6 +1464,40 @@
+ #endif
+     if((!diagnosticHold&&!diagnosticRound&&!requestMode)||(requestMode&&(!activeScope.requestEntryAllowed||!target))){
+         if(cycleTarget)NativeCycleMissing(firing,cycleInvocation);originalUpdate(self,context,extra);return;}
++    bool converging=false;
++    if(nativeCycleRecoveryEnabled&&cycleTarget)WithNativeCycle([&]{converging=nativeCycle.Recovering();});
++    if(converging){
++        NativeCycleRecoveryDecision decision;const auto cancelEpoch=nativeCycleCancelEpoch.load(std::memory_order_acquire);
++        ULONG_PTR low=0,high=0;GetCurrentThreadStackLimits(&low,&high);
++        const auto capacity=observation.lease?Capacity(firing,observation.lease->snapshot.config.baseCapacity):std::nullopt;
++        const bool source=observation.lease&&capacity&&cycleCallback.Isolated()&&holdCodeVerified&&
++            caller==base+binding.code[1].rva+0x2f&&unsigned(context)>=low&&std::uint64_t(unsigned(context))+0x30<=high&&
++            !(unsigned(context)&3)&&observation.entry.contextCopied&&IsCurrent(*observation.lease,Now())&&
++            (nativeBoltCandidate?ReadM95StockShotConfig(memory,observation.lease->snapshot.config):
++                IsDiagnosticSpasConfig(observation.lease->snapshot.config));
++        if(source)WithNativeCycle([&]{if(cycleCallback.Isolated())decision=nativeCycle.EvaluateRecovery(
++            {RoundIdentity(*observation.lease),observation.lease->snapshot.config},observation.entry,*capacity,
++            std::min(observation.lease->deadline,observation.entry.nowNs+100000000));});
++        bool guarded=decision&&cycleCallback.Isolated()&&observation.lease&&IsCurrent(*observation.lease,Now())&&
++            cancelEpoch==nativeCycleCancelEpoch.load(std::memory_order_acquire)&&Now()<decision.deadlineNs;
++        if(!guarded)NativeCycleMissing(firing,cycleInvocation);
++        observation.cycleGuardEpoch=decision.epoch;
++        const std::array<unsigned,2> words{Word<unsigned>(observation.entry.copiedContext.data(),0x28),
++            Word<unsigned>(observation.entry.copiedContext.data(),0x2c)};
++        struct OriginalRecovery {void* self;void* context;unsigned extra;} original{self,context,extra};
++        {
++            NativeGuardFrame frame(observation,firing,unsigned(context));
++            RunNativeCycleInputGuard({context,NativeInputCompare},words,guarded,[](void* value){
++                const auto& call=*static_cast<OriginalRecovery*>(value);originalUpdate(call.self,call.context,call.extra);
++            },&original,observation.cycleGuard);
++        }
++        const auto completed=observation.Finish();
++        WithNativeCycle([&]{
++            if(!completed||!cycleCallback.Isolated()){nativeCycle.Missing(firing,cycleInvocation);return;}
++            ++nativeCycleUpdates;nativeCycle.FinishRecovery(decision,*completed,observation.cycleGuard,
++                observation.cycleGuardSteps,observation.cycleGuardRejected);
++        });return;
++    }
+     const auto revision=callbackRevision.load(std::memory_order_acquire);
+     const bool quietBefore=active.load(std::memory_order_acquire)==1;
+     ReloadHoldInput input;unsigned deltaBits=0;bool ready=false;
+@@ -2405,20 +2476,20 @@
+     return false;
+ #endif
+ }
++bool EnableOrdinaryBoltInputRecording(unsigned cycles)noexcept {
++#if defined(FVR_BC2_ORDINARY_BOLT_INPUT_PROBE) && defined(FVR_BC2_ORDINARY_MANUAL_CYCLES)
++    return installed&&!started&&!enabled.load()&&nativeCycleDispatcher&&
++        (cycles==1||cycles==2)&&records.EnablePumpCapacity()&&recordWindowClock.Bolt();
++#else
++    (void)cycles;return false;
++#endif
++}
+ bool EnableOrdinaryResourceInputRecording()noexcept {
+ #if defined(FVR_BC2_ORDINARY_RESOURCE_INPUT_PROBE) && defined(FVR_BC2_ORDINARY_MANUAL_CYCLES)
+     return installed&&!started&&!enabled.load()&&requestMode&&combinedFamilies&&nativeCycleDispatcher&&
+         records.EnablePumpCapacity()&&recordWindowClock.Defer(true)&&recordWindowClock.CombinedPump();
+ #else
+     return false;
+-#endif
+-}
+-bool EnableOrdinaryBoltInputRecording(unsigned cycles)noexcept {
+-#if defined(FVR_BC2_ORDINARY_BOLT_INPUT_PROBE) && defined(FVR_BC2_ORDINARY_MANUAL_CYCLES)
+-    return installed&&!started&&!enabled.load()&&nativeCycleDispatcher&&
+-        (cycles==1||cycles==2)&&records.EnablePumpCapacity()&&recordWindowClock.Bolt();
+-#else
+-    (void)cycles;return false;
+ #endif
+ }
+ bool EnableNativeBoltRecording(unsigned cycles)noexcept {
+@@ -2495,11 +2566,32 @@
+ void CancelNativeCycle()noexcept {
+     if(!nativePumpCandidate)return;
+     bool observing=false;
+-    if(enabled.load(std::memory_order_acquire))WithNativeCycle([&]{observing=nativeCycle.SuspendCompletion()||nativeCycle.SuspendHeld(Now());});
++    if(enabled.load(std::memory_order_acquire))WithNativeCycle([&]{observing=nativeCycle.SuspendCompletion()||nativeCycle.BeginRecovery(Now())||nativeCycle.SuspendHeld(Now());});
+     if(observing)return; // Exact native debt survives bounded presentation loss.
+     nativeCycleCancelEpoch.fetch_add(1,std::memory_order_acq_rel);
+     for(auto& target:nativeCycleTargets)target.store(0,std::memory_order_release);
+     WithNativeCycle([&]{nativeCycle.Cancel(Bc2NativeCycleFailure::Control);});
++}
++std::optional<Bc2NativeCycleRecoveryView> ReadNativeCycleRecoveryView(std::int64_t now)noexcept {
++    if(!nativePumpCandidate||!nativeCycleRecoveryEnabled||now<=0)return {};
++    Gate lock(nativeCycleGate);if(!lock.held||nativeCycleAppliedCancel!=nativeCycleCancelEpoch.load(std::memory_order_acquire))return {};
++    return nativeCycle.RecoveryView(now);
++}
++bool SubmitNativeCycleRecovery(const interaction::WeaponCycleIdleDebtRelease& release,const interaction::HandInteractionSample& input)noexcept {
++    if(!nativePumpCandidate||!nativeCycleRecoveryEnabled)return false;bool accepted=false;auto current=input;current.nowNs=Now();
++    WithNativeCycle([&]{accepted=nativeCycle.SubmitRecovery(release,current);});return accepted;
++}
++bool AcknowledgeNativeCycleRecovery(const interaction::WeaponCycleIdleDebtReady& ready)noexcept {
++    if(!nativePumpCandidate||!nativeCycleRecoveryEnabled)return false;bool accepted=false;
++    WithNativeCycle([&]{accepted=nativeCycle.AcknowledgeRecovery(ready,Now());});if(accepted)++nativeCycleAcks;return accepted;
++}
++bool EnableNativeCycleRecovery()noexcept {
++#if defined(FVR_BC2_NATIVE_CYCLE_RECOVERY) && defined(FVR_BC2_MANUAL_CYCLE_CANDIDATE)
++    if(!installed||started||enabled.load()||!nativePumpCandidate||!holdCodeVerified)return false;
++    nativeCycleRecoveryEnabled=nativeCycle.EnableRecovery();return nativeCycleRecoveryEnabled;
++#else
++    return false;
++#endif
+ }
+ bool EnablePumpHoldDiagnostic()noexcept {
+     if(!installed||started||enabled.load()||!diagnosticHold||diagnosticRound||requestMode||!holdCodeVerified)return false;
+@@ -2782,7 +2874,9 @@
+         <<",\"cycle\":"<<view.cycle<<",\"shot\":"<<view.shot<<",\"failure_invocation\":"<<view.failureInvocation
+         <<",\"blocks_fire\":"<<(view.blocksFire?"true":"false")
+         <<",\"held_suspended\":"<<(view.heldSuspended?"true":"false")
+-        <<",\"held_suspensions\":"<<view.heldSuspensions<<",\"held_resumptions\":"<<view.heldResumptions;}out<<'}';
++        <<",\"held_suspensions\":"<<view.heldSuspensions<<",\"held_resumptions\":"<<view.heldResumptions
++        <<",\"recovery_enabled\":"<<nativeCycle.RecoveryEnabled()<<",\"guarded_updates\":"<<nativeCycle.RecoveryUpdates()
++        <<",\"guarded_steps\":"<<nativeCycle.RecoverySteps();}out<<'}';
+     out<<",\"diagnostic_hold\":{\"enabled\":"<<(diagnosticHold?"true":"false")<<",\"code_verified\":"<<(holdCodeVerified?"true":"false")
+        <<",\"target\":"<<unsigned(holdProbe.Target())<<",\"native_pump_accepted\":false"
+        <<",\"phase\":"<<unsigned(holdProbe.Phase())<<",\"reason\":"<<unsigned(holdProbe.Reason())<<",\"begin_ns\":"<<holdProbe.BeginNs()<<",\"deadline_ns\":"<<holdProbe.DeadlineNs()
+@@ -2890,7 +2984,13 @@
+         out<<",\"restore_fields_matched\":"<<(ReloadRestoreMatched(record)?"true":"false")
+            <<",\"hold_requested\":"<<(record.exit.holdRequested?"true":"false")<<",\"hold_applied\":"<<(record.exit.hold.applied?"true":"false")
+            <<",\"hold_restored\":"<<(record.exit.hold.restored?"true":"false")<<",\"hold_original_delta_bits\":"<<record.exit.hold.original
+-           <<",\"hold_before_restore_bits\":"<<record.exit.hold.beforeRestore<<",\"hold_unexpected_native_write\":"<<(record.exit.hold.unexpectedNativeWrite?"true":"false");out<<'}';
++           <<",\"hold_before_restore_bits\":"<<record.exit.hold.beforeRestore<<",\"hold_unexpected_native_write\":"<<(record.exit.hold.unexpectedNativeWrite?"true":"false")
++           <<",\"cycle_guard\":{\"epoch\":"<<record.exit.cycleGuardEpoch<<",\"steps\":"<<record.exit.cycleGuardSteps
++           <<",\"rejected\":"<<record.exit.cycleGuardRejected<<",\"requested\":"<<record.exit.cycleGuard.requested
++           <<",\"applied\":"<<record.exit.cycleGuard.applied<<",\"restored\":"<<record.exit.cycleGuard.restored
++           <<",\"unexpected_write\":"<<record.exit.cycleGuard.unexpectedWrite<<",\"original\":["<<record.exit.cycleGuard.original[0]<<','<<record.exit.cycleGuard.original[1]
++           <<"],\"effective\":["<<record.exit.cycleGuard.effective[0]<<','<<record.exit.cycleGuard.effective[1]
++           <<"],\"before_restore\":["<<record.exit.cycleGuard.beforeRestore[0]<<','<<record.exit.cycleGuard.beforeRestore[1]<<"]}";out<<'}';
+     }out<<"]}";
+ }
+ }
+@@ -2909,6 +3009,10 @@
+ std::optional<Bc2NativeCycleView> ReadNativeCycleView(std::int64_t)noexcept{return {};}
+ bool AcknowledgeNativeCycleReady(const interaction::WeaponCycleReady&)noexcept{return false;}
+ void CancelNativeCycle()noexcept{}
++std::optional<Bc2NativeCycleRecoveryView> ReadNativeCycleRecoveryView(std::int64_t)noexcept{return {};}
++bool SubmitNativeCycleRecovery(const interaction::WeaponCycleIdleDebtRelease&,const interaction::HandInteractionSample&)noexcept{return false;}
++bool AcknowledgeNativeCycleRecovery(const interaction::WeaponCycleIdleDebtReady&)noexcept{return false;}
++bool EnableNativeCycleRecovery()noexcept{return false;}
+ bool EnablePumpHoldDiagnostic()noexcept{return false;}
+ bool Install(std::span<const std::byte>,const engine::PeImage&,std::uintptr_t,const ReloadStateMemory&,bool,bool,bool,bool){return false;}
+ MagazineEmptyControlCounters ReadMagazineEmptyControlCounters()noexcept{return {};}
+--- a/src/games/bc2/Bc2ReloadFlowRuntime.h
++++ b/src/games/bc2/Bc2ReloadFlowRuntime.h
+@@ -3,6 +3,7 @@
+ #include "Bc2ReloadKeepAlive.h"
+ #pragma once
+ #include "Bc2OwnerPublication.h"
++#include "Bc2NativeCycleInputGuard.h"
+ #include "Bc2ReloadFlow.h"
+ #include "Bc2ReloadHold.h"
+ #include "Bc2AmmoReserve.h"
+@@ -70,6 +71,7 @@
+     std::optional<ReloadFlowBoundary> boundary;
+     std::array<std::byte,0x30> copiedContext{};bool contextCopied=false;
+     ReloadDeltaOverride hold{};bool holdRequested=false;
++    NativeCycleInputGuard cycleGuard{};std::uint64_t cycleGuardEpoch=0;unsigned cycleGuardSteps=0,cycleGuardRejected=0;
+ };
+ // True only for a fully captured owner-retained restore whose output matches
+ // the captured source fields and whose source bytes did not change. No authority
+--- a/tests/Bc2BoltPlayerCustodyTests.cpp
++++ b/tests/Bc2BoltPlayerCustodyTests.cpp
+@@ -174,6 +174,43 @@
+     blocked.tracking.custody=BoltCustodyPhase::Manipulating;player.Observe(blocked);CHECK(player.BlocksFire());return 0;
+ }
+ 
+-}
+-int main(){CHECK(!OrdinaryBoltCompiled);if(RendererAndPlayerShareCurrentBodyBase()||StartupBlockDoesNotInventOwedAction()||RebasedHeadAndCurrentBodyAnchor()||MappingRejectsStaleOrMismatchedFrame()||StableReferencesFreezeAndRecenterInvalidates()||PlayerReleaseUsesActualAdapterAndImmutableControls())return 1;
+-    std::puts("6 ordinary bolt mapping/reference/real-adapter groups passed; default OFF, original packets immutable.");return 0;}
++int SameLeftCustodyRecoveryRequiresTypedAuthority(){
++    for(unsigned mutation=0;mutation<6;++mutation){Setup f;
++        auto calibration=std::make_shared<Bc2BoltCalibration>(M95AuthoredBoltCalibration(1));calibration->nativeJoined=true;calibration->rigFingerprint=17;
++        f.raw.nativePartInWeapon=calibration->profile.closedContact;
++        Bc2BoltPlayerCustody player(calibration);HandInteraction hands;std::uint64_t intent=0;
++        Bc2BoltPlayerInput in;in.owner=f.owner;in.item={f.owner.weapon,3};in.asset=calibration->asset;in.mesh=calibration->mesh;
++        in.native=Bc2NativeCycleView{};in.native->native.owner=f.owner;
++        Bc2AmmoReserveLease ammo;ammo.identity.owner=f.owner;ammo.verified=ammo.allThreeIdle=true;ammo.capacity=5;ammo.loaded=5;ammo.reserve=45;
++        const auto sync=[&]{f.raw.raw.input=f.safety;in.controls=&f.input;in.safety=f.safety;in.body=f.frame;in.contact=f.raw;
++            ammo.sequence=f.safety.sequence;ammo.observedNs=f.safety.observedNs;ammo.deadlineNs=f.safety.deadlineNs;in.ammunition=ammo;};
++        for(unsigned n=0;n<70;++n){f.Next();sync();CHECK(player.Prepare(in,hands,intent));}
++        CHECK(player.ReferencesReady());const auto references=*player.References();
++        hands.Update(f.safety);const auto acquired=hands.Acquire(f.safety,{f.safety.owner,InteractionHand::Left,HandClaimKind::GunHold,in.item,
++            {{1,3},f.safety.sequence,f.safety.deadlineNs,true},++intent,0});CHECK(acquired.claim);
++        WeaponCycleLease held{f.safety.owner,in.item,{calibration->profile.id,3},1,1,50,f.safety.observedNs,f.safety.deadlineNs,true};
++        Bc2PhysicalBoltResult owned;owned.tracking.enabled=true;owned.tracking.held=held;owned.tracking.gun=acquired.claim;
++        owned.tracking.custody=BoltCustodyPhase::Manipulating;player.Observe(owned);
++        f.Next();f.safety.tracked[1]=f.input.hands[1].gripTracked=false;sync();CHECK(!player.Prepare(in,hands,intent));
++        CHECK(player.NeedsOwnerRetirement()&&!player.ReferencesReady());
++        f.Next();f.safety.tracked[1]=f.input.hands[1].gripTracked=true;f.safety.released[1]=true;f.input.hands[1].squeeze=0;f.frame.input=f.safety;sync();
++        CHECK(hands.Renew(f.safety,acquired.claim->token,{{1,3},f.safety.sequence,f.safety.deadlineNs,true}).accepted);
++        WeaponCycleDebt debt{held.owner,held.item,held.mechanism,held.cycle,held.shot,77,4,45,5};
++        WeaponCycleRecoveryGrant grant{debt,f.safety,1};
++        WeaponCycleIdleDebtLease authority{held.owner,held.item,held.mechanism,1,1,106,
++            f.safety.observedNs,f.safety.deadlineNs,grant,{101,102,103},{104,105,106}};
++        CHECK(weapon_cycle_detail::Lease(authority,f.safety.nowNs));
++        in.recovery=Bc2NativeCycleRecoveryView{};in.recovery->native.owner=f.owner;in.recovery->authority=authority;
++        if(mutation==1)in.recovery.reset();if(mutation==2)++in.recovery->authority->shot;
++        if(mutation==3)++in.recovery->native.owner.weapon;
++        if(mutation==4){CHECK(hands.Release(f.safety,acquired.claim->token).accepted);}
++        if(mutation==5)in.recovery->authority->deadlineNs=f.safety.nowNs;
++        const auto prepared=player.Prepare(in,hands,intent);CHECK(prepared);
++        if(!mutation){CHECK(!prepared->cancel&&!player.NeedsOwnerRetirement()&&player.ReferencesReady()&&player.BlocksFire());
++            CHECK(Distance((*player.References())[0],references[0])<.000001f);}
++        else CHECK(prepared->cancel&&player.NeedsOwnerRetirement()&&player.BlocksFire());
++    }return 0;
++}
++}
++int main(){if(SameLeftCustodyRecoveryRequiresTypedAuthority())return 1;CHECK(!OrdinaryBoltCompiled);if(RendererAndPlayerShareCurrentBodyBase()||StartupBlockDoesNotInventOwedAction()||RebasedHeadAndCurrentBodyAnchor()||MappingRejectsStaleOrMismatchedFrame()||StableReferencesFreezeAndRecenterInvalidates()||PlayerReleaseUsesActualAdapterAndImmutableControls())return 1;
++    std::puts("7 ordinary bolt mapping/reference/recovery/real-adapter groups passed; default OFF, original packets immutable.");return 0;}
+--- /dev/null
++++ b/tests/Bc2NativeCycleInputGuardTests.cpp
+@@ -0,0 +1,40 @@
++#include "Bc2NativeCycleInputGuard.h"
++#include "Test.h"
++using namespace fvr::bc2;
++namespace {
++struct Memory {
++    std::array<std::uint32_t,2> words{0xaabbcc00,5};unsigned calls=0,writes=0,compares=0;
++    unsigned failAt=0;bool scribble=false;bool seen=false;
++    NativeCycleInputAccess Access(){return {this,[](void* p,unsigned index,std::uint32_t expected,std::uint32_t next,std::uint32_t& observed)noexcept{
++        auto& m=*static_cast<Memory*>(p);if(++m.compares==m.failAt)return false;if(index>=2)return false;
++        observed=m.words[index];if(observed==expected){m.words[index]=next;++m.writes;}return true;}};}
++    static void Original(void* p){auto& m=*static_cast<Memory*>(p);++m.calls;m.seen=m.words==std::array<std::uint32_t,2>{0xaabbcc01,0};
++        if(m.scribble)m.words[1]=9;}
++};
++int ExactScopedInputAndPadding(){
++    for(unsigned input=0;input<8;++input)for(unsigned inhibited=0;inhibited<2;++inhibited){
++        Memory m;m.words={0xaabbcc00|inhibited,input};const auto saved=m.words;NativeCycleInputGuard receipt;
++        RunNativeCycleInputGuard(m.Access(),saved,true,Memory::Original,&m,receipt);
++        CHECK(m.calls==1&&m.seen&&m.words==saved&&receipt.Exact()&&receipt.original==saved&&receipt.effective[0]==0xaabbcc01);
++    }return 0;
++}
++int PartialPatchRollbackAndOriginalStillOnce(){
++    for(unsigned fail=1;fail<=2;++fail){Memory m;const auto original=m.words;m.failAt=fail;NativeCycleInputGuard receipt;
++        RunNativeCycleInputGuard(m.Access(),original,true,Memory::Original,&m,receipt);
++        CHECK(m.calls==1&&!receipt.applied&&!receipt.Exact()&&m.words==original&&receipt.rollback==(fail==2));}
++    return 0;
++}
++int RestoreContradictionCannotClaimContinuity(){
++    Memory m;m.scribble=true;NativeCycleInputGuard receipt;RunNativeCycleInputGuard(m.Access(),m.words,true,Memory::Original,&m,receipt);
++    CHECK(m.calls==1&&m.seen&&!receipt.Exact()&&receipt.unexpectedWrite&&!receipt.restored&&m.words[1]==9&&m.words[0]==0xaabbcc00);return 0;
++}
++int DisabledOrMalformedInputDoesNotMutate(){
++    for(unsigned mode=0;mode<3;++mode){Memory m;if(mode==1)m.words[0]|=2;if(mode==2)m.words[1]=8;
++        const auto original=m.words;NativeCycleInputGuard receipt;RunNativeCycleInputGuard(m.Access(),original,mode!=0,Memory::Original,&m,receipt);
++        CHECK(m.calls==1&&!m.writes&&!receipt.applied&&!receipt.Exact()&&m.words==original);}
++    return 0;
++}
++}
++int main(){if(ExactScopedInputAndPadding()||PartialPatchRollbackAndOriginalStillOnce()||RestoreContradictionCannotClaimContinuity()||
++    DisabledOrMalformedInputDoesNotMutate())return 1;
++    std::puts("4 native input guard groups passed; scoped caller words only, exact restoration/rollback, original once.");}
+--- /dev/null
++++ b/tests/Bc2NativeCycleRecoveryServiceTests.cpp
+@@ -0,0 +1,305 @@
++#include "Bc2NativeCycleService.h"
++#include "Bc2NativeCycleCallbacks.h"
++#include "Bc2NativeCycleDispatch.h"
++#include "Bc2ReloadInvocationEntry.h"
++#include "Bc2M95StockShotConfig.h"
++#include "Bc2M95PhysicalBoltDiagnostic.h"
++#include "Bc2NativeCycleEvidence.h"
++#include "M95ForwardRestore239Fixture.h"
++#include "M95SnapshotProgression241Fixture.h"
++#include "Bc2PhysicalPump.h"
++#include "Bc2PumpCalibration225.h"
++#include <thread>
++#include <barrier>
++#include "Bc2ReloadConfigDescriptor.h"
++#include "Test.h"
++#include <bit>
++#include <cstring>
++#include <cstdio>
++using namespace fvr::bc2;using namespace fvr::interaction;
++namespace {
++template<std::size_t N,class T>void Put(std::array<std::byte,N>& bytes,unsigned at,T value){std::memcpy(bytes.data()+at,&value,sizeof(value));}
++fvr::math::Matrix4 Pose(){fvr::math::Matrix4 m{};for(unsigned n=0;n<4;++n)m.values[n][n]=1;return m;}
++struct Fixture {
++    Bc2NativeCycleService service;Bc2NativeCycleControl control{};ReloadHoldInput input{};
++    HandInteraction hands;PhysicalWeaponCycle physical;WeaponCycleProfile profile{};HandClaimToken gun{};
++    std::uint64_t event=0,intent=0;std::int64_t clock=1000000000;
++    Bc2NativeCycleDecision decision{};ReloadFlowRecord update{};unsigned sent=0;bool begun=false;
++    Fixture(bool m95=false){
++        auto& n=input.identity;n.owner={0x10000,0x11000,0x12000,0x13000,11,12,13};n.firing={0x14000,0x15000,0x16000};
++        n.serverPlayer=0x17000;n.serverSoldier=0x18000;n.serverItem=0x19000;
++        auto& c=input.config;const auto& d=SpasReloadDescriptor;
++        std::memcpy(c.assetName.data(),d.assetName.data(),d.assetName.size());std::memcpy(c.assetPath.data(),d.assetPath.data(),d.assetPath.size());
++        c.weaponData=0x20000;c.firingData=0x21000;c.primaryFire=0x22000;c.ammoAddress=c.primaryFire+0x170;
++        c.fireLogicType=1;c.reloadType=0;c.fireInputAction=8;c.reloadInputAction=29;c.baseCapacity=c.numberOfMagazines=4;
++        c.reloadDelay=.06f;c.reloadTime=.72f;c.reloadThreshold=c.postReloadTime=1;c.boltDelay=.5f;
++        control.nativeOwner=n.owner;control.input.owner={(std::uint64_t(n.owner.weak)<<32)|n.owner.soldier,n.owner.actorGeneration,99,n.owner.space};
++        control.item={n.owner.weapon,99};control.mechanism={0x50554d50,99};control.permitted=true;
++        input.verified=true;input.context.deltaSeconds=1.f/60;input.context.reloadTimeMultiplier=1;input.context.flags24Through28[0]=true;
++        input.capacities={8,8,8};
++        for(unsigned branch=0;branch<3;++branch){auto& b=input.branches[branch];b.address=n.firing[branch];b.wrapperOffset=branch==0?0x3c:branch==1?0x40:0x10;
++            b.currentState=7;b.previousState=6;b.nextState=8;b.phaseTimer=.2f;b.loaded=7;b.reserve=24;}
++        profile.id=1;profile.revision=1;profile.closedContact=Pose();profile.axis={0,0,-1};profile.stroke=.09495844f;
++        profile.rearTolerance=profile.frontTolerance=.003f;profile.contactRadius=.06f;profile.lateralTolerance=.03f;
++        profile.maxStepMeters=.03f;profile.rotationTolerance=.15f;profile.endpointDwellNs=10000000;profile.maximumCycleNs=2000000000;
++        if(m95){
++            service.Configure(Bc2NativeCycleMode::M95);c.assetName={};c.assetPath={};
++            const char name[]="M95_sp",path[]="Objects/Weapons/Handheld/BU_sni_M95/SP_sni_M95";
++            std::memcpy(c.assetName.data(),name,sizeof(name));std::memcpy(c.assetPath.data(),path,sizeof(path));
++            c.reloadType=1;c.baseCapacity=c.numberOfMagazines=5;c.reloadDelay=0;c.reloadTime=6.9f;c.reloadThreshold=.67f;
++            c.postReloadTime=c.boltDelay=0;c.boltTime=2.3f;c.holdBoltUntilFireRelease=true;c.holdBoltUntilZoomRelease=false;
++            input.capacities={5,5,5};for(auto& b:input.branches){b.currentState=8;b.previousState=7;b.nextState=1;b.phaseTimer=2.2f;b.loaded=4;b.reserve=45;}
++        }
++        Advance();
++    }
++    bool Advance(bool grip=true){
++        clock+=10000000;auto& s=control.input;++s.sequence;s.observedNs=s.nowNs=clock;s.deadlineNs=clock+100000000;
++        s.focused=true;s.tracked={true,true};s.released={false,false};s.released[0]=!grip;control.release.reset();return service.Control(control);
++    }
++    ReloadFlowBoundary Boundary(unsigned branch)const {
++        ReloadFlowBoundary b;const auto& source=input.branches[branch];b.owner=input.identity.owner;b.snapshotSequence=20;
++        b.firing=source.address;b.wrapperOffset=source.wrapperOffset;b.branch=std::uint8_t(branch);b.current=source.currentState;b.previous=source.previousState;
++        b.next=source.nextState;b.timer=source.phaseTimer;b.loaded=source.loaded;b.reserve=source.reserve;
++        if(branch==2){b.serverPlayer=input.identity.serverPlayer;b.serverSoldier=input.identity.serverSoldier;b.serverItem=input.identity.serverItem;}return b;
++    }
++    Bc2NativeCycleDecision Begin(unsigned branch){
++        input.branch=branch;input.contextObservedNs=input.nowNs=++clock;input.leaseDeadlineNs=clock+100000000;
++        decision=service.Evaluate(input,++event);update={};update.id=event;auto& a=update.entry;
++        a.kind=ReloadFlowEvent::Update;a.nativeInvocation=a.nativeUpdate=a.update=event;a.thread=7;a.depth=1;a.caller=0x6e90b0;a.context=0x24000;
++        a.nowNs=clock;a.contextCopied=true;a.boundary=Boundary(branch);Put(a.copiedContext,0x18,input.context.deltaSeconds);Put(a.copiedContext,0x20,1.f);
++        a.copiedContext[0x24]=std::byte{1};Put(a.copiedContext,0x2c,input.context.inputFlags);
++        update.exit.thread=a.thread;update.exit.nowNs=++clock;update.exit.boundary=a.boundary;update.exit.contextCopied=true;update.exit.copiedContext=a.copiedContext;
++        update.finished=update.identityRetained=true;return decision;
++    }
++    void Finish(){
++        if(decision.hold){update.exit.holdRequested=true;update.exit.hold={std::bit_cast<unsigned>(input.context.deltaSeconds),0,true,true,false};}
++        service.Finish(decision,update);
++    }
++    void Shot(unsigned branch,int beforeLoaded=8){
++        // A newly selected owner starts its next synthetic shot from ready.
++        // Preserve an explicitly supplied state-6 post-shot fixture.
++        auto& b=input.branches[branch];if(b.currentState==2){b.currentState=7;b.previousState=6;b.nextState=8;b.phaseTimer=.2f;}
++        input.context.inputFlags=1;input.context.fireRequested=true;
++        const auto d=Begin(branch);(void)d;update.entry.boundary.current=2;update.entry.boundary.previous=1;update.entry.boundary.next=2;update.entry.boundary.timer=0;
++        update.entry.boundary.loaded=beforeLoaded;Finish();input.context.inputFlags=0;input.context.fireRequested=false;
++    }
++    bool Hold(){for(unsigned branch=0;branch<3;++branch)Shot(branch);
++        for(unsigned pass=0;pass<2;++pass){Advance();for(unsigned branch=0;branch<3;++branch){Begin(branch);Finish();}}
++        return service.View(clock).held.has_value();}
++    ReloadFlowRecord Restore(unsigned branch){
++        auto r=update;r.id=++event;auto& a=r.entry;a.kind=ReloadFlowEvent::Restore;a.depth=1;
++        a.parent=a.nativeParent=a.update=a.nativeUpdate=0;a.nativeInvocation=r.id;a.nowNs=++clock;a.boundary=Boundary(branch);
++        r.exit.hold={};r.exit.holdRequested=false;
++        a.contextCopied=false;r.exit.contextCopied=false;a.snapshotCopied=r.exit.snapshotCopied=true;
++        r.exit.nowNs=++clock;r.exit.boundary=a.boundary;r.exit.boundary->previous=a.boundary.current;
++        Put(a.copiedSnapshot,0,a.boundary.current);Put(a.copiedSnapshot,4,a.boundary.next);Put(a.copiedSnapshot,8,a.boundary.timer);
++        Put(a.copiedSnapshot,0x18,a.boundary.loaded);Put(a.copiedSnapshot,0x1c,a.boundary.reserve);
++        r.exit.copiedSnapshot=a.copiedSnapshot;return r;
++    }
++    void Commit(unsigned,unsigned from,unsigned to){
++        auto r=update;r.id=++event;auto& a=r.entry;a.kind=ReloadFlowEvent::Commit;a.depth=2;a.parent=a.nativeParent=update.id;
++        a.update=a.nativeUpdate=update.id;a.nativeInvocation=r.id;a.nowNs=++clock;a.boundary.current=from;a.boundary.previous=from-1;a.boundary.next=to;a.boundary.timer=0;
++        r.exit.nowNs=++clock;r.exit.boundary=a.boundary;r.exit.boundary->current=to;r.exit.boundary->previous=from;
++        service.Commit(r);
++    }
++    void Resume(unsigned branch,bool skip=false){Begin(branch);if(!skip)Commit(branch,7,8);Commit(branch,8,1);Commit(branch,1,2);
++        update.exit.nowNs=++clock;update.exit.boundary->current=2;update.exit.boundary->previous=1;update.exit.boundary->next=2;update.exit.boundary->timer=0;
++        Finish();auto& b=input.branches[branch];b.currentState=2;b.previousState=1;b.nextState=2;b.phaseTimer=0;}
++    bool Release(){const auto view=service.View(clock);if(!view.held)return false;
++        control.input.nowNs=clock;control.release=WeaponCycleRelease{*view.held,1,control.input.sequence,clock,view.held->deadlineNs};return service.Control(control);}
++    PhysicalWeaponCycleResult Physical(float travel,bool grip=true){
++        Advance(grip);for(unsigned branch=0;branch<3;++branch){Begin(branch);Finish();}
++        control.input.nowNs=++clock;const auto view=service.View(clock);
++        hands.Update(control.input);const auto current=hands.Current(InteractionHand::Right);
++        if(current){hands.Renew(control.input,current->token,{{1,99},control.input.sequence,control.input.deadlineNs,true});gun=current->token;}
++        else {const auto got=hands.Acquire(control.input,{control.input.owner,InteractionHand::Right,HandClaimKind::GunHold,control.item,
++            {{1,99},control.input.sequence,control.input.deadlineNs,true},++intent,0});if(got.claim)gun=got.claim->token;}
++        if(!view.held)return {};
++        if(!begun){begun=physical.Begin(profile,*view.held,clock);}
++        PhysicalWeaponCycleSample sample;sample.source=control.input;sample.lease=*view.held;sample.gun=gun;sample.grip=grip;
++        sample.rawContact=weapon_cycle_detail::Target(profile,travel,0);sample.contact={control.mechanism,sample.source.sequence,sample.source.deadlineNs,true};sample.acquireIntent=++intent;
++        const auto out=physical.Update(sample,hands);if(out.release){++sent;control.release=out.release;service.Control(control);}return out;
++    }
++    bool FullStroke(){Physical(0,false);Physical(0);
++        for(float t:{.02f,.04f,.06f,.08f,profile.stroke,profile.stroke,.075f,.055f,.035f,.015f,0.f,0.f})Physical(t);
++        return sent==1&&service.View(clock).phase==Bc2NativeCyclePhase::Releasing;}
++};
++
++struct RecoveryFixture:Fixture {
++    RecoveryFixture(bool m95=false):Fixture(m95){
++        // Configure is a pre-control capability; restart the fixture service
++        // before its first actual selected shot, then re-admit the same source.
++        service={};if(m95)service.Configure(Bc2NativeCycleMode::M95);
++        service.EnableRecovery();service.Control(control);
++    }
++    bool Held(){if(service.Mode()==Bc2NativeCycleMode::Spas)return Hold();
++        for(unsigned b=0;b<3;++b)Shot(b,5);
++        for(unsigned pass=0;pass<2;++pass){Advance();for(unsigned b=0;b<3;++b){Begin(b);Finish();}}
++        return service.View(clock).held.has_value();
++    }
++    void Idle(unsigned branch,bool busy=false,unsigned rejected=0){
++        clock+=1000000;const auto d0=Begin(branch);(void)d0; // Recovering normal Evaluate deliberately issues nothing.
++        auto& a=update.entry.boundary;a.current=busy?8:2;a.previous=busy?7:1;a.next=busy?1:2;a.timer=busy?.1f:0;
++        update.exit.boundary=a;update.exit.nowNs=++clock;
++        const auto d=service.EvaluateRecovery({input.identity,input.config},update.entry,input.capacities[branch],clock+99000000);
++        NativeCycleInputGuard g;g.requested=g.applied=g.restored=true;g.original={0,0};g.effective=g.beforeRestore={1,0};
++        update.exit.cycleGuard=g;update.exit.cycleGuardEpoch=d.epoch;update.exit.cycleGuardSteps=1;update.exit.cycleGuardRejected=rejected;
++        service.FinishRecovery(d,update,g,1,rejected);
++    }
++    void Rounds(){for(unsigned p=0;p<2;++p)for(unsigned b=0;b<3;++b)Idle(b);}
++    bool Grant(){Rounds();Advance(false);if(service.Mode()==Bc2NativeCycleMode::M95){control.input.released={false,true};service.Control(control);}
++        Rounds();return service.RecoveryView(clock)->authority.has_value();}
++};
++int NativeIdleRequiresActualGesture(){for(bool m95:{false,true}){RecoveryFixture f(m95);CHECK(f.Held());CHECK(f.service.BeginRecovery(f.clock));
++    CHECK(f.service.View(f.clock).blocksFire&&!f.service.View(f.clock).held);CHECK(f.Grant());
++    const auto view=f.service.RecoveryView(f.clock);CHECK(view&&view->authority&&!view->ready&&view->blocksFire);
++    f.clock+=1000000;f.Advance();auto release=WeaponCycleIdleDebtRelease{*view->authority,1,f.control.input.sequence,
++        f.control.input.observedNs,std::min(f.control.input.deadlineNs,view->authority->deadlineNs)};
++    CHECK(f.service.SubmitRecovery(release,f.control.input));f.Rounds();const auto ready=f.service.RecoveryView(f.clock)->ready;
++    CHECK(ready&&ready->release==release&&f.service.View(f.clock).blocksFire);
++    CHECK(f.service.AcknowledgeRecovery(*ready,f.clock));CHECK(!f.service.View(f.clock).blocksFire);
++    }return 0;}
++int LongTrackingLossRetainsDebt(){RecoveryFixture f;CHECK(f.Held());CHECK(f.service.BeginRecovery(f.clock));
++    for(unsigned second=0;second<61;++second){f.clock+=1000000000;f.Rounds();CHECK(f.service.View(f.clock).blocksFire);}
++    CHECK(f.service.ObservationWatch(f.clock));CHECK(!f.service.RecoveryView(f.clock)->authority);CHECK(f.Grant());return 0;}
++int MissingGuardAndConservationNeverRecover(){for(unsigned mutation=0;mutation<4;++mutation){RecoveryFixture f;CHECK(f.Held());CHECK(f.service.BeginRecovery(f.clock));
++    if(mutation==0)f.Idle(0,false,1);
++    if(mutation==1){--f.input.branches[0].loaded;f.Idle(0);}
++    if(mutation==2){++f.input.config.weaponData;f.Idle(0);}
++    if(mutation==3){f.service.Missing(f.input.identity.firing[0],++f.event);}
++    CHECK(f.service.View(f.clock).phase==Bc2NativeCyclePhase::Cancelled&&f.service.View(f.clock).blocksFire);
++    CHECK(!f.service.RecoveryView(f.clock)->authority&&!f.service.RecoveryView(f.clock)->ready);
++    CHECK(!f.service.BeginRecovery(f.clock));}return 0;}
++int NativeBusyRevokesGrantButNotSubmittedReceipt(){RecoveryFixture f;CHECK(f.Held());CHECK(f.service.BeginRecovery(f.clock));CHECK(f.Grant());
++    const auto old=*f.service.RecoveryView(f.clock)->authority;f.Idle(0,true);CHECK(!f.service.RecoveryView(f.clock)->authority);
++    f.Rounds();CHECK(!f.service.RecoveryView(f.clock)->authority);CHECK(f.Grant());
++    const auto next=*f.service.RecoveryView(f.clock)->authority;CHECK(next.grant.nonce!=old.grant.nonce);
++    f.Advance();auto release=WeaponCycleIdleDebtRelease{next,1,f.control.input.sequence,f.control.input.observedNs,
++        std::min(f.control.input.deadlineNs,next.deadlineNs)};CHECK(f.service.SubmitRecovery(release,f.control.input));f.Rounds();
++    const auto ready=*f.service.RecoveryView(f.clock)->ready;f.service.BeginRecovery(f.clock);f.clock+=61000000000;
++    CHECK(f.service.RecoveryView(f.clock)->ready->observedNs==ready.observedNs);CHECK(!f.service.AcknowledgeRecovery(ready,f.clock));
++    f.Rounds();CHECK(f.service.AcknowledgeRecovery(ready,f.clock));return 0;}
++int ExistingHoldDrainsBeforeConvergence(){RecoveryFixture f;CHECK(f.Held());f.Begin(1);CHECK(f.decision.hold);
++    CHECK(f.service.BeginRecovery(f.clock));f.Finish();CHECK(f.service.View(f.clock).phase==Bc2NativeCyclePhase::Converging);
++    CHECK(f.Grant());return 0;}
++int NoConversionOfNormalPendingOrStaleHold(){RecoveryFixture f;CHECK(f.Held());CHECK(f.Release());CHECK(!f.service.BeginRecovery(f.clock));
++    CHECK(f.service.View(f.clock).phase==Bc2NativeCyclePhase::Releasing);RecoveryFixture stale;CHECK(stale.Held());stale.clock+=101000000;
++    CHECK(!stale.service.BeginRecovery(stale.clock));CHECK(stale.service.View(stale.clock).blocksFire);return 0;}
++
++int RestoreNeverVotesAndBusyRewindsRevokeOnlyUnsubmittedAuthority(){
++    for(unsigned mutation=0;mutation<7;++mutation){RecoveryFixture f;CHECK(f.Held());CHECK(f.service.BeginRecovery(f.clock));CHECK(f.Grant());
++        auto r=f.Restore(0);auto& before=r.entry.boundary;auto& after=*r.exit.boundary;
++        before.current=2;before.previous=1;before.next=2;before.timer=0;
++        after=before;after.previous=before.current;after.current=7;after.next=8;after.timer=.2f;
++        Put(r.entry.copiedSnapshot,0,after.current);Put(r.entry.copiedSnapshot,4,after.next);Put(r.entry.copiedSnapshot,8,after.timer);
++        r.exit.copiedSnapshot=r.entry.copiedSnapshot;
++        if(mutation==1)r.exit.copiedSnapshot[0x30]=std::byte{1};
++        if(mutation==2)--after.loaded;
++        if(mutation==3)++r.entry.nativeInvocation;
++        if(mutation==4){before.current=after.current=12;Put(r.entry.copiedSnapshot,0,after.current);r.exit.copiedSnapshot=r.entry.copiedSnapshot;}
++        if(mutation==5)++r.exit.thread;
++        if(mutation==6)++after.owner.equipGeneration;
++        f.service.ObserveRestore(r);CHECK(!f.service.RecoveryView(f.clock)->authority&&!f.service.RecoveryView(f.clock)->ready);
++        if(!mutation){CHECK(f.service.Recovering());f.Rounds();CHECK(!f.service.RecoveryView(f.clock)->authority);CHECK(f.Grant());}
++        else CHECK(f.service.View(f.clock).phase==Bc2NativeCyclePhase::Cancelled);
++    }return 0;
++}
++int ExactGuardedIdleRecordMutations(){
++    RecoveryFixture f;CHECK(f.Held());CHECK(f.service.BeginRecovery(f.clock));f.Idle(0);const auto base=f.update;
++    for(unsigned mutation=0;mutation<11;++mutation){auto r=base;auto g=r.exit.cycleGuard;unsigned steps=1,rejected=0;
++        if(mutation==0)g.restored=false;if(mutation==1)g.original[1]=1;if(mutation==2)g.beforeRestore[0]=0;
++        if(mutation==3)steps=0;if(mutation==4)rejected=1;if(mutation==5)r.exit.copiedContext[0x18]^=std::byte{1};
++        if(mutation==6)++r.entry.nativeParent;if(mutation==7)--r.exit.boundary->loaded;
++        if(mutation==8)r.exit.boundary->current=10;if(mutation==9)r.entry.boundary.current=12;
++        if(mutation==10)r.exit.boundary->flagsA8|=4;
++        CHECK(!CycleGuardedUpdate(r,f.input.identity,0,g,steps,rejected,false,false));
++    }
++    CHECK(CycleGuardedUpdate(base,f.input.identity,0,base.exit.cycleGuard,1,0,false,false));
++    auto busy=base;busy.entry.boundary.current=busy.exit.boundary->current=7;
++    busy.entry.boundary.next=busy.exit.boundary->next=8;busy.entry.boundary.timer=.2f;busy.exit.boundary->timer=.18f;
++    CHECK(CycleGuardedUpdate(busy,f.input.identity,0,busy.exit.cycleGuard,0,0,false,false));return 0;
++}
++
++int GuardedCommitsRequireOwnOpenParentAndConservedProjection(){
++    RecoveryFixture f;CHECK(f.Held());CHECK(f.service.BeginRecovery(f.clock));f.Idle(0);
++    ReloadFlowRecord retainedCommit;
++    for(const auto pair:std::array<std::pair<unsigned,unsigned>,4>{{{7,8},{8,1},{1,2},{6,1}}}){
++        auto r=f.update;const auto parent=r.id;r.id=++f.event;r.entry.kind=ReloadFlowEvent::Commit;r.entry.depth=2;
++        r.entry.nativeInvocation=r.id;r.entry.parent=r.entry.nativeParent=r.entry.update=r.entry.nativeUpdate=parent;
++        r.entry.boundary.current=pair.first;r.entry.boundary.previous=pair.first-1;r.entry.boundary.next=pair.second;r.entry.boundary.timer=0;
++        r.exit.boundary=r.entry.boundary;r.exit.boundary->current=pair.second;r.exit.boundary->previous=pair.first;
++        r.entry.copiedContext[0x28]=r.exit.copiedContext[0x28]=std::byte{1};
++        CHECK(CycleGuardedCommit(r,f.input.identity,0,parent,false,pair.first==6));
++        for(unsigned mutation=0;mutation<7;++mutation){auto bad=r;
++            if(mutation==0)bad.entry.nativeParent=0;if(mutation==1)++bad.exit.thread;
++            if(mutation==2)bad.entry.copiedContext[0x28]=bad.exit.copiedContext[0x28]=std::byte{0};
++            if(mutation==3)++bad.exit.boundary->next;if(mutation==4)bad.entry.boundary.timer=bad.exit.boundary->timer=.1f;
++            if(mutation==5)--bad.exit.boundary->loaded;if(mutation==6){bad.entry.boundary.current=2;bad.entry.boundary.next=3;bad.exit.boundary->current=bad.exit.boundary->next=3;bad.exit.boundary->previous=2;}
++            CHECK(!CycleGuardedCommit(bad,f.input.identity,0,parent,false,pair.first==6));
++        }
++        // A structurally correct direct child is insufficient without its
++        // currently open evaluated Update in this service instance.
++        retainedCommit=r;
++    }f.service.Commit(retainedCommit);CHECK(f.service.View(f.clock).phase==Bc2NativeCyclePhase::Cancelled);return 0;
++}
++
++int EmptyShotRecoveryRetainsZeroAndStillRequiresGesture(){RecoveryFixture f;
++    for(auto& branch:f.input.branches){branch.currentState=6;branch.previousState=5;branch.nextState=1;branch.phaseTimer=.7f;branch.loaded=0;}
++    for(unsigned b=0;b<3;++b)f.Shot(b,1);
++    for(unsigned p=0;p<2;++p){f.Advance();for(unsigned b=0;b<3;++b){f.Begin(b);f.Finish();}}
++    CHECK(f.service.View(f.clock).held&&f.service.View(f.clock).loaded==0);CHECK(f.service.BeginRecovery(f.clock));CHECK(f.Grant());
++    CHECK(f.service.RecoveryView(f.clock)->authority->grant.debt.loaded==0&&f.service.View(f.clock).blocksFire);
++    CHECK(!f.service.YieldForReload());f.input.branches[0].reserve=23;f.Idle(0);
++    CHECK(f.service.View(f.clock).phase==Bc2NativeCyclePhase::Cancelled&&!f.service.RecoveryView(f.clock)->ready);return 0;}
++struct PumpBridge {
++    RecoveryFixture native;RigSnapshot rig;std::shared_ptr<Bc2PumpCalibration> calibration=std::make_shared<Bc2PumpCalibration>();
++    Bc2PhysicalPump pump;Bc2PhysicalPumpSample sample;Bc2PhysicalPumpResult result;Bc2PumpRawContact prior;
++    unsigned acknowledged=0,cancelled=0;bool tracking=true;
++    PumpBridge():pump(calibration,Api()){
++        native.control.mechanism={0x5350415350554d50ull,native.control.item.generation};native.service.Control(native.control);
++        rig.names={"root","jntWpn_1","jntWpn_4","LeftHand"};rig.parents={-1,0,1,0};rig.weaponBone=1;
++        rig.identity={0x11000,0x12000,0x30000,0x40000,0x50000,0x60000,0x70000,0x80000,0x90000,4,false};
++        rig.world.assign(4,Pose());rig.inverseBind.assign(4,Pose());rig.evaluatedWorld.assign(4,Pose());rig.nativeEvaluated.resize(4);
++        calibration->revision=1;calibration->rigFingerprint=bc2_pump_detail::DerivePart(rig)->fingerprint;
++        calibration->closedPart=Pose();calibration->closedPart.values[3][2]=-.84f;
++        calibration->closedWrist=Pose();calibration->rearDirection=1;calibration->measured=true;
++    }
++    Bc2PhysicalPumpApi Api(){return {this,
++        [](void* p,const Bc2NativeCycleControl& c)noexcept{return static_cast<PumpBridge*>(p)->native.service.Control(c);},
++        [](void* p,std::int64_t now)noexcept->std::optional<Bc2NativeCycleView>{return static_cast<PumpBridge*>(p)->native.service.View(now);},
++        [](void* p,const WeaponCycleReady& r)noexcept{return static_cast<PumpBridge*>(p)->native.service.AcknowledgeReady(r);},
++        [](void* p)noexcept{auto& x=*static_cast<PumpBridge*>(p);++x.cancelled;x.native.service.BeginRecovery(x.native.clock);},
++        {[](void* p,std::int64_t now)noexcept{return static_cast<PumpBridge*>(p)->native.service.RecoveryView(now);},
++         [](void* p,const WeaponCycleIdleDebtRelease& r,const HandInteractionSample& input)noexcept{return static_cast<PumpBridge*>(p)->native.service.SubmitRecovery(r,input);},
++         [](void* p,const WeaponCycleIdleDebtReady& r)noexcept{auto& x=*static_cast<PumpBridge*>(p);
++            const auto okay=x.native.service.AcknowledgeRecovery(r,x.native.clock);if(okay)++x.acknowledged;return okay;}}};}
++    void Tick(float travel,bool grip=true){
++        native.Advance(grip);
++        if(native.service.Recovering())native.Rounds();
++        else for(unsigned b=0;b<3;++b){native.Begin(b);native.Finish();}
++        sample.nativeOwner=native.control.nativeOwner;sample.input=native.control.input;sample.input.nowNs=++native.clock;
++        sample.input.tracked[0]=tracking;sample.item=native.control.item;sample.asset=SpasReloadAsset;sample.grip=grip;
++        native.hands.Update(sample.input);
++        const auto gun=native.hands.Current(InteractionHand::Right);
++        if(gun)native.hands.Renew(sample.input,gun->token,{{1,99},sample.input.sequence,sample.input.deadlineNs,true});
++        else native.hands.Acquire(sample.input,{sample.input.owner,InteractionHand::Right,HandClaimKind::GunHold,sample.item,
++            {{1,99},sample.input.sequence,sample.input.deadlineNs,true},++native.intent,0});
++        sample.raw=prior;result=pump.Tick(sample,native.hands,native.intent);
++        auto pose=Pose();pose.values[3][2]=travel;
++        prior=BuildPumpRawContact(result.tracking,rig,pose,Pose(),{.02f,0,0},1,sample.input.nowNs);
++    }
++};
++int RealPumpAdapterTrackingLossRegrabThroughNativeService(){PumpBridge p;CHECK(p.native.Held());p.Tick(0,false);p.Tick(0,false);p.Tick(0);p.Tick(0);
++    CHECK(p.result.tracking.target&&p.result.ownsHand);p.Tick(.02f);p.tracking=false;p.Tick(.03f,false);
++    CHECK(p.cancelled==1&&p.native.service.Recovering()&&!p.result.ownsHand&&p.result.blocksFire);
++    p.tracking=true;for(unsigned n=0;n<6;++n)p.Tick(0,false);
++    p.Tick(0);p.Tick(0);CHECK(p.result.tracking.recoveryTarget&&!p.result.tracking.target);
++    for(float t:{.02f,.04f,.06f,.08f,SpasObservedForeEndStroke,SpasObservedForeEndStroke,SpasObservedForeEndStroke,SpasObservedForeEndStroke,
++                 .075f,.055f,.035f,.015f,0.f,0.f,0.f,0.f,0.f,0.f})p.Tick(t);
++    for(unsigned n=0;n<6;++n)p.Tick(0);
++    CHECK(p.acknowledged==1&&!p.result.blocksFire&&p.native.service.View(p.native.clock).shot==1);
++    CHECK(p.native.service.View(p.native.clock).loaded==7&&p.native.service.View(p.native.clock).reserve==24);return 0;}
++
++}
++int main(){CHECK(!EmptyShotRecoveryRetainsZeroAndStillRequiresGesture());CHECK(!GuardedCommitsRequireOwnOpenParentAndConservedProjection());CHECK(!RestoreNeverVotesAndBusyRewindsRevokeOnlyUnsubmittedAuthority());CHECK(!ExactGuardedIdleRecordMutations());CHECK(!RealPumpAdapterTrackingLossRegrabThroughNativeService());CHECK(!NativeIdleRequiresActualGesture());CHECK(!LongTrackingLossRetainsDebt());CHECK(!MissingGuardAndConservationNeverRecover());
++    CHECK(!NativeBusyRevokesGrantButNotSubmittedReceipt());CHECK(!ExistingHoldDrainsBeforeConvergence());CHECK(!NoConversionOfNormalPendingOrStaleHold());return 0;}

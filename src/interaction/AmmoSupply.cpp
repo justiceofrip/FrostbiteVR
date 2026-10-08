@@ -84,7 +84,7 @@ AmmoSupplyResult AmmoSupply::UpdateCurrent(const AmmoSupplySample& s,HandInterac
     else {input_.focused&=in.focused;input_.tracked[h]=input_.tracked[h]&&in.tracked[h];input_.released[h]=input_.released[h]||in.released[h];}
     if(blocked_||!input_.focused||!input_.tracked[h]||s.trackingEpoch==0)
         return fail(AmmoSupplyReason::TrackingLost);
-    if(!SourceValid(s.source,in.nowNs)||s.source.identity.owner!=in.owner||s.source.identity.trackingEpoch!=s.trackingEpoch)
+    if(!SourceValid(s.source,in.nowNs)||s.source.observedNs<terminalCutoffNs_||s.source.identity.owner!=in.owner||s.source.identity.trackingEpoch!=s.trackingEpoch)
         return fail(AmmoSupplyReason::InvalidSource);
     const bool changed=source_.identity!=s.source.identity||source_.family!=s.source.family||source_.objectUnits!=s.source.objectUnits;
     if(!fresh&&changed)return fail(AmmoSupplyReason::SourceChanged);
@@ -205,6 +205,25 @@ AmmoSupplyResolution AmmoSupply::Resolve(const HandInteractionSample& safety,Han
         armed_=false;
     }
     settled_=receipt.currentReserve;lastNow_=safety.nowNs;pending_.reset();return out;
+}
+AmmoSupplyResolution AmmoSupply::SettleTerminal(const HandInteractionSample& safety,HandInteraction& hands,
+    const AmmoSupplyTerminalReceipt& r)noexcept {
+    AmmoSupplyResolution out;
+    if(!pending_||r.reservation!=*pending_||!r.nativeFinalVerified||!r.event||r.event<=lastRetirement_||
+       safety.nowNs<lastNow_||r.completedNs<pending_->startedNs||r.completedNs>safety.nowNs||
+       r.reserveBefore!=pending_->reserveBefore||r.acknowledgement.request!=pending_->request||
+       r.acknowledgement.owner!=RequestOwner(pending_->identity)||r.acknowledgement.operation!=pending_->operation)return out;
+    const auto status=r.acknowledgement.status;
+    if(status==ReloadAcknowledgement::Applied){
+        if(r.reserveBefore<r.reserveAfter||r.reserveBefore-r.reserveAfter!=pending_->units)return out;
+        out.consumed=pending_;
+    }else if(status!=ReloadAcknowledgement::Rejected||r.reserveAfter!=r.reserveBefore)return out;
+    out.accepted=true;out.releasedReservation=pending_;
+    hands.Release(safety,pending_->claim);
+    if(held_&&held_->item==pending_->item&&held_->claim.token==pending_->claim)held_.reset();
+    pending_.reset();armed_=false;blocked_=true;lastRetirement_=r.event;lastNow_=safety.nowNs;
+    terminalCutoffNs_=std::max(terminalCutoffNs_,r.completedNs);
+    return out;
 }
 AmmoSupplyResolution AmmoSupply::Rebaseline(const HandInteractionSample& safety,HandInteraction& hands,
     const AmmoSupplyRebaseline& evidence)noexcept {

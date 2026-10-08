@@ -1,7 +1,15 @@
 #pragma once
 #include "Bc2ReloadFlow.h"
 #include <atomic>
+#include <cmath>
 namespace fvr::bc2 {
+// Elapsed simulation time is distinct from the age of the context read. A
+// measured 59.6 ms native frame cancelled an otherwise current manual reload.
+// Accept bounded hitches; ownership, read age and control expiry still apply
+// independently. Diagnostics retain their narrower context admission.
+inline bool ValidManualReloadDelta(float seconds)noexcept {
+    return std::isfinite(seconds)&&seconds>0&&seconds<=.1f;
+}
 struct ReloadHoldIdentity {
     ReloadStateOwner owner{};
     std::array<std::uint32_t,3> firing{};
@@ -17,6 +25,9 @@ struct ReloadHoldInput {
     unsigned branch=3;
     bool verified=false;
     std::int64_t contextObservedNs=0; // Before actual context read; never policy processing time.
+    // Diagnostic-only qualification from exact original client Restore receipts
+    // for this owner/count cohort, bounded to ContextFreshNs. Server bit2 denied.
+    unsigned clientRestoreMask=0;
 };
 enum class ReloadHoldTarget:unsigned {Reload,SpasPump};
 enum class ReloadHoldPhase:unsigned {Disabled,Waiting,Holding,Released,Aborted};

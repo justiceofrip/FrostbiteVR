@@ -41,6 +41,48 @@ int CapturedChannelTravelReplay(){Fixture f;f.source.closedPartFromWeapon=captur
         CHECK(Near(posed.values[row][col],captured_spas_pump::LowZ.values[row][col],row==3?.00015f:.00002f));
     return 0;
 }
+int PhysicalConsumerToPrivatePalette(){
+    Fixture f;HandInteraction hands;PhysicalWeaponCycle physical;PhysicalWeaponCycleSample sample;
+    sample.source=f.input;sample.lease=f.source.lease;sample.rawContact=Pose();
+    WeaponCycleProfile profile;profile.id=3;profile.revision=1;profile.closedContact=Pose();profile.axis={0,0,-1};
+    profile.stroke=SpasObservedForeEndStroke;profile.rearTolerance=.003f;profile.frontTolerance=.003f;
+    profile.contactRadius=.06f;profile.lateralTolerance=.03f;profile.maxStepMeters=.03f;profile.rotationTolerance=.15f;
+    profile.endpointDwellNs=10000000;profile.maximumCycleNs=2000000000;
+    std::uint64_t intent=1;hands.Update(sample.source);
+    const auto gun=hands.Acquire(sample.source,{sample.source.owner,InteractionHand::Right,HandClaimKind::GunHold,sample.lease.item,
+        {{1,1},sample.source.sequence,sample.source.deadlineNs,true},intent++,0});CHECK(gun.claim);sample.gun=gun.claim->token;
+    CHECK(physical.Begin(profile,sample.lease,sample.source.nowNs));
+    const auto original=f.rig.nativeEvaluated;unsigned palettes=0,submissions=0;
+    for(float travel:{-1.f,0.f,.02f,.04f,.06f,.08f,SpasObservedForeEndStroke,SpasObservedForeEndStroke,.075f,.055f,.035f,.015f,0.f,0.f}){
+        ++sample.source.sequence;sample.source.nowNs+=10000000;sample.source.observedNs=sample.source.nowNs;sample.source.deadlineNs=sample.source.nowNs+100000000;
+        ++sample.lease.sequence;sample.lease.observedNs=sample.source.nowNs;sample.lease.deadlineNs=sample.source.deadlineNs;
+        sample.grip=travel>=0;sample.source.released[0]=!sample.grip;
+        sample.rawContact=weapon_cycle_detail::Target(profile,std::max(0.f,travel),0);
+        sample.contact={sample.lease.mechanism,sample.source.sequence,sample.source.deadlineNs,true};sample.acquireIntent=intent++;
+        hands.Update(sample.source);CHECK(hands.Renew(sample.source,sample.gun,{{1,1},sample.source.sequence,sample.source.deadlineNs,true}).accepted);
+        const auto result=physical.Update(sample,hands);if(result.release)++submissions;
+        if(!result.target)continue;
+        const auto mechanism=hands.Current(InteractionHand::Left),currentGun=hands.Current(InteractionHand::Right);CHECK(mechanism&&currentGun);
+        // Native callback and boundary calibration are mocked. The unchanged
+        // captured closed transform is retained; only current receipts renew.
+        auto source=f.source;source.lease=result.target->lease;source.mechanism=result.target->mechanism;source.gun=result.target->gun;
+        source.inputSequence=result.target->inputSequence;source.observedNs=result.target->observedNs;source.deadlineNs=result.target->deadlineNs;
+        const auto plan=BuildSpasPumpCyclePart(f.rig,f.binding,source,profile,*result.target,sample.lease,sample.source,*mechanism,*currentGun,Pose(),1);
+        CHECK(plan&&plan->edits.size()==1&&plan->edits[0].index==f.binding.part);++palettes;
+        float z=0;std::memcpy(&z,plan->edits[0].after.data()+56,4);CHECK(Near(z,.8469f+travel,1e-5f));
+        for(unsigned mutation=0;mutation<6;++mutation){auto badSource=source;auto badTarget=*result.target;auto badProfile=profile;
+            if(mutation==0)++badTarget.revision;
+            if(mutation==1)badTarget.contact.values[3][2]+=.01f;
+            if(mutation==2)badSource.rearDirection=1;
+            if(mutation==3)badSource.nativeBoundaryVerified=false;
+            if(mutation==4)--badSource.inputSequence;
+            if(mutation==5)badProfile.stroke=.1f;
+            CHECK(!BuildSpasPumpCyclePart(f.rig,f.binding,badSource,badProfile,badTarget,sample.lease,sample.source,*mechanism,*currentGun,Pose(),1));
+        }
+    }
+    CHECK(palettes==12&&submissions==1&&!hands.Current(InteractionHand::Left));CHECK(f.rig.nativeEvaluated==original);
+    CHECK(physical.Phase()==WeaponCyclePhase::AwaitingNative);return 0;
 }
-int main(){if(SingleLeafPrivateCopy()||CurrentAnimationDoesNotDoubleMovePart()||ExactLifetimeAndClaims()||CapturedChannelTravelReplay())return 1;
-    std::puts("4 SPAS private part adapter groups passed; captured motion replay, no renderer/native admission.");}
+}
+int main(){if(SingleLeafPrivateCopy()||CurrentAnimationDoesNotDoubleMovePart()||ExactLifetimeAndClaims()||CapturedChannelTravelReplay()||PhysicalConsumerToPrivatePalette())return 1;
+    std::puts("5 SPAS private part adapter groups passed; real physical consumer/private palette, mocked native boundaries, no runtime admission.");}

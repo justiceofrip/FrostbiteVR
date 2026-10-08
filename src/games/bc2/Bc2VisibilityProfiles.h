@@ -40,6 +40,13 @@ inline bool VisibilityConfigurationMatches(const SelectedMeshesSnapshot& s,
        d.weightedNames.empty()||d.weightedNames.size()>64||!d.rigFingerprint)return false;
     const auto end=std::find(s.weaponName.begin(),s.weaponName.end(),'\0');
     if(end==s.weaponName.end()||std::string_view(s.weaponName.data(),std::size_t(end-s.weaponName.begin()))!=d.asset)return false;
+    // Exact variants can intentionally share every mesh (MG36 scope/Kobra).
+    // Diagnostic permission relaxes native admission, never configuration identity.
+    if(!d.configurationPath.empty()){
+        const auto e=std::find(s.configurationPath.begin(),s.configurationPath.end(),'\0');
+        if(!s.configurationPathVerified||e==s.configurationPath.end()||
+           std::string_view(s.configurationPath.data(),std::size_t(e-s.configurationPath.begin()))!=d.configurationPath)return false;
+    }
     for(std::size_t n=0;n<d.meshes.size();++n){
         if(d.meshes[n].empty()||std::find(d.meshes.begin(),d.meshes.begin()+n,d.meshes[n])!=d.meshes.begin()+n)return false;
         unsigned matches=0;

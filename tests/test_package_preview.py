@@ -12,7 +12,7 @@ import zipfile
 
 spec=importlib.util.spec_from_file_location('pack',Path(__file__).resolve().parents[1]/'tools/package_preview.py')
 p=importlib.util.module_from_spec(spec);spec.loader.exec_module(p)
-BODY_RUNTIME=('tools/bc2_authored_grip_bindings.py', 'tools/bc2_authored_magazine_geometry.py', 'tools/bc2_body_ammo_assets.py', 'tools/bc2_body_equipment_assets.py', 'tools/bc2_granny_curves.py', 'tools/bc2_granny_resource.py', 'tools/bc2_mesh_geometry.py', 'tools/bc2_weapon_animation_pipeline.py', 'tools/bc2_weapon_asset_pipeline.py', 'tools/bc2_weapon_config_pipeline.py', 'tools/bc2_weapon_mesh_bindings.py', 'tools/inspect_bc2_mesh_asset.py', 'tools/Prepare-BodyAmmoAssets.ps1', 'config/body-ammo-assets.json', 'licenses/Norbyte-LSLib-MIT.txt')
+BODY_RUNTIME=('tools/bc2_authored_grip_bindings.py', 'tools/bc2_authored_magazine_geometry.py', 'tools/bc2_reviewed_magazine_contact.py', 'tools/bc2_magazine_assembly.py', 'tools/bc2_magazine_assembly_cache.py', 'tools/bc2_configured_body_assets.py', 'tools/bc2_magazine_contact_batch.py', 'tools/bc2_body_ammo_assets.py', 'tools/bc2_body_equipment_assets.py', 'tools/bc2_granny_curves.py', 'tools/bc2_granny_resource.py', 'tools/bc2_mesh_geometry.py', 'tools/bc2_weapon_animation_pipeline.py', 'tools/bc2_weapon_asset_pipeline.py', 'tools/bc2_weapon_config_pipeline.py', 'tools/bc2_weapon_mesh_bindings.py', 'tools/inspect_bc2_mesh_asset.py', 'tools/Prepare-BodyAmmoAssets.ps1', 'config/body-ammo-assets.json', 'licenses/Norbyte-LSLib-MIT.txt')
 
 def image(machine=0x14c,dependency=None):
     data=bytearray(1024);data[:2]=b'MZ';struct.pack_into('<I',data,60,128);data[128:132]=b'PE\0\0'
@@ -68,12 +68,7 @@ class Packaging(unittest.TestCase):
             path=self.root/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(b'public\n')
         # Exercise real distributed helper bytes, not placeholder scripts that
         # could hide an import inside main() or a developer-only installation.
-        for name in ('tools/game_window.py','tools/read_bc2.py','tools/bc2_weapon_asset_pipeline.py',
-                     'tools/bc2_mesh_geometry.py','tools/inspect_bc2_mesh_asset.py','tools/bc2_weapon_config_pipeline.py','tools/bc2_weapon_mesh_bindings.py','tools/audit_pump_hold.py','tools/inspect_lmg_common.py','tools/build_lmg_jobs.py','tools/capture_lmg_native.py','tools/capture_reload_state.py','tools/capture_reload_server.py',
-                     'tools/bc2_granny_resource.py','tools/bc2_granny_curves.py','tools/bc2_weapon_animation_pipeline.py','tools/bc2_authored_mechanism_geometry.py',
-                     'tools/build_manual_reload_catalog.py','tools/inspect_reload_animations.py','tools/bc2_authored_grip_bindings.py','tools/bc2_authored_hand_pose_batch.py','tools/bc2_authored_magazine_geometry.py','tools/bc2_magazine_contact_batch.py','tools/bc2_magazine_descriptor_manifest.py','tools/bc2_magazine_registry_header.py',
-                     'tools/bc2_authored_sight_geometry.py','tools/bc2_authored_optic_catalog.py',
-                     'tools/audit_pump_capture.py','tools/report_empty_step.py','tools/bc2_magazine_pipeline_coverage.py'):
+        for name in (name for name in p.EXACT if name.startswith('tools/') and name.endswith('.py')):
             (self.root/name).write_bytes((Path(__file__).resolve().parents[1]/name).read_bytes())
         for name in BODY_RUNTIME:
             if name.endswith('.py'):

@@ -17,6 +17,8 @@ public:
  void Observe(const MagazinePhysicalProbeState&,const MagazinePackCounters&,std::int64_t now)noexcept;
  bool CancelConsumer()const noexcept{return phase_==Phase::Done||phase_==Phase::Failed;}
  bool Completed()const noexcept{return phase_==Phase::Done;}
+ // Installation-only anchor selection; never resets a running diagnostic.
+ bool UseChestSupply()noexcept{if(first_)return false;chestSupply_=true;return true;}
  void Report(std::ostream&)const;
 private:
  enum class Phase:unsigned {Warmup,ApproachMagazine,Grip,Pull,Release,Pouch,GrabReplacement,ApproachRail,Enter,Stroke,WaitAck,WaitBaseline,Done,Failed,Carry};

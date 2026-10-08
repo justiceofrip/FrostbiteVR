@@ -1,5 +1,6 @@
 #pragma once
 #include "Bc2Profile.h"
+#include "Bc2PhysicalPump.h"
 #include "Bc2AmmoCounterHost.h"
 #include "Bc2Camera.h"
 #include "Bc2SelectedMeshes1p.h"
@@ -22,6 +23,19 @@ bool SetFeedbackWriter(FeedbackWriter)noexcept;
 // Explicit driver-only native head-aim/camera opt-in, after Install before Start.
 // Fire can remain disabled for the bounded signed-axis response diagnostic.
 bool EnableBoatHeadAim(bool enableFire=false)noexcept;
+// Explicit pre-Start opt-in. Requires measured calibration and a native-cycle
+// build; ordinary hands and finite fixtures have separate activation gates.
+bool EnablePhysicalPumpCandidate(const Bc2PumpCalibration&)noexcept;
+bool EnablePhysicalBoltProbe(unsigned cycles=1)noexcept;
+// Default-OFF real-controller pump+M95 dispatch; contains no finite fixture.
+bool EnableOrdinaryManualCycles()noexcept;
+// Private input-only diagnostic, after ordinary activation and before Start.
+bool EnableOrdinaryBoltInputProbe(unsigned cycles=1)noexcept;
+bool EnableOrdinaryResourceInputProbe()noexcept;
+bool EnablePhysicalPumpProbe(unsigned cycles=2)noexcept;
+// Private finite persistent body/resource/shell composition; after setup, before Start.
+bool EnableResourcePumpCombination()noexcept;
+bool EnableM95StockShotProbe()noexcept;
 // Called once after this module's MinHook initialization, before hook enable.
 // InputReader is nonblocking and enforces the IPC producer-side 100ms deadline.
 bool Install(std::span<const std::byte>,const engine::PeImage&,std::uintptr_t,InputReader,bool motionAim=false,bool bodyFollow=false,bool observePoses=false,bool rigPulse=false,bool handPoses=false,bool deathProbe=false,bool equipProbe=false,bool muzzleFire=false,bool twoHandGrip=false,bool enableSightFlip=false,bool reloadHoldProbe=false,bool reloadRoundProbe=false,bool reloadRequestProbe=false,bool physicalReload=false,bool physicalReloadProbe=false,unsigned magazineReloadSession=0);
@@ -49,7 +63,7 @@ bool EnablePhysicalReloadProbeRepeat()noexcept;
 std::shared_ptr<const SelectedMeshesSnapshot> ReadSelectedMeshes(const ReloadStateOwner&,std::int64_t nowNs)noexcept;
 std::shared_ptr<const SelectedMeshesSnapshot> ReadCurrentSelectedMeshes(std::int64_t nowNs)noexcept;
 bool BodyDisplayNativeCurrent(const BodyInventoryDisplay&)noexcept;
-graphics::AmmoCounterSample ReadAmmoCounter(std::int64_t nowNs)noexcept;
+graphics::AmmoCounterSample ReadAmmoCounter()noexcept;
 bool AdjustViewBase(std::array<RenderViewCopy,2>&,const runtime::TrackingFrame&)noexcept;
 // Bounded read-only plan and post-setter camera evidence; no native writes.
 bool ObserveVehicleCameraPlan(unsigned,const runtime::TrackingFrame&,const RenderViewCopy&,const RenderViewCopy&,const std::array<RenderViewCopy,2>&)noexcept;

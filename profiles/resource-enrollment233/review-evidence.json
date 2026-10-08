@@ -1,0 +1,146 @@
+{
+  "schema": "fvr.bc2.shared-resource-family-enrollment-review.v1",
+  "family": "bc2.automatic-magazine-zero-bolt.v1",
+  "basis": "Exact installed config/content/geometry + already-reviewed executable-wide AutomaticFire2/rtMagazine1 zero-bolt adapter; bounded232 operation evidence. No new per-asset ABI.",
+  "prior_family_review": {
+    "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\profiles\\resource-batch227\\reviewed-diagnostic-batch\\review-evidence.json",
+    "sha256": "96dcd4704755c4863f32d61a356c647d664bbeb428500396bf4d13c33633ffbd"
+  },
+  "actual_audit": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\resource-crossclass232-audit-v2-candidate\\actual232-audit-v2.json",
+    "sha256": "b044aec9b2e6f6ba173aa840b75c0395e92045278dc5baabff017e3af8a1e68e"
+  },
+  "audit_tool": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\resource-crossclass232-audit-v2-candidate\\audit_resource_inventory_probe.py",
+    "sha256": "92d131a3a2a7d29187d4e00d44d24a647624aeaddbdd10254827624cf654d305"
+  },
+  "actual232": {
+    "overall_status": "inconclusive",
+    "overall_reasons": [
+      "native_observation_loss",
+      "read_miss_during_combined_sequence"
+    ],
+    "operations": [
+      {
+        "cycle": 0,
+        "operation": "remove",
+        "command": 1,
+        "authority_invocation": 4131,
+        "branch_invocations": [
+          4138,
+          4135,
+          4136
+        ]
+      },
+      {
+        "cycle": 0,
+        "operation": "seat",
+        "command": 2,
+        "authority_invocation": 4916,
+        "branch_invocations": [
+          4923,
+          4920,
+          4921
+        ]
+      },
+      {
+        "cycle": 1,
+        "operation": "remove",
+        "command": 3,
+        "authority_invocation": 4970,
+        "branch_invocations": [
+          4978,
+          4975,
+          4976
+        ]
+      },
+      {
+        "cycle": 1,
+        "operation": "seat",
+        "command": 4,
+        "authority_invocation": 6361,
+        "branch_invocations": [
+          6368,
+          6365,
+          6366
+        ]
+      },
+      {
+        "cycle": 2,
+        "operation": "remove",
+        "command": 5,
+        "authority_invocation": 11014,
+        "branch_invocations": [
+          11021,
+          11019,
+          11018
+        ]
+      },
+      {
+        "cycle": 2,
+        "operation": "seat",
+        "command": 6,
+        "authority_invocation": 11794,
+        "branch_invocations": [
+          11801,
+          11798,
+          11799
+        ]
+      }
+    ],
+    "shell": {
+      "naturally_finished": true,
+      "weapon": 129732144,
+      "identity": {
+        "player": 1008893136,
+        "soldier": 1008846416,
+        "weak": 136064664,
+        "weapon": 129732144,
+        "actor_generation": 2,
+        "equip_generation": 4,
+        "space": 8589934593,
+        "firing": [
+          112993392,
+          112993216,
+          113013104
+        ],
+        "server_player": 409672768,
+        "server_soldier": 449725168,
+        "server_item": 108277808
+      },
+      "shot_invocations": [
+        6879
+      ],
+      "transfer_invocation": 8139,
+      "independent_invocations": [
+        8142,
+        8133,
+        8134
+      ],
+      "before": [
+        7,
+        24,
+        8
+      ],
+      "after": [
+        8,
+        23,
+        8
+      ]
+    },
+    "full_observer_completeness_verified": false
+  },
+  "boundaries": {
+    "per_variant_native_tested": false,
+    "headset_tested": false,
+    "whole_scene_appearance_tested": false,
+    "geometry_is_native_authority": false
+  },
+  "runtime": {
+    "explicit_backend": "BC2_RESOURCE_MAGAZINES ordinary mode3 or finite input-only mode7",
+    "registry": "profiles/resource-enrollment233/ReviewedResourceRegistry.h",
+    "geometry": "profiles/resource-batch227/zero-bolt-batch/CombinedGeometry.h",
+    "native_operation_review": "Regenerate source-bound operation header/receipt for final integrated source;232 header used for CPU evidence replay only"
+  },
+  "native_provisioning": "Generic typed constructor may consume the exact enrollment identities only after independent current resident type/owner/config verification. This package invokes none."
+}

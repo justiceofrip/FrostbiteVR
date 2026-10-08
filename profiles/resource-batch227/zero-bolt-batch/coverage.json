@@ -1,0 +1,2834 @@
+{
+  "schema": "fvr.bc2.magazine_pipeline_coverage.v1",
+  "rows": [
+    {
+      "key": "bc2:magazine-descriptor:00dd2c9e5d97a56a4866ed8969b6d76b8885aae79facaa02c15d0fdd08ea3ebe",
+      "descriptor_digest": "0c13f57d22f0856774d0dea7bb577581a799c9e619fbff9d84d9afa6996c70d4",
+      "asset": "AEK971",
+      "path": "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Scoped",
+      "class": "wcAssault",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:0180359a55abe60c12075d4d7129c36432401d6d59fdac75051d2aa1624d6d46",
+      "descriptor_digest": "474d69a0d84d01ab93c808d49ddb58a25f10d1d24c9d070531eeeeff7fbe42ca",
+      "asset": "QJU88",
+      "path": "Objects/Weapons/Handheld/MEC_lmg_QJY88/MEC_lmg_QJY88",
+      "class": "wcLmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:1099ee5b921992241708f3f5956340a9d2d905daf76e9a04386b479d1dae8818",
+      "descriptor_digest": "e55695b70d71ba1d33272ce9057f91a1aee9add697b81aa68f8547e8b6ab7529",
+      "asset": "AN94",
+      "path": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan",
+      "class": "wcAssault",
+      "dispatch_compatible": false,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry",
+        "unreviewed_dispatch_symbol:FireLogic.FireLogicType:fltSingleFire"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:1113d42a78aa4618bd110c7f7ead1844124ede58986074d44a9acb9787faa58a",
+      "descriptor_digest": "d939fa731908d9ff8bf14befbf3d9ab50cb29e6a2a7466057cf0a3ca12a263e9",
+      "asset": "M60_sp",
+      "path": "Objects/Weapons/Handheld/BU_lmg_M60/SP_lmg_M60",
+      "class": "wcLmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:137333396af845c526e0c4133d7b1ebef35b6e6b88afeee86dcf4eca2e23ca12",
+      "descriptor_digest": "766b119e69be4d1087da848c3f43205026a36ef325677c43fe16e125f6e14ace",
+      "asset": "AKS74u",
+      "path": "Objects/Weapons/Handheld/RU_rif_AKS74u/RU_rif_AKS74u",
+      "class": "wcSmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 1,
+      "native_bolt_values": {
+        "boltDelay": 0.5,
+        "boltTime": 1.0,
+        "holdBoltUntilFireRelease": true,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [
+        "Objects/Weapons/Handheld/RU_rif_AKS74u/RU_rif_AKS74u_Mesh"
+      ],
+      "geometry_source_profiles": [
+        "6ed52c56c6896d64e9a42699af2b9f2e3e8e3e6c3a5f8809e8f5dd8dd503394f"
+      ],
+      "fixture_candidate": true,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "current_native_configuration_and_three_branch_cycle_receipts",
+        "headset_acceptance",
+        "main_grip_and_support_native_proof",
+        "native_magazine_render_and_empty_control_acceptance",
+        "native_mesh_skin_and_rig_identity"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:13b8aa537cdea0a5730562015bdc9961ba66018aa17f3a0abae4ab4d1c6c45cd",
+      "descriptor_digest": "c31431276522dd4999abdcc4971d4949ebbd54591b7f9a4eb77cda89fc2640e6",
+      "asset": "XM8C",
+      "path": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Scoped",
+      "class": "wcSmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 1,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [
+        "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Mesh"
+      ],
+      "geometry_source_profiles": [
+        "930c185312a178513a60c1e741e52cd0eed22b52f49f214952058019b463b439"
+      ],
+      "fixture_candidate": true,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "current_native_configuration_and_three_branch_cycle_receipts",
+        "headset_acceptance",
+        "main_grip_and_support_native_proof",
+        "native_magazine_render_and_empty_control_acceptance",
+        "native_mesh_skin_and_rig_identity"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:1643591677dee7102b7a9553f6a75ad4e8a8290d26f79f40c92aeffec2dfd7e3",
+      "descriptor_digest": "1caa7c417da8553f4edde00b0384cc3f871ebb813200a31beb963d4cdd69e1c1",
+      "asset": "QJU88_sp",
+      "path": "Objects/Weapons/Handheld/MEC_lmg_QJY88/SP_lmg_QJY88",
+      "class": "wcLmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:193029c00fbe121e066512ba9f1b132fbe9c42666217cb6fbabccd7a483ae3c0",
+      "descriptor_digest": "067915fccd3d0d0eb5adebe90c27ec7f6ab1dca22befc9a9c489b1d8ecd41b9d",
+      "asset": "AKS74u_sp",
+      "path": "Objects/Weapons/Handheld/RU_rif_AKS74u/SP_rif_AKS74u",
+      "class": "wcSmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.5,
+        "boltTime": 1.0,
+        "holdBoltUntilFireRelease": true,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:1a9677a741508f9651487efe7eecd5f825ec4a67d2f1ca7e7649125c5e467ea5",
+      "descriptor_digest": "c6ea54dcdf0cb2d38fb42aec0e37ca617cbc84017e492dbf9f5ecbbbc23720d2",
+      "asset": "AUG",
+      "path": "Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG",
+      "class": "wcAssault",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:1e83842f6aa6f5f5f41423710b85c69ca25b2613bb1f0b208e7b6e09940f8670",
+      "descriptor_digest": "56c9205b9a508c0933fb509d6c715545052ed8ade11558b25d137fde14404283",
+      "asset": "UZI",
+      "path": "Objects/Weapons/Handheld/BU_smg_IMIUZI/BU_smg_IMIUZI_Scoped",
+      "class": "wcSmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 1,
+      "native_bolt_values": {
+        "boltDelay": 0.5,
+        "boltTime": 1.0,
+        "holdBoltUntilFireRelease": true,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [
+        "Objects/Weapons/Handheld/BU_smg_IMIUZI/BU_smg_IMIUZI_Mesh"
+      ],
+      "geometry_source_profiles": [
+        "d3a9f0384952fadff6a6c0a4f9472f182c74b90ecec52d537a99b6e1b0b811ad"
+      ],
+      "fixture_candidate": true,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "current_native_configuration_and_three_branch_cycle_receipts",
+        "headset_acceptance",
+        "main_grip_and_support_native_proof",
+        "native_magazine_render_and_empty_control_acceptance",
+        "native_mesh_skin_and_rig_identity"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:21d7db31a43c1c93e00100c9f76f817155805ca65bf800410d484623d1d7f49a",
+      "descriptor_digest": "99f50a82adf6b0d9fe2ebec86edd5efc7d5482081b36bb29d9e64d1fb3ba4728",
+      "asset": "M249",
+      "path": "Objects/Weapons/Handheld/UL_lmg_FNMinimi/UL_lmg_FNMinimi_Kobra",
+      "class": "wcLmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:280d9ee64ec00ebeccaa3726f9bd400f4ee2bf737eeb2fd3bb457b5a07035bac",
+      "descriptor_digest": "a93caacb638d0d695ae815c8fc629c96ed80217e5fae651606dddef3a24d69b4",
+      "asset": "MG3",
+      "path": "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Kobra",
+      "class": "wcLmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:2b72eea82134305423456788ce5ca3b3a9879432ee9ac0ea2b8e00c873a25156",
+      "descriptor_digest": "b41c31716f6607aec4894f223392a050c62e3c2e584ee26365aa4695aaf4a139",
+      "asset": "M249",
+      "path": "Objects/Weapons/Handheld/UL_lmg_FNMinimi/UL_lmg_FNMinimi",
+      "class": "wcLmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:2d6471a03056b3b2e4e13f2a59baf212565aefa56dccc33895ee43c076b5abb0",
+      "descriptor_digest": "8912038301025442ebfe473decfba3dab63fa73a5c26ec75bbc27c042ba814f6",
+      "asset": "MP443",
+      "path": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach",
+      "class": "wcSmg",
+      "dispatch_compatible": false,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry",
+        "unreviewed_dispatch_symbol:FireLogic.FireLogicType:fltSingleFire"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:2e907a5781437c8d857df9c56b3c7cbb85fd31e40d7a00cea4e6853292d4553b",
+      "descriptor_digest": "0c3e487bc8a09eee0cb2e5c460b917481116af5ff41f0c40276167e7bf77755b",
+      "asset": "PKM",
+      "path": "Objects/Weapons/Handheld/RU_lmg_PKM/RU_lmg_PKM_Kobra",
+      "class": "wcLmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:2f12ae7620d188380483d36e391c24f5d98899b9bfee0afcf69dab5f810f44ed",
+      "descriptor_digest": "21dfe24c26c4493677495f0af0246bd56805f9c529ef3469f9d99ff8d3c398de",
+      "asset": "UZI",
+      "path": "Objects/Weapons/Handheld/BU_smg_IMIUZI/BU_smg_IMIUZI_Kobra",
+      "class": "wcSmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 1,
+      "native_bolt_values": {
+        "boltDelay": 0.5,
+        "boltTime": 1.0,
+        "holdBoltUntilFireRelease": true,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [
+        "Objects/Weapons/Handheld/BU_smg_IMIUZI/BU_smg_IMIUZI_Mesh"
+      ],
+      "geometry_source_profiles": [
+        "5e300af5661e46507bedd19f969a5cb76852d117865b791c5bc780140aaf8ef2"
+      ],
+      "fixture_candidate": true,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "current_native_configuration_and_three_branch_cycle_receipts",
+        "headset_acceptance",
+        "main_grip_and_support_native_proof",
+        "native_magazine_render_and_empty_control_acceptance",
+        "native_mesh_skin_and_rig_identity"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:304a17ade6eb3c26fcd32b44430cb4e896bc77432d6229a5789b6d53db23f64f",
+      "descriptor_digest": "6d77694f7e806201a3aeb9dd5eb6cfdbb214c51aac579044ed3705999ff11bd7",
+      "asset": "M9-3",
+      "path": "Objects/Weapons/Handheld/US_hg_M9Beretta/US_hg_M9-3",
+      "class": "wcSmg",
+      "dispatch_compatible": false,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry",
+        "unreviewed_dispatch_symbol:FireLogic.FireLogicType:fltSingleFire"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:3327ed5d49d19216e64395bda737a124b272fd5c53cb6eb3a4945637e8f22f4e",
+      "descriptor_digest": "0dcf6f4f9e883f143656074626bc91c60016e076e3e1621d7ac975980f333490",
+      "asset": "M60",
+      "path": "Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60",
+      "class": "wcLmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:34570b13cfb1c6fe0dc4f0db73a6604346ac190a95161f7156d8a4e07521f601",
+      "descriptor_digest": "8bb5e63dbaaebf9716d63d3125845a7858eb679bdede467dabb276acb88b3fda",
+      "asset": "M416",
+      "path": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416",
+      "class": "wcAssault",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 1,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [
+        "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh"
+      ],
+      "geometry_source_profiles": [
+        "f7693652e7381b307bb85d9c90618448e9f886a7e6dce9a8fc44adc070395293"
+      ],
+      "fixture_candidate": true,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "current_native_configuration_and_three_branch_cycle_receipts",
+        "headset_acceptance",
+        "main_grip_and_support_native_proof",
+        "native_magazine_render_and_empty_control_acceptance",
+        "native_mesh_skin_and_rig_identity"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:371ec684be3ddbc8425a79205d61be91657a896370e4a363bfc280be4bb96fc3",
+      "descriptor_digest": "362e2ac552a64ef9ba063774220e9d98260ed855b9b91f36ded2ebb0f9c9691f",
+      "asset": "M16k",
+      "path": "Objects/Weapons/Handheld/BU_rif_M16A2/UPG_rif_M16A2_Kobra",
+      "class": "wcAssault",
+      "dispatch_compatible": false,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry",
+        "unreviewed_dispatch_symbol:FireLogic.FireLogicType:fltSingleFire"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:37d95e7c9c8d29f4ba3cfce885933531e185d1de7626e18f2c256b07488394ca",
+      "descriptor_digest": "213ba474253272a23ffef3a45601fd3de03c3052d464ca416462862cf87eccd7",
+      "asset": "UMPk",
+      "path": "Objects/Weapons/Handheld/BU_smg_UMP/UPG_smg_UMP_Scoped",
+      "class": "wcSmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.5,
+        "boltTime": 1.0,
+        "holdBoltUntilFireRelease": true,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:3c24d2117441df6d2392d17ef4239457e04defd13eaf277d5409cece3c9bf3aa",
+      "descriptor_digest": "62233fb7106ed7bf272e0f3b3a14d9c082497290a8b757d3216becca23779634",
+      "asset": "XM8 LMG",
+      "path": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg",
+      "class": "wcLmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 1,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [
+        "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Mesh"
+      ],
+      "geometry_source_profiles": [
+        "1b4157cff5adddcd1985bf910da831f328786ce9221e4d5beffeb11581f8fa55"
+      ],
+      "fixture_candidate": true,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "current_native_configuration_and_three_branch_cycle_receipts",
+        "headset_acceptance",
+        "main_grip_and_support_native_proof",
+        "native_magazine_render_and_empty_control_acceptance",
+        "native_mesh_skin_and_rig_identity"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:3d34e98de9c99fe9098603548856b48f15a5028b02d075ff6dfe160b1b0ef995",
+      "descriptor_digest": "a1ee9fe13d10447292d2193c2a0c1ff2e93fd8d7ec100ac350126e9451de48bb",
+      "asset": "M60",
+      "path": "Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60_Kobra",
+      "class": "wcLmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:3f8bc0cd10418e563b7c74ec9e5b7d88a6caa178bd6b9e8785c5fe9b7567ce25",
+      "descriptor_digest": "e3beb18941e29d0bd42fbbee8efb7e10614a88fa34aeb3af784536ec41ba7e4e",
+      "asset": "Mk14EBR",
+      "path": "Objects/Weapons/Handheld/BU_rif_Mk14EBR/BU_rif_Mk14EBR_Assault_Scope",
+      "class": "wcAssault",
+      "dispatch_compatible": false,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.5,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "authored_bolt_fields_require_shared_dispatch_review",
+        "missing_exact_configuration_geometry",
+        "unreviewed_dispatch_symbol:FireLogic.FireLogicType:fltSingleFire"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:41f9670a90c1b089f3fe239e5d1bd9fda05eecd0b0019136d5f986f65dceeee3",
+      "descriptor_digest": "7a8ea6abc392e5d9761d36cf464e2cad6a779df7af02efda073b2992be2a4ad3",
+      "asset": "Mk14EBR",
+      "path": "Objects/Weapons/Handheld/BU_rif_Mk14EBR/BU_rif_Mk14EBR_Kobra",
+      "class": "wcAssault",
+      "dispatch_compatible": false,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.5,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "authored_bolt_fields_require_shared_dispatch_review",
+        "missing_exact_configuration_geometry",
+        "unreviewed_dispatch_symbol:FireLogic.FireLogicType:fltSingleFire"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:463b9ae5b99b03ae6ccf70a09a19ff158221f5e0814bc33b242004d11bdd092d",
+      "descriptor_digest": "b177fe6472b484d94bffef46b35a05259f70fe4c21be1843e746bed2dc578d06",
+      "asset": "M1911",
+      "path": "Objects/Weapons/Handheld/Beach/M1911A1/M1911A1",
+      "class": "wcSmg",
+      "dispatch_compatible": false,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry",
+        "unreviewed_dispatch_symbol:FireLogic.FireLogicType:fltSingleFire"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:4a8f0b274238635d732abd2cc11fd663760d4ce612ced9272691fa84190fdc58",
+      "descriptor_digest": "1cf13bbe79b0957f7ce224aa473c89895750e83ddacd534dc1a2c30df2bf0db1",
+      "asset": "Mk14EBR",
+      "path": "Objects/Weapons/Handheld/BU_rif_Mk14EBR/BU_rif_Mk14EBR_Assault_Kobra",
+      "class": "wcAssault",
+      "dispatch_compatible": false,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.5,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "authored_bolt_fields_require_shared_dispatch_review",
+        "missing_exact_configuration_geometry",
+        "unreviewed_dispatch_symbol:FireLogic.FireLogicType:fltSingleFire"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:4f4cd5de7565ff110c07a825713010edd3291f421fb6afaa68c13d2da20c4012",
+      "descriptor_digest": "b6d8cc07abf4f50dceb5fdbfb354c4384c56057302343d6df2cdc4fb22d8d598",
+      "asset": "XM8",
+      "path": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Scoped",
+      "class": "wcAssault",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:51433e30a3e6b097035ab4924f7c3a28d0361479b33be0e10e1614c133961297",
+      "descriptor_digest": "f80000605bde3ac4cfae20444a3f9ebef7a885d19780f6f19fc30c1fd84f9a00",
+      "asset": "UMPk",
+      "path": "Objects/Weapons/Handheld/BU_smg_UMP/UPG_smg_UMP_Kobra",
+      "class": "wcSmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.5,
+        "boltTime": 1.0,
+        "holdBoltUntilFireRelease": true,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:517ac4ed68c905e171599163d0c502698363f4b838a3de31f9b3ea63c2ab2dff",
+      "descriptor_digest": "5ee1adfcee546b1bbceca0874d9c04c1ba08d299059a1d50c41c469a5e13925c",
+      "asset": "M16",
+      "path": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Kobra",
+      "class": "wcAssault",
+      "dispatch_compatible": false,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry",
+        "unreviewed_dispatch_symbol:FireLogic.FireLogicType:fltSingleFire"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:52bfa481c525136589096989304d8b22ec43cc3d684f36b42a97846a54cb5e4a",
+      "descriptor_digest": "dadac7056f60266195f92be9d56fed1c433ce5fa6c61424c0a063b24eeca994b",
+      "asset": "MP443_sp",
+      "path": "Objects/Weapons/Handheld/RU_hg_MP443Grach/SP_hg_MP443Grach",
+      "class": "wcSmg",
+      "dispatch_compatible": false,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry",
+        "unreviewed_dispatch_symbol:FireLogic.FireLogicType:fltSingleFire"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:545e31af17e617544d388a21fc5fe6218dcc788fa48e9f46ef77791fda0aa5b8",
+      "descriptor_digest": "9b46f1b7740e21f76a7f0592294437875a0d916239b417e262c09b96532f82b8",
+      "asset": "Mk14EBR",
+      "path": "Objects/Weapons/Handheld/BU_rif_Mk14EBR/BU_rif_Mk14EBR",
+      "class": "wcAssault",
+      "dispatch_compatible": false,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.5,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "authored_bolt_fields_require_shared_dispatch_review",
+        "missing_exact_configuration_geometry",
+        "unreviewed_dispatch_symbol:FireLogic.FireLogicType:fltSingleFire"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:54aea2c982ef3d9305f89d21cf188f4eb646ca844736a5e3e7f804b229385888",
+      "descriptor_digest": "065aaef2ff48f30b75c86bef524b74eedf721d26509f0a37ac4d6f264521ddcd",
+      "asset": "9A91",
+      "path": "Objects/Weapons/Handheld/MEC_rif_9A91/MEC_rif_9A91",
+      "class": "wcSmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 1,
+      "native_bolt_values": {
+        "boltDelay": 0.5,
+        "boltTime": 1.0,
+        "holdBoltUntilFireRelease": true,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [
+        "Objects/Weapons/Handheld/MEC_rif_9A91/MEC_rif_9A91_Mesh"
+      ],
+      "geometry_source_profiles": [
+        "cc83f5144d5c201b210e7452c9940250cfab854f17e90af7c1f1746dd0a85157"
+      ],
+      "fixture_candidate": true,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "current_native_configuration_and_three_branch_cycle_receipts",
+        "headset_acceptance",
+        "main_grip_and_support_native_proof",
+        "native_magazine_render_and_empty_control_acceptance",
+        "native_mesh_skin_and_rig_identity"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:555d420b597c1c38f88c1ec54388b7b8e7bc0a9e51d9b185ee9915b9c3646724",
+      "descriptor_digest": "8fbbb353a5f0656faa8456c6abd5cf2a0d64990dc91a38a8014c6f473e6fbacf",
+      "asset": "M16k",
+      "path": "Objects/Weapons/Handheld/BU_rif_M16A2/UPG_rif_M16A2",
+      "class": "wcAssault",
+      "dispatch_compatible": false,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry",
+        "unreviewed_dispatch_symbol:FireLogic.FireLogicType:fltSingleFire"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:568ad04d9a3d0a2f6ca6d72fdd2ebf64dc7271ba5c3e5457b85cc9d6b05ba912",
+      "descriptor_digest": "7e0f35786784c13cae277d30a139facb9ee4d998c2126756d755220caf4fffad",
+      "asset": "XM8 LMG",
+      "path": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Scoped",
+      "class": "wcLmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 1,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [
+        "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Mesh"
+      ],
+      "geometry_source_profiles": [
+        "5fbd9ff21e0022091f8b608b2d29ed3a330826a963a7a6e666e463156aa2b752"
+      ],
+      "fixture_candidate": true,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "current_native_configuration_and_three_branch_cycle_receipts",
+        "headset_acceptance",
+        "main_grip_and_support_native_proof",
+        "native_magazine_render_and_empty_control_acceptance",
+        "native_mesh_skin_and_rig_identity"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:5c55193f7c6059983df900538081454b7f1b28b7c95647f3a08f799f0728f0bb",
+      "descriptor_digest": "bd21cf9db55f9ed7f6e5c031d764c5a8dd643b94e4ecec20bb01c3bbd48a2a51",
+      "asset": "F2000",
+      "path": "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Scoped",
+      "class": "wcAssault",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:5fec50eaad08f83a41e34573b8ec4341fbbb85c0d933b3d2097916f19d92e08f",
+      "descriptor_digest": "09bcca7ed34506a7e70c4a8e7c58b791f55de17a001552d882ab917c5c0c49b3",
+      "asset": "MG3k",
+      "path": "Objects/Weapons/Handheld/BU_lmg_MG3/UPG_lmg_MG3",
+      "class": "wcLmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:6019d3973c2ef13f248106f3863a1ad1d4a64ba7b89f6041ebe0ae5cd800ce74",
+      "descriptor_digest": "3bb227f006ddb8326624eb3efb93f58c5c760f9761034792f93b4db1e24e3c7f",
+      "asset": "G3",
+      "path": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Assault",
+      "class": "wcAssault",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:61dcf19b4aa4479fb2400fae748ff794e5c96543aef1bbaa15c7f0fd43f8212a",
+      "descriptor_digest": "f6f1e0f2649a6920c9d5e50710ed1d2d3dd350a4160efeff9e4e19ee323a8568",
+      "asset": "QJU88_sp_k",
+      "path": "Objects/Weapons/Handheld/MEC_lmg_QJY88/SP_lmg_QJY88_Kobra",
+      "class": "wcLmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:61ed1947ca0bbf24439a2dcfcff5519f320d04b065ca5932088c9abb623349c1",
+      "descriptor_digest": "514eb693b159cdc39a1bb140e61ad2493e03bccce59c580a08bc1c552be2e95a",
+      "asset": "AUG",
+      "path": "Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG_Kobra",
+      "class": "wcAssault",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:62f8c84e9ebce6830e22def87e0993c41af8f80c9eff50bd4db968586f2f5d68",
+      "descriptor_digest": "35cd8b0f85e5dff1d47722ba2802e67ec826e8c58688944e3115302383e2c46d",
+      "asset": "AEK971",
+      "path": "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Kobra",
+      "class": "wcAssault",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:63cff9a8d31c5d9fb6b8b88a1567c244eb70457fd41f44c18cae0d8ae474cabf",
+      "descriptor_digest": "9019ab03e6002f09b01e7f74abb43596997d0f87c6f75f79c7f4fd2453361168",
+      "asset": "XM8 LMG",
+      "path": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Kobra",
+      "class": "wcLmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 1,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [
+        "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Mesh"
+      ],
+      "geometry_source_profiles": [
+        "f93898be3e882887bfd0ae74a8ad427619b840fe6c4252ebb4b0a52dd6835c77"
+      ],
+      "fixture_candidate": true,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "current_native_configuration_and_three_branch_cycle_receipts",
+        "headset_acceptance",
+        "main_grip_and_support_native_proof",
+        "native_magazine_render_and_empty_control_acceptance",
+        "native_mesh_skin_and_rig_identity"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:6683eecdf056217377c7bdfc8b8248a9b953505d95a8d581a0bff048e5358755",
+      "descriptor_digest": "c6dac68e52b24a2ac8e4626c9fb571a12bce2fef41c4920ec7406951b879d46a",
+      "asset": "PP2000",
+      "path": "Objects/Weapons/Handheld/BU_smg_PP2000/BU_smg_PP2000_Kobra",
+      "class": "wcSmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.5,
+        "boltTime": 1.0,
+        "holdBoltUntilFireRelease": true,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:686ec6e168f3234c814b9fb3a48a372f8da821ac42eebd0de737888b1e1cfc75",
+      "descriptor_digest": "5601f63aee627def5be6918ad875c7f3b5707ab0274a1adbcd63e573c1b72ebb",
+      "asset": "G3",
+      "path": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Kobra",
+      "class": "wcAssault",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:6877ac14cd00fadc4c2ebbd1b212a03ebd5a2d91de168016224e3cfe26da565d",
+      "descriptor_digest": "13264838240f620a00df8d688468ef3feb0f621f6a9aa478043188331d131670",
+      "asset": "AN94",
+      "path": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Scoped",
+      "class": "wcAssault",
+      "dispatch_compatible": false,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry",
+        "unreviewed_dispatch_symbol:FireLogic.FireLogicType:fltSingleFire"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:69eaf910273974736249debf309231a418eb5556bcc628cdac68d7f50253add3",
+      "descriptor_digest": "8fd9d1d1a7c105387dbbffb7288b87b002b304b0ecfacaf5740e552e4485db62",
+      "asset": "MG36",
+      "path": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Kobra",
+      "class": "wcLmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 1,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [
+        "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Mesh"
+      ],
+      "geometry_source_profiles": [
+        "fc795caaa27d6d02208bd08effad3a1b094db3cb2d7d45f40645daeedca21056"
+      ],
+      "fixture_candidate": true,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "current_native_configuration_and_three_branch_cycle_receipts",
+        "headset_acceptance",
+        "main_grip_and_support_native_proof",
+        "native_magazine_render_and_empty_control_acceptance",
+        "native_mesh_skin_and_rig_identity"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:778d8e81e10cb929091000a375535d88c2e93fb66375e6476d5b6efcc1cf1d13",
+      "descriptor_digest": "d26b35aab5355cd98e43ce39170ed38d28ca9821ff0d559081e608fbaaa42574",
+      "asset": "Mk14EBR",
+      "path": "Objects/Weapons/Handheld/BU_rif_Mk14EBR/BU_rif_Mk14EBR_Scope",
+      "class": "wcAssault",
+      "dispatch_compatible": false,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.5,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "authored_bolt_fields_require_shared_dispatch_review",
+        "missing_exact_configuration_geometry",
+        "unreviewed_dispatch_symbol:FireLogic.FireLogicType:fltSingleFire"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:7aa7592b0312ca3195604e7797aa200fc22b64b2009be98a94a1ede39451711d",
+      "descriptor_digest": "96a7b6c15a86f119029caa19eb78af2fb4acee01195121aa67860b0e851e3bb1",
+      "asset": "Mk14EBR",
+      "path": "Objects/Weapons/Handheld/BU_rif_Mk14EBR/BU_rif_Mk14EBR_Assault",
+      "class": "wcAssault",
+      "dispatch_compatible": false,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.5,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "authored_bolt_fields_require_shared_dispatch_review",
+        "missing_exact_configuration_geometry",
+        "unreviewed_dispatch_symbol:FireLogic.FireLogicType:fltSingleFire"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:7ad9e8aedea68626ea7742c7ec69bf034976bd5a465cf3244568862589473b68",
+      "descriptor_digest": "701dd5db3efa12a0ae9be5c56db9cbf6f2f18c7e376ad88eb37aeea2c239fb8c",
+      "asset": "MG3k",
+      "path": "Objects/Weapons/Handheld/BU_lmg_MG3/UPG_lmg_MG3_Scoped",
+      "class": "wcLmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:7bb572fe1e1efe193567d5aae46d68fe9c7865cabe79c95897cc3ca228f1f4e2",
+      "descriptor_digest": "2695de08dbfb4877d1c0ed41d45cd71e8072a8c5b60f316fc7d20514357f24d5",
+      "asset": "PKM",
+      "path": "Objects/Weapons/Handheld/RU_lmg_PKM/RU_lmg_PKM",
+      "class": "wcLmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:7cb01a7dbb019b587085e89663a7e303a0cebd4eaab01656a87765b9ce66265a",
+      "descriptor_digest": "e709f4794b278af91ffeaa6a65fc83c759dc8acb8d81ddf1ec0af97db274465b",
+      "asset": "M416",
+      "path": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Scoped",
+      "class": "wcAssault",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 1,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [
+        "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh"
+      ],
+      "geometry_source_profiles": [
+        "1d94ea9b80839bfdcb7f4da4f4a3fefbe556a9ec7a5daf6500faed93c8c7cc71"
+      ],
+      "fixture_candidate": true,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "current_native_configuration_and_three_branch_cycle_receipts",
+        "headset_acceptance",
+        "main_grip_and_support_native_proof",
+        "native_magazine_render_and_empty_control_acceptance",
+        "native_mesh_skin_and_rig_identity"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:7e41a821f675656317c4fd3441a7449bd3c8256a7d63cfe9036b9474e748742e",
+      "descriptor_digest": "aee06acc2e5e7106b107d9f8105cddefbbfd54203cc0d1ffa565f70df105a6ec",
+      "asset": "SCAR",
+      "path": "Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL_Kobra",
+      "class": "wcSmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:7fddce96ae850bb34700694a6ca212e9bd2b8eaf3164f68ea6532c7b90103bfe",
+      "descriptor_digest": "2c7db5ddffa18a2ba2774b537546f0eb34d033bb1121f03344a3cef312679286",
+      "asset": "AEK971_sp_k",
+      "path": "Objects/Weapons/Handheld/RU_rgl_AEK971/SP_rgl_AEK971_Kobra",
+      "class": "wcAssault",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:821e8a22afc26c4a6164fe5f6690eb089ef40e9cd811cdaa5360207bc7bac8eb",
+      "descriptor_digest": "c12a4ee9f52cad052a1442076f2528448d2a0dc77efeafb5270f55ad9c6d0870",
+      "asset": "AN94_sp_s",
+      "path": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/SP_rif_AN94_Scoped",
+      "class": "wcAssault",
+      "dispatch_compatible": false,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry",
+        "unreviewed_dispatch_symbol:FireLogic.FireLogicType:fltSingleFire"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:82fc18dabdc421e1b89e62c7394a6364723e5a2397f9fc3131f931041d218f38",
+      "descriptor_digest": "29ee6a4cdd1bc395cb82367e00cd1c4ff0368a92f03f6cca7898c3b4f7703f92",
+      "asset": "G3",
+      "path": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Assault_Kobra",
+      "class": "wcAssault",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:8878947ae5d05fcc4f3177d557e860934fab375091be2445ac1f1bfb1ea97d29",
+      "descriptor_digest": "1e5a774911e8b51a017ecc6fffc99aea1c3f60358658fa841b07a8aa967ea958",
+      "asset": "Garand",
+      "path": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Assault",
+      "class": "wcAssault",
+      "dispatch_compatible": false,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.5,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "authored_bolt_fields_require_shared_dispatch_review",
+        "missing_exact_configuration_geometry",
+        "unreviewed_dispatch_symbol:FireLogic.FireLogicType:fltSingleFire"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:8bdb6ad412066df74e28ef0076eb2046388e51bd5494399f2efe08e84e811d91",
+      "descriptor_digest": "95b738d323bb2cc51db27be52a19c6c7c9b36df471c0b90a30c4e60f0f172efb",
+      "asset": "MG3",
+      "path": "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3",
+      "class": "wcLmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:8c4fb1fb10d63744bf8d1cd8537ee557d4151722f7befe180b50006964c7e4cd",
+      "descriptor_digest": "7b793719af41ef0ef2447cb324f319e2d2a91ae77ddcc5dcaa7f2fbeea9ee0c7",
+      "asset": "MG3_sp_k",
+      "path": "Objects/Weapons/Handheld/BU_lmg_MG3/SP_lmg_MG3_Kobra",
+      "class": "wcLmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:9541e55a524bc896fb311579681393e3e8399913e23eaa12f49304c1b77a08bd",
+      "descriptor_digest": "0a90b171035b96e43948d7f6107dbcbbb7ddb1e8ecd54649eb6665f75485966a",
+      "asset": "MG3k",
+      "path": "Objects/Weapons/Handheld/BU_lmg_MG3/UPG_lmg_MG3_Kobra",
+      "class": "wcLmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:95a6bb217edbfd7ba14c2db5e485d6cd56e6d6e6a3bbf5888d319b0be6c92438",
+      "descriptor_digest": "45b0c2a9583f50588da68415370e9f4967440761964a8cd56e7ee739146681aa",
+      "asset": "XM8_sp_s",
+      "path": "Objects/Weapons/Handheld/US_rgl_XM8/SP_rgl_XM8_Scoped",
+      "class": "wcAssault",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": true,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:98da580d445de61d73ac71da960a19f846bc4d9b0956ed99c0db3ddc412eb158",
+      "descriptor_digest": "3d137b1fbf5627fc990aff365d8af87074d270f12045c4c02fff4efb7d06e2bd",
+      "asset": "SCAR",
+      "path": "Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL",
+      "class": "wcSmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:98ec12b73655a4883c20dbe4e9f73ec1b1eed3b61efa50bb9630cd9421cf88f0",
+      "descriptor_digest": "00c1e4398d18f3f29ac5af6e878fe16705ebd6e2e171c5cc902f8507f1366c95",
+      "asset": "XM8_sp",
+      "path": "Objects/Weapons/Handheld/US_rgl_XM8/SP_rgl_XM8",
+      "class": "wcAssault",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:9904586f0ef31a801eb21d2c7e837cdb53182fc785e1c7d7b46c22fcde8013c9",
+      "descriptor_digest": "1bcc29e7659fe74b8cc7ec6263b234aafb534ee0ad7122e4c3de20c5a69bca64",
+      "asset": "QJU88",
+      "path": "Objects/Weapons/Handheld/MEC_lmg_QJY88/MEC_lmg_QJY88_Scoped",
+      "class": "wcLmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:9c0e1d6ef3b018b3449d16b5835731f0473e504a20d0c330c5db747d0ce94882",
+      "descriptor_digest": "3648e76e0438b903eb33253ada7e230aa39430bd72ef841bce5396052ff2ab08",
+      "asset": "AKS74u",
+      "path": "Objects/Weapons/Handheld/RU_rif_AKS74u/RU_rif_AKS74U_Scoped",
+      "class": "wcSmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 1,
+      "native_bolt_values": {
+        "boltDelay": 0.5,
+        "boltTime": 1.0,
+        "holdBoltUntilFireRelease": true,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [
+        "Objects/Weapons/Handheld/RU_rif_AKS74u/RU_rif_AKS74u_Mesh"
+      ],
+      "geometry_source_profiles": [
+        "da21d512223d42e479d7699ff33df6b6b571b2a678058d15232ba5871045a8bb"
+      ],
+      "fixture_candidate": true,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "current_native_configuration_and_three_branch_cycle_receipts",
+        "headset_acceptance",
+        "main_grip_and_support_native_proof",
+        "native_magazine_render_and_empty_control_acceptance",
+        "native_mesh_skin_and_rig_identity"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:9d2a5b73b2d86db27ba73aecc04884756c7c41f7866312d06c6542b4985c7d78",
+      "descriptor_digest": "6a46b57c25cafc76184a2cfdd21812db8d33e75fabe9b5b3ea10239d33a238b9",
+      "asset": "MG3",
+      "path": "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Scoped",
+      "class": "wcLmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:9d997f5df5985bfb26a4219f09b93c220e875c5cd22659d07c4830b22b071a49",
+      "descriptor_digest": "7e295a3ab4d14a6436939c83b6d0b7c0cfb8c6ab2906d84dfd0fe85c4ccd351c",
+      "asset": "M16",
+      "path": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2",
+      "class": "wcAssault",
+      "dispatch_compatible": false,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry",
+        "unreviewed_dispatch_symbol:FireLogic.FireLogicType:fltSingleFire"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:9eb61decaaf8f1bafd230fe090ec624a0c4ba7d71298ae2e3d18b6845eec0774",
+      "descriptor_digest": "c5522196bc7ba1fdf909eb2455345207dbcc6938f953bd868a0eef140242ff35",
+      "asset": "F2000",
+      "path": "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000",
+      "class": "wcAssault",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:a0cd7ccfe9530e190af53ca7a74bc47cf775e4ff3fe8797c9785075776c81553",
+      "descriptor_digest": "eb99584c5649b0745259fadf59de7562c0d58f75a87e9538f82691b779249b5b",
+      "asset": "UMP",
+      "path": "Objects/Weapons/Handheld/BU_smg_UMP/BU_smg_UMP_Kobra",
+      "class": "wcSmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.5,
+        "boltTime": 1.0,
+        "holdBoltUntilFireRelease": true,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:a4f45301ab39a17b5c246787eff61d1b26e2eff7ed57a4c934f6390caad3a1df",
+      "descriptor_digest": "e801a3c6d44d9fad7c70479121f8169f873365140dbe0009e7e4ef53b405e06d",
+      "asset": "M416",
+      "path": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Kobra",
+      "class": "wcAssault",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 1,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [
+        "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh"
+      ],
+      "geometry_source_profiles": [
+        "bb2a1f2ee49efc2d04adca08149072262de2a8056db94daf92aa8f92b73f2cde"
+      ],
+      "fixture_candidate": true,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "current_native_configuration_and_three_branch_cycle_receipts",
+        "headset_acceptance",
+        "main_grip_and_support_native_proof",
+        "native_magazine_render_and_empty_control_acceptance",
+        "native_mesh_skin_and_rig_identity"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:a7abb6254e1f53a5bc9f5ecae8481be94380dd72b6f05bb379bb5c5c83056133",
+      "descriptor_digest": "acf60ac2e3b6cb1ae436a96195e0fb4aef76888ba7d1d922300179409657d80d",
+      "asset": "G3",
+      "path": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3",
+      "class": "wcAssault",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:acd7d5fc6757741ecab81865e03711bbc4ae54ae1cad8a87b292989edea8c5d6",
+      "descriptor_digest": "e756014f4cdac048e3ed456c4bb96a671fa10b7e0a4653a1eecd4ffd924061ac",
+      "asset": "M16",
+      "path": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Scoped",
+      "class": "wcAssault",
+      "dispatch_compatible": false,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry",
+        "unreviewed_dispatch_symbol:FireLogic.FireLogicType:fltSingleFire"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:ae252d073136692f790560e7d4403808fa35821233e692d3a7cbcb9db55850f1",
+      "descriptor_digest": "cec932f340b478987079843337cdf087616bae2f15287c5cf7a696173639bf54",
+      "asset": "M1A1 Thompson",
+      "path": "Objects/Weapons/Handheld/Beach/Thompson/Thompson",
+      "class": "wcSmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.5,
+        "boltTime": 1.0,
+        "holdBoltUntilFireRelease": true,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:b023be93b5c35527c70749c9d0c5392f44518f76e1bb764a61e55c9f2b67b299",
+      "descriptor_digest": "b69e246dbf2abd3eb18111aa80e39dee0e5d8faa0f86ca394f0af89284734e29",
+      "asset": "MP412",
+      "path": "Objects/Weapons/Handheld/MEC_hg_MP412rex/MEC_hg_MP412rex",
+      "class": "wcSmg",
+      "dispatch_compatible": false,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry",
+        "unreviewed_dispatch_symbol:FireLogic.FireLogicType:fltSingleFire"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:b07b718776133f97bff4adc7e67750282a271d9b8dc102870b641f160dbe61d7",
+      "descriptor_digest": "c98a9bbca22295f6a256a73106ea0e3654d392d8d8e42e7dc96c192d5df874c8",
+      "asset": "MG3_sp",
+      "path": "Objects/Weapons/Handheld/BU_lmg_MG3/SP_lmg_MG3",
+      "class": "wcLmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:b31aebfb1fa3bd62b92e52020688c97af446cc1e60aa41559ac9e3dc8e59f575",
+      "descriptor_digest": "c73120ea25cc6946e03ecaa270c96fe81fc89bf3878d9269a03f60131406c2f7",
+      "asset": "SCAR_sp",
+      "path": "Objects/Weapons/Handheld/UL_rif_FNSCARL/SP_rif_FNSCARL",
+      "class": "wcSmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:b5d5869089005d9252bd83368918d18444ae3e3ff8fa125513fba1d3b87684d5",
+      "descriptor_digest": "956dfe180a6fb2828596436d342e41b94b6f405d0ba480f7c5f399a723dca55c",
+      "asset": "M9",
+      "path": "Objects/Weapons/Handheld/US_hg_M9Beretta/US_hg_M9Beretta",
+      "class": "wcSmg",
+      "dispatch_compatible": false,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry",
+        "unreviewed_dispatch_symbol:FireLogic.FireLogicType:fltSingleFire"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:b62512a8b03688d4d94af267154496ca57934e0d620e170c9cf2255bbd3dfc32",
+      "descriptor_digest": "a83a3c5288dee2d4f5c7d1ddc7033380f5e935cc15574d23f29e43a27a047a17",
+      "asset": "F2000_sp",
+      "path": "Objects/Weapons/Handheld/BU_rif_F2000/SP_rif_F2000",
+      "class": "wcAssault",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:b91bfb494c8eb5341c48ed73ecc9be8057fb576fb1247ddd900c18b846c339da",
+      "descriptor_digest": "a0265dbb8c84d6f331d02f82f8740f6a3e812636984953f18319d8ab039cef08",
+      "asset": "M60_sp_s",
+      "path": "Objects/Weapons/Handheld/BU_lmg_M60/SP_lmg_M60_Scope",
+      "class": "wcLmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:bbdf00b7b5c94d833086717bb9346d028b3a05c185d7385c29789674d09b4dc2",
+      "descriptor_digest": "9ae27a565772942901686d9dcf8a5d7158e69512056e78b7b35906844aacafd8",
+      "asset": "SCAR",
+      "path": "Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL_Scoped",
+      "class": "wcSmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:bf703cc6c898cb9c9acadf69f7c91693973213997ed3e40941e34c182d61c1cb",
+      "descriptor_digest": "7fe4f80d5f880ab0f8abff61fc61b593d120106d8537c537f7bd6bb8a5e2b3d4",
+      "asset": "XM8",
+      "path": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Kobra",
+      "class": "wcAssault",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:c03287be1d2c19ecf5e56f62721282876919a4d87ef237d2cdf5bdc0acd0ffb3",
+      "descriptor_digest": "abac4ca3208fe701d7add2d9dc01d07c6489ae7476f24819cb2dfb612e0b40ec",
+      "asset": "MG36",
+      "path": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36",
+      "class": "wcLmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 1,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [
+        "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Mesh"
+      ],
+      "geometry_source_profiles": [
+        "1b8b8f439cd2332d67d2377dd0a7fc94859c1030ba5853cd5408641c290d3bbd"
+      ],
+      "fixture_candidate": true,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "current_native_configuration_and_three_branch_cycle_receipts",
+        "headset_acceptance",
+        "main_grip_and_support_native_proof",
+        "native_magazine_render_and_empty_control_acceptance",
+        "native_mesh_skin_and_rig_identity"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:c1a74a0b4d07ae614a7c3a48455c0eb361714404263f88327da8ec710a2dd4d9",
+      "descriptor_digest": "8775a60a29e8bc0f073726be12c82a5e2fd772365843c44fce8ef3460c7657d3",
+      "asset": "PKM",
+      "path": "Objects/Weapons/Handheld/RU_lmg_PKM/RU_lmg_PKM_Scoped",
+      "class": "wcLmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:c28491138d60417a2682b2b136e16eb15443dbb8492941dc9dd00f79cb81128b",
+      "descriptor_digest": "a735a2655948dea436bfe51cf0281c84a2ccd2891ce14333015b8818dfb1fd0a",
+      "asset": "AUG",
+      "path": "Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG_Scoped",
+      "class": "wcAssault",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:c2cd76f9fd1d95b0c0c3e01ef20da54a47b95ecbd8dc388c9a5e1ec61bb61c3d",
+      "descriptor_digest": "7d81121646d6d00bc956fc4632e1851ffae48a842b26dfa9b90f1d9b9b9379df",
+      "asset": "Garand",
+      "path": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand",
+      "class": "wcAssault",
+      "dispatch_compatible": false,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.5,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "authored_bolt_fields_require_shared_dispatch_review",
+        "missing_exact_configuration_geometry",
+        "unreviewed_dispatch_symbol:FireLogic.FireLogicType:fltSingleFire"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:c350d350a994fe9fb6a7ee3fc46b70b419f37e1a809359b325bd9cfa326d1414",
+      "descriptor_digest": "9045d9e9a075ddc6bc512947aa9f7ab0e35dc6bfc0284a26816d91955a30705f",
+      "asset": "PP2000",
+      "path": "Objects/Weapons/Handheld/BU_smg_PP2000/BU_smg_PP2000_Scoped",
+      "class": "wcSmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.5,
+        "boltTime": 1.0,
+        "holdBoltUntilFireRelease": true,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:c3c22709659be930c6dc7a831b565ded925abe64ccb68b7f68f9ebc5ad5c567e",
+      "descriptor_digest": "924645a13919d598e325db8cac9cadff5e9996171cb87bf765d39de39e9a9fd0",
+      "asset": "SCAR_sp_s",
+      "path": "Objects/Weapons/Handheld/UL_rif_FNSCARL/SP_rif_FNSCARL_Scoped",
+      "class": "wcSmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:c607fff81b24f15b148070723fccedf2649d4fb685bbd1ddc815d2b825852203",
+      "descriptor_digest": "ba2ff561a9d4cc54833efe64d2cc24af9e102b63b6c9ac1a6a9ddb4981726929",
+      "asset": "9A91",
+      "path": "Objects/Weapons/Handheld/MEC_rif_9A91/MEC_rif_9A91_Scoped",
+      "class": "wcSmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 1,
+      "native_bolt_values": {
+        "boltDelay": 0.5,
+        "boltTime": 1.0,
+        "holdBoltUntilFireRelease": true,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [
+        "Objects/Weapons/Handheld/MEC_rif_9A91/MEC_rif_9A91_Mesh"
+      ],
+      "geometry_source_profiles": [
+        "832837fac9289b8a176eebf29136374d1e675a703d88d2f8cce120c1e02c96bb"
+      ],
+      "fixture_candidate": true,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "current_native_configuration_and_three_branch_cycle_receipts",
+        "headset_acceptance",
+        "main_grip_and_support_native_proof",
+        "native_magazine_render_and_empty_control_acceptance",
+        "native_mesh_skin_and_rig_identity"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:caafb2a8249c50b118b4cc3244308afb99c696df61bf5668963eee6183b4326b",
+      "descriptor_digest": "ec5b65e992082fd7e3b8e3d3ee4679860df158812a933e3ec11013d6cb217779",
+      "asset": "G3",
+      "path": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Scoped",
+      "class": "wcAssault",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:cd3e5189d7339655017c75ce9f051d082b0e45b51aef04e49580a3ca4e7ca422",
+      "descriptor_digest": "2dd4fc8c8e6561e2f1d997cc4399ed1f6a68a64749775c35dc4fe2f6d6ac09ba",
+      "asset": "M16k",
+      "path": "Objects/Weapons/Handheld/BU_rif_M16A2/UPG_rif_M16A2_Scoped",
+      "class": "wcAssault",
+      "dispatch_compatible": false,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry",
+        "unreviewed_dispatch_symbol:FireLogic.FireLogicType:fltSingleFire"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:d2ee3e2255136b7eba413c440457b5be5da8dbbc8434fccd93593cc1ee476af9",
+      "descriptor_digest": "3428684ecfe0760031b57f7030a6a6088a3e763b6cbf5982f70173e90cb7676c",
+      "asset": "G3",
+      "path": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Assault_Scoped",
+      "class": "wcAssault",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:d3d4611105dd3a73998b6a3b1c9a07b81cbca4ee7a4c3388b1391038cce84eb1",
+      "descriptor_digest": "785d0e4357bc6d6b82f690f77dccad214219dad423f287a169f114306497b794",
+      "asset": "UMPk",
+      "path": "Objects/Weapons/Handheld/BU_smg_UMP/UPG_smg_UMP",
+      "class": "wcSmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.5,
+        "boltTime": 1.0,
+        "holdBoltUntilFireRelease": true,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:d5192f6f7e611fddcf8af969a5a4fb4d656788a6086f8f1d82c07939c809aa69",
+      "descriptor_digest": "f123651287aa4a8cb65e0a775a795bea04c5ce38e05b508be2b46e9e6d092ea2",
+      "asset": "PP2000",
+      "path": "Objects/Weapons/Handheld/BU_smg_PP2000/BU_smg_PP2000",
+      "class": "wcSmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.5,
+        "boltTime": 1.0,
+        "holdBoltUntilFireRelease": true,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:d7526d6782bf33307bf98410184fe08f6480ceff5377df4047c7c917e60a21b9",
+      "descriptor_digest": "e7dc22e698882a00b7dff7b05a57a405d6d8f00d1ee188ef201b45901eb7db2e",
+      "asset": "AKS74u",
+      "path": "Objects/Weapons/Handheld/RU_rif_AKS74u/RU_rif_AKS74u_Kobra",
+      "class": "wcSmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 1,
+      "native_bolt_values": {
+        "boltDelay": 0.5,
+        "boltTime": 1.0,
+        "holdBoltUntilFireRelease": true,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [
+        "Objects/Weapons/Handheld/RU_rif_AKS74u/RU_rif_AKS74u_Mesh"
+      ],
+      "geometry_source_profiles": [
+        "69c441ba9d9848eae95f6005ec1f19ec05268bb8293e06a2420c6aa38d99909a"
+      ],
+      "fixture_candidate": true,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "current_native_configuration_and_three_branch_cycle_receipts",
+        "headset_acceptance",
+        "main_grip_and_support_native_proof",
+        "native_magazine_render_and_empty_control_acceptance",
+        "native_mesh_skin_and_rig_identity"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:d75314cc75e395e6d0eafa3ea8fd67f254f751534848b21b29986d30b94939e7",
+      "descriptor_digest": "861f5754604d1e0ce99fbf8644a67f9b5c7c64f8501d2974799cf34f0848c8f5",
+      "asset": "F2000_sp_k",
+      "path": "Objects/Weapons/Handheld/BU_rif_F2000/SP_rif_F2000_Kobra",
+      "class": "wcAssault",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:d803188a5f4f780d2a338a532f61a49c1825af07d2ea85d592916b7008d314ed",
+      "descriptor_digest": "b85a35ea2fcfef19f8e546dcc2e22e55a806974d7521c40e6f60b07083a0161b",
+      "asset": "UMP",
+      "path": "Objects/Weapons/Handheld/BU_smg_UMP/BU_smg_UMP_Scoped",
+      "class": "wcSmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.5,
+        "boltTime": 1.0,
+        "holdBoltUntilFireRelease": true,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:d80febf74cb2b158690b9e89c0ac3670fbb41deb3c973534e9dcb9bac87f92a0",
+      "descriptor_digest": "d4563139fddcef4fcaf8dc3d0b955a44c23b5e188bad8a5b8dcc31320f9c5c08",
+      "asset": "M60",
+      "path": "Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60_Scoped",
+      "class": "wcLmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:d8c12ee5fdb3d7010d506a6d35ccb7a4659b922df4b91086d53a3720c02574e7",
+      "descriptor_digest": "525af5240a80c30e8c8b289d8a894bec8978dfec009df47532a5a6e2f0fe5e39",
+      "asset": "UMP",
+      "path": "Objects/Weapons/Handheld/BU_smg_UMP/BU_smg_UMP",
+      "class": "wcSmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.5,
+        "boltTime": 1.0,
+        "holdBoltUntilFireRelease": true,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:dbd63631c3bbd5e3825c9fbef9d478b5b2f0f35cf2cce2b9978d95bd0533952b",
+      "descriptor_digest": "e1dab96ceeb8417717eb5547bb84c1f6fea1375bf8aaa5f86e787c8e770abead",
+      "asset": "F2000",
+      "path": "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Kobra",
+      "class": "wcAssault",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:dc48ab96e370e3bd6b60d02fd97e6d3d2597f8290320692ffd9b7b7cf8e63565",
+      "descriptor_digest": "d98a7423295caf7e7b1a668b80ff8e9120e5a13f39b1058c5ed6e0ed365e6a84",
+      "asset": "UZI",
+      "path": "Objects/Weapons/Handheld/BU_smg_IMIUZI/BU_smg_IMIUZI",
+      "class": "wcSmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 1,
+      "native_bolt_values": {
+        "boltDelay": 0.5,
+        "boltTime": 1.0,
+        "holdBoltUntilFireRelease": true,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [
+        "Objects/Weapons/Handheld/BU_smg_IMIUZI/BU_smg_IMIUZI_Mesh"
+      ],
+      "geometry_source_profiles": [
+        "a0b6b8549bb8be8db2af5ed37f7f8b97f0bd66a48a469742638f0f111241a1e4"
+      ],
+      "fixture_candidate": true,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "current_native_configuration_and_three_branch_cycle_receipts",
+        "headset_acceptance",
+        "main_grip_and_support_native_proof",
+        "native_magazine_render_and_empty_control_acceptance",
+        "native_mesh_skin_and_rig_identity"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:de895a89d3dfd4d24e665efa52fbe7c3c840db75e7df0d5e1becd95886534659",
+      "descriptor_digest": "ef134a49b04b447e18d89c1fb8cd0676d7d40e219555004fd1046111e3337d16",
+      "asset": "XM8C",
+      "path": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Kobra",
+      "class": "wcSmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 1,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [
+        "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Mesh"
+      ],
+      "geometry_source_profiles": [
+        "ac1f96f6020b9664d82446b259aa37c42a1a1febfb2952e03d9856d3e220af17"
+      ],
+      "fixture_candidate": true,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "current_native_configuration_and_three_branch_cycle_receipts",
+        "headset_acceptance",
+        "main_grip_and_support_native_proof",
+        "native_magazine_render_and_empty_control_acceptance",
+        "native_mesh_skin_and_rig_identity"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:df92ffe911bb808043e97940248688ac618cd39cad1c6b27770853381c9831a3",
+      "descriptor_digest": "1dd674865210588fad3c65f9508204caf627012b6175c65de527f55083e47933",
+      "asset": "AEK971",
+      "path": "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971",
+      "class": "wcAssault",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:e0eb4b211e7e45faa687c0998e8c55d1dd849a75e8fbb01379afc8be01b56862",
+      "descriptor_digest": "a41b1cc9989872459ea546ce31399b814998c464de576107e1ed9d6617c50b7a",
+      "asset": "9A91",
+      "path": "Objects/Weapons/Handheld/MEC_rif_9A91/MEC_rif_9A91_Kobra",
+      "class": "wcSmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 1,
+      "native_bolt_values": {
+        "boltDelay": 0.5,
+        "boltTime": 1.0,
+        "holdBoltUntilFireRelease": true,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [
+        "Objects/Weapons/Handheld/MEC_rif_9A91/MEC_rif_9A91_Mesh"
+      ],
+      "geometry_source_profiles": [
+        "8f64889fab2c54f837e686a503ae11308c4354d9e7a2cf37502456f24133162f"
+      ],
+      "fixture_candidate": true,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "current_native_configuration_and_three_branch_cycle_receipts",
+        "headset_acceptance",
+        "main_grip_and_support_native_proof",
+        "native_magazine_render_and_empty_control_acceptance",
+        "native_mesh_skin_and_rig_identity"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:e23e559810ac92ba9fbea095c4f39fe279f2ad3234d813dbd0b2e368c72a3329",
+      "descriptor_digest": "58996f6a50cdccc03c50090854f60d617927b1ccd0aa640369c9f546916b6ebd",
+      "asset": "M1A1 Thompson",
+      "path": "Objects/Weapons/Handheld/Beach/Thompson/Thompson_Assault",
+      "class": "wcSmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.5,
+        "boltTime": 1.0,
+        "holdBoltUntilFireRelease": true,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:e274022c3fe42e2cac5bb7767f978f695ac5ce8b99e666c1c5bf89119c64572c",
+      "descriptor_digest": "b2456755518854bcbffb7f53dc43d19fee8423c98ab9b40c6b113f3317956a02",
+      "asset": "XM8",
+      "path": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8",
+      "class": "wcAssault",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:ed61f93b9649b451711a26dd989887a838f50836a2f127e3c3e8323dfced5e88",
+      "descriptor_digest": "e5a3a71e3374a00a5853fe6cb5b30eefe7a48fd00ebec259145e815b1c67f2b9",
+      "asset": "QJU88",
+      "path": "Objects/Weapons/Handheld/MEC_lmg_QJY88/MEC_lmg_QJY88_Kobra",
+      "class": "wcLmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:f1b468bfcba270dd085492a5093190267a2aec160df2ead87308947af5a760ef",
+      "descriptor_digest": "33716da2e23372141bfbbfb6deedceee81ba78defc801e6416cbe2e301915053",
+      "asset": "AN94_sp_k",
+      "path": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/SP_rif_AN94_Kobra",
+      "class": "wcAssault",
+      "dispatch_compatible": false,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry",
+        "unreviewed_dispatch_symbol:FireLogic.FireLogicType:fltSingleFire"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:f4e111ff381076ced20b749da2cfd26b442cd23bdfedf34577a4e9567904b37b",
+      "descriptor_digest": "98d56d8977fde3879a44dd04d3539acea33f23c738a667e38649179d4cff1fa1",
+      "asset": "AEK971_sp",
+      "path": "Objects/Weapons/Handheld/RU_rgl_AEK971/SP_rgl_AEK971",
+      "class": "wcAssault",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": true,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:f65dbc64c1432ca431614a1f9793cb1d1a1811db628f0c5cb3f0a6db3be967dd",
+      "descriptor_digest": "3b03962cbe75cc23107fc803fe63266e2a964a0dc07f42a358ffd70950112a29",
+      "asset": "M249",
+      "path": "Objects/Weapons/Handheld/UL_lmg_FNMinimi/UL_lmg_FNMinimi_Scoped",
+      "class": "wcLmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:f684d060c479c89c9d961fef083e541224e14c7a11371fdc2b41776fe73343ab",
+      "descriptor_digest": "c8d1702eddc33cc6cec78899c028b0900c38a97b97ffbe1b6bbf358b3de2a6da",
+      "asset": "MG36",
+      "path": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Scope",
+      "class": "wcLmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 1,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [
+        "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Mesh"
+      ],
+      "geometry_source_profiles": [
+        "d6b15a51a33527e048a015f08f627986a20e66a66de368c331edeaf01b0eb6af"
+      ],
+      "fixture_candidate": true,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "current_native_configuration_and_three_branch_cycle_receipts",
+        "headset_acceptance",
+        "main_grip_and_support_native_proof",
+        "native_magazine_render_and_empty_control_acceptance",
+        "native_mesh_skin_and_rig_identity"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:f82cc516cde83c58df2ce57e6f7c84bbdbc8b643630b96c9a9ea8a14592bb324",
+      "descriptor_digest": "529f0b745a0b4ede187dbfdb021f554b1b1e660b800570bc8d8eacab9e72b3fa",
+      "asset": "XM8C",
+      "path": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c",
+      "class": "wcSmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 1,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [
+        "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Mesh"
+      ],
+      "geometry_source_profiles": [
+        "70eb387197620ec034205fd1b6621d76d0d0e8a0d54d90e0f036d1eaa6f51b82"
+      ],
+      "fixture_candidate": true,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "current_native_configuration_and_three_branch_cycle_receipts",
+        "headset_acceptance",
+        "main_grip_and_support_native_proof",
+        "native_magazine_render_and_empty_control_acceptance",
+        "native_mesh_skin_and_rig_identity"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:fb95624902ba5bab0cc29643cb0eecdf5cc22210e53c36ea80c1c03e4c1513a0",
+      "descriptor_digest": "fecbb42d6170cd4ed92f15b5df011cafde87e795f83c9cba3510fc50b2e4cb72",
+      "asset": "AKS74u_sp_k",
+      "path": "Objects/Weapons/Handheld/RU_rif_AKS74u/SP_rif_AKS74u_Kobra",
+      "class": "wcSmg",
+      "dispatch_compatible": true,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.5,
+        "boltTime": 1.0,
+        "holdBoltUntilFireRelease": true,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry"
+      ]
+    },
+    {
+      "key": "bc2:magazine-descriptor:ffe465b3e39d55fe94d0eb5aa7f9d6c5265c0ce412130589a6632190ba8567b6",
+      "descriptor_digest": "3ddddbca09e7f655f731d5f3348b91c10ed1bf321eeb0f577c0a6f6c0f323144",
+      "asset": "AN94",
+      "path": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Kobra",
+      "class": "wcAssault",
+      "dispatch_compatible": false,
+      "measured_geometry_profiles": 0,
+      "native_bolt_values": {
+        "boltDelay": 0.0,
+        "boltTime": 0.0,
+        "holdBoltUntilFireRelease": false,
+        "holdBoltUntilZoomRelease": false
+      },
+      "geometry_meshes": [],
+      "geometry_source_profiles": [],
+      "fixture_candidate": false,
+      "existing_baseline_reference": false,
+      "new_runtime_admission": false,
+      "missing_admission": [
+        "missing_exact_configuration_geometry",
+        "unreviewed_dispatch_symbol:FireLogic.FireLogicType:fltSingleFire"
+      ]
+    }
+  ],
+  "geometry_excluded": [],
+  "summary": {
+    "descriptors": 112,
+    "measured_names": 7,
+    "dispatch_compatible_paths": 87,
+    "exact_geometry_paths": 21,
+    "fixture_rows": 21,
+    "fixture_names": [
+      "9A91",
+      "AKS74u",
+      "M416",
+      "MG36",
+      "UZI",
+      "XM8 LMG",
+      "XM8C"
+    ],
+    "new_runtime_admissions": 0
+  },
+  "scope": {
+    "supplied_measured_names": [
+      "9A91",
+      "AKS74u",
+      "M416",
+      "MG36",
+      "UZI",
+      "XM8 LMG",
+      "XM8C"
+    ],
+    "geometry_join": "exact configuration resource/hash/GUID and original binding digest; selected mesh/LOD/rig/skeleton/static-pose verified",
+    "selected_build_enrollment": "not_observed",
+    "native_acceptance": "not_observed",
+    "existing_baseline_exact_references": [
+      {
+        "asset": "XM8_sp_s",
+        "path": "Objects/Weapons/Handheld/US_rgl_XM8/SP_rgl_XM8_Scoped",
+        "key": "bc2:magazine-descriptor:95a6bb217edbfd7ba14c2db5e485d6cd56e6d6e6a3bbf5888d319b0be6c92438"
+      },
+      {
+        "asset": "AEK971_sp",
+        "path": "Objects/Weapons/Handheld/RU_rgl_AEK971/SP_rgl_AEK971",
+        "key": "bc2:magazine-descriptor:f4e111ff381076ced20b749da2cfd26b442cd23bdfedf34577a4e9567904b37b"
+      }
+    ],
+    "missing_geometry_means": "Exact geometry/backlink unavailable in supplied metadata; not a project-wide evidence verdict.",
+    "outside_scope": "Accepted AEK/scoped-XM8 geometry and separate belt-fed authored mechanism evidence are not supplied to this batch."
+  },
+  "limits": [
+    "Fixture native receipts are mocked; passing portable behavior does not prove native execution.",
+    "Authored bolt data is preserved and remains deferred; no automatic normalization.",
+    "Measured magazine contact is independent of ordinary weapon grip/support admission.",
+    "Content-hashed metadata backlinks do not establish complete immutable-package resource closure or native acceptance."
+  ]
+}

@@ -1,6 +1,10 @@
 #include "Test.h"
+#include "Bc2NativeCycleService.h"
+#include "Bc2ReloadConfigDescriptor.h"
+#include "NativeProbeConfig.h"
 #include "Bc2BodyInventory.h"
 #include "Bc2BodyHolster.h"
+#include "Bc2BoltInputStartup.h"
 #include "Bc2BodyHolsterLifecycle.h"
 #include "fvr/interaction/ControllerInput.h"
 #include "Bc2InputBinding.h"
@@ -568,7 +572,32 @@ int OrdinaryOwnSlotStowIsExplicitlyUnavailable(){
     CHECK(text.find("\"kind\":4")!=std::string::npos);
     return 0;
 }
+int ResourceLifetimeBinding(){
+ Run r;r.Tick();const auto a=r.adapter.ResourceBinding(r.s.owner,r.s.hand.nowNs);CHECK(a);
+ const auto other=r.adapter.AssignedSlot(Fixture::b);CHECK(other);
+ CHECK(a->context.resource.weaponGeneration==r.adapter.AssignedSlot(Fixture::a)->item.generation);
+ CHECK(!r.adapter.ResourceBinding(r.s.owner,a->deadlineNs));
+ r.s.reloadBusy=true; // native lifetime remains observed while interaction is suspended
+ for(unsigned cycle=0;cycle<32;++cycle){
+  const auto slot=cycle%2?0u:1u;r.f.Select(slot);r.s.owner=r.f.owner;r.Advance();r.Tick();
+  const auto binding=r.adapter.ResourceBinding(r.s.owner,r.s.hand.nowNs);CHECK(binding);
+  CHECK(binding->context.resource.weaponGeneration==(slot?other->item.generation:a->context.resource.weaponGeneration));
+  CHECK(binding->context.equipGeneration==r.s.owner.equipGeneration);
+  CHECK(!r.adapter.Display(r.s.hand.nowNs)); // display is not the identity authority
+ }
+ ++r.s.owner.space;r.Advance();r.Tick();const auto recentered=r.adapter.ResourceBinding(r.s.owner,r.s.hand.nowNs);CHECK(recentered);
+ CHECK(recentered->context.resource==a->context.resource&&recentered->context.space!=a->context.space);
+ auto oldOwner=r.s.owner;--oldOwner.space;CHECK(!r.adapter.ResourceBinding(oldOwner,r.s.hand.nowNs));
+ r.f.Word(Fixture::a+4,Fixture::bd);r.Advance();r.Tick();
+ const auto replacement=r.adapter.ResourceBinding(r.s.owner,r.s.hand.nowNs);CHECK(replacement);
+ CHECK(replacement->context.resource.weaponGeneration!=a->context.resource.weaponGeneration&&replacement->data==Fixture::bd);
+ r.s.hand.nowNs+=151000000;r.Tick();const auto gap=r.adapter.ResourceBinding(r.s.owner,r.s.hand.nowNs);CHECK(gap);
+ CHECK(gap->context.resource.weaponGeneration!=replacement->context.resource.weaponGeneration);
+ r.f.denyMap=true;r.s.hand.nowNs+=10000000;r.Tick();CHECK(!r.adapter.ResourceBinding(r.s.owner,r.s.hand.nowNs));
+ return 0;
+}
 int SharedLifecycleBoundary(){
+ CHECK(ResourceLifetimeBinding()==0);
  for(unsigned reason=0;reason<5;++reason){Run r;r.Tick();const auto slot=r.adapter.AssignedSlot(Fixture::a);CHECK(slot);
   r.Advance();if(reason==0)r.s.reloadBusy=true;else if(reason==1)r.s.cancel=true;else if(reason==2)r.s.hand.tracked[1]=false;
   else if(reason==3)r.s.interaction=bc2::BodyInteractionState::Suspended;else r.s.input.focused=false;
@@ -622,7 +651,82 @@ int SharedLifecycleBoundary(){
 }
 
 #include "Bc2PlayerHolsterChecks.inc"
-int main(){if(PlayerRepeatedHolsterRecovery())return 1;if(SharedLifecycleBoundary())return 1;if(OrdinaryOwnSlotStowIsExplicitlyUnavailable())return 1;if(ActualCarriedCrossDrawRetirement()||CarriedCrossDrawIdentityFailures()||CarriedCrossDrawAuthorityFailures()||HolsterTransitionJournalKeepsLatest())return 1;if(ShoulderEarlyDirectSwap()||ShoulderDirectSwapFailures()||ShoulderSwapRereadAndTimeout())return 1;if(ShoulderEarlyGrabAndReleaseStow()||ShoulderMissKeepsUsableGun()||ShoulderReleaseExactContinuity()||ShoulderFailedHideRecoversHeld()||ShoulderEmptyApproachInputBreaks())return 1;if(HeldApproachBoundaries()||ScrollThenActualHeldApproach())return 1;if(ActualUnsupportedExchangeRetirement())return 1;if(ScopedXm8OrdinaryAutoStowDraw()||ScopedXm8OrdinaryAdmissionNegatives()||ScopedXm8OrdinaryKeepsSlotsAcrossDraw())return 1;
+
+int NativePumpDebtProtectsActualShoulderAndResourceLifetime(){
+ using namespace bc2;using namespace interaction;
+ const auto config=[] {const auto& d=SpasReloadDescriptor;ReloadObservedConfig c;
+  c.weaponData=0xb0000;c.firingData=0xc0000;c.primaryFire=0xd0000;c.ammoAddress=c.primaryFire+0x170;
+  std::copy(d.assetName.begin(),d.assetName.end(),c.assetName.begin());std::copy(d.assetPath.begin(),d.assetPath.end(),c.assetPath.begin());
+  const auto& v=d.values;c.fireLogicType=v.fireLogicType;c.reloadType=v.reloadType;c.fireInputAction=v.fireInputAction;c.reloadInputAction=v.reloadInputAction;
+  c.baseCapacity=v.baseCapacity;c.numberOfMagazines=v.numberOfMagazines;c.reloadDelay=v.reloadDelay;c.reloadTime=v.reloadTime;
+  c.reloadThreshold=v.reloadThreshold;c.postReloadTime=v.postReloadTime;c.boltDelay=v.boltDelay;c.boltTime=v.boltTime;
+  c.holdBoltUntilFireRelease=v.holdBoltUntilFireRelease;c.holdBoltUntilZoomRelease=v.holdBoltUntilZoomRelease;return c;}();
+ for(bool debt:{false,true}){HolsterRun h;auto& r=h.r;Bc2NativeCycleService pump;
+  const auto binding=r.adapter.ResourceBinding(r.s.owner,r.s.hand.nowNs);CHECK(binding);
+  const auto slot=r.adapter.AssignedSlot(Fixture::a);CHECK(slot);
+  const auto gun=r.hands.Current(InteractionHand::Right);CHECK(gun);
+  Bc2NativeCycleControl control{r.s.owner,r.s.hand,r.s.gun,{991,99},{},true};CHECK(pump.Control(control));
+  if(debt){ReloadHoldInput source;source.identity.owner=r.s.owner;source.identity.firing={0x30000,0x31000,0x32000};
+   source.identity.serverPlayer=0x33000;source.identity.serverSoldier=0x34000;source.identity.serverItem=0x35000;
+   source.config=config;source.verified=true;source.branch=0;source.nowNs=source.contextObservedNs=r.s.hand.nowNs;
+   source.leaseDeadlineNs=source.nowNs+100000000;source.context.deltaSeconds=.016f;source.context.reloadTimeMultiplier=1;
+   source.context.flags24Through28[0]=true;
+   for(unsigned b=0;b<3;++b){auto& v=source.branches[b];v.address=source.identity.firing[b];v.wrapperOffset=b==0?0x3c:b==1?0x40:0x10;
+    v.currentState=v.nextState=2;v.previousState=1;v.loaded=8;v.reserve=24;source.capacities[b]=8;}
+   const auto decision=pump.Evaluate(source,1);CHECK(decision.tracked&&!decision.hold);
+   ReloadFlowRecord shot;shot.id=1;shot.entry.nativeInvocation=shot.entry.update=shot.entry.nativeUpdate=1;
+   shot.entry.kind=ReloadFlowEvent::Update;shot.entry.thread=1;shot.entry.depth=1;shot.entry.caller=0x6e90b0;shot.entry.context=0x36000;
+   shot.entry.nowNs=source.nowNs;shot.entry.contextCopied=true;float dt=.016f,multiplier=1;
+   std::memcpy(shot.entry.copiedContext.data()+0x18,&dt,4);std::memcpy(shot.entry.copiedContext.data()+0x20,&multiplier,4);
+   shot.entry.copiedContext[0x24]=std::byte{1};auto& before=shot.entry.boundary;before.owner=r.s.owner;
+   before.snapshotSequence=1;before.firing=source.identity.firing[0];before.wrapperOffset=0x3c;before.current=before.next=2;
+   before.previous=1;before.loaded=8;before.reserve=24;shot.exit.boundary=before;
+   shot.exit.boundary->loaded=7;shot.exit.boundary->current=6;shot.exit.boundary->previous=5;shot.exit.boundary->next=7;
+   shot.exit.boundary->timer=.7f;shot.exit.boundary->flagsA8=2;shot.exit.thread=1;shot.exit.nowNs=source.nowNs+100;
+   shot.exit.contextCopied=true;shot.exit.copiedContext=shot.entry.copiedContext;shot.finished=shot.identityRetained=true;
+   pump.Finish(decision,shot);CHECK(pump.View(source.nowNs+100).phase==Bc2NativeCyclePhase::ShotObserved);
+  }
+  r.s.reloadBusy=pump.View(r.s.hand.nowNs+100).blocksFire;CHECK(r.s.reloadBusy==debt);h.Step(1);
+  if(debt){CHECK(h.holster.Phase()==BodyHolsterPhase::Held&&!h.out.visibility.enabled&&!h.out.inventory.request);
+   CHECK(r.hands.Current(InteractionHand::Right)->token==gun->token&&!pump.YieldForReload());}
+  else CHECK(h.holster.Phase()==BodyHolsterPhase::HidePending&&h.out.inventory.request);
+  CHECK(r.adapter.AssignedSlot(Fixture::a)==slot);
+  const auto retained=r.adapter.ResourceBinding(r.s.owner,r.s.hand.nowNs);CHECK(retained&&retained->context.resource==binding->context.resource);
+ }
+ std::puts("Pump/body composition: idle stow and exact native debt suspension passed");return 0;
+}
+int OrdinaryBoltStartupPreservesOriginalRigPublication(){
+ using namespace bc2;using namespace interaction;
+ for(bool reproduceMissingVisibility:{true,false}){
+  Run r;Bc2BodyHolster holster;Bc2BoltInputStartup startup;std::shared_ptr<BodyHolsterProbeSample> published;
+  r.s.input.head=r.s.input.referenceHead={};
+  for(auto& hand:r.s.input.hands){hand.active=Components;hand.gripTracked=hand.aimTracked=true;}
+  r.s.input.hands[1].grip.position={.15f,-.1f,-.2f};
+  // No accepted holster/selected-mesh profile. Real inventory and existing
+  // shared GunHold still follow TickHolster's ordinary visible-weapon route.
+  for(unsigned tick=0;tick<650&&!startup.Ready()&&!startup.Failed();++tick){
+   r.Advance(1);auto input=r.s.input;
+   if(published)startup.Prepare(input,r.s.owner,published,r.s.hand.nowNs);
+   r.s.input=input;BodyHolsterSample command;command.nativeOwner=r.s.owner;command.hand=r.s.hand;
+   command.nativeTick=tick+1;command.gun=r.s.gun;
+   CHECK(!command.ordinary&&!command.selected);
+   const auto outcome=r.adapter.TickHolster(r.f.Memory(),r.s,command,holster,r.hands,r.intent);
+   CHECK(!command.ordinary&&holster.Phase()==BodyHolsterPhase::Held&&!outcome.freeRight&&!outcome.visibility.enabled);
+   auto sample=std::make_shared<BodyHolsterProbeSample>();CaptureBodyHolsterProbeSource(*sample,r.s);
+   sample->sampledNs=r.s.hand.nowNs;sample->nativeTick=command.nativeTick;sample->phase=holster.Phase();sample->outcome=outcome;
+   sample->selectedSlot=r.adapter.AssignedSlot(r.s.owner.weapon);sample->right=r.hands.Current(InteractionHand::Right);
+   sample->left=r.hands.Current(InteractionHand::Left);
+   CHECK(sample->ordinaryVisible&&sample->ordinaryVisible->observedNs==r.s.visible->observedNs&&sample->ordinaryVisible->deadlineNs==r.s.visible->deadlineNs);
+   CHECK(sample->right&&sample->right->token.kind==HandClaimKind::GunHold&&sample->right->inputSequence==r.s.hand.sequence);
+   if(reproduceMissingVisibility)sample->ordinaryVisible=command.ordinary; // Exact former Gameplay publication.
+   published=std::move(sample);CHECK(input.hands[1].trigger==0);
+  }
+  CHECK(reproduceMissingVisibility?startup.Failed()&&!startup.Ready():startup.Ready()&&!startup.Failed());
+ }
+ std::puts("Ordinary bolt startup publication: former pass-by-value source reproduces timeout; original visible rig and real GunHold succeed");
+ return 0;
+}
+int main(){if(OrdinaryBoltStartupPreservesOriginalRigPublication())return 1;if(NativePumpDebtProtectsActualShoulderAndResourceLifetime())return 1;if(PlayerRepeatedHolsterRecovery())return 1;if(SharedLifecycleBoundary())return 1;if(OrdinaryOwnSlotStowIsExplicitlyUnavailable())return 1;if(ActualCarriedCrossDrawRetirement()||CarriedCrossDrawIdentityFailures()||CarriedCrossDrawAuthorityFailures()||HolsterTransitionJournalKeepsLatest())return 1;if(ShoulderEarlyDirectSwap()||ShoulderDirectSwapFailures()||ShoulderSwapRereadAndTimeout())return 1;if(ShoulderEarlyGrabAndReleaseStow()||ShoulderMissKeepsUsableGun()||ShoulderReleaseExactContinuity()||ShoulderFailedHideRecoversHeld()||ShoulderEmptyApproachInputBreaks())return 1;if(HeldApproachBoundaries()||ScrollThenActualHeldApproach())return 1;if(ActualUnsupportedExchangeRetirement())return 1;if(ScopedXm8OrdinaryAutoStowDraw()||ScopedXm8OrdinaryAdmissionNegatives()||ScopedXm8OrdinaryKeepsSlotsAcrossDraw())return 1;
     std::puts("Ordinary scoped XM8: automatic stow/draw/fire continuity, six admission negatives, cross-draw slots passed");
     if(GameplayInputRearmComposition()||GameplayInputRearmRejectsUnregisteredOrActiveFailure()||GameplayInvalidationJournalIsBounded())return 1;std::puts("Gameplay pause rearm: 3 groups passed (actual policy/input/consumer)");if(UnevaluatedHolsterRetiresChangedLifetimes()||UnevaluatedHolsterDoesNotEraseCurrentSlots()||HeldFireMissingPresentationKeepsOnlyMetadata()||HeldFireSlotContinuity())return 1;std::puts("Held firing slot continuity: positive and five negative variants passed");
     if(DefaultStowTests())return 1;

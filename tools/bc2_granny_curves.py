@@ -10,7 +10,8 @@ import struct
 
 IDENTITY={3:(0.,0.,0.),4:(0.,0.,0.,1.),9:(1.,0.,0.,0.,1.,0.,0.,0.,1.)}
 FORMATS={'DaK32fC32f':1,'DaIdentity':2,'D3Constant32f':4,'D4Constant32f':5,
-         'D4nK16uC15u':8,'D4nK8uC7u':9,'D3K16uC16u':10,'D3K8uC8u':11,'D3I1K8uC8u':18}
+         'D4nK16uC15u':8,'D4nK8uC7u':9,'D3K16uC16u':10,'D3K8uC8u':11,
+         'D3I1K16uC16u':17,'D3I1K8uC8u':18}
 SCALE=(1.4142135,.70710677,.35355338,.35355338,.35355338,.17677669,.17677669,.17677669)
 OFFSET=(-.70710677,-.35355338,-.53033006,-.17677669,.17677669,-.17677669,-.088388346,0.)
 
@@ -68,7 +69,9 @@ def decode(curve,dimension):
         if len(packed)!=len(knots)*dimension:raise ValueError('Float curve count')
         controls=[tuple(packed[n:n+dimension]) for n in range(0,len(packed),dimension)]
     else:
-        packed=numbers(data['KnotsControls']);component_count=1 if form=='D3I1K8uC8u' else 3
+        # Both I1 vector formats store one scalar for all three affine axes.
+        # The first half holds knots; the second holds 8- or 16-bit scalars.
+        packed=numbers(data['KnotsControls']);component_count=1 if form in ('D3I1K16uC16u','D3I1K8uC8u') else 3
         if not packed or len(packed)%(component_count+1):raise ValueError('Quantized curve count')
         n=len(packed)//(component_count+1)
         bits=16 if '16u' in form else 8

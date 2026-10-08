@@ -22,7 +22,10 @@ constexpr bool ValidMagazineReloadSession(std::uint32_t mode,std::uint32_t flags
     // No host session, fire/optic/sight/other synthetic fixtures are admitted.
     constexpr auto combined=physical|0x10000000u;
     if(mode==7||mode==8)return duration==60000&&(flags&combined)==combined&&(flags&0xffu)==9&&!(flags&~(combined|0x200u));
-    if(mode==4||mode==5||mode==6)return duration==30000&&(flags&physical)==physical&&(flags&0xffu)==9&&!(flags&~(physical|0x200u));
+    // Bounded hand diagnostics may include the real chest inventory/renderer.
+    // This enables no additional scripted input or unlimited host session.
+    if(mode==4||mode==5)return duration==30000&&(flags&physical)==physical&&(flags&0xffu)==9&&!(flags&~(physical|0x200u|0x10000000u));
+    if(mode==6)return duration==30000&&(flags&physical)==physical&&(flags&0xffu)==9&&!(flags&~(physical|0x200u));
     // Normal physical mode can coexist with sight/body interactions. Continuous
     // sessions carry the host PID in the duration union; no synthetic probes.
     constexpr auto normal=physical|0x200u|0x400u|0x200000u|0x10000000u;

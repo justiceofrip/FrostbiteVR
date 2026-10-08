@@ -1,0 +1,219 @@
+{
+  "schema": 1,
+  "name": "cycle243-native-recovery",
+  "status": "frozen-default-off-not-live-tested",
+  "depends_on": {
+    "manifest": "G:\\Unity\\VRMMO\\bc2vr-recovery\\cycle242-physical-recovery-candidate\\manifest.json",
+    "sha256": "8568bb941310ea7a0883ebe3db17e401b446e478fcfc8caf9e3b8d168d2a8dbc"
+  },
+  "files": [
+    {
+      "path": "include/fvr/interaction/WeaponCycleConvergence.h",
+      "original_sha256": "bacba4ad1ff0cc01e93a0e0cdbb1d908d12fd45c1f4df5f1186bb5496414d4a0",
+      "original_base": "adapter242",
+      "candidate_sha256": "d0b8342ed68f0b03f23b5c516f872134c7f27672728143450292e4f967cb26fe"
+    },
+    {
+      "path": "src/games/bc2/Bc2BoltPlayerCustody.cpp",
+      "original_sha256": "1e6f01574e1c6da039d47a22293eb0a8c9ac21d9c233267d21c3c1b5b153fe32",
+      "original_base": "main243-244",
+      "candidate_sha256": "178e8eeabe75cc3c750de1b4a8726eed49d4444950a3922fb7efcb5017a93c22"
+    },
+    {
+      "path": "src/games/bc2/Bc2BoltPlayerCustody.h",
+      "original_sha256": "177c9fe0eb0b088d1b1a3e5f2dcba28b1e006e85411baf1cc70a7df7695e83f8",
+      "original_base": "main243-244",
+      "candidate_sha256": "0f7b5a720bbd23c4527746434373b9605c93cb1d2826340bda84dbd38be8aed4"
+    },
+    {
+      "path": "src/games/bc2/Bc2Gameplay.cpp",
+      "original_sha256": "bfd9e4773508a7c7a77edc21790bd62445860fba8ef2f180b924331e61963747",
+      "original_base": "main243-244",
+      "candidate_sha256": "4bcb04a7ccf8214dd75932d3c28161fe7c02ec258ff575032c48ab47b332b770"
+    },
+    {
+      "path": "src/games/bc2/Bc2NativeCycleEvidence.cpp",
+      "original_sha256": "911f3d213bbf82761fdcdbb143e3f205f1bf5c5e234553da1c0495034e5e8246",
+      "original_base": "main243-244",
+      "candidate_sha256": "63837a712019d2ce03c5c8bb63a155178ec2d1b809d4014409abb0074d1f7f0d"
+    },
+    {
+      "path": "src/games/bc2/Bc2NativeCycleEvidence.h",
+      "original_sha256": "e99388179a265eca2f1099e433645addb1563f965226e0c597986c6ca5e6819e",
+      "original_base": "main243-244",
+      "candidate_sha256": "c3680250f2c4353520969bf120838b8f397e01f08828c37c3eabe278f9b8a755"
+    },
+    {
+      "path": "src/games/bc2/Bc2NativeCycleInputGuard.h",
+      "original_sha256": null,
+      "original_base": "new",
+      "candidate_sha256": "d7e6338f76bae7b8e5bc76cd5e307c4cef053c66190a235413405395c00b4a67"
+    },
+    {
+      "path": "src/games/bc2/Bc2NativeCycleRecovery.cpp",
+      "original_sha256": "d9b6b52873f0fe148ed18b9bd4c5f51b5dc4ee95a37a663b19db7c37a88fe371",
+      "original_base": "adapter242",
+      "candidate_sha256": "4e31c86a989b4c51439a0dd279ab60c190368dbc9c4fae26904e3960a57be336"
+    },
+    {
+      "path": "src/games/bc2/Bc2NativeCycleRecovery.h",
+      "original_sha256": "f71677c6074e9355ccf21bdb680391668afd03dd6fc969725e35de6fda728c43",
+      "original_base": "adapter242",
+      "candidate_sha256": "548332e234266cbf1b0d3e328a2664bcfa5bc0957bf2cdfeb08eb02f74201931"
+    },
+    {
+      "path": "src/games/bc2/Bc2NativeCycleRecoveryState.h",
+      "original_sha256": null,
+      "original_base": "new",
+      "candidate_sha256": "7ab4210b383908b862a02e6ee7201ed4b79ab8425bb19ddc02332badbdd26bd9"
+    },
+    {
+      "path": "src/games/bc2/Bc2NativeCycleService.cpp",
+      "original_sha256": "48354b4d2e0ede759cd789fcee430a0020247ad287c4004b21f5e5e7988e6a05",
+      "original_base": "main243-244",
+      "candidate_sha256": "1a14d0152547fdb50b41d0b44b4cb8230f4579cff779d1f94bbdb9ccfbe36592"
+    },
+    {
+      "path": "src/games/bc2/Bc2NativeCycleService.h",
+      "original_sha256": "0cc98e1e5638c9c26964688852419e791e448086674aa878d5d22979fc41f500",
+      "original_base": "main243-244",
+      "candidate_sha256": "695bed983ccc830e0478e8b4e5ee1a30879ab99af52edafff6cd2b6fffb13767"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadFlowRuntime.cpp",
+      "original_sha256": "abbf9d3d875ccd7c8c576f4028fce9ffcf0f6509c760098bddeec4f0c24738b4",
+      "original_base": "main243-244",
+      "candidate_sha256": "2f69a84e1194a01baa98e7decd37fbf0b0ddaee6587a30da27c0cc981ad7a613"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadFlowRuntime.h",
+      "original_sha256": "d3876f93b9b4ddcbb509de12e9d485109689785437aead6281e5e10ae9ba906d",
+      "original_base": "main243-244",
+      "candidate_sha256": "9a3ac49a01bc73d90feec831c1c119fad0f0da2cb4ac593a5240bc16238afcdc"
+    },
+    {
+      "path": "tests/Bc2BoltPlayerCustodyTests.cpp",
+      "original_sha256": "fc8fcb57e1e2a6331efd724e83f6f9eddd539d8b682db19bf21d74cf47da5585",
+      "original_base": "main243-244",
+      "candidate_sha256": "2768dc66ff8e74fd62d2d0d7ee0f713430ffabd3c34a39fe2659cd4257983e66"
+    },
+    {
+      "path": "tests/Bc2NativeCycleInputGuardTests.cpp",
+      "original_sha256": null,
+      "original_base": "new",
+      "candidate_sha256": "9aa2e0855a6ff92ef0362719c47045e5487a2b8599d9b516913c94707c1926a2"
+    },
+    {
+      "path": "tests/Bc2NativeCycleRecoveryServiceTests.cpp",
+      "original_sha256": null,
+      "original_base": "new",
+      "candidate_sha256": "c55d928c6182faf7c89e8a8a2e819557212db114b7d73c0f4e3fcb7dcfc4f937"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "INTEGRATION.txt",
+      "sha256": "301f3bfa06fd2d99413a959d5a723108870198901b06da3f8fe75502b550a55b"
+    },
+    {
+      "path": "recovery-native.patch",
+      "sha256": "ff64d4d3feaa1151e35cc94009774ac61214d265e827b344d52b3846adf164ef"
+    },
+    {
+      "path": "probe_native_input_guard.py",
+      "sha256": "7fa03d3231bb8c2cde246c43aa7948945bdcc5719ddeca34a505ca7c0efd2660"
+    },
+    {
+      "path": "probe_native_input_guard_callbacks.py",
+      "sha256": "d16c3a34d61d3428e89a232e4a54c40d5e71d2ef1878df093545e0cf4b1e0157"
+    },
+    {
+      "path": "native-input-guard-02.json",
+      "sha256": "2cfc0b42880e5e34934af78d27f2a27443fbe5626d52f9b22de27f3cf64c685a"
+    },
+    {
+      "path": "native-input-guard-03.json",
+      "sha256": "72895608a4225f28356642bba7fa796a768a5f3459496bfb32393791d96e9188"
+    },
+    {
+      "path": "x86/native-recovery.exe",
+      "sha256": "f228d87654e331e7bc315933ce1c9cd66fda4b0e6154610f02a0a6cbc5d12e73"
+    },
+    {
+      "path": "x86/legacy-service.exe",
+      "sha256": "9ae47df3152a010f28684fce6d4ecedea547c53db410f460d2934474374e62db"
+    },
+    {
+      "path": "x86/legacy-service.log",
+      "sha256": "97dc6b0ab7503f29a01fe99fb1e2c2589083d047fc5a16b090a9dc2566cd0665"
+    },
+    {
+      "path": "x86/bolt-player-recovery.exe",
+      "sha256": "c0fcac0dcdd54c7f2da17f1da1f50a0cd835dfccdc53d7dcd7cb240fc02eaf3e"
+    },
+    {
+      "path": "x86/bolt-player-recovery.log",
+      "sha256": "74479f038bb0e8191988d5cae025089a6cc45ba60d5474f557460aa317a8a3ad"
+    },
+    {
+      "path": "x86/runtime-build.log",
+      "sha256": "4326f65019e7a4d30665c1dd53900e0a5bc60f06fb6cbcfd9e7e752d4de516cf"
+    },
+    {
+      "path": "x86/Bc2PhysicalPumpTests.log",
+      "sha256": "c3de068bdb605f1379fb6efd87cc06a8c03beed1302318b1f845e99e00f7c48b"
+    },
+    {
+      "path": "x86/Bc2PhysicalPumpRecoveryTests.log",
+      "sha256": "03be7fa21a8766b05a0a3c8394f9be8021f99ba550f8ed650669d4254820cdd4"
+    },
+    {
+      "path": "x86/Bc2PhysicalBoltTests.log",
+      "sha256": "d972edc042dd1c52683712c5f8dc52fdb5289213a5e5aac30500aa06fbe9e3c6"
+    },
+    {
+      "path": "x86/Bc2PhysicalBoltRecoveryTests.log",
+      "sha256": "87888bfdc3313d2f722140c00948b60d7d205103671966c4abf0495d90a9d9dd"
+    },
+    {
+      "path": "x64/native-recovery.exe",
+      "sha256": "0e0eff4a910d393a8be602dbfeef2428497a2bb605943e2733cb797da8ec932b"
+    },
+    {
+      "path": "x64/legacy-service.exe",
+      "sha256": "b395036d06bd398345a055220c43fb2a352b4eeb979f8508f6fb61a330714c31"
+    },
+    {
+      "path": "x64/legacy-service.log",
+      "sha256": "97dc6b0ab7503f29a01fe99fb1e2c2589083d047fc5a16b090a9dc2566cd0665"
+    },
+    {
+      "path": "x64/bolt-player-recovery.exe",
+      "sha256": "bd0ba5bbb2e54570ecf3cf64b01337822e4d1936a6fd577149303617662bc348"
+    },
+    {
+      "path": "x64/bolt-player-recovery.log",
+      "sha256": "74479f038bb0e8191988d5cae025089a6cc45ba60d5474f557460aa317a8a3ad"
+    },
+    {
+      "path": "x64/runtime-build.log",
+      "sha256": "b7cb307f835189cd216bdb980761fdcdc9d0ddb6dfba6f19465771719c9a4faf"
+    },
+    {
+      "path": "x64/Bc2PhysicalPumpTests.log",
+      "sha256": "c3de068bdb605f1379fb6efd87cc06a8c03beed1302318b1f845e99e00f7c48b"
+    },
+    {
+      "path": "x64/Bc2PhysicalPumpRecoveryTests.log",
+      "sha256": "03be7fa21a8766b05a0a3c8394f9be8021f99ba550f8ed650669d4254820cdd4"
+    },
+    {
+      "path": "x64/Bc2PhysicalBoltTests.log",
+      "sha256": "d972edc042dd1c52683712c5f8dc52fdb5289213a5e5aac30500aa06fbe9e3c6"
+    },
+    {
+      "path": "x64/Bc2PhysicalBoltRecoveryTests.log",
+      "sha256": "87888bfdc3313d2f722140c00948b60d7d205103671966c4abf0495d90a9d9dd"
+    }
+  ]
+}

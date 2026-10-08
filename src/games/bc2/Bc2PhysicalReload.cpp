@@ -55,6 +55,9 @@ void Bc2PhysicalReload::Journal(unsigned event,std::int64_t now,unsigned reason,
 void Bc2PhysicalReload::Cancel(const interaction::HandInteractionSample& safety,interaction::HandInteraction& hands,
     PhysicalReloadCancelReason reason,unsigned sourceFlags)noexcept {
     if(!enabled_)return;
+    if(reason==PhysicalReloadCancelReason::FullMagazine||reason==PhysicalReloadCancelReason::EmptyReserve||
+       reason==PhysicalReloadCancelReason::Retiring)supportReturn_.CancelUnlessSettled();
+    else supportReturn_.Reset();
     if(active_){ObserveCancellation(safety,reason,sourceFlags);api_.cancel(api_.context);active_=false;retiring_=true;retirementDrained_=false;blocksCurrent_=true;++cancelled_;Journal(5,safety.nowNs,unsigned(reason));}
     bridge_.Cancel();supply_.Cancel(safety,hands);manual_.Reset();insertion_.Update({});
     pulseUntil_=0;lease_.reset();acknowledgement_.reset();completion_.reset();pendingTargets_.reset();deferredSeat_.reset();guidedPreview_.reset();
@@ -155,6 +158,7 @@ PhysicalReloadResult Bc2PhysicalReload::Tick(const PhysicalReloadSample& supplie
     const bool safe=gunSafe&&s.weapon.id==s.nativeOwner.weapon;
     diagnosticSafe=safe;
     const bool cancelInput=!safe||s.cancel||s.asset!=SpasReloadAsset;
+    supportReturn_.Observe(s.input,gun,cancelInput,hands.Current(InteractionHand::Left).has_value());
     if(cancelInput){cancel(!safe?CancelReason::UnsafeInput:s.cancel?CancelReason::RequestedInput:CancelReason::WrongAsset);out.tracking.preview.reset();}
     if(active_&&(native_.owner!=s.nativeOwner||physical_!=s.input.owner))cancel(CancelReason::OwnerChanged);
     const auto reserveObservation=api_.reserveObserved?api_.reserveObserved(api_.context):ReloadReserveObservation{ReloadObservationResult::Available,api_.reserve(api_.context)};
@@ -197,6 +201,32 @@ PhysicalReloadResult Bc2PhysicalReload::Tick(const PhysicalReloadSample& supplie
         }
 
         const bool pending=bridge_.Phase()==Bc2ReloadBridgePhase::Pending&&supply_.Pending().has_value();
+        if(pending&&active_&&!retiring_&&safe&&!s.cancel&&s.asset==SpasReloadAsset&&
+           native_.owner==s.nativeOwner&&physical_==s.input.owner&&bridge_.Owners().native==native_&&
+           bridge_.Owners().cycle==cycle_&&s.meshes&&
+           FindSelectedMesh(*s.meshes,s.nativeOwner,SelectedMeshKind::Spas12,s.input.nowNs)){
+            // One original firing copy may transfer before its peers. The
+            // submitted transaction outlives old observation leases, but cannot
+            // spend credit or renew presentation until a coherent result returns.
+            auto waiting=Interaction(s,nullptr,{},s.input.nowNs);
+            waiting.insertion.weaponClaim=*gun;waiting.selectedMeshIdentityVerified=true;
+            const auto retained=bridge_.ObservePendingInput(waiting);
+            if(retained.phase!=Bc2ReloadBridgePhase::Pending){cancel(CancelReason::BridgeCancelled);return out;}
+            const auto keep=Keep({native_,cycle_,s.input.sequence,s.input.observedNs,s.input.deadlineNs,true},s.input.nowNs);
+            if(keep==ReloadKeepAliveResult::Rejected){cancel(CancelReason::KeepAliveRejected);return out;}
+            s.input.nowNs=Now(s.input.nowNs);waiting.insertion.nowNs=s.input.nowNs;
+            if(keep==ReloadKeepAliveResult::Deferred&&!ReloadKeepAliveDeferredWithinOriginalDeadline(keep,s.input.nowNs,acceptedControlDeadline_)){
+                cancel(CancelReason::KeepAliveRejected);return out;}
+            if(bridge_.ObservePendingInput(waiting).phase!=Bc2ReloadBridgePhase::Pending){cancel(CancelReason::BridgeCancelled);return out;}
+            ManualReloadSample safety;const auto& owner=s.input.owner;
+            safety.owner={owner.actor,owner.actorGeneration,s.weapon.id,owner.equipGeneration,owner.space};
+            safety.sequence=s.input.sequence;safety.nowNs=s.input.nowNs;safety.focused=s.input.focused;
+            safety.tracked=s.input.tracked[0]&&s.input.tracked[1];safety.bindingsVerified=true;
+            safety.neutral=!s.gripPressed;
+            const auto observed=manual_.Update(safety);
+            if(observed.cancelled){cancel(CancelReason::ManualPolicyCancelled);return out;}
+            pendingTargets_.reset();guidedPreview_.reset();return out;
+        }
         const bool held=lease_&&lease_->nativeBindingVerified&&lease_->allThreeHeld;
         const bool original=active_&&!retiring_&&safe&&!s.cancel&&s.asset==SpasReloadAsset&&
             native_.owner==s.nativeOwner&&physical_==s.input.owner&&s.meshes&&
@@ -206,7 +236,7 @@ PhysicalReloadResult Bc2PhysicalReload::Tick(const PhysicalReloadSample& supplie
             lease_&&lease_->identity==native_&&lease_->cycle==cycle_&&
             Fresh(lease_->observedNs,lease_->deadlineNs,s.input.nowNs)&&
             ReloadKeepAliveDeferredWithinOriginalDeadline(ReloadKeepAliveResult::Deferred,s.input.nowNs,acceptedControlDeadline_);
-        if(original&&(pending||held)){out.ammoOwnsHand=bool(supply_.Held());return out;}
+        if(original&&held){out.ammoOwnsHand=bool(supply_.Held());return out;}
         reserve_.reset();cancel(CancelReason::MissingSource);return out;
     }
     if(api_.reserveObserved&&reserveObservation.result==ReloadObservationResult::Rejected)reserve_.reset();
@@ -276,6 +306,8 @@ PhysicalReloadResult Bc2PhysicalReload::Tick(const PhysicalReloadSample& supplie
     if(completion_&&acknowledgement_&&lease_&&reserve_&&supply_.Pending()){
         if(const auto receipt=SpasAmmoSupplyReceipt(*supply_.Pending(),bridge_.Owners(),*completion_,*acknowledgement_,*lease_,*reserve_,s.input.nowNs)){
             if(supply_.Resolve(s.input,hands,*receipt).accepted){physicalAck=*completion_->acknowledged;++completed_;Journal(4,s.input.nowNs);
+                supportReturn_.Observe(s.input,gun,cancelInput,hands.Current(InteractionHand::Left).has_value());
+                supportReturn_.Complete(receipt->reservation.request,receipt->observedNs);
                 Feedback(out,interaction::FeedbackKind::ReloadApplied,s.input);
                 // Receipt retains the ORIGINAL reservation after Resolve clears it.
                 bool recorded=false;
@@ -363,7 +395,8 @@ PhysicalReloadResult Bc2PhysicalReload::Tick(const PhysicalReloadSample& supplie
         // Seating transfers presentation to the gun immediately. Native ammo
         // stays pending until its exact completion receipt; the free hand can
         // already return to the fore-end during the remaining stock animation.
-        supply_.ReleaseSubmitted(s.input,hands,*reservation);
+        if(supply_.ReleaseSubmitted(s.input,hands,*reservation)&&!hands.Current(InteractionHand::Left))
+            supportReturn_.Arm(reservation->request,s.input,*gun);
         ++submitted_;Journal(3,s.input.nowNs);
         if(transactionCount_<transactions_.size()){
             auto& t=transactions_[transactionCount_++];t.reservation=*reservation;t.before=prepared.submit->heldLease;

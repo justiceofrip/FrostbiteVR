@@ -84,11 +84,11 @@ int ShellCommonBoundaryAndExplicitManualCycle(){
     c.inputFlags=4;c.reloadRequested=true;CHECK(!ManualEmptyFamilyStepEligible(s,policy.Family(),config,policy.Phase(),c,T+1));return 0;
 }
 int ArmingIntentUsesRealScopedOverride(){
-    for(unsigned family=0;family<3;++family)for(unsigned branch=0;branch<3;++branch)for(unsigned flags:{0u,1u,4u,5u}){
+    for(float delta:{.005f,.0596221f,.1f})for(unsigned family=0;family<3;++family)for(unsigned branch=0;branch<3;++branch)for(unsigned flags:{0u,1u,4u,5u}){
         const auto& d=family==0?SpasReloadDescriptor:family==1?Xm8ReloadDescriptor:AekMagazineNativeProfile.configuration;
         const auto f=family==0?ReloadNativeFamily::SpasTube:ReloadNativeFamily::Xm8Magazine;
         auto s=Step(branch);s.profile=family==2?NativeMagazineProfileId::AuthoredAek:NativeMagazineProfileId::ScopedXm8;
-        auto c=Context();c.inputFlags=flags;c.fireRequested=bool(flags&1);c.reloadRequested=bool(flags&4);
+        auto c=Context();c.deltaSeconds=delta;c.inputFlags=flags;c.fireRequested=bool(flags&1);c.reloadRequested=bool(flags&4);
         const bool controlled=ManualEmptyFamilyStepEligible(s,f,Config(d),ReloadRequestCyclePhase::Arming,c,T+1);
         CHECK(controlled==!(flags&4));
         struct Call {unsigned byte=0,next=2,calls=0,flags=0;};Call call;call.flags=flags;

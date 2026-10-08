@@ -10,6 +10,8 @@ constexpr std::int64_t now=1000000000;
 ReloadStateOwner owner{0x10000,0x20000,0x30000,0x40000,1,2,3};
 SelectedMeshesSnapshot Snapshot(const VisibilityDescriptor& d){
     SelectedMeshesSnapshot s;s.owner=owner;s.sequence=1;s.observedNs=now-1000000;s.deadlineNs=now+100000000;
+    if(!d.configurationPath.empty()){s.configurationPathVerified=true;
+        std::memcpy(s.configurationPath.data(),d.configurationPath.data(),d.configurationPath.size());}
     s.weaponData=0x50000;s.meshTypeInfo=0x60000;s.stateTypeInfo=0x70000;s.stateCount=1;
     s.soleConfiguredArray=s.states[0].array=0x80000;s.states[0].count=std::uint8_t(d.meshes.size());
     std::memcpy(s.weaponName.data(),d.asset.data(),d.asset.size());

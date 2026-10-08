@@ -1,0 +1,68 @@
+{
+  "candidate": "resource-sampled-path242",
+  "main_modified": false,
+  "native_admitted": false,
+  "files": [
+    {
+      "path": "CMakeLists.txt",
+      "base_sha256": "842a9a2f11a4ac00087af9e60162f3eaabacb124c71ffaf2fed8a051db413e7c",
+      "payload_sha256": "f6cac7046cabe74396f91cf843055b484d7652ec93f63b3e5cc8dcc7d38ba621"
+    },
+    {
+      "path": "include/fvr/interaction/DetachableMagazine.h",
+      "base_sha256": "db665b180af86c6dff144acae71150d16373ac1c8642a2dc32c5131c2b2a2bd8",
+      "payload_sha256": "d209a04f353980aae2f64323c4df1793a80c42b83aab09a0e53ba687a1195fcb"
+    },
+    {
+      "path": "include/fvr/interaction/ReloadInsertion.h",
+      "base_sha256": "762d6b81244640e97c8ec1e7ac479561da4ee268755a4be76f69ccf7d00354a5",
+      "payload_sha256": "f25b7379a9190f19bb9c08b23cd22812f4725ed0c01d0e357526001361c45c92"
+    },
+    {
+      "path": "profiles/experimental-pistol-sampled242/exact-geometry.json",
+      "base_sha256": null,
+      "payload_sha256": "418e0aaa795788095b7a6eaed7565f915b13ffbc58795da3d23fde2fbce12437"
+    },
+    {
+      "path": "profiles/experimental-pistol-sampled242/PistolGeometry.h",
+      "base_sha256": null,
+      "payload_sha256": "b48c96afd1ade4268399dc6e6f8f392af8646e02add04df2d6c43eac26047d85"
+    },
+    {
+      "path": "src/games/bc2/Bc2MagazineGeometryProfile.cpp",
+      "base_sha256": "4c724cf1abb318a1e96190c1bea3fe18d1ae73d31b8febadc86255c80f6ad77e",
+      "payload_sha256": "ac80347128da913812d873e72931842b4be531b21b6e1fe282b27c1193fa7a01"
+    },
+    {
+      "path": "src/interaction/DetachableMagazine.cpp",
+      "base_sha256": "7216ee2d63f4098f5444e621499e7d877a6b5eed8a16fe2fb4609e1aee105513",
+      "payload_sha256": "1f9782eb64ceb42cfac79fdf63674b5115f98ab39fbc844e8b298474728121e9"
+    },
+    {
+      "path": "tests/DetachableSampledPathTests.cpp",
+      "base_sha256": null,
+      "payload_sha256": "61745ab4cef332008de94632ebe3dc7571adc74eaa13f7605075721e50e9a6df"
+    },
+    {
+      "path": "tests/ReloadSampledPathTests.cpp",
+      "base_sha256": null,
+      "payload_sha256": "a2151244cb7b9ab608863ce1bd1830471383b11645f438269bc5e44cc280f0c7"
+    },
+    {
+      "path": "tests/test_bc2_sampled_magazine_path.py",
+      "base_sha256": null,
+      "payload_sha256": "e4af0f98d4a47522f40f8874fdfecbd4d9d33b5c79143ab2603d73ae669dd9fc"
+    },
+    {
+      "path": "tools/bc2_authored_magazine_geometry.py",
+      "base_sha256": "4b2f3897fd304ef06f244f54d5d70d6f88dcef31596abb3662eedfdae7946315",
+      "payload_sha256": "cf15238443d14b90869a3919d8f28d093953f75f6b3ab2a6053ce2ba2285e8ce"
+    },
+    {
+      "path": "tools/bc2_sampled_magazine_path.py",
+      "base_sha256": null,
+      "payload_sha256": "d8ca3bf6b3e3f411396feae606bc1ccd0954915126c5caf2520278e6dbc60c34"
+    }
+  ],
+  "patch_sha256": "3c24005379e527327b7d4f0dd429487ec01ac9dbb1a02bf2ad30dad90a24a423"
+}

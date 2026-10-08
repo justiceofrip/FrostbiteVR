@@ -244,6 +244,20 @@ class ReportTests(unittest.TestCase):
             with self.assertRaises(MOD.ReportError):
                 MOD.analyze(data)
 
+    def test_known_arming_bank_extension_and_strict_capacity(self):
+        for capacity in (128, 131):
+            data = capture(*(row() for _ in range(capacity)))
+            journal(data)["capacity"] = capacity
+            self.assertEqual(MOD.analyze(data)["journals"][0]["retained_rows"], capacity)
+            journal(data)["rows"].append(row())
+            with self.assertRaises(MOD.ReportError):
+                MOD.analyze(data)
+        for capacity in (127, 129, 132, True):
+            data = capture(row())
+            journal(data)["capacity"] = capacity
+            with self.assertRaises(MOD.ReportError):
+                MOD.analyze(data)
+
     def test_invalid_native_ranges_cannot_supply_entry_evidence(self):
         for field, value in (("current", -1), ("next", 16), ("flags_a8", 256), ("firing", 0x100000000)):
             sample = row()

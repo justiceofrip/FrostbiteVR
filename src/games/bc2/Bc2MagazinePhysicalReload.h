@@ -10,6 +10,7 @@
 #include "fvr/interaction/AmmoSupplyVisual.h"
 #include <ostream>
 namespace fvr::bc2 {
+class Bc2MagazineResourceReload;
 enum class MagazineCancelCause:unsigned {
  External=1,ApiOrClock,ReserveUnavailable,OwnerChanged,Mapping,InputOrClaim,
  ExplicitInput,KeepAlive,CounterExhausted,SourceUnavailable,InteractionRejected,InvalidStart,SeatSubmission,NativeObservationRejected,NativeObservationExpired
@@ -31,6 +32,9 @@ struct MagazinePhysicalApi {
  ReloadKeepAliveResult (*keepObserved)(void*,const ReloadCycleControl&)noexcept=nullptr;
     ReloadReserveObservation (*reserveObserved)(void*)noexcept=nullptr;
  ReloadMagazineLeaseObservation (*leaseObserved)(void*,const ReloadHoldIdentity&,std::uint64_t)noexcept=nullptr;
+ std::optional<AmmoResourceView> (*resourceRead)(void*,const ReloadStateOwner&,std::int64_t)noexcept=nullptr;
+ bool (*resourceSubmit)(void*,const AmmoResourceRequest&)noexcept=nullptr;
+ std::optional<AmmoResourceOutcome> (*resourceOutcome)(void*,std::uint64_t,const interaction::AmmoResourceContext&)noexcept=nullptr;
 };
 struct MagazinePhysicalSample {
  bool actionFlagsKnown=false;std::uint64_t actionHeld=0,actionPressed=0;
@@ -50,6 +54,10 @@ struct MagazinePhysicalResult {
  unsigned acquired=0,submitted=0,completed=0;
  std::optional<interaction::AmmoSupplyVisualSample> bodyAmmo;
 };
+struct MagazineResourceProbeState {
+ MagazinePhysicalResult result{};
+ std::optional<AmmoResourceView> resource;
+};
 // A physically submitted/attached magazine may free the support hand while
 // its native ammo transaction still blocks Fire and equipment changes. This
 // tests original current-frame evidence; it never advances or acknowledges it.
@@ -58,7 +66,7 @@ inline bool MagazineBlocksSupport(const MagazinePhysicalResult& r,std::int64_t n
  if(!r.blocksWeaponActions)return false;
  const auto phase=r.interaction.phase;
  const auto& target=r.tracking.target;
- return !((phase==interaction::DetachableMagazinePhase::AwaitingSeat||phase==interaction::DetachableMagazinePhase::Complete)&&
+ return !((phase==interaction::DetachableMagazinePhase::AwaitingSeat||phase==interaction::DetachableMagazinePhase::AwaitingOriginalReturn||phase==interaction::DetachableMagazinePhase::Complete)&&
   r.tracking.cycle&&target&&target->role==interaction::MagazinePropRole::Attached&&
   !target->handTarget&&!target->handClaim.id&&MagazineTargetFresh(r.tracking,now));
 }
@@ -99,17 +107,25 @@ public:
  static interaction::AmmoSupplyConfig DefaultPouch()noexcept;
  explicit Bc2MagazinePhysicalReload(bool enabled=false,MagazinePhysicalApi api={},
      interaction::AmmoSupplyConfig pouch=DefaultPouch())noexcept;
+ ~Bc2MagazinePhysicalReload();
  MagazinePhysicalResult Tick(const MagazinePhysicalSample&,interaction::HandInteraction&,std::uint64_t& sharedIntent)noexcept;
  void Cancel(const interaction::HandInteractionSample&,interaction::HandInteraction&,MagazineCancelCause=MagazineCancelCause::External)noexcept;
- bool BlocksEquipment()const noexcept{return active_||blocksCurrent_;}
+ bool BlocksEquipment()const noexcept;
+ bool ResourceBackend()const noexcept{return bool(resource_);}
+ MagazineResourceProbeState ResourceProbeState(std::int64_t now)const noexcept;
  void Report(std::ostream&)const;
- void EnableBodyAmmo(bool enabled=true,interaction::SupplyAnchorFrame frame=interaction::SupplyAnchorFrame::HeadYaw)noexcept {bodyAmmoEnabled_=enabled;bodyAmmoFrame_=frame;}
+ void EnableBodyAmmo(bool enabled=true,interaction::SupplyAnchorFrame frame=interaction::SupplyAnchorFrame::HeadYaw)noexcept;
+ // Read-only display shared by physical and detached idle routes. Pass the
+ // final coherent tracking publication and the actual current right claim.
+ std::optional<interaction::AmmoSupplyVisualSample> BodyAmmoDisplay(const MagazineTracking&,
+  const std::optional<interaction::HandClaim>& currentGun,std::int64_t now)const noexcept;
  MagazinePhysicalProbeState ProbeState(std::int64_t now)const noexcept {
   return {active_,lease_&&lease_->allThreeHeld&&lease_->deadlineNs>now,retiring_,bool(supply_.Pending()),
    bool(last_.removalClaim)||bool(supply_.Held()),BlocksEquipment(),acquired_,started_,submitted_,completed_,last_.phase,last_.reason,
    owners_.cycle,lastReserve_,originalReturns_,originalReturning_,originalMagazine_,originalReceipt_,cancelled_,reconciled_};
  }
 private:
+ std::unique_ptr<Bc2MagazineResourceReload> resource_;
  MagazinePhysicalResult TickImpl(const MagazinePhysicalSample&,interaction::HandInteraction&,std::uint64_t&)noexcept;
  void RetainDeferredPresentation(MagazinePhysicalResult&,const MagazinePhysicalSample&,interaction::HandInteraction&)noexcept;
  struct EmittedPresentation {MagazineTracking tracking;interaction::DetachableMagazinePhase phase;};
@@ -133,6 +149,9 @@ private:
  MagazinePhysicalApi api_{};bool enabled_=false,active_=false,retiring_=false,gateApplied_=false,drained_=false,blocksCurrent_=false;
  bool startupUnknown_=false;MagazineCycleStartResult startupResult_=MagazineCycleStartResult::NotStarted;
  unsigned unstarted_=0,startInspections_=0;
+ struct StartAttempt {std::uint64_t input=0,request=0,cycle=0;std::int64_t now=0,observed=0,deadline=0;
+  unsigned stage=0;bool identityPresent=false,identityMatches=false;int loaded=-1,reserve=-1;};
+ std::array<StartAttempt,64> startAttempts_{};unsigned startAttemptCount_=0,startAttemptDropped_=0;
  Bc2MagazineOwnerMap owners_{};
  interaction::DetachableMagazineResult last_{};
  std::optional<interaction::ManualReloadRequest> unseat_;

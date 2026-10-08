@@ -2,6 +2,10 @@
 #include <cstdint>
 #include "Bc2BodyHolsterDiagnostic.h"
 #include "Bc2PumpDiagnostic.h"
+#include "Bc2M95StockShotDiagnostic.h"
+#include "Bc2M95PhysicalBoltDiagnostic.h"
+#include "Bc2M95OrdinaryBoltDiagnostic.h"
+#include "Bc2OrdinaryResourceInputDiagnostic.h"
 namespace fvr::bc2 {
 enum class BoatHeadAimMode:std::uint32_t {Disabled=0,AimOnly=1,AimAndFire=2};
 constexpr bool ValidBoatHeadAimConfig(BoatHeadAimMode mode,std::uint32_t flags,std::uint32_t magazineSession)noexcept {
@@ -51,7 +55,7 @@ constexpr bool ValidPhysicalReloadRepeatProbeConfig(std::uint32_t flags,std::uin
 // Bit 0x800 opts into verified local on-foot controller input.
 // Bit 0x400 runs until hostPid exits (stream only); the duration word holds its PID.
 struct NativeProbeConfig {
-    std::uint32_t magic=0x32504246,bytes=1184;
+    std::uint32_t magic=0x32504246,bytes=1200;
     union {std::uint32_t durationMs=3000;std::uint32_t hostPid;};
     std::uint32_t flags=0;
     wchar_t reportPath[512]{};
@@ -59,7 +63,11 @@ struct NativeProbeConfig {
     std::uint32_t magazineReloadSession=0; // MagazineReloadSession; explicit diagnostic only.
     BoatHeadAimMode boatHeadAim=BoatHeadAimMode::Disabled; // Explicit capability; fire is a separate opt-in.
     BodyHolsterDiagnosticProfile bodyHolsterDiagnostic=BodyHolsterDiagnosticProfile::Disabled; // Bounded trial only, never production acceptance.
+    std::uint32_t m95PhysicalBoltCycles=0; // Explicit finite private physical bolt trial only.
+    std::uint32_t m95StockShot=0; // One finite original native cycle, no manual hold.
+    std::uint32_t m95OrdinaryBoltInputCycles=0; // Bounded real-control trajectory; ordinary adapters only.
+    std::uint32_t ordinaryResourceInput=0; // Input-only combined sequence through ordinary dispatcher.
     PumpHoldDiagnostic pumpHoldDiagnostic=PumpHoldDiagnostic::Disabled; // Isolated one-shot350ms trial, never ordinary activation.
 };
-static_assert(sizeof(NativeProbeConfig)==1184);
+static_assert(sizeof(NativeProbeConfig)==1200);
 }

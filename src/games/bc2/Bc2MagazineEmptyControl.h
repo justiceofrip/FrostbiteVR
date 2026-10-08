@@ -44,7 +44,7 @@ inline bool ManualEmptyStepBoundaryEligible(const MagazineEmptyStep& s,
         b.address>=0x10000&&b.wrapperOffset==(s.branch==0?0x3cu:s.branch==1?0x40u:0x10u)&&
         b.currentState==2&&b.nextState==2&&std::isfinite(b.phaseTimer)&&b.phaseTimer>=0&&
         b.loaded>=0&&b.loaded<=1000000&&b.reserve>=0&&b.reserve<=1000000&&!(b.flagsA8&(8|16))&&
-        std::isfinite(context.deltaSeconds)&&context.deltaSeconds>0&&context.deltaSeconds<=.05f&&
+        ValidManualReloadDelta(context.deltaSeconds)&&
         context.reloadTimeMultiplier==1&&!context.orderRequested&&!(context.inputFlags&~5u)&&
         context.fireRequested==bool(context.inputFlags&1)&&context.reloadRequested==bool(context.inputFlags&4)&&
         context.flags24Through28[0]&&!context.flags24Through28[2]&&!context.flags24Through28[4];
@@ -52,7 +52,7 @@ inline bool ManualEmptyStepBoundaryEligible(const MagazineEmptyStep& s,
 inline bool MagazineEmptyStepEligible(const MagazineEmptyStep& s,const ReloadObservedConfig& config,
     ReloadRequestCyclePhase phase,const ReloadUpdateContext& context,std::int64_t now)noexcept {
     const auto* profile=ResolveMagazineNativeProfile(s.profile);
-    return profile&&profile->Matches(config)&&config.fireLogicType==2&&config.reloadType==1&&
+    return profile&&profile->Matches(config)&&profile->ReviewedDispatch()&&
         ManualEmptyStepBoundaryEligible(s,phase,context,now);
 }
 inline bool ManualEmptyFamilyStepEligible(const MagazineEmptyStep& s,ReloadNativeFamily family,

@@ -433,6 +433,35 @@ int MissingExpiredAndWrongOwnerEvidence(){
     CHECK(!out.accepted&&out.reason==HandInteractionReason::WrongOwner&&f.arbiter.Current(left)->token==held.claim->token);
     return 0;
 }
+int QueuedOwnershipAfterConsumerAdoption(){
+    for(unsigned operation=0;operation<3;++operation)for(unsigned expired=0;expired<2;++expired){
+        Fixture f;const auto gun=f.Gun();CHECK(gun.claim);const auto source=f.sample;
+        auto processing=source;processing.nowNs+=ms;
+        auto request=f.Request(left,HandClaimKind::WeaponSupport,rifle,2,gun.claim->token.id);
+        const auto adopted=f.arbiter.AcquireFrom(processing,source,request);CHECK(adopted.claim);
+        const auto token=adopted.claim->token;
+        auto sight=f.Request(left,HandClaimKind::Sight,rifle,3,gun.claim->token.id);
+        const auto apply=[&](const HandInteractionSample& current){
+            if(operation==0)return f.arbiter.RenewFrom(current,source,token,From(source,2));
+            if(operation==1)return f.arbiter.TransferFrom(current,source,token,sight);
+            return f.arbiter.Release(current,token);
+        };
+        const auto queued=apply(source);CHECK(!queued.accepted&&queued.reason==HandInteractionReason::StaleInput);
+        CHECK(f.arbiter.Current(left)->token==token&&f.arbiter.Current(right)->token==gun.claim->token);
+        // Processing advances only. The exact renderer observation and current
+        // controller identity, generation and expiry remain the saved originals.
+        auto current=source;current.nowNs=expired?source.deadlineNs:processing.nowNs+ms;
+        const auto result=apply(current);
+        CHECK(current.observedNs==source.observedNs&&current.deadlineNs==source.deadlineNs&&current.sequence==source.sequence);
+        if(expired){CHECK(!result.accepted&&result.reason==HandInteractionReason::StaleInput);
+            CHECK(!f.arbiter.Current(left)&&!f.arbiter.Current(right));}
+        else {CHECK(result.accepted);CHECK(f.arbiter.Current(right)->token==gun.claim->token);
+            if(operation==0)CHECK(f.arbiter.Current(left)->token==token&&f.arbiter.Current(left)->deadlineNs==source.deadlineNs);
+            if(operation==1)CHECK(f.arbiter.Current(left)->token.kind==HandClaimKind::Sight&&f.arbiter.Current(left)->deadlineNs==source.deadlineNs);
+            if(operation==2)CHECK(!f.arbiter.Current(left));}
+    }
+    return 0;
+}
 int FailedIntentCannotLaterWin(){
     Fixture f;auto gun=f.Gun();CHECK(gun.claim);
     auto request=f.Request(left,HandClaimKind::AmmoObject,rifle,5);
@@ -447,7 +476,7 @@ int FailedIntentCannotLaterWin(){
 }
 static_assert(!std::is_copy_constructible_v<HandInteraction>);
 int main(){
-    if(FailedAndSuccessfulTransfers()||ExplicitSharingAndCrossHandTransfer()||DependencyAndPerHandTracking()||
+    if(QueuedOwnershipAfterConsumerAdoption()||FailedAndSuccessfulTransfers()||ExplicitSharingAndCrossHandTransfer()||DependencyAndPerHandTracking()||
        IdentityFocusResetAndFreshIntent()||LeasesRenewalAndContactIdentity()||MalformedAndImmutableInput()||
         UnavailableIntentCannotReplay()||HistoricalTransferAndExactSource()||HistoricalReleaseAndTrackingBarriers()||
         DelayedGeometryWithinOneNeutralRun()||NewReleaseRunRejectsEarlierNeutralGeometry()||

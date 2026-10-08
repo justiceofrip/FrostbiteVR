@@ -87,6 +87,10 @@ class Bc2ReloadRequestBridge
                                 const Bc2ReloadTargets &) noexcept;
     Bc2ReloadBridgeResult Update(const Bc2ReloadInteractionSample &, const ReloadRoundLease &,
                                  const std::optional<Bc2ReloadAckEvidence> &evidence = {}) noexcept;
+    // A typed native cohort gap can retain an already submitted transaction.
+    // Validates current ownership/input and the ORIGINAL operation deadline;
+    // drops presentation and grants no native lease, command, or completion.
+    Bc2ReloadBridgeResult ObservePendingInput(const Bc2ReloadInteractionSample &) noexcept;
     Bc2ReloadBridgeResult Cancel(Bc2ReloadBridgeReason = Bc2ReloadBridgeReason::Explicit) noexcept;
     Bc2ReloadBridgePhase Phase() const noexcept
     {

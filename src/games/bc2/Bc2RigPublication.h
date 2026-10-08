@@ -1,5 +1,7 @@
 #pragma once
 #include "Bc2Profile.h"
+#include "Bc2PhysicalPump.h"
+#include "Bc2BoltRuntimeGeometry.h"
 #include "Bc2EquipmentIdentity.h"
 #include "Bc2ReloadProducerBinding.h"
 #include "Bc2WeaponProfiles.h"
@@ -51,6 +53,9 @@ struct Tracking {
     unsigned sightPhysicalItem=0;
     const SightAdapterProfile* sightAdapter=nullptr;bool sightSecondary=false;
     MagazineTracking magazine{};
+    Bc2PumpTracking pump{};
+    Bc2BoltTracking bolt{};
+    interaction::InputFrame boltRawInput{}; // Before support-orientation guidance; same original generation.
     std::optional<interaction::AmmoSupplyVisualSample> bodyMagazine;
     ReloadTracking reload{}; // Explicit mode; defaults off, immutable preview.
     bool weaponActionsBlocked=false;
@@ -71,6 +76,9 @@ struct NativeSightState {
  math::Matrix4 rear{},front{}; // Raw native weapon-local metres; NEVER contact proof.
  math::Matrix4 rawHand{};bool rawHandValid=false;unsigned physicalItem=0; // Pre-IK, in placed weapon space.
 };
+// Current-input body base using the original bounded native eye/stance source.
+// Does not reuse or restamp the previous published tracked body frame.
+std::optional<math::Matrix4> BuildCurrentEyeBase(const Tracking&)noexcept;
 struct WeaponShotFrame {
  math::Matrix4 nativeWeapon{},trackedWeapon{},nativeFlash{},trackedFlash{};
  std::uint64_t generation=0;std::int64_t deadline=0;unsigned flashBone=0;
@@ -79,6 +87,8 @@ struct WeaponShotFrame {
  WeaponSightContact sight{};
  NativeSightState nativeSight{}; // Same raw item/owner/space/generation/deadline as this frame.
  MagazineRawContact magazine{};
+ Bc2PumpRawContact pump{};
+ Bc2BoltControllerContact bolt{};
  ReloadRawContact reload{}; // Original pre-IK input generation/times and rig identity.
  // Returned only through the publication's original configured-mesh/input lease.
  // Experimental authored contact, never a native aim/muzzle/holster capability.
@@ -98,6 +108,10 @@ std::optional<WeaponSupportFrame> ReadWeaponSupportFrame(unsigned soldier,unsign
 // Never use this getter for firing, support, or EmptyHands acknowledgement.
 std::optional<WeaponShotFrame> ReadBodyWeaponFrame(unsigned soldier,unsigned weak,unsigned weapon)noexcept;
 ReloadRawContact ReadReloadContact(const ReloadStateOwner&)noexcept;
+Bc2PumpRawContact ReadPumpContact(const ReloadStateOwner&)noexcept;
+Bc2BoltControllerContact ReadBoltContact(const ReloadStateOwner&)noexcept;
+Bc2BoltPackCounters ReadBoltPackCounters()noexcept;
+Bc2PumpPackCounters ReadPumpPackCounters()noexcept;
 MagazineRawContact ReadMagazineContact(const ReloadStateOwner&)noexcept;
 interaction::SupportGripContact ReadSupportContact(unsigned soldier,unsigned weak,unsigned weapon,std::uint64_t owner,std::uint64_t space)noexcept;
 WeaponSightContact ReadSightContact(unsigned soldier,unsigned weak,unsigned weapon,std::uint64_t owner,std::uint64_t space)noexcept;
@@ -119,6 +133,8 @@ void RetargetWeapon(unsigned animation,void* nativeWorld)noexcept;
 BodyHolsterPackCounters ReadBodyHolsterPackCounters()noexcept;
 MagazinePackCounters ReadMagazinePackCounters()noexcept;
 std::optional<MagazineDetachPairReceipt> ReadMagazineDetachPair(const ReloadStateOwner&,std::int64_t nowNs)noexcept;
+// Finite M95 diagnostic:1 preflight,2 fire,3 released,4 done,5 failed. Zero disabled.
+void PublishM95ShotCapturePhase(unsigned)noexcept;
 void Start()noexcept;
 bool Stop()noexcept;
 void Report(std::ostream&);

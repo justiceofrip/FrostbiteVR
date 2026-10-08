@@ -7,9 +7,11 @@ namespace {
 CarriedMeshesResult Carry(Fixture& f,bool enabled=true){return ReadCarriedMeshes1p({&f,Fixture::Read,nullptr},f.binding,Base,f.owner,
     f.inventory,1,Heap+0x4200,f.data,19,2,Now,Now+100000000,enabled);}
 void Prepare(Fixture& f){f.Put(Heap+0x4204,f.data);f.Put(f.data+0x64,19u);}
-int ActualCarriedReader(){Fixture f;Prepare(f);const auto s=Carry(f);CHECK(s.snapshot&&s.snapshot->weapon==Heap+0x4200);
+int ActualCarriedReader(){Fixture f;Prepare(f);const auto path=f.Text("Objects/Weapons/Handheld/Test/ExactVariant");f.Put(f.data+0x40,path);const auto s=Carry(f);CHECK(s.snapshot&&s.snapshot->weapon==Heap+0x4200);
     CHECK(s.snapshot->configured.owner==f.owner&&s.snapshot->configured.owner.weapon!=s.snapshot->weapon);
     CHECK(s.snapshot->configured.weaponData==f.data&&s.snapshot->nativeSlot==1&&s.snapshot->persistence==19);
+    CHECK(s.snapshot->configured.configurationPathVerified&&s.snapshot->configured.configurationPathPointer==path);
+    CHECK(std::string_view(s.snapshot->configured.configurationPath.data())=="Objects/Weapons/Handheld/Test/ExactVariant");
     CHECK(!s.snapshot->configured.renderSuppressionAllowed&&!s.snapshot->configured.activeStateVerified);return 0;}
 int MembershipAndIdentity(){for(unsigned n=0;n<6;++n){Fixture f;Prepare(f);
     if(n==0)f.Put(f.items+4,Heap+0x4300);if(n==1)f.Put(Heap+0x4204,f.data+0x100);if(n==2)f.Put(f.data+0x64,20u);
@@ -26,6 +28,19 @@ struct Changing {Fixture f;unsigned reads=0;bool config=false;
 int RepeatedCohortRejects(){for(bool config:{false,true}){Changing c;Prepare(c.f);c.config=config;
     const auto r=ReadCarriedMeshes1p({&c,Changing::Read,nullptr},c.f.binding,Base,c.f.owner,c.f.inventory,1,Heap+0x4200,c.f.data,19,2,Now,Now+100000000,true);
     CHECK(!r.snapshot&&r.status==SelectedMeshesStatus::ChangedDuringRead);}return 0;}
+struct PathChanging {Fixture f;unsigned reads=0,mode=0,path=0;
+    static bool Read(void* x,unsigned at,void* out,std::size_t n){auto& c=*static_cast<PathChanging*>(x);
+        if(at==c.f.data+0x40&&++c.reads==2){
+            if(c.mode==0)c.f.Put(c.f.data+0x40,c.f.Text("Objects/Weapons/Handheld/Test/ExactVariant"));
+            if(c.mode==1)c.f.Put(c.path,std::uint8_t{'X'});
+            if(c.mode==2)c.f.Put(c.f.data+0x40,0u);
+            if(c.mode==3)c.f.Put(c.f.data+0x40,c.f.Text("../invalid/path"));}
+        return Fixture::Read(&c.f,at,out,n);}
+};
+int CarriedExactPathCannotChangeBetweenReads(){for(unsigned mode=0;mode<4;++mode){PathChanging c;Prepare(c.f);c.mode=mode;
+    c.path=c.f.Text("Objects/Weapons/Handheld/Test/ExactVariant");c.f.Put(c.f.data+0x40,c.path);
+    const auto result=ReadCarriedMeshes1p({&c,PathChanging::Read,nullptr},c.f.binding,Base,c.f.owner,c.f.inventory,1,Heap+0x4200,c.f.data,19,2,Now,Now+100000000,true);
+    CHECK(!result.snapshot&&result.status==SelectedMeshesStatus::ChangedDuringRead);}return 0;}
 int OriginalCachedLease(){Fixture f;Prepare(f);SelectedMeshesObservation observer;
     CHECK(observer.Install(f.file,f.pe,Base,{&f,Fixture::Read,nullptr},true));
     const auto read=[&](std::uint64_t sequence,std::int64_t observed,std::int64_t now){return observer.ReadCarried(f.owner,f.inventory,1,Heap+0x4200,f.data,19,sequence,observed,now);};
@@ -34,5 +49,5 @@ int OriginalCachedLease(){Fixture f;Prepare(f);SelectedMeshesObservation observe
     observer.Clear();const auto second=read(3,Now+20000000,Now+20000000);CHECK(second&&second!=first&&first->configured.deadlineNs==Now+200000000);
     CHECK(!read(4,Now,Now+100000000));return 0;}
 }
-int main(){for(auto fn:{ActualCarriedReader,MembershipAndIdentity,OriginalWindowAndUnknown,RepeatedCohortRejects,OriginalCachedLease})if(fn())return 1;
-    std::cout<<"5 carried configured-mesh reader/cache groups passed\n";return 0;}
+int main(){for(auto fn:{ActualCarriedReader,MembershipAndIdentity,OriginalWindowAndUnknown,RepeatedCohortRejects,CarriedExactPathCannotChangeBetweenReads,OriginalCachedLease})if(fn())return 1;
+    std::cout<<"6 carried configured-mesh reader/cache groups passed\n";return 0;}

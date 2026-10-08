@@ -1,0 +1,28 @@
+{
+  "schema": "fvr.bc2.proposed-reviewed-diagnostic-registry.v1",
+  "summary": {
+    "rows": 12,
+    "enabled": 12,
+    "omitted_unreviewed_or_builtin": 0
+  },
+  "files": [
+    {
+      "path": "review-evidence.json",
+      "sha256": "96dcd4704755c4863f32d61a356c647d664bbeb428500396bf4d13c33633ffbd"
+    },
+    {
+      "path": "exact-reviews.json",
+      "sha256": "7ed0aa34a3a371dc7de4e5a835534784f6c677cd612cd4ceb98a94db93dcc270"
+    },
+    {
+      "path": "ReviewedDiagnosticRegistry.h",
+      "sha256": "a9de5501695a957c8165ae08fc497016a2c888197ef83e110a5420896cb50c77"
+    }
+  ],
+  "emitter": {
+    "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\tools\\bc2_magazine_registry_header.py",
+    "sha256": "71dc87e3270053f8c58d08c639fca51464fc288c7097f61086b4ef5999d8805c"
+  },
+  "geometry": "../zero-bolt-batch/CombinedGeometry.h",
+  "normal_source_or_build_modified": false
+}

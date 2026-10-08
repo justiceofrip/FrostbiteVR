@@ -319,6 +319,7 @@ def main():
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--all-weapons',action='store_true',help='Also sample configured inactive weapons, marked separately from selected state')
     parser.add_argument('--mesh-links',action='store_true',help='Also record bounded reflected first-person mesh asset ownership for captured inventory weapons')
+    parser.add_argument('--asset',action='append',default=[],help='Also inspect this exact selected/test asset; repeat for multiple names. Read-only, no native admission.')
     args=parser.parse_args()
     if not 0<=args.seconds<=60 or not 2<=args.interval_ms<=1000:parser.error('Bounded duration 0..60 seconds, interval 2..1000 ms')
     image=Image();process=Process(args.pid)
@@ -329,7 +330,7 @@ def main():
                 data=process.u32(address+4)
                 inspect.require_type(data,'SoldierWeaponData')
                 name=inspect.text(process.u32(data+12))
-                if name in ('SPAS12_sp','XM8_sp_s','40mmgl'):
+                if name in ('SPAS12_sp','XM8_sp_s','40mmgl') or name in args.asset:
                     weapons.append(inspect.weapon(address,slot))
         if args.mesh_links:
             for weapon in weapons:weapon['mesh_links']=inspect.mesh_links(weapon)

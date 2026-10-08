@@ -46,6 +46,9 @@ EXACT = (
     "tools/bc2_authored_grip_bindings.py", "tests/test_bc2_authored_grip_bindings.py", "release/AUTHORED-GRIP-BINDINGS.md",
     "tools/bc2_authored_hand_pose_batch.py", "tests/test_bc2_authored_hand_pose_batch.py",
     "tools/bc2_authored_magazine_geometry.py", "tests/test_bc2_authored_magazine_geometry.py", "release/AUTHORED-MAGAZINE-GEOMETRY.md",
+    "tools/bc2_reviewed_magazine_contact.py", "tests/test_bc2_reviewed_magazine_contact.py",
+    "tools/bc2_magazine_assembly.py", "tools/bc2_magazine_assembly_cache.py",
+    "tools/bc2_configured_body_assets.py",
     "tools/bc2_magazine_contact_batch.py", "tests/test_bc2_magazine_contact_batch.py", "release/MAGAZINE-CONTACT-BATCH.md", "release/CONTACT-COVERAGE.json",
     "tools/bc2_magazine_registry_header.py", "tests/test_bc2_magazine_registry_header.py", "release/MAGAZINE-REGISTRY.md",
     "tools/bc2_magazine_descriptor_manifest.py", "tests/test_bc2_magazine_descriptor_manifest.py", "release/MAGAZINE-DESCRIPTOR-JOBS.md",
@@ -77,6 +80,11 @@ EXACT = (
 RUNTIME = (
     'tools/bc2_authored_grip_bindings.py',
     'tools/bc2_authored_magazine_geometry.py',
+    'tools/bc2_reviewed_magazine_contact.py',
+    'tools/bc2_magazine_assembly.py',
+    'tools/bc2_magazine_assembly_cache.py',
+    'tools/bc2_configured_body_assets.py',
+    'tools/bc2_magazine_contact_batch.py',
     'tools/bc2_body_ammo_assets.py',
     'tools/bc2_body_equipment_assets.py',
     'tools/bc2_granny_curves.py',
@@ -168,7 +176,7 @@ def validate_python_helpers(files: dict[str, bytes]) -> None:
     # separate from the standard-library-only launcher path; do not accidentally
     # resolve omitted local modules from the developer's PYTHONPATH/site folders.
     standard = {"argparse", "ctypes", "json", "pathlib", "time", "struct", "os"}
-    body_standard = {"__future__", "bisect", "collections", "copy", "dataclasses",
+    body_standard = {"__future__", "bisect", "collections", "contextlib", "copy", "dataclasses",
                      "hashlib", "math", "re", "statistics", "uuid", "zlib"}
     optional = {("tools/game_window.py", "PIL")}
     pending = ["tools/game_window.py"]; seen = set()

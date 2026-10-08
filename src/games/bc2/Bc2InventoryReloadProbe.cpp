@@ -56,18 +56,18 @@ void Bc2InventoryReloadProbe::Prepare(InputFrame& in,const ReloadStateOwner& own
  now,in.generation,body->request,body->right?body->right->token.id:0,body->outcome.inventory.committedRequest};
  // Let the ordinary automatic startup stow settle before issuing any gesture.
  // A transient first Held sample does not prove that startup is finished.
- if(phase_==Phase::Warmup&&now-first_>=2000000000ll&&body&&display&&BodyInventoryDisplayFresh(*display,now)&&asset==Xm8MagazineAsset&&
+ if(phase_==Phase::Warmup&&now-first_>=2000000000ll&&body&&display&&BodyInventoryDisplayFresh(*display,now)&&(inventoryOnly_||asset==Xm8MagazineAsset)&&
  display->selectedOwner==owner&&body->nativeOwner==owner&&body->selectedSlot){
   original_=body->selectedSlot;anchors_=body->anchors;
   for(unsigned n=0;n<display->count;++n){const auto slot=display->slots[n].assignment;
    if(slot!=*original_&&(slot.slot==anchors_.shoulders[0].slot||slot.slot==anchors_.shoulders[1].slot))other_=slot;}
   if(other_&&Current(*body,now)){
-   if(Held(*body,*original_,now)){baselineClaim_=body->right->token.id;To(Phase::ReachStow,now);}
+   if(Held(*body,*original_,now)){baselineClaim_=body->right->token.id;To(inventoryOnly_?Phase::InitialHeld:Phase::ReachStow,now);}
    else if(Empty(*body,now))To(Phase::ReachInitial,now);
   }
  }
  const bool fresh=body&&Current(*body,now);
- if(phase_!=Phase::Warmup&&(phase_<Phase::Reload||phase_==Phase::Recovery)&&display&&BodyInventoryDisplayFresh(*display,now)){
+ if(phase_!=Phase::Warmup&&(phase_<Phase::Reload||phase_==Phase::Recovery||phase_==Phase::InitialHeld||phase_==Phase::OtherHeld)&&display&&BodyInventoryDisplayFresh(*display,now)){
   bool a=false,b=false;for(unsigned n=0;n<display->count;++n){a|=display->slots[n].assignment==original_;b|=display->slots[n].assignment==other_;}
   if(!a||!b)Fail(5,now);
  }
@@ -87,20 +87,22 @@ void Bc2InventoryReloadProbe::Prepare(InputFrame& in,const ReloadStateOwner& own
  switch(phase_){
  case Phase::ReachInitial:reach(false,Phase::DrawInitial);break;
  case Phase::DrawInitial:draw(false,Phase::ClearInitial);break;
- case Phase::ClearInitial:clear(true,Phase::ReachStow);break;
+ case Phase::ClearInitial:clear(true,inventoryOnly_?Phase::InitialHeld:Phase::ReachStow);break;
  case Phase::ReachStow:reach(false,Phase::Stow);break;
  case Phase::Stow:stow(false,Phase::ClearEmpty);break;
  case Phase::ClearEmpty:clear(false,Phase::ReachOther);break;
  case Phase::ReachOther:reach(true,Phase::DrawOther);break;
  case Phase::DrawOther:draw(true,Phase::ClearOther);break;
- case Phase::ClearOther:clear(true,Phase::ReachOtherStow);break;
+ case Phase::ClearOther:clear(true,inventoryOnly_?Phase::OtherHeld:Phase::ReachOtherStow);break;
  case Phase::ReachOtherStow:reach(true,Phase::StowOther);break;
  case Phase::StowOther:stow(true,Phase::ClearOtherEmpty);break;
  case Phase::ClearOtherEmpty:clear(false,Phase::ReachOriginal);break;
  case Phase::ReachOriginal:reach(false,Phase::DrawOriginal);break;
  case Phase::DrawOriginal:draw(false,Phase::ClearOriginal);break;
  case Phase::ClearOriginal:
-  if(restoredClaim_==baselineClaim_||!otherClaim_)Fail(7,now);else clear(true,Phase::Reload);break;
+  if(restoredClaim_==baselineClaim_||!otherClaim_)Fail(7,now);else clear(true,inventoryOnly_?Phase::Done:Phase::Reload);break;
+ case Phase::InitialHeld:case Phase::OtherHeld:squeeze_=1;break;
+ case Phase::Done:if(inventoryOnly_)squeeze_=1;break;
  default:break;
  }
  const auto d=Distance(command_.position,target);const float t=d>.025f?.025f/d:1.f;
@@ -140,13 +142,13 @@ void Bc2InventoryReloadProbe::Observe(const MagazinePhysicalProbeState& s,const 
  else if(phase_==Phase::Recovery){recovery_.Observe(s,p,recoveryRaw_,now);if(recovery_.Failed())Fail(11,now);}
 }
 void Bc2InventoryReloadProbe::Report(std::ostream& o)const{
- o<<"{\"synthetic_input\":true,\"headset_verified\":false,\"persistent_consumers\":true,\"phase\":"<<unsigned(phase_)<<",\"failure\":"<<failure_
+ o<<"{\"synthetic_input\":true,\"headset_verified\":false,\"persistent_consumers\":true,\"inventory_only\":"<<(inventoryOnly_?"true":"false")<<",\"phase\":"<<unsigned(phase_)<<",\"failure\":"<<failure_
  <<",\"completed\":"<<(Completed()?"true":"false")<<",\"original_weapon\":"<<(original_?original_->item.id:0)<<",\"other_weapon\":"<<(other_?other_->item.id:0)
  <<",\"baseline_claim\":"<<baselineClaim_<<",\"other_claim\":"<<otherClaim_<<",\"restored_claim\":"<<restoredClaim_<<",\"rows\":[";
  for(unsigned n=0;n<count_;++n){const auto& r=rows_[n];if(n)o<<',';o<<"{\"phase\":"<<r.phase<<",\"reason\":"<<r.reason<<",\"now_ns\":"<<r.now
  <<",\"input\":"<<r.input<<",\"weapon\":"<<r.weapon<<",\"body_phase\":"<<r.bodyPhase<<",\"slot\":"<<r.slot<<",\"request\":"<<r.request<<",\"claim\":"<<r.claim<<",\"commit\":"<<r.committed<<'}';}
  o<<"],\"interruption_enabled\":"<<(interrupt_?"true":"false")<<",\"interruption\":";recovery_.Report(o);
  o<<",\"interrupted_magazine_probe\":"<<(interruptedReport_.empty()?"null":interruptedReport_);
- o<<",\"magazine_physical_probe\":";reload_.Report(o);o<<'}';
+ if(!inventoryOnly_){o<<",\"magazine_physical_probe\":";reload_.Report(o);}o<<'}';
 }
 }

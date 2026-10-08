@@ -3,7 +3,9 @@
 #include "Bc2StereoRecovery.h"
 #include "fvr/runtime/RenderOwnerRecovery.h"
 #include "Bc2Gameplay.h"
+#include "Bc2PumpCalibration225.h"
 #include "Bc2ReloadFlowRuntime.h"
+#include "Bc2NativeCycleRuntime.h"
 #include "Bc2BodyInventorySession.h"
 #include "Bc2BodyAmmoRenderer.h"
 #include "Bc2BodyAmmoHost.h"
@@ -34,6 +36,7 @@
 #include "fvr/interaction/TrackingMath.h"
 #include "NativeProbeConfig.h"
 #include "Bc2MagazineReloadSession.h"
+#include "Bc2ResourceMagazineSession.h"
 #include "fvr/platform/windows/ProcessLifetime.h"
 #include "NativeViewAbi.h"
 #include "fvr/math/StereoMath.h"
@@ -628,6 +631,22 @@ std::int64_t reloadDrawFrequency=0;
 std::int64_t ReloadDrawNowNs()noexcept {
     if(reloadDrawFrequency<=0)return 0;const auto qpc=Qpc();
     return (qpc/reloadDrawFrequency)*1000000000+(qpc%reloadDrawFrequency)*1000000000/reloadDrawFrequency;
+}
+std::array<std::array<std::atomic<std::uint64_t>,4>,3> bodySourceReads{};
+template<class Reader> auto ReadBodySource(Reader read,unsigned kind)noexcept {
+    // A tracking publication may change during a source's validated read.
+    // Re-read current evidence with a current validation clock, at most three
+    // times. Never reuse an earlier frame or extend a source's own deadline.
+    for(unsigned attempt=0;attempt<3;++attempt){
+        auto source=read(ReloadDrawNowNs());
+        if(source){++bodySourceReads[kind][attempt];return source;}
+    }
+    ++bodySourceReads[kind][3];return decltype(read(std::int64_t{})){};
+}
+fvr::bc2::BodyPropSources ReadBodySources()noexcept {
+    return {ReadBodySource(fvr::bc2::rigPublication::ReadBodyAmmoRenderSource,0),
+        ReadBodySource(fvr::bc2::rigPublication::ReadHolsteredBodyRenderSource,1),
+        ReadBodySource(fvr::bc2::rigPublication::ReadCarriedBodyRenderSource,2)};
 }
 struct BufferEvidence {ComPtr<ID3D11Buffer> staging;std::vector<unsigned char> bytes;unsigned source=0;bool done=false;};
 struct EyeBufferEvidence {bool queued=false;std::atomic<bool> complete=false;std::array<BufferEvidence,14> buffers;ComPtr<ID3D11DeviceContext> context;unsigned indices=0;};
@@ -1391,7 +1410,7 @@ void __fastcall VisibilityHook(void* self,void*,void* request,void* view,void* p
         // The owned second view must not forward the constructor's identity.
         alignas(16) std::array<float,16> source{};
         const bool captured=tracked.state.load(std::memory_order_acquire)==1?Read(reinterpret_cast<std::uintptr_t>(tracked.right[0].bytes.data()+0x50),source.data(),64):Read(stereoExperiment.main+0x30,source.data(),64);
-        if(captured&&std::all_of(source.begin(),source.end(),[](float x){return std::isfinite(x);})){ 
+        if(captured&&std::all_of(source.begin(),source.end(),[](float x){return std::isfinite(x);})){
             using Setter=void(__thiscall*)(void*,const void*);
             reinterpret_cast<Setter>(imageBase+viewAnchor.setter)(view,source.data());++anchorCopies;
         }
@@ -1478,10 +1497,8 @@ void __fastcall DrawHook(void* self,void*,void* request,void* view,void* data){
         reinterpret_cast<unsigned>(self)==stereoExperiment.world&&reinterpret_cast<unsigned>(request)==stereoExperiment.request&&
         U32(stereoExperiment.world+0x88)==stereoExperiment.frame&&U32(address)==imageBase+layout.vtable&&
         U32(address+0x70)==stereoExperiment.request&&U32(stereoExperiment.request+8)==stereoExperiment.world;
-    const auto bodyAmmoBefore=bodyAmmoEyeOwned?fvr::bc2::rigPublication::ReadBodyAmmoRenderSource(ReloadDrawNowNs()):std::nullopt;
-    const auto bodyHolsteredBefore=bodyAmmoEyeOwned?fvr::bc2::rigPublication::ReadHolsteredBodyRenderSource(ReloadDrawNowNs()):std::nullopt;
-    const auto bodyCarriedCurrent=bodyAmmoEyeOwned?fvr::bc2::rigPublication::ReadCarriedBodyRenderSource(ReloadDrawNowNs()):std::nullopt;
-    const fvr::bc2::BodyPropSources bodySourcesBefore{bodyAmmoBefore,bodyHolsteredBefore,bodyCarriedCurrent};
+    const auto bodySourcesBefore=bodyAmmoEyeOwned?ReadBodySources():fvr::bc2::BodyPropSources{};
+    const auto& bodyAmmoBefore=bodySourcesBefore.ammo;
     const auto bodyPairKey=bodyAmmoEyeOwned?fvr::bc2::CarriedPairKey(tracked.lease):fvr::bc2::BodyCarriedPairKey{};
     const auto bodyPair=bodyAmmoEyeOwned?tracked.bodyPropPair.Begin(bodyPairKey,evidenceEye,bodySourcesBefore):nullptr;
     const auto holsterBefore=trackedEvidence&&bodyHolsterProbeMode?
@@ -1547,7 +1564,8 @@ void __fastcall DrawHook(void* self,void*,void* request,void* view,void* data){
     if(bodyAmmoEyeOwned&&tracked.state.load(std::memory_order_acquire)==1&&
         U32(stereoExperiment.world+0x88)==stereoExperiment.frame&&U32(address)==imageBase+layout.vtable&&
         U32(address+0x70)==stereoExperiment.request&&U32(stereoExperiment.request+8)==stereoExperiment.world){
-        const auto now=ReloadDrawNowNs();const auto after=fvr::bc2::rigPublication::ReadBodyAmmoRenderSource(now);
+        const auto bodySourcesAfter=ReadBodySources();const auto& after=bodySourcesAfter.ammo;
+        const auto now=ReloadDrawNowNs();
         const fvr::bc2::BodyAmmoEyeKey key{stereoExperiment.world,stereoExperiment.request,address,stereoExperiment.frame.load(),evidenceEye};
         fvr::bc2::BodyAmmoBoundaryProof proof;proof.eye=key;proof.nativeDrawReturned=true;
         proof.immediateContext=reinterpret_cast<std::uintptr_t>(observedImmediateContext);
@@ -1566,11 +1584,9 @@ void __fastcall DrawHook(void* self,void*,void* request,void* view,void* data){
                 props=*eye;
             }
         }
-        const fvr::bc2::BodyPropSources bodySourcesAfter{after,
-            fvr::bc2::rigPublication::ReadHolsteredBodyRenderSource(now),fvr::bc2::rigPublication::ReadCarriedBodyRenderSource(now)};
         // Optional per-eye ammo HUD telemetry is assigned to props.ammo here.
         // The pair helper preserves it independently of prop admission.
-        props.ammo=fvr::bc2::gameplay::ReadAmmoCounter(ReloadDrawNowNs());
+        props.ammo=fvr::bc2::gameplay::ReadAmmoCounter();
         if(const auto pair=tracked.bodyPropPair.End(bodyPair,bodyPairKey,evidenceEye,bodySourcesBefore,bodySourcesAfter,props,ReloadDrawNowNs()))
             if(tracked.state.load(std::memory_order_acquire)==1&&fvr::bc2::CarriedPairKey(tracked.lease)==bodyPairKey&&
                U32(stereoExperiment.world+0x88)==stereoExperiment.frame&&U32(address+0x70)==stereoExperiment.request){
@@ -1632,9 +1648,18 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
     fvr::bc2::NativeProbeConfig config{};
     if(!Read(reinterpret_cast<std::uintptr_t>(raw),&config,sizeof(config)))return 10;
     const bool continuous=(config.flags&0x400u)!=0;const auto mode=config.flags&0xffu;passEvidenceEnabled=(config.flags&0x100u)!=0;uncapMirror=(config.flags&0x200u)!=0;
-    if(config.magic!=0x32504246||config.bytes!=sizeof(config)||!fvr::bc2::ValidPumpHoldDiagnostic(config.pumpHoldDiagnostic,config.flags,config.durationMs)||!fvr::bc2::ValidBodyHolsterDiagnosticConfig(config.bodyHolsterDiagnostic,config.flags)||!fvr::bc2::ValidBoatHeadAimConfig(config.boatHeadAim,config.flags,config.magazineReloadSession)||!fvr::bc2::ValidMagazineReloadSession(config.magazineReloadSession,config.flags,config.durationMs)||!fvr::bc2::ValidBodyHolsterProbeConfig(config.flags,config.durationMs)||!fvr::bc2::ValidBodyInventoryConfig(config.flags)||!fvr::bc2::ValidWeaponVisibilityProbeConfig(config.flags,config.durationMs)||!fvr::bc2::ValidOpticFilterProbeConfig(config.flags,config.durationMs)||((config.flags&0xc00000u)==0xc00000u)||((config.flags&0xc00000u)&&((config.flags&0x268400u)||!(config.flags&0x10000u)||config.durationMs>15000))||!fvr::bc2::ValidReloadRequestProbeConfig(config.flags,config.durationMs)||!fvr::bc2::ValidPhysicalReloadConfig(config.flags)||!fvr::bc2::ValidPhysicalReloadProbeConfig(config.flags,config.durationMs)||!fvr::bc2::ValidPhysicalReloadRepeatProbeConfig(config.flags,config.durationMs)||((config.flags&0x200000u)&&!(config.flags&0x100000u))||((config.flags&0x100000u)&&!(config.flags&0x80000u))||((config.flags&0x80000u)&&!(config.flags&0x10000u))||((config.flags&0x40000u)&&((config.flags&0x400u)||!(config.flags&0x1000u)))||((config.flags&0x20000u)&&((config.flags&0x400u)||!(config.flags&0x1000u)))||mode>9||((config.flags&0x10000u)&&((config.flags&0x8000u)||(config.flags&0x6000u)!=0x6000u))||((config.flags&0x8000u)&&((config.flags&0x400u)||!(config.flags&0x4000u)))||((config.flags&0x1000u)&&!(config.flags&0x800u))||((config.flags&0x1e000u)&&!(config.flags&0x1000u))||
+    if(config.magic!=0x32504246||config.bytes!=sizeof(config)||!fvr::bc2::ValidOrdinaryResourceInputSession(config.ordinaryResourceInput,config.flags,config.durationMs,config.magazineReloadSession,unsigned(config.pumpHoldDiagnostic),unsigned(config.boatHeadAim),unsigned(config.bodyHolsterDiagnostic),config.m95StockShot,config.m95PhysicalBoltCycles,config.m95OrdinaryBoltInputCycles)||!fvr::bc2::ValidM95OrdinaryBoltInputSession(config.m95OrdinaryBoltInputCycles,config.flags,config.durationMs,config.magazineReloadSession,unsigned(config.pumpHoldDiagnostic),unsigned(config.boatHeadAim),unsigned(config.bodyHolsterDiagnostic),config.m95StockShot,config.m95PhysicalBoltCycles)||!fvr::bc2::ValidM95PhysicalBoltSession(config.m95PhysicalBoltCycles,config.flags,config.durationMs,config.magazineReloadSession,unsigned(config.pumpHoldDiagnostic),unsigned(config.boatHeadAim),unsigned(config.bodyHolsterDiagnostic),config.m95StockShot)||!fvr::bc2::ValidM95StockShotSession(config.m95StockShot,config.flags,config.durationMs,config.magazineReloadSession,unsigned(config.pumpHoldDiagnostic),unsigned(config.boatHeadAim),unsigned(config.bodyHolsterDiagnostic))||!fvr::bc2::ValidPumpHoldDiagnostic(config.pumpHoldDiagnostic,config.flags,config.durationMs)||!fvr::bc2::ValidBodyHolsterDiagnosticConfig(config.bodyHolsterDiagnostic,config.flags)||!fvr::bc2::ValidBoatHeadAimConfig(config.boatHeadAim,config.flags,config.magazineReloadSession)||!fvr::bc2::ValidMagazineReloadSession(config.magazineReloadSession,config.flags,config.durationMs)||!fvr::bc2::ValidBodyHolsterProbeConfig(config.flags,config.durationMs)||!fvr::bc2::ValidBodyInventoryConfig(config.flags)||!fvr::bc2::ValidWeaponVisibilityProbeConfig(config.flags,config.durationMs)||!fvr::bc2::ValidOpticFilterProbeConfig(config.flags,config.durationMs)||((config.flags&0xc00000u)==0xc00000u)||((config.flags&0xc00000u)&&((config.flags&0x268400u)||!(config.flags&0x10000u)||config.durationMs>15000))||!fvr::bc2::ValidReloadRequestProbeConfig(config.flags,config.durationMs)||!fvr::bc2::ValidPhysicalReloadConfig(config.flags)||!fvr::bc2::ValidPhysicalReloadProbeConfig(config.flags,config.durationMs)||!fvr::bc2::ValidPhysicalReloadRepeatProbeConfig(config.flags,config.durationMs)||((config.flags&0x200000u)&&!(config.flags&0x100000u))||((config.flags&0x100000u)&&!(config.flags&0x80000u))||((config.flags&0x80000u)&&!(config.flags&0x10000u))||((config.flags&0x40000u)&&((config.flags&0x400u)||!(config.flags&0x1000u)))||((config.flags&0x20000u)&&((config.flags&0x400u)||!(config.flags&0x1000u)))||mode>9||((config.flags&0x10000u)&&((config.flags&0x8000u)||(config.flags&0x6000u)!=0x6000u))||((config.flags&0x8000u)&&((config.flags&0x400u)||!(config.flags&0x4000u)))||((config.flags&0x1000u)&&!(config.flags&0x800u))||((config.flags&0x1e000u)&&!(config.flags&0x1000u))||
        ((passEvidenceEnabled||uncapMirror||continuous||(config.flags&0xfff800u))&&mode!=9)||
        (continuous?!config.hostPid:(config.durationMs<100||config.durationMs>(mode==9?60000u:5000u)))||config.reportPath[511]||config.frameChannel[63])return 10;
+#ifdef FVR_BC2_RESOURCE_INVENTORY_PROBE
+    if(!fvr::bc2::ValidResourceInventorySession(config.magazineReloadSession,config.flags,config.durationMs)||
+       config.pumpHoldDiagnostic!=fvr::bc2::PumpHoldDiagnostic::Disabled||
+       config.bodyHolsterDiagnostic!=fvr::bc2::BodyHolsterDiagnosticProfile::Disabled)return 10;
+#elif defined(FVR_BC2_RESOURCE_MAGAZINES)
+    if(!fvr::bc2::ValidResourceMagazineSession(config.magazineReloadSession,config.flags,config.durationMs)||
+       config.pumpHoldDiagnostic!=fvr::bc2::PumpHoldDiagnostic::Disabled||
+       config.bodyHolsterDiagnostic!=fvr::bc2::BodyHolsterDiagnosticProfile::Disabled)return 10;
+#endif
     if(InterlockedCompareExchange(&started,1,0))return 11;
     cameraPulseMode=mode<=2?mode:0;lifecycleMode=mode==4;streamMode=mode==9;streamToken=config.frameChannel;stereoMode=mode==5||mode==6||mode==8||streamMode;burstMode=mode==8||streamMode;initializationOnly=mode==6;poolOnly=mode==7;
     opticEvidenceEnabled=bool(config.flags&0x8000000u);
@@ -1747,9 +1772,20 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
         if(config.flags&0x800u)Require(fvr::bc2::gameplay::SetFeedbackWriter(
             [](const fvr::interaction::FeedbackEvent& event)noexcept{return frameBridge.PublishFeedback(event);}),
             "Gameplay feedback writer configuration rejected");
+        if(config.m95PhysicalBoltCycles)Require(fvr::bc2::gameplay::EnablePhysicalBoltProbe(config.m95PhysicalBoltCycles),"Physical bolt requires its explicit isolated private build");
+        if(config.m95StockShot)Require(fvr::bc2::gameplay::EnableM95StockShotProbe(),"M95 stock shot requires its explicit isolated private build");
         if(config.pumpHoldDiagnostic==fvr::bc2::PumpHoldDiagnostic::SelectedManualEmptyFire){Require(config.magazineReloadSession==3,"Empty-fire requires normal shared manual families");Require(fvr::bc2::gameplay::EnableEmptyFireProbe(),"Empty-fire diagnostic configuration rejected");}
         if(config.pumpHoldDiagnostic==fvr::bc2::PumpHoldDiagnostic::SpasOneShot)Require(fvr::bc2::reloadFlowRuntime::EnablePumpHoldDiagnostic(),"Pump hold diagnostic configuration rejected");
+        if(const auto cycles=fvr::bc2::PumpPhysicalCycles(config.pumpHoldDiagnostic)){
+            Require(!config.magazineReloadSession,"Physical pump trial excludes magazine/resource sessions");
+            Require(fvr::bc2::gameplay::EnablePhysicalPumpProbe(cycles),"Physical pump requires the explicit private candidate build and measured binding");
+        }
         if(config.flags&0x10000000u)Require(fvr::bc2::gameplay::EnableBodyInventory(),"Body inventory native selector/anchor binding unverified");
+#ifdef FVR_BC2_AMMO_MOVE_PROBE
+        // Private resource diagnostics need the same native lifetime domain as
+        // player holsters. No synthetic generation or second inventory tracker.
+        else Require(fvr::bc2::gameplay::EnableBodyInventory(),"Private ammunition inventory binding unverified");
+#endif
         bodyAmmoObservationEnabled=bool(config.flags&0x10000000u);bodyAmmoRenderer.EnableObservation(bodyAmmoObservationEnabled);
         if(bodyAmmoObservationEnabled){
             // Owned CPU geometry is loaded before native callbacks. The report
@@ -1775,6 +1811,33 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
             // combined headset comfort and complete shot-effect pairing remain separate.
             Require(fvr::bc2::gameplay::EnableBodyHolsters(fvr::bc2::BodyInventoryHolsterAcceptance),"Body holster binding unverified");
         }
+#ifdef FVR_BC2_ORDINARY_MANUAL_CYCLES
+        // Persistent player input selects a measured native mechanism through
+        // the shared dispatcher. No finite controller driver is installed.
+        Require(fvr::bc2::ValidResourceMagazineSession(config.magazineReloadSession,config.flags,config.durationMs)&&
+            fvr::bc2::gameplay::EnableOrdinaryManualCycles(),
+            "Ordinary manual cycles require tracked body, shell and resource controls with measured native bindings");
+#endif
+        if(config.ordinaryResourceInput)
+            Require(fvr::bc2::reloadFlowRuntime::EnableOrdinaryResourceInputRecording()&&
+                fvr::bc2::gameplay::EnableOrdinaryResourceInputProbe(),
+                "Ordinary resource input requires its explicit bounded diagnostic build");
+        if(config.m95OrdinaryBoltInputCycles)
+            Require(fvr::bc2::reloadFlowRuntime::EnableOrdinaryBoltInputRecording(config.m95OrdinaryBoltInputCycles)&&
+                fvr::bc2::gameplay::EnableOrdinaryBoltInputProbe(config.m95OrdinaryBoltInputCycles),
+                "Ordinary bolt input requires its explicit bounded diagnostic build");
+#ifdef FVR_BC2_MANUAL_PUMP_HANDS
+        // Ordinary mode3 has real tracked input and persistent body/shell/resource
+        // consumers. Exact native SPAS admission and measured contact stay in
+        // the existing adapter; no finite controller driver is constructed.
+        Require(fvr::bc2::ValidResourceMagazineSession(config.magazineReloadSession,config.flags,config.durationMs)&&
+            fvr::bc2::gameplay::EnablePhysicalPumpCandidate(fvr::bc2::MeasuredSpasPump225()),
+            "Ordinary SPAS pump requires tracked body, shell and resource controls with measured native binding");
+#endif
+#ifdef FVR_BC2_RESOURCE_PUMP_PROBE
+        Require(config.magazineReloadSession==7&&fvr::bc2::gameplay::EnableResourcePumpCombination(),
+            "Combined resource pump requires the finite persistent consumer sequence");
+#endif
         // Configured-mesh reads remain a bounded PassEvidence/Hands diagnostic.
         // Continuous HMD sessions do not opt in through this path.
         if(config.flags&0x2000000u)
@@ -1999,6 +2062,9 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
         report<<",\"body_ammo_cache\":{\"status\":\""<<fvr::bc2::BodyAmmoCacheStatusName(bodyAmmoCache.status)
             <<"\",\"bytes\":"<<bodyAmmoCache.bytes<<",\"parts\":"<<(bodyAmmoCache.catalog?bodyAmmoCache.catalog->size():0)
             <<",\"failure_part\":"<<bodyAmmoCache.part<<",\"failure_section\":"<<bodyAmmoCache.section<<'}';
+        report<<",\"body_source_reads\":{\"order\":[\"ammo\",\"selected_holster\",\"carried\"],\"columns\":[\"first\",\"second\",\"third\",\"unavailable\"],\"counts\":[";
+        for(unsigned kind=0;kind<bodySourceReads.size();++kind){if(kind)report<<',';report<<'[';
+            for(unsigned attempt=0;attempt<4;++attempt){if(attempt)report<<',';report<<bodySourceReads[kind][attempt].load();}report<<']';}report<<"]}";
         report<<",\"body_ammo_render\":";bodyAmmoRenderer.Report(report);
         report<<",\"reload_draw_evidence\":";reloadDrawCapture.Report(report);
         report<<",\"reload_palette_producer\":";fvr::bc2::ReloadProducerBinding().Report(report);

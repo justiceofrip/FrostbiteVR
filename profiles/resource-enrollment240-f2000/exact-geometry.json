@@ -1,0 +1,858 @@
+{
+  "schema": "fvr.bc2.authored_magazine_geometry",
+  "schema_version": 1,
+  "profiles": [
+    {
+      "native_asset_name": "F2000_sp",
+      "configured_mesh_path": "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Mesh",
+      "weapon": {
+        "resource": "Objects/Weapons/Handheld/BU_rif_F2000/SP_rif_F2000.dbx",
+        "sha256": "62d1514ab5eb00161f763e67d73768d9ef8a2ee611027a2a41b6deacefa86925",
+        "instance_guid": "46404a9e-9e38-43a7-831e-fb4b2f2692c6",
+        "type": "GameSharedResources.SoldierWeaponData"
+      },
+      "grip_binding_digest": "96d913ccbdc707a079019c5580b41f00b450a342a83498c5e41e27a8494a4610",
+      "mesh_sha256": "b17e8a31cec97fe0e9ca12e61c97c359c3a146f0e0c9eea41e854e9760e00e06",
+      "lod_sha256": "3ee9a75750f5cb31064268259e6f5d9a7ed01d40efbbdbcf1ee040612ba94fae",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "static_clip_sha256": "f79a112f7d39d262d48157a2022533738e88cd91dd749501a96e9d9556ce217c",
+      "reload_clip": {
+        "resource": "Animations/Weapons/Handheld/BU_rif_F2000/1P/1P_Reload.res",
+        "sha256": "3d86a181e4202be9fbd58a00b8156c6e598311714e046961cc7bb54e11c62a8f",
+        "archive": "Dist/win32/async/weapon/ai_rif_f2000-00.fbrb",
+        "archive_index_sha256": "47afa9d037b1bf7b499ca018231ea4707b8f052709157efc301477827ab6cf99",
+        "asset_document": "Animations/Weapons/Handheld/BU_rif_F2000/1P/1P_Reload.dbx",
+        "asset_document_sha256": "69ea85329e963a16890f1ad7011078c56d7c34aac9fd137f59dba2ed05f414ad",
+        "asset_guid": "03e1d1ce-d1e0-4f13-99c2-b60bc7e079de",
+        "asset_archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+        "asset_archive_index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965",
+        "skeleton_reference": "characters/skeletons/ske01/20a6d9b2-2cd5-4895-a59c-f144e6d3f061"
+      },
+      "role_evidence": {
+        "bone": "jntWpnwpnJnt_16",
+        "parent": "jntWpn_1",
+        "child_count": 1,
+        "bone_hash": "f2519cbd",
+        "extent_m": [
+          0.026901815086603185,
+          0.16883049160242106,
+          0.08397753909230257
+        ],
+        "triangles": 588,
+        "reload_control_extent_m": 1.0458417851552548,
+        "role": "geometric_detachable_magazine_candidate",
+        "native_role_verified": false,
+        "rigid_assembly_digest": "a3a25e68877c62cf723b9a31de80ac4ce3e4d93af1b00f5b35bcf86d0eaf641e"
+      },
+      "rejected_parts": [
+        {
+          "bone": "jntWpn_12",
+          "parent": "jntWpn_1",
+          "child_count": 1,
+          "bone_hash": "f7315720",
+          "extent_m": [
+            0.04497258551418781,
+            0.04497253894805908,
+            0.10014586523175262
+          ],
+          "triangles": 480,
+          "reload_control_extent_m": 0.0,
+          "role": "geometric_detachable_magazine_candidate",
+          "native_role_verified": false,
+          "rigid_assembly_digest": "666a2d344c98c4e18130faf2940b7641a940d000aa3c5279605c6da25f091112",
+          "reasons": [
+            "no substantial authored reload-position control displacement"
+          ]
+        },
+        {
+          "bone": "jntWpn_13",
+          "parent": "jntWpn_12",
+          "child_count": 1,
+          "bone_hash": "f7315721",
+          "extent_m": [
+            0.03678687103092666,
+            0.03678691387176518,
+            0.05813628435134915
+          ],
+          "triangles": 240,
+          "reload_control_extent_m": 0.0,
+          "role": "geometric_detachable_magazine_candidate",
+          "native_role_verified": false,
+          "reasons": [
+            "not a rigid direct leaf of the weapon root",
+            "outside explicit box-magazine shape candidate bounds",
+            "no substantial authored reload-position control displacement"
+          ]
+        },
+        {
+          "bone": "jntWpn_17",
+          "parent": "jntWpnwpnJnt_16",
+          "child_count": 1,
+          "bone_hash": "f7315725",
+          "extent_m": [
+            0.018470731563866104,
+            0.013424158096313546,
+            0.061731994152069335
+          ],
+          "triangles": 236,
+          "reload_control_extent_m": 0.0,
+          "role": "geometric_detachable_magazine_candidate",
+          "native_role_verified": false,
+          "reasons": [
+            "not a rigid direct leaf of the weapon root",
+            "outside explicit box-magazine shape candidate bounds",
+            "no substantial authored reload-position control displacement"
+          ]
+        },
+        {
+          "bone": "jntWpn_1",
+          "parent": "jntWpn_0",
+          "child_count": 13,
+          "bone_hash": "f7f9bcd2",
+          "extent_m": [
+            0.07562106847763157,
+            0.22109472751617376,
+            0.7614212930202489
+          ],
+          "triangles": 11446,
+          "reload_control_extent_m": 0.0011948967615973095,
+          "role": "geometric_detachable_magazine_candidate",
+          "native_role_verified": false,
+          "reasons": [
+            "not a rigid direct leaf of the weapon root",
+            "outside explicit box-magazine shape candidate bounds",
+            "no substantial authored reload-position control displacement"
+          ]
+        },
+        {
+          "bone": "jntWpn_5",
+          "parent": "jntWpn_1",
+          "child_count": 0,
+          "bone_hash": "f7f9bcd6",
+          "extent_m": [
+            0.0644157901406289,
+            0.05660617351531985,
+            0.2716540284454828
+          ],
+          "triangles": 1680,
+          "reload_control_extent_m": 0.0,
+          "role": "geometric_detachable_magazine_candidate",
+          "native_role_verified": false,
+          "reasons": [
+            "no substantial authored reload-position control displacement"
+          ]
+        },
+        {
+          "bone": "jntWpn_3",
+          "parent": "jntWpn_1",
+          "child_count": 0,
+          "bone_hash": "f7f9bcd0",
+          "extent_m": [
+            0.014538008719682693,
+            0.03665006160736098,
+            0.06406462192535423
+          ],
+          "triangles": 380,
+          "reload_control_extent_m": 0.0,
+          "role": "geometric_detachable_magazine_candidate",
+          "native_role_verified": false,
+          "reasons": [
+            "outside explicit box-magazine shape candidate bounds",
+            "no substantial authored reload-position control displacement"
+          ]
+        },
+        {
+          "bone": "jntWpn_7",
+          "parent": "jntWpn_1",
+          "child_count": 0,
+          "bone_hash": "f7f9bcd4",
+          "extent_m": [
+            0.00719034392386768,
+            0.12173891067504888,
+            0.01042884588241602
+          ],
+          "triangles": 204,
+          "reload_control_extent_m": 0.0,
+          "role": "geometric_detachable_magazine_candidate",
+          "native_role_verified": false,
+          "reasons": [
+            "outside explicit box-magazine shape candidate bounds",
+            "no substantial authored reload-position control displacement"
+          ]
+        },
+        {
+          "bone": "jntWpn_6",
+          "parent": "jntWpn_1",
+          "child_count": 0,
+          "bone_hash": "f7f9bcd5",
+          "extent_m": [
+            0.030734287574890204,
+            0.017542004585266113,
+            0.19679973274469353
+          ],
+          "triangles": 474,
+          "reload_control_extent_m": 0.0,
+          "role": "geometric_detachable_magazine_candidate",
+          "native_role_verified": false,
+          "reasons": [
+            "no substantial authored reload-position control displacement"
+          ]
+        },
+        {
+          "bone": "jntWpn_4",
+          "parent": "jntWpn_1",
+          "child_count": 0,
+          "bone_hash": "f7f9bcd7",
+          "extent_m": [
+            0.018582547083497235,
+            0.023581743240356588,
+            0.035767011344433074
+          ],
+          "triangles": 116,
+          "reload_control_extent_m": 0.0,
+          "role": "geometric_detachable_magazine_candidate",
+          "native_role_verified": false,
+          "reasons": [
+            "outside explicit box-magazine shape candidate bounds",
+            "no substantial authored reload-position control displacement"
+          ]
+        },
+        {
+          "bone": "jntWpn_8",
+          "parent": "jntWpn_1",
+          "child_count": 0,
+          "bone_hash": "f7f9bcdb",
+          "extent_m": [
+            0.004477970302106107,
+            0.133784294128418,
+            0.01640817523002648
+          ],
+          "triangles": 132,
+          "reload_control_extent_m": 0.0,
+          "role": "geometric_detachable_magazine_candidate",
+          "native_role_verified": false,
+          "reasons": [
+            "outside explicit box-magazine shape candidate bounds",
+            "no substantial authored reload-position control displacement"
+          ]
+        },
+        {
+          "bone": "jntWpn_2",
+          "parent": "jntWpn_1",
+          "child_count": 0,
+          "bone_hash": "f7f9bcd1",
+          "extent_m": [
+            0.008641808293760387,
+            0.033332467079162695,
+            0.05335890501737606
+          ],
+          "triangles": 122,
+          "reload_control_extent_m": 0.0,
+          "role": "geometric_detachable_magazine_candidate",
+          "native_role_verified": false,
+          "reasons": [
+            "outside explicit box-magazine shape candidate bounds",
+            "no substantial authored reload-position control displacement"
+          ]
+        }
+      ],
+      "bones": {
+        "weapon": "jntWpn_1",
+        "magazine": "jntWpnwpnJnt_16",
+        "wrist": "LeftHand",
+        "fingers": [
+          "LeftHandThumb1",
+          "LeftHandThumb2",
+          "LeftHandThumb3",
+          "LeftHandIndex1",
+          "LeftHandIndex2",
+          "LeftHandIndex3",
+          "LeftHandMiddle1",
+          "LeftHandMiddle2",
+          "LeftHandMiddle3",
+          "LeftHandRing1",
+          "LeftHandRing2",
+          "LeftHandRing3",
+          "LeftHandPinky1",
+          "LeftHandPinky2",
+          "LeftHandPinky3"
+        ]
+      },
+      "geometry": {
+        "attached_item": [
+          1.0000000000000002,
+          -2.4023973951733563e-16,
+          1.993260827838175e-16,
+          0.0,
+          -2.4023973951733563e-16,
+          1.0000000000000007,
+          1.0020960925345929e-16,
+          0.0,
+          1.993260827838175e-16,
+          1.0020960925345929e-16,
+          1.000000000000001,
+          -0.0,
+          -5.768618952153436e-09,
+          -0.015117705799639563,
+          -0.20354896783828758,
+          1.0
+        ],
+        "item_from_insertion": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          -1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          -0.004222968450808618,
+          0.08194444328546549,
+          -0.011470756382231433,
+          1.0
+        ],
+        "weapon_from_entry": [
+          1.0000000000000002,
+          -2.4023973951733563e-16,
+          1.993260827838175e-16,
+          0.0,
+          -1.993260827838175e-16,
+          -1.0020960925345929e-16,
+          -1.000000000000001,
+          0.0,
+          -2.4023973951733563e-16,
+          1.0000000000000007,
+          1.0020960925345929e-16,
+          0.0,
+          -0.004222974219427569,
+          -0.03317326251417409,
+          -0.21501972422051902,
+          1.0
+        ],
+        "item_from_hand": [
+          -0.5344278762220116,
+          0.8251013766275608,
+          0.1832881976673305,
+          0.0,
+          0.36703369681077297,
+          0.4218931740216624,
+          -0.8290310097453212,
+          0.0,
+          -0.7613626668823801,
+          -0.3757843370887572,
+          -0.5283114814922332,
+          0.0,
+          0.0885596940911642,
+          -0.11320624749590298,
+          0.03584412548990422,
+          1.0
+        ],
+        "wrist_from_fingers": {
+          "LeftHandThumb1": [
+            0.7774001825795344,
+            -0.29333832123611986,
+            0.5564185343962628,
+            0.0,
+            0.42885528912041315,
+            0.8943006243124854,
+            -0.12770878727695392,
+            0.0,
+            -0.46014356142269147,
+            0.33790386598657884,
+            0.8210291591853307,
+            0.0,
+            0.029251491650939133,
+            0.004964171908796146,
+            0.005828503053635352,
+            1.0
+          ],
+          "LeftHandThumb2": [
+            0.7979551961844414,
+            -0.11206682962814193,
+            0.592206493192494,
+            0.0,
+            0.36527349054004776,
+            0.8714776198324081,
+            -0.32726447292661365,
+            0.0,
+            -0.479419213205879,
+            0.4774597195872544,
+            0.7363351371357478,
+            0.0,
+            0.07200850146113008,
+            -0.011169435671768667,
+            0.03643152227960445,
+            1.0
+          ],
+          "LeftHandThumb3": [
+            0.6149172339571725,
+            0.13911455641060838,
+            0.776224152920499,
+            0.0,
+            0.3141125538526258,
+            0.8596523296821549,
+            -0.40290343208296003,
+            0.0,
+            -0.7233326336441941,
+            0.4915740150442507,
+            0.48491740414077916,
+            0.0,
+            0.10134103910625865,
+            -0.015288970846871391,
+            0.058200813761532674,
+            1.0
+          ],
+          "LeftHandIndex1": [
+            -0.10982173894085692,
+            0.5417423393070098,
+            0.8333393207200659,
+            0.0,
+            -0.5315404964569995,
+            0.6764421389460661,
+            -0.5097947952699384,
+            0.0,
+            -0.8398832575318176,
+            -0.4989401471722253,
+            0.2136699399950937,
+            0.0,
+            0.045615147799253644,
+            0.03559079766273508,
+            0.061053309589624634,
+            1.0
+          ],
+          "LeftHandIndex2": [
+            0.5193910896503247,
+            -0.3422721664647073,
+            0.7829959514936254,
+            0.0,
+            -0.31671252875402267,
+            0.7739234072108023,
+            0.5483937763153941,
+            0.0,
+            -0.7936788205074429,
+            -0.5328154688396165,
+            0.2935670384139543,
+            0.0,
+            0.04046558376730196,
+            0.06099320789576875,
+            0.10012876253525735,
+            1.0
+          ],
+          "LeftHandIndex3": [
+            0.5824287109941113,
+            -0.7791547295966862,
+            0.23172117718683655,
+            0.0,
+            0.08247962150072544,
+            0.3402347369742054,
+            0.936716304861401,
+            0.0,
+            -0.8086865329946085,
+            -0.5264581950195195,
+            0.2624268664789407,
+            0.0,
+            0.05675143052393507,
+            0.05026104062686579,
+            0.1246801118579319,
+            1.0
+          ],
+          "LeftHandMiddle1": [
+            0.22713277230168225,
+            -0.1011331645557683,
+            0.9685983619506561,
+            0.0,
+            -0.4812151643384724,
+            0.8530324466741648,
+            0.2019099069678999,
+            0.0,
+            -0.8466656183861807,
+            -0.5119645768488542,
+            0.14508481207461524,
+            0.0,
+            0.023393513634801043,
+            0.03436671942472474,
+            0.07057999819517156,
+            1.0
+          ],
+          "LeftHandMiddle2": [
+            0.5315866776976949,
+            -0.7536463183437808,
+            0.38656542905592584,
+            0.0,
+            -0.0846428388936919,
+            0.4068396521946788,
+            0.9095697264235083,
+            0.0,
+            -0.8427640203036365,
+            -0.5162351443373258,
+            0.15247977515945738,
+            0.0,
+            0.034416527109238065,
+            0.029458611165781787,
+            0.11758718560764575,
+            1.0
+          ],
+          "LeftHandMiddle3": [
+            0.4011680026256135,
+            -0.8048240555078882,
+            -0.43740424477274303,
+            0.0,
+            0.3607137991261343,
+            -0.30012856165775703,
+            0.8830676087351647,
+            0.0,
+            -0.8419915609965288,
+            -0.5120362156655368,
+            0.16990916707921153,
+            0.0,
+            0.05108234464617677,
+            0.00583098362007059,
+            0.12970643008276456,
+            1.0
+          ],
+          "LeftHandRing1": [
+            0.19478195761057063,
+            -0.08343031204387183,
+            0.9772918561113985,
+            0.0,
+            -0.5080820693641751,
+            0.8436961155714682,
+            0.17329014790297384,
+            0.0,
+            -0.8389949938944906,
+            -0.5302982628690015,
+            0.12194733542849459,
+            0.0,
+            0.0039155087433756924,
+            0.022704977542162053,
+            0.07432119548320784,
+            1.0
+          ],
+          "LeftHandRing2": [
+            0.4786101639950304,
+            -0.695036484356014,
+            0.5365226894872978,
+            0.0,
+            -0.15611360403136593,
+            0.5339564902200037,
+            0.830974734386238,
+            0.0,
+            -0.8640375301785178,
+            -0.48147144460078806,
+            0.14705235284429877,
+            0.0,
+            0.012366229001497885,
+            0.019085308468190246,
+            0.1167215296201637,
+            1.0
+          ],
+          "LeftHandRing3": [
+            0.4426107499592291,
+            -0.8521133730982418,
+            -0.2792821573385361,
+            0.0,
+            0.29593309252045163,
+            -0.15519639369365812,
+            0.9425166757865723,
+            0.0,
+            -0.8464746474477636,
+            -0.4998168452259508,
+            0.18347695347527745,
+            0.0,
+            0.0266509373946882,
+            -0.0016589093703526098,
+            0.13273470849142618,
+            1.0
+          ],
+          "LeftHandPinky1": [
+            0.25201227799024317,
+            -0.011707516475716107,
+            0.9676532156718879,
+            0.0,
+            -0.46118123757363616,
+            0.8776231499264143,
+            0.1307267104431553,
+            0.0,
+            -0.8507653482907156,
+            -0.47920824363862075,
+            0.21577252229274302,
+            0.0,
+            -0.013539345003664445,
+            0.006117947399616339,
+            0.07387904822826405,
+            1.0
+          ],
+          "LeftHandPinky2": [
+            0.437347889655253,
+            -0.544201304799541,
+            0.7159411730502556,
+            0.0,
+            -0.17101067720877217,
+            0.7312614571045533,
+            0.6603120698835719,
+            0.0,
+            -0.8828828754113982,
+            -0.4112196751224399,
+            0.22675142137923396,
+            0.0,
+            -0.00427933582085515,
+            0.005687763160429377,
+            0.1094347669192538,
+            1.0
+          ],
+          "LeftHandPinky3": [
+            0.48275597023970496,
+            -0.8576282088821947,
+            0.17725836659362362,
+            0.0,
+            0.16225176059062563,
+            0.2864914859010404,
+            0.9442441393471624,
+            0.0,
+            -0.8605934228096146,
+            -0.4270790135744612,
+            0.27745716206489174,
+            0.0,
+            0.00602067785140209,
+            -0.007128763482271289,
+            0.12629595236309532,
+            1.0
+          ]
+        },
+        "measured": {
+          "closed_part_frame": "exact static authored controls",
+          "bone_local_extent_m": [
+            0.026901815086603185,
+            0.16883049160242106,
+            0.08397753909230257
+          ],
+          "bounds_m": [
+            [
+              -0.013327891938403452,
+              -0.08688604831695557,
+              -0.04705931618809859
+            ],
+            [
+              0.013573923148199735,
+              0.08194444328546549,
+              0.036918222904203976
+            ]
+          ],
+          "part_triangle_count": 588,
+          "part_sections": [
+            {
+              "name": "jntWpn_5_metal",
+              "triangles": 176,
+              "vertices": 276,
+              "vertex_skin_sha256": "475164c090af502537cacec29e5704b3bf0d1d333d442533c807c9b014e34c88",
+              "indices_sha256": "bee049d9764ac889e45098ee3aa4274019fa6b22a28017ebc4c14d9c38541f00",
+              "bone_hash": "f2519cbd",
+              "assembly_bone": "jntWpnwpnJnt_16"
+            },
+            {
+              "name": "jntWpn_17_Ammo_ZOnly",
+              "triangles": 176,
+              "vertices": 96,
+              "vertex_skin_sha256": "c37a42813ed263acdf66f9b7c71291cff823d849c0e19594c45d9ccd8ee2b509",
+              "indices_sha256": "59cddca57fa51a5a53702eb95e12df055f8d523ed4213d23413460d7e281e9fe",
+              "bone_hash": "f2519cbd",
+              "assembly_bone": "jntWpnwpnJnt_16"
+            },
+            {
+              "name": "jntWpn_17_Ammo",
+              "triangles": 118,
+              "vertices": 96,
+              "vertex_skin_sha256": "90e85644d221962836bcfd92c3e8b85e7aa6b78085eecbbf32a1b0a04a0ebfd3",
+              "indices_sha256": "1c19393087756aeaded8f375e6a337a1074c373fce6e05d5a05ba6705c951bd9",
+              "bone_hash": "f7315725",
+              "assembly_bone": "jntWpn_17"
+            },
+            {
+              "name": "jntWpn_17_Ammo_ZOnly",
+              "triangles": 118,
+              "vertices": 72,
+              "vertex_skin_sha256": "fb2b4f7dbc466dd3639408ca97f5b063280d530904e8299ad1f5042d89ef44d1",
+              "indices_sha256": "d057c014944eda4011896dbe770ded1fd46099b3c658abe897ecb1cdeb5c2d58",
+              "bone_hash": "f7315725",
+              "assembly_bone": "jntWpn_17"
+            }
+          ]
+        },
+        "design": {
+          "status": "experimental_geometry_based_estimate",
+          "carry": "same authored reload frame wrist-to-magazine and complete finger hierarchy; experimental paired pose",
+          "rail": "long bone-local extent axis; nearer rigid weapon-body end; median3mm end-band landmark",
+          "end_distances_to_body_m": [
+            0.043582985807544564,
+            0.015703928029368455
+          ],
+          "long_axis": 1,
+          "short_axis": 0,
+          "inward_direction": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "authored_reload_grasp": true,
+          "native_insertion_trajectory": false,
+          "ux_defaults": {
+            "travel_m": 0.1,
+            "capture_m": 0.07,
+            "release_m": 0.15,
+            "post_capture_travel_m": 0.035,
+            "seat_tolerance_m": 0.004,
+            "pull_m": 0.09,
+            "max_step_m": 0.07,
+            "capture_angle_rad": 0.7853981633974483,
+            "release_angle_rad": 1.3089969389957472,
+            "max_step_angle_rad": 1.0471975511965976,
+            "alignment_ns": 120000000,
+            "seat_dwell_ns": 60000000,
+            "max_sample_gap_ns": 100000000,
+            "max_guided_ns": 5000000000,
+            "lower_third_fraction": 0.3333333333333333,
+            "end_band_m": 0.003
+          },
+          "paired_reload_grasp": {
+            "source": "same_frame_authored_reload_contact_candidate",
+            "clip_sha256": "3d86a181e4202be9fbd58a00b8156c6e598311714e046961cc7bb54e11c62a8f",
+            "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+            "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+            "magazine_bone": "jntWpnwpnJnt_16",
+            "sample_count": 214,
+            "eligible_windows": 40,
+            "window": {
+              "begin_seconds": 0.8,
+              "end_seconds": 1.0,
+              "time_seconds": 0.9,
+              "max_wrist_translation_m": 0.0017210604471832526,
+              "max_wrist_angle_rad": 0.03928352900531427,
+              "max_finger_angle_rad": 0.018665061609839422,
+              "max_knuckle_distance_to_bounds_m": 0.0383264721650417,
+              "minimum_item_motion_m": 0.17521258477659624
+            },
+            "criteria": {
+              "sample_hz": 60,
+              "window_seconds": 0.2,
+              "min_item_motion_m": 0.1,
+              "max_wrist_translation_m": 0.01,
+              "max_wrist_angle_rad": 0.15,
+              "max_finger_angle_rad": 0.05,
+              "max_contact_distance_m": 0.05
+            },
+            "runtime_interpolation_verified": false,
+            "active_native_animation_verified": false,
+            "grasp_digest": "bbf74a33a05709edcf00ec49a11b7b278d572f98097dd76b9d23586c51dc9229"
+          }
+        }
+      },
+      "runtime_admitted": false,
+      "status": "experimental_geometry_ready_for_review",
+      "assembly": {
+        "schema": "fvr.bc2.rigid_magazine_assembly",
+        "schema_version": 1,
+        "root": "jntWpnwpnJnt_16",
+        "members": [
+          {
+            "bone": "jntWpn_17",
+            "parent": "jntWpnwpnJnt_16",
+            "item_from_bone": [
+              1.0000000000000004,
+              -4.804794790346715e-16,
+              3.9865216556763525e-16,
+              0.0,
+              -4.804794790346715e-16,
+              1.0000000000000013,
+              2.004192185069187e-16,
+              0.0,
+              3.9865216556763525e-16,
+              2.004192185069187e-16,
+              1.0000000000000022,
+              0.0,
+              2.9246276470587234e-08,
+              0.0764105096459389,
+              -1.3858559627064237e-08,
+              1.0
+            ],
+            "constant_local_controls": true,
+            "triangles": 236,
+            "maximum_relative_error_m": 4.16842910551052e-16,
+            "maximum_relative_error_rad": 9.340781929789186e-06
+          },
+          {
+            "bone": "jntWpn_18",
+            "parent": "jntWpn_17",
+            "item_from_bone": [
+              1.0000000000000004,
+              -4.804794790346715e-16,
+              3.9865216556763525e-16,
+              0.0,
+              -4.804794790346715e-16,
+              1.0000000000000013,
+              2.004192185069187e-16,
+              0.0,
+              3.9865216556763525e-16,
+              2.004192185069187e-16,
+              1.0000000000000022,
+              0.0,
+              2.9246276470587234e-08,
+              0.0764105096459389,
+              -1.3858559627064237e-08,
+              1.0
+            ],
+            "constant_local_controls": true,
+            "triangles": 0,
+            "maximum_relative_error_m": 4.16842910551052e-16,
+            "maximum_relative_error_rad": 1.617884612929901e-05
+          },
+          {
+            "bone": "jntWpn_19",
+            "parent": "jntWpn_18",
+            "item_from_bone": [
+              1.0000000000000004,
+              -4.804794790346715e-16,
+              3.9865216556763525e-16,
+              0.0,
+              -4.804794790346715e-16,
+              1.0000000000000013,
+              2.004192185069187e-16,
+              0.0,
+              3.9865216556763525e-16,
+              2.004192185069187e-16,
+              1.0000000000000022,
+              0.0,
+              2.9246276470587234e-08,
+              0.0764105096459389,
+              -1.3858559627064237e-08,
+              1.0
+            ],
+            "constant_local_controls": true,
+            "triangles": 0,
+            "maximum_relative_error_m": 4.16842910551052e-16,
+            "maximum_relative_error_rad": 2.3507345721604014e-05
+          }
+        ],
+        "subtree_complete": true,
+        "sample_count": 214,
+        "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+        "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+        "reload_clip_sha256": "3d86a181e4202be9fbd58a00b8156c6e598311714e046961cc7bb54e11c62a8f",
+        "translation_tolerance_m": 1e-05,
+        "angle_tolerance_rad": 0.0001,
+        "runtime_admitted": false,
+        "native_role_verified": false,
+        "body_prop_cache_verified": false,
+        "assembly_digest": "a3a25e68877c62cf723b9a31de80ac4ce3e4d93af1b00f5b35bcf86d0eaf641e"
+      },
+      "profile_digest": "ad03b2e0731a13fa8e534c4e153725ae26ece4da2fc8c6a8b3bd2a153b0dd068"
+    }
+  ],
+  "gaps": [],
+  "runtime_admission": false,
+  "geometry_based_grasp_not_native_calibration": true
+}
