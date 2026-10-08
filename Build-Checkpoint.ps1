@@ -4,7 +4,8 @@ param([ValidateSet('x86','x64')][string]$Architecture='x86',
 $ErrorActionPreference='Stop'
 $PSNativeCommandUseErrorActionPreference=$false
 $profiles=Join-Path $PSScriptRoot 'profiles/checkpoint202'
-$receipt=Join-Path $profiles 'source-with-header.json'
+$operation=Join-Path $PSScriptRoot 'profiles/checkpoint203'
+$receipt=Join-Path $operation 'source-with-header.json'
 $proof=Get-Content -LiteralPath $receipt -Raw | ConvertFrom-Json
 $vswhere=Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
 $vsInstall=& $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
@@ -18,7 +19,7 @@ if(-not $vsInstall){throw 'Visual Studio C++ tools are required.'}
     "-DBC2_AUTHORED_GRIP_HEADER=$profiles/Bc2AuthoredGrips.generated.h" `
     "-DBC2_AUTHORED_SUPPORT_HEADER=$profiles/Bc2AuthoredSupports.generated.h" `
     "-DBC2_EXPERIMENTAL_MAGAZINE_HEADER=$profiles/Bc2ExperimentalMagazineGeometry.h" `
-    "-DBC2_NATIVE_OPERATION_CAPABILITIES_HEADER=$profiles/Bc2NativeOperationCapabilities.generated.h" `
+    "-DBC2_NATIVE_OPERATION_CAPABILITIES_HEADER=$operation/Bc2NativeOperationCapabilities.generated.h" `
     "-DBC2_NATIVE_OPERATION_SOURCE_RECEIPT=$receipt" `
     "-DBC2_NATIVE_OPERATION_SOURCE_SHA256=$($proof.source_sha256)"
 if($LASTEXITCODE -ne 0){throw 'Checkpoint configuration or exact source verification failed.'}

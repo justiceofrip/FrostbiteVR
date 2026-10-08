@@ -1,3 +1,13 @@
+## October 8: separate old retirement from current equipment — 203
+
+Cleanup of an interrupted operation belongs to the old owner and cycle, while
+fresh attachment evidence belongs to the current weapon's validated profile.
+Comparing that new attachment to an old rig can silently block future reloads.
+Persistent cross-profile CPU sequences reproduced and fixed this shared BC2
+consumer defect; native original-return/replacement regression also passed.
+No Refractor identity assumptions, offsets, or ammunition authority were reused.
+Actual native cross-profile transitions and headset acceptance remain separate.
+
 ## October 8: preserve diagnostic completions without changing authority
 
 Concurrent native callbacks can finish correctly while a nonblocking diagnostic

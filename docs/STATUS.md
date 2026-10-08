@@ -1,4 +1,10 @@
-# Current status — checkpoint 202
+# Current status — checkpoint 203
+
+[Checkpoint 203](RELOAD-TRANSITIONS-203.md) fixes a reproduced shared magazine
+retirement failure after switching to a different rig/profile. Persistent CPU
+transition tests and all 185 suites pass on x86 and x64. The rebuilt module also
+passes the existing strict actual-game original-return/replacement sequence.
+Native cross-profile transition coverage and new headset acceptance remain open.
 
 Source publication prepared October 7, 2026 (US Eastern). Historical diagnostic
 timestamps use UTC and may display October 8. This is a developer WIP, not a

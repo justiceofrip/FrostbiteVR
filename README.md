@@ -21,19 +21,25 @@ not supported games.
 
 ## Where the project stands
 
+Current development **203** fixes a reproduced shared reload-retirement failure
+after switching weapon profiles. All 185 public C++ suites pass on each
+architecture, and the rebuilt module passes the prior actual-game magazine
+sequence. Cross-profile recovery is currently CPU-tested; see
+[the evidence and limits](docs/RELOAD-TRANSITIONS-203.md).
+
 Earlier headset tests demonstrated native stereo, tracked weapons and support
 hands, roomscale/recentering, controller menu interaction, chest ammunition,
 shoulder holsters, selected manual reloads and the tested boat's head aiming and
 firing. These features remain experimental, and later tests exposed regressions.
 
-The latest checkpoint, **202 (October 7, 2026, US Eastern)**, passed an automated
+The prior checkpoint, **202 (October 7, 2026, US Eastern)**, passed an automated
 controller sequence in the actual game: return a partly used XM8 magazine,
 remove it again, carry a replacement with fast motion and insert it. The strict
 audit verified conserved ammunition, no cancellations or magazine visual
 fallbacks, stereo delivery and cleanup. Shared reload-start timing and diagnostic
 completion retention were corrected. That development composition passed all
 186 C++ suites on both architectures. Two suites use local test-only fixtures
-that are excluded from this repository; ordinary public builds have 184 suites.
+that are excluded from this repository; the initial public build had 184 suites.
 
 **This checkpoint has not had a new headset acceptance test.** Reliable behavior
 across weapon changes, holsters, pickups, empty ammunition and campaign transitions

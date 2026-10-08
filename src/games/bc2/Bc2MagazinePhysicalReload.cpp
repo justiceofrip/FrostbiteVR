@@ -211,7 +211,11 @@ MagazinePhysicalResult Bc2MagazinePhysicalReload::Tick(const MagazinePhysicalSam
   }
   ObserveRetirement(s);
   const auto& r=retirement_;
-  const bool attached=s.raw.valid&&s.raw.owner==s.nativeOwner&&s.raw.rigFingerprint==profile_->geometry->rigFingerprint&&s.raw.nativeMagazineAttached&&
+  // The drained request still belongs to owners_.native, but this attachment
+  // observation belongs to the currently selected, independently verified map.
+  // Requiring the old rig here strands retirement after a profile switch and
+  // prevents the new weapon from ever starting another manual reload.
+  const bool attached=s.raw.valid&&s.raw.owner==s.nativeOwner&&s.raw.rigFingerprint==map->family.binding.profile->geometry->rigFingerprint&&s.raw.nativeMagazineAttached&&
    s.raw.inputEvidence.owner==s.input.owner&&s.raw.inputEvidence.deadlineNs>s.input.nowNs&&r&&s.raw.inputEvidence.observedNs>=r->observedNs;
   if(r&&!attached)++retireAttachedWaits_;
   if(r&&r->verified&&r->identity==owners_.native&&r->cycle==owners_.cycle&&Fresh(r->observedNs,r->deadlineNs,s.input.nowNs)&&

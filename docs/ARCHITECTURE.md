@@ -1,5 +1,13 @@
 # Engine boundaries
 
+## Cross-profile reload retirement — 203
+
+Retirement receipts describe the old native owner and cycle. The current attached
+magazine describes the independently validated current family/profile. Keeping
+these checks separate permits a drained old reload to rebaseline onto a different
+rig without acknowledging an old ammo transfer. Persistent CPU transition tests
+cover this separation; native/headset acceptance is tracked independently.
+
 ## Diagnostic completion retention — October 8, 202
 
 BC2's independent native invocation result remains the gameplay authority. When
