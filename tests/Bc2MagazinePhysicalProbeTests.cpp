@@ -28,15 +28,16 @@ template<class Probe> Probe ProbeFor(bool original,bool carry,bool sequence=fals
 float Metric(const std::string& report,const std::string& field){const auto key="\""+field+"\":";const auto at=report.find(key);
  return at==std::string::npos?0:std::stof(report.substr(at+key.size()));}
 struct Loop {
+ enum class InputFault {None,LeftTracking,RightTracking,HeadTracking,Focus,Expired};
  std::int64_t now=1000*Ms,started=0,submittedAt=0,retiredAt=0;std::uint64_t sequence=0,cycle=0,intent=0;
  bool freezeCarry=false,anatomical=true,applied=false,gateTaken=false,ackTaken=false,publishPairs=true,allowReceipt=true,allowAttached=true,allowRetirement=true,allowIdle=true,changeOnCancel=false;
- bool observedHalfPull=false,observedHalfCarry=false,shortCarryLease=false,shortIssued=false,chest=false;
+ bool observedHalfPull=false,observedHalfCarry=false,shortCarryLease=false,shortIssued=false,chest=false,nativeCancelled=false;
  std::int64_t gapAt=0;
  unsigned starts=0,submits=0,cancels=0;int loaded=27,reserve=83;
  ReloadHoldIdentity native{};MagazinePhysicalApi api{};std::optional<ManualReloadRequest> unseat;
  std::optional<ReloadMagazineNativeRequest> request;
  std::optional<Bc2MagazinePhysicalReload> consumer;Bc2MagazinePhysicalProbe probe{true};MagazinePackCounters packs{};
- HandInteraction hands;std::optional<HandClaim> gun;TrackedRig rig;MagazineRawContact raw{};
+ HandInteraction hands;std::optional<HandClaim> gun;TrackedRig rig;ControllerActions actions;MagazineRawContact raw{};
  std::shared_ptr<SelectedMeshesSnapshot> meshes=std::make_shared<SelectedMeshesSnapshot>();
  explicit Loop(bool original=false,bool carry=false,bool sequence=false,bool body=false):chest(body),probe(true,original,carry,sequence,body){native.owner={0x10000,0x20000,0x30000,0x40000,5,3,7};native.firing={0x50000,0x60000,0x70000};
  native.serverPlayer=0x80000;native.serverSoldier=0x90000;native.serverItem=0xa0000;
@@ -44,12 +45,13 @@ struct Loop {
  auto& m=meshes->states[0].meshes[0];m.kind=SelectedMeshKind::Xm8;m.address=0x120000;std::memcpy(m.assetPath.data(),Xm8MagazineMesh.data(),Xm8MagazineMesh.size());
  api.context=this;api.clock=[](void* p)noexcept{return static_cast<Loop*>(p)->now;};
  api.reserve=[](void* p)noexcept->std::optional<Bc2AmmoReserveLease>{auto& f=*static_cast<Loop*>(p);
-  if(f.submittedAt&&!f.applied&&f.now-f.submittedAt>=300*Ms){f.loaded+=int(f.request->reservedUnits);f.reserve-=int(f.request->reservedUnits);f.applied=true;}
-  return Bc2AmmoReserveLease{f.native,100000+f.sequence,f.now,f.now+100*Ms,f.loaded,f.reserve,30,true,!f.started||(f.allowIdle&&f.retiredAt&&f.now-f.retiredAt>=100*Ms)};};
+  if(f.submittedAt&&!f.applied&&!f.nativeCancelled&&f.now-f.submittedAt>=300*Ms){f.loaded+=int(f.request->reservedUnits);f.reserve-=int(f.request->reservedUnits);f.applied=true;}
+  return Bc2AmmoReserveLease{f.native,100000+f.sequence,f.now,f.now+100*Ms,f.loaded,f.reserve,30,true,
+   !f.started||(f.allowIdle&&((f.retiredAt&&f.now-f.retiredAt>=100*Ms)||(f.applied&&f.now-f.submittedAt>600*Ms)))};};
  api.identity=[](void* p)noexcept->std::optional<ReloadHoldIdentity>{return static_cast<Loop*>(p)->native;};
  api.start=[](void* p,const ReloadCycleControl& c,const ManualReloadRequest& r,const ReloadMagazineStartupPulse& pulse)noexcept{auto& f=*static_cast<Loop*>(p);++f.starts;f.started=f.now;f.cycle=c.cycle;f.unseat=r;
   if(pulse.control!=c||pulse.endNs!=c.observedNs+100000000||pulse.endNs>c.deadlineNs)return MagazineCycleStartResult::NotStarted;
-  f.retiredAt=0;f.gateTaken=false;f.ackTaken=false;f.applied=false;f.submittedAt=0;f.request.reset();return MagazineCycleStartResult::Started;};
+  f.retiredAt=0;f.gateTaken=false;f.ackTaken=false;f.applied=false;f.nativeCancelled=false;f.submittedAt=0;f.request.reset();return MagazineCycleStartResult::Started;};
  api.inspectStart=[](void*,const ReloadHoldIdentity&,std::uint64_t,const std::optional<ReloadMagazineStartupPulse>&)noexcept{return MagazineCycleStartResult::Unknown;};
  api.keep=[](void*,const ReloadCycleControl&)noexcept{return true;};
  api.lease=[](void* p,const ReloadHoldIdentity& id,std::uint64_t cycle)noexcept->std::optional<ReloadMagazineLease>{auto& f=*static_cast<Loop*>(p);
@@ -66,35 +68,47 @@ struct Loop {
   if(!f.applied||f.ackTaken||!f.allowReceipt)return {};f.ackTaken=true;const auto& r=*f.request;
   return ReloadMagazineAckEvidence{{{r.request.id,r.request.owner,r.request.operation,ReloadAcknowledgement::Applied},id,cycle,f.sequence,900,
    r.heldLease.loaded,r.heldLease.reserve,f.loaded,f.reserve},f.now,f.now+100*Ms,true};};
- api.cancel=[](void* p)noexcept{auto& f=*static_cast<Loop*>(p);++f.cancels;f.retiredAt=f.now;if(f.changeOnCancel){++f.loaded;--f.reserve;}};
+ api.cancel=[](void* p)noexcept{auto& f=*static_cast<Loop*>(p);++f.cancels;f.retiredAt=f.now;f.nativeCancelled=true;if(f.changeOnCancel){++f.loaded;--f.reserve;}};
  api.retire=[](void* p,const ReloadHoldIdentity& id,std::uint64_t cycle)noexcept->std::optional<ReloadCycleRetirement>{auto& f=*static_cast<Loop*>(p);
   if(!f.retiredAt||!f.allowRetirement)return {};return ReloadCycleRetirement{id,cycle,1000+f.sequence,f.now,f.now+200*Ms,true};};
  auto pouch=chest?ChestAmmoSupply():Bc2MagazinePhysicalReload::DefaultPouch();
  const auto ids=Bc2MagazinePhysicalReload::DefaultPouch();pouch.itemNamespace=ids.itemNamespace;pouch.pouch=ids.pouch;
  consumer.emplace(true,api,pouch);
  }
- void Tick(){const auto priorRaw=raw.rawLeftWristWorldMeters;bool frozen=false;now+=10*Ms;++sequence;auto in=Input(sequence);
-  probe.Prepare(in,native.owner,Xm8MagazineAsset,raw,consumer->ProbeState(now),now,now+100*Ms,now);
+ // Pausing the motion driver never resets the real consumer or hand arbiter.
+ // Lost tracking is supplied as input, not a direct consumer Cancel call.
+ void Tick(bool drive=true,InputFault fault=InputFault::None){const auto priorRaw=raw.rawLeftWristWorldMeters;bool frozen=false;now+=10*Ms;++sequence;auto in=Input(sequence);
+  if(drive)probe.Prepare(in,native.owner,Xm8MagazineAsset,raw,consumer->ProbeState(now),now,now+100*Ms,now);
+  if(fault==InputFault::LeftTracking)in.hands[0].gripTracked=in.hands[0].aimTracked=false;
+  if(fault==InputFault::RightTracking)in.hands[1].gripTracked=in.hands[1].aimTracked=false;
+  if(fault==InputFault::HeadTracking)in.headValid=false;
+  if(fault==InputFault::Focus){in.focused=false;in.hands={};}
+  if(fault==InputFault::Expired)in.predictedNs=now-110*Ms;
+  const auto action=actions.Update(in,{native.owner.soldier,native.owner.equipGeneration,true,true},now);
   frozen=freezeCarry&&Report(probe).find("\"phase\":14")!=std::string::npos;
   if(in.hands[0].squeeze>.35f&&in.hands[0].squeeze<.75f){
    observedHalfCarry|=Report(probe).find("\"phase\":14")!=std::string::npos;
    observedHalfPull|=Report(probe).find("\"phase\":3")!=std::string::npos;
   }
-  HandInteractionSample h{{(std::uint64_t(native.owner.weak)<<32)|native.owner.soldier,5,17,7},sequence,now,now+100*Ms,now,true,{true,true},{in.hands[0].squeeze<=.35f,false}};
+  HandInteractionSample h{{(std::uint64_t(native.owner.weak)<<32)|native.owner.soldier,5,17,7},sequence,in.predictedNs,in.predictedNs+100*Ms,now,
+   in.focused&&in.headValid,{in.hands[0].gripTracked,in.hands[1].gripTracked&&in.hands[1].aimTracked},{in.hands[0].squeeze<=.35f,false}};
   hands.Update(h);HandContactProof proof{{1002,1},sequence,h.deadlineNs,true};
   if(gun)gun=hands.Renew(h,gun->token,proof).claim;
   if(!gun)gun=hands.Acquire(h,{h.owner,InteractionHand::Right,HandClaimKind::GunHold,{0xb0000,17},proof,++intent,0}).claim;
   meshes->sequence=sequence;meshes->observedNs=now;meshes->deadlineNs=now+200*Ms;
   MagazinePhysicalSample s;s.nativeOwner=native.owner;s.input=h;s.weapon={0xb0000,17};s.trackingEpoch=7;s.geometrySequence=sequence;
   s.family={{native.owner,s.weapon,0xd0000,0xc0000,2},now,now+100*Ms,true};
-  s.bodyFromHand=*(chest?BodyAnchorHandPose(in,InteractionHand::Left):PhysicalReloadPouchPose(in));s.gripPressed=ReloadGripActive(in.hands[0].squeeze,h,hands.Current(InteractionHand::Left));s.cancel=probe.CancelConsumer();s.asset=Xm8MagazineAsset;s.meshes=meshes;s.raw=raw;
+  const auto pouch=chest?BodyAnchorHandPose(in,InteractionHand::Left):PhysicalReloadPouchPose(in);
+  if(pouch)s.bodyFromHand=*pouch;
+  s.gripPressed=ReloadGripActive(in.hands[0].squeeze,h,hands.Current(InteractionHand::Left));s.cancel=!action.active||!pouch||(drive&&probe.CancelConsumer());s.asset=Xm8MagazineAsset;s.meshes=meshes;s.raw=raw;
+  s.actionFlagsKnown=true;s.actionHeld=action.held;s.actionPressed=action.pressed;
   if(raw.valid)s.originalHandEvidence=raw.inputEvidence;
   const auto result=consumer->Tick(s,hands,intent);
   // Test-owned mock renderer receipt. Production reads actual verified Pack
   // counters; the fixture itself has no writer for these values.
   if(publishPairs&&result.tracking.target&&MagazineTargetFresh(result.tracking,now)){
    ++packs.pairs;packs.copies+=2;const auto role=unsigned(result.tracking.target->role);++packs.rolePairs[role];packs.roleCopies[role]+=2;}
-  probe.Observe(consumer->ProbeState(now),packs,now);
+  if(drive)probe.Observe(consumer->ProbeState(now),packs,now);
   const auto body=Pose(5,2,3),left=Multiply(Pose(-.2f,-.4f,.3f),body),right=Multiply(Pose(0,-.25f,.45f),body);
   std::array<ArmAnchor,2> arms{{{{4.8f,1.8f,3},{0,1,0}},{{5.2f,1.8f,3},{0,1,0}}}};
   const auto posed=rig.Update({1,2,3,4},in,body,left,right,right,arms);
@@ -227,6 +241,104 @@ int OriginalReturnRejectsUnexpectedSupplyOrReceipt(){
 }
 int ChestSupplySequence(){Loop f(false,true,true,true);CHECK(f.Run());CHECK(f.starts==2&&f.submits==1&&f.loaded==30&&f.reserve==80);
  CHECK(Report(f.probe).find("\"chest_supply\":true")!=std::string::npos);return 0;}
+int RepeatDriverWithoutResettingConsumer(){
+ Loop f(true,false,false,true);const auto* original=&*f.consumer;
+ for(unsigned episode=0;episode<3;++episode){
+  if(episode)f.probe=Bc2MagazinePhysicalProbe(true,true,false,false,true);
+  const bool pass=f.Run();if(!pass){std::cerr<<Report(f.probe)<<'\n';f.consumer->Report(std::cerr);}
+  CHECK(pass && &*f.consumer==original);
+  CHECK(f.starts==episode+1&&f.consumer->ProbeState(f.now).originalReturns==episode+1);
+  CHECK(f.submits==0&&f.loaded==27&&f.reserve==83);
+ }
+ f.probe=Bc2MagazinePhysicalProbe(true,false,true,false,true);CHECK(f.Run());
+ CHECK(f.starts==4&&f.submits==1&&f.consumer->ProbeState(f.now).originalReturns==3);
+ CHECK(f.loaded==30&&f.reserve==80);return 0;
+}
+int TrackingInterruptionThenRealRecovery(){
+ for(const auto phase:{DetachableMagazinePhase::Pulling,DetachableMagazinePhase::RemovedHeld,
+     DetachableMagazinePhase::WellEmpty,DetachableMagazinePhase::ReplacementHeld,DetachableMagazinePhase::Guided,DetachableMagazinePhase::AwaitingSeat})
+ for(const auto fault:{Loop::InputFault::LeftTracking,Loop::InputFault::RightTracking,Loop::InputFault::HeadTracking,Loop::InputFault::Focus,Loop::InputFault::Expired}){
+  Loop f(false,true,false,true);const auto* original=&*f.consumer;
+  for(unsigned n=0;n<2500&&!f.probe.CancelConsumer()&&f.consumer->ProbeState(f.now).phase!=phase;++n)f.Tick();
+  CHECK(f.consumer->ProbeState(f.now).phase==phase&&f.starts==1);
+  const unsigned oldSubmits=phase==DetachableMagazinePhase::AwaitingSeat?1:0;CHECK(f.submits==oldSubmits);
+  const auto interrupted=f.consumer->ProbeState(f.now);const auto oldCycle=interrupted.cycle;
+  f.Tick(false,fault);CHECK(f.cancels==1&&!f.hands.Current(InteractionHand::Left));
+  CHECK(f.consumer->ProbeState(f.now).retiring);
+  for(unsigned n=0;n<60&&f.consumer->ProbeState(f.now).retiring;++n)f.Tick(false);
+  CHECK(!f.consumer->ProbeState(f.now).retiring&&!f.consumer->BlocksEquipment());
+  CHECK(f.loaded==27&&f.reserve==83&&f.consumer->ProbeState(f.now).completed==0);
+  // Only replace the controller script. Native counters, counts, ownership,
+  // supplies, claims and their monotonically increasing IDs all persist.
+  f.probe=Bc2MagazinePhysicalProbe(true,false,true,true,true);
+  const bool pass=f.Run();if(!pass){std::cerr<<"Interrupted phase "<<unsigned(phase)<<", input fault "<<unsigned(fault)<<": "<<Report(f.probe)<<'\n';f.consumer->Report(std::cerr);}
+  CHECK(pass && &*f.consumer==original);
+  const auto done=f.consumer->ProbeState(f.now);
+  CHECK(done.originalReturns==1&&done.completed==1&&done.acquired==interrupted.acquired+1);
+  CHECK(done.cycle>oldCycle&&f.starts==3&&f.submits==oldSubmits+1&&f.loaded==30&&f.reserve==80);
+ }
+ return 0;
+}
+int RepeatedReplacementsKeepLifetimeEvidence(){
+ Loop f(false,true,false,true);const auto* original=&*f.consumer;
+ unsigned simulatedShots=0;std::uint64_t previousCycle=0,previousRequest=0;
+ for(unsigned episode=0;episode<4;++episode){
+  if(episode){
+   // Test-owned native observation: three rounds fired between episodes.
+   // No production consumer state, ledger, IDs or receipts are reset here.
+   f.loaded-=3;simulatedShots+=3;f.probe=Bc2MagazinePhysicalProbe(true,false,true,false,true);
+  }
+  const bool pass=f.Run();if(!pass){std::cerr<<Report(f.probe)<<'\n';f.consumer->Report(std::cerr);}
+  CHECK(pass && &*f.consumer==original);
+  const auto s=f.consumer->ProbeState(f.now);
+  CHECK(s.started==episode+1&&s.acquired==episode+1&&s.submitted==episode+1&&s.completed==episode+1);
+  CHECK(f.request&&f.request->request.id>previousRequest&&s.cycle>previousCycle);
+  CHECK(f.loaded==30&&f.loaded+f.reserve+int(simulatedShots)==110);
+  previousCycle=s.cycle;previousRequest=f.request->request.id;
+ }
+ return 0;
+}
+int NewEpisodeRejectsBusyConsumer(){
+ for(const auto phase:{DetachableMagazinePhase::PreparingRemoval,DetachableMagazinePhase::RemovedHeld,
+     DetachableMagazinePhase::ReplacementHeld,DetachableMagazinePhase::AwaitingSeat}){
+  Loop f(false,true,false,true);
+  for(unsigned n=0;n<2500&&!f.probe.CancelConsumer()&&f.consumer->ProbeState(f.now).phase!=phase;++n)f.Tick();
+  const auto state=f.consumer->ProbeState(f.now);CHECK(state.phase==phase);
+  Bc2MagazinePhysicalProbe next(true,false,true,false,true);auto in=Input(++f.sequence);f.now=in.predictedNs;
+  next.Prepare(in,f.native.owner,Xm8MagazineAsset,f.raw,state,f.now,f.now+100*Ms,f.now);
+  CHECK(Metric(Report(next),"failure")==21&&in.hands[0].squeeze==0);
+  CHECK(f.starts==1&&!f.cancels); // The driver did not call the native API.
+ }
+ return 0;
+}
+int LifetimeCountersCannotRollBack(){
+ Loop f(false,true,true,true);CHECK(f.Run());
+ for(unsigned field=0;field<5;++field){
+  auto state=f.consumer->ProbeState(f.now);Bc2MagazinePhysicalProbe next(true);
+  auto in=Input(++f.sequence);f.now=in.predictedNs;
+  next.Prepare(in,f.native.owner,Xm8MagazineAsset,f.raw,state,f.now,f.now+100*Ms,f.now);
+  CHECK(!next.CancelConsumer());
+  if(field==0)--state.acquired;if(field==1)--state.started;if(field==2)--state.submitted;
+  if(field==3)--state.completed;if(field==4)--state.originalReturns;
+  next.Observe(state,f.packs,f.now);CHECK(Metric(Report(next),"failure")==4);
+ }
+ return 0;
+}
+int PriorEvidenceCannotCompleteNewEpisode(){
+ Loop f(true,false,false,true);CHECK(f.Run());const auto old=f.consumer->ProbeState(f.now);
+ f.probe=Bc2MagazinePhysicalProbe(true,true,false,false,true);f.Tick();
+ CHECK(!f.probe.CancelConsumer()&&Report(f.probe).find("\"native_receipt\":false")!=std::string::npos);
+ f.probe.Observe(old,f.packs,f.now);
+ CHECK(!f.probe.CancelConsumer()&&Report(f.probe).find("\"native_receipt\":false")!=std::string::npos);
+ f.publishPairs=false;CHECK(!f.Run());
+ CHECK(f.consumer->ProbeState(f.now).originalReturns==1&&f.starts==2&&f.submits==0);
+ // Old receipt plus a forged completion count is still not fresh evidence.
+ Bc2MagazinePhysicalProbe next(true,true);auto in=Input(++f.sequence);f.now=in.predictedNs;
+ next.Prepare(in,f.native.owner,Xm8MagazineAsset,f.raw,old,f.now,f.now+100*Ms,f.now);
+ auto replay=old;++replay.started;++replay.originalReturns;
+ next.Observe(replay,f.packs,f.now);CHECK(next.CancelConsumer()&&!next.Completed());
+ return 0;
+}
 int DisabledAndBounded(){Bc2MagazinePhysicalProbe off;auto in=Input(1);const auto original=in;off.Prepare(in,{},"",{},{},1000*Ms,1100*Ms,1000*Ms);
  CHECK(in.hands[0].grip.position.x==original.hands[0].grip.position.x&&!off.CancelConsumer());
  Bc2MagazinePhysicalProbe probe(true);ReloadStateOwner owner{0x10000,0x20000,0x30000,0x40000,5,3,7};
@@ -234,5 +346,5 @@ int DisabledAndBounded(){Bc2MagazinePhysicalProbe off;auto in=Input(1);const aut
  probe.Prepare(in,owner,Xm8MagazineAsset,{},{},31000*Ms,31100*Ms,31000*Ms);
  CHECK(probe.CancelConsumer()&&in.hands[0].squeeze==0);return 0;}
 }
-int main(){if(ChestSupplySequence()||CarryWaitRejectsLostControl()||CarryPreviousLeaseMayExpire()||CarryMissingHoldIsBounded()||CarryWaitDoesNotInventMotion()||RepeatedOriginalThenReplacement()||RepeatRequiresFirstReturnRetirement()||RepeatStillRequiresObservedCarry()||FreshFreeCarryThroughRealConsumer()||CarryCoverageRequiresObservedMotion()||OriginalReturnThroughRealConsumer()||OriginalReturnRequiresActualEvidence()||OriginalReturnRejectsUnexpectedSupplyOrReceipt()||ClosedLoopRealPolicies()||PackEvidenceCannotBeInvented()||NativeReceiptCannotBeInferredFromCounts()||AttachedBaselineRequiredAfterReceipt()||FullOrEmptyPreflightNeverBegins()||DisabledAndBounded())return 1;
- std::cout<<"BC2 magazine physical probe: 19 actual-policy/TrackedRig/evidence groups passed; native/GPU/headset unverified\n";}
+int main(){if(RepeatedReplacementsKeepLifetimeEvidence()||NewEpisodeRejectsBusyConsumer()||LifetimeCountersCannotRollBack()||PriorEvidenceCannotCompleteNewEpisode()||RepeatDriverWithoutResettingConsumer()||TrackingInterruptionThenRealRecovery()||ChestSupplySequence()||CarryWaitRejectsLostControl()||CarryPreviousLeaseMayExpire()||CarryMissingHoldIsBounded()||CarryWaitDoesNotInventMotion()||RepeatedOriginalThenReplacement()||RepeatRequiresFirstReturnRetirement()||RepeatStillRequiresObservedCarry()||FreshFreeCarryThroughRealConsumer()||CarryCoverageRequiresObservedMotion()||OriginalReturnThroughRealConsumer()||OriginalReturnRequiresActualEvidence()||OriginalReturnRejectsUnexpectedSupplyOrReceipt()||ClosedLoopRealPolicies()||PackEvidenceCannotBeInvented()||NativeReceiptCannotBeInferredFromCounts()||AttachedBaselineRequiredAfterReceipt()||FullOrEmptyPreflightNeverBegins()||DisabledAndBounded())return 1;
+ std::cout<<"BC2 magazine physical probe: persistent actual-policy/TrackedRig/evidence groups passed; native/GPU/headset unverified\n";}

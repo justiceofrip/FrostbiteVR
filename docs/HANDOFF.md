@@ -1,12 +1,25 @@
 # Fork handoff
 
+Local checkpoint [205](RELOAD-RECOVERY-205.md) extends the reload motion driver
+to repeated episodes without resetting persistent consumers. Offline tests now
+cover 30 tracking/focus/input interruption cases followed by recovery, repeated
+reloads and rejection of old evidence. Native responses and renderer receipts
+are mocked in this matrix. All 186 C++ suites pass on both architectures.
+`Build-Checkpoint.ps1` selects the 205 operation
+receipt with the same 202 calibration headers. No new live interruption mode
+or headset acceptance is claimed. The user is independently testing unmodified
+BC2 launch switches; do not restart, inject into, focus or close those sessions.
+The x86 205 output is `build/x86-checkpoint205`, because the old DLL at
+`build/x86/BC2NativeProbe.dll` remained locked. Do not select the old path by
+habit. The new offline build receipt pins the separate output directory.
+
 Local development now adds [204](COMBINED-INVENTORY-RELOAD-204.md), a bounded
 combined shoulder-switch/chest-reload controller sequence. All 186 suites pass
 on x86 and x64. The corrected live run passed its strict combined, reload and
 startup-pulse audits: 20/191 to 30/181 ammo, zero cancellations/fallbacks, 240 pairs
-and clean restoration. BC2 is minimized with no active mod/host session; its
-disabled DLL remains mapped, so restart BC2 before the next injection.
-`Build-Checkpoint.ps1` now selects the 204 operation receipt and 202 calibrations. No GitHub push was
+and clean restoration. At the end of that run BC2 was minimized with its disabled
+DLL still mapped. That historical PID is not authority to close any later game
+session; verify the current process before future tests. No GitHub push was
 made; the public repository remains the user's fork snapshot.
 
 The prior [checkpoint 203](RELOAD-TRANSITIONS-203.md) corrected a reproduced

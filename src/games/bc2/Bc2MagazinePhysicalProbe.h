@@ -22,6 +22,10 @@ private:
  enum class Phase:unsigned {Warmup,ApproachMagazine,Grip,Pull,Release,Pouch,GrabReplacement,ApproachRail,Enter,Stroke,WaitAck,WaitBaseline,Done,Failed,Carry};
  void PhaseTo(Phase,std::int64_t)noexcept;
  void Fail(unsigned,std::int64_t)noexcept;
+ // Diagnostic episode accounting only. Never clears or rewrites the consumer.
+ struct Counts {unsigned acquired=0,started=0,submitted=0,completed=0,returned=0;};
+ std::optional<Counts> EpisodeCounts(const MagazinePhysicalProbeState&,std::int64_t,bool mayBegin=false)noexcept;
+ std::optional<Counts> counterBaseline_;Counts counterLatest_{};
  struct Input {interaction::InputFrame frame{};ReloadStateOwner owner{};std::int64_t observed=0,deadline=0;};
  std::array<std::optional<Input>,32> history_{};unsigned historyNext_=0;
  bool enabled_=false,originalReturn_=false,carryChallenge_=false;

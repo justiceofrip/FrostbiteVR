@@ -1,5 +1,14 @@
 # Engine boundaries
 
+## Diagnostic episodes — 205
+
+Reload motion scripts use per-episode counters over persistent consumer lifetime
+counters. An immutable baseline can be taken only while attached and idle;
+monotonic checks and fresh native/renderer evidence still govern completion.
+No consumer or native request is reset when the script changes. Offline recovery
+tests use real policies with explicitly mocked native and renderer boundaries.
+See [coverage and remaining live integration](RELOAD-RECOVERY-205.md).
+
 ## Combined player diagnostic — 204
 
 One explicit bounded driver composes ordinary shoulder inventory and chest

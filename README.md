@@ -21,7 +21,11 @@ not supported games.
 
 ## Where the project stands
 
-Current local development **204** passes a combined actual-game shoulder-switch
+Local checkpoint **205** adds repeated reload diagnostics and 30 offline
+input-loss/recovery cases through persistent consumers, with mocked native and
+renderer boundaries. See [coverage and remaining live work](docs/RELOAD-RECOVERY-205.md).
+
+The latest actual-game acceptance, **204**, passes a combined shoulder-switch
 and chest-reload sequence through persistent normal consumers. All 186 C++ suites
 pass on each architecture; the strict native audit confirms conserved ammo, no
 reload cancellations or magazine visual fallbacks, and clean restoration. See

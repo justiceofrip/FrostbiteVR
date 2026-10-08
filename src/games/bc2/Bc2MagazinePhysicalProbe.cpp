@@ -30,11 +30,33 @@ void Bc2MagazinePhysicalProbe::PhaseTo(Phase p,std::int64_t now)noexcept {
  if(rowCount_<rows_.size())rows_[rowCount_++]={unsigned(p),failure_,now};else ++dropped_;
 }
 void Bc2MagazinePhysicalProbe::Fail(unsigned why,std::int64_t now)noexcept {if(CancelConsumer())return;failure_=why;PhaseTo(Phase::Failed,now);}
+std::optional<Bc2MagazinePhysicalProbe::Counts> Bc2MagazinePhysicalProbe::EpisodeCounts(
+ const MagazinePhysicalProbeState& s,std::int64_t now,bool mayBegin)noexcept {
+ const Counts current{s.acquired,s.started,s.submitted,s.completed,s.originalReturns};
+ if(s.completed>s.submitted||s.submitted>s.acquired||std::uint64_t(s.submitted)+s.originalReturns>s.started){Fail(4,now);return {};}
+ if(!counterBaseline_){
+  // Starting another script is allowed only after the real consumer has
+  // retired its previous work. A busy consumer is never a new zero baseline.
+  if(!mayBegin||s.active||s.nativeHolding||s.retiring||s.pending||s.ownsHand||s.blocksEquipment||
+   s.phase!=DetachableMagazinePhase::Attached){Fail(21,now);return {};}
+  counterBaseline_=counterLatest_=current;
+ }
+ if(current.acquired<counterLatest_.acquired||current.started<counterLatest_.started||
+  current.submitted<counterLatest_.submitted||current.completed<counterLatest_.completed||current.returned<counterLatest_.returned){Fail(4,now);return {};}
+ counterLatest_=current;const auto& b=*counterBaseline_;
+ const Counts delta{current.acquired-b.acquired,current.started-b.started,current.submitted-b.submitted,
+  current.completed-b.completed,current.returned-b.returned};
+ if(delta.started>1||delta.submitted>1||delta.completed>delta.submitted||delta.submitted>delta.acquired||delta.acquired>1||
+  (originalReturn_?(delta.submitted||delta.completed||delta.acquired||delta.returned>1):delta.returned!=0)){Fail(4,now);return {};}
+ return delta;
+}
 void Bc2MagazinePhysicalProbe::Prepare(InputFrame& in,const ReloadStateOwner& owner,std::string_view asset,const MagazineRawContact& raw,
  const MagazinePhysicalProbeState& state,std::int64_t observed,std::int64_t deadline,std::int64_t now)noexcept {
  if(!enabled_)return;
  if(CancelConsumer()){in.hands[0].grip=command_;in.hands[0].aim=command_;in.hands[0].squeeze=0;return;}
  if(!first_){first_=phaseAt_=now;owner_=owner;command_=in.hands[0].grip;baseline_=packs_;}
+ const auto counts=EpisodeCounts(state,now,true);
+ if(!counts){in.hands[0].squeeze=0;return;}
  if(now<lastNow_||now-first_>=30000000000ll)Fail(1,now);lastNow_=now;
  if(owner!=owner_||asset!=Xm8MagazineAsset||!ValidInput(in)||!in.focused||!in.headValid||!Static(in)||
  !in.hands[0].gripTracked||!in.hands[1].gripTracked||!in.hands[1].aimTracked||observed<=0||observed>now||
@@ -44,8 +66,6 @@ void Bc2MagazinePhysicalProbe::Prepare(InputFrame& in,const ReloadStateOwner& ow
   in.hands[0].grip=lastInput_->hands[0].grip;in.hands[0].aim=lastInput_->hands[0].aim;
   in.hands[0].squeeze=CancelConsumer()?0:lastInput_->hands[0].squeeze;return;
  }
- if(state.submitted>1||state.completed>1||state.completed>state.submitted||
-    (originalReturn_&&(state.submitted||state.completed||state.acquired)))Fail(4,now);
  if(state.phase==DetachableMagazinePhase::Cancelled&&phase_!=Phase::Warmup)Fail(5,now);
  const Input* original=nullptr;
  if(raw.valid&&raw.owner==owner&&raw.rigFingerprint==Xm8MagazineRig)
@@ -134,9 +154,9 @@ void Bc2MagazinePhysicalProbe::Prepare(InputFrame& in,const ReloadStateOwner& ow
     if(!alignedAt_)alignedAt_=now;if(now-alignedAt_>=100000000)PhaseTo(Phase::GrabReplacement,now);
    }else alignedAt_=0;
   }
-  if(phase_==Phase::GrabReplacement&&state.acquired==1&&state.ownsHand&&state.phase==DetachableMagazinePhase::ReplacementHeld)PhaseTo(Phase::ApproachRail,now);
+  if(phase_==Phase::GrabReplacement&&counts->acquired==1&&state.ownsHand&&state.phase==DetachableMagazinePhase::ReplacementHeld)PhaseTo(Phase::ApproachRail,now);
  }
- if((originalReturn_?state.originalReturning:state.submitted==1)&&phase_>=Phase::ApproachRail&&phase_<=Phase::Stroke)PhaseTo(Phase::WaitAck,now);
+ if((originalReturn_?state.originalReturning:counts->submitted==1)&&phase_>=Phase::ApproachRail&&phase_<=Phase::Stroke)PhaseTo(Phase::WaitAck,now);
  if(phase_==Phase::WaitBaseline&&receiptVerified_&&!state.active&&!state.retiring&&!state.pending&&!state.blocksEquipment&&
   state.phase==DetachableMagazinePhase::Attached&&removedPair_&&(originalReturn_?originalReturns_==1:(hiddenPair_&&replacementPair_))){
   PhaseTo(Phase::Done,now);
@@ -150,6 +170,7 @@ void Bc2MagazinePhysicalProbe::Prepare(InputFrame& in,const ReloadStateOwner& ow
     next.returnThenReplace_=true;next.secondCycle_=true;next.firstCycleReport_=evidence.str();
     next.first_=first_;next.phaseAt_=now;next.lastNow_=now;next.owner_=owner_;
     next.command_=command_;next.packs_=packs_;next.baseline_=packs_;
+    if(!next.EpisodeCounts(state,now,true)){phase_=Phase::WaitBaseline;Fail(21,now);return;}
     *this=std::move(next);
    }catch(...){phase_=Phase::WaitBaseline;Fail(19,now);}
   }
@@ -166,25 +187,25 @@ void Bc2MagazinePhysicalProbe::Prepare(InputFrame& in,const ReloadStateOwner& ow
 }
 void Bc2MagazinePhysicalProbe::Observe(const MagazinePhysicalProbeState& s,const MagazinePackCounters& packs,std::int64_t now)noexcept {
  if(!enabled_||CancelConsumer())return;
+ const auto counts=EpisodeCounts(s,now);if(!counts)return;
  if(packs.copies<packs_.copies||packs.pairs<packs_.pairs||packs.fallbacks<packs_.fallbacks){Fail(12,now);return;}
  for(unsigned n=0;n<4;++n)if(packs.roleCopies[n]<packs_.roleCopies[n]||packs.rolePairs[n]<packs_.rolePairs[n]){Fail(12,now);return;}
- packs_=packs;submitted_=s.submitted;acquired_=s.acquired;
+ packs_=packs;submitted_=counts->submitted;acquired_=counts->acquired;
  if(originalReturn_){
-  if(s.submitted||s.completed||s.acquired||s.originalReturns>1||s.originalReturns<originalReturns_){Fail(4,now);return;}
   if(s.original){
    if(original_&&*original_!=*s.original){Fail(14,now);return;}
    if(!original_){original_=s.original;originalCycle_=s.cycle;}
   }
   if(s.reserve&&Fresh(*s.reserve,owner_,now)&&loadedBefore_>=0&&
     (s.reserve->loaded!=loadedBefore_||s.reserve->reserve!=reserveBefore_||s.reserve->capacity!=capacityBefore_)){Fail(15,now);return;}
-  if(s.originalReturns>originalReturns_){
+  if(counts->returned>originalReturns_){
    const auto& receipt=s.originalReceipt;
    if(!original_||!receipt||!receipt->verified||receipt->original!=*original_||receipt->cycle!=originalCycle_||
      !receipt->seat||!receipt->retirement||receipt->observedNs<=0||receipt->observedNs>now||receipt->deadlineNs<=now||
      receipt->deadlineNs-receipt->observedNs>200000000||!removedPair_||(phase_!=Phase::WaitAck&&phase_!=Phase::Stroke)||
      !s.reserve||!Fresh(*s.reserve,owner_,now)||!s.reserve->reloadInputReady||
      s.reserve->loaded!=loadedBefore_||s.reserve->reserve!=reserveBefore_||s.reserve->capacity!=capacityBefore_){Fail(16,now);return;}
-   originalReceipt_=receipt;originalReturns_=s.originalReturns;receiptVerified_=true;PhaseTo(Phase::WaitBaseline,now);
+   originalReceipt_=receipt;originalReturns_=counts->returned;receiptVerified_=true;PhaseTo(Phase::WaitBaseline,now);
   }
  }
  const auto newPair=[&](unsigned role){if(!phasePairs_[role])phasePairs_[role]=packs.rolePairs[role];
@@ -192,16 +213,20 @@ void Bc2MagazinePhysicalProbe::Observe(const MagazinePhysicalProbeState& s,const
  if(s.phase==DetachableMagazinePhase::RemovedHeld&&newPair(1))removedPair_=true;
  if(s.phase==DetachableMagazinePhase::WellEmpty&&newPair(3))hiddenPair_=true;
  if((s.phase==DetachableMagazinePhase::Guided||s.phase==DetachableMagazinePhase::AwaitingSeat)&&newPair(2))replacementPair_=true;
- if(s.completed>completed_){
-  if(s.completed!=1||s.submitted!=1||!s.reserve||!Fresh(*s.reserve,owner_,now)||expectedUnits_<=0||
+ if(counts->completed>completed_){
+  if(counts->completed!=1||counts->submitted!=1||!s.reserve||!Fresh(*s.reserve,owner_,now)||expectedUnits_<=0||
    s.reserve->capacity!=capacityBefore_||s.reserve->loaded!=loadedBefore_+expectedUnits_||s.reserve->reserve!=reserveBefore_-expectedUnits_){Fail(13,now);return;}
-  completed_=s.completed;receiptVerified_=true;PhaseTo(Phase::WaitBaseline,now);
- }else if(s.completed<completed_||s.completed>s.submitted||s.submitted>1||s.acquired>1)Fail(4,now);
+  completed_=counts->completed;receiptVerified_=true;PhaseTo(Phase::WaitBaseline,now);
+ }
 }
 void Bc2MagazinePhysicalProbe::Report(std::ostream& o)const {
  const auto precision=o.precision();o.precision(std::numeric_limits<float>::max_digits10);
+ const auto counters=[&](const Counts& c){o<<"{\"acquired\":"<<c.acquired<<",\"started\":"<<c.started
+  <<",\"submitted\":"<<c.submitted<<",\"completed\":"<<c.completed<<",\"original_returns\":"<<c.returned<<'}';};
  o<<"{\"enabled\":"<<(enabled_?"true":"false")<<",\"synthetic_input\":true,\"headset_verified\":false,\"eye_textures_verified\":false"
-  <<",\"chest_supply\":"<<(chestSupply_?"true":"false")
+  <<",\"counter_baseline\":";if(counterBaseline_)counters(*counterBaseline_);else o<<"null";
+ o<<",\"counter_latest\":";counters(counterLatest_);
+ o<<",\"chest_supply\":"<<(chestSupply_?"true":"false")
   <<",\"return_then_replace\":"<<(returnThenReplace_?"true":"false")<<",\"second_cycle\":"<<(secondCycle_?"true":"false")
   <<",\"first_cycle\":"<<(firstCycleReport_.empty()?"null":firstCycleReport_)
   <<",\"original_return_fixture\":"<<(originalReturn_?"true":"false")

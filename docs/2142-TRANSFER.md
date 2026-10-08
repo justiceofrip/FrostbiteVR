@@ -1,3 +1,13 @@
+## October 8: preserve lifetime evidence across diagnostic episodes — 205
+
+A scripted player may start another gesture sequence; the gameplay consumers
+must retain their lifetimes. Baseline diagnostic counters only when the consumer
+is idle, retain absolute counters alongside episode deltas, and reject rollback
+or reused completion evidence. Real controller/hand/reload policies now pass 30
+offline input-loss/recovery cases with mock native responses. This improves
+repeatable testing; it does not establish native or headset acceptance. See
+[205](RELOAD-RECOVERY-205.md).
+
 ## October 8: combine gestures without resetting the consumers — 204
 
 Independent holster and reload success does not prove their composition. Drive

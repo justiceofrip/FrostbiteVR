@@ -1,4 +1,11 @@
-# Current local status — checkpoint 204
+# Current local status — checkpoint 205
+
+[Checkpoint 205](RELOAD-RECOVERY-205.md) lets the automated reload driver run
+repeated episodes without resetting gameplay consumers. Thirty offline
+tracking/focus/input-loss cases recover into another reload, with native and
+renderer boundaries explicitly mocked. Live interruption integration and
+headset acceptance remain pending; 204 is still the latest native acceptance.
+Both 205 builds pass all 186 C++ suites.
 
 [Checkpoint 204](COMBINED-INVENTORY-RELOAD-204.md) passed a combined actual-game
 sequence through persistent normal consumers: holster XM8, draw/holster SPAS,
