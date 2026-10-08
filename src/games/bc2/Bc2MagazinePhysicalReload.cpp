@@ -75,12 +75,14 @@ void Bc2MagazinePhysicalReload::Record(unsigned kind,const HandInteractionSample
   originalMagazine_?originalMagazine_->rounds:0,lastReserve_?lastReserve_->loaded:-1,lastReserve_?lastReserve_->reserve:-1,kind==2?startOrigin_:ReloadStartOrigin{},kind==7?last_.claimFailure:std::nullopt,last_.nativeFailureCheck,kind==7?nativeBoundary_:std::nullopt,kind==7?last_.motionFailure:std::nullopt};
 }
 bool Bc2MagazinePhysicalReload::RollbackUnstarted(const HandInteractionSample& in,HandInteraction& hands)noexcept {
+ emittedPresentation_.reset();
  if(!unseat_||supply_.Pending()||supply_.Held()||!interaction_.RejectUnstarted(in,hands,*unseat_))return false;
  startupUnknown_=active_=retiring_=blocksCurrent_=gateApplied_=drained_=false;pulseUntil_=0;
  unseat_.reset();startupPulse_.reset();lease_.reset();gate_.reset();ack_.reset();originalMagazine_.reset();originalReserve_.reset();last_={};history_={};historyNext_=0;++unstarted_;
  return true;
 }
 void Bc2MagazinePhysicalReload::Cancel(const HandInteractionSample& in,HandInteraction& hands,MagazineCancelCause cause)noexcept {
+ emittedPresentation_.reset();
  if(!enabled_||retiring_)return;
  if(startupUnknown_){pulseUntil_=0;blocksCurrent_=true;return;} // No global native cancellation before ownership is known.
  if(active_){cancelCause_=cause;api_.cancel(api_.context);active_=false;retiring_=true;blocksCurrent_=true;++cancelled_;}
@@ -90,6 +92,47 @@ void Bc2MagazinePhysicalReload::Cancel(const HandInteractionSample& in,HandInter
  supply_.Cancel(in,hands);pulseUntil_=0;lease_.reset();gate_.reset();ack_.reset();replacementFrame_.reset();removalFrame_.reset();
 }
 MagazinePhysicalResult Bc2MagazinePhysicalReload::Tick(const MagazinePhysicalSample& supplied,HandInteraction& hands,
+ std::uint64_t& sharedIntent)noexcept {
+ retainedPresentationThisTick_=false;
+ auto out=TickImpl(supplied,hands,sharedIntent);
+ if(!retainedPresentationThisTick_){
+  if(MagazineTargetFresh(out.tracking,Now(supplied.input.nowNs)))emittedPresentation_=EmittedPresentation{out.tracking,last_.phase};
+  else emittedPresentation_.reset();
+ }
+ return out;
+}
+void Bc2MagazinePhysicalReload::RetainDeferredPresentation(MagazinePhysicalResult& out,const MagazinePhysicalSample& s,
+ HandInteraction& hands)noexcept {
+ const auto now=Now(s.input.nowNs);
+ if(!active_||!emittedPresentation_||emittedPresentation_->phase!=last_.phase||!last_.prop||s.cancel||
+    acceptedControlDeadline_<=now||s.nativeOwner!=owners_.native.owner||s.input.owner!=owners_.physical||
+    s.weapon!=owners_.weapon||s.family.binding!=owners_.family.binding||!s.meshes||!s.family.binding.profile||
+    !MagazineFamilyFresh(s.family,s.nativeOwner,s.input.owner,s.weapon,now)||
+    !MagazineSelected(*s.meshes,s.nativeOwner,s.asset,*s.family.binding.profile,now)||s.trackingEpoch!=s.nativeOwner.space)return;
+ const auto& old=emittedPresentation_->tracking;
+ if(!MagazineTargetFresh(old,now)||old.cycle!=owners_.cycle||old.target->inputSequence!=last_.prop->inputSequence||
+    old.target->role!=last_.prop->role||old.target->item!=last_.prop->item||old.target->handClaim!=last_.prop->handClaim||
+    old.target->gunClaim!=last_.prop->gunClaim||old.target->deadlineNs!=last_.prop->deadlineNs)return;
+ const auto gun=hands.Current(InteractionHand::Right),hand=hands.Current(InteractionHand::Left);
+ if(!gun||gun->token!=old.target->gunClaim||gun->inputSequence!=s.input.sequence||gun->deadlineNs<=now||
+    (old.target->handTarget&&(!s.gripPressed||s.input.released[0]||!hand||hand->token!=old.target->handClaim||hand->deadlineNs<=now)))return;
+ // Current metadata validates the original; it does not replace its native,
+ // selected-mesh, family, target or carry-frame deadlines and transforms.
+ auto current=old;current.inputEvidence=s.input;current.family=s.family;current.selected=s.meshes;
+ if(!MagazineTargetRetained(old,current,now))return;
+ out.tracking=old;out.tracking.inputEvidence=s.input;
+ if(!MagazineTargetFresh(out.tracking,now)){out.tracking={};return;}
+ // Durable phase/ownership only: no request, acknowledgement, seat, haptic or
+ // freshly captured geometry is replayed while the native observation waits.
+ out.interaction.phase=last_.phase;out.interaction.reason=last_.reason;out.interaction.nativeCycle=last_.nativeCycle;
+ out.interaction.prop=old.target;out.interaction.original=last_.original;
+ const bool removalOwned=hand&&last_.removalClaim&&hand->token==last_.removalClaim->token;
+ const bool supplyOwned=hand&&supply_.Held()&&hand->token==supply_.Held()->claim.token;
+ out.ownsLeftHand=removalOwned||supplyOwned;
+ if(removalOwned)out.interaction.removalClaim=last_.removalClaim;
+ retainedPresentationThisTick_=true;
+}
+MagazinePhysicalResult Bc2MagazinePhysicalReload::TickImpl(const MagazinePhysicalSample& supplied,HandInteraction& hands,
  std::uint64_t& sharedIntent)noexcept {
  MagazinePhysicalResult out;if(!enabled_)return out;
  nativeBoundary_.reset();
@@ -124,7 +167,7 @@ MagazinePhysicalResult Bc2MagazinePhysicalReload::Tick(const MagazinePhysicalSam
    currentGun->token.item==s.weapon&&currentGun->token.kind==HandClaimKind::GunHold&&
    currentGun->inputSequence==s.input.sequence&&currentGun->deadlineNs>s.input.nowNs;
   if(currentSafe&&ReloadKeepAliveDeferredWithinOriginalDeadline(ReloadKeepAliveResult::Deferred,s.input.nowNs,acceptedControlDeadline_)){
-   out.blocksWeaponActions=true;out.ownsLeftHand=bool(last_.removalClaim)||bool(supply_.Held());return out;}
+    out.blocksWeaponActions=true;out.ownsLeftHand=bool(last_.removalClaim)||bool(supply_.Held());RetainDeferredPresentation(out,s,hands);return out;}
   if(active_&&!currentSafe){cancel(s.cancel?MagazineCancelCause::ExplicitInput:MagazineCancelCause::InputOrClaim);return out;}
   if(active_)cancel(MagazineCancelCause::ReserveUnavailable);return out;
  }
@@ -154,7 +197,7 @@ MagazinePhysicalResult Bc2MagazinePhysicalReload::Tick(const MagazinePhysicalSam
    gun->inputSequence==s.input.sequence&&gun->deadlineNs>s.input.nowNs;
   if(same&&retainedReserve_&&Fresh(retainedReserve_->observedNs,retainedReserve_->deadlineNs,s.input.nowNs)&&lastInputDeadline_>s.input.nowNs){
    const auto keep=Keep({owners_.native,owners_.cycle,s.input.sequence,s.input.observedNs,s.input.deadlineNs,true},s.input.nowNs);
-  if(keep==ReloadKeepAliveResult::Deferred){out.blocksWeaponActions=true;out.ownsLeftHand=bool(last_.removalClaim)||bool(supply_.Held());return out;}
+   if(keep==ReloadKeepAliveResult::Deferred){out.blocksWeaponActions=true;out.ownsLeftHand=bool(last_.removalClaim)||bool(supply_.Held());RetainDeferredPresentation(out,s,hands);return out;}
   if(keep==ReloadKeepAliveResult::Rejected){
     cancel(MagazineCancelCause::KeepAlive);return out;}
    if(submitted)++transferReadDeferrals_;else ++heldReadDeferrals_;out.tracking={s.family,true,s.nativeOwner,s.input,s.meshes,*retainedReserve_,owners_.cycle,last_.prop};
@@ -288,7 +331,7 @@ MagazinePhysicalResult Bc2MagazinePhysicalReload::Tick(const MagazinePhysicalSam
  if(active_){
   const auto priorControlDeadline=acceptedControlDeadline_;
   const auto keep=Keep({owners_.native,owners_.cycle,s.input.sequence,s.input.observedNs,s.input.deadlineNs,true},s.input.nowNs);
-  if(keep==ReloadKeepAliveResult::Deferred){out.blocksWeaponActions=true;out.ownsLeftHand=bool(last_.removalClaim)||bool(supply_.Held());return out;}
+   if(keep==ReloadKeepAliveResult::Deferred){out.blocksWeaponActions=true;out.ownsLeftHand=bool(last_.removalClaim)||bool(supply_.Held());RetainDeferredPresentation(out,s,hands);return out;}
   if(keep==ReloadKeepAliveResult::Rejected){cancel(MagazineCancelCause::KeepAlive);return out;}
   const auto observation=api_.leaseObserved?api_.leaseObserved(api_.context,owners_.native,owners_.cycle):
    ReloadMagazineLeaseObservation{ReloadMagazineObservationResult::Ready,api_.lease(api_.context,owners_.native,owners_.cycle)};

@@ -6,6 +6,12 @@ roster.** SPAS shell loading and the scoped-XM8 launcher sight/mode are separate
 integrated paths. Wider asset extraction, generated descriptors and offline
 consumer tests are preserved, but most are not enrolled in the current runtime.
 
+The follow-up extraction now prepares **21 exact configurations across seven
+additional weapon models**. All 21 pass the shared consumer's partial/empty
+reload and identity-denial checks on x86 and x64 with mocked native responses.
+Their production registrations remain disabled. See the completed variant batch
+below; it resolves the 14 geometry gaps found in the initial audit.
+
 The often quoted **35 configurations, 20 two-hand grip records and 10 magazine
 contact records are prepared data counts**, including SP/optics variants. They
 are neither distinct gun counts nor completed manual-reload coverage. The
@@ -212,10 +218,38 @@ and UZI, plus the 9A91 Kobra path. The original binding files are
 `arsmg-paired-contact-batch-candidate/all/grip-bindings.json` (66 records) and
 `lmg-authored-mechanisms-candidate/all/reference-bindings.json` (30 records).
 Having more source bindings does not authorize cloning a measured magazine role
-onto every configuration using the same asset name. The next step for the 14
-variants is an exact component-equivalence receipt or the existing batch
-extractor with that configuration, followed by the independent native family
-proof; it is not a separate controller implementation for every gun.
+onto every configuration using the same asset name. The subsequent extraction
+below resolves the 14 variants through their own assets and configuration
+bindings. Independent native family proof remains separate.
+
+## Completed exact variant extraction and shared-consumer batch
+
+`<local-recovery>/weapon-pipeline206-variant-extraction` contains fresh extraction
+of all 14 previously unresolved variants using the existing paired-grasp
+extractor and each variant's original configuration, mesh and animation data.
+The serial extraction took about 97 seconds. No hand positioning or controller
+state machine was written separately for these weapon names.
+
+The combined output now contains 21 unique exact paths: **12 zero-bolt and nine
+stock-bolt candidates**, with zero requested extraction gaps and zero enabled
+production registrations. The seven models are M416, XM8 Compact, MG36, XM8 LMG,
+9A91, AKS74u and UZI, each with three configurations. The manifest records source
+and output hashes and exact reproduction inputs. Independent validation checks
+35 file hashes, 14 new profile digests/original bindings and the emitted path set.
+
+Root compiled the existing standalone magazine-consumer batch against the final
+21 headers and the current 206d libraries, sequentially on x86 and x64. Both
+architectures pass all 21 disabled-registry checks and all 21 mock-native consumer
+rows. Each consumer row runs partial and empty magazine reloads, checks transferred
+counts, and rejects mismatched path/capacity/bolt timing. `consumer-audit.json`
+joins the exact output paths and retains source/library hashes.
+
+These checks execute the shared C++ consumer and measured geometry; native calls
+are mocked. They do not test game hooks, live configured meshes, GPU rendering,
+headset feel, full package closure or production admission. The current runtime
+still enables only scoped XM8 and AEK971_sp magazine profiles. The remaining
+integration unit is the native mechanism family and its package composition,
+not a new per-weapon interaction implementation.
 
 The new `manifest.json` lists all five data-input hashes, tool/output hashes,
 the seven exact and 14 unresolved paths, and reproduction arguments. SHA-256:

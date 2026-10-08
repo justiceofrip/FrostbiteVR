@@ -174,6 +174,14 @@ std::optional<AmmoSupplyReservation> AmmoSupply::ReserveCurrent(const HandIntera
         source_.sequence,in.nowNs,held_->units,source_.reserveUnits,seat.operation};
     lastSeat_=seat.id;lastRequest_=request.id;return pending_;
 }
+bool AmmoSupply::ReleaseSubmitted(const HandInteractionSample& safety,HandInteraction& hands,
+    const AmmoSupplyReservation& reservation)noexcept {
+    if(!pending_||*pending_!=reservation||!held_||held_->item!=reservation.item||
+        held_->claim.token!=reservation.claim||safety.owner!=reservation.identity.owner||
+        safety.nowNs<lastNow_)return false;
+    Drop(safety,hands,AmmoSupplyReason::Released);
+    return true;
+}
 AmmoSupplyResolution AmmoSupply::Resolve(const HandInteractionSample& safety,HandInteraction& hands,
     const AmmoSupplyReceipt& receipt)noexcept {
     AmmoSupplyResolution out;

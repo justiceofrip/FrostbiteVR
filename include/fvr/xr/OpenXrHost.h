@@ -35,6 +35,8 @@ struct HostReport {
     interaction::RecenterEvidence recenterInput{};
     std::uint64_t menuFrames=0,menuErrors=0;
     graphics::BodyPropComposeStats bodyProps{};bool bodyPropsReady=false;
+    bool ammoCounterReady=false;
+    std::uint64_t ammoCounterFrames=0,ammoCounterUploads=0,ammoCounterErrors=0,ammoCounterValidSamples=0,ammoCounterInvalidSamples=0;
     std::uint64_t feedbackApplied=0,feedbackRejected=0,feedbackErrors=0;
     std::uint64_t captureFeedbackApplied=0,receiptFeedbackApplied=0,lastFeedbackEvent=0;
     std::int32_t lastSessionState=0;

@@ -79,7 +79,7 @@ int RenderEpochNamespaces(){using graphics::BodyPropSourceKind;using graphics::B
     CHECK(BodyPropWireEpoch(BodyPropSourceKind::VehicleReticle,UINT64_MAX>>7,7));
     Run r;r.Tick();auto d=r.adapter.Display(r.s.hand.nowNs);CHECK(d&&d->count==2);d->slots[1]=d->slots[0];CHECK(!BodyInventoryDisplayFresh(*d,r.s.hand.nowNs));
     graphics::BodyPropInstance empty{};CHECK(!graphics::SameBodyPropSource(empty,empty));
-    CHECK(sizeof(graphics::BodyPropFrame)==2352&&graphics::MaxBodyProps==8);return 0;}
+    CHECK(sizeof(graphics::BodyPropFrame)==2480&&graphics::MaxBodyProps==8);return 0;}
 int InPlaceAssetMutationIsRejected(){Run r;r.f.Word(Fixture::bd+12,0x39000);r.f.Text(0x39000,"SPAS12_sp");r.Tick();
     const auto d=r.adapter.Display(r.s.hand.nowNs);CHECK(d);unsigned index=0;while(index<d->count&&d->slots[index].native.weapon!=Fixture::b)++index;CHECK(index<d->count);
     const auto c=Mesh(*d,index);const auto e=body_carried_detail::Equipment(*c);CHECK(e&&WeaponEquipmentStillCurrent(r.f.Memory(),*e));

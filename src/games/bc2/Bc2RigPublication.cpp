@@ -2,6 +2,7 @@
 #include <intrin.h>
 #include <MinHook.h>
 #include "Bc2RigPublication.h"
+#include "Bc2WeaponFrameAccess.h"
 #include "Bc2MagazineFallbackObservation.h"
 #include "Bc2AuthoredSupport.h"
 #ifdef FVR_BC2_AUTHORED_SUPPORT_HEADER
@@ -76,7 +77,7 @@ std::array<std::atomic<unsigned>,8> reloadPresentationRejections{};
 struct NativeEye {unsigned soldier=0,weak=0;math::Matrix4 camera{};ULONGLONG ms=0;};
 std::atomic<std::shared_ptr<const NativeEye>> nativeEye;
 std::atomic<std::shared_ptr<const Tracking>> eyeTracking;
-std::atomic<unsigned> shotFrameRaces=0,shotFrameExpired=0,shotFrameUnavailable=0;
+std::atomic<unsigned> shotFrameRaces=0,shotFrameExpired=0,shotFrameUnavailable=0,supportFramesWhileFireBlocked=0;
 
 struct HandRecord {std::uint64_t generation=0;math::Matrix4 nativeWeapon{},placedWeapon{},eyeBase{},resolvedRight{},nativeRight{},nativeLeft{};bool attachmentPending=false,authoredGrip=false,supportAttached=false,sightAttached=false;std::array<math::Vec3,2> localGrips{};math::Vec3 grip{},actorPosition{},nativeRoot{},bodyRoot{},anatomyRoot{};std::array<math::Vec3,2> grips{},shoulders{},anchors{},targets{},resolved{};std::array<float,2> errors{};std::array<bool,2> tracked{};unsigned weapon=0;std::uint64_t ownerGeneration=0,space=0;};
 std::array<HandRecord,256> handRecords{};unsigned handRecordCount=0,handRecordNext=0;ULONGLONG handRecordTime=0;
@@ -548,25 +549,24 @@ std::optional<WeaponVisibilityReceipt> ReadWeaponVisibilityReceipt(const ReloadS
 std::optional<BodyAmmoRenderSource> ReadBodyAmmoRenderSource(std::int64_t now)noexcept {
     if(!hands||!enabled.load(std::memory_order_acquire))return {};
     try {
+        // PublishTracking already validates magazine/reload members before
+        // storing this immutable Tracking. Reading four separately published
+        // guards can observe N/N+1 and spuriously hide otherwise-current ammo.
+        // One snapshot supplies both its geometry and original source leases.
         const auto input=eyeTracking.load(std::memory_order_acquire);
-        const auto guard=shotGuard.load(std::memory_order_acquire);
-        if(!input||!guard||!guard->valid||!guard->leftTracked||!input->eyeBaseValid||
-            guard->generation!=input->input.generation||guard->space!=input->input.spaceGeneration||
-            guard->soldier!=input->soldier||guard->weak!=input->weak||guard->weapon!=input->weapon||
-            guard->owner!=input->ownerGeneration||guard->equipmentGeneration!=input->equipmentGeneration||
-            guard->equipment!=input->nativeEquipment||!Fresh(guard->deadline)||
+        if(!input||!input->eyeBaseValid||!input->input.focused||!input->input.headValid||
+            !input->input.hands[0].gripTracked||!input->input.hands[1].gripTracked||!input->input.hands[1].aimTracked||
+            !interaction::ValidInput(input->input)||!Fresh(input->deadline)||
             now>=ReloadNanos(input->deadline)||!EquipmentStillCurrent(input->nativeEquipment)||input->freeRight)return {};
         BodyAmmoTracking source;
-        std::shared_ptr<const MagazineTracking> magazine;
-        std::shared_ptr<const ReloadTracking> reload;
         if(input->bodyMagazine){
-            magazine=magazineGuard.load(std::memory_order_acquire);if(!magazine)return {};
-            source.magazine=*magazine;source.visual=*input->bodyMagazine;
+            if(!input->magazine.enabled)return {};
+            source.magazine=input->magazine;source.visual=*input->bodyMagazine;
         }else{
-            reload=reloadGuard.load(std::memory_order_acquire);
-            if(!reload||!reload->belt||reload->inputEvidence.sequence!=input->input.generation||
-                !ReloadBeltCompatible(*reload,now))return {};
-            source.shell=*reload->belt;source.visual=reload->belt->visual;
+            const auto& reload=input->reload;
+            if(!reload.enabled||!reload.belt||reload.inputEvidence.sequence!=input->input.generation||
+                !ReloadBeltCompatible(reload,now))return {};
+            source.shell=*reload.belt;source.visual=reload.belt->visual;
         }
         if(!BodyAmmoFresh(source,now))return {};
         const auto& nativeOwner=source.magazine?source.magazine->owner:source.shell->owner;
@@ -581,9 +581,7 @@ std::optional<BodyAmmoRenderSource> ReadBodyAmmoRenderSource(std::int64_t now)no
             source.magazine->family.binding.equipment!=input->nativeEquipment)return {};
         const auto pose=BuildBodyAmmoPose(source,input->input,input->eyeBase,now);if(!pose)return {};
         // Reject an input publication which changed during this bounded read.
-        if(shotGuard.load(std::memory_order_acquire)!=guard||eyeTracking.load(std::memory_order_acquire)!=input||
-            (magazine&&magazineGuard.load(std::memory_order_acquire)!=magazine)||
-            (reload&&reloadGuard.load(std::memory_order_acquire)!=reload)||
+        if(eyeTracking.load(std::memory_order_acquire)!=input||!enabled.load(std::memory_order_acquire)||
             !EquipmentStillCurrent(input->nativeEquipment))return {};
         BodyAmmoRenderSource result;result.prop={pose->source.visual,pose->partWorld};
         result.authority=std::make_shared<const BodyAmmoTracking>(pose->source);
@@ -698,24 +696,29 @@ void PublishTracking(const Tracking& source)noexcept {
     std::unique_lock lock(frameMutex,std::try_to_lock);if(!lock.owns_lock())return;
     tracking=next;if(!next.deadline)published.reset();
 }
-std::optional<WeaponShotFrame> ReadWeaponFrame(unsigned soldier,unsigned weak,unsigned weapon,bool allowSuppressed)noexcept {
+std::optional<WeaponShotFrame> ReadWeaponFrame(unsigned soldier,unsigned weak,unsigned weapon,WeaponFrameUse use)noexcept {
     if(!hands||!enabled.load(std::memory_order_acquire))return {};
     // An ordinary input publication may advance while these immutable pointers
     // are read. Retry a bounded number of times; do not weaken invalidation.
     for(unsigned attempt=0;attempt<3;++attempt){
         const auto guard=shotGuard.load(std::memory_order_acquire);const auto pose=shotPublication.load(std::memory_order_acquire);
-        if(!guard||!guard->valid||(!allowSuppressed&&guard->weaponActionsBlocked)||!pose||guard->soldier!=soldier||guard->weak!=weak||guard->weapon!=weapon||
-           pose->identity.soldier!=soldier||pose->identity.weak!=weak||pose->identity.weapon!=weapon||
-           pose->identity.owner!=guard->owner||pose->identity.space!=guard->space||pose->identity.equipmentGeneration!=guard->equipmentGeneration||pose->identity.generation>guard->generation){++shotFrameUnavailable;return {};}
+        if(!guard||!pose||!WeaponFrameAdmitted(*guard,pose->identity,soldier,weak,weapon,use)){++shotFrameUnavailable;return {};}
         if(!Fresh(guard->deadline)||!Fresh(pose->frame.deadline)||!EquipmentStillCurrent(guard->equipment)||!AuthoredCurrent(pose->authoredGrip)){++shotFrameExpired;return {};}
         if(shotGuard.load(std::memory_order_acquire)!=guard){++shotFrameRaces;continue;}
+        if(use==WeaponFrameUse::Support&&guard->weaponActionsBlocked)++supportFramesWhileFireBlocked;
         return pose->frame;
     }
     return {};
 }
 
-std::optional<WeaponShotFrame> ReadWeaponShotFrame(unsigned soldier,unsigned weak,unsigned weapon)noexcept {return ReadWeaponFrame(soldier,weak,weapon,false);}
-std::optional<WeaponShotFrame> ReadBodyWeaponFrame(unsigned soldier,unsigned weak,unsigned weapon)noexcept {return ReadWeaponFrame(soldier,weak,weapon,true);}
+std::optional<WeaponShotFrame> ReadWeaponShotFrame(unsigned soldier,unsigned weak,unsigned weapon)noexcept {return ReadWeaponFrame(soldier,weak,weapon,WeaponFrameUse::Firing);}
+std::optional<WeaponShotFrame> ReadBodyWeaponFrame(unsigned soldier,unsigned weak,unsigned weapon)noexcept {return ReadWeaponFrame(soldier,weak,weapon,WeaponFrameUse::BodyObservation);}
+
+std::optional<WeaponSupportFrame> ReadWeaponSupportFrame(unsigned soldier,unsigned weak,unsigned weapon)noexcept {
+    const auto pose=ReadWeaponFrame(soldier,weak,weapon,WeaponFrameUse::Support);
+    if(!pose)return {};
+    return WeaponSupportFrame{pose->support,pose->generation,pose->deadline,pose->ownerGeneration,pose->space,pose->authoredSupportReference};
+}
 
 MagazineRawContact ReadMagazineContact(const ReloadStateOwner& owner)noexcept {
     for(unsigned attempt=0;attempt<3;++attempt){
@@ -723,7 +726,7 @@ MagazineRawContact ReadMagazineContact(const ReloadStateOwner& owner)noexcept {
         if(!guard||guard->owner!=owner||!MagazineTrackingFresh(*guard,now))return {};
         // Suppressed Fire does not suppress raw reload contact. This getter is
         // private to magazine interaction and never grants a firing pose.
-        const auto shot=ReadWeaponFrame(owner.soldier,owner.weak,owner.weapon,true);
+        const auto shot=ReadWeaponFrame(owner.soldier,owner.weak,owner.weapon,WeaponFrameUse::BodyObservation);
         if(!shot||!shot->magazine.valid||shot->magazine.owner!=owner||
            shot->magazine.inputEvidence.sequence!=shot->generation||
            shot->magazine.inputEvidence.sequence>guard->inputEvidence.sequence||
@@ -745,17 +748,8 @@ ReloadRawContact ReadReloadContact(const ReloadStateOwner& owner)noexcept {
     }return {};
 }
 interaction::SupportGripContact ReadSupportContact(unsigned soldier,unsigned weak,unsigned weapon,std::uint64_t owner,std::uint64_t space)noexcept {
-    if(!hands||!enabled.load(std::memory_order_acquire))return {};
-    for(unsigned attempt=0;attempt<3;++attempt){
-        const auto guard=shotGuard.load(std::memory_order_acquire);const auto pose=shotPublication.load(std::memory_order_acquire);
-        if(!guard||!guard->valid||guard->weaponActionsBlocked||!pose||guard->soldier!=soldier||guard->weak!=weak||guard->weapon!=weapon||
-           guard->owner!=owner||guard->space!=space||pose->identity.soldier!=soldier||pose->identity.weak!=weak||
-           pose->identity.weapon!=weapon||pose->identity.owner!=owner||pose->identity.space!=space||
-           pose->identity.equipmentGeneration!=guard->equipmentGeneration||pose->identity.generation>guard->generation||!Fresh(guard->deadline)||!Fresh(pose->frame.deadline)||!AuthoredCurrent(pose->authoredGrip))return {};
-        if(shotGuard.load(std::memory_order_acquire)!=guard||!EquipmentStillCurrent(guard->equipment))continue;
-        return pose->frame.support;
-    }
-    return {};
+    const auto pose=ReadWeaponSupportFrame(soldier,weak,weapon);
+    return pose&&pose->ownerGeneration==owner&&pose->space==space?pose->support:interaction::SupportGripContact{};
 }
 WeaponSightContact ReadSightContact(unsigned soldier,unsigned weak,unsigned weapon,std::uint64_t owner,std::uint64_t space)noexcept {
     if(!hands||!enabled.load(std::memory_order_acquire))return {};
@@ -1514,7 +1508,7 @@ void Report(std::ostream& out){out<<std::setprecision(9);out<<'{';weaponCapture.
     bool comma=false;for(const auto& item:WeaponProfiles()){if(comma)out<<',';comma=true;
         out<<"{\"asset_name\":\""<<item.assetName<<"\",\"profile_id\":\""<<item.core.stableId<<"\",\"revision\":"<<item.core.revision<<",\"features\":{";
         for(unsigned n=0;n<unsigned(interaction::WeaponFeature::Count);++n){if(n)out<<',';const auto feature=interaction::WeaponFeature(n);out<<'"'<<interaction::WeaponFeatureName(feature)<<"\":\""<<interaction::WeaponStatusName(interaction::WeaponFeatureStatus(&item.core,feature))<<'"';}out<<"}}";
-    }out<<"],\"support_attached_poses\":"<<supportAttachedPoses.load()<<",\"shot_frame_races\":"<<shotFrameRaces.load()<<",\"shot_frame_expired\":"<<shotFrameExpired.load()<<",\"shot_frame_unavailable\":"<<shotFrameUnavailable.load()<<",\"pulse_requested\":"<<(pulse?"true":"false")<<",\"hands_requested\":"<<(hands?"true":"false")<<",\"torso_stabilized_poses\":"<<torsoPoses.load()<<",\"hidden_leaf_poses\":"<<hiddenLeafPoses.load()<<",\"tracked_poses\":"<<trackedPoses.load()<<",\"tracking_rejected\":"<<trackingRejected.load()<<",\"tracking_unavailable\":"<<trackingUnavailable.load()<<",\"weapon_outputs\":"<<weaponOutputs.load()<<",\"calibrations\":"<<calibrations.load()<<",\"pose_misses\":"<<poseMisses.load()<<",\"owners\":"<<owners.load()<<",\"copies\":"<<copies.load()<<",\"changed_copies\":"<<changedCopies.load()<<",\"paired_copies\":"<<pairedCopies.load()<<",\"rejected\":"<<rejected.load()<<",\"source_changes\":"<<sourceChanges.load()<<",\"packing_failures\":"<<packingFailures.load()<<",\"partial_poses\":"<<partialPoses.load()<<",\"fallback_failures\":"<<fallbackFailures.load()<<",\"hand_poses\":["<<handPoses[0].load()<<','<<handPoses[1].load()<<"],\"hand_calibrations\":["<<handCalibrations[0].load()<<','<<handCalibrations[1].load()<<"],\"native_animation_written\":false,\"hand_evidence\":[";
+    }out<<"],\"support_attached_poses\":"<<supportAttachedPoses.load()<<",\"shot_frame_races\":"<<shotFrameRaces.load()<<",\"shot_frame_expired\":"<<shotFrameExpired.load()<<",\"shot_frame_unavailable\":"<<shotFrameUnavailable.load()<<",\"support_frames_while_fire_blocked\":"<<supportFramesWhileFireBlocked.load()<<",\"pulse_requested\":"<<(pulse?"true":"false")<<",\"hands_requested\":"<<(hands?"true":"false")<<",\"torso_stabilized_poses\":"<<torsoPoses.load()<<",\"hidden_leaf_poses\":"<<hiddenLeafPoses.load()<<",\"tracked_poses\":"<<trackedPoses.load()<<",\"tracking_rejected\":"<<trackingRejected.load()<<",\"tracking_unavailable\":"<<trackingUnavailable.load()<<",\"weapon_outputs\":"<<weaponOutputs.load()<<",\"calibrations\":"<<calibrations.load()<<",\"pose_misses\":"<<poseMisses.load()<<",\"owners\":"<<owners.load()<<",\"copies\":"<<copies.load()<<",\"changed_copies\":"<<changedCopies.load()<<",\"paired_copies\":"<<pairedCopies.load()<<",\"rejected\":"<<rejected.load()<<",\"source_changes\":"<<sourceChanges.load()<<",\"packing_failures\":"<<packingFailures.load()<<",\"partial_poses\":"<<partialPoses.load()<<",\"fallback_failures\":"<<fallbackFailures.load()<<",\"hand_poses\":["<<handPoses[0].load()<<','<<handPoses[1].load()<<"],\"hand_calibrations\":["<<handCalibrations[0].load()<<','<<handCalibrations[1].load()<<"],\"native_animation_written\":false,\"hand_evidence\":[";
     for(unsigned n=0;n<handRecordCount;++n){const auto& r=handRecords[(handRecordNext+handRecords.size()-handRecordCount+n)%handRecords.size()];if(n)out<<',';out<<"{\"attachment_pending\":"<<(r.attachmentPending?"true":"false")<<",\"authored_grip\":"<<(r.authoredGrip?"true":"false")<<",\"support_attached\":"<<(r.supportAttached?"true":"false")<<",\"sight_attached\":"<<(r.sightAttached?"true":"false")<<",\"generation\":"<<r.generation<<",\"weapon\":"<<r.weapon<<",\"owner_generation\":"<<r.ownerGeneration<<",\"space\":"<<r.space<<",\"grip\":["<<r.grip.x<<','<<r.grip.y<<','<<r.grip.z<<"],\"native\":[";
         for(unsigned k=0;k<16;++k){if(k)out<<',';out<<r.nativeWeapon.values[k/4][k%4];}out<<"],\"eye_base\":[";
         for(unsigned k=0;k<16;++k){if(k)out<<',';out<<r.eyeBase.values[k/4][k%4];}out<<"],\"local_grips\":[";

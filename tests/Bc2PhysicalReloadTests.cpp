@@ -453,7 +453,7 @@ int CancellationEvidenceDistinguishesSafetyCapacityAndPending(){
     {Fixture f;CHECK(f.Insert());f.s.cancel=true;f.s.cancelFlags=ReloadCancelUse|ReloadCancelNextWeapon;f.Send(true);
         const auto report=f.Report();CHECK(f.cancels==1&&f.submits==1&&f.reserve.loaded==2&&f.reserve.reserve==8);
         CHECK(report.find("\"reason_name\":\"requested_input\",\"source_flags\":96")!=std::string::npos);
-        CHECK(report.find("\"held\":true,\"item_generation\":1,\"pending\":true,\"pending_request\":1")!=std::string::npos);}
+        CHECK(report.find("\"held\":false,\"item_generation\":0,\"pending\":true,\"pending_request\":1")!=std::string::npos);}
     {Fixture f;f.reserve.loaded=7;CHECK(f.Insert());f.Ack();f.Send(true);
         CHECK(f.Report().find("\"reason_name\":\"full_magazine\",\"source_flags\":0")!=std::string::npos);}
     {Fixture f;f.reserve.reserve=1;CHECK(f.Insert());f.Ack();f.Send(true);
@@ -773,6 +773,27 @@ int HeldShellTypedGapCannotGrantOrRenew(){
  CHECK(a.starts==0&&a.submits==0&&!a.hands.Current(InteractionHand::Left));return 0;
 }
 
-int main(){CHECK(StartupGapKeepsOriginalClocks()==0);CHECK(StartupCohortGapRetainsOriginalShell()==0);CHECK(StartupCohortGapIsBounded()==0);CHECK(StartupCohortGapSafetyWins()==0);CHECK(HeldShellTypedGapCannotGrantOrRenew()==0);CHECK(SubmittedShellCohortGapRetainsOnlyOriginalLease()==0);CHECK(ObserverDeferralAndStartOrigin()==0);CHECK(DeferredKeepAliveNeverRenews()==0);if(ActualSelectorControlsFreshShellSourceAfterRevisits()||VehicleAndEquipmentSourceGapRequiresFreshNativeRecovery()||ScopedAliasRetirementUsesActualMapping()||ScopedAliasCannotGrantSpasSupply()||PendingRetirementUnblocksOnlyFreshDifferentEquipment()||AvailabilityDiagnosesBeforeAnyCycle()||AvailabilityRingIsBoundedAndTransitionOnly()||RetirementReceiptMustBeExactFreshAndReal()||SupplyReturnsAfterOrdinaryWeaponTransitions()||BeltReturnsBetweenActualAcknowledgedShells()||BetweenShellBeltRejectsLostHoldAndCancellation()||BeltAvailabilityComesFromActualConsumer()||FullGunCanShowReserveButCannotMintShell()||BeltRespectsNativeBusyAndSafetyWithoutNewAuthority()||BodyPouchBeltSharesTheExistingAlternateContact()||FeedbackDistinguishesLatchFromVerifiedReload()||FeedbackKeepsFinalReceiptButNotCancellation()||GuidedContinuityCannotBorrowNewDeadlines()||GuidedContinuityEndsOnFreshWithdrawalOrRejectedGeometry()||GuidedContinuityRequiresCurrentCycleClaimsAndHold()||GuidedPresentationSurvivesOneMissingGeometryTick()||CycleVisibilitySurvivesPendingAndReceiptOnlyWhileActive()||PartialReceiptRetainsHoldThroughSevenSecondsNeutral()||CancellationEvidenceDistinguishesSafetyCapacityAndPending()||CancellationEvidenceIsBoundedWithoutAffectingRetirement()||FreeCarryUsesCurrentRendererWrist()||UnderPortConsumerToAcknowledgement()||GeometryRingIsBoundedAndKeepsOriginalSource()||CarryDuringPumpWaitsForFreshNativeReadiness()||PendingReadyRejectsReleasedStaleOrChangedEvidence()||SecondShellCannotUseFirstReceipt()||AsyncContactSeatIsNotLost()||DeferredSeatCannotSpendExpiredOrReplacementEvidence()||CancellationStillDrainsAndReconciles()||StartRealCycleAndOriginalTime()||RailToNativeAck()||DefaultAndEvidenceGates()||SupportCannotBeStolen()||CancelPendingAndRebaseline()||
+int SubmittedShellReleasesHandBeforeNativeAmmoChanges(){
+ auto fp=std::make_unique<Fixture>();auto& f=*fp;CHECK(f.Insert());
+ CHECK(!f.result.ammoOwnsHand&&!f.hands.Current(InteractionHand::Left));
+ CHECK(f.policy->ProbeState(f.now).pending&&f.submits==1&&f.reserve.loaded==2&&f.reserve.reserve==8);
+ // Keep squeezing while moving from insertion to fore-end: the spent shell
+ // cannot reacquire the hand or manufacture another native request.
+ for(unsigned n=0;n<5;++n){f.Send(true,.7f);CHECK(!f.result.ammoOwnsHand&&f.submits==1);}
+ f.Send(false,.7f);f.s.bodyFromHand=Pose(0,0,.7f);f.Send(true,.7f);
+ const HandContactProof proof{{1234,1},f.s.input.sequence,f.s.input.deadlineNs,true};
+ auto support=f.hands.Acquire(f.s.input,{f.s.input.owner,InteractionHand::Left,HandClaimKind::WeaponSupport,
+     f.s.weapon,proof,++f.intent,f.gun->token.id}).claim;CHECK(support);
+ for(unsigned n=0;n<25;++n){f.Send(true,.7f);
+   support=f.hands.Renew(f.s.input,support->token,{{1234,1},f.s.input.sequence,f.s.input.deadlineNs,true}).claim;
+   CHECK(support&&!f.result.ammoOwnsHand&&f.policy->ProbeState(f.now).pending);
+   CHECK(f.submits==1&&f.reserve.loaded==2&&f.reserve.reserve==8);
+ }
+ // Exact native acknowledgement must not release the replacement support claim.
+ f.Ack();f.Send(true,.7f);CHECK(f.policy->ProbeState(f.now).completed==1);
+ CHECK(f.hands.Current(InteractionHand::Left)->token==support->token&&f.reserve.loaded==3&&f.reserve.reserve==7);
+ return 0;
+}
+int main(){CHECK(SubmittedShellReleasesHandBeforeNativeAmmoChanges()==0);CHECK(StartupGapKeepsOriginalClocks()==0);CHECK(StartupCohortGapRetainsOriginalShell()==0);CHECK(StartupCohortGapIsBounded()==0);CHECK(StartupCohortGapSafetyWins()==0);CHECK(HeldShellTypedGapCannotGrantOrRenew()==0);CHECK(SubmittedShellCohortGapRetainsOnlyOriginalLease()==0);CHECK(ObserverDeferralAndStartOrigin()==0);CHECK(DeferredKeepAliveNeverRenews()==0);if(ActualSelectorControlsFreshShellSourceAfterRevisits()||VehicleAndEquipmentSourceGapRequiresFreshNativeRecovery()||ScopedAliasRetirementUsesActualMapping()||ScopedAliasCannotGrantSpasSupply()||PendingRetirementUnblocksOnlyFreshDifferentEquipment()||AvailabilityDiagnosesBeforeAnyCycle()||AvailabilityRingIsBoundedAndTransitionOnly()||RetirementReceiptMustBeExactFreshAndReal()||SupplyReturnsAfterOrdinaryWeaponTransitions()||BeltReturnsBetweenActualAcknowledgedShells()||BetweenShellBeltRejectsLostHoldAndCancellation()||BeltAvailabilityComesFromActualConsumer()||FullGunCanShowReserveButCannotMintShell()||BeltRespectsNativeBusyAndSafetyWithoutNewAuthority()||BodyPouchBeltSharesTheExistingAlternateContact()||FeedbackDistinguishesLatchFromVerifiedReload()||FeedbackKeepsFinalReceiptButNotCancellation()||GuidedContinuityCannotBorrowNewDeadlines()||GuidedContinuityEndsOnFreshWithdrawalOrRejectedGeometry()||GuidedContinuityRequiresCurrentCycleClaimsAndHold()||GuidedPresentationSurvivesOneMissingGeometryTick()||CycleVisibilitySurvivesPendingAndReceiptOnlyWhileActive()||PartialReceiptRetainsHoldThroughSevenSecondsNeutral()||CancellationEvidenceDistinguishesSafetyCapacityAndPending()||CancellationEvidenceIsBoundedWithoutAffectingRetirement()||FreeCarryUsesCurrentRendererWrist()||UnderPortConsumerToAcknowledgement()||GeometryRingIsBoundedAndKeepsOriginalSource()||CarryDuringPumpWaitsForFreshNativeReadiness()||PendingReadyRejectsReleasedStaleOrChangedEvidence()||SecondShellCannotUseFirstReceipt()||AsyncContactSeatIsNotLost()||DeferredSeatCannotSpendExpiredOrReplacementEvidence()||CancellationStillDrainsAndReconciles()||StartRealCycleAndOriginalTime()||RailToNativeAck()||DefaultAndEvidenceGates()||SupportCannotBeStolen()||CancelPendingAndRebaseline()||
     ReplacementSurvivesOriginalAck()||DeathNewOwnerAndLateOldAck()||ExpiredSourceAndStaleGeometry()||FullFinalRoundAndFlagBoundary())return 1;
     std::cout<<"Bc2PhysicalReload: 47 actual-composition cases passed (test runtime only; no headset claim)\n";}

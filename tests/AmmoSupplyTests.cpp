@@ -338,7 +338,23 @@ int FreshSourceNeverRevivesExpiredPhysicalClaim(){
  CHECK(!f.supply.Pending()&&f.s.source.reserveUnits==4);return 0;
 }
 }
-int main(){if(PhysicalCarrySurvivesFreshShortSourceObservations()||FreshSourceNeverRevivesExpiredPhysicalClaim())return 1;
+int ReleaseSubmittedPreservesPendingResourceAndOtherClaims(){
+ Fixture f;CHECK(f.Grab().held);const auto reservation=f.Reserve();CHECK(reservation);
+ auto wrong=*reservation;++wrong.request;
+ CHECK(!f.supply.ReleaseSubmitted(f.s.input,f.hands,wrong)&&f.supply.Held());
+ CHECK(f.supply.ReleaseSubmitted(f.s.input,f.hands,*reservation));
+ CHECK(!f.supply.Held()&&!f.hands.Current(InteractionHand::Left)&&f.supply.Pending()==reservation);
+ CHECK(f.s.source.reserveUnits==4&&!f.supply.ReleaseSubmitted(f.s.input,f.hands,*reservation));
+ f.Next(true);f.Tick();CHECK(!f.supply.Held());
+ f.Next(false);f.Tick();f.Next(true);f.Tick();CHECK(f.supply.Held());
+ const auto replacement=f.supply.Held()->claim.token;
+ CHECK(!f.supply.ReleaseSubmitted(f.s.input,f.hands,*reservation));
+ CHECK(f.hands.Current(InteractionHand::Left)->token==replacement);
+ const auto receipt=f.Receipt(*reservation);
+ CHECK(f.supply.Resolve(f.s.input,f.hands,receipt).consumed==reservation);
+ CHECK(f.hands.Current(InteractionHand::Left)->token==replacement);return 0;
+}
+int main(){CHECK(ReleaseSubmittedPreservesPendingResourceAndOtherClaims()==0);if(PhysicalCarrySurvivesFreshShortSourceObservations()||FreshSourceNeverRevivesExpiredPhysicalClaim())return 1;
     if(AlternateContactSharesProvider()||AlternateContactCannotBypassReservation()||AlternateContactsKeepExactGeometryAndEdge()||RealEdgeBodyPouchAndReserve()||ContactFailureNeedsNewEdge()||NoStealingSupportOrSight()||IdentityAndSafetyInvalidation()||
         DuplicateAndStalePackets()||ReservationReplacementAndExactConsumption()||ExhaustionAndUnresolvedCannotMint()||
         PendingEquipChangeAndWrongReceipts()||MagazineExplicitUnitsAndNoEffect()||ActualInsertionConsumesSuppliedClaim()||

@@ -60,10 +60,13 @@ int PairMetadataIsAtomic(){ipc::RemoteFrameProvider host;CHECK(host.Create());ip
     CHECK(!host.TryGetCompletedPair(req,input,rendered,d,ticket));CHECK(producer.TryTake(request)==ipc::ChannelResult::Ok);
     d.width=req.width;d.height=req.height;d.format=req.format;d.adapterLow=req.adapterLow;d.adapterHigh=req.adapterHigh;d.resourceEpoch=1;d.session[0]=1;
     PairTicket t;t.session=d.session;t.resourceEpoch=d.resourceEpoch;t.sequence=1;t.frameId=21;t.spaceGeneration=request.spaceGeneration;t.trackingGeneration=request.trackingGeneration;t.predictedNs=request.predictedNs;
-    auto props=Frame(t);CHECK(producer.Publish(d,t,&props)==ipc::ChannelResult::Ok);
+    auto props=Frame(t);for(auto& e:props.eyes)e.ammo={41,1000000000,1100000000,51,61,t.spaceGeneration,0,180,30};
+    CHECK(producer.Publish(d,t,&props)==ipc::ChannelResult::Ok);
     ++input.generation;input.predictedNs+=10000000;CHECK(host.TryGetCompletedPair(req,input,rendered,d,ticket));
     BodyPropFrame got;CHECK(host.ReadBodyProps(ticket,got));CHECK(got.trackingGeneration==rendered.generation&&got.trackingGeneration!=input.generation);
     CHECK(got.eyes[1].instances[1].deadlineNs==1100000000);
+    CHECK(got.version==2&&got.bytes==2480);CHECK(got.eyes[0].ammo==props.eyes[0].ammo&&got.eyes[1].ammo==props.eyes[1].ammo);
+    CHECK(AmmoCounterPair(got.eyes[0].ammo,got.eyes[1].ammo,t.spaceGeneration,1000000000));
     auto wrong=ticket;++wrong.sequence;CHECK(!host.ReadBodyProps(wrong,got));
     host.PairConsumed(ticket,true);CHECK(producer.PollOutcome()==ipc::Outcome::Consumed);
     CHECK(!host.TryGetCompletedPair(req,input,rendered,d,ticket));CHECK(producer.TryTake(request)==ipc::ChannelResult::Ok);

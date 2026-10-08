@@ -19,6 +19,7 @@
 #include <memory>
 #include "OpenXrInput.h"
 #include "OpenXrMenu.h"
+#include "OpenXrAmmoHud.h"
 #include "fvr/interaction/RecenterPolicy.h"
 
 namespace fvr::xr {
@@ -62,6 +63,7 @@ struct Host {
     XrSpace local=XR_NULL_HANDLE,headSpace=XR_NULL_HANDLE;
     std::unique_ptr<OpenXrInput> controls;
     std::unique_ptr<OpenXrMenu> menu;
+    std::unique_ptr<OpenXrAmmoHud> ammoHud;
     interaction::RecenterGesture recenter;
     interaction::RecenterPolicy trackingRecovery;
     ULONGLONG lastFrameWall=0,presenceReturnAt=0;bool recoveryPending=false,userPresent=true,presenceKnown=false;
@@ -89,7 +91,7 @@ struct Host {
     std::uint64_t trackingGeneration=0,spaceGeneration=1;
     explicit Host(HostReport& r):report(r){}
     ~Host(){
-        AbortFrame();consumer.Reset();controls.reset();menu.reset();bodyProps.reset();
+        AbortFrame();consumer.Reset();controls.reset();menu.reset();ammoHud.reset();bodyProps.reset();
         for(auto chain:swapchains)if(chain&&api.DestroySwapchain)api.DestroySwapchain(chain);
         if(headSpace&&api.DestroySpace)api.DestroySpace(headSpace);
         if(local&&api.DestroySpace)api.DestroySpace(local);
@@ -194,6 +196,8 @@ struct Host {
         scratchDesc.Format=DXGI_FORMAT(req.format);scratchDesc.MipLevels=scratchDesc.ArraySize=1;
         scratchDesc.SampleDesc.Count=1;scratchDesc.Usage=D3D11_USAGE_DEFAULT;
         for(auto& texture:scratch)Hr(device->CreateTexture2D(&scratchDesc,nullptr,&texture),"Create private eye scratch");
+        if(options.provider){auto hud=std::make_unique<OpenXrAmmoHud>();
+            if(hud->Initialize(instance,session,api.get,device.Get(),req.format)){ammoHud=std::move(hud);report.ammoCounterReady=true;}}
         if(options.bodyProps&&!options.bodyProps->empty()){
             auto compositor=std::make_unique<graphics::D3D11BodyPropCompositor>();
             if(compositor->Initialize(context.Get(),req.width,req.height,req.format,options.bodyProps)){bodyProps=std::move(compositor);report.bodyPropsReady=true;}
@@ -326,7 +330,7 @@ struct Host {
                        renderedTracking.spaceGeneration==tracking.spaceGeneration&&renderedTracking.predictedNs<=tracking.predictedNs&&
                        tracking.predictedNs-renderedTracking.predictedNs<=runtime::RetainedPresentation::MaxAgeNs){
                         if(!graphics::Valid(openedDescriptor)||std::memcmp(&descriptor,&openedDescriptor,sizeof(descriptor))!=0){
-                            retained.Reset();
+                            retained.Reset();if(ammoHud)ammoHud->Reset();
                             if(consumer.Open(device.Get(),descriptor)==graphics::TransferResult::Ok)openedDescriptor=descriptor;else openedDescriptor={};
                         }
                         if(graphics::Valid(openedDescriptor)){
@@ -334,8 +338,11 @@ struct Host {
                             const bool copied=consumer.Copy(ticket,destinations)==graphics::TransferResult::Ok;
                             feedback.consumed=copied;
                             if(copied){
-                                if(bodyProps){graphics::BodyPropFrame props;
-                                    if(provider->ReadBodyProps(ticket,props))bodyProps->Compose(props,ticket,{scratch[0].Get(),scratch[1].Get()},BodyPropClockNs);
+                                graphics::BodyPropFrame props;
+                                const bool propsRead=provider->ReadBodyProps(ticket,props);
+                                if(ammoHud)ammoHud->Receive(propsRead?&props:nullptr,ticket,BodyPropClockNs());
+                                if(bodyProps){
+                                    if(propsRead)bodyProps->Compose(props,ticket,{scratch[0].Get(),scratch[1].Get()},BodyPropClockNs);
                                     report.bodyProps=bodyProps->Statistics();
                                 }
                                 for(unsigned eye=0;eye<2;++eye){uint32_t index=0;XrSwapchainImageAcquireInfo acquire{XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO};
@@ -377,6 +384,12 @@ struct Host {
         }
         std::vector<const XrCompositionLayerBaseHeader*> layers;
         if(submit)layers.push_back(reinterpret_cast<const XrCompositionLayerBaseHeader*>(&layer));
+        if(ammoHud){if(const auto* hud=ammoHud->Layer(headSpace,tracking.spaceGeneration,BodyPropClockNs,
+            submit&&!menuActive&&tracking.focused&&tracking.headValid)){
+                layers.push_back(reinterpret_cast<const XrCompositionLayerBaseHeader*>(hud));++report.ammoCounterFrames;}
+            report.ammoCounterUploads=ammoHud->Uploads();report.ammoCounterErrors=ammoHud->Errors();
+            report.ammoCounterValidSamples=ammoHud->ValidSamples();report.ammoCounterInvalidSamples=ammoHud->InvalidSamples();
+        }
         if(menu){menu->Layers(local,layers);report.menuFrames=menu->Frames();report.menuErrors=menu->Errors();}
         XrFrameEndInfo end{XR_TYPE_FRAME_END_INFO};end.displayTime=frameTime;end.environmentBlendMode=XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
         end.layerCount=std::uint32_t(layers.size());end.layers=layers.data();

@@ -95,6 +95,7 @@ std::uint64_t sightGraspToken=0;
 std::atomic<unsigned> sightRequests=0,sightCommits=0,sightCancellations=0;
 std::optional<ReloadStateBinding> reloadStateBinding;
 SelectedMeshesObservation selectedMeshes;
+std::atomic<std::shared_ptr<const AmmoCounterOwner>> ammoCounterOwner;
 void CancelPhysicalReload(PhysicalReloadResult* unpublished=nullptr,unsigned sourceFlags=0)noexcept;
 void CancelWeaponVisibilityProbe()noexcept;
 std::optional<Bc2EmptyFireProbe> emptyFireFixture;
@@ -102,6 +103,7 @@ std::optional<Bc2EmptyFireProbe> emptyFireFixture;
 std::optional<Bc2ArmingEmptyProbe> armingEmptyFixture;
 #endif
 void ClearReloadOwner()noexcept {
+    ammoCounterOwner.store({},std::memory_order_release);
 #ifdef FVR_BC2_ARMING_EMPTY_PROBE
 if(armingEmptyFixture)armingEmptyFixture->Cancel();
 #endif
@@ -1272,10 +1274,10 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         if(physicalResult.reloadHeld)out.held|=interaction::Reload;
     }
     // The renderer's authored reference is bound to the original exact
-    // equipment/configuration/rig lease; ReadWeaponShotFrame revalidates it.
+    // equipment/configuration/rig lease; ReadWeaponSupportFrame revalidates it.
     // It admits this contact to the SAME support/claim policy, without enabling
     // any native muzzle, aim-axis, sight, reload or holster feature.
-    auto supportEvidence=rigPublication::ReadWeaponShotFrame(owner.soldier,owner.weak,owner.weapon);
+    auto supportEvidence=rigPublication::ReadWeaponSupportFrame(owner.soldier,owner.weak,owner.weapon);
     if(!interaction::WeaponFeatureEnabled(coreProfile,interaction::WeaponFeature::SupportGrip)&&
        (!supportEvidence||!supportEvidence->authoredSupportReference))supportEvidence.reset();
     const auto supportContact=supportEvidence&&supportEvidence->ownerGeneration==rigEpoch&&supportEvidence->space==input.spaceGeneration?
@@ -1283,12 +1285,13 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     std::optional<WeaponModeCommand> physicalMode;std::uint64_t physicalRequest=0;
     bool sightOwnsHand=false;rigPublication::SightPreview sightPreview;
     if(sightFlip&&!physicalResult.ammoOwnsHand&&!magazineResult.ownsLeftHand&&!magazineResult.blocksWeaponActions&&!bodyDraw.pending){
+        const auto sightEvidence=rigPublication::ReadWeaponShotFrame(owner.soldier,owner.weak,owner.weapon);
         // Sight preference and support distance come from one immutable pose.
         // Current and original-source tracking are independently checked before
         // ownership; no left-hand eligibility is inferred from the gun alone.
         const auto* sightAdapter=familyBinding?SightAdapterForFamily(familyBinding->family):nullptr;
-        const auto contact=sightAdapter&&sightAdapter->nativeSightAccepted&&supportEvidence&&supportEvidence->ownerGeneration==rigEpoch&&supportEvidence->space==input.spaceGeneration?
-            supportEvidence->sight:rigPublication::WeaponSightContact{};
+        const auto contact=sightAdapter&&sightAdapter->nativeSightAccepted&&sightEvidence&&sightEvidence->ownerGeneration==rigEpoch&&sightEvidence->space==input.spaceGeneration?
+            sightEvidence->sight:rigPublication::WeaponSightContact{};
         if(!sightPolicy&&contact.valid){
             interaction::SightFlipConfig config;config.pivotMeters=contact.pivotMeters;config.axis=contact.axis;
             config.grabRadiusMeters=.08f;config.holdRadiusMeters=.20f;config.minLeverMeters=.015f;
@@ -1372,14 +1375,14 @@ void __fastcall GatherHook(void* self,void*,void* cache){
             // never replacement contact evidence or an additive native write.
             if(sightGrasp&&sightVisual&&sightPhase!=interaction::SightFlipPhase::Idle){
                 std::optional<math::Matrix4> nativeRear;std::optional<interaction::SightVisualRawHand> rawHand;
-                if(familyBinding&&supportEvidence&&supportEvidence->ownerGeneration==rigEpoch&&supportEvidence->space==input.spaceGeneration&&
-                   supportEvidence->generation>=sightGraspGeneration&&supportEvidence->generation<=input.generation&&
-                   supportEvidence->deadline>clock.QuadPart&&supportEvidence->nativeSight.valid&&
-                   supportEvidence->nativeSight.physicalItem==familyBinding->persistent){
-                    nativeRear=supportEvidence->nativeSight.rear;
-                    if(supportEvidence->nativeSight.rawHandValid)
-                        rawHand=interaction::SightVisualRawHand::Fresh(supportEvidence->nativeSight.rawHand,
-                            supportEvidence->generation,input.generation,clock.QuadPart,supportEvidence->deadline);
+                if(familyBinding&&sightEvidence&&sightEvidence->ownerGeneration==rigEpoch&&sightEvidence->space==input.spaceGeneration&&
+                   sightEvidence->generation>=sightGraspGeneration&&sightEvidence->generation<=input.generation&&
+                   sightEvidence->deadline>clock.QuadPart&&sightEvidence->nativeSight.valid&&
+                   sightEvidence->nativeSight.physicalItem==familyBinding->persistent){
+                    nativeRear=sightEvidence->nativeSight.rear;
+                    if(sightEvidence->nativeSight.rawHandValid)
+                        rawHand=interaction::SightVisualRawHand::Fresh(sightEvidence->nativeSight.rawHand,
+                            sightEvidence->generation,input.generation,clock.QuadPart,sightEvidence->deadline);
                 }
                 const auto progress=sightVisual->Update(sightPhase,sightResult.signedRadians,input.predictedNs,nativeRear,rawHand);
                 const auto preview=progress?sightGrasp->Evaluate(progress->appliedRadians,sightGraspMode):std::nullopt;
@@ -1752,8 +1755,20 @@ void __fastcall GatherHook(void* self,void*,void* cache){
             }
             if(quiet)++weaponVisibilityActionCommits;else ++weaponVisibilityActionFailures;
         }
+        // Sample final hand ownership AFTER holster/pickup decisions. Empty
+        // hands must not display the still-selected hidden inventory weapon.
+        const auto heldGun=handOwnership.Current(interaction::InteractionHand::Right);
+        AmmoCounterOwner hud;hud.owner={owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,input.spaceGeneration};
+        hud.observedNs=handSample.observedNs;hud.deadlineNs=handSample.deadlineNs;
+        hud.alive=out.active&&nativePlaying;hud.onFoot=owner.foot;
+        hud.held=heldGun&&heldGun->token.kind==interaction::HandClaimKind::GunHold&&
+            heldGun->token.owner==handSample.owner&&heldGun->token.item==handItem&&heldGun->deadlineNs>handSample.nowNs;
+        if(heldGun)hud.deadlineNs=(std::min)(hud.deadlineNs,heldGun->deadlineNs);
+        try{ammoCounterOwner.store(std::make_shared<const AmmoCounterOwner>(hud),std::memory_order_release);}
+        catch(...){ammoCounterOwner.store({},std::memory_order_release);}
     }
     else{
+        ammoCounterOwner.store({},std::memory_order_release);
         const ReloadStateOwner current{owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,input.spaceGeneration};
         // Preserve only a registered exact same-owner timeout transition while
         // ControllerActions is crossing its neutral rearm barrier. No native
@@ -1892,6 +1907,15 @@ bool EnableBodyInventory(interaction::BodyAnchorConfig config)noexcept {
         const auto magazinePouch=Bc2MagazinePhysicalReload::DefaultPouch();pouch.itemNamespace=magazinePouch.itemNamespace;pouch.pouch=magazinePouch.pouch;
         magazinePhysical.emplace(true,magazinePhysicalApi,pouch);magazinePhysical->EnableBodyAmmo(true,interaction::SupplyAnchorFrame::RecenteredBody);}
     return true;
+}
+graphics::AmmoCounterSample ReadAmmoCounter(std::int64_t now)noexcept {
+    if(!enabled.load(std::memory_order_acquire))return {};
+    for(unsigned attempt=0;attempt<3;++attempt){
+        const auto current=ammoCounterOwner.load(std::memory_order_acquire);
+        if(!current)return {};
+        const auto sample=AmmoCounterHostSample(reloadFlowRuntime::ReadReserve(),*current,now);
+        if(ammoCounterOwner.load(std::memory_order_acquire)==current)return sample;
+    }return {};
 }
 bool BodyDisplayNativeCurrent(const BodyInventoryDisplay& d)noexcept {
     const WeaponModeMemory memory{nullptr,[](void*,unsigned at,void* dst,std::size_t n){return Read(at,dst,n);},[](void*,unsigned at,const char* name){return Type(at,name);}};

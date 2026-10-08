@@ -28,6 +28,12 @@ ChannelResult StagedFrameProducer::SetBodyProps(const FrameLease& lease,unsigned
     if(step_!=Step::Rendering||!Matches(lease)||eye>1||props.count>graphics::MaxBodyProps)return ChannelResult::Invalid;
     bodyProps_.eyes[eye]=props;return ChannelResult::Ok;
 }
+ChannelResult StagedFrameProducer::SetBodyPropPair(const FrameLease& lease,const std::array<graphics::BodyPropEye,2>& eyes)noexcept {
+    Lock lock(gate_);if(!lock)return ChannelResult::Busy;
+    if(step_!=Step::Rendering||!Matches(lease)||eyes[0].count>graphics::MaxBodyProps||eyes[1].count>graphics::MaxBodyProps)
+        return ChannelResult::Invalid;
+    bodyProps_.eyes=eyes;return ChannelResult::Ok;
+}
 ChannelResult StagedFrameProducer::Submit(const FrameLease& lease,const graphics::TextureDescriptor& descriptor,const graphics::PairTicket& ticket)noexcept {
     Lock lock(gate_);if(!lock)return ChannelResult::Busy;
     if(step_!=Step::Rendering||!Matches(lease)||ticket.frameId!=lease_.native.frameId||

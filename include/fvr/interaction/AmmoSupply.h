@@ -123,6 +123,9 @@ public:
     std::optional<AmmoSupplyReservation> ReserveFrom(const AmmoSupplySample& currentSafety,HandInteraction&,
         const AmmoSupplySample& originalEvidence,const ReloadInsertionSeat&,
         const ManualReloadRequest& physicalRequest,std::uint64_t nativeCycle)noexcept;
+    // After successful native submission, the item belongs to the weapon.
+    // Releases only its exact hand token; never resolves/refunds the reservation.
+    bool ReleaseSubmitted(const HandInteractionSample&,HandInteraction&,const AmmoSupplyReservation&)noexcept;
     AmmoSupplyResolution Resolve(const HandInteractionSample& currentSafety,HandInteraction&,
         const AmmoSupplyReceipt&)noexcept;
     AmmoSupplyResolution Rebaseline(const HandInteractionSample& currentSafety,HandInteraction&,

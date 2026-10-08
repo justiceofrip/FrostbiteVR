@@ -360,6 +360,10 @@ PhysicalReloadResult Bc2PhysicalReload::Tick(const PhysicalReloadSample& supplie
             Journal(8,s.input.nowNs,prepared.submit?100:unsigned(prepared.reason));
             cancel(CancelReason::SubmissionRejected);return out;
         }
+        // Seating transfers presentation to the gun immediately. Native ammo
+        // stays pending until its exact completion receipt; the free hand can
+        // already return to the fore-end during the remaining stock animation.
+        supply_.ReleaseSubmitted(s.input,hands,*reservation);
         ++submitted_;Journal(3,s.input.nowNs);
         if(transactionCount_<transactions_.size()){
             auto& t=transactions_[transactionCount_++];t.reservation=*reservation;t.before=prepared.submit->heldLease;

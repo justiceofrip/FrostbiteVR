@@ -60,8 +60,10 @@ does not invalidate the deterministic two-frame-delay reproduction.
 The final 206d rebuild passes all **186 C++ suites on both x86 and x64**, using
 one compiler job and one architecture at a time. Its protected source digest is
 `b3706c124ea2286eb0460425bf6f2d29611a4d1ae1016f2136216eb1072cacd1`.
-The corrected binary's native check remains pending. BC2 is left closed while
-the user obtains a newly reported direct-map launch command from a fork.
+The corrected binary's native check remains pending. The user supplied the
+fork's native UI-thread startup method, and its bindings were verified locally.
+A separate auto-Continue helper now builds and passes offline lifecycle tests;
+review and actual-game startup verification remain before the recovery run.
 
 Three private audit tests retain the earlier transport timeouts as inconclusive
 and reject shortened tracking loss, changed ammo, missing cancellation, extra

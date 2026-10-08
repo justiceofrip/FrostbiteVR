@@ -85,6 +85,15 @@ struct WeaponShotFrame {
  bool authoredSupportReference=false;
 };
 std::optional<WeaponShotFrame> ReadWeaponShotFrame(unsigned soldier,unsigned weak,unsigned weapon)noexcept;
+// Contact-only capability: pending native ammo transfer can block firing while
+// a free hand regrips the fore-end. Contains no muzzle or native sight data.
+struct WeaponSupportFrame {
+ interaction::SupportGripContact support{};
+ std::uint64_t generation=0;std::int64_t deadline=0;
+ std::uint64_t ownerGeneration=0,space=0;
+ bool authoredSupportReference=false;
+};
+std::optional<WeaponSupportFrame> ReadWeaponSupportFrame(unsigned soldier,unsigned weak,unsigned weapon)noexcept;
 // Body transaction ownership observation only; it may describe hidden geometry.
 // Never use this getter for firing, support, or EmptyHands acknowledgement.
 std::optional<WeaponShotFrame> ReadBodyWeaponFrame(unsigned soldier,unsigned weak,unsigned weapon)noexcept;

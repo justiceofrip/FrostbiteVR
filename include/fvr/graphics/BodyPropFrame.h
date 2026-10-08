@@ -1,6 +1,7 @@
 #pragma once
 #include "fvr/graphics/RigidPropFrame.h"
 #include "fvr/graphics/SharedTextureProtocol.h"
+#include "fvr/graphics/AmmoCounter.h"
 #include <cstddef>
 #include <type_traits>
 namespace fvr::graphics {
@@ -27,13 +28,15 @@ struct alignas(8) BodyPropEye {
     math::Matrix4 view{},projection{};
     std::uint32_t count=0,reserved=0;
     std::array<BodyPropInstance,MaxBodyProps> instances{};
+    AmmoCounterSample ammo{}; // Optional; invalid/absent telemetry hides only HUD.
 };
 struct alignas(8) BodyPropFrame {
-    std::uint32_t version=1,bytes=2352;
+    std::uint32_t version=2,bytes=2480;
     std::uint64_t frameId=0,spaceGeneration=0,trackingGeneration=0;
     std::array<BodyPropEye,2> eyes{};
 };
-static_assert(sizeof(BodyPropInstance)==128&&sizeof(BodyPropEye)==1160&&sizeof(BodyPropFrame)==2352);
+static_assert(sizeof(BodyPropInstance)==128&&sizeof(BodyPropEye)==1224&&sizeof(BodyPropFrame)==2480);
+static_assert(offsetof(BodyPropEye,ammo)==1160);
 static_assert(std::is_trivially_copyable_v<BodyPropFrame> && offsetof(BodyPropFrame,eyes)==32);
 inline bool BodyPropFresh(const BodyPropInstance& p,std::int64_t now)noexcept {
     return ValidRigidPropKey(p.geometry)&&p.actorGeneration&&p.equipmentGeneration&&p.spaceGeneration&&RigidPropWorldValid(p.world)&&p.observedNs>0&&
@@ -46,7 +49,7 @@ inline bool SameBodyPropSource(const BodyPropInstance& a,const BodyPropInstance&
 }
 // Shape/identity validation does not renew source deadlines or permit gameplay.
 inline bool BodyPropFrameMatches(const BodyPropFrame& f,const PairTicket& t)noexcept {
-    if(f.version!=1||f.bytes!=sizeof(f)||!f.frameId||f.frameId!=t.frameId||
+    if(f.version!=2||f.bytes!=sizeof(f)||!f.frameId||f.frameId!=t.frameId||
         !f.spaceGeneration||f.spaceGeneration!=t.spaceGeneration||
         !f.trackingGeneration||f.trackingGeneration!=t.trackingGeneration)return false;
     for(const auto& e:f.eyes){

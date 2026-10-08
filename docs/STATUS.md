@@ -1,3 +1,11 @@
+# Current work — checkpoint 207
+
+[207](RELOAD-PRESENTATION-207.md) records the actual 206d headset feedback and
+shared grip/presentation fixes plus the requested loaded/reserve VR counter.
+Both full builds pass 189 suites, and the ammo HUD passes software-D3D pixel
+readback with mocked XR. Matching artifacts are staged for a fresh game launch;
+207 still needs actual-game/headset verification.
+
 # Current local status — checkpoint 206
 
 [Checkpoint 206](RELOAD-RECOVERY-206.md) fixes the reproduced delayed-hand-pose
@@ -5,8 +13,9 @@ grab failure. Focused actual-policy tests pass with N-2/N-3 geometry. The native
 interruption/holster/reload driver completed one full interaction with conserved
 ammo, but two transport timeouts kept its combined audit inconclusive. After the
 PC crash, the final 206d build passed all 186 suites on each architecture using
-one compiler job at a time. The corrected binary's actual-game validation remains
-pending. Source and saved evidence survived.
+one compiler job at a time. Its subsequent headset run was much more stable
+per the user, with the grip/presentation issues now addressed by the 207 candidate.
+Source and saved evidence survived.
 
 The current compiled magazine registry has **two exact profiles: scoped XM8
 and AEK971_sp**. SPAS shell loading is separate. The 35 prepared configurations,
@@ -14,6 +23,11 @@ and AEK971_sp**. SPAS shell loading is separate. The 35 prepared configurations,
 completed guns. Wider generated magazine registrations are not selected by the
 checkpoint build. Pump, bolt, slide/chamber and belt-fed native integration are
 still unfinished. See [the audited coverage and family gaps](WEAPON-COVERAGE-CURRENT.md).
+
+The corrected extraction pipeline now generates 21 exact candidate configurations
+for seven additional models. All pass shared partial/empty magazine-consumer checks
+on both architectures with mocked native calls. Native integration, full package
+composition and headset acceptance remain separate; these are not 21 enabled guns.
 
 [Checkpoint 205](RELOAD-RECOVERY-205.md) lets the automated reload driver run
 repeated episodes without resetting gameplay consumers. Thirty offline
@@ -53,10 +67,10 @@ player release or a supported-games compatibility list.
 | Full body / multiplayer | Research and shared groundwork; no complete implementation |
 | Other Frostbite games | Porting plan only; no verified BF3/BF4/Hardline or Battlefront adapter |
 
-The latest human headset feedback before this checkpoint still reported broken
-rifle reloads and unintended weapon draws. Subsequent fixes were evaluated using
-synthetic controller input through the actual BC2 adapter. Successful scripted
-checks improve coverage without replacing a headset check for feel and optics.
+Latest human feedback: frozen 206d felt substantially more stable. Held-magazine
+ghosting, chest-ammo flicker and post-insertion support delay remained, plus an
+uncertain late XM8 failure without a visible counter. The new 207 candidate adds
+that counter and shared fixes; software checks do not establish headset feel.
 
 The latest repeated native magazine audit passed with one original return, one
 replacement, zero cancellations, zero magazine visual fallbacks, conserved ammo

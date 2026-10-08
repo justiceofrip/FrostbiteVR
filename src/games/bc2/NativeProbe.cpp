@@ -17,7 +17,7 @@
 #include "Bc2OpticFilterRuntime.h"
 #include <memory>
 #include "Bc2RigPublication.h"
-#include "Bc2BodyCarriedPair.h"
+#include "Bc2BodyPropPair.h"
 #include "fvr/math/ProjectionOverride.h"
 #include "fvr/runtime/ExactWriteBatch.h"
 #include "fvr/graphics/D3D11FrameBridge.h"
@@ -356,7 +356,7 @@ struct TrackedTransaction {
     std::atomic<unsigned> state=0,restoreFailures=0;
     fvr::ipc::FrameLease lease{};std::array<fvr::bc2::RenderViewCopy,2> saved{},written{},observed{},right{};
     bool capturesOkay=true;
-    fvr::bc2::BodyCarriedPair bodyCarriedPair;
+    fvr::bc2::BodyPropPair bodyPropPair;
     std::array<float,16> savedAnchor{},writtenAnchor{};bool anchorWritten=false;
 } tracked;
 fvr::bc2::ViewAnchorCandidates viewAnchor{};bool viewAnchorMode=false;std::atomic<unsigned> anchorCopies=0;
@@ -767,7 +767,7 @@ void BeginTrackedFrame(unsigned incomingFrame)noexcept {
     if(tracked.restoreFailures.load()||contextRestoreFailures.load()){RecordStereoProgress(fvr::bc2::StereoProgressReason::BeginRestoreFailure,incomingFrame);return;}
     fvr::ipc::FrameLease lease{};if(!frameBridge.TryBegin({(std::uint64_t(e.world)<<32)|e.request,incomingFrame,1},lease)){RecordStereoProgress(fvr::bc2::StereoProgressReason::BridgeNoLease,incomingFrame);return;}
     weaponContextCount.store(0);derivedCount.store(0);derivedFrameFailed.store(false);for(auto& binding:derivedProjections)binding.frame.store(0);
-    tracked.lease=lease;tracked.bodyCarriedPair.Reset();tracked.capturesOkay=true;tracked.state.store(3,std::memory_order_release);
+    tracked.lease=lease;tracked.bodyPropPair.Reset();tracked.capturesOkay=true;tracked.state.store(3,std::memory_order_release);
     std::array<unsigned,4> viewport{};if(!Read(e.main+layout.viewportOffset,viewport.data(),16)){stereoRecovery.cancelUnwrittenRequest.store(lease.requestId,std::memory_order_release);RecordStereoProgress(fvr::bc2::StereoProgressReason::ViewportUnreadable,incomingFrame);return;}
     if(viewport[2]!=lease.requirements.width||viewport[3]!=lease.requirements.height){stereoRecovery.cancelUnwrittenRequest.store(lease.requestId,std::memory_order_release);RecordStereoProgress(fvr::bc2::StereoProgressReason::ViewportSizeChanged,incomingFrame);return;}
     // Acquire before native update, but apply after its per-view far/LOD edits.
@@ -826,7 +826,7 @@ void FinishTrackedFrame(bool completePair)noexcept {
         }
     }
     if(!(completePair&&restored&&tracked.capturesOkay&&e.visibilityMask.load(std::memory_order_acquire)==3&&frameBridge.PublishRestored(tracked.lease)))frameBridge.Cancel(tracked.lease);
-    tracked.bodyCarriedPair.Reset();
+    tracked.bodyPropPair.Reset();
     tracked.state.store(2,std::memory_order_release);
 }
 void PumpFrameBridge()noexcept {
@@ -1481,8 +1481,9 @@ void __fastcall DrawHook(void* self,void*,void* request,void* view,void* data){
     const auto bodyAmmoBefore=bodyAmmoEyeOwned?fvr::bc2::rigPublication::ReadBodyAmmoRenderSource(ReloadDrawNowNs()):std::nullopt;
     const auto bodyHolsteredBefore=bodyAmmoEyeOwned?fvr::bc2::rigPublication::ReadHolsteredBodyRenderSource(ReloadDrawNowNs()):std::nullopt;
     const auto bodyCarriedCurrent=bodyAmmoEyeOwned?fvr::bc2::rigPublication::ReadCarriedBodyRenderSource(ReloadDrawNowNs()):std::nullopt;
-    const auto bodyCarriedBefore=bodyCarriedCurrent?tracked.bodyCarriedPair.Read(fvr::bc2::CarriedPairKey(tracked.lease),
-        evidenceEye,*bodyCarriedCurrent,ReloadDrawNowNs()):nullptr;
+    const fvr::bc2::BodyPropSources bodySourcesBefore{bodyAmmoBefore,bodyHolsteredBefore,bodyCarriedCurrent};
+    const auto bodyPairKey=bodyAmmoEyeOwned?fvr::bc2::CarriedPairKey(tracked.lease):fvr::bc2::BodyCarriedPairKey{};
+    const auto bodyPair=bodyAmmoEyeOwned?tracked.bodyPropPair.Begin(bodyPairKey,evidenceEye,bodySourcesBefore):nullptr;
     const auto holsterBefore=trackedEvidence&&bodyHolsterProbeMode?
         fvr::bc2::gameplay::ReadBodyHolsterFixture(ReloadDrawNowNs()):nullptr;
     const auto visibilityBefore=trackedEvidence&&weaponVisibilityProbeMode?
@@ -1563,20 +1564,18 @@ void __fastcall DrawHook(void* self,void*,void* request,void* view,void* data){
         if(Read(address+layout.primaryOffset+0x220,&nativeView,64)&&Read(address+layout.primaryOffset+0x2e0,&nativeProjection,64)){
             if(const auto eye=fvr::bc2::CanonicalBodyPropEye(nativeView,nativeProjection)){
                 props=*eye;
-                if(bodyAmmoBefore&&after&&bodyAmmoBefore->prop.source.input.owner.space==tracked.lease.tracking.spaceGeneration){
-                    if(const auto instance=fvr::bc2::BodyAmmoHostInstance(*bodyAmmoBefore,*after,now))props.instances[props.count++]=*instance;
-                }
-                if(bodyHolsteredBefore&&bodyHolsteredBefore->spaceGeneration==tracked.lease.tracking.spaceGeneration){
-                    const auto holsteredAfter=fvr::bc2::rigPublication::ReadHolsteredBodyRenderSource(now);
-                    if(holsteredAfter)if(const auto instance=fvr::bc2::BodyHolsteredHostInstance(*bodyHolsteredBefore,*holsteredAfter,now))props.instances[props.count++]=*instance;
-                }
-                if(bodyCarriedBefore){const auto carriedAfter=fvr::bc2::rigPublication::ReadCarriedBodyRenderSource(now);
-                    if(carriedAfter)fvr::bc2::AppendBodyCarriedPair(*bodyCarriedBefore,fvr::bc2::CarriedPairKey(tracked.lease),*carriedAfter,now,props);
-                }
             }
         }
-        if(U32(stereoExperiment.world+0x88)==stereoExperiment.frame&&U32(address+0x70)==stereoExperiment.request)
-            frameBridge.SetBodyProps(tracked.lease,evidenceEye,props);
+        const fvr::bc2::BodyPropSources bodySourcesAfter{after,
+            fvr::bc2::rigPublication::ReadHolsteredBodyRenderSource(now),fvr::bc2::rigPublication::ReadCarriedBodyRenderSource(now)};
+        // Optional per-eye ammo HUD telemetry is assigned to props.ammo here.
+        // The pair helper preserves it independently of prop admission.
+        props.ammo=fvr::bc2::gameplay::ReadAmmoCounter(ReloadDrawNowNs());
+        if(const auto pair=tracked.bodyPropPair.End(bodyPair,bodyPairKey,evidenceEye,bodySourcesBefore,bodySourcesAfter,props,ReloadDrawNowNs()))
+            if(tracked.state.load(std::memory_order_acquire)==1&&fvr::bc2::CarriedPairKey(tracked.lease)==bodyPairKey&&
+               U32(stereoExperiment.world+0x88)==stereoExperiment.frame&&U32(address+0x70)==stereoExperiment.request){
+                frameBridge.SetBodyPropPair(tracked.lease,*pair);
+            }
     }
     if(stereoMode){
         const auto& e=stereoExperiment;

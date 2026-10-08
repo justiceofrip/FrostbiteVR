@@ -1,5 +1,6 @@
 #pragma once
 #include "Bc2Profile.h"
+#include "Bc2AmmoCounterHost.h"
 #include "Bc2Camera.h"
 #include "Bc2SelectedMeshes1p.h"
 #include "Bc2WeaponVisibilityProbe.h"
@@ -48,6 +49,7 @@ bool EnablePhysicalReloadProbeRepeat()noexcept;
 std::shared_ptr<const SelectedMeshesSnapshot> ReadSelectedMeshes(const ReloadStateOwner&,std::int64_t nowNs)noexcept;
 std::shared_ptr<const SelectedMeshesSnapshot> ReadCurrentSelectedMeshes(std::int64_t nowNs)noexcept;
 bool BodyDisplayNativeCurrent(const BodyInventoryDisplay&)noexcept;
+graphics::AmmoCounterSample ReadAmmoCounter(std::int64_t nowNs)noexcept;
 bool AdjustViewBase(std::array<RenderViewCopy,2>&,const runtime::TrackingFrame&)noexcept;
 // Bounded read-only plan and post-setter camera evidence; no native writes.
 bool ObserveVehicleCameraPlan(unsigned,const runtime::TrackingFrame&,const RenderViewCopy&,const RenderViewCopy&,const std::array<RenderViewCopy,2>&)noexcept;

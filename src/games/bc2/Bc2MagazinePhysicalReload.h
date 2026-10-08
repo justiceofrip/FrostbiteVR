@@ -110,6 +110,11 @@ public:
    owners_.cycle,lastReserve_,originalReturns_,originalReturning_,originalMagazine_,originalReceipt_,cancelled_,reconciled_};
  }
 private:
+ MagazinePhysicalResult TickImpl(const MagazinePhysicalSample&,interaction::HandInteraction&,std::uint64_t&)noexcept;
+ void RetainDeferredPresentation(MagazinePhysicalResult&,const MagazinePhysicalSample&,interaction::HandInteraction&)noexcept;
+ struct EmittedPresentation {MagazineTracking tracking;interaction::DetachableMagazinePhase phase;};
+ std::optional<EmittedPresentation> emittedPresentation_;
+ bool retainedPresentationThisTick_=false;
  bool Api()const noexcept;
  bool RollbackUnstarted(const interaction::HandInteractionSample&,interaction::HandInteraction&)noexcept;
  void ObserveRetirement(const MagazinePhysicalSample&)noexcept;

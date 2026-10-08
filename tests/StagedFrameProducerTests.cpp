@@ -35,6 +35,7 @@ bool WaitFeedback(ipc::StagedFrameProducer& producer,Feedback& feedback,unsigned
 }
 int main(){
     Feedback feedback;feedback.graphicsThread=std::this_thread::get_id();
+    std::atomic<bool> receivedBodyPair=false;
     ipc::FrameChannel host;CHECK(host.CreateHost());ipc::StagedFrameProducer producer(feedback);CHECK(producer.Connect(host.Token()));
     runtime::PresentationRequirements requirements{100,120,29,0x87654321,-2};runtime::TrackingFrame tracking{};
     tracking.generation=0x100000007ULL;tracking.spaceGeneration=0x200000003ULL;tracking.predictedNs=10000000000;
@@ -43,7 +44,7 @@ int main(){
     interaction::InputFrame controls{};controls.generation=1;controls.spaceGeneration=1;controls.predictedNs=1000000000;controls.focused=controls.headValid=true;
     CHECK(host.PublishInput(controls)==ipc::ChannelResult::Ok);interaction::InputFrame gotControls{};
     CHECK(producer.ReadInput(gotControls)==ipc::ChannelResult::Ok&&gotControls.generation==1);
-    auto request=[&](bool consume,std::atomic<bool>* delivered=nullptr,unsigned holdMs=0){return std::async(std::launch::async,[&,consume,delivered,holdMs]{graphics::TextureDescriptor d;graphics::PairTicket t;auto result=ipc::ChannelResult::Busy;const auto retryUntil=GetTickCount64()+1000;while(result==ipc::ChannelResult::Busy&&GetTickCount64()<retryUntil){result=host.RequestPair(requirements,tracking,50,d,t);if(result==ipc::ChannelResult::Busy)Sleep(1);}if(result==ipc::ChannelResult::Ok){if(delivered)delivered->store(true);if(holdMs)Sleep(holdMs);host.Feedback(t,consume);const auto feedbackUntil=GetTickCount64()+1000;while(host.FlushFeedback()==ipc::ChannelResult::Busy&&GetTickCount64()<feedbackUntil)Sleep(1);}return result;});};
+    auto request=[&](bool consume,std::atomic<bool>* delivered=nullptr,unsigned holdMs=0){return std::async(std::launch::async,[&,consume,delivered,holdMs]{graphics::TextureDescriptor d;graphics::PairTicket t;auto result=ipc::ChannelResult::Busy;const auto retryUntil=GetTickCount64()+1000;while(result==ipc::ChannelResult::Busy&&GetTickCount64()<retryUntil){result=host.RequestPair(requirements,tracking,50,d,t);if(result==ipc::ChannelResult::Busy)Sleep(1);}if(result==ipc::ChannelResult::Ok){graphics::BodyPropFrame props;if(host.ReadBodyProps(t,props)&&props.eyes[0].ammo.loaded==24&&props.eyes[1].ammo.loaded==24&&props.eyes[0].ammo.reserve==111&&props.eyes[1].ammo.reserve==111)receivedBodyPair=true;if(delivered)delivered->store(true);if(holdMs)Sleep(holdMs);host.Feedback(t,consume);const auto feedbackUntil=GetTickCount64()+1000;while(host.FlushFeedback()==ipc::ChannelResult::Busy&&GetTickCount64()<feedbackUntil)Sleep(1);}return result;});};
     ipc::NativeFrameKey key{0x100000001ULL,0x200000009ULL,0x300000004ULL};
     const auto firstStarted=GetTickCount64();ipc::FrameLease first;auto pending=request(true);
     // Visibility callback runs on a distinct thread. Only owned values cross.
@@ -55,18 +56,25 @@ int main(){
     wrong=first;++wrong.native.deviceEpoch;CHECK(producer.Cancel(wrong)==ipc::ChannelResult::Invalid);
     auto bad=ticket;++bad.frameId;CHECK(producer.Submit(first,d,bad)==ipc::ChannelResult::Invalid);
     bad=ticket;++bad.trackingGeneration;CHECK(producer.Submit(first,d,bad)==ipc::ChannelResult::Invalid);
+    std::array<graphics::BodyPropEye,2> props{};
+    for(auto& eye:props)eye.ammo={1,1000000000,1100000000,1,2,tracking.spaceGeneration,24,111,30};
+    CHECK(producer.SetBodyPropPair(wrong,props)==ipc::ChannelResult::Invalid);
+    CHECK(producer.SetBodyPropPair(first,props)==ipc::ChannelResult::Ok);
+    auto invalidProps=props;invalidProps[0].ammo.loaded=99;invalidProps[1].count=graphics::MaxBodyProps+1;
+    CHECK(producer.SetBodyPropPair(first,invalidProps)==ipc::ChannelResult::Invalid);
     CHECK(producer.Submit(first,d,ticket)==ipc::ChannelResult::Ok);
+    CHECK(producer.SetBodyPropPair(first,props)==ipc::ChannelResult::Invalid);
     CHECK(producer.Submit(first,d,ticket)==ipc::ChannelResult::Invalid);
     CHECK(producer.Cancel(first)==ipc::ChannelResult::Invalid);
     // Deterministic lost-wakeup regression: Publish signals while a recursive
     // outer hold keeps the named mutex unavailable to the awakened host.
-    const auto mutexName=L"Local\\FrostbiteVR.Control.v4."+host.Token()+L".mutex";
+    const auto mutexName=L"Local\\FrostbiteVR.Control.v5."+host.Token()+L".mutex";
     HANDLE heldMutex=OpenMutexW(SYNCHRONIZE|MUTEX_MODIFY_STATE,FALSE,mutexName.c_str());CHECK(heldMutex);
     CHECK(WaitForSingleObject(heldMutex,10)==WAIT_OBJECT_0);
     const auto firstPublished=GetTickCount64();producer.PumpGraphics();Sleep(8);CHECK(ReleaseMutex(heldMutex));CloseHandle(heldMutex);
     const auto releasedAt=GetTickCount64();const auto firstResult=PumpUntilHost(producer,pending);
     if(firstResult!=ipc::ChannelResult::Ok)std::fprintf(stderr,"first result=%u acquire/publish=%llu held=%llu total=%llu consumed=%u discarded=%u\n",unsigned(firstResult),firstPublished-firstStarted,releasedAt-firstPublished,GetTickCount64()-firstStarted,feedback.consumed.load(),feedback.discarded.load());
-    CHECK(firstResult==ipc::ChannelResult::Ok);
+    CHECK(firstResult==ipc::ChannelResult::Ok&&receivedBodyPair);
     for(unsigned i=0;i<100&&!feedback.consumed;++i){producer.PumpGraphics();Sleep(1);}CHECK(feedback.consumed==1&&!feedback.discarded);
     producer.PumpGraphics();CHECK(feedback.consumed==1);
     // Cancelled native frame leaves no GPU ticket, then stale leases cannot act.

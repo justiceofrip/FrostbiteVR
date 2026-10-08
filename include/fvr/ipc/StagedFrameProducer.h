@@ -38,6 +38,8 @@ public:
     ChannelResult Submit(const FrameLease&,const graphics::TextureDescriptor&,const graphics::PairTicket&)noexcept;
     ChannelResult Cancel(const FrameLease&)noexcept;
     ChannelResult SetBodyProps(const FrameLease&,unsigned eye,const graphics::BodyPropEye&)noexcept;
+    // One lock commits both stereo metadata eyes, or neither on contention.
+    ChannelResult SetBodyPropPair(const FrameLease&,const std::array<graphics::BodyPropEye,2>&)noexcept;
     // Graphics thread only: publish and return GPU ownership feedback exactly once.
     void PumpGraphics()noexcept;
 private:

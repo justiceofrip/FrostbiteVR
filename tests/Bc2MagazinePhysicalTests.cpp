@@ -1,4 +1,5 @@
 #include "Bc2MagazinePhysicalReload.h"
+#include "Bc2WeaponFrameAccess.h"
 #include "Bc2MagazineDetached.h"
 #ifndef BASELINE_DIAGNOSTICS
 #include "Bc2MagazineFallbackObservation.h"
@@ -179,7 +180,15 @@ int SubmittedMagazineReleasesSupportWithoutCompletingNativeReload(){
  const SupportGripOwner owner{f.s.input.owner.actor,f.s.input.owner.actorGeneration,f.s.weapon.id};
  const SupportGripContact contact{true,0,{}};std::optional<HandClaim> claim;
  const auto supportTick=[&](float squeeze){input.generation=f.s.input.sequence;input.predictedNs=f.now;input.hands[0].squeeze=squeeze;
-  return support.Update(owner,input,contact,MagazineBlocksSupport(f.result,f.now));};
+  struct PoseIdentity {unsigned soldier,weak,weapon;std::uint64_t owner,space,equipmentGeneration,generation;
+   bool valid,leftTracked,weaponActionsBlocked;};
+  const PoseIdentity current{f.s.nativeOwner.soldier,f.s.nativeOwner.weak,f.s.nativeOwner.weapon,
+   f.s.nativeOwner.actorGeneration,f.s.nativeOwner.space,f.s.nativeOwner.equipGeneration,input.generation,true,true,f.result.blocksWeaponActions};
+  if(!WeaponFrameAdmitted(current,current,current.soldier,current.weak,current.weapon,WeaponFrameUse::Support)||
+     WeaponFrameAdmitted(current,current,current.soldier,current.weak,current.weapon,WeaponFrameUse::Firing)!=!f.result.blocksWeaponActions)
+    return SupportGripResult{};
+  const auto visible=WeaponFrameAdmitted(current,current,current.soldier,current.weak,current.weapon,WeaponFrameUse::Support)?contact:SupportGripContact{};
+  return support.Update(owner,input,visible,MagazineBlocksSupport(f.result,f.now));};
  f.Send(false,false,.7f);CHECK(!supportTick(0).holding); // Real release rearms support.
  for(unsigned n=0;n<140;++n){f.Send(true,false,.7f);const auto supported=supportTick(1);
   CHECK(supported.holding&&(n||supported.engaged));
@@ -878,7 +887,76 @@ int ShortPulseRollsBackWithoutNativeCalls(){
  CHECK(!f.hands.Current(InteractionHand::Left)&&!f.result.reloadHeld&&!f.policy->BlocksEquipment());
  f.inputLifetime=100*Ms;f.Send();f.Send(false,true);CHECK(f.starts==1&&f.cancels==0);return 0;
 }
-int main(){if(ShortPulseRollsBackWithoutNativeCalls())return 1;CHECK(PairedLauncherTransitionRetiresOnlyRifleMagazine()==0);CHECK(RenderLifetimeKeepsGeometryButNeverNativeAuthority()==0);CHECK(MagazineFallbackObservationDoesNotChangeSelection()==0);CHECK(StartupWaitUsesOriginalUnseatTimeoutNotHeldGap()==0);CHECK(StartupPulseSurvivesOnlyOriginalDeadlineDuringObservationWait()==0);CHECK(TypedNativeObservationGap()==0);
+bool RemovedForDeferral(Fixture& f){f.Send();f.Send(true);f.held=true;
+ f.Send(true,false,.075f);f.Send(true,false,.04f);f.Send(true,false,.01f);
+ return f.result.interaction.phase==DetachableMagazinePhase::RemovedHeld&&f.result.tracking.target&&f.result.tracking.removalFrame;
+}
+void SetPresentationDeferral(Fixture& f,unsigned mode){f.reserveDeferred=mode==0;f.keepDeferred=mode!=0;f.reserveCohortGap=mode==2;}
+int DeferredPresentationPreservesOnlyIssuedEvidence(){
+ for(unsigned mode=0;mode<3;++mode){Fixture f;CHECK(RemovedForDeferral(f));const auto old=f.result.tracking;
+  const auto claim=f.hands.Current(InteractionHand::Left);CHECK(claim);SetPresentationDeferral(f,mode);
+  for(unsigned n=0;n<2;++n){f.Send(true,false,-.005f);
+   CHECK(f.cancels==0&&f.starts==1&&f.submits==0&&f.result.completed==0&&f.result.blocksWeaponActions&&f.result.ownsLeftHand);
+   CHECK(f.result.tracking.target&&MagazineTargetFresh(f.result.tracking,f.now));const auto& v=*f.result.tracking.target;
+   CHECK(v.inputSequence==old.target->inputSequence&&v.observedNs==old.target->observedNs&&v.deadlineNs==old.target->deadlineNs);
+   CHECK(v.weaponFromItemMeters.values==old.target->weaponFromItemMeters.values&&v.handClaim==old.target->handClaim);
+   CHECK(f.result.tracking.inputEvidence.sequence==f.s.input.sequence&&f.result.tracking.reserve.sequence==old.reserve.sequence);
+   CHECK(f.result.tracking.reserve.deadlineNs==old.reserve.deadlineNs&&f.result.tracking.family.deadlineNs==old.family.deadlineNs);
+   CHECK(f.result.tracking.removalFrame&&f.result.tracking.removalFrame->weaponWorldMeters.values==old.removalFrame->weaponWorldMeters.values);
+   CHECK(f.result.interaction.phase==DetachableMagazinePhase::RemovedHeld&&!f.result.interaction.physicallyRemoved&&!f.result.interaction.removalGrabbed);
+   CHECK(!f.result.interaction.transaction.request&&!f.result.interaction.transaction.acknowledged&&!f.result.interaction.transaction.completed);
+   CHECK(!f.result.interaction.seat&&!f.result.interaction.originalSeat&&!f.result.interaction.insertion.seat&&!f.result.interaction.insertion.captured);
+   CHECK(f.result.interaction.insertion.haptic==ReloadInsertionHaptic::None&&!f.result.reloadHeld);
+   CHECK(f.hands.Current(InteractionHand::Left)->deadlineNs==claim->deadlineNs&&f.reserve.loaded==27&&f.reserve.reserve==83);
+  }
+  f.reserveDeferred=f.keepDeferred=f.reserveCohortGap=false;f.Send(true,false,-.005f);
+  CHECK(f.result.tracking.target&&f.result.tracking.target->inputSequence>old.target->inputSequence&&f.cancels==0);
+ }
+ return 0;
+}
+int DeferredPresentationExpiryAndSafety(){
+ for(unsigned mode=0;mode<3;++mode){Fixture f;CHECK(RemovedForDeferral(f));const auto deadline=f.result.tracking.target->deadlineNs;SetPresentationDeferral(f,mode);
+  while(f.now+20*Ms<deadline){f.Send(true,false,.01f);CHECK(f.result.tracking.target&&f.result.tracking.target->deadlineNs==deadline);}
+  f.Send(true,false,.01f);CHECK(f.now>=deadline&&!f.result.tracking.target);
+ }
+ for(unsigned fault=0;fault<11;++fault){Fixture f;CHECK(RemovedForDeferral(f));f.reserveDeferred=true;
+  if(fault==0)f.s.input.focused=false;
+  if(fault==1)f.s.input.tracked[0]=false;
+  if(fault==2)++f.s.nativeOwner.equipGeneration;
+  if(fault==3){++f.s.input.owner.space;++f.s.trackingEpoch;}
+  if(fault==4)f.s.meshes.reset();
+  if(fault==5)f.familyFault=11;
+  if(fault==6){const auto hand=f.hands.Current(InteractionHand::Left);CHECK(hand&&f.hands.Release(f.s.input,hand->token).accepted);}
+  if(fault==7){const auto hand=f.hands.Current(InteractionHand::Left);CHECK(hand&&f.hands.Release(f.s.input,hand->token).accepted);
+   const auto replacement=f.hands.Acquire(f.s.input,{f.s.input.owner,InteractionHand::Left,HandClaimKind::Mechanism,f.s.weapon,
+    {{2002,1},f.s.input.sequence,f.s.input.deadlineNs,true},++f.intent,f.gun->token.id});CHECK(replacement.accepted&&replacement.claim);}
+  if(fault==8){CHECK(f.gun&&f.hands.Release(f.s.input,f.gun->token).accepted);f.gun.reset();}
+  if(fault==9)f.policy->Cancel(f.s.input,f.hands);
+  f.Send(fault!=10,false,.01f);CHECK(!f.result.tracking.target&&f.submits==0&&f.result.completed==0);
+ }
+ // Native startup has not emitted a magazine pose and cannot invent one.
+ for(unsigned mode=0;mode<3;++mode){Fixture f;f.Send();f.Send(false,true);CHECK(!f.result.tracking.target);
+  SetPresentationDeferral(f,mode);f.Send();CHECK(!f.result.tracking.target&&f.submits==0);}
+ return 0;
+}
+int DeferredSeatedPresentationPreservesSupportPhase(){
+ for(unsigned mode=0;mode<3;++mode){Fixture f;CHECK(f.Insert());SetPresentationDeferral(f,mode);f.Send(true,false,.7f);
+  const auto hand=f.hands.Current(InteractionHand::Left);CHECK(hand&&hand->token.kind==HandClaimKind::AmmoObject);
+  CHECK(f.result.ownsLeftHand&&MagazineBlocksSupport(f.result,f.now)&&f.submits==1&&f.result.completed==0);
+ }
+ for(unsigned mode=0;mode<3;++mode)for(bool grip:{false,true}){Fixture f;CHECK(f.Insert());f.Send(true,false,.7f);
+  CHECK(f.result.tracking.target&&f.result.tracking.target->role==MagazinePropRole::Attached);
+  const auto old=f.result.tracking;SetPresentationDeferral(f,mode);f.Send(grip);
+  CHECK(f.result.tracking.target&&f.result.tracking.target->deadlineNs==old.target->deadlineNs);
+  const auto hand=f.hands.Current(InteractionHand::Left);const bool owned=hand&&hand->token.kind==HandClaimKind::AmmoObject;
+  CHECK(f.result.interaction.phase==DetachableMagazinePhase::AwaitingSeat&&MagazineBlocksSupport(f.result,f.now)==owned);
+  CHECK(f.result.blocksWeaponActions&&f.result.ownsLeftHand==owned&&!f.result.interaction.seat&&!f.result.interaction.transaction.request);
+  CHECK(!f.result.interaction.transaction.completed&&f.result.completed==0&&f.submits==1&&f.reserve.loaded==27&&f.reserve.reserve==83);
+ }
+ return 0;
+}
+int main(){if(DeferredPresentationPreservesOnlyIssuedEvidence()||DeferredPresentationExpiryAndSafety()||DeferredSeatedPresentationPreservesSupportPhase())return 1;
+ if(ShortPulseRollsBackWithoutNativeCalls())return 1;CHECK(PairedLauncherTransitionRetiresOnlyRifleMagazine()==0);CHECK(RenderLifetimeKeepsGeometryButNeverNativeAuthority()==0);CHECK(MagazineFallbackObservationDoesNotChangeSelection()==0);CHECK(StartupWaitUsesOriginalUnseatTimeoutNotHeldGap()==0);CHECK(StartupPulseSurvivesOnlyOriginalDeadlineDuringObservationWait()==0);CHECK(TypedNativeObservationGap()==0);
  for(unsigned mode=0;mode<2;++mode){Fixture f;f.Send();f.Send(true);f.held=true;f.nativeLifetime=5*Ms;f.Send(true);
   CHECK(f.result.interaction.phase==DetachableMagazinePhase::Pulling);
   if(mode==0)f.held=false;else f.leaseHeld=false;f.Send(true);
@@ -916,4 +994,4 @@ int main(){if(ShortPulseRollsBackWithoutNativeCalls())return 1;CHECK(PairedLaunc
  for(const auto fn:{SubmittedMagazineReleasesSupportWithoutCompletingNativeReload,SupportRequiresFreshSeatedResultAndSafety,SeatedMagazineStaysAttachedThroughNativeContinuation,SeatedAttachmentStopsOnActualConsumerBoundaries,
   SeatedAttachmentReadGapNeverInflatesDeadline,SeatedAttachmentPackingChecksBothEyesAndExactProfile,
   FullIdleCountsCannotDivertUnfinishedPhysicalRetirement})if(const auto result=fn())return result;
- std::cout<<"BC2 magazine physical: 42 groups passed\n";return 0;}
+ std::cout<<"BC2 magazine physical: 45 groups passed\n";return 0;}

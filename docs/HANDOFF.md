@@ -1,3 +1,14 @@
+# October 8 headset follow-up — checkpoint 207
+
+Read [207](RELOAD-PRESENTATION-207.md) first. Frozen 206d **did run in the headset**:
+much more stable per user, but magazine/chest flicker and post-insertion support
+delay remained. The permitted mod stop completed without closing BC2. Current
+source adds actual ammo HUD telemetry, separate support-contact admission,
+shell hand release and coherent stereo body props. Both full builds pass 189
+suites; the HUD software-D3D readback passes. Matching artifacts are frozen in
+private `headset207-20261008`. A fresh game launch is required; 207 has not run
+in BC2 or a headset. Historical entries below describe their original validation.
+
 # Fork handoff
 
 Local checkpoint [206](RELOAD-RECOVERY-206.md) fixes a reproduced shared hand
@@ -10,9 +21,11 @@ the final 206d composition passed all 186 suites on x86 and x64, built sequentia
 with one compiler job. Source and saved native evidence survived. The large
 diagnostic record aggregate has been replaced by bounded setup-time allocation.
 The frozen local receipt is `normal-recovery206d-build-receipt.json` under the
-private pipeline runtime; the corrected binary has not yet run in BC2. The user
-reported a fork's direct-map launch shortcut, and root is waiting for the exact
-command before relaunching. No pre-crash PID is authority for a later session.
+private pipeline runtime; the later 206d headset result is recorded in 207. The user's
+fork supplied a UI-thread campaign-start method. Its bindings are verified against
+the installed executable; a separate private auto-Continue prototype is being
+built to load the saved test checkpoint without OS input. Its queued log must not
+be mistaken for observed gameplay. No pre-crash PID is authority for a later session.
 
 `Build-Checkpoint.ps1` now selects `profiles/checkpoint206` and the same 202
 calibration headers. Local x86 output is `build/x86-checkpoint206`. No GitHub
@@ -23,9 +36,12 @@ The current registry has two compiled magazine profiles, scoped XM8 and AEK971_s
 The wider prepared data is not enabled. Read [current weapon coverage](WEAPON-COVERAGE-CURRENT.md)
 before reporting gun counts. The offline batch tool now uses exact configuration
 and original component bindings. Its 89 focused Python tests pass, and the saved
-batch regenerates seven exact profiles with zero enabled production rows. A
-standalone C++ check on each architecture validates those generated configurations
-and rigid poses. This tooling change does not alter the frozen 206d native binaries.
+batch initially regenerated seven exact profiles with zero enabled production rows.
+The subsequent variant extraction independently recovers the other 14 profiles;
+all 21 pass the shared partial/empty consumer checks with mocked native responses
+on both architectures. See the private `weapon-pipeline206-variant-extraction`
+manifest and consumer audit. This tooling work does not alter the frozen 206d
+native binaries or enable these profiles in the game.
 
 Local checkpoint [205](RELOAD-RECOVERY-205.md) extends the reload motion driver
 to repeated episodes without resetting persistent consumers. Offline tests now
@@ -57,7 +73,7 @@ The prior 203 receipt is retained for its exact historical source.
 
 This public source snapshot starts at checkpoint 202. Read [STATUS.md](STATUS.md)
 for current acceptance and [../BUILDING.md](../BUILDING.md) for ordinary and
-checkpoint builds. The latest human headset feedback predates the automated fixes.
+checkpoint builds. The latest human feedback is the mixed 206d result recorded above.
 
 The shared magazine startup pulse now has immutable original input timing and
 requires genuinely fresh native contexts before Holding. A bounded diagnostic

@@ -1,3 +1,15 @@
+## October 8: reload authority and visual/hand lifetime — 207
+
+A pending native ammo transfer must not implicitly hide support contact or keep
+an inserted consumable attached to the hand. Use separate contact capability,
+physical item ownership and exact native completion. Preserve the reservation
+until its real receipt while releasing only the inserted item's original token.
+Also compose both eyes from immutable source geometry and join optional props
+by identity; dense array positions are not resource identities. Ammo HUD values
+come from verified native state and expire separately from reused world images.
+See [207 evidence and limits](RELOAD-PRESENTATION-207.md). No Refractor offsets or
+new native reload calls were transferred.
+
 ## October 8: count configured mechanisms, not names — 206
 
 Batch extraction must retain the original configuration and component provenance.

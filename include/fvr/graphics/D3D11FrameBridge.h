@@ -20,6 +20,9 @@ public:
     ipc::ChannelResult SetBodyProps(const ipc::FrameLease& lease,unsigned eye,const BodyPropEye& props)noexcept {
         return channel_.SetBodyProps(lease,eye,props);
     }
+    ipc::ChannelResult SetBodyPropPair(const ipc::FrameLease& lease,const std::array<BodyPropEye,2>& props)noexcept {
+        return channel_.SetBodyPropPair(lease,props);
+    }
     bool PublishRestored(const ipc::FrameLease&)noexcept;
     void Cancel(const ipc::FrameLease&)noexcept;
     void PumpGraphics()noexcept;

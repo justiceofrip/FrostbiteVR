@@ -54,6 +54,9 @@ int wmain(int argc,wchar_t** argv){
         const auto& delivery=remote.Statistics();
         std::cerr<<"body_props_cache="<<fvr::bc2::BodyAmmoCacheStatusName(propCache.status)<<" parts="<<(propCache.catalog?propCache.catalog->size():0)<<" ready="<<report.bodyPropsReady
             <<" pairs="<<report.bodyProps.pairs<<" instances="<<report.bodyProps.instances<<" expired="<<report.bodyProps.expired<<" missing="<<report.bodyProps.missing<<" invalid="<<report.bodyProps.invalid<<" failures="<<report.bodyProps.failures<<'\n';
+        std::cerr<<"ammo_counter_ready="<<report.ammoCounterReady<<" visible_frames="<<report.ammoCounterFrames
+            <<" uploads="<<report.ammoCounterUploads<<" errors="<<report.ammoCounterErrors
+            <<" valid_samples="<<report.ammoCounterValidSamples<<" invalid_samples="<<report.ammoCounterInvalidSamples<<'\n';
         std::cout<<std::boolalpha<<"{\n  \"state\":"<<Json(report.okay?(options.probeOnly?"runtime_ready":"session_observed"):"runtime_unavailable")
             <<",\n  \"runtime\":"<<Json(report.runtimeName)<<",\n  \"system\":"<<Json(report.systemName)<<",\n  \"error\":"<<Json(report.error)
             <<",\n  \"instance_created\":"<<report.instanceCreated<<",\n  \"system_available\":"<<report.systemAvailable<<",\n  \"session_created\":"<<report.sessionCreated
@@ -61,6 +64,9 @@ int wmain(int argc,wchar_t** argv){
             <<",\n  \"body_props\":{\"cache\":"<<Json(fvr::bc2::BodyAmmoCacheStatusName(propCache.status))<<",\"ready\":"<<report.bodyPropsReady
             <<",\"frames\":"<<report.bodyProps.frames<<",\"pairs\":"<<report.bodyProps.pairs<<",\"instances\":"<<report.bodyProps.instances
             <<",\"expired\":"<<report.bodyProps.expired<<",\"missing\":"<<report.bodyProps.missing<<",\"invalid\":"<<report.bodyProps.invalid<<",\"failures\":"<<report.bodyProps.failures<<",\"scene_depth\":false}"
+            <<",\n  \"ammo_counter\":{\"initialized\":"<<report.ammoCounterReady<<",\"visible_frames\":"<<report.ammoCounterFrames
+            <<",\"uploads\":"<<report.ammoCounterUploads<<",\"errors\":"<<report.ammoCounterErrors
+            <<",\"valid_samples\":"<<report.ammoCounterValidSamples<<",\"invalid_samples\":"<<report.ammoCounterInvalidSamples<<'}'
             <<",\n  \"minimum_feature_level\":"<<report.minimumFeatureLevel<<",\n  \"eye_width\":"<<report.requirements.width<<",\n  \"eye_height\":"<<report.requirements.height
             <<",\n  \"format\":"<<report.requirements.format<<",\n  \"waited_frames\":"<<report.waitedFrames<<",\n  \"ended_frames\":"<<report.endedFrames
             <<",\n  \"valid_tracking_frames\":"<<report.validTrackingFrames<<",\n  \"submitted_pairs\":"<<report.submittedPairs<<",\n  \"rejected_pairs\":"<<report.rejectedPairs
