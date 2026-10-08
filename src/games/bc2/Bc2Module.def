@@ -1,0 +1,4 @@
+LIBRARY BC2Adapter
+EXPORTS
+    FvrGetModuleInfo
+    FvrDiscoverBc2Profile

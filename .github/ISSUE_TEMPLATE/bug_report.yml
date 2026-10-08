@@ -1,0 +1,62 @@
+name: BC2 VR bug report
+description: Report a reproducible problem with a specific preview build.
+title: '[Bug] '
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Include enough detail to reproduce the problem. Please do not attach game files, saves, raw memory/crash dumps, entire report folders, credentials or personal file paths. A short redacted error excerpt or a recording of the behavior is enough to start.
+  - type: input
+    id: mod_build
+    attributes:
+      label: Exact mod build
+      description: Release/archive name and version, or source commit. Include the archive SHA-256 if known.
+      placeholder: preview version / source commit
+    validations:
+      required: true
+  - type: input
+    id: game_build
+    attributes:
+      label: Game edition and executable version
+      description: Store/edition, displayed executable version or BFBC2Game.exe SHA-256 if known. Do not upload the executable or its installation path.
+    validations:
+      required: true
+  - type: textarea
+    id: feature_flags
+    attributes:
+      label: Enabled features and launch options
+      description: List the switches used, or say default. Include magazine reload, body inventory or boat options if enabled. Remove personal paths from copied commands.
+      placeholder: Default preview, or the exact experimental switches
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Headset, runtime and PC
+      description: Headset/controllers, OpenXR runtime and version, connection method (wired/Steam Link/etc.), Windows version, GPU/driver, and refresh rate. Say monitor-only if applicable.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps and frequency
+      description: Include campaign mission/checkpoint, weapon or vehicle/seat, starting ammo if relevant, and whether this followed death, reload, recenter or headset reconnect. State how often it happens.
+      placeholder: |
+        1. Load ...
+        2. Equip / enter ...
+        3. ...
+        Frequency: every time / sometimes / once
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Expected and actual behavior
+      description: Distinguish what appeared on the monitor and in the headset. For a crash, say which application closed and whether the issue persists after restarting BC2.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Optional redacted evidence
+      description: Paste a brief error message or add a relevant screenshot/short video with a timestamp. Review it for personal information first. Raw dumps and whole report folders are not requested.

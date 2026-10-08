@@ -1,0 +1,1955 @@
+{
+  "schema": "fvr.bc2.authored_mechanism_coverage.v1",
+  "model_count": 7,
+  "native_asset_name_count": 14,
+  "configuration_count": 30,
+  "state_record_count": 30,
+  "independent_content_jobs": 7,
+  "models": [
+    {
+      "configured_mesh": "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Mesh",
+      "asset_names": [
+        "MG3",
+        "MG3_sp",
+        "MG3_sp_k",
+        "MG3k"
+      ],
+      "definitions": [
+        {
+          "asset": "MG3k",
+          "configuration": {
+            "resource": "Objects/Weapons/Handheld/BU_lmg_MG3/UPG_lmg_MG3_Kobra.dbx",
+            "sha256": "ef2d20a93c8134b40eea55c04c68a6202308a0b0fb08aeaf047cf90c67c180e6",
+            "instance_guid": "9d8cbec8-0903-42f0-9f91-3dcbafb5a437",
+            "type": "GameSharedResources.SoldierWeaponData"
+          },
+          "state_index": 0,
+          "binding_digest": "537f5881bbc46b002e5b7fd6208cced0661842f2fa3fbdb463b511ae6ee808fb",
+          "mechanism_digest": "806a32564672a5e1921dd27436b1ae2eab2748b49cbbfcd012de94a173e41113"
+        },
+        {
+          "asset": "MG3",
+          "configuration": {
+            "resource": "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Scoped.dbx",
+            "sha256": "f24bdbc7dca79f8bbc4026eedf734a7c6b5b3a7e13feac54fe28bfa1b34eafca",
+            "instance_guid": "456734db-b104-420e-a7ca-d65113c2f29a",
+            "type": "GameSharedResources.SoldierWeaponData"
+          },
+          "state_index": 0,
+          "binding_digest": "531cb7300282eb008a2789cffbaf5a5fb95367dbb2a79d61e1eafd4437c58a4f",
+          "mechanism_digest": "b9ff20b3cc4fa12663736c2b5fde197dee52118a9815709e6caca0cb3f7528be"
+        },
+        {
+          "asset": "MG3k",
+          "configuration": {
+            "resource": "Objects/Weapons/Handheld/BU_lmg_MG3/UPG_lmg_MG3_Scoped.dbx",
+            "sha256": "78f8cb63038841fbf6074cffc1423048f22322e27ab579093b03c118f5d359e4",
+            "instance_guid": "63c43439-b751-491c-83b4-cccc64419832",
+            "type": "GameSharedResources.SoldierWeaponData"
+          },
+          "state_index": 0,
+          "binding_digest": "339507ee707bbeba591050b0fc05dc246860fe6d6fca1149c1a172b6dd50ee96",
+          "mechanism_digest": "967aa786b8844abdce42ce9eb2b8aeaed15f47d36401005aed08273397656c00"
+        },
+        {
+          "asset": "MG3",
+          "configuration": {
+            "resource": "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Kobra.dbx",
+            "sha256": "b6eea2dda2aa7854e7256b0004b057de1f305ff0a8a1cec029fcb6be70c9b744",
+            "instance_guid": "dd64cb3f-6c32-4549-aad7-27335214da5a",
+            "type": "GameSharedResources.SoldierWeaponData"
+          },
+          "state_index": 0,
+          "binding_digest": "7dec4d9f6c625de3757b8aedd92e9a730f4b940818c0e81565d4626d022390e5",
+          "mechanism_digest": "57117644456c739a4d758cbf301c248bb5fcc96ca2891fcdfee2d636a3d199ca"
+        },
+        {
+          "asset": "MG3",
+          "configuration": {
+            "resource": "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3.dbx",
+            "sha256": "ec08bba67ae0ff8b9d327b61c2b066f91881d08b180ceb82e408f926b30a65f2",
+            "instance_guid": "de63f2a2-a42d-4726-b87e-4dcfbc763203",
+            "type": "GameSharedResources.SoldierWeaponData"
+          },
+          "state_index": 0,
+          "binding_digest": "e61d075846f03ce8d87d9facc23e05dcf5ec00f4880eea26bda545835b638c8f",
+          "mechanism_digest": "d4a2280aa7b1527fa353bdb707009b3cec41151cbdf493f43a57d6e96015ec46"
+        },
+        {
+          "asset": "MG3k",
+          "configuration": {
+            "resource": "Objects/Weapons/Handheld/BU_lmg_MG3/UPG_lmg_MG3.dbx",
+            "sha256": "4f09f04186645914906ed3a9b3ba113daebbd6d03bd9e5b8c5c04eac5c075ff6",
+            "instance_guid": "b6515bb7-cc4d-44e2-8678-fb6b88f12691",
+            "type": "GameSharedResources.SoldierWeaponData"
+          },
+          "state_index": 0,
+          "binding_digest": "a1ed74a4edf65bbfe9a36f38156b3ee93bebb304e1ab6141ddef27dbbd9f8b65",
+          "mechanism_digest": "3ab873211cc0495ab75472e0fbc2cfd725c667c7b3cf157019bb74f6089bb92a"
+        },
+        {
+          "asset": "MG3_sp",
+          "configuration": {
+            "resource": "Objects/Weapons/Handheld/BU_lmg_MG3/SP_lmg_MG3.dbx",
+            "sha256": "e79ec24fd52b5a2d7c336823e563100f10dc3194a15d6e428eb4819ec752fa15",
+            "instance_guid": "8890cba2-69c7-4a13-bfd8-b08e6a0e1de3",
+            "type": "GameSharedResources.SoldierWeaponData"
+          },
+          "state_index": 0,
+          "binding_digest": "e946b5d84cdf9485ade38a83759222833c46472dfc0540b44b59b994bfd523a3",
+          "mechanism_digest": "c13a3ab6e7e24a62c584adc3e395143e15c8f2dd48f3c0bd0a15f5a07e4b78e7"
+        },
+        {
+          "asset": "MG3_sp_k",
+          "configuration": {
+            "resource": "Objects/Weapons/Handheld/BU_lmg_MG3/SP_lmg_MG3_Kobra.dbx",
+            "sha256": "02d9c0b961b297c9856198b530084a340e46af7d8dcda2a7cd68fbf27ef452cf",
+            "instance_guid": "a40c3ac8-c1f2-47db-ac08-0bf52c2d0673",
+            "type": "GameSharedResources.SoldierWeaponData"
+          },
+          "state_index": 0,
+          "binding_digest": "7788efabf6cd5406f267297649a52c6749305aabae0b118793c4d17467dc1654",
+          "mechanism_digest": "d1a6ceb84603f4aa3cffdce507f857a9cfd8859dffd5dd38d13dc235851003e2"
+        }
+      ],
+      "source_hashes": {
+        "mesh_sha256": "fcd3afe0139905ea4abd6e7503e289f4554863d303df23dde2ec55ba9ec1cd50",
+        "lod_sha256": "d065ea0f4880423b3053437feb8bce7c11b116ed2f95c4518bec9cde84d2ca8c",
+        "sha256": "c45924fe781c6ddf996bb0a7ccba1825a83a75f9907801e66a0c1a6e1f15ae0d",
+        "asset_document_sha256": "9c3ac2774516868e182bc321b1de1d61597a82ab20ce70942e9917f7d1222705"
+      },
+      "parts": [
+        {
+          "bone": "jntWpn_1",
+          "parent": "jntWpn_0",
+          "triangles": 8644,
+          "independent_rigid_geometry": true,
+          "motion": "static",
+          "max_translation_m": 1.802262981072785e-15,
+          "max_rotation_rad": 0.0,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_12",
+          "parent": "jntWpn_1",
+          "triangles": 88,
+          "independent_rigid_geometry": true,
+          "motion": "static",
+          "max_translation_m": 4.031819930826612e-15,
+          "max_rotation_rad": 2.1073424255447017e-08,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_13",
+          "parent": "jntWpn_12",
+          "triangles": 374,
+          "independent_rigid_geometry": true,
+          "motion": "static",
+          "max_translation_m": 5.253000254515151e-16,
+          "max_rotation_rad": 2.9802322387695312e-08,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_17",
+          "parent": "jntWpnwpnJnt_16",
+          "triangles": 640,
+          "independent_rigid_geometry": true,
+          "motion": "hinge_candidate",
+          "max_translation_m": 4.826362607431733e-16,
+          "max_rotation_rad": 1.8601312380821229,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_18",
+          "parent": "jntWpn_17",
+          "triangles": 640,
+          "independent_rigid_geometry": true,
+          "motion": "general_rigid_motion",
+          "max_translation_m": 0.004724888535054725,
+          "max_rotation_rad": 1.2800244010236466,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_19",
+          "parent": "jntWpn_18",
+          "triangles": 1280,
+          "independent_rigid_geometry": true,
+          "motion": "hinge_candidate",
+          "max_translation_m": 3.7352279968433824e-16,
+          "max_rotation_rad": 1.6232920723237327,
+          "contact_windows": 3,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_2",
+          "parent": "jntWpn_1",
+          "triangles": 96,
+          "independent_rigid_geometry": true,
+          "motion": "static",
+          "max_translation_m": 1.4800689179631146e-15,
+          "max_rotation_rad": 2.1073424255447017e-08,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_3",
+          "parent": "jntWpn_1",
+          "triangles": 1620,
+          "independent_rigid_geometry": true,
+          "motion": "hinge_candidate",
+          "max_translation_m": 2.2451505828564934e-15,
+          "max_rotation_rad": 2.5841836339609374,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_6",
+          "parent": "jntWpn_1",
+          "triangles": 1332,
+          "independent_rigid_geometry": true,
+          "motion": "general_rigid_motion",
+          "max_translation_m": 0.7677090232484018,
+          "max_rotation_rad": 2.279998436523983,
+          "contact_windows": 15,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpnwpnJnt_14",
+          "parent": "jntWpn_13",
+          "triangles": 308,
+          "independent_rigid_geometry": true,
+          "motion": "static",
+          "max_translation_m": 3.642023652662075e-17,
+          "max_rotation_rad": 2.9802322387695312e-08,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpnwpnJnt_16",
+          "parent": "jntWpn_1",
+          "triangles": 560,
+          "independent_rigid_geometry": true,
+          "motion": "general_rigid_motion",
+          "max_translation_m": 0.6626504006071195,
+          "max_rotation_rad": 2.2479996264895306,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        }
+      ],
+      "native_manual_reload_enabled": false,
+      "headset_tested": false,
+      "missing_tracks": [
+        {
+          "bone": "jntWpn_4",
+          "reason": "Required authored tracks absent/unsupported: jntWpn_4"
+        }
+      ],
+      "unrepresented_skin_bones": [],
+      "authored_ammo": [
+        {
+          "asset": "MG3k",
+          "resource": "Objects/Weapons/Handheld/BU_lmg_MG3/UPG_lmg_MG3_Kobra.dbx",
+          "instance_guid": "9D8CBEC8-0903-42F0-9F91-3DCBAFB5A437",
+          "fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 8.0,
+            "FireLogic.ReloadThreshold": 0.75,
+            "Ammo.MagazineCapacity": 100
+          }
+        },
+        {
+          "asset": "MG3",
+          "resource": "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Scoped.dbx",
+          "instance_guid": "456734DB-B104-420E-A7CA-D65113C2F29A",
+          "fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 8.0,
+            "FireLogic.ReloadThreshold": 0.75,
+            "Ammo.MagazineCapacity": 100
+          }
+        },
+        {
+          "asset": "MG3k",
+          "resource": "Objects/Weapons/Handheld/BU_lmg_MG3/UPG_lmg_MG3_Scoped.dbx",
+          "instance_guid": "63C43439-B751-491C-83B4-CCCC64419832",
+          "fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 8.0,
+            "FireLogic.ReloadThreshold": 0.75,
+            "Ammo.MagazineCapacity": 100
+          }
+        },
+        {
+          "asset": "MG3",
+          "resource": "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Kobra.dbx",
+          "instance_guid": "DD64CB3F-6C32-4549-AAD7-27335214DA5A",
+          "fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 8.0,
+            "FireLogic.ReloadThreshold": 0.75,
+            "Ammo.MagazineCapacity": 100
+          }
+        },
+        {
+          "asset": "MG3",
+          "resource": "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3.dbx",
+          "instance_guid": "DE63F2A2-A42D-4726-B87E-4DCFBC763203",
+          "fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 8.0,
+            "FireLogic.ReloadThreshold": 0.75,
+            "Ammo.MagazineCapacity": 100
+          }
+        },
+        {
+          "asset": "MG3k",
+          "resource": "Objects/Weapons/Handheld/BU_lmg_MG3/UPG_lmg_MG3.dbx",
+          "instance_guid": "B6515BB7-CC4D-44E2-8678-FB6B88F12691",
+          "fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 8.0,
+            "FireLogic.ReloadThreshold": 0.75,
+            "Ammo.MagazineCapacity": 100
+          }
+        },
+        {
+          "asset": "MG3_sp",
+          "resource": "Objects/Weapons/Handheld/BU_lmg_MG3/SP_lmg_MG3.dbx",
+          "instance_guid": "8890CBA2-69C7-4A13-BFD8-B08E6A0E1DE3",
+          "fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 8.0,
+            "FireLogic.ReloadThreshold": 0.75,
+            "Ammo.MagazineCapacity": 100
+          }
+        },
+        {
+          "asset": "MG3_sp_k",
+          "resource": "Objects/Weapons/Handheld/BU_lmg_MG3/SP_lmg_MG3_Kobra.dbx",
+          "instance_guid": "A40C3AC8-C1F2-47DB-AC08-0BF52C2D0673",
+          "fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 8.0,
+            "FireLogic.ReloadThreshold": 0.75,
+            "Ammo.MagazineCapacity": 100
+          }
+        }
+      ],
+      "strict_magazine_gaps": [
+        {
+          "native_asset_name": "MG3k",
+          "reason": "Magazine geometric role candidate is not unique: "
+        },
+        {
+          "native_asset_name": "MG3",
+          "reason": "Magazine geometric role candidate is not unique: "
+        },
+        {
+          "native_asset_name": "MG3k",
+          "reason": "Magazine geometric role candidate is not unique: "
+        },
+        {
+          "native_asset_name": "MG3",
+          "reason": "Magazine geometric role candidate is not unique: "
+        },
+        {
+          "native_asset_name": "MG3",
+          "reason": "Magazine geometric role candidate is not unique: "
+        },
+        {
+          "native_asset_name": "MG3k",
+          "reason": "Magazine geometric role candidate is not unique: "
+        },
+        {
+          "native_asset_name": "MG3_sp",
+          "reason": "Magazine geometric role candidate is not unique: "
+        },
+        {
+          "native_asset_name": "MG3_sp_k",
+          "reason": "Magazine geometric role candidate is not unique: "
+        }
+      ],
+      "geometry_role_candidates": 0
+    },
+    {
+      "configured_mesh": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Mesh",
+      "asset_names": [
+        "MG36"
+      ],
+      "definitions": [
+        {
+          "asset": "MG36",
+          "configuration": {
+            "resource": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Scope.dbx",
+            "sha256": "6f2c2e40d3efc9a3f143ea2b89d9e08f0e617eaa9f831b51ea64bbd3367ff63d",
+            "instance_guid": "d7c9100e-a312-4084-871e-2471b63da284",
+            "type": "GameSharedResources.SoldierWeaponData"
+          },
+          "state_index": 0,
+          "binding_digest": "ebb05754d66af735f96bba957f26c65b3614728370bc397ea5ec4074e9a25782",
+          "mechanism_digest": "22d830d4909b9c4a2bf3decd0d479b2857f8eabe7f4ffacad4e9b4d01d073199"
+        },
+        {
+          "asset": "MG36",
+          "configuration": {
+            "resource": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36.dbx",
+            "sha256": "7a564c7726be97924e36db02ec6a218f6b1500c057dffe004b3df549a60a15c1",
+            "instance_guid": "b5101354-a431-45c0-b640-2f2339ac9e86",
+            "type": "GameSharedResources.SoldierWeaponData"
+          },
+          "state_index": 0,
+          "binding_digest": "9545846471ee762e027521573cb64455f71583ab9d9fc8b954cc7419060a12de",
+          "mechanism_digest": "03145424377317baff3c13b578e78be533ecea66570f2e69299aa1183a66a3af"
+        },
+        {
+          "asset": "MG36",
+          "configuration": {
+            "resource": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Kobra.dbx",
+            "sha256": "d0e44f08b2e86ab0e99a890f8a4d8af4adbb4c6ccbc0a2d98a8349f643b664fb",
+            "instance_guid": "75e08cb5-f9fd-4d99-9adc-5c172db310fc",
+            "type": "GameSharedResources.SoldierWeaponData"
+          },
+          "state_index": 0,
+          "binding_digest": "60025d2a77c7c866a6e53102cb6b5ebd5bee155435c953377be5ccf2e180280c",
+          "mechanism_digest": "f1cce4dd9782898f04156581c7bfe88f8b6ed6250285c0c6e2706729621f4c09"
+        }
+      ],
+      "source_hashes": {
+        "mesh_sha256": "de8980c038159fe89f4a7d16d41aa662652c2cd1938a08d4fbc83c50728e64b5",
+        "lod_sha256": "16e2e4ed8fc8050574ac7e29bff114b8e1c82693394701515f1f80fff3ba8195",
+        "sha256": "69582b779eacf6ff1c9938cda970c60ba59e2ba1a272503428711b8dd54f36c0",
+        "asset_document_sha256": "b3d934c712c4b3112d69ac26cd44334963adba874d40c7eef7bb49a16f693ae1"
+      },
+      "parts": [
+        {
+          "bone": "jntWpn_1",
+          "parent": "jntWpn_0",
+          "triangles": 11384,
+          "independent_rigid_geometry": true,
+          "motion": "static",
+          "max_translation_m": 2.282396704053591e-15,
+          "max_rotation_rad": 5.16191365590357e-08,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_2",
+          "parent": "jntWpn_1",
+          "triangles": 210,
+          "independent_rigid_geometry": true,
+          "motion": "general_rigid_motion",
+          "max_translation_m": 0.00041668247584813507,
+          "max_rotation_rad": 0.003937008391932695,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_4",
+          "parent": "jntWpn_1",
+          "triangles": 332,
+          "independent_rigid_geometry": true,
+          "motion": "general_rigid_motion",
+          "max_translation_m": 0.001128865954125077,
+          "max_rotation_rad": 0.002730087930124598,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_5",
+          "parent": "jntWpn_1",
+          "triangles": 332,
+          "independent_rigid_geometry": true,
+          "motion": "general_rigid_motion",
+          "max_translation_m": 0.0011202377945386094,
+          "max_rotation_rad": 0.003937008391876296,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_6",
+          "parent": "jntWpn_1",
+          "triangles": 2700,
+          "independent_rigid_geometry": true,
+          "motion": "general_rigid_motion",
+          "max_translation_m": 0.7640983119903936,
+          "max_rotation_rad": 2.3411590365183423,
+          "contact_windows": 3,
+          "static_closed_frame": true,
+          "semantic_role": null
+        }
+      ],
+      "native_manual_reload_enabled": false,
+      "headset_tested": false,
+      "missing_tracks": [
+        {
+          "bone": "jntWpn_12",
+          "reason": "Required authored tracks absent/unsupported: jntWpn_12"
+        },
+        {
+          "bone": "jntWpn_13",
+          "reason": "Required authored tracks absent/unsupported: jntWpn_12"
+        }
+      ],
+      "unrepresented_skin_bones": [],
+      "authored_ammo": [
+        {
+          "asset": "MG36",
+          "resource": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Scope.dbx",
+          "instance_guid": "D7C9100E-A312-4084-871E-2471B63DA284",
+          "fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 6.400000095367432,
+            "FireLogic.ReloadThreshold": 0.5799999833106995,
+            "Ammo.MagazineCapacity": 100
+          }
+        },
+        {
+          "asset": "MG36",
+          "resource": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36.dbx",
+          "instance_guid": "B5101354-A431-45C0-B640-2F2339AC9E86",
+          "fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 6.400000095367432,
+            "FireLogic.ReloadThreshold": 0.5799999833106995,
+            "Ammo.MagazineCapacity": 100
+          }
+        },
+        {
+          "asset": "MG36",
+          "resource": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Kobra.dbx",
+          "instance_guid": "75E08CB5-F9FD-4D99-9ADC-5C172DB310FC",
+          "fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 6.400000095367432,
+            "FireLogic.ReloadThreshold": 0.5799999833106995,
+            "Ammo.MagazineCapacity": 100
+          }
+        }
+      ],
+      "strict_magazine_gaps": [
+        {
+          "native_asset_name": "MG36",
+          "reason": "No stable authored magazine contact interval"
+        },
+        {
+          "native_asset_name": "MG36",
+          "reason": "No stable authored magazine contact interval"
+        },
+        {
+          "native_asset_name": "MG36",
+          "reason": "No stable authored magazine contact interval"
+        }
+      ],
+      "geometry_role_candidates": 0
+    },
+    {
+      "configured_mesh": "Objects/Weapons/Handheld/MEC_lmg_QJY88/MEC_lmg_QJY88_Mesh",
+      "asset_names": [
+        "QJU88",
+        "QJU88_sp",
+        "QJU88_sp_k"
+      ],
+      "definitions": [
+        {
+          "asset": "QJU88",
+          "configuration": {
+            "resource": "Objects/Weapons/Handheld/MEC_lmg_QJY88/MEC_lmg_QJY88_Kobra.dbx",
+            "sha256": "23ee1f34d87937f78f420c91e724bc7adba2f1788cbe515711a92251a956ba16",
+            "instance_guid": "00734bf6-4a22-4254-80bd-2070a8f5bdbc",
+            "type": "GameSharedResources.SoldierWeaponData"
+          },
+          "state_index": 0,
+          "binding_digest": "f7e142e368499acc5da48d2cc1e47f39165b9720ea6fdbd322e2f6bdf6bdfd82",
+          "mechanism_digest": "6ff14c1dd8e7c58c49d806ffc3b85fd4b49aa2c17dd7bb1fdacde9a7cbb9f2b7"
+        },
+        {
+          "asset": "QJU88",
+          "configuration": {
+            "resource": "Objects/Weapons/Handheld/MEC_lmg_QJY88/MEC_lmg_QJY88.dbx",
+            "sha256": "4a5ea65fa3e368c88fec78494ca57764c35a66e68d3beb73d536cecb26b92b80",
+            "instance_guid": "0f342abf-80ad-4399-8604-bdbd6ae50399",
+            "type": "GameSharedResources.SoldierWeaponData"
+          },
+          "state_index": 0,
+          "binding_digest": "81704e45e067b56fddc2246c0e70416381b8c2f912a0e4253a7af8ecfa106fd0",
+          "mechanism_digest": "9525a6a24fa024c63160027c5ed2dd128b59f297fe46f79f7970ed71690aa74a"
+        },
+        {
+          "asset": "QJU88",
+          "configuration": {
+            "resource": "Objects/Weapons/Handheld/MEC_lmg_QJY88/MEC_lmg_QJY88_Scoped.dbx",
+            "sha256": "802b49e4efc4361ce70a7a15198244f05cbf32f859b68cdfcf955a70f2189cbc",
+            "instance_guid": "c1621063-3a19-4151-a452-21b347bc66e7",
+            "type": "GameSharedResources.SoldierWeaponData"
+          },
+          "state_index": 0,
+          "binding_digest": "789f2fedbb2187f96975e98abff6e416482846e790f5184928095d9fca338fe3",
+          "mechanism_digest": "9303a73305db233748292ce44c99f2badb52a104a863c8e917ad4f6410cb86b1"
+        },
+        {
+          "asset": "QJU88_sp_k",
+          "configuration": {
+            "resource": "Objects/Weapons/Handheld/MEC_lmg_QJY88/SP_lmg_QJY88_Kobra.dbx",
+            "sha256": "4a7e87055920c76a7c142cce17c5f1e097ac0dc3743d6bc9faeeef8ebda74a9d",
+            "instance_guid": "1975a8f8-24c0-41d5-8f6b-e022090408be",
+            "type": "GameSharedResources.SoldierWeaponData"
+          },
+          "state_index": 0,
+          "binding_digest": "d494075bdd986fa357bf7d02c1b5a64ab0e0a7b9d1993589f754ea36d85ae14b",
+          "mechanism_digest": "9968ab4e7793cbba59984dabb7c947eeed196dbc75e09fc83227ed24098eeb14"
+        },
+        {
+          "asset": "QJU88_sp",
+          "configuration": {
+            "resource": "Objects/Weapons/Handheld/MEC_lmg_QJY88/SP_lmg_QJY88.dbx",
+            "sha256": "b0391715dd3b2b3e2dc78aa4cc1d82cbf712f732182e7de034c2a6e2fd1807cb",
+            "instance_guid": "5f90d97a-feef-48e8-b1ec-de137cff2a6a",
+            "type": "GameSharedResources.SoldierWeaponData"
+          },
+          "state_index": 0,
+          "binding_digest": "07dd8cd958b16bb0a7d2bbaaf407b15d933589c522295a7e3c13f6d47cc6ed8d",
+          "mechanism_digest": "b71889d4fc509295061514189808a7d4d8c0ff9f3bed34e53435ce5eb5a77ba9"
+        }
+      ],
+      "source_hashes": {
+        "mesh_sha256": "5ea0b426ba49ee270bfcdd9e777127c4ba1af2c0f085df0652f76b366e9c9909",
+        "lod_sha256": "e72e6c498e5a98386e8758f14cb97745ba76f1301512f84bf0de2a8f55fab65c",
+        "sha256": "4003ea4f4664252dc9a515ee0f3a30d196563cc9cd12f4abae88049e16ab2c3f",
+        "asset_document_sha256": "ab7781ee2ef8ada191230cd81e88a13eee2eeafac047f7ebbdd1128f5ef07cea"
+      },
+      "parts": [
+        {
+          "bone": "jntWpn_1",
+          "parent": "jntWpn_0",
+          "triangles": 7982,
+          "independent_rigid_geometry": true,
+          "motion": "static",
+          "max_translation_m": 1.6575354414928788e-15,
+          "max_rotation_rad": 4.2146848510894035e-08,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_11",
+          "parent": "jntWpn_1",
+          "triangles": 712,
+          "independent_rigid_geometry": true,
+          "motion": "static",
+          "max_translation_m": 6.222870798465684e-33,
+          "max_rotation_rad": 4.2146848510894035e-08,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_12",
+          "parent": "jntWpn_1",
+          "triangles": 1200,
+          "independent_rigid_geometry": true,
+          "motion": "general_rigid_motion",
+          "max_translation_m": 0.726669106644266,
+          "max_rotation_rad": 2.0143647287434656,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_13",
+          "parent": "jntWpn_12",
+          "triangles": 1136,
+          "independent_rigid_geometry": true,
+          "motion": "hinge_candidate",
+          "max_translation_m": 3.3870754433446747e-16,
+          "max_rotation_rad": 0.690017952416263,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_15",
+          "parent": "jntWpnwpnJnt_14",
+          "triangles": 1420,
+          "independent_rigid_geometry": true,
+          "motion": "general_rigid_rotation",
+          "max_translation_m": 4.1315595945158003e-16,
+          "max_rotation_rad": 3.079584891881904,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_17",
+          "parent": "jntWpnwpnJnt_16",
+          "triangles": 880,
+          "independent_rigid_geometry": true,
+          "motion": "static",
+          "max_translation_m": 3.795470959177985e-16,
+          "max_rotation_rad": 4.712160915387242e-08,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_2",
+          "parent": "jntWpn_1",
+          "triangles": 140,
+          "independent_rigid_geometry": true,
+          "motion": "static",
+          "max_translation_m": 1.2166548258476416e-15,
+          "max_rotation_rad": 4.2146848510894035e-08,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_3",
+          "parent": "jntWpn_1",
+          "triangles": 2808,
+          "independent_rigid_geometry": true,
+          "motion": "hinge_candidate",
+          "max_translation_m": 1.603468029943612e-15,
+          "max_rotation_rad": 2.5841836339609365,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_5",
+          "parent": "jntWpn_1",
+          "triangles": 1152,
+          "independent_rigid_geometry": true,
+          "motion": "static",
+          "max_translation_m": 2.3593224216040514e-15,
+          "max_rotation_rad": 4.2146848510894035e-08,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_6",
+          "parent": "jntWpn_1",
+          "triangles": 1976,
+          "independent_rigid_geometry": true,
+          "motion": "general_rigid_motion",
+          "max_translation_m": 0.767733307510775,
+          "max_rotation_rad": 2.2799984365239823,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_7",
+          "parent": "jntWpn_1",
+          "triangles": 92,
+          "independent_rigid_geometry": true,
+          "motion": "static",
+          "max_translation_m": 6.222870798465684e-33,
+          "max_rotation_rad": 4.2146848510894035e-08,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpnwpnJnt_14",
+          "parent": "jntWpn_13",
+          "triangles": 852,
+          "independent_rigid_geometry": true,
+          "motion": "general_rigid_rotation",
+          "max_translation_m": 4.841184262858935e-16,
+          "max_rotation_rad": 1.0465905216699563,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpnwpnJnt_16",
+          "parent": "jntWpn_1",
+          "triangles": 648,
+          "independent_rigid_geometry": true,
+          "motion": "static",
+          "max_translation_m": 2.892691459662126e-15,
+          "max_rotation_rad": 4.2146848510894035e-08,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        }
+      ],
+      "native_manual_reload_enabled": false,
+      "headset_tested": false,
+      "missing_tracks": [
+        {
+          "bone": "jntWpn_4",
+          "reason": "Required authored tracks absent/unsupported: jntWpn_4"
+        }
+      ],
+      "unrepresented_skin_bones": [],
+      "authored_ammo": [
+        {
+          "asset": "QJU88",
+          "resource": "Objects/Weapons/Handheld/MEC_lmg_QJY88/MEC_lmg_QJY88_Kobra.dbx",
+          "instance_guid": "00734BF6-4A22-4254-80BD-2070A8F5BDBC",
+          "fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 8.0,
+            "FireLogic.ReloadThreshold": 0.75,
+            "Ammo.MagazineCapacity": 200
+          }
+        },
+        {
+          "asset": "QJU88",
+          "resource": "Objects/Weapons/Handheld/MEC_lmg_QJY88/MEC_lmg_QJY88.dbx",
+          "instance_guid": "0F342ABF-80AD-4399-8604-BDBD6AE50399",
+          "fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 8.0,
+            "FireLogic.ReloadThreshold": 0.75,
+            "Ammo.MagazineCapacity": 200
+          }
+        },
+        {
+          "asset": "QJU88",
+          "resource": "Objects/Weapons/Handheld/MEC_lmg_QJY88/MEC_lmg_QJY88_Scoped.dbx",
+          "instance_guid": "C1621063-3A19-4151-A452-21B347BC66E7",
+          "fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 8.0,
+            "FireLogic.ReloadThreshold": 0.75,
+            "Ammo.MagazineCapacity": 200
+          }
+        },
+        {
+          "asset": "QJU88_sp_k",
+          "resource": "Objects/Weapons/Handheld/MEC_lmg_QJY88/SP_lmg_QJY88_Kobra.dbx",
+          "instance_guid": "1975A8F8-24C0-41D5-8F6B-E022090408BE",
+          "fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 8.0,
+            "FireLogic.ReloadThreshold": 0.75,
+            "Ammo.MagazineCapacity": 200
+          }
+        },
+        {
+          "asset": "QJU88_sp",
+          "resource": "Objects/Weapons/Handheld/MEC_lmg_QJY88/SP_lmg_QJY88.dbx",
+          "instance_guid": "5F90D97A-FEEF-48E8-B1EC-DE137CFF2A6A",
+          "fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 8.0,
+            "FireLogic.ReloadThreshold": 0.75,
+            "Ammo.MagazineCapacity": 200
+          }
+        }
+      ],
+      "strict_magazine_gaps": [
+        {
+          "native_asset_name": "QJU88",
+          "reason": "No stable authored magazine contact interval"
+        },
+        {
+          "native_asset_name": "QJU88",
+          "reason": "No stable authored magazine contact interval"
+        },
+        {
+          "native_asset_name": "QJU88",
+          "reason": "No stable authored magazine contact interval"
+        },
+        {
+          "native_asset_name": "QJU88_sp_k",
+          "reason": "No stable authored magazine contact interval"
+        },
+        {
+          "native_asset_name": "QJU88_sp",
+          "reason": "No stable authored magazine contact interval"
+        }
+      ],
+      "geometry_role_candidates": 0
+    },
+    {
+      "configured_mesh": "Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60_Mesh",
+      "asset_names": [
+        "M60",
+        "M60_sp",
+        "M60_sp_s"
+      ],
+      "definitions": [
+        {
+          "asset": "M60",
+          "configuration": {
+            "resource": "Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60.dbx",
+            "sha256": "b403eed0838e83cb4b8aeb5f90732ecc993275ec1b9ca8d1c0ebdb416504d51b",
+            "instance_guid": "4f0e5980-8009-442e-b3b2-3c60ba50caa7",
+            "type": "GameSharedResources.SoldierWeaponData"
+          },
+          "state_index": 0,
+          "binding_digest": "90453dbc0c3a00f0e54fba936d0d6d62ca9048b44036acd442d71c97bfbb1e17",
+          "mechanism_digest": "05e2b5556283f60dedb6d2504f19febc3f817b517e4f581d14fb9e0b87b08356"
+        },
+        {
+          "asset": "M60",
+          "configuration": {
+            "resource": "Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60_Kobra.dbx",
+            "sha256": "c103568d5cbbfba9ffd20969f02844a77d7d1aa6a886e3171f5459f872934fc4",
+            "instance_guid": "01cf38e3-9bab-450b-85b0-d48053606638",
+            "type": "GameSharedResources.SoldierWeaponData"
+          },
+          "state_index": 0,
+          "binding_digest": "486c126a0d5785298337757e5544b2827a3c7a6eb3546e87474e69c54d934fd4",
+          "mechanism_digest": "895d297a764a0eb30e3e02eddc8cc1792b80eb42d3a43a7eb52511992e960644"
+        },
+        {
+          "asset": "M60",
+          "configuration": {
+            "resource": "Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60_Scoped.dbx",
+            "sha256": "d677ece40b17d13c27d1a22aa193a79194e73e63c4eb75fe6df1dfc4e36add19",
+            "instance_guid": "e5a30f30-a66d-45cc-90f1-7c06b3e9f7d6",
+            "type": "GameSharedResources.SoldierWeaponData"
+          },
+          "state_index": 0,
+          "binding_digest": "bb2488b5929a534c4f3f2ffd606f8d34b0afc1b592bc3c5eba855d346c2cdc56",
+          "mechanism_digest": "273b23b4fc75288acd2f9abac3dbf733b1c3a6842ab8957d9a1abd8c9b96fae0"
+        },
+        {
+          "asset": "M60_sp",
+          "configuration": {
+            "resource": "Objects/Weapons/Handheld/BU_lmg_M60/SP_lmg_M60.dbx",
+            "sha256": "3c7b9a1cdba0fe1f3109bfbeafe1d8081f7dabf6aa465c4b430f8b65833bfdea",
+            "instance_guid": "bd561a9b-fd48-4254-b4c4-39653213981a",
+            "type": "GameSharedResources.SoldierWeaponData"
+          },
+          "state_index": 0,
+          "binding_digest": "cbfd53671f9889c86afc56c3c585b06939be5980a9d4e2ce31864d3797ae7436",
+          "mechanism_digest": "aa4b2747f12f32a8316df149911c4100fea1be3d571ba80f75f7287d6fed94db"
+        },
+        {
+          "asset": "M60_sp_s",
+          "configuration": {
+            "resource": "Objects/Weapons/Handheld/BU_lmg_M60/SP_lmg_M60_Scope.dbx",
+            "sha256": "caa83622df20545e5e765c2a913da46ecbcbc7a669561740aefef1f6a26c3fa7",
+            "instance_guid": "c113c0a1-ef2c-4883-9211-2bece0cab38a",
+            "type": "GameSharedResources.SoldierWeaponData"
+          },
+          "state_index": 0,
+          "binding_digest": "61a6c16a1854c507d45c26007062ee81f992db606327d29a3214789a1fa5ab75",
+          "mechanism_digest": "cf57fbe10bc3f59591f25d89bb22b632b63bfc836c39c0d7f4ca8b0d6146be81"
+        }
+      ],
+      "source_hashes": {
+        "mesh_sha256": "76111c128ce0365d6df6263bfa87cf6329979283d62dc95c95806d5b8eec4446",
+        "lod_sha256": "bff83bba14b87b2833321648d5d3ef738496896e173b20a73bf638aecb4440d9",
+        "sha256": "a6b0e5c68340c3ec2211e25a7f682bbce93befc1535e13fc31bd46bf727614f3",
+        "asset_document_sha256": "9032250906ed9e4031d4c630b275e3c1d79b8dd33cb40761ad9ffc89b84e3e06"
+      },
+      "parts": [
+        {
+          "bone": "jntWpn_1",
+          "parent": "jntWpn_0",
+          "triangles": 9564,
+          "independent_rigid_geometry": true,
+          "motion": "static",
+          "max_translation_m": 1.4163932969385122e-15,
+          "max_rotation_rad": 0.0,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_11",
+          "parent": "jntWpn_1",
+          "triangles": 1372,
+          "independent_rigid_geometry": true,
+          "motion": "static",
+          "max_translation_m": 6.206710197839727e-33,
+          "max_rotation_rad": 0.0,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_12",
+          "parent": "jntWpn_1",
+          "triangles": 560,
+          "independent_rigid_geometry": true,
+          "motion": "general_rigid_motion",
+          "max_translation_m": 0.7195820207931816,
+          "max_rotation_rad": 2.248201984565009,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_13",
+          "parent": "jntWpn_12",
+          "triangles": 320,
+          "independent_rigid_geometry": true,
+          "motion": "hinge_candidate",
+          "max_translation_m": 4.399265624358544e-16,
+          "max_rotation_rad": 1.251639168460488,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_15",
+          "parent": "jntWpnwpnJnt_14",
+          "triangles": 640,
+          "independent_rigid_geometry": true,
+          "motion": "hinge_candidate",
+          "max_translation_m": 3.4521340871686234e-16,
+          "max_rotation_rad": 1.7136885862803004,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_2",
+          "parent": "jntWpn_1",
+          "triangles": 44,
+          "independent_rigid_geometry": true,
+          "motion": "static",
+          "max_translation_m": 1.182182992068863e-15,
+          "max_rotation_rad": 0.0,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_3",
+          "parent": "jntWpn_1",
+          "triangles": 174,
+          "independent_rigid_geometry": true,
+          "motion": "static",
+          "max_translation_m": 9.574051918253567e-16,
+          "max_rotation_rad": 0.0,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_5",
+          "parent": "jntWpn_1",
+          "triangles": 680,
+          "independent_rigid_geometry": true,
+          "motion": "static",
+          "max_translation_m": 1.6289671187305718e-15,
+          "max_rotation_rad": 0.0,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_6",
+          "parent": "jntWpn_1",
+          "triangles": 746,
+          "independent_rigid_geometry": true,
+          "motion": "general_rigid_motion",
+          "max_translation_m": 0.7677397005744157,
+          "max_rotation_rad": 2.280247587483865,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_7",
+          "parent": "jntWpn_1",
+          "triangles": 264,
+          "independent_rigid_geometry": true,
+          "motion": "static",
+          "max_translation_m": 2.9890033296967998e-15,
+          "max_rotation_rad": 7.629627358359555e-06,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_8",
+          "parent": "jntWpn_1",
+          "triangles": 268,
+          "independent_rigid_geometry": true,
+          "motion": "static",
+          "max_translation_m": 3.1213150806540967e-15,
+          "max_rotation_rad": 7.629656461246367e-06,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_9",
+          "parent": "jntWpn_1",
+          "triangles": 1502,
+          "independent_rigid_geometry": true,
+          "motion": "hinge_candidate",
+          "max_translation_m": 1.4182220600507857e-15,
+          "max_rotation_rad": 1.5887584379965372,
+          "contact_windows": 5,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpnwpnJnt_14",
+          "parent": "jntWpn_13",
+          "triangles": 640,
+          "independent_rigid_geometry": true,
+          "motion": "general_rigid_motion",
+          "max_translation_m": 0.004331116555670756,
+          "max_rotation_rad": 1.206158281486329,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        }
+      ],
+      "native_manual_reload_enabled": false,
+      "headset_tested": false,
+      "missing_tracks": [
+        {
+          "bone": "jntWpn_4",
+          "reason": "Required authored tracks absent/unsupported: jntWpn_4"
+        }
+      ],
+      "unrepresented_skin_bones": [],
+      "authored_ammo": [
+        {
+          "asset": "M60",
+          "resource": "Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60.dbx",
+          "instance_guid": "4F0E5980-8009-442E-B3B2-3C60BA50CAA7",
+          "fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 7.800000190734863,
+            "FireLogic.ReloadThreshold": 0.699999988079071,
+            "Ammo.MagazineCapacity": 100
+          }
+        },
+        {
+          "asset": "M60",
+          "resource": "Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60_Kobra.dbx",
+          "instance_guid": "01CF38E3-9BAB-450B-85B0-D48053606638",
+          "fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 7.800000190734863,
+            "FireLogic.ReloadThreshold": 0.699999988079071,
+            "Ammo.MagazineCapacity": 100
+          }
+        },
+        {
+          "asset": "M60",
+          "resource": "Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60_Scoped.dbx",
+          "instance_guid": "E5A30F30-A66D-45CC-90F1-7C06B3E9F7D6",
+          "fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 7.800000190734863,
+            "FireLogic.ReloadThreshold": 0.699999988079071,
+            "Ammo.MagazineCapacity": 100
+          }
+        },
+        {
+          "asset": "M60_sp",
+          "resource": "Objects/Weapons/Handheld/BU_lmg_M60/SP_lmg_M60.dbx",
+          "instance_guid": "BD561A9B-FD48-4254-B4C4-39653213981A",
+          "fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 7.800000190734863,
+            "FireLogic.ReloadThreshold": 0.699999988079071,
+            "Ammo.MagazineCapacity": 100
+          }
+        },
+        {
+          "asset": "M60_sp_s",
+          "resource": "Objects/Weapons/Handheld/BU_lmg_M60/SP_lmg_M60_Scope.dbx",
+          "instance_guid": "C113C0A1-EF2C-4883-9211-2BECE0CAB38A",
+          "fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 7.800000190734863,
+            "FireLogic.ReloadThreshold": 0.699999988079071,
+            "Ammo.MagazineCapacity": 100
+          }
+        }
+      ],
+      "strict_magazine_gaps": [
+        {
+          "native_asset_name": "M60",
+          "reason": "Magazine geometric role candidate is not unique: "
+        },
+        {
+          "native_asset_name": "M60",
+          "reason": "Magazine geometric role candidate is not unique: "
+        },
+        {
+          "native_asset_name": "M60",
+          "reason": "Magazine geometric role candidate is not unique: "
+        },
+        {
+          "native_asset_name": "M60_sp",
+          "reason": "Magazine geometric role candidate is not unique: "
+        },
+        {
+          "native_asset_name": "M60_sp_s",
+          "reason": "Magazine geometric role candidate is not unique: "
+        }
+      ],
+      "geometry_role_candidates": 0
+    },
+    {
+      "configured_mesh": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Mesh",
+      "asset_names": [
+        "XM8 LMG"
+      ],
+      "definitions": [
+        {
+          "asset": "XM8 LMG",
+          "configuration": {
+            "resource": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg.dbx",
+            "sha256": "515f82d772129e026d2c713ef33b0cc665f86f364ac4a754d52c7c465b7046ef",
+            "instance_guid": "16ff338b-657b-4966-8a9e-bba5d3c40834",
+            "type": "GameSharedResources.SoldierWeaponData"
+          },
+          "state_index": 0,
+          "binding_digest": "8898d58013ad09a6d90fbed1ed199436dd1281add600ba7f28dc9b08ca0798c3",
+          "mechanism_digest": "41b56c19b118e6b217ede3307fd982a72d665cf5e4afdd1380c588ef2e7568dc"
+        },
+        {
+          "asset": "XM8 LMG",
+          "configuration": {
+            "resource": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Scoped.dbx",
+            "sha256": "9a560d44b3f4d0ed000635bcd4eaa912960db12eb53ecc3bb1fd7bc8e1a00914",
+            "instance_guid": "e5e3ba16-ae7a-4172-889f-3a6c0a397349",
+            "type": "GameSharedResources.SoldierWeaponData"
+          },
+          "state_index": 0,
+          "binding_digest": "f4890310f0d5d22a1076fa1a011044f43bc21ffb70f9f4a1a6eb0b303a080fe8",
+          "mechanism_digest": "f45543c7e9c720af2d9e01ccf809ad68e0d08cbd7ff684aa15a80ab683e61b33"
+        },
+        {
+          "asset": "XM8 LMG",
+          "configuration": {
+            "resource": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Kobra.dbx",
+            "sha256": "c49132975819d3fd9a6163f6466aa2f8bfa194f084e53bd14ef77185d1c36965",
+            "instance_guid": "294f6305-dcdf-4be8-81cd-f5f62ed333c2",
+            "type": "GameSharedResources.SoldierWeaponData"
+          },
+          "state_index": 0,
+          "binding_digest": "e01fd251afc87dec2ee81e54d588d56072143e5f5c1d4320110101c80338f5f6",
+          "mechanism_digest": "897b543fb90933c2cfae3e58426e0f941de39796152a30cfdce6e50e19e6b613"
+        }
+      ],
+      "source_hashes": {
+        "mesh_sha256": "b019321d9a47bb078997b98e6c9174396e955b0d82f6ee02af6884086d97a7c8",
+        "lod_sha256": "1ef5f57dfc88e70ffcaedec39822d9475ba0577b7556917d01078ca91b2de5ef",
+        "sha256": "5e25b3832255877f0322c869031ac3436f8dab0bce4a91581a30fd59eaba69fd",
+        "asset_document_sha256": "09ff4d488d6570fb0b977acfa4c01173552cfbabe4e74f775a6ebdcd68412a20"
+      },
+      "parts": [
+        {
+          "bone": "jntWpn_1",
+          "parent": "jntWpn_0",
+          "triangles": 12122,
+          "independent_rigid_geometry": true,
+          "motion": "general_rigid_motion",
+          "max_translation_m": 0.11545648916898028,
+          "max_rotation_rad": 0.1482887653174669,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_11",
+          "parent": "jntWpn_1",
+          "triangles": 416,
+          "independent_rigid_geometry": true,
+          "motion": "static",
+          "max_translation_m": 2.330183076060453e-15,
+          "max_rotation_rad": 0.0,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_2",
+          "parent": "jntWpn_1",
+          "triangles": 116,
+          "independent_rigid_geometry": true,
+          "motion": "static",
+          "max_translation_m": 1.1121203570482566e-15,
+          "max_rotation_rad": 0.001104208070831449,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_3",
+          "parent": "jntWpn_1",
+          "triangles": 416,
+          "independent_rigid_geometry": true,
+          "motion": "static",
+          "max_translation_m": 2.096016176087963e-15,
+          "max_rotation_rad": 1.8220239089423578e-05,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_5",
+          "parent": "jntWpn_1",
+          "triangles": 44,
+          "independent_rigid_geometry": true,
+          "motion": "general_rigid_motion",
+          "max_translation_m": 0.000953083934515887,
+          "max_rotation_rad": 0.0012946020235225402,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_6",
+          "parent": "jntWpn_1",
+          "triangles": 2284,
+          "independent_rigid_geometry": true,
+          "motion": "general_rigid_motion",
+          "max_translation_m": 0.7643079152204912,
+          "max_rotation_rad": 2.3409402812406763,
+          "contact_windows": 6,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_9",
+          "parent": "jntWpn_1",
+          "triangles": 1116,
+          "independent_rigid_geometry": true,
+          "motion": "static",
+          "max_translation_m": 5.17192951957096e-16,
+          "max_rotation_rad": 0.0018701831802096839,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpnwpnJnt_16",
+          "parent": "jntWpn_1",
+          "triangles": 204,
+          "independent_rigid_geometry": true,
+          "motion": "static",
+          "max_translation_m": 1.1597343645606905e-15,
+          "max_rotation_rad": 0.0018701831802096839,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        }
+      ],
+      "native_manual_reload_enabled": false,
+      "headset_tested": false,
+      "missing_tracks": [
+        {
+          "bone": "jntWpn_17",
+          "reason": "Required authored tracks absent/unsupported: jntWpn_17"
+        }
+      ],
+      "unrepresented_skin_bones": [],
+      "authored_ammo": [
+        {
+          "asset": "XM8 LMG",
+          "resource": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg.dbx",
+          "instance_guid": "16FF338B-657B-4966-8A9E-BBA5D3C40834",
+          "fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 6.400000095367432,
+            "FireLogic.ReloadThreshold": 0.6399999856948853,
+            "Ammo.MagazineCapacity": 100
+          }
+        },
+        {
+          "asset": "XM8 LMG",
+          "resource": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Scoped.dbx",
+          "instance_guid": "E5E3BA16-AE7A-4172-889F-3A6C0A397349",
+          "fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 6.400000095367432,
+            "FireLogic.ReloadThreshold": 0.6399999856948853,
+            "Ammo.MagazineCapacity": 100
+          }
+        },
+        {
+          "asset": "XM8 LMG",
+          "resource": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Kobra.dbx",
+          "instance_guid": "294F6305-DCDF-4BE8-81CD-F5F62ED333C2",
+          "fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 6.400000095367432,
+            "FireLogic.ReloadThreshold": 0.6399999856948853,
+            "Ammo.MagazineCapacity": 100
+          }
+        }
+      ],
+      "strict_magazine_gaps": [
+        {
+          "native_asset_name": "XM8 LMG",
+          "reason": "No stable authored magazine contact interval"
+        },
+        {
+          "native_asset_name": "XM8 LMG",
+          "reason": "No stable authored magazine contact interval"
+        },
+        {
+          "native_asset_name": "XM8 LMG",
+          "reason": "No stable authored magazine contact interval"
+        }
+      ],
+      "geometry_role_candidates": 0
+    },
+    {
+      "configured_mesh": "Objects/Weapons/Handheld/RU_lmg_PKM/RU_lmg_PKM_Mesh",
+      "asset_names": [
+        "PKM"
+      ],
+      "definitions": [
+        {
+          "asset": "PKM",
+          "configuration": {
+            "resource": "Objects/Weapons/Handheld/RU_lmg_PKM/RU_lmg_PKM_Kobra.dbx",
+            "sha256": "3a74555345e826bb42b54e9e9691c42537c602c3dfa8269e215934123ef3d39c",
+            "instance_guid": "197aa580-9ec5-4255-b429-b6f010f31129",
+            "type": "GameSharedResources.SoldierWeaponData"
+          },
+          "state_index": 0,
+          "binding_digest": "4754539b5d6f52ddcb1b20b32a57405ced7a349923d4010bacfd027183c195ce",
+          "mechanism_digest": "a7625229ee95bff82da06f4ad8c42d977f0babfd76c43c1b8706eb308681fee3"
+        },
+        {
+          "asset": "PKM",
+          "configuration": {
+            "resource": "Objects/Weapons/Handheld/RU_lmg_PKM/RU_lmg_PKM_Scoped.dbx",
+            "sha256": "acf04a74279816ca2c52d0022cda2956256cd2d2e887dcb3cb7ed038c5a4e0fb",
+            "instance_guid": "21cc46a6-bdf9-46bd-8a2b-2e4d808af6f3",
+            "type": "GameSharedResources.SoldierWeaponData"
+          },
+          "state_index": 0,
+          "binding_digest": "b0b325668340f1b58e7979616bcbe6ca6687f6e4fc1d583b304fe5099d7e9f22",
+          "mechanism_digest": "14d511c72c522c9c4ce60e8fdc38556228f114aa8f6f9daa8227c25e5a82a0ad"
+        },
+        {
+          "asset": "PKM",
+          "configuration": {
+            "resource": "Objects/Weapons/Handheld/RU_lmg_PKM/RU_lmg_PKM.dbx",
+            "sha256": "748809a7c23502232ed78def704291c0746804c7e4ffa09349d0d62c67fc5535",
+            "instance_guid": "eccf2b1d-eb98-439d-b5eb-cd8ad428e001",
+            "type": "GameSharedResources.SoldierWeaponData"
+          },
+          "state_index": 0,
+          "binding_digest": "be4fe0a1ba0bb38c21dcfbd00a2afda6611ea9c1f41112575fa91cbe98c44aa1",
+          "mechanism_digest": "b721cb6f9a0242f5c692b07b69010b59b0a775922276388b4ef28d0c35b83010"
+        }
+      ],
+      "source_hashes": {
+        "mesh_sha256": "b25014513770815b6fa8c45bee4aff6d3a33556812a64531589d952e65b657e9",
+        "lod_sha256": "3d3f8c5952097bde3e5245fadd65f35c7589e5a5052f5d7a831df462867e33bb",
+        "sha256": "541a6abf9f1e63bf9fbfe2fcc16428c88ad2cb047a7dc421b5927635a8e7769a",
+        "asset_document_sha256": "cff3ce4028407a620750f80b058b691478d21f3694f407a5f98cf5388715879e"
+      },
+      "parts": [
+        {
+          "bone": "jntWpn_1",
+          "parent": "jntWpn_0",
+          "triangles": 8776,
+          "independent_rigid_geometry": true,
+          "motion": "static",
+          "max_translation_m": 1.9824361001002195e-15,
+          "max_rotation_rad": 0.0,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_11",
+          "parent": "jntWpn_1",
+          "triangles": 1064,
+          "independent_rigid_geometry": true,
+          "motion": "hinge_candidate",
+          "max_translation_m": 2.256139125161704e-15,
+          "max_rotation_rad": 2.37050764556846,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_12",
+          "parent": "jntWpn_1",
+          "triangles": 2074,
+          "independent_rigid_geometry": true,
+          "motion": "hinge_candidate",
+          "max_translation_m": 2.256139125161704e-15,
+          "max_rotation_rad": 2.37050764556846,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_13",
+          "parent": "jntWpn_12",
+          "triangles": 300,
+          "independent_rigid_geometry": true,
+          "motion": "hinge_candidate",
+          "max_translation_m": 4.3037198963261196e-16,
+          "max_rotation_rad": 0.5206668094147086,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_17",
+          "parent": "jntWpnwpnJnt_16",
+          "triangles": 880,
+          "independent_rigid_geometry": true,
+          "motion": "general_rigid_motion",
+          "max_translation_m": 4.049527699486511e-16,
+          "max_rotation_rad": 0.08317316037004543,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_18",
+          "parent": "jntWpn_17",
+          "triangles": 640,
+          "independent_rigid_geometry": true,
+          "motion": "hinge_candidate",
+          "max_translation_m": 4.117185008963728e-16,
+          "max_rotation_rad": 0.23443623444719955,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_19",
+          "parent": "jntWpn_18",
+          "triangles": 960,
+          "independent_rigid_geometry": true,
+          "motion": "hinge_candidate",
+          "max_translation_m": 3.425386212974676e-16,
+          "max_rotation_rad": 1.7789552036884093,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_2",
+          "parent": "jntWpn_1",
+          "triangles": 108,
+          "independent_rigid_geometry": true,
+          "motion": "static",
+          "max_translation_m": 3.5470853182852865e-15,
+          "max_rotation_rad": 0.0,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_3",
+          "parent": "jntWpn_1",
+          "triangles": 64,
+          "independent_rigid_geometry": true,
+          "motion": "static",
+          "max_translation_m": 1.9684739567830855e-15,
+          "max_rotation_rad": 0.0,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_4",
+          "parent": "jntWpn_1",
+          "triangles": 186,
+          "independent_rigid_geometry": true,
+          "motion": "slider_candidate",
+          "max_translation_m": 0.11102332507263071,
+          "max_rotation_rad": 0.0,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_5",
+          "parent": "jntWpn_1",
+          "triangles": 1076,
+          "independent_rigid_geometry": true,
+          "motion": "static",
+          "max_translation_m": 2.8116100855205034e-15,
+          "max_rotation_rad": 0.0,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_6",
+          "parent": "jntWpn_1",
+          "triangles": 1632,
+          "independent_rigid_geometry": true,
+          "motion": "general_rigid_motion",
+          "max_translation_m": 0.828653278522791,
+          "max_rotation_rad": 2.1503312503395273,
+          "contact_windows": 16,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_7",
+          "parent": "jntWpn_1",
+          "triangles": 308,
+          "independent_rigid_geometry": true,
+          "motion": "static",
+          "max_translation_m": 7.539768119026526e-33,
+          "max_rotation_rad": 0.0,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_8",
+          "parent": "jntWpn_1",
+          "triangles": 56,
+          "independent_rigid_geometry": true,
+          "motion": "static",
+          "max_translation_m": 3.5853275740649204e-15,
+          "max_rotation_rad": 0.0,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_9",
+          "parent": "jntWpn_1",
+          "triangles": 276,
+          "independent_rigid_geometry": true,
+          "motion": "static",
+          "max_translation_m": 3.580156106448779e-15,
+          "max_rotation_rad": 3.5576034743527725e-07,
+          "contact_windows": 0,
+          "static_closed_frame": false,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpnwpnJnt_16",
+          "parent": "jntWpn_1",
+          "triangles": 720,
+          "independent_rigid_geometry": true,
+          "motion": "general_rigid_motion",
+          "max_translation_m": 1.0282607837741744,
+          "max_rotation_rad": 2.1503312503395273,
+          "contact_windows": 0,
+          "static_closed_frame": true,
+          "semantic_role": null
+        }
+      ],
+      "native_manual_reload_enabled": false,
+      "headset_tested": false,
+      "missing_tracks": [],
+      "unrepresented_skin_bones": [],
+      "authored_ammo": [
+        {
+          "asset": "PKM",
+          "resource": "Objects/Weapons/Handheld/RU_lmg_PKM/RU_lmg_PKM_Kobra.dbx",
+          "instance_guid": "197AA580-9EC5-4255-B429-B6F010F31129",
+          "fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 8.5,
+            "FireLogic.ReloadThreshold": 0.699999988079071,
+            "Ammo.MagazineCapacity": 100
+          }
+        },
+        {
+          "asset": "PKM",
+          "resource": "Objects/Weapons/Handheld/RU_lmg_PKM/RU_lmg_PKM_Scoped.dbx",
+          "instance_guid": "21CC46A6-BDF9-46BD-8A2B-2E4D808AF6F3",
+          "fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 8.5,
+            "FireLogic.ReloadThreshold": 0.699999988079071,
+            "Ammo.MagazineCapacity": 100
+          }
+        },
+        {
+          "asset": "PKM",
+          "resource": "Objects/Weapons/Handheld/RU_lmg_PKM/RU_lmg_PKM.dbx",
+          "instance_guid": "ECCF2B1D-EB98-439D-B5EB-CD8AD428E001",
+          "fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 8.5,
+            "FireLogic.ReloadThreshold": 0.699999988079071,
+            "Ammo.MagazineCapacity": 100
+          }
+        }
+      ],
+      "strict_magazine_gaps": [],
+      "geometry_role_candidates": 3
+    },
+    {
+      "configured_mesh": "Objects/Weapons/Handheld/UL_lmg_FNMinimi/UL_lmg_FNMinimi_Mesh",
+      "asset_names": [
+        "M249"
+      ],
+      "definitions": [
+        {
+          "asset": "M249",
+          "configuration": {
+            "resource": "Objects/Weapons/Handheld/UL_lmg_FNMinimi/UL_lmg_FNMinimi.dbx",
+            "sha256": "87ce26be3af226195387d0da68df0aeb8046990fc31ff14ce65a250dd01138f3",
+            "instance_guid": "46c1e3c8-85e3-47cf-8fd2-9d55acca92d3",
+            "type": "GameSharedResources.SoldierWeaponData"
+          },
+          "state_index": 0,
+          "binding_digest": "799f03aed3096d4c5fbfff5100137ce3b674b108fc398566c503de97e2fb3152",
+          "mechanism_digest": "3919abedbebb81552ac6de1629b2db07ce509d95e6bbb7b85072548579b8e6fc"
+        },
+        {
+          "asset": "M249",
+          "configuration": {
+            "resource": "Objects/Weapons/Handheld/UL_lmg_FNMinimi/UL_lmg_FNMinimi_Kobra.dbx",
+            "sha256": "79bfb7ef3bdd501ce2012119db7d96d5829d0ce5f72bedaf7bd37635ea451422",
+            "instance_guid": "8b208f35-565d-49f3-a884-9b00feacfc68",
+            "type": "GameSharedResources.SoldierWeaponData"
+          },
+          "state_index": 0,
+          "binding_digest": "5e1da7fb9ddf001d4bf3f94280292d616faf4c31a5cb8bb06da00a4ffb179168",
+          "mechanism_digest": "0594fd50ef1670381a158370bc730d547087ea18439b0f6343606f639fa873fe"
+        },
+        {
+          "asset": "M249",
+          "configuration": {
+            "resource": "Objects/Weapons/Handheld/UL_lmg_FNMinimi/UL_lmg_FNMinimi_Scoped.dbx",
+            "sha256": "214ae28886ea18869432d1dac175672bb0c803748b7660b5e4fcc8f7c338861e",
+            "instance_guid": "7332b717-0dc5-425e-9894-2c8e730fa765",
+            "type": "GameSharedResources.SoldierWeaponData"
+          },
+          "state_index": 0,
+          "binding_digest": "eb6d8b0b9b15070bd113d155175f2d307f02f104651aa14dc718fddd4c9b5425",
+          "mechanism_digest": "5a4d41b082abf4f4bebffa14ed531a07ef38064e248621ccfa43135aab867d2a"
+        }
+      ],
+      "source_hashes": {
+        "mesh_sha256": "b12ef487eba40a7f40862a1d90b345156a04e832b13012567ca7200d00e187eb",
+        "lod_sha256": "e5a9c249ecabc518fedf991772a14ceba7c4dcbbdea37eec53a68b2bf082f357",
+        "sha256": "14661a91aaf0fdde11b412845881ea6691fb2a30d0d096ad190bb8126e0efc6c",
+        "asset_document_sha256": "8ec853d09c7437423f03331c66452163ebe5d3c96355a0671700c2b1c8beb573"
+      },
+      "parts": [
+        {
+          "bone": "jntWpn_1",
+          "parent": "jntWpn_0",
+          "triangles": 9760,
+          "independent_rigid_geometry": true,
+          "motion": "static",
+          "max_translation_m": 1.7247704363936286e-15,
+          "max_rotation_rad": 0.0,
+          "contact_windows": 0,
+          "static_closed_frame": false,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_17",
+          "parent": "jntWpnwpnJnt_16",
+          "triangles": 640,
+          "independent_rigid_geometry": true,
+          "motion": "hinge_candidate",
+          "max_translation_m": 0.0007767974531218464,
+          "max_rotation_rad": 0.2373097364288847,
+          "contact_windows": 0,
+          "static_closed_frame": false,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_18",
+          "parent": "jntWpn_17",
+          "triangles": 640,
+          "independent_rigid_geometry": true,
+          "motion": "general_rigid_motion",
+          "max_translation_m": 0.005670469540192542,
+          "max_rotation_rad": 1.2980217096059958,
+          "contact_windows": 0,
+          "static_closed_frame": false,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_19",
+          "parent": "jntWpn_18",
+          "triangles": 1120,
+          "independent_rigid_geometry": true,
+          "motion": "general_rigid_rotation",
+          "max_translation_m": 4.1344379833184833e-16,
+          "max_rotation_rad": 0.554532702550782,
+          "contact_windows": 0,
+          "static_closed_frame": false,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_2",
+          "parent": "jntWpn_1",
+          "triangles": 84,
+          "independent_rigid_geometry": true,
+          "motion": "static",
+          "max_translation_m": 1.5309255655895519e-15,
+          "max_rotation_rad": 2.1073424255447017e-08,
+          "contact_windows": 0,
+          "static_closed_frame": false,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_3",
+          "parent": "jntWpn_1",
+          "triangles": 3426,
+          "independent_rigid_geometry": true,
+          "motion": "hinge_candidate",
+          "max_translation_m": 1.8342245593647153e-15,
+          "max_rotation_rad": 2.5841836339609365,
+          "contact_windows": 0,
+          "static_closed_frame": false,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_6",
+          "parent": "jntWpn_1",
+          "triangles": 332,
+          "independent_rigid_geometry": true,
+          "motion": "general_rigid_motion",
+          "max_translation_m": 0.767733326579832,
+          "max_rotation_rad": 2.279998436523983,
+          "contact_windows": 0,
+          "static_closed_frame": false,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_7",
+          "parent": "jntWpn_1",
+          "triangles": 100,
+          "independent_rigid_geometry": true,
+          "motion": "static",
+          "max_translation_m": 2.8103554715381875e-15,
+          "max_rotation_rad": 2.1073424255447017e-08,
+          "contact_windows": 0,
+          "static_closed_frame": false,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_8",
+          "parent": "jntWpn_1",
+          "triangles": 88,
+          "independent_rigid_geometry": true,
+          "motion": "static",
+          "max_translation_m": 2.759633480895776e-15,
+          "max_rotation_rad": 2.1073424255447017e-08,
+          "contact_windows": 0,
+          "static_closed_frame": false,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpn_9",
+          "parent": "jntWpn_1",
+          "triangles": 100,
+          "independent_rigid_geometry": true,
+          "motion": "static",
+          "max_translation_m": 2.5989255416437075e-15,
+          "max_rotation_rad": 2.1073424255447017e-08,
+          "contact_windows": 0,
+          "static_closed_frame": false,
+          "semantic_role": null
+        },
+        {
+          "bone": "jntWpnwpnJnt_16",
+          "parent": "jntWpn_1",
+          "triangles": 1160,
+          "independent_rigid_geometry": true,
+          "motion": "general_rigid_motion",
+          "max_translation_m": 0.6872083167358112,
+          "max_rotation_rad": 3.107048289923227,
+          "contact_windows": 0,
+          "static_closed_frame": false,
+          "semantic_role": null
+        }
+      ],
+      "native_manual_reload_enabled": false,
+      "headset_tested": false,
+      "missing_tracks": [
+        {
+          "bone": "jntWpn_5",
+          "reason": "Required authored tracks absent/unsupported: jntWpn_5"
+        }
+      ],
+      "unrepresented_skin_bones": [],
+      "authored_ammo": [
+        {
+          "asset": "M249",
+          "resource": "Objects/Weapons/Handheld/UL_lmg_FNMinimi/UL_lmg_FNMinimi.dbx",
+          "instance_guid": "46C1E3C8-85E3-47CF-8FD2-9D55ACCA92D3",
+          "fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 8.199999809265137,
+            "FireLogic.ReloadThreshold": 0.699999988079071,
+            "Ammo.MagazineCapacity": 200
+          }
+        },
+        {
+          "asset": "M249",
+          "resource": "Objects/Weapons/Handheld/UL_lmg_FNMinimi/UL_lmg_FNMinimi_Kobra.dbx",
+          "instance_guid": "8B208F35-565D-49F3-A884-9B00FEACFC68",
+          "fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 8.199999809265137,
+            "FireLogic.ReloadThreshold": 0.699999988079071,
+            "Ammo.MagazineCapacity": 200
+          }
+        },
+        {
+          "asset": "M249",
+          "resource": "Objects/Weapons/Handheld/UL_lmg_FNMinimi/UL_lmg_FNMinimi_Scoped.dbx",
+          "instance_guid": "7332B717-0DC5-425E-9894-2C8E730FA765",
+          "fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 8.199999809265137,
+            "FireLogic.ReloadThreshold": 0.699999988079071,
+            "Ammo.MagazineCapacity": 200
+          }
+        }
+      ],
+      "strict_magazine_gaps": [
+        {
+          "native_asset_name": "M249",
+          "reason": "Magazine geometric role candidate is not unique: "
+        },
+        {
+          "native_asset_name": "M249",
+          "reason": "Magazine geometric role candidate is not unique: "
+        },
+        {
+          "native_asset_name": "M249",
+          "reason": "Magazine geometric role candidate is not unique: "
+        }
+      ],
+      "geometry_role_candidates": 0
+    }
+  ],
+  "errors": [],
+  "reference_gaps": [],
+  "limits": [
+    "Authored spline interpolation is decoded but not native playback verified.",
+    "Part contact candidates use a separate30Hz mechanism sampler; they do not pass the stricter magazine60Hz/minimum100mm carried-motion gate.",
+    "ReloadType=rtMagazine means native bulk transfer, not a removable-box or belt mechanism classification.",
+    "No native hold, stage control, refill, restoration, runtime admission, or headset test is established."
+  ]
+}

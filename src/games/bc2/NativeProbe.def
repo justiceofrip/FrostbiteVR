@@ -1,0 +1,3 @@
+LIBRARY BC2NativeProbe
+EXPORTS
+    FvrRunNativeProbe=_FvrRunNativeProbe@4

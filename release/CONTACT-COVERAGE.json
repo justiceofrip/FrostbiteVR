@@ -1,0 +1,2352 @@
+{
+  "schema": "fvr.bc2.magazine_contact_public_coverage.v1",
+  "snapshot": "2026-10-03",
+  "summary": {
+    "assets_requested": 32,
+    "assets_with_paired_candidates": 13,
+    "configuration_definitions": 76,
+    "paired_state_profiles": 27,
+    "unresolved_assets": 18,
+    "deferred_assets": 1
+  },
+  "baseline_behavior_changed": false,
+  "runtime_admission": false,
+  "rows": [
+    {
+      "native_asset_name": "9A91",
+      "configuration_count": 3,
+      "configurations": [
+        {
+          "resource": "Objects/Weapons/Handheld/MEC_rif_9A91/MEC_rif_9A91_Kobra.dbx",
+          "sha256": "2ea98b1ffbdbc95ad9ebc5c2e1562cfc100193287ae337650ea6a57eb63db052",
+          "instance_guid": "89141423-62BB-4CB0-AF89-6B8485451993",
+          "weapon_class": "wcSmg",
+          "firing_resource": "Objects/Weapons/Handheld/MEC_rif_9A91/MEC_rif_9A91_Firing.dbx",
+          "firing_sha256": "287367878f3584eab4c452fb1e2742b2f0fc6727b8a214829371b9515f1fed6a",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.0999999046325684,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 20,
+            "Ammo.NumberOfMagazines": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/MEC_rif_9A91/MEC_rif_9A91_Scoped.dbx",
+          "sha256": "bcdc1aafdfe1ac52145fb17232f7ad4d62038d99a1ef8598e136dda7b8819b3e",
+          "instance_guid": "A40F09A2-A3F5-4325-A795-853B3FDE2FE3",
+          "weapon_class": "wcSmg",
+          "firing_resource": "Objects/Weapons/Handheld/MEC_rif_9A91/MEC_rif_9A91_Firing.dbx",
+          "firing_sha256": "287367878f3584eab4c452fb1e2742b2f0fc6727b8a214829371b9515f1fed6a",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.0999999046325684,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 20,
+            "Ammo.NumberOfMagazines": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/MEC_rif_9A91/MEC_rif_9A91.dbx",
+          "sha256": "c99262453ee0b53736ef6e1fc281ef400af6c84a7ce8f9d456b6b33b27938e59",
+          "instance_guid": "F5C47CC5-558A-426A-892D-D1EC35559925",
+          "weapon_class": "wcSmg",
+          "firing_resource": "Objects/Weapons/Handheld/MEC_rif_9A91/MEC_rif_9A91_Firing.dbx",
+          "firing_sha256": "287367878f3584eab4c452fb1e2742b2f0fc6727b8a214829371b9515f1fed6a",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.0999999046325684,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 20,
+            "Ammo.NumberOfMagazines": 4
+          }
+        }
+      ],
+      "paired_profiles": 3,
+      "positions": {
+        "hand_to_magazine": "same-frame authored reload wrist+15 fingers; experimental interpolation",
+        "closed_magazine": "exact static authored frame",
+        "entry_axis": "geometry-derived long-axis / body-facing end estimate",
+        "insertion_travel": "shared VR assist design, not extracted native insertion path",
+        "body_supply": "shared VR body-slot policy, not an authored gun coordinate"
+      },
+      "status": "paired_candidate",
+      "disabled_reason": [
+        "Current native descriptor/equipment/mesh binding and runtime checks not supplied by this batch"
+      ],
+      "provenance": [
+        {
+          "profile_digest": "8f64889fab2c54f837e686a503ae11308c4354d9e7a2cf37502456f24133162f",
+          "mesh_sha256": "6c61ce426abcc5e911d8fa42064a9d162607f294bec59f0cc499ecdcaa90b075",
+          "configured_mesh": "Objects/Weapons/Handheld/MEC_rif_9A91/MEC_rif_9A91_Mesh",
+          "reload_clip": "Animations/Weapons/Handheld/MEC_rif_9A91/1P/1P_Reload.res",
+          "reload_clip_sha256": "144846283f016543cd3a77ca2be9bfedb718695e1558ae0cc7dd408e113da77a",
+          "magazine_bone": "jntWpn_6",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09"
+        },
+        {
+          "profile_digest": "f0cff1c7fac8607ad5490118d3cffff3bf8fdbbcc5b80670ff01256bb25d1c6c",
+          "mesh_sha256": "6c61ce426abcc5e911d8fa42064a9d162607f294bec59f0cc499ecdcaa90b075",
+          "configured_mesh": "Objects/Weapons/Handheld/MEC_rif_9A91/MEC_rif_9A91_Mesh",
+          "reload_clip": "Animations/Weapons/Handheld/MEC_rif_9A91/1P/1P_Reload.res",
+          "reload_clip_sha256": "144846283f016543cd3a77ca2be9bfedb718695e1558ae0cc7dd408e113da77a",
+          "magazine_bone": "jntWpn_6",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09"
+        },
+        {
+          "profile_digest": "dbd9d3f88de3281d532a79bc37e5f752d3161d13348a3ffca3e0be9b4663e7d8",
+          "mesh_sha256": "6c61ce426abcc5e911d8fa42064a9d162607f294bec59f0cc499ecdcaa90b075",
+          "configured_mesh": "Objects/Weapons/Handheld/MEC_rif_9A91/MEC_rif_9A91_Mesh",
+          "reload_clip": "Animations/Weapons/Handheld/MEC_rif_9A91/1P/1P_Reload.res",
+          "reload_clip_sha256": "144846283f016543cd3a77ca2be9bfedb718695e1558ae0cc7dd408e113da77a",
+          "magazine_bone": "jntWpn_6",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09"
+        }
+      ],
+      "runtime_admitted": false,
+      "headset_tested": false,
+      "main_weapon_grip": {
+        "static_reference_rows": 3,
+        "nonstatic_reference_rows": 0,
+        "admitted_by_this_batch": false,
+        "reason": "Reload contact does not supply a verified main weapon grip or support capability"
+      }
+    },
+    {
+      "native_asset_name": "AEK971",
+      "configuration_count": 3,
+      "configurations": [
+        {
+          "resource": "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971.dbx",
+          "sha256": "a567e8328b92d6f8b3157bfc92e7f9042ede7994f68b789c7830396c9214f190",
+          "instance_guid": "677A99BB-20D1-4360-BBFC-FD7E829AB658",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Firing.dbx",
+          "firing_sha256": "26ea16da951a5b04c0e0cd96557919e4622df8774f4a504319ab1561aae6c5d8",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.200000047683716,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Kobra.dbx",
+          "sha256": "b03079e74c7d4a8b66af0b87a061476fdc23d291d60423825380a45983e49025",
+          "instance_guid": "A0D06CD2-B42D-4D88-A8E4-056E98BE85F4",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Firing.dbx",
+          "firing_sha256": "26ea16da951a5b04c0e0cd96557919e4622df8774f4a504319ab1561aae6c5d8",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.200000047683716,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Scoped.dbx",
+          "sha256": "c8c65332f252325e8cd285d7f51b0293874bcf697b327dd31e0bc1b6600b2b85",
+          "instance_guid": "C6F71482-8271-4705-A77A-B3EC10088BFF",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Firing_Scoped.dbx",
+          "firing_sha256": "513f2f2332453c06255bbdd5a07a4cc9c19346cfd1f3222738c1a48c368a9f06",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.200000047683716,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        }
+      ],
+      "paired_profiles": 3,
+      "positions": {
+        "hand_to_magazine": "same-frame authored reload wrist+15 fingers; experimental interpolation",
+        "closed_magazine": "exact static authored frame",
+        "entry_axis": "geometry-derived long-axis / body-facing end estimate",
+        "insertion_travel": "shared VR assist design, not extracted native insertion path",
+        "body_supply": "shared VR body-slot policy, not an authored gun coordinate"
+      },
+      "status": "paired_candidate",
+      "disabled_reason": [
+        "Current native descriptor/equipment/mesh binding and runtime checks not supplied by this batch"
+      ],
+      "provenance": [
+        {
+          "profile_digest": "733246a4e84a432673b31b1c5ce37d21149a3351a7588a7d3c94ab4aa5955596",
+          "mesh_sha256": "81407448c9b2c7dbc9ff29378d0b6b166cc642c5b33eaefa73fb008077994029",
+          "configured_mesh": "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Mesh",
+          "reload_clip": "Animations/Weapons/Handheld/RU_rgl_AEK971/1P/1P_Reload.res",
+          "reload_clip_sha256": "5ef791ee203ce671a05858f66eac1e739ae674d191447f0d6efd78e16bb37eb3",
+          "magazine_bone": "jntWpn_6",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09"
+        },
+        {
+          "profile_digest": "282a7b5fa3bee2859ad26e0f0f1d1b80c42e4a775415445b00283decce275d7a",
+          "mesh_sha256": "81407448c9b2c7dbc9ff29378d0b6b166cc642c5b33eaefa73fb008077994029",
+          "configured_mesh": "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Mesh",
+          "reload_clip": "Animations/Weapons/Handheld/RU_rgl_AEK971/1P/1P_Reload.res",
+          "reload_clip_sha256": "5ef791ee203ce671a05858f66eac1e739ae674d191447f0d6efd78e16bb37eb3",
+          "magazine_bone": "jntWpn_6",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09"
+        },
+        {
+          "profile_digest": "15eba1a275a33a1fd14901c2ad516587783e6f3d4067fc5c5dec1553d3f90e42",
+          "mesh_sha256": "81407448c9b2c7dbc9ff29378d0b6b166cc642c5b33eaefa73fb008077994029",
+          "configured_mesh": "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Mesh",
+          "reload_clip": "Animations/Weapons/Handheld/RU_rgl_AEK971/1P/1P_Reload.res",
+          "reload_clip_sha256": "5ef791ee203ce671a05858f66eac1e739ae674d191447f0d6efd78e16bb37eb3",
+          "magazine_bone": "jntWpn_6",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09"
+        }
+      ],
+      "runtime_admitted": false,
+      "headset_tested": false,
+      "main_weapon_grip": {
+        "static_reference_rows": 3,
+        "nonstatic_reference_rows": 0,
+        "admitted_by_this_batch": false,
+        "reason": "Reload contact does not supply a verified main weapon grip or support capability"
+      }
+    },
+    {
+      "native_asset_name": "AEK971_sp",
+      "configuration_count": 1,
+      "configurations": [
+        {
+          "resource": "Objects/Weapons/Handheld/RU_rgl_AEK971/SP_rgl_AEK971.dbx",
+          "sha256": "eef52077b1721323a66be8875c1bb4c7df1a2755b1264a36d9004534a91bfbc1",
+          "instance_guid": "C0088CEE-FB7F-4FC2-A69C-2C59372F4F81",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Firing.dbx",
+          "firing_sha256": "26ea16da951a5b04c0e0cd96557919e4622df8774f4a504319ab1561aae6c5d8",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.200000047683716,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        }
+      ],
+      "paired_profiles": 1,
+      "positions": {
+        "hand_to_magazine": "same-frame authored reload wrist+15 fingers; experimental interpolation",
+        "closed_magazine": "exact static authored frame",
+        "entry_axis": "geometry-derived long-axis / body-facing end estimate",
+        "insertion_travel": "shared VR assist design, not extracted native insertion path",
+        "body_supply": "shared VR body-slot policy, not an authored gun coordinate"
+      },
+      "status": "paired_candidate",
+      "disabled_reason": [
+        "Current native descriptor/equipment/mesh binding and runtime checks not supplied by this batch"
+      ],
+      "provenance": [
+        {
+          "profile_digest": "8675a332006b7a4a6630ef9047b8d5c9c39d352cd1e07430519bcf2924240621",
+          "mesh_sha256": "81407448c9b2c7dbc9ff29378d0b6b166cc642c5b33eaefa73fb008077994029",
+          "configured_mesh": "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Mesh",
+          "reload_clip": "Animations/Weapons/Handheld/RU_rgl_AEK971/1P/1P_Reload.res",
+          "reload_clip_sha256": "5ef791ee203ce671a05858f66eac1e739ae674d191447f0d6efd78e16bb37eb3",
+          "magazine_bone": "jntWpn_6",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09"
+        }
+      ],
+      "runtime_admitted": false,
+      "headset_tested": false,
+      "main_weapon_grip": {
+        "static_reference_rows": 1,
+        "nonstatic_reference_rows": 0,
+        "admitted_by_this_batch": false,
+        "reason": "Reload contact does not supply a verified main weapon grip or support capability"
+      }
+    },
+    {
+      "native_asset_name": "AEK971_sp_k",
+      "configuration_count": 1,
+      "configurations": [
+        {
+          "resource": "Objects/Weapons/Handheld/RU_rgl_AEK971/SP_rgl_AEK971_Kobra.dbx",
+          "sha256": "b5eaaf38ebf0221abbf4cac1dd92c2329a630d893e18048d9784e2bc3ce3f81f",
+          "instance_guid": "9770F645-E63C-4A86-AD1A-7D9E99D1B689",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Firing.dbx",
+          "firing_sha256": "26ea16da951a5b04c0e0cd96557919e4622df8774f4a504319ab1561aae6c5d8",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.200000047683716,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        }
+      ],
+      "paired_profiles": 1,
+      "positions": {
+        "hand_to_magazine": "same-frame authored reload wrist+15 fingers; experimental interpolation",
+        "closed_magazine": "exact static authored frame",
+        "entry_axis": "geometry-derived long-axis / body-facing end estimate",
+        "insertion_travel": "shared VR assist design, not extracted native insertion path",
+        "body_supply": "shared VR body-slot policy, not an authored gun coordinate"
+      },
+      "status": "paired_candidate",
+      "disabled_reason": [
+        "Current native descriptor/equipment/mesh binding and runtime checks not supplied by this batch"
+      ],
+      "provenance": [
+        {
+          "profile_digest": "c9caf126b30b87d4900ddb3f298c20d7e61a94f15ce80579399caa4ac759bfb7",
+          "mesh_sha256": "81407448c9b2c7dbc9ff29378d0b6b166cc642c5b33eaefa73fb008077994029",
+          "configured_mesh": "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Mesh",
+          "reload_clip": "Animations/Weapons/Handheld/RU_rgl_AEK971/1P/1P_Reload.res",
+          "reload_clip_sha256": "5ef791ee203ce671a05858f66eac1e739ae674d191447f0d6efd78e16bb37eb3",
+          "magazine_bone": "jntWpn_6",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09"
+        }
+      ],
+      "runtime_admitted": false,
+      "headset_tested": false,
+      "main_weapon_grip": {
+        "static_reference_rows": 1,
+        "nonstatic_reference_rows": 0,
+        "admitted_by_this_batch": false,
+        "reason": "Reload contact does not supply a verified main weapon grip or support capability"
+      }
+    },
+    {
+      "native_asset_name": "AKS74u",
+      "configuration_count": 3,
+      "configurations": [
+        {
+          "resource": "Objects/Weapons/Handheld/RU_rif_AKS74u/RU_rif_AKS74u_Kobra.dbx",
+          "sha256": "2c4647689c92964ff709534f94727aa02328029bfaf9cd7c0ca05590c1863f8f",
+          "instance_guid": "EFBDB8F5-6F28-46C6-ACAB-DD107968445F",
+          "weapon_class": "wcSmg",
+          "firing_resource": "Objects/Weapons/Handheld/RU_rif_AKS74u/RU_rif_AKS74u_Firing.dbx",
+          "firing_sha256": "5ede2d936a1d88760987b456d2fefdb927b7aabe7464590a5ad40279e2dc0fdf",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.200000047683716,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/RU_rif_AKS74u/RU_rif_AKS74u.dbx",
+          "sha256": "8ff7c3d213c5b7c48c8f07e2dbd7d7437ba9aaf361d3463be80615c3c39ce3a0",
+          "instance_guid": "E244D635-5210-493D-BFC5-42604266E8F4",
+          "weapon_class": "wcSmg",
+          "firing_resource": "Objects/Weapons/Handheld/RU_rif_AKS74u/RU_rif_AKS74u_Firing.dbx",
+          "firing_sha256": "5ede2d936a1d88760987b456d2fefdb927b7aabe7464590a5ad40279e2dc0fdf",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.200000047683716,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/RU_rif_AKS74u/RU_rif_AKS74U_Scoped.dbx",
+          "sha256": "ac2ce55da2cee78916d637565eb5e846ee8f24d38e19fbf7fa5eaddcc56f0b8e",
+          "instance_guid": "AA515565-1AC4-44DA-A0DE-21539DCF74EB",
+          "weapon_class": "wcSmg",
+          "firing_resource": "Objects/Weapons/Handheld/RU_rif_AKS74u/RU_rif_AKS74u_Firing.dbx",
+          "firing_sha256": "5ede2d936a1d88760987b456d2fefdb927b7aabe7464590a5ad40279e2dc0fdf",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.200000047683716,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        }
+      ],
+      "paired_profiles": 3,
+      "positions": {
+        "hand_to_magazine": "same-frame authored reload wrist+15 fingers; experimental interpolation",
+        "closed_magazine": "exact static authored frame",
+        "entry_axis": "geometry-derived long-axis / body-facing end estimate",
+        "insertion_travel": "shared VR assist design, not extracted native insertion path",
+        "body_supply": "shared VR body-slot policy, not an authored gun coordinate"
+      },
+      "status": "paired_candidate",
+      "disabled_reason": [
+        "Current native descriptor/equipment/mesh binding and runtime checks not supplied by this batch"
+      ],
+      "provenance": [
+        {
+          "profile_digest": "d040aad9db7fb2d0d5c63d3fbf1684cae3c8765f99e5b5851cc0decf0b0b7119",
+          "mesh_sha256": "3becf48fc0d77f137726bb92b52c3387a4a423c2990c27ccddf457745b1d0e95",
+          "configured_mesh": "Objects/Weapons/Handheld/RU_rif_AKS74u/RU_rif_AKS74u_Mesh",
+          "reload_clip": "Animations/Weapons/Handheld/RU_rif_AKS74u/1P/1P_Reload.res",
+          "reload_clip_sha256": "998a734282d0bc17e2e01d6fb4947e32e624612a73efc6e9bd9720e769225193",
+          "magazine_bone": "jntWpn_6",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09"
+        },
+        {
+          "profile_digest": "6ed52c56c6896d64e9a42699af2b9f2e3e8e3e6c3a5f8809e8f5dd8dd503394f",
+          "mesh_sha256": "3becf48fc0d77f137726bb92b52c3387a4a423c2990c27ccddf457745b1d0e95",
+          "configured_mesh": "Objects/Weapons/Handheld/RU_rif_AKS74u/RU_rif_AKS74u_Mesh",
+          "reload_clip": "Animations/Weapons/Handheld/RU_rif_AKS74u/1P/1P_Reload.res",
+          "reload_clip_sha256": "998a734282d0bc17e2e01d6fb4947e32e624612a73efc6e9bd9720e769225193",
+          "magazine_bone": "jntWpn_6",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09"
+        },
+        {
+          "profile_digest": "066a6a9b8910fd0f98e30a94ad257252d8cf52d8ffc181573511a3470e49a62a",
+          "mesh_sha256": "3becf48fc0d77f137726bb92b52c3387a4a423c2990c27ccddf457745b1d0e95",
+          "configured_mesh": "Objects/Weapons/Handheld/RU_rif_AKS74u/RU_rif_AKS74u_Mesh",
+          "reload_clip": "Animations/Weapons/Handheld/RU_rif_AKS74u/1P/1P_Reload.res",
+          "reload_clip_sha256": "998a734282d0bc17e2e01d6fb4947e32e624612a73efc6e9bd9720e769225193",
+          "magazine_bone": "jntWpn_6",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09"
+        }
+      ],
+      "runtime_admitted": false,
+      "headset_tested": false,
+      "main_weapon_grip": {
+        "static_reference_rows": 0,
+        "nonstatic_reference_rows": 3,
+        "admitted_by_this_batch": false,
+        "reason": "Reload contact does not supply a verified main weapon grip or support capability"
+      }
+    },
+    {
+      "native_asset_name": "AKS74u_sp",
+      "configuration_count": 1,
+      "configurations": [
+        {
+          "resource": "Objects/Weapons/Handheld/RU_rif_AKS74u/SP_rif_AKS74u.dbx",
+          "sha256": "880e3cc69f6d0fdd1a225eb978b41a8e7d71d20dbeef363bc003a37c4807f787",
+          "instance_guid": "1C8D18AF-47DC-46A7-8351-0A745559A0B7",
+          "weapon_class": "wcSmg",
+          "firing_resource": "Objects/Weapons/Handheld/RU_rif_AKS74u/RU_rif_AKS74u_Firing.dbx",
+          "firing_sha256": "5ede2d936a1d88760987b456d2fefdb927b7aabe7464590a5ad40279e2dc0fdf",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.200000047683716,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        }
+      ],
+      "paired_profiles": 1,
+      "positions": {
+        "hand_to_magazine": "same-frame authored reload wrist+15 fingers; experimental interpolation",
+        "closed_magazine": "exact static authored frame",
+        "entry_axis": "geometry-derived long-axis / body-facing end estimate",
+        "insertion_travel": "shared VR assist design, not extracted native insertion path",
+        "body_supply": "shared VR body-slot policy, not an authored gun coordinate"
+      },
+      "status": "paired_candidate",
+      "disabled_reason": [
+        "Current native descriptor/equipment/mesh binding and runtime checks not supplied by this batch"
+      ],
+      "provenance": [
+        {
+          "profile_digest": "b1d73127cf477a33542ac853aac1215e84ae68085971d6f60118a47a07af0a0d",
+          "mesh_sha256": "3becf48fc0d77f137726bb92b52c3387a4a423c2990c27ccddf457745b1d0e95",
+          "configured_mesh": "Objects/Weapons/Handheld/RU_rif_AKS74u/RU_rif_AKS74u_Mesh",
+          "reload_clip": "Animations/Weapons/Handheld/RU_rif_AKS74u/1P/1P_Reload.res",
+          "reload_clip_sha256": "998a734282d0bc17e2e01d6fb4947e32e624612a73efc6e9bd9720e769225193",
+          "magazine_bone": "jntWpn_6",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09"
+        }
+      ],
+      "runtime_admitted": false,
+      "headset_tested": false,
+      "main_weapon_grip": {
+        "static_reference_rows": 0,
+        "nonstatic_reference_rows": 1,
+        "admitted_by_this_batch": false,
+        "reason": "Reload contact does not supply a verified main weapon grip or support capability"
+      }
+    },
+    {
+      "native_asset_name": "AKS74u_sp_k",
+      "configuration_count": 1,
+      "configurations": [
+        {
+          "resource": "Objects/Weapons/Handheld/RU_rif_AKS74u/SP_rif_AKS74u_Kobra.dbx",
+          "sha256": "63ddce7bab79e3e303ed871f5c28c263cfb81802b1463ba0815cb4d64ba2d145",
+          "instance_guid": "15D61AC6-0CFA-4D1D-A917-BB4F186BE223",
+          "weapon_class": "wcSmg",
+          "firing_resource": "Objects/Weapons/Handheld/RU_rif_AKS74u/RU_rif_AKS74u_Firing.dbx",
+          "firing_sha256": "5ede2d936a1d88760987b456d2fefdb927b7aabe7464590a5ad40279e2dc0fdf",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.200000047683716,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        }
+      ],
+      "paired_profiles": 1,
+      "positions": {
+        "hand_to_magazine": "same-frame authored reload wrist+15 fingers; experimental interpolation",
+        "closed_magazine": "exact static authored frame",
+        "entry_axis": "geometry-derived long-axis / body-facing end estimate",
+        "insertion_travel": "shared VR assist design, not extracted native insertion path",
+        "body_supply": "shared VR body-slot policy, not an authored gun coordinate"
+      },
+      "status": "paired_candidate",
+      "disabled_reason": [
+        "Current native descriptor/equipment/mesh binding and runtime checks not supplied by this batch"
+      ],
+      "provenance": [
+        {
+          "profile_digest": "802c4debdf9f3a8a5f1d6e45faf3cab7f777753dce259a711013439a8858bb36",
+          "mesh_sha256": "3becf48fc0d77f137726bb92b52c3387a4a423c2990c27ccddf457745b1d0e95",
+          "configured_mesh": "Objects/Weapons/Handheld/RU_rif_AKS74u/RU_rif_AKS74u_Mesh",
+          "reload_clip": "Animations/Weapons/Handheld/RU_rif_AKS74u/1P/1P_Reload.res",
+          "reload_clip_sha256": "998a734282d0bc17e2e01d6fb4947e32e624612a73efc6e9bd9720e769225193",
+          "magazine_bone": "jntWpn_6",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09"
+        }
+      ],
+      "runtime_admitted": false,
+      "headset_tested": false,
+      "main_weapon_grip": {
+        "static_reference_rows": 0,
+        "nonstatic_reference_rows": 1,
+        "admitted_by_this_batch": false,
+        "reason": "Reload contact does not supply a verified main weapon grip or support capability"
+      }
+    },
+    {
+      "native_asset_name": "AN94",
+      "configuration_count": 3,
+      "configurations": [
+        {
+          "resource": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Kobra.dbx",
+          "sha256": "b03c15de6436481ee10013d164ec8afb35877cad095f51273145ae4e366815df",
+          "instance_guid": "BC08EFA5-A9ED-4BA5-A7A5-EDF2BE35EAF4",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Firing.dbx",
+          "firing_sha256": "cc5edd3b53bfb72672a8f97fc000229cf41a85c828469cdbb92176f8ccd6b791",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.4000000953674316,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltSingleFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan.dbx",
+          "sha256": "70c754da0b5a5127c9517c321c9fd16ce1f7e6b7a78aef5b898144ca20fb1761",
+          "instance_guid": "2C564F24-5DAF-4BBC-96F4-4A56D91A4F85",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Firing.dbx",
+          "firing_sha256": "cc5edd3b53bfb72672a8f97fc000229cf41a85c828469cdbb92176f8ccd6b791",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.4000000953674316,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltSingleFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Scoped.dbx",
+          "sha256": "48949b0d8859231c6d1c5242878670a8496082648d9bbf16fa858d6705889f54",
+          "instance_guid": "2FCFBD7C-E585-4F59-8747-F5D5BEB1313A",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Firing_Scoped.dbx",
+          "firing_sha256": "564259b95ec54860f37e89b5037bc1c515a951a25ac8b8536da29b4b3e4bf776",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.4000000953674316,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltSingleFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        }
+      ],
+      "paired_profiles": 0,
+      "positions": {
+        "hand_to_magazine": "unresolved",
+        "closed_magazine": "unresolved",
+        "entry_axis": "unresolved",
+        "insertion_travel": "shared VR assist design, not extracted native insertion path",
+        "body_supply": "shared VR body-slot policy, not an authored gun coordinate"
+      },
+      "status": "unresolved",
+      "disabled_reason": [
+        "Magazine geometric role candidate is not unique: "
+      ],
+      "provenance": [],
+      "runtime_admitted": false,
+      "headset_tested": false,
+      "main_weapon_grip": {
+        "static_reference_rows": 0,
+        "nonstatic_reference_rows": 3,
+        "admitted_by_this_batch": false,
+        "reason": "Reload contact does not supply a verified main weapon grip or support capability"
+      }
+    },
+    {
+      "native_asset_name": "AN94_sp_k",
+      "configuration_count": 1,
+      "configurations": [
+        {
+          "resource": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/SP_rif_AN94_Kobra.dbx",
+          "sha256": "70c554deab1dc38a94cfb535a541b987785806c43362a19f5a695a0e1fa51611",
+          "instance_guid": "0707E9E7-969E-4EC0-884C-B08BC3445433",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Firing.dbx",
+          "firing_sha256": "cc5edd3b53bfb72672a8f97fc000229cf41a85c828469cdbb92176f8ccd6b791",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.4000000953674316,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltSingleFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        }
+      ],
+      "paired_profiles": 0,
+      "positions": {
+        "hand_to_magazine": "unresolved",
+        "closed_magazine": "unresolved",
+        "entry_axis": "unresolved",
+        "insertion_travel": "shared VR assist design, not extracted native insertion path",
+        "body_supply": "shared VR body-slot policy, not an authored gun coordinate"
+      },
+      "status": "unresolved",
+      "disabled_reason": [
+        "Magazine geometric role candidate is not unique: "
+      ],
+      "provenance": [],
+      "runtime_admitted": false,
+      "headset_tested": false,
+      "main_weapon_grip": {
+        "static_reference_rows": 0,
+        "nonstatic_reference_rows": 1,
+        "admitted_by_this_batch": false,
+        "reason": "Reload contact does not supply a verified main weapon grip or support capability"
+      }
+    },
+    {
+      "native_asset_name": "AN94_sp_s",
+      "configuration_count": 1,
+      "configurations": [
+        {
+          "resource": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/SP_rif_AN94_Scoped.dbx",
+          "sha256": "158fbe6ab51db5dd0c77612c372f909f7287854a18bf122e330f0b0afb63d1bc",
+          "instance_guid": "26CDF39D-11F1-40D4-857C-75F6B044E9F6",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Firing_Scoped.dbx",
+          "firing_sha256": "564259b95ec54860f37e89b5037bc1c515a951a25ac8b8536da29b4b3e4bf776",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.4000000953674316,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltSingleFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        }
+      ],
+      "paired_profiles": 0,
+      "positions": {
+        "hand_to_magazine": "unresolved",
+        "closed_magazine": "unresolved",
+        "entry_axis": "unresolved",
+        "insertion_travel": "shared VR assist design, not extracted native insertion path",
+        "body_supply": "shared VR body-slot policy, not an authored gun coordinate"
+      },
+      "status": "unresolved",
+      "disabled_reason": [
+        "Magazine geometric role candidate is not unique: "
+      ],
+      "provenance": [],
+      "runtime_admitted": false,
+      "headset_tested": false,
+      "main_weapon_grip": {
+        "static_reference_rows": 0,
+        "nonstatic_reference_rows": 1,
+        "admitted_by_this_batch": false,
+        "reason": "Reload contact does not supply a verified main weapon grip or support capability"
+      }
+    },
+    {
+      "native_asset_name": "AUG",
+      "configuration_count": 3,
+      "configurations": [
+        {
+          "resource": "Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG_Kobra.dbx",
+          "sha256": "4814e32c2cf7731ae081e16750e7ab05d9f22387e54e2581e69c2368dae97243",
+          "instance_guid": "A55E0BB3-5F66-49BD-BFED-D7FE4B8C9BC8",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG_Firing.dbx",
+          "firing_sha256": "51f5339462acd6ad9813a55eadd31033f18f3f1faf6622f352d9a7759e294400",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.200000047683716,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG.dbx",
+          "sha256": "cff1cb85a2c8db4b3e6158457833986e73694d481364af06d7a83635fbe862e8",
+          "instance_guid": "763A5B70-FC8F-400A-A202-A295377E19AF",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG_Firing.dbx",
+          "firing_sha256": "51f5339462acd6ad9813a55eadd31033f18f3f1faf6622f352d9a7759e294400",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.200000047683716,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG_Scoped.dbx",
+          "sha256": "34476b9ea4a38f4ac00e595b760c2081f4a7e6cd28de849e72dc5bea5fd481b1",
+          "instance_guid": "FE35353C-B5AE-4CE2-A241-F0A43D076EB4",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgL_SteyrAug_Firing_Scoped.dbx",
+          "firing_sha256": "a811da780d3cbd337df559950c4e92414b60bf7ae760dd0b622d8893cd2dd706",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.200000047683716,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        }
+      ],
+      "paired_profiles": 0,
+      "positions": {
+        "hand_to_magazine": "unresolved",
+        "closed_magazine": "unresolved",
+        "entry_axis": "unresolved",
+        "insertion_travel": "shared VR assist design, not extracted native insertion path",
+        "body_supply": "shared VR body-slot policy, not an authored gun coordinate"
+      },
+      "status": "unresolved",
+      "disabled_reason": [
+        "No stable authored magazine contact interval"
+      ],
+      "provenance": [],
+      "runtime_admitted": false,
+      "headset_tested": false,
+      "main_weapon_grip": {
+        "static_reference_rows": 0,
+        "nonstatic_reference_rows": 3,
+        "admitted_by_this_batch": false,
+        "reason": "Reload contact does not supply a verified main weapon grip or support capability"
+      }
+    },
+    {
+      "native_asset_name": "F2000",
+      "configuration_count": 3,
+      "configurations": [
+        {
+          "resource": "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000.dbx",
+          "sha256": "83f2f28450a0eda76aaaf211b0eae669a5d2182ec99d21b0e91fa518b295ba4a",
+          "instance_guid": "4C059A65-D0DB-49BB-9268-A328629C9C82",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Firing.dbx",
+          "firing_sha256": "84329145dc831e8eb2f28c48ff56e9fc3a17e6b41747361304c302f249b48971",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.0999999046325684,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Scoped.dbx",
+          "sha256": "c56a994611fc8ede4bcaeb5e6714311e4c0f94bd2b20c274991dd7c2f1dd0d45",
+          "instance_guid": "53CCFDFD-EA8B-4D0A-A420-339C4156D4E8",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Firing_Scoped.dbx",
+          "firing_sha256": "671fc6bd7f9eb368fe004d2c7ff299a174fd7729f93508299eb7b04642f584bc",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.0999999046325684,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Kobra.dbx",
+          "sha256": "8e1fe66ef5cfaffc91fd3f677f9d568304eb102b2aa7dfda8a71c7fc0dac6467",
+          "instance_guid": "3FBA7025-FCA4-405E-96B7-24A3D0381779",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Firing.dbx",
+          "firing_sha256": "84329145dc831e8eb2f28c48ff56e9fc3a17e6b41747361304c302f249b48971",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.0999999046325684,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        }
+      ],
+      "paired_profiles": 0,
+      "positions": {
+        "hand_to_magazine": "unresolved",
+        "closed_magazine": "unresolved",
+        "entry_axis": "unresolved",
+        "insertion_travel": "shared VR assist design, not extracted native insertion path",
+        "body_supply": "shared VR body-slot policy, not an authored gun coordinate"
+      },
+      "status": "unresolved",
+      "disabled_reason": [
+        "Magazine geometric role candidate is not unique: "
+      ],
+      "provenance": [],
+      "runtime_admitted": false,
+      "headset_tested": false,
+      "main_weapon_grip": {
+        "static_reference_rows": 3,
+        "nonstatic_reference_rows": 0,
+        "admitted_by_this_batch": false,
+        "reason": "Reload contact does not supply a verified main weapon grip or support capability"
+      }
+    },
+    {
+      "native_asset_name": "F2000_sp",
+      "configuration_count": 1,
+      "configurations": [
+        {
+          "resource": "Objects/Weapons/Handheld/BU_rif_F2000/SP_rif_F2000.dbx",
+          "sha256": "62d1514ab5eb00161f763e67d73768d9ef8a2ee611027a2a41b6deacefa86925",
+          "instance_guid": "46404A9E-9E38-43A7-831E-FB4B2F2692C6",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Firing.dbx",
+          "firing_sha256": "84329145dc831e8eb2f28c48ff56e9fc3a17e6b41747361304c302f249b48971",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.0999999046325684,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        }
+      ],
+      "paired_profiles": 0,
+      "positions": {
+        "hand_to_magazine": "unresolved",
+        "closed_magazine": "unresolved",
+        "entry_axis": "unresolved",
+        "insertion_travel": "shared VR assist design, not extracted native insertion path",
+        "body_supply": "shared VR body-slot policy, not an authored gun coordinate"
+      },
+      "status": "unresolved",
+      "disabled_reason": [
+        "Magazine geometric role candidate is not unique: "
+      ],
+      "provenance": [],
+      "runtime_admitted": false,
+      "headset_tested": false,
+      "main_weapon_grip": {
+        "static_reference_rows": 1,
+        "nonstatic_reference_rows": 0,
+        "admitted_by_this_batch": false,
+        "reason": "Reload contact does not supply a verified main weapon grip or support capability"
+      }
+    },
+    {
+      "native_asset_name": "F2000_sp_k",
+      "configuration_count": 1,
+      "configurations": [
+        {
+          "resource": "Objects/Weapons/Handheld/BU_rif_F2000/SP_rif_F2000_Kobra.dbx",
+          "sha256": "1f9862c8e572be9106ff4376cc6c32d74b628e033e5e3a45f8d47a36320adf0a",
+          "instance_guid": "4E1E987A-95C8-4ACF-AB26-ED6337E3229A",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Firing.dbx",
+          "firing_sha256": "84329145dc831e8eb2f28c48ff56e9fc3a17e6b41747361304c302f249b48971",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.0999999046325684,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        }
+      ],
+      "paired_profiles": 0,
+      "positions": {
+        "hand_to_magazine": "unresolved",
+        "closed_magazine": "unresolved",
+        "entry_axis": "unresolved",
+        "insertion_travel": "shared VR assist design, not extracted native insertion path",
+        "body_supply": "shared VR body-slot policy, not an authored gun coordinate"
+      },
+      "status": "unresolved",
+      "disabled_reason": [
+        "Magazine geometric role candidate is not unique: "
+      ],
+      "provenance": [],
+      "runtime_admitted": false,
+      "headset_tested": false,
+      "main_weapon_grip": {
+        "static_reference_rows": 1,
+        "nonstatic_reference_rows": 0,
+        "admitted_by_this_batch": false,
+        "reason": "Reload contact does not supply a verified main weapon grip or support capability"
+      }
+    },
+    {
+      "native_asset_name": "G3",
+      "configuration_count": 6,
+      "configurations": [
+        {
+          "resource": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3.dbx",
+          "sha256": "ed83d82965d34c95c43f1e60aec350219711a5784d623d6ccfb816432b7624bb",
+          "instance_guid": "363B537F-734C-4AF9-8E53-3C15564595E2",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Firing.dbx",
+          "firing_sha256": "30e2ca842cf66bfbdc85edaf1bd62b29d78eff230f1e51465099c380f9d584ec",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.4000000953674316,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 20,
+            "Ammo.NumberOfMagazines": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Assault.dbx",
+          "sha256": "dcaefd902cc37f1a49706ff3f9e13b39ad1a57e46e257b800318e66f4ba9bc0c",
+          "instance_guid": "9997CBEF-6C5A-4CB2-A2EC-F28B07EE08DB",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Firing.dbx",
+          "firing_sha256": "30e2ca842cf66bfbdc85edaf1bd62b29d78eff230f1e51465099c380f9d584ec",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.4000000953674316,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 20,
+            "Ammo.NumberOfMagazines": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Assault_Scoped.dbx",
+          "sha256": "5258aecd0beceec2afc69e63ceccd45325be52173ccbdfa499ac25a5c770340a",
+          "instance_guid": "5F40B246-3AE8-42FF-B6E8-33AD09B70CD7",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Firing.dbx",
+          "firing_sha256": "30e2ca842cf66bfbdc85edaf1bd62b29d78eff230f1e51465099c380f9d584ec",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.4000000953674316,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 20,
+            "Ammo.NumberOfMagazines": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Kobra.dbx",
+          "sha256": "0b2ff642336693562b2156b80e899aabf0a14009f56b6b33322281bbc52650e0",
+          "instance_guid": "FF2E0E14-E07A-46DE-858C-5F1337B7B8CB",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Firing.dbx",
+          "firing_sha256": "30e2ca842cf66bfbdc85edaf1bd62b29d78eff230f1e51465099c380f9d584ec",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.4000000953674316,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 20,
+            "Ammo.NumberOfMagazines": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Assault_Kobra.dbx",
+          "sha256": "aeb5ff4e3b0ff63dca1f000af9b065b2f400473997d79afbd3e8a520b72109eb",
+          "instance_guid": "10DCC986-0EB3-4176-A242-2D6558A5B187",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Firing.dbx",
+          "firing_sha256": "30e2ca842cf66bfbdc85edaf1bd62b29d78eff230f1e51465099c380f9d584ec",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.4000000953674316,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 20,
+            "Ammo.NumberOfMagazines": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Scoped.dbx",
+          "sha256": "6cc5013a4b9988d358b1e5e6bb97057b41e0e16c61a2ccf24a31b17f1bdaf188",
+          "instance_guid": "03C53A2D-428E-4666-A912-25D1E9264FF5",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Firing.dbx",
+          "firing_sha256": "30e2ca842cf66bfbdc85edaf1bd62b29d78eff230f1e51465099c380f9d584ec",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.4000000953674316,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 20,
+            "Ammo.NumberOfMagazines": 4
+          }
+        }
+      ],
+      "paired_profiles": 0,
+      "positions": {
+        "hand_to_magazine": "unresolved",
+        "closed_magazine": "unresolved",
+        "entry_axis": "unresolved",
+        "insertion_travel": "shared VR assist design, not extracted native insertion path",
+        "body_supply": "shared VR body-slot policy, not an authored gun coordinate"
+      },
+      "status": "unresolved",
+      "disabled_reason": [
+        "No exact mesh geometry binding"
+      ],
+      "provenance": [],
+      "runtime_admitted": false,
+      "headset_tested": false,
+      "main_weapon_grip": {
+        "static_reference_rows": 0,
+        "nonstatic_reference_rows": 0,
+        "admitted_by_this_batch": false,
+        "reason": "Reload contact does not supply a verified main weapon grip or support capability"
+      }
+    },
+    {
+      "native_asset_name": "Garand",
+      "configuration_count": 2,
+      "configurations": [
+        {
+          "resource": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Assault.dbx",
+          "sha256": "a41b2e7bb7f7e8af83521a60106fa23fbec462dd740fbac2230898a1519cb83b",
+          "instance_guid": "4BC8D46C-CC7B-4993-8BBE-09E708BEF4FA",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Firing.dbx",
+          "firing_sha256": "131015bf44b1a8ad7a3eb42f21a6c74a1a49dc748d2bf993350d9e439ea79f16",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 4.099999904632568,
+            "FireLogic.ReloadThreshold": 0.6499999761581421,
+            "FireLogic.FireLogicType": "fltSingleFire",
+            "Ammo.MagazineCapacity": 8,
+            "Ammo.NumberOfMagazines": 6
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand.dbx",
+          "sha256": "db8d551f626a593e10848381c00983c7a4999e1096a91deb1ded60d49a8e101d",
+          "instance_guid": "D77B3602-E594-465D-87FA-8C193660522B",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Firing.dbx",
+          "firing_sha256": "131015bf44b1a8ad7a3eb42f21a6c74a1a49dc748d2bf993350d9e439ea79f16",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 4.099999904632568,
+            "FireLogic.ReloadThreshold": 0.6499999761581421,
+            "FireLogic.FireLogicType": "fltSingleFire",
+            "Ammo.MagazineCapacity": 8,
+            "Ammo.NumberOfMagazines": 6
+          }
+        }
+      ],
+      "paired_profiles": 0,
+      "positions": {
+        "hand_to_magazine": "unresolved",
+        "closed_magazine": "unresolved",
+        "entry_axis": "unresolved",
+        "insertion_travel": "shared VR assist design, not extracted native insertion path",
+        "body_supply": "shared VR body-slot policy, not an authored gun coordinate"
+      },
+      "status": "deferred",
+      "disabled_reason": [
+        "Deferred en-bloc mechanism candidate; native rtMagazine alone does not establish box-magazine geometry or underbarrel support"
+      ],
+      "provenance": [],
+      "runtime_admitted": false,
+      "headset_tested": false,
+      "main_weapon_grip": {
+        "static_reference_rows": 0,
+        "nonstatic_reference_rows": 0,
+        "admitted_by_this_batch": false,
+        "reason": "Reload contact does not supply a verified main weapon grip or support capability"
+      }
+    },
+    {
+      "native_asset_name": "M16",
+      "configuration_count": 3,
+      "configurations": [
+        {
+          "resource": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2.dbx",
+          "sha256": "7020e5f31483583d06a39c836b3da872290944e28c0fd2a0a0d34dcd6948bf7c",
+          "instance_guid": "0DF850C9-8E97-426D-AAFC-EB0B0477DFB5",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Firing.dbx",
+          "firing_sha256": "8d61fe213c029857d83cec5856b3a8e82b9889e9d42604478c63507b371b1509",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.299999952316284,
+            "FireLogic.ReloadThreshold": 0.6000000238418579,
+            "FireLogic.FireLogicType": "fltSingleFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Scoped.dbx",
+          "sha256": "d6c6c0e879e16783508cbbaa8ea8b9f6795e5fd090758db18cc34f00a78aa8a5",
+          "instance_guid": "42BFB0F7-6D52-43BC-A878-07542CE052A5",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Firing_Scoped.dbx",
+          "firing_sha256": "62bb71d125b17962109dda0a97e5b61b051f098addce73e8eeebfe6fe8c9e1f8",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.299999952316284,
+            "FireLogic.ReloadThreshold": 0.6000000238418579,
+            "FireLogic.FireLogicType": "fltSingleFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Kobra.dbx",
+          "sha256": "3d81027bfe3e0d4273772208ecc75ece2e60533b1f809ef32f5521ab9a6f1384",
+          "instance_guid": "38EF1AA2-493E-47E9-B2E6-3A34BF09C454",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Firing.dbx",
+          "firing_sha256": "8d61fe213c029857d83cec5856b3a8e82b9889e9d42604478c63507b371b1509",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.299999952316284,
+            "FireLogic.ReloadThreshold": 0.6000000238418579,
+            "FireLogic.FireLogicType": "fltSingleFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        }
+      ],
+      "paired_profiles": 0,
+      "positions": {
+        "hand_to_magazine": "unresolved",
+        "closed_magazine": "unresolved",
+        "entry_axis": "unresolved",
+        "insertion_travel": "shared VR assist design, not extracted native insertion path",
+        "body_supply": "shared VR body-slot policy, not an authored gun coordinate"
+      },
+      "status": "unresolved",
+      "disabled_reason": [
+        "Magazine geometric role candidate is not unique: "
+      ],
+      "provenance": [],
+      "runtime_admitted": false,
+      "headset_tested": false,
+      "main_weapon_grip": {
+        "static_reference_rows": 3,
+        "nonstatic_reference_rows": 0,
+        "admitted_by_this_batch": false,
+        "reason": "Reload contact does not supply a verified main weapon grip or support capability"
+      }
+    },
+    {
+      "native_asset_name": "M16k",
+      "configuration_count": 3,
+      "configurations": [
+        {
+          "resource": "Objects/Weapons/Handheld/BU_rif_M16A2/UPG_rif_M16A2_Kobra.dbx",
+          "sha256": "e857ce0e773ace8104712b9b259291aa07b9cbcb02a609e46b276edc2a22e555",
+          "instance_guid": "8FB0867E-FCD8-4121-BB00-EC9B7E6DA878",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Firing.dbx",
+          "firing_sha256": "8d61fe213c029857d83cec5856b3a8e82b9889e9d42604478c63507b371b1509",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.299999952316284,
+            "FireLogic.ReloadThreshold": 0.6000000238418579,
+            "FireLogic.FireLogicType": "fltSingleFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_rif_M16A2/UPG_rif_M16A2_Scoped.dbx",
+          "sha256": "84e72eda5b33ea697993e52ea9f4a45d94507056d6a9a43cf30a047621bd126e",
+          "instance_guid": "5859DF39-18D6-41A8-84C1-3998932A30BC",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Firing_Scoped.dbx",
+          "firing_sha256": "62bb71d125b17962109dda0a97e5b61b051f098addce73e8eeebfe6fe8c9e1f8",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.299999952316284,
+            "FireLogic.ReloadThreshold": 0.6000000238418579,
+            "FireLogic.FireLogicType": "fltSingleFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_rif_M16A2/UPG_rif_M16A2.dbx",
+          "sha256": "eb3c438965a1045b6db6f76c61bf54691b38232ad560b21c84f38efacaf89dc4",
+          "instance_guid": "B75BBBDC-6D08-4119-80AC-CA4F6EF78F39",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Firing.dbx",
+          "firing_sha256": "8d61fe213c029857d83cec5856b3a8e82b9889e9d42604478c63507b371b1509",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.299999952316284,
+            "FireLogic.ReloadThreshold": 0.6000000238418579,
+            "FireLogic.FireLogicType": "fltSingleFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        }
+      ],
+      "paired_profiles": 0,
+      "positions": {
+        "hand_to_magazine": "unresolved",
+        "closed_magazine": "unresolved",
+        "entry_axis": "unresolved",
+        "insertion_travel": "shared VR assist design, not extracted native insertion path",
+        "body_supply": "shared VR body-slot policy, not an authored gun coordinate"
+      },
+      "status": "unresolved",
+      "disabled_reason": [
+        "Magazine geometric role candidate is not unique: "
+      ],
+      "provenance": [],
+      "runtime_admitted": false,
+      "headset_tested": false,
+      "main_weapon_grip": {
+        "static_reference_rows": 3,
+        "nonstatic_reference_rows": 0,
+        "admitted_by_this_batch": false,
+        "reason": "Reload contact does not supply a verified main weapon grip or support capability"
+      }
+    },
+    {
+      "native_asset_name": "M1A1 Thompson",
+      "configuration_count": 2,
+      "configurations": [
+        {
+          "resource": "Objects/Weapons/Handheld/Beach/Thompson/Thompson_Assault.dbx",
+          "sha256": "b2207c1afcf2b976401228b2a564885f0b69ef981ed4ddbc358e378b04963ec1",
+          "instance_guid": "980051AE-97E5-4BDF-A203-6EEF9E16AB92",
+          "weapon_class": "wcSmg",
+          "firing_resource": "Objects/Weapons/Handheld/Beach/Thompson/Thompson_Firing.dbx",
+          "firing_sha256": "22b0a56ad68242eb64531dc93e07239f0da3c0ee436e4ea3152a843baeaf6003",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.700000047683716,
+            "FireLogic.ReloadThreshold": 0.800000011920929,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/Beach/Thompson/Thompson.dbx",
+          "sha256": "1fddcb8da6dd1e3746c30293b5c901c94242d2c581c3c2255e8c9f44e7e98c1b",
+          "instance_guid": "207CFFD9-8285-4407-AB2A-4C3A650F1F99",
+          "weapon_class": "wcSmg",
+          "firing_resource": "Objects/Weapons/Handheld/Beach/Thompson/Thompson_Firing.dbx",
+          "firing_sha256": "22b0a56ad68242eb64531dc93e07239f0da3c0ee436e4ea3152a843baeaf6003",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.700000047683716,
+            "FireLogic.ReloadThreshold": 0.800000011920929,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        }
+      ],
+      "paired_profiles": 0,
+      "positions": {
+        "hand_to_magazine": "unresolved",
+        "closed_magazine": "unresolved",
+        "entry_axis": "unresolved",
+        "insertion_travel": "shared VR assist design, not extracted native insertion path",
+        "body_supply": "shared VR body-slot policy, not an authored gun coordinate"
+      },
+      "status": "unresolved",
+      "disabled_reason": [
+        "No exact mesh geometry binding"
+      ],
+      "provenance": [],
+      "runtime_admitted": false,
+      "headset_tested": false,
+      "main_weapon_grip": {
+        "static_reference_rows": 0,
+        "nonstatic_reference_rows": 0,
+        "admitted_by_this_batch": false,
+        "reason": "Reload contact does not supply a verified main weapon grip or support capability"
+      }
+    },
+    {
+      "native_asset_name": "M416",
+      "configuration_count": 3,
+      "configurations": [
+        {
+          "resource": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Scoped.dbx",
+          "sha256": "6a4dd608be0432b022795d44bfbd55c8939c5d0fd6d95c7b421a740ab192c247",
+          "instance_guid": "796CAB59-65BC-4D59-B868-983681809062",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Firing_Scoped.dbx",
+          "firing_sha256": "f329e152305f97bba6d292e0b939a99598ec31777dcd30d8ef4a39dde3be1b51",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 2.9000000953674316,
+            "FireLogic.ReloadThreshold": 0.699999988079071,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416.dbx",
+          "sha256": "0bd854517cadef34c6eef85698736eca2c05c797fb5ed2f3dec35c2a2b61326a",
+          "instance_guid": "CA69BFBA-0F21-42E3-BBE9-FA2902600563",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Firing.dbx",
+          "firing_sha256": "b6fce14fb5c5926d220797c53396ad2edc7ce70a0df604695b1ba31b956ff9b7",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 2.9000000953674316,
+            "FireLogic.ReloadThreshold": 0.699999988079071,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Kobra.dbx",
+          "sha256": "6a7232f70141053111da71246e385861f1e5d0e50e02cfcd28fe2947d8d34ad5",
+          "instance_guid": "C8E7F199-D0C4-44D7-A44B-AD221C23CB9C",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Firing.dbx",
+          "firing_sha256": "b6fce14fb5c5926d220797c53396ad2edc7ce70a0df604695b1ba31b956ff9b7",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 2.9000000953674316,
+            "FireLogic.ReloadThreshold": 0.699999988079071,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        }
+      ],
+      "paired_profiles": 3,
+      "positions": {
+        "hand_to_magazine": "same-frame authored reload wrist+15 fingers; experimental interpolation",
+        "closed_magazine": "exact static authored frame",
+        "entry_axis": "geometry-derived long-axis / body-facing end estimate",
+        "insertion_travel": "shared VR assist design, not extracted native insertion path",
+        "body_supply": "shared VR body-slot policy, not an authored gun coordinate"
+      },
+      "status": "paired_candidate",
+      "disabled_reason": [
+        "Current native descriptor/equipment/mesh binding and runtime checks not supplied by this batch"
+      ],
+      "provenance": [
+        {
+          "profile_digest": "ffea9f98e8c93e5559f067e6c2ca448b795fa7275a08c204c740b3dd62002a5d",
+          "mesh_sha256": "d2acc4490d3c585fd6adc6a304f0f08758d066605dfc5fa0cea83a7d85a4b5ac",
+          "configured_mesh": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh",
+          "reload_clip": "Animations/Weapons/Handheld/UL_rif_HK416/1P/1P_Reload.res",
+          "reload_clip_sha256": "090a9ececcf8265aab85dd70226f08c59693108e362925b1521c4ce4ce6d2d91",
+          "magazine_bone": "jntWpn_6",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09"
+        },
+        {
+          "profile_digest": "f7693652e7381b307bb85d9c90618448e9f886a7e6dce9a8fc44adc070395293",
+          "mesh_sha256": "d2acc4490d3c585fd6adc6a304f0f08758d066605dfc5fa0cea83a7d85a4b5ac",
+          "configured_mesh": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh",
+          "reload_clip": "Animations/Weapons/Handheld/UL_rif_HK416/1P/1P_Reload.res",
+          "reload_clip_sha256": "090a9ececcf8265aab85dd70226f08c59693108e362925b1521c4ce4ce6d2d91",
+          "magazine_bone": "jntWpn_6",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09"
+        },
+        {
+          "profile_digest": "0125122411b4ca93f76083ef1952e0dce5537239723a0a2c12979a9c112b8b78",
+          "mesh_sha256": "d2acc4490d3c585fd6adc6a304f0f08758d066605dfc5fa0cea83a7d85a4b5ac",
+          "configured_mesh": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh",
+          "reload_clip": "Animations/Weapons/Handheld/UL_rif_HK416/1P/1P_Reload.res",
+          "reload_clip_sha256": "090a9ececcf8265aab85dd70226f08c59693108e362925b1521c4ce4ce6d2d91",
+          "magazine_bone": "jntWpn_6",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09"
+        }
+      ],
+      "runtime_admitted": false,
+      "headset_tested": false,
+      "main_weapon_grip": {
+        "static_reference_rows": 0,
+        "nonstatic_reference_rows": 3,
+        "admitted_by_this_batch": false,
+        "reason": "Reload contact does not supply a verified main weapon grip or support capability"
+      }
+    },
+    {
+      "native_asset_name": "Mk14EBR",
+      "configuration_count": 6,
+      "configurations": [
+        {
+          "resource": "Objects/Weapons/Handheld/BU_rif_Mk14EBR/BU_rif_Mk14EBR_Kobra.dbx",
+          "sha256": "5e9bd63f2cf900e6a191aa767a7d940caabce6fcb6069af3c8fbb4af2bf634d1",
+          "instance_guid": "F96B3F73-11D0-49D5-BB9D-2BC30A81EA1A",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/BU_rif_Mk14EBR/BU_rif_Mk14EBR_Firing.dbx",
+          "firing_sha256": "c6ccc0dc43dc149511c63104828b78c53fb5d3ae26b258544bde2a0dfdc53c73",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.0999999046325684,
+            "FireLogic.ReloadThreshold": 0.6499999761581421,
+            "FireLogic.FireLogicType": "fltSingleFire",
+            "Ammo.MagazineCapacity": 10,
+            "Ammo.NumberOfMagazines": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_rif_Mk14EBR/BU_rif_Mk14EBR.dbx",
+          "sha256": "23c2e44285d2547f3a76142a510648220bd9601a35e3a2388d701daf92ada8e3",
+          "instance_guid": "EA04234C-C5D1-4AB3-A630-E535A8903F28",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/BU_rif_Mk14EBR/BU_rif_Mk14EBR_Firing.dbx",
+          "firing_sha256": "c6ccc0dc43dc149511c63104828b78c53fb5d3ae26b258544bde2a0dfdc53c73",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.0999999046325684,
+            "FireLogic.ReloadThreshold": 0.6499999761581421,
+            "FireLogic.FireLogicType": "fltSingleFire",
+            "Ammo.MagazineCapacity": 10,
+            "Ammo.NumberOfMagazines": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_rif_Mk14EBR/BU_rif_Mk14EBR_Assault_Kobra.dbx",
+          "sha256": "fb7de60c77fd023759f34d06ebd087b692b0b5ae940a6850826429c67db8edb9",
+          "instance_guid": "EEE4E0F1-EF17-4CF2-9356-289D85B4E742",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/BU_rif_Mk14EBR/BU_rif_Mk14EBR_Firing.dbx",
+          "firing_sha256": "c6ccc0dc43dc149511c63104828b78c53fb5d3ae26b258544bde2a0dfdc53c73",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.0999999046325684,
+            "FireLogic.ReloadThreshold": 0.6499999761581421,
+            "FireLogic.FireLogicType": "fltSingleFire",
+            "Ammo.MagazineCapacity": 10,
+            "Ammo.NumberOfMagazines": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_rif_Mk14EBR/BU_rif_Mk14EBR_Assault.dbx",
+          "sha256": "516e9cce36a5f0e314d5e8de6e8bcfb1c97e144e55dfe4688c96c7cefeac9840",
+          "instance_guid": "1BC128DB-2F92-489B-9C2D-F7A53FE04749",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/BU_rif_Mk14EBR/BU_rif_Mk14EBR_Firing.dbx",
+          "firing_sha256": "c6ccc0dc43dc149511c63104828b78c53fb5d3ae26b258544bde2a0dfdc53c73",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.0999999046325684,
+            "FireLogic.ReloadThreshold": 0.6499999761581421,
+            "FireLogic.FireLogicType": "fltSingleFire",
+            "Ammo.MagazineCapacity": 10,
+            "Ammo.NumberOfMagazines": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_rif_Mk14EBR/BU_rif_Mk14EBR_Assault_Scope.dbx",
+          "sha256": "330a8756ee9a52dacc9c9eea5bd9e96b404722c3533110793a79cdd255f96fe7",
+          "instance_guid": "3943D011-8F20-47C8-9FEF-0380A9F3BC45",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/BU_rif_Mk14EBR/BU_rif_Mk14EBR_Firing.dbx",
+          "firing_sha256": "c6ccc0dc43dc149511c63104828b78c53fb5d3ae26b258544bde2a0dfdc53c73",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.0999999046325684,
+            "FireLogic.ReloadThreshold": 0.6499999761581421,
+            "FireLogic.FireLogicType": "fltSingleFire",
+            "Ammo.MagazineCapacity": 10,
+            "Ammo.NumberOfMagazines": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_rif_Mk14EBR/BU_rif_Mk14EBR_Scope.dbx",
+          "sha256": "dc0d31eedfd069197436e76a1d8c53432876eae51ef3bff0439a7c76a2233846",
+          "instance_guid": "EABDCAF5-3E0B-4BE4-AB4F-FB36DC9E3254",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/BU_rif_Mk14EBR/BU_rif_Mk14EBR_Firing.dbx",
+          "firing_sha256": "c6ccc0dc43dc149511c63104828b78c53fb5d3ae26b258544bde2a0dfdc53c73",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.0999999046325684,
+            "FireLogic.ReloadThreshold": 0.6499999761581421,
+            "FireLogic.FireLogicType": "fltSingleFire",
+            "Ammo.MagazineCapacity": 10,
+            "Ammo.NumberOfMagazines": 4
+          }
+        }
+      ],
+      "paired_profiles": 0,
+      "positions": {
+        "hand_to_magazine": "unresolved",
+        "closed_magazine": "unresolved",
+        "entry_axis": "unresolved",
+        "insertion_travel": "shared VR assist design, not extracted native insertion path",
+        "body_supply": "shared VR body-slot policy, not an authored gun coordinate"
+      },
+      "status": "unresolved",
+      "disabled_reason": [
+        "No stable authored magazine contact interval"
+      ],
+      "provenance": [],
+      "runtime_admitted": false,
+      "headset_tested": false,
+      "main_weapon_grip": {
+        "static_reference_rows": 6,
+        "nonstatic_reference_rows": 0,
+        "admitted_by_this_batch": false,
+        "reason": "Reload contact does not supply a verified main weapon grip or support capability"
+      }
+    },
+    {
+      "native_asset_name": "PP2000",
+      "configuration_count": 3,
+      "configurations": [
+        {
+          "resource": "Objects/Weapons/Handheld/BU_smg_PP2000/BU_smg_PP2000_Scoped.dbx",
+          "sha256": "42ba16bd39694e30f6181e0974a2f27fb2f63b94367a9d8db625e303b310a979",
+          "instance_guid": "A9E617C8-F9F8-4844-91E4-16B258D12F42",
+          "weapon_class": "wcSmg",
+          "firing_resource": "Objects/Weapons/Handheld/BU_smg_PP2000/BU_smg_PP2000_Firing.dbx",
+          "firing_sha256": "bd267fc7174d23d854137bbfe3275fa1c71fa159528f5e4dbfad62a54a1b0b3b",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 2.8499999046325684,
+            "FireLogic.ReloadThreshold": 0.800000011920929,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 40,
+            "Ammo.NumberOfMagazines": 3
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_smg_PP2000/BU_smg_PP2000_Kobra.dbx",
+          "sha256": "ecd5c77daf17908aaea2369b21a5be85a32cb6eab7f459c509581f5dfd08804b",
+          "instance_guid": "A11F3500-F861-4750-BA0C-D6C79C18532C",
+          "weapon_class": "wcSmg",
+          "firing_resource": "Objects/Weapons/Handheld/BU_smg_PP2000/BU_smg_PP2000_Firing.dbx",
+          "firing_sha256": "bd267fc7174d23d854137bbfe3275fa1c71fa159528f5e4dbfad62a54a1b0b3b",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 2.8499999046325684,
+            "FireLogic.ReloadThreshold": 0.800000011920929,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 40,
+            "Ammo.NumberOfMagazines": 3
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_smg_PP2000/BU_smg_PP2000.dbx",
+          "sha256": "25475fc23a93a4168db67673aef4c4c75a09a29b57fa95637b2c4456df2dbb9b",
+          "instance_guid": "D0060D52-0DE0-4A16-A774-22E78F8CAFBA",
+          "weapon_class": "wcSmg",
+          "firing_resource": "Objects/Weapons/Handheld/BU_smg_PP2000/BU_smg_PP2000_Firing.dbx",
+          "firing_sha256": "bd267fc7174d23d854137bbfe3275fa1c71fa159528f5e4dbfad62a54a1b0b3b",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 2.8499999046325684,
+            "FireLogic.ReloadThreshold": 0.800000011920929,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 40,
+            "Ammo.NumberOfMagazines": 3
+          }
+        }
+      ],
+      "paired_profiles": 0,
+      "positions": {
+        "hand_to_magazine": "unresolved",
+        "closed_magazine": "unresolved",
+        "entry_axis": "unresolved",
+        "insertion_travel": "shared VR assist design, not extracted native insertion path",
+        "body_supply": "shared VR body-slot policy, not an authored gun coordinate"
+      },
+      "status": "unresolved",
+      "disabled_reason": [
+        "Magazine geometric role candidate is not unique: "
+      ],
+      "provenance": [],
+      "runtime_admitted": false,
+      "headset_tested": false,
+      "main_weapon_grip": {
+        "static_reference_rows": 3,
+        "nonstatic_reference_rows": 0,
+        "admitted_by_this_batch": false,
+        "reason": "Reload contact does not supply a verified main weapon grip or support capability"
+      }
+    },
+    {
+      "native_asset_name": "SCAR",
+      "configuration_count": 3,
+      "configurations": [
+        {
+          "resource": "Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL_Kobra.dbx",
+          "sha256": "7d216c57eea514fbeee6106e5dd5872803ea71823f9d265ac3d8b314ce8bdd3c",
+          "instance_guid": "717CE619-E324-4967-BC70-11E36F5B7072",
+          "weapon_class": "wcSmg",
+          "firing_resource": "Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL_Firing.dbx",
+          "firing_sha256": "cb2535ddf88771291b292b86207110d4b65df321e86b9af8061e3b09b54975c3",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.299999952316284,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL.dbx",
+          "sha256": "7d97233814a8c59c03c0d3c3917254695045b86589f5ee55b901f19e34f3ffcb",
+          "instance_guid": "994266FA-8E2C-4D7C-B8F3-3A326C64B7C2",
+          "weapon_class": "wcSmg",
+          "firing_resource": "Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL_Firing.dbx",
+          "firing_sha256": "cb2535ddf88771291b292b86207110d4b65df321e86b9af8061e3b09b54975c3",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.299999952316284,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL_Scoped.dbx",
+          "sha256": "3c2d7c8db4b89d6e0cf6d48c74a014fc9cd24c83b0eadb59602b419a7db5bfdd",
+          "instance_guid": "ECBE8C76-05AC-4E38-BD33-37A4C094387B",
+          "weapon_class": "wcSmg",
+          "firing_resource": "Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL_Firing.dbx",
+          "firing_sha256": "cb2535ddf88771291b292b86207110d4b65df321e86b9af8061e3b09b54975c3",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.299999952316284,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        }
+      ],
+      "paired_profiles": 0,
+      "positions": {
+        "hand_to_magazine": "unresolved",
+        "closed_magazine": "unresolved",
+        "entry_axis": "unresolved",
+        "insertion_travel": "shared VR assist design, not extracted native insertion path",
+        "body_supply": "shared VR body-slot policy, not an authored gun coordinate"
+      },
+      "status": "unresolved",
+      "disabled_reason": [
+        "No stable authored magazine contact interval"
+      ],
+      "provenance": [],
+      "runtime_admitted": false,
+      "headset_tested": false,
+      "main_weapon_grip": {
+        "static_reference_rows": 3,
+        "nonstatic_reference_rows": 0,
+        "admitted_by_this_batch": false,
+        "reason": "Reload contact does not supply a verified main weapon grip or support capability"
+      }
+    },
+    {
+      "native_asset_name": "SCAR_sp",
+      "configuration_count": 1,
+      "configurations": [
+        {
+          "resource": "Objects/Weapons/Handheld/UL_rif_FNSCARL/SP_rif_FNSCARL.dbx",
+          "sha256": "afef46404434e56a20dacd77bc81217bc6018da97b7009d27d87ca57b30e6d6f",
+          "instance_guid": "FC1E53BE-DBCC-487B-84E0-3AD6213FE7D1",
+          "weapon_class": "wcSmg",
+          "firing_resource": "Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL_Firing.dbx",
+          "firing_sha256": "cb2535ddf88771291b292b86207110d4b65df321e86b9af8061e3b09b54975c3",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.299999952316284,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        }
+      ],
+      "paired_profiles": 0,
+      "positions": {
+        "hand_to_magazine": "unresolved",
+        "closed_magazine": "unresolved",
+        "entry_axis": "unresolved",
+        "insertion_travel": "shared VR assist design, not extracted native insertion path",
+        "body_supply": "shared VR body-slot policy, not an authored gun coordinate"
+      },
+      "status": "unresolved",
+      "disabled_reason": [
+        "No stable authored magazine contact interval"
+      ],
+      "provenance": [],
+      "runtime_admitted": false,
+      "headset_tested": false,
+      "main_weapon_grip": {
+        "static_reference_rows": 1,
+        "nonstatic_reference_rows": 0,
+        "admitted_by_this_batch": false,
+        "reason": "Reload contact does not supply a verified main weapon grip or support capability"
+      }
+    },
+    {
+      "native_asset_name": "SCAR_sp_s",
+      "configuration_count": 1,
+      "configurations": [
+        {
+          "resource": "Objects/Weapons/Handheld/UL_rif_FNSCARL/SP_rif_FNSCARL_Scoped.dbx",
+          "sha256": "afec48bfa7ce38765503f771f4fa4491c3f84c444943887b9c46e04323116ba5",
+          "instance_guid": "BACEF779-0C96-4795-8A59-20645A5EC396",
+          "weapon_class": "wcSmg",
+          "firing_resource": "Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL_Firing.dbx",
+          "firing_sha256": "cb2535ddf88771291b292b86207110d4b65df321e86b9af8061e3b09b54975c3",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.299999952316284,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        }
+      ],
+      "paired_profiles": 0,
+      "positions": {
+        "hand_to_magazine": "unresolved",
+        "closed_magazine": "unresolved",
+        "entry_axis": "unresolved",
+        "insertion_travel": "shared VR assist design, not extracted native insertion path",
+        "body_supply": "shared VR body-slot policy, not an authored gun coordinate"
+      },
+      "status": "unresolved",
+      "disabled_reason": [
+        "No stable authored magazine contact interval"
+      ],
+      "provenance": [],
+      "runtime_admitted": false,
+      "headset_tested": false,
+      "main_weapon_grip": {
+        "static_reference_rows": 1,
+        "nonstatic_reference_rows": 0,
+        "admitted_by_this_batch": false,
+        "reason": "Reload contact does not supply a verified main weapon grip or support capability"
+      }
+    },
+    {
+      "native_asset_name": "UMP",
+      "configuration_count": 3,
+      "configurations": [
+        {
+          "resource": "Objects/Weapons/Handheld/BU_smg_UMP/BU_smg_UMP_Scoped.dbx",
+          "sha256": "bc1e3314007540dd4ba304832fe2c5532bb36be23a0ec38c352630d5dd67cfae",
+          "instance_guid": "746464AC-59C6-4A11-992F-200A14353436",
+          "weapon_class": "wcSmg",
+          "firing_resource": "Objects/Weapons/Handheld/BU_smg_UMP/BU_smg_UMP_firing.dbx",
+          "firing_sha256": "6afbefb411e8b66f24a429dfd776329147d994849c54a0a477659a33b13f2dc3",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.0999999046325684,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 25,
+            "Ammo.NumberOfMagazines": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_smg_UMP/BU_smg_UMP.dbx",
+          "sha256": "7f47ec0c1a8e05085d9b582550a6aff9387ede7e9ee6dea7124646c8175b4bfd",
+          "instance_guid": "8D9C738E-A09D-4AC4-9ED8-CA8360CF9D4E",
+          "weapon_class": "wcSmg",
+          "firing_resource": "Objects/Weapons/Handheld/BU_smg_UMP/BU_smg_UMP_firing.dbx",
+          "firing_sha256": "6afbefb411e8b66f24a429dfd776329147d994849c54a0a477659a33b13f2dc3",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.0999999046325684,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 25,
+            "Ammo.NumberOfMagazines": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_smg_UMP/BU_smg_UMP_Kobra.dbx",
+          "sha256": "7f5f2505c9972c6d28f438693ab8a68f95a34634c105bc06d29a669651cdff38",
+          "instance_guid": "64DF6A5F-0C6C-45F5-8D25-0584A83D0226",
+          "weapon_class": "wcSmg",
+          "firing_resource": "Objects/Weapons/Handheld/BU_smg_UMP/BU_smg_UMP_firing.dbx",
+          "firing_sha256": "6afbefb411e8b66f24a429dfd776329147d994849c54a0a477659a33b13f2dc3",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.0999999046325684,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 25,
+            "Ammo.NumberOfMagazines": 4
+          }
+        }
+      ],
+      "paired_profiles": 0,
+      "positions": {
+        "hand_to_magazine": "unresolved",
+        "closed_magazine": "unresolved",
+        "entry_axis": "unresolved",
+        "insertion_travel": "shared VR assist design, not extracted native insertion path",
+        "body_supply": "shared VR body-slot policy, not an authored gun coordinate"
+      },
+      "status": "unresolved",
+      "disabled_reason": [
+        "Magazine geometric role candidate is not unique: "
+      ],
+      "provenance": [],
+      "runtime_admitted": false,
+      "headset_tested": false,
+      "main_weapon_grip": {
+        "static_reference_rows": 3,
+        "nonstatic_reference_rows": 0,
+        "admitted_by_this_batch": false,
+        "reason": "Reload contact does not supply a verified main weapon grip or support capability"
+      }
+    },
+    {
+      "native_asset_name": "UMPk",
+      "configuration_count": 3,
+      "configurations": [
+        {
+          "resource": "Objects/Weapons/Handheld/BU_smg_UMP/UPG_smg_UMP_Kobra.dbx",
+          "sha256": "039ee1ee62cf94c05104b678c3958ef975f060b89e74f18be7eb36c9eec39641",
+          "instance_guid": "C99D8729-2B90-4BBA-B75E-1A69F61388CB",
+          "weapon_class": "wcSmg",
+          "firing_resource": "Objects/Weapons/Handheld/BU_smg_UMP/BU_smg_UMP_firing.dbx",
+          "firing_sha256": "6afbefb411e8b66f24a429dfd776329147d994849c54a0a477659a33b13f2dc3",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.0999999046325684,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 25,
+            "Ammo.NumberOfMagazines": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_smg_UMP/UPG_smg_UMP_Scoped.dbx",
+          "sha256": "fadccfddecb127c52cae5d36e75f38578c7ffc87d1375f88740e777fe29bed87",
+          "instance_guid": "ECC516B4-BFFE-41FF-9620-57315B0EFEB5",
+          "weapon_class": "wcSmg",
+          "firing_resource": "Objects/Weapons/Handheld/BU_smg_UMP/BU_smg_UMP_firing.dbx",
+          "firing_sha256": "6afbefb411e8b66f24a429dfd776329147d994849c54a0a477659a33b13f2dc3",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.0999999046325684,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 25,
+            "Ammo.NumberOfMagazines": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_smg_UMP/UPG_smg_UMP.dbx",
+          "sha256": "5b58620069e72c9f49117512f65f59607efc6da9d4910540e01bc05c9a1fda25",
+          "instance_guid": "CE190D0E-DC45-488E-A4CE-3DA348ACF647",
+          "weapon_class": "wcSmg",
+          "firing_resource": "Objects/Weapons/Handheld/BU_smg_UMP/BU_smg_UMP_firing.dbx",
+          "firing_sha256": "6afbefb411e8b66f24a429dfd776329147d994849c54a0a477659a33b13f2dc3",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.0999999046325684,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 25,
+            "Ammo.NumberOfMagazines": 4
+          }
+        }
+      ],
+      "paired_profiles": 0,
+      "positions": {
+        "hand_to_magazine": "unresolved",
+        "closed_magazine": "unresolved",
+        "entry_axis": "unresolved",
+        "insertion_travel": "shared VR assist design, not extracted native insertion path",
+        "body_supply": "shared VR body-slot policy, not an authored gun coordinate"
+      },
+      "status": "unresolved",
+      "disabled_reason": [
+        "Magazine geometric role candidate is not unique: "
+      ],
+      "provenance": [],
+      "runtime_admitted": false,
+      "headset_tested": false,
+      "main_weapon_grip": {
+        "static_reference_rows": 3,
+        "nonstatic_reference_rows": 0,
+        "admitted_by_this_batch": false,
+        "reason": "Reload contact does not supply a verified main weapon grip or support capability"
+      }
+    },
+    {
+      "native_asset_name": "UZI",
+      "configuration_count": 3,
+      "configurations": [
+        {
+          "resource": "Objects/Weapons/Handheld/BU_smg_IMIUZI/BU_smg_IMIUZI.dbx",
+          "sha256": "4978ee888e33bb4086623535b93d63d9f2f4bda364e5dd9b351f7ff063a1349e",
+          "instance_guid": "A0F66CE7-39BD-4495-85F4-5D880ADD6203",
+          "weapon_class": "wcSmg",
+          "firing_resource": "Objects/Weapons/Handheld/BU_smg_IMIUZI/BU_smg_IMIUZI_Firing.dbx",
+          "firing_sha256": "999c5e9968e34df826162d1c1f9e63db1b8cb737071ba7437853208f8595315d",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.200000047683716,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 32,
+            "Ammo.NumberOfMagazines": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_smg_IMIUZI/BU_smg_IMIUZI_Scoped.dbx",
+          "sha256": "29040c14632aa20446a3ca95be940488b1ed9efdbf40a9df3d5b5e7a87d09bfe",
+          "instance_guid": "C0853544-A9D4-44C8-BA74-7FEC3A21E869",
+          "weapon_class": "wcSmg",
+          "firing_resource": "Objects/Weapons/Handheld/BU_smg_IMIUZI/BU_smg_IMIUZI_Firing.dbx",
+          "firing_sha256": "999c5e9968e34df826162d1c1f9e63db1b8cb737071ba7437853208f8595315d",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.200000047683716,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 32,
+            "Ammo.NumberOfMagazines": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_smg_IMIUZI/BU_smg_IMIUZI_Kobra.dbx",
+          "sha256": "19f8eaa40bc0d57e8d86902256078291032c5a9548197faba0cab1b2ebac88c1",
+          "instance_guid": "7500BC14-A764-4490-BAEE-85648F803B4E",
+          "weapon_class": "wcSmg",
+          "firing_resource": "Objects/Weapons/Handheld/BU_smg_IMIUZI/BU_smg_IMIUZI_Firing.dbx",
+          "firing_sha256": "999c5e9968e34df826162d1c1f9e63db1b8cb737071ba7437853208f8595315d",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 3.200000047683716,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 32,
+            "Ammo.NumberOfMagazines": 4
+          }
+        }
+      ],
+      "paired_profiles": 3,
+      "positions": {
+        "hand_to_magazine": "same-frame authored reload wrist+15 fingers; experimental interpolation",
+        "closed_magazine": "exact static authored frame",
+        "entry_axis": "geometry-derived long-axis / body-facing end estimate",
+        "insertion_travel": "shared VR assist design, not extracted native insertion path",
+        "body_supply": "shared VR body-slot policy, not an authored gun coordinate"
+      },
+      "status": "paired_candidate",
+      "disabled_reason": [
+        "Current native descriptor/equipment/mesh binding and runtime checks not supplied by this batch"
+      ],
+      "provenance": [
+        {
+          "profile_digest": "a0b6b8549bb8be8db2af5ed37f7f8b97f0bd66a48a469742638f0f111241a1e4",
+          "mesh_sha256": "ebdfe842d0b2fb96e9fe3812b4defc15a3953e6225db20b4e21fb4260d9676d6",
+          "configured_mesh": "Objects/Weapons/Handheld/BU_smg_IMIUZI/BU_smg_IMIUZI_Mesh",
+          "reload_clip": "Animations/Weapons/Handheld/BU_smg_IMIUZI/1P/1P_Reload.res",
+          "reload_clip_sha256": "b6a56810101c16a18750395326d98ab623791bbc3296f81ca69cd2530eb9cda5",
+          "magazine_bone": "jntWpn_6",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09"
+        },
+        {
+          "profile_digest": "984b9c7dd2faf251e5e0606f40b986464eaa7a611e09cd608b3d1feb95506c35",
+          "mesh_sha256": "ebdfe842d0b2fb96e9fe3812b4defc15a3953e6225db20b4e21fb4260d9676d6",
+          "configured_mesh": "Objects/Weapons/Handheld/BU_smg_IMIUZI/BU_smg_IMIUZI_Mesh",
+          "reload_clip": "Animations/Weapons/Handheld/BU_smg_IMIUZI/1P/1P_Reload.res",
+          "reload_clip_sha256": "b6a56810101c16a18750395326d98ab623791bbc3296f81ca69cd2530eb9cda5",
+          "magazine_bone": "jntWpn_6",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09"
+        },
+        {
+          "profile_digest": "c3e70cf2f6599830fc5ef4f2a2ddf51821f8b703877435b79c65077a1b912aeb",
+          "mesh_sha256": "ebdfe842d0b2fb96e9fe3812b4defc15a3953e6225db20b4e21fb4260d9676d6",
+          "configured_mesh": "Objects/Weapons/Handheld/BU_smg_IMIUZI/BU_smg_IMIUZI_Mesh",
+          "reload_clip": "Animations/Weapons/Handheld/BU_smg_IMIUZI/1P/1P_Reload.res",
+          "reload_clip_sha256": "b6a56810101c16a18750395326d98ab623791bbc3296f81ca69cd2530eb9cda5",
+          "magazine_bone": "jntWpn_6",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09"
+        }
+      ],
+      "runtime_admitted": false,
+      "headset_tested": false,
+      "main_weapon_grip": {
+        "static_reference_rows": 0,
+        "nonstatic_reference_rows": 3,
+        "admitted_by_this_batch": false,
+        "reason": "Reload contact does not supply a verified main weapon grip or support capability"
+      }
+    },
+    {
+      "native_asset_name": "XM8",
+      "configuration_count": 3,
+      "configurations": [
+        {
+          "resource": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Kobra.dbx",
+          "sha256": "c050f1f7670fe2458b0e2a917f08447a4245ab4e13ff6ae824ec6ef28b24e93e",
+          "instance_guid": "DB5C7B93-1CB3-4604-B2EB-2866BDA58E46",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Firing.dbx",
+          "firing_sha256": "bb3f2b383136cb848694033adc1962020b35b5e4cbc9f8e73601e4d454f8ab3b",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 2.799999952316284,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8.dbx",
+          "sha256": "97a21f7175e4671522b0f27d19f51e547b5b7cf3913028d48c973d7916a3730e",
+          "instance_guid": "6649BC62-58AC-40C3-929C-AB451B1FBA59",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Firing.dbx",
+          "firing_sha256": "bb3f2b383136cb848694033adc1962020b35b5e4cbc9f8e73601e4d454f8ab3b",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 2.799999952316284,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Scoped.dbx",
+          "sha256": "58f9a1d69fd33a6b901cacea3c29b2bf4f2658798258508c2f8bbd1137f1971b",
+          "instance_guid": "99C1995B-ECD4-49CE-9FFA-0E1042E231F2",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Firing_Scoped.dbx",
+          "firing_sha256": "ec165b831a8e6ffc4237a37f99e0d9121466d75660d068f0a96020810d6462ab",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 2.799999952316284,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        }
+      ],
+      "paired_profiles": 3,
+      "positions": {
+        "hand_to_magazine": "same-frame authored reload wrist+15 fingers; experimental interpolation",
+        "closed_magazine": "exact static authored frame",
+        "entry_axis": "geometry-derived long-axis / body-facing end estimate",
+        "insertion_travel": "shared VR assist design, not extracted native insertion path",
+        "body_supply": "shared VR body-slot policy, not an authored gun coordinate"
+      },
+      "status": "paired_candidate",
+      "disabled_reason": [
+        "Current native descriptor/equipment/mesh binding and runtime checks not supplied by this batch"
+      ],
+      "provenance": [
+        {
+          "profile_digest": "880af206379936194fcd6eb304f32ad2c672a4d26da0ff0a79e655252468f0db",
+          "mesh_sha256": "131824e2e98e32371ca3bcc29d179cb03a5f52cfb701406aee07d6658d43efb0",
+          "configured_mesh": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Mesh",
+          "reload_clip": "Animations/Weapons/Handheld/US_rgl_XM8/1P/1P_Reload.res",
+          "reload_clip_sha256": "168f331bed6e231b73b9e534b4d12f4c279511c7dee2e049a8ea6e69052e098b",
+          "magazine_bone": "jntWpn_6",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09"
+        },
+        {
+          "profile_digest": "458b3655838475d0156a736694f5e4b2edeff872a47324481533ca181f6aa8d0",
+          "mesh_sha256": "131824e2e98e32371ca3bcc29d179cb03a5f52cfb701406aee07d6658d43efb0",
+          "configured_mesh": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Mesh",
+          "reload_clip": "Animations/Weapons/Handheld/US_rgl_XM8/1P/1P_Reload.res",
+          "reload_clip_sha256": "168f331bed6e231b73b9e534b4d12f4c279511c7dee2e049a8ea6e69052e098b",
+          "magazine_bone": "jntWpn_6",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09"
+        },
+        {
+          "profile_digest": "0591e872a0222d17656de8a0adf0c51e65de664157e37df9dd554c407ca1a0b7",
+          "mesh_sha256": "131824e2e98e32371ca3bcc29d179cb03a5f52cfb701406aee07d6658d43efb0",
+          "configured_mesh": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Mesh",
+          "reload_clip": "Animations/Weapons/Handheld/US_rgl_XM8/1P/1P_Reload.res",
+          "reload_clip_sha256": "168f331bed6e231b73b9e534b4d12f4c279511c7dee2e049a8ea6e69052e098b",
+          "magazine_bone": "jntWpn_6",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09"
+        }
+      ],
+      "runtime_admitted": false,
+      "headset_tested": false,
+      "main_weapon_grip": {
+        "static_reference_rows": 3,
+        "nonstatic_reference_rows": 0,
+        "admitted_by_this_batch": false,
+        "reason": "Reload contact does not supply a verified main weapon grip or support capability"
+      }
+    },
+    {
+      "native_asset_name": "XM8C",
+      "configuration_count": 3,
+      "configurations": [
+        {
+          "resource": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Scoped.dbx",
+          "sha256": "ae12d9803482f3846993ea46e0a4afc19495e4b76cd847ea78a45c616092d970",
+          "instance_guid": "9F5AB2BD-CD9E-4830-927C-C91953F70092",
+          "weapon_class": "wcSmg",
+          "firing_resource": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Firing.dbx",
+          "firing_sha256": "d24c625727cc4214213234eda5c0a952acaf72b2ae5902f7a7d1ea1c5e4361b2",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 2.700000047683716,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Kobra.dbx",
+          "sha256": "b3a2b0b87554e994332c9e4d5819c6dd327afb26ab718a2b0161c5313464f6a6",
+          "instance_guid": "461CFAFC-F0DF-4323-AC58-57FBCB733D6F",
+          "weapon_class": "wcSmg",
+          "firing_resource": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Firing.dbx",
+          "firing_sha256": "d24c625727cc4214213234eda5c0a952acaf72b2ae5902f7a7d1ea1c5e4361b2",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 2.700000047683716,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c.dbx",
+          "sha256": "21a6b56404b4ade896da5cd9b08a89db4db710c33ba0d99bff33f0acbcad4d9c",
+          "instance_guid": "93E2A23E-B8D6-490B-8468-0B789DA8E35C",
+          "weapon_class": "wcSmg",
+          "firing_resource": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Firing.dbx",
+          "firing_sha256": "d24c625727cc4214213234eda5c0a952acaf72b2ae5902f7a7d1ea1c5e4361b2",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 2.700000047683716,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        }
+      ],
+      "paired_profiles": 3,
+      "positions": {
+        "hand_to_magazine": "same-frame authored reload wrist+15 fingers; experimental interpolation",
+        "closed_magazine": "exact static authored frame",
+        "entry_axis": "geometry-derived long-axis / body-facing end estimate",
+        "insertion_travel": "shared VR assist design, not extracted native insertion path",
+        "body_supply": "shared VR body-slot policy, not an authored gun coordinate"
+      },
+      "status": "paired_candidate",
+      "disabled_reason": [
+        "Current native descriptor/equipment/mesh binding and runtime checks not supplied by this batch"
+      ],
+      "provenance": [
+        {
+          "profile_digest": "b958ae5dfb13baf7b40b9b37c644ff508a1feaa8c0a8506d2564cc9b5654fec6",
+          "mesh_sha256": "e7e8b8ca1e8d2f03cd67e28f3abc307a88bd9c35f2df609bad46896e7c2559d7",
+          "configured_mesh": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Mesh",
+          "reload_clip": "Animations/Weapons/Handheld/US_rif_XM8_C/1P/1P_Reload.res",
+          "reload_clip_sha256": "75824a87bcf171d7888ff8933505f432e0ed5e0a58e063f508d41a3469e79ae3",
+          "magazine_bone": "jntWpn_6",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09"
+        },
+        {
+          "profile_digest": "133fba43622aebbcc57499f6448653ffb31feac2c18ed0b1a484ce5f949449ba",
+          "mesh_sha256": "e7e8b8ca1e8d2f03cd67e28f3abc307a88bd9c35f2df609bad46896e7c2559d7",
+          "configured_mesh": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Mesh",
+          "reload_clip": "Animations/Weapons/Handheld/US_rif_XM8_C/1P/1P_Reload.res",
+          "reload_clip_sha256": "75824a87bcf171d7888ff8933505f432e0ed5e0a58e063f508d41a3469e79ae3",
+          "magazine_bone": "jntWpn_6",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09"
+        },
+        {
+          "profile_digest": "70eb387197620ec034205fd1b6621d76d0d0e8a0d54d90e0f036d1eaa6f51b82",
+          "mesh_sha256": "e7e8b8ca1e8d2f03cd67e28f3abc307a88bd9c35f2df609bad46896e7c2559d7",
+          "configured_mesh": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Mesh",
+          "reload_clip": "Animations/Weapons/Handheld/US_rif_XM8_C/1P/1P_Reload.res",
+          "reload_clip_sha256": "75824a87bcf171d7888ff8933505f432e0ed5e0a58e063f508d41a3469e79ae3",
+          "magazine_bone": "jntWpn_6",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09"
+        }
+      ],
+      "runtime_admitted": false,
+      "headset_tested": false,
+      "main_weapon_grip": {
+        "static_reference_rows": 3,
+        "nonstatic_reference_rows": 0,
+        "admitted_by_this_batch": false,
+        "reason": "Reload contact does not supply a verified main weapon grip or support capability"
+      }
+    },
+    {
+      "native_asset_name": "XM8_sp",
+      "configuration_count": 1,
+      "configurations": [
+        {
+          "resource": "Objects/Weapons/Handheld/US_rgl_XM8/SP_rgl_XM8.dbx",
+          "sha256": "f8a349fb548584eceb8b45899acdf580ba32a488646f7cb0e902228b61abd60d",
+          "instance_guid": "DC440E16-A62E-4650-BF78-503B6AC7B499",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Firing.dbx",
+          "firing_sha256": "bb3f2b383136cb848694033adc1962020b35b5e4cbc9f8e73601e4d454f8ab3b",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 2.799999952316284,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        }
+      ],
+      "paired_profiles": 1,
+      "positions": {
+        "hand_to_magazine": "same-frame authored reload wrist+15 fingers; experimental interpolation",
+        "closed_magazine": "exact static authored frame",
+        "entry_axis": "geometry-derived long-axis / body-facing end estimate",
+        "insertion_travel": "shared VR assist design, not extracted native insertion path",
+        "body_supply": "shared VR body-slot policy, not an authored gun coordinate"
+      },
+      "status": "paired_candidate",
+      "disabled_reason": [
+        "Current native descriptor/equipment/mesh binding and runtime checks not supplied by this batch"
+      ],
+      "provenance": [
+        {
+          "profile_digest": "ef7fe544698f1e8e13f1ed8b6134f8f21c88fbac50a1addde9ca4d1110776151",
+          "mesh_sha256": "131824e2e98e32371ca3bcc29d179cb03a5f52cfb701406aee07d6658d43efb0",
+          "configured_mesh": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Mesh",
+          "reload_clip": "Animations/Weapons/Handheld/US_rgl_XM8/1P/1P_Reload.res",
+          "reload_clip_sha256": "168f331bed6e231b73b9e534b4d12f4c279511c7dee2e049a8ea6e69052e098b",
+          "magazine_bone": "jntWpn_6",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09"
+        }
+      ],
+      "runtime_admitted": false,
+      "headset_tested": false,
+      "main_weapon_grip": {
+        "static_reference_rows": 1,
+        "nonstatic_reference_rows": 0,
+        "admitted_by_this_batch": false,
+        "reason": "Reload contact does not supply a verified main weapon grip or support capability"
+      }
+    },
+    {
+      "native_asset_name": "XM8_sp_s",
+      "configuration_count": 1,
+      "configurations": [
+        {
+          "resource": "Objects/Weapons/Handheld/US_rgl_XM8/SP_rgl_XM8_Scoped.dbx",
+          "sha256": "23a7261d6cbaffe7c642af167edfca1a8ac818ebef551538b01a5784ef8f472f",
+          "instance_guid": "6A066A2D-AB87-4356-AFA4-567741C395BF",
+          "weapon_class": "wcAssault",
+          "firing_resource": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Firing_Scoped.dbx",
+          "firing_sha256": "ec165b831a8e6ffc4237a37f99e0d9121466d75660d068f0a96020810d6462ab",
+          "ammo_and_reload": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.ReloadTime": 2.799999952316284,
+            "FireLogic.ReloadThreshold": 0.75,
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "Ammo.MagazineCapacity": 30,
+            "Ammo.NumberOfMagazines": 4
+          }
+        }
+      ],
+      "paired_profiles": 1,
+      "positions": {
+        "hand_to_magazine": "same-frame authored reload wrist+15 fingers; experimental interpolation",
+        "closed_magazine": "exact static authored frame",
+        "entry_axis": "geometry-derived long-axis / body-facing end estimate",
+        "insertion_travel": "shared VR assist design, not extracted native insertion path",
+        "body_supply": "shared VR body-slot policy, not an authored gun coordinate"
+      },
+      "status": "paired_candidate",
+      "disabled_reason": [
+        "Current native descriptor/equipment/mesh binding and runtime checks not supplied by this batch"
+      ],
+      "provenance": [
+        {
+          "profile_digest": "e59004e6ac0a810bfab1cf7653a958696a97763cfe9aef32f142eb78fcd4d726",
+          "mesh_sha256": "131824e2e98e32371ca3bcc29d179cb03a5f52cfb701406aee07d6658d43efb0",
+          "configured_mesh": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Mesh",
+          "reload_clip": "Animations/Weapons/Handheld/US_rgl_XM8/1P/1P_Reload.res",
+          "reload_clip_sha256": "168f331bed6e231b73b9e534b4d12f4c279511c7dee2e049a8ea6e69052e098b",
+          "magazine_bone": "jntWpn_6",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09"
+        }
+      ],
+      "runtime_admitted": false,
+      "headset_tested": false,
+      "main_weapon_grip": {
+        "static_reference_rows": 1,
+        "nonstatic_reference_rows": 0,
+        "admitted_by_this_batch": false,
+        "reason": "Reload contact does not supply a verified main weapon grip or support capability"
+      }
+    }
+  ]
+}

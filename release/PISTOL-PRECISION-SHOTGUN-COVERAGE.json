@@ -1,0 +1,4106 @@
+{
+  "schema": "fvr.bc2.pistol_precision_shotgun_coverage.v1",
+  "summary": {
+    "configuration_definitions": 73,
+    "native_asset_names": 30,
+    "mechanism_states": 46,
+    "decoded_body_models": 11,
+    "strict_magazine_profiles": 17,
+    "strict_magazine_asset_names": 7,
+    "strict_magazine_body_models": 4,
+    "new_runtime_weapons": 0
+  },
+  "rows": [
+    {
+      "native_asset": "870MCS",
+      "definitions": [
+        {
+          "resource": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_870MCS_Assault.dbx",
+          "instance_guid": "79070FF4-8A66-47CA-B53F-49A8EE2A7B17",
+          "sha256": "c53414fb9184ef6ba633d9b6f701345121102bc689e7727be75e5fb30a822319",
+          "class": "wcShotgun",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtSingleBullet",
+            "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+            "FireLogic.BoltAction.BoltActionDelay": 0.5,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_Remington870MCS.dbx",
+          "instance_guid": "FBCC489E-ACC3-448F-998A-DDFB85582047",
+          "sha256": "5b205a695ea01761b0c21727655967f554a5b0db0c826317e24efb7f4fde8925",
+          "class": "wcShotgun",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtSingleBullet",
+            "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+            "FireLogic.BoltAction.BoltActionDelay": 0.5,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_870MCS_Assault_Slug.dbx",
+          "instance_guid": "1C67174A-686D-4BE7-87C7-CE34DB5BEAA3",
+          "sha256": "c9d3fe797f72919b3b3f4eca87c3721b8708923813614312143c7a1593c6be52",
+          "class": "wcShotgun",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtSingleBullet",
+            "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+            "FireLogic.BoltAction.BoltActionDelay": 0.5,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_870MCS_Frag_Assault.dbx",
+          "instance_guid": "FC6342C8-7834-47CF-86F9-D2C79DE732A6",
+          "sha256": "3f6acf30377a14e0bca381bcdefc6831a273b465825f5b2cb9cd6e45043ac0ca",
+          "class": "wcShotgun",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtSingleBullet",
+            "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+            "FireLogic.BoltAction.BoltActionDelay": 0.5,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_870MCS_Frag.dbx",
+          "instance_guid": "BEB9CF28-56B9-487A-BAF2-A396C5BD6AB2",
+          "sha256": "61ec8e695b5a478eeeab775482d8bbda289644861952a3318d7aac8f37f7d9a5",
+          "class": "wcShotgun",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtSingleBullet",
+            "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+            "FireLogic.BoltAction.BoltActionDelay": 0.5,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_870MCS_Slug.dbx",
+          "instance_guid": "5B7EB1B8-DF24-4369-A6CD-B3EDAD30F385",
+          "sha256": "65122fbbe334e603a05faae1fcf324733751584928942450398793e6d2bd8b16",
+          "class": "wcShotgun",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtSingleBullet",
+            "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+            "FireLogic.BoltAction.BoltActionDelay": 0.5,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 4
+          }
+        }
+      ],
+      "mechanism_models": [],
+      "strict_magazine_profiles": [],
+      "strict_magazine_gaps": [
+        "Unsupported animation wrapper flags"
+      ],
+      "reference_gaps": [],
+      "separate_chamber_state_proven": false,
+      "native_manual_reload_enabled": false,
+      "headset_tested": false
+    },
+    {
+      "native_asset": "GOL",
+      "definitions": [
+        {
+          "resource": "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL_Kobra.dbx",
+          "instance_guid": "0CA52687-D93D-4160-ACF0-63BFED5FAD88",
+          "sha256": "12c0e163971af2fac10e58e70ce5035dbeb9ff816ed5127296661035816a2e6e",
+          "class": "wcSniper",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 1.7999999523162842,
+            "Ammo.MagazineCapacity": 5
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL_Scoped.dbx",
+          "instance_guid": "82F7222D-DC86-4D46-82F3-444B9F6D6C12",
+          "sha256": "b413a709fda2431c4e10085ca02db20344f2e21ab71ab77940b489807142e2c5",
+          "class": "wcSniper",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 1.7999999523162842,
+            "Ammo.MagazineCapacity": 5
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL.dbx",
+          "instance_guid": "7D1DFD60-085C-4E0A-9FEB-80A40D11EB2E",
+          "sha256": "c10e29215b23d814f1c75dcc3782da6a96c78340ac6eef48a203cdc87d93cac7",
+          "class": "wcSniper",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 1.7999999523162842,
+            "Ammo.MagazineCapacity": 5
+          }
+        }
+      ],
+      "mechanism_models": [
+        {
+          "mesh": "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL_Mesh",
+          "mesh_sha256": "0c1e6113cf5cbe04392a6acfc182c332a3d883005bb6b22bf712d80e39311844",
+          "clip_sha256": "5a96543e7a194aa433ba38a5ce361abae8d62424b828ddb1a56f865a3c9d4e18",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "parts": [
+            {
+              "bone": "jntWpn_1",
+              "parent": "jntWpn_0",
+              "triangles": 7334,
+              "extent_m": [
+                0.07122802734375026,
+                0.28320312499999944,
+                1.2183227539062504
+              ],
+              "rigid": false,
+              "motion_kind": "static",
+              "travel_m": 1.377021497221767e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_11",
+              "parent": "jntWpn_1",
+              "triangles": 3400,
+              "extent_m": [
+                0.06108093261718485,
+                0.07226562500000047,
+                0.3869628906250008
+              ],
+              "rigid": false,
+              "motion_kind": "static",
+              "travel_m": 7.967009239196867e-33,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_2",
+              "parent": "jntWpn_1",
+              "triangles": 148,
+              "extent_m": [
+                0.006927490234375382,
+                0.03808593750000004,
+                0.014587402343750127
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 1.0737212159139527e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_6",
+              "parent": "jntWpn_1",
+              "triangles": 402,
+              "extent_m": [
+                0.02371215820312666,
+                0.050781250000000104,
+                0.09564208984375033
+              ],
+              "rigid": true,
+              "motion_kind": "general_rigid_motion",
+              "travel_m": 0.3869306757727783,
+              "rotation_rad": 0.7083274952370879,
+              "complete_same_frame_contact_windows_30hz": 3,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_7",
+              "parent": "jntWpn_1",
+              "triangles": 700,
+              "extent_m": [
+                0.103912353515624,
+                0.20751953125000044,
+                0.059265136718748675
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 2.1891490746826194e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_8",
+              "parent": "jntWpn_1",
+              "triangles": 700,
+              "extent_m": [
+                0.103912353515626,
+                0.20751953124999967,
+                0.05926513671875081
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 2.336334479349917e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            }
+          ],
+          "missing_tracks": [
+            {
+              "bone": "jntWpn_3",
+              "reason": "Required authored tracks absent/unsupported: jntWpn_3"
+            }
+          ]
+        }
+      ],
+      "strict_magazine_profiles": [],
+      "strict_magazine_gaps": [
+        "No bounded initial withdrawal witness"
+      ],
+      "reference_gaps": [],
+      "separate_chamber_state_proven": false,
+      "native_manual_reload_enabled": false,
+      "headset_tested": false
+    },
+    {
+      "native_asset": "M1911",
+      "definitions": [
+        {
+          "resource": "Objects/Weapons/Handheld/Beach/M1911A1/M1911A1.dbx",
+          "instance_guid": "E9E77835-FFE4-4F7B-8784-0970C71E051B",
+          "sha256": "7d94e90adc48c527abaec2a3d6f540b2f22417c4a42a5b0df0b3293e2f8e80c0",
+          "class": "wcSmg",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltSingleFire",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 7
+          }
+        }
+      ],
+      "mechanism_models": [],
+      "strict_magazine_profiles": [],
+      "strict_magazine_gaps": [],
+      "reference_gaps": [
+        "No exact mesh geometry binding"
+      ],
+      "separate_chamber_state_proven": false,
+      "native_manual_reload_enabled": false,
+      "headset_tested": false
+    },
+    {
+      "native_asset": "M24",
+      "definitions": [
+        {
+          "resource": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24.dbx",
+          "instance_guid": "3632D971-D742-493D-8962-358ADE024C39",
+          "sha256": "84252e7fa90e376d2cfe3131a1e83423a00d9a1dda52d0974b5d4d8d3d8de82c",
+          "class": "wcSniper",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 1.649999976158142,
+            "Ammo.MagazineCapacity": 5
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24_Scoped.dbx",
+          "instance_guid": "3F35373A-9CC7-44BC-94B6-23DCFB1AF196",
+          "sha256": "942be844e1a6392fb1a21eec3127be36b453357c53af1258b371cdc5615420b8",
+          "class": "wcSniper",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 1.649999976158142,
+            "Ammo.MagazineCapacity": 5
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24_Kobra.dbx",
+          "instance_guid": "DE784D39-793F-49C9-B389-6F4B2358617E",
+          "sha256": "12d56fe4e39fd8b9d3a6c42ebd18eab4bf8e4a4c5b5a2296b7dfbd73ec9cd6a8",
+          "class": "wcSniper",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 1.649999976158142,
+            "Ammo.MagazineCapacity": 5
+          }
+        }
+      ],
+      "mechanism_models": [
+        {
+          "mesh": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24_Mesh",
+          "mesh_sha256": "d9d7f5bd581cf2585db01e4fdf43ce9233f829711639b2b1625da1a80ae83df9",
+          "clip_sha256": "872b2c3596477a2f6d7b403666daa8077cb24793946b2083cabdacfbbf7cee06",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "parts": [
+            {
+              "bone": "jntWpn_1",
+              "parent": "jntWpn_0",
+              "triangles": 2844,
+              "extent_m": [
+                0.06195068359375,
+                0.16699218749999958,
+                1.3428344726562502
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 2.359611117240355e-15,
+              "rotation_rad": 5.575503985246929e-08,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_11",
+              "parent": "jntWpn_1",
+              "triangles": 2282,
+              "extent_m": [
+                0.06974792480469144,
+                0.06835937500000026,
+                0.3769531250000009
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 7.963465631514947e-33,
+              "rotation_rad": 6.322027276634106e-08,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_2",
+              "parent": "jntWpn_1",
+              "triangles": 100,
+              "extent_m": [
+                0.006233215332031603,
+                0.028320312500000035,
+                0.012695312500000132
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 1.7691749143903726e-15,
+              "rotation_rad": 6.322027276634106e-08,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_3",
+              "parent": "jntWpn_1",
+              "triangles": 688,
+              "extent_m": [
+                0.060928344726562944,
+                0.0507812499999997,
+                0.1693725585937503
+              ],
+              "rigid": true,
+              "motion_kind": "general_rigid_motion",
+              "travel_m": 0.07714868547021393,
+              "rotation_rad": 1.2448395582596328,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_5",
+              "parent": "jntWpn_1",
+              "triangles": 260,
+              "extent_m": [
+                0.05880737304687528,
+                0.012695312500000173,
+                0.06579589843750011
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 3.5256298535440796e-15,
+              "rotation_rad": 6.322027276634106e-08,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_6",
+              "parent": "jntWpn_1",
+              "triangles": 576,
+              "extent_m": [
+                0.018653869628907825,
+                0.053710937500000056,
+                0.09707641601562497
+              ],
+              "rigid": true,
+              "motion_kind": "general_rigid_motion",
+              "travel_m": 0.33647173134339486,
+              "rotation_rad": 1.0233976292680775,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_7",
+              "parent": "jntWpn_1",
+              "triangles": 844,
+              "extent_m": [
+                0.10655212402343611,
+                0.20214843750000047,
+                0.05212402343749876
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 4.108419686024957e-15,
+              "rotation_rad": 6.322027276634106e-08,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_8",
+              "parent": "jntWpn_1",
+              "triangles": 800,
+              "extent_m": [
+                0.10656738281250139,
+                0.20214843749999958,
+                0.05212402343750096
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 4.431053881428709e-15,
+              "rotation_rad": 6.322027276634106e-08,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_9",
+              "parent": "jntWpn_1",
+              "triangles": 580,
+              "extent_m": [
+                0.04966735839843771,
+                0.020507812499999993,
+                0.05395507812500009
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 1.5413350237898105e-15,
+              "rotation_rad": 6.322027276634106e-08,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            }
+          ],
+          "missing_tracks": []
+        }
+      ],
+      "strict_magazine_profiles": [],
+      "strict_magazine_gaps": [
+        "Complete paired magazine role is not unique: "
+      ],
+      "reference_gaps": [],
+      "separate_chamber_state_proven": false,
+      "native_manual_reload_enabled": false,
+      "headset_tested": false
+    },
+    {
+      "native_asset": "M9",
+      "definitions": [
+        {
+          "resource": "Objects/Weapons/Handheld/US_hg_M9Beretta/US_hg_M9Beretta.dbx",
+          "instance_guid": "F4692BA9-A65B-420E-86E3-B34693FA384D",
+          "sha256": "5e671d40c30fa8d718c16e75fb22220e47e7b40325eba4be6a95cbfefcb29f91",
+          "class": "wcSmg",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltSingleFire",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 12
+          }
+        }
+      ],
+      "mechanism_models": [
+        {
+          "mesh": "Objects/Weapons/Handheld/US_hg_M9Beretta/US_hg_M9Beretta_Mesh",
+          "mesh_sha256": "6394f767c0e788f979c5940d1bbc02ef79b79ffff3e7a0825628f4064bf2d276",
+          "clip_sha256": "ae711bea5956669636137c96ef164b980e6bb60e7515146b166c2159587148cf",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "parts": [
+            {
+              "bone": "jntWpn_1",
+              "parent": "jntWpn_0",
+              "triangles": 4196,
+              "extent_m": [
+                0.0395673643797647,
+                0.1505695581436156,
+                0.2435086593031886
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 7.076002351690567e-16,
+              "rotation_rad": 8.429369702178808e-08,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_12",
+              "parent": "jntWpn_1",
+              "triangles": 520,
+              "extent_m": [
+                0.02408275566995214,
+                0.12762320041656497,
+                0.06168041378259703
+              ],
+              "rigid": true,
+              "motion_kind": "general_rigid_motion",
+              "travel_m": 0.5382097321383035,
+              "rotation_rad": 1.3090861200538115,
+              "complete_same_frame_contact_windows_30hz": 5,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_2",
+              "parent": "jntWpn_1",
+              "triangles": 186,
+              "extent_m": [
+                0.008337274193763893,
+                0.03296601772308355,
+                0.01873765885829929
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 3.97887670475967e-16,
+              "rotation_rad": 7.884953353001449e-08,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_3",
+              "parent": "jntWpn_1",
+              "triangles": 2498,
+              "extent_m": [
+                0.03826856985688227,
+                0.04599845409393341,
+                0.21484847366809823
+              ],
+              "rigid": true,
+              "motion_kind": "slider_candidate",
+              "travel_m": 0.07164103283197629,
+              "rotation_rad": 7.884953353001449e-08,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_4",
+              "parent": "jntWpn_1",
+              "triangles": 116,
+              "extent_m": [
+                0.003504518288537084,
+                0.009430170059204102,
+                0.009430259466171265
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 2.8562295508749217e-16,
+              "rotation_rad": 7.884953353001449e-08,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_6",
+              "parent": "jntWpn_1",
+              "triangles": 680,
+              "extent_m": [
+                0.00808660406619313,
+                0.035684943199157756,
+                0.01693647354841243
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 4.165034641200501e-16,
+              "rotation_rad": 7.884953353001449e-08,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            }
+          ],
+          "missing_tracks": []
+        }
+      ],
+      "strict_magazine_profiles": [],
+      "strict_magazine_gaps": [
+        "No stable authored magazine contact interval"
+      ],
+      "reference_gaps": [],
+      "separate_chamber_state_proven": false,
+      "native_manual_reload_enabled": false,
+      "headset_tested": false
+    },
+    {
+      "native_asset": "M9-3",
+      "definitions": [
+        {
+          "resource": "Objects/Weapons/Handheld/US_hg_M9Beretta/US_hg_M9-3.dbx",
+          "instance_guid": "5BD5CC30-2813-44A3-BF08-6D23EAA66394",
+          "sha256": "8ba71d710a9822745622e66c77ae601367fb5230676ed8834611f0ebc74d9279",
+          "class": "wcSmg",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltSingleFire",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 20
+          }
+        }
+      ],
+      "mechanism_models": [
+        {
+          "mesh": "Objects/Weapons/Handheld/US_hg_M9Beretta/US_hg_M9Beretta_Mesh",
+          "mesh_sha256": "6394f767c0e788f979c5940d1bbc02ef79b79ffff3e7a0825628f4064bf2d276",
+          "clip_sha256": "ae711bea5956669636137c96ef164b980e6bb60e7515146b166c2159587148cf",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "parts": [
+            {
+              "bone": "jntWpn_1",
+              "parent": "jntWpn_0",
+              "triangles": 4196,
+              "extent_m": [
+                0.0395673643797647,
+                0.1505695581436156,
+                0.2435086593031886
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 7.076002351690567e-16,
+              "rotation_rad": 8.429369702178808e-08,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_12",
+              "parent": "jntWpn_1",
+              "triangles": 520,
+              "extent_m": [
+                0.02408275566995214,
+                0.12762320041656497,
+                0.06168041378259703
+              ],
+              "rigid": true,
+              "motion_kind": "general_rigid_motion",
+              "travel_m": 0.5382097321383035,
+              "rotation_rad": 1.3090861200538115,
+              "complete_same_frame_contact_windows_30hz": 5,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_2",
+              "parent": "jntWpn_1",
+              "triangles": 186,
+              "extent_m": [
+                0.008337274193763893,
+                0.03296601772308355,
+                0.01873765885829929
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 3.97887670475967e-16,
+              "rotation_rad": 7.884953353001449e-08,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_3",
+              "parent": "jntWpn_1",
+              "triangles": 2498,
+              "extent_m": [
+                0.03826856985688227,
+                0.04599845409393341,
+                0.21484847366809823
+              ],
+              "rigid": true,
+              "motion_kind": "slider_candidate",
+              "travel_m": 0.07164103283197629,
+              "rotation_rad": 7.884953353001449e-08,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_4",
+              "parent": "jntWpn_1",
+              "triangles": 116,
+              "extent_m": [
+                0.003504518288537084,
+                0.009430170059204102,
+                0.009430259466171265
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 2.8562295508749217e-16,
+              "rotation_rad": 7.884953353001449e-08,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_6",
+              "parent": "jntWpn_1",
+              "triangles": 680,
+              "extent_m": [
+                0.00808660406619313,
+                0.035684943199157756,
+                0.01693647354841243
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 4.165034641200501e-16,
+              "rotation_rad": 7.884953353001449e-08,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            }
+          ],
+          "missing_tracks": []
+        }
+      ],
+      "strict_magazine_profiles": [],
+      "strict_magazine_gaps": [
+        "No stable authored magazine contact interval"
+      ],
+      "reference_gaps": [],
+      "separate_chamber_state_proven": false,
+      "native_manual_reload_enabled": false,
+      "headset_tested": false
+    },
+    {
+      "native_asset": "M95",
+      "definitions": [
+        {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95.dbx",
+          "instance_guid": "CB2A15FE-8F0A-4772-9102-64548E0DB3B6",
+          "sha256": "992535507a1b074634772678f5cd6bc8a71a90a599ac5b469c71d1c7bfd560a3",
+          "class": "wcSniper",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 2.299999952316284,
+            "Ammo.MagazineCapacity": 5
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Scoped.dbx",
+          "instance_guid": "812F8F83-616D-48A2-A6C8-1D2B55FA5165",
+          "sha256": "14366feb18371c96bded4aa417cf614b5e62e75634e6b6afabfb67132385974c",
+          "class": "wcSniper",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 2.299999952316284,
+            "Ammo.MagazineCapacity": 5
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Kobra.dbx",
+          "instance_guid": "DCD9E585-21BB-419A-AAD4-0B80295F287F",
+          "sha256": "6b5bfe1065253189c3bc18a0f1b974927ca1d65a94218a8b76a0037639e898d3",
+          "class": "wcSniper",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 2.299999952316284,
+            "Ammo.MagazineCapacity": 5
+          }
+        }
+      ],
+      "mechanism_models": [
+        {
+          "mesh": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Mesh",
+          "mesh_sha256": "7da14b841199f114e88b647378d58346aea7cba1295b010024cfbac0a20d309d",
+          "clip_sha256": "59a136022cf9923c139643d1744bfdd0186f4a842eb212b528b2fab250504b06",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "parts": [
+            {
+              "bone": "jntWpn_1",
+              "parent": "jntWpn_0",
+              "triangles": 6444,
+              "extent_m": [
+                0.08959960937500178,
+                0.20458984375000008,
+                1.4708251953125007
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 1.6951874226909401e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_11",
+              "parent": "jntWpn_1",
+              "triangles": 5148,
+              "extent_m": [
+                0.049102783203125944,
+                0.07031250000000025,
+                0.3344726562500007
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 1.2320082938408411e-32,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_2",
+              "parent": "jntWpn_1",
+              "triangles": 88,
+              "extent_m": [
+                0.007759094238281708,
+                0.03710937500000006,
+                0.01678466796875016
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 1.2784153001188267e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_4",
+              "parent": "jntWpn_1",
+              "triangles": 392,
+              "extent_m": [
+                0.04051208496093809,
+                0.2592773437500003,
+                0.0505371093750006
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 2.3225834540769512e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_5",
+              "parent": "jntWpn_1",
+              "triangles": 392,
+              "extent_m": [
+                0.040267944335938374,
+                0.2592773437499999,
+                0.050537109375000555
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 2.331070662866214e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_6",
+              "parent": "jntWpn_1",
+              "triangles": 592,
+              "extent_m": [
+                0.04589843750000001,
+                0.14257812500000017,
+                0.162582397460938
+              ],
+              "rigid": true,
+              "motion_kind": "general_rigid_motion",
+              "travel_m": 0.30449858668847946,
+              "rotation_rad": 0.4589410976950899,
+              "complete_same_frame_contact_windows_30hz": 23,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_7",
+              "parent": "jntWpn_1",
+              "triangles": 192,
+              "extent_m": [
+                0.0025033950805658936,
+                0.029296875,
+                0.030151367187500007
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 1.7825436894285256e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_8",
+              "parent": "jntWpn_1",
+              "triangles": 192,
+              "extent_m": [
+                0.0022315979003911398,
+                0.0302734375,
+                0.0301513671875
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 3.85799676564265e-16,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            }
+          ],
+          "missing_tracks": [
+            {
+              "bone": "jntWpn_3",
+              "reason": "Required authored tracks absent/unsupported: jntWpn_3"
+            }
+          ]
+        }
+      ],
+      "strict_magazine_profiles": [
+        "c02c8603ee3fe0de87e482b2c90d7aa628196baa0e1cfb1005c072a68beef910",
+        "cd3127536805fdf7dad4401c706a778f63784baafb7ad46d6045f6e5d9658856",
+        "a86da3c68031f13ee45e238c2a762663e2ff1adda401595935668f932493c5a6"
+      ],
+      "strict_magazine_gaps": [],
+      "reference_gaps": [],
+      "separate_chamber_state_proven": false,
+      "native_manual_reload_enabled": false,
+      "headset_tested": false
+    },
+    {
+      "native_asset": "M95_sp",
+      "definitions": [
+        {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/SP_sni_M95.dbx",
+          "instance_guid": "7717EA86-49ED-4AA8-B401-7E62D8ADE339",
+          "sha256": "8f8494c4d007bb3955485d740372bd521ff6fb4fa437f1df81602c29023ec298",
+          "class": "wcSniper",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 2.299999952316284,
+            "Ammo.MagazineCapacity": 5
+          }
+        }
+      ],
+      "mechanism_models": [
+        {
+          "mesh": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Mesh",
+          "mesh_sha256": "7da14b841199f114e88b647378d58346aea7cba1295b010024cfbac0a20d309d",
+          "clip_sha256": "59a136022cf9923c139643d1744bfdd0186f4a842eb212b528b2fab250504b06",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "parts": [
+            {
+              "bone": "jntWpn_1",
+              "parent": "jntWpn_0",
+              "triangles": 6444,
+              "extent_m": [
+                0.08959960937500178,
+                0.20458984375000008,
+                1.4708251953125007
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 1.6951874226909401e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_11",
+              "parent": "jntWpn_1",
+              "triangles": 5148,
+              "extent_m": [
+                0.049102783203125944,
+                0.07031250000000025,
+                0.3344726562500007
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 1.2320082938408411e-32,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_2",
+              "parent": "jntWpn_1",
+              "triangles": 88,
+              "extent_m": [
+                0.007759094238281708,
+                0.03710937500000006,
+                0.01678466796875016
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 1.2784153001188267e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_4",
+              "parent": "jntWpn_1",
+              "triangles": 392,
+              "extent_m": [
+                0.04051208496093809,
+                0.2592773437500003,
+                0.0505371093750006
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 2.3225834540769512e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_5",
+              "parent": "jntWpn_1",
+              "triangles": 392,
+              "extent_m": [
+                0.040267944335938374,
+                0.2592773437499999,
+                0.050537109375000555
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 2.331070662866214e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_6",
+              "parent": "jntWpn_1",
+              "triangles": 592,
+              "extent_m": [
+                0.04589843750000001,
+                0.14257812500000017,
+                0.162582397460938
+              ],
+              "rigid": true,
+              "motion_kind": "general_rigid_motion",
+              "travel_m": 0.30449858668847946,
+              "rotation_rad": 0.4589410976950899,
+              "complete_same_frame_contact_windows_30hz": 23,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_7",
+              "parent": "jntWpn_1",
+              "triangles": 192,
+              "extent_m": [
+                0.0025033950805658936,
+                0.029296875,
+                0.030151367187500007
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 1.7825436894285256e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_8",
+              "parent": "jntWpn_1",
+              "triangles": 192,
+              "extent_m": [
+                0.0022315979003911398,
+                0.0302734375,
+                0.0301513671875
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 3.85799676564265e-16,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            }
+          ],
+          "missing_tracks": [
+            {
+              "bone": "jntWpn_3",
+              "reason": "Required authored tracks absent/unsupported: jntWpn_3"
+            }
+          ]
+        }
+      ],
+      "strict_magazine_profiles": [
+        "353160512ce23f8e73d0cb7f8aa9170c35689cfe8d096baaf8bbecc024c2fdaf"
+      ],
+      "strict_magazine_gaps": [],
+      "reference_gaps": [],
+      "separate_chamber_state_proven": false,
+      "native_manual_reload_enabled": false,
+      "headset_tested": false
+    },
+    {
+      "native_asset": "M95_sp_s",
+      "definitions": [
+        {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/SP_sni_M95_Scoped.dbx",
+          "instance_guid": "1378ECEF-DC5F-4728-81E5-A5DD7E9B10DA",
+          "sha256": "e395944e3978c6847bc5c66d033d265a7571477c5a588deba1aafde822e6c4b9",
+          "class": "wcSniper",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 2.299999952316284,
+            "Ammo.MagazineCapacity": 5
+          }
+        }
+      ],
+      "mechanism_models": [
+        {
+          "mesh": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Mesh",
+          "mesh_sha256": "7da14b841199f114e88b647378d58346aea7cba1295b010024cfbac0a20d309d",
+          "clip_sha256": "59a136022cf9923c139643d1744bfdd0186f4a842eb212b528b2fab250504b06",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "parts": [
+            {
+              "bone": "jntWpn_1",
+              "parent": "jntWpn_0",
+              "triangles": 6444,
+              "extent_m": [
+                0.08959960937500178,
+                0.20458984375000008,
+                1.4708251953125007
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 1.6951874226909401e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_11",
+              "parent": "jntWpn_1",
+              "triangles": 5148,
+              "extent_m": [
+                0.049102783203125944,
+                0.07031250000000025,
+                0.3344726562500007
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 1.2320082938408411e-32,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_2",
+              "parent": "jntWpn_1",
+              "triangles": 88,
+              "extent_m": [
+                0.007759094238281708,
+                0.03710937500000006,
+                0.01678466796875016
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 1.2784153001188267e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_4",
+              "parent": "jntWpn_1",
+              "triangles": 392,
+              "extent_m": [
+                0.04051208496093809,
+                0.2592773437500003,
+                0.0505371093750006
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 2.3225834540769512e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_5",
+              "parent": "jntWpn_1",
+              "triangles": 392,
+              "extent_m": [
+                0.040267944335938374,
+                0.2592773437499999,
+                0.050537109375000555
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 2.331070662866214e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_6",
+              "parent": "jntWpn_1",
+              "triangles": 592,
+              "extent_m": [
+                0.04589843750000001,
+                0.14257812500000017,
+                0.162582397460938
+              ],
+              "rigid": true,
+              "motion_kind": "general_rigid_motion",
+              "travel_m": 0.30449858668847946,
+              "rotation_rad": 0.4589410976950899,
+              "complete_same_frame_contact_windows_30hz": 23,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_7",
+              "parent": "jntWpn_1",
+              "triangles": 192,
+              "extent_m": [
+                0.0025033950805658936,
+                0.029296875,
+                0.030151367187500007
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 1.7825436894285256e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_8",
+              "parent": "jntWpn_1",
+              "triangles": 192,
+              "extent_m": [
+                0.0022315979003911398,
+                0.0302734375,
+                0.0301513671875
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 3.85799676564265e-16,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            }
+          ],
+          "missing_tracks": [
+            {
+              "bone": "jntWpn_3",
+              "reason": "Required authored tracks absent/unsupported: jntWpn_3"
+            }
+          ]
+        }
+      ],
+      "strict_magazine_profiles": [
+        "e5d29cfe1742c2fd8abd280aeb2f7d8649a73d0d313795ab3fb8879cde53a304"
+      ],
+      "strict_magazine_gaps": [],
+      "reference_gaps": [],
+      "separate_chamber_state_proven": false,
+      "native_manual_reload_enabled": false,
+      "headset_tested": false
+    },
+    {
+      "native_asset": "M95k",
+      "definitions": [
+        {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/UPG_sni_M95_Kobra.dbx",
+          "instance_guid": "8CFA632A-BF58-48B7-BD8B-75760BFC7843",
+          "sha256": "b977410ca5f1378221df8f4cf96c8a328a3392ecc55cd26411cfd4f6ca4a3af3",
+          "class": "wcSniper",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 2.299999952316284,
+            "Ammo.MagazineCapacity": 5
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/UPG_sni_M95.dbx",
+          "instance_guid": "BC0F37AC-A57F-4899-B393-3B669A18B3BD",
+          "sha256": "b0d0fefba512071700dac709af898f4d0554b3dce272dffe6774bf845fe95bc8",
+          "class": "wcSniper",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 2.299999952316284,
+            "Ammo.MagazineCapacity": 5
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_sni_M95/UPG_sni_M95_Scoped.dbx",
+          "instance_guid": "8FB1CB9C-B070-459B-9260-BF4B0F713AF4",
+          "sha256": "ba7fae3e042aa8c991074b4477e7c986d97af6888b82a55d86863a8d494fed95",
+          "class": "wcSniper",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 2.299999952316284,
+            "Ammo.MagazineCapacity": 5
+          }
+        }
+      ],
+      "mechanism_models": [
+        {
+          "mesh": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Mesh",
+          "mesh_sha256": "7da14b841199f114e88b647378d58346aea7cba1295b010024cfbac0a20d309d",
+          "clip_sha256": "59a136022cf9923c139643d1744bfdd0186f4a842eb212b528b2fab250504b06",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "parts": [
+            {
+              "bone": "jntWpn_1",
+              "parent": "jntWpn_0",
+              "triangles": 6444,
+              "extent_m": [
+                0.08959960937500178,
+                0.20458984375000008,
+                1.4708251953125007
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 1.6951874226909401e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_11",
+              "parent": "jntWpn_1",
+              "triangles": 5148,
+              "extent_m": [
+                0.049102783203125944,
+                0.07031250000000025,
+                0.3344726562500007
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 1.2320082938408411e-32,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_2",
+              "parent": "jntWpn_1",
+              "triangles": 88,
+              "extent_m": [
+                0.007759094238281708,
+                0.03710937500000006,
+                0.01678466796875016
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 1.2784153001188267e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_4",
+              "parent": "jntWpn_1",
+              "triangles": 392,
+              "extent_m": [
+                0.04051208496093809,
+                0.2592773437500003,
+                0.0505371093750006
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 2.3225834540769512e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_5",
+              "parent": "jntWpn_1",
+              "triangles": 392,
+              "extent_m": [
+                0.040267944335938374,
+                0.2592773437499999,
+                0.050537109375000555
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 2.331070662866214e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_6",
+              "parent": "jntWpn_1",
+              "triangles": 592,
+              "extent_m": [
+                0.04589843750000001,
+                0.14257812500000017,
+                0.162582397460938
+              ],
+              "rigid": true,
+              "motion_kind": "general_rigid_motion",
+              "travel_m": 0.30449858668847946,
+              "rotation_rad": 0.4589410976950899,
+              "complete_same_frame_contact_windows_30hz": 23,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_7",
+              "parent": "jntWpn_1",
+              "triangles": 192,
+              "extent_m": [
+                0.0025033950805658936,
+                0.029296875,
+                0.030151367187500007
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 1.7825436894285256e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_8",
+              "parent": "jntWpn_1",
+              "triangles": 192,
+              "extent_m": [
+                0.0022315979003911398,
+                0.0302734375,
+                0.0301513671875
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 3.85799676564265e-16,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            }
+          ],
+          "missing_tracks": [
+            {
+              "bone": "jntWpn_3",
+              "reason": "Required authored tracks absent/unsupported: jntWpn_3"
+            }
+          ]
+        }
+      ],
+      "strict_magazine_profiles": [
+        "1932450efbac0ccc41f2da6b87a2346eb5035e7df1d6f8ddd9d20d2b30e84fc2",
+        "784160b9f7ff6593e19ef31391b43c5220f9013d2f371d21cad2bd9ad2260417",
+        "4183f79c382a0ba3920b492118932ebbbf552b6d0aad021a253a6e24a632f6c1"
+      ],
+      "strict_magazine_gaps": [],
+      "reference_gaps": [],
+      "separate_chamber_state_proven": false,
+      "native_manual_reload_enabled": false,
+      "headset_tested": false
+    },
+    {
+      "native_asset": "MP412",
+      "definitions": [
+        {
+          "resource": "Objects/Weapons/Handheld/MEC_hg_MP412rex/MEC_hg_MP412rex.dbx",
+          "instance_guid": "811B1F2B-4413-41A1-B7F0-0AED8A1D527A",
+          "sha256": "6479ac2e4e3d68887ae0c202e3dee4d703a65fa5a83188e8f6d963660e854a2e",
+          "class": "wcSmg",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltSingleFire",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 6
+          }
+        }
+      ],
+      "mechanism_models": [],
+      "strict_magazine_profiles": [],
+      "strict_magazine_gaps": [
+        "Unsupported animation wrapper flags"
+      ],
+      "reference_gaps": [],
+      "separate_chamber_state_proven": false,
+      "native_manual_reload_enabled": false,
+      "headset_tested": false
+    },
+    {
+      "native_asset": "MP443",
+      "definitions": [
+        {
+          "resource": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach.dbx",
+          "instance_guid": "A1617BA1-B5EF-4A8C-94D2-79CD1AFD7B8A",
+          "sha256": "e2057d4456fc5619b556c5db67716d5fd2f0c91eb07e7a27276811e8e670f412",
+          "class": "wcSmg",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltSingleFire",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 17
+          }
+        }
+      ],
+      "mechanism_models": [
+        {
+          "mesh": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach_Mesh",
+          "mesh_sha256": "205b298bb56bf12eec807fc015c3ea95ba02ef20d51c5a58f449fb225242e1b5",
+          "clip_sha256": "db48a882545cb352a0178a10e6838bc37d461c717c21b97d928b0b10040b2232",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "parts": [
+            {
+              "bone": "jntWpn_1",
+              "parent": "jntWpn_0",
+              "triangles": 3588,
+              "extent_m": [
+                0.0361761562526227,
+                0.1435922384262086,
+                0.21307443082332633
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 9.770344528797414e-33,
+              "rotation_rad": 4.2146848510894035e-08,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_12",
+              "parent": "jntWpn_1",
+              "triangles": 248,
+              "extent_m": [
+                0.02656546514481308,
+                0.13254690170288091,
+                0.0678987726569181
+              ],
+              "rigid": true,
+              "motion_kind": "general_rigid_motion",
+              "travel_m": 0.5382047164577128,
+              "rotation_rad": 1.3090861200538106,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_13",
+              "parent": "jntWpn_12",
+              "triangles": 176,
+              "extent_m": [
+                0.014941207133233929,
+                0.013261914253234879,
+                0.02672594785690325
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 3.2185788160735004e-17,
+              "rotation_rad": 4.712160915387242e-08,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_2",
+              "parent": "jntWpn_1",
+              "triangles": 100,
+              "extent_m": [
+                0.0057541083078833976,
+                0.031650185585022014,
+                0.013973094522953068
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 3.413330639543739e-16,
+              "rotation_rad": 4.2146848510894035e-08,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_3",
+              "parent": "jntWpn_1",
+              "triangles": 1440,
+              "extent_m": [
+                0.022645606659353473,
+                0.04371798038482666,
+                0.20621465146541623
+              ],
+              "rigid": true,
+              "motion_kind": "slider_candidate",
+              "travel_m": 0.07198297979892279,
+              "rotation_rad": 4.2146848510894035e-08,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_4",
+              "parent": "jntWpn_1",
+              "triangles": 68,
+              "extent_m": [
+                0.0019843792542816544,
+                0.008049249649047865,
+                0.008049227297306095
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 3.9878347984225573e-16,
+              "rotation_rad": 4.2146848510894035e-08,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_5",
+              "parent": "jntWpn_1",
+              "triangles": 296,
+              "extent_m": [
+                0.030363474041223623,
+                0.015964865684509465,
+                0.021306917071342888
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 3.512711114899954e-16,
+              "rotation_rad": 4.2146848510894035e-08,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_6",
+              "parent": "jntWpn_1",
+              "triangles": 68,
+              "extent_m": [
+                0.007479505380615429,
+                0.02125871181488042,
+                0.016502916812896878
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 4.1334269869942207e-16,
+              "rotation_rad": 4.2146848510894035e-08,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            }
+          ],
+          "missing_tracks": []
+        }
+      ],
+      "strict_magazine_profiles": [],
+      "strict_magazine_gaps": [
+        "No stable authored magazine contact interval"
+      ],
+      "reference_gaps": [],
+      "separate_chamber_state_proven": false,
+      "native_manual_reload_enabled": false,
+      "headset_tested": false
+    },
+    {
+      "native_asset": "MP443_sp",
+      "definitions": [
+        {
+          "resource": "Objects/Weapons/Handheld/RU_hg_MP443Grach/SP_hg_MP443Grach.dbx",
+          "instance_guid": "58098858-821B-4406-A19C-AE62E5D38BDF",
+          "sha256": "e16f5713854ca38ab58d61bd3c568e2f87533c0e82032d71d61f27449d5484cc",
+          "class": "wcSmg",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltSingleFire",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 17
+          }
+        }
+      ],
+      "mechanism_models": [
+        {
+          "mesh": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach_Mesh",
+          "mesh_sha256": "205b298bb56bf12eec807fc015c3ea95ba02ef20d51c5a58f449fb225242e1b5",
+          "clip_sha256": "db48a882545cb352a0178a10e6838bc37d461c717c21b97d928b0b10040b2232",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "parts": [
+            {
+              "bone": "jntWpn_1",
+              "parent": "jntWpn_0",
+              "triangles": 3588,
+              "extent_m": [
+                0.0361761562526227,
+                0.1435922384262086,
+                0.21307443082332633
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 9.770344528797414e-33,
+              "rotation_rad": 4.2146848510894035e-08,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_12",
+              "parent": "jntWpn_1",
+              "triangles": 248,
+              "extent_m": [
+                0.02656546514481308,
+                0.13254690170288091,
+                0.0678987726569181
+              ],
+              "rigid": true,
+              "motion_kind": "general_rigid_motion",
+              "travel_m": 0.5382047164577128,
+              "rotation_rad": 1.3090861200538106,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_13",
+              "parent": "jntWpn_12",
+              "triangles": 176,
+              "extent_m": [
+                0.014941207133233929,
+                0.013261914253234879,
+                0.02672594785690325
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 3.2185788160735004e-17,
+              "rotation_rad": 4.712160915387242e-08,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_2",
+              "parent": "jntWpn_1",
+              "triangles": 100,
+              "extent_m": [
+                0.0057541083078833976,
+                0.031650185585022014,
+                0.013973094522953068
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 3.413330639543739e-16,
+              "rotation_rad": 4.2146848510894035e-08,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_3",
+              "parent": "jntWpn_1",
+              "triangles": 1440,
+              "extent_m": [
+                0.022645606659353473,
+                0.04371798038482666,
+                0.20621465146541623
+              ],
+              "rigid": true,
+              "motion_kind": "slider_candidate",
+              "travel_m": 0.07198297979892279,
+              "rotation_rad": 4.2146848510894035e-08,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_4",
+              "parent": "jntWpn_1",
+              "triangles": 68,
+              "extent_m": [
+                0.0019843792542816544,
+                0.008049249649047865,
+                0.008049227297306095
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 3.9878347984225573e-16,
+              "rotation_rad": 4.2146848510894035e-08,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_5",
+              "parent": "jntWpn_1",
+              "triangles": 296,
+              "extent_m": [
+                0.030363474041223623,
+                0.015964865684509465,
+                0.021306917071342888
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 3.512711114899954e-16,
+              "rotation_rad": 4.2146848510894035e-08,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_6",
+              "parent": "jntWpn_1",
+              "triangles": 68,
+              "extent_m": [
+                0.007479505380615429,
+                0.02125871181488042,
+                0.016502916812896878
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 4.1334269869942207e-16,
+              "rotation_rad": 4.2146848510894035e-08,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            }
+          ],
+          "missing_tracks": []
+        }
+      ],
+      "strict_magazine_profiles": [],
+      "strict_magazine_gaps": [
+        "No stable authored magazine contact interval"
+      ],
+      "reference_gaps": [],
+      "separate_chamber_state_proven": false,
+      "native_manual_reload_enabled": false,
+      "headset_tested": false
+    },
+    {
+      "native_asset": "NS2000",
+      "definitions": [
+        {
+          "resource": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Assault_Slug.dbx",
+          "instance_guid": "0A8AB56A-8527-4130-AF03-3471643C0676",
+          "sha256": "7b5f7bfb8f6af035019b244d9c51e6507ae334c2f5230e45229dbd29169cf90c",
+          "class": "wcShotgun",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtSingleBullet",
+            "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+            "FireLogic.BoltAction.BoltActionDelay": 0.5,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead.dbx",
+          "instance_guid": "F9633DFA-3FA8-44EE-811C-0FA88A6771A5",
+          "sha256": "4638204867c64ed0ed5179619c53677b75839223ed72f016067fe853f76ce15b",
+          "class": "wcShotgun",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtSingleBullet",
+            "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+            "FireLogic.BoltAction.BoltActionDelay": 0.5,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Assault.dbx",
+          "instance_guid": "61F036C8-6593-4358-A83B-EE421D5D4129",
+          "sha256": "5c312c2830b93daced609debc1bb1b139d1d898f1435ee2c178b0c22563aa853",
+          "class": "wcShotgun",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtSingleBullet",
+            "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+            "FireLogic.BoltAction.BoltActionDelay": 0.5,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Assault_FRAG.dbx",
+          "instance_guid": "C3A330F8-9446-47C0-BB51-C7231B0BCEEE",
+          "sha256": "dce0c07f5b24268b0fefc22d5a14d70eae13b8437324c499d44b036a7c9fd1c8",
+          "class": "wcShotgun",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtSingleBullet",
+            "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+            "FireLogic.BoltAction.BoltActionDelay": 0.5,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Slug.dbx",
+          "instance_guid": "7D149C91-41DD-42D9-98BF-F591203EB1B8",
+          "sha256": "c8ed51bcf4349807da7c0f0ef5bbd6237cc6765fb76925aebda34e42e883f4cf",
+          "class": "wcShotgun",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtSingleBullet",
+            "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+            "FireLogic.BoltAction.BoltActionDelay": 0.5,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_FRAG.dbx",
+          "instance_guid": "9C30014C-CD01-49BB-85A6-FCC609ED7A93",
+          "sha256": "c266a0ddfca04718d4ae949701844e756d9053c743d9f93d8f88e788aca82bce",
+          "class": "wcShotgun",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtSingleBullet",
+            "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+            "FireLogic.BoltAction.BoltActionDelay": 0.5,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 4
+          }
+        }
+      ],
+      "mechanism_models": [],
+      "strict_magazine_profiles": [],
+      "strict_magazine_gaps": [
+        "Unsupported animation wrapper flags"
+      ],
+      "reference_gaps": [],
+      "separate_chamber_state_proven": false,
+      "native_manual_reload_enabled": false,
+      "headset_tested": false
+    },
+    {
+      "native_asset": "QBU88",
+      "definitions": [
+        {
+          "resource": "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88.dbx",
+          "instance_guid": "8E18B38E-6734-494A-BA37-D4264B077D3F",
+          "sha256": "262bdb522e499fd12766e185940754e3c384fcecdcaff55b0ab953e4428ab600",
+          "class": "wcSniper",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltSingleFire",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 10
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88_Kobra.dbx",
+          "instance_guid": "AAF5E0DD-A0FF-4D1B-8645-837C1D726A1E",
+          "sha256": "efd5ae5cf68228d5e7fd85cc33af281475b5af30ba557000bf83759fe49187f5",
+          "class": "wcSniper",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltSingleFire",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 10
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88_Scoped.dbx",
+          "instance_guid": "74AAD94B-A1A0-42B5-80D5-E1E321894A47",
+          "sha256": "bf7a9c6eca83f0f1c27d54d605ffbe785146f0fc68ac6d92522b168234a6cab8",
+          "class": "wcSniper",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltSingleFire",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 10
+          }
+        }
+      ],
+      "mechanism_models": [
+        {
+          "mesh": "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88_Mesh",
+          "mesh_sha256": "b1198e53a1b975d0f03c8b3119891e65bd91a51f20009142a8f562901335957b",
+          "clip_sha256": "e126baa2d6ece901243fdfcc7bbf61e7ed7ac6a4073887336df52ccd5d3c694b",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "parts": [
+            {
+              "bone": "jntWpn_1",
+              "parent": "jntWpn_0",
+              "triangles": 7972,
+              "extent_m": [
+                0.07806396484375,
+                0.20849609374999972,
+                1.0328979492187502
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 2.5930412649048537e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_11",
+              "parent": "jntWpn_1",
+              "triangles": 3702,
+              "extent_m": [
+                0.06324768066405903,
+                0.0927734375000001,
+                0.33581542968750094
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 1.2538532669725563e-32,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_12",
+              "parent": "jntWpn_1",
+              "triangles": 272,
+              "extent_m": [
+                0.028106689453126055,
+                0.10253906250000014,
+                0.07928466796875035
+              ],
+              "rigid": true,
+              "motion_kind": "general_rigid_motion",
+              "travel_m": 0.29210612981773254,
+              "rotation_rad": 1.052406060254942,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_13",
+              "parent": "jntWpn_12",
+              "triangles": 254,
+              "extent_m": [
+                0.015411376953124932,
+                0.01855468750000008,
+                0.07171630859375018
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 4.2582657590167993e-16,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_2",
+              "parent": "jntWpn_1",
+              "triangles": 92,
+              "extent_m": [
+                0.007167816162109472,
+                0.04199218750000004,
+                0.019348144531250132
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 2.058065813968604e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_3",
+              "parent": "jntWpn_1",
+              "triangles": 84,
+              "extent_m": [
+                0.00729942321777346,
+                0.016601562500000052,
+                0.011230468750000135
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 8.34646186565242e-16,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_4",
+              "parent": "jntWpn_1",
+              "triangles": 214,
+              "extent_m": [
+                0.05327606201171891,
+                0.03320312500000025,
+                0.24999999999999997
+              ],
+              "rigid": true,
+              "motion_kind": "slider_candidate",
+              "travel_m": 0.14188137154633734,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_7",
+              "parent": "jntWpn_1",
+              "triangles": 960,
+              "extent_m": [
+                0.03335189819335792,
+                0.2763671875,
+                0.06915283203125033
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 3.98174432835242e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_8",
+              "parent": "jntWpn_1",
+              "triangles": 960,
+              "extent_m": [
+                0.03233337402343895,
+                0.2758789062500001,
+                0.0691528320312504
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 3.773491222862773e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            }
+          ],
+          "missing_tracks": []
+        }
+      ],
+      "strict_magazine_profiles": [],
+      "strict_magazine_gaps": [
+        "No stable authored magazine contact interval"
+      ],
+      "reference_gaps": [],
+      "separate_chamber_state_proven": false,
+      "native_manual_reload_enabled": false,
+      "headset_tested": false
+    },
+    {
+      "native_asset": "QBU88_sp",
+      "definitions": [
+        {
+          "resource": "Objects/Weapons/Handheld/BU_sni_QBY88/SP_sni_QBU88.dbx",
+          "instance_guid": "96FB1AAE-975B-49DF-80F6-6ECC8103EBF2",
+          "sha256": "adeb31f56ef751ae0b7c33fd86fd18e9a043ba8d49eb7dc3d3dd54019d0073a9",
+          "class": "wcSniper",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltSingleFire",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 10
+          }
+        }
+      ],
+      "mechanism_models": [
+        {
+          "mesh": "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88_Mesh",
+          "mesh_sha256": "b1198e53a1b975d0f03c8b3119891e65bd91a51f20009142a8f562901335957b",
+          "clip_sha256": "e126baa2d6ece901243fdfcc7bbf61e7ed7ac6a4073887336df52ccd5d3c694b",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "parts": [
+            {
+              "bone": "jntWpn_1",
+              "parent": "jntWpn_0",
+              "triangles": 7972,
+              "extent_m": [
+                0.07806396484375,
+                0.20849609374999972,
+                1.0328979492187502
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 2.5930412649048537e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_11",
+              "parent": "jntWpn_1",
+              "triangles": 3702,
+              "extent_m": [
+                0.06324768066405903,
+                0.0927734375000001,
+                0.33581542968750094
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 1.2538532669725563e-32,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_12",
+              "parent": "jntWpn_1",
+              "triangles": 272,
+              "extent_m": [
+                0.028106689453126055,
+                0.10253906250000014,
+                0.07928466796875035
+              ],
+              "rigid": true,
+              "motion_kind": "general_rigid_motion",
+              "travel_m": 0.29210612981773254,
+              "rotation_rad": 1.052406060254942,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_13",
+              "parent": "jntWpn_12",
+              "triangles": 254,
+              "extent_m": [
+                0.015411376953124932,
+                0.01855468750000008,
+                0.07171630859375018
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 4.2582657590167993e-16,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_2",
+              "parent": "jntWpn_1",
+              "triangles": 92,
+              "extent_m": [
+                0.007167816162109472,
+                0.04199218750000004,
+                0.019348144531250132
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 2.058065813968604e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_3",
+              "parent": "jntWpn_1",
+              "triangles": 84,
+              "extent_m": [
+                0.00729942321777346,
+                0.016601562500000052,
+                0.011230468750000135
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 8.34646186565242e-16,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_4",
+              "parent": "jntWpn_1",
+              "triangles": 214,
+              "extent_m": [
+                0.05327606201171891,
+                0.03320312500000025,
+                0.24999999999999997
+              ],
+              "rigid": true,
+              "motion_kind": "slider_candidate",
+              "travel_m": 0.14188137154633734,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_7",
+              "parent": "jntWpn_1",
+              "triangles": 960,
+              "extent_m": [
+                0.03335189819335792,
+                0.2763671875,
+                0.06915283203125033
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 3.98174432835242e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_8",
+              "parent": "jntWpn_1",
+              "triangles": 960,
+              "extent_m": [
+                0.03233337402343895,
+                0.2758789062500001,
+                0.0691528320312504
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 3.773491222862773e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            }
+          ],
+          "missing_tracks": []
+        }
+      ],
+      "strict_magazine_profiles": [],
+      "strict_magazine_gaps": [
+        "No stable authored magazine contact interval"
+      ],
+      "reference_gaps": [],
+      "separate_chamber_state_proven": false,
+      "native_manual_reload_enabled": false,
+      "headset_tested": false
+    },
+    {
+      "native_asset": "QBU88_sp_k",
+      "definitions": [
+        {
+          "resource": "Objects/Weapons/Handheld/BU_sni_QBY88/SP_sni_QBU88_Kobra.dbx",
+          "instance_guid": "6D9BBDEB-C6C6-4D82-95D1-195E3E84719A",
+          "sha256": "0c294fd9bc16e0ec213d1608e40a52be4aeb06d59b20777b0e228870e2736e24",
+          "class": "wcSniper",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltSingleFire",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 10
+          }
+        }
+      ],
+      "mechanism_models": [
+        {
+          "mesh": "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88_Mesh",
+          "mesh_sha256": "b1198e53a1b975d0f03c8b3119891e65bd91a51f20009142a8f562901335957b",
+          "clip_sha256": "e126baa2d6ece901243fdfcc7bbf61e7ed7ac6a4073887336df52ccd5d3c694b",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "parts": [
+            {
+              "bone": "jntWpn_1",
+              "parent": "jntWpn_0",
+              "triangles": 7972,
+              "extent_m": [
+                0.07806396484375,
+                0.20849609374999972,
+                1.0328979492187502
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 2.5930412649048537e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_11",
+              "parent": "jntWpn_1",
+              "triangles": 3702,
+              "extent_m": [
+                0.06324768066405903,
+                0.0927734375000001,
+                0.33581542968750094
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 1.2538532669725563e-32,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_12",
+              "parent": "jntWpn_1",
+              "triangles": 272,
+              "extent_m": [
+                0.028106689453126055,
+                0.10253906250000014,
+                0.07928466796875035
+              ],
+              "rigid": true,
+              "motion_kind": "general_rigid_motion",
+              "travel_m": 0.29210612981773254,
+              "rotation_rad": 1.052406060254942,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_13",
+              "parent": "jntWpn_12",
+              "triangles": 254,
+              "extent_m": [
+                0.015411376953124932,
+                0.01855468750000008,
+                0.07171630859375018
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 4.2582657590167993e-16,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_2",
+              "parent": "jntWpn_1",
+              "triangles": 92,
+              "extent_m": [
+                0.007167816162109472,
+                0.04199218750000004,
+                0.019348144531250132
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 2.058065813968604e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_3",
+              "parent": "jntWpn_1",
+              "triangles": 84,
+              "extent_m": [
+                0.00729942321777346,
+                0.016601562500000052,
+                0.011230468750000135
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 8.34646186565242e-16,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_4",
+              "parent": "jntWpn_1",
+              "triangles": 214,
+              "extent_m": [
+                0.05327606201171891,
+                0.03320312500000025,
+                0.24999999999999997
+              ],
+              "rigid": true,
+              "motion_kind": "slider_candidate",
+              "travel_m": 0.14188137154633734,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_7",
+              "parent": "jntWpn_1",
+              "triangles": 960,
+              "extent_m": [
+                0.03335189819335792,
+                0.2763671875,
+                0.06915283203125033
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 3.98174432835242e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_8",
+              "parent": "jntWpn_1",
+              "triangles": 960,
+              "extent_m": [
+                0.03233337402343895,
+                0.2758789062500001,
+                0.0691528320312504
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 3.773491222862773e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            }
+          ],
+          "missing_tracks": []
+        }
+      ],
+      "strict_magazine_profiles": [],
+      "strict_magazine_gaps": [
+        "No stable authored magazine contact interval"
+      ],
+      "reference_gaps": [],
+      "separate_chamber_state_proven": false,
+      "native_manual_reload_enabled": false,
+      "headset_tested": false
+    },
+    {
+      "native_asset": "S20K",
+      "definitions": [
+        {
+          "resource": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Assault_FRAG.dbx",
+          "instance_guid": "4B7A97A0-AD3B-4EB4-B761-88D72FE68654",
+          "sha256": "ddcbc54c5caa89654ac3709613b7011e4444952c187343a7384686e6396f4829",
+          "class": "wcShotgun",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltSingleFire",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 6
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12.dbx",
+          "instance_guid": "DB8383BA-6059-4192-B0A4-BF2ECB36F3A2",
+          "sha256": "f5191a7b1d3b363822a22069fc1a579ec258fa1dd079fe0e1191c62ea4dfe975",
+          "class": "wcShotgun",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltSingleFire",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 6
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_FRAG.dbx",
+          "instance_guid": "8770594F-DA9A-494E-BDCB-1279B4964ED2",
+          "sha256": "5eca8a51c6400190fa05991ad4a21e4e910a9e5223418b5229a654f598acc516",
+          "class": "wcShotgun",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltSingleFire",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 6
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Assault_Slug.dbx",
+          "instance_guid": "1BBC17E3-D8C2-4033-A348-D69910D0135E",
+          "sha256": "73b99cb95f1dec1c6725c946fa355f4ed6f4318ae97e8a1347a99036798bb25e",
+          "class": "wcShotgun",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltSingleFire",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 6
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Slug.dbx",
+          "instance_guid": "DBB3B8BA-A5C4-41B8-B877-BA832455AD3C",
+          "sha256": "139fadbefafb09b9d55957f5188b35e440c6e362bc39545bbe6d89197608414b",
+          "class": "wcShotgun",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltSingleFire",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 6
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Assault.dbx",
+          "instance_guid": "E0BF1BC3-97A6-4480-BFB6-7AABC3B298D5",
+          "sha256": "120d8793ba985e2012ab3a6a98ffc00cfc86a1efe75d071cda5824e573fe0aa8",
+          "class": "wcShotgun",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltSingleFire",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 6
+          }
+        }
+      ],
+      "mechanism_models": [
+        {
+          "mesh": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Mesh",
+          "mesh_sha256": "e0510d94f696b95c39a3adfec6ced939786bac6fafc787a503979d99852556a4",
+          "clip_sha256": "eb2f01001ab5be9e9c38212e77c8f372afd1142ce1b7e83d12f1085695d195a3",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "parts": [
+            {
+              "bone": "jntWpn_1",
+              "parent": "jntWpn_0",
+              "triangles": 9400,
+              "extent_m": [
+                0.06854248046874567,
+                0.26220703124999967,
+                1.1044921875000002
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 2.573656682874094e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_2",
+              "parent": "jntWpn_1",
+              "triangles": 152,
+              "extent_m": [
+                0.005950927734375024,
+                0.035156250000000056,
+                0.02801513671874995
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 1.8453769834465433e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_3",
+              "parent": "jntWpn_1",
+              "triangles": 224,
+              "extent_m": [
+                0.05334472656250032,
+                0.038085937500000173,
+                0.19940185546875006
+              ],
+              "rigid": true,
+              "motion_kind": "slider_candidate",
+              "travel_m": 0.10482210077294599,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_4",
+              "parent": "jntWpn_1",
+              "triangles": 68,
+              "extent_m": [
+                0.01253509521484375,
+                0.03417968750000004,
+                0.011779785156250184
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 2.428575738026514e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_6",
+              "parent": "jntWpn_1",
+              "triangles": 804,
+              "extent_m": [
+                0.0398864746093769,
+                0.2084960937500002,
+                0.15608215332031286
+              ],
+              "rigid": true,
+              "motion_kind": "general_rigid_motion",
+              "travel_m": 0.7900606047041921,
+              "rotation_rad": 3.131403005857674,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            }
+          ],
+          "missing_tracks": []
+        }
+      ],
+      "strict_magazine_profiles": [],
+      "strict_magazine_gaps": [
+        "Complete paired magazine role is not unique: "
+      ],
+      "reference_gaps": [],
+      "separate_chamber_state_proven": false,
+      "native_manual_reload_enabled": false,
+      "headset_tested": false
+    },
+    {
+      "native_asset": "SPAS12",
+      "definitions": [
+        {
+          "resource": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Assault.dbx",
+          "instance_guid": "B6875190-00BC-45D2-87DA-663D798E4B6F",
+          "sha256": "a4e3a566430ca38f9afad5939a4be2d07aa7db06a7d89afee06c45cb60da0cfa",
+          "class": "wcShotgun",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtSingleBullet",
+            "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+            "FireLogic.BoltAction.BoltActionDelay": 0.5,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_FRAG.dbx",
+          "instance_guid": "3CD79520-D9C4-4EC6-BA5F-370DA9FCF789",
+          "sha256": "9582fdca2069d67b88372b0d375c259f5ffa29a87d143ee1f6ae3a82ec093a60",
+          "class": "wcShotgun",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtSingleBullet",
+            "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+            "FireLogic.BoltAction.BoltActionDelay": 0.5,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Assault_Slug.dbx",
+          "instance_guid": "75AF4BEF-8D9E-4DC9-BA62-2A73B2473BC0",
+          "sha256": "d187bcc483224b2651944dfa5682f0e41f6d3530f2bc05bd575a50dee0c959ae",
+          "class": "wcShotgun",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtSingleBullet",
+            "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+            "FireLogic.BoltAction.BoltActionDelay": 0.5,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12.dbx",
+          "instance_guid": "F236287B-F276-485A-A3E6-1C7D4530F407",
+          "sha256": "0061306f908e68bfc2ee6cec5bc1cc00507469713d2a7a2eea8394ddc5f87fb7",
+          "class": "wcShotgun",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtSingleBullet",
+            "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+            "FireLogic.BoltAction.BoltActionDelay": 0.5,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Assault_FRAG.dbx",
+          "instance_guid": "275EF8E3-24E9-4BB3-B9B8-3402AD82EB40",
+          "sha256": "78faf84c33640d3e08135ff3150adc409c1175b9ba422258e1bfc6808405e6f9",
+          "class": "wcShotgun",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtSingleBullet",
+            "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+            "FireLogic.BoltAction.BoltActionDelay": 0.5,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Slug.dbx",
+          "instance_guid": "590CC282-3DEB-44D9-AA6F-3A14C723D7B3",
+          "sha256": "3dadfa119ecbe20609bd38190e00e9620b09c4ec76103d3caf892a2779b1b806",
+          "class": "wcShotgun",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtSingleBullet",
+            "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+            "FireLogic.BoltAction.BoltActionDelay": 0.5,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 4
+          }
+        }
+      ],
+      "mechanism_models": [],
+      "strict_magazine_profiles": [],
+      "strict_magazine_gaps": [
+        "Exact archive resource/type absent or ambiguous: Animations/Weapons/Handheld/UL_shg_SPAS12/1P/1P_Reload.res expected GrannyAnimation observed []"
+      ],
+      "reference_gaps": [],
+      "separate_chamber_state_proven": false,
+      "native_manual_reload_enabled": false,
+      "headset_tested": false
+    },
+    {
+      "native_asset": "SPAS12_sp",
+      "definitions": [
+        {
+          "resource": "Objects/Weapons/Handheld/UL_shg_SPAS12/SP_shg_SPAS12.dbx",
+          "instance_guid": "CD43BC40-BBD7-4BAB-B3D6-8AE934374944",
+          "sha256": "800b46aead4e2704cb771176e5d7ae58f72838beb89fe4cb3f9d7192089f2113",
+          "class": "wcShotgun",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtSingleBullet",
+            "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+            "FireLogic.BoltAction.BoltActionDelay": 0.5,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 4
+          }
+        }
+      ],
+      "mechanism_models": [],
+      "strict_magazine_profiles": [],
+      "strict_magazine_gaps": [
+        "Exact archive resource/type absent or ambiguous: Animations/Weapons/Handheld/UL_shg_SPAS12/1P/1P_Reload.res expected GrannyAnimation observed []"
+      ],
+      "reference_gaps": [],
+      "separate_chamber_state_proven": false,
+      "native_manual_reload_enabled": false,
+      "headset_tested": false
+    },
+    {
+      "native_asset": "SPAS12_sp_s",
+      "definitions": [
+        {
+          "resource": "Objects/Weapons/Handheld/UL_shg_SPAS12/SP_shg_SPAS12_Slug.dbx",
+          "instance_guid": "C8312BA4-443E-40B1-B0AE-3EA3C71773C0",
+          "sha256": "d63b873bc98ae672b9fd6176894329c691a7d3172585eb8090e7020a7c9739eb",
+          "class": "wcShotgun",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtSingleBullet",
+            "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+            "FireLogic.BoltAction.BoltActionDelay": 0.5,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 4
+          }
+        }
+      ],
+      "mechanism_models": [],
+      "strict_magazine_profiles": [],
+      "strict_magazine_gaps": [
+        "Exact archive resource/type absent or ambiguous: Animations/Weapons/Handheld/UL_shg_SPAS12/1P/1P_Reload.res expected GrannyAnimation observed []"
+      ],
+      "reference_gaps": [],
+      "separate_chamber_state_proven": false,
+      "native_manual_reload_enabled": false,
+      "headset_tested": false
+    },
+    {
+      "native_asset": "SV98",
+      "definitions": [
+        {
+          "resource": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98_Kobra.dbx",
+          "instance_guid": "3261B232-3A20-4AEE-BD73-090F92CB4CAC",
+          "sha256": "e0e734e4aa30889c95baff9d75e4d808828c72fd1067ccfa238c5696504fa9e7",
+          "class": "wcSniper",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 1.600000023841858,
+            "Ammo.MagazineCapacity": 10
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98_Scoped.dbx",
+          "instance_guid": "67D1700A-FFEC-4296-916F-4E7D8429EAA0",
+          "sha256": "45f85b1f1c6a508bf88dee3de04b6d56c85a19f976d3fddb681f8ecaddf18b8f",
+          "class": "wcSniper",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 1.600000023841858,
+            "Ammo.MagazineCapacity": 10
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98.dbx",
+          "instance_guid": "33F9E790-E758-4468-B3DB-00CD6C3B1A4D",
+          "sha256": "aaab64e3c8c783167e401e9c27a240135aa69bbc54a1cb40b1b2e1efb30d696e",
+          "class": "wcSniper",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 1.600000023841858,
+            "Ammo.MagazineCapacity": 10
+          }
+        }
+      ],
+      "mechanism_models": [
+        {
+          "mesh": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98_Mesh",
+          "mesh_sha256": "61f36f914b771fc1a5a5dd2ccdcc750538929aa8c113862cb4e0f88d18dfae04",
+          "clip_sha256": "7b172599f210da842a4f1917be845349ac1d7c4593dd5a51fcff420bd08388c0",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "parts": [
+            {
+              "bone": "jntWpn_1",
+              "parent": "jntWpn_0",
+              "triangles": 6558,
+              "extent_m": [
+                0.04284667968751478,
+                0.22167968749999814,
+                1.4941406250000004
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 2.2077666831027625e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_11",
+              "parent": "jntWpn_1",
+              "triangles": 4230,
+              "extent_m": [
+                0.0560607910156277,
+                0.09570312500000022,
+                0.3081054687500004
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 1.2064140418282399e-32,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_12",
+              "parent": "jntWpn_1",
+              "triangles": 592,
+              "extent_m": [
+                0.03610229492187514,
+                0.039062500000000056,
+                0.023071289062500097
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 4.289930822253049e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_13",
+              "parent": "jntWpn_12",
+              "triangles": 348,
+              "extent_m": [
+                0.1448745727539049,
+                0.22900390625000083,
+                0.02020263671875
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 3.7348201122991825e-16,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_2",
+              "parent": "jntWpn_1",
+              "triangles": 92,
+              "extent_m": [
+                0.007236480712890767,
+                0.04101562500000006,
+                0.011901855468750116
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 1.8451769305454207e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_3",
+              "parent": "jntWpn_1",
+              "triangles": 692,
+              "extent_m": [
+                0.06277465820312712,
+                0.04101562499999975,
+                0.126144409179687
+              ],
+              "rigid": true,
+              "motion_kind": "general_rigid_motion",
+              "travel_m": 0.07612474988385741,
+              "rotation_rad": 1.2446593779587092,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_6",
+              "parent": "jntWpn_1",
+              "triangles": 700,
+              "extent_m": [
+                0.026596069335939058,
+                0.07519531250000011,
+                0.10650634765625025
+              ],
+              "rigid": true,
+              "motion_kind": "general_rigid_motion",
+              "travel_m": 0.3363950749704284,
+              "rotation_rad": 1.0237362867021684,
+              "complete_same_frame_contact_windows_30hz": 14,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_8",
+              "parent": "jntWpn_1",
+              "triangles": 400,
+              "extent_m": [
+                0.018409729003906188,
+                0.008789062500000094,
+                0.06628417968750012
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 2.782543153348154e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpnwpnJnt_14",
+              "parent": "jntWpn_13",
+              "triangles": 348,
+              "extent_m": [
+                0.14487457275390775,
+                0.22900390624999917,
+                0.02020263671875
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 8.632273183213515e-17,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            }
+          ],
+          "missing_tracks": []
+        }
+      ],
+      "strict_magazine_profiles": [
+        "a5b2dbd67ad0b9541aeda7a177c3a5e84df0449b073b353074124b75c2df8536",
+        "8f9f4591f649ef49bf8c05c1bf555a9669a3ac1c468e01ee93b03c8f0b421d9c",
+        "5f15fe18bdcb2e625aa7bacb3af3f4d98b98b29dca481e356ab3326fa9e06a9e"
+      ],
+      "strict_magazine_gaps": [],
+      "reference_gaps": [],
+      "separate_chamber_state_proven": false,
+      "native_manual_reload_enabled": false,
+      "headset_tested": false
+    },
+    {
+      "native_asset": "SVU",
+      "definitions": [
+        {
+          "resource": "Objects/Weapons/Handheld/UL_sni_SVU/UL_sni_SVU.dbx",
+          "instance_guid": "763FFFD8-481F-479F-8414-B2F0B62F2574",
+          "sha256": "256f3e276b8dae06739453fd5fbbae0c820acb0629b02f01608aeb9f3bbe0cfc",
+          "class": "wcSniper",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltSingleFire",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 0.5,
+            "Ammo.MagazineCapacity": 10
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/UL_sni_SVU/UL_sni_SVU_Scoped.dbx",
+          "instance_guid": "D18E3FA0-9072-4358-B41E-C4EF04DD56E9",
+          "sha256": "34726cf9a312f3dc146686cfa1b7a3258bd8ab86c8bb1844d42742ff4306b25f",
+          "class": "wcSniper",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltSingleFire",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 0.5,
+            "Ammo.MagazineCapacity": 10
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/UL_sni_SVU/UL_sni_SVU_Kobra.dbx",
+          "instance_guid": "F6FB90EC-A5FB-4129-A43B-72F8EA67D33D",
+          "sha256": "64f76339e07c1013e790e10b73579d270390e76e96ab6041b2425f654a072b5e",
+          "class": "wcSniper",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltSingleFire",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 0.5,
+            "Ammo.MagazineCapacity": 10
+          }
+        }
+      ],
+      "mechanism_models": [
+        {
+          "mesh": "Objects/Weapons/Handheld/UL_sni_SVU/UL_sni_SVU_Mesh",
+          "mesh_sha256": "29e96bbd3be11f91945d0dda6c4a6bfc2d33cf8f020af1ab67617022eeaaa587",
+          "clip_sha256": "cecf23dc80b6d13b45b5c0596992aa4d62c27f76863a8205b2908e504d76a0d6",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "parts": [
+            {
+              "bone": "jntWpn_1",
+              "parent": "jntWpn_0",
+              "triangles": 6968,
+              "extent_m": [
+                0.06732177734375158,
+                0.17773437499999967,
+                0.9105224609375006
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 2.331847604588457e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_11",
+              "parent": "jntWpn_1",
+              "triangles": 5050,
+              "extent_m": [
+                0.07252502441406192,
+                0.13867187500000025,
+                0.3270874023437503
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 1.033791529137238e-32,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_2",
+              "parent": "jntWpn_1",
+              "triangles": 90,
+              "extent_m": [
+                0.02747344970703139,
+                0.028320312500000125,
+                0.009643554687500359
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 1.1539113383325242e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_3",
+              "parent": "jntWpn_1",
+              "triangles": 68,
+              "extent_m": [
+                0.005893707275390748,
+                0.03125000000000005,
+                0.011596679687500062
+              ],
+              "rigid": true,
+              "motion_kind": "general_rigid_motion",
+              "travel_m": 0.07209328438053875,
+              "rotation_rad": 1.1750917391963542,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_4",
+              "parent": "jntWpn_1",
+              "triangles": 192,
+              "extent_m": [
+                0.019699096679687625,
+                0.02734375000000018,
+                0.148956298828125
+              ],
+              "rigid": true,
+              "motion_kind": "slider_candidate",
+              "travel_m": 0.06688627791519777,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_6",
+              "parent": "jntWpn_1",
+              "triangles": 630,
+              "extent_m": [
+                0.023315429687501485,
+                0.1015625000000001,
+                0.09240722656250028
+              ],
+              "rigid": true,
+              "motion_kind": "general_rigid_motion",
+              "travel_m": 0.30743398378740744,
+              "rotation_rad": 1.0524750879976994,
+              "complete_same_frame_contact_windows_30hz": 6,
+              "static_closed_pose": true
+            }
+          ],
+          "missing_tracks": []
+        }
+      ],
+      "strict_magazine_profiles": [
+        "ed79e491001652394bca23c81676524a4af6c128f9633589c2fd4797ae340cd1",
+        "0f5da27d251051e2b11f963baf434786b34b0a9d535b6552cd54fe06bf6cdd02",
+        "8f6def9aa3d99879f74adf52180ba425ae80e464b75f91b8717343ea8846c018"
+      ],
+      "strict_magazine_gaps": [],
+      "reference_gaps": [],
+      "separate_chamber_state_proven": false,
+      "native_manual_reload_enabled": false,
+      "headset_tested": false
+    },
+    {
+      "native_asset": "T194",
+      "definitions": [
+        {
+          "resource": "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194_FRAG.dbx",
+          "instance_guid": "E3457EAC-015F-4982-974B-92543A2BF010",
+          "sha256": "d089ce4a92cf6396ac2a5afbbb9e82e0d794aa812c95b796cd7f09b1fc2b6ba5",
+          "class": "wcShotgun",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtSingleBullet",
+            "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+            "FireLogic.BoltAction.BoltActionDelay": 0.5,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194_Slug.dbx",
+          "instance_guid": "F00E6142-A931-4010-9136-E1FDF29B53C9",
+          "sha256": "32cb52f0ac88e3e87b7b02e74938de8323679ef4da0a9fcb14c12a34567183fd",
+          "class": "wcShotgun",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtSingleBullet",
+            "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+            "FireLogic.BoltAction.BoltActionDelay": 0.5,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 4
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194.dbx",
+          "instance_guid": "ED6C98B7-205E-4488-857D-2408528EF2AA",
+          "sha256": "6268186190de2603cbcf9c3b943e7b8230e4f5c22384a77b45c201053a1c16a2",
+          "class": "wcShotgun",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtSingleBullet",
+            "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+            "FireLogic.BoltAction.BoltActionDelay": 0.5,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 4
+          }
+        }
+      ],
+      "mechanism_models": [],
+      "strict_magazine_profiles": [],
+      "strict_magazine_gaps": [
+        "Unsupported animation wrapper flags"
+      ],
+      "reference_gaps": [],
+      "separate_chamber_state_proven": false,
+      "native_manual_reload_enabled": false,
+      "headset_tested": false
+    },
+    {
+      "native_asset": "T194_sp",
+      "definitions": [
+        {
+          "resource": "Objects/Weapons/Handheld/MEC_shg_TOZ194/SP_shg_TOZ194.dbx",
+          "instance_guid": "5CF68976-BF6C-4744-BDA5-71A954679FF9",
+          "sha256": "22f193d20ccc49b898ae09b92530de4db8e0f49f5a541e7971431e48186ca446",
+          "class": "wcShotgun",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtSingleBullet",
+            "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+            "FireLogic.BoltAction.BoltActionDelay": 0.5,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 4
+          }
+        }
+      ],
+      "mechanism_models": [],
+      "strict_magazine_profiles": [],
+      "strict_magazine_gaps": [
+        "Unsupported animation wrapper flags"
+      ],
+      "reference_gaps": [],
+      "separate_chamber_state_proven": false,
+      "native_manual_reload_enabled": false,
+      "headset_tested": false
+    },
+    {
+      "native_asset": "T194_sp_s",
+      "definitions": [
+        {
+          "resource": "Objects/Weapons/Handheld/MEC_shg_TOZ194/SP_shg_TOZ194_Slug.dbx",
+          "instance_guid": "361C0419-96A4-4E20-96CA-7B386C57EEE6",
+          "sha256": "0d23262d8a7450c67aa22a8bdf41bf97891945c34017bf364f2f0b7d794eadcf",
+          "class": "wcShotgun",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtSingleBullet",
+            "FireLogic.FireLogicType": "fltSingleFireWithBoltAction",
+            "FireLogic.BoltAction.BoltActionDelay": 0.5,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 4
+          }
+        }
+      ],
+      "mechanism_models": [],
+      "strict_magazine_profiles": [],
+      "strict_magazine_gaps": [
+        "Unsupported animation wrapper flags"
+      ],
+      "reference_gaps": [],
+      "separate_chamber_state_proven": false,
+      "native_manual_reload_enabled": false,
+      "headset_tested": false
+    },
+    {
+      "native_asset": "USAS12",
+      "definitions": [
+        {
+          "resource": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12.dbx",
+          "instance_guid": "89F16A61-39CA-4572-980C-0BC602A9B498",
+          "sha256": "1cdfbbf7748f99704503655a30dc0b2c6804892b612a41e8ff428a40dd6a64ee",
+          "class": "wcShotgun",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 6
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Slug.dbx",
+          "instance_guid": "FFF06977-349E-47D7-8D79-55CA2B59CE2B",
+          "sha256": "b87e1b6005cbca3da6c4781b44430234d7b01e4d89833fb481496929180cb968",
+          "class": "wcShotgun",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 6
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Assault_FRAG.dbx",
+          "instance_guid": "F41EAAA9-A29F-4C59-BA6E-D1763491D3DF",
+          "sha256": "a7ef1ca22f890e14b05dd72a12979bff8f421f5ebbcc1f7ad7a835c506a4bb98",
+          "class": "wcShotgun",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 6
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Assault.dbx",
+          "instance_guid": "0ED33DBF-5C18-4DC6-ADFC-38D2864E5405",
+          "sha256": "d08173d4b684960f0508244018dd3c499196971321a01469de086f4753f8026a",
+          "class": "wcShotgun",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 6
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_FRAG.dbx",
+          "instance_guid": "C25F723C-0D6F-44B4-BE51-59245538727E",
+          "sha256": "336a8989c46ee61b75c5b95aed09f47566da3ff65ce95c0e1c2e8c3a665322a9",
+          "class": "wcShotgun",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 6
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Assault_Slug.dbx",
+          "instance_guid": "C85C2005-302E-48E0-B7D6-42105037EBFB",
+          "sha256": "aec18843cbba6f0fbba03fe82a13dd974040b49e7d112c6cee91ae478de59418",
+          "class": "wcShotgun",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 6
+          }
+        }
+      ],
+      "mechanism_models": [
+        {
+          "mesh": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Mesh",
+          "mesh_sha256": "f387c57a135b85b3566047492fc301c41f6e981862c5e47d64d0c76e82b52f58",
+          "clip_sha256": "25cd4c269f513669550eb4030fdce8dfec629b204f6f819b6425c1a9197cf0b6",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "parts": [
+            {
+              "bone": "jntWpn_1",
+              "parent": "jntWpn_0",
+              "triangles": 9638,
+              "extent_m": [
+                0.05206298828125,
+                0.25244140624999944,
+                0.9547119140625003
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 1.5151278326760128e-15,
+              "rotation_rad": 2.1073424255447017e-08,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_12",
+              "parent": "jntWpn_1",
+              "triangles": 656,
+              "extent_m": [
+                0.028182983398438832,
+                0.23681640625000014,
+                0.10266113281250012
+              ],
+              "rigid": true,
+              "motion_kind": "general_rigid_motion",
+              "travel_m": 0.7505457044682157,
+              "rotation_rad": 1.8005438108188536,
+              "complete_same_frame_contact_windows_30hz": 17,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_13",
+              "parent": "jntWpn_12",
+              "triangles": 102,
+              "extent_m": [
+                0.0205841064453125,
+                0.0195312500000001,
+                0.06372070312500033
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 5.426346477770877e-16,
+              "rotation_rad": 2.9802322387695312e-08,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_2",
+              "parent": "jntWpn_1",
+              "triangles": 584,
+              "extent_m": [
+                0.0251922607421878,
+                0.012695312500000128,
+                0.027465820312500326
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 1.1235497212495116e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_3",
+              "parent": "jntWpn_1",
+              "triangles": 192,
+              "extent_m": [
+                0.03207397460937499,
+                0.014648437500000186,
+                0.009277343750000422
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 4.0126059925804464e-16,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_4",
+              "parent": "jntWpn_1",
+              "triangles": 100,
+              "extent_m": [
+                0.005645751953125309,
+                0.026367187500000045,
+                0.011352539062500116
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 1.1635115332149176e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_5",
+              "parent": "jntWpn_1",
+              "triangles": 236,
+              "extent_m": [
+                0.0034799575805672654,
+                0.03613281250000015,
+                0.10350799560546879
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 1.276258839281341e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_6",
+              "parent": "jntWpn_1",
+              "triangles": 144,
+              "extent_m": [
+                0.04923915863037125,
+                0.014648437500000132,
+                0.013977050781250342
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 2.7098305274300056e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_7",
+              "parent": "jntWpn_1",
+              "triangles": 192,
+              "extent_m": [
+                0.02935791015625007,
+                0.011718750000000167,
+                0.010742187499999598
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 2.815604385429968e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            }
+          ],
+          "missing_tracks": []
+        }
+      ],
+      "strict_magazine_profiles": [],
+      "strict_magazine_gaps": [
+        "Magazine geometric role candidate is not unique: "
+      ],
+      "reference_gaps": [],
+      "separate_chamber_state_proven": false,
+      "native_manual_reload_enabled": false,
+      "headset_tested": false
+    },
+    {
+      "native_asset": "USAS12_sp",
+      "definitions": [
+        {
+          "resource": "Objects/Weapons/Handheld/BU_shg_USAS-12/SP_shg_USAS12.dbx",
+          "instance_guid": "8DAACBDD-6A60-4631-B0B6-D99655D7CF55",
+          "sha256": "6ba93fd079c7725723f5712d58a28b1d173da108350da5d0bd3c6a281e446a29",
+          "class": "wcShotgun",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 6
+          }
+        }
+      ],
+      "mechanism_models": [
+        {
+          "mesh": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Mesh",
+          "mesh_sha256": "f387c57a135b85b3566047492fc301c41f6e981862c5e47d64d0c76e82b52f58",
+          "clip_sha256": "25cd4c269f513669550eb4030fdce8dfec629b204f6f819b6425c1a9197cf0b6",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "parts": [
+            {
+              "bone": "jntWpn_1",
+              "parent": "jntWpn_0",
+              "triangles": 9638,
+              "extent_m": [
+                0.05206298828125,
+                0.25244140624999944,
+                0.9547119140625003
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 1.5151278326760128e-15,
+              "rotation_rad": 2.1073424255447017e-08,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_12",
+              "parent": "jntWpn_1",
+              "triangles": 656,
+              "extent_m": [
+                0.028182983398438832,
+                0.23681640625000014,
+                0.10266113281250012
+              ],
+              "rigid": true,
+              "motion_kind": "general_rigid_motion",
+              "travel_m": 0.7505457044682157,
+              "rotation_rad": 1.8005438108188536,
+              "complete_same_frame_contact_windows_30hz": 17,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_13",
+              "parent": "jntWpn_12",
+              "triangles": 102,
+              "extent_m": [
+                0.0205841064453125,
+                0.0195312500000001,
+                0.06372070312500033
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 5.426346477770877e-16,
+              "rotation_rad": 2.9802322387695312e-08,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_2",
+              "parent": "jntWpn_1",
+              "triangles": 584,
+              "extent_m": [
+                0.0251922607421878,
+                0.012695312500000128,
+                0.027465820312500326
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 1.1235497212495116e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_3",
+              "parent": "jntWpn_1",
+              "triangles": 192,
+              "extent_m": [
+                0.03207397460937499,
+                0.014648437500000186,
+                0.009277343750000422
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 4.0126059925804464e-16,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_4",
+              "parent": "jntWpn_1",
+              "triangles": 100,
+              "extent_m": [
+                0.005645751953125309,
+                0.026367187500000045,
+                0.011352539062500116
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 1.1635115332149176e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_5",
+              "parent": "jntWpn_1",
+              "triangles": 236,
+              "extent_m": [
+                0.0034799575805672654,
+                0.03613281250000015,
+                0.10350799560546879
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 1.276258839281341e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_6",
+              "parent": "jntWpn_1",
+              "triangles": 144,
+              "extent_m": [
+                0.04923915863037125,
+                0.014648437500000132,
+                0.013977050781250342
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 2.7098305274300056e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_7",
+              "parent": "jntWpn_1",
+              "triangles": 192,
+              "extent_m": [
+                0.02935791015625007,
+                0.011718750000000167,
+                0.010742187499999598
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 2.815604385429968e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            }
+          ],
+          "missing_tracks": []
+        }
+      ],
+      "strict_magazine_profiles": [],
+      "strict_magazine_gaps": [
+        "Magazine geometric role candidate is not unique: "
+      ],
+      "reference_gaps": [],
+      "separate_chamber_state_proven": false,
+      "native_manual_reload_enabled": false,
+      "headset_tested": false
+    },
+    {
+      "native_asset": "USAS12_sp_s",
+      "definitions": [
+        {
+          "resource": "Objects/Weapons/Handheld/BU_shg_USAS-12/SP_shg_USAS12_Slug.dbx",
+          "instance_guid": "E7A66774-66C8-42FA-A2D0-1C6AFDDA5CCF",
+          "sha256": "7b347c663723d2090b07945677143ad80920513be4eb3da8cdb8bfc8d3b031f3",
+          "class": "wcShotgun",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 6
+          }
+        }
+      ],
+      "mechanism_models": [
+        {
+          "mesh": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Mesh",
+          "mesh_sha256": "f387c57a135b85b3566047492fc301c41f6e981862c5e47d64d0c76e82b52f58",
+          "clip_sha256": "25cd4c269f513669550eb4030fdce8dfec629b204f6f819b6425c1a9197cf0b6",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "parts": [
+            {
+              "bone": "jntWpn_1",
+              "parent": "jntWpn_0",
+              "triangles": 9638,
+              "extent_m": [
+                0.05206298828125,
+                0.25244140624999944,
+                0.9547119140625003
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 1.5151278326760128e-15,
+              "rotation_rad": 2.1073424255447017e-08,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_12",
+              "parent": "jntWpn_1",
+              "triangles": 656,
+              "extent_m": [
+                0.028182983398438832,
+                0.23681640625000014,
+                0.10266113281250012
+              ],
+              "rigid": true,
+              "motion_kind": "general_rigid_motion",
+              "travel_m": 0.7505457044682157,
+              "rotation_rad": 1.8005438108188536,
+              "complete_same_frame_contact_windows_30hz": 17,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_13",
+              "parent": "jntWpn_12",
+              "triangles": 102,
+              "extent_m": [
+                0.0205841064453125,
+                0.0195312500000001,
+                0.06372070312500033
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 5.426346477770877e-16,
+              "rotation_rad": 2.9802322387695312e-08,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_2",
+              "parent": "jntWpn_1",
+              "triangles": 584,
+              "extent_m": [
+                0.0251922607421878,
+                0.012695312500000128,
+                0.027465820312500326
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 1.1235497212495116e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_3",
+              "parent": "jntWpn_1",
+              "triangles": 192,
+              "extent_m": [
+                0.03207397460937499,
+                0.014648437500000186,
+                0.009277343750000422
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 4.0126059925804464e-16,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_4",
+              "parent": "jntWpn_1",
+              "triangles": 100,
+              "extent_m": [
+                0.005645751953125309,
+                0.026367187500000045,
+                0.011352539062500116
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 1.1635115332149176e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_5",
+              "parent": "jntWpn_1",
+              "triangles": 236,
+              "extent_m": [
+                0.0034799575805672654,
+                0.03613281250000015,
+                0.10350799560546879
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 1.276258839281341e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_6",
+              "parent": "jntWpn_1",
+              "triangles": 144,
+              "extent_m": [
+                0.04923915863037125,
+                0.014648437500000132,
+                0.013977050781250342
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 2.7098305274300056e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_7",
+              "parent": "jntWpn_1",
+              "triangles": 192,
+              "extent_m": [
+                0.02935791015625007,
+                0.011718750000000167,
+                0.010742187499999598
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 2.815604385429968e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            }
+          ],
+          "missing_tracks": []
+        }
+      ],
+      "strict_magazine_profiles": [],
+      "strict_magazine_gaps": [
+        "Magazine geometric role candidate is not unique: "
+      ],
+      "reference_gaps": [],
+      "separate_chamber_state_proven": false,
+      "native_manual_reload_enabled": false,
+      "headset_tested": false
+    },
+    {
+      "native_asset": "VSS",
+      "definitions": [
+        {
+          "resource": "Objects/Weapons/Handheld/BU_sni_VSSVintores/BU_sni_VSSVintores_Scoped.dbx",
+          "instance_guid": "F8A33345-A75A-48CD-94EB-F480242D12E8",
+          "sha256": "d2f60a131cac9415dc1df226cff07a2ccca4f7f454f7c8047ffb7d6691360a4d",
+          "class": "wcSniper",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 20
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_sni_VSSVintores/BU_sni_VSSVintores_Kobra.dbx",
+          "instance_guid": "F19040C7-ADC9-4BFC-8D3D-EF80961D6EA1",
+          "sha256": "71a8887897a904ca0227bed174fd473002a72aad5f460b51b4c5155221fd3395",
+          "class": "wcSniper",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 20
+          }
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_sni_VSSVintores/BU_sni_VSSVintores.dbx",
+          "instance_guid": "848238EC-10E5-4D40-80D2-96CB04DA2A64",
+          "sha256": "d723d3c23a8582720108bbcdae94716bcf341229120dec9f72f72e2787d2194d",
+          "class": "wcSniper",
+          "native_fields": {
+            "FireLogic.ReloadType": "rtMagazine",
+            "FireLogic.FireLogicType": "fltAutomaticFire",
+            "FireLogic.BoltAction.BoltActionDelay": 0.0,
+            "FireLogic.BoltAction.BoltActionTime": 0.0,
+            "Ammo.MagazineCapacity": 20
+          }
+        }
+      ],
+      "mechanism_models": [
+        {
+          "mesh": "Objects/Weapons/Handheld/BU_sni_VSSVintores/BU_sni_VSSVintores_Mesh",
+          "mesh_sha256": "ea5256f70b50ff38f39cb74564a0ea269296d439545e777b82f3bb6c93236f8d",
+          "clip_sha256": "9a34a5d750426ade66b4fda5c26087f731d8fc7b65cae18108755e674dd62653",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "parts": [
+            {
+              "bone": "jntWpn_1",
+              "parent": "jntWpn_0",
+              "triangles": 6914,
+              "extent_m": [
+                0.05229187011718622,
+                0.17187499999999975,
+                0.9562988281250008
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 1.5411472328710917e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_11",
+              "parent": "jntWpn_1",
+              "triangles": 6232,
+              "extent_m": [
+                0.07580566406249911,
+                0.13867187500000028,
+                0.3561401367187502
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 7.14627695893842e-33,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_2",
+              "parent": "jntWpn_1",
+              "triangles": 132,
+              "extent_m": [
+                0.007648468017578524,
+                0.04199218750000007,
+                0.015747070312500108
+              ],
+              "rigid": true,
+              "motion_kind": "static",
+              "travel_m": 1.500920451025714e-15,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_3",
+              "parent": "jntWpn_1",
+              "triangles": 116,
+              "extent_m": [
+                0.011596679687500156,
+                0.01562500000000004,
+                0.015014648437500146
+              ],
+              "rigid": true,
+              "motion_kind": "general_rigid_motion",
+              "travel_m": 0.07209316653971624,
+              "rotation_rad": 1.175091739196356,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_4",
+              "parent": "jntWpn_1",
+              "triangles": 238,
+              "extent_m": [
+                0.027181625366211222,
+                0.018554687500000083,
+                0.07614135742187506
+              ],
+              "rigid": true,
+              "motion_kind": "slider_candidate",
+              "travel_m": 0.06688617438424938,
+              "rotation_rad": 0.0,
+              "complete_same_frame_contact_windows_30hz": 0,
+              "static_closed_pose": true
+            },
+            {
+              "bone": "jntWpn_6",
+              "parent": "jntWpn_1",
+              "triangles": 914,
+              "extent_m": [
+                0.03283691406250007,
+                0.0947265625000001,
+                0.0770874023437503
+              ],
+              "rigid": true,
+              "motion_kind": "general_rigid_motion",
+              "travel_m": 0.30743389804259613,
+              "rotation_rad": 1.052475087997702,
+              "complete_same_frame_contact_windows_30hz": 6,
+              "static_closed_pose": true
+            }
+          ],
+          "missing_tracks": []
+        }
+      ],
+      "strict_magazine_profiles": [
+        "1c5259007354e2b61020d033965c579122f521d94d172b713a2a869f0311d15c",
+        "c0488bebede70e0cb362674daebe89f4afe5be0f6a40c8cc10cb78db9cbf88b9",
+        "61ac516f6571b9673f70f05631d25544c4270f7f4244af57bf7c015f64f8d87c"
+      ],
+      "strict_magazine_gaps": [],
+      "reference_gaps": [],
+      "separate_chamber_state_proven": false,
+      "native_manual_reload_enabled": false,
+      "headset_tested": false
+    }
+  ],
+  "limits": [
+    "Native class/reload enum is not a physical feed-family classification.",
+    "Magazine contacts are exact same-frame wrist plus15 fingers; strict60Hz and diagnostic30Hz results stay separate.",
+    "Linear insertion geometry remains an estimate unless independently corroborated by the source receipt.",
+    "Pistol chamber/slide-stop, tactical chamber retention, bolt/pump sequencing and native restoration remain unverified.",
+    "No derived transform, raw vertex, game archive, generated header or screenshot is included in this public report."
+  ]
+}

@@ -1,0 +1,13 @@
+# Completed diagnostic image retirement
+
+Repeated bounded probes deliberately keep their DLLs loaded until BC2 exits. Before this change, each ordinary 1920×1080 probe also retained eight completed CPU RGBA vectors after writing their files: **66,355,200 bytes (63.28125 MiB)** per probe. Saved evidence for old process40984 accounts for ten such modules and **632.8125 MiB** of pixel contents. Mapped module images and other evidence are separate costs.
+
+The cleanup now frees only completed, successfully saved CPU pixel buffers after a clean hook shutdown and explicit graphics quiescence. An atomic lifetime gate covers the complete DrawHook and DesktopPresentHook bodies, the only entry paths producing these captures. Sealing requires a successful hook disable and zero active readers. A delayed callback arriving after sealing delegates directly to the native original and cannot touch diagnostic images. A bounded unsuccessful drain leaves all buffers intact.
+
+Each image gains a writer-only serialization receipt after its output file closes successfully. The trace report is closed successfully before release. Pending/failed captures, unsaved images, failed report serialization and failed detach retain their data. `swap` with an empty vector releases capacity, unlike `clear()`. Completed pixel metadata, hashes and files retain their existing meaning; no GPU resource, live native data, callback trampoline or DLL is freed by this change.
+
+`diagnostic-image-retirement.json` records hooks-disabled/quiescent/report-saved status and actual released image count, logical bytes and capacity bytes. Existing `native-trace.json` image records and disk filenames remain unchanged. The release applies only to future attachments built with this version; it does not reach into old retained modules.
+
+Portable lifetime tests cover failed detach, a held concurrent callback, late callback exclusion, pending/failed/unsaved guards, successful disk roundtrip with actual capacity release, idempotence and mixed capture outcomes. Five groups pass on x86 and x64 with `/W4 /WX`; the x86 NativeProbe translation unit compiles, retaining only its existing alignment/conversion/shadowing warnings. Root integration/full builds and actual sidecar verification remain separate.
+
+This repairs diagnostic memory retention, **not the black checkpoint/menu problem**. Root reproduced the black screen by choosing FROM LAST CHECKPOINT in fresh process5348 before any mod attachment; the ordinary fresh native ESC menu and RESTART dropdown had rendered. That native baseline failure is being investigated independently. No game configuration or native menu change is part of this cleanup.

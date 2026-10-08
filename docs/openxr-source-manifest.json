@@ -1,0 +1,24 @@
+{
+  "version": "1.1.61",
+  "origin": "Khronos OpenXR SDK; existing licensed BF2142VR vendored copy",
+  "source_workspace": "<local-bf2142-workspace>\\public-source\\BF2142VR",
+  "license": "licenses/OpenXR-Apache-2.0.txt",
+  "files": [
+    {
+      "path": "third_party\\openxr-1.1.61\\include\\openxr\\openxr_platform_defines.h",
+      "sha256": "7DC30AD27F1082A71F84F5F5ADF10762558FC9FE57FDC7628D796D22BE3B0DBE"
+    },
+    {
+      "path": "third_party\\openxr-1.1.61\\include\\openxr\\openxr_platform.h",
+      "sha256": "150939F39AAF1159E9F59AB53B5D5863C08D5777EFA13820B5CBCD3562EB068D"
+    },
+    {
+      "path": "third_party\\openxr-1.1.61\\include\\openxr\\openxr.h",
+      "sha256": "75AE85F7B1308D33572908342D1F3BF6D26A57769CC2092AA3163DFEAF1DCBED"
+    },
+    {
+      "path": "runtime\\openxr\\win64\\openxr_loader.dll",
+      "sha256": "A69729A3348BC4DCB9BE126A49D594074E477BE7312F65180B0D082BF100FA5F"
+    }
+  ]
+}

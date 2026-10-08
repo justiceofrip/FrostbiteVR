@@ -1,0 +1,57 @@
+{
+  "schema": "fvr.bc2.runtime_weapon_scope_snapshot",
+  "schema_version": 1,
+  "sources": [
+    {
+      "path": "src/games/bc2/Bc2WeaponProfiles.cpp",
+      "sha256": "f56989e13d5fd7692369ea59972d30e33c4184f597d0ec77a066500ae4c87235"
+    },
+    {
+      "path": "src/games/bc2/Bc2WeaponVisibility.cpp",
+      "sha256": "acf1db5e25c1b652f45ddac013bbfe31393d2f3c674917e0df5881adefde57d5"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadFamily.h",
+      "sha256": "61ce4538b552b949bd7a497409e0a21881be2ed0ff4e19aef898aab52766d139"
+    }
+  ],
+  "scopes": [
+    {
+      "native_asset": "SPAS12_sp",
+      "mesh_resource": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Mesh.res",
+      "native_family": "SpasTube",
+      "source_profile_features": {
+        "aim_alignment": "native_verified",
+        "support_grip": "headset_accepted",
+        "translated_muzzle": "native_verified"
+      },
+      "visibility_scope": "Exact native selected mesh count/path and rig; XM8 additionally requires exact ACOG mesh",
+      "reload_scope": "Existing exact adapter family only; no sibling capacity, timing or abort signature inheritance",
+      "scope": "Existing source implementation/evidence declarations; not acceptance of this newly generated blueprint"
+    },
+    {
+      "native_asset": "XM8_sp_s",
+      "mesh_resource": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Mesh.res",
+      "native_family": "Xm8Magazine",
+      "source_profile_features": {
+        "aim_alignment": "native_verified",
+        "support_grip": "headset_accepted",
+        "translated_muzzle": "native_verified"
+      },
+      "visibility_scope": "Exact native selected mesh count/path and rig; XM8 additionally requires exact ACOG mesh",
+      "reload_scope": "Existing exact adapter family only; no sibling capacity, timing or abort signature inheritance",
+      "scope": "Existing source implementation/evidence declarations; not acceptance of this newly generated blueprint"
+    },
+    {
+      "native_asset": "40mmgl",
+      "mesh_resource": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Mesh.res",
+      "native_family": null,
+      "source_profile_features": {
+        "aim_alignment": "native_verified",
+        "support_grip": "native_verified",
+        "translated_muzzle": "unverified"
+      },
+      "scope": "Exact XM8-scoped launcher mode relation only; no grenade manual reload or muzzle-origin admission"
+    }
+  ]
+}

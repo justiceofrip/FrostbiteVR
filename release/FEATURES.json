@@ -1,0 +1,163 @@
+{
+  "schema": 1,
+  "scope": "single-player-preview",
+  "supported_game": {
+    "executable": "BFBC2Game.exe",
+    "architecture": "x86",
+    "tested_sha256": "3911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258",
+    "renderer": "Direct3D 11",
+    "campaign_completion_verified": false
+  },
+  "default_launch_switches": [
+    "SightFlip",
+    "PhysicalReload"
+  ],
+  "accepted_features": [
+    {
+      "id": "native_stereo",
+      "evidence": "user headset acceptance",
+      "limits": "No promise of universal GPU, streaming or campaign-transition performance."
+    },
+    {
+      "id": "motion_aim_and_roomscale",
+      "evidence": "user headset acceptance",
+      "limits": "Supported local campaign soldier and observed weapon profiles."
+    },
+    {
+      "id": "recenter",
+      "evidence": "user headset acceptance",
+      "controls": "Hold both thumbstick clicks for one second; release before repeating."
+    },
+    {
+      "id": "pause_menu_laser",
+      "evidence": "user headset acceptance",
+      "limits": "Pause menu; not a VR-first title/front-end environment."
+    },
+    {
+      "id": "spas_shell_reload",
+      "evidence": "user accepted bottom-entry magnetic guide and shell loading",
+      "limits": "SPAS profile only; physical pump interaction is not implemented."
+    },
+    {
+      "id": "xm8_support_grip_and_launcher_sight",
+      "evidence": "user headset acceptance",
+      "limits": "Minor hand/weapon orientation and sight polish remain."
+    },
+    {
+      "id": "xm8_partial_magazine_handling",
+      "evidence": "User headset feedback accepted improved magazine grasp, magnetic insertion and manual magazine handling; later tests reported separate empty-magazine and holster regressions.",
+      "limits": "Acceptance applies to the observed interactions, not all native states, weapon variants or this development package. Two-handed automatic reload and delayed native ammo completion remain open."
+    }
+  ],
+  "experimental_features": [
+    {
+      "id": "xm8_magazine_reload",
+      "default": false,
+      "switch": "ExperimentalMagazineReload",
+      "status": "The shared magazine consumer covers exact scoped-XM8 and measured AEK routes. User headset feedback accepted their magnetic insertion and improved magazine grasp. Empty control, weapon transitions and concurrent hand ownership remain development work.",
+      "limits": "Shared empty-reload guard has separate SPAS/XM8 monitor evidence. AEK cause and final headset behavior remain unverified. Additional AR/SMG/LMG profiles remain disabled offline candidates."
+    },
+    {
+      "id": "body_inventory_holster",
+      "default": false,
+      "switch": "ExperimentalBodyInventory",
+      "status": "Empty hands, shoulder stow/draw and vehicle exit-to-empty have positive user feedback. Latest run accepted ground-pickup recovery; residual shoulder feel remains a check.",
+      "admitted_profiles": [
+        "SPAS12_sp",
+        "XM8_sp_s with current XM8 and ACOG meshes"
+      ],
+      "limits": "Native selected-weapon hiding remains limited to exact admitted SPAS/scoped-XM8 configurations. Persistent spare display and recovery repairs await a focused headset test. New whole-weapon display data does not grant grip, reload or native hide support."
+    },
+    {
+      "id": "boat_head_aim",
+      "default": false,
+      "switch": "ExperimentalBoatHeadAim",
+      "status": "User accepted PBLB head aiming, front-gun trigger firing and later the enter/exit binding. The switches remain explicit in the development launcher.",
+      "limits": "Vehicle reticle source/presentation is under development. Other vehicle roles, mounted-camera limits and full campaign coverage remain unverified."
+    },
+    {
+      "id": "body_equipment_display",
+      "default": false,
+      "switch": "ExperimentalBodyInventory",
+      "status": "User confirmed chest ammunition appeared in an earlier test. The development source adds measured display rows for nine additional base guns through the existing carried-slot renderer.",
+      "limits": "This is display coverage only. New rows, both-shoulder presentation and the exact package have no headset acceptance. Installed geometry is generated privately and excluded from source/runtime archives."
+    }
+  ],
+  "not_implemented": [
+    "manual pump and bolt cycling",
+    "belt-fed manual reload",
+    "all-weapon manual reload",
+    "physical zoomed sniper and launcher scopes",
+    "full body IK",
+    "multiplayer and remote IK",
+    "VR-first main menu",
+    "VR settings menu",
+    "graphical installer",
+    "BC2 native physical ground pickup",
+    "BC2 native temporary-held weapon firing",
+    "persistent dropped or stored magazine objects",
+    "vehicle-only aiming reticle"
+  ],
+  "known_issues": [
+    "Latest headset feedback: SPAS and AEK automatically reload empty weapons. Shared shell omission is repaired and SPAS/XM8 monitor checks passed; AEK cause and headset regression remain pending.",
+    "Magazine seating can wait about 2.8 seconds for native ammo completion. Latest support-hand release code is retained; continued interaction regression is required.",
+    "Pickup recovery was user-accepted in the latest run. Residual shoulder reliability and repeatable transitions remain headset checks.",
+    "Earlier incomplete spare-weapon display prompted persistent carried-slot fixes. Expanded 22-part body cache has offline checks only in this combined build.",
+    "Campaign death/restart blackscreen was reported. Existing monitor recovery checks do not establish a fix for the exact headset failure.",
+    "Floating optic red dot, some LOD/camera artifacts, residual SPAS cocking animation and launcher-sight polish remain.",
+    "Manual pumping, belt-fed reloads, physical zoomed scopes and full-body IK are not playable features of this package.",
+    "Ground X interaction uses native inventory exchange. Temporary extra held weapons and physical ground-grab ownership are not complete.",
+    "New AR/SMG/LMG offline descriptor and contact coverage does not imply native or headset acceptance. Stock bolt timing and actual weapon/mesh ownership retain separate evidence requirements.",
+    "Steam Link reconnect and fast-motion presentation still need testing with the exact packaged payload; no runtime/device-wide certification is claimed."
+  ],
+  "exact_package_headset_accepted": false,
+  "intended_inventory_controls": {
+    "long_guns": "back/shoulders",
+    "sidearms": "hip",
+    "gadgets": "chest",
+    "selection": "Physical slots are the intended normal controls. Current explicit BodyInventory/magazine switches, legacy pouch and thumbstick selection are development gates/fallbacks while native item coverage is completed."
+  },
+  "status_as_of_utc": "2026-10-03",
+  "development_build_evidence": {
+    "integration": "combined-development-190440",
+    "status": "offline_composition_verified_headset_pending",
+    "full_test_counts": {
+      "x86_ctest": 166,
+      "x64_ctest": 166,
+      "python": 695
+    },
+    "new_combined_headset_accepted": false,
+    "published": false,
+    "prepared_headset_candidate": "Separate 190440 repair, 163 CTest suites per architecture and 659 Python tests; SPAS/XM8 monitor evidence, headset pending.",
+    "public_build_attestation": false,
+    "private_build_inputs": "Authored grip/magazine metadata inputs are recorded locally and excluded from source export.",
+    "offline_extensions": {
+      "measured_magazine_configurations": 21,
+      "measured_magazine_names": 7,
+      "whole_weapon_display_rows": 19,
+      "cache_parts": 22,
+      "gp30_native_enabled": false,
+      "vehicle_reticle_enabled": false,
+      "local_asset_preparation_verified": true,
+      "manual_empty_registry_fixture_configurations": 21
+    },
+    "monitor_evidence": {
+      "applies_to": "Separate pinned headset-190440 repair payloads, not this combined binary",
+      "spas": "8 to 0, three continuous seconds empty; final diagnostic build repeated successfully",
+      "xm8": "22 to 0, three continuous seconds empty before final diagnostic-only extension",
+      "aek": "Not verified; intermittent cause unproven"
+    }
+  },
+  "latest_headset_evidence": {
+    "session": "20261003-190440-058",
+    "combined_test_passed": false,
+    "user_accepted": [
+      "ground pickup no longer breaks equipment"
+    ],
+    "reported": [
+      "SPAS and AEK automatic reload when empty",
+      "Unspecified subjective instability"
+    ],
+    "next_focused_test_accepted": false
+  }
+}

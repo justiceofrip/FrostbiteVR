@@ -1,0 +1,364 @@
+{
+  "schema": "fvr.weapon_family_work_plan",
+  "schema_version": 1,
+  "status": "offline_work_plan_not_runtime_profiles",
+  "items": [
+    {
+      "label": "AEK-971",
+      "exact_mesh_names": [
+        "RU_rgl_AEK971_Mesh.res"
+      ],
+      "family_proposal": "detachable_magazine",
+      "action_variant": "self_loading"
+    },
+    {
+      "label": "XM8",
+      "exact_mesh_names": [
+        "US_rgl_XM8_Mesh.res"
+      ],
+      "family_proposal": "detachable_magazine",
+      "action_variant": "self_loading"
+    },
+    {
+      "label": "F2000",
+      "exact_mesh_names": [
+        "BU_rif_F2000_Mesh.res"
+      ],
+      "family_proposal": "detachable_magazine",
+      "action_variant": "self_loading"
+    },
+    {
+      "label": "AUG",
+      "exact_mesh_names": [
+        "MEC_rgl_SteyrAUG_Mesh.res"
+      ],
+      "family_proposal": "detachable_magazine",
+      "action_variant": "self_loading"
+    },
+    {
+      "label": "AN-94",
+      "exact_mesh_names": [
+        "BU_rif_AN94Abakan_Mesh.res"
+      ],
+      "family_proposal": "detachable_magazine",
+      "action_variant": "self_loading"
+    },
+    {
+      "label": "M416",
+      "exact_mesh_names": [
+        "UL_rif_HK416_Mesh.res"
+      ],
+      "family_proposal": "detachable_magazine",
+      "action_variant": "self_loading"
+    },
+    {
+      "label": "M16A2",
+      "exact_mesh_names": [
+        "BU_rif_M16A2_Mesh.res"
+      ],
+      "family_proposal": "detachable_magazine",
+      "action_variant": "self_loading"
+    },
+    {
+      "label": "9A-91",
+      "exact_mesh_names": [
+        "MEC_rif_9A91_Mesh.res"
+      ],
+      "family_proposal": "detachable_magazine",
+      "action_variant": "self_loading"
+    },
+    {
+      "label": "SCAR-L",
+      "exact_mesh_names": [
+        "UL_rif_FNSCARL_Mesh.res"
+      ],
+      "family_proposal": "detachable_magazine",
+      "action_variant": "self_loading"
+    },
+    {
+      "label": "XM8 Compact",
+      "exact_mesh_names": [
+        "US_rif_XM8c_Mesh.res"
+      ],
+      "family_proposal": "detachable_magazine",
+      "action_variant": "self_loading"
+    },
+    {
+      "label": "AKS-74U",
+      "exact_mesh_names": [
+        "RU_rif_AKS74u_Mesh.res"
+      ],
+      "family_proposal": "detachable_magazine",
+      "action_variant": "self_loading"
+    },
+    {
+      "label": "UZI",
+      "exact_mesh_names": [
+        "BU_smg_IMIUZI_Mesh.res"
+      ],
+      "family_proposal": "detachable_magazine",
+      "action_variant": "self_loading"
+    },
+    {
+      "label": "PP-2000",
+      "exact_mesh_names": [
+        "BU_smg_PP2000_Mesh.res"
+      ],
+      "family_proposal": "detachable_magazine",
+      "action_variant": "self_loading"
+    },
+    {
+      "label": "UMP",
+      "exact_mesh_names": [
+        "BU_smg_UMP_Mesh.res"
+      ],
+      "family_proposal": "detachable_magazine",
+      "action_variant": "self_loading"
+    },
+    {
+      "label": "XM8 LMG",
+      "exact_mesh_names": [
+        "US_rif_XM8lmg_Mesh.res"
+      ],
+      "family_proposal": "detachable_magazine",
+      "action_variant": "self_loading"
+    },
+    {
+      "label": "MG36",
+      "exact_mesh_names": [
+        "BU_lmg_MG36_Mesh.res"
+      ],
+      "family_proposal": "detachable_magazine",
+      "action_variant": "self_loading"
+    },
+    {
+      "label": "Type 88 sniper",
+      "exact_mesh_names": [
+        "BU_sni_QBY88_Mesh.res"
+      ],
+      "family_proposal": "detachable_magazine",
+      "action_variant": "self_loading"
+    },
+    {
+      "label": "SVU",
+      "exact_mesh_names": [
+        "UL_sni_SVU_Mesh.res"
+      ],
+      "family_proposal": "detachable_magazine",
+      "action_variant": "self_loading"
+    },
+    {
+      "label": "VSS",
+      "exact_mesh_names": [
+        "BU_sni_VSSVintores_Mesh.res"
+      ],
+      "family_proposal": "detachable_magazine",
+      "action_variant": "self_loading"
+    },
+    {
+      "label": "M9",
+      "exact_mesh_names": [
+        "US_hg_M9Beretta_Mesh.res"
+      ],
+      "family_proposal": "detachable_magazine",
+      "action_variant": "self_loading"
+    },
+    {
+      "label": "M1911",
+      "exact_mesh_names": [
+        "US_M1911_Mesh.res"
+      ],
+      "family_proposal": "detachable_magazine",
+      "action_variant": "self_loading"
+    },
+    {
+      "label": "MP443",
+      "exact_mesh_names": [
+        "RU_hg_MP443Grach_Mesh.res"
+      ],
+      "family_proposal": "detachable_magazine",
+      "action_variant": "self_loading"
+    },
+    {
+      "label": "Saiga",
+      "exact_mesh_names": [
+        "RU_shg_Saiga12_Mesh.res"
+      ],
+      "family_proposal": "detachable_magazine",
+      "action_variant": "self_loading"
+    },
+    {
+      "label": "USAS",
+      "exact_mesh_names": [
+        "BU_shg_USAS-12_Mesh.res"
+      ],
+      "family_proposal": "detachable_magazine",
+      "action_variant": "self_loading"
+    },
+    {
+      "label": "M14 / Mk14 EBR",
+      "exact_mesh_names": [
+        "bu_rif_mk14ebr_mesh.res"
+      ],
+      "family_proposal": "detachable_magazine",
+      "action_variant": "self_loading",
+      "underbarrel_note": "Six installed Mk14 async variants observed; no launcher variant among them. Native eligibility not asserted."
+    },
+    {
+      "label": "PKM",
+      "exact_mesh_names": [
+        "RU_lmg_PKM_Mesh.res"
+      ],
+      "family_proposal": "belt_feed",
+      "action_variant": "self_loading"
+    },
+    {
+      "label": "M249",
+      "exact_mesh_names": [
+        "UL_lmg_FNMinimi_Mesh.res"
+      ],
+      "family_proposal": "belt_feed",
+      "action_variant": "self_loading"
+    },
+    {
+      "label": "Type 88 LMG",
+      "exact_mesh_names": [
+        "MEC_lmg_QJY88_Mesh.res"
+      ],
+      "family_proposal": "belt_feed",
+      "action_variant": "self_loading"
+    },
+    {
+      "label": "M60",
+      "exact_mesh_names": [
+        "BU_lmg_M60_Mesh.res"
+      ],
+      "family_proposal": "belt_feed",
+      "action_variant": "self_loading"
+    },
+    {
+      "label": "MG3 (distinct from roster G3)",
+      "exact_mesh_names": [
+        "BU_lmg_MG3_Mesh.res"
+      ],
+      "family_proposal": "belt_feed",
+      "action_variant": "self_loading"
+    },
+    {
+      "label": "M24",
+      "exact_mesh_names": [
+        "US_sni_M24_Mesh.res"
+      ],
+      "family_proposal": "bolt_magazine",
+      "action_variant": "manual_bolt"
+    },
+    {
+      "label": "SV98",
+      "exact_mesh_names": [
+        "RU_sni_SV98_Mesh.res"
+      ],
+      "family_proposal": "bolt_magazine",
+      "action_variant": "manual_bolt"
+    },
+    {
+      "label": "GOL",
+      "exact_mesh_names": [
+        "MEC_sni_GOL_Mesh.res"
+      ],
+      "family_proposal": "bolt_magazine",
+      "action_variant": "manual_bolt"
+    },
+    {
+      "label": "M95",
+      "exact_mesh_names": [
+        "BU_sni_M95_Mesh.res"
+      ],
+      "family_proposal": "bolt_magazine",
+      "action_variant": "manual_bolt"
+    },
+    {
+      "label": "870",
+      "exact_mesh_names": [
+        "US_shg_Remington870MCS_Mesh.res"
+      ],
+      "family_proposal": "tube_pump",
+      "action_variant": "manual_pump"
+    },
+    {
+      "label": "SPAS",
+      "exact_mesh_names": [
+        "UL_shg_SPAS-12_Mesh.res"
+      ],
+      "family_proposal": "tube_pump",
+      "action_variant": "manual_pump"
+    },
+    {
+      "label": "NS2000 / Neostead",
+      "exact_mesh_names": [
+        "BU_shg_Neostead_Mesh.res"
+      ],
+      "family_proposal": "tube_pump",
+      "action_variant": "manual_pump"
+    },
+    {
+      "label": "MP412",
+      "exact_mesh_names": [
+        "MEC_hg_MP412rex_Mesh.res"
+      ],
+      "family_proposal": "revolver_cylinder",
+      "action_variant": "revolver"
+    },
+    {
+      "label": "Tracer dart",
+      "exact_mesh_names": [
+        "TracerDartGun_Mesh.res"
+      ],
+      "family_proposal": "single_round_launcher",
+      "action_variant": "unverified_dart_action"
+    },
+    {
+      "label": "G3",
+      "exact_mesh_names": [],
+      "family_proposal": "detachable_magazine",
+      "action_variant": "self_loading",
+      "note": "Roster intent retained without inventing a mesh spelling. Exact asset resolution is still required.",
+      "underbarrel_note": null
+    },
+    {
+      "label": "Thompson",
+      "exact_mesh_names": [],
+      "family_proposal": "detachable_magazine",
+      "action_variant": "self_loading",
+      "note": "Roster intent retained without inventing a mesh spelling. Exact asset resolution is still required.",
+      "underbarrel_note": null
+    },
+    {
+      "label": "Garand",
+      "exact_mesh_names": [],
+      "family_proposal": "en_bloc_clip",
+      "action_variant": "self_loading",
+      "note": "Roster intent retained without inventing a mesh spelling. Exact asset resolution is still required.",
+      "underbarrel_note": "Garand excluded by explicit user correction."
+    },
+    {
+      "label": "G43 / K98 (roster ambiguous)",
+      "exact_mesh_names": [],
+      "family_proposal": "unassigned",
+      "action_variant": "self_loading",
+      "note": "Roster intent retained without inventing a mesh spelling. Exact asset resolution is still required.",
+      "underbarrel_note": null
+    },
+    {
+      "label": "M9-3",
+      "exact_mesh_names": [],
+      "family_proposal": "detachable_magazine",
+      "action_variant": "self_loading",
+      "note": "Installed us_hg_m9-3 archive references the M9 mesh; distinct native variant identity remains required, so no duplicate mesh profile is fabricated."
+    }
+  ],
+  "notes": [
+    "Explicit work routing proposals, including mechanism exceptions; all native binding and admission remain separate.",
+    "M9-3 needs distinct native asset/mode identity even where mesh is shared; not silently equated with M9.",
+    "G3 user entries in AR and LMG categories are not treated as two verified weapons; MG3 discovered independently."
+  ]
+}

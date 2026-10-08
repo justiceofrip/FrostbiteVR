@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BC2 authored manual reload catalog metadata",
+  "type": "object",
+  "required": ["schema", "schema_version", "derived_metadata_only", "exported_assets", "configurations", "meshes", "calibration_jobs", "native_family_groups", "unbound_meshes", "unresolved_configurations", "summary", "limits"],
+  "properties": {
+    "schema": {"const": "fvr.bc2.manual_reload_catalog"},
+    "schema_version": {"const": 1},
+    "derived_metadata_only": {"const": true},
+    "exported_assets": {"const": false},
+    "configurations": {"type": "array", "items": {"type": "object", "required": ["id", "resource", "resource_sha256", "instance_guid", "fields", "meshes", "authored_states", "native_family_group", "runtime_enabled"], "properties": {"runtime_enabled": {"const": false}}}},
+    "meshes": {"type": "array", "items": {"type": "object", "required": ["resource", "geometry_variants", "animation_candidates", "configurations", "runtime_enabled"], "properties": {"runtime_enabled": {"const": false}}}},
+    "calibration_jobs": {"type": "array", "items": {"type": "object", "required": ["id", "mesh_resource", "mesh_sha256", "configurations", "native_family_groups", "execute_automatically", "runtime_enabled"], "properties": {"execute_automatically": {"const": false}, "runtime_enabled": {"const": false}}}},
+    "native_family_groups": {"type": "array", "items": {"type": "object", "required": ["id", "dispatch_fields", "missing_dispatch_fields", "configurations", "runtime_admitted"], "properties": {"runtime_admitted": {"const": false}}}},
+    "unbound_meshes": {"type": "array", "items": {"type": "string"}},
+    "unresolved_configurations": {"type": "array", "items": {"type": "string"}},
+    "unmatched_animation_observations": {"type": "array"},
+    "summary": {"type": "object", "required": ["configurations", "meshes", "calibration_jobs", "native_family_groups", "runtime_enabled"], "properties": {"runtime_enabled": {"const": 0}}},
+    "input_sha256": {"type": "object"},
+    "limits": {"type": "array", "items": {"type": "string"}}
+  }
+}

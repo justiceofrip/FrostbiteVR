@@ -1,0 +1,1379 @@
+{
+  "schema": "fvr.bc2.native-operation-source.v1",
+  "roots": [
+    "src/games/bc2/Bc2SelectedMeshes1p.cpp",
+    "src/games/bc2/Bc2WeaponVisibility.cpp",
+    "src/games/bc2/Bc2HolsterInput.cpp",
+    "src/games/bc2/Bc2BodyHolster.cpp",
+    "src/games/bc2/Bc2BodyInventory.cpp",
+    "src/games/bc2/Bc2InputBinding.cpp",
+    "src/games/bc2/Bc2RigPublication.cpp",
+    "src/games/bc2/Bc2Gameplay.cpp",
+    "src/games/bc2/NativeProbe.cpp",
+    "src/games/bc2/Bc2RigWorkerRuntime.cpp",
+    "src/games/bc2/Bc2ReloadFlowRuntime.cpp",
+    "third_party/minhook-1.3.4/src/buffer.c",
+    "third_party/minhook-1.3.4/src/hook.c",
+    "third_party/minhook-1.3.4/src/trampoline.c",
+    "third_party/minhook-1.3.4/src/hde/hde32.c"
+  ],
+  "files": [
+    {
+      "path": "include/fvr/engine/BindingValidation.h",
+      "sha256": "bba6c133257d44dab270d5fbefb8458c61b3b92f9154b63b922f56b6b26d9261"
+    },
+    {
+      "path": "include/fvr/engine/FrostbiteCamera.h",
+      "sha256": "9c0fd024850592b53dcf445c8074a5f1faa03ca5641bda518081b32e0dd6a206"
+    },
+    {
+      "path": "include/fvr/engine/ModuleApi.h",
+      "sha256": "372c62f4af7e6bbd1122b8e660eabbba0c1138d1b0314dd9e451501d8144b88a"
+    },
+    {
+      "path": "include/fvr/engine/PeImage.h",
+      "sha256": "f2c7ede3167ed240befe0eb0fa53a88606666e9650cae9566098176e21b2c8df"
+    },
+    {
+      "path": "include/fvr/graphics/BodyPropFrame.h",
+      "sha256": "fd0c7f21fc0c74e3d9064b942a74ff91560c6acf4cd84ab46a631ac1e5462f58"
+    },
+    {
+      "path": "include/fvr/graphics/D3D11FrameBridge.h",
+      "sha256": "dce576de25ae0ebdbcc70a353b73a8dadbe06d62f84a425788e1a2f6c310e383"
+    },
+    {
+      "path": "include/fvr/graphics/D3D11LegacyRelay.h",
+      "sha256": "61f22a8e1dd425a7c2e4962578f2cfa498e127b591c180a9f4c4280b629d42aa"
+    },
+    {
+      "path": "include/fvr/graphics/D3D11MenuProducer.h",
+      "sha256": "6be9171e049afae3b1d4bd2c1670e1799d245b552b7a6efa7af78d0e8c668855"
+    },
+    {
+      "path": "include/fvr/graphics/D3D11PresentationPacing.h",
+      "sha256": "b8f686ade2de02981e49604dffddcb20472c217bbcd9d5027c8cc1b4e6b2ea48"
+    },
+    {
+      "path": "include/fvr/graphics/D3D11RigidPropRenderer.h",
+      "sha256": "4156afc9af8f4b117b027e811b2f94bd81e7834de1b2cacade3a7ca5e782f03e"
+    },
+    {
+      "path": "include/fvr/graphics/D3D11SharedPair.h",
+      "sha256": "a66930fc046d3d6cba64d0b782ce7c4a4c1c51c1f512af80645b8db5b2f40ed8"
+    },
+    {
+      "path": "include/fvr/graphics/DesktopImageEvidence.h",
+      "sha256": "90b06d0dcb93b3f9dcdc849e85214c062131908b8a5afde4fd008eadd97e0a4d"
+    },
+    {
+      "path": "include/fvr/graphics/DesktopWindowMode.h",
+      "sha256": "2a403ad1ffd5c807daa809c932b8aa2e1d55e3851b467bfd7e0deac2f5f11433"
+    },
+    {
+      "path": "include/fvr/graphics/DiagnosticImageLifetime.h",
+      "sha256": "bbd618b3f1067881c0297a80d1b12adab5ba252f290123b70db181ab4990794b"
+    },
+    {
+      "path": "include/fvr/graphics/RigidPropFrame.h",
+      "sha256": "9e69688d9b3bd154131789bbee0f0ced8f8e80f84bcdfdf00b92d5f25d05646b"
+    },
+    {
+      "path": "include/fvr/graphics/RigidPropGeometry.h",
+      "sha256": "cfc4224f638ce9724c7eead69786694f5147c808c5ab7cfbc372b88df946f327"
+    },
+    {
+      "path": "include/fvr/graphics/SharedTextureProtocol.h",
+      "sha256": "214c32e78e46967a13840601065709c5214493fd46b0d138abf46b9af402e677"
+    },
+    {
+      "path": "include/fvr/interaction/ActionPolicy.h",
+      "sha256": "e51bcfb26adf64febb2e6139cf40a9480ea36eb90516010123ca4e941d59b48a"
+    },
+    {
+      "path": "include/fvr/interaction/AimFrame.h",
+      "sha256": "b7c371ffcba375b5f10d4abb4a96373ea69232bf5ef1dc0d439ffa0943b1358a"
+    },
+    {
+      "path": "include/fvr/interaction/AmmoSupply.h",
+      "sha256": "6f0f212763506f3db8dd2d1b355b978af69dec99b8f1b65cccf021ced5568036"
+    },
+    {
+      "path": "include/fvr/interaction/AmmoSupplyProp.h",
+      "sha256": "91c06a44370a2b57fcfaa1d30fd39aaad162c2862e4ad1845d7064c5eb11ceed"
+    },
+    {
+      "path": "include/fvr/interaction/AmmoSupplyVisual.h",
+      "sha256": "86d399c2f3419936c8764a6d3290b0271e21659cbbccb5352e593ca321a493d8"
+    },
+    {
+      "path": "include/fvr/interaction/ArmIk.h",
+      "sha256": "043e20d4b5a6988dca027d56963163cec36db1a9a18d5781cd94320579e2525c"
+    },
+    {
+      "path": "include/fvr/interaction/BodyAnchors.h",
+      "sha256": "ad5725a283494d129215da19570fcec649699b57e996a0baf00c25c368b1c866"
+    },
+    {
+      "path": "include/fvr/interaction/BodyGripApproach.h",
+      "sha256": "48acd9785468043445398f04fb73d7d7d0bb60fd7f18d31a3cd7c09a02671280"
+    },
+    {
+      "path": "include/fvr/interaction/BodyGripRelease.h",
+      "sha256": "bb726019250cc5c1bcea35c41af143836c816a24cca4264aa5482494f93f8891"
+    },
+    {
+      "path": "include/fvr/interaction/BodyInventory.h",
+      "sha256": "957d9cf516695c4e184f5768f16f51044dd9143fa5d1b966fa9776433476aa01"
+    },
+    {
+      "path": "include/fvr/interaction/ComfortCamera.h",
+      "sha256": "4022189bb3102dda8081b9bf3ca38b0b29aec18205c3f74ad0bf6ff96f90fae6"
+    },
+    {
+      "path": "include/fvr/interaction/ComfortControls.h",
+      "sha256": "644b9a080b2364ba323f274788a4c604590a7cbcdd8f28cc7f7c17df6fee429f"
+    },
+    {
+      "path": "include/fvr/interaction/ControllerInput.h",
+      "sha256": "44512936ae78358052abb7a66f16f174aa4ec6c2efcb173004aad79facd943f6"
+    },
+    {
+      "path": "include/fvr/interaction/DetachableMagazine.h",
+      "sha256": "b900e54be5da6365b078c2b0af64d42e92898653d07a479c77e0b7bbefeebc1e"
+    },
+    {
+      "path": "include/fvr/interaction/Feedback.h",
+      "sha256": "e317e8c3e7a6c12e14f7d426bc8aa6dd5c162d7b5719ee949ee239a7e140068b"
+    },
+    {
+      "path": "include/fvr/interaction/FingerCurlOverlay.h",
+      "sha256": "91fe067e739fbc0dffff9f4cacdf4ed7a379d198e73b7412f6159703907c3647"
+    },
+    {
+      "path": "include/fvr/interaction/FiringPoseHistory.h",
+      "sha256": "7bf2c2b56eadfcfc959bee1573c1264521fae26ebc0d71e842ac35986d04b703"
+    },
+    {
+      "path": "include/fvr/interaction/GripAttachment.h",
+      "sha256": "5143011e74846be8eab41184bda7716108afe9e2dac0ea89ade8afce145a4713"
+    },
+    {
+      "path": "include/fvr/interaction/HandInteraction.h",
+      "sha256": "b8beadeed9e9190d754adacc8955bc8a5abdd9f64284368ed9f5ffb6a9a83ba6"
+    },
+    {
+      "path": "include/fvr/interaction/HandPose.h",
+      "sha256": "62565bbc69544c850d57903f31d9230c7c3eb6c6ecdac69c81c6d39be37943cc"
+    },
+    {
+      "path": "include/fvr/interaction/HandTouch.h",
+      "sha256": "a456a74e132d5184b77d8732aa8c6784c0a1c87ff558e25a0b5da6a18e6662eb"
+    },
+    {
+      "path": "include/fvr/interaction/ManualReload.h",
+      "sha256": "ffe58cfdf43cd3e06bc5219d89913ebee28a17f22d9faffe6282b3f14d4e5b36"
+    },
+    {
+      "path": "include/fvr/interaction/ReloadGrip.h",
+      "sha256": "21f0d6a6621e889dd966be9199746213b552b1c493e9bc92d91b257fa8a2d100"
+    },
+    {
+      "path": "include/fvr/interaction/ReloadInsertion.h",
+      "sha256": "762d6b81244640e97c8ec1e7ac479561da4ee268755a4be76f69ccf7d00354a5"
+    },
+    {
+      "path": "include/fvr/interaction/RigPose.h",
+      "sha256": "25b67256d3db2577c8dfa4bfa3452b626e411f611389115387e9cadd9117e8d1"
+    },
+    {
+      "path": "include/fvr/interaction/RoomscaleFollow.h",
+      "sha256": "a6bfc603df82bbed460c2795e7d99ac523ddca8db4c6cfb73c0e95bb5bd9f9e9"
+    },
+    {
+      "path": "include/fvr/interaction/SightFlip.h",
+      "sha256": "d6cc3459ea02ba95c9ca262afbfb4de4abdabd8773c4e30225f28fc332ac6718"
+    },
+    {
+      "path": "include/fvr/interaction/SightFlipPackets.h",
+      "sha256": "88db25f2f632fa2446c5ff96cc057e52029b5ad4f273db664bb73dcce032da19"
+    },
+    {
+      "path": "include/fvr/interaction/SightGrasp.h",
+      "sha256": "5d648964fc5455242f93050a97bf6f9c3152932654081de8d627bc7f9a7ee6a1"
+    },
+    {
+      "path": "include/fvr/interaction/SightOwnershipRecovery.h",
+      "sha256": "38034946318e0bcccb05ace8ec440c9ab6ebe781377245c947feddc1210ab6c4"
+    },
+    {
+      "path": "include/fvr/interaction/SightVisualHandoff.h",
+      "sha256": "b5d9120ce377fb7be96ae4a54b60554668693a2d523bc983e83452aee2fb06b0"
+    },
+    {
+      "path": "include/fvr/interaction/SupportGrip.h",
+      "sha256": "8d1cbe84cbc06f500a9f2dc88868fdea19ebd2ea88b6a2a647447f8a7308e4b3"
+    },
+    {
+      "path": "include/fvr/interaction/SupportOwnershipRecovery.h",
+      "sha256": "df42da8bf98e8a2ffb1c12d83d82f16b800982111f001af584889495f3d942c2"
+    },
+    {
+      "path": "include/fvr/interaction/TrackedRig.h",
+      "sha256": "b29a72320ebe74d8b43e589bf4cde659b3eadf5fadc9e7e25398ee4c41b969e9"
+    },
+    {
+      "path": "include/fvr/interaction/TrackingMath.h",
+      "sha256": "043e7cb043a44e50c0d717347d81da6ed0d627afb1dd266c3bfef8a3bbf2f447"
+    },
+    {
+      "path": "include/fvr/interaction/VehicleHeadAim.h",
+      "sha256": "61cb92c11e2d08fc91e88d94c5f573d488944301a1b2633e70caf11e6d003344"
+    },
+    {
+      "path": "include/fvr/interaction/VehicleTracking.h",
+      "sha256": "b7f0bf8c97b3ee4c6af39071795f026a3bf57dabd72ecbaa967c6dc60f2d61f6"
+    },
+    {
+      "path": "include/fvr/interaction/WeaponProfile.h",
+      "sha256": "25f30c9817a7000da2655ae7ccb21676db8ef3e1b8b4ef16c78f22ae9d476b61"
+    },
+    {
+      "path": "include/fvr/ipc/FeedbackChannel.h",
+      "sha256": "bfa5b6f2453e6e6fc118bc7a83ee3dd1fa4192e5f252687bb400d52fc95968ac"
+    },
+    {
+      "path": "include/fvr/ipc/FeedbackProtocol.h",
+      "sha256": "399cf9b66eeb87c874c04a8cefc6d76ac49d7927c9704d614e466f36cc571d9d"
+    },
+    {
+      "path": "include/fvr/ipc/FrameChannel.h",
+      "sha256": "948fee2fda3909121f89ca9d7bcccc9c6402192d5a250bc37c50cd58bda9e9c8"
+    },
+    {
+      "path": "include/fvr/ipc/FrameProtocol.h",
+      "sha256": "34f2f4c1e0737750a428842e133cbf1183b21e3d7197a5eea69ce5a2e3bc4d0e"
+    },
+    {
+      "path": "include/fvr/ipc/InputProtocol.h",
+      "sha256": "eccf55b76c7431060f2750cfcbbabdf484b8a0223f3424934c7569e8e5e07ad7"
+    },
+    {
+      "path": "include/fvr/ipc/MenuChannel.h",
+      "sha256": "0dc5564166cd95a1ba27fe57166f4f2cc1dab594c43fb7c8b8df0540ee18f7e6"
+    },
+    {
+      "path": "include/fvr/ipc/MenuProtocol.h",
+      "sha256": "20f26bea520d5094cc18f742eda286038ac5ca1e7a0932256cb965f6937264e8"
+    },
+    {
+      "path": "include/fvr/ipc/StagedFrameProducer.h",
+      "sha256": "b4e144b040443c18a0293dc7bf92e10d196c4f80c570fbdaa6bab4f0f6343398"
+    },
+    {
+      "path": "include/fvr/math/OpticAperture.h",
+      "sha256": "3734ad2e02875a61ebad75fe7cabfe27b38ee5352c60465d84f38a16dfa5c669"
+    },
+    {
+      "path": "include/fvr/math/ProjectionOverride.h",
+      "sha256": "f7a67f3d427ee9b7c1e39c33cfd0464761e4bbac1c6668d9eedde2059f4c5e96"
+    },
+    {
+      "path": "include/fvr/math/StereoCulling.h",
+      "sha256": "47ab626d2b3ded6f4728393fb9c46b5dc2fb1b0137aa7356200e974e0ed171bf"
+    },
+    {
+      "path": "include/fvr/math/StereoMath.h",
+      "sha256": "f9963bb184fca17adb05747116f855fd13bfeeeadf41e2db353aa760a15f7426"
+    },
+    {
+      "path": "include/fvr/math/WeaponPoseMath.h",
+      "sha256": "c6e137a1a87fe5b461360111ba19f3f9b85f7b3423a517ef3e63bdff376cb8ef"
+    },
+    {
+      "path": "include/fvr/platform/windows/ProcessLifetime.h",
+      "sha256": "1ad1e70c3f7acde9a6810e9784de5808712768f5c5017cb7942d6660a2b3ec2e"
+    },
+    {
+      "path": "include/fvr/runtime/ExactWriteBatch.h",
+      "sha256": "bdbf32460c9ccf29d1ccd4538f40d123ec62e60d7860ec686e534972db56601a"
+    },
+    {
+      "path": "include/fvr/runtime/FrameCoordinator.h",
+      "sha256": "b7d322db1862f27c9aded905cef99b2a018009db604ec7840832df5053308ea8"
+    },
+    {
+      "path": "include/fvr/runtime/FrameProvider.h",
+      "sha256": "b1970cbdcd4a87f902ee0a88a2c678800638f3248d4b8d9cbef59b630d90ec61"
+    },
+    {
+      "path": "include/fvr/runtime/PresentationPolicy.h",
+      "sha256": "76468e5767f2629ee2c87f324c9a98b76e7116e506193d14136da05b94b0d290"
+    },
+    {
+      "path": "include/fvr/runtime/RenderOwnerRecovery.h",
+      "sha256": "318479430d851f871bc193011f6571bd33e21a9bf5589baea16a188d34329a09"
+    },
+    {
+      "path": "src/engines/frostbite/BindingValidation.cpp",
+      "sha256": "ef69ce26c412f1e4ac6b1fecedd2f594312905a525970f36477a393dab3bf8a4"
+    },
+    {
+      "path": "src/engines/frostbite/FrostbiteCamera.cpp",
+      "sha256": "ec1e48973b6c5835d44ee69293f53e34798d14ba118d232d614d66423f550207"
+    },
+    {
+      "path": "src/engines/frostbite/PeImage.cpp",
+      "sha256": "a2316523a8357c1d53645a8b89183add9d7e58295445f4343b40d26bed36e79d"
+    },
+    {
+      "path": "src/games/bc2/Bc2AmmoReserve.h",
+      "sha256": "81d4b4eca829c231ab9963cfa3bcf19a3fb7ae946a4762961370efebd212279d"
+    },
+    {
+      "path": "src/games/bc2/Bc2AmmoSupply.cpp",
+      "sha256": "f6cf153d417f39f0b9766516c5be0b8c31a5e6b20401d6333764a37c5290ad68"
+    },
+    {
+      "path": "src/games/bc2/Bc2AmmoSupply.h",
+      "sha256": "8ee5509f1c62fe9facce370991d1e70fec28c24f895c913bba6a4b240a8ac1f4"
+    },
+    {
+      "path": "src/games/bc2/Bc2ArmingEmptyProbe.h",
+      "sha256": "bca226dc038a58c5b1f1d8ca7c25e38dc0857e11af5dcd1e47b067aef33751a9"
+    },
+    {
+      "path": "src/games/bc2/Bc2AuthoredGrip.h",
+      "sha256": "eb76b05265099b41241f16b7a56555feb170682b0a6b4a45c497771c5efb3288"
+    },
+    {
+      "path": "src/games/bc2/Bc2AuthoredSight.h",
+      "sha256": "d205452360884dd7e182f87aa5cf5939f326e2e8580b94b57e190f85077139f0"
+    },
+    {
+      "path": "src/games/bc2/Bc2AuthoredSupport.h",
+      "sha256": "4d6da8a026c9ee8a878ff649270fa39ff4753ea0f86bad8cf1752df60c3d0833"
+    },
+    {
+      "path": "src/games/bc2/Bc2BeltAmmo.cpp",
+      "sha256": "1f514e68621a8a772b7306d86c146352ef6a022a63fa46e5a39c776785717514"
+    },
+    {
+      "path": "src/games/bc2/Bc2BeltAmmo.h",
+      "sha256": "dc85bafcbdccf814a40d90b73f1dffd1058a80b44aa8063de5bb171cce4a6487"
+    },
+    {
+      "path": "src/games/bc2/Bc2BoatAim.cpp",
+      "sha256": "15b1c836ae08d68adfb6d472afbb956e12691466775263e37f7745ae7038c40b"
+    },
+    {
+      "path": "src/games/bc2/Bc2BoatAim.h",
+      "sha256": "fdb21c89344408ec0310aff9f7b9c107302d72bc80b02a23beb3b4018a727e4a"
+    },
+    {
+      "path": "src/games/bc2/Bc2BoatAimProof.inc",
+      "sha256": "74fd23cb1b37e9fe23fb83b95c99af7314e5adb5eb065d962adc49eb805843e2"
+    },
+    {
+      "path": "src/games/bc2/Bc2BoatProfile.cpp",
+      "sha256": "deeb325ee2bf96499d48f13811390a5ea63b25c2d4b377a121a5fa02c75c615c"
+    },
+    {
+      "path": "src/games/bc2/Bc2BoatProfile.h",
+      "sha256": "dd6b5f26b19f1affd1808b767d6f594b8ed22cdcad359779a043a615a948532e"
+    },
+    {
+      "path": "src/games/bc2/Bc2BodyAmmo.h",
+      "sha256": "9552eeea91337764fd85adc4d99ca303caea66194627f881326a336fcf3b38b6"
+    },
+    {
+      "path": "src/games/bc2/Bc2BodyAmmoAssetProfile.h",
+      "sha256": "11b9587913c39d086731000bc3ed23e1a78751b96da45c2e4a5cba3e1ce38b22"
+    },
+    {
+      "path": "src/games/bc2/Bc2BodyAmmoGeometryCache.cpp",
+      "sha256": "7567d16c5220210f3cd3806d20c688d7c5b146d3054656d9a61b666aa5e341c2"
+    },
+    {
+      "path": "src/games/bc2/Bc2BodyAmmoGeometryCache.h",
+      "sha256": "1d6bd221d0eb72deb32968b380f9e85e4dc99b21a73ca55742ff07232623d66a"
+    },
+    {
+      "path": "src/games/bc2/Bc2BodyAmmoHost.h",
+      "sha256": "cb891c9c911301620264c1a1f141732f5dfe0695185b5d8c0ee4260b3afa27c7"
+    },
+    {
+      "path": "src/games/bc2/Bc2BodyAmmoRenderer.cpp",
+      "sha256": "b76b04002f9a73ba063a1bc7c2151628d5ef9be0577ad35d3b15d3edf6c7004d"
+    },
+    {
+      "path": "src/games/bc2/Bc2BodyAmmoRenderer.h",
+      "sha256": "63b15750a02d89f2b40ae922004c71fe61c0627ce22632144b064cf6a9772d11"
+    },
+    {
+      "path": "src/games/bc2/Bc2BodyCarriedPair.h",
+      "sha256": "75236a9ada32c34667a9e0b3807b46a77457f675bbb4d450bcdc948f886d1be9"
+    },
+    {
+      "path": "src/games/bc2/Bc2BodyEquipment.h",
+      "sha256": "07ee29dc5c52d72ac621445ad08c7d8c7424bb4379edc4600b2128cece37be53"
+    },
+    {
+      "path": "src/games/bc2/Bc2BodyHolster.cpp",
+      "sha256": "043a4f01d37d12d74c0705194770a26a6f5114917563e0f6167557c1c7482690"
+    },
+    {
+      "path": "src/games/bc2/Bc2BodyHolster.h",
+      "sha256": "c99765093436e77371b50f9cdfea295c036450fefc692bf205048c90e105785e"
+    },
+    {
+      "path": "src/games/bc2/Bc2BodyHolsterChallenge.cpp",
+      "sha256": "546b1aa28c080daa60480263b60bcf4a049e9a9529da2ff8dd1780f463f14638"
+    },
+    {
+      "path": "src/games/bc2/Bc2BodyHolsterChallenge.h",
+      "sha256": "579e6ad83f622032714be0f65c01f7a06d01f75ddc1898ac7859fcdd44d2b394"
+    },
+    {
+      "path": "src/games/bc2/Bc2BodyHolsterDiagnostic.h",
+      "sha256": "58947fc611d4fd81af5b0c7e0ff5a989571bc3517d4dc47df44b557f963b4c38"
+    },
+    {
+      "path": "src/games/bc2/Bc2BodyHolsterLifecycle.h",
+      "sha256": "08890ada07e6fe2b7b5df9c7c182f139d22e18e75972a4ff1447c07894b30807"
+    },
+    {
+      "path": "src/games/bc2/Bc2BodyHolsterObservation.h",
+      "sha256": "eea9365eb2278754b44c1f897ba6c63632c862f4144ce09f0c496dbee8c06902"
+    },
+    {
+      "path": "src/games/bc2/Bc2BodyHolsterProbe.cpp",
+      "sha256": "dfddbb77b15d5bd6769617dd839953c3a11666d094a4287607d427af9d8528fa"
+    },
+    {
+      "path": "src/games/bc2/Bc2BodyHolsterProbe.h",
+      "sha256": "80c9613fc80877d66c62403493858432648980a39d505f49c636c2ca3a269dd0"
+    },
+    {
+      "path": "src/games/bc2/Bc2BodyHolsterProbeSession.h",
+      "sha256": "6cb428c18a48cb4117f2ed42414c1ba7e0701dc067bfcbc2b9c9c8bf7a466955"
+    },
+    {
+      "path": "src/games/bc2/Bc2BodyInventory.cpp",
+      "sha256": "efdd8fcb114e77bf644c473372524d1576ff29b93385c86f6c8dda97a136c856"
+    },
+    {
+      "path": "src/games/bc2/Bc2BodyInventory.h",
+      "sha256": "91d816ebd20f751cbe65e40b803fb5897c29820b7bdebc4d76ff424334e8fbfc"
+    },
+    {
+      "path": "src/games/bc2/Bc2BodyInventorySession.h",
+      "sha256": "1917aa20a39a1cd6f3dd3c06e1393e2f7fce650949a2f72407d1eefc2ccd366f"
+    },
+    {
+      "path": "src/games/bc2/Bc2Camera.cpp",
+      "sha256": "b1fd58b1cc00ed18ee49e790ca91118245bdde55e47ba04c2fd4e5648ce64341"
+    },
+    {
+      "path": "src/games/bc2/Bc2Camera.h",
+      "sha256": "2b0fc63ae748d3d2d781a157a45faafafa003b7e22d02b590f12dce1adfc384a"
+    },
+    {
+      "path": "src/games/bc2/Bc2ContextInteractEvidence.h",
+      "sha256": "e5053c2feaf6c11d5e44159580772bc338068a466892fb86e297958d940e1cdd"
+    },
+    {
+      "path": "src/games/bc2/Bc2DiagnosticFireAmmo.h",
+      "sha256": "3bd303e01d44668dfa705d97867ddcfdb4b94399790400cde8cc4594528b3a9c"
+    },
+    {
+      "path": "src/games/bc2/Bc2DiagnosticFireReserve.h",
+      "sha256": "2e6d2fb77004b253190a9e9faa029aba9d3b9abedc81aaed3ee430a82e79a93f"
+    },
+    {
+      "path": "src/games/bc2/Bc2EmptyFireProbe.h",
+      "sha256": "24ce0264b1acfaf505d1ebbd7fef073aef2b13f8d3c155d4be93f8ac0c317d18"
+    },
+    {
+      "path": "src/games/bc2/Bc2EquipmentIdentity.h",
+      "sha256": "f55f0b36792aca917f650597f8ed70350de1f6822c7822af231f26a64630cab6"
+    },
+    {
+      "path": "src/games/bc2/Bc2Gameplay.cpp",
+      "sha256": "9106dc58ffd807b1bc0677870ed245b6a8f978e9dda2f3c368bc60f87c473dd8"
+    },
+    {
+      "path": "src/games/bc2/Bc2Gameplay.h",
+      "sha256": "e513b91cf4d3fd13a19eec979a108e9c7ff61353e0d0d6e8d88422248b371331"
+    },
+    {
+      "path": "src/games/bc2/Bc2HandPose.h",
+      "sha256": "c3d24652f1f2e5d996a638d1dfc96c74e805841d838b246c5070ca5e55ac9458"
+    },
+    {
+      "path": "src/games/bc2/Bc2HolsterInput.cpp",
+      "sha256": "9e8f2e3b2be7e93d31b25a94cae0d7118c0136fccf040ceef9efda253ef6ea73"
+    },
+    {
+      "path": "src/games/bc2/Bc2HolsterInput.h",
+      "sha256": "ae1c26df3bc73b8ac6c16c4d94359c34ea78fe12496b759fb2ac7335367e465f"
+    },
+    {
+      "path": "src/games/bc2/Bc2InputBinding.cpp",
+      "sha256": "11b686818b9915cc68c3dd0bd254ac0dfd19d33fb98583f24c802f4785965b31"
+    },
+    {
+      "path": "src/games/bc2/Bc2InputBinding.h",
+      "sha256": "0ae143135183ca72dc86bc9481398133bf70b34d81d456e17f5117658122c0eb"
+    },
+    {
+      "path": "src/games/bc2/Bc2MagazineDetachEvidence.cpp",
+      "sha256": "14f815b45fa59d7f460d54204d3d78230cc1f3b1b1312fc0d672c16a4185f028"
+    },
+    {
+      "path": "src/games/bc2/Bc2MagazineDetachEvidence.h",
+      "sha256": "35366df160df70e3176847171db93e6e7ac284c6b626761330e3fb789e1aa6ef"
+    },
+    {
+      "path": "src/games/bc2/Bc2MagazineDetachGate.cpp",
+      "sha256": "e4b295f43856b3433b29904a3771b2a3127d2e40eb67f855e30013d9d54d3af8"
+    },
+    {
+      "path": "src/games/bc2/Bc2MagazineDetachGate.h",
+      "sha256": "87953f7042c3ee87a327f1826abd5c6c78cf3b0d9c6063cbf61f1f757874b754"
+    },
+    {
+      "path": "src/games/bc2/Bc2MagazineDetached.cpp",
+      "sha256": "c68af40b4c8d9f6c1722c4d7c53adfadf283c6d4669974e1da67f1cc70148c7d"
+    },
+    {
+      "path": "src/games/bc2/Bc2MagazineDetached.h",
+      "sha256": "bff5c544c3de61ce7bceb74d68287dae4a123993d62131d6202397daed43bceb"
+    },
+    {
+      "path": "src/games/bc2/Bc2MagazineDetachedProbe.cpp",
+      "sha256": "f999d28596aa9aa36130c9f2e6fa6e457cf05ec1a398c353d471df19036371a1"
+    },
+    {
+      "path": "src/games/bc2/Bc2MagazineDetachedProbe.h",
+      "sha256": "9fd91ef25f2bb5d5c60f99b6a0d3ccf3c6aa7cdc6e2ce0b7414d23f101ff6de0"
+    },
+    {
+      "path": "src/games/bc2/Bc2MagazineEmptyControl.h",
+      "sha256": "8a629610e1d361681d64fa4f4ace6a9c47413e27f0a1b8e006f6945ee0aff98b"
+    },
+    {
+      "path": "src/games/bc2/Bc2MagazineEmptyDiagnostic.h",
+      "sha256": "9a0583eeaec0c437dd384825bc48c67769680a8fe66bc286b0ee21309c129bce"
+    },
+    {
+      "path": "src/games/bc2/Bc2MagazineEquipmentProfile.h",
+      "sha256": "277e41a661bccb497b789081afbd223bc6d8d8102882cb83fc976693cab51b0a"
+    },
+    {
+      "path": "src/games/bc2/Bc2MagazineFallbackObservation.h",
+      "sha256": "2a2a0c53ff9a981a8cf4244e9cf61ebd9a26553404c4a2713eca6c4850697434"
+    },
+    {
+      "path": "src/games/bc2/Bc2MagazineGeometryProfile.cpp",
+      "sha256": "3424a830b5a105751d60d120db0671b727eaf21361025fe7027d68dc52e5fa51"
+    },
+    {
+      "path": "src/games/bc2/Bc2MagazineGeometryProfile.h",
+      "sha256": "d4d4c7ee0745dd838d38f2dc41dbbdd06fe0d5a73f8e656295380552299eebb2"
+    },
+    {
+      "path": "src/games/bc2/Bc2MagazineInteraction.cpp",
+      "sha256": "f8e3fe779d26e27e61d2286c4bbb5afa0e0faf933904f3ba8be5ea13c2f005a2"
+    },
+    {
+      "path": "src/games/bc2/Bc2MagazineInteraction.h",
+      "sha256": "85c4b8be87f5dae029ab07d43b5bfcb2c4b753dc9afde65a02917eecbad89a24"
+    },
+    {
+      "path": "src/games/bc2/Bc2MagazineLeaseObservation.h",
+      "sha256": "07fd73a21ae32942b7921da16fcfb88f69f32d24ca69891239d6196d25aa2e9a"
+    },
+    {
+      "path": "src/games/bc2/Bc2MagazineNativeProfile.h",
+      "sha256": "4b000b54eb61794d5aa4344c8003351a02a143424de2bc9328722a11e7d56f32"
+    },
+    {
+      "path": "src/games/bc2/Bc2MagazinePhysicalProbe.cpp",
+      "sha256": "ecdf0be3e9b32cad114aa4be3d3748ab2e348882e4a479b9f69055be1f9e4324"
+    },
+    {
+      "path": "src/games/bc2/Bc2MagazinePhysicalProbe.h",
+      "sha256": "f451cb40660577ee2d7e46163f09a904a186b5c7c617131124c2b7dcca4b146e"
+    },
+    {
+      "path": "src/games/bc2/Bc2MagazinePhysicalReload.cpp",
+      "sha256": "e072fe230f79a24bce2008432b7bcfc4621b2daf443a55166b217321f84f9c37"
+    },
+    {
+      "path": "src/games/bc2/Bc2MagazinePhysicalReload.h",
+      "sha256": "0fc80cfe5347fe681b95ef2a5721e86069d3922573c500b6dcb68b9ad34924a7"
+    },
+    {
+      "path": "src/games/bc2/Bc2MagazinePresentation.cpp",
+      "sha256": "10c585f361ebc08baa4a2b300edacd549b2e545607d218ae2187dc5298fa3fac"
+    },
+    {
+      "path": "src/games/bc2/Bc2MagazinePresentation.h",
+      "sha256": "2cd88d39a49d5318234f1c97e45dde7979bec600e6d415b9df98dad33309b325"
+    },
+    {
+      "path": "src/games/bc2/Bc2MagazineReload.h",
+      "sha256": "25cbe6d62f49110e5d912915d0e57f2ae8cc58321be854b7846c133c091ec6fb"
+    },
+    {
+      "path": "src/games/bc2/Bc2MagazineReloadCycle.cpp",
+      "sha256": "540ae118e4dd73c24968cd160cb7d42307177d0e7fb81920c9cfcb27b6ee4581"
+    },
+    {
+      "path": "src/games/bc2/Bc2MagazineReloadCycle.h",
+      "sha256": "1205931068b2411cb115d60e464c1aef7793f8e1ba9f227a183ff87b6dd35e89"
+    },
+    {
+      "path": "src/games/bc2/Bc2MagazineReloadProbe.cpp",
+      "sha256": "83f2a6dc791e615653b1966fe94c68135c46b65561f7671c3bbb4d6a3a37ff98"
+    },
+    {
+      "path": "src/games/bc2/Bc2MagazineReloadProbe.h",
+      "sha256": "6ea7f711b2e4880d847268450d4d13e001ab6835d412ea83ae9a6503e3153300"
+    },
+    {
+      "path": "src/games/bc2/Bc2MagazineReloadSession.h",
+      "sha256": "7b83a8dcd84255c2edf379cbf2d4c15f106c35a4efdcf01dd83f23e1e8269706"
+    },
+    {
+      "path": "src/games/bc2/Bc2MagazineStart.h",
+      "sha256": "30e4289a3dd24226077f4f50574b648f94cbf1624d2374567792402aa02bd518"
+    },
+    {
+      "path": "src/games/bc2/Bc2ManualEmptyFamily.h",
+      "sha256": "fb72d4483201edcf6739ac80f725967b7fe45726ae96d11fc7e3a6f04ace82ac"
+    },
+    {
+      "path": "src/games/bc2/Bc2MenuBinding.cpp",
+      "sha256": "90dc93b2282340c3b3bb8b002ce53f8b1b3704029f396e2603555f917ec9bdee"
+    },
+    {
+      "path": "src/games/bc2/Bc2MenuBinding.h",
+      "sha256": "8461b2583573b0b5b5e1e68fe53ff8bc31f0bd9cf0c641f26d2071c37430fc10"
+    },
+    {
+      "path": "src/games/bc2/Bc2MenuControl.h",
+      "sha256": "35e1cbd8eab05f7c68126497d85fd12068922861dda2e521cd82f1f606a1820a"
+    },
+    {
+      "path": "src/games/bc2/Bc2MenuRuntime.cpp",
+      "sha256": "e3fc67bba023b5a53364fd0cb732919df11f91e78a13c4a78b0c255c177c9924"
+    },
+    {
+      "path": "src/games/bc2/Bc2MenuRuntime.h",
+      "sha256": "fff6ab358f27a75d21ebf53b9595fa74b1858392f7fb61f61973d619c5e7c7a2"
+    },
+    {
+      "path": "src/games/bc2/Bc2MenuState.cpp",
+      "sha256": "a18296b2659feb61ea379534e4cee1916ae20d5aed7342274827ed1cb563c92f"
+    },
+    {
+      "path": "src/games/bc2/Bc2MenuState.h",
+      "sha256": "7fbdd48c5052e613b52ead3234cd5e412a3dd923bcd23bd089979fa111523b98"
+    },
+    {
+      "path": "src/games/bc2/Bc2NativeOperationCapability.h",
+      "sha256": "711afa26c82e2e82af4ebe17480becba4c9c723e8c13131da9731536fdbea1ec"
+    },
+    {
+      "path": "src/games/bc2/Bc2OpticDiscovery.cpp",
+      "sha256": "7c68bd938eed813cd4f32e08670c2797df9cd1a5ebc1aa7e9ef37e66deaa34d9"
+    },
+    {
+      "path": "src/games/bc2/Bc2OpticDiscovery.h",
+      "sha256": "7bfeb801b7ed829ebf45df6440309118087c7e6f6bf4822e71547ffe82748082"
+    },
+    {
+      "path": "src/games/bc2/Bc2OpticDrawState.cpp",
+      "sha256": "2db9e4193314ebe39f2d4986f049b8d095128aff76d8b824dea04aaf12fe241a"
+    },
+    {
+      "path": "src/games/bc2/Bc2OpticDrawState.h",
+      "sha256": "75bc13ed3e1c21245f2d2cf5a031bdd75026161986563b0bdd983bb035781efb"
+    },
+    {
+      "path": "src/games/bc2/Bc2OpticFilter.cpp",
+      "sha256": "c0ce51559c7ef0d2b2bfd3c3518ee26d252abbdfbc672313fd6514cf36ccf05f"
+    },
+    {
+      "path": "src/games/bc2/Bc2OpticFilter.h",
+      "sha256": "6b457bd55716669c72d50002890ecaee5cce53e7bb8537b7f831a595a12f2bf3"
+    },
+    {
+      "path": "src/games/bc2/Bc2OpticFilterRuntime.cpp",
+      "sha256": "a4c3e99ae653e8bff03db220216c57b6b7f0fba9b229e6e331fec290de1f2996"
+    },
+    {
+      "path": "src/games/bc2/Bc2OpticFilterRuntime.h",
+      "sha256": "4b97b86ddadc4c4856f61937ce22fc14423ba39324d1bb217eb22db17189d931"
+    },
+    {
+      "path": "src/games/bc2/Bc2OpticFilterSession.h",
+      "sha256": "cd9c8455f2e2c5dde190c3747b4023c3ab3302c966bd444e47fff81e4947edd9"
+    },
+    {
+      "path": "src/games/bc2/Bc2OrdinaryEquipment.h",
+      "sha256": "cce6ed79d5be96e8ce42653e2e52073df244b0dd94310fc88de0043ec4e58dd6"
+    },
+    {
+      "path": "src/games/bc2/Bc2OwnerPublication.h",
+      "sha256": "49ac23c94c494a3694ec0b15dd0d4384888882b63acf0cd66620a026d4a73de5"
+    },
+    {
+      "path": "src/games/bc2/Bc2PersistentBodyEquipment.h",
+      "sha256": "876a7a1179d834cce8add9df43a2e5b243d6e3c6fc0b2df10e8823d4c06a1a31"
+    },
+    {
+      "path": "src/games/bc2/Bc2PhysicalReload.cpp",
+      "sha256": "2c56b0688343702af9d948f86629df9ac74d22dc01204a111129cbe0dc48fe7f"
+    },
+    {
+      "path": "src/games/bc2/Bc2PhysicalReload.h",
+      "sha256": "58516ecf0f11644bb649bb2a6f3f261a6feeecd8a63c6c835bd3ffa7d6fb33ce"
+    },
+    {
+      "path": "src/games/bc2/Bc2PhysicalReloadLifecycleProbe.cpp",
+      "sha256": "6b3a57a537b20eb28f40a990f5a626f2e1d13e6157fcd68c66bf6fe49d3f4605"
+    },
+    {
+      "path": "src/games/bc2/Bc2PhysicalReloadLifecycleProbe.h",
+      "sha256": "dcec268b350f34d9004bca247b2dc3789441ee91edd4fb4b7cd0402912f20bc6"
+    },
+    {
+      "path": "src/games/bc2/Bc2PhysicalReloadProbe.cpp",
+      "sha256": "4ae05d9abd5f91ae77a9409f68007a588dc4007b5f9a5382502810a2b3e62cd4"
+    },
+    {
+      "path": "src/games/bc2/Bc2PhysicalReloadProbe.h",
+      "sha256": "6e6fd86c859ebd19a4cb96028a8c548f4b141a20f91594e4bc2edb2fbb8459de"
+    },
+    {
+      "path": "src/games/bc2/Bc2PlayerPair.cpp",
+      "sha256": "39967ec0d0968d84010391af74e97bad8f136b114b2dd8cbf919ef9155b49989"
+    },
+    {
+      "path": "src/games/bc2/Bc2PlayerPair.h",
+      "sha256": "bf3f9ac169cb4753f9efe8ad463e77fa8a346c90c291512c9b6485f101672d67"
+    },
+    {
+      "path": "src/games/bc2/Bc2PreholdCleanup.h",
+      "sha256": "a5bbaff079715187241bf6b0be72c42cef80e80da6afd76dd0bc6f0dfdc52e07"
+    },
+    {
+      "path": "src/games/bc2/Bc2PreholdEntryObservation.h",
+      "sha256": "a13a3bfd9dde49dddb2306f821934a7ea0848feb0b0e32712e9fd5d2115b00da"
+    },
+    {
+      "path": "src/games/bc2/Bc2PreholdObservationCommit.h",
+      "sha256": "4fd18429678f05d1f06cb7142cfa30f1b766aff5f0b785d5e6256555f60d3af2"
+    },
+    {
+      "path": "src/games/bc2/Bc2PreholdOperationJournal.h",
+      "sha256": "9614314734985f32ef07624601ff4ec1dc6bb000371bfd7a298954a88a38ad34"
+    },
+    {
+      "path": "src/games/bc2/Bc2PreholdOrder.h",
+      "sha256": "eed8cdc6a51543996ea0418fbe4c77fab490b778a00b1b9bbd60cdb1b9baf125"
+    },
+    {
+      "path": "src/games/bc2/Bc2PreholdStartPreread.h",
+      "sha256": "c2dafcc1f5ae53270540a879eee4506ed90a763567968d246136cc3eac9dca37"
+    },
+    {
+      "path": "src/games/bc2/Bc2Profile.cpp",
+      "sha256": "33fc71f0362d67a074e86bd656197fab949512a5aa6f42f0a70ccd3364ca7182"
+    },
+    {
+      "path": "src/games/bc2/Bc2Profile.h",
+      "sha256": "ed5f694d0fd82f8c32e4d82b3e4a4a8444abb10b8f1c9267406fb4ee715d9e56"
+    },
+    {
+      "path": "src/games/bc2/Bc2PumpDiagnostic.h",
+      "sha256": "e183afb2435b7b75a4067c9551226bebf5b5587436ebef079967a6a6ac714d8e"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadAbort.h",
+      "sha256": "4ec53b7146de7483da409ee13eebcbfa477a3afea276a201d80a50988edca2ad"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadCohortRetry.h",
+      "sha256": "de639467e137b465d1883e73de886f75417594e00de49ce655e0204237d8a899"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadConfigDescriptor.h",
+      "sha256": "10445a3c10491f0a12d226b6b8cdff2f6d0d1f8a066b393012ecd0021f6c8d81"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadDeferredCompletion.h",
+      "sha256": "cf27819d7eba71fd2c468ecc2c1cc5a695eaf99479a4df9849af56015e8444f1"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadDrawCapture.cpp",
+      "sha256": "beac2cb353f4a977f258976e9feb837c283f106fe17c1ebba39a7da6cc2e10a9"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadDrawCapture.h",
+      "sha256": "b2c491ebef84bd07fac90e7858f0b582c0e3dd28e74f483b5588e1ad18f6fa1b"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadDrawGeometry.h",
+      "sha256": "674b66e7a412c0266acebbe45061cd0c67ed181c04825a3dd6aacbe28b1f5614"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadFamily.h",
+      "sha256": "61ce4538b552b949bd7a497409e0a21881be2ed0ff4e19aef898aab52766d139"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadFlow.cpp",
+      "sha256": "b31ec5cb2d603f324cda5a88b84cb8f2d1a901242060396bcc46fd031515e0ba"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadFlow.h",
+      "sha256": "4e4e0edc4606c9111f779686ea9d6dd2aa5426524007aa472763a88ec352e829"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadFlowRuntime.cpp",
+      "sha256": "0d333f82ce754ee5a9023328c90f4a632e9496a1f64f6245a527b49ed7a42607"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadFlowRuntime.h",
+      "sha256": "3e90d4cf32cf50321bc1e66f380d8359e962efbc81cdabb468f137db75477f8d"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadHold.cpp",
+      "sha256": "b073cfd2827ef378ac50fdc276fcdc946135217ce24fc24c2e278b3f0ad8736d"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadHold.h",
+      "sha256": "9d6a284298338f8de902684916e302c919d905a52f5761173a98aca656eafc55"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadInteraction.cpp",
+      "sha256": "d8d6fb06ba0fe837a0ca19ef423210c6c1e63c956bcce7e3564332c0781be74f"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadInteraction.h",
+      "sha256": "26bf7e1ca6e54a6c91cbd76b5b262f31da0bd2ad2bb987553419325b492747b4"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadInvocationEntry.h",
+      "sha256": "a8808079a737b42c44acb2037adca52873f9936acd1ddbf7b23b9fca1fefdbf7"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadKeepAlive.h",
+      "sha256": "b0f75ac3db71aae0bc0c5281b0d9a7009205333065480f87e8c1a100090008db"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadLockBodyTelemetry.h",
+      "sha256": "2cd0499a5fc7ae6e156b6b1160f6b32391daaffb7a323472ab8cb762850bda4e"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadNativePolicy.h",
+      "sha256": "a14c7c5a7980b4dbfed8dce7212f91f4a91745a19e9b293c27bc383b00b31ecb"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadObservation.h",
+      "sha256": "b674e15a1054790441f66fd70b218ba2d1fa5e1ac5bf397db7265857f5e3b7b7"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadPalette.cpp",
+      "sha256": "bb8e429e412d8ab027e1c4fc0274cd8039fcc240918a015a1b3a355df44b9e91"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadPalette.h",
+      "sha256": "f7fd402a5d5989e270d720f902c029be64402f2dd9c7b896e20a4fc6eafeb817"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadPhaseRetry.h",
+      "sha256": "bde32d590addfe3686909a5c6bf80e6686af174ba292ca6cb1afd224ca8d9034"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadPolicyLock.h",
+      "sha256": "9e9d43dbf4160332464b523fe70f5c9a36ec18be49e4c08fc8756ae6618cf2d2"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadPreentryDeferral.h",
+      "sha256": "1574444fae7258d610f1271c449a10feb5a429ab721cd5a9a2719ae0445e0e83"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadPresentation.cpp",
+      "sha256": "554b939ea073c01c1f8a1e3117a0e8186567046cb1401432535bb63b243c5d96"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadPresentation.h",
+      "sha256": "44b90508ce6239fc653763590f54c3ee33bf7c576d91d8edd3bad38733d71d53"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadPreview.cpp",
+      "sha256": "e0dd49db9142ca15f77fdbf5b9c2da5ba10c582aca9be19b92ab4a43ebe13470"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadPreview.h",
+      "sha256": "31fe15e3eae0a7f9da4aeb9a94be1c7957ba260a9c3f973cef2bea2da6485d87"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadProducerBinding.cpp",
+      "sha256": "66d25e2a8854dc9ab83982bfeaba28e24f458d9ee0734d33f382ca7e5ca62433"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadProducerBinding.h",
+      "sha256": "92a7eeaa9079b64d8f0024da3a743c72fa75aa7db00cfdd687d5a08e4eebc3c7"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadRequestBridge.cpp",
+      "sha256": "8d33643fd35947ca3ca6290765de912a7e1d125969c1196535a0ca6b01bfe6e4"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadRequestBridge.h",
+      "sha256": "152336e1ff697f5f8dd8c673788665709543fe36f5a574fd5e50a2f472036bed"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadRequestCycle.cpp",
+      "sha256": "a72a79923116bde9c55f12e8f2384329c04acbca5b0d2a9a1ebe0af2a38867d1"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadRequestCycle.h",
+      "sha256": "7d5342cfe981a6118ae5e5776ce01d81680cd6e24e31e0b7df63cb338b4dbc97"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadRequestProbe.cpp",
+      "sha256": "72edd07d8598c93674968561cec71e50519033e2f52739533ec739c6e5abcfc5"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadRequestProbe.h",
+      "sha256": "232803acd1f524874ded1f31a5d821ee383c0aab4fd1c22a799876dc33b7174e"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadRetirement.h",
+      "sha256": "b362c67b44bc906949e84c49f10013ffd2fc05dcf94143700d27c24fa8c750ee"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadRound.h",
+      "sha256": "97617b2484b1859cf6c326961e22a51ee1e2971d94f47cb468bce96bf1b15160"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadRoundGate.cpp",
+      "sha256": "467f281ae256b5ba05b28133d6051943b231f56343bd9c224176099135e899e5"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadRoundGate.h",
+      "sha256": "10527f365e9fb1a598aa13c3728e617a84d344090227c6cef2773b0c2b3dcb00"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadServer.cpp",
+      "sha256": "0fa77e2979a8645d12527eedfad1d4e5bdd548c0dbfcc04796afbba40f2c8d33"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadServer.h",
+      "sha256": "7103783ba33e0b0d9078782195272cabb1834a0b50277ff764eddcdc5abd2af3"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadStartOrigin.h",
+      "sha256": "789d0b04cbbab47a6962f72159c1adca370b252f21b3bd0a4d2fa868b564228b"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadState.cpp",
+      "sha256": "132d54330dea92771f70d5bb4eae839156816153387191981ede9887a1e76a40"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadState.h",
+      "sha256": "990406be2bc63a050895fded1733757e962e6ab72d0394fb69c7d5453a0fa803"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReserveFinalValidation.h",
+      "sha256": "55f6990c8f3a5fb0e41920979c12cf3a54dac788de6d5e49fd6b38ebc3afb3f4"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReserveReadEvidence.h",
+      "sha256": "f9e29bb010d18ecb7a889783b718b414e547c105d9752648745eb3e3f0a89d8a"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReticleAperture.cpp",
+      "sha256": "63237d097ca17200a36eff8a4e37543ca96a975fe79ffa639a54e4069a784f36"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReticleAperture.h",
+      "sha256": "7d57e209c1604c171f264ae16361ef89becf4b73b8eb0eb633ee26de25ae4965"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReticleDrawObservation.h",
+      "sha256": "438a1833ff9312b8f297ea8e743be1128bffd4b06fd587dac9ffdfaf61532e25"
+    },
+    {
+      "path": "src/games/bc2/Bc2Rig.cpp",
+      "sha256": "e2dfe2937cf11ad7dc96c4f561f184c83600f159702ceed47ff906f30c6ad466"
+    },
+    {
+      "path": "src/games/bc2/Bc2Rig.h",
+      "sha256": "c98d462a6eeb1c7cbfce40fdcb677949779d4ea33736a73be72ac462bf88cd38"
+    },
+    {
+      "path": "src/games/bc2/Bc2RigPublication.cpp",
+      "sha256": "bd9f4992b8b501763c723c4184182b8c721c2c03b9ef0b39887340b3072abc80"
+    },
+    {
+      "path": "src/games/bc2/Bc2RigPublication.h",
+      "sha256": "126f00301de04fbfe107a4bee8889d5ad3937f3f9fdc448b9d57575c76394cdf"
+    },
+    {
+      "path": "src/games/bc2/Bc2RigWorkerBinding.cpp",
+      "sha256": "2e8df07e604f7f7ab11afbf1dc52902ec9873b1febb5f3ee425984807729c79d"
+    },
+    {
+      "path": "src/games/bc2/Bc2RigWorkerBinding.h",
+      "sha256": "dec66713b9688425f361166091a4393ba700a0d741ab94f730a669917b0845ee"
+    },
+    {
+      "path": "src/games/bc2/Bc2RigWorkerLifecycle.h",
+      "sha256": "6eb03aafb6ff374e732c17f5a9d3bac0653d3965e26256c7b092c564376bce40"
+    },
+    {
+      "path": "src/games/bc2/Bc2RigWorkerRuntime.cpp",
+      "sha256": "d388d046c0b3a65865447b432a9cfcd1cb555b4afbfa5a7c53cff51d1d12da21"
+    },
+    {
+      "path": "src/games/bc2/Bc2RigWorkerRuntime.h",
+      "sha256": "27d4e95adbe2078521edba8d416cab5864ccbeef375fc07d35bca8fe8384c773"
+    },
+    {
+      "path": "src/games/bc2/Bc2SelectedCarriedWeapon.h",
+      "sha256": "429c586f78025989e85d931ef090b1a4aaead174598d4969e42c635aa7ea2df4"
+    },
+    {
+      "path": "src/games/bc2/Bc2SelectedMeshes1p.cpp",
+      "sha256": "d5a7ea20f411a03a2ae81af9311e992cb8735d08c828b69fe4ccabc987654b8e"
+    },
+    {
+      "path": "src/games/bc2/Bc2SelectedMeshes1p.h",
+      "sha256": "bef73b1971d32f65f3523b3bc59903b45a73d236f6580245b7508adf3a5f9900"
+    },
+    {
+      "path": "src/games/bc2/Bc2SelectedMeshesObservation.cpp",
+      "sha256": "6e652403f39f30c6739548d5f4cca3cd6b0f22730d759ac1ba5bf00540e39ad5"
+    },
+    {
+      "path": "src/games/bc2/Bc2SelectedMeshesObservation.h",
+      "sha256": "932454a5bfb68d1f9fcfec302b7421e5eb521f8ae03f9f126dcd9e5c7d252fbe"
+    },
+    {
+      "path": "src/games/bc2/Bc2SightAdapter.h",
+      "sha256": "680f34eb0d365cdbe132a26fa7316f0ebd3754ced7ddb9540d6130a46c4fdbbe"
+    },
+    {
+      "path": "src/games/bc2/Bc2SightContact.h",
+      "sha256": "bb6f94df5fe2f8463cc92b30002ca2f13bcb30b62991f7e19c2d4e2616721034"
+    },
+    {
+      "path": "src/games/bc2/Bc2StereoProgressEvidence.h",
+      "sha256": "804a906fcd4a7d75302581ef1d577428f84453691dd6d2ebde51f307882513a9"
+    },
+    {
+      "path": "src/games/bc2/Bc2StereoRecovery.h",
+      "sha256": "65611c5b6e4ada61f9a0b60b35afade89aca6354eb31e03d0c3dabca5508e45e"
+    },
+    {
+      "path": "src/games/bc2/Bc2TrackedViews.h",
+      "sha256": "d9cfa23a3ff14f79b0a102e35329d0344e85a3546ea91e75b3c4b65b7ac67e8d"
+    },
+    {
+      "path": "src/games/bc2/Bc2VehicleCommit.h",
+      "sha256": "6637793d638095034db7ff15f63d29cc5be5b5e8a32677e1ad1bf3d7475362d3"
+    },
+    {
+      "path": "src/games/bc2/Bc2VehicleInput.cpp",
+      "sha256": "00bc8973f04ea9747985dca65745016f8ffdf3df9051e527bf2c351cc4c92645"
+    },
+    {
+      "path": "src/games/bc2/Bc2VehicleInput.h",
+      "sha256": "5f61d017e80f7cbf0d8338c4961dc164e61c6f4ac8931d1a434d57721d7fa279"
+    },
+    {
+      "path": "src/games/bc2/Bc2VehicleRoutes.cpp",
+      "sha256": "ab64b73b7acfe8091f70c7422b321d0ebd1879cb73f3f6fc5dd8f9d95c8edde2"
+    },
+    {
+      "path": "src/games/bc2/Bc2VehicleRoutes.h",
+      "sha256": "90e26725a99eb3591a919009e47cd67f39f40aad86fd8005c02200e8ea034984"
+    },
+    {
+      "path": "src/games/bc2/Bc2WeaponCapture.cpp",
+      "sha256": "2a9bd2f7268a3f35a510954da84760f04ead90be0c53fc7f2006beae2e89a593"
+    },
+    {
+      "path": "src/games/bc2/Bc2WeaponCapture.h",
+      "sha256": "d9e84f133a37a2c26bcd24d0d0c13667ab540f838c79e52925e6172581218b91"
+    },
+    {
+      "path": "src/games/bc2/Bc2WeaponDrawCatalog.h",
+      "sha256": "4a94690a7ed11962b3830e0cf860c80371103db2123084f045089bea0024b7ce"
+    },
+    {
+      "path": "src/games/bc2/Bc2WeaponMode.cpp",
+      "sha256": "f01de068d4cac9504b757c0a328d99cec68b1e0d909791820d8b40f126fc36f5"
+    },
+    {
+      "path": "src/games/bc2/Bc2WeaponMode.h",
+      "sha256": "34cca217811082b9d5126cb7b6311e9d12612df0e3f412f56e3b646f9c2fad00"
+    },
+    {
+      "path": "src/games/bc2/Bc2WeaponModeFamilies.h",
+      "sha256": "4dfebd1df6b3c3b5f2e247df4cf506d0231a969f54a3fbb14250b60f53bc6815"
+    },
+    {
+      "path": "src/games/bc2/Bc2WeaponProfiles.cpp",
+      "sha256": "f56989e13d5fd7692369ea59972d30e33c4184f597d0ec77a066500ae4c87235"
+    },
+    {
+      "path": "src/games/bc2/Bc2WeaponProfiles.h",
+      "sha256": "efdcb7f8b0295f53d3112c9ba84d315c76c85ec92d66563be1b93b94076cbdbe"
+    },
+    {
+      "path": "src/games/bc2/Bc2WeaponVisibility.cpp",
+      "sha256": "b1a71ca575abf7dfeb2dc084ed5fdf864f61c6293fbe3df6bc94b8c021c1f5e7"
+    },
+    {
+      "path": "src/games/bc2/Bc2WeaponVisibility.h",
+      "sha256": "f24622a9b3394b81fd1c66102dde335366afee1b4fc887655c918edd1f863c82"
+    },
+    {
+      "path": "src/games/bc2/Bc2WeaponVisibilityCoverage.h",
+      "sha256": "241179caef5820e55f5b72a75e3b51eb8366a21492204ba79579b9f8ab52b0e9"
+    },
+    {
+      "path": "src/games/bc2/Bc2WeaponVisibilityProbe.cpp",
+      "sha256": "f58c602c8be7585c021608e1afdf02b39258394e45e64d432168bb1b27aae2c0"
+    },
+    {
+      "path": "src/games/bc2/Bc2WeaponVisibilityProbe.h",
+      "sha256": "bb49867b01aeaa65ba0c11caed47776a55d8541ce11b42c35879647f52f30f45"
+    },
+    {
+      "path": "src/games/bc2/Bc2WeaponVisibilityProbeSession.h",
+      "sha256": "540f55b8bf42c7eefbf9b5799171d62624c3a323231b71935f4ff91b7a6ae47b"
+    },
+    {
+      "path": "src/games/bc2/Bc2Xm8MagazineCalibration.h",
+      "sha256": "d78596efce16eb9446cbb09554531acb05b578e36f9c9919ddb43b15e68eda99"
+    },
+    {
+      "path": "src/games/bc2/NativeProbe.cpp",
+      "sha256": "f989eb3d41ac5d91606dc47e4f5e5c06c54503177cda526cff85ac72dc512fd5"
+    },
+    {
+      "path": "src/games/bc2/NativeProbeConfig.h",
+      "sha256": "ead21de7ec0d9702118d63927e85ca1e86533b11da389e0d50ed1d7cc20f18b5"
+    },
+    {
+      "path": "src/games/bc2/NativeViewAbi.h",
+      "sha256": "c46e52cd5f71404358395fc12416e059ccf367f55d84b4eeef422aae7f4749de"
+    },
+    {
+      "path": "src/games/bc2/NativeWorkPool.h",
+      "sha256": "18ca9eec94ec4e44762b7661f4d7e2a6337d9a130af8556f3c8260cef1e9916f"
+    },
+    {
+      "path": "src/graphics/D3D11RigidPropRenderer.cpp",
+      "sha256": "c14b7072ba79fff3f79e96b614eec0a1572b50dfd287dfb81087e96edc909112"
+    },
+    {
+      "path": "src/graphics/RigidPropGeometry.cpp",
+      "sha256": "34dc2ffd392a8fbddebecccdc0862fb6704419e0c1ae553a764f1f528d872a0e"
+    },
+    {
+      "path": "src/graphics/d3d11/D3D11FrameBridge.cpp",
+      "sha256": "9bb3440564a8b249ff4861fe5bd511e05e024eedc3a10a3fc51f186579e1877f"
+    },
+    {
+      "path": "src/graphics/d3d11/D3D11LegacyRelay.cpp",
+      "sha256": "7e2ed73b1908f88a3747983c4883fab6997272469a682917e8252db1b0beb453"
+    },
+    {
+      "path": "src/graphics/d3d11/D3D11MenuProducer.cpp",
+      "sha256": "1c019357924a3415b5fd3f3f4ff096e0ad2f7f72c2a8b22bc88d0bacfbdd6bac"
+    },
+    {
+      "path": "src/graphics/d3d11/D3D11SharedPair.cpp",
+      "sha256": "52170b7c1bf4d729c60d6eaddcf60b92d7cd665d865df7f8c56584b86551585b"
+    },
+    {
+      "path": "src/interaction/ActionPolicy.cpp",
+      "sha256": "1ebcc155dec615b5ca4bbbf044a186eacdef5a6b94675ee28851a5db005fea45"
+    },
+    {
+      "path": "src/interaction/AmmoSupply.cpp",
+      "sha256": "d640d0ff353179f1694a15d976b31fa9e039b75d4f1629751fa4b31c8cf4c536"
+    },
+    {
+      "path": "src/interaction/ArmIk.cpp",
+      "sha256": "a6f59c342c45042b25d67c69f9afd69f414fcf89a1691a5345b4aa1c318e1da1"
+    },
+    {
+      "path": "src/interaction/ComfortCamera.cpp",
+      "sha256": "7976e962ba38381d2fdfdad2c2e53a6c1c9e94ca39b2e53989558d3c0e4d6336"
+    },
+    {
+      "path": "src/interaction/ComfortControls.cpp",
+      "sha256": "410758814dc3d94891528e70e16548540ba50f87df5a52ad6f77a445253f1cbd"
+    },
+    {
+      "path": "src/interaction/ControllerInput.cpp",
+      "sha256": "c78076bbd688ed69bf1203bccb33827d9ffa084c68d08f53dca910d9564e2edc"
+    },
+    {
+      "path": "src/interaction/DetachableMagazine.cpp",
+      "sha256": "5dd494504330bb2c7b2e6befaa458382256848ed454327760a10b14930473ebf"
+    },
+    {
+      "path": "src/interaction/FiringPoseHistory.cpp",
+      "sha256": "5e0625681651bcb3d7f20141d763855a6dce1d6da8d2fdd7a15fe2bc27412f70"
+    },
+    {
+      "path": "src/interaction/RigPose.cpp",
+      "sha256": "c73f57002eecfa379ad008cafeec5b0796db71d6bb0a189150fc62f6f596f7e4"
+    },
+    {
+      "path": "src/interaction/RoomscaleFollow.cpp",
+      "sha256": "666561caa47735151ef944c6af441509503bb17571b12da8d9b8316df65cf0c2"
+    },
+    {
+      "path": "src/interaction/SupportGrip.cpp",
+      "sha256": "7990626f433606da22e0d805d9684b98078e7fcfcabde146aa1f74252bfabf79"
+    },
+    {
+      "path": "src/interaction/TrackedRig.cpp",
+      "sha256": "b966f8671bb4249c6cc7bc8d41fb354c5563c6d4956f20814e88fb74749d2ace"
+    },
+    {
+      "path": "src/interaction/TrackingMath.cpp",
+      "sha256": "2738e8de7ec574202342ced80a524f45f68d1fd20bcde545f0d4ce8a0caf0bc0"
+    },
+    {
+      "path": "src/ipc/FrameProtocol.cpp",
+      "sha256": "b39d65236fc22c635c2b57fec405b4b06fabedce2a1d42bce12210e6043a5a0f"
+    },
+    {
+      "path": "src/ipc/InputProtocol.cpp",
+      "sha256": "933d634564fa11383fbb6172f7227f980a2fad3e74a6282048ad3e917edc4347"
+    },
+    {
+      "path": "src/ipc/StagedFrameProducer.cpp",
+      "sha256": "3831bf1e60a9904980a256a5981d5a72d95963eecad5082ad702e2f215ca2a00"
+    },
+    {
+      "path": "src/math/OpticAperture.cpp",
+      "sha256": "2d4aee85a18eec9a63c3f35a4894b753f39d0300e325c5ffb1d592b3a52138ca"
+    },
+    {
+      "path": "src/math/StereoCulling.cpp",
+      "sha256": "6764d322a03568ed6670df73728249507476158b504b3d9ce5f03cb4fcafefc3"
+    },
+    {
+      "path": "src/math/StereoMath.cpp",
+      "sha256": "211c60a6d4d46d30aa7cca940f92d42b0082fb68c3b6352d65abf1dde29fb62a"
+    },
+    {
+      "path": "src/math/WeaponPoseMath.cpp",
+      "sha256": "b9b1f225b31f274d848187e63d181660917f230441e43eb72fadc7091c79ed79"
+    },
+    {
+      "path": "src/platform/windows/FeedbackChannel.cpp",
+      "sha256": "cf9a4c468aec9edfe795f380987a5c038c457ac8cc4dcd4294c06e9050389d27"
+    },
+    {
+      "path": "src/platform/windows/FrameChannel.cpp",
+      "sha256": "e97a59e1f4640933f5f00b1b3dd8bd941baf03530e3ad60d7082b1adb8d0604a"
+    },
+    {
+      "path": "src/platform/windows/MenuChannel.cpp",
+      "sha256": "dfe73c3e11b2cfae0ce7fbd97b99711f5e24e97597a9dbfa499108adc43fae5b"
+    },
+    {
+      "path": "src/runtime/FrameCoordinator.cpp",
+      "sha256": "fe54702ee1287469f77356e5a6a4724f9449cfa829c6f0c2305b5a7128ca67bc"
+    },
+    {
+      "path": "third_party/minhook-1.3.4/include/MinHook.h",
+      "sha256": "c3608e584bd9659aebdbb4c8c82585605989193623f240552d35c43311b3d31a"
+    },
+    {
+      "path": "third_party/minhook-1.3.4/src/buffer.c",
+      "sha256": "69045b390e0f18cf149ea0451ae750f389654eb8d2ed7f2f89c7ff04b7909519"
+    },
+    {
+      "path": "third_party/minhook-1.3.4/src/buffer.h",
+      "sha256": "175ec5496c020509cf4c7670322b51b5bcd5b63a345bfefc4a19b43675857fa7"
+    },
+    {
+      "path": "third_party/minhook-1.3.4/src/hde/hde32.c",
+      "sha256": "2d4d7dd73d609028822aaf71ac05112b83fe6cc2ae2d6d71fa051b3fc6acfc43"
+    },
+    {
+      "path": "third_party/minhook-1.3.4/src/hde/hde32.h",
+      "sha256": "754579fbcec5f64fa229646ceecb241c0b7f31c8a0bb12370e604c316c569315"
+    },
+    {
+      "path": "third_party/minhook-1.3.4/src/hde/hde64.h",
+      "sha256": "fd5b39e2865e12b9525ebda8fd9e9658b341ead5932d1bcb412a189f81ca42ca"
+    },
+    {
+      "path": "third_party/minhook-1.3.4/src/hde/pstdint.h",
+      "sha256": "975488009779ea99c7e04b83a160397d5cd7195cb5bf6ad79180805f756c7d00"
+    },
+    {
+      "path": "third_party/minhook-1.3.4/src/hde/table32.h",
+      "sha256": "e56f8641bd9133c1b99a1e6555b19eebe7ed663e5ea8de4edbe74ba461161ab4"
+    },
+    {
+      "path": "third_party/minhook-1.3.4/src/hook.c",
+      "sha256": "4005d39875ca4b8a957aabba73bd053cba77e50a8b383d48e0cb44c13f26669b"
+    },
+    {
+      "path": "third_party/minhook-1.3.4/src/trampoline.c",
+      "sha256": "824ed887ec9da606960962af8973205d1f97cd03241e75517eba485280fb6377"
+    },
+    {
+      "path": "third_party/minhook-1.3.4/src/trampoline.h",
+      "sha256": "23681f7768d5dbd23ea14b45ba64e488a337501f23122253c532b05dbed4b85f"
+    }
+  ],
+  "excluded_generated_data": [
+    "src/games/bc2/Bc2BeltPropProfiles.h",
+    "src/games/bc2/Bc2BodyAmmoAssetProfiles.h",
+    "src/games/bc2/Bc2BodyEquipmentProfiles.h",
+    "src/games/bc2/Bc2VisibilityDescriptorData.h"
+  ],
+  "recipe_sha256": "b71bbab7cd9ec8407d717b5ce5f48ae7878db7c8478635d81f2e56fad3eb9062",
+  "build_wiring_sha256": "10e0c0189272ccc5f785b268f017492b3ba9463b42d5c9159ba6d018a2c41a57",
+  "source_sha256": "7de2ac581fd2f583a8e442f0cc1ddfc7feaf0a9f53495a6a0aa8bb8807cc04d7",
+  "excluded_data_sha256": [
+    {
+      "path": "src/games/bc2/Bc2BeltPropProfiles.h",
+      "sha256": "83884b0a26216bfb5654c1053fd93778140596ac362599226f708225999ca57e"
+    },
+    {
+      "path": "src/games/bc2/Bc2BodyAmmoAssetProfiles.h",
+      "sha256": "2801cece99a2c2a70df376581b8cd0742d49f2024bfb9c8ecdf590e28f2c5108"
+    },
+    {
+      "path": "src/games/bc2/Bc2BodyEquipmentProfiles.h",
+      "sha256": "45de36b3a2251f7098914b79f9fe27202d6413a12fed11a54584d28e964f635e"
+    },
+    {
+      "path": "src/games/bc2/Bc2VisibilityDescriptorData.h",
+      "sha256": "996519e84401184fef315b755ce78a1fe88ef41ac2425f6256d680c17d01a6eb"
+    }
+  ],
+  "reviewed_header_sha256": "29b145dc3ab14c4692efb527185e5864bbe87cd3238d20ccfeeeaef7769c70fd",
+  "native_admission_granted": false
+}

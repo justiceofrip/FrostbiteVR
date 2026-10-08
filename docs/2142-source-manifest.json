@@ -1,0 +1,150 @@
+{
+  "source_root": "<local-bf2142-workspace>\\public-source\\BF2142VR",
+  "head": "0777f8124001addb583f6655989af09f433102af",
+  "includes_uncommitted_changes": true,
+  "files": [
+    {
+      "source": "src\\stereo\\StereoMath.h",
+      "destination": "include\\fvr\\math\\StereoMath.h",
+      "source_sha256": "DFAC1B0D2AD74DD70F94D8D5704C428AEDC30BBCBA661664B1D853FE79ED1190",
+      "destination_sha256": "F9963BB184FCA17ADB05747116F855FD13BFEEEADF41E2DB353AA760A15F7426"
+    },
+    {
+      "source": "src\\stereo\\StereoMath.cpp",
+      "destination": "src\\math\\StereoMath.cpp",
+      "source_sha256": "7ABC3DDF20C4225D1ED9C14029C1CA3D747EA957A942DF129FE7B39F9ED132CE",
+      "destination_sha256": "211C60A6D4D46D30AA7CCA940F92D42B0082FB68C3B6352D65ABF1DDE29FB62A"
+    },
+    {
+      "source": "src\\stereo\\WeaponPoseMath.h",
+      "destination": "include\\fvr\\math\\WeaponPoseMath.h",
+      "source_sha256": "480C67B01992E4877F7A23AB66B157866475E34E72C3EC90370F03B44F91C514",
+      "destination_sha256": "C6E137A1A87FE5B461360111BA19F3F9B85F7B3423A517EF3E63BDFF376CB8EF"
+    },
+    {
+      "source": "src\\stereo\\WeaponPoseMath.cpp",
+      "destination": "src\\math\\WeaponPoseMath.cpp",
+      "source_sha256": "803CC88F7E63ACD296F6A333E810733DF1DFAE8D5D2D1E46D99E25F1C2BF102D",
+      "destination_sha256": "B9B1F225B31F274D848187E63D181660917F230441E43EB72FADC7091C79ED79"
+    },
+    {
+      "source": "src\\stereo\\UiPointerMath.h",
+      "destination": "include\\fvr\\math\\UiPointerMath.h",
+      "source_sha256": "C25AB5DE2F118E457BE90659A5D8C63867554D0C951E98D3AB959D8C57E4DE7D",
+      "destination_sha256": "91311C3F33E7C827D28993E3131A877C04F1E5B07E32D4CA64ACAB230D6C5092"
+    },
+    {
+      "source": "src\\stereo\\UiPointerMath.cpp",
+      "destination": "src\\math\\UiPointerMath.cpp",
+      "source_sha256": "5098638F7C9CC6571A946258E94D6CDB96FC423CC88D351EE0C91EA24BABFC2C",
+      "destination_sha256": "EB3D0BAFCBDAAF83AE2C64C6A88FC9FD608B6C37525A9F6EBA42C6CAD235B677"
+    },
+    {
+      "source": "src\\stereo\\UiPointerSmoothing.h",
+      "destination": "include\\fvr\\math\\UiPointerSmoothing.h",
+      "source_sha256": "E7A3A1E24101119B119B8A70A7F567CADFC02E5DDB30ABB9289FEBA72A9FF02C",
+      "destination_sha256": "16AD754C2D48ED76A4E14810ECBF6A93FA6D4B07A79A310B6EA3B9275576AAD7"
+    },
+    {
+      "source": "src\\stereo\\UiPointerSmoothing.cpp",
+      "destination": "src\\math\\UiPointerSmoothing.cpp",
+      "source_sha256": "9DF32FB5DFC6C3EDA3419814E3D582CFCD9796D5F2F3E949D7AA6EFD84A2FFD8",
+      "destination_sha256": "ADC182C2BFA1B8945FADCA3EADE13665B45D7A461407ABEB6CF2D2F69B478B7A"
+    },
+    {
+      "source": "src\\stereo\\ArmPoleVectorMath.h",
+      "destination": "include\\fvr\\math\\ArmPoleVectorMath.h",
+      "source_sha256": "BCE05EEE3CD8CF968905E7B1BD55BC4BF227CE92683B644DC05A5B103312473C",
+      "destination_sha256": "58AC2B8593899BFA87FB5464F4CFE4CA9ED969C53C3F8DAC0985EDF936FF4087"
+    },
+    {
+      "source": "src\\stereo\\ArmPoleVectorMath.cpp",
+      "destination": "src\\math\\ArmPoleVectorMath.cpp",
+      "source_sha256": "BEC4DA61CA9DEC9E7046CCDABFF9E99B9D6C926893F61B515A99327A26673769",
+      "destination_sha256": "0CD27E70BB28B9DAFACDE678F86B2AF9CC84A54FF7071B04171984F8542CD2DF"
+    },
+    {
+      "source": "src\\bf2142\\TrackingMath.h",
+      "destination": "include\\fvr\\interaction\\TrackingMath.h",
+      "source_sha256": "BB0DE5469986158B03A7F6AC5690A0B2845C35ABDD999D85B299A8701F91C448",
+      "destination_sha256": "E17E88746385FE7DE519129AE99EED9DF7897B10C4368ADAFA6C997108DBA145"
+    },
+    {
+      "source": "src\\bf2142\\TrackingMath.cpp",
+      "destination": "src\\interaction\\TrackingMath.cpp",
+      "source_sha256": "EA21158FD08FFA5713DB57BC602089DFB01B474C8B213E694750BFA7A0B04B98",
+      "destination_sha256": "D60B2B39ABE39FDD030C9335BEA75C18041739E6C325B76DC94D6008C2453AA3"
+    },
+    {
+      "source": "src\\bf2142\\ComfortCamera.h",
+      "destination": "include\\fvr\\interaction\\ComfortCamera.h",
+      "source_sha256": "DD06EB6837D3362C67D4C02AFD68149747964585473EE7837E670B5B93B49B8C",
+      "destination_sha256": "4022189BB3102DDA8081B9BF3CA38B0B29AEC18205C3F74AD0BF6FF96F90FAE6"
+    },
+    {
+      "source": "src\\bf2142\\ComfortCamera.cpp",
+      "destination": "src\\interaction\\ComfortCamera.cpp",
+      "source_sha256": "716C34ED43BFC65D07B0477D084E52021C5C96EC59F53654B3D1EFEF0B1796B2",
+      "destination_sha256": "7976E962BA38381D2FDFDAD2C2E53A6C1C9E94CA39B2E53989558D3C0E4D6336"
+    },
+    {
+      "source": "src\\bf2142\\ComfortControls.h",
+      "destination": "include\\fvr\\interaction\\ComfortControls.h",
+      "source_sha256": "33759B7B93CEAE0D15C166BC4175AC82F8BB26927DDB57B5EA4BCF65B18173CE",
+      "destination_sha256": "644B9A080B2364BA323F274788A4C604590A7CBCDD8F28CC7F7C17DF6FEE429F"
+    },
+    {
+      "source": "src\\bf2142\\ComfortControls.cpp",
+      "destination": "src\\interaction\\ComfortControls.cpp",
+      "source_sha256": "EFCD6F3F2DEBD0C2745ACD558281A01A37B0A95D102CF9FA71E54DBC43EAEBB1",
+      "destination_sha256": "410758814DC3D94891528E70E16548540BA50F87DF5A52AD6F77A445253F1CBD"
+    },
+    {
+      "source": "src\\bf2142\\WeaponGrip.h",
+      "destination": "include\\fvr\\interaction\\WeaponGrip.h",
+      "source_sha256": "56307790A323AF9B10B6F17955482060F39CA6042509A5856908060D665B7DDE",
+      "destination_sha256": "7B74CAFF4794ADD2321DFDCF11B9273DD299FF6CA97F7EC458FF75F3DAF61C54"
+    },
+    {
+      "source": "src\\bf2142\\WeaponGrip.cpp",
+      "destination": "src\\interaction\\WeaponGrip.cpp",
+      "source_sha256": "6B919B7FFD3C06F152EBF618DF10831003BDB1CE1386615DA965FE84F4DC1484",
+      "destination_sha256": "E6738F163780C0EA50F825140B6F732371340F49FF5450478EF88EA010C43177"
+    },
+    {
+      "source": "src\\bf2142\\AutoAdsPolicy.h",
+      "destination": "include\\fvr\\interaction\\AutoAdsPolicy.h",
+      "source_sha256": "64CF1A105142E25329263F1086F6012AD54940A81DA51B0B0AE6AAD8A20BE920",
+      "destination_sha256": "24B35E6F22BFFF0C31A275613E2C77F573F8B68D01248D8D139B5C2FF55EE07D"
+    },
+    {
+      "source": "src\\bf2142\\RecenterPolicy.h",
+      "destination": "include\\fvr\\interaction\\RecenterPolicy.h",
+      "source_sha256": "39D6A16651A9E2C91C5CCCE644735ABEFBC5EFB2F34114B55D5EB2A6FEAB434E",
+      "destination_sha256": "CCFFC71C7605762FD02B70C0EC5D7B7D8FD3E31357C152C20EA4F7BD37A33B75"
+    },
+    {
+      "source": "src\\bf2142\\MovementFrame.h",
+      "destination": "include\\fvr\\interaction\\MovementFrame.h",
+      "source_sha256": "764F4DFADC1CE9DD87BF0115C6DE1704252B45B2BB62B57204982E1C42492429",
+      "destination_sha256": "753FF8BA9EA9C96C55D1DBA6ABB33370C4155621AD3B468E6174B5AC19909543"
+    },
+    {
+      "source": "src\\stereo\\UiPointerSmoothingTests.cpp",
+      "destination": "tests\\UiPointerSmoothingTests.cpp",
+      "source_sha256": "5E94CC20B6C9761CB503A1CD654FF5C854092FE300B1C92D546D83423A2DE1A8",
+      "destination_sha256": "0C8CE18E73859B958C6E440033C64228EC1B6D76CBA0C67658653D7AD88D3C41"
+    },
+    {
+      "source": "src\\stereo\\ArmPoleVectorMathTests.cpp",
+      "destination": "tests\\ArmPoleVectorMathTests.cpp",
+      "source_sha256": "A3A291630ACA0E2E08CEBE2D4D706FC57DC9BD9F1A1E1B8ECFEBE253B362BB23",
+      "destination_sha256": "4B4FD3032A53E02F3E00C51B6EE12C9ADBCC373E884C6B148C577F53D6FAA527"
+    }
+  ],
+  "transformations": [
+    "Namespace/include normalization",
+    "D3D8-named pure math renamed Lh to specify convention without implying a graphics API",
+    "PhysicalStance changed to semantic requests with explicit per-game support flags"
+  ]
+}
