@@ -1,3 +1,13 @@
+## October 8: combine gestures without resetting the consumers — 204
+
+Independent holster and reload success does not prove their composition. Drive
+the ordinary inventory/chest-ammo path using actual assignments and retain its
+consumer and hand lifetimes. Startup auto-stow must settle first; empty hands
+must remain empty while leaving the shoulder. Keep callback recording deadlines
+separate from gameplay authority so a longer setup cannot erase reload evidence.
+The new driver passes CPU checks and one strict live combined sequence in
+[204](COMBINED-INVENTORY-RELOAD-204.md), separately from headset acceptance.
+
 ## October 8: separate old retirement from current equipment — 203
 
 Cleanup of an interrupted operation belongs to the old owner and cycle, while

@@ -1,4 +1,12 @@
-# Current status — checkpoint 203
+# Current local status — checkpoint 204
+
+[Checkpoint 204](COMBINED-INVENTORY-RELOAD-204.md) passed a combined actual-game
+sequence through persistent normal consumers: holster XM8, draw/holster SPAS,
+draw XM8, return its original magazine, then reload from chest ammunition.
+Both builds pass 186 C++ suites. The strict native audit verifies conserved ammo,
+zero reload cancellations or magazine visual fallbacks, and clean restoration.
+This is one automated XM8/SPAS sequence, not all-weapon or headset acceptance.
+Changes after the fork snapshot remain local; GitHub is not automatically updated.
 
 [Checkpoint 203](RELOAD-TRANSITIONS-203.md) fixes a reproduced shared magazine
 retirement failure after switching to a different rig/profile. Persistent CPU
@@ -14,8 +22,8 @@ player release or a supported-games compatibility list.
 | --- | --- |
 | Native stereo / OpenXR | Demonstrated in BC2 headset sessions; pacing, LOD and lifecycle polish remain |
 | Hands, support grip, roomscale, recenter | Demonstrated; reconnect/transition combinations still need coverage |
-| Body inventory and chest ammo | Demonstrated; repeated holster/pickup/reload transitions have had regressions |
-| Magazine reload | Checkpoint 202 passed an actual-game original-return then replacement sequence on scoped XM8; broader gestures/configurations and new headset acceptance remain |
+| Body inventory and chest ammo | 204 passes combined native shoulder switches and chest reload; pickups, active-reload interruptions and broader transitions remain |
+| Magazine reload | 204 passes original return and replacement after native holster/switch steps on scoped XM8; broader configurations and new headset acceptance remain |
 | Shell reload | Actual SPAS insertions and earlier headset acceptance; manual pumping is unfinished |
 | Underbarrel sight / reload | Selected launcher sight interaction demonstrated; horizontal AEK sight and other attachment coverage incomplete; stock reload retained where supported |
 | Boat | Tested boat's head aim/fire and controls demonstrated; complete vehicle/campaign coverage and vehicle reticle remain |

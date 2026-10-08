@@ -1,5 +1,6 @@
 #include "Bc2MagazinePhysicalProbe.h"
 #include "Bc2PhysicalReloadProbe.h"
+#include "fvr/interaction/BodyAnchors.h"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -125,10 +126,10 @@ void Bc2MagazinePhysicalProbe::Prepare(InputFrame& in,const ReloadStateOwner& ow
   }
  }
  if(phase_==Phase::Pouch||phase_==Phase::GrabReplacement){
-  math::Pose pouch;const auto c=Bc2MagazinePhysicalReload::DefaultPouch();pouch.position={c.pouchCenterMeters[0],c.pouchCenterMeters[1],-c.pouchCenterMeters[2]};
+  math::Pose pouch;const auto c=chestSupply_?ChestAmmoSupply():Bc2MagazinePhysicalReload::DefaultPouch();pouch.position={c.pouchCenterMeters[0],c.pouchCenterMeters[1],-c.pouchCenterMeters[2]};
   command_=Step(command_,pouch);
   if(phase_==Phase::Pouch&&newRaw&&original->frame.hands[0].squeeze<=.35f){
-   const auto actual=PhysicalReloadPouchPose(original->frame),target=Controller(pouch);
+   const auto actual=chestSupply_?BodyAnchorHandPose(original->frame,InteractionHand::Left):PhysicalReloadPouchPose(original->frame),target=Controller(pouch);
    if(actual&&target&&Distance(*actual,*target)<.01f&&Angle(*actual,*target)<.05f){
     if(!alignedAt_)alignedAt_=now;if(now-alignedAt_>=100000000)PhaseTo(Phase::GrabReplacement,now);
    }else alignedAt_=0;
@@ -145,7 +146,7 @@ void Bc2MagazinePhysicalProbe::Prepare(InputFrame& in,const ReloadStateOwner& ow
    // 30-second outer deadline cover both actual interactions.
    try {
     std::ostringstream evidence;Report(evidence);
-    Bc2MagazinePhysicalProbe next(true,false,true);
+    Bc2MagazinePhysicalProbe next(true,false,true,false,chestSupply_);
     next.returnThenReplace_=true;next.secondCycle_=true;next.firstCycleReport_=evidence.str();
     next.first_=first_;next.phaseAt_=now;next.lastNow_=now;next.owner_=owner_;
     next.command_=command_;next.packs_=packs_;next.baseline_=packs_;
@@ -200,6 +201,7 @@ void Bc2MagazinePhysicalProbe::Observe(const MagazinePhysicalProbeState& s,const
 void Bc2MagazinePhysicalProbe::Report(std::ostream& o)const {
  const auto precision=o.precision();o.precision(std::numeric_limits<float>::max_digits10);
  o<<"{\"enabled\":"<<(enabled_?"true":"false")<<",\"synthetic_input\":true,\"headset_verified\":false,\"eye_textures_verified\":false"
+  <<",\"chest_supply\":"<<(chestSupply_?"true":"false")
   <<",\"return_then_replace\":"<<(returnThenReplace_?"true":"false")<<",\"second_cycle\":"<<(secondCycle_?"true":"false")
   <<",\"first_cycle\":"<<(firstCycleReport_.empty()?"null":firstCycleReport_)
   <<",\"original_return_fixture\":"<<(originalReturn_?"true":"false")

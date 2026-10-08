@@ -11,7 +11,7 @@ struct MagazinePackCounters {
 // geometry evidence and packed-copy receipts are never manufactured here.
 class Bc2MagazinePhysicalProbe {
 public:
- explicit Bc2MagazinePhysicalProbe(bool enabled=false,bool originalReturn=false,bool carryChallenge=false,bool returnThenReplace=false)noexcept:enabled_(enabled),originalReturn_(originalReturn||returnThenReplace),carryChallenge_(carryChallenge&&!originalReturn&&!returnThenReplace),returnThenReplace_(returnThenReplace){}
+ explicit Bc2MagazinePhysicalProbe(bool enabled=false,bool originalReturn=false,bool carryChallenge=false,bool returnThenReplace=false,bool chestSupply=false)noexcept:enabled_(enabled),originalReturn_(originalReturn||returnThenReplace),carryChallenge_(carryChallenge&&!originalReturn&&!returnThenReplace),returnThenReplace_(returnThenReplace),chestSupply_(chestSupply){}
  void Prepare(interaction::InputFrame&,const ReloadStateOwner&,std::string_view asset,const MagazineRawContact&,
      const MagazinePhysicalProbeState&,std::int64_t observed,std::int64_t deadline,std::int64_t now)noexcept;
  void Observe(const MagazinePhysicalProbeState&,const MagazinePackCounters&,std::int64_t now)noexcept;
@@ -25,7 +25,7 @@ private:
  struct Input {interaction::InputFrame frame{};ReloadStateOwner owner{};std::int64_t observed=0,deadline=0;};
  std::array<std::optional<Input>,32> history_{};unsigned historyNext_=0;
  bool enabled_=false,originalReturn_=false,carryChallenge_=false;
- bool returnThenReplace_=false,secondCycle_=false;std::string firstCycleReport_;
+ bool returnThenReplace_=false,secondCycle_=false,chestSupply_=false;std::string firstCycleReport_;
  bool carryReturning_=false,carryExercised_=false;std::optional<math::Matrix4> carryStart_;
  std::optional<math::Matrix4> carryPrevious_;
  std::int64_t carryWaitAt_=0,carryFailureAt_=0;unsigned carryWaits_=0,carryFailureFlags_=0;

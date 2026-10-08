@@ -218,6 +218,7 @@ std::optional<ReloadFlowRecord> ReloadFlowInvocation::Finish(const ReloadFlowEve
 
 #if defined(_M_IX86)
 #include <Windows.h>
+#include "Bc2ReloadRecordWindow.h"
 #include <MinHook.h>
 #include <intrin.h>
 #include <atomic>
@@ -264,6 +265,7 @@ std::atomic<bool> enabled=false;std::atomic<unsigned> active=0;
 std::atomic<std::uint64_t> ownerRevision=1;
 struct Lease {ReloadStateSnapshot snapshot{};std::int64_t deadline=0;std::uint64_t revision=0;std::optional<ReloadServerSnapshot> server;};Lease published;
 std::int64_t frequency=0,startNs=0;bool installed=false,started=false,drained=false;
+ReloadRecordWindow recordWindowClock;
 std::atomic<unsigned> ownerDrops=0,recordBusy=0,recordBeginBusy=0,recordEndBusy=0,ownerMisses=0,readMisses=0,contextMisses=0,nestingMisses=0,windowExpired=0;
 std::array<std::atomic<unsigned>,4> calls{},matches{},serverMatches{};
 std::atomic<unsigned> serverPublishAttempts=0,serverPublishMisses=0,serverReadMisses=0;
@@ -449,7 +451,7 @@ struct Observation {
         frame.previous=currentFrame;frame.firing=firing;frame.depth=frame.previous?frame.previous->depth+1:1;currentFrame=&frame;
         if(!enabled.load(std::memory_order_acquire))return;
         ++calls[unsigned(kind)];const auto now=Now();
-        const bool recordWindow=now>0&&now>=startNs&&now-startNs<20000000000ll;
+        const bool recordWindow=recordWindowClock.Contains(now);
         if(!recordWindow){++windowExpired;if(!requestMode||now<=0||(!RequestTarget(firing)&&!combinedFamilies))return;}
         if(frame.depth>8){evidence.stage=1;++nestingMisses;return;}
         lease=Owner(firing,now);if(!lease){evidence.stage=2;++ownerMisses;return;}
@@ -1677,7 +1679,9 @@ bool EnablePumpHoldDiagnostic()noexcept {
     if(!installed||started||enabled.load()||!diagnosticHold||diagnosticRound||requestMode||!holdCodeVerified)return false;
     pumpDiagnostic=true;return true;
 }
-void Start()noexcept{if(!installed||started)return;startNs=Now();if(startNs<=0)return;started=true;if(diagnosticHold)holdProbe.Enable(pumpDiagnostic?ReloadHoldTarget::SpasPump:ReloadHoldTarget::Reload);if(diagnosticRound)roundGate.Enable();enabled.store(true,std::memory_order_release);}
+bool DeferInventoryReloadRecords()noexcept{return installed&&!started&&!enabled.load()&&requestMode&&combinedFamilies&&recordWindowClock.Defer();}
+bool BeginInventoryReloadRecords()noexcept{return enabled.load(std::memory_order_acquire)&&requestMode&&combinedFamilies&&recordWindowClock.OpenDeferred(Now());}
+void Start()noexcept{if(!installed||started)return;startNs=Now();if(startNs<=0)return;started=true;recordWindowClock.Start(startNs);if(diagnosticHold)holdProbe.Enable(pumpDiagnostic?ReloadHoldTarget::SpasPump:ReloadHoldTarget::Reload);if(diagnosticRound)roundGate.Enable();enabled.store(true,std::memory_order_release);}
 bool Stop()noexcept{
     enabled.store(false,std::memory_order_release);holdProbe.Stop();ClearOwner();bool okay=true;
     for(auto hook:hooks)if(hook){const auto status=MH_DisableHook(hook);okay&=status==MH_OK||status==MH_ERROR_DISABLED;}
@@ -1712,7 +1716,7 @@ void Report(std::ostream& out){
        <<",\"server_binding_verified\":"<<(serverBinding?"true":"false")<<",\"server_publish_attempts\":"<<serverPublishAttempts.load()
        <<",\"server_publish_misses\":"<<serverPublishMisses.load()<<",\"server_read_misses\":"<<serverReadMisses.load()
        <<",\"server_matched\":["<<serverMatches[0].load()<<','<<serverMatches[1].load()<<','<<serverMatches[2].load()<<','<<serverMatches[3].load()<<']'
-       <<",\"capacity\":"<<ReloadFlowRecords::Capacity<<",\"window_seconds\":20,\"start_ns\":"<<startNs<<",\"in_flight\":"<<active.load()
+       <<",\"capacity\":"<<ReloadFlowRecords::Capacity<<",\"window_seconds\":20,\"start_ns\":"<<recordWindowClock.StartNs()<<",\"runtime_start_ns\":"<<startNs<<",\"in_flight\":"<<active.load()
        <<",\"owner_lock_drops\":"<<ownerDrops.load()<<",\"record_lock_drops\":"<<recordBusy.load()
        <<",\"record_begin_lock_drops\":"<<recordBeginBusy.load()<<",\"record_end_lock_drops\":"<<recordEndBusy.load()
        <<",\"completion_journal\":{\"capacity\":"<<ReloadDeferredCompletions::Capacity<<",\"pending\":"<<recordCompletions.Pending()
@@ -1993,6 +1997,8 @@ bool Install(std::span<const std::byte>,const engine::PeImage&,std::uintptr_t,co
 MagazineEmptyControlCounters ReadMagazineEmptyControlCounters()noexcept{return {};}
 void PublishMagazineInteractionDiagnostic(const MagazineInteractionDiagnostic&)noexcept{}
 bool EnableMagazineRequestCycles()noexcept{return false;}
+bool DeferInventoryReloadRecords()noexcept{return false;}
+bool BeginInventoryReloadRecords()noexcept{return false;}
 bool SelectRequestFamily(ReloadNativeFamily,const ReloadStateOwner&)noexcept{return false;}
 bool SelectMagazineRequestProfile(NativeMagazineProfileId,const ReloadStateOwner&)noexcept{return false;}
 std::optional<NativeMagazineProfileId> ReadMagazineRequestProfile(const ReloadStateOwner&)noexcept{return {};}

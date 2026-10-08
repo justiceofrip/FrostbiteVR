@@ -1,11 +1,12 @@
 #pragma once
 #include <cstdint>
 namespace fvr::bc2 {
-enum class MagazineReloadSession:std::uint32_t {None=0,GateInsertProbe=1,GateCancelProbe=2,Physical=3,PhysicalConsumerProbe=4,OriginalReturnProbe=5,FullReturnProbe=6};
+enum class MagazineReloadSession:std::uint32_t {None=0,GateInsertProbe=1,GateCancelProbe=2,Physical=3,PhysicalConsumerProbe=4,OriginalReturnProbe=5,FullReturnProbe=6,InventoryReloadProbe=7};
 // Construction policy only; admission still requires current native idle counts,
 // exact owner/hand evidence and committed suppression. No motion script in mode3.
 constexpr bool MagazineDetachedSessionEnabled(std::uint32_t mode)noexcept {
     return mode==static_cast<std::uint32_t>(MagazineReloadSession::Physical)||
+        mode==static_cast<std::uint32_t>(MagazineReloadSession::InventoryReloadProbe)||
         mode==static_cast<std::uint32_t>(MagazineReloadSession::FullReturnProbe);
 }
 constexpr bool ValidMagazineReloadSession(std::uint32_t mode,std::uint32_t flags,std::uint32_t duration)noexcept {
@@ -16,6 +17,10 @@ constexpr bool ValidMagazineReloadSession(std::uint32_t mode,std::uint32_t flags
     constexpr std::uint32_t allowed=required|0x200u;
     if(mode<=2)return duration==30000&&(flags&required)==required&&(flags&0xffu)==9&&!(flags&~allowed);
     constexpr auto physical=required|0x2000000u;
+    // One bounded combined fixture through normal body/chest/detached paths.
+    // No host session, fire/optic/sight/other synthetic fixtures are admitted.
+    constexpr auto combined=physical|0x10000000u;
+    if(mode==7)return duration==60000&&(flags&combined)==combined&&(flags&0xffu)==9&&!(flags&~(combined|0x200u));
     if(mode==4||mode==5||mode==6)return duration==30000&&(flags&physical)==physical&&(flags&0xffu)==9&&!(flags&~(physical|0x200u));
     // Normal physical mode can coexist with sight/body interactions. Continuous
     // sessions carry the host PID in the duration union; no synthetic probes.

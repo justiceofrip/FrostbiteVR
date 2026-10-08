@@ -1,5 +1,15 @@
 # Engine boundaries
 
+## Combined player diagnostic — 204
+
+One explicit bounded driver composes ordinary shoulder inventory and chest
+reload input. Consumer/native/hand ownership instances persist across every
+stage. Diagnostic observations never create acknowledgements. A separate
+one-shot callback recording clock starts at the reload portion; native runtime,
+invocation and lease clocks retain their original authority and lifetimes.
+The ordinary recording mode and capacity are unchanged. See
+[the sequence and limits](COMBINED-INVENTORY-RELOAD-204.md).
+
 ## Cross-profile reload retirement — 203
 
 Retirement receipts describe the old native owner and cycle. The current attached

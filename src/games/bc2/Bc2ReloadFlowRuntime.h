@@ -140,6 +140,10 @@ bool Install(std::span<const std::byte>,const engine::PeImage&,std::uintptr_t im
 // These use the current native clock, exact owner and fresh original timestamps.
 // Pre-Start capability grant; normal SPAS request mode stays the initial family.
 bool EnableMagazineRequestCycles()noexcept;
+// Diagnostic log starts at the reload portion of the combined controller test.
+// Neither function resets consumers, native cycles, records, or lease clocks.
+bool DeferInventoryReloadRecords()noexcept;
+bool BeginInventoryReloadRecords()noexcept;
 // Atomic value snapshot safe for incremental telemetry; no report serialization
 // or policy/container access while native callbacks run.
 struct MagazineEmptyControlCounters {

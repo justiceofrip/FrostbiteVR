@@ -32,6 +32,7 @@
 #include "Bc2PhysicalReload.h"
 #include "Bc2MagazinePhysicalReload.h"
 #include "Bc2MagazinePhysicalProbe.h"
+#include "Bc2InventoryReloadProbe.h"
 #include "Bc2MagazineDetached.h"
 #include "Bc2MagazineDetachedProbe.h"
 #include "Bc2PhysicalReloadProbe.h"
@@ -115,6 +116,7 @@ bool physicalReloadMode=false;std::optional<Bc2PhysicalReload> physicalReload;
 PhysicalReloadApi physicalReloadApi{};
 std::optional<Bc2MagazinePhysicalReload> magazinePhysical;MagazinePhysicalApi magazinePhysicalApi{};
 std::optional<Bc2MagazinePhysicalProbe> magazinePhysicalFixture;
+std::optional<Bc2InventoryReloadProbe> inventoryReloadFixture;
 std::optional<Bc2MagazineDetached> magazineDetached;
 std::optional<Bc2MagazineDetachedProbe> magazineDetachedFixture;
 std::atomic<unsigned> magazineRecoverySuppressionCommits=0,magazineRecoverySuppressionFailures=0;
@@ -1089,6 +1091,15 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         magazinePhysicalFixture->Prepare(input,current,asset,rigPublication::ReadMagazineContact(current),magazinePhysical->ProbeState(now),
             HandNanos(inputDeadline-handFrequency/10),HandNanos(inputDeadline),now);
     }
+    if(inventoryReloadFixture&&magazinePhysical&&bodyInventory){
+        const ReloadStateOwner current{owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,input.spaceGeneration};
+        LARGE_INTEGER processed{};QueryPerformanceCounter(&processed);const auto now=HandNanos(processed.QuadPart);
+        inventoryReloadFixture->Prepare(input,current,asset,ReadBodyHolsterProbe(now),bodyInventory->Display(now),
+            rigPublication::ReadMagazineContact(current),magazinePhysical->ProbeState(now),
+            HandNanos(inputDeadline-handFrequency/10),HandNanos(inputDeadline),now);
+        if(inventoryReloadFixture->State()==Bc2InventoryReloadProbe::Phase::Reload)
+            reloadFlowRuntime::BeginInventoryReloadRecords();
+    }
 #ifdef FVR_BC2_ARMING_EMPTY_PROBE
     if(armingEmptyFixture&&physicalReload){
         const ReloadStateOwner current{owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,input.spaceGeneration};
@@ -1192,6 +1203,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         sample.gripPressed=interaction::ReloadGripActive(input.hands[0].squeeze,handSample,handOwnership.Current(interaction::InteractionHand::Left));
         sample.ejectPressed=(out.pressed&interaction::Reload)!=0;
         sample.cancel=bodyDraw.pending||!aimValid||!out.active||(magazinePhysicalFixture&&magazinePhysicalFixture->CancelConsumer())||
+            (inventoryReloadFixture&&inventoryReloadFixture->CancelConsumer())||
             (physicalReload&&physicalReload->BlocksEquipment());
         sample.asset=asset;sample.meshes=selectedMeshes.Read(sample.nativeOwner,handSample.nowNs);
         sample.raw=rigPublication::ReadMagazineContact(sample.nativeOwner);
@@ -1212,6 +1224,8 @@ void __fastcall GatherHook(void* self,void*,void* cache){
                 magazinePhysical->Cancel(safety,handOwnership);magazineResult.tracking.target.reset();magazineResult.reloadHeld=false;
                 magazineResult.blocksWeaponActions=magazinePhysical->BlocksEquipment();}}
         ApplyMagazinePhysicalActions(out,magazineProfile,magazineResult);
+        if(inventoryReloadFixture){LARGE_INTEGER stamp{};QueryPerformanceCounter(&stamp);const auto now=HandNanos(stamp.QuadPart);
+            inventoryReloadFixture->Observe(magazinePhysical->ProbeState(now),rigPublication::ReadMagazinePackCounters(),now);}
     }
     if(physicalReload){
         // Shared right GunHold has just been renewed. RAW controller/pouch and
@@ -1710,7 +1724,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
                 }
                 rigPublication::PublishTracking(*holsterTracking);}
             else {InvalidateBodyHolsterState(BodyHolsterLifecycleReason::TrackingPublicationUnavailable);rigPublication::PublishTracking({});}
-            if(bodyHolster->DiagnosticDeadline()){
+            if(bodyHolster->DiagnosticDeadline()||inventoryReloadFixture){
                 try{auto sample=std::make_shared<BodyHolsterProbeSample>();LARGE_INTEGER now{};QueryPerformanceCounter(&now);
                     sample->sampledNs=HandNanos(now.QuadPart);sample->trialStartNs=bodyHolster->DiagnosticStart();sample->trialDeadlineNs=bodyHolster->DiagnosticDeadline();
                     sample->nativeOwner=holsterSample.nativeOwner;sample->input=input;sample->hand=holsterBodySample->hand;
@@ -1910,9 +1924,9 @@ bool Install(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uin
 #endif
     }
     const bool magazinePhysicalProbe=magazineReloadSession==4||magazineReloadSession==5;
-    const bool magazineNormal=magazineReloadSession==3||magazinePhysicalProbe||magazineReloadSession==6;
+    const bool magazineNormal=magazineReloadSession==3||magazinePhysicalProbe||magazineReloadSession==6||magazineReloadSession==7;
     const bool magazineProbe=magazineReloadSession==1||magazineReloadSession==2;
-    if(magazineReloadSession>6||((magazinePhysicalProbe||magazineReloadSession==6)&&(enableSightFlip||reloadHoldProbe||reloadRoundProbe||reloadRequestProbe||enableRigPulse||enableDeathProbe||enableEquipProbe))||
+    if(magazineReloadSession>7||((magazinePhysicalProbe||magazineReloadSession>=6)&&(enableSightFlip||reloadHoldProbe||reloadRoundProbe||reloadRequestProbe||enableRigPulse||enableDeathProbe||enableEquipProbe))||
        (magazineNormal&&(!enablePhysicalReload||enablePhysicalReloadProbe))||
        (magazineProbe&&(reloadHoldProbe||reloadRoundProbe||reloadRequestProbe||enablePhysicalReload||enablePhysicalReloadProbe||enableSightFlip||enableRigPulse||enableDeathProbe||enableEquipProbe||!handPoses||!twoHandGrip)))return false;
     physicalReloadMode=enablePhysicalReload;reloadRequestMode=reloadRequestProbe||physicalReloadMode||magazineReloadSession!=0;
@@ -1923,6 +1937,7 @@ bool Install(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uin
         const bool flowInstalled=reloadStateBinding&&reloadFlowRuntime::Install(bytes,pe,base,memory,reloadHoldProbe,reloadRoundProbe,reloadRequestMode&&!magazineProbe,magazineProbe);
         if((reloadHoldProbe||reloadRoundProbe||reloadRequestMode)&&!flowInstalled)return false;
         if(magazineNormal&&!reloadFlowRuntime::EnableMagazineRequestCycles())return false;
+        if(magazineReloadSession==7&&!reloadFlowRuntime::DeferInventoryReloadRecords())return false;
         if(physicalReloadMode){
             PhysicalReloadApi api;
             api.reserve=[](void*)noexcept{return reloadFlowRuntime::ReadReserve();};
@@ -1958,6 +1973,7 @@ bool Install(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uin
             api.clock=[](void*)noexcept{LARGE_INTEGER now{};QueryPerformanceCounter(&now);return HandNanos(now.QuadPart);};
             magazinePhysicalApi=api;magazinePhysical.emplace(true,api);
     if(magazinePhysicalProbe)magazinePhysicalFixture.emplace(true,magazineReloadSession==5,magazineReloadSession!=5,magazineReloadSession==4);
+    if(magazineReloadSession==7)inventoryReloadFixture.emplace();
             if(MagazineDetachedSessionEnabled(magazineReloadSession))magazineDetached.emplace(true);
             if(magazineReloadSession==6)magazineDetachedFixture.emplace(true);
         }
@@ -2216,6 +2232,7 @@ void Report(std::ostream& out){out<<"{\"installed\":"<<(hooks[0]&&hooks[1]?"true
     out<<",\"context_interact\":";contextInteractEvidence.Report(out);
     if(magazinePhysical){out<<',';magazinePhysical->Report(out);}
     if(magazinePhysicalFixture){out<<",\"magazine_physical_probe\":";magazinePhysicalFixture->Report(out);}
+    if(inventoryReloadFixture){out<<",\"inventory_reload_probe\":";inventoryReloadFixture->Report(out);}
     if(magazineDetached){out<<',';magazineDetached->Report(out);}
     if(magazineDetached)out<<",\"magazine_recovery_suppression\":{\"commits\":"<<magazineRecoverySuppressionCommits<<",\"failures\":"<<magazineRecoverySuppressionFailures<<'}';
     if(magazineDetachedFixture){out<<",\"magazine_detached_probe\":";magazineDetachedFixture->Report(out);}

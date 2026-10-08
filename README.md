@@ -21,11 +21,12 @@ not supported games.
 
 ## Where the project stands
 
-Current development **203** fixes a reproduced shared reload-retirement failure
-after switching weapon profiles. All 185 public C++ suites pass on each
-architecture, and the rebuilt module passes the prior actual-game magazine
-sequence. Cross-profile recovery is currently CPU-tested; see
-[the evidence and limits](docs/RELOAD-TRANSITIONS-203.md).
+Current local development **204** passes a combined actual-game shoulder-switch
+and chest-reload sequence through persistent normal consumers. All 186 C++ suites
+pass on each architecture; the strict native audit confirms conserved ammo, no
+reload cancellations or magazine visual fallbacks, and clean restoration. See
+[the evidence and limits](docs/COMBINED-INVENTORY-RELOAD-204.md). This local work
+does not automatically update the published fork snapshot.
 
 Earlier headset tests demonstrated native stereo, tracked weapons and support
 hands, roomscale/recentering, controller menu interaction, chest ammunition,

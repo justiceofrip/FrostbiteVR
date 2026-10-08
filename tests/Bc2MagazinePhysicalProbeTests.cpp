@@ -3,6 +3,7 @@
 #include "fvr/interaction/TrackedRig.h"
 #include "Test.h"
 #include "fvr/interaction/ReloadGrip.h"
+#include "fvr/interaction/BodyAnchors.h"
 #include <cstring>
 #include <iostream>
 #include <sstream>
@@ -29,7 +30,7 @@ float Metric(const std::string& report,const std::string& field){const auto key=
 struct Loop {
  std::int64_t now=1000*Ms,started=0,submittedAt=0,retiredAt=0;std::uint64_t sequence=0,cycle=0,intent=0;
  bool freezeCarry=false,anatomical=true,applied=false,gateTaken=false,ackTaken=false,publishPairs=true,allowReceipt=true,allowAttached=true,allowRetirement=true,allowIdle=true,changeOnCancel=false;
- bool observedHalfPull=false,observedHalfCarry=false,shortCarryLease=false,shortIssued=false;
+ bool observedHalfPull=false,observedHalfCarry=false,shortCarryLease=false,shortIssued=false,chest=false;
  std::int64_t gapAt=0;
  unsigned starts=0,submits=0,cancels=0;int loaded=27,reserve=83;
  ReloadHoldIdentity native{};MagazinePhysicalApi api{};std::optional<ManualReloadRequest> unseat;
@@ -37,7 +38,7 @@ struct Loop {
  std::optional<Bc2MagazinePhysicalReload> consumer;Bc2MagazinePhysicalProbe probe{true};MagazinePackCounters packs{};
  HandInteraction hands;std::optional<HandClaim> gun;TrackedRig rig;MagazineRawContact raw{};
  std::shared_ptr<SelectedMeshesSnapshot> meshes=std::make_shared<SelectedMeshesSnapshot>();
- explicit Loop(bool original=false,bool carry=false,bool sequence=false):probe(ProbeFor<Bc2MagazinePhysicalProbe>(original,carry,sequence)){native.owner={0x10000,0x20000,0x30000,0x40000,5,3,7};native.firing={0x50000,0x60000,0x70000};
+ explicit Loop(bool original=false,bool carry=false,bool sequence=false,bool body=false):chest(body),probe(true,original,carry,sequence,body){native.owner={0x10000,0x20000,0x30000,0x40000,5,3,7};native.firing={0x50000,0x60000,0x70000};
  native.serverPlayer=0x80000;native.serverSoldier=0x90000;native.serverItem=0xa0000;
  meshes->owner=native.owner;meshes->stateCount=1;meshes->soleConfiguredArray=0x110000;meshes->states[0].count=1;
  auto& m=meshes->states[0].meshes[0];m.kind=SelectedMeshKind::Xm8;m.address=0x120000;std::memcpy(m.assetPath.data(),Xm8MagazineMesh.data(),Xm8MagazineMesh.size());
@@ -68,7 +69,9 @@ struct Loop {
  api.cancel=[](void* p)noexcept{auto& f=*static_cast<Loop*>(p);++f.cancels;f.retiredAt=f.now;if(f.changeOnCancel){++f.loaded;--f.reserve;}};
  api.retire=[](void* p,const ReloadHoldIdentity& id,std::uint64_t cycle)noexcept->std::optional<ReloadCycleRetirement>{auto& f=*static_cast<Loop*>(p);
   if(!f.retiredAt||!f.allowRetirement)return {};return ReloadCycleRetirement{id,cycle,1000+f.sequence,f.now,f.now+200*Ms,true};};
- consumer.emplace(true,api);
+ auto pouch=chest?ChestAmmoSupply():Bc2MagazinePhysicalReload::DefaultPouch();
+ const auto ids=Bc2MagazinePhysicalReload::DefaultPouch();pouch.itemNamespace=ids.itemNamespace;pouch.pouch=ids.pouch;
+ consumer.emplace(true,api,pouch);
  }
  void Tick(){const auto priorRaw=raw.rawLeftWristWorldMeters;bool frozen=false;now+=10*Ms;++sequence;auto in=Input(sequence);
   probe.Prepare(in,native.owner,Xm8MagazineAsset,raw,consumer->ProbeState(now),now,now+100*Ms,now);
@@ -84,7 +87,7 @@ struct Loop {
   meshes->sequence=sequence;meshes->observedNs=now;meshes->deadlineNs=now+200*Ms;
   MagazinePhysicalSample s;s.nativeOwner=native.owner;s.input=h;s.weapon={0xb0000,17};s.trackingEpoch=7;s.geometrySequence=sequence;
   s.family={{native.owner,s.weapon,0xd0000,0xc0000,2},now,now+100*Ms,true};
-  s.bodyFromHand=*PhysicalReloadPouchPose(in);s.gripPressed=ReloadGripActive(in.hands[0].squeeze,h,hands.Current(InteractionHand::Left));s.cancel=probe.CancelConsumer();s.asset=Xm8MagazineAsset;s.meshes=meshes;s.raw=raw;
+  s.bodyFromHand=*(chest?BodyAnchorHandPose(in,InteractionHand::Left):PhysicalReloadPouchPose(in));s.gripPressed=ReloadGripActive(in.hands[0].squeeze,h,hands.Current(InteractionHand::Left));s.cancel=probe.CancelConsumer();s.asset=Xm8MagazineAsset;s.meshes=meshes;s.raw=raw;
   if(raw.valid)s.originalHandEvidence=raw.inputEvidence;
   const auto result=consumer->Tick(s,hands,intent);
   // Test-owned mock renderer receipt. Production reads actual verified Pack
@@ -222,6 +225,8 @@ int OriginalReturnRejectsUnexpectedSupplyOrReceipt(){
   CHECK(Report(f.probe).find("\"actual_consumer_completed\":false")!=std::string::npos);
  }return 0;
 }
+int ChestSupplySequence(){Loop f(false,true,true,true);CHECK(f.Run());CHECK(f.starts==2&&f.submits==1&&f.loaded==30&&f.reserve==80);
+ CHECK(Report(f.probe).find("\"chest_supply\":true")!=std::string::npos);return 0;}
 int DisabledAndBounded(){Bc2MagazinePhysicalProbe off;auto in=Input(1);const auto original=in;off.Prepare(in,{},"",{},{},1000*Ms,1100*Ms,1000*Ms);
  CHECK(in.hands[0].grip.position.x==original.hands[0].grip.position.x&&!off.CancelConsumer());
  Bc2MagazinePhysicalProbe probe(true);ReloadStateOwner owner{0x10000,0x20000,0x30000,0x40000,5,3,7};
@@ -229,5 +234,5 @@ int DisabledAndBounded(){Bc2MagazinePhysicalProbe off;auto in=Input(1);const aut
  probe.Prepare(in,owner,Xm8MagazineAsset,{},{},31000*Ms,31100*Ms,31000*Ms);
  CHECK(probe.CancelConsumer()&&in.hands[0].squeeze==0);return 0;}
 }
-int main(){if(CarryWaitRejectsLostControl()||CarryPreviousLeaseMayExpire()||CarryMissingHoldIsBounded()||CarryWaitDoesNotInventMotion()||RepeatedOriginalThenReplacement()||RepeatRequiresFirstReturnRetirement()||RepeatStillRequiresObservedCarry()||FreshFreeCarryThroughRealConsumer()||CarryCoverageRequiresObservedMotion()||OriginalReturnThroughRealConsumer()||OriginalReturnRequiresActualEvidence()||OriginalReturnRejectsUnexpectedSupplyOrReceipt()||ClosedLoopRealPolicies()||PackEvidenceCannotBeInvented()||NativeReceiptCannotBeInferredFromCounts()||AttachedBaselineRequiredAfterReceipt()||FullOrEmptyPreflightNeverBegins()||DisabledAndBounded())return 1;
- std::cout<<"BC2 magazine physical probe: 18 actual-policy/TrackedRig/evidence groups passed; native/GPU/headset unverified\n";}
+int main(){if(ChestSupplySequence()||CarryWaitRejectsLostControl()||CarryPreviousLeaseMayExpire()||CarryMissingHoldIsBounded()||CarryWaitDoesNotInventMotion()||RepeatedOriginalThenReplacement()||RepeatRequiresFirstReturnRetirement()||RepeatStillRequiresObservedCarry()||FreshFreeCarryThroughRealConsumer()||CarryCoverageRequiresObservedMotion()||OriginalReturnThroughRealConsumer()||OriginalReturnRequiresActualEvidence()||OriginalReturnRejectsUnexpectedSupplyOrReceipt()||ClosedLoopRealPolicies()||PackEvidenceCannotBeInvented()||NativeReceiptCannotBeInferredFromCounts()||AttachedBaselineRequiredAfterReceipt()||FullOrEmptyPreflightNeverBegins()||DisabledAndBounded())return 1;
+ std::cout<<"BC2 magazine physical probe: 19 actual-policy/TrackedRig/evidence groups passed; native/GPU/headset unverified\n";}

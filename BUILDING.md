@@ -21,22 +21,23 @@ separate process. A successful x64 build does not provide a native BF3/BF4 adapt
 `requirements-dev.txt` pins NumPy and Pillow for offline geometry and image tests.
 Use a virtual environment if you keep other projects' Python dependencies separate.
 
-## Current checkpoint configuration (203)
+## Current checkpoint configuration (204)
 
 ```powershell
 .\Build-Checkpoint.ps1 -Architecture x86 -Jobs 2
 .\Build-Checkpoint.ps1 -Architecture x64 -Jobs 2
 ```
 
-This builds the shared retirement correction described in
-[checkpoint 203](docs/RELOAD-TRANSITIONS-203.md), using calibration headers retained
+This includes the shared retirement correction described in
+[checkpoint 203](docs/RELOAD-TRANSITIONS-203.md) and the explicit combined-player
+diagnostic in [204](docs/COMBINED-INVENTORY-RELOAD-204.md), using calibration headers retained
 from 202. The omitted registry fixtures affect two test targets only.
 `profiles/checkpoint202` contains mod-authored contact/rail values and identity
 hashes, not game meshes or animations. Some header comments retain their original
 "private" wording from local development. Experimental geometry is labeled as
 such; it is not automatically measured or accepted for every weapon.
 
-The current operation header and source receipt are in `profiles/checkpoint203`.
+The current operation header and source receipt are in `profiles/checkpoint204`.
 The older 202 source receipt remains historical; it intentionally will not verify
 against changed source. To reproduce the initial publication, use commit
 `a820f76b30a2451014c2bd1cb9a9460ab7d685d3` and its build script.
