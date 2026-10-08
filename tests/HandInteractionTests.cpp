@@ -277,6 +277,96 @@ int HistoricalReleaseAndTrackingBarriers(){
     CHECK(!f.arbiter.AcquireFrom(f.sample,lost,request).accepted);
     return 0;
 }
+int DelayedGeometryWithinOneNeutralRun(){
+    for(unsigned lag:{2u,3u})for(unsigned beforeSource:{0u,1u}){
+        Fixture f;auto g=f.Gun();CHECK(g.claim);auto support=f.Support(g.claim->token);CHECK(support.claim);
+        const auto held=f.sample;
+        f.Next();f.sample.released[0]=true;f.arbiter.Update(f.sample);
+        for(unsigned n=0;n<beforeSource;++n){f.Next();f.arbiter.Update(f.sample);}
+        const auto neutral=f.sample;
+        for(unsigned n=1;n<lag;++n){f.Next();f.arbiter.Update(f.sample);}
+        f.Next();f.sample.released[0]=false;f.arbiter.Update(f.sample);
+        CHECK(f.sample.sequence-neutral.sequence==lag&&!f.arbiter.Current(left));
+        auto request=f.Request(left,HandClaimKind::Mechanism,rifle,3,g.claim->token.id);request.contact=From(held,3);
+        auto out=f.arbiter.AcquireFrom(f.sample,held,request);
+        CHECK(!out.accepted&&out.reason==HandInteractionReason::ContactMismatch&&!f.arbiter.Current(left));
+        // Renderer N-2/N-3 contact remains in the same genuine neutral run.
+        // Acquisition still uses a new current intent and the ORIGINAL expiry.
+        request=f.Request(left,HandClaimKind::Mechanism,rifle,3,g.claim->token.id);request.contact=From(neutral,3);
+        out=f.arbiter.AcquireFrom(f.sample,neutral,request);
+        CHECK(out.accepted&&out.claim&&out.claim->inputSequence==neutral.sequence);
+        CHECK(out.claim->deadlineNs==neutral.deadlineNs&&out.claim->token.prerequisiteClaim==g.claim->token.id);
+        CHECK(f.arbiter.Current(right)->token==g.claim->token);
+    }
+    return 0;
+}
+int NewReleaseRunRejectsEarlierNeutralGeometry(){
+    Fixture f;auto g=f.Gun();CHECK(g.claim);
+    f.Next();f.sample.released[0]=true;f.arbiter.Update(f.sample);const auto oldNeutral=f.sample;
+    f.Next();f.arbiter.Update(f.sample);
+    f.Next();f.sample.released[0]=false;f.arbiter.Update(f.sample);const auto held=f.sample;
+    f.Next();f.sample.released[0]=true;f.arbiter.Update(f.sample);const auto newNeutral=f.sample;
+    f.Next();f.arbiter.Update(f.sample);
+    f.Next();f.sample.released[0]=false;f.arbiter.Update(f.sample);
+    // Even an unclaimed held packet ends the previous continuous neutral run.
+    for(const auto& source:{oldNeutral,held}){
+        auto request=f.Request(left,HandClaimKind::Mechanism,rifle,3,g.claim->token.id);request.contact=From(source,3);
+        const auto out=f.arbiter.AcquireFrom(f.sample,source,request);
+        CHECK(!out.accepted&&out.reason==HandInteractionReason::ContactMismatch&&!f.arbiter.Current(left));
+    }
+    auto request=f.Request(left,HandClaimKind::Mechanism,rifle,3,g.claim->token.id);request.contact=From(newNeutral,3);
+    const auto out=f.arbiter.AcquireFrom(f.sample,newNeutral,request);
+    CHECK(out.accepted&&out.claim&&out.claim->inputSequence==newNeutral.sequence&&out.claim->deadlineNs==newNeutral.deadlineNs);
+    return 0;
+}
+int DelayedNeutralGeometryCannotCrossSafetyLoss(){
+    for(unsigned loss=0;loss<5;++loss){
+        Fixture f;auto g=f.Gun();CHECK(g.claim);
+        f.Next();f.sample.released[0]=true;f.arbiter.Update(f.sample);const auto neutral=f.sample;
+        f.Next();f.arbiter.Update(f.sample);
+        f.Next();f.sample.released[0]=false;f.arbiter.Update(f.sample);
+        auto support=f.Support(g.claim->token);CHECK(support.claim);
+        f.Next();
+        if(loss==0)f.sample.tracked[0]=false;
+        if(loss==1)f.sample.focused=false;
+        if(loss==2)++f.sample.owner.equipGeneration;
+        if(loss==3)f.sample.tracked[1]=false;
+        auto out=f.arbiter.Update(f.sample);
+        if(loss==3)CHECK(Released(out,support.claim->token,HandInteractionReason::DependencyLost));
+        if(loss==4)CHECK(f.arbiter.Release(f.sample,support.claim->token).accepted);
+        CHECK(!f.arbiter.Current(left));
+        f.Next();f.sample.tracked={true,true};f.sample.focused=true;f.arbiter.Update(f.sample);
+        if(!f.arbiter.Current(right)){g=f.Gun();CHECK(g.claim);}
+        const auto gun=f.arbiter.Current(right)->token;
+        auto request=f.Request(left,HandClaimKind::Mechanism,rifle,3,gun.id);request.contact=From(neutral,3);
+        out=f.arbiter.AcquireFrom(f.sample,neutral,request);
+        CHECK(!out.accepted&&!f.arbiter.Current(left)&&f.arbiter.Current(right)->token==gun);
+        CHECK(out.reason==(loss==2?HandInteractionReason::WrongOwner:HandInteractionReason::ContactMismatch));
+        // A failed intent cannot be rebound to fresh geometry during the held grip.
+        request.contact=From(f.sample,3);
+        out=f.arbiter.AcquireFrom(f.sample,f.sample,request);
+        CHECK(!out.accepted&&out.reason==HandInteractionReason::StaleIntent&&!f.arbiter.Current(left));
+    }
+    return 0;
+}
+int DelayedNeutralGeometryCannotStealOccupiedHand(){
+    for(const auto kind:{HandClaimKind::WeaponSupport,HandClaimKind::Sight}){
+        Fixture f;auto g=f.Gun();CHECK(g.claim);
+        f.Next();f.sample.released[0]=true;f.arbiter.Update(f.sample);const auto neutral=f.sample;
+        f.Next();f.arbiter.Update(f.sample);
+        f.Next();f.sample.released[0]=false;f.arbiter.Update(f.sample);
+        const auto occupied=f.arbiter.Acquire(f.sample,f.Request(left,kind,rifle,2,g.claim->token.id));CHECK(occupied.claim);
+        auto request=f.Request(left,HandClaimKind::Mechanism,rifle,3,g.claim->token.id);request.contact=From(neutral,3);
+        auto out=f.arbiter.AcquireFrom(f.sample,neutral,request);
+        CHECK(!out.accepted&&out.reason==HandInteractionReason::HandOccupied&&Releases(out)==0);
+        CHECK(f.arbiter.Current(left)->token==occupied.claim->token&&f.arbiter.Current(right)->token==g.claim->token);
+        CHECK(f.arbiter.Release(f.sample,occupied.claim->token).accepted);
+        request.contact=From(f.sample,3);
+        out=f.arbiter.AcquireFrom(f.sample,f.sample,request);
+        CHECK(!out.accepted&&out.reason==HandInteractionReason::StaleIntent&&!f.arbiter.Current(left));
+    }
+    return 0;
+}
 int DuplicateSafetyLossCannotBecomeNeutralEvidence(){
     for(unsigned loss=0;loss<4;++loss){
         Fixture f;auto g=f.Gun();CHECK(g.claim);auto held=f.Support(g.claim->token);CHECK(held.claim);
@@ -359,7 +449,9 @@ static_assert(!std::is_copy_constructible_v<HandInteraction>);
 int main(){
     if(FailedAndSuccessfulTransfers()||ExplicitSharingAndCrossHandTransfer()||DependencyAndPerHandTracking()||
        IdentityFocusResetAndFreshIntent()||LeasesRenewalAndContactIdentity()||MalformedAndImmutableInput()||
-       UnavailableIntentCannotReplay()||HistoricalTransferAndExactSource()||HistoricalReleaseAndTrackingBarriers()||
+        UnavailableIntentCannotReplay()||HistoricalTransferAndExactSource()||HistoricalReleaseAndTrackingBarriers()||
+        DelayedGeometryWithinOneNeutralRun()||NewReleaseRunRejectsEarlierNeutralGeometry()||
+        DelayedNeutralGeometryCannotCrossSafetyLoss()||DelayedNeutralGeometryCannotStealOccupiedHand()||
        DuplicateSafetyLossCannotBecomeNeutralEvidence()||HistoricalRenewalIsMonotonic()||
        MissingExpiredAndWrongOwnerEvidence()||FailedIntentCannotLaterWin())return 1;
     return 0;

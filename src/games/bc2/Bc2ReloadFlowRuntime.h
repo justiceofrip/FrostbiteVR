@@ -12,6 +12,7 @@
 #include "Bc2MagazineStart.h"
 #include "Bc2MagazineEmptyDiagnostic.h"
 #include "Bc2ReloadRetirement.h"
+#include <memory>
 #include <ostream>
 namespace fvr::bc2 {
 enum class ReloadFlowEvent : std::uint8_t { Update,Commit,Transfer,Restore };
@@ -98,13 +99,22 @@ private:
 class ReloadFlowRecords {
 public:
     static constexpr unsigned Capacity=20480;
+    static constexpr unsigned RecoveryCapacity=2*Capacity;
+    ReloadFlowRecords()noexcept;
+    // Configuration only, before the first callback. Ordinary runs keep their
+    // original capacity; the explicit 40-second recovery recorder gets twice it.
+    bool EnableRecoveryCapacity()noexcept;
+    unsigned Limit()const noexcept{return limit_;}
     std::uint64_t Begin(const ReloadFlowEventInput&)noexcept;
     bool End(std::uint64_t,const ReloadFlowEventEnd&)noexcept;
-    std::span<const ReloadFlowRecord> Records()const noexcept{return {records_.data(),count_};}
+    std::span<const ReloadFlowRecord> Records()const noexcept{return {records_.get(),count_};}
     unsigned Dropped()const noexcept{return dropped_;}
     unsigned Rejected()const noexcept{return rejected_;}
 private:
-    std::array<ReloadFlowRecord,Capacity> records_{};unsigned count_=0,dropped_=0,rejected_=0;
+    // Allocate once during setup, never in a game callback. Besides keeping
+    // ordinary storage small, this avoids a huge aggregate initializer in every
+    // translation unit that includes this header.
+    std::unique_ptr<ReloadFlowRecord[]> records_;unsigned limit_=0,count_=0,dropped_=0,rejected_=0;
 };
 namespace reloadFlowRuntime {
 // Cached existing owned-Update observation only, no native read or renewal.
@@ -142,7 +152,7 @@ bool Install(std::span<const std::byte>,const engine::PeImage&,std::uintptr_t im
 bool EnableMagazineRequestCycles()noexcept;
 // Diagnostic log starts at the reload portion of the combined controller test.
 // Neither function resets consumers, native cycles, records, or lease clocks.
-bool DeferInventoryReloadRecords()noexcept;
+bool DeferInventoryReloadRecords(bool recovery=false)noexcept;
 bool BeginInventoryReloadRecords()noexcept;
 // Atomic value snapshot safe for incremental telemetry; no report serialization
 // or policy/container access while native callbacks run.

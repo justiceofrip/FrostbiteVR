@@ -1,4 +1,22 @@
-# Shared weapon system: implementation decision, October 5
+# Shared weapon system
+
+## Current composition — October 8, checkpoint 206
+
+The active checkout is this repository. Read [current weapon coverage](WEAPON-COVERAGE-CURRENT.md)
+and [the handoff](HANDOFF.md) before using the historical paths below. The normal
+checkpoint integrates two exact detachable-magazine profiles, scoped XM8 and
+AEK971_sp. Prepared descriptors, grip data and visibility qualifications are
+separate from compiled reload coverage. The wider registry is not selected.
+
+The pipeline must join immutable configuration and component evidence, then
+reuse the corresponding mechanism consumer. An asset-name match must not
+silently turn one measured magazine into every attachment variant. The existing
+authored exporter already accepts exact configuration metadata; the coverage
+and preparation tool now uses that contract. The saved batch regenerates seven
+exact candidates; its former 21-path count relied on unsupported name matching.
+Native registrations remain disabled for these candidates.
+
+## Implementation decision and historical checkpoint — October 5
 
 The unit of work is a mechanism and its lifecycle, not a weapon name. An ordinary
 new rifle must supply configuration and geometry data to the same consumers.
@@ -9,7 +27,7 @@ Categories organize coverage; they do not establish mechanics or native authorit
 Active source: `<local-recovery>/headset-20261005-115245-fix-composition/source`.
 Checkpoint: `../checkpoint-183-shared-start/runtime-checkpoint.json` from the source root.
 Normal binary pins: `<local-recovery>/pipeline-runtime-20261005/normal-start-preread-build-receipt.json`.
-This entry supersedes older readiness and launch instructions below.
+This was the October 5 composition; it is not the current launch instruction.
 
 Current normal composition passes **183 CTest suites per architecture** and
 **788 Python tests**. The immutable checkpoint records exact logs, build settings,

@@ -1002,6 +1002,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     vehicleActions.Reset();PublishVehicleView({});
     {std::lock_guard lock(vehicleViewMutex);boatAimReady=false;boatHeadPolicy.Reset();}
     auto actionInput=input;if(reloadRequestMode)actionInput.hands[0].trigger=0;
+    if(inventoryReloadFixture)inventoryReloadFixture->ActionInput(actionInput);
 #ifdef FVR_BC2_ARMING_EMPTY_PROBE
     if(armingEmptyFixture){
         const ReloadStateOwner current{owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,input.spaceGeneration};
@@ -1924,9 +1925,9 @@ bool Install(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uin
 #endif
     }
     const bool magazinePhysicalProbe=magazineReloadSession==4||magazineReloadSession==5;
-    const bool magazineNormal=magazineReloadSession==3||magazinePhysicalProbe||magazineReloadSession==6||magazineReloadSession==7;
+    const bool magazineNormal=magazineReloadSession==3||magazinePhysicalProbe||magazineReloadSession==6||magazineReloadSession==7||magazineReloadSession==8;
     const bool magazineProbe=magazineReloadSession==1||magazineReloadSession==2;
-    if(magazineReloadSession>7||((magazinePhysicalProbe||magazineReloadSession>=6)&&(enableSightFlip||reloadHoldProbe||reloadRoundProbe||reloadRequestProbe||enableRigPulse||enableDeathProbe||enableEquipProbe))||
+    if(magazineReloadSession>8||((magazinePhysicalProbe||magazineReloadSession>=6)&&(enableSightFlip||reloadHoldProbe||reloadRoundProbe||reloadRequestProbe||enableRigPulse||enableDeathProbe||enableEquipProbe))||
        (magazineNormal&&(!enablePhysicalReload||enablePhysicalReloadProbe))||
        (magazineProbe&&(reloadHoldProbe||reloadRoundProbe||reloadRequestProbe||enablePhysicalReload||enablePhysicalReloadProbe||enableSightFlip||enableRigPulse||enableDeathProbe||enableEquipProbe||!handPoses||!twoHandGrip)))return false;
     physicalReloadMode=enablePhysicalReload;reloadRequestMode=reloadRequestProbe||physicalReloadMode||magazineReloadSession!=0;
@@ -1937,7 +1938,7 @@ bool Install(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uin
         const bool flowInstalled=reloadStateBinding&&reloadFlowRuntime::Install(bytes,pe,base,memory,reloadHoldProbe,reloadRoundProbe,reloadRequestMode&&!magazineProbe,magazineProbe);
         if((reloadHoldProbe||reloadRoundProbe||reloadRequestMode)&&!flowInstalled)return false;
         if(magazineNormal&&!reloadFlowRuntime::EnableMagazineRequestCycles())return false;
-        if(magazineReloadSession==7&&!reloadFlowRuntime::DeferInventoryReloadRecords())return false;
+        if((magazineReloadSession==7||magazineReloadSession==8)&&!reloadFlowRuntime::DeferInventoryReloadRecords(magazineReloadSession==8))return false;
         if(physicalReloadMode){
             PhysicalReloadApi api;
             api.reserve=[](void*)noexcept{return reloadFlowRuntime::ReadReserve();};
@@ -1973,7 +1974,7 @@ bool Install(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uin
             api.clock=[](void*)noexcept{LARGE_INTEGER now{};QueryPerformanceCounter(&now);return HandNanos(now.QuadPart);};
             magazinePhysicalApi=api;magazinePhysical.emplace(true,api);
     if(magazinePhysicalProbe)magazinePhysicalFixture.emplace(true,magazineReloadSession==5,magazineReloadSession!=5,magazineReloadSession==4);
-    if(magazineReloadSession==7)inventoryReloadFixture.emplace();
+    if(magazineReloadSession==7||magazineReloadSession==8)inventoryReloadFixture.emplace(magazineReloadSession==8);
             if(MagazineDetachedSessionEnabled(magazineReloadSession))magazineDetached.emplace(true);
             if(magazineReloadSession==6)magazineDetachedFixture.emplace(true);
         }

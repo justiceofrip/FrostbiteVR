@@ -177,6 +177,7 @@ inline HandInteractionResult HandInteraction::Update(const HandInteractionSample
     lastNow_=s.nowNs;
     if(s.nowNs>=s.deadlineNs)return reject(HandInteractionReason::StaleInput);
     const bool newOwner=!initialized_||s.owner!=sample_.owner;
+    const auto previouslyReleased=sample_.released;
     if(initialized_&&(s.observedNs<sample_.observedNs||(newOwner&&s.observedNs==sample_.observedNs)))
         return reject(HandInteractionReason::StaleInput);
     if(newOwner){
@@ -197,7 +198,15 @@ inline HandInteractionResult HandInteraction::Update(const HandInteractionSample
     if(!sample_.focused){out.reason=HandInteractionReason::FocusLost;invalidationBarrier_.fill(sample_.sequence);DropAll(out.reason,out);return out;}
     for(std::size_t h=0;h<2;++h){
         if(!sample_.tracked[h]){invalidationBarrier_[h]=sample_.sequence;Drop(h,HandInteractionReason::TrackingLost,out);}
-        else if(sample_.released[h]){releaseBarrier_[h]=sample_.sequence;Drop(h,HandInteractionReason::Released,out);}
+        else if(sample_.released[h]){
+            // The release EDGE invalidates older held geometry. Later genuinely
+            // neutral packets belong to the same interval: advancing this on
+            // every packet incorrectly rejects renderer N-2/N-3 contact at the
+            // next grip. Exact history, invalidation barriers and original
+            // deadlines still apply; failed intents are never retried here.
+            if(newOwner||!previouslyReleased[h])releaseBarrier_[h]=sample_.sequence;
+            Drop(h,HandInteractionReason::Released,out);
+        }
         else if(claims_[h]&&s.nowNs>=claims_[h]->deadlineNs)Drop(h,HandInteractionReason::LeaseExpired,out);
     }
     DropDependents(out);return out;

@@ -1,5 +1,10 @@
 # Next weapon mechanisms and ownership
 
+This is a historical mechanism plan and assignment record. Use
+[current coverage](WEAPON-COVERAGE-CURRENT.md) for today's integrated features;
+the agent assignments and test counts below do not describe currently running
+workers or completed implementations.
+
 The user requested the remaining sniper, shotgun-pump, launcher/attachment and AEK
 horizontal-sight work, then explicitly requested handgun magazine eject, insertion
 and chambering. These are development requirements; none is added to the prepared

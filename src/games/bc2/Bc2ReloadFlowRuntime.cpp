@@ -163,6 +163,16 @@ bool ReloadRestoreMatched(const ReloadFlowRecord& record)noexcept{
     return after.current==source->current&&after.next==source->next&&after.previous==record.entry.boundary.current&&
         after.timer==source->phaseTimer&&after.loaded==source->loaded&&after.reserve==source->reserve;
 }
+ReloadFlowRecords::ReloadFlowRecords()noexcept:records_(new(std::nothrow) ReloadFlowRecord[Capacity]){
+    if(records_)limit_=Capacity;
+}
+bool ReloadFlowRecords::EnableRecoveryCapacity()noexcept{
+    if(count_||dropped_||rejected_)return false;
+    if(limit_==RecoveryCapacity)return true;
+    std::unique_ptr<ReloadFlowRecord[]> storage(new(std::nothrow) ReloadFlowRecord[RecoveryCapacity]);
+    if(!storage)return false;
+    records_=std::move(storage);limit_=RecoveryCapacity;return true;
+}
 std::uint64_t ReloadFlowRecords::Begin(const ReloadFlowEventInput& in)noexcept{
     if(!in.thread||in.nowNs<=0||!in.depth||in.depth>8||!OwnerValid(in.boundary.owner)||!in.boundary.firing||
        unsigned(in.kind)>unsigned(ReloadFlowEvent::Restore)){++rejected_;return 0;}
@@ -178,7 +188,7 @@ std::uint64_t ReloadFlowRecords::Begin(const ReloadFlowEventInput& in)noexcept{
         if(update.finished||update.entry.kind!=ReloadFlowEvent::Update||update.entry.thread!=in.thread||
            !SameIdentity(update.entry.boundary,in.boundary)){++rejected_;return 0;}
     }
-    if(count_==Capacity){++dropped_;return 0;}
+    if(count_==limit_){++dropped_;return 0;}
     auto& record=records_[count_];record.id=++count_;record.entry=in;return record.id;
 }
 bool ReloadFlowRecords::End(std::uint64_t id,const ReloadFlowEventEnd& end)noexcept{
@@ -1679,7 +1689,8 @@ bool EnablePumpHoldDiagnostic()noexcept {
     if(!installed||started||enabled.load()||!diagnosticHold||diagnosticRound||requestMode||!holdCodeVerified)return false;
     pumpDiagnostic=true;return true;
 }
-bool DeferInventoryReloadRecords()noexcept{return installed&&!started&&!enabled.load()&&requestMode&&combinedFamilies&&recordWindowClock.Defer();}
+bool DeferInventoryReloadRecords(bool recovery)noexcept{return installed&&!started&&!enabled.load()&&requestMode&&combinedFamilies&&
+ recordWindowClock.Defer(recovery)&&(!recovery||records.EnableRecoveryCapacity());}
 bool BeginInventoryReloadRecords()noexcept{return enabled.load(std::memory_order_acquire)&&requestMode&&combinedFamilies&&recordWindowClock.OpenDeferred(Now());}
 void Start()noexcept{if(!installed||started)return;startNs=Now();if(startNs<=0)return;started=true;recordWindowClock.Start(startNs);if(diagnosticHold)holdProbe.Enable(pumpDiagnostic?ReloadHoldTarget::SpasPump:ReloadHoldTarget::Reload);if(diagnosticRound)roundGate.Enable();enabled.store(true,std::memory_order_release);}
 bool Stop()noexcept{
@@ -1716,7 +1727,7 @@ void Report(std::ostream& out){
        <<",\"server_binding_verified\":"<<(serverBinding?"true":"false")<<",\"server_publish_attempts\":"<<serverPublishAttempts.load()
        <<",\"server_publish_misses\":"<<serverPublishMisses.load()<<",\"server_read_misses\":"<<serverReadMisses.load()
        <<",\"server_matched\":["<<serverMatches[0].load()<<','<<serverMatches[1].load()<<','<<serverMatches[2].load()<<','<<serverMatches[3].load()<<']'
-       <<",\"capacity\":"<<ReloadFlowRecords::Capacity<<",\"window_seconds\":20,\"start_ns\":"<<recordWindowClock.StartNs()<<",\"runtime_start_ns\":"<<startNs<<",\"in_flight\":"<<active.load()
+       <<",\"capacity\":"<<records.Limit()<<",\"window_seconds\":"<<recordWindowClock.DurationNs()/1000000000<<",\"start_ns\":"<<recordWindowClock.StartNs()<<",\"runtime_start_ns\":"<<startNs<<",\"in_flight\":"<<active.load()
        <<",\"owner_lock_drops\":"<<ownerDrops.load()<<",\"record_lock_drops\":"<<recordBusy.load()
        <<",\"record_begin_lock_drops\":"<<recordBeginBusy.load()<<",\"record_end_lock_drops\":"<<recordEndBusy.load()
        <<",\"completion_journal\":{\"capacity\":"<<ReloadDeferredCompletions::Capacity<<",\"pending\":"<<recordCompletions.Pending()
@@ -1997,7 +2008,7 @@ bool Install(std::span<const std::byte>,const engine::PeImage&,std::uintptr_t,co
 MagazineEmptyControlCounters ReadMagazineEmptyControlCounters()noexcept{return {};}
 void PublishMagazineInteractionDiagnostic(const MagazineInteractionDiagnostic&)noexcept{}
 bool EnableMagazineRequestCycles()noexcept{return false;}
-bool DeferInventoryReloadRecords()noexcept{return false;}
+bool DeferInventoryReloadRecords(bool)noexcept{return false;}
 bool BeginInventoryReloadRecords()noexcept{return false;}
 bool SelectRequestFamily(ReloadNativeFamily,const ReloadStateOwner&)noexcept{return false;}
 bool SelectMagazineRequestProfile(NativeMagazineProfileId,const ReloadStateOwner&)noexcept{return false;}

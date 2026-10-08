@@ -86,6 +86,7 @@ struct MagazinePhysicalProbeState {
  unsigned originalReturns=0;bool originalReturning=false;
  std::optional<interaction::OriginalMagazine> original;
  std::optional<interaction::OriginalMagazineReturnReceipt> originalReceipt;
+ unsigned cancelled=0,reconciled=0;
 };
 // Update shared HandInteraction + renew right GunHold first. Call before support
 // grab arbitration so a real magazine contact can claim Mechanism; it never
@@ -106,7 +107,7 @@ public:
  MagazinePhysicalProbeState ProbeState(std::int64_t now)const noexcept {
   return {active_,lease_&&lease_->allThreeHeld&&lease_->deadlineNs>now,retiring_,bool(supply_.Pending()),
    bool(last_.removalClaim)||bool(supply_.Held()),BlocksEquipment(),acquired_,started_,submitted_,completed_,last_.phase,last_.reason,
-   owners_.cycle,lastReserve_,originalReturns_,originalReturning_,originalMagazine_,originalReceipt_};
+   owners_.cycle,lastReserve_,originalReturns_,originalReturning_,originalMagazine_,originalReceipt_,cancelled_,reconciled_};
  }
 private:
  bool Api()const noexcept;
@@ -166,6 +167,10 @@ private:
   std::optional<NativeBoundaryEvidence> nativeBoundary;
   std::optional<interaction::MagazineMotionFailure> motionFailure;};
  std::array<Event,128> events_{};unsigned eventCount_=0,eventDropped_=0;
+ struct Admission {std::int64_t now=0;std::uint64_t input=0,geometry=0,claim=0;
+  unsigned reason=0,claimKind=0;bool released=false,ready=false;};
+ std::array<Admission,32> admissions_{};unsigned admissionCount_=0,admissionDropped_=0;
+ std::optional<interaction::DetachableMagazineReason> admissionReason_;
  void Record(unsigned,const interaction::HandInteractionSample&,std::uint64_t geometry=0)noexcept;
 };
 } // namespace fvr::bc2

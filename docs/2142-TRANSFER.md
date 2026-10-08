@@ -1,3 +1,25 @@
+## October 8: count configured mechanisms, not names — 206
+
+Batch extraction must retain the original configuration and component provenance.
+Joining magazine geometry by display name counted three variants from one saved
+profile. The corrected offline preparation joins configuration resource/hash/GUID,
+original binding digest, selected mesh/LOD and rig, then calls the existing
+geometry exporter. The saved seven-profile batch yields seven exact candidates,
+not 21. Native registrations remain disabled; configuration data and a working
+native mechanism are independent requirements. This avoids transferring stale
+native or attachment assumptions to another Frostbite adapter.
+
+## October 8: release edges versus delayed geometry — 206
+
+A controller release is an edge, not every later open-hand packet. Advancing
+the release barrier continuously made N-2/N-3 renderer contact fail at the next
+grip even while it remained fresh and in the same neutral period. The shared
+arbiter now retains that interval's initial boundary; separate invalidation,
+history, original expiry and ownership checks still reject unsafe evidence.
+The actual-policy reload loop reproduces the old failure and passes after the
+fix. Native recovery tests retain real consumers through input loss, retirement,
+shoulder changes and subsequent reload. See [evidence limits](RELOAD-RECOVERY-206.md).
+
 ## October 8: preserve lifetime evidence across diagnostic episodes — 205
 
 A scripted player may start another gesture sequence; the gameplay consumers

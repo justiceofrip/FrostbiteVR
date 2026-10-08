@@ -1,5 +1,6 @@
 #include "Bc2InventoryReloadProbe.h"
 #include <cmath>
+#include <sstream>
 namespace fvr::bc2 {
 namespace {
 using namespace interaction;
@@ -42,10 +43,12 @@ void Bc2InventoryReloadProbe::Prepare(InputFrame& in,const ReloadStateOwner& own
  if(!ValidInput(in)||!in.focused||!in.headValid||!Static(in.head)||!Static(in.referenceHead)||
  !in.hands[0].gripTracked||!in.hands[1].gripTracked||!in.hands[1].aimTracked||observed<=0||observed>now||deadline<=now||deadline-observed>100000000)Fail(2,now);
  if(owner.player!=initial_.player||owner.soldier!=initial_.soldier||owner.weak!=initial_.weak||owner.space!=initial_.space)Fail(3,now);
+ recoveryRaw_=raw;
  if(lastInput_&&in.generation<=lastInput_){
   if(in.generation<lastInput_||observed!=observed_||deadline!=deadline_)Fail(4,now);
   in.hands[1].grip=in.hands[1].aim=command_;in.hands[1].squeeze=CancelConsumer()?0:squeeze_;
   if(phase_==Phase::Reload)reload_.Prepare(in,owner,asset,raw,state,observed,deadline,now);
+  if(phase_==Phase::Recovery){recovery_.Prepare(in,now);if(recovery_.Failed())Fail(11,now);}
   return;
  }
  lastInput_=in.generation;observed_=observed;deadline_=deadline;
@@ -64,7 +67,7 @@ void Bc2InventoryReloadProbe::Prepare(InputFrame& in,const ReloadStateOwner& own
   }
  }
  const bool fresh=body&&Current(*body,now);
- if(phase_!=Phase::Warmup&&phase_<Phase::Reload&&display&&BodyInventoryDisplayFresh(*display,now)){
+ if(phase_!=Phase::Warmup&&(phase_<Phase::Reload||phase_==Phase::Recovery)&&display&&BodyInventoryDisplayFresh(*display,now)){
   bool a=false,b=false;for(unsigned n=0;n<display->count;++n){a|=display->slots[n].assignment==original_;b|=display->slots[n].assignment==other_;}
   if(!a||!b)Fail(5,now);
  }
@@ -103,13 +106,38 @@ void Bc2InventoryReloadProbe::Prepare(InputFrame& in,const ReloadStateOwner& own
  const auto d=Distance(command_.position,target);const float t=d>.025f?.025f/d:1.f;
  command_.position={command_.position.x+(target.x-command_.position.x)*t,command_.position.y+(target.y-command_.position.y)*t,command_.position.z+(target.z-command_.position.z)*t};
  in.hands[1].grip=in.hands[1].aim=command_;in.hands[1].squeeze=CancelConsumer()?0:squeeze_;
- if(phase_==Phase::Reload){reload_.Prepare(in,owner,asset,raw,state,observed,deadline,now);
+ if(phase_==Phase::Reload){
+  if(interrupt_&&!recoveryBegun_){recoveryBegun_=recovery_.Begin(state,packs_,now);if(!recoveryBegun_)Fail(11,now);}
+  reload_.Prepare(in,owner,asset,raw,state,observed,deadline,now);
   if(reload_.Completed())To(Phase::Done,now);else if(reload_.CancelConsumer())Fail(8,now);}
  else {in.hands[0].grip.position={-.2f,-.25f,-.45f};in.hands[0].aim=in.hands[0].grip;in.hands[0].squeeze=0;}
+ if(phase_==Phase::Recovery){
+  in.hands[1].squeeze=1;recovery_.Prepare(in,now);
+  if(recovery_.Failed())Fail(11,now);
+  else if(recovery_.Recovered()&&fresh&&Held(*body,*original_,now)){
+   // Replace only the input script after actual old-cycle retirement. Normal
+   // inventory, hand and reload consumers remain alive through both laps.
+   reload_=Bc2MagazinePhysicalProbe(true,false,true,true,true);
+   baselineClaim_=body->right->token.id;otherClaim_=restoredClaim_=0;To(Phase::ReachStow,now);
+  }
+ }
+ if(phase_==Phase::Recovery&&now-phaseAt_>6000000000ll)Fail(12,now);
  if(phase_<Phase::Reload&&now-phaseAt_>6000000000ll)Fail(9,now);
 }
 void Bc2InventoryReloadProbe::Observe(const MagazinePhysicalProbeState& s,const MagazinePackCounters& p,std::int64_t now)noexcept{
- if(phase_==Phase::Reload){reload_.Observe(s,p,now);if(reload_.CancelConsumer()&&!reload_.Completed())Fail(8,now);}
+ packs_=p;
+ if(phase_==Phase::Reload){
+  reload_.Observe(s,p,now);if(reload_.CancelConsumer()&&!reload_.Completed())Fail(8,now);
+  if(interrupt_&&!recovery_.Recovered()&&phase_==Phase::Reload){
+   recovery_.Observe(s,p,recoveryRaw_,now);
+   if(recovery_.Failed())Fail(11,now);
+   else if(recovery_.LossStarted()){
+    try {std::ostringstream report;reload_.Report(report);interruptedReport_=report.str();To(Phase::Recovery,now);}
+    catch(...){Fail(13,now);}
+   }
+  }
+ }
+ else if(phase_==Phase::Recovery){recovery_.Observe(s,p,recoveryRaw_,now);if(recovery_.Failed())Fail(11,now);}
 }
 void Bc2InventoryReloadProbe::Report(std::ostream& o)const{
  o<<"{\"synthetic_input\":true,\"headset_verified\":false,\"persistent_consumers\":true,\"phase\":"<<unsigned(phase_)<<",\"failure\":"<<failure_
@@ -117,6 +145,8 @@ void Bc2InventoryReloadProbe::Report(std::ostream& o)const{
  <<",\"baseline_claim\":"<<baselineClaim_<<",\"other_claim\":"<<otherClaim_<<",\"restored_claim\":"<<restoredClaim_<<",\"rows\":[";
  for(unsigned n=0;n<count_;++n){const auto& r=rows_[n];if(n)o<<',';o<<"{\"phase\":"<<r.phase<<",\"reason\":"<<r.reason<<",\"now_ns\":"<<r.now
  <<",\"input\":"<<r.input<<",\"weapon\":"<<r.weapon<<",\"body_phase\":"<<r.bodyPhase<<",\"slot\":"<<r.slot<<",\"request\":"<<r.request<<",\"claim\":"<<r.claim<<",\"commit\":"<<r.committed<<'}';}
- o<<"],\"magazine_physical_probe\":";reload_.Report(o);o<<'}';
+ o<<"],\"interruption_enabled\":"<<(interrupt_?"true":"false")<<",\"interruption\":";recovery_.Report(o);
+ o<<",\"interrupted_magazine_probe\":"<<(interruptedReport_.empty()?"null":interruptedReport_);
+ o<<",\"magazine_physical_probe\":";reload_.Report(o);o<<'}';
 }
 }

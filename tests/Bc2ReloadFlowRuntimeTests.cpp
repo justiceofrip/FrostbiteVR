@@ -384,9 +384,16 @@ int InvalidNestingAndLifecycle(){
 }
 int FixedStorageOverflow(){
     Fixture f;const auto state=*f.Read();auto records=std::make_unique<ReloadFlowRecords>();const auto in=Input(state);
+    CHECK(records->Limit()==ReloadFlowRecords::Capacity);
     for(unsigned n=0;n<ReloadFlowRecords::Capacity;++n){const auto id=records->Begin(in);CHECK(id==n+1&&records->End(id,End(state)));}
     CHECK(!records->Begin(in)&&records->Dropped()==1&&records->Records().size()==ReloadFlowRecords::Capacity);
-    CHECK(records->Records().front().id==1&&records->Records().back().finished);return 0;
+    CHECK(records->Records().front().id==1&&records->Records().back().finished);
+    CHECK(!records->EnableRecoveryCapacity());
+    auto recovery=std::make_unique<ReloadFlowRecords>();CHECK(recovery->EnableRecoveryCapacity());
+    CHECK(recovery->Limit()==ReloadFlowRecords::RecoveryCapacity);
+    for(unsigned n=0;n<ReloadFlowRecords::RecoveryCapacity;++n){const auto id=recovery->Begin(in);CHECK(id==n+1&&recovery->End(id,End(state)));}
+    CHECK(!recovery->Begin(in)&&recovery->Dropped()==1&&!recovery->EnableRecoveryCapacity());
+    CHECK(recovery->Records().size()==ReloadFlowRecords::RecoveryCapacity&&recovery->Records().back().finished);return 0;
 }
 }
 #if defined(_M_IX86)

@@ -15,13 +15,19 @@ not supported games.
 - [Build instructions](BUILDING.md)
 - [Fork guide and code map](CONTRIBUTING.md)
 - [Current status and roadmap](docs/STATUS.md)
+- [Actual weapon coverage and integration gaps](docs/WEAPON-COVERAGE-CURRENT.md)
 - [Shared weapon-system pipeline](docs/WEAPON-SYSTEM-PIPELINE.md)
 - [Frostbite porting roadmap](docs/FROSTBITE-PORTING-ROADMAP.md)
 - [Architecture](docs/ARCHITECTURE.md)
 
 ## Where the project stands
 
-Local checkpoint **205** adds repeated reload diagnostics and 30 offline
+Local checkpoint **206** fixes a shared hand-grab failure with delayed renderer
+poses and adds a native interruption/recovery diagnostic. The rebuilt x86 and
+x64 compositions pass all 186 suites after the PC crash. The corrected binary's
+actual-game check remains pending. See [evidence and limits](docs/RELOAD-RECOVERY-206.md).
+
+Checkpoint **205** adds repeated reload diagnostics and 30 offline
 input-loss/recovery cases through persistent consumers, with mocked native and
 renderer boundaries. See [coverage and remaining live work](docs/RELOAD-RECOVERY-205.md).
 

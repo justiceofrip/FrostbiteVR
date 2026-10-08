@@ -28,6 +28,8 @@ struct Driver {
  void Start(){for(unsigned n=0;n<250&&probe.State()==Bc2InventoryReloadProbe::Phase::Warmup;++n)Tick();}
 };
 int Config(){constexpr auto flags=0x12197809u;
+ CHECK(ValidMagazineReloadSession(8,flags,60000)&&MagazineDetachedSessionEnabled(8));
+ CHECK(!ValidMagazineReloadSession(8,flags,30000)&&!ValidMagazineReloadSession(8,flags|0x400u,60000));
  CHECK(ValidMagazineReloadSession(7,flags,60000)&&ValidBodyInventoryConfig(flags)&&MagazineDetachedSessionEnabled(7));
  CHECK(!ValidMagazineReloadSession(7,flags,30000)&&!ValidMagazineReloadSession(7,flags&~0x10000000u,60000));
  for(auto bit:{0x400u,0x200000u,0x4000000u,0x80000000u,0x100u})CHECK(!ValidMagazineReloadSession(7,flags|bit,60000));return 0;}
@@ -37,7 +39,11 @@ int RecordWindow(){ReloadRecordWindow normal;CHECK(!normal.OpenDeferred(1));norm
  ReloadRecordWindow deferred;CHECK(deferred.Defer());deferred.Start(1000);CHECK(!deferred.Contains(5000000000ll));
  CHECK(!deferred.OpenDeferred(0)&&deferred.OpenDeferred(5000000000ll));CHECK(deferred.StartNs()==5000000000ll);
  CHECK(deferred.OpenDeferred(6000000000ll)&&deferred.StartNs()==5000000000ll);
- CHECK(!deferred.Contains(5000000000ll+ReloadRecordWindow::Duration));return 0;}
+ CHECK(!deferred.Contains(5000000000ll+ReloadRecordWindow::Duration));
+ ReloadRecordWindow recovery;CHECK(recovery.Defer(true)&&!recovery.Defer());recovery.Start(1000);
+ CHECK(recovery.DurationNs()==40000000000ll&&recovery.OpenDeferred(5000000000ll));
+ CHECK(recovery.Contains(25000000000ll)&&!recovery.Contains(45000000000ll));
+ CHECK(recovery.OpenDeferred(44000000000ll)&&recovery.StartNs()==5000000000ll&&!recovery.Defer(true));return 0;}
 int MissingNativeAcknowledgement(){Driver d;d.Start();CHECK(d.probe.State()==Bc2InventoryReloadProbe::Phase::ReachStow);
  for(unsigned n=0;n<700&&!d.probe.CancelConsumer();++n)d.Tick();
  CHECK(d.probe.CancelConsumer()&&!d.probe.Completed());std::ostringstream o;d.probe.Report(o);

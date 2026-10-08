@@ -80,7 +80,8 @@ int SessionIsolation(){
     CHECK(ValidMagazineReloadSession(6,physical,30000)&&ValidMagazineReloadSession(6,physical|0x200u,30000));
     for(auto duration:{0u,15000u,29999u,30001u,60000u})CHECK(!ValidMagazineReloadSession(6,physical,duration));
     for(auto bad:{0x400u,0x200000u,0x10000000u})CHECK(!ValidMagazineReloadSession(6,physical|bad,30000));
-    for(unsigned mode=0;mode<=8;++mode)CHECK(MagazineDetachedSessionEnabled(mode)==(mode==3||mode==6||mode==7));
+    for(unsigned mode=0;mode<=9;++mode)CHECK(MagazineDetachedSessionEnabled(mode)==(mode==3||mode==6||mode==7||mode==8));
+    CHECK(!ValidMagazineReloadSession(9,physical|0x10000000u,60000));
     CHECK(!ValidMagazineReloadSession(7,physical,30000));CHECK(ValidMagazineReloadSession(0,0,0));return 0;
 }
 }

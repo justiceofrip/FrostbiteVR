@@ -33,7 +33,7 @@ int wmain(int argc,wchar_t** argv){try{
     bool inventoryReloadProbe=false,inventoryOptionsOnly=true;
     float roomscaleStepX=.4f,shotCycleDirection=-1,supportPrimaryDirection=0;
     for(int i=3;i<argc;++i){const std::wstring option=argv[i];
-        inventoryOptionsOnly=inventoryOptionsOnly&&(option==L"--inventory-reload-probe"||option==L"--pairs"||option==L"--static-pose"||option==L"--async"||option==L"--capture-poses");
+        inventoryOptionsOnly=inventoryOptionsOnly&&(option==L"--inventory-reload-probe"||option==L"--inventory-recovery-probe"||option==L"--pairs"||option==L"--static-pose"||option==L"--async"||option==L"--capture-poses");
         emptyFireOptionsOnly=emptyFireOptionsOnly&&bc2::EmptyFireReceiverOption(option);
         pumpOptionsOnly=pumpOptionsOnly&&(option==L"--pump-hold-probe"||option==L"--pairs"||option==L"--static-pose"||option==L"--async"||option==L"--capture-poses"||option==L"--request-lifetime");
         neutralSceneOptionsOnly=neutralSceneOptionsOnly&&probe::NeutralSceneOption(option);
@@ -45,7 +45,7 @@ int wmain(int argc,wchar_t** argv){try{
         else if(option==L"--shot-cycle-direction"&&i+1<argc){shotCycleDirection=std::stof(argv[++i]);Require(shotCycleDirection==1||shotCycleDirection==-1,"Shot cycle direction must be -1 or 1");}
         else if(option==L"--support-primary-direction"&&i+1<argc){supportPrimaryDirection=std::stof(argv[++i]);Require(supportPrimaryDirection==0||supportPrimaryDirection==1||supportPrimaryDirection==-1,"Invalid support selection");}
         else if(option==L"--xm8-magazine-probe"){magazineReloadProbe=controlsObserve=true;}
-        else if(option==L"--inventory-reload-probe"){inventoryReloadProbe=magazinePhysicalProbe=controlsObserve=true;}
+        else if(option==L"--inventory-reload-probe"||option==L"--inventory-recovery-probe"){Require(!inventoryReloadProbe,"Select one inventory diagnostic");inventoryReloadProbe=magazinePhysicalProbe=controlsObserve=true;}
         else if(option==L"--magazine-physical-probe"){magazinePhysicalProbe=controlsObserve=true;}
         else if(option==L"--magazine-original-return-probe"){magazineOriginalReturnProbe=magazinePhysicalProbe=controlsObserve=capturePoses=true;}
         else if(option==L"--magazine-full-return-probe"){magazineFullReturnProbe=magazinePhysicalProbe=controlsObserve=capturePoses=true;}

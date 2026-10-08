@@ -373,6 +373,17 @@ MagazinePhysicalResult Bc2MagazinePhysicalReload::Tick(const MagazinePhysicalSam
   physical.weaponFromHandMeters=Multiply(s.raw.rawLeftWristWorldMeters,*InverseRigid(s.raw.weaponWorldMeters));}
  boundary.currentClaim=hands.Current(InteractionHand::Left);
  last_=interaction_.Update(physical,hands);out.interaction=last_;
+ // Keep the FIRST failed grab, before held-input NeedNeutral hides its cause.
+ // Observation only: never retries a gesture or alters hand/native admission.
+ if(last_.phase==DetachableMagazinePhase::Attached&&s.gripPressed&&last_.reason!=DetachableMagazineReason::None){
+  if(admissionReason_!=last_.reason){
+   const auto claim=hands.Current(InteractionHand::Left);
+   if(admissionCount_<admissions_.size())admissions_[admissionCount_++]={s.input.nowNs,s.input.sequence,physical.geometrySequence,
+    claim?claim->token.id:0,unsigned(last_.reason),claim?unsigned(claim->token.kind):0,s.input.released[0],reserve->reloadInputReady};
+   else ++admissionDropped_;
+  }
+  admissionReason_=last_.reason;
+ }else admissionReason_.reset();
  if(last_.removalGrabbed)Record(1,s.input,physical.geometrySequence);
  if(last_.physicallyRemoved)Record(3,s.input,physical.geometrySequence);
  if(last_.insertion.captured)Record(4,s.input,physical.geometrySequence);
@@ -440,7 +451,11 @@ void Bc2MagazinePhysicalReload::Report(std::ostream& o)const {
   <<",\"cancel_cause\":"<<unsigned(cancelCause_)<<",\"held_read_deferrals\":"<<heldReadDeferrals_<<",\"reserve_read_misses\":"<<reserveReadMisses_<<",\"transfer_read_deferrals\":"<<transferReadDeferrals_<<",\"transfer_read_expirations\":"<<transferReadExpirations_<<",\"retire_attached_waits\":"<<retireAttachedWaits_
   <<",\"observation_deferred\":"<<observationDeferred_<<",\"observation_expired\":"<<observationExpired_
   <<",\"cancelled\":"<<cancelled_<<",\"reconciled\":"<<reconciled_<<",\"pending\":"<<supply_.Pending().has_value()
-  <<",\"event_dropped\":"<<eventDropped_<<",\"events\":[";
+  <<",\"admission_dropped\":"<<admissionDropped_<<",\"admissions\":[";
+ for(unsigned n=0;n<admissionCount_;++n){const auto& a=admissions_[n];if(n)o<<',';
+  o<<"{\"now_ns\":"<<a.now<<",\"input\":"<<a.input<<",\"geometry\":"<<a.geometry<<",\"claim\":"<<a.claim
+   <<",\"reason\":"<<a.reason<<",\"claim_kind\":"<<a.claimKind<<",\"released\":"<<a.released<<",\"ready\":"<<a.ready<<'}';}
+ o<<"],\"event_dropped\":"<<eventDropped_<<",\"events\":[";
  for(unsigned n=0;n<eventCount_;++n){const auto& e=events_[n];if(n)o<<',';
   o<<"{\"kind\":"<<e.kind<<",\"phase\":"<<e.phase<<",\"reason\":"<<e.reason<<",\"cycle\":"<<e.cycle
    <<",\"cause\":"<<e.cause<<",\"input\":"<<e.input<<",\"geometry\":"<<e.geometry<<",\"item\":"<<e.item<<",\"request\":"<<e.request

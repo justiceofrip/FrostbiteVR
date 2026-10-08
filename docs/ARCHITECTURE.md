@@ -1,5 +1,28 @@
 # Engine boundaries
 
+## Exact configuration geometry preparation — 206
+
+The offline magazine batch tool joins content-hashed source bindings to exact
+configuration resource/hash/GUID and selected mesh/LOD/rig. It regenerates headers
+through the existing authored geometry exporter; stale supplied C++ bodies are
+provenance inputs only. An unresolved same-name variant remains unavailable.
+Generated native registration is disabled and the separately labeled mock-native
+header is only for standalone policy tests. No production consumer or native
+registration is enabled by this tooling correction.
+
+## Delayed geometry and recovery — 206
+
+HandInteraction's release barrier marks the start of a continuous observed
+released period. Advancing it on each neutral packet rejects valid delayed
+renderer contact at the next grip. Exact history, expiry, ownership, consumed
+intents and separate invalidation barriers retain their authority. This change
+adds no held-grip retry or automatic claim stealing.
+
+The explicit inventory-recovery diagnostic drops left tracking through normal
+input, waits for real old-cycle retirement and restored evidence, then repeats
+ordinary inventory/reload gestures on the same consumers. Its larger bounded
+recording window/capacity affect diagnostics only. See [206](RELOAD-RECOVERY-206.md).
+
 ## Diagnostic episodes — 205
 
 Reload motion scripts use per-episode counters over persistent consumer lifetime

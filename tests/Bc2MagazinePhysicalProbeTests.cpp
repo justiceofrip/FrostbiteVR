@@ -1,4 +1,5 @@
 #include "Bc2MagazinePhysicalProbe.h"
+#include "Bc2ReloadInterruptionProbe.h"
 #include "Bc2PhysicalReload.h"
 #include "fvr/interaction/TrackedRig.h"
 #include "Test.h"
@@ -38,6 +39,8 @@ struct Loop {
  std::optional<ReloadMagazineNativeRequest> request;
  std::optional<Bc2MagazinePhysicalReload> consumer;Bc2MagazinePhysicalProbe probe{true};MagazinePackCounters packs{};
  HandInteraction hands;std::optional<HandClaim> gun;TrackedRig rig;ControllerActions actions;MagazineRawContact raw{};
+ Bc2ReloadInterruptionProbe* interruption=nullptr;
+ std::array<MagazineRawContact,4> rawHistory{};unsigned rawDelay=1;
  std::shared_ptr<SelectedMeshesSnapshot> meshes=std::make_shared<SelectedMeshesSnapshot>();
  explicit Loop(bool original=false,bool carry=false,bool sequence=false,bool body=false):chest(body),probe(true,original,carry,sequence,body){native.owner={0x10000,0x20000,0x30000,0x40000,5,3,7};native.firing={0x50000,0x60000,0x70000};
  native.serverPlayer=0x80000;native.serverSoldier=0x90000;native.serverItem=0xa0000;
@@ -78,13 +81,16 @@ struct Loop {
  // Pausing the motion driver never resets the real consumer or hand arbiter.
  // Lost tracking is supplied as input, not a direct consumer Cancel call.
  void Tick(bool drive=true,InputFault fault=InputFault::None){const auto priorRaw=raw.rawLeftWristWorldMeters;bool frozen=false;now+=10*Ms;++sequence;auto in=Input(sequence);
+  if(interruption&&interruption->LossStarted())drive=false;
   if(drive)probe.Prepare(in,native.owner,Xm8MagazineAsset,raw,consumer->ProbeState(now),now,now+100*Ms,now);
   if(fault==InputFault::LeftTracking)in.hands[0].gripTracked=in.hands[0].aimTracked=false;
   if(fault==InputFault::RightTracking)in.hands[1].gripTracked=in.hands[1].aimTracked=false;
   if(fault==InputFault::HeadTracking)in.headValid=false;
   if(fault==InputFault::Focus){in.focused=false;in.hands={};}
   if(fault==InputFault::Expired)in.predictedNs=now-110*Ms;
-  const auto action=actions.Update(in,{native.owner.soldier,native.owner.equipGeneration,true,true},now);
+  auto actionInput=in;if(interruption)interruption->ActionInput(actionInput);
+  const auto action=actions.Update(actionInput,{native.owner.soldier,native.owner.equipGeneration,true,true},now);
+  if(interruption)interruption->Prepare(in,now);
   frozen=freezeCarry&&Report(probe).find("\"phase\":14")!=std::string::npos;
   if(in.hands[0].squeeze>.35f&&in.hands[0].squeeze<.75f){
    observedHalfCarry|=Report(probe).find("\"phase\":14")!=std::string::npos;
@@ -109,6 +115,7 @@ struct Loop {
   if(publishPairs&&result.tracking.target&&MagazineTargetFresh(result.tracking,now)){
    ++packs.pairs;packs.copies+=2;const auto role=unsigned(result.tracking.target->role);++packs.rolePairs[role];packs.roleCopies[role]+=2;}
   if(drive)probe.Observe(consumer->ProbeState(now),packs,now);
+  if(interruption)interruption->Observe(consumer->ProbeState(now),packs,raw,now);
   const auto body=Pose(5,2,3),left=Multiply(Pose(-.2f,-.4f,.3f),body),right=Multiply(Pose(0,-.25f,.45f),body);
   std::array<ArmAnchor,2> arms{{{{4.8f,1.8f,3},{0,1,0}},{{5.2f,1.8f,3},{0,1,0}}}};
   const auto posed=rig.Update({1,2,3,4},in,body,left,right,right,arms);
@@ -118,6 +125,8 @@ struct Loop {
    if(anatomical){auto attachment=Pose();attachment.values[1][1]=attachment.values[2][2]=-1;
     auto wrist=Multiply(attachment,Multiply(Matrix(in.hands[0].grip),body));wrist.values[3]=posed->left.values[3];raw.rawLeftWristWorldMeters=wrist;}
    if(frozen)raw.rawLeftWristWorldMeters=priorRaw;
+   rawHistory[sequence%rawHistory.size()]=raw;
+   raw=rawHistory[(sequence+rawHistory.size()-(rawDelay-1))%rawHistory.size()];
   }
  }
  bool Run(){for(unsigned n=0;n<3000&&!probe.CancelConsumer();++n)Tick();return Completed(probe);}
@@ -241,6 +250,13 @@ int OriginalReturnRejectsUnexpectedSupplyOrReceipt(){
 }
 int ChestSupplySequence(){Loop f(false,true,true,true);CHECK(f.Run());CHECK(f.starts==2&&f.submits==1&&f.loaded==30&&f.reserve==80);
  CHECK(Report(f.probe).find("\"chest_supply\":true")!=std::string::npos);return 0;}
+int LaggedGeometryThroughRealConsumer(){
+ for(unsigned delay:{2u,3u}){Loop f(false,true,true,true);f.rawDelay=delay;
+  const bool pass=f.Run();if(!pass){std::cerr<<"Renderer input lag "<<delay<<": "<<Report(f.probe)<<'\n';f.consumer->Report(std::cerr);}
+  CHECK(pass&&f.starts==2&&f.submits==1&&f.loaded==30&&f.reserve==80);
+  CHECK(f.consumer->ProbeState(f.now).originalReturns==1&&f.consumer->ProbeState(f.now).completed==1);
+ }return 0;
+}
 int RepeatDriverWithoutResettingConsumer(){
  Loop f(true,false,false,true);const auto* original=&*f.consumer;
  for(unsigned episode=0;episode<3;++episode){
@@ -339,6 +355,45 @@ int PriorEvidenceCannotCompleteNewEpisode(){
  next.Observe(replay,f.packs,f.now);CHECK(next.CancelConsumer()&&!next.Completed());
  return 0;
 }
+int BoundedInterruptionDriverThroughRealConsumer(){
+ for(unsigned failure=0;failure<4;++failure){Loop f(true,false,false,true);Bc2ReloadInterruptionProbe probe;
+  CHECK(probe.Begin(f.consumer->ProbeState(f.now),f.packs,f.now));f.interruption=&probe;
+  if(failure==1)f.allowRetirement=false;
+  if(failure==2)f.changeOnCancel=true;
+  if(failure==3)f.allowAttached=false;
+  for(unsigned n=0;n<2500&&!probe.Recovered()&&!probe.Failed();++n)f.Tick();
+  if(!failure){
+   if(!probe.Recovered()){probe.Report(std::cerr);f.consumer->Report(std::cerr);}
+   CHECK(probe.Recovered()&&f.cancels==1&&f.starts==1&&f.submits==0);
+   CHECK(f.consumer->ProbeState(f.now).cancelled==1&&f.consumer->ProbeState(f.now).reconciled==1);
+   CHECK(f.loaded==27&&f.reserve==83);
+   f.interruption=nullptr;f.probe=Bc2MagazinePhysicalProbe(true,false,true,true,true);
+   CHECK(f.Run()&&f.starts==3&&f.submits==1&&f.loaded==30&&f.reserve==80);
+  }else CHECK(probe.Failed()&&!probe.Recovered()&&f.starts==1&&f.submits==0);
+ }
+ return 0;
+}
+int RecoveryNeedsNewNativeRetirementAndRestoredInput(){
+ Loop f(true,false,false,true);Bc2ReloadInterruptionProbe probe;
+ CHECK(probe.Begin(f.consumer->ProbeState(f.now),f.packs,f.now));f.interruption=&probe;
+ for(unsigned n=0;n<2500&&!probe.Recovered()&&!probe.Failed();++n)f.Tick();CHECK(probe.Recovered());
+ // Replaying the observed happy-path counter shape is not enough: each guard
+ // below is independently required before the same completed sample is usable.
+ for(unsigned fault=0;fault<6;++fault){Loop g(true,false,false,true);Bc2ReloadInterruptionProbe q;
+  CHECK(q.Begin(g.consumer->ProbeState(g.now),g.packs,g.now));g.interruption=&q;
+  for(unsigned n=0;n<2500&&q.State()!=Bc2ReloadInterruptionProbe::Phase::Retiring&&!q.Failed();++n)g.Tick();
+  CHECK(q.State()==Bc2ReloadInterruptionProbe::Phase::Retiring);
+  // Temporarily stop observing in the diagnostic; production cleanup proceeds.
+  g.interruption=nullptr;for(unsigned n=0;n<30;++n)g.Tick(false);
+  auto s=g.consumer->ProbeState(g.now);auto raw=g.raw;CHECK(!s.retiring&&s.reconciled==1);
+  if(fault==0)--s.reconciled;if(fault==1)--s.cancelled;if(fault==2)raw.nativeMagazineAttached=false;
+  if(fault==3)raw.inputEvidence.tracked[0]=false;if(fault==4)raw.inputEvidence.deadlineNs=g.now;
+  if(fault==5)++raw.owner.weapon;
+  q.Observe(s,g.packs,raw,g.now);CHECK(!q.Recovered());
+  q.Observe(g.consumer->ProbeState(g.now),g.packs,g.raw,g.now);CHECK(q.Recovered());
+ }
+ return 0;
+}
 int DisabledAndBounded(){Bc2MagazinePhysicalProbe off;auto in=Input(1);const auto original=in;off.Prepare(in,{},"",{},{},1000*Ms,1100*Ms,1000*Ms);
  CHECK(in.hands[0].grip.position.x==original.hands[0].grip.position.x&&!off.CancelConsumer());
  Bc2MagazinePhysicalProbe probe(true);ReloadStateOwner owner{0x10000,0x20000,0x30000,0x40000,5,3,7};
@@ -346,5 +401,5 @@ int DisabledAndBounded(){Bc2MagazinePhysicalProbe off;auto in=Input(1);const aut
  probe.Prepare(in,owner,Xm8MagazineAsset,{},{},31000*Ms,31100*Ms,31000*Ms);
  CHECK(probe.CancelConsumer()&&in.hands[0].squeeze==0);return 0;}
 }
-int main(){if(RepeatedReplacementsKeepLifetimeEvidence()||NewEpisodeRejectsBusyConsumer()||LifetimeCountersCannotRollBack()||PriorEvidenceCannotCompleteNewEpisode()||RepeatDriverWithoutResettingConsumer()||TrackingInterruptionThenRealRecovery()||ChestSupplySequence()||CarryWaitRejectsLostControl()||CarryPreviousLeaseMayExpire()||CarryMissingHoldIsBounded()||CarryWaitDoesNotInventMotion()||RepeatedOriginalThenReplacement()||RepeatRequiresFirstReturnRetirement()||RepeatStillRequiresObservedCarry()||FreshFreeCarryThroughRealConsumer()||CarryCoverageRequiresObservedMotion()||OriginalReturnThroughRealConsumer()||OriginalReturnRequiresActualEvidence()||OriginalReturnRejectsUnexpectedSupplyOrReceipt()||ClosedLoopRealPolicies()||PackEvidenceCannotBeInvented()||NativeReceiptCannotBeInferredFromCounts()||AttachedBaselineRequiredAfterReceipt()||FullOrEmptyPreflightNeverBegins()||DisabledAndBounded())return 1;
+int main(){if(LaggedGeometryThroughRealConsumer()||RecoveryNeedsNewNativeRetirementAndRestoredInput()||BoundedInterruptionDriverThroughRealConsumer()||RepeatedReplacementsKeepLifetimeEvidence()||NewEpisodeRejectsBusyConsumer()||LifetimeCountersCannotRollBack()||PriorEvidenceCannotCompleteNewEpisode()||RepeatDriverWithoutResettingConsumer()||TrackingInterruptionThenRealRecovery()||ChestSupplySequence()||CarryWaitRejectsLostControl()||CarryPreviousLeaseMayExpire()||CarryMissingHoldIsBounded()||CarryWaitDoesNotInventMotion()||RepeatedOriginalThenReplacement()||RepeatRequiresFirstReturnRetirement()||RepeatStillRequiresObservedCarry()||FreshFreeCarryThroughRealConsumer()||CarryCoverageRequiresObservedMotion()||OriginalReturnThroughRealConsumer()||OriginalReturnRequiresActualEvidence()||OriginalReturnRejectsUnexpectedSupplyOrReceipt()||ClosedLoopRealPolicies()||PackEvidenceCannotBeInvented()||NativeReceiptCannotBeInferredFromCounts()||AttachedBaselineRequiredAfterReceipt()||FullOrEmptyPreflightNeverBegins()||DisabledAndBounded())return 1;
  std::cout<<"BC2 magazine physical probe: persistent actual-policy/TrackedRig/evidence groups passed; native/GPU/headset unverified\n";}

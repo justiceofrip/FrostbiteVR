@@ -1,4 +1,19 @@
-# Current local status — checkpoint 205
+# Current local status — checkpoint 206
+
+[Checkpoint 206](RELOAD-RECOVERY-206.md) fixes the reproduced delayed-hand-pose
+grab failure. Focused actual-policy tests pass with N-2/N-3 geometry. The native
+interruption/holster/reload driver completed one full interaction with conserved
+ammo, but two transport timeouts kept its combined audit inconclusive. After the
+PC crash, the final 206d build passed all 186 suites on each architecture using
+one compiler job at a time. The corrected binary's actual-game validation remains
+pending. Source and saved evidence survived.
+
+The current compiled magazine registry has **two exact profiles: scoped XM8
+and AEK971_sp**. SPAS shell loading is separate. The 35 prepared configurations,
+20 grip records and 10 magazine-contact records are data/variant counts, not
+completed guns. Wider generated magazine registrations are not selected by the
+checkpoint build. Pump, bolt, slide/chamber and belt-fed native integration are
+still unfinished. See [the audited coverage and family gaps](WEAPON-COVERAGE-CURRENT.md).
 
 [Checkpoint 205](RELOAD-RECOVERY-205.md) lets the automated reload driver run
 repeated episodes without resetting gameplay consumers. Thirty offline
