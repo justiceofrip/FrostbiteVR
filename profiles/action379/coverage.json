@@ -1,0 +1,912 @@
+{
+  "schema": "fvr.bc2.action_coverage379",
+  "profiles": 169,
+  "asset_names": 73,
+  "models": 39,
+  "records": 427,
+  "distinct_content_jobs": 93,
+  "roles": {
+    "1p_reload": 166,
+    "1p_deploy": 169,
+    "1p_boltaction": 42,
+    "1p_reload_in": 25,
+    "1p_reload_out": 25
+  },
+  "missing_roles": 415,
+  "gaps": [
+    {
+      "asset": "PP2000",
+      "weapon": {
+        "resource": "Objects/Weapons/Handheld/BU_smg_PP2000/BU_smg_PP2000_Scoped.dbx",
+        "sha256": "42ba16bd39694e30f6181e0974a2f27fb2f63b94367a9d8db625e303b310a979",
+        "instance_guid": "a9e617c8-f9f8-4844-91e4-16b258d12f42",
+        "type": "GameSharedResources.SoldierWeaponData"
+      },
+      "state_index": 0,
+      "binding_digest": "8f752f4886b5f32030eae8388da87c3d3f699f7ff3692e87cc948780c0e5b130",
+      "stage": "action",
+      "role": "1p_reload",
+      "reason": "Non-unit authored orientation"
+    },
+    {
+      "asset": "PP2000",
+      "weapon": {
+        "resource": "Objects/Weapons/Handheld/BU_smg_PP2000/BU_smg_PP2000_Kobra.dbx",
+        "sha256": "ecd5c77daf17908aaea2369b21a5be85a32cb6eab7f459c509581f5dfd08804b",
+        "instance_guid": "a11f3500-f861-4750-ba0c-d6c79c18532c",
+        "type": "GameSharedResources.SoldierWeaponData"
+      },
+      "state_index": 0,
+      "binding_digest": "62f4f3322212f1499916fc7e91826c2793a756b310f5d9480e88a2d7162a9585",
+      "stage": "action",
+      "role": "1p_reload",
+      "reason": "Non-unit authored orientation"
+    },
+    {
+      "asset": "PP2000",
+      "weapon": {
+        "resource": "Objects/Weapons/Handheld/BU_smg_PP2000/BU_smg_PP2000.dbx",
+        "sha256": "25475fc23a93a4168db67673aef4c4c75a09a29b57fa95637b2c4456df2dbb9b",
+        "instance_guid": "d0060d52-0de0-4a16-a774-22e78f8cafba",
+        "type": "GameSharedResources.SoldierWeaponData"
+      },
+      "state_index": 0,
+      "binding_digest": "b00e2542219aaf6a3b5c64cf01b0a80eb1b7433102de08b7ab5d576bb676073d",
+      "stage": "action",
+      "role": "1p_reload",
+      "reason": "Non-unit authored orientation"
+    }
+  ],
+  "model_coverage": [
+    {
+      "mesh": "Objects/Weapons/Handheld/MEC_rif_9A91/MEC_rif_9A91_Mesh",
+      "assets": [
+        "9A91"
+      ],
+      "role_records": {
+        "1p_reload": 3,
+        "1p_deploy": 3
+      },
+      "linear_part_candidates": [],
+      "sampled_left_contact_candidates": [
+        {
+          "role": "1p_reload",
+          "part": "jntWpn_6"
+        }
+      ],
+      "native_admission": false
+    },
+    {
+      "mesh": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Mesh",
+      "assets": [
+        "M16",
+        "M16k"
+      ],
+      "role_records": {
+        "1p_reload": 6,
+        "1p_deploy": 6
+      },
+      "linear_part_candidates": [
+        {
+          "role": "1p_reload",
+          "part": "jntWpn_4"
+        }
+      ],
+      "sampled_left_contact_candidates": [
+        {
+          "role": "1p_reload",
+          "part": "jntWpn_12"
+        }
+      ],
+      "native_admission": false
+    },
+    {
+      "mesh": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Mesh",
+      "assets": [
+        "AN94",
+        "AN94_sp_k",
+        "AN94_sp_s"
+      ],
+      "role_records": {
+        "1p_reload": 5,
+        "1p_deploy": 5
+      },
+      "linear_part_candidates": [],
+      "sampled_left_contact_candidates": [
+        {
+          "role": "1p_reload",
+          "part": "jntWpn_12"
+        }
+      ],
+      "native_admission": false
+    },
+    {
+      "mesh": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Mesh",
+      "assets": [
+        "XM8C"
+      ],
+      "role_records": {
+        "1p_reload": 3,
+        "1p_deploy": 3
+      },
+      "linear_part_candidates": [],
+      "sampled_left_contact_candidates": [
+        {
+          "role": "1p_reload",
+          "part": "jntWpn_6"
+        }
+      ],
+      "native_admission": false
+    },
+    {
+      "mesh": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh",
+      "assets": [
+        "M416"
+      ],
+      "role_records": {
+        "1p_reload": 3,
+        "1p_deploy": 3
+      },
+      "linear_part_candidates": [],
+      "sampled_left_contact_candidates": [
+        {
+          "role": "1p_reload",
+          "part": "jntWpn_6"
+        }
+      ],
+      "native_admission": false
+    },
+    {
+      "mesh": "Objects/Weapons/Handheld/BU_smg_PP2000/BU_smg_PP2000_Mesh",
+      "assets": [
+        "PP2000"
+      ],
+      "role_records": {
+        "1p_deploy": 3
+      },
+      "linear_part_candidates": [],
+      "sampled_left_contact_candidates": [],
+      "native_admission": false
+    },
+    {
+      "mesh": "objects/weapons/handheld/bu_rif_mk14ebr/bu_rif_mk14ebr_mesh",
+      "assets": [
+        "Mk14EBR"
+      ],
+      "role_records": {
+        "1p_reload": 6,
+        "1p_deploy": 6
+      },
+      "linear_part_candidates": [],
+      "sampled_left_contact_candidates": [],
+      "native_admission": false
+    },
+    {
+      "mesh": "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Mesh",
+      "assets": [
+        "AEK971",
+        "AEK971_sp",
+        "AEK971_sp_k"
+      ],
+      "role_records": {
+        "1p_reload": 5,
+        "1p_deploy": 5
+      },
+      "linear_part_candidates": [],
+      "sampled_left_contact_candidates": [
+        {
+          "role": "1p_reload",
+          "part": "jntWpn_6"
+        }
+      ],
+      "native_admission": false
+    },
+    {
+      "mesh": "Objects/Weapons/Handheld/RU_rif_AKS74u/RU_rif_AKS74u_Mesh",
+      "assets": [
+        "AKS74u",
+        "AKS74u_sp",
+        "AKS74u_sp_k"
+      ],
+      "role_records": {
+        "1p_reload": 5,
+        "1p_deploy": 5
+      },
+      "linear_part_candidates": [],
+      "sampled_left_contact_candidates": [
+        {
+          "role": "1p_reload",
+          "part": "jntWpn_6"
+        }
+      ],
+      "native_admission": false
+    },
+    {
+      "mesh": "Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG_Mesh",
+      "assets": [
+        "AUG"
+      ],
+      "role_records": {
+        "1p_reload": 3,
+        "1p_deploy": 3
+      },
+      "linear_part_candidates": [],
+      "sampled_left_contact_candidates": [],
+      "native_admission": false
+    },
+    {
+      "mesh": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Mesh",
+      "assets": [
+        "XM8",
+        "XM8_sp",
+        "XM8_sp_s"
+      ],
+      "role_records": {
+        "1p_reload": 5,
+        "1p_deploy": 5
+      },
+      "linear_part_candidates": [],
+      "sampled_left_contact_candidates": [
+        {
+          "role": "1p_reload",
+          "part": "jntWpn_6"
+        }
+      ],
+      "native_admission": false
+    },
+    {
+      "mesh": "Objects/Weapons/Handheld/BU_smg_IMIUZI/BU_smg_IMIUZI_Mesh",
+      "assets": [
+        "UZI"
+      ],
+      "role_records": {
+        "1p_reload": 3,
+        "1p_deploy": 3
+      },
+      "linear_part_candidates": [],
+      "sampled_left_contact_candidates": [
+        {
+          "role": "1p_reload",
+          "part": "jntWpn_6"
+        }
+      ],
+      "native_admission": false
+    },
+    {
+      "mesh": "Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL_Mesh",
+      "assets": [
+        "SCAR",
+        "SCAR_sp",
+        "SCAR_sp_s"
+      ],
+      "role_records": {
+        "1p_reload": 5,
+        "1p_deploy": 5
+      },
+      "linear_part_candidates": [],
+      "sampled_left_contact_candidates": [
+        {
+          "role": "1p_reload",
+          "part": "jntWpn_6"
+        }
+      ],
+      "native_admission": false
+    },
+    {
+      "mesh": "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Mesh",
+      "assets": [
+        "F2000",
+        "F2000_sp",
+        "F2000_sp_k"
+      ],
+      "role_records": {
+        "1p_reload": 5,
+        "1p_deploy": 5
+      },
+      "linear_part_candidates": [],
+      "sampled_left_contact_candidates": [
+        {
+          "role": "1p_reload",
+          "part": "jntWpnwpnJnt_16"
+        }
+      ],
+      "native_admission": false
+    },
+    {
+      "mesh": "Objects/Weapons/Handheld/BU_smg_UMP/BU_smg_UMP_Mesh",
+      "assets": [
+        "UMP",
+        "UMPk"
+      ],
+      "role_records": {
+        "1p_reload": 6,
+        "1p_deploy": 6
+      },
+      "linear_part_candidates": [],
+      "sampled_left_contact_candidates": [
+        {
+          "role": "1p_reload",
+          "part": "jntWpn_12"
+        }
+      ],
+      "native_admission": false
+    },
+    {
+      "mesh": "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Mesh",
+      "assets": [
+        "MG3",
+        "MG3_sp",
+        "MG3_sp_k",
+        "MG3k"
+      ],
+      "role_records": {
+        "1p_reload": 8,
+        "1p_deploy": 8
+      },
+      "linear_part_candidates": [
+        {
+          "role": "1p_reload",
+          "part": "jntWpn_4"
+        }
+      ],
+      "sampled_left_contact_candidates": [
+        {
+          "role": "1p_reload",
+          "part": "jntWpn_19"
+        },
+        {
+          "role": "1p_reload",
+          "part": "jntWpn_6"
+        }
+      ],
+      "native_admission": false
+    },
+    {
+      "mesh": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Mesh",
+      "assets": [
+        "MG36"
+      ],
+      "role_records": {
+        "1p_reload": 3,
+        "1p_deploy": 3
+      },
+      "linear_part_candidates": [],
+      "sampled_left_contact_candidates": [
+        {
+          "role": "1p_reload",
+          "part": "jntWpn_6"
+        }
+      ],
+      "native_admission": false
+    },
+    {
+      "mesh": "Objects/Weapons/Handheld/MEC_lmg_QJY88/MEC_lmg_QJY88_Mesh",
+      "assets": [
+        "QJU88",
+        "QJU88_sp",
+        "QJU88_sp_k"
+      ],
+      "role_records": {
+        "1p_reload": 5,
+        "1p_deploy": 5
+      },
+      "linear_part_candidates": [
+        {
+          "role": "1p_reload",
+          "part": "jntWpn_4"
+        }
+      ],
+      "sampled_left_contact_candidates": [],
+      "native_admission": false
+    },
+    {
+      "mesh": "Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60_Mesh",
+      "assets": [
+        "M60",
+        "M60_sp",
+        "M60_sp_s"
+      ],
+      "role_records": {
+        "1p_reload": 5,
+        "1p_deploy": 5
+      },
+      "linear_part_candidates": [
+        {
+          "role": "1p_reload",
+          "part": "jntWpn_4"
+        }
+      ],
+      "sampled_left_contact_candidates": [
+        {
+          "role": "1p_reload",
+          "part": "jntWpn_9"
+        }
+      ],
+      "native_admission": false
+    },
+    {
+      "mesh": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Mesh",
+      "assets": [
+        "XM8 LMG"
+      ],
+      "role_records": {
+        "1p_reload": 3,
+        "1p_deploy": 3
+      },
+      "linear_part_candidates": [],
+      "sampled_left_contact_candidates": [
+        {
+          "role": "1p_reload",
+          "part": "jntWpn_6"
+        }
+      ],
+      "native_admission": false
+    },
+    {
+      "mesh": "Objects/Weapons/Handheld/RU_lmg_PKM/RU_lmg_PKM_Mesh",
+      "assets": [
+        "PKM"
+      ],
+      "role_records": {
+        "1p_reload": 3,
+        "1p_deploy": 3
+      },
+      "linear_part_candidates": [
+        {
+          "role": "1p_reload",
+          "part": "jntWpn_4"
+        }
+      ],
+      "sampled_left_contact_candidates": [
+        {
+          "role": "1p_reload",
+          "part": "jntWpn_6"
+        }
+      ],
+      "native_admission": false
+    },
+    {
+      "mesh": "Objects/Weapons/Handheld/UL_lmg_FNMinimi/UL_lmg_FNMinimi_Mesh",
+      "assets": [
+        "M249"
+      ],
+      "role_records": {
+        "1p_reload": 3,
+        "1p_deploy": 3
+      },
+      "linear_part_candidates": [
+        {
+          "role": "1p_reload",
+          "part": "jntWpn_5"
+        }
+      ],
+      "sampled_left_contact_candidates": [],
+      "native_admission": false
+    },
+    {
+      "mesh": "Objects/Weapons/Handheld/BU_shg_Neostead/BU_shg_Neostead_Mesh",
+      "assets": [
+        "NS2000"
+      ],
+      "role_records": {
+        "1p_boltaction": 6,
+        "1p_reload": 6,
+        "1p_reload_in": 6,
+        "1p_reload_out": 6,
+        "1p_deploy": 6
+      },
+      "linear_part_candidates": [
+        {
+          "role": "1p_boltaction",
+          "part": "jntWpn_4"
+        },
+        {
+          "role": "1p_reload_out",
+          "part": "jntWpn_4"
+        }
+      ],
+      "sampled_left_contact_candidates": [
+        {
+          "role": "1p_boltaction",
+          "part": "jntWpn_4"
+        },
+        {
+          "role": "1p_reload_out",
+          "part": "jntWpn_4"
+        }
+      ],
+      "native_admission": false
+    },
+    {
+      "mesh": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Mesh",
+      "assets": [
+        "S20K"
+      ],
+      "role_records": {
+        "1p_reload": 6,
+        "1p_deploy": 6
+      },
+      "linear_part_candidates": [
+        {
+          "role": "1p_reload",
+          "part": "jntWpn_3"
+        }
+      ],
+      "sampled_left_contact_candidates": [],
+      "native_admission": false
+    },
+    {
+      "mesh": "Objects/Weapons/Handheld/BU_sni_VSSVintores/BU_sni_VSSVintores_Mesh",
+      "assets": [
+        "VSS"
+      ],
+      "role_records": {
+        "1p_reload": 3,
+        "1p_deploy": 3
+      },
+      "linear_part_candidates": [],
+      "sampled_left_contact_candidates": [
+        {
+          "role": "1p_reload",
+          "part": "jntWpn_6"
+        }
+      ],
+      "native_admission": false
+    },
+    {
+      "mesh": "Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Mesh",
+      "assets": [
+        "SPAS12",
+        "SPAS12_sp",
+        "SPAS12_sp_s"
+      ],
+      "role_records": {
+        "1p_boltaction": 8,
+        "1p_reload": 8,
+        "1p_reload_in": 8,
+        "1p_reload_out": 8,
+        "1p_deploy": 8
+      },
+      "linear_part_candidates": [
+        {
+          "role": "1p_boltaction",
+          "part": "jntWpn_4"
+        },
+        {
+          "role": "1p_boltaction",
+          "part": "jntWpn_5"
+        },
+        {
+          "role": "1p_reload_out",
+          "part": "jntWpn_4"
+        },
+        {
+          "role": "1p_reload_out",
+          "part": "jntWpn_5"
+        }
+      ],
+      "sampled_left_contact_candidates": [
+        {
+          "role": "1p_boltaction",
+          "part": "jntWpn_4"
+        },
+        {
+          "role": "1p_reload_out",
+          "part": "jntWpn_4"
+        }
+      ],
+      "native_admission": false
+    },
+    {
+      "mesh": "Objects/Weapons/Handheld/US_shg_Remington870MCS/US_shg_Remington870MCS_Mesh",
+      "assets": [
+        "870MCS"
+      ],
+      "role_records": {
+        "1p_boltaction": 6,
+        "1p_reload": 6,
+        "1p_reload_in": 6,
+        "1p_reload_out": 6,
+        "1p_deploy": 6
+      },
+      "linear_part_candidates": [
+        {
+          "role": "1p_boltaction",
+          "part": "jntWpn_4"
+        },
+        {
+          "role": "1p_boltaction",
+          "part": "jntWpn_5"
+        },
+        {
+          "role": "1p_reload_out",
+          "part": "jntWpn_4"
+        },
+        {
+          "role": "1p_reload_out",
+          "part": "jntWpn_5"
+        }
+      ],
+      "sampled_left_contact_candidates": [
+        {
+          "role": "1p_boltaction",
+          "part": "jntWpn_4"
+        },
+        {
+          "role": "1p_reload_out",
+          "part": "jntWpn_4"
+        }
+      ],
+      "native_admission": false
+    },
+    {
+      "mesh": "Objects/Weapons/Handheld/UL_sni_SVU/UL_sni_SVU_Mesh",
+      "assets": [
+        "SVU"
+      ],
+      "role_records": {
+        "1p_reload": 3,
+        "1p_deploy": 3
+      },
+      "linear_part_candidates": [],
+      "sampled_left_contact_candidates": [
+        {
+          "role": "1p_reload",
+          "part": "jntWpn_6"
+        }
+      ],
+      "native_admission": false
+    },
+    {
+      "mesh": "Objects/Weapons/Handheld/MEC_sni_GOL/MEC_sni_GOL_Mesh",
+      "assets": [
+        "GOL"
+      ],
+      "role_records": {
+        "1p_boltaction": 3,
+        "1p_reload": 3,
+        "1p_deploy": 3
+      },
+      "linear_part_candidates": [],
+      "sampled_left_contact_candidates": [
+        {
+          "role": "1p_reload",
+          "part": "jntWpn_6"
+        }
+      ],
+      "native_admission": false
+    },
+    {
+      "mesh": "Objects/Weapons/Handheld/BU_shg_USAS-12/BU_shg_USAS-12_Mesh",
+      "assets": [
+        "USAS12",
+        "USAS12_sp",
+        "USAS12_sp_s"
+      ],
+      "role_records": {
+        "1p_reload": 8,
+        "1p_deploy": 8
+      },
+      "linear_part_candidates": [],
+      "sampled_left_contact_candidates": [
+        {
+          "role": "1p_reload",
+          "part": "jntWpn_12"
+        }
+      ],
+      "native_admission": false
+    },
+    {
+      "mesh": "Objects/Weapons/Handheld/BU_sni_QBY88/BU_sni_QBY88_Mesh",
+      "assets": [
+        "QBU88",
+        "QBU88_sp",
+        "QBU88_sp_k"
+      ],
+      "role_records": {
+        "1p_reload": 5,
+        "1p_deploy": 5
+      },
+      "linear_part_candidates": [],
+      "sampled_left_contact_candidates": [],
+      "native_admission": false
+    },
+    {
+      "mesh": "Objects/Weapons/Handheld/BU_sni_M95/BU_sni_M95_Mesh",
+      "assets": [
+        "M95",
+        "M95_sp",
+        "M95_sp_s",
+        "M95k"
+      ],
+      "role_records": {
+        "1p_boltaction": 8,
+        "1p_reload": 8,
+        "1p_deploy": 8
+      },
+      "linear_part_candidates": [],
+      "sampled_left_contact_candidates": [
+        {
+          "role": "1p_reload",
+          "part": "jntWpn_6"
+        }
+      ],
+      "native_admission": false
+    },
+    {
+      "mesh": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach_Mesh",
+      "assets": [
+        "MP443",
+        "MP443_sp"
+      ],
+      "role_records": {
+        "1p_reload": 2,
+        "1p_deploy": 2
+      },
+      "linear_part_candidates": [
+        {
+          "role": "1p_reload",
+          "part": "jntWpn_3"
+        }
+      ],
+      "sampled_left_contact_candidates": [],
+      "native_admission": false
+    },
+    {
+      "mesh": "Objects/Weapons/Handheld/MEC_hg_MP412rex/MEC_hg_MP412rex_Mesh",
+      "assets": [
+        "MP412"
+      ],
+      "role_records": {
+        "1p_reload": 1,
+        "1p_deploy": 1
+      },
+      "linear_part_candidates": [],
+      "sampled_left_contact_candidates": [
+        {
+          "role": "1p_reload",
+          "part": "jntWpn_4"
+        }
+      ],
+      "native_admission": false
+    },
+    {
+      "mesh": "Objects/Weapons/Handheld/US_sni_M24/US_sni_M24_Mesh",
+      "assets": [
+        "M24"
+      ],
+      "role_records": {
+        "1p_boltaction": 3,
+        "1p_reload": 3,
+        "1p_deploy": 3
+      },
+      "linear_part_candidates": [],
+      "sampled_left_contact_candidates": [],
+      "native_admission": false
+    },
+    {
+      "mesh": "Objects/Weapons/Handheld/RU_sni_SV98/RU_sni_SV98_Mesh",
+      "assets": [
+        "SV98"
+      ],
+      "role_records": {
+        "1p_boltaction": 3,
+        "1p_reload": 3,
+        "1p_deploy": 3
+      },
+      "linear_part_candidates": [],
+      "sampled_left_contact_candidates": [
+        {
+          "role": "1p_reload",
+          "part": "jntWpn_6"
+        }
+      ],
+      "native_admission": false
+    },
+    {
+      "mesh": "Objects/Weapons/Handheld/US_hg_M9Beretta/US_hg_M9Beretta_Mesh",
+      "assets": [
+        "M9",
+        "M9-3"
+      ],
+      "role_records": {
+        "1p_reload": 2,
+        "1p_deploy": 2
+      },
+      "linear_part_candidates": [
+        {
+          "role": "1p_reload",
+          "part": "jntWpn_3"
+        }
+      ],
+      "sampled_left_contact_candidates": [
+        {
+          "role": "1p_reload",
+          "part": "jntWpn_12"
+        }
+      ],
+      "native_admission": false
+    },
+    {
+      "mesh": "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194_Mesh",
+      "assets": [
+        "T194",
+        "T194_sp",
+        "T194_sp_s"
+      ],
+      "role_records": {
+        "1p_boltaction": 5,
+        "1p_reload": 5,
+        "1p_reload_in": 5,
+        "1p_reload_out": 5,
+        "1p_deploy": 5
+      },
+      "linear_part_candidates": [
+        {
+          "role": "1p_boltaction",
+          "part": "jntWpn_3"
+        },
+        {
+          "role": "1p_boltaction",
+          "part": "jntWpn_4"
+        },
+        {
+          "role": "1p_boltaction",
+          "part": "jntWpn_5"
+        },
+        {
+          "role": "1p_reload_out",
+          "part": "jntWpn_3"
+        },
+        {
+          "role": "1p_reload_out",
+          "part": "jntWpn_4"
+        },
+        {
+          "role": "1p_reload_out",
+          "part": "jntWpn_5"
+        }
+      ],
+      "sampled_left_contact_candidates": [
+        {
+          "role": "1p_reload_out",
+          "part": "jntWpn_5"
+        }
+      ],
+      "native_admission": false
+    },
+    {
+      "mesh": "Objects/Weapons/Handheld/Beach/M1911A1/US_M1911_Mesh",
+      "assets": [
+        "M1911"
+      ],
+      "role_records": {
+        "1p_reload": 1,
+        "1p_deploy": 1
+      },
+      "linear_part_candidates": [
+        {
+          "role": "1p_reload",
+          "part": "jntWpn_3"
+        }
+      ],
+      "sampled_left_contact_candidates": [
+        {
+          "role": "1p_reload",
+          "part": "jntWpn_12"
+        }
+      ],
+      "native_admission": false
+    }
+  ],
+  "native_admissions": 0,
+  "report_sha256": "c1e775329c56c32bec9ed49392d5b080f4b9f50bbd66c0df15945f98d9dbd7b8",
+  "tools": {
+    "bc2_authored_action_geometry.py": "42ea1e70844f08ddb9b40477878146c9260fe0b1f7681a2a422cab35c658ebea",
+    "bc2_authored_magazine_geometry.py": "3489589d6b7c3428d1b76a26df572acfef868305f78826b9501956b0f5b7ee27",
+    "bc2_authored_mechanism_geometry.py": "28ab341feaa5bd1c3a558212e30aa6e8a0f461ed5c387375ca5dec6cf2fe7dc3",
+    "bc2_authored_linear_mechanism.py": "c82762805550a36628f7e3fd91699129eb63d95e142f1976c6579c07da890a0f",
+    "bc2_granny_resource.py": "b96444d4e8ba8f62b00604fc7e2e4fc8d7ba484d1320c18578817bb5f3f81dd3",
+    "bc2_weapon_animation_pipeline.py": "1e1be1d12389835bc089ead9c172a011797a3c8d5370957b0ade2876ff3cd55b"
+  }
+}

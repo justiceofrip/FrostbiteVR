@@ -33,7 +33,13 @@ int Config(){constexpr auto flags=0x12197809u;
  CHECK(ValidMagazineReloadSession(7,flags,60000)&&ValidBodyInventoryConfig(flags)&&MagazineDetachedSessionEnabled(7));
  CHECK(!ValidMagazineReloadSession(7,flags,30000)&&!ValidMagazineReloadSession(7,flags&~0x10000000u,60000));
  for(auto bit:{0x400u,0x200000u,0x4000000u,0x80000000u,0x100u})CHECK(!ValidMagazineReloadSession(7,flags|bit,60000));return 0;}
-int RecordWindow(){ReloadRecordWindow normal;CHECK(!normal.OpenDeferred(1));normal.Start(1000);
+int RecordWindow(){
+ for(unsigned cycles:{1u,2u,5u}){ReloadRecordWindow bolt;
+  CHECK(bolt.Bolt(cycles)&&bolt.DurationNs()==std::int64_t(OrdinaryBoltProbeDurationMs(cycles))*1000000);
+  bolt.Start(1000);CHECK(bolt.Contains(1001)&&!bolt.Bolt(cycles));
+  CHECK(!bolt.Contains(1000+bolt.DurationNs()));}
+ for(unsigned cycles:{0u,3u,4u,6u}){ReloadRecordWindow bolt;CHECK(!bolt.Bolt(cycles));}
+ ReloadRecordWindow normal;CHECK(!normal.OpenDeferred(1));normal.Start(1000);
  CHECK(normal.StartNs()==1000&&normal.Contains(1000)&&!normal.Contains(999)&&!normal.Defer());
  CHECK(!normal.Contains(1000+ReloadRecordWindow::Duration));normal.Start(2000);CHECK(normal.StartNs()==1000);
  ReloadRecordWindow deferred;CHECK(deferred.Defer());deferred.Start(1000);CHECK(!deferred.Contains(5000000000ll));

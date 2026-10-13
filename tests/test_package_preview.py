@@ -12,7 +12,7 @@ import zipfile
 
 spec=importlib.util.spec_from_file_location('pack',Path(__file__).resolve().parents[1]/'tools/package_preview.py')
 p=importlib.util.module_from_spec(spec);spec.loader.exec_module(p)
-BODY_RUNTIME=('tools/bc2_authored_grip_bindings.py', 'tools/bc2_authored_magazine_geometry.py', 'tools/bc2_reviewed_magazine_contact.py', 'tools/bc2_magazine_assembly.py', 'tools/bc2_magazine_assembly_cache.py', 'tools/bc2_configured_body_assets.py', 'tools/bc2_magazine_contact_batch.py', 'tools/bc2_body_ammo_assets.py', 'tools/bc2_body_equipment_assets.py', 'tools/bc2_granny_curves.py', 'tools/bc2_granny_resource.py', 'tools/bc2_mesh_geometry.py', 'tools/bc2_weapon_animation_pipeline.py', 'tools/bc2_weapon_asset_pipeline.py', 'tools/bc2_weapon_config_pipeline.py', 'tools/bc2_weapon_mesh_bindings.py', 'tools/inspect_bc2_mesh_asset.py', 'tools/Prepare-BodyAmmoAssets.ps1', 'config/body-ammo-assets.json', 'licenses/Norbyte-LSLib-MIT.txt')
+BODY_RUNTIME=('tools/bc2_authored_grip_bindings.py', 'tools/bc2_authored_magazine_geometry.py', 'tools/bc2_sampled_magazine_path.py', 'tools/bc2_reviewed_magazine_contact.py', 'tools/bc2_magazine_assembly.py', 'tools/bc2_magazine_assembly_cache.py', 'tools/bc2_configured_body_assets.py', 'tools/bc2_magazine_contact_batch.py', 'tools/bc2_body_ammo_assets.py', 'tools/bc2_body_equipment_assets.py', 'tools/bc2_granny_curves.py', 'tools/bc2_granny_resource.py', 'tools/bc2_mesh_geometry.py', 'tools/bc2_weapon_animation_pipeline.py', 'tools/bc2_weapon_asset_pipeline.py', 'tools/bc2_weapon_config_pipeline.py', 'tools/bc2_weapon_mesh_bindings.py', 'tools/inspect_bc2_mesh_asset.py', 'tools/Prepare-BodyAmmoAssets.ps1', 'config/body-ammo-assets.json', 'licenses/Norbyte-LSLib-MIT.txt')
 
 def image(machine=0x14c,dependency=None):
     data=bytearray(1024);data[:2]=b'MZ';struct.pack_into('<I',data,60,128);data[128:132]=b'PE\0\0'
@@ -248,6 +248,24 @@ class Packaging(unittest.TestCase):
         for name in ('mechanisms.json','generated/Bc2PrecisionMagazineCandidates.h','previews/M9-parts.png'):
             target=self.root/name;target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(b'private mechanism geometry')
         self.assertFalse(any(data==b'private mechanism geometry' for data in p.collect_source(self.root).values()))
+
+    def test_sampled_magazine_export_survives_source_packaging(self):
+        names=('tests/test_bc2_sampled_magazine_path.py',
+               'profiles/experimental-pistol-sampled242/exact-geometry.json',
+               'profiles/experimental-pistol-sampled242/PistolGeometry.h')
+        for name in names:
+            (self.root/name).write_bytes((Path(__file__).resolve().parents[1]/name).read_bytes())
+        destination=self.temp_dir/'sampled-path-source'
+        p.stage(self.root,destination,'sampled-path-test',source_only=True)
+        completed=subprocess.run([sys.executable,'-I','-S','-B',
+                                 str(destination/'source/tests/test_bc2_sampled_magazine_path.py')],
+                                 cwd=self.temp_dir,capture_output=True,text=True,timeout=15)
+        self.assertEqual(completed.returncode,0,completed.stderr)
+        self.assertIn('Ran 10 tests',completed.stderr)
+        runtime={name:p.collect_source(self.root)[name] for name in p.RUNTIME}
+        runtime.pop('tools/bc2_sampled_magazine_path.py')
+        with self.assertRaisesRegex(ValueError,'bc2_sampled_magazine_path'):
+            p.validate_python_helpers(runtime)
 
     def test_authored_lmg_mechanisms_are_source_only(self):
         expected=('tools/bc2_authored_mechanism_geometry.py','tests/test_bc2_authored_mechanism_geometry.py',

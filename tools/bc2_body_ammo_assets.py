@@ -7,7 +7,7 @@ from __future__ import annotations
 import argparse,hashlib,json,struct
 from pathlib import Path
 from inspect_bc2_mesh_asset import Archive,bone_hash,sha
-from bc2_mesh_geometry import metadata,geometry
+from bc2_mesh_geometry import metadata,geometry, position_bytes
 from bc2_weapon_animation_pipeline import Skeleton,canonical
 
 MAGIC=b'BC2PROP1'
@@ -48,7 +48,7 @@ def derive(game,specs=SPECS):
         for s in ss:
             if s['name'].endswith('_ZOnly') or part not in s['bone_names']:continue
             palette=[known[lod['palette'][n]] for n in s['palette']];part_index=palette.index(part)
-            half=s['stride'] in (16,48);posbytes=8 if half else 12
+            posbytes=position_bytes(s);half=posbytes==8
             indices=data[start+vb_size+s['first_index']*2:start+vb_size+(s['first_index']+s['triangles']*3)*2]
             ids=struct.unpack('<'+'H'*(len(indices)//2),indices);skin=bytearray();positions=bytearray();owners=[]
             for n in ids:

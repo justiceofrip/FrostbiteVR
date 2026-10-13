@@ -27,4 +27,25 @@ inline void ResourceMagazineInput(interaction::InputFrame& in,std::uint64_t elap
     const auto step=ResourceMagazineSchedule(elapsedMs,exitVehicle,direction,startHeld);
     in.hands[0].held=step.use?interaction::Primary:0;in.hands[1].stickY=step.select;
 }
+// One Exit pulse after the harness independently proves checkpoint replacement
+// and vehicle occupancy. The scene driver owns ordinary shoulder gestures;
+// legacy stick selection must not compete with empty-hand recovery.
+class ResourceSceneResume {
+public:
+    bool Accept(std::uint64_t id,std::uint64_t issued,std::uint64_t deadline,std::uint64_t now)noexcept {
+        if(accepted_||failed_||id!=1||!issued||issued>now||deadline<=now||
+           deadline<=issued||deadline-issued>1000)return false;
+        accepted_=true;began_=last_=now;return true;
+    }
+    ResourceMagazineSetup Step(std::uint64_t now)noexcept {
+        if(!accepted_||failed_)return {};
+        if(now<last_){failed_=true;return {};}
+        last_=now;auto step=ResourceMagazineSchedule(now-began_,true,1);step.select=0;return step;
+    }
+    bool Accepted()const noexcept{return accepted_;}
+    bool Failed()const noexcept{return failed_;}
+    std::uint64_t Began()const noexcept{return began_;}
+private:
+    bool accepted_=false,failed_=false;std::uint64_t began_=0,last_=0;
+};
 }

@@ -1,11 +1,13 @@
 #pragma once
 #include "Bc2BodyAmmoHost.h"
 #include "Bc2BodyCarriedPair.h"
+#include "Bc2StowedAmmo.h"
 namespace fvr::bc2 {
 struct BodyPropSources {
     std::optional<BodyAmmoRenderSource> ammo;
     std::optional<BodyHolsteredRenderSource> holstered;
     std::optional<BodyCarriedRenderBatch> carried;
+    std::optional<StowedAmmoRenderSource> stowedAmmo;
 };
 struct BodyPropPairSource {BodyCarriedPairKey key{};BodyPropSources original;};
 
@@ -23,6 +25,10 @@ inline graphics::BodyPropEye BuildBodyPropPairEye(const BodyPropPairSource& pair
     };
     if(original.ammo&&before.ammo&&after.ammo)
         append(BodyAmmoHostInstance(*original.ammo,*before.ammo,now),BodyAmmoHostInstance(*original.ammo,*after.ammo,now));
+    // The held and empty-hand paths cannot share a source within an eye pair.
+    // A transition must start a new pair using its own fresh typed evidence.
+    if(!original.ammo&&!before.ammo&&!after.ammo&&original.stowedAmmo&&before.stowedAmmo&&after.stowedAmmo)
+        append(StowedAmmoHostInstance(*original.stowedAmmo,*before.stowedAmmo,now),StowedAmmoHostInstance(*original.stowedAmmo,*after.stowedAmmo,now));
     if(original.holstered&&before.holstered&&after.holstered)
         append(BodyHolsteredHostInstance(*original.holstered,*before.holstered,now),BodyHolsteredHostInstance(*original.holstered,*after.holstered,now));
     if(original.carried&&before.carried&&after.carried){graphics::BodyPropEye a,b;

@@ -1,5 +1,6 @@
 #include "Test.h"
 #include "Bc2ReloadState.h"
+#include "Bc2ReloadStateRetry.h"
 #include <cstring>
 #include <fstream>
 #include <iterator>
@@ -58,6 +59,23 @@ struct Fixture {
     }};}
     ReloadStateResult Read(){return ReadReloadState(Memory(),binding,base,owner,1,1000000);}
 };
+int TornSnapshotRetryPreservesBounds(){
+    for(unsigned fault=0;fault<5;++fault){
+        Fixture f;unsigned reads=0;ReloadStateRetryAttempt attempt;
+        f.changeAt=f.branch0;f.changeTarget=f.branch0+0x50;f.changeValue=0x3e800000;
+        if(fault==1)f.failAt=f.branch0;
+        auto read=[&](std::int64_t at){++reads;
+            if(fault==2&&reads==2)f.Put(f.weak,f.soldier+8);
+            if(fault==4&&reads==2){f.calls=0;f.changeValue=0x3f000000;}
+            return ReadReloadState(f.Memory(),f.binding,f.base,f.owner,99,at);};
+        const auto result=ReadReloadStateCoherent(read,[&]{return fault==3?2000000ll:1000001ll;},1000000,2000000,attempt);
+        if(!fault){CHECK(result.snapshot&&attempt.attempted&&attempt.recovered&&reads==2);
+            CHECK(result.snapshot->observedNs==1000001&&result.snapshot->sequence==99&&result.snapshot->owner==f.owner);
+            CHECK(result.snapshot->branches[0].phaseTimer==.25f);
+        }else {CHECK(!result.snapshot&&!attempt.recovered);CHECK(reads==((fault==1||fault==3)?1:2));}
+    }
+    return 0;
+}
 int ValidObservedSingleRound(){
     Fixture f;const auto before=f.heap;auto result=f.Read();CHECK(result.status==ReloadStateStatus::Observed&&result.snapshot);
     const auto& s=*result.snapshot;CHECK(s.owner==f.owner&&s.sequence==1&&s.eligibilityBranch==0&&s.config.baseCapacity==4);
@@ -173,7 +191,7 @@ int InstalledImageProof(const char* path){
 }
 }
 int main(int argc,char** argv){
-    if(ValidObservedSingleRound()||CapacityAndUnknowns()||AllObservedPhases()||OwnershipAndConfigurationRejections()||MalformedAndReflectionRejections()||RacingReadsRejected())return 1;
+    if(TornSnapshotRetryPreservesBounds()||ValidObservedSingleRound()||CapacityAndUnknowns()||AllObservedPhases()||OwnershipAndConfigurationRejections()||MalformedAndReflectionRejections()||RacingReadsRejected())return 1;
     return argc==2?InstalledImageProof(argv[1]):0;
 }
 

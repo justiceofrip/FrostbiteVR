@@ -8,6 +8,10 @@ struct RetiredStereoView {
     bool nativeTypeVerified=false;
     bool operator==(const RetiredStereoView&)const=default;
 };
+struct StereoChildHolder {
+    std::uint32_t object=0,control=0,owners=0,first=0,second=0;
+    bool operator==(const StereoChildHolder&)const=default;
+};
 // Same-world shutdown must retire only the private eye subtree. Native original
 // children can be re-registered while a session runs. Snapshot their CURRENT
 // ordered generation before Release, then compare that exact order afterwards.
@@ -16,6 +20,15 @@ struct LiveStereoRetirementGraph {
     std::uint32_t mainChildren=0,eyeChildren=0;
     bool nativeOwnersVerified=false,requestRegistered=false,callbacksVerified=false;
     std::array<RetiredStereoView,64> views{};
+    // A new inactive view retains its children in an owned pending queue until
+    // native update consumes it. Its destructor releases both holders and queue.
+    // Additional references are admissible only with those exact owners proved.
+    bool pendingEyeOwnershipVerified=false;
+    std::uint32_t pendingEyeCount=0;
+    // Pending entries can span retired child generations. Use the same bound
+    // as the registered-view snapshot, not the current holder-count bound.
+    std::array<std::uint32_t,64> pendingEye{};
+    std::array<StereoChildHolder,8> eyeHolders{};
     bool operator==(const LiveStereoRetirementGraph&)const=default;
 };
 struct StereoSurvivors {
@@ -23,14 +36,63 @@ struct StereoSurvivors {
     std::array<std::uint32_t,64> ordered{};
     bool operator==(const StereoSurvivors&)const=default;
 };
+// The same native subtree destructor owns these references during session exit
+// and after scene replacement. Neither path may infer ownership from refcount2.
+template<class Graph> bool OwnsPendingStereoChildren(const Graph& g,unsigned children)noexcept {
+    if(g.pendingEyeCount>g.pendingEye.size()||children>g.eyeHolders.size()||g.count>g.views.size())return false;
+    if(g.pendingEyeCount){
+        if(!g.pendingEyeOwnershipVerified||!children)return false;
+        for(unsigned i=0;i<children;++i){const auto& h=g.eyeHolders[i];
+            if(!h.object||!h.control||h.owners!=1||!h.first||!h.second||h.first==h.second)return false;
+            for(unsigned j=0;j<i;++j){const auto& other=g.eyeHolders[j];
+                if(h.object==other.object||h.control==other.control||h.first==other.first||h.first==other.second||
+                   h.second==other.first||h.second==other.second)return false;
+            }
+            for(auto child:{h.first,h.second}){
+                unsigned matches=0;
+                for(unsigned n=0;n<g.count;++n)if(g.views[n].address==child&&g.views[n].parent==g.eye)++matches;
+                if(matches!=1)return false;
+            }
+        }
+        for(unsigned i=0;i<g.pendingEyeCount;++i){
+            unsigned registered=0;
+            for(unsigned n=0;n<g.count;++n)registered+=g.views[n].address==g.pendingEye[i]&&g.views[n].parent==g.eye;
+            if(registered!=1)return false;
+            for(unsigned j=0;j<i;++j)if(g.pendingEye[j]==g.pendingEye[i])return false;
+        }
+    }
+    return true;
+}
+// A native child generation can be replaced while its previous generation still
+// waits in the same owned queue. Current children have holder+queue refs; older
+// queued children have queue refs only. Count the verified union, never infer a
+// permanent holder reference for a child solely because it is registered.
+template<class Graph> unsigned OwnedStereoChildCount(const Graph& g,unsigned children)noexcept {
+    unsigned count=children*2;
+    for(unsigned i=0;i<g.pendingEyeCount;++i){bool held=false;
+        for(unsigned h=0;h<children;++h)held|=g.eyeHolders[h].first==g.pendingEye[i]||g.eyeHolders[h].second==g.pendingEye[i];
+        count+=!held;
+    }
+    return count;
+}
+template<class Graph> unsigned OwnedStereoViewReferences(const Graph& g,std::uint32_t address,unsigned children)noexcept {
+    if(!g.pendingEyeCount||address==g.eye)return 1;
+    bool child=false;for(unsigned n=0;n<g.count;++n)child|=g.views[n].address==address&&g.views[n].parent==g.eye;
+    if(!child)return 1;
+    unsigned references=0;
+    for(unsigned h=0;h<children;++h)references+=(g.eyeHolders[h].first==address)+(g.eyeHolders[h].second==address);
+    for(unsigned i=0;i<g.pendingEyeCount;++i)references+=g.pendingEye[i]==address;
+    return references;
+}
 inline bool CaptureLiveStereoSurvivors(const LiveStereoRetirementGraph& g,StereoSurvivors& result)noexcept {
     if(!g.world||!g.request||!g.main||!g.eye||g.main==g.eye||!g.nativeOwnersVerified||
        !g.requestRegistered||!g.callbacksVerified||!g.mainChildren||!g.eyeChildren||
        g.mainChildren>8||g.eyeChildren>8||g.count>g.views.size()||
-       g.count!=2+2*g.mainChildren+2*g.eyeChildren||g.requestReferences!=g.count+1)return false;
+       g.requestReferences!=g.count+1||!OwnsPendingStereoChildren(g,g.eyeChildren)||
+       g.count!=2+2*g.mainChildren+OwnedStereoChildCount(g,g.eyeChildren))return false;
     StereoSurvivors out{};unsigned mains=0,eyes=0;
     for(unsigned n=0;n<g.count;++n){const auto& v=g.views[n];
-        if(!v.address||!v.nativeTypeVerified||v.request!=g.request||v.references!=1)return false;
+        if(!v.address||!v.nativeTypeVerified||v.request!=g.request||v.references!=OwnedStereoViewReferences(g,v.address,g.eyeChildren))return false;
         for(unsigned j=0;j<n;++j)if(v.address==g.views[j].address)return false;
         if(v.address==g.main){if(v.parent)return false;++mains;}
         else if(v.address==g.eye){if(v.parent)return false;++eyes;}
@@ -38,7 +100,7 @@ inline bool CaptureLiveStereoSurvivors(const LiveStereoRetirementGraph& g,Stereo
         if(v.address==g.eye||v.parent==g.eye)++out.removed;
         else out.ordered[out.count++]=v.address;
     }
-    if(mains!=1||eyes!=1||out.count!=1+2*g.mainChildren||out.removed!=1+2*g.eyeChildren)return false;
+    if(mains!=1||eyes!=1||out.count!=1+2*g.mainChildren||out.removed!=1+OwnedStereoChildCount(g,g.eyeChildren))return false;
     out.referencesAfter=g.requestReferences-out.removed;result=out;return true;
 }
 struct RetiredStereoGraph {
@@ -46,6 +108,11 @@ struct RetiredStereoGraph {
     std::uint32_t requestReferences=0,worldReferences=0,mainCount=0,mainEntry=0,count=0,children=0;
     bool nativeOwnersVerified=false,requestRegistered=false,callbacksVerified=false;
     std::array<RetiredStereoView,64> views{};
+    bool pendingEyeOwnershipVerified=false;
+    std::uint32_t pendingEyeCount=0;
+    std::array<std::uint32_t,64> pendingEye{};
+    std::array<StereoChildHolder,8> eyeHolders{};
+    bool operator==(const RetiredStereoGraph&)const=default;
 };
 struct RetiredViewCache {
     std::uint32_t callback=0,type=0,references=0,scene=0,begin=0,end=0,capacity=0;
@@ -79,10 +146,11 @@ inline bool CanRetireStereoGraph(const RetiredStereoGraph& g)noexcept {
        g.world==g.currentWorld||g.request==g.currentRequest||!g.nativeOwnersVerified||
        !g.requestRegistered||!g.callbacksVerified||g.worldReferences!=1||
        g.mainCount!=1||g.mainEntry!=g.eye||!g.count||g.count>g.views.size()||
-       g.requestReferences!=g.count||g.children>8||g.count!=1+g.children*2)return false;
+       g.requestReferences!=g.count||g.children>8||!OwnsPendingStereoChildren(g,g.children)||
+       g.count!=1+OwnedStereoChildCount(g,g.children))return false;
     unsigned roots=0;
     for(unsigned i=0;i<g.count;++i){const auto& v=g.views[i];
-        if(!v.address||v.request!=g.request||v.references!=1||!v.nativeTypeVerified)return false;
+        if(!v.address||v.request!=g.request||v.references!=OwnedStereoViewReferences(g,v.address,g.children)||!v.nativeTypeVerified)return false;
         for(unsigned j=0;j<i;++j)if(g.views[j].address==v.address)return false;
         if(v.address==g.eye){if(v.parent)return false;++roots;}
         else if(v.parent!=g.eye)return false;

@@ -360,7 +360,32 @@ int ResourceOriginalReturnsScaleAcrossCapacities(){
  return 0;
 }
 }
-int main(){if(ResourceBackendUsesTheSameHandsAndRail()||ResourceBackendRejectsAnimationAndForgedEvidence()||ResourceOriginalReturnsScaleAcrossCapacities())return 1;if(RemovedMagazineCanMoveFreelyBeforeReplacement())return 1;if(NativeFailureCheckDistinguishesObservationGateAndHold())return 1;if(ShortNativeObservationCannotExpirePhysicalGrip())return 1;if(ClaimFailureRetainsExactRenewalEvidence())return 1;if(EjectNeedsEdgeAndGateReceipt()||GripPullPreservesContactAndNoReserveCredit()||ReplacementUsesSupplyAndNativeAck()||
+int CompetingSupportContact(){
+ for(bool resource:{false,true}){
+  Fixture f(resource);f.Send();f.s.competingGripDistanceMeters=.001f;
+  auto r=f.Send(true,false,.14f);
+  CHECK(r.phase==DetachableMagazinePhase::Attached&&!r.transaction.request&&!r.removalGrabbed);
+  CHECK(!f.hands.Current(InteractionHand::Left)&&r.reason==DetachableMagazineReason::HandUnavailable);
+  // Moving the held squeeze onto the magazine cannot create a delayed grab.
+  f.s.competingGripDistanceMeters=.05f;r=f.Send(true);
+  CHECK(!r.transaction.request&&r.reason==DetachableMagazineReason::NeedNeutral);
+  f.Send(false);r=f.Send(true);CHECK(r.removalGrabbed&&r.transaction.request);
+  if(resource)CHECK(f.Native(*r.transaction.request,AmmunitionOperation::RemoveMagazine)==0);
+  else f.Ack(*r.transaction.request);
+  // Once the magazine owns the hand, a later nearby support contact cannot
+  // transfer custody or abort the user's existing removal.
+  f.s.competingGripDistanceMeters=0;r=f.Send(true,false,.09f);
+  CHECK(r.removalClaim&&r.phase!=DetachableMagazinePhase::Cancelled);
+  Fixture tie(resource);tie.Send();tie.s.competingGripDistanceMeters=0;
+  CHECK(!tie.Send(true).transaction.request&&!tie.hands.Current(InteractionHand::Left));
+  Fixture eject(resource);eject.Send();eject.s.competingGripDistanceMeters=0;
+  CHECK(eject.Send(false,true).transaction.request); // Explicit eject is not a spatial grab.
+  Fixture invalid(resource);invalid.Send();invalid.s.competingGripDistanceMeters=std::numeric_limits<float>::quiet_NaN();
+  CHECK(invalid.Send(true).reason==DetachableMagazineReason::InvalidInput);
+ }
+ return 0;
+}
+int main(){if(CompetingSupportContact())return 1;if(ResourceBackendUsesTheSameHandsAndRail()||ResourceBackendRejectsAnimationAndForgedEvidence()||ResourceOriginalReturnsScaleAcrossCapacities())return 1;if(RemovedMagazineCanMoveFreelyBeforeReplacement())return 1;if(NativeFailureCheckDistinguishesObservationGateAndHold())return 1;if(ShortNativeObservationCannotExpirePhysicalGrip())return 1;if(ClaimFailureRetainsExactRenewalEvidence())return 1;if(EjectNeedsEdgeAndGateReceipt()||GripPullPreservesContactAndNoReserveCredit()||ReplacementUsesSupplyAndNativeAck()||
     NoNativeAcknowledgementFromTimeOrPose()||WrongOrUnverifiedAcknowledgement()||PullReleaseAndTrackingJumpCancel()||NoStealingSupportClaim()||
     DuplicateCannotPullOrRenewEvidence()||RebaselineRequiresRetirement()||KeyedRailRejectsBackwardsAndRequiresTravel()||
     LateRendererSeatUsesOriginalSupplyEvidence()||MissingContactRetainsOnlyOriginalGuidedTarget()||UnstartedRollbackRequiresExactPreGateRequest()||OriginalMagazineHasSeparateIdentityAndReturnReceipt()||SeatedAttachmentSurvivesLoadingHandReleaseWithoutCompletion())return 1;

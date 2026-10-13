@@ -20,9 +20,21 @@ public:
  bool CancelConsumer()const noexcept{return phase_==Phase::Failed;}
  bool Completed()const noexcept{return phase_==Phase::Done;}
  Phase State()const noexcept{return phase_;}
+ // Diagnostic input only: start by drawing one exact other-shoulder item.
+ // Its ordinary empty-hands/visibility evidence must still authorize a draw.
+ bool PreferOtherInitialShoulder(const interaction::BodySlotAssignment& target)noexcept {
+  if(!inventoryOnly_||first_||initialTarget_||!target.slot||target.item.id<0x10000||!target.item.generation)return false;
+  initialTarget_=target;return true;
+ }
  // Script progression only. No native command, receipt or consumer reset.
  bool ResumeInitial(std::int64_t now)noexcept {if(!inventoryOnly_||phase_!=Phase::InitialHeld)return false;To(Phase::ReachStow,now);return true;}
  bool ResumeOther(std::int64_t now)noexcept {if(!inventoryOnly_||phase_!=Phase::OtherHeld)return false;To(Phase::ReachOtherStow,now);return true;}
+ // One additional shoulder round trip; persistent consumers and the original
+ // session/input clocks survive. Fresh real claims must prove each new draw.
+ bool RevisitOther(std::int64_t now)noexcept {
+  if(!inventoryOnly_||phase_!=Phase::Done||!restoredClaim_||now<lastNow_)return false;
+  baselineClaim_=restoredClaim_;otherClaim_=restoredClaim_=0;To(Phase::ReachStow,now);return true;
+ }
  void Report(std::ostream&)const;
 private:
  void To(Phase,std::int64_t)noexcept;
@@ -33,7 +45,7 @@ private:
  Phase phase_=Phase::Warmup;unsigned failure_=0;
  std::int64_t first_=0,phaseAt_=0,lastNow_=0,observed_=0,deadline_=0;
  std::uint64_t lastInput_=0,baselineClaim_=0,otherClaim_=0,restoredClaim_=0;
- ReloadStateOwner initial_{};std::optional<interaction::BodySlotAssignment> original_,other_;
+ ReloadStateOwner initial_{};std::optional<interaction::BodySlotAssignment> original_,other_,initialTarget_;
  interaction::BodyAnchorConfig anchors_{};math::Pose command_{};float squeeze_=0;
  Bc2MagazinePhysicalProbe reload_{true,false,true,true,true};
  bool interrupt_=false,recoveryBegun_=false;Bc2ReloadInterruptionProbe recovery_;

@@ -1,0 +1,34 @@
+{
+  "schema": "fvr.bc2.authored_model_axes",
+  "schema_version": 1,
+  "profiles": [
+    {
+      "native_asset_name": "SCAR_sp",
+      "configured_mesh_path": "Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL_Mesh",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "binding_digest": "0177e0002369dd9b412fa87cc8b54c3a8415746b14d8a90ec456aa90d8da3e51",
+      "animation_sha256": "e7d54f6dd1679b4cb26b6f4873e1c3226a6a6e67cf9a85a6319bf5938ca8c521",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "mesh_sha256": "86aaf1a9ee8d663bd342a7e9caa05d7065710dae6a9d96efd027938624b2a1f8",
+      "model_forward": [
+        0,
+        0,
+        -1
+      ],
+      "model_up": [
+        0,
+        1,
+        0
+      ],
+      "review": {
+        "status": "authored_geometry_reviewed",
+        "native_verified": false,
+        "geometry_image_sha256": "36d199f93236e8e1c673f8ff67c96879792b5f2588298d8fb8180b3f94bd146f",
+        "firing_fields_sha256": "ea15aa69b11defd873f064560a6d9d2a56973fc830f2f63d7073366e0e872b8f",
+        "static_flash_sha256": "4e17bc8c2a95f401b1871493f64e39145df5f438557b7a572b4416a7a6d611c8",
+        "description": "Reviewed installed SCAR assembled mesh: barrel points along canonical -Z, sights above receiver along +Y. Exact typed firing direction is raw +Z and static flash rotation is identity. Experimental controller/model alignment; no new native projectile or ammunition capability.",
+        "geometry_report_sha256": "0c826451ea55fd497d846b55291b9e2d12baf9385c594c5e8579d8b86ae76c11"
+      }
+    }
+  ]
+}

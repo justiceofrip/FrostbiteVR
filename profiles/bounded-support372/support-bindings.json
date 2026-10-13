@@ -1,0 +1,2359 @@
+{
+  "schema": "fvr.bc2.authored_support_bindings",
+  "schema_version": 1,
+  "profiles": [
+    {
+      "native_asset_name": "M249",
+      "configured_mesh_path": "Objects/Weapons/Handheld/UL_lmg_FNMinimi/UL_lmg_FNMinimi_Mesh",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "animation_sha256": "d0d7a52a09b858e84239ac27668539c2d07ff3126e6df295a50f390b1b420647",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "left_hand_in_weapon": [
+        0.07567666680130347,
+        0.4908384927149685,
+        -0.8679577271798116,
+        0.0,
+        0.22000507963011684,
+        -0.8572213733320372,
+        -0.4655848816700178,
+        0.0,
+        -0.9725588964370189,
+        -0.15572119692590317,
+        -0.17285861791988832,
+        -0.0,
+        0.0706495520566878,
+        -0.0706980031996357,
+        -0.5502711728151278,
+        1.0
+      ],
+      "left_hand_status": "bounded_decoded_reference",
+      "right_hand_retargeted": false,
+      "native_admission": false,
+      "source_bindings": [
+        "799f03aed3096d4c5fbfff5100137ce3b674b108fc398566c503de97e2fb3152",
+        "5e1da7fb9ddf001d4bf3f94280292d616faf4c31a5cb8bb06da00a4ffb179168",
+        "eb6d8b0b9b15070bd113d155175f2d307f02f104651aa14dc718fddd4c9b5425"
+      ],
+      "source_weapons": [
+        {
+          "resource": "Objects/Weapons/Handheld/UL_lmg_FNMinimi/UL_lmg_FNMinimi.dbx",
+          "sha256": "87ce26be3af226195387d0da68df0aeb8046990fc31ff14ce65a250dd01138f3",
+          "instance_guid": "46c1e3c8-85e3-47cf-8fd2-9d55acca92d3",
+          "type": "GameSharedResources.SoldierWeaponData"
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/UL_lmg_FNMinimi/UL_lmg_FNMinimi_Kobra.dbx",
+          "sha256": "79bfb7ef3bdd501ce2012119db7d96d5829d0ce5f72bedaf7bd37635ea451422",
+          "instance_guid": "8b208f35-565d-49f3-a884-9b00feacfc68",
+          "type": "GameSharedResources.SoldierWeaponData"
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/UL_lmg_FNMinimi/UL_lmg_FNMinimi_Scoped.dbx",
+          "sha256": "214ae28886ea18869432d1dac175672bb0c803748b7660b5e4fcc8f7c338861e",
+          "instance_guid": "7332b717-0dc5-425e-9894-2c8e730fa765",
+          "type": "GameSharedResources.SoldierWeaponData"
+        }
+      ],
+      "animation_chain": {
+        "tree": {
+          "resource": "Objects/Weapons/Handheld/UL_lmg_FNMinimi/UL_lmg_FNMinimi_Animtree1p.dbx",
+          "sha256": "ea3098f9232fddeec7ac1b20e7a68e1e5ec4f5e0c0db489a461ffc73f64e8f45",
+          "instance_guid": "d6af03d6-9d88-4897-83f0-b96a30a6a0d4",
+          "type": "Animation.SpecificAnimTreeData"
+        },
+        "animation_asset": {
+          "resource": "Animations/Weapons/Handheld/UL_lmg_FNMinimi/1P/HandsIkPose.dbx",
+          "sha256": "48a65e7ab6835d0c2820f1dd99a174c89db31cc6ea7635a428f401112c5aeb93",
+          "instance_guid": "e21f45d1-c1c8-484b-bee2-3508de53be02",
+          "type": "Animation.AnimationAsset"
+        },
+        "animation_resource": "Animations/Weapons/Handheld/UL_lmg_FNMinimi/1P/HandsIkPose.res",
+        "skeleton_asset": {
+          "resource": "Characters/Skeletons/ske01.dbx",
+          "sha256": "ebad79fb62ab383dcc4ea5179652ded99944b7f9905c6095baa8f0b7183520ba",
+          "instance_guid": "20a6d9b2-2cd5-4895-a59c-f144e6d3f061",
+          "type": "Animation.SkeletonAsset"
+        },
+        "skeleton_resource": "Characters/Skeletons/ske01.res"
+      },
+      "right_hand_status_not_admitted": "decoded_spline_candidate",
+      "reference_envelopes": [
+        {
+          "schema": "fvr.bc2.authored_relative_pose_bound",
+          "schema_version": 1,
+          "bone": "LeftHand",
+          "reference_bone": "jntWpn_1",
+          "common_ancestor": "Spine",
+          "unshared_bone_chain": [
+            "LeftHand",
+            "LeftForeArmRoll",
+            "LeftForeArm",
+            "LeftArmRoll",
+            "LeftArm",
+            "LeftShoulder",
+            "Spine4",
+            "Spine3",
+            "Spine2",
+            "Spine1"
+          ],
+          "unshared_reference_chain": [
+            "jntWpn_1",
+            "jntWpn_0"
+          ],
+          "reference_time_seconds": 0.0,
+          "reference_pose": [
+            0.07567666680130371,
+            0.49083849271496816,
+            -0.8679577271798103,
+            0.0,
+            0.22000507963011645,
+            -0.8572213733320361,
+            -0.46558488167001694,
+            0.0,
+            -0.9725588964370181,
+            -0.15572119692590305,
+            -0.17285861791988769,
+            -0.0,
+            0.0706495520566879,
+            -0.0706980031996357,
+            -0.5502711728151268,
+            1.0
+          ],
+          "duration_seconds": 0.03333333507180214,
+          "translation_hull_bound_m": 0.0001283352806030722,
+          "rotation_hull_bound_rad": 0.00012929127245831109,
+          "translation_numerical_allowance_m": 2.2005874509755676e-08,
+          "rotation_numerical_allowance_rad": 1e-08,
+          "translation_bound_m": 0.00012835728647758195,
+          "rotation_bound_rad": 0.00012930127245831108,
+          "unshared_controls_constant": false,
+          "method": "convex_control_hulls_normalization_bound_and_common_ancestor_cancellation",
+          "target_runtime_interpolation_verified": false,
+          "runtime_admission": false,
+          "animation_sha256": "d0d7a52a09b858e84239ac27668539c2d07ff3126e6df295a50f390b1b420647",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+          "source_binding_digest": "799f03aed3096d4c5fbfff5100137ce3b674b108fc398566c503de97e2fb3152",
+          "translation_tolerance_m": 0.00025,
+          "rotation_tolerance_rad": 0.0008726646259971648
+        },
+        {
+          "schema": "fvr.bc2.authored_relative_pose_bound",
+          "schema_version": 1,
+          "bone": "LeftHand",
+          "reference_bone": "jntWpn_1",
+          "common_ancestor": "Spine",
+          "unshared_bone_chain": [
+            "LeftHand",
+            "LeftForeArmRoll",
+            "LeftForeArm",
+            "LeftArmRoll",
+            "LeftArm",
+            "LeftShoulder",
+            "Spine4",
+            "Spine3",
+            "Spine2",
+            "Spine1"
+          ],
+          "unshared_reference_chain": [
+            "jntWpn_1",
+            "jntWpn_0"
+          ],
+          "reference_time_seconds": 0.0,
+          "reference_pose": [
+            0.07567666680130371,
+            0.49083849271496816,
+            -0.8679577271798103,
+            0.0,
+            0.22000507963011645,
+            -0.8572213733320361,
+            -0.46558488167001694,
+            0.0,
+            -0.9725588964370181,
+            -0.15572119692590305,
+            -0.17285861791988769,
+            -0.0,
+            0.0706495520566879,
+            -0.0706980031996357,
+            -0.5502711728151268,
+            1.0
+          ],
+          "duration_seconds": 0.03333333507180214,
+          "translation_hull_bound_m": 0.0001283352806030722,
+          "rotation_hull_bound_rad": 0.00012929127245831109,
+          "translation_numerical_allowance_m": 2.2005874509755676e-08,
+          "rotation_numerical_allowance_rad": 1e-08,
+          "translation_bound_m": 0.00012835728647758195,
+          "rotation_bound_rad": 0.00012930127245831108,
+          "unshared_controls_constant": false,
+          "method": "convex_control_hulls_normalization_bound_and_common_ancestor_cancellation",
+          "target_runtime_interpolation_verified": false,
+          "runtime_admission": false,
+          "animation_sha256": "d0d7a52a09b858e84239ac27668539c2d07ff3126e6df295a50f390b1b420647",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+          "source_binding_digest": "5e1da7fb9ddf001d4bf3f94280292d616faf4c31a5cb8bb06da00a4ffb179168",
+          "translation_tolerance_m": 0.00025,
+          "rotation_tolerance_rad": 0.0008726646259971648
+        },
+        {
+          "schema": "fvr.bc2.authored_relative_pose_bound",
+          "schema_version": 1,
+          "bone": "LeftHand",
+          "reference_bone": "jntWpn_1",
+          "common_ancestor": "Spine",
+          "unshared_bone_chain": [
+            "LeftHand",
+            "LeftForeArmRoll",
+            "LeftForeArm",
+            "LeftArmRoll",
+            "LeftArm",
+            "LeftShoulder",
+            "Spine4",
+            "Spine3",
+            "Spine2",
+            "Spine1"
+          ],
+          "unshared_reference_chain": [
+            "jntWpn_1",
+            "jntWpn_0"
+          ],
+          "reference_time_seconds": 0.0,
+          "reference_pose": [
+            0.07567666680130371,
+            0.49083849271496816,
+            -0.8679577271798103,
+            0.0,
+            0.22000507963011645,
+            -0.8572213733320361,
+            -0.46558488167001694,
+            0.0,
+            -0.9725588964370181,
+            -0.15572119692590305,
+            -0.17285861791988769,
+            -0.0,
+            0.0706495520566879,
+            -0.0706980031996357,
+            -0.5502711728151268,
+            1.0
+          ],
+          "duration_seconds": 0.03333333507180214,
+          "translation_hull_bound_m": 0.0001283352806030722,
+          "rotation_hull_bound_rad": 0.00012929127245831109,
+          "translation_numerical_allowance_m": 2.2005874509755676e-08,
+          "rotation_numerical_allowance_rad": 1e-08,
+          "translation_bound_m": 0.00012835728647758195,
+          "rotation_bound_rad": 0.00012930127245831108,
+          "unshared_controls_constant": false,
+          "method": "convex_control_hulls_normalization_bound_and_common_ancestor_cancellation",
+          "target_runtime_interpolation_verified": false,
+          "runtime_admission": false,
+          "animation_sha256": "d0d7a52a09b858e84239ac27668539c2d07ff3126e6df295a50f390b1b420647",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+          "source_binding_digest": "eb6d8b0b9b15070bd113d155175f2d307f02f104651aa14dc718fddd4c9b5425",
+          "translation_tolerance_m": 0.00025,
+          "rotation_tolerance_rad": 0.0008726646259971648
+        }
+      ],
+      "target_runtime_interpolation_verified": false,
+      "weapon_class": "wcLmg",
+      "support_contact_reference": true,
+      "binding_digest": "5dd973415933d7411895f247195841ab7c512adc5dae7ff087e96c30126bfb44"
+    },
+    {
+      "native_asset_name": "M416",
+      "configured_mesh_path": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "animation_sha256": "51490c90b27a0ce26058da872365090af5706a1b2277df9571df83cf5eed91e7",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "left_hand_in_weapon": [
+        0.09289906145262745,
+        0.8757503092630806,
+        -0.47374165977549465,
+        0.0,
+        0.19356802977003837,
+        -0.4826063651342646,
+        -0.8541794391009668,
+        0.0,
+        -0.9766786483957608,
+        -0.01234877149811873,
+        -0.21435094030659338,
+        -0.0,
+        0.04267659657665099,
+        -0.08924727119162165,
+        -0.5846140442650394,
+        1.0
+      ],
+      "left_hand_status": "bounded_decoded_reference",
+      "right_hand_retargeted": false,
+      "native_admission": false,
+      "source_bindings": [
+        "7d3408b2aad787d1f5157804ab48ac1120f3a2142a5bb139f2beba75fef261ef",
+        "61c4598400e7efea4a7f96ddfc210811b977b1efdad8e18636c4a3edb277fb38",
+        "73e93aa5ffeb9297b2f109f52fae0ab6aea6aa067b20ef027c352ee9f841fee5"
+      ],
+      "source_weapons": [
+        {
+          "resource": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Scoped.dbx",
+          "sha256": "6a4dd608be0432b022795d44bfbd55c8939c5d0fd6d95c7b421a740ab192c247",
+          "instance_guid": "796cab59-65bc-4d59-b868-983681809062",
+          "type": "GameSharedResources.SoldierWeaponData"
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416.dbx",
+          "sha256": "0bd854517cadef34c6eef85698736eca2c05c797fb5ed2f3dec35c2a2b61326a",
+          "instance_guid": "ca69bfba-0f21-42e3-bbe9-fa2902600563",
+          "type": "GameSharedResources.SoldierWeaponData"
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Kobra.dbx",
+          "sha256": "6a7232f70141053111da71246e385861f1e5d0e50e02cfcd28fe2947d8d34ad5",
+          "instance_guid": "c8e7f199-d0c4-44d7-a44b-ad221c23cb9c",
+          "type": "GameSharedResources.SoldierWeaponData"
+        }
+      ],
+      "animation_chain": {
+        "tree": {
+          "resource": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Scoped_AnimTree_1P.dbx",
+          "sha256": "1ee9418171160fd0ba74164effe1dc79584e538a61b1d083d69d39d1c2327d74",
+          "instance_guid": "a01a3f19-7612-43f6-ba74-f082874c11e1",
+          "type": "Animation.SpecificAnimTreeData"
+        },
+        "animation_asset": {
+          "resource": "Animations/Weapons/Handheld/UL_rif_HK416/1P/HandsIKPose.dbx",
+          "sha256": "133c95691d5c3c9f6a2ab41b4faadae50332e537d404a469d8432019603b3f3b",
+          "instance_guid": "c8296f74-3a55-437a-af01-9bbccff69f28",
+          "type": "Animation.AnimationAsset"
+        },
+        "animation_resource": "Animations/Weapons/Handheld/UL_rif_HK416/1P/HandsIKPose.res",
+        "skeleton_asset": {
+          "resource": "Characters/Skeletons/ske01.dbx",
+          "sha256": "ebad79fb62ab383dcc4ea5179652ded99944b7f9905c6095baa8f0b7183520ba",
+          "instance_guid": "20a6d9b2-2cd5-4895-a59c-f144e6d3f061",
+          "type": "Animation.SkeletonAsset"
+        },
+        "skeleton_resource": "Characters/Skeletons/ske01.res"
+      },
+      "right_hand_status_not_admitted": "static_authored_pose",
+      "reference_envelopes": [
+        {
+          "schema": "fvr.bc2.authored_relative_pose_bound",
+          "schema_version": 1,
+          "bone": "LeftHand",
+          "reference_bone": "jntWpn_1",
+          "common_ancestor": "Spine",
+          "unshared_bone_chain": [
+            "LeftHand",
+            "LeftForeArmRoll",
+            "LeftForeArm",
+            "LeftArmRoll",
+            "LeftArm",
+            "LeftShoulder",
+            "Spine4",
+            "Spine3",
+            "Spine2",
+            "Spine1"
+          ],
+          "unshared_reference_chain": [
+            "jntWpn_1",
+            "jntWpn_0"
+          ],
+          "reference_time_seconds": 0.0,
+          "reference_pose": [
+            0.09289906145262777,
+            0.8757503092630802,
+            -0.473741659775494,
+            0.0,
+            0.1935680297700383,
+            -0.482606365134264,
+            -0.8541794391009649,
+            0.0,
+            -0.9766786483957591,
+            -0.012348771498118914,
+            -0.21435094030659357,
+            -0.0,
+            0.04267659657665102,
+            -0.08924727119162136,
+            -0.5846140442650378,
+            1.0
+          ],
+          "duration_seconds": 0.03333333507180214,
+          "translation_hull_bound_m": 5.9347349173124957e-05,
+          "rotation_hull_bound_rad": 0.0002255804261926065,
+          "translation_numerical_allowance_m": 2.1932926612203473e-08,
+          "rotation_numerical_allowance_rad": 1e-08,
+          "translation_bound_m": 5.936928209973716e-05,
+          "rotation_bound_rad": 0.0002255904261926065,
+          "unshared_controls_constant": false,
+          "method": "convex_control_hulls_normalization_bound_and_common_ancestor_cancellation",
+          "target_runtime_interpolation_verified": false,
+          "runtime_admission": false,
+          "animation_sha256": "51490c90b27a0ce26058da872365090af5706a1b2277df9571df83cf5eed91e7",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+          "source_binding_digest": "7d3408b2aad787d1f5157804ab48ac1120f3a2142a5bb139f2beba75fef261ef",
+          "translation_tolerance_m": 0.00025,
+          "rotation_tolerance_rad": 0.0008726646259971648
+        },
+        {
+          "schema": "fvr.bc2.authored_relative_pose_bound",
+          "schema_version": 1,
+          "bone": "LeftHand",
+          "reference_bone": "jntWpn_1",
+          "common_ancestor": "Spine",
+          "unshared_bone_chain": [
+            "LeftHand",
+            "LeftForeArmRoll",
+            "LeftForeArm",
+            "LeftArmRoll",
+            "LeftArm",
+            "LeftShoulder",
+            "Spine4",
+            "Spine3",
+            "Spine2",
+            "Spine1"
+          ],
+          "unshared_reference_chain": [
+            "jntWpn_1",
+            "jntWpn_0"
+          ],
+          "reference_time_seconds": 0.0,
+          "reference_pose": [
+            0.09289906145262777,
+            0.8757503092630802,
+            -0.473741659775494,
+            0.0,
+            0.1935680297700383,
+            -0.482606365134264,
+            -0.8541794391009649,
+            0.0,
+            -0.9766786483957591,
+            -0.012348771498118914,
+            -0.21435094030659357,
+            -0.0,
+            0.04267659657665102,
+            -0.08924727119162136,
+            -0.5846140442650378,
+            1.0
+          ],
+          "duration_seconds": 0.03333333507180214,
+          "translation_hull_bound_m": 5.9347349173124957e-05,
+          "rotation_hull_bound_rad": 0.0002255804261926065,
+          "translation_numerical_allowance_m": 2.1932926612203473e-08,
+          "rotation_numerical_allowance_rad": 1e-08,
+          "translation_bound_m": 5.936928209973716e-05,
+          "rotation_bound_rad": 0.0002255904261926065,
+          "unshared_controls_constant": false,
+          "method": "convex_control_hulls_normalization_bound_and_common_ancestor_cancellation",
+          "target_runtime_interpolation_verified": false,
+          "runtime_admission": false,
+          "animation_sha256": "51490c90b27a0ce26058da872365090af5706a1b2277df9571df83cf5eed91e7",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+          "source_binding_digest": "61c4598400e7efea4a7f96ddfc210811b977b1efdad8e18636c4a3edb277fb38",
+          "translation_tolerance_m": 0.00025,
+          "rotation_tolerance_rad": 0.0008726646259971648
+        },
+        {
+          "schema": "fvr.bc2.authored_relative_pose_bound",
+          "schema_version": 1,
+          "bone": "LeftHand",
+          "reference_bone": "jntWpn_1",
+          "common_ancestor": "Spine",
+          "unshared_bone_chain": [
+            "LeftHand",
+            "LeftForeArmRoll",
+            "LeftForeArm",
+            "LeftArmRoll",
+            "LeftArm",
+            "LeftShoulder",
+            "Spine4",
+            "Spine3",
+            "Spine2",
+            "Spine1"
+          ],
+          "unshared_reference_chain": [
+            "jntWpn_1",
+            "jntWpn_0"
+          ],
+          "reference_time_seconds": 0.0,
+          "reference_pose": [
+            0.09289906145262777,
+            0.8757503092630802,
+            -0.473741659775494,
+            0.0,
+            0.1935680297700383,
+            -0.482606365134264,
+            -0.8541794391009649,
+            0.0,
+            -0.9766786483957591,
+            -0.012348771498118914,
+            -0.21435094030659357,
+            -0.0,
+            0.04267659657665102,
+            -0.08924727119162136,
+            -0.5846140442650378,
+            1.0
+          ],
+          "duration_seconds": 0.03333333507180214,
+          "translation_hull_bound_m": 5.9347349173124957e-05,
+          "rotation_hull_bound_rad": 0.0002255804261926065,
+          "translation_numerical_allowance_m": 2.1932926612203473e-08,
+          "rotation_numerical_allowance_rad": 1e-08,
+          "translation_bound_m": 5.936928209973716e-05,
+          "rotation_bound_rad": 0.0002255904261926065,
+          "unshared_controls_constant": false,
+          "method": "convex_control_hulls_normalization_bound_and_common_ancestor_cancellation",
+          "target_runtime_interpolation_verified": false,
+          "runtime_admission": false,
+          "animation_sha256": "51490c90b27a0ce26058da872365090af5706a1b2277df9571df83cf5eed91e7",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+          "source_binding_digest": "73e93aa5ffeb9297b2f109f52fae0ab6aea6aa067b20ef027c352ee9f841fee5",
+          "translation_tolerance_m": 0.00025,
+          "rotation_tolerance_rad": 0.0008726646259971648
+        }
+      ],
+      "target_runtime_interpolation_verified": false,
+      "weapon_class": "wcAssault",
+      "support_contact_reference": true,
+      "binding_digest": "f5bdad1bc316fee0e6b00f1e6210ab61dda082203f129242e30d3fff43515312"
+    },
+    {
+      "native_asset_name": "MG3",
+      "configured_mesh_path": "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Mesh",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "animation_sha256": "1e197a9db62fadb3d4df26147d4e71ad6764c87bd2c6013b16240fec4024cafb",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "left_hand_in_weapon": [
+        -0.0488371991281412,
+        0.900088366402208,
+        -0.4329617311596077,
+        0.0,
+        0.4954205523448029,
+        -0.3545668245816973,
+        -0.7929948569949404,
+        0.0,
+        -0.8672793115805837,
+        -0.25322578773390736,
+        -0.4286062250257845,
+        -0.0,
+        0.0581306185085707,
+        -0.03271337818941179,
+        -0.6195764534455289,
+        1.0
+      ],
+      "left_hand_status": "bounded_decoded_reference",
+      "right_hand_retargeted": false,
+      "native_admission": false,
+      "source_bindings": [
+        "531cb7300282eb008a2789cffbaf5a5fb95367dbb2a79d61e1eafd4437c58a4f",
+        "7dec4d9f6c625de3757b8aedd92e9a730f4b940818c0e81565d4626d022390e5",
+        "e61d075846f03ce8d87d9facc23e05dcf5ec00f4880eea26bda545835b638c8f"
+      ],
+      "source_weapons": [
+        {
+          "resource": "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Scoped.dbx",
+          "sha256": "f24bdbc7dca79f8bbc4026eedf734a7c6b5b3a7e13feac54fe28bfa1b34eafca",
+          "instance_guid": "456734db-b104-420e-a7ca-d65113c2f29a",
+          "type": "GameSharedResources.SoldierWeaponData"
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Kobra.dbx",
+          "sha256": "b6eea2dda2aa7854e7256b0004b057de1f305ff0a8a1cec029fcb6be70c9b744",
+          "instance_guid": "dd64cb3f-6c32-4549-aad7-27335214da5a",
+          "type": "GameSharedResources.SoldierWeaponData"
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3.dbx",
+          "sha256": "ec08bba67ae0ff8b9d327b61c2b066f91881d08b180ceb82e408f926b30a65f2",
+          "instance_guid": "de63f2a2-a42d-4726-b87e-4dcfbc763203",
+          "type": "GameSharedResources.SoldierWeaponData"
+        }
+      ],
+      "animation_chain": {
+        "tree": {
+          "resource": "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Scoped_AnimTree1p.dbx",
+          "sha256": "e02608ae36db393f3a8d95881bc534b38bb789682129274978de4ad347de38a3",
+          "instance_guid": "5d38aae5-2d70-4606-b437-ea417fe2c69f",
+          "type": "Animation.SpecificAnimTreeData"
+        },
+        "animation_asset": {
+          "resource": "Animations/Weapons/Handheld/BU_lmg_MG3/1P/HandsIkPose.dbx",
+          "sha256": "2ed9edb18ec6577a4dc5e7d9d4784d6de78126823e3b29aa26d8fceea00eb83f",
+          "instance_guid": "ecb64032-7a14-4d22-a8fe-938b8a7bf8c2",
+          "type": "Animation.AnimationAsset"
+        },
+        "animation_resource": "Animations/Weapons/Handheld/BU_lmg_MG3/1P/HandsIkPose.res",
+        "skeleton_asset": {
+          "resource": "Characters/Skeletons/ske01.dbx",
+          "sha256": "ebad79fb62ab383dcc4ea5179652ded99944b7f9905c6095baa8f0b7183520ba",
+          "instance_guid": "20a6d9b2-2cd5-4895-a59c-f144e6d3f061",
+          "type": "Animation.SkeletonAsset"
+        },
+        "skeleton_resource": "Characters/Skeletons/ske01.res"
+      },
+      "right_hand_status_not_admitted": "static_authored_pose",
+      "reference_envelopes": [
+        {
+          "schema": "fvr.bc2.authored_relative_pose_bound",
+          "schema_version": 1,
+          "bone": "LeftHand",
+          "reference_bone": "jntWpn_1",
+          "common_ancestor": "Spine",
+          "unshared_bone_chain": [
+            "LeftHand",
+            "LeftForeArmRoll",
+            "LeftForeArm",
+            "LeftArmRoll",
+            "LeftArm",
+            "LeftShoulder",
+            "Spine4",
+            "Spine3",
+            "Spine2",
+            "Spine1"
+          ],
+          "unshared_reference_chain": [
+            "jntWpn_1",
+            "jntWpn_0"
+          ],
+          "reference_time_seconds": 0.0,
+          "reference_pose": [
+            -0.04883719912814051,
+            0.9000883664022072,
+            -0.432961731159607,
+            0.0,
+            0.4954205523448024,
+            -0.3545668245816964,
+            -0.7929948569949385,
+            0.0,
+            -0.8672793115805828,
+            -0.2532257877339074,
+            -0.4286062250257835,
+            -0.0,
+            0.05813061850857078,
+            -0.03271337818941079,
+            -0.6195764534455271,
+            1.0
+          ],
+          "duration_seconds": 0.03333333507180214,
+          "translation_hull_bound_m": 8.905224248562371e-08,
+          "rotation_hull_bound_rad": 3.384893022721768e-07,
+          "translation_numerical_allowance_m": 2.2326915044097774e-08,
+          "rotation_numerical_allowance_rad": 1e-08,
+          "translation_bound_m": 1.1137915752972148e-07,
+          "rotation_bound_rad": 3.484893022721768e-07,
+          "unshared_controls_constant": false,
+          "method": "convex_control_hulls_normalization_bound_and_common_ancestor_cancellation",
+          "target_runtime_interpolation_verified": false,
+          "runtime_admission": false,
+          "animation_sha256": "1e197a9db62fadb3d4df26147d4e71ad6764c87bd2c6013b16240fec4024cafb",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+          "source_binding_digest": "531cb7300282eb008a2789cffbaf5a5fb95367dbb2a79d61e1eafd4437c58a4f",
+          "translation_tolerance_m": 0.00025,
+          "rotation_tolerance_rad": 0.0008726646259971648
+        },
+        {
+          "schema": "fvr.bc2.authored_relative_pose_bound",
+          "schema_version": 1,
+          "bone": "LeftHand",
+          "reference_bone": "jntWpn_1",
+          "common_ancestor": "Spine",
+          "unshared_bone_chain": [
+            "LeftHand",
+            "LeftForeArmRoll",
+            "LeftForeArm",
+            "LeftArmRoll",
+            "LeftArm",
+            "LeftShoulder",
+            "Spine4",
+            "Spine3",
+            "Spine2",
+            "Spine1"
+          ],
+          "unshared_reference_chain": [
+            "jntWpn_1",
+            "jntWpn_0"
+          ],
+          "reference_time_seconds": 0.0,
+          "reference_pose": [
+            -0.04883719912814051,
+            0.9000883664022072,
+            -0.432961731159607,
+            0.0,
+            0.4954205523448024,
+            -0.3545668245816964,
+            -0.7929948569949385,
+            0.0,
+            -0.8672793115805828,
+            -0.2532257877339074,
+            -0.4286062250257835,
+            -0.0,
+            0.05813061850857078,
+            -0.03271337818941079,
+            -0.6195764534455271,
+            1.0
+          ],
+          "duration_seconds": 0.03333333507180214,
+          "translation_hull_bound_m": 8.905224248562371e-08,
+          "rotation_hull_bound_rad": 3.384893022721768e-07,
+          "translation_numerical_allowance_m": 2.2326915044097774e-08,
+          "rotation_numerical_allowance_rad": 1e-08,
+          "translation_bound_m": 1.1137915752972148e-07,
+          "rotation_bound_rad": 3.484893022721768e-07,
+          "unshared_controls_constant": false,
+          "method": "convex_control_hulls_normalization_bound_and_common_ancestor_cancellation",
+          "target_runtime_interpolation_verified": false,
+          "runtime_admission": false,
+          "animation_sha256": "1e197a9db62fadb3d4df26147d4e71ad6764c87bd2c6013b16240fec4024cafb",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+          "source_binding_digest": "7dec4d9f6c625de3757b8aedd92e9a730f4b940818c0e81565d4626d022390e5",
+          "translation_tolerance_m": 0.00025,
+          "rotation_tolerance_rad": 0.0008726646259971648
+        },
+        {
+          "schema": "fvr.bc2.authored_relative_pose_bound",
+          "schema_version": 1,
+          "bone": "LeftHand",
+          "reference_bone": "jntWpn_1",
+          "common_ancestor": "Spine",
+          "unshared_bone_chain": [
+            "LeftHand",
+            "LeftForeArmRoll",
+            "LeftForeArm",
+            "LeftArmRoll",
+            "LeftArm",
+            "LeftShoulder",
+            "Spine4",
+            "Spine3",
+            "Spine2",
+            "Spine1"
+          ],
+          "unshared_reference_chain": [
+            "jntWpn_1",
+            "jntWpn_0"
+          ],
+          "reference_time_seconds": 0.0,
+          "reference_pose": [
+            -0.04883719912814051,
+            0.9000883664022072,
+            -0.432961731159607,
+            0.0,
+            0.4954205523448024,
+            -0.3545668245816964,
+            -0.7929948569949385,
+            0.0,
+            -0.8672793115805828,
+            -0.2532257877339074,
+            -0.4286062250257835,
+            -0.0,
+            0.05813061850857078,
+            -0.03271337818941079,
+            -0.6195764534455271,
+            1.0
+          ],
+          "duration_seconds": 0.03333333507180214,
+          "translation_hull_bound_m": 8.905224248562371e-08,
+          "rotation_hull_bound_rad": 3.384893022721768e-07,
+          "translation_numerical_allowance_m": 2.2326915044097774e-08,
+          "rotation_numerical_allowance_rad": 1e-08,
+          "translation_bound_m": 1.1137915752972148e-07,
+          "rotation_bound_rad": 3.484893022721768e-07,
+          "unshared_controls_constant": false,
+          "method": "convex_control_hulls_normalization_bound_and_common_ancestor_cancellation",
+          "target_runtime_interpolation_verified": false,
+          "runtime_admission": false,
+          "animation_sha256": "1e197a9db62fadb3d4df26147d4e71ad6764c87bd2c6013b16240fec4024cafb",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+          "source_binding_digest": "e61d075846f03ce8d87d9facc23e05dcf5ec00f4880eea26bda545835b638c8f",
+          "translation_tolerance_m": 0.00025,
+          "rotation_tolerance_rad": 0.0008726646259971648
+        }
+      ],
+      "target_runtime_interpolation_verified": false,
+      "weapon_class": "wcLmg",
+      "support_contact_reference": true,
+      "binding_digest": "80eac12339e02a630c4c030028b98ef148e3d2797e9c102224b3b0a8d307b30a"
+    },
+    {
+      "native_asset_name": "MG3_sp",
+      "configured_mesh_path": "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Mesh",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "animation_sha256": "1e197a9db62fadb3d4df26147d4e71ad6764c87bd2c6013b16240fec4024cafb",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "left_hand_in_weapon": [
+        -0.0488371991281412,
+        0.900088366402208,
+        -0.4329617311596077,
+        0.0,
+        0.4954205523448029,
+        -0.3545668245816973,
+        -0.7929948569949404,
+        0.0,
+        -0.8672793115805837,
+        -0.25322578773390736,
+        -0.4286062250257845,
+        -0.0,
+        0.0581306185085707,
+        -0.03271337818941179,
+        -0.6195764534455289,
+        1.0
+      ],
+      "left_hand_status": "bounded_decoded_reference",
+      "right_hand_retargeted": false,
+      "native_admission": false,
+      "source_bindings": [
+        "e946b5d84cdf9485ade38a83759222833c46472dfc0540b44b59b994bfd523a3"
+      ],
+      "source_weapons": [
+        {
+          "resource": "Objects/Weapons/Handheld/BU_lmg_MG3/SP_lmg_MG3.dbx",
+          "sha256": "e79ec24fd52b5a2d7c336823e563100f10dc3194a15d6e428eb4819ec752fa15",
+          "instance_guid": "8890cba2-69c7-4a13-bfd8-b08e6a0e1de3",
+          "type": "GameSharedResources.SoldierWeaponData"
+        }
+      ],
+      "animation_chain": {
+        "tree": {
+          "resource": "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_AnimTree1p.dbx",
+          "sha256": "22341677c31c341ed9a49b58f478fdad37403be0129bb7bd3148042cad8543ae",
+          "instance_guid": "14650f19-7ed9-4aec-b5a1-295712fc2755",
+          "type": "Animation.SpecificAnimTreeData"
+        },
+        "animation_asset": {
+          "resource": "Animations/Weapons/Handheld/BU_lmg_MG3/1P/HandsIkPose.dbx",
+          "sha256": "2ed9edb18ec6577a4dc5e7d9d4784d6de78126823e3b29aa26d8fceea00eb83f",
+          "instance_guid": "ecb64032-7a14-4d22-a8fe-938b8a7bf8c2",
+          "type": "Animation.AnimationAsset"
+        },
+        "animation_resource": "Animations/Weapons/Handheld/BU_lmg_MG3/1P/HandsIkPose.res",
+        "skeleton_asset": {
+          "resource": "Characters/Skeletons/ske01.dbx",
+          "sha256": "ebad79fb62ab383dcc4ea5179652ded99944b7f9905c6095baa8f0b7183520ba",
+          "instance_guid": "20a6d9b2-2cd5-4895-a59c-f144e6d3f061",
+          "type": "Animation.SkeletonAsset"
+        },
+        "skeleton_resource": "Characters/Skeletons/ske01.res"
+      },
+      "right_hand_status_not_admitted": "static_authored_pose",
+      "reference_envelopes": [
+        {
+          "schema": "fvr.bc2.authored_relative_pose_bound",
+          "schema_version": 1,
+          "bone": "LeftHand",
+          "reference_bone": "jntWpn_1",
+          "common_ancestor": "Spine",
+          "unshared_bone_chain": [
+            "LeftHand",
+            "LeftForeArmRoll",
+            "LeftForeArm",
+            "LeftArmRoll",
+            "LeftArm",
+            "LeftShoulder",
+            "Spine4",
+            "Spine3",
+            "Spine2",
+            "Spine1"
+          ],
+          "unshared_reference_chain": [
+            "jntWpn_1",
+            "jntWpn_0"
+          ],
+          "reference_time_seconds": 0.0,
+          "reference_pose": [
+            -0.04883719912814051,
+            0.9000883664022072,
+            -0.432961731159607,
+            0.0,
+            0.4954205523448024,
+            -0.3545668245816964,
+            -0.7929948569949385,
+            0.0,
+            -0.8672793115805828,
+            -0.2532257877339074,
+            -0.4286062250257835,
+            -0.0,
+            0.05813061850857078,
+            -0.03271337818941079,
+            -0.6195764534455271,
+            1.0
+          ],
+          "duration_seconds": 0.03333333507180214,
+          "translation_hull_bound_m": 8.905224248562371e-08,
+          "rotation_hull_bound_rad": 3.384893022721768e-07,
+          "translation_numerical_allowance_m": 2.2326915044097774e-08,
+          "rotation_numerical_allowance_rad": 1e-08,
+          "translation_bound_m": 1.1137915752972148e-07,
+          "rotation_bound_rad": 3.484893022721768e-07,
+          "unshared_controls_constant": false,
+          "method": "convex_control_hulls_normalization_bound_and_common_ancestor_cancellation",
+          "target_runtime_interpolation_verified": false,
+          "runtime_admission": false,
+          "animation_sha256": "1e197a9db62fadb3d4df26147d4e71ad6764c87bd2c6013b16240fec4024cafb",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+          "source_binding_digest": "e946b5d84cdf9485ade38a83759222833c46472dfc0540b44b59b994bfd523a3",
+          "translation_tolerance_m": 0.00025,
+          "rotation_tolerance_rad": 0.0008726646259971648
+        }
+      ],
+      "target_runtime_interpolation_verified": false,
+      "weapon_class": "wcLmg",
+      "support_contact_reference": true,
+      "binding_digest": "b3da44df70c7c407c1770b7c2bf36f265e8053c33a17d6acce51bf8735952976"
+    },
+    {
+      "native_asset_name": "MG3_sp_k",
+      "configured_mesh_path": "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Mesh",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "animation_sha256": "1e197a9db62fadb3d4df26147d4e71ad6764c87bd2c6013b16240fec4024cafb",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "left_hand_in_weapon": [
+        -0.0488371991281412,
+        0.900088366402208,
+        -0.4329617311596077,
+        0.0,
+        0.4954205523448029,
+        -0.3545668245816973,
+        -0.7929948569949404,
+        0.0,
+        -0.8672793115805837,
+        -0.25322578773390736,
+        -0.4286062250257845,
+        -0.0,
+        0.0581306185085707,
+        -0.03271337818941179,
+        -0.6195764534455289,
+        1.0
+      ],
+      "left_hand_status": "bounded_decoded_reference",
+      "right_hand_retargeted": false,
+      "native_admission": false,
+      "source_bindings": [
+        "7788efabf6cd5406f267297649a52c6749305aabae0b118793c4d17467dc1654"
+      ],
+      "source_weapons": [
+        {
+          "resource": "Objects/Weapons/Handheld/BU_lmg_MG3/SP_lmg_MG3_Kobra.dbx",
+          "sha256": "02d9c0b961b297c9856198b530084a340e46af7d8dcda2a7cd68fbf27ef452cf",
+          "instance_guid": "a40c3ac8-c1f2-47db-ac08-0bf52c2d0673",
+          "type": "GameSharedResources.SoldierWeaponData"
+        }
+      ],
+      "animation_chain": {
+        "tree": {
+          "resource": "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Scoped_AnimTree1p.dbx",
+          "sha256": "e02608ae36db393f3a8d95881bc534b38bb789682129274978de4ad347de38a3",
+          "instance_guid": "5d38aae5-2d70-4606-b437-ea417fe2c69f",
+          "type": "Animation.SpecificAnimTreeData"
+        },
+        "animation_asset": {
+          "resource": "Animations/Weapons/Handheld/BU_lmg_MG3/1P/HandsIkPose.dbx",
+          "sha256": "2ed9edb18ec6577a4dc5e7d9d4784d6de78126823e3b29aa26d8fceea00eb83f",
+          "instance_guid": "ecb64032-7a14-4d22-a8fe-938b8a7bf8c2",
+          "type": "Animation.AnimationAsset"
+        },
+        "animation_resource": "Animations/Weapons/Handheld/BU_lmg_MG3/1P/HandsIkPose.res",
+        "skeleton_asset": {
+          "resource": "Characters/Skeletons/ske01.dbx",
+          "sha256": "ebad79fb62ab383dcc4ea5179652ded99944b7f9905c6095baa8f0b7183520ba",
+          "instance_guid": "20a6d9b2-2cd5-4895-a59c-f144e6d3f061",
+          "type": "Animation.SkeletonAsset"
+        },
+        "skeleton_resource": "Characters/Skeletons/ske01.res"
+      },
+      "right_hand_status_not_admitted": "static_authored_pose",
+      "reference_envelopes": [
+        {
+          "schema": "fvr.bc2.authored_relative_pose_bound",
+          "schema_version": 1,
+          "bone": "LeftHand",
+          "reference_bone": "jntWpn_1",
+          "common_ancestor": "Spine",
+          "unshared_bone_chain": [
+            "LeftHand",
+            "LeftForeArmRoll",
+            "LeftForeArm",
+            "LeftArmRoll",
+            "LeftArm",
+            "LeftShoulder",
+            "Spine4",
+            "Spine3",
+            "Spine2",
+            "Spine1"
+          ],
+          "unshared_reference_chain": [
+            "jntWpn_1",
+            "jntWpn_0"
+          ],
+          "reference_time_seconds": 0.0,
+          "reference_pose": [
+            -0.04883719912814051,
+            0.9000883664022072,
+            -0.432961731159607,
+            0.0,
+            0.4954205523448024,
+            -0.3545668245816964,
+            -0.7929948569949385,
+            0.0,
+            -0.8672793115805828,
+            -0.2532257877339074,
+            -0.4286062250257835,
+            -0.0,
+            0.05813061850857078,
+            -0.03271337818941079,
+            -0.6195764534455271,
+            1.0
+          ],
+          "duration_seconds": 0.03333333507180214,
+          "translation_hull_bound_m": 8.905224248562371e-08,
+          "rotation_hull_bound_rad": 3.384893022721768e-07,
+          "translation_numerical_allowance_m": 2.2326915044097774e-08,
+          "rotation_numerical_allowance_rad": 1e-08,
+          "translation_bound_m": 1.1137915752972148e-07,
+          "rotation_bound_rad": 3.484893022721768e-07,
+          "unshared_controls_constant": false,
+          "method": "convex_control_hulls_normalization_bound_and_common_ancestor_cancellation",
+          "target_runtime_interpolation_verified": false,
+          "runtime_admission": false,
+          "animation_sha256": "1e197a9db62fadb3d4df26147d4e71ad6764c87bd2c6013b16240fec4024cafb",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+          "source_binding_digest": "7788efabf6cd5406f267297649a52c6749305aabae0b118793c4d17467dc1654",
+          "translation_tolerance_m": 0.00025,
+          "rotation_tolerance_rad": 0.0008726646259971648
+        }
+      ],
+      "target_runtime_interpolation_verified": false,
+      "weapon_class": "wcLmg",
+      "support_contact_reference": true,
+      "binding_digest": "f7edcaf21fd2da8b7ce33af8e7913c30522088d6c3b63f72a8b836527dbd3f41"
+    },
+    {
+      "native_asset_name": "MG3k",
+      "configured_mesh_path": "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Mesh",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "animation_sha256": "1e197a9db62fadb3d4df26147d4e71ad6764c87bd2c6013b16240fec4024cafb",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "left_hand_in_weapon": [
+        -0.0488371991281412,
+        0.900088366402208,
+        -0.4329617311596077,
+        0.0,
+        0.4954205523448029,
+        -0.3545668245816973,
+        -0.7929948569949404,
+        0.0,
+        -0.8672793115805837,
+        -0.25322578773390736,
+        -0.4286062250257845,
+        -0.0,
+        0.0581306185085707,
+        -0.03271337818941179,
+        -0.6195764534455289,
+        1.0
+      ],
+      "left_hand_status": "bounded_decoded_reference",
+      "right_hand_retargeted": false,
+      "native_admission": false,
+      "source_bindings": [
+        "537f5881bbc46b002e5b7fd6208cced0661842f2fa3fbdb463b511ae6ee808fb",
+        "339507ee707bbeba591050b0fc05dc246860fe6d6fca1149c1a172b6dd50ee96",
+        "a1ed74a4edf65bbfe9a36f38156b3ee93bebb304e1ab6141ddef27dbbd9f8b65"
+      ],
+      "source_weapons": [
+        {
+          "resource": "Objects/Weapons/Handheld/BU_lmg_MG3/UPG_lmg_MG3_Kobra.dbx",
+          "sha256": "ef2d20a93c8134b40eea55c04c68a6202308a0b0fb08aeaf047cf90c67c180e6",
+          "instance_guid": "9d8cbec8-0903-42f0-9f91-3dcbafb5a437",
+          "type": "GameSharedResources.SoldierWeaponData"
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_lmg_MG3/UPG_lmg_MG3_Scoped.dbx",
+          "sha256": "78f8cb63038841fbf6074cffc1423048f22322e27ab579093b03c118f5d359e4",
+          "instance_guid": "63c43439-b751-491c-83b4-cccc64419832",
+          "type": "GameSharedResources.SoldierWeaponData"
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_lmg_MG3/UPG_lmg_MG3.dbx",
+          "sha256": "4f09f04186645914906ed3a9b3ba113daebbd6d03bd9e5b8c5c04eac5c075ff6",
+          "instance_guid": "b6515bb7-cc4d-44e2-8678-fb6b88f12691",
+          "type": "GameSharedResources.SoldierWeaponData"
+        }
+      ],
+      "animation_chain": {
+        "tree": {
+          "resource": "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Scoped_AnimTree1p.dbx",
+          "sha256": "e02608ae36db393f3a8d95881bc534b38bb789682129274978de4ad347de38a3",
+          "instance_guid": "5d38aae5-2d70-4606-b437-ea417fe2c69f",
+          "type": "Animation.SpecificAnimTreeData"
+        },
+        "animation_asset": {
+          "resource": "Animations/Weapons/Handheld/BU_lmg_MG3/1P/HandsIkPose.dbx",
+          "sha256": "2ed9edb18ec6577a4dc5e7d9d4784d6de78126823e3b29aa26d8fceea00eb83f",
+          "instance_guid": "ecb64032-7a14-4d22-a8fe-938b8a7bf8c2",
+          "type": "Animation.AnimationAsset"
+        },
+        "animation_resource": "Animations/Weapons/Handheld/BU_lmg_MG3/1P/HandsIkPose.res",
+        "skeleton_asset": {
+          "resource": "Characters/Skeletons/ske01.dbx",
+          "sha256": "ebad79fb62ab383dcc4ea5179652ded99944b7f9905c6095baa8f0b7183520ba",
+          "instance_guid": "20a6d9b2-2cd5-4895-a59c-f144e6d3f061",
+          "type": "Animation.SkeletonAsset"
+        },
+        "skeleton_resource": "Characters/Skeletons/ske01.res"
+      },
+      "right_hand_status_not_admitted": "static_authored_pose",
+      "reference_envelopes": [
+        {
+          "schema": "fvr.bc2.authored_relative_pose_bound",
+          "schema_version": 1,
+          "bone": "LeftHand",
+          "reference_bone": "jntWpn_1",
+          "common_ancestor": "Spine",
+          "unshared_bone_chain": [
+            "LeftHand",
+            "LeftForeArmRoll",
+            "LeftForeArm",
+            "LeftArmRoll",
+            "LeftArm",
+            "LeftShoulder",
+            "Spine4",
+            "Spine3",
+            "Spine2",
+            "Spine1"
+          ],
+          "unshared_reference_chain": [
+            "jntWpn_1",
+            "jntWpn_0"
+          ],
+          "reference_time_seconds": 0.0,
+          "reference_pose": [
+            -0.04883719912814051,
+            0.9000883664022072,
+            -0.432961731159607,
+            0.0,
+            0.4954205523448024,
+            -0.3545668245816964,
+            -0.7929948569949385,
+            0.0,
+            -0.8672793115805828,
+            -0.2532257877339074,
+            -0.4286062250257835,
+            -0.0,
+            0.05813061850857078,
+            -0.03271337818941079,
+            -0.6195764534455271,
+            1.0
+          ],
+          "duration_seconds": 0.03333333507180214,
+          "translation_hull_bound_m": 8.905224248562371e-08,
+          "rotation_hull_bound_rad": 3.384893022721768e-07,
+          "translation_numerical_allowance_m": 2.2326915044097774e-08,
+          "rotation_numerical_allowance_rad": 1e-08,
+          "translation_bound_m": 1.1137915752972148e-07,
+          "rotation_bound_rad": 3.484893022721768e-07,
+          "unshared_controls_constant": false,
+          "method": "convex_control_hulls_normalization_bound_and_common_ancestor_cancellation",
+          "target_runtime_interpolation_verified": false,
+          "runtime_admission": false,
+          "animation_sha256": "1e197a9db62fadb3d4df26147d4e71ad6764c87bd2c6013b16240fec4024cafb",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+          "source_binding_digest": "537f5881bbc46b002e5b7fd6208cced0661842f2fa3fbdb463b511ae6ee808fb",
+          "translation_tolerance_m": 0.00025,
+          "rotation_tolerance_rad": 0.0008726646259971648
+        },
+        {
+          "schema": "fvr.bc2.authored_relative_pose_bound",
+          "schema_version": 1,
+          "bone": "LeftHand",
+          "reference_bone": "jntWpn_1",
+          "common_ancestor": "Spine",
+          "unshared_bone_chain": [
+            "LeftHand",
+            "LeftForeArmRoll",
+            "LeftForeArm",
+            "LeftArmRoll",
+            "LeftArm",
+            "LeftShoulder",
+            "Spine4",
+            "Spine3",
+            "Spine2",
+            "Spine1"
+          ],
+          "unshared_reference_chain": [
+            "jntWpn_1",
+            "jntWpn_0"
+          ],
+          "reference_time_seconds": 0.0,
+          "reference_pose": [
+            -0.04883719912814051,
+            0.9000883664022072,
+            -0.432961731159607,
+            0.0,
+            0.4954205523448024,
+            -0.3545668245816964,
+            -0.7929948569949385,
+            0.0,
+            -0.8672793115805828,
+            -0.2532257877339074,
+            -0.4286062250257835,
+            -0.0,
+            0.05813061850857078,
+            -0.03271337818941079,
+            -0.6195764534455271,
+            1.0
+          ],
+          "duration_seconds": 0.03333333507180214,
+          "translation_hull_bound_m": 8.905224248562371e-08,
+          "rotation_hull_bound_rad": 3.384893022721768e-07,
+          "translation_numerical_allowance_m": 2.2326915044097774e-08,
+          "rotation_numerical_allowance_rad": 1e-08,
+          "translation_bound_m": 1.1137915752972148e-07,
+          "rotation_bound_rad": 3.484893022721768e-07,
+          "unshared_controls_constant": false,
+          "method": "convex_control_hulls_normalization_bound_and_common_ancestor_cancellation",
+          "target_runtime_interpolation_verified": false,
+          "runtime_admission": false,
+          "animation_sha256": "1e197a9db62fadb3d4df26147d4e71ad6764c87bd2c6013b16240fec4024cafb",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+          "source_binding_digest": "339507ee707bbeba591050b0fc05dc246860fe6d6fca1149c1a172b6dd50ee96",
+          "translation_tolerance_m": 0.00025,
+          "rotation_tolerance_rad": 0.0008726646259971648
+        },
+        {
+          "schema": "fvr.bc2.authored_relative_pose_bound",
+          "schema_version": 1,
+          "bone": "LeftHand",
+          "reference_bone": "jntWpn_1",
+          "common_ancestor": "Spine",
+          "unshared_bone_chain": [
+            "LeftHand",
+            "LeftForeArmRoll",
+            "LeftForeArm",
+            "LeftArmRoll",
+            "LeftArm",
+            "LeftShoulder",
+            "Spine4",
+            "Spine3",
+            "Spine2",
+            "Spine1"
+          ],
+          "unshared_reference_chain": [
+            "jntWpn_1",
+            "jntWpn_0"
+          ],
+          "reference_time_seconds": 0.0,
+          "reference_pose": [
+            -0.04883719912814051,
+            0.9000883664022072,
+            -0.432961731159607,
+            0.0,
+            0.4954205523448024,
+            -0.3545668245816964,
+            -0.7929948569949385,
+            0.0,
+            -0.8672793115805828,
+            -0.2532257877339074,
+            -0.4286062250257835,
+            -0.0,
+            0.05813061850857078,
+            -0.03271337818941079,
+            -0.6195764534455271,
+            1.0
+          ],
+          "duration_seconds": 0.03333333507180214,
+          "translation_hull_bound_m": 8.905224248562371e-08,
+          "rotation_hull_bound_rad": 3.384893022721768e-07,
+          "translation_numerical_allowance_m": 2.2326915044097774e-08,
+          "rotation_numerical_allowance_rad": 1e-08,
+          "translation_bound_m": 1.1137915752972148e-07,
+          "rotation_bound_rad": 3.484893022721768e-07,
+          "unshared_controls_constant": false,
+          "method": "convex_control_hulls_normalization_bound_and_common_ancestor_cancellation",
+          "target_runtime_interpolation_verified": false,
+          "runtime_admission": false,
+          "animation_sha256": "1e197a9db62fadb3d4df26147d4e71ad6764c87bd2c6013b16240fec4024cafb",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+          "source_binding_digest": "a1ed74a4edf65bbfe9a36f38156b3ee93bebb304e1ab6141ddef27dbbd9f8b65",
+          "translation_tolerance_m": 0.00025,
+          "rotation_tolerance_rad": 0.0008726646259971648
+        }
+      ],
+      "target_runtime_interpolation_verified": false,
+      "weapon_class": "wcLmg",
+      "support_contact_reference": true,
+      "binding_digest": "0cd6e781d207f4f0853e9f0dc37f6a2a14d37ed6f741af6f128ea964cd4cecd5"
+    },
+    {
+      "native_asset_name": "S20K",
+      "configured_mesh_path": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Mesh",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "animation_sha256": "ba1d3617da6538c3545b7e23314477868c4bfd41488f41426754e5abf0b9fc12",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "left_hand_in_weapon": [
+        0.22330684096083886,
+        0.8963864679343057,
+        -0.38291690336723444,
+        0.0,
+        0.6811460539158094,
+        -0.4245062404377119,
+        -0.5965186544143981,
+        0.0,
+        -0.6972618647359211,
+        -0.1276156414147625,
+        -0.7053652529372904,
+        -0.0,
+        0.03897163827783882,
+        0.01134150225388564,
+        -0.6781310787187383,
+        1.0
+      ],
+      "left_hand_status": "bounded_decoded_reference",
+      "right_hand_retargeted": false,
+      "native_admission": false,
+      "source_bindings": [
+        "8f3fa24f8a2a896bc4a73c359566cdafd61da1ab0a0cb574b22c7c1a99edac56",
+        "9d1816d87cfe205b06c9fd0c2fa6109f54590dfcc6095a059fe69efea1f60d59",
+        "9dbd207d58ddd7ba2e7ca61ea7d8394d2bdb37c194a7c6e106a4a5e0cb2cd86e",
+        "f6089efa4c964a583949beb8c01f646ba811971331dc3bc303f9f9f1471c33fc",
+        "1c7c7614a908c625b72bdb32055855fc085fd3912cc2b4c42905db478f57aeef",
+        "73869eb1e3924e1516386e4996cdf018fef1b8bebcb9244e25d45644cb10f905"
+      ],
+      "source_weapons": [
+        {
+          "resource": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Assault_FRAG.dbx",
+          "sha256": "ddcbc54c5caa89654ac3709613b7011e4444952c187343a7384686e6396f4829",
+          "instance_guid": "4b7a97a0-ad3b-4eb4-b761-88d72fe68654",
+          "type": "GameSharedResources.SoldierWeaponData"
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12.dbx",
+          "sha256": "f5191a7b1d3b363822a22069fc1a579ec258fa1dd079fe0e1191c62ea4dfe975",
+          "instance_guid": "db8383ba-6059-4192-b0a4-bf2ecb36f3a2",
+          "type": "GameSharedResources.SoldierWeaponData"
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_FRAG.dbx",
+          "sha256": "5eca8a51c6400190fa05991ad4a21e4e910a9e5223418b5229a654f598acc516",
+          "instance_guid": "8770594f-da9a-494e-bdcb-1279b4964ed2",
+          "type": "GameSharedResources.SoldierWeaponData"
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Assault_Slug.dbx",
+          "sha256": "73b99cb95f1dec1c6725c946fa355f4ed6f4318ae97e8a1347a99036798bb25e",
+          "instance_guid": "1bbc17e3-d8c2-4033-a348-d69910d0135e",
+          "type": "GameSharedResources.SoldierWeaponData"
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Slug.dbx",
+          "sha256": "139fadbefafb09b9d55957f5188b35e440c6e362bc39545bbe6d89197608414b",
+          "instance_guid": "dbb3b8ba-a5c4-41b8-b877-ba832455ad3c",
+          "type": "GameSharedResources.SoldierWeaponData"
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_Assault.dbx",
+          "sha256": "120d8793ba985e2012ab3a6a98ffc00cfc86a1efe75d071cda5824e573fe0aa8",
+          "instance_guid": "e0bf1bc3-97a6-4480-bfb6-7aabc3b298d5",
+          "type": "GameSharedResources.SoldierWeaponData"
+        }
+      ],
+      "animation_chain": {
+        "tree": {
+          "resource": "Objects/Weapons/Handheld/RU_shg_Saiga12/RU_shg_Saiga12_AnimTree1p.dbx",
+          "sha256": "7e0b1b00c4e95e35bca08e647b841b54ff2198e3c469df91fb91f959eeef444c",
+          "instance_guid": "236929cf-385a-4732-9f3b-84b5d55d1b1a",
+          "type": "Animation.SpecificAnimTreeData"
+        },
+        "animation_asset": {
+          "resource": "Animations/Weapons/Handheld/RU_shg_Saiga12/1P/HandsIkPose.dbx",
+          "sha256": "74e5748ddb305846f88b3513953b063dd9e7aea179f1e0f748a853651b7150d8",
+          "instance_guid": "1002bc57-3c7e-4cb0-9947-648c04c5710a",
+          "type": "Animation.AnimationAsset"
+        },
+        "animation_resource": "Animations/Weapons/Handheld/RU_shg_Saiga12/1P/HandsIkPose.res",
+        "skeleton_asset": {
+          "resource": "Characters/Skeletons/ske01.dbx",
+          "sha256": "ebad79fb62ab383dcc4ea5179652ded99944b7f9905c6095baa8f0b7183520ba",
+          "instance_guid": "20a6d9b2-2cd5-4895-a59c-f144e6d3f061",
+          "type": "Animation.SkeletonAsset"
+        },
+        "skeleton_resource": "Characters/Skeletons/ske01.res"
+      },
+      "right_hand_status_not_admitted": "static_authored_pose",
+      "reference_envelopes": [
+        {
+          "schema": "fvr.bc2.authored_relative_pose_bound",
+          "schema_version": 1,
+          "bone": "LeftHand",
+          "reference_bone": "jntWpn_1",
+          "common_ancestor": "Spine",
+          "unshared_bone_chain": [
+            "LeftHand",
+            "LeftForeArmRoll",
+            "LeftForeArm",
+            "LeftArmRoll",
+            "LeftArm",
+            "LeftShoulder",
+            "Spine4",
+            "Spine3",
+            "Spine2",
+            "Spine1"
+          ],
+          "unshared_reference_chain": [
+            "jntWpn_1",
+            "jntWpn_0"
+          ],
+          "reference_time_seconds": 0.0,
+          "reference_pose": [
+            0.22330684096083897,
+            0.8963864679343052,
+            -0.382916903367234,
+            0.0,
+            0.681146053915809,
+            -0.42450624043771135,
+            -0.5965186544143973,
+            0.0,
+            -0.6972618647359207,
+            -0.12761564141476256,
+            -0.7053652529372894,
+            -0.0,
+            0.03897163827783892,
+            0.011341502253885215,
+            -0.6781310787187378,
+            1.0
+          ],
+          "duration_seconds": 0.03333333507180214,
+          "translation_hull_bound_m": 1.3143262727158445e-07,
+          "rotation_hull_bound_rad": 4.995779674850962e-07,
+          "translation_numerical_allowance_m": 2.159850186788887e-08,
+          "rotation_numerical_allowance_rad": 1e-08,
+          "translation_bound_m": 1.5303112913947333e-07,
+          "rotation_bound_rad": 5.095779674850962e-07,
+          "unshared_controls_constant": false,
+          "method": "convex_control_hulls_normalization_bound_and_common_ancestor_cancellation",
+          "target_runtime_interpolation_verified": false,
+          "runtime_admission": false,
+          "animation_sha256": "ba1d3617da6538c3545b7e23314477868c4bfd41488f41426754e5abf0b9fc12",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+          "source_binding_digest": "8f3fa24f8a2a896bc4a73c359566cdafd61da1ab0a0cb574b22c7c1a99edac56",
+          "translation_tolerance_m": 0.00025,
+          "rotation_tolerance_rad": 0.0008726646259971648
+        },
+        {
+          "schema": "fvr.bc2.authored_relative_pose_bound",
+          "schema_version": 1,
+          "bone": "LeftHand",
+          "reference_bone": "jntWpn_1",
+          "common_ancestor": "Spine",
+          "unshared_bone_chain": [
+            "LeftHand",
+            "LeftForeArmRoll",
+            "LeftForeArm",
+            "LeftArmRoll",
+            "LeftArm",
+            "LeftShoulder",
+            "Spine4",
+            "Spine3",
+            "Spine2",
+            "Spine1"
+          ],
+          "unshared_reference_chain": [
+            "jntWpn_1",
+            "jntWpn_0"
+          ],
+          "reference_time_seconds": 0.0,
+          "reference_pose": [
+            0.22330684096083897,
+            0.8963864679343052,
+            -0.382916903367234,
+            0.0,
+            0.681146053915809,
+            -0.42450624043771135,
+            -0.5965186544143973,
+            0.0,
+            -0.6972618647359207,
+            -0.12761564141476256,
+            -0.7053652529372894,
+            -0.0,
+            0.03897163827783892,
+            0.011341502253885215,
+            -0.6781310787187378,
+            1.0
+          ],
+          "duration_seconds": 0.03333333507180214,
+          "translation_hull_bound_m": 1.3143262727158445e-07,
+          "rotation_hull_bound_rad": 4.995779674850962e-07,
+          "translation_numerical_allowance_m": 2.159850186788887e-08,
+          "rotation_numerical_allowance_rad": 1e-08,
+          "translation_bound_m": 1.5303112913947333e-07,
+          "rotation_bound_rad": 5.095779674850962e-07,
+          "unshared_controls_constant": false,
+          "method": "convex_control_hulls_normalization_bound_and_common_ancestor_cancellation",
+          "target_runtime_interpolation_verified": false,
+          "runtime_admission": false,
+          "animation_sha256": "ba1d3617da6538c3545b7e23314477868c4bfd41488f41426754e5abf0b9fc12",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+          "source_binding_digest": "9d1816d87cfe205b06c9fd0c2fa6109f54590dfcc6095a059fe69efea1f60d59",
+          "translation_tolerance_m": 0.00025,
+          "rotation_tolerance_rad": 0.0008726646259971648
+        },
+        {
+          "schema": "fvr.bc2.authored_relative_pose_bound",
+          "schema_version": 1,
+          "bone": "LeftHand",
+          "reference_bone": "jntWpn_1",
+          "common_ancestor": "Spine",
+          "unshared_bone_chain": [
+            "LeftHand",
+            "LeftForeArmRoll",
+            "LeftForeArm",
+            "LeftArmRoll",
+            "LeftArm",
+            "LeftShoulder",
+            "Spine4",
+            "Spine3",
+            "Spine2",
+            "Spine1"
+          ],
+          "unshared_reference_chain": [
+            "jntWpn_1",
+            "jntWpn_0"
+          ],
+          "reference_time_seconds": 0.0,
+          "reference_pose": [
+            0.22330684096083897,
+            0.8963864679343052,
+            -0.382916903367234,
+            0.0,
+            0.681146053915809,
+            -0.42450624043771135,
+            -0.5965186544143973,
+            0.0,
+            -0.6972618647359207,
+            -0.12761564141476256,
+            -0.7053652529372894,
+            -0.0,
+            0.03897163827783892,
+            0.011341502253885215,
+            -0.6781310787187378,
+            1.0
+          ],
+          "duration_seconds": 0.03333333507180214,
+          "translation_hull_bound_m": 1.3143262727158445e-07,
+          "rotation_hull_bound_rad": 4.995779674850962e-07,
+          "translation_numerical_allowance_m": 2.159850186788887e-08,
+          "rotation_numerical_allowance_rad": 1e-08,
+          "translation_bound_m": 1.5303112913947333e-07,
+          "rotation_bound_rad": 5.095779674850962e-07,
+          "unshared_controls_constant": false,
+          "method": "convex_control_hulls_normalization_bound_and_common_ancestor_cancellation",
+          "target_runtime_interpolation_verified": false,
+          "runtime_admission": false,
+          "animation_sha256": "ba1d3617da6538c3545b7e23314477868c4bfd41488f41426754e5abf0b9fc12",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+          "source_binding_digest": "9dbd207d58ddd7ba2e7ca61ea7d8394d2bdb37c194a7c6e106a4a5e0cb2cd86e",
+          "translation_tolerance_m": 0.00025,
+          "rotation_tolerance_rad": 0.0008726646259971648
+        },
+        {
+          "schema": "fvr.bc2.authored_relative_pose_bound",
+          "schema_version": 1,
+          "bone": "LeftHand",
+          "reference_bone": "jntWpn_1",
+          "common_ancestor": "Spine",
+          "unshared_bone_chain": [
+            "LeftHand",
+            "LeftForeArmRoll",
+            "LeftForeArm",
+            "LeftArmRoll",
+            "LeftArm",
+            "LeftShoulder",
+            "Spine4",
+            "Spine3",
+            "Spine2",
+            "Spine1"
+          ],
+          "unshared_reference_chain": [
+            "jntWpn_1",
+            "jntWpn_0"
+          ],
+          "reference_time_seconds": 0.0,
+          "reference_pose": [
+            0.22330684096083897,
+            0.8963864679343052,
+            -0.382916903367234,
+            0.0,
+            0.681146053915809,
+            -0.42450624043771135,
+            -0.5965186544143973,
+            0.0,
+            -0.6972618647359207,
+            -0.12761564141476256,
+            -0.7053652529372894,
+            -0.0,
+            0.03897163827783892,
+            0.011341502253885215,
+            -0.6781310787187378,
+            1.0
+          ],
+          "duration_seconds": 0.03333333507180214,
+          "translation_hull_bound_m": 1.3143262727158445e-07,
+          "rotation_hull_bound_rad": 4.995779674850962e-07,
+          "translation_numerical_allowance_m": 2.159850186788887e-08,
+          "rotation_numerical_allowance_rad": 1e-08,
+          "translation_bound_m": 1.5303112913947333e-07,
+          "rotation_bound_rad": 5.095779674850962e-07,
+          "unshared_controls_constant": false,
+          "method": "convex_control_hulls_normalization_bound_and_common_ancestor_cancellation",
+          "target_runtime_interpolation_verified": false,
+          "runtime_admission": false,
+          "animation_sha256": "ba1d3617da6538c3545b7e23314477868c4bfd41488f41426754e5abf0b9fc12",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+          "source_binding_digest": "f6089efa4c964a583949beb8c01f646ba811971331dc3bc303f9f9f1471c33fc",
+          "translation_tolerance_m": 0.00025,
+          "rotation_tolerance_rad": 0.0008726646259971648
+        },
+        {
+          "schema": "fvr.bc2.authored_relative_pose_bound",
+          "schema_version": 1,
+          "bone": "LeftHand",
+          "reference_bone": "jntWpn_1",
+          "common_ancestor": "Spine",
+          "unshared_bone_chain": [
+            "LeftHand",
+            "LeftForeArmRoll",
+            "LeftForeArm",
+            "LeftArmRoll",
+            "LeftArm",
+            "LeftShoulder",
+            "Spine4",
+            "Spine3",
+            "Spine2",
+            "Spine1"
+          ],
+          "unshared_reference_chain": [
+            "jntWpn_1",
+            "jntWpn_0"
+          ],
+          "reference_time_seconds": 0.0,
+          "reference_pose": [
+            0.22330684096083897,
+            0.8963864679343052,
+            -0.382916903367234,
+            0.0,
+            0.681146053915809,
+            -0.42450624043771135,
+            -0.5965186544143973,
+            0.0,
+            -0.6972618647359207,
+            -0.12761564141476256,
+            -0.7053652529372894,
+            -0.0,
+            0.03897163827783892,
+            0.011341502253885215,
+            -0.6781310787187378,
+            1.0
+          ],
+          "duration_seconds": 0.03333333507180214,
+          "translation_hull_bound_m": 1.3143262727158445e-07,
+          "rotation_hull_bound_rad": 4.995779674850962e-07,
+          "translation_numerical_allowance_m": 2.159850186788887e-08,
+          "rotation_numerical_allowance_rad": 1e-08,
+          "translation_bound_m": 1.5303112913947333e-07,
+          "rotation_bound_rad": 5.095779674850962e-07,
+          "unshared_controls_constant": false,
+          "method": "convex_control_hulls_normalization_bound_and_common_ancestor_cancellation",
+          "target_runtime_interpolation_verified": false,
+          "runtime_admission": false,
+          "animation_sha256": "ba1d3617da6538c3545b7e23314477868c4bfd41488f41426754e5abf0b9fc12",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+          "source_binding_digest": "1c7c7614a908c625b72bdb32055855fc085fd3912cc2b4c42905db478f57aeef",
+          "translation_tolerance_m": 0.00025,
+          "rotation_tolerance_rad": 0.0008726646259971648
+        },
+        {
+          "schema": "fvr.bc2.authored_relative_pose_bound",
+          "schema_version": 1,
+          "bone": "LeftHand",
+          "reference_bone": "jntWpn_1",
+          "common_ancestor": "Spine",
+          "unshared_bone_chain": [
+            "LeftHand",
+            "LeftForeArmRoll",
+            "LeftForeArm",
+            "LeftArmRoll",
+            "LeftArm",
+            "LeftShoulder",
+            "Spine4",
+            "Spine3",
+            "Spine2",
+            "Spine1"
+          ],
+          "unshared_reference_chain": [
+            "jntWpn_1",
+            "jntWpn_0"
+          ],
+          "reference_time_seconds": 0.0,
+          "reference_pose": [
+            0.22330684096083897,
+            0.8963864679343052,
+            -0.382916903367234,
+            0.0,
+            0.681146053915809,
+            -0.42450624043771135,
+            -0.5965186544143973,
+            0.0,
+            -0.6972618647359207,
+            -0.12761564141476256,
+            -0.7053652529372894,
+            -0.0,
+            0.03897163827783892,
+            0.011341502253885215,
+            -0.6781310787187378,
+            1.0
+          ],
+          "duration_seconds": 0.03333333507180214,
+          "translation_hull_bound_m": 1.3143262727158445e-07,
+          "rotation_hull_bound_rad": 4.995779674850962e-07,
+          "translation_numerical_allowance_m": 2.159850186788887e-08,
+          "rotation_numerical_allowance_rad": 1e-08,
+          "translation_bound_m": 1.5303112913947333e-07,
+          "rotation_bound_rad": 5.095779674850962e-07,
+          "unshared_controls_constant": false,
+          "method": "convex_control_hulls_normalization_bound_and_common_ancestor_cancellation",
+          "target_runtime_interpolation_verified": false,
+          "runtime_admission": false,
+          "animation_sha256": "ba1d3617da6538c3545b7e23314477868c4bfd41488f41426754e5abf0b9fc12",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+          "source_binding_digest": "73869eb1e3924e1516386e4996cdf018fef1b8bebcb9244e25d45644cb10f905",
+          "translation_tolerance_m": 0.00025,
+          "rotation_tolerance_rad": 0.0008726646259971648
+        }
+      ],
+      "target_runtime_interpolation_verified": false,
+      "weapon_class": "wcShotgun",
+      "support_contact_reference": true,
+      "binding_digest": "713874612a51a39b9d3e77cbda254dde1fad8f67cd168f6a96707a822ed5ba6e"
+    },
+    {
+      "native_asset_name": "T194",
+      "configured_mesh_path": "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194_Mesh",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "animation_sha256": "6ad19d580728347fbbf8c3b0c3e7d7308c24e88c131440ad47ca23a50276cecc",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "left_hand_in_weapon": [
+        0.272119002502752,
+        0.8811715236614347,
+        -0.386636773167134,
+        0.0,
+        0.6458906918112531,
+        -0.46509620870608653,
+        -0.6054012973877807,
+        0.0,
+        -0.7132856809921881,
+        -0.084983895741555,
+        -0.6957020014029723,
+        -0.0,
+        0.037897782306318295,
+        -0.06986378449000025,
+        -0.5776665911075506,
+        1.0
+      ],
+      "left_hand_status": "bounded_decoded_reference",
+      "right_hand_retargeted": false,
+      "native_admission": false,
+      "source_bindings": [
+        "200a70e88bd83adcd952fbee7755d793d31f8c4a9b1d3ba4a0bb3b48fdb3614d",
+        "4057b78f1eca2b0fa4a8af3781b0323a36efcf7177f6d864a0230dfd834c96a5",
+        "4b58b2e9f07986a069e880345113827d12c4026e3acc9558f347f986adc94307"
+      ],
+      "source_weapons": [
+        {
+          "resource": "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194_FRAG.dbx",
+          "sha256": "d089ce4a92cf6396ac2a5afbbb9e82e0d794aa812c95b796cd7f09b1fc2b6ba5",
+          "instance_guid": "e3457eac-015f-4982-974b-92543a2bf010",
+          "type": "GameSharedResources.SoldierWeaponData"
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194_Slug.dbx",
+          "sha256": "32cb52f0ac88e3e87b7b02e74938de8323679ef4da0a9fcb14c12a34567183fd",
+          "instance_guid": "f00e6142-a931-4010-9136-e1fdf29b53c9",
+          "type": "GameSharedResources.SoldierWeaponData"
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194.dbx",
+          "sha256": "6268186190de2603cbcf9c3b943e7b8230e4f5c22384a77b45c201053a1c16a2",
+          "instance_guid": "ed6c98b7-205e-4488-857d-2408528ef2aa",
+          "type": "GameSharedResources.SoldierWeaponData"
+        }
+      ],
+      "animation_chain": {
+        "tree": {
+          "resource": "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194_AnimTree1p.dbx",
+          "sha256": "9b3a57a59bdb140cfc86131d6a79babb9757da14ab99dda4fdd67eb9bd4968f8",
+          "instance_guid": "e67b69d6-c936-40c0-b922-71665a393975",
+          "type": "Animation.SpecificAnimTreeData"
+        },
+        "animation_asset": {
+          "resource": "Animations/Weapons/Handheld/MEC_shg_TOZ194/1P/HandsIkPose.dbx",
+          "sha256": "13ce1bae7c869f796eb7c40b820e923412c966ec25049e192dbf8e4d8369d05a",
+          "instance_guid": "2adde684-f8cd-4cb6-9e99-63130aac3c90",
+          "type": "Animation.AnimationAsset"
+        },
+        "animation_resource": "Animations/Weapons/Handheld/MEC_shg_TOZ194/1P/HandsIkPose.res",
+        "skeleton_asset": {
+          "resource": "Characters/Skeletons/ske01.dbx",
+          "sha256": "ebad79fb62ab383dcc4ea5179652ded99944b7f9905c6095baa8f0b7183520ba",
+          "instance_guid": "20a6d9b2-2cd5-4895-a59c-f144e6d3f061",
+          "type": "Animation.SkeletonAsset"
+        },
+        "skeleton_resource": "Characters/Skeletons/ske01.res"
+      },
+      "right_hand_status_not_admitted": "static_authored_pose",
+      "reference_envelopes": [
+        {
+          "schema": "fvr.bc2.authored_relative_pose_bound",
+          "schema_version": 1,
+          "bone": "LeftHand",
+          "reference_bone": "jntWpn_1",
+          "common_ancestor": "Spine",
+          "unshared_bone_chain": [
+            "LeftHand",
+            "LeftForeArmRoll",
+            "LeftForeArm",
+            "LeftArmRoll",
+            "LeftArm",
+            "LeftShoulder",
+            "Spine4",
+            "Spine3",
+            "Spine2",
+            "Spine1"
+          ],
+          "unshared_reference_chain": [
+            "jntWpn_1",
+            "jntWpn_0"
+          ],
+          "reference_time_seconds": 0.0,
+          "reference_pose": [
+            0.27211900250275245,
+            0.8811715236614345,
+            -0.3866367731671338,
+            0.0,
+            0.6458906918112522,
+            -0.46509620870608526,
+            -0.6054012973877793,
+            0.0,
+            -0.713285680992187,
+            -0.08498389574155527,
+            -0.6957020014029708,
+            -0.0,
+            0.03789778230631846,
+            -0.06986378449000047,
+            -0.5776665911075499,
+            1.0
+          ],
+          "duration_seconds": 0.03333333507180214,
+          "translation_hull_bound_m": 8.328765063168361e-08,
+          "rotation_hull_bound_rad": 2.457562379948451e-07,
+          "translation_numerical_allowance_m": 2.211882971447809e-08,
+          "rotation_numerical_allowance_rad": 1e-08,
+          "translation_bound_m": 1.054064803461617e-07,
+          "rotation_bound_rad": 2.5575623799484514e-07,
+          "unshared_controls_constant": false,
+          "method": "convex_control_hulls_normalization_bound_and_common_ancestor_cancellation",
+          "target_runtime_interpolation_verified": false,
+          "runtime_admission": false,
+          "animation_sha256": "6ad19d580728347fbbf8c3b0c3e7d7308c24e88c131440ad47ca23a50276cecc",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+          "source_binding_digest": "200a70e88bd83adcd952fbee7755d793d31f8c4a9b1d3ba4a0bb3b48fdb3614d",
+          "translation_tolerance_m": 0.00025,
+          "rotation_tolerance_rad": 0.0008726646259971648
+        },
+        {
+          "schema": "fvr.bc2.authored_relative_pose_bound",
+          "schema_version": 1,
+          "bone": "LeftHand",
+          "reference_bone": "jntWpn_1",
+          "common_ancestor": "Spine",
+          "unshared_bone_chain": [
+            "LeftHand",
+            "LeftForeArmRoll",
+            "LeftForeArm",
+            "LeftArmRoll",
+            "LeftArm",
+            "LeftShoulder",
+            "Spine4",
+            "Spine3",
+            "Spine2",
+            "Spine1"
+          ],
+          "unshared_reference_chain": [
+            "jntWpn_1",
+            "jntWpn_0"
+          ],
+          "reference_time_seconds": 0.0,
+          "reference_pose": [
+            0.27211900250275245,
+            0.8811715236614345,
+            -0.3866367731671338,
+            0.0,
+            0.6458906918112522,
+            -0.46509620870608526,
+            -0.6054012973877793,
+            0.0,
+            -0.713285680992187,
+            -0.08498389574155527,
+            -0.6957020014029708,
+            -0.0,
+            0.03789778230631846,
+            -0.06986378449000047,
+            -0.5776665911075499,
+            1.0
+          ],
+          "duration_seconds": 0.03333333507180214,
+          "translation_hull_bound_m": 8.328765063168361e-08,
+          "rotation_hull_bound_rad": 2.457562379948451e-07,
+          "translation_numerical_allowance_m": 2.211882971447809e-08,
+          "rotation_numerical_allowance_rad": 1e-08,
+          "translation_bound_m": 1.054064803461617e-07,
+          "rotation_bound_rad": 2.5575623799484514e-07,
+          "unshared_controls_constant": false,
+          "method": "convex_control_hulls_normalization_bound_and_common_ancestor_cancellation",
+          "target_runtime_interpolation_verified": false,
+          "runtime_admission": false,
+          "animation_sha256": "6ad19d580728347fbbf8c3b0c3e7d7308c24e88c131440ad47ca23a50276cecc",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+          "source_binding_digest": "4057b78f1eca2b0fa4a8af3781b0323a36efcf7177f6d864a0230dfd834c96a5",
+          "translation_tolerance_m": 0.00025,
+          "rotation_tolerance_rad": 0.0008726646259971648
+        },
+        {
+          "schema": "fvr.bc2.authored_relative_pose_bound",
+          "schema_version": 1,
+          "bone": "LeftHand",
+          "reference_bone": "jntWpn_1",
+          "common_ancestor": "Spine",
+          "unshared_bone_chain": [
+            "LeftHand",
+            "LeftForeArmRoll",
+            "LeftForeArm",
+            "LeftArmRoll",
+            "LeftArm",
+            "LeftShoulder",
+            "Spine4",
+            "Spine3",
+            "Spine2",
+            "Spine1"
+          ],
+          "unshared_reference_chain": [
+            "jntWpn_1",
+            "jntWpn_0"
+          ],
+          "reference_time_seconds": 0.0,
+          "reference_pose": [
+            0.27211900250275245,
+            0.8811715236614345,
+            -0.3866367731671338,
+            0.0,
+            0.6458906918112522,
+            -0.46509620870608526,
+            -0.6054012973877793,
+            0.0,
+            -0.713285680992187,
+            -0.08498389574155527,
+            -0.6957020014029708,
+            -0.0,
+            0.03789778230631846,
+            -0.06986378449000047,
+            -0.5776665911075499,
+            1.0
+          ],
+          "duration_seconds": 0.03333333507180214,
+          "translation_hull_bound_m": 8.328765063168361e-08,
+          "rotation_hull_bound_rad": 2.457562379948451e-07,
+          "translation_numerical_allowance_m": 2.211882971447809e-08,
+          "rotation_numerical_allowance_rad": 1e-08,
+          "translation_bound_m": 1.054064803461617e-07,
+          "rotation_bound_rad": 2.5575623799484514e-07,
+          "unshared_controls_constant": false,
+          "method": "convex_control_hulls_normalization_bound_and_common_ancestor_cancellation",
+          "target_runtime_interpolation_verified": false,
+          "runtime_admission": false,
+          "animation_sha256": "6ad19d580728347fbbf8c3b0c3e7d7308c24e88c131440ad47ca23a50276cecc",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+          "source_binding_digest": "4b58b2e9f07986a069e880345113827d12c4026e3acc9558f347f986adc94307",
+          "translation_tolerance_m": 0.00025,
+          "rotation_tolerance_rad": 0.0008726646259971648
+        }
+      ],
+      "target_runtime_interpolation_verified": false,
+      "weapon_class": "wcShotgun",
+      "support_contact_reference": true,
+      "binding_digest": "d5f095a58a9964153b50ae0d6bd535cf3e48f921d49f8d3635409a8984d7d314"
+    },
+    {
+      "native_asset_name": "T194_sp",
+      "configured_mesh_path": "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194_Mesh",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "animation_sha256": "6ad19d580728347fbbf8c3b0c3e7d7308c24e88c131440ad47ca23a50276cecc",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "left_hand_in_weapon": [
+        0.272119002502752,
+        0.8811715236614347,
+        -0.386636773167134,
+        0.0,
+        0.6458906918112531,
+        -0.46509620870608653,
+        -0.6054012973877807,
+        0.0,
+        -0.7132856809921881,
+        -0.084983895741555,
+        -0.6957020014029723,
+        -0.0,
+        0.037897782306318295,
+        -0.06986378449000025,
+        -0.5776665911075506,
+        1.0
+      ],
+      "left_hand_status": "bounded_decoded_reference",
+      "right_hand_retargeted": false,
+      "native_admission": false,
+      "source_bindings": [
+        "a02a2821d32bced0ddb87273b993e7b71f6b32d395819805555cf8a8692b2bcf"
+      ],
+      "source_weapons": [
+        {
+          "resource": "Objects/Weapons/Handheld/MEC_shg_TOZ194/SP_shg_TOZ194.dbx",
+          "sha256": "22f193d20ccc49b898ae09b92530de4db8e0f49f5a541e7971431e48186ca446",
+          "instance_guid": "5cf68976-bf6c-4744-bda5-71a954679ff9",
+          "type": "GameSharedResources.SoldierWeaponData"
+        }
+      ],
+      "animation_chain": {
+        "tree": {
+          "resource": "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194_AnimTree1p.dbx",
+          "sha256": "9b3a57a59bdb140cfc86131d6a79babb9757da14ab99dda4fdd67eb9bd4968f8",
+          "instance_guid": "e67b69d6-c936-40c0-b922-71665a393975",
+          "type": "Animation.SpecificAnimTreeData"
+        },
+        "animation_asset": {
+          "resource": "Animations/Weapons/Handheld/MEC_shg_TOZ194/1P/HandsIkPose.dbx",
+          "sha256": "13ce1bae7c869f796eb7c40b820e923412c966ec25049e192dbf8e4d8369d05a",
+          "instance_guid": "2adde684-f8cd-4cb6-9e99-63130aac3c90",
+          "type": "Animation.AnimationAsset"
+        },
+        "animation_resource": "Animations/Weapons/Handheld/MEC_shg_TOZ194/1P/HandsIkPose.res",
+        "skeleton_asset": {
+          "resource": "Characters/Skeletons/ske01.dbx",
+          "sha256": "ebad79fb62ab383dcc4ea5179652ded99944b7f9905c6095baa8f0b7183520ba",
+          "instance_guid": "20a6d9b2-2cd5-4895-a59c-f144e6d3f061",
+          "type": "Animation.SkeletonAsset"
+        },
+        "skeleton_resource": "Characters/Skeletons/ske01.res"
+      },
+      "right_hand_status_not_admitted": "static_authored_pose",
+      "reference_envelopes": [
+        {
+          "schema": "fvr.bc2.authored_relative_pose_bound",
+          "schema_version": 1,
+          "bone": "LeftHand",
+          "reference_bone": "jntWpn_1",
+          "common_ancestor": "Spine",
+          "unshared_bone_chain": [
+            "LeftHand",
+            "LeftForeArmRoll",
+            "LeftForeArm",
+            "LeftArmRoll",
+            "LeftArm",
+            "LeftShoulder",
+            "Spine4",
+            "Spine3",
+            "Spine2",
+            "Spine1"
+          ],
+          "unshared_reference_chain": [
+            "jntWpn_1",
+            "jntWpn_0"
+          ],
+          "reference_time_seconds": 0.0,
+          "reference_pose": [
+            0.27211900250275245,
+            0.8811715236614345,
+            -0.3866367731671338,
+            0.0,
+            0.6458906918112522,
+            -0.46509620870608526,
+            -0.6054012973877793,
+            0.0,
+            -0.713285680992187,
+            -0.08498389574155527,
+            -0.6957020014029708,
+            -0.0,
+            0.03789778230631846,
+            -0.06986378449000047,
+            -0.5776665911075499,
+            1.0
+          ],
+          "duration_seconds": 0.03333333507180214,
+          "translation_hull_bound_m": 8.328765063168361e-08,
+          "rotation_hull_bound_rad": 2.457562379948451e-07,
+          "translation_numerical_allowance_m": 2.211882971447809e-08,
+          "rotation_numerical_allowance_rad": 1e-08,
+          "translation_bound_m": 1.054064803461617e-07,
+          "rotation_bound_rad": 2.5575623799484514e-07,
+          "unshared_controls_constant": false,
+          "method": "convex_control_hulls_normalization_bound_and_common_ancestor_cancellation",
+          "target_runtime_interpolation_verified": false,
+          "runtime_admission": false,
+          "animation_sha256": "6ad19d580728347fbbf8c3b0c3e7d7308c24e88c131440ad47ca23a50276cecc",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+          "source_binding_digest": "a02a2821d32bced0ddb87273b993e7b71f6b32d395819805555cf8a8692b2bcf",
+          "translation_tolerance_m": 0.00025,
+          "rotation_tolerance_rad": 0.0008726646259971648
+        }
+      ],
+      "target_runtime_interpolation_verified": false,
+      "weapon_class": "wcShotgun",
+      "support_contact_reference": true,
+      "binding_digest": "864ea71c3462e899502bcaf4a3b10260b7d62553253d073576a6b3b5a06fd364"
+    },
+    {
+      "native_asset_name": "T194_sp_s",
+      "configured_mesh_path": "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194_Mesh",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "animation_sha256": "6ad19d580728347fbbf8c3b0c3e7d7308c24e88c131440ad47ca23a50276cecc",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "left_hand_in_weapon": [
+        0.272119002502752,
+        0.8811715236614347,
+        -0.386636773167134,
+        0.0,
+        0.6458906918112531,
+        -0.46509620870608653,
+        -0.6054012973877807,
+        0.0,
+        -0.7132856809921881,
+        -0.084983895741555,
+        -0.6957020014029723,
+        -0.0,
+        0.037897782306318295,
+        -0.06986378449000025,
+        -0.5776665911075506,
+        1.0
+      ],
+      "left_hand_status": "bounded_decoded_reference",
+      "right_hand_retargeted": false,
+      "native_admission": false,
+      "source_bindings": [
+        "b6ffbc68cb123829d3062d2a580a2cc6eb5671f729c122979fc9062f2faa5bd7"
+      ],
+      "source_weapons": [
+        {
+          "resource": "Objects/Weapons/Handheld/MEC_shg_TOZ194/SP_shg_TOZ194_Slug.dbx",
+          "sha256": "0d23262d8a7450c67aa22a8bdf41bf97891945c34017bf364f2f0b7d794eadcf",
+          "instance_guid": "361c0419-96a4-4e20-96ca-7b386c57eee6",
+          "type": "GameSharedResources.SoldierWeaponData"
+        }
+      ],
+      "animation_chain": {
+        "tree": {
+          "resource": "Objects/Weapons/Handheld/MEC_shg_TOZ194/MEC_shg_TOZ194_AnimTree1p.dbx",
+          "sha256": "9b3a57a59bdb140cfc86131d6a79babb9757da14ab99dda4fdd67eb9bd4968f8",
+          "instance_guid": "e67b69d6-c936-40c0-b922-71665a393975",
+          "type": "Animation.SpecificAnimTreeData"
+        },
+        "animation_asset": {
+          "resource": "Animations/Weapons/Handheld/MEC_shg_TOZ194/1P/HandsIkPose.dbx",
+          "sha256": "13ce1bae7c869f796eb7c40b820e923412c966ec25049e192dbf8e4d8369d05a",
+          "instance_guid": "2adde684-f8cd-4cb6-9e99-63130aac3c90",
+          "type": "Animation.AnimationAsset"
+        },
+        "animation_resource": "Animations/Weapons/Handheld/MEC_shg_TOZ194/1P/HandsIkPose.res",
+        "skeleton_asset": {
+          "resource": "Characters/Skeletons/ske01.dbx",
+          "sha256": "ebad79fb62ab383dcc4ea5179652ded99944b7f9905c6095baa8f0b7183520ba",
+          "instance_guid": "20a6d9b2-2cd5-4895-a59c-f144e6d3f061",
+          "type": "Animation.SkeletonAsset"
+        },
+        "skeleton_resource": "Characters/Skeletons/ske01.res"
+      },
+      "right_hand_status_not_admitted": "static_authored_pose",
+      "reference_envelopes": [
+        {
+          "schema": "fvr.bc2.authored_relative_pose_bound",
+          "schema_version": 1,
+          "bone": "LeftHand",
+          "reference_bone": "jntWpn_1",
+          "common_ancestor": "Spine",
+          "unshared_bone_chain": [
+            "LeftHand",
+            "LeftForeArmRoll",
+            "LeftForeArm",
+            "LeftArmRoll",
+            "LeftArm",
+            "LeftShoulder",
+            "Spine4",
+            "Spine3",
+            "Spine2",
+            "Spine1"
+          ],
+          "unshared_reference_chain": [
+            "jntWpn_1",
+            "jntWpn_0"
+          ],
+          "reference_time_seconds": 0.0,
+          "reference_pose": [
+            0.27211900250275245,
+            0.8811715236614345,
+            -0.3866367731671338,
+            0.0,
+            0.6458906918112522,
+            -0.46509620870608526,
+            -0.6054012973877793,
+            0.0,
+            -0.713285680992187,
+            -0.08498389574155527,
+            -0.6957020014029708,
+            -0.0,
+            0.03789778230631846,
+            -0.06986378449000047,
+            -0.5776665911075499,
+            1.0
+          ],
+          "duration_seconds": 0.03333333507180214,
+          "translation_hull_bound_m": 8.328765063168361e-08,
+          "rotation_hull_bound_rad": 2.457562379948451e-07,
+          "translation_numerical_allowance_m": 2.211882971447809e-08,
+          "rotation_numerical_allowance_rad": 1e-08,
+          "translation_bound_m": 1.054064803461617e-07,
+          "rotation_bound_rad": 2.5575623799484514e-07,
+          "unshared_controls_constant": false,
+          "method": "convex_control_hulls_normalization_bound_and_common_ancestor_cancellation",
+          "target_runtime_interpolation_verified": false,
+          "runtime_admission": false,
+          "animation_sha256": "6ad19d580728347fbbf8c3b0c3e7d7308c24e88c131440ad47ca23a50276cecc",
+          "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+          "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+          "source_binding_digest": "b6ffbc68cb123829d3062d2a580a2cc6eb5671f729c122979fc9062f2faa5bd7",
+          "translation_tolerance_m": 0.00025,
+          "rotation_tolerance_rad": 0.0008726646259971648
+        }
+      ],
+      "target_runtime_interpolation_verified": false,
+      "weapon_class": "wcShotgun",
+      "support_contact_reference": true,
+      "binding_digest": "6c667bc239876d7255f4c203635d3b94bb366ea33c369881c1a03004c6a72e98"
+    }
+  ],
+  "coverage": [
+    {
+      "asset": "AN94",
+      "status": "deferred",
+      "reason": "Full-curve support envelope exceeds explicit tolerance"
+    },
+    {
+      "asset": "AN94_sp_k",
+      "status": "deferred",
+      "reason": "Full-curve support envelope exceeds explicit tolerance"
+    },
+    {
+      "asset": "AN94_sp_s",
+      "status": "deferred",
+      "reason": "Full-curve support envelope exceeds explicit tolerance"
+    },
+    {
+      "asset": "M249",
+      "status": "bounded_reference_prepared",
+      "profiles": 1
+    },
+    {
+      "asset": "M416",
+      "status": "bounded_reference_prepared",
+      "profiles": 1
+    },
+    {
+      "asset": "MG3",
+      "status": "bounded_reference_prepared",
+      "profiles": 1
+    },
+    {
+      "asset": "MG3_sp",
+      "status": "bounded_reference_prepared",
+      "profiles": 1
+    },
+    {
+      "asset": "MG3_sp_k",
+      "status": "bounded_reference_prepared",
+      "profiles": 1
+    },
+    {
+      "asset": "MG3k",
+      "status": "bounded_reference_prepared",
+      "profiles": 1
+    },
+    {
+      "asset": "S20K",
+      "status": "bounded_reference_prepared",
+      "profiles": 1
+    },
+    {
+      "asset": "T194",
+      "status": "bounded_reference_prepared",
+      "profiles": 1
+    },
+    {
+      "asset": "T194_sp",
+      "status": "bounded_reference_prepared",
+      "profiles": 1
+    },
+    {
+      "asset": "T194_sp_s",
+      "status": "bounded_reference_prepared",
+      "profiles": 1
+    }
+  ],
+  "runtime_admission": false,
+  "runtime_enabled": false,
+  "player_header_unchanged": "profiles/support312/CombinedSupport.h",
+  "scope": "Unselected support reference candidates only. No native reload, right-hand retarget, pump, bolt or headset acceptance.",
+  "inputs": [
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\arsmg-paired-contact-batch-candidate\\all\\grip-bindings.json",
+      "sha256": "9c027340e204ec5b979fe3dc5be1e6501e2e4d2c3b545bcc228d299ed7d22903"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\lmg-authored-mechanisms-candidate\\all\\reference-bindings.json",
+      "sha256": "0cbe8ed392eb9cda5feb6f3676bc3881ee4c6638ff287ad85e099fd40c12584e"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\pistol-sniper-shotgun-mechanisms-candidate\\batch\\reference-bindings.json",
+      "sha256": "367daddaf86244359245312db8028756b91bf763b34535aa1191253db3981559"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\mesh312-research\\reference-bindings.json",
+      "sha256": "3813a763b4640355e699f280a8a8dd9fcc6710ca03f57f7df3afe60c867d1ae7"
+    }
+  ],
+  "tolerance_translation_m": 0.00025,
+  "tolerance_rotation_rad": 0.0008726646259971648,
+  "tool_sha256": "1271cbf1d0962542a41b109a05b7ac3d9141638c4648ce0d62e583edfcffa6aa",
+  "generator_sha256": "388a41f97efdb12355d9ea8cc5b145b70899830adcf34ab8675727ff0c8d60ac"
+}

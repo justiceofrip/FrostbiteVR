@@ -90,7 +90,9 @@ class Skeleton:
 
 class Clip:
     def __init__(self,data):
-        self.root=Resource(data).read_root_fields(('ArtToolInfo','Animations'))
+        resource=Resource(data)
+        self.wrapper_records=resource.wrapper_records
+        self.root=resource.read_root_fields(('ArtToolInfo','Animations'))
         art=self.root['ArtToolInfo']
         if art is not None and not valid_basis(art):raise ValueError('Unsupported clip basis/units')
         self.basis='explicit_matching_clip_art_metadata' if art else 'not_stored_in_clip; inherited_from_explicitly_paired_skeleton'
@@ -121,6 +123,7 @@ class Clip:
                           for name,curves in self.tracks.items()]+[{'name':name,'payload_decoded':False,'motion_status':'unsupported','reason':reason} for name,reason in self.unsupported.items()],
                 'supported_tracks':len(self.tracks),'unsupported_tracks':self.unsupported,'curve_formats':dict(self.formats),
                 'all_track_payloads_decoded':not self.unsupported,
+                'wrapper_records':self.wrapper_records,'wrapper_record_semantics_verified':False,
                 'clip_basis_provenance':self.basis,'clip_skeleton_pairing':'explicit caller-selected skeleton; named-track mapping; not active native mesh proof',
                 'target_runtime_interpolation_verified':False}
     def evaluate(self,skeleton,time,names,weapon='jntWpn_1'):

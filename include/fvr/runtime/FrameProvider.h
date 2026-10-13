@@ -3,6 +3,7 @@
 #include "fvr/interaction/ControllerInput.h"
 #include "fvr/interaction/Feedback.h"
 #include "fvr/graphics/BodyPropFrame.h"
+#include "fvr/graphics/SceneDepthFrame.h"
 namespace fvr::runtime {
 // Local C++ contract shared by native producers, IPC and XR presentation.
 // Not an exported ABI: serialize explicitly at process/module boundaries.
@@ -21,6 +22,7 @@ public:
     }
     // Optional render-only metadata for the EXACT delivered image pair.
     virtual bool ReadBodyProps(const graphics::PairTicket&,graphics::BodyPropFrame& out)noexcept {out={};return false;}
+    virtual bool ReadSceneDepth(const graphics::TextureDescriptor&,const graphics::PairTicket&,graphics::SceneDepthFrame& out)noexcept {out={};return false;}
     virtual void UpdateInput(const interaction::InputFrame&) noexcept {}
     virtual bool TakeFeedback(interaction::FeedbackEvent& event)noexcept {event={};return false;}
     virtual void Suspend() noexcept {}

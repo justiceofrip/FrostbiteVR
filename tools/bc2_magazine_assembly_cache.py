@@ -6,7 +6,7 @@ The caller reads installed exact blobs; proprietary geometry stays local.
 """
 import struct
 from bc2_body_ammo_assets import MAGIC,MAX_CACHE,fnv,text
-from bc2_mesh_geometry import metadata,geometry
+from bc2_mesh_geometry import metadata,geometry, position_bytes
 from bc2_weapon_animation_pipeline import identity,canonical,multiply
 from bc2_authored_magazine_geometry import rigid_parts,point
 from bc2_authored_grip_bindings import digest
@@ -33,7 +33,7 @@ def derive_cache(mesh_raw,lod_data,skeleton,static_clip,reload_clip,profile):
     for s in ss:
         if s['name'].endswith('_ZOnly'):excluded.append(s['name']);continue
         if not set(s['bone_names'])&set(names):continue
-        half=s['stride'] in (16,48);posbytes=8 if half else 12
+        posbytes=position_bytes(s);half=posbytes==8
         raw_indices=struct.unpack_from('<'+'H'*(s['triangles']*3),lod_data,start+vb+s['first_index']*2)
         packed=[]
         for offset in range(0,len(raw_indices),3):

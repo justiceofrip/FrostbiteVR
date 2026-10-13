@@ -28,7 +28,8 @@ struct Fixture {
  Fixture(bool enabled=true,const MagazineEquipmentProfile& selected=Xm8MagazineEquipment(),bool direct=false):profile(&selected),directIdentity(direct){
   reserve.identity.owner={0x10000,0x20000,0x30000,0x40000,5,3,7};reserve.identity.firing={0x50000,0x60000,0x70000};
   reserve.identity.serverPlayer=0x80000;reserve.identity.serverSoldier=0x90000;reserve.identity.serverItem=0xa0000;
-  reserve.loaded=27;reserve.reserve=83;reserve.capacity=30;reserve.verified=reserve.reloadInputReady=true;
+  reserve.capacity=profile->native->configuration.values.baseCapacity;
+  reserve.loaded=reserve.capacity-3;reserve.reserve=83;reserve.verified=reserve.reloadInputReady=true;
   s.nativeOwner=reserve.identity.owner;s.weapon={0xb0000,17};s.trackingEpoch=7;
   s.input={{(std::uint64_t(0x30000)<<32)|0x20000,5,17,7},1,now,now+100*Ms,now,true,{true,true},{true,false}};
   s.asset=profile->geometry->asset;s.meshes=meshes;s.bodyFromHand=Pose(2);s.geometrySequence=1;
@@ -65,7 +66,7 @@ struct Fixture {
   policy.emplace(enabled,api,AmmoSupplyConfig{InteractionHand::Left,1000,{1001,1},{0,0,0},.15f,200*Ms});
  }
  void Geometry(float z){const auto p=profile->geometry->interaction.insertion;
-  s.raw.rawLeftWristWorldMeters=Multiply(p.itemFromHand,Multiply(*InverseRigid(p.itemFromInsertion),Multiply(TravelPose(p,z),p.weaponFromEntry)));}
+  s.raw.rawLeftWristWorldMeters=Multiply(p.itemFromHand,InsertionItemPose(p,z));}
  void Sync(){s.input.nowNs=now;s.family={{s.nativeOwner,s.weapon,0xd0000,0xc0000,2},now,now+100*Ms,true};s.family.binding.profile=profile;
   if(directIdentity||profile->native->identityRoute==MagazineIdentityRoute::SelectedCarriedItem){
    s.family.binding.launcher=s.family.binding.launcherSlot=0;s.family.binding.equipment=equipment;

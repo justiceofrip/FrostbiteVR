@@ -28,6 +28,7 @@ public:
     bool TryGetCompletedPair(const runtime::PresentationRequirements&,const runtime::TrackingFrame&,
         runtime::TrackingFrame&,graphics::TextureDescriptor&,graphics::PairTicket&)noexcept override;
     bool ReadBodyProps(const graphics::PairTicket& t,graphics::BodyPropFrame& p)noexcept override{return channel_.ReadBodyProps(t,p);}
+    bool ReadSceneDepth(const graphics::TextureDescriptor& d,const graphics::PairTicket& t,graphics::SceneDepthFrame& p)noexcept override{return channel_.ReadSceneDepth(d,t,p);}
     void UpdateInput(const interaction::InputFrame& input)noexcept override{channel_.PublishInput(input);}
     bool TakeFeedback(interaction::FeedbackEvent& event)noexcept override{return channel_.TakeFeedback(event);}
     void Suspend()noexcept override;

@@ -14,11 +14,11 @@ bool ReturnEmpty(Fixture& f){const auto& c=f.profile->geometry->interaction;cons
 int Replacement(const MagazineEquipmentProfile& profile){for(int available:{7,83}){
  Fixture f(true,profile,true);f.reserve.loaded=0;f.reserve.reserve=available;f.reserve.emptyReloadControlled=true;
  CHECK(InsertEmpty(f));CHECK(f.result.interaction.original&&f.result.interaction.original->rounds==0);
- CHECK(f.submits==1&&f.submitted&&f.submitted->reservedUnits==unsigned(std::min(30,available)));
+ CHECK(f.submits==1&&f.submitted&&f.submitted->reservedUnits==unsigned(std::min(f.reserve.capacity,available)));
  CHECK(f.reserve.loaded==0&&f.reserve.reserve==available); // Gestures never edit native ammo.
  f.Complete();f.Send();f.allowRetire=true;f.Send();f.Send();
  CHECK(f.policy->ProbeState(f.now).completed==1&&!f.policy->BlocksEquipment());
- CHECK(f.reserve.loaded==std::min(30,available)&&f.reserve.reserve==std::max(0,available-30));
+ CHECK(f.reserve.loaded==std::min(f.reserve.capacity,available)&&f.reserve.reserve==std::max(0,available-f.reserve.capacity));
  }return 0;}
 int OriginalReturn(const MagazineEquipmentProfile& profile){Fixture f(true,profile,true);f.reserve.loaded=0;f.reserve.emptyReloadControlled=true;
  CHECK(ReturnEmpty(f));CHECK(f.result.interaction.original&&f.result.interaction.original->rounds==0&&f.submits==0);
@@ -27,14 +27,14 @@ int OriginalReturn(const MagazineEquipmentProfile& profile){Fixture f(true,profi
  CHECK(f.policy->ProbeState(f.now).originalReturns==1&&f.reserve.loaded==0&&f.reserve.reserve==83&&f.submits==0);return 0;}
 int MissingProofAndUnavailableReserve(const MagazineEquipmentProfile& profile){for(unsigned bad=0;bad<9;++bad){Fixture f(true,profile,true);f.reserve.loaded=0;f.reserve.emptyReloadControlled=true;
  if(bad==0)f.reserve.emptyReloadControlled=false;if(bad==1)f.reserve.reserve=0;
- if(bad==2)f.reserve.reloadInputReady=false;if(bad==3)f.reserve.loaded=-1;if(bad==4)f.reserve.loaded=30;
+ if(bad==2)f.reserve.reloadInputReady=false;if(bad==3)f.reserve.loaded=-1;if(bad==4)f.reserve.loaded=f.reserve.capacity;
  if(bad==5)f.s.input.focused=false;if(bad==6)++f.s.input.owner.space;
  if(bad==7)f.source=false;if(bad==8)f.familyFault=4;
  f.Send();f.Send(true);CHECK(f.starts==0&&f.submits==0&&!f.policy->BlocksEquipment());
  if(bad==0){CHECK(f.result.ordinaryReloadAllowed);f.reserve.emptyReloadControlled=true;f.Send();f.Send(true);CHECK(f.starts==1);}
  }return 0;}
 int EmptyBodyAvailability(const MagazineEquipmentProfile& profile){Fixture f(true,profile,true);f.policy->EnableBodyAmmo(true);f.reserve.loaded=0;f.reserve.emptyReloadControlled=true;f.Send();
- CHECK(f.result.bodyAmmo&&f.result.bodyAmmo->source.objectUnits==30);
+ CHECK(f.result.bodyAmmo&&f.result.bodyAmmo->source.objectUnits==unsigned(std::min(f.reserve.capacity,f.reserve.reserve)));
  BodyAmmoTracking body;body.visual=*f.result.bodyAmmo;body.magazine=f.result.tracking;CHECK(BodyAmmoFresh(body,f.now));
  f.Send(true);CHECK(f.starts==1&&!f.result.bodyAmmo);return 0;}
 int CancellationKeepsCounts(const MagazineEquipmentProfile& profile){Fixture f(true,profile,true);f.reserve.loaded=0;f.reserve.emptyReloadControlled=true;CHECK(f.Eject());

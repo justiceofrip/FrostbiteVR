@@ -28,6 +28,7 @@ inline const BodyEquipmentProfile* Profile(const BodyInventoryDisplay& d,const B
        s.stateCount!=1||!s.soleConfiguredArray||s.states[0].array!=s.soleConfiguredArray||s.states[0].count>8||
        c.weapon==d.selectedOwner.weapon||slot.assignment.item==d.physicalSelected)return nullptr;
     const auto asset=body_equipment_detail::Text(s.weaponName);const BodyEquipmentProfile* found=nullptr;
+    if(slot.native.carryAsset[0]&&asset!=body_equipment_detail::Text(slot.native.carryAsset))return nullptr;
     for(const auto& p:BodyEquipmentProfiles)if(asset==p.asset&&body_equipment_detail::ProfileMatchesSelected(p,s)){
         if(found||!interaction::reload_insertion_detail::Rigid(p.modelToAnchor))return nullptr;found=&p;
     }return found;
@@ -66,8 +67,8 @@ inline std::optional<BodyCarriedRenderBatch> BuildBodyCarriedBatch(std::shared_p
         // source rejects this complete batch, never a per-eye partial fallback.
         if(!configs[i])continue;
         const auto* p=body_carried_detail::Profile(*d,slot,*configs[i],now);if(!p)return {};
-        const auto anchor=std::find_if(anchors.shoulders.begin(),anchors.shoulders.end(),[&](const auto& a){return a.slot==slot.assignment.slot;});
-        if(anchor==anchors.shoulders.end()||out.count==out.instances.size())return {};
+        const auto* anchor=interaction::FindBodyWeaponAnchor(anchors,slot.assignment.slot);
+        if(!anchor||out.count==out.instances.size())return {};
         const auto pose=BodyEquipmentPose(input,eyeBase,*anchor,p->modelToAnchor);if(!pose)return {};
         const auto& c=configs[i]->configured;auto& v=out.instances[out.count];
         v.geometry=MakeBodyAmmoGeometryKey(p->asset,p->mesh,p->part,p->rig);v.world=*pose;

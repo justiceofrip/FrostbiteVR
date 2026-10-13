@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 import struct
 from inspect_bc2_mesh_asset import Archive, sha
-from bc2_mesh_geometry import metadata, geometry
+from bc2_mesh_geometry import metadata, geometry, position_bytes
 
 MAX_SECTIONS = 2048
 
@@ -33,7 +33,7 @@ def derive_sections(resource, mesh_bytes, data_resource, data, lod):
     for number, s in enumerate(sections):
         count = s['triangles']*3
         if count > 100000: raise ValueError('Draw index bound')
-        posbytes = 8 if s['stride'] in (16,48) else 12
+        posbytes = position_bytes(s)
         indices = struct.unpack_from('<'+'H'*count, data, start+vb+s['first_index']*2)
         records = [data[start+s['vertex_offset']+i*s['stride']:start+s['vertex_offset']+i*s['stride']+posbytes+8] for i in indices]
         expanded = b''.join(records)

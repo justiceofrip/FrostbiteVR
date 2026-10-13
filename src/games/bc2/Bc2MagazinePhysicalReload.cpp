@@ -19,7 +19,7 @@ interaction::AmmoSupplyConfig Bc2MagazinePhysicalReload::DefaultPouch()noexcept 
 Bc2MagazinePhysicalReload::Bc2MagazinePhysicalReload(bool enabled,MagazinePhysicalApi api,AmmoSupplyConfig pouch)noexcept
  :supply_(pouch),pouch_(pouch),api_(api),enabled_(enabled){
  if(enabled&&api.resourceRead&&api.resourceSubmit)resource_=std::make_unique<Bc2MagazineResourceReload>(
-     MagazineResourceApi{api.context,api.resourceRead,api.resourceSubmit,api.resourceOutcome},pouch);
+     MagazineResourceApi{api.context,api.resourceRead,api.resourceSubmit,api.resourceOutcome,api.resourceReadObserved},pouch);
  }
 Bc2MagazinePhysicalReload::~Bc2MagazinePhysicalReload()=default;
 MagazineResourceProbeState Bc2MagazinePhysicalReload::ResourceProbeState(std::int64_t now)const noexcept {
@@ -34,7 +34,7 @@ std::optional<interaction::AmmoSupplyVisualSample> Bc2MagazinePhysicalReload::Bo
  if(!enabled_||!bodyAmmoEnabled_||retiring_||startupUnknown_||supply_.Held()||supply_.Pending()||last_.removalClaim||
     (active_?(tracking.cycle!=owners_.cycle):bool(tracking.cycle)))return {};
  return BuildMagazineBodyAmmo(tracking,currentGun,
-  pouch_.alternateContact.value_or(AmmoSupplyContact{pouch_.pouchCenterMeters,pouch_.pouchRadiusMeters}),bodyAmmoFrame_,now,
+  BodyAmmoContact(),bodyAmmoFrame_,now,
   active_&&lease_?&*lease_:nullptr);
 }
 ReloadKeepAliveResult Bc2MagazinePhysicalReload::Keep(const ReloadCycleControl& c,std::int64_t now)noexcept {
@@ -427,7 +427,8 @@ MagazinePhysicalResult Bc2MagazinePhysicalReload::TickImpl(const MagazinePhysica
   reserve->observedNs,reserve->deadlineNs,unsigned(reserve->loaded),unsigned(reserve->capacity)};
  if(original&&Rigid(s.raw.rawLeftWristWorldMeters)&&Rigid(s.raw.weaponWorldMeters)){
   physical.geometryInput=original->supply.input;physical.geometrySequence=original->supply.input.sequence;
-  physical.weaponFromHandMeters=Multiply(s.raw.rawLeftWristWorldMeters,*InverseRigid(s.raw.weaponWorldMeters));}
+  physical.weaponFromHandMeters=Multiply(s.raw.rawLeftWristWorldMeters,*InverseRigid(s.raw.weaponWorldMeters));
+  physical.competingGripDistanceMeters=s.raw.supportContactDistanceMeters;}
  boundary.currentClaim=hands.Current(InteractionHand::Left);
  last_=interaction_.Update(physical,hands);out.interaction=last_;
  // Keep the FIRST failed grab, before held-input NeedNeutral hides its cause.

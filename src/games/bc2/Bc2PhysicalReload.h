@@ -1,6 +1,7 @@
 #include "Bc2ReloadStartOrigin.h"
 #include "Bc2ReloadObservation.h"
 #include "Bc2ReloadKeepAlive.h"
+#include "Bc2ReloadStart.h"
 #pragma once
 #include "Bc2AmmoSupply.h"
 #include "Bc2MagazineInteraction.h"
@@ -27,6 +28,7 @@ struct PhysicalReloadApi {
     std::int64_t (*clock)(void*)noexcept=nullptr;
     ReloadKeepAliveResult (*keepObserved)(void*,const ReloadCycleControl&)noexcept=nullptr;
     ReloadReserveObservation (*reserveObserved)(void*)noexcept=nullptr;
+    ReloadStartResult (*startObserved)(void*,const ReloadCycleControl&)noexcept=nullptr;
 };
 // Observation labels only. They never authorize native state changes.
 enum class PhysicalReloadCancelReason : unsigned {
@@ -39,7 +41,7 @@ enum class PhysicalReloadCancelReason : unsigned {
 enum PhysicalReloadCancelFlag : unsigned {
     ReloadCancelBodyDraw=1, ReloadCancelFixture=2, ReloadCancelAimInvalid=4,
     ReloadCancelInactive=8, ReloadCancelFire=16, ReloadCancelUse=32,
-    ReloadCancelNextWeapon=64, ReloadCancelPreviousWeapon=128, ReloadCancelNoPouch=256, ReloadCancelMagazineBusy=512
+    ReloadCancelNextWeapon=64, ReloadCancelPreviousWeapon=128, ReloadCancelNoPouch=256, ReloadCancelMagazineBusy=512, ReloadCancelPumpDebt=1024
 };
 struct PhysicalReloadSample {
     bool actionFlagsKnown=false;std::uint64_t actionHeld=0,actionPressed=0;
@@ -79,12 +81,16 @@ public:
     explicit Bc2PhysicalReload(bool enabled=false,PhysicalReloadApi api={},
         interaction::AmmoSupplyConfig pouch=DefaultPouch())noexcept;
     void EnableBeltAmmo(bool enabled=true,interaction::SupplyAnchorFrame frame=interaction::SupplyAnchorFrame::HeadYaw)noexcept {beltEnabled_=enabled;beltFrame_=frame;}
+    interaction::AmmoSupplyContact BodyAmmoContact()const noexcept {
+        return pouch_.alternateContact.value_or(interaction::AmmoSupplyContact{pouch_.pouchCenterMeters,pouch_.pouchRadiusMeters});
+    }
     PhysicalReloadResult Tick(const PhysicalReloadSample&,interaction::HandInteraction&,std::uint64_t& sharedIntent)noexcept;
     std::optional<interaction::SupportGripResult> ContinueSupport(const interaction::SupportGripOwner& owner,
         const interaction::InputFrame& input,const interaction::SupportGripContact& contact,
         const interaction::HandInteractionSample& original,interaction::HandInteractionKey key,
-        interaction::HandInteraction& hands,interaction::SupportGrip& support,std::uint64_t& intent,bool cancel)noexcept {
-        return supportReturn_.Continue(owner,input,contact,original,key,hands,support,intent,cancel);
+        interaction::HandInteraction& hands,interaction::SupportGrip& support,std::uint64_t& intent,bool cancel,
+        const interaction::HandInteractionSample& current)noexcept {
+        return supportReturn_.Continue(owner,input,contact,original,key,hands,support,intent,cancel,current);
     }
     void Cancel(const interaction::HandInteractionSample&,interaction::HandInteraction&,
         PhysicalReloadCancelReason reason=PhysicalReloadCancelReason::External,unsigned sourceFlags=0)noexcept;
@@ -142,7 +148,12 @@ private:
     unsigned feedbackEventCount_=0,feedbackEventDropped_=0;
     ReloadKeepAliveResult Keep(const ReloadCycleControl&,std::int64_t)noexcept;
     std::int64_t acceptedControlDeadline_=0,startupGapDeadline_=0;
+    bool holdEstablished_=false;
+    std::int64_t holdObservationGapDeadline_=0;
     unsigned startupGapWaits_=0,startupGapExpired_=0;
+    std::int64_t startDeferredAt_=0;
+    std::uint64_t startAttemptInput_=0;
+    unsigned startDeferrals_=0;
     std::int64_t pulseUntil_=0,started_=0,lastNow_=0;
     unsigned acquired_=0,startedCount_=0,submitted_=0,completed_=0,cancelled_=0,reconciled_=0;
     unsigned lastGeometryFailure_=0;

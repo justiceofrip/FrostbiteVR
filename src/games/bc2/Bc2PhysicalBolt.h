@@ -1,5 +1,6 @@
 #pragma once
 #include "Bc2NativeCycleService.h"
+#include "Bc2NativeCycleRecovery.h"
 #include "Bc2Rig.h"
 #include "fvr/interaction/BoltWeaponCustody.h"
 #include <memory>
@@ -33,6 +34,12 @@ struct Bc2BoltTracking {
     std::optional<interaction::HandClaim> mechanism,gun;
     interaction::BoltCustodyPhase custody=interaction::BoltCustodyPhase::Idle;
     interaction::WeaponCyclePhase mechanismPhase=interaction::WeaponCyclePhase::Idle;
+    interaction::WeaponCycleFailure mechanismFailure=interaction::WeaponCycleFailure::None;
+    bool rawContactValid=false;
+    std::uint64_t rawInputSequence=0;
+    float rawContactDistance=0;
+    std::optional<interaction::WeaponCycleIdleDebtLease> recovery;
+    std::optional<interaction::PhysicalWeaponCycleIdleDebtTarget> recoveryTarget;
 };
 struct Bc2PhysicalBoltApi {
     void* context=nullptr;
@@ -40,6 +47,7 @@ struct Bc2PhysicalBoltApi {
     std::optional<Bc2NativeCycleView> (*view)(void*,std::int64_t)noexcept=nullptr;
     bool (*ack)(void*,const interaction::WeaponCycleReady&)noexcept=nullptr;
     void (*cancel)(void*)noexcept=nullptr;
+    Bc2PhysicalCycleRecoveryApi recovery{};
 };
 struct Bc2PhysicalBoltSample {
     ReloadStateOwner nativeOwner{};
@@ -64,6 +72,7 @@ struct Bc2PhysicalBoltResult {
     bool blocksFire=false,ownsGunCustody=false,ownsMechanism=false;
     std::optional<interaction::HandGunCustodyResult> custodyChange;
     std::optional<interaction::WeaponCycleReady> settled;
+    std::optional<interaction::WeaponCycleIdleDebtReady> recovered;
 };
 // One instance per interaction domain. The ordinary gun/support adapter must
 // yield its claims while ownsGunCustody is true and adopt custodyChange claims
@@ -75,12 +84,19 @@ public:
     bool BlocksFire()const noexcept{return blocks_;}
     void Cancel(const interaction::HandInteractionSample&,interaction::HandInteraction&)noexcept;
 private:
+    Bc2PhysicalBoltResult TickRecovery(const Bc2PhysicalBoltSample&,const Bc2NativeCycleRecoveryView&,
+        interaction::HandInteraction&,std::uint64_t& intent)noexcept;
     std::shared_ptr<const Bc2BoltCalibration> calibration_;
     Bc2PhysicalBoltApi api_{};
-    interaction::BoltWeaponCustody custody_;
+    std::unique_ptr<interaction::BoltWeaponCustody> custody_=std::make_unique<interaction::BoltWeaponCustody>();
     std::optional<interaction::WeaponCycleLease> cycle_;
     std::optional<interaction::WeaponCycleRelease> pending_;
     std::optional<interaction::WeaponCycleReady> acknowledged_;
+    std::unique_ptr<interaction::BoltWeaponIdleDebtCustody> recoveryCustody_;
+    std::optional<interaction::WeaponCycleIdleDebtLease> recoveryCycle_;
+    std::optional<interaction::WeaponCycleIdleDebtRelease> recoveryPending_;
+    std::optional<interaction::WeaponCycleIdleDebtReady> recoveryAcknowledged_;
+    bool recoverySettled_=false,recoveryPlacement_=false;
     ReloadStateOwner owner_{};
     bool blocks_=false,settled_=false;
 };

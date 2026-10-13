@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <optional>
 namespace fvr::bc2 {
 enum class OwnerPublicationStatus:unsigned {Published,Deferred,Rejected,Superseded};
 enum class OwnerPublicationReason:unsigned {
@@ -23,5 +24,16 @@ constexpr OwnerCopyAdmission AdmitOwnerPublicationCopy(bool held,std::int64_t ob
 }
 constexpr bool OwnerCopyUnavailableCancels(OwnerCopyAdmission result)noexcept {
  return result==OwnerCopyAdmission::Rejected;
+}
+// Caller holds the publication gate. Keep the complete original lease and its
+// deadline; the supplied predicate retains revision/enable/lifetime checks.
+template<class Lease,class Clock,class Current>
+std::optional<Lease> CopyPublishedOwnerAtAcquisition(const Lease& published,
+ std::int64_t callbackEntry,Clock&& clock,Current&& current)noexcept {
+ const auto acquired=clock();
+ // Another thread may publish after this callback entered but before it
+ // acquired the gate. Only the clock at acquisition can judge that snapshot.
+ if(callbackEntry<=0||acquired<callbackEntry||!current(published,acquired))return {};
+ return published;
 }
 } // namespace fvr::bc2

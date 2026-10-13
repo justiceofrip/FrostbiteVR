@@ -2,9 +2,9 @@
 #include "fvr/interaction/WeaponCycle.h"
 
 namespace fvr::interaction {
-struct PhysicalWeaponCycleSample {
+template<class Authority> struct PhysicalWeaponCycleSampleT {
     HandInteractionSample source{};
-    WeaponCycleLease lease{};
+    Authority lease{};
     math::Matrix4 rawContact{};
     bool grip=false;
     HandClaimToken gun{};
@@ -18,8 +18,8 @@ struct PhysicalWeaponCycleSample {
     // The arbiter validates this packet from its history via *From APIs.
     std::optional<HandInteractionSample> contactSource;
 };
-struct PhysicalWeaponCycleTarget {
-    WeaponCycleLease lease{};
+template<class Authority> struct PhysicalWeaponCycleTargetT {
+    Authority lease{};
     HandClaimToken mechanism{},gun{};
     std::uint64_t profile=0,revision=0,inputSequence=0;
     std::int64_t observedNs=0,deadlineNs=0;
@@ -27,19 +27,19 @@ struct PhysicalWeaponCycleTarget {
     float travel=0,rotation=0;
     WeaponCycleHandAssignment hands{};
 };
-struct PhysicalWeaponCycleResult {
-    WeaponCycleResult cycle{};
-    std::optional<PhysicalWeaponCycleTarget> target;
+template<class Authority> struct PhysicalWeaponCycleResultT {
+    WeaponCycleResultT<Authority> cycle{};
+    std::optional<PhysicalWeaponCycleTargetT<Authority>> target;
     // Emitted once. A failed adapter submission must explicitly reject the
     // transaction; repeated controller packets never reissue a native call.
-    std::optional<WeaponCycleRelease> release;
+    std::optional<WeaponCycleReleaseT<Authority>> release;
     bool ownsMechanism=false;
 };
-inline bool CurrentPhysicalWeaponCycleTarget(const PhysicalWeaponCycleTarget& target,
-    const WeaponCycleLease& lease,const HandInteractionSample& input,const HandClaim& mechanism,const HandClaim& gun,
+template<class Authority> inline bool CurrentPhysicalWeaponCycleTarget(const PhysicalWeaponCycleTargetT<Authority>& target,
+    const Authority& lease,const HandInteractionSample& input,const HandClaim& mechanism,const HandClaim& gun,
     WeaponCycleHandAssignment expectedHands={})noexcept {
     using namespace weapon_cycle_detail;
-    return Hands(expectedHands)&&target.hands==expectedHands&&target.profile&&target.revision&&Same(target.lease,lease)&&Lease(target.lease,input.nowNs)&&Lease(lease,input.nowNs)&&
+    return Hands(expectedHands)&&AuthorityForHands(lease,expectedHands)&&AuthorityForHands(target.lease,expectedHands)&&target.hands==expectedHands&&target.profile&&target.revision&&Same(target.lease,lease)&&Lease(target.lease,input.nowNs)&&Lease(lease,input.nowNs)&&
         lease.sequence>=target.lease.sequence&&lease.observedNs>=target.lease.observedNs&&
         (lease.sequence!=target.lease.sequence||(lease.observedNs==target.lease.observedNs&&lease.deadlineNs==target.lease.deadlineNs))&&
         input.owner==lease.owner&&input.focused&&input.tracked[0]&&input.tracked[1]&&!input.released[0]&&!input.released[1]&&
@@ -60,14 +60,22 @@ inline bool CurrentPhysicalWeaponCycleTarget(const PhysicalWeaponCycleTarget& ta
 // geometry and current GunHold are adapter inputs. This owns only its assigned
 // Mechanism claim. It never writes ammunition, invokes native code or decides
 // that an unsupported weapon is admitted.
-class PhysicalWeaponCycle {
+template<class Authority> class PhysicalWeaponCycleT {
 public:
-    PhysicalWeaponCycle()=default;
-    PhysicalWeaponCycle(const PhysicalWeaponCycle&)=delete;
-    PhysicalWeaponCycle& operator=(const PhysicalWeaponCycle&)=delete;
+    using WeaponCycleLease=Authority;
+    using WeaponCycleRelease=WeaponCycleReleaseT<Authority>;
+    using WeaponCycleReady=WeaponCycleReadyT<Authority>;
+    using WeaponCycleResult=WeaponCycleResultT<Authority>;
+    using WeaponCycle=WeaponCycleT<Authority>;
+    using PhysicalWeaponCycleSample=PhysicalWeaponCycleSampleT<Authority>;
+    using PhysicalWeaponCycleTarget=PhysicalWeaponCycleTargetT<Authority>;
+    using PhysicalWeaponCycleResult=PhysicalWeaponCycleResultT<Authority>;
+    PhysicalWeaponCycleT()=default;
+    PhysicalWeaponCycleT(const PhysicalWeaponCycleT&)=delete;
+    PhysicalWeaponCycleT& operator=(const PhysicalWeaponCycleT&)=delete;
     bool Begin(const WeaponCycleProfile& profile,const WeaponCycleLease& lease,std::int64_t now)noexcept {
         if(mechanism_||awaitingOutcome_||!policy_.Begin(profile,lease,now))return false;
-        profile_=profile;identity_=lease;target_.reset();submitted_=false;adoptSupport_=true;
+        profile_=profile;identity_=lease;target_.reset();submitted_=false;adoptSupport_=weapon_cycle_detail::InitialHeldAdoption(lease);
         previousGrip_=true;lastInput_=0;return true;
     }
     bool ObserveReady(const WeaponCycleReady& ready,std::int64_t now)noexcept {
@@ -82,6 +90,44 @@ public:
         // Adapter proof of rejection/non-dispatch is required. A timeout or
         // missing callback is not permission to discard an ambiguous request.
         if(awaitingOutcome_&&submittedRelease_==release){policy_.Cancel(WeaponCycleFailure::NativeRejected);target_.reset();awaitingOutcome_=false;}
+    }
+    void CancelPhysical(const HandInteractionSample& source,HandInteraction& hands)noexcept {
+        // Cleanup is not a new input observation. An older cancelled recognizer
+        // may outlive its recovery and the next consumer's acquisition in this
+        // same packet. Only release custody still owned by this exact token.
+        if(mechanism_){
+            const auto current=hands.Current(mechanism_->hand);
+            if(current&&current->token==*mechanism_)hands.Release(source,*mechanism_);
+        }
+        mechanism_.reset();target_.reset();adoptSupport_=false;
+        const auto phase=policy_.Phase();
+        if(!awaitingOutcome_&&phase!=WeaponCyclePhase::Idle&&phase!=WeaponCyclePhase::Complete&&phase!=WeaponCyclePhase::Cancelled)
+            policy_.Cancel(WeaponCycleFailure::Tracking);
+        // Keep the original native deadline and exact transaction, including
+        // an ambiguous timed-out outcome. Cleanup cannot acknowledge it.
+        policy_.PollNative(source.nowNs);
+    }
+    // Existing hand custody and permission to move a native mechanism have
+    // different evidence lifetimes. A fresh original controller/contact packet
+    // can maintain this exact grasp while the adapter observes the same owed
+    // mechanism but has no current native-use lease. This cannot acquire a
+    // claim, advance the gesture, renew a target or emit a native release.
+    bool RetainGrasp(const HandInteractionSample& current,const HandInteractionSample& original,
+        const HandClaimToken& gun,HandInteraction& hands)noexcept {
+        const auto phase=policy_.Phase();
+        if(!mechanism_||awaitingOutcome_||phase==WeaponCyclePhase::Idle||phase==WeaponCyclePhase::Complete||
+           phase==WeaponCyclePhase::Cancelled||phase==WeaponCyclePhase::AwaitingNative||
+           current.owner!=identity_.owner||original.owner!=identity_.owner||
+           !current.focused||!original.focused||!current.tracked[0]||!current.tracked[1]||
+           !original.tracked[0]||!original.tracked[1]||current.released[0]||current.released[1]||
+           original.released[0]||original.released[1])return false;
+        const auto held=hands.Current(profile_.hands.mechanism),right=hands.Current(profile_.hands.gun);
+        if(!held||held->token!=*mechanism_||!right||right->token!=gun||
+           gun.owner!=identity_.owner||gun.item!=identity_.item||gun.kind!=HandClaimKind::GunHold||
+           held->token.prerequisiteClaim!=gun.id||right->inputSequence!=current.sequence||
+           right->deadlineNs<=current.nowNs)return false;
+        return hands.RenewFrom(current,original,*mechanism_,
+            {identity_.mechanism,original.sequence,original.deadlineNs,true}).accepted;
     }
     PhysicalWeaponCycleResult Update(const PhysicalWeaponCycleSample& sample,HandInteraction& hands)noexcept {
         using namespace weapon_cycle_detail;const auto& s=sample.source;
@@ -123,6 +169,21 @@ public:
             if(phase!=WeaponCyclePhase::Cancelled)policy_.Cancel(s.owner==identity_.owner?WeaponCycleFailure::Tracking:WeaponCycleFailure::Owner);
             return Output(policy_.PollNative(s.nowNs),sample,hands);
         }
+        if(mechanism_&&(!sample.grip||s.released[HandIndex(profile_.hands.mechanism)])){
+            // A real release invalidates older render packets through the
+            // arbiter's release barrier. Preserve that physical reason so the
+            // same owed cycle can be regripped; it is not forged evidence.
+            Drop(s,hands);adoptSupport_=false;
+            return Output(policy_.Cancel(WeaponCycleFailure::Released),sample,hands);
+        }
+        if(sample.contactSource&&!hands.HasRecordedEvidence(original,profile_.hands.mechanism)){
+            // Before acquisition an unavailable historical packet grants no
+            // gesture progress. It is not loss of an established grasp and
+            // must not cancel the native recovery grant merely while waiting
+            // for the first usable neutral/contact packet after an exchange.
+            if(mechanism_){Drop(s,hands);adoptSupport_=false;policy_.Cancel(WeaponCycleFailure::Evidence);}
+            return Output(policy_.PollNative(s.nowNs),sample,hands);
+        }
         if(phase==WeaponCyclePhase::Cancelled){
             Drop(s,hands);adoptSupport_=false;
             // Must remain the original held native cycle and timeout. Native
@@ -133,9 +194,8 @@ public:
         if(mechanism_){
             const auto held=hands.Current(profile_.hands.mechanism);
             if(!held||held->token!=*mechanism_||!sample.grip||s.released[HandIndex(profile_.hands.mechanism)]||
-               !(sample.contactSource?hands.RenewFrom(s,original,*mechanism_,{identity_.mechanism,original.sequence,original.deadlineNs,true}):
-                   hands.Renew(s,*mechanism_,{identity_.mechanism,s.sequence,
-                       held->inputSequence==s.sequence?held->deadlineNs:s.deadlineNs,true})).accepted){
+               !hands.RenewFrom(s,s,*mechanism_,{identity_.mechanism,s.sequence,
+                   held->inputSequence==s.sequence?held->deadlineNs:s.deadlineNs,true}).accepted){
                 Drop(s,hands);adoptSupport_=false;
                 return Output(policy_.Cancel(WeaponCycleFailure::Released),sample,hands);
             }
@@ -212,4 +272,12 @@ private:
     std::uint64_t lastInput_=0;
     bool previousGrip_=true,submitted_=false,adoptSupport_=false,awaitingOutcome_=false;
 };
+using PhysicalWeaponCycleSample=PhysicalWeaponCycleSampleT<WeaponCycleLease>;
+using PhysicalWeaponCycleTarget=PhysicalWeaponCycleTargetT<WeaponCycleLease>;
+using PhysicalWeaponCycleResult=PhysicalWeaponCycleResultT<WeaponCycleLease>;
+using PhysicalWeaponCycle=PhysicalWeaponCycleT<WeaponCycleLease>;
+using PhysicalWeaponCycleIdleDebtSample=PhysicalWeaponCycleSampleT<WeaponCycleIdleDebtLease>;
+using PhysicalWeaponCycleIdleDebtTarget=PhysicalWeaponCycleTargetT<WeaponCycleIdleDebtLease>;
+using PhysicalWeaponCycleIdleDebtResult=PhysicalWeaponCycleResultT<WeaponCycleIdleDebtLease>;
+using PhysicalWeaponCycleIdleDebt=PhysicalWeaponCycleT<WeaponCycleIdleDebtLease>;
 }

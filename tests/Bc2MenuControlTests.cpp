@@ -43,6 +43,40 @@ int InitialSpaceAndMalformedControlsDoNotReplay(){
     c=Control(4,7,4);c.flags=ipc::MenuDown;edge=p.Observe(ipc::ChannelResult::Ok,c);CHECK(edge.read==MenuControlRead::Inactive&&!edge.toggle&&!edge.cancel);
     c=Control(5,8,5);edge=p.Observe(ipc::ChannelResult::Ok,c);CHECK(edge.read==MenuControlRead::Rearmed&&!edge.toggle&&!edge.cancel);return 0;
 }
+int ContentionRetainsOnlyUnexpiredOwnedInput(){
+    MenuControlSequence p;auto c=Control(1);c.flags|=ipc::MenuPoint|ipc::MenuDown;
+    CHECK(p.Observe(ipc::ChannelResult::Ok,c,800).read==MenuControlRead::Rearmed);
+    CHECK(p.RetainPointerAcrossContention(1,800));
+    // Busy output is unusable, even if its bytes appear to extend the deadline.
+    auto garbage=Control(99,99);garbage.deadlineQpc=999999;
+    for(std::int64_t now=801;now<1000;++now){
+        const auto e=p.Observe(ipc::ChannelResult::Busy,garbage,now);
+        CHECK(e.read==MenuControlRead::Busy&&!e.toggle&&!e.cancel);
+        CHECK(p.RetainPointerAcrossContention(1,now));
+        CHECK(!p.RetainPointerAcrossContention(2,now));
+    }
+    CHECK(p.Observe(ipc::ChannelResult::Busy,garbage,1000).read==MenuControlRead::Inactive);
+    CHECK(!p.RetainPointerAcrossContention(1,1000));
+    c=Control(2,1);c.deadlineQpc=1200;
+    const auto after=p.Observe(ipc::ChannelResult::Ok,c,1001);
+    CHECK(after.read==MenuControlRead::Rearmed&&!after.toggle);
+    CHECK(!p.RetainPointerAcrossContention(1,1002)); // fresh neutral is not down
+    c=Control(3,2);c.deadlineQpc=1400;c.flags|=ipc::MenuPoint|ipc::MenuDown;
+    CHECK(p.Observe(ipc::ChannelResult::Ok,c,1200).toggle);
+    CHECK(p.RetainPointerAcrossContention(1,1201));
+    CHECK(p.Observe(ipc::ChannelResult::Busy,{},1199).read==MenuControlRead::Inactive);
+    CHECK(!p.RetainPointerAcrossContention(1,1202)); // clock reversal retires it
+    c=Control(4);c.flags|=ipc::MenuPoint|ipc::MenuDown;
+    CHECK(p.Observe(ipc::ChannelResult::Ok,c,1000).read==MenuControlRead::Inactive);
+    for(const auto lost:{ipc::ChannelResult::Timeout,ipc::ChannelResult::Closed,ipc::ChannelResult::Invalid}){
+        c.deadlineQpc=1500;p.Observe(ipc::ChannelResult::Ok,c,1300);
+        CHECK(p.RetainPointerAcrossContention(1,1301));
+        CHECK(p.Observe(lost,{},1302).read==MenuControlRead::Inactive);
+        CHECK(!p.RetainPointerAcrossContention(1,1303));
+    }
+    return 0;
+}
 }
 int main(){CHECK(!BusyKeepsUnseenEdge());CHECK(!ExpiryAndFocusRequireNeutralBaseline());CHECK(!InitialSpaceAndMalformedControlsDoNotReplay());
-    std::cout<<"Three menu-control edge groups passed; Busy emits no input and preserves the next fresh edge.\n";return 0;}
+    CHECK(!ContentionRetainsOnlyUnexpiredOwnedInput());
+    std::cout<<"Four menu-control groups passed; contention retains only the original unexpired press lease.\n";return 0;}

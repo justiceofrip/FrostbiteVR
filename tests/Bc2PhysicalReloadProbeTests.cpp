@@ -1,5 +1,6 @@
 #include "Bc2PhysicalReloadProbe.h"
 #include "Bc2PhysicalReloadPreparation.h"
+#include "Bc2SupportControllerMapping.h"
 #include "NativeProbeConfig.h"
 #include "fvr/interaction/TrackedRig.h"
 #include "Test.h"
@@ -33,9 +34,25 @@ int InverseMatchesActualTrackedRig(){for(bool anatomical:{false,true})for(float 
         for(unsigned axis=0;axis<3;++axis)controller.values[3][axis]*=units;
         auto wrist=Multiply(attachment,Multiply(controller,body));wrist.values[3]=tracked.left.values[3];return wrist;
     };
-    ReloadRawContact contact;contact.valid=true;contact.owner.space=7;contact.rigFingerprint=SpasReloadRig;contact.inputEvidence.sequence=source.generation;
-    contact.rawLeftWristWorldMeters=publishedWrist(*initial,source);contact.trackingBodyWorldMeters=body;
-    for(unsigned axis=0;axis<3;++axis){contact.rawLeftWristWorldMeters.values[3][axis]/=units;contact.trackingBodyWorldMeters.values[3][axis]/=units;}
+    // Use the production support publication with NO magazine/shell tracking.
+    // It must invert both wrist mappings, across world scales and body yaw.
+    const ReloadStateOwner nativeOwner{0x1000,0x2000,0x3000,0x4000,5,17,7};
+    const HandInteractionSample evidence{{(std::uint64_t(nativeOwner.weak)<<32)|nativeOwner.soldier,5,19,7},
+        source.generation,1000000000,1100000000,1010000000,true,{true,true},{true,false}};
+    RigIdentity identity;identity.soldier=nativeOwner.soldier;identity.weak=nativeOwner.weak;
+    identity.pose=0x5000;identity.skeleton=0x6000;identity.count=120;
+    const auto make=[&](const auto& o,const auto& h,const auto& i,const auto& r,const auto& b,float u){
+        return BuildSupportControllerMapping(o,h,i,r,SpasReloadRig,publishedWrist(*initial,source),initial->weapon,b,u,1010000000);};
+    const auto contact=make(nativeOwner,evidence,source,identity,body,units);
+    CHECK(contact.valid&&!contact.nativeShellVisible&&contact.inputEvidence.observedNs==evidence.observedNs&&
+        contact.inputEvidence.deadlineNs==evidence.deadlineNs&&contact.owner==nativeOwner&&contact.rig==identity);
+    auto badEvidence=evidence;++badEvidence.sequence;CHECK(!make(nativeOwner,badEvidence,source,identity,body,units).valid);
+    badEvidence=evidence;badEvidence.deadlineNs=1010000000;CHECK(!make(nativeOwner,badEvidence,source,identity,body,units).valid);
+    badEvidence=evidence;badEvidence.tracked[0]=false;CHECK(!make(nativeOwner,badEvidence,source,identity,body,units).valid);
+    auto badOwner=nativeOwner;++badOwner.space;CHECK(!make(badOwner,evidence,source,identity,body,units).valid);
+    auto badRig=identity;++badRig.soldier;CHECK(!make(nativeOwner,evidence,source,badRig,body,units).valid);
+    CHECK(!make(nativeOwner,evidence,source,identity,math::Matrix4{},units).valid);
+    CHECK(!make(nativeOwner,evidence,source,identity,body,0).valid);
     auto actual=source;actual.generation++;actual.predictedNs+=10000000;actual.hands[0].grip.position={-.15f,-.32f,-.5f};
     actual.hands[0].grip.orientation={0,.3f,.1f,std::sqrt(.90f)};
     const auto nativeDesired=rig.Update(owner,actual,body,left,right,weapon,arms);CHECK(nativeDesired);

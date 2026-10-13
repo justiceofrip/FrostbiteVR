@@ -1,4 +1,6 @@
 #include "Bc2TrackedViews.h"
+#include "Bc2SceneMilestoneWriter.h"
+#include "Bc2GraphicsThreadObservation.h"
 #include "Bc2StereoProgressEvidence.h"
 #include "Bc2StereoRecovery.h"
 #include "fvr/runtime/RenderOwnerRecovery.h"
@@ -26,6 +28,7 @@
 #include "fvr/graphics/D3D11PresentationPacing.h"
 #include "fvr/graphics/DesktopImageEvidence.h"
 #include "fvr/graphics/DiagnosticImageLifetime.h"
+#include "fvr/graphics/RenderBootstrap.h"
 #include "fvr/graphics/DesktopWindowMode.h"
 #include "NativeWorkPool.h"
 #include <Windows.h>
@@ -48,10 +51,15 @@
 #include <intrin.h>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
+#include <sstream>
 #include <stdexcept>
 #include <vector>
 namespace {
 using Microsoft::WRL::ComPtr;
+namespace sceneTrace=fvr::bc2::sceneMilestones;
+using fvr::runtime::SceneMilestoneKind;
+using fvr::runtime::SceneMilestoneStage;
 using WorldFn=void(__thiscall*)(void*,void*);
 using PrepareFn=void*(__thiscall*)(void*,void*,void*);
 using DrawFn=void(__thiscall*)(void*,void*,void*,void*);
@@ -88,6 +96,28 @@ struct ColorCapture {
     std::atomic<bool> complete=false;
 };
 std::array<ColorCapture,3> colorCaptures;
+#ifdef FVR_BC2_SCENE_DEPTH_CAPTURE
+std::array<ColorCapture,2> sceneDepthCaptures,sceneDepthColors;
+std::array<fvr::graphics::BodyPropEye,2> sceneDepthProps{};
+unsigned sceneDepthFrame=0,sceneDepthMask=0;
+unsigned sceneDepthFirstValidFrame=0;
+thread_local int sceneDepthDrawingEye=-1;
+struct SceneDepthCandidate {
+    ComPtr<ID3D11Texture2D> texture;ColorCapture capture;
+    std::uint64_t resource=0;D3D11_VIEWPORT viewport{};
+    unsigned draws=0,depthFunction=0,depthWrite=0;
+};
+struct SceneDepthCalls {
+    unsigned indexed=0,nonIndexed=0,indexedInstanced=0,instanced=0;
+    unsigned noDepth=0,unsupported=0,wrongSize=0,wrongViewport=0;
+    std::array<unsigned,128> formats{};
+};
+std::array<SceneDepthCalls,2> sceneDepthCalls{};
+std::array<std::array<SceneDepthCandidate,8>,2> sceneDepthCandidates;
+std::array<unsigned,2> sceneDepthCandidateCounts{},sceneDepthCandidateOverflow{};
+std::array<std::array<std::array<std::byte,0x460>,4>,2> sceneDepthViewCopies{};
+std::array<unsigned,2> sceneDepthViewMask{};
+#endif
 fvr::graphics::DiagnosticImageLifetime diagnosticImageLifetime;
 struct WeaponVisibilityEyeRow {
     unsigned frame=0,eye=0,phase=0;std::uint64_t request=0,input=0,draw=0,receiptInput=0;
@@ -100,7 +130,7 @@ struct BodyHolsterEyeRow {
     std::int64_t nowNs=0,receiptDeadlineNs=0;bool hidden=false,paired=false,free=false,suppressed=false;
 };
 std::array<BodyHolsterEyeRow,512> bodyHolsterEyes{};unsigned bodyHolsterEyeCount=0;
-std::array<void*,11> hookEntries{};std::atomic<bool> deferredCleanup=false;
+std::array<void*,14> hookEntries{};std::atomic<bool> deferredCleanup=false;
 struct WorkPoolExperiment {
     std::atomic<unsigned> stage=0; // 0 idle, 1 leased, 2 restored, 3 rejected
     unsigned owner=0,vtable=0,global=0,reset=0,thread=0,frame=0,peak=0;
@@ -165,7 +195,7 @@ Target BoundTarget()noexcept {
 // A single read-only GPU copy after the original world draw. Polls Map with
 // DO_NOT_WAIT on the same graphics thread; never waits for GPU completion or
 // changes any bindings. Only the completed owned pixels cross to the writer.
-void CaptureWorldColor(ColorCapture& c,unsigned frame,ID3D11Texture2D* explicitSource=nullptr) noexcept {
+void CaptureWorldColor(ColorCapture& c,unsigned frame,ID3D11Texture2D* explicitSource=nullptr,bool rawDepth=false) noexcept {
     if(c.step==ColorCapture::Step::Finished||c.step==ColorCapture::Step::Failed)return;
     const auto fail=[&](HRESULT hr){c.error=hr;c.step=ColorCapture::Step::Failed;c.complete.store(true,std::memory_order_release);};
     try {
@@ -184,7 +214,9 @@ void CaptureWorldColor(ColorCapture& c,unsigned frame,ID3D11Texture2D* explicitS
             }
             D3D11_TEXTURE2D_DESC desc{};texture->GetDesc(&desc);
             if(!desc.Width||!desc.Height||desc.Width>4096||desc.Height>4096||desc.ArraySize!=1||desc.MipLevels!=1||desc.SampleDesc.Count!=1||
-               (desc.Format!=DXGI_FORMAT_R8G8B8A8_UNORM&&desc.Format!=DXGI_FORMAT_R8G8B8A8_UNORM_SRGB&&desc.Format!=DXGI_FORMAT_B8G8R8A8_UNORM&&desc.Format!=DXGI_FORMAT_B8G8R8A8_UNORM_SRGB)){fail(E_INVALIDARG);return;}
+               (rawDepth?(desc.Format!=DXGI_FORMAT_R24G8_TYPELESS&&desc.Format!=DXGI_FORMAT_D24_UNORM_S8_UINT&&
+                          desc.Format!=DXGI_FORMAT_R32_TYPELESS&&desc.Format!=DXGI_FORMAT_D32_FLOAT):
+               (desc.Format!=DXGI_FORMAT_R8G8B8A8_UNORM&&desc.Format!=DXGI_FORMAT_R8G8B8A8_UNORM_SRGB&&desc.Format!=DXGI_FORMAT_B8G8R8A8_UNORM&&desc.Format!=DXGI_FORMAT_B8G8R8A8_UNORM_SRGB))){fail(E_INVALIDARG);return;}
             c.target={desc.Width,desc.Height,unsigned(desc.Format),1};c.frame=frame;
             desc.Usage=D3D11_USAGE_STAGING;desc.BindFlags=0;desc.CPUAccessFlags=D3D11_CPU_ACCESS_READ;desc.MiscFlags=0;
             HRESULT hr=device->CreateTexture2D(&desc,nullptr,&c.staging);if(FAILED(hr)){fail(hr);return;}
@@ -375,18 +407,19 @@ struct StereoExperiment {
 } stereoExperiment;
 struct StereoShutdownEvidence {
     unsigned captured=0,rejected=0,requestReferencesBefore=0;
+    unsigned pendingReferencesBefore=0;
     bool afterCaptured=false;
     ListSnapshot historical{},before{},expected{},after{};
 } stereoShutdown;
 fvr::bc2::StereoProgressEvidence stereoProgressEvidence;
 struct StereoRecoveryNative {
     struct Code {unsigned address=0,size=0;std::uint64_t hash=0;};
-    std::array<Code,19> code{};
+    std::array<Code,21> code{};
     unsigned worldType=0,subsystemType=0,requestAddRef=0,requestRelease=0,retiredCacheResize=0;
     fvr::runtime::RenderOwnerRecovery policy;
     std::atomic<unsigned> callbacks=0,attempts=0,completed=0,rejected=0,failure=0,retirementStep=0;
     std::atomic<unsigned> cacheClearCalls=0,cacheClearReceipts=0;
-    std::atomic<unsigned> oldWorld=0,oldRequest=0,oldEye=0,newWorld=0,newRequest=0,retiredViews=0;
+    std::atomic<unsigned> oldWorld=0,oldRequest=0,oldEye=0,newWorld=0,newRequest=0,retiredViews=0,retiredPendingReferences=0;
     std::atomic<bool> completedOnStop=false;
     std::atomic<std::uint64_t> cancelUnwrittenRequest=0;
 } stereoRecovery;
@@ -632,7 +665,7 @@ std::int64_t ReloadDrawNowNs()noexcept {
     if(reloadDrawFrequency<=0)return 0;const auto qpc=Qpc();
     return (qpc/reloadDrawFrequency)*1000000000+(qpc%reloadDrawFrequency)*1000000000/reloadDrawFrequency;
 }
-std::array<std::array<std::atomic<std::uint64_t>,4>,3> bodySourceReads{};
+std::array<std::array<std::atomic<std::uint64_t>,4>,4> bodySourceReads{};
 template<class Reader> auto ReadBodySource(Reader read,unsigned kind)noexcept {
     // A tracking publication may change during a source's validated read.
     // Re-read current evidence with a current validation clock, at most three
@@ -646,7 +679,8 @@ template<class Reader> auto ReadBodySource(Reader read,unsigned kind)noexcept {
 fvr::bc2::BodyPropSources ReadBodySources()noexcept {
     return {ReadBodySource(fvr::bc2::rigPublication::ReadBodyAmmoRenderSource,0),
         ReadBodySource(fvr::bc2::rigPublication::ReadHolsteredBodyRenderSource,1),
-        ReadBodySource(fvr::bc2::rigPublication::ReadCarriedBodyRenderSource,2)};
+        ReadBodySource(fvr::bc2::rigPublication::ReadCarriedBodyRenderSource,2),
+        ReadBodySource(fvr::bc2::rigPublication::ReadStowedAmmoRenderSource,3)};
 }
 struct BufferEvidence {ComPtr<ID3D11Buffer> staging;std::vector<unsigned char> bytes;unsigned source=0;bool done=false;};
 struct EyeBufferEvidence {bool queued=false;std::atomic<bool> complete=false;std::array<BufferEvidence,14> buffers;ComPtr<ID3D11DeviceContext> context;unsigned indices=0;};
@@ -759,16 +793,118 @@ struct OpticViewScope {
     explicit OpticViewScope(std::optional<fvr::bc2::opticFilterRuntime::View> next):previous(opticDrawView){opticDrawView=next;}
     ~OpticViewScope(){opticDrawView=previous;}
 };
+#ifdef FVR_BC2_BODY_SCENE_DEPTH
+// The measured BC2 pass clears one full-resolution D24S8 allocation for
+// world, then again for first-person geometry. This is a scoped observation,
+// not a draw-count signature. Any different sequence omits the attachment.
+struct BodySceneDepthEye {
+    fvr::ipc::FrameLease lease{};unsigned eye=0,clears=0;
+    bool invalid=false;ComPtr<ID3D11Texture2D> source;
+};
+thread_local BodySceneDepthEye* bodySceneDepthEye=nullptr;
+std::atomic<unsigned> bodyDepthBegins=0,bodyDepthEnds=0,bodyDepthRejected=0;
+using ClearDepthFn=void(STDMETHODCALLTYPE*)(ID3D11DeviceContext*,ID3D11DepthStencilView*,UINT,FLOAT,UINT8);
+ClearDepthFn clearDepthOriginal=nullptr;
+void STDMETHODCALLTYPE ClearBodySceneDepthHook(ID3D11DeviceContext* context,ID3D11DepthStencilView* dsv,UINT flags,FLOAT depth,UINT8 stencil){
+    auto* e=bodySceneDepthEye;
+    if(e&&!e->invalid&&context==observedImmediateContext&&dsv){
+        ComPtr<ID3D11Resource> resource;ComPtr<ID3D11Texture2D> source;dsv->GetResource(&resource);
+        if(SUCCEEDED(resource.As(&source))){
+            D3D11_TEXTURE2D_DESC d{};source->GetDesc(&d);
+            if(d.Width==e->lease.requirements.width&&d.Height==e->lease.requirements.height&&d.Format==DXGI_FORMAT_R24G8_TYPELESS){
+                // Copy world BEFORE the native first-person clear. No target
+                // binding, query, shader dispatch or extra native draw occurs.
+                if(flags!=(D3D11_CLEAR_DEPTH|D3D11_CLEAR_STENCIL)||depth!=1.f||stencil||
+                   ++e->clears>2||(e->source&&e->source.Get()!=source.Get()))e->invalid=true;
+                else if(e->clears==1)e->source=source;
+                else if(!frameBridge.CaptureDepth(e->eye,0,source.Get(),e->lease))e->invalid=true;
+            }
+        }
+    }
+    clearDepthOriginal(context,dsv,flags,depth,stencil);
+}
+struct BodySceneDepthScope {
+    BodySceneDepthEye state;BodySceneDepthEye* previous=bodySceneDepthEye;bool active=false;
+    BodySceneDepthScope(bool owned,unsigned eye){
+        bodySceneDepthEye=nullptr;
+        if(!owned)return;
+        state.lease=tracked.lease;state.eye=eye;
+        if(eye==0&&!frameBridge.BeginDepthCapture(state.lease,false))return;
+        active=true;bodySceneDepthEye=&state;++bodyDepthBegins;
+    }
+    void End()noexcept {
+        if(!active)return;active=false;bodySceneDepthEye=previous;
+        if(!state.invalid&&state.clears==2&&state.source&&
+           tracked.state.load(std::memory_order_acquire)==1&&
+           tracked.lease.requestId==state.lease.requestId&&
+           U32(stereoExperiment.world+0x88)==state.lease.native.frameId&&
+           frameBridge.CaptureDepth(state.eye,1,state.source.Get(),state.lease))++bodyDepthEnds;
+        else ++bodyDepthRejected;
+        state.source.Reset();
+    }
+    ~BodySceneDepthScope(){bodySceneDepthEye=previous;}
+};
+#endif
+#ifdef FVR_BC2_SCENE_DEPTH_CAPTURE
+void ObserveSceneDepthCandidate(ID3D11DeviceContext* context,unsigned kind)noexcept;
+#endif
 void STDMETHODCALLTYPE NonIndexedDrawHook(ID3D11DeviceContext* context,UINT count,UINT start){
     if(opticEvidenceEnabled)fvr::bc2::opticFilterRuntime::CaptureDraw(context,false,count,start);
     if(context==observedImmediateContext&&drawingEvidenceEye>=0)CapturePassBuffers(context,unsigned(drawingEvidenceEye),count,0);
     nonIndexedDrawOriginal(context,count,start);
+#ifdef FVR_BC2_SCENE_DEPTH_CAPTURE
+    ObserveSceneDepthCandidate(context,1);
+#endif
 }
+#ifdef FVR_BC2_SCENE_DEPTH_CAPTURE
+void ObserveSceneDepthCandidate(ID3D11DeviceContext* context,unsigned kind)noexcept {
+    if(context!=observedImmediateContext||sceneDepthDrawingEye<0||sceneDepthDrawingEye>1||
+       !sceneDepthFrame||sceneDepthFrame!=stereoExperiment.frame)return;
+    const unsigned eye=unsigned(sceneDepthDrawingEye);
+    auto& calls=sceneDepthCalls[eye];
+    if(kind==0)++calls.indexed;else if(kind==1)++calls.nonIndexed;else if(kind==2)++calls.indexedInstanced;else ++calls.instanced;
+    ComPtr<ID3D11DepthStencilView> dsv;context->OMGetRenderTargets(0,nullptr,&dsv);if(!dsv){++calls.noDepth;return;}
+    ComPtr<ID3D11Resource> resource;dsv->GetResource(&resource);ComPtr<ID3D11Texture2D> texture;
+    if(FAILED(resource.As(&texture)))return;D3D11_TEXTURE2D_DESC desc{};texture->GetDesc(&desc);
+    if(unsigned(desc.Format)<calls.formats.size())++calls.formats[desc.Format];
+    if(desc.Format!=DXGI_FORMAT_R24G8_TYPELESS&&desc.Format!=DXGI_FORMAT_D24_UNORM_S8_UINT&&
+       desc.Format!=DXGI_FORMAT_R32_TYPELESS&&desc.Format!=DXGI_FORMAT_D32_FLOAT){++calls.unsupported;return;}
+    if(desc.Width!=1920||desc.Height!=1080||desc.SampleDesc.Count!=1){++calls.wrongSize;return;}
+    D3D11_VIEWPORT viewport{};UINT count=1;context->RSGetViewports(&count,&viewport);if(count!=1){++calls.wrongViewport;return;}
+    D3D11_DEPTH_STENCIL_DESC state{};ComPtr<ID3D11DepthStencilState> ds;UINT stencil=0;
+    context->OMGetDepthStencilState(&ds,&stencil);if(ds)ds->GetDesc(&state);
+    else {state.DepthEnable=TRUE;state.DepthFunc=D3D11_COMPARISON_LESS;state.DepthWriteMask=D3D11_DEPTH_WRITE_MASK_ALL;}
+    const auto id=reinterpret_cast<std::uintptr_t>(texture.Get());
+    for(unsigned n=0;n<sceneDepthCandidateCounts[eye];++n){auto& c=sceneDepthCandidates[eye][n];
+        if(c.resource==id&&std::memcmp(&c.viewport,&viewport,sizeof(viewport))==0){++c.draws;return;}}
+    if(sceneDepthCandidateCounts[eye]==sceneDepthCandidates[eye].size()){++sceneDepthCandidateOverflow[eye];return;}
+    auto& c=sceneDepthCandidates[eye][sceneDepthCandidateCounts[eye]++];c.texture=texture;c.resource=id;
+    c.viewport=viewport;c.draws=1;c.depthFunction=state.DepthFunc;c.depthWrite=state.DepthWriteMask;
+}
+using IndexedInstancedDrawFn=void(STDMETHODCALLTYPE*)(ID3D11DeviceContext*,UINT,UINT,UINT,INT,UINT);
+using InstancedDrawFn=void(STDMETHODCALLTYPE*)(ID3D11DeviceContext*,UINT,UINT,UINT,UINT);
+IndexedInstancedDrawFn indexedInstancedDrawOriginal=nullptr;
+InstancedDrawFn instancedDrawOriginal=nullptr;
+void STDMETHODCALLTYPE IndexedInstancedDrawHook(ID3D11DeviceContext* context,UINT count,UINT instances,UINT start,INT base,UINT firstInstance){
+    indexedInstancedDrawOriginal(context,count,instances,start,base,firstInstance);
+    ObserveSceneDepthCandidate(context,2);
+}
+void STDMETHODCALLTYPE InstancedDrawHook(ID3D11DeviceContext* context,UINT count,UINT instances,UINT start,UINT firstInstance){
+    instancedDrawOriginal(context,count,instances,start,firstInstance);
+    ObserveSceneDepthCandidate(context,3);
+}
+#endif
 void STDMETHODCALLTYPE IndexedDrawHook(ID3D11DeviceContext* context,UINT count,UINT start,INT base){
+#if defined(FVR_BC2_ORDINARY_RESOURCE_SCENE_PROBE)
+    fvr::bc2::graphicsThreadObservation::Scope graphicsThread(fvr::bc2::graphicsThreadObservation::Boundary::Indexed,context==observedImmediateContext);
+#endif
     if(opticEvidenceEnabled)fvr::bc2::opticFilterRuntime::CaptureDraw(context,true,count,start,base);
     if(context==observedImmediateContext)reloadDrawCapture.ObserveIndexed(context,count,start,base);
     if(context==observedImmediateContext&&drawingEvidenceEye>=0){CaptureGeometryBuffers(context,unsigned(drawingEvidenceEye),count);CapturePassBuffers(context,unsigned(drawingEvidenceEye),count,1);}
     indexedDrawOriginal(context,count,start,base);
+#ifdef FVR_BC2_SCENE_DEPTH_CAPTURE
+    ObserveSceneDepthCandidate(context,0);
+#endif
 }
 void SaveTrackedCameraEvidence(unsigned view,unsigned eye,unsigned step)noexcept {
     if(trackedCameraEvidence.frame.load(std::memory_order_acquire)!=stereoExperiment.frame)return;
@@ -831,6 +967,8 @@ void ApplyTrackedView(unsigned world,unsigned request,unsigned view)noexcept {
 
 void FinishTrackedFrame(bool completePair)noexcept {
     const auto state=tracked.state.load(std::memory_order_acquire);if(state!=1&&state!=3)return;auto& e=stereoExperiment;bool restored=state==3;
+    const auto milestone=sceneTrace::Native(SceneMilestoneKind::FinishTrackedFrame,SceneMilestoneKind::FinishTrackedFrame,e.world,e.request);
+    fvr::runtime::SceneMilestoneContext milestoneResult{};milestoneResult.outcome=(state<<8)|(completePair?1u:0u);
     if(state==1){restored=U32(e.main)==imageBase+layout.vtable&&U32(e.main+0x70)==e.request&&U32(e.world+0x88)==tracked.lease.native.frameId;
         if(restored)for(unsigned i=0;i<2;++i)restored&=Hash(e.main+(i?layout.secondaryOffset:layout.primaryOffset),0x460)==Hash(reinterpret_cast<std::uintptr_t>(tracked.written[i].bytes.data()),0x460);
         if(restored)for(unsigned i=0;i<2;++i)std::memcpy(reinterpret_cast<void*>(e.main+(i?layout.secondaryOffset:layout.primaryOffset)),tracked.saved[i].bytes.data(),0x460);
@@ -844,9 +982,12 @@ void FinishTrackedFrame(bool completePair)noexcept {
             tracked.anchorWritten=false;
         }
     }
-    if(!(completePair&&restored&&tracked.capturesOkay&&e.visibilityMask.load(std::memory_order_acquire)==3&&frameBridge.PublishRestored(tracked.lease)))frameBridge.Cancel(tracked.lease);
+    const bool published=completePair&&restored&&tracked.capturesOkay&&e.visibilityMask.load(std::memory_order_acquire)==3&&frameBridge.PublishRestored(tracked.lease);
+    if(!published)frameBridge.Cancel(tracked.lease);
+    milestoneResult.outcome|=(restored?2u:0u)|(tracked.capturesOkay?4u:0u)|(published?8u:0u);
     tracked.bodyPropPair.Reset();
     tracked.state.store(2,std::memory_order_release);
+    sceneTrace::Mark(milestone,SceneMilestoneStage::Exit,milestoneResult);
 }
 void PumpFrameBridge()noexcept {
     bodyAmmoRenderer.PumpStop();
@@ -872,6 +1013,31 @@ void PumpFrameBridge()noexcept {
 }
 fvr::graphics::SwapChainPresentFn desktopPresentOriginal=nullptr;
 IDXGISwapChain* observedSwapChain=nullptr;unsigned observedRenderer=0;
+struct GraphicsBootstrapSnapshot {
+    std::uintptr_t device=0,context=0;
+    std::array<std::uintptr_t,5> entries{}; // Indexed, Draw, two instanced, ClearDepth.
+    unsigned thread=0,deviceFlags=0;
+};
+fvr::graphics::RenderBootstrap<GraphicsBootstrapSnapshot> graphicsBootstrap;
+GraphicsBootstrapSnapshot graphicsBootstrapEvidence;
+std::atomic<bool> graphicsRuntimeReady=false;
+unsigned graphicsBootstrapWorkerThread=0;
+bool CaptureGraphicsBootstrap(IDXGISwapChain* chain,GraphicsBootstrapSnapshot& out)noexcept {
+    // Called only from this chain's native Present. Never transfer owning COM
+    // references to the setup worker, including on mismatch or cancellation.
+    ComPtr<ID3D11Device> device;ComPtr<ID3D11DeviceContext> context;
+    if(FAILED(chain->GetDevice(IID_PPV_ARGS(&device)))||
+       reinterpret_cast<unsigned>(device.Get())!=U32(observedRenderer+0x7c))return false;
+    device->GetImmediateContext(&context);if(!context)return false;
+    const unsigned slots[]={12,13,20,21,53};
+    const auto table=*reinterpret_cast<void***>(context.Get());
+    for(unsigned n=0;n<out.entries.size();++n){out.entries[n]=reinterpret_cast<std::uintptr_t>(table[slots[n]]);if(!out.entries[n])return false;}
+    out.device=reinterpret_cast<std::uintptr_t>(device.Get());out.context=reinterpret_cast<std::uintptr_t>(context.Get());
+    out.thread=GetCurrentThreadId();out.deviceFlags=device->GetCreationFlags();
+    return U32(imageBase+profile.rendererGlobal)==observedRenderer&&
+        U32(observedRenderer)==imageBase+profile.rendererVtable&&
+        U32(observedRenderer+0x88)==reinterpret_cast<unsigned>(chain)&&U32(observedRenderer+0x7c)==out.device;
+}
 std::atomic<unsigned> desktopPresentCalls=0,desktopSyncBypassed=0,desktopSyncOne=0;
 std::atomic<unsigned> desktopPresentOkay=0,desktopPresentOccluded=0,desktopPresentStatus=0,desktopPresentFailed=0,desktopPresentTests=0;
 std::atomic<long> desktopPresentFirstFailure=0,desktopPresentLastResult=0;
@@ -952,6 +1118,16 @@ unsigned ObserveDesktopBuffer(IDXGISwapChain* chain,UINT flags)noexcept {
     return scheduledMask;
 }
 HRESULT STDMETHODCALLTYPE DesktopPresentHook(IDXGISwapChain* chain,UINT interval,UINT flags){
+    if(!graphicsRuntimeReady.load(std::memory_order_acquire)){
+        if(chain==observedSwapChain&&!(flags&DXGI_PRESENT_TEST)&&
+           U32(imageBase+profile.rendererGlobal)==observedRenderer&&
+           U32(observedRenderer)==imageBase+profile.rendererVtable&&U32(observedRenderer+0x88)==reinterpret_cast<unsigned>(chain))
+            graphicsBootstrap.Observe([&](GraphicsBootstrapSnapshot& out)noexcept{return CaptureGraphicsBootstrap(chain,out);});
+        return desktopPresentOriginal(chain,interval,flags);
+    }
+#if defined(FVR_BC2_ORDINARY_RESOURCE_SCENE_PROBE)
+    fvr::bc2::graphicsThreadObservation::Scope graphicsThread(fvr::bc2::graphicsThreadObservation::Boundary::Present,chain==observedSwapChain);
+#endif
     fvr::graphics::DiagnosticImageLifetime::Scope imageScope(diagnosticImageLifetime);
     if(!imageScope.Active())return desktopPresentOriginal(chain,interval,flags);
     const bool matching=chain==observedSwapChain&&U32(imageBase+profile.rendererGlobal)==observedRenderer&&
@@ -1000,13 +1176,45 @@ bool CurrentScene(unsigned world,unsigned request)noexcept {
         U32(subsystem+0x30)==request&&U32(world)==stereoRecovery.worldType&&
         U32(request)==imageBase+lifecycle.requestVtable&&U32(request+8)==world&&U32(request+0xc4)==3;
 }
+template<class Graph> bool CapturePendingStereoChildren(Graph& g,unsigned children,ListSnapshot& pending,ListSnapshot& holders)noexcept {
+    if(!pending.Capture(g.eye+0x1670)||pending.count>g.pendingEye.size())return false;
+    g.pendingEyeCount=pending.count;
+    for(unsigned i=0;i<pending.count;++i)g.pendingEye[i]=pending.values[i];
+    if(!pending.count)return true;
+    if(!children||children>g.eyeHolders.size()||!holders.Capture(g.eye+0x1680)||holders.count!=children*2)return false;
+    for(unsigned i=0;i<children;++i){auto& h=g.eyeHolders[i];
+        h.object=holders.values[i*2];h.control=holders.values[i*2+1];
+        if(!h.object||!h.control)return false;
+        h.owners=U32(h.control);h.first=U32(h.object+0xc);h.second=U32(h.object+0x10);
+    }
+    // Callers fingerprint both native destructor loops before capturing this
+    // proof. The root destructor alone releases its holders and pending queue.
+    g.pendingEyeOwnershipVerified=true;return true;
+}
+template<class Graph> bool PendingStereoChildrenMatch(const Graph& g,unsigned children,const ListSnapshot& pending,const ListSnapshot& holders)noexcept {
+    if(!pending.Matches())return false;
+    if(!g.pendingEyeCount)return true;
+    if(children>g.eyeHolders.size()||!holders.Matches()||holders.count!=children*2)return false;
+    for(unsigned i=0;i<children;++i){const auto& h=g.eyeHolders[i];
+        if(U32(h.control)!=h.owners||U32(h.object+0xc)!=h.first||U32(h.object+0x10)!=h.second)return false;
+    }
+    return true;
+}
 struct LiveStereoSnapshot {
     fvr::bc2::LiveStereoRetirementGraph graph{};fvr::bc2::StereoSurvivors survivors{};
-    ListSnapshot main{},all{},requests{},callbacks{};
+    ListSnapshot main{},all{},requests{},callbacks{},eyePending{},eyeHolders{};
     std::array<CallbackSnapshot,16> callbackValues{};
 };
 bool CaptureLiveStereoShutdown(LiveStereoSnapshot& out)noexcept {
     const auto& e=stereoExperiment;auto& g=out.graph;
+    using Reason=fvr::bc2::StereoProgressReason;
+    const auto reject=[&](Reason reason)noexcept {
+        auto sample=StereoProgressSample(e.world,e.request,e.frame.load(std::memory_order_acquire));
+        sample.shutdownViews=g.count;sample.shutdownReferences=g.requestReferences;
+        sample.shutdownMainChildren=g.mainChildren;sample.shutdownEyeChildren=g.eyeChildren;
+        sample.shutdownSurvivors=out.survivors.count;sample.shutdownReferencesAfter=out.survivors.referencesAfter;
+        stereoProgressEvidence.Record(reason,sample);return false;
+    };
     const auto quiescent=[]()noexcept{const auto state=tracked.state.load(std::memory_order_acquire);
         const auto pool=workPool.stage.load(std::memory_order_acquire);
         return state!=1&&state!=3&&!tracked.anchorWritten&&!tracked.restoreFailures.load()&&!contextRestoreFailures.load()&&
@@ -1015,14 +1223,16 @@ bool CaptureLiveStereoShutdown(LiveStereoSnapshot& out)noexcept {
     // draw/visibility jobs, before the next world update can enqueue new jobs.
     // Callback count is an additional check, not the serialization mechanism.
     unsigned char eyeActive=1;
-    if(!CurrentScene(e.world,e.request)||!quiescent()||!e.callbacks.Matches()||
-       U32(e.main)!=imageBase+layout.vtable||U32(e.main+0x70)!=e.request||
-       U32(e.eye)!=imageBase+layout.vtable||U32(e.eye+0x70)!=e.request||
-       !Read(e.eye+layout.activeOffset,&eyeActive,1)||eyeActive)return false;
-    for(const auto& code:stereoRecovery.code)if(!code.address||Hash(code.address,code.size)!=code.hash)return false;
+    if(!CurrentScene(e.world,e.request))return reject(Reason::ShutdownScene);
+    if(!quiescent())return reject(Reason::ShutdownQuiescence);
+    if(!e.callbacks.Matches())return reject(Reason::ShutdownCallbacks);
+    if(U32(e.main)!=imageBase+layout.vtable||U32(e.main+0x70)!=e.request||
+       U32(e.eye)!=imageBase+layout.vtable||U32(e.eye+0x70)!=e.request)return reject(Reason::ShutdownView);
+    if(!Read(e.eye+layout.activeOffset,&eyeActive,1)||eyeActive)return reject(Reason::ShutdownActiveEye);
+    for(const auto& code:stereoRecovery.code)if(!code.address||Hash(code.address,code.size)!=code.hash)return reject(Reason::ShutdownCode);
     if(!out.main.Capture(e.request+0x24)||out.main.count!=2||out.main.values[0]!=e.main||out.main.values[1]!=e.eye||
        !out.all.Capture(e.request+0x14)||!out.requests.Capture(e.world+0xac)||out.requests.count!=1||out.requests.values[0]!=e.request||
-       !SnapshotCallbacks(e.world,e.main,out.callbacks,out.callbackValues)||!SameEntries(out.callbacks,e.callbacks))return false;
+       !SnapshotCallbacks(e.world,e.main,out.callbacks,out.callbackValues)||!SameEntries(out.callbacks,e.callbacks))return reject(Reason::ShutdownLists);
     g.world=e.world;g.request=e.request;g.main=e.main;g.eye=e.eye;g.count=out.all.count;
     g.requestReferences=U32(e.request+4);g.mainChildren=ChildCount(e.main);g.eyeChildren=ChildCount(e.eye);
     g.nativeOwnersVerified=g.requestRegistered=g.callbacksVerified=true;
@@ -1033,24 +1243,31 @@ bool CaptureLiveStereoShutdown(LiveStereoSnapshot& out)noexcept {
             U32(type+12)==imageBase+initialization.parentGetter&&U32(type+4)==imageBase+lifecycle.release;
             if(v.nativeTypeVerified)v.parent=U32(v.address+0x1670);}
     }
+    if(!CapturePendingStereoChildren(g,g.eyeChildren,out.eyePending,out.eyeHolders))return reject(Reason::ShutdownGraph);
     for(unsigned i=0;i<out.callbacks.count;++i){const auto& cb=out.callbackValues[i];const auto& original=e.callbackValues[i];
         if(cb.object!=original.object||cb.vtable!=original.vtable||cb.remember!=original.remember||cb.list!=original.list||
-           (cb.remember&&(cb.borrowed!=original.borrowed||cb.borrowed!=e.main))||
-           (cb.list&&!SameEntries(cb.registered,out.all)))return false;
+           (cb.remember&&(cb.borrowed!=original.borrowed||cb.borrowed!=e.main)))return reject(Reason::ShutdownCallbackIdentity);
+        if(cb.list&&!SameEntries(cb.registered,out.all))return reject(Reason::ShutdownCallbackViews);
     }
-    if(!fvr::bc2::CaptureLiveStereoSurvivors(g,out.survivors)||out.survivors.count!=e.allViews.count||
-       out.survivors.referencesAfter!=e.refsBefore||!out.main.Matches()||!out.all.Matches()||
-       !out.requests.Matches()||!out.callbacks.Matches())return false;
-    for(unsigned i=0;i<out.callbacks.count;++i)if(out.callbackValues[i].list&&!out.callbackValues[i].registered.Matches())return false;
-    return CurrentScene(e.world,e.request)&&quiescent()&&U32(e.request+4)==g.requestReferences;
+    if(!fvr::bc2::CaptureLiveStereoSurvivors(g,out.survivors))return reject(Reason::ShutdownGraph);
+    if(out.survivors.count!=e.allViews.count||out.survivors.referencesAfter!=e.refsBefore)return reject(Reason::ShutdownSurvivors);
+    if(!out.main.Matches()||!out.all.Matches()||!out.requests.Matches()||!out.callbacks.Matches()||
+       !PendingStereoChildrenMatch(g,g.eyeChildren,out.eyePending,out.eyeHolders))return reject(Reason::ShutdownListMutation);
+    for(unsigned i=0;i<out.callbacks.count;++i)if(out.callbackValues[i].list&&!out.callbackValues[i].registered.Matches())return reject(Reason::ShutdownListMutation);
+    if(!CurrentScene(e.world,e.request)||!quiescent()||U32(e.request+4)!=g.requestReferences)return reject(Reason::ShutdownFinalBoundary);
+    return true;
 }
 bool RefreshShutdownGeneration()noexcept {
     LiveStereoSnapshot first{},again{};
-    if(!CaptureLiveStereoShutdown(first)||!CaptureLiveStereoShutdown(again)||first.graph!=again.graph||
-       first.survivors!=again.survivors||!SameEntries(first.main,again.main)||!SameEntries(first.all,again.all)||
-       !SameEntries(first.callbacks,again.callbacks)){++stereoShutdown.rejected;return false;}
+    if(!CaptureLiveStereoShutdown(first)||!CaptureLiveStereoShutdown(again)){++stereoShutdown.rejected;return false;}
+    if(first.graph!=again.graph||first.survivors!=again.survivors||!SameEntries(first.main,again.main)||!SameEntries(first.all,again.all)||
+       !SameEntries(first.callbacks,again.callbacks)){
+        RecordStereoProgress(fvr::bc2::StereoProgressReason::ShutdownGenerationChanged,stereoExperiment.frame);
+        ++stereoShutdown.rejected;return false;
+    }
     auto& e=stereoExperiment;stereoShutdown.historical=e.allViews;stereoShutdown.before=again.all;
     stereoShutdown.requestReferencesBefore=again.graph.requestReferences;
+    stereoShutdown.pendingReferencesBefore=again.graph.pendingEyeCount;
     ListSnapshot current{};current.address=e.request+0x14;current.count=again.survivors.count;current.values=again.survivors.ordered;
     // These are owned metadata copies only. Native vectors retain their current
     // order; never write old entries or revive a previous child generation.
@@ -1062,7 +1279,7 @@ bool RefreshShutdownGeneration()noexcept {
 }
 struct RetiredStereoSnapshot {
     fvr::bc2::RetiredStereoGraph graph{};
-    ListSnapshot main{},all{},requests{},callbacks{},currentCallbacks{};
+    ListSnapshot main{},all{},requests{},callbacks{},currentCallbacks{},eyePending{},eyeHolders{};
     std::array<CallbackSnapshot,16> callbackValues{};
 };
 bool CaptureRetiredStereo(unsigned world,unsigned request,RetiredStereoSnapshot& out)noexcept {
@@ -1089,6 +1306,7 @@ bool CaptureRetiredStereo(unsigned world,unsigned request,RetiredStereoSnapshot&
             U32(type+12)==imageBase+initialization.parentGetter&&U32(type+4)==imageBase+lifecycle.release;
             if(v.nativeTypeVerified)v.parent=U32(v.address+0x1670);}
     }
+    if(!CapturePendingStereoChildren(g,g.children,out.eyePending,out.eyeHolders))return false;
     g.callbacksVerified=true;
     const auto noop=[](unsigned address){std::array<unsigned char,3> b{};return address>=imageBase&&
         address<imageBase+profile.imageSize-3&&Read(address,b.data(),b.size())&&b==std::array<unsigned char,3>{0xc2,4,0};};
@@ -1107,7 +1325,8 @@ bool CaptureRetiredStereo(unsigned world,unsigned request,RetiredStereoSnapshot&
         }else if(!noop(create)||!noop(destroy))return false;
     }
     if(!fvr::bc2::CanRetireStereoGraph(g)||!out.main.Matches()||!out.all.Matches()||
-       !out.requests.Matches()||!out.callbacks.Matches()||!out.currentCallbacks.Matches())return false;
+       !out.requests.Matches()||!out.callbacks.Matches()||!out.currentCallbacks.Matches()||
+       !PendingStereoChildrenMatch(g,g.children,out.eyePending,out.eyeHolders))return false;
     return U32(g.eye+0x20)==1&&U32(g.request+4)==g.requestReferences&&
         U32(g.world+4)==1&&CurrentScene(world,request);
 }
@@ -1129,9 +1348,10 @@ struct RetireStereoCalls {
         if(!held||U32(g.eye)!=imageBase+layout.vtable||U32(g.eye+0x70)!=g.request||U32(g.eye+0x20)!=1||
            U32(g.request+0xc4)!=3||U32(g.request+4)!=g.requestReferences+1||U32(g.world+4)!=1||
            !CurrentScene(g.currentWorld,g.currentRequest)||!snapshot.callbacks.Matches()||
-           !snapshot.main.Matches()||!snapshot.all.Matches()||stereoRecovery.callbacks.load(std::memory_order_acquire))return false;
+           !snapshot.main.Matches()||!snapshot.all.Matches()||stereoRecovery.callbacks.load(std::memory_order_acquire)||
+           !fvr::bc2::CanRetireStereoGraph(g)||!PendingStereoChildrenMatch(g,g.children,snapshot.eyePending,snapshot.eyeHolders))return false;
         for(unsigned i=0;i<g.count;++i){const auto& v=g.views[i];
-            if(U32(v.address+0x70)!=g.request||U32(v.address+0x20)!=1||
+            if(U32(v.address+0x70)!=g.request||U32(v.address+0x20)!=v.references||
                (v.address!=g.eye&&(U32(U32(v.address)+12)!=imageBase+initialization.parentGetter||U32(v.address+0x1670)!=g.eye)))return false;
         }
         reinterpret_cast<fvr::bc2::SetViewActiveFn>(imageBase+lifecycle.setActive)(reinterpret_cast<void*>(g.eye),false);
@@ -1212,10 +1432,15 @@ bool RecoverStereoOwner(unsigned world,unsigned request,unsigned incomingFrame)n
     if(ready!=fvr::runtime::RecoveryReadiness::Ready||stereoRecovery.callbacks.load(std::memory_order_acquire)||
        workPool.stage.load(std::memory_order_acquire)==1||workPool.stage.load(std::memory_order_acquire)==3||
        !fvr::bc2::rigWorkerRuntime::Quiescent())return false;
-    RetiredStereoSnapshot snapshot{};
-    if(!CaptureRetiredStereo(world,request,snapshot)){++stereoRecovery.rejected;return false;}
+    RetiredStereoSnapshot first{},snapshot{};
+    if(!CaptureRetiredStereo(world,request,first)||!CaptureRetiredStereo(world,request,snapshot)||first.graph!=snapshot.graph||
+       !SameEntries(first.main,snapshot.main)||!SameEntries(first.all,snapshot.all)||!SameEntries(first.requests,snapshot.requests)||
+       !SameEntries(first.callbacks,snapshot.callbacks)||!SameEntries(first.currentCallbacks,snapshot.currentCallbacks)){
+        ++stereoRecovery.rejected;return false;
+    }
     ++stereoRecovery.attempts;stereoRecovery.oldWorld=e.world;stereoRecovery.oldRequest=e.request;stereoRecovery.oldEye=e.eye;
     stereoRecovery.newWorld=world;stereoRecovery.newRequest=request;stereoRecovery.retiredViews=snapshot.graph.count;
+    stereoRecovery.retiredPendingReferences=snapshot.graph.pendingEyeCount;
     StereoCheckpoint("owner_cleanup_begin");
     auto step=fvr::runtime::RetirementStep::Untouched;RetireStereoCalls calls{snapshot};
     const bool retired=fvr::runtime::RetireOwnedRenderRoot(calls,step);stereoRecovery.retirementStep=unsigned(step);
@@ -1290,11 +1515,14 @@ void AdvanceStereo(std::uintptr_t world,std::uintptr_t request,unsigned incoming
     using SetCamera=void(__thiscall*)(void*,const void*);using SetViewport=void(__thiscall*)(void*,const unsigned*);
     SetDiagnosticCameras(e.eye,camera);
     reinterpret_cast<SetViewport>(U32(U32(e.eye)+15*4))(fresh,viewport.data());
+    const auto sceneRebuild=sceneTrace::journal.BeginRebuild({e.world,e.request,e.main,e.eye,incomingFrame},sceneTrace::Stamp);
     StereoCheckpoint("before_native_rebuild");
     const auto frameBefore=U32(world+0x88);const auto timeBefore=Hash(world+0x8c,8);
     const auto primaryBefore=Hash(e.main+layout.primaryOffset,0x460),secondaryBefore=Hash(e.main+layout.secondaryOffset,0x460);
     using Rebuild=void(__thiscall*)(void*);
+    sceneTrace::Mark(sceneRebuild,SceneMilestoneStage::CallingOriginal);
     reinterpret_cast<Rebuild>(imageBase+initialization.rebuild)(reinterpret_cast<void*>(world));
+    sceneTrace::Mark(sceneRebuild,SceneMilestoneStage::OriginalReturned);
     e.clockPreserved=frameBefore==U32(world+0x88)&&timeBefore==Hash(world+0x8c,8);
     e.camerasPreserved=primaryBefore==Hash(e.main+layout.primaryOffset,0x460)&&secondaryBefore==Hash(e.main+layout.secondaryOffset,0x460);
     const bool borrowedOkay=RestoreBorrowed(e.callbacks,e.callbackValues,e.eye,e.redirects,e.restores);
@@ -1302,6 +1530,7 @@ void AdvanceStereo(std::uintptr_t world,std::uintptr_t request,unsigned incoming
     bool generationOkay=CaptureOriginalGeneration(e.allViews,unsigned(request+0x14),e.eye,e.allViews.count);
     for(unsigned i=0;i<e.callbacks.count;++i){auto& cb=e.callbackValues[i];if(cb.list)generationOkay&=CaptureOriginalGeneration(cb.registered,cb.object+0x20,e.eye,cb.registered.count);}
     e.initialized=e.childrenAfter>0&&ChildCount(e.main)==e.childrenBefore&&generationOkay&&borrowedOkay&&e.camerasPreserved&&e.clockPreserved;
+    sceneTrace::journal.CompleteRebuild(sceneRebuild,e.initialized,sceneTrace::Stamp);
     StereoCheckpoint("after_native_rebuild");
     if(!e.initialized){
         if(borrowedOkay&&U32(e.eye+0x20)==1){reinterpret_cast<fvr::bc2::ViewRefFn>(imageBase+lifecycle.release)(fresh);e.cachedViewsRestored=RefreshRegisteredCallbacks();}StereoCheckpoint("initialization_rejected");
@@ -1343,7 +1572,11 @@ void ProbeViewLifecycle(std::uintptr_t world,std::uintptr_t request)noexcept {
 void __fastcall UpdateHook(void* self,void*,void* request,unsigned frame,float dt,void* extra,void* out1,void* out2){
     if(sampling.load(std::memory_order_acquire)){updateCalls.fetch_add(1,std::memory_order_relaxed);ProbeViewLifecycle(reinterpret_cast<std::uintptr_t>(self),reinterpret_cast<std::uintptr_t>(request));}
     AdvanceStereo(reinterpret_cast<std::uintptr_t>(self),reinterpret_cast<std::uintptr_t>(request),frame);
+    const auto milestone=sceneTrace::Native(SceneMilestoneKind::WorldUpdate,SceneMilestoneKind::WorldUpdate,
+        reinterpret_cast<std::uintptr_t>(self),reinterpret_cast<std::uintptr_t>(request));
+    sceneTrace::Mark(milestone,SceneMilestoneStage::CallingOriginal);
     updateOriginal(self,request,frame,dt,extra,out1,out2); // One simulation update.
+    sceneTrace::Mark(milestone,SceneMilestoneStage::OriginalReturned);
     if(deferredCleanup.load(std::memory_order_acquire)){
         const auto stage=stereoExperiment.stage.load(std::memory_order_acquire);
         if(stage!=StereoExperiment::Armed&&stage!=StereoExperiment::Retiring){
@@ -1351,6 +1584,7 @@ void __fastcall UpdateHook(void* self,void*,void* request,unsigned frame,float d
             if(streamMode&&bodyAmmoRenderer.Quiescent())for(unsigned index=0;index<3;++index)if(hookEntries[index])MH_DisableHook(hookEntries[index]);
         }
     }
+    sceneTrace::Mark(milestone,SceneMilestoneStage::Exit);
 }
 std::optional<fvr::bc2::ReloadProducerView> ReloadProducerViewKey(std::uintptr_t world,std::uintptr_t request,std::uintptr_t view)noexcept {
     const auto& e=stereoExperiment;
@@ -1387,6 +1621,7 @@ std::optional<fvr::bc2::ReloadProducerView> LookupWorkerProducerView(unsigned wo
 void __fastcall VisibilityHook(void* self,void*,void* request,void* view,void* params,void* extra,void* out1,void* out2){
     RenderCallbackScope callback;
     VisibilityRecord* record=nullptr;const auto world=reinterpret_cast<std::uintptr_t>(self),req=reinterpret_cast<std::uintptr_t>(request),object=reinterpret_cast<std::uintptr_t>(view);
+    const auto milestone=sceneTrace::Native(SceneMilestoneKind::MainVisibility,SceneMilestoneKind::EyeVisibility,world,req,object);
     const std::array<unsigned,4> offsets{layout.primaryOffset,layout.secondaryOffset,layout.thirdOffset,layout.fourthOffset};
     if(sampling.load(std::memory_order_acquire)){
         visibilityCalls.fetch_add(1,std::memory_order_relaxed);const auto index=visibilityAllocated.fetch_add(1,std::memory_order_relaxed);
@@ -1421,7 +1656,9 @@ void __fastcall VisibilityHook(void* self,void*,void* request,void* view,void* p
     // A rejected nested call deliberately masks its parent's TLS association.
     if(fvr::bc2::ReloadProducerBinding().Enabled())producerScope.emplace(fvr::bc2::ReloadProducerBinding(),
         producerKey.value_or(fvr::bc2::ReloadProducerView{}),bool(producerKey),ReloadDrawNowNs());
+    sceneTrace::Mark(milestone,SceneMilestoneStage::CallingOriginal);
     visibilityOriginal(self,request,view,params,extra,out1,out2);
+    sceneTrace::Mark(milestone,SceneMilestoneStage::OriginalReturned);
     if(producerScope)producerScope->Complete(producerKey&&ReloadProducerViewKey(world,req,object)==producerKey,ReloadDrawNowNs());
     if(gatheringEvidenceEye==1)ObserveContexts(1);
     gatheringEvidenceEye=priorGatheringEye;
@@ -1436,6 +1673,7 @@ void __fastcall VisibilityHook(void* self,void*,void* request,void* view,void* p
         if(record->ownerValid)for(unsigned i=0;i<4;++i)record->cameraAfter[i]=Hash(object+offsets[i],0x460);
         record->complete.store(true,std::memory_order_release);
     }
+    sceneTrace::Mark(milestone,SceneMilestoneStage::Exit);
 }
 void __fastcall WorldHook(void* self,void*,void* request){
     RenderCallbackScope callback;
@@ -1480,8 +1718,14 @@ void* __fastcall PrepareHook(void* self,void*,void* request,void* view){
     return data;
 }
 void __fastcall DrawHook(void* self,void*,void* request,void* view,void* data){
+#if defined(FVR_BC2_ORDINARY_RESOURCE_SCENE_PROBE)
+    fvr::bc2::graphicsThreadObservation::Scope graphicsThread(fvr::bc2::graphicsThreadObservation::Boundary::View);
+#endif
+    const auto milestone=sceneTrace::Native(SceneMilestoneKind::MainDraw,SceneMilestoneKind::EyeDraw,
+        reinterpret_cast<std::uintptr_t>(self),reinterpret_cast<std::uintptr_t>(request),reinterpret_cast<std::uintptr_t>(view));
     fvr::graphics::DiagnosticImageLifetime::Scope imageScope(diagnosticImageLifetime);
-    if(!imageScope.Active()){drawOriginal(self,request,view,data);return;}
+    if(!imageScope.Active()){sceneTrace::Mark(milestone,SceneMilestoneStage::CallingOriginal);drawOriginal(self,request,view,data);sceneTrace::Mark(milestone,SceneMilestoneStage::OriginalReturned);
+        sceneTrace::Mark(milestone,SceneMilestoneStage::Exit);return;}
     RenderCallbackScope callback;
     PumpFrameBridge();
     if(sampling.load(std::memory_order_relaxed))drawCalls.fetch_add(1,std::memory_order_relaxed);
@@ -1524,6 +1768,17 @@ void __fastcall DrawHook(void* self,void*,void* request,void* view,void* data){
     } drawEvidenceEnd{trackedEvidence};
     const auto priorEvidenceEye=drawingEvidenceEye;
     if(trackedEvidence&&trackedCameraEvidence.frame.load(std::memory_order_acquire)==stereoExperiment.frame)drawingEvidenceEye=int(evidenceEye);
+#ifdef FVR_BC2_SCENE_DEPTH_CAPTURE
+    const auto priorSceneDepthEye=sceneDepthDrawingEye;
+    if(bodyAmmoEyeOwned&&bodyAmmoBefore&&evidenceEye==0&&!sceneDepthFrame){
+        if(!sceneDepthFirstValidFrame)sceneDepthFirstValidFrame=stereoExperiment.frame;
+        if(stereoExperiment.frame-sceneDepthFirstValidFrame>=120)sceneDepthFrame=stereoExperiment.frame;
+    }
+    sceneDepthDrawingEye=bodyAmmoEyeOwned&&sceneDepthFrame==stereoExperiment.frame?int(evidenceEye):-1;
+#endif
+#ifdef FVR_BC2_BODY_SCENE_DEPTH
+    BodySceneDepthScope bodyDepth(bodyAmmoEyeOwned,evidenceEye);
+#endif
     {ScopedContextEye constants;
         if(trackedEvidence&&evidenceEye==0&&reinterpret_cast<unsigned>(self)==stereoExperiment.world&&reinterpret_cast<unsigned>(request)==stereoExperiment.request){
             if(!constants.Apply()){contextPatchFailures.fetch_add(1);tracked.capturesOkay=false;}
@@ -1532,8 +1787,16 @@ void __fastcall DrawHook(void* self,void*,void* request,void* view,void* data){
         if(trackedEvidence&&reinterpret_cast<unsigned>(self)==stereoExperiment.world&&reinterpret_cast<unsigned>(request)==stereoExperiment.request)
             opticView=fvr::bc2::opticFilterRuntime::View{reinterpret_cast<unsigned>(request),unsigned(address),stereoExperiment.frame.load(),int(evidenceEye)};
         OpticViewScope opticScope(opticView);
-        const auto wasDrawing=drawingNativeView;drawingNativeView=true;drawOriginal(self,request,view,data);drawingNativeView=wasDrawing;
+        const auto wasDrawing=drawingNativeView;drawingNativeView=true;sceneTrace::Mark(milestone,SceneMilestoneStage::CallingOriginal);
+    drawOriginal(self,request,view,data);drawingNativeView=wasDrawing;
+    sceneTrace::Mark(milestone,SceneMilestoneStage::OriginalReturned);
     }drawingEvidenceEye=priorEvidenceEye;
+#ifdef FVR_BC2_BODY_SCENE_DEPTH
+    bodyDepth.End();
+#endif
+#ifdef FVR_BC2_SCENE_DEPTH_CAPTURE
+    sceneDepthDrawingEye=priorSceneDepthEye;
+#endif
     drawEvidenceEnd.Finish();
     if(trackedEvidence&&weaponVisibilityProbeMode&&weaponVisibilityEyeCount<weaponVisibilityEyes.size()){
         const auto ns=ReloadDrawNowNs();
@@ -1587,6 +1850,34 @@ void __fastcall DrawHook(void* self,void*,void* request,void* view,void* data){
         // Optional per-eye ammo HUD telemetry is assigned to props.ammo here.
         // The pair helper preserves it independently of prop admission.
         props.ammo=fvr::bc2::gameplay::ReadAmmoCounter();
+#ifdef FVR_BC2_SCENE_DEPTH_CAPTURE
+        // Diagnostic copies only: never bind a target, dispatch or draw. Preserve
+        // matching native color/depth and the exact prop projection for review.
+        if(sceneDepthFrame==stereoExperiment.frame&&!(sceneDepthMask&(1u<<evidenceEye))&&bodyAmmoBefore&&after){
+            ComPtr<ID3D11DepthStencilView> dsv;observedImmediateContext->OMGetRenderTargets(0,nullptr,&dsv);
+            ComPtr<ID3D11Resource> resource;ComPtr<ID3D11Texture2D> depth;
+            if(dsv){dsv->GetResource(&resource);resource.As(&depth);}
+            if(depth){
+                sceneDepthProps[evidenceEye]=props;
+                if(const auto instance=fvr::bc2::BodyAmmoHostInstance(*bodyAmmoBefore,*after,now)){
+                    sceneDepthProps[evidenceEye].count=1;sceneDepthProps[evidenceEye].instances[0]=*instance;
+                }
+                CaptureWorldColor(sceneDepthCaptures[evidenceEye],sceneDepthFrame,depth.Get(),true);
+                CaptureWorldColor(sceneDepthColors[evidenceEye],sceneDepthFrame);
+                const unsigned offsets[]{layout.primaryOffset,layout.secondaryOffset,layout.thirdOffset,layout.fourthOffset};
+                for(unsigned v=0;v<4;++v)if(Read(address+offsets[v],sceneDepthViewCopies[evidenceEye][v].data(),0x460))sceneDepthViewMask[evidenceEye]|=1u<<v;
+                for(unsigned n=0;n<sceneDepthCandidateCounts[evidenceEye];++n){auto& c=sceneDepthCandidates[evidenceEye][n];
+                    CaptureWorldColor(c.capture,sceneDepthFrame,c.texture.Get(),true);c.texture.Reset();}
+                sceneDepthMask|=1u<<evidenceEye;
+            }
+        }
+        for(unsigned n=0;n<2;++n){
+            if(sceneDepthCaptures[n].step==ColorCapture::Step::Pending)CaptureWorldColor(sceneDepthCaptures[n],sceneDepthFrame,nullptr,true);
+            if(sceneDepthColors[n].step==ColorCapture::Step::Pending)CaptureWorldColor(sceneDepthColors[n],sceneDepthFrame);
+            for(unsigned i=0;i<sceneDepthCandidateCounts[n];++i){auto& c=sceneDepthCandidates[n][i].capture;
+                if(c.step==ColorCapture::Step::Pending)CaptureWorldColor(c,sceneDepthFrame,nullptr,true);}
+        }
+#endif
         if(const auto pair=tracked.bodyPropPair.End(bodyPair,bodyPairKey,evidenceEye,bodySourcesBefore,bodySourcesAfter,props,ReloadDrawNowNs()))
             if(tracked.state.load(std::memory_order_acquire)==1&&fvr::bc2::CarriedPairKey(tracked.lease)==bodyPairKey&&
                U32(stereoExperiment.world+0x88)==stereoExperiment.frame&&U32(address+0x70)==stereoExperiment.request){
@@ -1615,8 +1906,10 @@ void __fastcall DrawHook(void* self,void*,void* request,void* view,void* data){
     }
     pulse.Restore();
     if(record&&record->drawn==1&&record->view==address){record->cameraAfter=Hash(address+layout.primaryOffset,0x460);record->dataAfter=Hash(record->preparedData,0x64);record->viewItemsAfter=ItemCount(address);record->targetAfter=BoundTarget();}
+    sceneTrace::Mark(milestone,SceneMilestoneStage::Exit);
 }
 bool DisableProbeHooks()noexcept {
+    graphicsBootstrap.Cancel();
     bodyAmmoRenderer.RequestStop();
     fvr::bc2::opticFilterRuntime::Disable();
     fvr::bc2::rigWorkerRuntime::Disable();
@@ -1722,17 +2015,25 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
             for(unsigned i=0;i<cacheRvas.size();++i)
                 Require(same(cacheRvas[i],cacheSizes[i])&&Hash(imageBase+cacheRvas[i],cacheSizes[i])==cacheHashes[i],"Retired cache native shrink ABI unverified");
             stereoRecovery.retiredCacheResize=unsigned(imageBase+cacheResize);
+            const auto holderRelease=rel(lifecycle.destructor+0x1a,0xe8);
+            const auto pendingRelease=rel(lifecycle.destructor+0xe4,0xe8);
+            Require(rel(lifecycle.destructor+0xca,0xe8)==holderRelease&&
+                same(holderRelease,0x74)&&same(pendingRelease,0x37)&&
+                Hash(imageBase+holderRelease,0x74)==0x28fb8a386238ded6ULL&&
+                Hash(imageBase+pendingRelease,0x37)==0xfeea1c870d1c1239ULL,
+                "Owned child-holder/pending-queue destructors unverified");
             const unsigned char renderingGate[]={0x83,0xbe,0xc4,0,0,0,1};
             const unsigned char renderingDone[]={0xc7,0x86,0xc4,0,0,0,3,0,0,0};
             const unsigned char updatingDone[]={0xc7,0x83,0xc4,0,0,0,1,0,0,0};
             Require(!std::memcmp(bytes.data()+Offset(pe.image,render->worldRender+0x1e,7),renderingGate,7)&&
                 !std::memcmp(bytes.data()+Offset(pe.image,render->worldRender+0x175,10),renderingDone,10)&&
                 !std::memcmp(bytes.data()+Offset(pe.image,visibility->worldUpdate+0x3da,10),updatingDone,10),"Native request phase contract changed");
-            const std::array<std::pair<unsigned,unsigned>,19> spans{{{add,14},{release,31},{deleting,30},{requestDestructor,0x7a},{baseDestructor,0xc3},
+            const std::array<std::pair<unsigned,unsigned>,21> spans{{{add,14},{release,31},{deleting,30},{requestDestructor,0x7a},{baseDestructor,0xc3},
                 {lifecycle.release,34},{lifecycle.destructor,0xf3},{lifecycle.deletingDestructor,30},{lifecycle.setActive,13},
                 {viewCallbacks.unregisterView,61},{initialization.refreshRegistered,0x164},{initialization.parentGetter,7},
                 {render->worldRender+0x1e,7},{render->worldRender+0x175,10},{visibility->worldUpdate+0x3da,10},
-                {cacheResize,cacheSizes[0]},{cacheShrink,cacheSizes[1]},{cacheMove,cacheSizes[2]},{cacheDestroy,cacheSizes[3]}}};
+                {cacheResize,cacheSizes[0]},{cacheShrink,cacheSizes[1]},{cacheMove,cacheSizes[2]},{cacheDestroy,cacheSizes[3]},
+                {holderRelease,0x74},{pendingRelease,0x37}}};
             for(unsigned i=0;i<spans.size();++i){const auto [rva,n]=spans[i];Require(same(rva,n),"Retirement code modified");
                 stereoRecovery.code[i]={unsigned(imageBase+rva),n,Hash(imageBase+rva,n)};}
         }
@@ -1773,7 +2074,7 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
             [](const fvr::interaction::FeedbackEvent& event)noexcept{return frameBridge.PublishFeedback(event);}),
             "Gameplay feedback writer configuration rejected");
         if(config.m95PhysicalBoltCycles)Require(fvr::bc2::gameplay::EnablePhysicalBoltProbe(config.m95PhysicalBoltCycles),"Physical bolt requires its explicit isolated private build");
-        if(config.m95StockShot)Require(fvr::bc2::gameplay::EnableM95StockShotProbe(),"M95 stock shot requires its explicit isolated private build");
+        if(config.m95StockShot)Require(fvr::bc2::gameplay::EnableM95StockShotProbe(config.m95StockShot),"M95 stock shot requires its explicit isolated private build");
         if(config.pumpHoldDiagnostic==fvr::bc2::PumpHoldDiagnostic::SelectedManualEmptyFire){Require(config.magazineReloadSession==3,"Empty-fire requires normal shared manual families");Require(fvr::bc2::gameplay::EnableEmptyFireProbe(),"Empty-fire diagnostic configuration rejected");}
         if(config.pumpHoldDiagnostic==fvr::bc2::PumpHoldDiagnostic::SpasOneShot)Require(fvr::bc2::reloadFlowRuntime::EnablePumpHoldDiagnostic(),"Pump hold diagnostic configuration rejected");
         if(const auto cycles=fvr::bc2::PumpPhysicalCycles(config.pumpHoldDiagnostic)){
@@ -1792,7 +2093,7 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
             // folder receives this PRIVATE installed-asset cache from the launcher.
             bodyAmmoCache=fvr::bc2::LoadBodyAmmoGeometryCache(output.parent_path()/L"body-ammo-assets.fvrprop");
             if(bodyAmmoCache.catalog&&!bodyAmmoRenderer.QueueGeometryCatalog(bodyAmmoCache.catalog))
-                bodyAmmoCache.status=fvr::bc2::BodyAmmoCacheStatus::Geometry;
+                bodyAmmoCache.status=fvr::bc2::BodyAmmoCacheStatus::Catalog;
         }
         if(config.flags&0x20000000u)Require(fvr::bc2::gameplay::EnablePhysicalReloadProbeRepeat(),"Two-shell physical fixture configuration rejected");
         weaponVisibilityProbeMode=bool(config.flags&fvr::bc2::WeaponVisibilityProbeFlag);
@@ -1818,9 +2119,14 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
             fvr::bc2::gameplay::EnableOrdinaryManualCycles(),
             "Ordinary manual cycles require tracked body, shell and resource controls with measured native bindings");
 #endif
+#ifdef FVR_BC2_ORDINARY_RESOURCE_INTERRUPTION_PROBE
+        constexpr bool interruptOrdinaryPump=true;
+#else
+        constexpr bool interruptOrdinaryPump=false;
+#endif
         if(config.ordinaryResourceInput)
             Require(fvr::bc2::reloadFlowRuntime::EnableOrdinaryResourceInputRecording()&&
-                fvr::bc2::gameplay::EnableOrdinaryResourceInputProbe(),
+                fvr::bc2::gameplay::EnableOrdinaryResourceInputProbe(interruptOrdinaryPump,config.ordinaryResourceInput==2),
                 "Ordinary resource input requires its explicit bounded diagnostic build");
         if(config.m95OrdinaryBoltInputCycles)
             Require(fvr::bc2::reloadFlowRuntime::EnableOrdinaryBoltInputRecording(config.m95OrdinaryBoltInputCycles)&&
@@ -1852,11 +2158,50 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
         if(lifecycleMode||stereoMode)Require(MH_CreateHook(reinterpret_cast<void*>(imageBase+visibility->worldUpdate),UpdateHook,reinterpret_cast<void**>(&updateOriginal))==MH_OK,"Create pre-update lifecycle boundary");
         if(stereoMode||poolOnly)Require(MH_CreateHook(reinterpret_cast<void*>(imageBase+workPool.reset),ResetPoolHook,reinterpret_cast<void**>(&resetPoolOriginal))==MH_OK,"Create native pool cleanup boundary");
         hookEntries={reinterpret_cast<void*>(imageBase+render->worldRender),reinterpret_cast<void*>(imageBase+render->prepareView),reinterpret_cast<void*>(imageBase+render->drawView),reinterpret_cast<void*>(imageBase+visibility->prepareVisibility),(lifecycleMode||stereoMode)?reinterpret_cast<void*>(imageBase+visibility->worldUpdate):nullptr,(stereoMode||poolOnly)?reinterpret_cast<void*>(imageBase+workPool.reset):nullptr};
-        if(streamMode){auto* device=reinterpret_cast<ID3D11Device*>(U32(renderer+0x7c));ComPtr<ID3D11DeviceContext> context;device->GetImmediateContext(&context);
-            observedImmediateContext=context.Get();auto* entry=(*reinterpret_cast<void***>(context.Get()))[12];
+        // Bootstrap through native Present before enabling the other hooks.
+        // The setup worker inspects raw identity/vtable addresses only; D3D11
+        // calls and their temporary reference releases stay on the render thread.
+        if(streamMode){
+            Require(same(profile.presentWrapper,49),"Native DXGI presentation call changed");
+            observedRenderer=renderer;observedSwapChain=reinterpret_cast<IDXGISwapChain*>(U32(renderer+0x88));
+            Require(observedSwapChain!=nullptr,"No desktop swap chain");
+            auto* entry=reinterpret_cast<void*>(U32(U32(reinterpret_cast<unsigned>(observedSwapChain))+8*sizeof(unsigned)));HMODULE owner=nullptr;
+            Require(entry&&GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                reinterpret_cast<LPCWSTR>(entry),&owner)&&owner==GetModuleHandleW(L"dxgi.dll"),"Unexpected DXGI Present owner");
+            Require(MH_CreateHook(entry,DesktopPresentHook,reinterpret_cast<void**>(&desktopPresentOriginal))==MH_OK,"Create bounded desktop pacing hook");
+            hookEntries[10]=entry;graphicsBootstrapWorkerThread=GetCurrentThreadId();hooksEnabled=true;
+            Require(MH_EnableHook(entry)==MH_OK,"Enable native graphics bootstrap");
+            const auto deadline=GetTickCount64()+5000;
+            using Phase=decltype(graphicsBootstrap)::Phase;
+            while((graphicsBootstrap.State()==Phase::Waiting||graphicsBootstrap.State()==Phase::Capturing)&&GetTickCount64()<deadline)Sleep(1);
+            const auto captured=graphicsBootstrap.Read();
+            Require(captured.has_value(),"Native Present graphics bootstrap unavailable");
+            Require(captured->thread!=graphicsBootstrapWorkerThread&&captured->device==U32(renderer+0x7c)&&
+                U32(imageBase+profile.rendererGlobal)==renderer&&U32(renderer)==imageBase+profile.rendererVtable&&
+                U32(renderer+0x88)==reinterpret_cast<unsigned>(observedSwapChain),"Graphics bootstrap identity changed");
+            graphicsBootstrapEvidence=*captured;
+            observedImmediateContext=reinterpret_cast<ID3D11DeviceContext*>(captured->context);
+        }
+        if(streamMode){auto* entry=reinterpret_cast<void*>(graphicsBootstrapEvidence.entries[0]);
             HMODULE owner=nullptr;Require(GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,reinterpret_cast<LPCWSTR>(entry),&owner)&&owner==GetModuleHandleW(L"d3d11.dll"),"Unexpected D3D11 DrawIndexed owner");
             Require(MH_CreateHook(entry,IndexedDrawHook,reinterpret_cast<void**>(&indexedDrawOriginal))==MH_OK,"Create bounded geometry constant observer");hookEntries[6]=entry;
-            if(passEvidenceEnabled||opticEvidenceEnabled){auto* nonIndexedEntry=(*reinterpret_cast<void***>(observedImmediateContext))[13];HMODULE nonIndexedOwner=nullptr;
+            bool observeNonIndexed=passEvidenceEnabled||opticEvidenceEnabled;
+#ifdef FVR_BC2_BODY_SCENE_DEPTH
+            auto* clearEntry=reinterpret_cast<void*>(graphicsBootstrapEvidence.entries[4]);HMODULE clearOwner=nullptr;
+            Require(GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,reinterpret_cast<LPCWSTR>(clearEntry),&clearOwner)&&clearOwner==GetModuleHandleW(L"d3d11.dll"),"Unexpected D3D11 ClearDepthStencilView owner");
+            Require(MH_CreateHook(clearEntry,ClearBodySceneDepthHook,reinterpret_cast<void**>(&clearDepthOriginal))==MH_OK,"Create scoped world/first-person depth copies");hookEntries[13]=clearEntry;
+#endif
+#ifdef FVR_BC2_SCENE_DEPTH_CAPTURE
+            observeNonIndexed=true;
+            const auto addDrawObserver=[&](unsigned slot,void* detour,void** original,unsigned record){
+                auto* entry=reinterpret_cast<void*>(graphicsBootstrapEvidence.entries[slot==20?2:3]);HMODULE owner=nullptr;
+                Require(GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,reinterpret_cast<LPCWSTR>(entry),&owner)&&owner==GetModuleHandleW(L"d3d11.dll"),"Unexpected instanced draw owner");
+                Require(MH_CreateHook(entry,detour,original)==MH_OK,"Create diagnostic instanced draw observer");hookEntries[record]=entry;
+            };
+            addDrawObserver(20,reinterpret_cast<void*>(IndexedInstancedDrawHook),reinterpret_cast<void**>(&indexedInstancedDrawOriginal),11);
+            addDrawObserver(21,reinterpret_cast<void*>(InstancedDrawHook),reinterpret_cast<void**>(&instancedDrawOriginal),12);
+#endif
+            if(observeNonIndexed){auto* nonIndexedEntry=reinterpret_cast<void*>(graphicsBootstrapEvidence.entries[1]);HMODULE nonIndexedOwner=nullptr;
             Require(GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,reinterpret_cast<LPCWSTR>(nonIndexedEntry),&nonIndexedOwner)&&nonIndexedOwner==GetModuleHandleW(L"d3d11.dll"),"Unexpected D3D11 Draw owner");
             Require(MH_CreateHook(nonIndexedEntry,NonIndexedDrawHook,reinterpret_cast<void**>(&nonIndexedDrawOriginal))==MH_OK,"Create bounded pass observer");hookEntries[8]=nonIndexedEntry;}
         }
@@ -1868,20 +2213,6 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
             Require(overrides&&same(overrides->setter,0x6d)&&same(overrides->meshCaller-0x25,41)&&same(overrides->terrainCaller-0x27,43),"Projection override code/ABI mismatch");projectionOverrides=*overrides;
             auto* projectionEntry=reinterpret_cast<void*>(imageBase+overrides->setter);
             Require(MH_CreateHook(projectionEntry,ProjectionContextHook,reinterpret_cast<void**>(&projectionContextOriginal))==MH_OK,"Create projection override observer");hookEntries[9]=projectionEntry;
-        }
-        // Observe the final desktop buffer in either pacing mode; the hook
-        // still bypasses sync only when uncapMirror explicitly authorizes it.
-        if(streamMode){
-            Require(same(profile.presentWrapper,49),"Native DXGI presentation call changed");
-            observedRenderer=renderer;observedSwapChain=reinterpret_cast<IDXGISwapChain*>(U32(renderer+0x88));
-            Require(observedSwapChain!=nullptr,"No desktop swap chain");
-            ComPtr<ID3D11Device> ownerDevice;Require(SUCCEEDED(observedSwapChain->GetDevice(IID_PPV_ARGS(&ownerDevice)))&&
-                reinterpret_cast<unsigned>(ownerDevice.Get())==U32(renderer+0x7c),"Desktop swap-chain device mismatch");
-            auto* entry=(*reinterpret_cast<void***>(observedSwapChain))[8];HMODULE owner=nullptr;
-            Require(GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                reinterpret_cast<LPCWSTR>(entry),&owner)&&owner==GetModuleHandleW(L"dxgi.dll"),"Unexpected DXGI Present owner");
-            Require(MH_CreateHook(entry,DesktopPresentHook,reinterpret_cast<void**>(&desktopPresentOriginal))==MH_OK,"Create bounded desktop pacing hook");
-            hookEntries[10]=entry;
         }
         if(streamMode)fvr::bc2::menu::Install(bytes,pe.image,imageBase,streamToken);
         // Retain trampolines/module until process exit, including partial setup.
@@ -1912,14 +2243,51 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
         Require(globalEnable==MH_OK,"Enable native trace");
         Require(opticStarted,"Enable bounded native lens-filter observer");
         Require(workerStarted,"Enable bounded palette worker observation");
+        graphicsRuntimeReady.store(true,std::memory_order_release);
         sampling.store(true,std::memory_order_release);fvr::bc2::menu::Start();if(config.flags&0x800u)fvr::bc2::gameplay::Start();
+        sceneTrace::Writer sceneWriter(output.parent_path()/L"scene-milestones.jsonl");
+        bool cycleFailureSaved=false,originObservationSaved=false;
+        const auto persistCycleFailure=[&]{
+#if defined(FVR_BC2_ORDINARY_RESOURCE_INPUT_PROBE)
+            // A diagnostic observer only: publish an existing native debt to
+            // the external input receiver. It never changes game state. The
+            // opt-in receiver can then change tracking/input space together.
+            if(!originObservationSaved){
+                LARGE_INTEGER qpc{},frequency{};QueryPerformanceCounter(&qpc);QueryPerformanceFrequency(&frequency);
+                const auto nowNs=std::int64_t((qpc.QuadPart/frequency.QuadPart)*1000000000ll+
+                    (qpc.QuadPart%frequency.QuadPart)*1000000000ll/frequency.QuadPart);
+                const auto cycle=fvr::bc2::reloadFlowRuntime::ReadNativeCycleView(nowNs);
+                if(cycle&&cycle->phase==fvr::bc2::Bc2NativeCyclePhase::Converging&&cycle->blocksFire&&cycle->cycle&&cycle->shot){
+                    const auto pending=output.parent_path()/L"pump-origin-ready.pending";
+                    std::ofstream observation(pending,std::ios::binary);
+                    observation<<cycle->native.owner.space<<' '<<cycle->cycle<<' '<<cycle->shot<<'\n';
+                    observation.close();Require(bool(observation),"Save pump origin observation");
+                    std::filesystem::rename(pending,output.parent_path()/L"pump-origin-ready.txt");originObservationSaved=true;
+                }
+            }
+#endif
+            if(cycleFailureSaved)return;
+            std::ostringstream captured;
+            if(!fvr::bc2::reloadFlowRuntime::WriteNativeCycleFirstFailure(captured))return;
+            std::ofstream evidence(output.parent_path()/L"native-cycle-first-failure.json",std::ios::binary);
+            evidence<<captured.str();evidence.flush();cycleFailureSaved=bool(evidence);
+        };
         if(continuous){
             std::ofstream telemetry(output.parent_path()/L"session-telemetry.jsonl");
             const auto sessionStarted=GetTickCount64();auto nextSample=sessionStarted;
             while(!hostLifetime.Ended()){
+                persistCycleFailure();sceneWriter.Flush();
+#if defined(FVR_BC2_ORDINARY_RESOURCE_SCENE_PROBE)
+                fvr::bc2::graphicsThreadObservation::Flush(output.parent_path()/L"graphics-threads.jsonl");
+#endif
+
                 const auto now=GetTickCount64();if(now>=nextSample){
                     FILETIME ft{};GetSystemTimeAsFileTime(&ft);const auto utc=(std::uint64_t(ft.dwHighDateTime)<<32)|ft.dwLowDateTime;
                     const auto emptyGate=fvr::bc2::reloadFlowRuntime::ReadMagazineEmptyControlCounters();
+                    // Flush presentation evidence during play: a game crash
+                    // cannot run the final detailed interaction report.
+                    const auto pump=fvr::bc2::rigPublication::ReadPumpPackCounters();
+                    const auto magazine=fvr::bc2::rigPublication::ReadMagazinePackCounters();
                     telemetry<<"{\"elapsed_ms\":"<<(now-sessionStarted)<<",\"utc_filetime_100ns\":"<<utc<<",\"world_calls\":"<<worldCalls.load()
                         <<",\"published\":"<<frameBridge.Published()<<",\"consumed\":"<<frameBridge.Consumed()<<",\"discarded\":"<<frameBridge.Discarded()
                         <<",\"input_samples\":"<<inputSamples.load()<<",\"tracked_input_samples\":"<<inputTrackedSamples.load()<<",\"gpu_failure_stage\":"<<frameBridge.FailureStage()<<",\"camera_restore_failures\":"<<tracked.restoreFailures.load()
@@ -1927,10 +2295,29 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
                         <<"],\"applied\":["<<emptyGate.applied[0]<<','<<emptyGate.applied[1]<<','<<emptyGate.applied[2]
                         <<"],\"restored\":["<<emptyGate.restored[0]<<','<<emptyGate.restored[1]<<','<<emptyGate.restored[2]
                         <<"],\"patch_failures\":"<<emptyGate.patchFailures<<",\"restore_failures\":"<<emptyGate.restoreFailures
-                        <<",\"receipt_failures\":"<<emptyGate.receiptFailures<<"}}\n";telemetry.flush();nextSample=now+1000;
+                        <<",\"receipt_failures\":"<<emptyGate.receiptFailures<<'}'
+                        <<",\"pump_presentation\":{\"poses\":"<<pump.poses<<",\"pairs\":"<<pump.pairs<<",\"fallbacks\":"<<pump.fallbacks
+                        <<",\"rest_poses\":"<<pump.restPoses<<",\"rest_pairs\":"<<pump.restPairs<<'}'
+                        <<",\"magazine_presentation\":{\"pairs\":"<<magazine.pairs<<",\"fallbacks\":"<<magazine.fallbacks
+                        <<",\"role_pairs\":["<<magazine.rolePairs[0]<<','<<magazine.rolePairs[1]<<','<<magazine.rolePairs[2]<<','<<magazine.rolePairs[3]<<"]}}\n";
+                    telemetry.flush();nextSample=now+1000;
                 }Sleep(100);
             }
-        }else Sleep(config.durationMs);
+        }else {
+            const auto until=GetTickCount64()+config.durationMs;
+            for(auto now=GetTickCount64();now<until;now=GetTickCount64()){
+                persistCycleFailure();sceneWriter.Flush();
+#if defined(FVR_BC2_ORDINARY_RESOURCE_SCENE_PROBE)
+                fvr::bc2::graphicsThreadObservation::Flush(output.parent_path()/L"graphics-threads.jsonl");
+#endif
+Sleep(DWORD(std::min<std::uint64_t>(100,until-now)));
+            }
+        }
+        persistCycleFailure();sceneWriter.Flush();
+#if defined(FVR_BC2_ORDINARY_RESOURCE_SCENE_PROBE)
+                fvr::bc2::graphicsThreadObservation::Flush(output.parent_path()/L"graphics-threads.jsonl");
+#endif
+
         sampling.store(false,std::memory_order_release);
         if(stereoMode){for(unsigned attempt=0;attempt<200;++attempt){const auto state=stereoExperiment.stage.load(std::memory_order_acquire);if(state!=StereoExperiment::Armed&&state!=StereoExperiment::Retiring)break;Sleep(5);}}
         for(unsigned attempt=0;attempt<200&&workPool.stage.load(std::memory_order_acquire)==1;++attempt)Sleep(5);
@@ -1940,7 +2327,7 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
         if(disabled)for(unsigned attempt=0;attempt<200;++attempt){
             if(diagnosticImageLifetime.TryQuiesce(true))break;Sleep(1);
         }
-        Sleep(50);unsigned complete=0;for(const auto& r:records)if(r.complete.load(std::memory_order_acquire))++complete;
+        Sleep(50);sceneWriter.Flush();unsigned complete=0;for(const auto& r:records)if(r.complete.load(std::memory_order_acquire))++complete;
         report<<"{\"state\":\"observed\",\"pid\":"<<GetCurrentProcessId()<<",\"hooks_disabled\":"<<(disabled?"true":"false")<<",\"module_retained_until_exit\":true,\"native_render_replayed\":false,\"camera_written\":"<<(cameraPulse.complete.load(std::memory_order_acquire)&&cameraPulse.applied?"true":"false")<<",\"world_calls\":"<<worldCalls.load()<<",\"prepare_calls\":"<<prepareCalls.load()<<",\"draw_calls\":"<<drawCalls.load()<<",\"complete_records\":"<<complete<<",\"records\":[";
         bool first=true;for(const auto& r:records)if(r.complete.load(std::memory_order_acquire)){
             if(!first)report<<',';first=false;report<<"{\"thread\":"<<r.thread<<",\"frame\":"<<r.frame<<",\"world_frame\":"<<r.worldFrame<<",\"world\":"<<r.world<<",\"request\":"<<r.request<<",\"view\":"<<r.view<<",\"begin_qpc\":"<<r.beginQpc<<",\"end_qpc\":"<<r.endQpc<<",\"request_before\":"<<r.requestBefore<<",\"request_after\":"<<r.requestAfter<<",\"views\":"<<r.viewCount<<",\"prepare_calls\":"<<r.prepared<<",\"draw_calls\":"<<r.drawn<<",\"arena_before\":"<<r.arenaBefore<<",\"arena_after\":"<<r.arenaAfter<<",\"view_items_before\":"<<r.viewItemsBefore<<",\"view_items_after\":"<<r.viewItemsAfter<<",\"camera_hash_before\":"<<r.cameraBefore<<",\"camera_hash_after\":"<<r.cameraAfter<<",\"prepared_hash_before\":"<<r.dataBefore<<",\"prepared_hash_after\":"<<r.dataAfter<<",\"target_before\":";WriteTarget(report,r.targetBefore);report<<",\"target_after\":";WriteTarget(report,r.targetAfter);report<<",\"children\":[";for(unsigned i=0;i<r.childrenCount;++i){if(i)report<<',';const auto& child=r.children[i];report<<"{\"entry\":"<<child.entry<<",\"view\":"<<child.view<<",\"vtable\":"<<child.vtable<<",\"owner\":"<<child.owner<<",\"active\":"<<child.active<<",\"shadow\":"<<child.shadow<<",\"primary_hash\":"<<child.primary<<",\"secondary_hash\":"<<child.secondary<<'}';}report<<"]}";}
@@ -1950,6 +2337,7 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
         unsigned variantIndex=0;for(const auto& variant:cameraExperiment.variants){if(variantIndex++)report<<',';report<<"{\"projection\":[";bool firstElement=true;for(const auto& row:variant.projection.values)for(float value:row){if(!firstElement)report<<',';firstElement=false;if(std::isfinite(value))report<<value;else report<<"null";}report<<"],\"frustum_hash\":"<<variant.frustumHash<<'}';}
         report<<"],\"mapped_cameras\":[";unsigned mappedIndex=0;for(const auto& result:cameraExperiment.mapped){if(mappedIndex++)report<<',';report<<"{\"passed\":"<<(result.complete?"true":"false")<<",\"view_error\":"<<result.viewError<<",\"projection_error\":"<<result.projectionError<<",\"view_projection_relative_error\":"<<result.viewProjectionRelativeError<<'}';}report<<"],\"culling_cameras\":[";unsigned cullIndex=0;for(const auto& result:cameraExperiment.culling){if(cullIndex++)report<<',';report<<"{\"passed\":"<<(result.passed?"true":"false")<<",\"max_distance\":"<<result.maxDistance<<",\"normal_error\":"<<result.normalError<<'}';}report<<"]}";
         }else report<<"{\"complete\":false}";
+        report<<",\"scene_milestones\":";sceneWriter.Status(report);
         report<<",\"visibility_calls\":"<<visibilityCalls.load()<<",\"visibility_records\":[";bool firstVisibility=true;
         for(const auto& r:visibilityRecords)if(r.complete.load(std::memory_order_acquire)){if(!firstVisibility)report<<',';firstVisibility=false;report<<"{\"thread\":"<<r.thread<<",\"frame\":"<<r.frame<<",\"world_frame\":"<<r.worldFrame<<",\"world\":"<<r.world<<",\"request\":"<<r.request<<",\"view\":"<<r.view<<",\"begin_qpc\":"<<r.beginQpc<<",\"end_qpc\":"<<r.endQpc<<",\"owner_valid\":"<<(r.ownerValid?"true":"false")<<",\"request_before\":"<<r.requestBefore<<",\"request_after\":"<<r.requestAfter<<",\"job1\":"<<r.job1<<",\"job2\":"<<r.job2<<",\"camera_before\":[";for(unsigned i=0;i<4;++i){if(i)report<<',';report<<r.cameraBefore[i];}report<<"],\"camera_after\":[";for(unsigned i=0;i<4;++i){if(i)report<<',';report<<r.cameraAfter[i];}report<<"]}";}
         report<<"],\"camera_pulse\":";
@@ -1971,6 +2359,7 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
         if(stereoState==StereoExperiment::Released){
             const auto list=[&](const ListSnapshot& s){report<<'[';for(unsigned i=0;i<s.count;++i){if(i)report<<',';report<<s.values[i];}report<<']';};
             report<<",\"stereo_shutdown\":{\"captured\":"<<stereoShutdown.captured<<",\"rejected\":"<<stereoShutdown.rejected
+                <<",\"owned_pending_references\":"<<stereoShutdown.pendingReferencesBefore
                 <<",\"request_refs_before_release\":"<<stereoShutdown.requestReferencesBefore<<",\"after_captured\":"<<stereoShutdown.afterCaptured
                 <<",\"historical_original_order\":";list(stereoShutdown.historical);
             report<<",\"before_release_order\":";list(stereoShutdown.before);report<<",\"expected_survivor_order\":";list(stereoShutdown.expected);
@@ -1980,6 +2369,7 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
             <<",\"rejected\":"<<stereoRecovery.rejected.load()<<",\"failure\":"<<stereoRecovery.failure.load()<<",\"retirement_step\":"<<stereoRecovery.retirementStep.load()
             <<",\"old_world\":"<<stereoRecovery.oldWorld.load()<<",\"old_request\":"<<stereoRecovery.oldRequest.load()<<",\"old_eye\":"<<stereoRecovery.oldEye.load()
             <<",\"new_world\":"<<stereoRecovery.newWorld.load()<<",\"new_request\":"<<stereoRecovery.newRequest.load()<<",\"retired_views\":"<<stereoRecovery.retiredViews.load()
+            <<",\"owned_pending_references\":"<<stereoRecovery.retiredPendingReferences.load()
             <<",\"cache_clear_calls\":"<<stereoRecovery.cacheClearCalls.load()<<",\"cache_clear_receipts\":"<<stereoRecovery.cacheClearReceipts.load()
             <<",\"completed_on_stop\":"<<(stereoRecovery.completedOnStop.load()?"true":"false")<<'}';
         report<<",\"stereo_progress\":";
@@ -2062,10 +2452,18 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
         report<<",\"body_ammo_cache\":{\"status\":\""<<fvr::bc2::BodyAmmoCacheStatusName(bodyAmmoCache.status)
             <<"\",\"bytes\":"<<bodyAmmoCache.bytes<<",\"parts\":"<<(bodyAmmoCache.catalog?bodyAmmoCache.catalog->size():0)
             <<",\"failure_part\":"<<bodyAmmoCache.part<<",\"failure_section\":"<<bodyAmmoCache.section<<'}';
-        report<<",\"body_source_reads\":{\"order\":[\"ammo\",\"selected_holster\",\"carried\"],\"columns\":[\"first\",\"second\",\"third\",\"unavailable\"],\"counts\":[";
+        report<<",\"body_source_reads\":{\"order\":[\"ammo\",\"selected_holster\",\"carried\",\"stowed_ammo\"],\"columns\":[\"first\",\"second\",\"third\",\"unavailable\"],\"counts\":[";
         for(unsigned kind=0;kind<bodySourceReads.size();++kind){if(kind)report<<',';report<<'[';
             for(unsigned attempt=0;attempt<4;++attempt){if(attempt)report<<',';report<<bodySourceReads[kind][attempt].load();}report<<']';}report<<"]}";
         report<<",\"body_ammo_render\":";bodyAmmoRenderer.Report(report);
+#ifdef FVR_BC2_BODY_SCENE_DEPTH
+        report<<",\"body_scene_depth\":{\"begun_eyes\":"<<bodyDepthBegins.load()<<",\"completed_eyes\":"<<bodyDepthEnds.load()<<",\"rejected_eyes\":"<<bodyDepthRejected.load()<<",\"extra_native_draws\":0}";
+        report<<R"(,"graphics_bootstrap":{"worker_thread":)"<<graphicsBootstrapWorkerThread
+            <<R"(,"present_thread":)"<<graphicsBootstrapEvidence.thread<<R"(,"device_flags":)"<<graphicsBootstrapEvidence.deviceFlags
+            <<R"(,"device":)"<<graphicsBootstrapEvidence.device<<R"(,"context":)"<<graphicsBootstrapEvidence.context
+            <<R"(,"worker_com_calls":0,"temporary_refs_released_before_publication":true})";
+
+#endif
         report<<",\"reload_draw_evidence\":";reloadDrawCapture.Report(report);
         report<<",\"reload_palette_producer\":";fvr::bc2::ReloadProducerBinding().Report(report);
         report<<",\"optic_filter_observation\":";fvr::bc2::opticFilterRuntime::Report(report);
@@ -2082,6 +2480,45 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
         }
         report<<']';
         report<<"}\n";report.flush();
+#ifdef FVR_BC2_SCENE_DEPTH_CAPTURE
+        {
+            std::ofstream evidence(output.parent_path()/"scene-depth-evidence.json");
+            evidence<<std::setprecision(9);
+            evidence<<"{\"diagnostic_only\":true,\"draws_added\":0,\"frame\":"<<sceneDepthFrame<<",\"mask\":"<<sceneDepthMask<<",\"eyes\":[";
+            for(unsigned eye=0;eye<2;++eye){
+                if(eye)evidence<<',';const auto& p=sceneDepthProps[eye];
+                evidence<<"{\"eye\":"<<eye<<",\"props\":"<<p.count<<",\"view\":[";
+                const auto matrix=[&](const fvr::math::Matrix4& m){for(unsigned n=0;n<16;++n){if(n)evidence<<',';evidence<<m.values[n/4][n%4];}};
+                matrix(p.view);evidence<<"],\"projection\":[";matrix(p.projection);evidence<<"],\"world\":[";matrix(p.instances[0].world);
+                evidence<<"],\"geometry\":["<<p.instances[0].geometry.asset<<','<<p.instances[0].geometry.part<<','<<p.instances[0].geometry.revision<<"],\"captures\":[";
+                for(unsigned kind=0;kind<2;++kind){if(kind)evidence<<',';auto& c=kind?sceneDepthColors[eye]:sceneDepthCaptures[eye];
+                    const bool okay=c.complete.load(std::memory_order_acquire)&&c.step==ColorCapture::Step::Finished;
+                    evidence<<"{\"captured\":"<<okay<<",\"frame\":"<<c.frame<<",\"error\":"<<c.error<<",\"target\":";WriteTarget(evidence,c.target);evidence<<'}';
+                    if(okay){std::ofstream bytes(output.parent_path()/("scene-depth-"+std::to_string(eye)+(kind?".rgba":".d24s8")),std::ios::binary);
+                        bytes.write(reinterpret_cast<const char*>(c.rgba.data()),std::streamsize(c.rgba.size()));bytes.close();Require(bool(bytes),"Write scene-depth evidence");c.serialized=true;}
+                }evidence<<"],\"view_mask\":"<<sceneDepthViewMask[eye]<<",\"candidate_overflow\":"<<sceneDepthCandidateOverflow[eye];
+                const auto& calls=sceneDepthCalls[eye];
+                evidence<<",\"draw_observation\":{\"indexed\":"<<calls.indexed<<",\"non_indexed\":"<<calls.nonIndexed
+                    <<",\"indexed_instanced\":"<<calls.indexedInstanced<<",\"instanced\":"<<calls.instanced
+                    <<",\"no_depth\":"<<calls.noDepth<<",\"unsupported\":"<<calls.unsupported
+                    <<",\"wrong_size\":"<<calls.wrongSize<<",\"wrong_viewport\":"<<calls.wrongViewport<<",\"formats\":[";
+                bool firstFormat=true;for(unsigned f=0;f<calls.formats.size();++f)if(calls.formats[f]){
+                    if(!firstFormat)evidence<<',';firstFormat=false;evidence<<"{\"format\":"<<f<<",\"draws\":"<<calls.formats[f]<<'}';}
+                evidence<<"]},\"depth_candidates\":[";
+                for(unsigned v=0;v<4;++v)if(sceneDepthViewMask[eye]&(1u<<v)){
+                    std::ofstream bytes(output.parent_path()/("scene-view-"+std::to_string(eye)+"-"+std::to_string(v)+".bin"),std::ios::binary);
+                    bytes.write(reinterpret_cast<const char*>(sceneDepthViewCopies[eye][v].data()),0x460);bytes.close();Require(bool(bytes),"Write scene-view evidence");}
+                for(unsigned n=0;n<sceneDepthCandidateCounts[eye];++n){if(n)evidence<<',';auto& c=sceneDepthCandidates[eye][n];auto& cap=c.capture;
+                    const bool okay=cap.complete.load(std::memory_order_acquire)&&cap.step==ColorCapture::Step::Finished;
+                    evidence<<"{\"index\":"<<n<<",\"captured\":"<<okay<<",\"resource\":"<<c.resource<<",\"draws\":"<<c.draws
+                        <<",\"viewport\":["<<c.viewport.TopLeftX<<','<<c.viewport.TopLeftY<<','<<c.viewport.Width<<','<<c.viewport.Height<<','<<c.viewport.MinDepth<<','<<c.viewport.MaxDepth
+                        <<"],\"depth_function\":"<<c.depthFunction<<",\"depth_write\":"<<c.depthWrite<<",\"target\":";WriteTarget(evidence,cap.target);evidence<<'}';
+                    if(okay){std::ofstream bytes(output.parent_path()/("scene-candidate-"+std::to_string(eye)+"-"+std::to_string(n)+".d24s8"),std::ios::binary);
+                        bytes.write(reinterpret_cast<const char*>(cap.rgba.data()),std::streamsize(cap.rgba.size()));bytes.close();Require(bool(bytes),"Write depth candidate");cap.serialized=true;}
+                }evidence<<"]}";
+            }evidence<<"]}\n";evidence.close();Require(bool(evidence),"Write scene-depth metadata");
+        }
+#endif
         bool cameraPassed=cameraComplete&&cameraExperiment.liveUnchanged;
         if(cameraComplete){for(const auto& result:cameraExperiment.mapped)cameraPassed&=result.complete;for(const auto& result:cameraExperiment.culling)cameraPassed&=result.passed;}
         if(streamMode){
@@ -2139,6 +2576,11 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
         if(disabled&&diagnosticImageLifetime.Quiescent()){
             for(auto& capture:colorCaptures)releaseImage(capture);
             for(auto& capture:desktopCaptures)releaseImage(capture.color);
+#ifdef FVR_BC2_SCENE_DEPTH_CAPTURE
+            for(auto& capture:sceneDepthCaptures)releaseImage(capture);
+            for(auto& capture:sceneDepthColors)releaseImage(capture);
+            for(auto& eye:sceneDepthCandidates)for(auto& candidate:eye)releaseImage(candidate.capture);
+#endif
         }
         std::ofstream imageRetirement(output.parent_path()/"diagnostic-image-retirement.json");
         imageRetirement<<"{\"hooks_disabled\":"<<(disabled?"true":"false")

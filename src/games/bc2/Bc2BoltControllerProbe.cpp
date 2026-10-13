@@ -71,8 +71,8 @@ void Bc2BoltControllerProbe::Prepare(InputFrame& in,const ReloadStateOwner& owne
     const Bc2BoltControllerContact& raw,const std::optional<Bc2NativeCycleView>& native,const std::optional<Bc2AmmoReserveLease>& reserve,
     std::int64_t observed,std::int64_t deadline,std::int64_t now)noexcept {
     ++inputs_;if(!first_){first_=phaseAt_=now;for(unsigned n=0;n<2;++n)command_[n]=in.hands[n].grip;}
-    if(now<=0||now<lastNow_||now-first_>=25000000000ll)Fail(1,now);lastNow_=now;
-    if(requested_<1||requested_>2||!BoltCalibrationValid(calibration_)||!ValidInput(in)||!StaticReference(in)||
+    if(now<=0||now<lastNow_||now-first_>=(requested_==5?55000000000ll:25000000000ll))Fail(1,now);lastNow_=now;
+    if((requested_!=1&&requested_!=2&&!(requested_==5&&InputOnly()))||!BoltCalibrationValid(calibration_)||!ValidInput(in)||!StaticReference(in)||
        !in.focused||!in.headValid||!in.hands[0].gripTracked||!in.hands[1].gripTracked||!in.hands[1].aimTracked||
        observed<=0||observed>now||deadline<=now||deadline-observed>100000000||
        (armed_&&(owner!=owner_||asset!="M95_sp")))Fail(2,now);
@@ -98,7 +98,7 @@ void Bc2BoltControllerProbe::Prepare(InputFrame& in,const ReloadStateOwner& owne
     const bool freshRaw=original&&raw.raw.input.sequence>lastRaw_;if(original)++rawMatches_;
     const bool ammo=reserve&&reserve->verified&&reserve->identity.owner==owner&&reserve->sequence&&reserve->observedNs>0&&
         reserve->observedNs<=now&&reserve->deadlineNs>now&&reserve->deadlineNs-reserve->observedNs<=250000000&&
-        reserve->allThreeIdle&&reserve->capacity==5&&reserve->loaded>=int(requested_)+1&&reserve->loaded<=5&&reserve->reserve>=0;
+        reserve->allThreeIdle&&reserve->capacity==5&&(requested_==5?reserve->loaded==5:reserve->loaded>=int(requested_)+1)&&reserve->loaded<=5&&reserve->reserve>=0;
     if(!armed_&&!Failed()&&phase_==Phase::Warmup&&asset=="M95_sp"&&freshRaw&&ammo&&native&&
        !native->blocksFire&&native->phase==Bc2NativeCyclePhase::Watching&&now-first_>=2000000000ll&&
        (!InputOnly()||(referencesReady_&&selected_&&native->selectedMode==Bc2NativeCycleMode::M95&&native->selectedOwner==owner))){
@@ -109,7 +109,8 @@ void Bc2BoltControllerProbe::Prepare(InputFrame& in,const ReloadStateOwner& owne
         // A gap truncates an already-issued trigger. It cannot restart it.
         if(phase_==Phase::Fire&&(now-phaseAt_>=100000000||!original||!native))Move(Phase::WaitHeld,now);
         if(phase_==Phase::WaitHeld&&native&&native->held&&freshRaw){
-            if(native->native.owner!=owner||native->phase!=Bc2NativeCyclePhase::Held||native->loaded!=loaded_-1||
+            if(native->native.owner!=owner||
+               (native->phase!=Bc2NativeCyclePhase::Held&&native->phase!=Bc2NativeCyclePhase::Advancing)||native->loaded!=loaded_-1||
                native->reserve!=reserve_||native->capacity!=5||!weapon_cycle_detail::Lease(*native->held,now))Fail(6,now);
             else{held_=native->held;loaded_=native->loaded;baselinePairs_=packs_.pairs;Move(Phase::EnterCustody,now);}
         }
@@ -166,6 +167,15 @@ void Bc2BoltControllerProbe::Observe(const Bc2PhysicalBoltResult& physical,const
     Bc2BoltPackCounters packs,std::int64_t now)noexcept {
     physical_=physical;packs_=packs;if(Failed()||Completed())return;
     const auto& t=physical.tracking;
+    if(armed_){
+        const auto* previous=physicalRowCount_?&physicalRows_[physicalRowCount_-1]:nullptr;
+        if(!previous||previous->phase!=phase_||previous->mechanism!=t.mechanismPhase||
+           previous->failure!=t.mechanismFailure||previous->custody!=t.custody||previous->ownsMechanism!=physical.ownsMechanism){
+            if(physicalRowCount_<physicalRows_.size())physicalRows_[physicalRowCount_++]={phase_,t.mechanismPhase,t.mechanismFailure,
+                t.custody,t.input.sequence,t.rawInputSequence,now,t.rawContactDistance,t.rawContactValid,physical.ownsMechanism};
+            else ++physicalRowDrops_;
+        }
+    }
     if(physical.custodyChange&&physical.custodyChange->transaction.accepted){
         if(custodyReceiptCount_<custodyReceipts_.size())custodyReceipts_[custodyReceiptCount_++]={t.input,t.custody,*physical.custodyChange};else ++custodyDrops_;}
     if(phase_==Phase::EnterCustody&&physical.custodyChange&&physical.custodyChange->transaction.accepted&&t.custody==BoltCustodyPhase::Manipulating)Move(Phase::ApproachBolt,now);
@@ -187,7 +197,13 @@ void Bc2BoltControllerProbe::Observe(const Bc2PhysicalBoltResult& physical,const
     }
 }
 void Bc2BoltControllerProbe::Report(std::ostream& out)const {
-    out<<"{\"phase\":"<<unsigned(phase_)<<",\"failure\":"<<failure_<<",\"requested\":"<<requested_<<",\"completed\":"<<completed_
+    out<<"{\"physical_transition_drops\":"<<physicalRowDrops_<<",\"physical_transitions\":[";
+    for(unsigned n=0;n<physicalRowCount_;++n){const auto& r=physicalRows_[n];if(n)out<<',';
+        out<<"{\"phase\":"<<unsigned(r.phase)<<",\"mechanism\":"<<unsigned(r.mechanism)<<",\"failure\":"<<unsigned(r.failure)
+           <<",\"custody\":"<<unsigned(r.custody)<<",\"input\":"<<r.input<<",\"raw\":"<<r.raw<<",\"now_ns\":"<<r.now
+           <<",\"contact_distance\":"<<r.distance<<",\"raw_valid\":"<<(r.rawValid?"true":"false")
+           <<",\"owns_mechanism\":"<<(r.ownsMechanism?"true":"false")<<'}';}
+    out<<"],\"phase\":"<<unsigned(phase_)<<",\"failure\":"<<failure_<<",\"requested\":"<<requested_<<",\"completed\":"<<completed_
        <<",\"input_only\":"<<(InputOnly()?"true":"false")<<",\"references_ready\":"<<(referencesReady_?"true":"false")
        <<",\"selected_mode_ready\":"<<(selected_?"true":"false")<<",\"input_edge_drops\":"<<edgeDrops_
        <<",\"inputs\":"<<inputs_<<",\"raw_matches\":"<<rawMatches_<<",\"controller_poses\":"<<poses_
@@ -198,6 +214,11 @@ void Bc2BoltControllerProbe::Report(std::ostream& out)const {
         <<",\"shot\":"<<r.ready.release.cycle.shot<<",\"request\":"<<r.ready.release.request<<",\"loaded\":"<<r.loaded<<",\"reserve\":"<<r.reserve
         <<",\"release_ns\":"<<r.ready.release.observedNs<<",\"ready_ns\":"<<r.ready.observedNs<<",\"pairs\":"<<r.pairs<<",\"custody_returned\":"<<(r.custodyReturned?"true":"false");
         const auto& l=r.ready.release.cycle;const auto& o=r.native.owner;
+        out<<",\"native_boundary_held\":"<<(l.held?"true":"false")
+           <<",\"native_clock_advancing\":"<<(l.advancing?"true":"false");
+        if(l.advancing)out<<",\"advance_guard\":{\"epoch\":"<<l.advancing->guardEpoch
+            <<",\"updates\":["<<l.advancing->updates[0]<<','<<l.advancing->updates[1]<<','<<l.advancing->updates[2]
+            <<"],\"loaded\":"<<l.advancing->loaded<<",\"reserve\":"<<l.advancing->reserve<<",\"capacity\":"<<l.advancing->capacity<<'}';
         out<<",\"release_input_sequence\":"<<r.ready.release.inputSequence<<",\"release_deadline_ns\":"<<r.ready.release.deadlineNs
            <<",\"ready_sequence\":"<<r.ready.sequence<<",\"ready_deadline_ns\":"<<r.ready.deadlineNs
            <<",\"native_ready\":"<<(r.ready.nativeReady?"true":"false")<<",\"unchanged_ammunition\":"<<(r.ready.unchangedAmmunition?"true":"false")

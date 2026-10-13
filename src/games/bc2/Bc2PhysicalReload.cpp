@@ -55,12 +55,23 @@ void Bc2PhysicalReload::Journal(unsigned event,std::int64_t now,unsigned reason,
 void Bc2PhysicalReload::Cancel(const interaction::HandInteractionSample& safety,interaction::HandInteraction& hands,
     PhysicalReloadCancelReason reason,unsigned sourceFlags)noexcept {
     if(!enabled_)return;
+    // An already applied shell leaves only a bounded presentation-return
+    // intent. A missing source publication cannot revoke that completed act;
+    // current input/exact gun and new support geometry remain independent gates.
+    // Unsettled work and explicit input/identity cancellation still retire it.
     if(reason==PhysicalReloadCancelReason::FullMagazine||reason==PhysicalReloadCancelReason::EmptyReserve||
-       reason==PhysicalReloadCancelReason::Retiring)supportReturn_.CancelUnlessSettled();
-    else supportReturn_.Reset();
-    if(active_){ObserveCancellation(safety,reason,sourceFlags);api_.cancel(api_.context);active_=false;retiring_=true;retirementDrained_=false;blocksCurrent_=true;++cancelled_;Journal(5,safety.nowNs,unsigned(reason));}
+       reason==PhysicalReloadCancelReason::Retiring||reason==PhysicalReloadCancelReason::MissingSource)
+        supportReturn_.CancelUnlessSettled(unsigned(reason),sourceFlags);
+    else supportReturn_.Reset(interaction::HeldActionSupportReturn::Diagnostic::Cancelled,unsigned(reason),sourceFlags);
+    // A shell can already be carried while native pump/reload readiness is
+    // pending. Retain its loss evidence even before a native cycle exists.
+    if(active_||supply_.Held())ObserveCancellation(safety,reason,sourceFlags);
+    if(!active_&&supply_.Held())Journal(11,safety.nowNs,unsigned(reason));
+    if(active_){api_.cancel(api_.context);active_=false;retiring_=true;retirementDrained_=false;blocksCurrent_=true;++cancelled_;Journal(5,safety.nowNs,unsigned(reason));}
     bridge_.Cancel();supply_.Cancel(safety,hands);manual_.Reset();insertion_.Update({});
     pulseUntil_=0;lease_.reset();acknowledgement_.reset();completion_.reset();pendingTargets_.reset();deferredSeat_.reset();guidedPreview_.reset();
+    holdEstablished_=false;holdObservationGapDeadline_=0;
+    startDeferredAt_=0;startAttemptInput_=0;
 }
 void Bc2PhysicalReload::Feedback(PhysicalReloadResult& out,interaction::FeedbackKind kind,
     const interaction::HandInteractionSample& input)noexcept {
@@ -158,7 +169,7 @@ PhysicalReloadResult Bc2PhysicalReload::Tick(const PhysicalReloadSample& supplie
     const bool safe=gunSafe&&s.weapon.id==s.nativeOwner.weapon;
     diagnosticSafe=safe;
     const bool cancelInput=!safe||s.cancel||s.asset!=SpasReloadAsset;
-    supportReturn_.Observe(s.input,gun,cancelInput,hands.Current(InteractionHand::Left).has_value());
+    supportReturn_.Observe(s.input,gun,cancelInput,hands.Current(InteractionHand::Left).has_value(),s.cancelFlags);
     if(cancelInput){cancel(!safe?CancelReason::UnsafeInput:s.cancel?CancelReason::RequestedInput:CancelReason::WrongAsset);out.tracking.preview.reset();}
     if(active_&&(native_.owner!=s.nativeOwner||physical_!=s.input.owner))cancel(CancelReason::OwnerChanged);
     const auto reserveObservation=api_.reserveObserved?api_.reserveObserved(api_.context):ReloadReserveObservation{ReloadObservationResult::Available,api_.reserve(api_.context)};
@@ -175,9 +186,10 @@ PhysicalReloadResult Bc2PhysicalReload::Tick(const PhysicalReloadSample& supplie
         if(active_&&!retiring_&&!lease_&&supply_.Held()&&!supply_.Pending()&&
            !deferredSeat_&&!completion_&&safe&&!s.cancel&&s.asset==SpasReloadAsset&&
            native_.owner==s.nativeOwner&&physical_==s.input.owner){
-            if(s.input.nowNs-started_>3000000000ll){cancel(CancelReason::HoldNotEstablished);return out;}
+            if(!holdEstablished_&&s.input.nowNs-started_>3000000000ll){cancel(CancelReason::HoldNotEstablished);return out;}
             if(!startupGapDeadline_&&acceptedControlDeadline_>s.input.nowNs)
-                startupGapDeadline_=s.input.nowNs+std::min<std::int64_t>({50000000,acceptedControlDeadline_-s.input.nowNs,3000000000ll-(s.input.nowNs-started_)});
+                startupGapDeadline_=s.input.nowNs+std::min<std::int64_t>({50000000,acceptedControlDeadline_-s.input.nowNs,
+                    holdEstablished_?50000000ll:3000000000ll-(s.input.nowNs-started_)});
             if(!startupGapDeadline_||s.input.nowNs>=startupGapDeadline_){++startupGapExpired_;cancel(CancelReason::MissingSource);return out;}
             Bc2ReloadInteractionSample profile;profile.insertion.identity={s.input.owner,s.weapon,{},s.trackingEpoch};
             profile.insertion.nowNs=s.input.nowNs;profile.assetName=s.asset;profile.meshPath=SpasReloadMesh;
@@ -190,7 +202,7 @@ PhysicalReloadResult Bc2PhysicalReload::Tick(const PhysicalReloadSample& supplie
             const auto keep=Keep({native_,cycle_,s.input.sequence,s.input.observedNs,s.input.deadlineNs,true},s.input.nowNs);
             if(keep==ReloadKeepAliveResult::Rejected){cancel(CancelReason::KeepAliveRejected);return out;}
             s.input.nowNs=Now(s.input.nowNs);
-            if(s.input.nowNs-started_>3000000000ll){++startupGapExpired_;cancel(CancelReason::HoldNotEstablished);return out;}
+            if(!holdEstablished_&&s.input.nowNs-started_>3000000000ll){++startupGapExpired_;cancel(CancelReason::HoldNotEstablished);return out;}
             if(s.input.nowNs>=startupGapDeadline_||s.input.nowNs>=acceptedControlDeadline_||
                !Fresh(reserve_->observedNs,reserve_->deadlineNs,s.input.nowNs)){
                 ++startupGapExpired_;cancel(CancelReason::MissingSource);return out;}
@@ -263,7 +275,7 @@ PhysicalReloadResult Bc2PhysicalReload::Tick(const PhysicalReloadSample& supplie
             t.heldCycle=*lease_;
         }
         auto& v=t.visual;v.enabled=true;v.source=*source;v.input=s.input;v.gun=*gun;
-        v.contact=pouch_.alternateContact.value_or(AmmoSupplyContact{pouch_.pouchCenterMeters,pouch_.pouchRadiusMeters});
+        v.contact=BodyAmmoContact();
         v.frame=beltFrame_;
         if(SpasBeltAmmoFresh(t,Now(s.input.nowNs)))try{out.tracking.belt=std::make_shared<const BeltAmmoTracking>(std::move(t));}catch(...){}
     };
@@ -306,7 +318,7 @@ PhysicalReloadResult Bc2PhysicalReload::Tick(const PhysicalReloadSample& supplie
     if(completion_&&acknowledgement_&&lease_&&reserve_&&supply_.Pending()){
         if(const auto receipt=SpasAmmoSupplyReceipt(*supply_.Pending(),bridge_.Owners(),*completion_,*acknowledgement_,*lease_,*reserve_,s.input.nowNs)){
             if(supply_.Resolve(s.input,hands,*receipt).accepted){physicalAck=*completion_->acknowledged;++completed_;Journal(4,s.input.nowNs);
-                supportReturn_.Observe(s.input,gun,cancelInput,hands.Current(InteractionHand::Left).has_value());
+                supportReturn_.Observe(s.input,gun,cancelInput,hands.Current(InteractionHand::Left).has_value(),s.cancelFlags);
                 supportReturn_.Complete(receipt->reservation.request,receipt->observedNs);
                 Feedback(out,interaction::FeedbackKind::ReloadApplied,s.input);
                 // Receipt retains the ORIGINAL reservation after Resolve clears it.
@@ -319,7 +331,16 @@ PhysicalReloadResult Bc2PhysicalReload::Tick(const PhysicalReloadSample& supplie
         }
     }
     if((reserve_->loaded>=reserve_->capacity||reserve_->reserve<=0)&&!supply_.Pending()){cancel(reserve_->loaded>=reserve_->capacity?CancelReason::FullMagazine:CancelReason::EmptyReserve);return out;}
+    const auto priorSupply=supply_.Held();
     const auto held=supply_.Update(current,hands);diagnosticSupply=held.reason;
+    if(priorSupply&&!supply_.Held()){
+        startDeferredAt_=0;startAttemptInput_=0;
+        // Supply safety can release custody without cancelling a native cycle.
+        // Keep the original item/claim; terminal idle churn must not hide it.
+        if(rowCount_<rows_.size())rows_[rowCount_++]={12,unsigned(held.reason),s.input.nowNs,cycle_,
+            priorSupply->item.generation,0,priorSupply->item.id,priorSupply->claim.token.id};
+        else ++dropped_;
+    }
     if(held.acquired){++acquired_;Journal(1,s.input.nowNs);}
     if(supply_.Held()){
         bool remembered=false;for(const auto& e:history_)if(e&&SameInput(e->supply.input,current.input)){remembered=true;break;}
@@ -328,20 +349,52 @@ PhysicalReloadResult Bc2PhysicalReload::Tick(const PhysicalReloadSample& supplie
     // A real shell may be carried while the gun finishes pumping. Preserve its
     // current claim/presentation, but do not spend the one Reload edge until a
     // NEW full native read is ready. Cached reserve credit is insufficient.
-    if(supply_.Held()&&!active_&&observedReserve&&reserve_->reloadInputReady){
+    if(supply_.Held()&&!active_&&observedReserve&&reserve_->reloadInputReady&&s.input.sequence!=startAttemptInput_){
         const auto identity=api_.identity(api_.context);
-        if(!identity||*identity!=reserve_->identity||nextCycle_==std::numeric_limits<std::uint64_t>::max()){
+        if(!identity||*identity!=reserve_->identity||(startDeferredAt_&&*identity!=native_)||nextCycle_==std::numeric_limits<std::uint64_t>::max()){
             cancel(CancelReason::StartIdentityRejected);return out;
         }
         native_=*identity;physical_=s.input.owner;cycle_=++nextCycle_;
-        startOrigin_={s.actionFlagsKnown,s.gripPressed,false,s.input.sequence,s.actionHeld,s.actionPressed};
-        if(!api_.start(api_.context,{native_,cycle_,s.input.sequence,s.input.observedNs,s.input.deadlineNs,true})){
+        if(!startDeferredAt_)startOrigin_={s.actionFlagsKnown,s.gripPressed,false,s.input.sequence,s.actionHeld,s.actionPressed};
+        startAttemptInput_=s.input.sequence;
+        const ReloadCycleControl control{native_,cycle_,s.input.sequence,s.input.observedNs,s.input.deadlineNs,true};
+        const auto start=api_.startObserved?api_.startObserved(api_.context,control):
+            api_.start(api_.context,control)?ReloadStartResult::Accepted:ReloadStartResult::Rejected;
+        if(start==ReloadStartResult::Rejected){
             cancel(CancelReason::StartRejected);return out;
         }
-        acceptedControlDeadline_=s.input.deadlineNs;startupGapDeadline_=0;active_=true;retirementDrained_=false;blocksCurrent_=true;started_=s.input.nowNs;pulseUntil_=s.input.nowNs+100000000;lastRaw_=0;retirement_.reset();
-        ++startedCount_;Journal(2,s.input.nowNs,0,0,reserve_->sequence);
+        if(start==ReloadStartResult::Deferred){
+            // No native start, pulse or ammo authority. Retain the real shell
+            // under its ordinary hand/supply leases. Admission delay cannot
+            // discard persistent custody; release or lost ownership can. A fresh
+            // attempt gets a new cycle ID because an excluded callback arrival
+            // may have cancelled a registered but unpublished prior cycle.
+            if(!startDeferredAt_)startDeferredAt_=s.input.nowNs;
+            ++startDeferrals_;Journal(13,s.input.nowNs,0,0,s.input.sequence);
+        }else{
+            startDeferredAt_=0;startAttemptInput_=0;
+            acceptedControlDeadline_=s.input.deadlineNs;startupGapDeadline_=0;active_=true;retirementDrained_=false;blocksCurrent_=true;started_=s.input.nowNs;pulseUntil_=s.input.nowNs+100000000;lastRaw_=0;retirement_.reset();
+            holdEstablished_=false;holdObservationGapDeadline_=0;
+            ++startedCount_;Journal(2,s.input.nowNs,0,0,reserve_->sequence);
+        }
     }
-    if(active_&&!lease_&&s.input.nowNs-started_>3000000000ll){cancel(CancelReason::HoldNotEstablished);return out;}
+    if(active_&&lease_&&lease_->identity==native_&&lease_->cycle==cycle_&&lease_->nativeBindingVerified&&
+       Fresh(lease_->observedNs,lease_->deadlineNs,s.input.nowNs)){
+        if(lease_->allThreeHeld)holdEstablished_=true;
+        holdObservationGapDeadline_=0;
+    }
+    if(active_&&!lease_){
+        if(!holdEstablished_&&s.input.nowNs-started_>3000000000ll){cancel(CancelReason::HoldNotEstablished);return out;}
+        if(holdEstablished_&&!supply_.Pending()){
+            // An established cycle can briefly lose its publication. Keep its
+            // real shell/claim, not native hold or seating authority. This
+            // deadline never moves with later input; fresh native evidence is
+            // required to clear it. Pending insertions have their own lifetime.
+            if(!holdObservationGapDeadline_&&acceptedControlDeadline_>s.input.nowNs)
+                holdObservationGapDeadline_=s.input.nowNs+std::min<std::int64_t>(50000000,acceptedControlDeadline_-s.input.nowNs);
+            if(!holdObservationGapDeadline_||s.input.nowNs>=holdObservationGapDeadline_){cancel(CancelReason::MissingSource);return out;}
+        }
+    }
     const auto original=Original(s);
     Bc2ReloadInteractionResult geometric;std::optional<Bc2ReloadInteractionSample> paired;
     bool geometrySampled=false;
@@ -455,6 +508,7 @@ void Bc2PhysicalReload::Report(std::ostream& out)const {
     out<<"{\"enabled\":"<<(enabled_?"true":"false")<<",\"headset_verified\":false,\"native_acceptance_verified\":false,\"consumer_code_integrated\":true"
         <<",\"active\":"<<(active_?"true":"false")<<",\"retiring\":"<<(retiring_?"true":"false")
         <<",\"startup_gap_waits\":"<<startupGapWaits_<<",\"startup_gap_expired\":"<<startupGapExpired_
+        <<",\"start_deferrals\":"<<startDeferrals_
         <<",\"acquired\":"<<acquired_<<",\"cycles\":"<<startedCount_<<",\"submitted\":"<<submitted_
         <<",\"completed\":"<<completed_<<",\"cancelled\":"<<cancelled_<<",\"reconciled\":"<<reconciled_
         <<",\"dropped\":"<<dropped_<<",\"events\":[";
@@ -468,7 +522,7 @@ void Bc2PhysicalReload::Report(std::ostream& out)const {
         out<<"{\"event\":"<<e.id<<",\"kind\":\""<<(e.kind==interaction::FeedbackKind::ReloadCapture?"capture":"native_receipt")
            <<"\",\"input_sequence\":"<<e.inputSequence<<",\"space\":"<<e.space<<",\"observed_ns\":"<<e.observedNs<<",\"deadline_ns\":"<<e.deadlineNs<<'}';}out<<"]}";
     out<<",\"geometry\":";ReportGeometry(out);out<<",\"cancellation_evidence\":";ReportCancellations(out);
-    out<<",\"supply_availability\":";ReportAvailability(out);out<<'}';
+    out<<",\"supply_availability\":";ReportAvailability(out);out<<",\"support_return\":";supportReturn_.Report(out);out<<'}';
 }
 
 void Bc2PhysicalReload::ObserveAvailability(const PhysicalReloadSample& s,const interaction::HandInteraction& hands,
@@ -545,8 +599,8 @@ void Bc2PhysicalReload::ReportCancellations(std::ostream& out)const {
         "missing_source","full_magazine","empty_reserve","retiring","intent_exhausted","keepalive_rejected","bridge_cancelled",
         "start_identity_rejected","start_rejected","hold_not_established","manual_policy_cancelled","native_owners_rejected",
         "native_lease_rejected","submission_rejected"};
-    out<<"{\"schema\":1,\"capacity\":"<<cancellations_.size()<<",\"total\":"<<cancelled_<<",\"dropped\":"<<cancellationDropped_
-       <<",\"source_flag_names\":{\"1\":\"body_draw\",\"2\":\"fixture\",\"4\":\"aim_invalid\",\"8\":\"inactive\",\"16\":\"fire\",\"32\":\"use\",\"64\":\"next_weapon\",\"128\":\"previous_weapon\",\"256\":\"missing_pouch\",\"512\":\"magazine_busy\"},\"rows\":[";
+    out<<"{\"schema\":2,\"capacity\":"<<cancellations_.size()<<",\"total\":"<<(cancellationCount_+cancellationDropped_)<<",\"dropped\":"<<cancellationDropped_<<",\"native_cycle_cancellations\":"<<cancelled_
+       <<",\"source_flag_names\":{\"1\":\"body_draw\",\"2\":\"fixture\",\"4\":\"aim_invalid\",\"8\":\"inactive\",\"16\":\"fire\",\"32\":\"use\",\"64\":\"next_weapon\",\"128\":\"previous_weapon\",\"256\":\"missing_pouch\",\"512\":\"magazine_busy\",\"1024\":\"pump_debt\"},\"rows\":[";
     for(unsigned n=0;n<cancellationCount_;++n){if(n)out<<',';const auto& r=cancellations_[n];const auto& i=r.input;
         out<<"{\"reason\":"<<unsigned(r.reason)<<",\"reason_name\":\""<<reasons[unsigned(r.reason)]<<"\",\"source_flags\":"<<r.sourceFlags
            <<",\"cycle\":"<<r.cycle<<",\"now_ns\":"<<i.nowNs<<",\"input_sequence\":"<<i.sequence

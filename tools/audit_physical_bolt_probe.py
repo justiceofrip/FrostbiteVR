@@ -437,7 +437,7 @@ def mechanism_status(trace, requested, ordinary=False):
                       native_phase=native['phase'], native_failure=native['failure'],
                       native_failure_invocation=native.get('failure_invocation'))
         checks = dict(
-            requested_cycles_match=type(requested) is int and requested in (1, 2) and probe['requested'] == requested,
+            requested_cycles_match=type(requested) is int and (requested in (1, 2) or (ordinary and requested == 5)) and probe['requested'] == requested,
             fixture_completed=probe['phase'] == 17 and probe['failure'] == 0 and probe['completed'] == requested,
             native_completed=native['enabled'] is True and native['phase'] == 5 and native['failure'] == 0 and native['blocks_fire'] is False,
             native_outcomes=native['releases'] == native['acknowledgements'] == requested,
@@ -457,7 +457,7 @@ def mechanism_status(trace, requested, ordinary=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--run', type=Path, required=True); parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--runtime-status', type=int, choices=(1, 2),
+    parser.add_argument('--runtime-status', type=int, choices=(1, 2, 5),
                         help='Check terminal runtime status for this requested cycle count; does not audit callbacks')
     parser.add_argument('--ordinary-input', action='store_true', help='Require the ordinary player input route for runtime status')
     args = parser.parse_args()

@@ -71,6 +71,15 @@ int CatalogAndLateBothEyeEvidence(){Bc2BodyAmmoRenderer renderer;Source s;auto c
     CHECK(text.find("\"record_total\":300")!=std::string::npos&&text.find("\"retained_serial_begin\":44")!=std::string::npos);
     CHECK(text.find("\"now_ns\":30900000000")!=std::string::npos);CHECK(text.find("\"eye\":0")!=std::string::npos&&text.find("\"eye\":1")!=std::string::npos);
     CHECK(renderer.Quiescent());renderer.RequestStop();CHECK(renderer.PumpStop());return 0;}
+int FleetCatalogKeepsEveryAsset(){Source s;auto catalog=std::make_shared<BodyAmmoGeometryCatalog>();
+    for(unsigned n=0;n<MaxBodyPropAssets;++n){auto g=std::make_shared<BodyAmmoGeometry>(*s.Geometry());
+        g->asset="Asset_"+std::to_string(n);g->key=MakeBodyAmmoGeometryKey(g->asset,g->mesh,g->part,g->rigFingerprint);catalog->push_back(g);}
+    Bc2BodyAmmoRenderer renderer;CHECK(renderer.QueueGeometryCatalog(catalog));
+    auto invalid=std::make_shared<BodyAmmoGeometryCatalog>(*catalog);invalid->push_back(catalog->front());CHECK(!renderer.QueueGeometryCatalog(invalid));
+    invalid->pop_back();(*invalid)[MaxBodyPropAssets-1]=invalid->front();CHECK(!renderer.QueueGeometryCatalog(invalid));
+    auto bad=std::make_shared<BodyAmmoGeometry>(*catalog->back());bad->sections.clear();invalid->back()=bad;CHECK(!renderer.QueueGeometryCatalog(invalid));
+    std::ostringstream report;renderer.Report(report);CHECK(report.str().find("\"catalog_parts\":64")!=std::string::npos);
+    renderer.RequestStop();CHECK(renderer.PumpStop());return 0;}
 }
-int main(){if(GeometryIsOwnedAndExact()||ExactSourceBeforeAnyUpload()||SourceClaimLeaseAndReplacement()||PreDrawSelectedLeaseCannotRenew()||ProofCannotBeInferredFromTargetShape()||DisabledAndUnprovenNeverTouchGpu()||CatalogAndLateBothEyeEvidence())return 1;
-    std::cout<<"Bc2BodyAmmoRenderer: 7 CPU groups passed; no GPU/native acceptance\n";}
+int main(){if(GeometryIsOwnedAndExact()||ExactSourceBeforeAnyUpload()||SourceClaimLeaseAndReplacement()||PreDrawSelectedLeaseCannotRenew()||ProofCannotBeInferredFromTargetShape()||DisabledAndUnprovenNeverTouchGpu()||CatalogAndLateBothEyeEvidence()||FleetCatalogKeepsEveryAsset())return 1;
+    std::cout<<"Bc2BodyAmmoRenderer: 8 CPU groups passed; no GPU/native acceptance\n";}

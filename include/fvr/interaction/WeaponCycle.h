@@ -2,6 +2,7 @@
 #include "fvr/interaction/HandInteraction.h"
 #include "fvr/interaction/FeedMechanism.h"
 #include <numbers>
+#include "fvr/interaction/WeaponCycleRecoveryAuthority.h"
 
 namespace fvr::interaction {
 // A physical gesture and a native cycle are separate authorities. This policy
@@ -26,6 +27,15 @@ struct WeaponCycleProfile {
     // Fixed for the whole cycle. Adapters must transfer custody explicitly;
     // selecting right-hand manipulation never creates a left GunHold.
     WeaponCycleHandAssignment hands{};
+    // A non-rotating sliding rail has no physical controller stop. Crossing
+    // each endpoint in order counts; do not require the player to dwell there.
+    // Defaults preserve the rotational bolt/detent contract.
+    bool slidingRail=false;
+    float railOvertravelMeters=0,maximumSpeedMetersPerSecond=0;
+    // Optional held-grasp envelope around the rail segment. Controller travel
+    // beyond a virtual stop clamps the displayed part; it is not a release.
+    // Acquisition still uses contactRadius. Zero retains the older limits.
+    float railRetentionRadius=0;
 };
 struct WeaponCycleLease {
     HandInteractionOwner owner{};HandInteractionKey item{},mechanism{};
@@ -34,6 +44,9 @@ struct WeaponCycleLease {
     // Adapter-issued receipt for the exact native cycle being held. These
     // fields alone never constitute a native capability in a game adapter.
     bool held=false;
+    // Mutually exclusive with a frozen native boundary. A continuously guarded
+    // native clock may advance while the same physical stroke remains owed.
+    std::optional<WeaponCycleGuardedAdvance> advancing;
     bool operator==(const WeaponCycleLease&)const=default;
 };
 struct WeaponCycleInput {
@@ -41,19 +54,19 @@ struct WeaponCycleInput {
     math::Matrix4 rawContact{};
     bool grip=false,mechanismClaim=false;
 };
-struct WeaponCycleRelease {
-    WeaponCycleLease cycle{};
+template<class Authority> struct WeaponCycleReleaseT {
+    Authority cycle{};
     std::uint64_t request=0,inputSequence=0;
     std::int64_t observedNs=0,deadlineNs=0;
-    bool operator==(const WeaponCycleRelease&)const=default;
+    bool operator==(const WeaponCycleReleaseT&)const=default;
 };
-struct WeaponCycleReady {
-    WeaponCycleRelease release{};
+template<class Authority> struct WeaponCycleReadyT {
+    WeaponCycleReleaseT<Authority> release{};
     std::uint64_t sequence=0;
     std::int64_t observedNs=0,deadlineNs=0;
     bool nativeReady=false,unchangedAmmunition=false;
 };
-struct WeaponCycleResult {
+template<class Authority> struct WeaponCycleResultT {
     WeaponCyclePhase phase=WeaponCyclePhase::Idle;
     WeaponCycleFailure failure=WeaponCycleFailure::None;
     bool blocksFire=false;
@@ -61,8 +74,14 @@ struct WeaponCycleResult {
     // Presentation only; adapters must validate current native part identity
     // and their renderer receipts independently before using this target.
     std::optional<math::Matrix4> contact;
-    std::optional<WeaponCycleRelease> release;
+    std::optional<WeaponCycleReleaseT<Authority>> release;
 };
+using WeaponCycleRelease=WeaponCycleReleaseT<WeaponCycleLease>;
+using WeaponCycleReady=WeaponCycleReadyT<WeaponCycleLease>;
+using WeaponCycleResult=WeaponCycleResultT<WeaponCycleLease>;
+using WeaponCycleIdleDebtRelease=WeaponCycleReleaseT<WeaponCycleIdleDebtLease>;
+using WeaponCycleIdleDebtReady=WeaponCycleReadyT<WeaponCycleIdleDebtLease>;
+using WeaponCycleIdleDebtResult=WeaponCycleResultT<WeaponCycleIdleDebtLease>;
 namespace weapon_cycle_detail {
 inline bool Hands(WeaponCycleHandAssignment h){
     return (h.mechanism==InteractionHand::Left||h.mechanism==InteractionHand::Right)&&
@@ -82,11 +101,42 @@ inline std::array<float,3> Position(const math::Matrix4& a){return {a.values[3][
 inline std::array<float,3> Sub(std::array<float,3> a,const std::array<float,3>& b){for(unsigned n=0;n<3;++n)a[n]-=b[n];return a;}
 inline float Distance(const math::Matrix4& a,const math::Matrix4& b){const auto d=Sub(Position(a),Position(b));return float(std::sqrt(Dot(d,d)));}
 inline bool Same(const WeaponCycleLease& a,const WeaponCycleLease& b){
-    return a.owner==b.owner&&a.item==b.item&&a.mechanism==b.mechanism&&a.cycle==b.cycle&&a.shot==b.shot;
+    return a.owner==b.owner&&a.item==b.item&&a.mechanism==b.mechanism&&a.cycle==b.cycle&&a.shot==b.shot&&
+        a.advancing.has_value()==b.advancing.has_value()&&(!a.advancing||
+        (a.advancing->guardEpoch==b.advancing->guardEpoch&&a.advancing->loaded==b.advancing->loaded&&
+         a.advancing->reserve==b.advancing->reserve&&a.advancing->capacity==b.advancing->capacity));
 }
 inline bool Lease(const WeaponCycleLease& p,std::int64_t now){
-    return Owner(p.owner)&&Key(p.item)&&Key(p.mechanism)&&p.cycle&&p.sequence&&p.held&&Window(p.observedNs,p.deadlineNs,now);
+    if(!Owner(p.owner)||!Key(p.item)||!Key(p.mechanism)||!p.cycle||!p.sequence||
+       !Window(p.observedNs,p.deadlineNs,now)||p.held==p.advancing.has_value())return false;
+    if(!p.advancing)return true;
+    const auto& g=*p.advancing;
+    if(!p.shot||!g.guardEpoch||g.loaded<0||g.reserve<0||g.capacity<=0||g.loaded>=g.capacity)return false;
+    for(unsigned b=0;b<3;++b){
+        if(!g.updates[b])return false;
+        for(unsigned a=0;a<b;++a)if(g.updates[a]==g.updates[b])return false;
+    }
+    return true;
 }
+inline bool Same(const WeaponCycleIdleDebtLease& a,const WeaponCycleIdleDebtLease& b){
+    return a.owner==b.owner&&a.item==b.item&&a.mechanism==b.mechanism&&a.cycle==b.cycle&&a.shot==b.shot&&a.grant==b.grant;
+}
+inline bool Lease(const WeaponCycleIdleDebtLease& p,std::int64_t now){
+    const auto& g=p.grant;const auto& d=g.debt;const auto& n=g.neutral;
+    if(!Owner(p.owner)||!Key(p.item)||!Key(p.mechanism)||!p.cycle||!p.shot||!p.sequence||
+       !Window(p.observedNs,p.deadlineNs,now)||!g.nonce||!d.guardEpoch||d.loaded<0||d.reserve<0||d.capacity<=0||d.loaded>=d.capacity||
+       d.owner!=p.owner||d.item!=p.item||d.mechanism!=p.mechanism||d.cycle!=p.cycle||d.shot!=p.shot||
+       n.owner!=p.owner||!n.sequence||!n.focused||!n.tracked[0]||!n.tracked[1]||
+       !Window(n.observedNs,n.deadlineNs,n.nowNs)||n.observedNs>p.observedNs)return false;
+    for(unsigned b=0;b<3;++b)if(!p.first[b]||p.second[b]<=p.first[b]||p.second[b]>p.sequence)return false;
+    return true;
+}
+inline bool AuthorityForHands(const WeaponCycleLease&,WeaponCycleHandAssignment){return true;}
+inline bool AuthorityForHands(const WeaponCycleIdleDebtLease& a,WeaponCycleHandAssignment h){
+    return Hands(h)&&a.grant.neutral.released[HandIndex(h.mechanism)]&&!a.grant.neutral.released[HandIndex(h.gun)];
+}
+inline bool InitialHeldAdoption(const WeaponCycleLease&){return true;}
+inline bool InitialHeldAdoption(const WeaponCycleIdleDebtLease&){return false;}
 inline bool Profile(const WeaponCycleProfile& p){
     if(!p.id||!p.revision||!Hands(p.hands)||(p.family!=WeaponCycleFamily::Pump&&p.family!=WeaponCycleFamily::Bolt)||
         !feed_mechanism_detail::Pose(p.closedContact)||!std::isfinite(Dot(p.axis,p.axis))||std::abs(Dot(p.axis,p.axis)-1)>1e-5||
@@ -97,6 +147,11 @@ inline bool Profile(const WeaponCycleProfile& p){
         !std::isfinite(p.maxStepMeters)||p.maxStepMeters<=0||p.maxStepMeters>=p.stroke||
         !std::isfinite(p.rotationTolerance)||p.rotationTolerance<0||p.rotationTolerance>.5f||
         p.endpointDwellNs<=0||p.endpointDwellNs>250000000||p.maximumCycleNs<=0||p.maximumCycleNs>30000000000ll)return false;
+    if(p.slidingRail&&(p.family!=WeaponCycleFamily::Pump||!std::isfinite(p.railOvertravelMeters)||
+       p.railOvertravelMeters<.03f||p.railOvertravelMeters>.15f||!std::isfinite(p.maximumSpeedMetersPerSecond)||
+       p.maximumSpeedMetersPerSecond<=0||p.maximumSpeedMetersPerSecond>10))return false;
+    if(!std::isfinite(p.railRetentionRadius)||p.railRetentionRadius<0||p.railRetentionRadius>.5f||
+       (p.railRetentionRadius>0&&(!p.slidingRail||p.railRetentionRadius<p.contactRadius)))return false;
     return p.family==WeaponCycleFamily::Pump?p.unlockRadians==0:
         std::isfinite(p.unlockRadians)&&std::abs(p.unlockRadians)>.25f&&std::abs(p.unlockRadians)<std::numbers::pi_v<float>-.1f;
 }
@@ -110,13 +165,17 @@ inline math::Matrix4 Target(const WeaponCycleProfile& p,float travel,float angle
     return result;
 }
 }
-class WeaponCycle {
+template<class Authority> class WeaponCycleT {
 public:
+    using WeaponCycleLease=Authority;
+    using WeaponCycleRelease=WeaponCycleReleaseT<Authority>;
+    using WeaponCycleReady=WeaponCycleReadyT<Authority>;
+    using WeaponCycleResult=WeaponCycleResultT<Authority>;
     static constexpr std::int64_t MaximumInputGapNs=150000000;
     bool Begin(const WeaponCycleProfile& profile,const WeaponCycleLease& lease,std::int64_t now)noexcept {
         using namespace weapon_cycle_detail;
         if((phase_!=WeaponCyclePhase::Idle&&phase_!=WeaponCyclePhase::Complete&&phase_!=WeaponCyclePhase::Cancelled)||
-           !Profile(profile)||!Lease(lease,now)||now>INT64_MAX-profile.maximumCycleNs||
+           !Profile(profile)||!Lease(lease,now)||!AuthorityForHands(lease,profile.hands)||now>INT64_MAX-profile.maximumCycleNs||
            (identity_.cycle&&Same(identity_,lease)))return false;
         profile_=profile;identity_=lease;latest_=lease;deadline_=now+profile.maximumCycleNs;
         phase_=WeaponCyclePhase::AwaitingGrip;failure_=WeaponCycleFailure::None;neutral_=false;
@@ -197,6 +256,7 @@ public:
            (lastObserved_&&s.observedNs-lastObserved_>MaximumInputGapNs))return Cancel(WeaponCycleFailure::Tracking);
         // A duplicate cannot accrue endpoint dwell or mutate a gesture.
         if(s.sequence==lastSequence_)return Result(phase_!=WeaponCyclePhase::AwaitingGrip);
+        const auto elapsed=s.observedNs-lastObserved_;
         lastSequence_=s.sequence;lastObserved_=s.observedNs;
         if(phase_==WeaponCyclePhase::AwaitingGrip){
             if(!in.grip){neutral_=true;return Result();}
@@ -205,10 +265,27 @@ public:
             return Result(true);
         }
         if(!in.grip||!in.mechanismClaim)return Cancel(WeaponCycleFailure::Released);
-        if(Distance(in.rawContact,previous_)>profile_.maxStepMeters)return Cancel(WeaponCycleFailure::Geometry);
+        const auto stepLimit=profile_.slidingRail?
+            std::max(profile_.maxStepMeters,float(elapsed)*1e-9f*profile_.maximumSpeedMetersPerSecond):profile_.maxStepMeters;
+        if(Distance(in.rawContact,previous_)>stepLimit)return Cancel(WeaponCycleFailure::Geometry);
         const auto delta=Sub(Position(in.rawContact),Position(grabbed_));const auto axial=Dot(delta,profile_.axis);
         const double lateral2=std::max(0.,Dot(delta,delta)-axial*axial);
-        if(lateral2>double(profile_.lateralTolerance)*profile_.lateralTolerance||axial<-.03||axial>profile_.stroke+.03)return Cancel(WeaponCycleFailure::Geometry);
+        const double overtravel=profile_.slidingRail?profile_.railOvertravelMeters:.03;
+        if(profile_.slidingRail&&profile_.railRetentionRadius>0){
+            const auto beyond=std::max({0.,-axial,axial-profile_.stroke});
+            if(lateral2+beyond*beyond>double(profile_.railRetentionRadius)*profile_.railRetentionRadius)
+                return Cancel(WeaponCycleFailure::Geometry);
+        }else if(lateral2>double(profile_.lateralTolerance)*profile_.lateralTolerance||axial<-overtravel||axial>profile_.stroke+overtravel)
+            return Cancel(WeaponCycleFailure::Geometry);
+        if(profile_.slidingRail){
+            // Wrist roll does not rotate a sliding fore-end. The displayed
+            // wrist/part remain on the measured rail, independently of raw input.
+            rotation_=0;travel_=std::clamp(float(axial),0.f,profile_.stroke);previous_=in.rawContact;
+            if(phase_==WeaponCyclePhase::Rear&&travel_>=profile_.stroke-profile_.rearTolerance)
+                phase_=WeaponCyclePhase::Forward;
+            else if(phase_==WeaponCyclePhase::Forward&&travel_<=profile_.frontTolerance)Release(s);
+            return Result(true);
+        }
         // Choose the captured orientation row most perpendicular to the rail.
         unsigned best=0;double minimum=2;
         for(unsigned n=0;n<3;++n){std::array<float,3> v{grabbed_.values[n][0],grabbed_.values[n][1],grabbed_.values[n][2]};
@@ -240,9 +317,7 @@ public:
             else if(phase_==WeaponCyclePhase::Rear)phase_=WeaponCyclePhase::Forward;
             else if(phase_==WeaponCyclePhase::Forward&&profile_.family==WeaponCycleFamily::Bolt)phase_=WeaponCyclePhase::Lock;
             else {
-                if(nextRequest_==UINT64_MAX)return Cancel(WeaponCycleFailure::Invalid);
-                phase_=WeaponCyclePhase::AwaitingNative;
-                release_=WeaponCycleRelease{latest_,++nextRequest_,s.sequence,s.observedNs,std::min(s.deadlineNs,latest_.deadlineNs)};
+                Release(s);
             }
         }
         return Result(true);
@@ -270,6 +345,11 @@ public:
     WeaponCycleResult Cancel(WeaponCycleFailure why)noexcept {phase_=WeaponCyclePhase::Cancelled;failure_=why;release_.reset();return Result();}
     WeaponCyclePhase Phase()const noexcept{return phase_;}
 private:
+    void Release(const HandInteractionSample& source)noexcept {
+        if(nextRequest_==UINT64_MAX){Cancel(WeaponCycleFailure::Invalid);return;}
+        phase_=WeaponCyclePhase::AwaitingNative;
+        release_=WeaponCycleRelease{latest_,++nextRequest_,source.sequence,source.observedNs,std::min(source.deadlineNs,latest_.deadlineNs)};
+    }
     WeaponCycleResult Result(bool target=false)const noexcept {
         WeaponCycleResult r{phase_,failure_,phase_!=WeaponCyclePhase::Idle&&phase_!=WeaponCyclePhase::Complete,travel_,rotation_};
         if(target)r.contact=weapon_cycle_detail::Target(profile_,travel_,rotation_);
@@ -284,4 +364,6 @@ private:
     std::int64_t deadline_=0,lastObserved_=0,endpoint_=0;
     bool neutral_=false;float travel_=0,rotation_=0;
 };
+using WeaponCycle=WeaponCycleT<WeaponCycleLease>;
+using WeaponCycleIdleDebt=WeaponCycleT<WeaponCycleIdleDebtLease>;
 }

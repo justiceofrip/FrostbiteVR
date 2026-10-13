@@ -25,8 +25,25 @@ class Resource:
     def __init__(self,data,kind='GrannyAnimation'):
         if len(data)>MAX_RESOURCE or len(data)<16:raise ValueError('Resource size')
         if kind not in ('GrannyAnimation','GrannyModel') or struct.unpack_from('<I',data)[0]!=10:raise ValueError('Unsupported Frostbite resource wrapper')
-        count_offset=8 if kind=='GrannyAnimation' else 4
-        if kind=='GrannyAnimation' and struct.unpack_from('<I',data,4)[0]!=0:raise ValueError('Unsupported animation wrapper flags')
+        count_offset=4;self.wrapper_records=[]
+        if kind=='GrannyAnimation':
+            # Installed loader f472b0 calls f47170 before f46c20 reads strings.
+            # The word at +4 is a record count, not flags. Each record contains
+            # a u32 identifier, a u32 pair count, then two f32s per pair. Keep
+            # their semantics opaque; parsing does not authorize game events.
+            records=struct.unpack_from('<I',data,4)[0]
+            if records>4096:raise ValueError('Animation wrapper record count')
+            count_offset=8;total_pairs=0
+            for _ in range(records):
+                if count_offset+8>len(data):raise ValueError('Truncated animation wrapper record')
+                identifier,pairs=struct.unpack_from('<2I',data,count_offset);count_offset+=8
+                total_pairs+=pairs
+                if total_pairs>MAX_ITEMS or count_offset+pairs*8>len(data):raise ValueError('Animation wrapper pair bounds')
+                values=[struct.unpack_from('<2f',data,count_offset+i*8) for i in range(pairs)]
+                if any(not math.isfinite(v) for pair in values for v in pair):raise ValueError('Nonfinite animation wrapper pair')
+                self.wrapper_records.append({'identifier':identifier,'float_pairs':values})
+                count_offset+=pairs*8
+        if count_offset+4>len(data):raise ValueError('Missing string count')
         count=struct.unpack_from('<I',data,count_offset)[0]
         if not 0<count<=4096:raise ValueError('String count')
         at=count_offset+4;self.names=[]

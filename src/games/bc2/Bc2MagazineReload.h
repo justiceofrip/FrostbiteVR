@@ -1,5 +1,6 @@
 #pragma once
 #include "Bc2ReloadHold.h"
+#include "Bc2ReloadPredictionRestore.h"
 #include "fvr/interaction/ManualReload.h"
 #include <algorithm>
 #include <cmath>
@@ -34,14 +35,6 @@ struct ReloadMagazineAcknowledgement {
     ReloadHoldIdentity identity{};
     std::uint64_t cycle=0,sampleSequence=0,serverInvocation=0;
     int loadedBefore=0,reserveBefore=0,loadedAfter=0,reserveAfter=0;
-};
-// Observation of an actual native Restore hook, never inferred from counts.
-struct ReloadMagazinePredictionRestore {
- ReloadHoldIdentity identity{};std::uint64_t cycle=0,invocation=0;
- std::int64_t beginNs=0,endNs=0;unsigned branch=3,caller=0;
- int loadedBefore=0,reserveBefore=0,loadedAfter=0,reserveAfter=0;
- bool immutableSnapshotMatched=false,identityRetained=false;
- ReloadObservedConfig config{};
 };
 enum class ReloadMagazinePhase:unsigned {Idle,Awaiting,Complete,Failed};
 enum class ReloadMagazineFailure:unsigned {None,Expired,OwnerChanged,InvalidEvidence,UnexpectedAmmo,RepeatedTransfer,Reverted,NotSettled};

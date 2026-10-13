@@ -34,8 +34,14 @@ struct MagazineTracking {
 };
 bool MagazineTrackingFresh(const MagazineTracking&,std::int64_t now)noexcept;
 bool MagazineTargetFresh(const MagazineTracking&,std::int64_t now)noexcept;
+// Visual-only admission. Never use for raw contact, supply, or native work.
+bool MagazinePaletteTargetFresh(const MagazineTracking&,std::int64_t now)noexcept;
 bool MagazineTargetRetained(const MagazineTracking& original,const MagazineTracking& current,std::int64_t now)noexcept;
-struct MagazineRawContact:ReloadRawContact {bool nativeMagazineAttached=false;};
+struct MagazineRawContact:ReloadRawContact {
+ bool nativeMagazineAttached=false;
+ // Reachable measured support contact, using this packet's anatomical wrist.
+ std::optional<float> supportContactDistanceMeters;
+};
 // Free carry only: retain the basis of the exact raw packet that produced the target.
 std::optional<MagazineCarryFrame> MagazineRemovalFrame(const MagazineTracking&,const MagazineRawContact&)noexcept;
 MagazineRawContact BuildMagazineRawContact(const MagazineTracking&,const RigSnapshot&,std::string_view asset,
@@ -70,7 +76,8 @@ MagazinePresentationPlan BuildMagazinePresentation(const RigSnapshot&,const Maga
 std::optional<std::vector<std::array<std::byte,64>>> HideMagazinePackedPalette(
  const RigSnapshot&,const MagazinePresentationBinding&,std::span<const std::array<std::byte,64>> ordinary);
 // BEFORE EACH native Pack: original target/mesh/owner/cycle/claim deadlines must
-// remain valid. coherentShotGuard is the adapter's existing exact-source proof.
+// remain valid. Resource-backed poses retain their exact native admission time,
+// separately from these pose lifetimes. coherentShotGuard proves exact source.
 ReloadPackedPaletteChoice SelectMagazinePackedPalette(const MagazineTracking& original,const MagazineTracking* current,
  std::int64_t now,std::span<const std::array<std::byte,64>> posed,
  std::span<const std::array<std::byte,64>> ordinary,bool coherentShotGuard)noexcept;

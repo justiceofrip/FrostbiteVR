@@ -16,8 +16,8 @@ if(BUILD_TESTING AND TARGET BC2BodyAmmoRenderer)
     target_include_directories(Bc2ResourceEnrollmentTests PRIVATE tests src/platform/windows)
     target_link_libraries(Bc2ResourceEnrollmentTests PRIVATE BC2BodyAmmoRenderer)
     target_compile_definitions(Bc2ResourceEnrollmentTests PRIVATE
-      FVR_BC2_REVIEWED_MAGAZINE_REGISTRY_HEADER="${CMAKE_CURRENT_SOURCE_DIR}/profiles/resource-enrollment240-f2000/CombinedRegistry.h"
-      FVR_BC2_EXPERIMENTAL_MAGAZINE_HEADER="${CMAKE_CURRENT_SOURCE_DIR}/profiles/resource-enrollment240-f2000/CombinedGeometry.h")
+      FVR_BC2_REVIEWED_MAGAZINE_REGISTRY_HEADER="${CMAKE_CURRENT_SOURCE_DIR}/profiles/resource-enrollment295-pistol/CombinedRegistry.h"
+      FVR_BC2_EXPERIMENTAL_MAGAZINE_HEADER="${CMAKE_CURRENT_SOURCE_DIR}/profiles/resource-enrollment295-pistol/CombinedGeometry.h")
     if(MSVC)
       set_property(TARGET Bc2ResourceEnrollmentTests PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
     endif()
@@ -31,8 +31,8 @@ if(BUILD_TESTING AND TARGET BC2BodyAmmoRenderer)
   target_include_directories(Bc2F2000AssemblyEnrollmentTests PRIVATE tests src/platform/windows)
   target_link_libraries(Bc2F2000AssemblyEnrollmentTests PRIVATE BC2BodyAmmoRenderer)
   target_compile_definitions(Bc2F2000AssemblyEnrollmentTests PRIVATE
-    FVR_BC2_REVIEWED_MAGAZINE_REGISTRY_HEADER="${CMAKE_CURRENT_SOURCE_DIR}/profiles/resource-enrollment240-f2000/CombinedRegistry.h"
-    FVR_BC2_EXPERIMENTAL_MAGAZINE_HEADER="${CMAKE_CURRENT_SOURCE_DIR}/profiles/resource-enrollment240-f2000/CombinedGeometry.h")
+    FVR_BC2_REVIEWED_MAGAZINE_REGISTRY_HEADER="${CMAKE_CURRENT_SOURCE_DIR}/profiles/resource-enrollment295-pistol/CombinedRegistry.h"
+    FVR_BC2_EXPERIMENTAL_MAGAZINE_HEADER="${CMAKE_CURRENT_SOURCE_DIR}/profiles/resource-enrollment295-pistol/CombinedGeometry.h")
   if(MSVC)
     set_property(TARGET Bc2F2000AssemblyEnrollmentTests PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
   endif()
@@ -45,9 +45,9 @@ if(BUILD_TESTING)
     src/games/bc2/Bc2MagazineNativeRegistry.cpp src/games/bc2/Bc2MagazineGeometryProfile.cpp)
   target_include_directories(Bc2ResourceScarConsumerTests PRIVATE tests src/platform/windows)
   target_link_libraries(Bc2ResourceScarConsumerTests PRIVATE BC2Camera FvrCore)
-  target_compile_definitions(Bc2ResourceScarConsumerTests PRIVATE FVR_EXPECTED_RESOURCE_PROFILE_COUNT=15
-    FVR_BC2_REVIEWED_MAGAZINE_REGISTRY_HEADER="${CMAKE_CURRENT_SOURCE_DIR}/profiles/resource-enrollment240-f2000/CombinedRegistry.h"
-    FVR_BC2_EXPERIMENTAL_MAGAZINE_HEADER="${CMAKE_CURRENT_SOURCE_DIR}/profiles/resource-enrollment240-f2000/CombinedGeometry.h")
+  target_compile_definitions(Bc2ResourceScarConsumerTests PRIVATE FVR_EXPECTED_RESOURCE_PROFILE_COUNT=16
+    FVR_BC2_REVIEWED_MAGAZINE_REGISTRY_HEADER="${CMAKE_CURRENT_SOURCE_DIR}/profiles/resource-enrollment295-pistol/CombinedRegistry.h"
+    FVR_BC2_EXPERIMENTAL_MAGAZINE_HEADER="${CMAKE_CURRENT_SOURCE_DIR}/profiles/resource-enrollment295-pistol/CombinedGeometry.h")
   if(MSVC)
     set_property(TARGET Bc2ResourceScarConsumerTests PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
   endif()

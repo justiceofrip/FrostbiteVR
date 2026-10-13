@@ -64,9 +64,9 @@ struct NativeProbeConfig {
     BoatHeadAimMode boatHeadAim=BoatHeadAimMode::Disabled; // Explicit capability; fire is a separate opt-in.
     BodyHolsterDiagnosticProfile bodyHolsterDiagnostic=BodyHolsterDiagnosticProfile::Disabled; // Bounded trial only, never production acceptance.
     std::uint32_t m95PhysicalBoltCycles=0; // Explicit finite private physical bolt trial only.
-    std::uint32_t m95StockShot=0; // One finite original native cycle, no manual hold.
+    std::uint32_t m95StockShot=0; // 1: one loaded shot, 2: five shots through empty. No manual hold.
     std::uint32_t m95OrdinaryBoltInputCycles=0; // Bounded real-control trajectory; ordinary adapters only.
-    std::uint32_t ordinaryResourceInput=0; // Input-only combined sequence through ordinary dispatcher.
+    std::uint32_t ordinaryResourceInput=0; // 1: combined; 2: eight pumps/empty tube, ordinary input only.
     PumpHoldDiagnostic pumpHoldDiagnostic=PumpHoldDiagnostic::Disabled; // Isolated one-shot350ms trial, never ordinary activation.
 };
 static_assert(sizeof(NativeProbeConfig)==1200);

@@ -51,6 +51,15 @@ struct ReloadRequestClockFailure
     std::uint64_t sequence = 0;
     bool regression = false;
 };
+// A request to stop a held shell reload, not authority to load ammunition or
+// renew an insertion lease. Each native branch must independently revalidate
+// these counts/identity and its own current Update before calling the helper.
+struct ReloadStopIntent {
+    ReloadHoldIdentity identity{};
+    std::uint64_t cycle=0,sequence=0;
+    std::int64_t observedNs=0,deadlineNs=0;
+    int loaded=0,reserve=0,capacity=0;
+};
 // Persistent REQUEST policy, independent of the bounded diagnostic recorder.
 // A cycle has no total time cap while original controller/owner leases remain
 // fresh. Only a submitted insertion has a 1.5-second completion deadline.
@@ -68,6 +77,17 @@ class Bc2ReloadRequestCycle
     }
     bool Start(const ReloadCycleControl &, std::int64_t nowNs) noexcept;
     bool KeepAlive(const ReloadCycleControl &, std::int64_t nowNs) noexcept;
+    bool ObservePredictionRestore(const ReloadPredictionRestore& e,std::int64_t now)noexcept {
+        const bool accepted=Current(now)&&phase_==ReloadRequestCyclePhase::Advancing&&e.branch<2&&!open_[e.branch]&&
+            configured_&&e.config==config_&&IsDiagnosticSpasConfig(e.config)&&
+            e.cycle==control_.cycle&&e.identity==control_.identity&&e.endNs<=now&&completion_.ObservePredictionRestore(e);
+        // The original Update context remains valid only until its ORIGINAL
+        // freshness bound. A Restore neither replaces nor renews that evidence.
+        // Withdrawing the hold is sufficient: clearing the context would make
+        // an independently arriving server Update cancel before client replay.
+        if(accepted){holds_[e.branch]=0;published_.reset();}
+        return accepted;
+    }
     ReloadRequestDecision Evaluate(const ReloadHoldInput &, bool timingVerified, bool cohortStable,
                                    std::uint64_t update) noexcept;
     // Adapter processing time is sampled under its policy lock. Native source
@@ -80,6 +100,7 @@ class Bc2ReloadRequestCycle
                 bool identityRetained, const ReloadDeltaOverride &, std::int64_t processingNs) noexcept;
     bool Transfer(const ReloadRoundTransfer &, std::uint64_t parentUpdate) noexcept;
     std::optional<ReloadRoundLease> Lease(const ReloadHoldIdentity &, std::uint64_t cycle, std::int64_t nowNs) noexcept;
+    std::optional<ReloadStopIntent> StopIntent(std::int64_t nowNs) noexcept;
     bool Submit(const Bc2ReloadNativeRequest &, std::int64_t nowNs) noexcept;
     std::optional<Bc2ReloadAckEvidence> TakeAcknowledgement(const ReloadHoldIdentity &, std::uint64_t cycle,
                                                             std::int64_t nowNs) noexcept;

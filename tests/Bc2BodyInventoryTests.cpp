@@ -37,6 +37,7 @@ struct Fixture {
         Word(soldier+0x248,inventory);Word(soldier+0x260,array);Word(soldier+0x264,array+9*4);
         Word(inventory+4,switching);Word(inventory+0x14c,0);Word(array,a);Word(array+4,b);
         Word(a+4,ad);Word(b+4,bd);Word(ad+0x84,0);Word(bd+0x84,1);
+        Word(ad+0xc,0x2b000);Text(0x2b000,"XM8_sp_s");Word(bd+0xc,0x2b100);Text(0x2b100,"SPAS12_sp");
         for(unsigned data:{ad,bd})Word(data,table);Word(table+8,getter);Byte(getter,0xb8);Word(getter+1,info);Byte(getter+5,0xc3);
         Word(info+4,meta);Word(meta,strings);Text(strings,"SoldierWeaponData");Short(meta+4,0x35);Short(meta+6,0x130);Byte(meta+13,1);Word(info+36,fields);
         Word(fields,strings+64);Text(strings+64,"WeaponClass");Word(fields+8,enumInfo);Word(fields+16,0x84);
@@ -117,6 +118,37 @@ struct HolsterRun {
     bool Empty(){Step(1);if(holster.Phase()!=bc2::BodyHolsterPhase::HidePending)return false;Step(1);Step(1);
         return out.freeRight&&out.inventory.emptyHands&&!r.hands.Current(interaction::InteractionHand::Right);}
 };
+}
+int ShoulderDrawSurvivesReceiptGap(){
+    HolsterRun h;for(auto& hand:h.r.s.input.hands)hand.active|=interaction::Trigger;
+    CHECK(h.Empty());h.Step(0);
+    h.r.s.input.hands[1].grip.position.x=.20f;
+    h.out.visibility={}; // No paired hide receipt on the deliberate press.
+    h.Step(1);CHECK(h.holster.Phase()==bc2::BodyHolsterPhase::HidePending);
+    CHECK(!h.out.select&&!h.out.inventory.request&&!h.out.freeRight);
+    bool selected=false;
+    for(unsigned n=0;n<6&&!selected;++n){h.Step(1);selected=h.out.select&&h.out.select->id==Fixture::b;}
+    CHECK(selected); // Same held shoulder contact, after NEW hide proof.
+    for(unsigned fault=0;fault<9;++fault){
+        HolsterRun stopped;for(auto& hand:stopped.r.s.input.hands)hand.active|=interaction::Trigger;
+        CHECK(stopped.Empty());stopped.Step(0);stopped.r.s.input.hands[1].grip.position.x=.20f;
+        stopped.out.visibility={};stopped.Step(1);CHECK(stopped.holster.EmptyRehidePending());
+        if(fault==0)stopped.Step(0); // actual release ends this deliberate draw
+        if(fault==1){stopped.r.s.input.hands[1].grip.position={0,1,-.4f};stopped.Step(1);}
+        if(fault==2){stopped.r.s.input.hands[1].trigger=1;stopped.Step(1);stopped.r.s.input.hands[1].trigger=0;}
+        if(fault==3){stopped.r.s.hand.focused=false;stopped.Step(1);stopped.r.s.hand.focused=true;}
+        if(fault==4){stopped.r.s.hand.tracked[1]=false;stopped.Step(1);stopped.r.s.hand.tracked[1]=true;}
+        if(fault==5){stopped.r.s.input.hands[1].active&=~interaction::Squeeze;stopped.Step(1);stopped.r.s.input.hands[1].active|=interaction::Squeeze;}
+        if(fault==6){stopped.r.adapter.SuspendInteraction();}
+        if(fault==7){stopped.r.f.denyMap=true;stopped.Step(1);stopped.r.f.denyMap=false;}
+        if(fault==8){stopped.allowReadback=false;for(unsigned n=0;n<65;++n)stopped.Step(1);stopped.allowReadback=true;}
+        // Returning later, still squeezed, cannot resurrect the cancelled draw.
+        // A release alone can arm a NEW press, so keep that case released.
+        stopped.r.s.input.hands[1].grip.position={.20f,1.58f,.18f};
+        for(unsigned n=0;n<8;++n){stopped.Step(fault==0?0:1);CHECK(!stopped.out.select);}
+    }
+    std::puts("Shoulder draw receipt gap: connected recovery and nine cancelled-contact variants passed");
+    return 0;
 }
 int ActualUnsupportedExchangeRetirement(){
     for(unsigned mode=0;mode<3;++mode){
@@ -572,6 +604,37 @@ int OrdinaryOwnSlotStowIsExplicitlyUnavailable(){
     CHECK(text.find("\"kind\":4")!=std::string::npos);
     return 0;
 }
+int SchedulingPausePreservesResourceIdentity(){
+ // A scheduler stall expires action authority, not the actual magazine.
+ // Exercise the connected reader and slot lifetime domain with real metadata
+ // replacement negatives, rather than only testing the generation counter.
+ for(unsigned change=0;change<6;++change){Run r;r.Tick();r.Advance();r.Tick();
+  const auto before=r.adapter.ResourceBinding(r.s.owner,r.s.hand.nowNs);CHECK(before);
+  const auto other=r.adapter.AssignedSlot(Fixture::b);CHECK(other);
+  r.s.hand.nowNs+=180000000;
+  CHECK(!r.adapter.ResourceBinding(r.s.owner,r.s.hand.nowNs)); // old lease stays expired
+  if(change==1)r.f.Word(Fixture::ad+0x64,0x34567);
+  if(change==2)r.f.Word(Fixture::a+4,Fixture::bd);
+  if(change==3){++r.s.owner.actorGeneration;++r.s.hand.owner.actorGeneration;}
+  if(change==4)r.adapter.Cancel();
+  if(change==5){r.f.denyMap=true;r.Tick();r.f.denyMap=false;}
+  r.s.interaction=bc2::BodyInteractionState::Suspended;
+  const auto result=r.Tick();CHECK(!result.command&&!result.committed&&!r.adapter.Display(r.s.hand.nowNs));
+  const auto after=r.adapter.ResourceBinding(r.s.owner,r.s.hand.nowNs);CHECK(after);
+  CHECK((after->context.resource==before->context.resource)==(change==0));
+  CHECK(after->observedNs==r.s.hand.nowNs&&after->deadlineNs==after->observedNs+100000000);
+  CHECK(!bc2::AmmoResourceBindingFresh(*before,r.s.owner,r.s.hand.nowNs));
+  if(change<3)CHECK(r.adapter.AssignedSlot(Fixture::b)==other);
+ }
+ // An outstanding shoulder command cannot acquire a completion from the gap.
+ {Run r;r.Tick();r.Advance();r.Tick();r.Advance(1);CHECK(r.Tick().pending);
+  const auto before=r.adapter.ResourceBinding(r.s.owner,r.s.hand.nowNs);CHECK(before);
+  r.s.hand.nowNs+=180000000;r.s.interaction=bc2::BodyInteractionState::Suspended;
+  const auto resumed=r.Tick();CHECK(resumed.cancelled&&!resumed.pending&&!resumed.committed&&!resumed.command);
+  const auto after=r.adapter.ResourceBinding(r.s.owner,r.s.hand.nowNs);CHECK(after&&after->context.resource==before->context.resource);
+ }
+ std::puts("Scheduling pause retains verified physical resources, expires leases and retires commands");return 0;
+}
 int ResourceLifetimeBinding(){
  Run r;r.Tick();const auto a=r.adapter.ResourceBinding(r.s.owner,r.s.hand.nowNs);CHECK(a);
  const auto other=r.adapter.AssignedSlot(Fixture::b);CHECK(other);
@@ -592,11 +655,12 @@ int ResourceLifetimeBinding(){
  const auto replacement=r.adapter.ResourceBinding(r.s.owner,r.s.hand.nowNs);CHECK(replacement);
  CHECK(replacement->context.resource.weaponGeneration!=a->context.resource.weaponGeneration&&replacement->data==Fixture::bd);
  r.s.hand.nowNs+=151000000;r.Tick();const auto gap=r.adapter.ResourceBinding(r.s.owner,r.s.hand.nowNs);CHECK(gap);
- CHECK(gap->context.resource.weaponGeneration!=replacement->context.resource.weaponGeneration);
+ CHECK(gap->context.resource==replacement->context.resource);
  r.f.denyMap=true;r.s.hand.nowNs+=10000000;r.Tick();CHECK(!r.adapter.ResourceBinding(r.s.owner,r.s.hand.nowNs));
  return 0;
 }
 int SharedLifecycleBoundary(){
+ CHECK(SchedulingPausePreservesResourceIdentity()==0);
  CHECK(ResourceLifetimeBinding()==0);
  for(unsigned reason=0;reason<5;++reason){Run r;r.Tick();const auto slot=r.adapter.AssignedSlot(Fixture::a);CHECK(slot);
   r.Advance();if(reason==0)r.s.reloadBusy=true;else if(reason==1)r.s.cancel=true;else if(reason==2)r.s.hand.tracked[1]=false;
@@ -607,7 +671,7 @@ int SharedLifecycleBoundary(){
   r.Advance(1);CHECK(!r.Tick().command);CHECK(r.adapter.AssignedSlot(Fixture::a)==slot); // held squeeze cannot rearm
  }
  {Run r;r.Tick();auto old=r.adapter.AssignedSlot(Fixture::a);CHECK(old);r.s.hand.nowNs+=151000000;r.s.hand.observedNs=r.s.hand.nowNs;r.s.hand.deadlineNs=r.s.hand.nowNs+100000000;
-  ++r.s.input.generation;r.s.hand.sequence=r.s.input.generation;r.Tick();auto now=r.adapter.AssignedSlot(Fixture::a);CHECK(now&&now->item.generation!=old->item.generation);}
+  ++r.s.input.generation;r.s.hand.sequence=r.s.input.generation;r.Tick();auto now=r.adapter.AssignedSlot(Fixture::a);CHECK(now==old);}
  for(unsigned structural=0;structural<3;++structural){Run r;r.Tick();auto old=r.adapter.AssignedSlot(Fixture::a);CHECK(old);r.Advance();r.s.reloadBusy=true;
   if(structural==0)r.f.Word(Fixture::a+4,Fixture::bd);else if(structural==1){++r.s.owner.actorGeneration;++r.s.hand.owner.actorGeneration;}
   else r.f.Word(Fixture::ad+0x64,0x123456);
@@ -647,12 +711,74 @@ int SharedLifecycleBoundary(){
   CHECK((r.adapter.AssignedSlot(Fixture::a)==a)==(mode==0));
   CHECK((r.adapter.AssignedSlot(Fixture::b)==b)==(mode<2));
  }
- std::puts("shared lifetime boundary: suspension, neutral rearm, bounded native gap and exact replacement passed");return 0;
+ std::puts("shared lifetime boundary: suspension, neutral rearm, expired native lease and exact replacement passed");return 0;
 }
 
 #include "Bc2PlayerHolsterChecks.inc"
 
+int EmptyHandsSurviveInteractionSuspension(){
+ using namespace bc2;using namespace interaction;
+ for(unsigned reason=0;reason<8;++reason){HolsterRun h;CHECK(h.Empty());
+  const auto slot=h.r.adapter.AssignedSlot(Fixture::a);CHECK(slot);
+  const auto old=*h.out.freeRight;const auto request=h.holster.RequestId();
+  // The hand stays in front of the torso, outside both shoulder volumes.
+  h.r.s.input.hands[1].grip.position={.15f,1.2f,-.35f};
+  for(unsigned n=0;n<4;++n){h.r.Advance(1);
+   if(reason==6&&n==0){
+    // Actual input-unavailable cleanup, then a gap longer than the native
+    // metadata observation lifetime. This may renew a portable item key, but
+    // is not a request to draw the exact unchanged carried configuration.
+    h.holster.Invalidate(true);h.r.adapter.SuspendInteraction();h.r.hands.Reset();
+    h.r.s.hand.observedNs+=300000000;h.r.s.hand.nowNs+=300000000;
+    h.r.s.hand.deadlineNs+=300000000;h.r.s.input.predictedNs+=300000000;
+   }
+   if(reason==0)h.r.s.reloadBusy=true; // Existing pump/reload debt is not a Draw.
+   if(reason==1)h.r.s.interaction=BodyInteractionState::Suspended;
+   if(reason==2)h.r.s.input.focused=false;
+   if(reason==3)h.r.s.hand.tracked[1]=false;
+   if(reason==4)h.r.s.hand.deadlineNs=h.r.s.hand.nowNs;
+   if(reason==5)h.r.s.input.headValid=false;
+   if(reason>=6)h.r.s.interaction=BodyInteractionState::Suspended;
+   if(reason==7)h.r.f.denyMap=true;
+   h.Tick();CHECK(h.out.blockWeaponActions&&!h.out.allowAutomaticGunHold);
+   CHECK(!h.out.visibility.enabled&&!h.out.freeRight&&!h.out.select&&!h.out.inventory.request);
+   CHECK(!h.r.hands.Current(InteractionHand::Right));
+   if(reason<6)CHECK(h.r.adapter.AssignedSlot(Fixture::a)==slot);
+  }
+  h.r.s.reloadBusy=false;h.r.s.interaction=BodyInteractionState::Available;
+  h.r.f.denyMap=false;
+  h.r.s.input.focused=h.r.s.input.headValid=h.r.s.hand.tracked[1]=true;
+  h.r.s.hand.deadlineNs=h.r.s.hand.observedNs+100000000;
+  for(unsigned n=0;n<6;++n){h.Step(1);
+   CHECK(!h.out.select&&!h.out.inventory.request&&!h.out.inventory.committedRequest);
+   CHECK(!h.out.visibility.enabled||h.out.visibility.hide);
+   CHECK(!h.r.hands.Current(InteractionHand::Right));
+  }
+  CHECK(h.holster.Phase()==BodyHolsterPhase::Empty&&h.out.freeRight);
+  CHECK(h.holster.RequestId()>request&&h.out.freeRight->visibility.request!=old.visibility.request);
+  // Ordinary open/close hand animation must not draw either. A later fresh
+  // shoulder contact still draws via the normal hide/show acknowledgement.
+  for(unsigned n=0;n<3;++n){h.Step(0);h.Step(1);CHECK(h.holster.Phase()==BodyHolsterPhase::Empty&&!h.out.select);}
+  h.Step(0);h.r.s.input.hands[1].grip.position={-.20f,1.58f,.18f};
+  h.Step(1);CHECK(h.out.select);h.Step(1);h.Step(1);
+  CHECK(h.holster.Phase()==BodyHolsterPhase::Held&&h.r.hands.Current(InteractionHand::Right));
+ }
+ // Explicit cancellation and a concrete item replacement must not inherit
+ // committed empty authority from the old item or its paired hide receipt.
+ for(unsigned reason=0;reason<2;++reason){HolsterRun h;CHECK(h.Empty());
+  h.r.s.input.hands[1].grip.position={.15f,1.2f,-.35f};h.r.s.reloadBusy=true;
+  if(reason==0)h.r.s.cancel=true;
+  else h.r.f.Word(Fixture::ad+0x64,0x34567);
+  h.Step(1);CHECK(!h.out.visibility.enabled&&!h.out.freeRight&&!h.out.select);
+  h.r.s.reloadBusy=h.r.s.cancel=false;
+  for(unsigned n=0;n<5;++n)h.Step(1);
+  CHECK(h.holster.Phase()==BodyHolsterPhase::Held&&!h.out.freeRight);
+ }
+ std::puts("Committed empty hands survive eight suspension paths; neutral grip needs a shoulder contact to draw");return 0;
+}
+
 int NativePumpDebtProtectsActualShoulderAndResourceLifetime(){
+ if(EmptyHandsSurviveInteractionSuspension())return 1;
  using namespace bc2;using namespace interaction;
  const auto config=[] {const auto& d=SpasReloadDescriptor;ReloadObservedConfig c;
   c.weaponData=0xb0000;c.firingData=0xc0000;c.primaryFire=0xd0000;c.ammoAddress=c.primaryFire+0x170;
@@ -726,7 +852,9 @@ int OrdinaryBoltStartupPreservesOriginalRigPublication(){
  std::puts("Ordinary bolt startup publication: former pass-by-value source reproduces timeout; original visible rig and real GunHold succeed");
  return 0;
 }
-int main(){if(OrdinaryBoltStartupPreservesOriginalRigPublication())return 1;if(NativePumpDebtProtectsActualShoulderAndResourceLifetime())return 1;if(PlayerRepeatedHolsterRecovery())return 1;if(SharedLifecycleBoundary())return 1;if(OrdinaryOwnSlotStowIsExplicitlyUnavailable())return 1;if(ActualCarriedCrossDrawRetirement()||CarriedCrossDrawIdentityFailures()||CarriedCrossDrawAuthorityFailures()||HolsterTransitionJournalKeepsLatest())return 1;if(ShoulderEarlyDirectSwap()||ShoulderDirectSwapFailures()||ShoulderSwapRereadAndTimeout())return 1;if(ShoulderEarlyGrabAndReleaseStow()||ShoulderMissKeepsUsableGun()||ShoulderReleaseExactContinuity()||ShoulderFailedHideRecoversHeld()||ShoulderEmptyApproachInputBreaks())return 1;if(HeldApproachBoundaries()||ScrollThenActualHeldApproach())return 1;if(ActualUnsupportedExchangeRetirement())return 1;if(ScopedXm8OrdinaryAutoStowDraw()||ScopedXm8OrdinaryAdmissionNegatives()||ScopedXm8OrdinaryKeepsSlotsAcrossDraw())return 1;
+ #include "Bc2HipCarryChecks.inc"
+int main(){if(HipCarryChecks())return 1;if(OrdinaryBoltStartupPreservesOriginalRigPublication())return 1;if(NativePumpDebtProtectsActualShoulderAndResourceLifetime())return 1;if(PlayerRepeatedHolsterRecovery())return 1;if(SharedLifecycleBoundary())return 1;if(OrdinaryOwnSlotStowIsExplicitlyUnavailable())return 1;if(ActualCarriedCrossDrawRetirement()||CarriedCrossDrawIdentityFailures()||CarriedCrossDrawAuthorityFailures()||HolsterTransitionJournalKeepsLatest())return 1;if(ShoulderEarlyDirectSwap()||ShoulderDirectSwapFailures()||ShoulderSwapRereadAndTimeout())return 1;if(ShoulderEarlyGrabAndReleaseStow()||ShoulderMissKeepsUsableGun()||ShoulderReleaseExactContinuity()||ShoulderFailedHideRecoversHeld()||ShoulderEmptyApproachInputBreaks())return 1;if(HeldApproachBoundaries()||ScrollThenActualHeldApproach())return 1;if(ActualUnsupportedExchangeRetirement())return 1;if(ScopedXm8OrdinaryAutoStowDraw()||ScopedXm8OrdinaryAdmissionNegatives()||ScopedXm8OrdinaryKeepsSlotsAcrossDraw())return 1;
+    if(ShoulderDrawSurvivesReceiptGap())return 1;
     std::puts("Ordinary scoped XM8: automatic stow/draw/fire continuity, six admission negatives, cross-draw slots passed");
     if(GameplayInputRearmComposition()||GameplayInputRearmRejectsUnregisteredOrActiveFailure()||GameplayInvalidationJournalIsBounded())return 1;std::puts("Gameplay pause rearm: 3 groups passed (actual policy/input/consumer)");if(UnevaluatedHolsterRetiresChangedLifetimes()||UnevaluatedHolsterDoesNotEraseCurrentSlots()||HeldFireMissingPresentationKeepsOnlyMetadata()||HeldFireSlotContinuity())return 1;std::puts("Held firing slot continuity: positive and five negative variants passed");
     if(DefaultStowTests())return 1;

@@ -33,6 +33,9 @@ struct MenuTargetSnapshot {
     std::uint32_t manager=0,ui=0,target=0,queue=0,buffer=0,count=0,capacity=0;
     bool operator==(const MenuTargetSnapshot&)const=default;
 };
+// The APT target owns input. Its queue/storage may grow or be replaced without
+// creating a new input owner; never strand an up on an obsolete buffer address.
+bool SameMenuTargetOwner(const MenuTargetSnapshot&,const MenuTargetSnapshot&) noexcept;
 // Input-ready is NOT menu-open: the same target also serves the HUD. A separate
 // verified menu-state binding must authorize every command and its menu epoch.
 std::optional<MenuTargetSnapshot> ReadMenuTarget(const MenuMemory&,const MenuBindingCandidates&,std::uint32_t imageBase);
@@ -57,7 +60,7 @@ struct MenuNativeCalls {
     bool (*cursor)(void*,std::uint32_t function,std::uint32_t manager,std::int32_t x,std::int32_t y)=nullptr;
     bool (*event)(void*,std::uint32_t function,std::uint32_t manager,const std::array<std::uint32_t,3>&)=nullptr;
 };
-enum class MenuDispatchResult : std::uint8_t {Rejected,TargetChanged,QueueFull,CallFailed,Invoked};
+enum class MenuDispatchResult : std::uint8_t {Rejected,TargetChanged,QueueFull,CallFailed,Invoked,Retired};
 // Minted only by a successful down. Non-copyable so a caller cannot replay a
 // copied release capability. Forget only after the original UI/session retires.
 class MenuOwnedPress {
@@ -88,7 +91,9 @@ MenuDispatchResult DispatchMenuPointer(const MenuMemory&,const MenuBindingCandid
 // Cleanup only: originalEpoch is the epoch of the successful down, even if the
 // current menu has closed. Current focus/tracking/menu-owned are irrelevant.
 // No cursor call or new down. Retains ownership on failure for a bounded caller
-// retry; a replacement target cannot receive this up. A successful up consumes it.
+// retry; a fully validated replacement input owner retires it without an up.
+// Missing/blocked/unstable target reads do not prove replacement. Retired callers
+// must advance their menu epoch and require neutral input before another down.
 MenuDispatchResult ReleaseMenuPointer(const MenuMemory&,const MenuBindingCandidates&,std::uint32_t imageBase,
     const MenuTargetSnapshot& originalTarget,std::uint64_t originalEpoch,const MenuDispatchGuard&,const MenuNativeCalls&,MenuOwnedPress&);
 }

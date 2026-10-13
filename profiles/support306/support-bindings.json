@@ -1,0 +1,74 @@
+{
+  "schema": "fvr.bc2.authored_support_bindings",
+  "schema_version": 1,
+  "profiles": [
+    {
+      "native_asset_name": "MP443_sp",
+      "configured_mesh_path": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach_Mesh",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "animation_sha256": "a9a549f7102b3baf5ec01a8e26b5f933572df66f4e3833820022fb9bc4914f61",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "left_hand_in_weapon": [
+        0.23526903058931514,
+        0.8199877537519971,
+        -0.521793605693207,
+        0.0,
+        0.8968017559834665,
+        -0.39011499547711337,
+        -0.20870290071981243,
+        0.0,
+        -0.374693332887757,
+        -0.41884409271308426,
+        -0.8271484342539847,
+        -0.0,
+        0.022324912235839538,
+        -0.05854111687008353,
+        0.10161653184652952,
+        1.0
+      ],
+      "left_hand_status": "static_authored_pose",
+      "right_hand_retargeted": false,
+      "native_admission": false,
+      "source_bindings": [
+        "27d24e0477d010c64a8e835bb55bf874d3a2ae5499114833c7dae583dd038d30"
+      ],
+      "source_weapons": [
+        {
+          "resource": "Objects/Weapons/Handheld/RU_hg_MP443Grach/SP_hg_MP443Grach.dbx",
+          "sha256": "e16f5713854ca38ab58d61bd3c568e2f87533c0e82032d71d61f27449d5484cc",
+          "instance_guid": "58098858-821b-4406-a19c-ae62e5d38bdf",
+          "type": "GameSharedResources.SoldierWeaponData"
+        }
+      ],
+      "animation_chain": {
+        "tree": {
+          "resource": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach_AnimTree1p.dbx",
+          "sha256": "9387c267159e9ac22766790616d592f8a733cc6fa9fad88f8a5dd36eea5a2b0c",
+          "instance_guid": "02bd776e-e07c-42bd-ba59-46e3ec4229fa",
+          "type": "Animation.SpecificAnimTreeData"
+        },
+        "animation_asset": {
+          "resource": "Animations/Weapons/Handheld/RU_hg_MP443Grach/1P/HandsIKPose.dbx",
+          "sha256": "e7dba31a6eed329cc56d27557f9bd64db7e31d08b3a0c6b0b6d39015f6cdc020",
+          "instance_guid": "51b81b60-891b-4297-8d60-d2acc9bde70f",
+          "type": "Animation.AnimationAsset"
+        },
+        "animation_resource": "Animations/Weapons/Handheld/RU_hg_MP443Grach/1P/HandsIKPose.res",
+        "skeleton_asset": {
+          "resource": "Characters/Skeletons/ske01.dbx",
+          "sha256": "ebad79fb62ab383dcc4ea5179652ded99944b7f9905c6095baa8f0b7183520ba",
+          "instance_guid": "20a6d9b2-2cd5-4895-a59c-f144e6d3f061",
+          "type": "Animation.SkeletonAsset"
+        },
+        "skeleton_resource": "Characters/Skeletons/ske01.res"
+      },
+      "right_hand_status_not_admitted": "decoded_spline_candidate",
+      "weapon_class": "wcSmg",
+      "support_contact_reference": true,
+      "support_aim_mode": "primary_hand",
+      "binding_digest": "c67f15e4a243c841bc37e5817e02ca42d98b87a1d76a58f5d28cba703307af8e"
+    }
+  ],
+  "runtime_admission": false,
+  "scope": "Static weapon-local support contact only; no gun-hand pose, native feature admission or grip claim"
+}

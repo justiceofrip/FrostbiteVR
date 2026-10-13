@@ -1,0 +1,478 @@
+{
+  "schema": "fvr.bc2.authored_support_bindings",
+  "schema_version": 1,
+  "runtime_admission": false,
+  "profiles": [
+    {
+      "native_asset_name": "F2000_sp",
+      "configured_mesh_path": "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Mesh",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "animation_sha256": "f79a112f7d39d262d48157a2022533738e88cd91dd749501a96e9d9556ce217c",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "left_hand_in_weapon": [
+        0.005642200178953599,
+        0.7620827565625314,
+        -0.6474550468775387,
+        0.0,
+        0.5105780311849799,
+        -0.5589033955077453,
+        -0.6534042152918714,
+        0.0,
+        -0.8598129096776882,
+        -0.32688968573506266,
+        -0.3922561582838718,
+        -0.0,
+        0.05183415754828444,
+        -0.056576501238840594,
+        -0.509766363992963,
+        1.0
+      ],
+      "left_hand_status": "static_authored_pose",
+      "right_hand_retargeted": false,
+      "native_admission": false,
+      "source_bindings": [
+        "9f528e75ee7f47dd2e533ae22f9f869a567064b9b49caa4c84736ec00b7c6b86"
+      ],
+      "source_weapons": [
+        {
+          "resource": "Objects/Weapons/Handheld/BU_rif_F2000/SP_rif_F2000.dbx",
+          "sha256": "62d1514ab5eb00161f763e67d73768d9ef8a2ee611027a2a41b6deacefa86925",
+          "instance_guid": "46404a9e-9e38-43a7-831e-fb4b2f2692c6",
+          "type": "GameSharedResources.SoldierWeaponData"
+        }
+      ],
+      "animation_chain": {
+        "tree": {
+          "resource": "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_AnimTree1P.dbx",
+          "sha256": "e4210889e170dad85f5fa894939a96aa9066d16822dcafff18524662f1c5d621",
+          "instance_guid": "53ff199c-c5bf-4aa5-8c3c-dc96d81dd16f",
+          "type": "Animation.SpecificAnimTreeData"
+        },
+        "animation_asset": {
+          "resource": "Animations/Weapons/Handheld/BU_rif_F2000/1P/HandsIkPose.dbx",
+          "sha256": "a7367684048d49e579d94556249cf933bf269ac433f7c642f0e9df8592297b28",
+          "instance_guid": "286d7471-8ea6-4276-b69f-bcae8982b7c9",
+          "type": "Animation.AnimationAsset"
+        },
+        "animation_resource": "Animations/Weapons/Handheld/BU_rif_F2000/1P/HandsIkPose.res",
+        "skeleton_asset": {
+          "resource": "Characters/Skeletons/ske01.dbx",
+          "sha256": "ebad79fb62ab383dcc4ea5179652ded99944b7f9905c6095baa8f0b7183520ba",
+          "instance_guid": "20a6d9b2-2cd5-4895-a59c-f144e6d3f061",
+          "type": "Animation.SkeletonAsset"
+        },
+        "skeleton_resource": "Characters/Skeletons/ske01.res"
+      },
+      "right_hand_status_not_admitted": "static_authored_pose",
+      "weapon_class": "wcAssault",
+      "support_contact_reference": true,
+      "binding_digest": "e76218198ff157428e8943cf6c568ff57068dcd1f71e74fca4a128cb297d85de"
+    },
+    {
+      "native_asset_name": "MG36",
+      "configured_mesh_path": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Mesh",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "animation_sha256": "c33bb0c6be6ca5b7572c82a8b2ebb4fcb921cf62b53665e88ab615d168c8fe50",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "left_hand_in_weapon": [
+        0.4311019476411387,
+        0.5769813772806853,
+        -0.6937172341893352,
+        0.0,
+        -0.16960553929721875,
+        -0.7033073494129617,
+        -0.6903569607829092,
+        0.0,
+        -0.8862195392676229,
+        0.41527251598558623,
+        -0.20533793046411175,
+        -0.0,
+        0.016186296255049856,
+        -0.0296902423913629,
+        -0.5830641700629511,
+        1.0
+      ],
+      "left_hand_status": "static_authored_pose",
+      "right_hand_retargeted": false,
+      "native_admission": false,
+      "source_bindings": [
+        "ebb05754d66af735f96bba957f26c65b3614728370bc397ea5ec4074e9a25782",
+        "9545846471ee762e027521573cb64455f71583ab9d9fc8b954cc7419060a12de",
+        "60025d2a77c7c866a6e53102cb6b5ebd5bee155435c953377be5ccf2e180280c"
+      ],
+      "source_weapons": [
+        {
+          "resource": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Scope.dbx",
+          "sha256": "6f2c2e40d3efc9a3f143ea2b89d9e08f0e617eaa9f831b51ea64bbd3367ff63d",
+          "instance_guid": "d7c9100e-a312-4084-871e-2471b63da284",
+          "type": "GameSharedResources.SoldierWeaponData"
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36.dbx",
+          "sha256": "7a564c7726be97924e36db02ec6a218f6b1500c057dffe004b3df549a60a15c1",
+          "instance_guid": "b5101354-a431-45c0-b640-2f2339ac9e86",
+          "type": "GameSharedResources.SoldierWeaponData"
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Kobra.dbx",
+          "sha256": "d0e44f08b2e86ab0e99a890f8a4d8af4adbb4c6ccbc0a2d98a8349f643b664fb",
+          "instance_guid": "75e08cb5-f9fd-4d99-9adc-5c172db310fc",
+          "type": "GameSharedResources.SoldierWeaponData"
+        }
+      ],
+      "animation_chain": {
+        "tree": {
+          "resource": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_AnimTree1p.dbx",
+          "sha256": "f22a57ebde7a973952412d5bd75ba35f6d1c30f725b153c26d0debe1cde961cb",
+          "instance_guid": "578b5273-b737-49e9-a87a-38f15279c064",
+          "type": "Animation.SpecificAnimTreeData"
+        },
+        "animation_asset": {
+          "resource": "Animations/Weapons/Handheld/BU_lmg_MG36/1P/HandsIkPose.dbx",
+          "sha256": "03a3eec84d3f73099df9588a320c7fea21790fce1f906ceb476d38f5894729a2",
+          "instance_guid": "0e915b23-8ae5-40d3-ada0-fa0646588d4f",
+          "type": "Animation.AnimationAsset"
+        },
+        "animation_resource": "Animations/Weapons/Handheld/BU_lmg_MG36/1P/HandsIkPose.res",
+        "skeleton_asset": {
+          "resource": "Characters/Skeletons/ske01.dbx",
+          "sha256": "ebad79fb62ab383dcc4ea5179652ded99944b7f9905c6095baa8f0b7183520ba",
+          "instance_guid": "20a6d9b2-2cd5-4895-a59c-f144e6d3f061",
+          "type": "Animation.SkeletonAsset"
+        },
+        "skeleton_resource": "Characters/Skeletons/ske01.res"
+      },
+      "right_hand_status_not_admitted": "decoded_spline_candidate",
+      "weapon_class": "wcLmg",
+      "support_contact_reference": true,
+      "binding_digest": "e6e0269aa97624fa5faff9257b113a7895240c3fab5e8215abc0d2739c61015d"
+    },
+    {
+      "native_asset_name": "SCAR_sp",
+      "configured_mesh_path": "Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL_Mesh",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "animation_sha256": "e7d54f6dd1679b4cb26b6f4873e1c3226a6a6e67cf9a85a6319bf5938ca8c521",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "left_hand_in_weapon": [
+        0.17239183750481374,
+        0.7009592667022276,
+        -0.6920528598206864,
+        0.0,
+        0.4252126901610664,
+        -0.6866961418810282,
+        -0.5896122258329647,
+        0.0,
+        -0.8885241822751392,
+        -0.1926253232313649,
+        -0.41643758519411966,
+        -0.0,
+        0.04478646735584643,
+        -0.0060050857957696605,
+        -0.5486748961614233,
+        1.0
+      ],
+      "left_hand_status": "static_authored_pose",
+      "right_hand_retargeted": false,
+      "native_admission": false,
+      "source_bindings": [
+        "24335ec67c20f45540528b9d40f3d11e2c89a092992a593456dc6157b2b17e49"
+      ],
+      "source_weapons": [
+        {
+          "resource": "Objects/Weapons/Handheld/UL_rif_FNSCARL/SP_rif_FNSCARL.dbx",
+          "sha256": "afef46404434e56a20dacd77bc81217bc6018da97b7009d27d87ca57b30e6d6f",
+          "instance_guid": "fc1e53be-dbcc-487b-84e0-3ad6213fe7d1",
+          "type": "GameSharedResources.SoldierWeaponData"
+        }
+      ],
+      "animation_chain": {
+        "tree": {
+          "resource": "Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL_Animtree1p.dbx",
+          "sha256": "a384c4a8fa8f4765fad99dc9f3f6d8b1db1f92f70760e22c00a1cfc39d3fa23d",
+          "instance_guid": "a95bb87e-5a5e-4b9b-88e6-75fa977f22fd",
+          "type": "Animation.SpecificAnimTreeData"
+        },
+        "animation_asset": {
+          "resource": "Animations/Weapons/Handheld/UL_rif_FNSCARL/1P/HandsIKPose.dbx",
+          "sha256": "dcd5741ecfc26ff5a3bac1e34dd671bd170c6befa6867b7eb26c7cf212ebf4fa",
+          "instance_guid": "c94b23a9-5551-4c93-9ed0-627fab56c29b",
+          "type": "Animation.AnimationAsset"
+        },
+        "animation_resource": "Animations/Weapons/Handheld/UL_rif_FNSCARL/1P/HandsIKPose.res",
+        "skeleton_asset": {
+          "resource": "Characters/Skeletons/ske01.dbx",
+          "sha256": "ebad79fb62ab383dcc4ea5179652ded99944b7f9905c6095baa8f0b7183520ba",
+          "instance_guid": "20a6d9b2-2cd5-4895-a59c-f144e6d3f061",
+          "type": "Animation.SkeletonAsset"
+        },
+        "skeleton_resource": "Characters/Skeletons/ske01.res"
+      },
+      "right_hand_status_not_admitted": "static_authored_pose",
+      "weapon_class": "wcSmg",
+      "support_contact_reference": true,
+      "binding_digest": "f8235cd9daad3bb0705d01e40344d90f500d6c4b02a31dd835f3e3b0da6ddfda"
+    },
+    {
+      "native_asset_name": "SCAR_sp_s",
+      "configured_mesh_path": "Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL_Mesh",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "animation_sha256": "e7d54f6dd1679b4cb26b6f4873e1c3226a6a6e67cf9a85a6319bf5938ca8c521",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "left_hand_in_weapon": [
+        0.17239183750481374,
+        0.7009592667022276,
+        -0.6920528598206864,
+        0.0,
+        0.4252126901610664,
+        -0.6866961418810282,
+        -0.5896122258329647,
+        0.0,
+        -0.8885241822751392,
+        -0.1926253232313649,
+        -0.41643758519411966,
+        -0.0,
+        0.04478646735584643,
+        -0.0060050857957696605,
+        -0.5486748961614233,
+        1.0
+      ],
+      "left_hand_status": "static_authored_pose",
+      "right_hand_retargeted": false,
+      "native_admission": false,
+      "source_bindings": [
+        "393e4e29ca358cb6351ced822c5a873572fba54e805622d491fa3c9b48d2a86d"
+      ],
+      "source_weapons": [
+        {
+          "resource": "Objects/Weapons/Handheld/UL_rif_FNSCARL/SP_rif_FNSCARL_Scoped.dbx",
+          "sha256": "afec48bfa7ce38765503f771f4fa4491c3f84c444943887b9c46e04323116ba5",
+          "instance_guid": "bacef779-0c96-4795-8a59-20645a5ec396",
+          "type": "GameSharedResources.SoldierWeaponData"
+        }
+      ],
+      "animation_chain": {
+        "tree": {
+          "resource": "Objects/Weapons/Handheld/UL_rif_FNSCARL/UL_rif_FNSCARL_AnimTree1p_Scoped.dbx",
+          "sha256": "f5bc3a8cf53747c35382cf04d214faf2b7c228637a44136d9aa584fc69b911cc",
+          "instance_guid": "98d35215-3ddf-4a95-8198-636cf8341c05",
+          "type": "Animation.SpecificAnimTreeData"
+        },
+        "animation_asset": {
+          "resource": "Animations/Weapons/Handheld/UL_rif_FNSCARL/1P/HandsIKPose.dbx",
+          "sha256": "dcd5741ecfc26ff5a3bac1e34dd671bd170c6befa6867b7eb26c7cf212ebf4fa",
+          "instance_guid": "c94b23a9-5551-4c93-9ed0-627fab56c29b",
+          "type": "Animation.AnimationAsset"
+        },
+        "animation_resource": "Animations/Weapons/Handheld/UL_rif_FNSCARL/1P/HandsIKPose.res",
+        "skeleton_asset": {
+          "resource": "Characters/Skeletons/ske01.dbx",
+          "sha256": "ebad79fb62ab383dcc4ea5179652ded99944b7f9905c6095baa8f0b7183520ba",
+          "instance_guid": "20a6d9b2-2cd5-4895-a59c-f144e6d3f061",
+          "type": "Animation.SkeletonAsset"
+        },
+        "skeleton_resource": "Characters/Skeletons/ske01.res"
+      },
+      "right_hand_status_not_admitted": "static_authored_pose",
+      "weapon_class": "wcSmg",
+      "support_contact_reference": true,
+      "binding_digest": "1050c4f128cfc17a0ed330544fe74af1d7eaeed461ea5a94eac8ea3510f103fc"
+    },
+    {
+      "native_asset_name": "XM8 LMG",
+      "configured_mesh_path": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Mesh",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "animation_sha256": "227b8299a41dd1e89db3fc953973eb4af72bde282f798c141bee1a36541ec2a8",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "left_hand_in_weapon": [
+        0.5275064484199989,
+        0.3697481562439924,
+        -0.7648681244694988,
+        0.0,
+        0.11945797263193987,
+        -0.9236580968927915,
+        -0.3641229364089206,
+        0.0,
+        -0.8411104206048022,
+        0.10070760149341024,
+        -0.5314049673755971,
+        -0.0,
+        0.02855136738412826,
+        -0.017111874608230573,
+        -0.5855579875954409,
+        1.0
+      ],
+      "left_hand_status": "static_authored_pose",
+      "right_hand_retargeted": false,
+      "native_admission": false,
+      "source_bindings": [
+        "8898d58013ad09a6d90fbed1ed199436dd1281add600ba7f28dc9b08ca0798c3",
+        "f4890310f0d5d22a1076fa1a011044f43bc21ffb70f9f4a1a6eb0b303a080fe8",
+        "e01fd251afc87dec2ee81e54d588d56072143e5f5c1d4320110101c80338f5f6"
+      ],
+      "source_weapons": [
+        {
+          "resource": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg.dbx",
+          "sha256": "515f82d772129e026d2c713ef33b0cc665f86f364ac4a754d52c7c465b7046ef",
+          "instance_guid": "16ff338b-657b-4966-8a9e-bba5d3c40834",
+          "type": "GameSharedResources.SoldierWeaponData"
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Scoped.dbx",
+          "sha256": "9a560d44b3f4d0ed000635bcd4eaa912960db12eb53ecc3bb1fd7bc8e1a00914",
+          "instance_guid": "e5e3ba16-ae7a-4172-889f-3a6c0a397349",
+          "type": "GameSharedResources.SoldierWeaponData"
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Kobra.dbx",
+          "sha256": "c49132975819d3fd9a6163f6466aa2f8bfa194f084e53bd14ef77185d1c36965",
+          "instance_guid": "294f6305-dcdf-4be8-81cd-f5f62ed333c2",
+          "type": "GameSharedResources.SoldierWeaponData"
+        }
+      ],
+      "animation_chain": {
+        "tree": {
+          "resource": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_AnimTree1p.dbx",
+          "sha256": "c82074f4cfdab6b7dd3bac6ad3fe3eb3ae562f43a9657f6f57cb30d292f0fcf3",
+          "instance_guid": "a35ec827-16fa-47d9-9417-73038afb861e",
+          "type": "Animation.SpecificAnimTreeData"
+        },
+        "animation_asset": {
+          "resource": "Animations/Weapons/Handheld/US_rif_XM8_LMG/1P/HandsIkPose.dbx",
+          "sha256": "b23f8b6f14df3bc9e2e858f766aaa1c9de9a884e9e3b8ec168e0c82183ee83bb",
+          "instance_guid": "a83e18ff-ca4e-4e82-aed2-d9c8fcae2d53",
+          "type": "Animation.AnimationAsset"
+        },
+        "animation_resource": "Animations/Weapons/Handheld/US_rif_XM8_LMG/1P/HandsIkPose.res",
+        "skeleton_asset": {
+          "resource": "Characters/Skeletons/ske01.dbx",
+          "sha256": "ebad79fb62ab383dcc4ea5179652ded99944b7f9905c6095baa8f0b7183520ba",
+          "instance_guid": "20a6d9b2-2cd5-4895-a59c-f144e6d3f061",
+          "type": "Animation.SkeletonAsset"
+        },
+        "skeleton_resource": "Characters/Skeletons/ske01.res"
+      },
+      "right_hand_status_not_admitted": "static_authored_pose",
+      "weapon_class": "wcLmg",
+      "support_contact_reference": true,
+      "binding_digest": "150fe316bc4511d701ed59b388c7052385226a6ebb3940e19c0305a2c8ed2b10"
+    },
+    {
+      "native_asset_name": "XM8C",
+      "configured_mesh_path": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Mesh",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "animation_sha256": "57ba309521f14ae1d9dceb594f185cf081b94520b424bc335e9393a4bc776013",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "left_hand_in_weapon": [
+        0.6061637144008164,
+        0.48852412340323836,
+        -0.6276222846560696,
+        0.0,
+        -0.04547834347644112,
+        -0.7665434942573482,
+        -0.6405800431533719,
+        0.0,
+        -0.7940385832051525,
+        0.4168396001639403,
+        -0.4424335838481554,
+        -0.0,
+        0.021067602163656912,
+        -0.039761888852150096,
+        -0.5533723114220941,
+        1.0
+      ],
+      "left_hand_status": "static_authored_pose",
+      "right_hand_retargeted": false,
+      "native_admission": false,
+      "source_bindings": [
+        "3463e664e2b93f591ecaa22d2ec1c7c5a2f20ccffc6fb1314a6db7ab1fa724ca",
+        "9da3af7c7ee53383506efccacbba3bec0eff241a5f042ccccda0c5a4dfc33c35",
+        "0422d5a93731c072bc094132285d22f7486d92a234181f3ce257eee07f40b1d7"
+      ],
+      "source_weapons": [
+        {
+          "resource": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Scoped.dbx",
+          "sha256": "ae12d9803482f3846993ea46e0a4afc19495e4b76cd847ea78a45c616092d970",
+          "instance_guid": "9f5ab2bd-cd9e-4830-927c-c91953f70092",
+          "type": "GameSharedResources.SoldierWeaponData"
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Kobra.dbx",
+          "sha256": "b3a2b0b87554e994332c9e4d5819c6dd327afb26ab718a2b0161c5313464f6a6",
+          "instance_guid": "461cfafc-f0df-4323-ac58-57fbcb733d6f",
+          "type": "GameSharedResources.SoldierWeaponData"
+        },
+        {
+          "resource": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c.dbx",
+          "sha256": "21a6b56404b4ade896da5cd9b08a89db4db710c33ba0d99bff33f0acbcad4d9c",
+          "instance_guid": "93e2a23e-b8d6-490b-8468-0b789da8e35c",
+          "type": "GameSharedResources.SoldierWeaponData"
+        }
+      ],
+      "animation_chain": {
+        "tree": {
+          "resource": "Objects/Weapons/Handheld/US_rif_XM8c/US_rif_XM8c_Scoped_AnimTree1p.dbx",
+          "sha256": "c198e01e77a80b5accd05690103392ece2d3c7f7ebfe7324b280759494ec0bd5",
+          "instance_guid": "7a27ed90-909c-4b9e-9c01-89a8167d1623",
+          "type": "Animation.SpecificAnimTreeData"
+        },
+        "animation_asset": {
+          "resource": "Animations/Weapons/Handheld/US_rif_XM8_C/1P/HandsIKPose.dbx",
+          "sha256": "cf44a016bd6a5e1aaa7184c4420b74e6350876cbc927cb63df5f5367ac6ea16b",
+          "instance_guid": "a1375dc9-c093-45eb-a2d4-cc3daab6dbcf",
+          "type": "Animation.AnimationAsset"
+        },
+        "animation_resource": "Animations/Weapons/Handheld/US_rif_XM8_C/1P/HandsIKPose.res",
+        "skeleton_asset": {
+          "resource": "Characters/Skeletons/ske01.dbx",
+          "sha256": "ebad79fb62ab383dcc4ea5179652ded99944b7f9905c6095baa8f0b7183520ba",
+          "instance_guid": "20a6d9b2-2cd5-4895-a59c-f144e6d3f061",
+          "type": "Animation.SkeletonAsset"
+        },
+        "skeleton_resource": "Characters/Skeletons/ske01.res"
+      },
+      "right_hand_status_not_admitted": "static_authored_pose",
+      "weapon_class": "wcSmg",
+      "support_contact_reference": true,
+      "binding_digest": "87200216b2e405af80482d14d691196d7c756bbc0582567764f04b4e18621c3b"
+    }
+  ],
+  "sources": [
+    {
+      "path": "verified-bindings.json",
+      "sha256": "333e69ce7f5911f9bdf1d3695ed06c7fb9f64a1f9d0343b5f1cad3957af2ad36",
+      "archive": "Dist/win32/levels/sp_common/level-00.fbrb",
+      "archive_index_sha256": "57835d6ace174f83eeb46ec8bbfe3acf8a3e7fde5cb8c8e49f084950e975a842",
+      "assets": [
+        "F2000_sp",
+        "SCAR_sp",
+        "SCAR_sp_s"
+      ]
+    },
+    {
+      "path": "arsmg-verified-bindings.json",
+      "sha256": "86b43b8269d94d28117972a4478529c94fbe46ef085072394ea73b16817747aa",
+      "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+      "archive_index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965",
+      "assets": [
+        "XM8C"
+      ]
+    },
+    {
+      "path": "lmg-verified-bindings.json",
+      "sha256": "00987bd34efbc0d64c94f5351304059dc6acb07248b0d59a833277a78d9372dc",
+      "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+      "archive_index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965",
+      "assets": [
+        "MG36",
+        "XM8 LMG"
+      ]
+    }
+  ],
+  "scope": "Static left-wrist support references for existing enrolled magazine families; no right-hand, aim, ammo, action, or headset admission",
+  "deferred": [
+    {
+      "native_asset_name": "M416",
+      "reason": "Current exact source left-hand ancestor chain is decoded_spline_candidate, not proven constant; all three configured variants remain unenrolled"
+    }
+  ]
+}

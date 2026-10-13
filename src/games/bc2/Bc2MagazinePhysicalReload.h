@@ -35,6 +35,7 @@ struct MagazinePhysicalApi {
  std::optional<AmmoResourceView> (*resourceRead)(void*,const ReloadStateOwner&,std::int64_t)noexcept=nullptr;
  bool (*resourceSubmit)(void*,const AmmoResourceRequest&)noexcept=nullptr;
  std::optional<AmmoResourceOutcome> (*resourceOutcome)(void*,std::uint64_t,const interaction::AmmoResourceContext&)noexcept=nullptr;
+    AmmoResourceRead (*resourceReadObserved)(void*,const ReloadStateOwner&,std::int64_t)noexcept=nullptr;
 };
 struct MagazinePhysicalSample {
  bool actionFlagsKnown=false;std::uint64_t actionHeld=0,actionPressed=0;
@@ -53,6 +54,9 @@ struct MagazinePhysicalResult {
  bool ordinaryReloadAllowed=false;
  unsigned acquired=0,submitted=0,completed=0;
  std::optional<interaction::AmmoSupplyVisualSample> bodyAmmo;
+ // Identity-only idle wait. Independently verified support may remain held;
+ // no magazine target, ammunition observation or native action is granted.
+ bool idleAwaitingResource=false;
 };
 struct MagazineResourceProbeState {
  MagazinePhysicalResult result{};
@@ -64,6 +68,7 @@ struct MagazineResourceProbeState {
 inline bool MagazineBlocksSupport(const MagazinePhysicalResult& r,std::int64_t now)noexcept {
  if(r.ownsLeftHand)return true;
  if(!r.blocksWeaponActions)return false;
+ if(r.idleAwaitingResource&&r.interaction.phase==interaction::DetachableMagazinePhase::Attached)return false;
  const auto phase=r.interaction.phase;
  const auto& target=r.tracking.target;
  return !((phase==interaction::DetachableMagazinePhase::AwaitingSeat||phase==interaction::DetachableMagazinePhase::AwaitingOriginalReturn||phase==interaction::DetachableMagazinePhase::Complete)&&
@@ -112,6 +117,10 @@ public:
  void Cancel(const interaction::HandInteractionSample&,interaction::HandInteraction&,MagazineCancelCause=MagazineCancelCause::External)noexcept;
  bool BlocksEquipment()const noexcept;
  bool ResourceBackend()const noexcept{return bool(resource_);}
+ interaction::AmmoSupplyContact BodyAmmoContact()const noexcept {
+  const interaction::AmmoSupplyContact primary{pouch_.pouchCenterMeters,pouch_.pouchRadiusMeters};
+  return ResourceBackend()?primary:pouch_.alternateContact.value_or(primary);
+ }
  MagazineResourceProbeState ResourceProbeState(std::int64_t now)const noexcept;
  void Report(std::ostream&)const;
  void EnableBodyAmmo(bool enabled=true,interaction::SupplyAnchorFrame frame=interaction::SupplyAnchorFrame::HeadYaw)noexcept;

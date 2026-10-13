@@ -30,10 +30,15 @@ int RejectMalformedBeforeAnyUpload(){Fixture f;const auto valid=f.Pack();
 int AtomicCatalogRejectsDuplicateOrInverse(){Fixture f;const auto first=f.Pack();auto twice=first;twice[8]=std::byte{2};twice.insert(twice.end(),first.begin()+12,first.end());
     CHECK(f.Parse(twice).status==BodyAmmoCacheStatus::Identity);f.profile.inverseBind.values[0][0]=0;CHECK(f.Parse(first).status==BodyAmmoCacheStatus::Geometry);
     const auto missing=LoadBodyAmmoGeometryCache("Z:/no-such-body-ammo-cache.fvrprop");CHECK(missing.status==BodyAmmoCacheStatus::Missing&&!missing.catalog);return 0;}
-int ActualInstalledCache(const char* path){const auto loaded=LoadBodyAmmoGeometryCache(path);CHECK(loaded.status==BodyAmmoCacheStatus::Loaded&&loaded.catalog&&loaded.catalog->size()==5);
+int ActualInstalledCache(const char* path,unsigned expected=5){const auto loaded=LoadBodyAmmoGeometryCache(path);CHECK(loaded.status==BodyAmmoCacheStatus::Loaded&&loaded.catalog&&loaded.catalog->size()==expected);
     unsigned triangles=0;for(const auto& part:*loaded.catalog)for(const auto& section:part->sections)triangles+=unsigned(section.mesh.vertices.size()/3);
-    CHECK(triangles==15616);std::cout<<"Installed cache:5 ammo/equipment parts/15616 triangles reconstructed; CPU only\n";return 0;}
+    if(expected==5)CHECK(triangles==15616);
+    Bc2BodyAmmoRenderer renderer;CHECK(renderer.QueueGeometryCatalog(loaded.catalog));renderer.RequestStop();CHECK(renderer.PumpStop());
+    std::cout<<"Installed cache:"<<expected<<" ammo/equipment parts/"<<triangles<<" triangles reconstructed and queued; CPU only\n";return 0;}
 }
-int main(int argc,char** argv){if(ExactOwnedGeometry()||RejectMalformedBeforeAnyUpload()||AtomicCatalogRejectsDuplicateOrInverse()||(argc==2&&ActualInstalledCache(argv[1])))return 1;
+int main(int argc,char** argv){unsigned expected=5;if(argc==3){const auto value=std::string_view(argv[2]);const auto result=std::from_chars(value.data(),value.data()+value.size(),expected);
+        CHECK(result.ec==std::errc{}&&result.ptr==value.data()+value.size()&&expected&&expected<=MaxBodyPropAssets);}
+    CHECK(argc>=1&&argc<=3);
+    if(ExactOwnedGeometry()||RejectMalformedBeforeAnyUpload()||AtomicCatalogRejectsDuplicateOrInverse()||(argc>=2&&ActualInstalledCache(argv[1],expected)))return 1;
     std::cout<<"Bc2BodyAmmoCache:3 deterministic CPU groups passed; no GPU/native admission\n";}
 

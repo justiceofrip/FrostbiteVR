@@ -81,6 +81,27 @@ struct Simulation {
     bool Settle(){for(auto& b:input.branches){b.currentState=b.nextState=2;b.phaseTimer=0;}
         if(!Tick())return false;const auto d=Begin(0);return !d.tracked&&policy.Phase()==ReloadRequestCyclePhase::Finished;}
 };
+int SubmittedMagazineSurvivesOtherBranchSchedulingGap(){
+ for(bool aek:{false,true}){Simulation s;
+  if(aek){s.policy=Bc2MagazineReloadCycle(true,AekMagazineNativeProfile);
+   const auto& profile=AekMagazineNativeProfile.configuration;s.input.config.assetName={};s.input.config.assetPath={};
+   std::memcpy(s.input.config.assetName.data(),profile.assetName.data(),profile.assetName.size());
+   std::memcpy(s.input.config.assetPath.data(),profile.assetPath.data(),profile.assetPath.size());s.input.config.reloadTime=3.2f;}
+  CHECK(s.Arm()&&s.Unseat());const auto request=s.Request();CHECK(s.policy.Submit(request,s.input.nowNs));
+  CHECK(s.Tick(58000000));s.input.context.deltaSeconds=.0587298f;
+  const auto current=s.Begin(2);CHECK(current.tracked&&!current.hold&&!s.policy.Allows(current,s.input.nowNs));
+  CHECK(current.deadlineNs<=s.control.deadlineNs&&current.deadlineNs<=s.input.leaseDeadlineNs);
+  CHECK(s.End(current)&&s.policy.Phase()==ReloadRequestCyclePhase::Advancing);
+  CHECK(!s.policy.TakeAcknowledgement(s.input.identity,s.control.cycle,s.input.nowNs));
+  CHECK(s.Transfer(1,10)&&s.Transfer(0,10));
+  CHECK(!s.policy.TakeAcknowledgement(s.input.identity,s.control.cycle,s.input.nowNs));
+  CHECK(s.Transfer(2,10)&&s.Settle());
+  const auto ack=s.policy.TakeAcknowledgement(s.input.identity,s.control.cycle,s.input.nowNs);
+  CHECK(ack&&ack->verified&&!s.policy.TakeAcknowledgement(s.input.identity,s.control.cycle,s.input.nowNs));
+  for(const auto& b:s.input.branches)CHECK(b.loaded==30&&b.reserve==80);
+ }
+ return 0;
+}
 int CurrentHoldSurvivesBoundedFrameHitch(){
     for(float delta:{.0596221f,.1f}){
         Simulation s;CHECK(s.Arm());const auto loaded=s.input.branches[0].loaded;
@@ -304,6 +325,6 @@ int ImmutableStartupPulseGate(){
  CHECK(!fire.Begin(0).hold&&fire.policy.Failure()==ReloadRequestCycleFailure::Timing);
  return 0;
 }
-int main(){if(CurrentHoldSurvivesBoundedFrameHitch())return 1;if(EstablishedPulseRequiresGenuineContext()||ImmutableStartupPulseGate())return 1;if(HoldingMissingPositiveReceiptIsDeferred())return 1;if(TypedMagazineCycleObservation())return 1;if(HeldAndNativeCompletion()||ResourceCounts()||EvidenceFailures()||IdentityAndGates()||TimingReads()||NativeDispatchAndAbortScope())return 1;
+int main(){if(SubmittedMagazineSurvivesOtherBranchSchedulingGap())return 1;if(CurrentHoldSurvivesBoundedFrameHitch())return 1;if(EstablishedPulseRequiresGenuineContext()||ImmutableStartupPulseGate())return 1;if(HoldingMissingPositiveReceiptIsDeferred())return 1;if(TypedMagazineCycleObservation())return 1;if(HeldAndNativeCompletion()||ResourceCounts()||EvidenceFailures()||IdentityAndGates()||TimingReads()||NativeDispatchAndAbortScope())return 1;
     std::puts("Magazine cycle: ten deterministic groups passed; existing launch paths remain disabled");return 0;}
 

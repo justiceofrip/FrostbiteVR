@@ -1,4 +1,5 @@
 #include "fvr/ipc/RemoteFrameProvider.h"
+#include "fvr/ipc/WaitForConnection.h"
 #include "fvr/ipc/StagedFrameProducer.h"
 #include "fvr/graphics/D3D11FrameBridge.h"
 #include <atomic>
@@ -121,7 +122,7 @@ int wmain(int argc,wchar_t** argv){try {
     if(argc==3&&(std::wstring(argv[1])==L"--abandon"||std::wstring(argv[1])==L"--connect-exit")){
         ipc::FrameChannel endpoint;Require(endpoint.ConnectProducer(argv[2]),"Connect failure-test endpoint");
         if(std::wstring(argv[1])==L"--abandon"){
-            const auto name=L"Local\\FrostbiteVR.Control.v5."+std::wstring(argv[2])+L".mutex";
+            const auto name=L"Local\\FrostbiteVR.Control.v6."+std::wstring(argv[2])+L".mutex";
             HANDLE mutex=OpenMutexW(SYNCHRONIZE|MUTEX_MODIFY_STATE,FALSE,name.c_str());Require(mutex&&WaitForSingleObject(mutex,1000)==WAIT_OBJECT_0,"Acquire abandonment-test mutex");
         }
         ExitProcess(0); // Deliberately bypass RAII to exercise an actual peer crash.
@@ -146,7 +147,8 @@ int wmain(int argc,wchar_t** argv){try {
     desc.ArraySize=1;desc.Format=DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;desc.BindFlags=0;desc.Usage=D3D11_USAGE_STAGING;desc.CPUAccessFlags=D3D11_CPU_ACCESS_READ;
     ComPtr<ID3D11Texture2D> staging;Hr(device->CreateTexture2D(&desc,nullptr,&staging),"Create IPC readback");
     ipc::RemoteFrameProvider host;Require(host.Create()&&host.SetBudget(50),"Create receiver channel");Child child(executable,legacyIpc?L"--produce-frame-bridge-legacy-ipc":legacyMode?L"--produce-frame-bridge-legacy":bridgeMode?L"--produce-frame-bridge":staged?L"--produce-staged":L"--produce",host.Token());
-    const auto start=GetTickCount64();while(!host.Connected()&&GetTickCount64()-start<3000)Sleep(1);Require(host.Connected(),"Producer handshake timed out");
+    const auto start=GetTickCount64();Require(ipc::WaitForConnection([&]{return host.Connected();},
+        []{return GetTickCount64();},[]{Sleep(1);},start,3000),"Producer handshake timed out");
     graphics::D3D11PairConsumer consumer;graphics::TextureDescriptor opened{},discardedDescriptor{};bool dropped=false,recreated=false;
     unsigned consumed=0,timeouts=0;std::array<std::vector<std::uint32_t>,2> previous;
     for(std::uint64_t attempt=1;consumed<4&&GetTickCount64()-start<12000;++attempt){

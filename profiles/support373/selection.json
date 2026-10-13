@@ -1,0 +1,29 @@
+{
+  "schema": "fvr.bc2.support_selection.v1",
+  "checkpoint": 373,
+  "preserved_supports": 59,
+  "separate_spas_anchor_preserved": true,
+  "added": 10,
+  "support_only": true,
+  "right_hand_retarget": false,
+  "native_ammunition_admission": false,
+  "selected_header": "profiles/support373/CombinedSupport.h",
+  "sources": [
+    {
+      "path": "profiles/checkpoint202/Bc2AuthoredSupports.generated.h",
+      "sha256": "6e4be268a9be780aa729da50deabce32bd784e6031a135b6e2e005b2bbeadc69"
+    },
+    {
+      "path": "profiles/support312/StaticSupports.generated.h",
+      "sha256": "84a0fa0fc6736c834e3a713510f82fd7cc40e44ede633cd3cc4a6abb9250ee70"
+    },
+    {
+      "path": "profiles/bounded-support372/CandidateSupports.generated.h",
+      "sha256": "907113d906034dd0a9e04b5d35a91d3211f3a100693461232396e78803384c07"
+    },
+    {
+      "path": "profiles/bounded-support372/support-bindings.json",
+      "sha256": "d68bec98bf639348470a6bc14a8312e5423cc0988a245d99f447b319139492ba"
+    }
+  ]
+}

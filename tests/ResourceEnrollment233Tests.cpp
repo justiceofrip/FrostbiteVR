@@ -54,17 +54,17 @@ int ExactBodyAndVisibility(){unsigned count=0;
   CHECK(!Source(f));ExactCycle(f,p);ExactCycle(f,p);
   CHECK(f.out.phase==BodyHolsterPhase::Held&&f.hands.Current(InteractionHand::Right)&&!f.out.blockWeaponActions);
  }
- CHECK(count==15);return 0;
+ CHECK(count==16);return 0;
 }
 int InstalledCatalog(const char* path){auto result=LoadBodyAmmoGeometryCache(path);
- CHECK(result.status==BodyAmmoCacheStatus::Loaded&&result.catalog&&result.catalog->size()==44);
+ CHECK(result.status==BodyAmmoCacheStatus::Loaded&&result.catalog&&result.catalog->size()==46);
  for(const auto& p:BodyEquipmentProfiles){if(!p.configurationPath)continue;unsigned matches=0;
   for(const auto& g:*result.catalog)if(g->asset==p.asset&&g->mesh==p.mesh&&g->part==p.part&&g->rigFingerprint==p.rig)++matches;
   CHECK(matches==1);}
- CHECK(BodyAmmoAssetProfiles.size()==44);return 0;
+ CHECK(BodyAmmoAssetProfiles.size()==46);return 0;
 }
 }
 int main(int argc,char** argv){CHECK(argc<=2&&NativeOperationCapabilities.size()==1);
  if(ExactBodyAndVisibility()||ActualHiddenSelectedProfiles()||SourceIdentityAndReceiptFailures()||OriginalDeadlinesAndDrawCancellation()||
     PoseUsesBodyShoulderAndScale()||RecenterRequiresNewTypedSource()||(argc==2&&InstalledCatalog(argv[1])))return 1;
- std::cout<<"15 exact resource/visibility/body joins; 255 malformed bindings; actual hide/draw consumers; 44 installed cache profiles passed. Native/GPU receipts are CPU fixtures.\n";}
+ std::cout<<"16 exact resource/visibility/body joins; 272 malformed bindings; actual hide/draw consumers; 46 installed cache profiles passed. Native/GPU receipts are CPU fixtures.\n";}

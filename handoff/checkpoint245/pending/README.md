@@ -1,4 +1,8 @@
-# Unmerged checkpoint245 work
+# Archived checkpoint245 work
+
+This describes the checkpoint245 snapshot only. For current development use
+[checkpoint390](../../checkpoint390/README.md) and the normal source tree. Do not
+apply these old full-file payloads over390; they can overwrite later integration.
 
 These frozen source payloads are saved for the next agent; they are not built
 into checkpoint245. Each original manifest and payload hash is preserved.

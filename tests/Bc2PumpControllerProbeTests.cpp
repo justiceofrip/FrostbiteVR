@@ -35,7 +35,7 @@ struct Fixture {
     Native native;HandInteraction hands;Bc2PhysicalPump pump;Bc2PumpControllerProbe driver;ControllerActions actions;SupportGrip support;unsigned supportReturns=0;bool publishSupport=true,forgeSupport=false;
     Bc2PhysicalPumpSample sample{};InputFrame input{};Bc2PumpRawContact raw{};Bc2PumpPackCounters packs{};
     std::uint64_t intent=0;std::int64_t now=1000000000;bool publishPairs=true,forgeRaw=false,mapBeforePrepare=false;
-    static Bc2PumpCalibration Calibration(){Bc2PumpCalibration c;c.revision=1;c.closedPart=Matrix(0,0,-.84f);
+    static Bc2PumpCalibration Calibration(){Bc2PumpCalibration c;c.revision=1;c.asset=SpasReloadAsset;c.profileId=0x5350415350554d50ull;c.geometry=SpasPumpGeometry;c.closedPart=Matrix(0,0,-.84f);
         c.closedWrist=Matrix(-.2f,-.25f,.45f);c.rearDirection=1;c.measured=true;return c;}
     static RigSnapshot Rig(){RigSnapshot r;r.names={"root","jntWpn_1","jntWpn_4","LeftHand"};r.parents={-1,0,1,0};r.weaponBone=1;
         r.identity={0x11000,0x12000,0x30000,0x40000,0x50000,0x60000,0x70000,0x80000,0x90000,4,false};
@@ -140,8 +140,34 @@ int HeldSupportProofIsRequired(){
         CHECK(f.driver.Failed()&&!f.driver.Completed()&&f.native.acked==1&&f.supportReturns==1);}
     return 0;
 }
+int WaitingHandDoesNotChaseRenderedWeapon(){
+    Fixture f(2);unsigned waiting=0,settling=0;
+    for(unsigned n=0;n<2400&&!f.driver.Completed()&&!f.driver.Failed();++n){
+        const auto phase=f.driver.Current();
+        const bool still=phase==Bc2PumpControllerProbe::Phase::WaitReady||phase==Bc2PumpControllerProbe::Phase::Settle;
+        const auto previous=f.input.hands[0].grip;
+        // A render-only change must not become controller motion while the
+        // virtual player is simply holding the completed fore-end. The real
+        // support solver otherwise feeds that motion back into weapon aiming.
+        if(still)f.raw.weaponWorldMeters.values[3][0]+=.12f;
+        f.Tick();
+        if(still&&f.driver.Current()==phase){
+            CHECK(f.input.hands[0].grip.position.x==previous.position.x);
+            CHECK(f.input.hands[0].grip.position.y==previous.position.y);
+            CHECK(f.input.hands[0].grip.position.z==previous.position.z);
+            CHECK(f.input.hands[0].grip.orientation.x==previous.orientation.x);
+            CHECK(f.input.hands[0].grip.orientation.y==previous.orientation.y);
+            CHECK(f.input.hands[0].grip.orientation.z==previous.orientation.z);
+            CHECK(f.input.hands[0].grip.orientation.w==previous.orientation.w);
+            if(phase==Bc2PumpControllerProbe::Phase::WaitReady)++waiting;else ++settling;
+        }
+    }
+    CHECK(f.driver.Completed()&&waiting>10&&settling>20);
+    CHECK(f.native.fired==2&&f.native.released==2&&f.native.acked==2&&f.supportReturns==2);
+    return 0;
+}
 }
 int main(){if(FiniteClosedLoopUsesConsumer()||RendererSourceCannotBeRestamped()||PairedPresentationRequired()||
     ControllerInverseRejectsWrongOriginal()||CapabilityAndReceiverAreExplicit()||InvalidRequestedCountCannotFire()||
-    MappingBeforePreparationCannotBeRepairedByDuplicateUpdate()||HeldSupportProofIsRequired())return 1;
-    std::puts("8 pump driver groups passed; real action mapping, controller conversion, renderer contact builder and physical consumer; synthetic native receipts and pack counters.");}
+    MappingBeforePreparationCannotBeRepairedByDuplicateUpdate()||HeldSupportProofIsRequired()||WaitingHandDoesNotChaseRenderedWeapon())return 1;
+    std::puts("9 pump driver groups passed; real action mapping, controller conversion, renderer contact builder and physical consumer; synthetic native receipts and pack counters.");}

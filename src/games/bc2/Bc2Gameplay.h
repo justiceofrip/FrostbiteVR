@@ -31,11 +31,11 @@ bool EnablePhysicalBoltProbe(unsigned cycles=1)noexcept;
 bool EnableOrdinaryManualCycles()noexcept;
 // Private input-only diagnostic, after ordinary activation and before Start.
 bool EnableOrdinaryBoltInputProbe(unsigned cycles=1)noexcept;
-bool EnableOrdinaryResourceInputProbe()noexcept;
+bool EnableOrdinaryResourceInputProbe(bool interruptPump=false,bool emptyPump=false)noexcept;
 bool EnablePhysicalPumpProbe(unsigned cycles=2)noexcept;
 // Private finite persistent body/resource/shell composition; after setup, before Start.
 bool EnableResourcePumpCombination()noexcept;
-bool EnableM95StockShotProbe()noexcept;
+bool EnableM95StockShotProbe(unsigned mode=1)noexcept;
 // Called once after this module's MinHook initialization, before hook enable.
 // InputReader is nonblocking and enforces the IPC producer-side 100ms deadline.
 bool Install(std::span<const std::byte>,const engine::PeImage&,std::uintptr_t,InputReader,bool motionAim=false,bool bodyFollow=false,bool observePoses=false,bool rigPulse=false,bool handPoses=false,bool deathProbe=false,bool equipProbe=false,bool muzzleFire=false,bool twoHandGrip=false,bool enableSightFlip=false,bool reloadHoldProbe=false,bool reloadRoundProbe=false,bool reloadRequestProbe=false,bool physicalReload=false,bool physicalReloadProbe=false,unsigned magazineReloadSession=0);

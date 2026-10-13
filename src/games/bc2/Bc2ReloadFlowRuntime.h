@@ -1,8 +1,10 @@
 #include "Bc2ReloadObservation.h"
 #include "Bc2PreholdEntryObservation.h"
 #include "Bc2ReloadKeepAlive.h"
+#include "Bc2ReloadStart.h"
 #pragma once
 #include "Bc2OwnerPublication.h"
+#include "Bc2NativeCycleInputGuard.h"
 #include "Bc2ReloadFlow.h"
 #include "Bc2ReloadHold.h"
 #include "Bc2AmmoReserve.h"
@@ -70,6 +72,7 @@ struct ReloadFlowEventEnd {
     std::optional<ReloadFlowBoundary> boundary;
     std::array<std::byte,0x30> copiedContext{};bool contextCopied=false;
     ReloadDeltaOverride hold{};bool holdRequested=false;
+    NativeCycleInputGuard cycleGuard{};std::uint64_t cycleGuardEpoch=0;unsigned cycleGuardSteps=0,cycleGuardRejected=0;
 };
 // True only for a fully captured owner-retained restore whose output matches
 // the captured source fields and whose source bytes did not change. No authority
@@ -225,6 +228,7 @@ std::optional<Bc2AmmoReserveLease> ReadPublishedReserve()noexcept;
 std::optional<Bc2AmmoReserveLease> ReadDiagnosticFireReserve()noexcept;
 // Exact stock M95 observation only; grants no manual-cycle or reload authority.
 std::optional<Bc2AmmoReserveLease> ReadM95StockShotReserve()noexcept;
+bool EnableM95EmptyRecording()noexcept;
 ReloadReserveObservation ReadReserveObserved()noexcept;
 // Read-only diagnostic snapshot; sequential branch reads are not atomic.
 struct RequestProbeSnapshot {
@@ -277,6 +281,9 @@ struct MagazineEmptyControlCounters {
     unsigned patchFailures=0,restoreFailures=0,receiptFailures=0;
 };
 MagazineEmptyControlCounters ReadMagazineEmptyControlCounters()noexcept;
+// Serializes only the immutable first terminal cycle failure. This does not
+// take a policy gate, inspect live game memory, or consume/renew an outcome.
+bool WriteNativeCycleFirstFailure(std::ostream&);
 // Read-only context for rejected empty-Step evidence; never a control capability.
 void PublishMagazineInteractionDiagnostic(const MagazineInteractionDiagnostic&)noexcept;
 // Explicit idle Gather selection only. Caller has reconciled/retired both
@@ -292,6 +299,7 @@ bool SelectMagazineRequestProfile(NativeMagazineProfileId,const ReloadStateOwner
 std::optional<NativeMagazineProfileId> ReadMagazineRequestProfile(const ReloadStateOwner&)noexcept;
 std::optional<ReloadHoldIdentity> RequestIdentity()noexcept;
 bool StartRequestCycle(const ReloadCycleControl&)noexcept;
+ReloadStartResult StartRequestCycleObserved(const ReloadCycleControl&)noexcept;
 bool KeepAliveRequestCycle(const ReloadCycleControl&)noexcept;
 ReloadKeepAliveResult KeepAliveRequestCycleObserved(const ReloadCycleControl&)noexcept;
 std::optional<ReloadRoundLease> RequestLease(const ReloadHoldIdentity&,std::uint64_t cycle)noexcept;
@@ -324,6 +332,7 @@ void ClearOwner()noexcept;
 void PublishAmmoResourceBinding(const std::optional<AmmoResourceBinding>&)noexcept;
 bool ResourceHandsEnabled()noexcept;
 std::optional<AmmoResourceView> ReadAmmoResourceView(const ReloadStateOwner&,std::int64_t now)noexcept;
+AmmoResourceRead ReadAmmoResourceObserved(const ReloadStateOwner&,std::int64_t now)noexcept;
 bool SubmitAmmoResourceRequest(const AmmoResourceRequest&)noexcept;
 std::optional<AmmoResourceOutcome> ReadAmmoResourceOutcome(std::uint64_t,const interaction::AmmoResourceContext&)noexcept;
 // One bounded recording session, at most20 seconds; no automatic reset/rearm.

@@ -59,6 +59,52 @@ bool ValidateCycleUpdate(const ReloadFlowRecord& r,const ReloadHoldIdentity& ide
     return r.entry.kind==ReloadFlowEvent::Update&&r.entry.depth==1&&!r.entry.parent&&!r.entry.nativeParent&&
         r.entry.update==r.id&&r.entry.nativeUpdate==r.id&&Basic(r,identity,branch,true);
 }
+bool CycleConvergencePhase(unsigned current,unsigned next,float timer,bool m95,bool empty)noexcept {
+    if(!std::isfinite(timer)||timer<0)return false;
+    if(current==2)return next==2&&timer==0;
+    if(current==1)return (next==1||next==2)&&timer==0;
+    if(empty)return current==6&&next==1&&timer>0&&timer<=1;
+    if(current==6)return next==7&&timer>0&&timer<=1;
+    if(current==7)return (next==7||next==8)&&timer>=0&&timer<=.5f;
+    return current==8&&next==1&&timer>=0&&timer<=(m95?2.3f:1.f);
+}
+bool CycleGuardedUpdate(const ReloadFlowRecord& r,const ReloadHoldIdentity& identity,unsigned branch,
+    const NativeCycleInputGuard& guard,unsigned guardedSteps,unsigned rejectedSteps,bool m95,bool empty)noexcept {
+    if(!ValidateCycleUpdate(r,identity,branch)||!Unheld(r)||!guard.Exact()||rejectedSteps)return false;
+    std::array<std::uint32_t,2> original{};std::memcpy(original.data(),r.entry.copiedContext.data()+0x28,8);
+    if(guard.original!=original||guard.effective!=std::array<std::uint32_t,2>{(original[0]&~255u)|1u,0})return false;
+    const auto context=DecodeReloadUpdateContext(r.entry.copiedContext);
+    const auto& before=r.entry.boundary;const auto& after=*r.exit.boundary;
+    return context&&!context->flags24Through28[2]&&
+        (!(before.current==2&&before.next==2&&after.current==2&&after.next==2)||guardedSteps)&&
+        CycleConvergencePhase(before.current,before.next,before.timer,m95,empty)&&
+        CycleConvergencePhase(after.current,after.next,after.timer,m95,empty)&&
+        before.loaded==after.loaded&&before.reserve==after.reserve&&
+        (after.flagsA8==before.flagsA8||after.flagsA8==(before.flagsA8&~2u));
+}
+bool CycleGuardedCommit(const ReloadFlowRecord& r,const ReloadHoldIdentity& identity,unsigned branch,std::uint64_t parent,bool m95,bool empty)noexcept {
+    (void)m95;const auto& e=r.entry;
+    if(!parent||r.id<=parent||e.kind!=ReloadFlowEvent::Commit||e.depth!=2||e.parent!=parent||e.nativeParent!=parent||
+       e.update!=parent||e.nativeUpdate!=parent||!Basic(r,identity,branch,false)||!Unheld(r))return false;
+    const auto c=DecodeReloadUpdateContext(e.copiedContext);const auto& a=e.boundary;const auto& z=*r.exit.boundary;
+    return c&&!c->inputFlags&&!c->flags24Through28[2]&&c->flags24Through28[4]&&
+        (a.timer==0)&&((a.current==7&&a.next==8&&!empty)||(a.current==8&&a.next==1&&!empty)||(a.current==6&&a.next==1&&empty)||(a.current==1&&a.next==2))&&
+        z.previous==a.current&&z.current==a.next&&z.next==a.next&&z.timer==a.timer&&
+        z.loaded==a.loaded&&z.reserve==a.reserve&&z.flagsA8==a.flagsA8;
+}
+bool CycleConvergenceRestore(const ReloadFlowRecord& r,const ReloadHoldIdentity& identity,unsigned branch,bool m95,bool empty)noexcept {
+    const auto& a=r.entry;const auto& e=r.exit;
+    if(!Identity(identity)||branch>=2||a.kind!=ReloadFlowEvent::Restore||!r.id||a.nativeInvocation!=r.id||
+       a.depth!=1||a.parent||a.nativeParent||a.update||a.nativeUpdate||!r.finished||!r.identityRetained||
+       !e.boundary||!a.thread||a.thread!=e.thread||a.nowNs<=0||e.nowNs<a.nowNs||a.caller<0x10000||a.context<0x10000||
+       a.contextCopied||e.contextCopied||!Unheld(r)||!Boundary(a.boundary,identity,branch)||!Boundary(*e.boundary,identity,branch)||
+       a.boundary.snapshotSequence!=e.boundary->snapshotSequence||a.boundary.soldierFlags!=e.boundary->soldierFlags||
+       !ReloadRestoreMatched(r))return false;
+    const auto& b=a.boundary;const auto& v=*e.boundary;
+    return CycleConvergencePhase(b.current,b.next,b.timer,m95,empty)&&
+        CycleConvergencePhase(v.current,v.next,v.timer,m95,empty)&&
+        b.loaded==v.loaded&&b.reserve==v.reserve&&b.flagsA8==v.flagsA8;
+}
 bool CycleM95PreHoldRewind(const ReloadFlowRecord& r,const ReloadHoldIdentity& identity,unsigned branch)noexcept {
     const auto& a=r.entry;const auto& e=r.exit;
     if(!Identity(identity)||branch>=2||a.kind!=ReloadFlowEvent::Restore||!r.id||a.nativeInvocation!=r.id||
@@ -89,8 +135,22 @@ bool CyclePreHoldSnapshotProgression(const ReloadFlowRecord& r,const ReloadHoldI
     return b.current!=v.current&&phase(b)&&phase(v)&&b.loaded>0&&v.loaded==b.loaded&&
         v.reserve==b.reserve&&v.flagsA8==b.flagsA8;
 }
-bool CycleM95ForwardReadyRestore(const ReloadFlowRecord& r,const ReloadHoldIdentity& identity)noexcept {
-    constexpr unsigned branch=0;
+bool CyclePredictedShotRollback(const ReloadFlowRecord& r,const ReloadHoldIdentity& identity,unsigned branch,bool empty)noexcept {
+    const auto& a=r.entry;const auto& e=r.exit;
+    if(!Identity(identity)||branch>=2||a.kind!=ReloadFlowEvent::Restore||!r.id||a.nativeInvocation!=r.id||
+       a.depth!=1||a.parent||a.nativeParent||a.update||a.nativeUpdate||!r.finished||!r.identityRetained||
+       !e.boundary||!a.thread||a.thread!=e.thread||a.nowNs<=0||e.nowNs<a.nowNs||a.caller<0x10000||a.context<0x10000||
+       a.contextCopied||e.contextCopied||!Unheld(r)||!Boundary(a.boundary,identity,branch)||!Boundary(*e.boundary,identity,branch)||
+       a.boundary.snapshotSequence!=e.boundary->snapshotSequence||a.boundary.soldierFlags!=e.boundary->soldierFlags||
+       !ReloadRestoreMatched(r))return false;
+    const auto& b=a.boundary;const auto& z=*e.boundary;
+    return b.current==6&&(b.previous==5||b.previous==6)&&b.next==(empty?1u:7u)&&
+        b.timer>0&&b.timer<=(empty?1.f:30.f)&&(empty?b.loaded==0:b.loaded>0)&&
+        z.current==2&&z.previous==6&&z.next==2&&z.timer==0&&z.loaded==b.loaded+1&&
+        z.reserve==b.reserve&&z.flagsA8==b.flagsA8;
+}
+bool CycleForwardReadyRestore(const ReloadFlowRecord& r,const ReloadHoldIdentity& identity,unsigned branch,
+    const NativeCycleHeldBoundary& held)noexcept {
     const auto& a=r.entry;const auto& e=r.exit;
     if(!Identity(identity)||branch>=2||a.kind!=ReloadFlowEvent::Restore||!r.id||a.nativeInvocation!=r.id||
        a.depth!=1||a.parent||a.nativeParent||a.update||a.nativeUpdate||!r.finished||!r.identityRetained||
@@ -99,18 +159,27 @@ bool CycleM95ForwardReadyRestore(const ReloadFlowRecord& r,const ReloadHoldIdent
        a.boundary.snapshotSequence!=e.boundary->snapshotSequence||a.boundary.soldierFlags!=e.boundary->soldierFlags||
        !ReloadRestoreMatched(r))return false;
     const auto& b=a.boundary;const auto& v=*e.boundary;
-    return b.current==8&&(b.previous==7||b.previous==8)&&b.next==1&&b.timer>0&&b.timer<=2.3f&&
-        v.current==2&&v.previous==8&&v.next==2&&v.timer==0&&
-        b.loaded>0&&v.loaded==b.loaded&&v.reserve==b.reserve&&v.flagsA8==b.flagsA8;
+    return held.current>2&&held.current<=15&&held.next<=15&&held.previous<=15&&
+        std::isfinite(held.maxTimer)&&held.maxTimer>0&&held.maxTimer<=30&&
+        b.current==held.current&&(b.previous==held.previous||b.previous==held.current)&&
+        b.next==held.next&&b.timer>0&&b.timer<=held.maxTimer&&
+        v.current==2&&v.previous==held.current&&v.next==2&&v.timer==0&&
+        (held.emptyAmmunition?b.loaded==0:b.loaded>0)&&v.loaded==b.loaded&&v.reserve==b.reserve&&v.flagsA8==b.flagsA8;
 }
-bool CycleM95ForwardIdleUpdate(const ReloadFlowRecord& r,const ReloadHoldIdentity& identity)noexcept {
-    if(!ValidateCycleUpdate(r,identity,0)||!Unheld(r)||!Neutral(r,true))return false;
+bool CycleForwardIdleUpdate(const ReloadFlowRecord& r,const ReloadHoldIdentity& identity,unsigned branch,unsigned previous)noexcept {
+    if(branch>=2||previous<=2||previous>15||!ValidateCycleUpdate(r,identity,branch)||!Unheld(r)||!Neutral(r,true))return false;
     const auto& b=r.entry.boundary;const auto& a=*r.exit.boundary;
     // Actual239 Update2752 clears only the stock per-update bit0x2 (130 to128).
     // Preserve every other state/count/flag bit; this is still its own completed Update.
     auto compared=a;compared.flagsA8=b.flagsA8;
-    return b.current==2&&b.previous==8&&b.next==2&&b.timer==0&&SameState(b,compared)&&
+    return b.current==2&&b.previous==previous&&b.next==2&&b.timer==0&&SameState(b,compared)&&
         (a.flagsA8==b.flagsA8||a.flagsA8==(b.flagsA8&~2u));
+}
+bool CycleM95ForwardReadyRestore(const ReloadFlowRecord& r,const ReloadHoldIdentity& identity)noexcept {
+    return CycleForwardReadyRestore(r,identity,0,{8,7,1,.1f,2.3f});
+}
+bool CycleM95ForwardIdleUpdate(const ReloadFlowRecord& r,const ReloadHoldIdentity& identity)noexcept {
+    return CycleForwardIdleUpdate(r,identity,0,8);
 }
 
 bool CycleShot(const ReloadFlowRecord& r,const ReloadHoldIdentity& identity,unsigned branch)noexcept {
@@ -126,9 +195,37 @@ bool CycleShot(const ReloadFlowRecord& r,const ReloadHoldIdentity& identity,unsi
 bool CycleEmptyShot(const ReloadFlowRecord& r,const ReloadHoldIdentity& identity,unsigned branch)noexcept {
     if(!ValidateCycleUpdate(r,identity,branch)||!Unheld(r)||!Neutral(r,false))return false;
     const auto& before=r.entry.boundary;const auto& after=*r.exit.boundary;
-    // Actual212 own shot receipts: the empty branch bypasses states7/8.
+    // Actual SPAS212/M95281 own shot receipts: empty bypasses states7/8.
     return before.loaded==1&&after.loaded==0&&after.reserve==before.reserve&&
         after.current==6&&after.previous==5&&after.next==1&&after.timer>0&&after.timer<=1.f;
+}
+namespace {
+bool PassiveMagazinePhase(const ReloadFlowBoundary& b)noexcept {
+    return (b.current==2&&b.next==2&&b.timer==0)||(b.current==1&&b.next==2&&b.timer==0)||
+        (b.current==10&&(b.next==11||b.next==12)&&b.timer==0)||
+        (b.current==11&&b.next==12&&b.timer<=10)||(b.current==12&&b.next==1&&b.timer<=10);
+}
+bool PassiveMagazineCounts(const ReloadFlowBoundary& a,const ReloadFlowBoundary& b,int capacity)noexcept {
+    return capacity>0&&capacity<=1000000&&a.loaded<=capacity&&b.loaded<=capacity&&
+        a.loaded+a.reserve==b.loaded+b.reserve;
+}
+}
+bool CyclePassiveMagazineUpdate(const ReloadFlowRecord& r,const ReloadHoldIdentity& id,unsigned branch,int capacity)noexcept {
+    if(!ValidateCycleUpdate(r,id,branch)||!Unheld(r))return false;
+    const auto& a=r.entry.boundary;const auto& b=*r.exit.boundary;
+    return PassiveMagazinePhase(a)&&PassiveMagazinePhase(b)&&PassiveMagazineCounts(a,b,capacity)&&
+        (a.current==11||a.current==12)&&(b.current==12||b.current==1||b.current==2)&&b.loaded>=a.loaded;
+}
+bool CyclePassiveMagazineRestore(const ReloadFlowRecord& r,const ReloadHoldIdentity& identity,unsigned branch,int capacity)noexcept {
+    const auto& a=r.entry;const auto& e=r.exit;
+    if(!Identity(identity)||branch>=2||a.kind!=ReloadFlowEvent::Restore||!r.id||a.nativeInvocation!=r.id||
+       a.depth!=1||a.parent||a.nativeParent||a.update||a.nativeUpdate||!r.finished||!r.identityRetained||
+       !e.boundary||!a.thread||a.thread!=e.thread||a.nowNs<=0||e.nowNs<a.nowNs||a.caller<0x10000||a.context<0x10000||
+       a.contextCopied||e.contextCopied||!Unheld(r)||!Boundary(a.boundary,identity,branch)||!Boundary(*e.boundary,identity,branch)||
+       a.boundary.snapshotSequence!=e.boundary->snapshotSequence||a.boundary.soldierFlags!=e.boundary->soldierFlags||
+       !ReloadRestoreMatched(r))return false;
+    return PassiveMagazinePhase(a.boundary)&&PassiveMagazinePhase(*e.boundary)&&
+        PassiveMagazineCounts(a.boundary,*e.boundary,capacity);
 }
 bool CycleHold(const ReloadFlowRecord& r,const ReloadHoldIdentity& identity,unsigned branch,
     const NativeCycleHeldBoundary& p,bool arming)noexcept {

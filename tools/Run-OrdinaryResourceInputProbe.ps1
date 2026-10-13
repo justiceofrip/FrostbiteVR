@@ -8,13 +8,15 @@ param([Parameter(Mandatory=$true)][int]$ExpectedPid,
  [string]$SetupPreflight='',
  [Parameter(Mandatory=$true)][string]$GeometryCache,
  [Parameter(Mandatory=$true)][string]$GeometrySha256,
- [switch]$ManualPump, [switch]$StartHeld,
+ [switch]$ManualPump, [switch]$StartHeld, [switch]$InterruptPump,
  [string]$ExpectedAsset='XM8_sp_s')
 $ErrorActionPreference='Stop'
 $PSNativeCommandUseErrorActionPreference=$false
 $build=Get-Content -LiteralPath $BuildReceipt -Raw | ConvertFrom-Json
 if(-not $build.ordinary_resource_input_probe -or -not $build.ordinary_manual_cycles -or -not $build.resource_magazines -or $build.ordinary_bolt_input_probe -or $build.resource_inventory_probe -or $build.resource_pump_probe -or $build.manual_bolt_probe -or $build.manual_pump_probe -or $build.ammo_move_probe -or $build.ammo_refill_probe -or $build.ammo_resource_hands){throw 'Exact ordinary resource input-only build required'}
 if(-not $ManualPump){throw 'This input driver requests a physical pump and ordinary family dispatch'}
+if([bool]$build.ordinary_resource_interruption_probe -ne [bool]$InterruptPump){throw 'Requested interruption scenario differs from the frozen build'}
+if($InterruptPump -and -not $build.native_cycle_recovery){throw 'Interruption diagnostic requires native recovery'}
 if($ExpectedAsset -notmatch '^[A-Za-z0-9_]{1,63}$'){throw 'Invalid expected asset'}
 $gameExe=Join-Path $GameDirectory 'BFBC2Game.exe'
 $start=[DateTime]::Parse($ExpectedStartUtc).ToUniversalTime()
@@ -85,13 +87,14 @@ try {
  $serverExit=$LASTEXITCODE
  $statusArguments=@('--trace',(Join-Path $Output 'native-trace.json'),'--output',(Join-Path $Output 'runtime-status.json'))
  if($ManualPump){$statusArguments+='--manual-pump'}
+ if($InterruptPump){$statusArguments+='--interrupted-pump'}
  & $Python -X utf8 -B (Join-Path $PSScriptRoot 'check_resource_inventory_status.py') @statusArguments
  $statusExit=$LASTEXITCODE
  $p.Refresh()
  @{pid=$ExpectedPid;start_utc=$ExpectedStartUtc;trace_exit=$traceExit;receiver_exited=$exited;
   receiver_exit=$(if($exited){$receiver.ExitCode}else{$null});postflight_exit=$postExit;
   client_drain_exit=$clientExit;server_drain_exit=$serverExit;runtime_status_exit=$statusExit;runtime_completed=($statusExit -eq 0);ordinary_native_dispatch=$true;responding=$p.Responding;game_exited=$p.HasExited;
-  utc=[DateTime]::UtcNow.ToString('o');headset_verified=$false;mode=$(if($ManualPump){'resource-pump-shell-shoulder-rifle-fire'}else{'ordinary-resource-rifle-shotgun-rifle'});manual_pump=[bool]$ManualPump;start_held=[bool]$StartHeld;expected_asset=$ExpectedAsset}|
+  utc=[DateTime]::UtcNow.ToString('o');headset_verified=$false;mode=$(if($InterruptPump){'resource-held-support-pump-interruption-shell-shoulder-rifle-fire'}elseif($ManualPump){'resource-pump-shell-shoulder-rifle-fire'}else{'ordinary-resource-rifle-shotgun-rifle'});manual_pump=[bool]$ManualPump;interrupted_pump=[bool]$InterruptPump;start_held=[bool]$StartHeld;expected_asset=$ExpectedAsset}|
   ConvertTo-Json|Set-Content -LiteralPath (Join-Path $Output 'completion.json')
  Get-Content -LiteralPath (Join-Path $Output 'completion.json') -Raw
  if($traceExit -or -not $exited -or $receiver.ExitCode -or $postExit -or $clientExit -or $serverExit -or $statusExit){exit 1}

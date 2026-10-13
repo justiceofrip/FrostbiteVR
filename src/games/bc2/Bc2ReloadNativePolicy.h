@@ -58,6 +58,16 @@ public:
     ReloadNativeFamily Family()const noexcept{return IsMagazine()?ReloadNativeFamily::Xm8Magazine:ReloadNativeFamily::SpasTube;}
     NativeMagazineProfileId MagazineProfileId()const noexcept{return magazineProfileId_.load(std::memory_order_acquire);}
     const MagazineNativeProfile& MagazineProfile()const noexcept{return *ResolveMagazineNativeProfile(MagazineProfileId());}
+    // This answers only whether the selected reload policy owes an old operation.
+    // Call under policy exclusion. Native selection still needs its own fresh
+    // owner/configuration/counts and excluded callback boundary. A remembered
+    // retirement survives family round trips, but Start clears it for a new cycle.
+    bool RetiredForNativeHandoff(bool currentRetirementReceipt=false)const noexcept {
+        if(!Cycle())return Phase()==ReloadRequestCyclePhase::Idle;
+        return Phase()==ReloadRequestCyclePhase::Cancelled&&(currentRetirementReceipt||
+            (IsMagazine()?RetiredMatches(1,magazine_,MagazineProfileId()):
+                          RetiredMatches(0,spas_,NativeMagazineProfileId::ScopedXm8)));
+    }
     bool SelectMagazineProfile(NativeMagazineProfileId id,bool callbacksDrained,bool priorRetired)noexcept {
         return SelectProfile(ReloadNativeFamily::Xm8Magazine,id,callbacksDrained,priorRetired);
     }
@@ -91,6 +101,10 @@ public:
     bool ObserveMagazinePredictionRestore(const ReloadMagazinePredictionRestore& e,std::int64_t now)noexcept {
         CancellationOriginScope cancellation(*this);return magazineMode_&&magazine_.ObservePredictionRestore(e,now);
     }
+    bool ObservePredictionRestore(const ReloadPredictionRestore& e,std::int64_t now)noexcept {
+        CancellationOriginScope cancellation(*this);
+        return magazineMode_?magazine_.ObservePredictionRestore(e,now):spas_.ObservePredictionRestore(e,now);
+    }
     bool Transfer(const ReloadRoundTransfer& t,std::uint64_t u)noexcept {CancellationOriginScope cancellation(*this);
         if(!magazineMode_)return spas_.Transfer(t,u);
         return magazine_.Transfer({t.identity,t.cycle,t.invocation,t.beginNs,t.endNs,t.branch,
@@ -112,6 +126,9 @@ public:
         const auto l=magazine_.Lease(i,c,n);if(!l)return {};
         return ReloadRoundLease{l->identity,l->cycle,l->sequence,l->observedNs,l->deadlineNs,
             l->loaded,l->reserve,l->capacity,l->nativeBindingVerified,l->allThreeHeld};
+    }
+    std::optional<ReloadStopIntent> ShellStopIntent(std::int64_t now)noexcept {
+        CancellationOriginScope cancellation(*this);return magazineMode_?std::nullopt:spas_.StopIntent(now);
     }
     bool Submit(const Bc2ReloadNativeRequest& r,std::int64_t n)noexcept{CancellationOriginScope cancellation(*this);return !magazineMode_&&spas_.Submit(r,n);}
     bool SubmitMagazine(const ReloadMagazineNativeRequest& r,std::int64_t n)noexcept{CancellationOriginScope cancellation(*this);return magazineMode_&&magazine_.Submit(r,n);}

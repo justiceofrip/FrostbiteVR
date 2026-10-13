@@ -10,7 +10,7 @@ ManualReloadOwner RequestOwner(HandInteractionOwner owner,HandInteractionKey wea
     return {owner.actor,owner.actorGeneration,weapon.id,owner.equipGeneration,owner.space};
 }
 math::Matrix4 Attached(const ReloadInsertionProfile& p)noexcept {
-    return Multiply(*InverseRigid(p.itemFromInsertion),Multiply(TravelPose(p,p.travelMeters),p.weaponFromEntry));
+    return InsertionItemPose(p,p.travelMeters);
 }
 bool SameGeometryEvidence(const HandInteractionSample& a,const HandInteractionSample& b)noexcept {
     return a.owner==b.owner&&a.sequence==b.sequence&&a.observedNs==b.observedNs&&a.deadlineNs==b.deadlineNs&&
@@ -54,7 +54,8 @@ bool DetachableMagazine::ValidConfig()const noexcept {
         (c.hand==InteractionHand::Left||c.hand==InteractionHand::Right)&&
         std::isfinite(c.grabRadiusMeters)&&c.grabRadiusMeters>0&&std::isfinite(c.pullMeters)&&c.pullMeters>0&&
         std::isfinite(c.pullReleaseMeters)&&c.pullReleaseMeters>c.grabRadiusMeters&&
-        std::isfinite(c.maxPullStepMeters)&&c.maxPullStepMeters>0&&c.maxPullStepMeters<c.pullMeters&&transaction_.ValidConfig()&&
+        std::isfinite(c.maxPullStepMeters)&&c.maxPullStepMeters>0&&c.maxPullStepMeters<c.pullMeters&&
+        (!c.insertion.pathCount||c.pullMeters<=c.insertion.travelMeters)&&transaction_.ValidConfig()&&
         (c.backend==MagazineControlBackend::AnimationHold||c.backend==MagazineControlBackend::AmmunitionResource);
 }
 DetachableMagazineResult DetachableMagazine::Snapshot()const noexcept {
@@ -213,6 +214,12 @@ DetachableMagazineResult DetachableMagazine::Update(const DetachableMagazineSamp
         if(transaction.cancelled||transaction.reason!=ManualReloadCancel::None){
             fail(DetachableMagazineReason::NativeRejected);cached_.transaction=transaction;return cached_;
         }
+        if((cached_.phase==DetachableMagazinePhase::ReplacementHeld||cached_.phase==DetachableMagazinePhase::Guided)&&
+           (!s.gripPressed||in.released[static_cast<unsigned>(config_.hand)])){
+            // Releasing carried supply is real input even without a native
+            // publication. It cannot seat, refund, or acquire another object.
+            insertion_.Reset();cached_.phase=DetachableMagazinePhase::WellEmpty;cached_.prop.reset();
+        }
     }
     if(!fresh)return Snapshot(); // Real safety above can cancel; duplicates cannot move or acknowledge.
     owner_=in.owner;weapon_=s.weapon;epoch_=s.trackingEpoch;sequence_=in.sequence;observed_=in.observedNs;deadline_=in.deadlineNs;seen_=true;
@@ -267,7 +274,13 @@ DetachableMagazineResult DetachableMagazine::Update(const DetachableMagazineSamp
             }
             if(!ejectMode_){
                 if(!geometry){out.reason=DetachableMagazineReason::InvalidInput;cached_=out;return out;}
-                if(Distance(s.weaponFromHandMeters,attachedHand)>config_.grabRadiusMeters){out.reason=DetachableMagazineReason::OutsideMagazine;cached_=out;return out;}
+                const auto distance=Distance(s.weaponFromHandMeters,attachedHand);
+                if(distance>config_.grabRadiusMeters){out.reason=DetachableMagazineReason::OutsideMagazine;cached_=out;return out;}
+                if(s.competingGripDistanceMeters){
+                    const auto other=*s.competingGripDistanceMeters;
+                    if(!std::isfinite(other)||other<0)return fail(DetachableMagazineReason::InvalidInput);
+                    if(other<=distance){out.reason=DetachableMagazineReason::HandUnavailable;cached_=out;return out;}
+                }
                 const auto acquired=hands.AcquireFrom(in,geometryInput,{in.owner,config_.hand,HandClaimKind::Mechanism,s.weapon,
                     {config_.removalContact,geometryInput.sequence,geometryInput.deadlineNs,true},s.intent,gun->token.id});
                 if(!acquired.accepted||!acquired.claim){out.reason=DetachableMagazineReason::HandUnavailable;cached_=out;return out;}
@@ -304,12 +317,24 @@ DetachableMagazineResult DetachableMagazine::Update(const DetachableMagazineSamp
                 if(step>config_.maxPullStepMeters)return failMotion(DetachableMagazineReason::PoseJump,MagazineMotionFailureCheck::TranslationStep,step,config_.maxPullStepMeters);
                 if(turn>config_.insertion.maxStepRadians)return failMotion(DetachableMagazineReason::PoseJump,MagazineMotionFailureCheck::RotationStep,turn,config_.insertion.maxStepRadians);
             }
+            const auto priorRaw=previousRaw_;
             history_[historySlot]->removal=removal_;if(freshGeometry)previousRaw_=s.weaponFromHandMeters;
-            const auto axisPose=Multiply(TravelPose(config_.insertion,1),config_.insertion.weaponFromEntry);
-            double along=0,square=0;
-            for(unsigned n=0;n<3;++n){const double axis=axisPose.values[3][n]-config_.insertion.weaponFromEntry.values[3][n];
-                const double d=s.weaponFromHandMeters.values[3][n]-grabRaw_.values[3][n];along-=d*axis;square+=d*d;}
-            const double radial=std::sqrt(std::max(0.,square-along*along));
+            double along=0,radial=0;
+            if(config_.insertion.pathCount){
+                if(freshGeometry&&!pulled_){const auto inverse=*InverseRigid(itemFromGrip_);
+                    const auto current=ProjectInsertionItem(Multiply(inverse,s.weaponFromHandMeters),config_.insertion);
+                    const auto previous=ProjectInsertionItem(Multiply(inverse,priorRaw),config_.insertion);
+                    if(!current||!previous)return failMotion(DetachableMagazineReason::PullAbandoned,MagazineMotionFailureCheck::PathAmbiguous);
+                    if(current->angle>config_.insertion.releaseAngleRadians)return failMotion(DetachableMagazineReason::PullAbandoned,MagazineMotionFailureCheck::PathOrientation,current->angle,config_.insertion.releaseAngleRadians);
+                    if(std::abs(current->along-previous->along)>config_.maxPullStepMeters)return failMotion(DetachableMagazineReason::PoseJump,MagazineMotionFailureCheck::PathProgressStep,std::abs(current->along-previous->along),config_.maxPullStepMeters);
+                    along=config_.insertion.travelMeters-current->along;radial=current->distance;
+                }
+            }else{
+                const auto axisPose=Multiply(TravelPose(config_.insertion,1),config_.insertion.weaponFromEntry);double square=0;
+                for(unsigned n=0;n<3;++n){const double axis=axisPose.values[3][n]-config_.insertion.weaponFromEntry.values[3][n];
+                    const double d=s.weaponFromHandMeters.values[3][n]-grabRaw_.values[3][n];along-=d*axis;square+=d*d;}
+                radial=std::sqrt(std::max(0.,square-along*along));
+            }
             if(freshGeometry&&!pulled_&&radial>config_.pullReleaseMeters)return failMotion(DetachableMagazineReason::PullAbandoned,MagazineMotionFailureCheck::OffAxis,radial,config_.pullReleaseMeters);
             if(freshGeometry&&!pulled_&&along<-config_.pullReleaseMeters)return failMotion(DetachableMagazineReason::PullAbandoned,MagazineMotionFailureCheck::ReversePull,along,-config_.pullReleaseMeters);
             if(freshGeometry&&!pulled_&&along>=config_.pullMeters){pulled_=true;pulledNow=true;}
@@ -392,8 +417,10 @@ DetachableMagazineResult DetachableMagazine::Update(const DetachableMagazineSamp
                     out.prop=Target(geometrySample,geometry->gun,MagazinePropRole::Replacement,itemPose,wrist,geometry->replacement->claim);
                     out.phase=out.insertion.phase==ReloadInsertionPhase::Free?DetachableMagazinePhase::ReplacementHeld:DetachableMagazinePhase::Guided;
                     if(out.insertion.phase==ReloadInsertionPhase::Free){
-                        const auto raw=Multiply(Multiply(config_.insertion.itemFromInsertion,*out.insertion.rawItem),*InverseRigid(config_.insertion.weaponFromEntry));
-                        physical.neutral=OutsideEntryApproach(raw,config_.insertion)&&!s.ejectPressed;
+                        if(config_.insertion.pathCount){const auto point=ProjectInsertionItem(*out.insertion.rawItem,config_.insertion);
+                            physical.neutral=point&&point->captureDistance>config_.insertion.captureDistanceMeters&&!s.ejectPressed;
+                        }else{const auto raw=Multiply(Multiply(config_.insertion.itemFromInsertion,*out.insertion.rawItem),*InverseRigid(config_.insertion.weaponFromEntry));
+                            physical.neutral=OutsideEntryApproach(raw,config_.insertion)&&!s.ejectPressed;}
                     }
                 }
                 if(out.insertion.seat){out.seat=out.insertion.seat;

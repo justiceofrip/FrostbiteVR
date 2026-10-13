@@ -1,5 +1,6 @@
 #include "Test.h"
 #include "fvr/ipc/RemoteFrameProvider.h"
+#include "fvr/ipc/WaitForConnection.h"
 #include <Windows.h>
 using namespace fvr;
 void Ticket(const ipc::FrameRequest& request,graphics::TextureDescriptor& d,graphics::PairTicket& t){
@@ -8,6 +9,16 @@ void Ticket(const ipc::FrameRequest& request,graphics::TextureDescriptor& d,grap
     t.spaceGeneration=request.spaceGeneration;t.trackingGeneration=request.trackingGeneration;t.predictedNs=request.predictedNs;
 }
 int main(){
+    // A successful peer observation must not be polled a second time and
+    // relabeled as timeout when that immediately following poll would be Busy.
+    unsigned calls=0,pauses=0;std::uint64_t tick=100;
+    CHECK(ipc::WaitForConnection([&]{return ++calls==2;},[&]{return tick;},[&]{++pauses;++tick;},100,10));
+    CHECK(calls==2&&pauses==1);
+    calls=pauses=0;tick=100;
+    CHECK(!ipc::WaitForConnection([&]{++calls;return false;},[&]{return tick;},[&]{++pauses;++tick;},100,3));
+    CHECK(calls==3&&pauses==3);
+    CHECK(!ipc::WaitForConnection([&]{++calls;return true;},[]{return 99ull;},[]{},100,3));
+    CHECK(calls==3);
     ipc::RemoteFrameProvider host;CHECK(host.Create());CHECK(host.SetBudget(50));ipc::FrameChannel producer;CHECK(producer.ConnectProducer(host.Token()));
     runtime::PresentationRequirements req{100,120,29,19,4};runtime::TrackingFrame now{};
     now.generation=0x100000005;now.spaceGeneration=0x200000007;now.predictedNs=1000000000;now.focused=now.headValid=true;

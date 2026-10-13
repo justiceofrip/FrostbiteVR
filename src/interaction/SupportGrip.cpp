@@ -55,14 +55,24 @@ SupportGripResult SupportGrip::UpdateImpl(const SupportGripOwner& owner,const In
   const bool neutral=squeeze<=.35f&&(fresh||armed_);
   out=drop(SupportRelease::Action);armed_=neutral;return out;
  }
- if(!contact.valid||!std::isfinite(contact.distanceMeters)||contact.distanceMeters<0||!Finite(contact.wristOffsetMeters)){
+ if(!contact.valid||!std::isfinite(contact.distanceMeters)||contact.distanceMeters<0||!Finite(contact.wristOffsetMeters)||
+    (contact.aimMode!=SupportAimMode::TwoPoint&&contact.aimMode!=SupportAimMode::PrimaryHand)){
   // No pose/contact/claim is authorized here. A genuinely new tracked neutral
   // packet is useful even while ammunition owns the hand or contact is absent.
   const bool neutral=squeeze<=.35f&&(fresh||armed_);
   out=wait(SupportRelease::Contact);armed_|=neutral;return out;
  }
+ if(holding_&&aimMode_!=contact.aimMode)return drop(SupportRelease::Identity);
  if(squeeze<=.35f){holding_=false;token_=0;out.reason=SupportRelease::Button;if(fresh)armed_=true;out.released=previouslyHeld;return out;}
- if(contact.distanceMeters>(holding_?.28f:.16f))return wait(SupportRelease::Distance);
+ if(contact.distanceMeters>(holding_?.28f:SupportGripAcquireRadiusMeters))return wait(SupportRelease::Distance);
+ if(contact.aimMode==SupportAimMode::PrimaryHand){
+  if(!holding_){
+   if(!adopt&&(!armed_||!fresh||squeeze<.7f))return out;
+   if(nextToken_==std::numeric_limits<std::uint64_t>::max())return drop(SupportRelease::Identity);
+   token_=++nextToken_;aimMode_=contact.aimMode;holding_=true;armed_=false;out.engaged=true;
+  }
+  out.holding=true;out.token=token_;return out;
+ }
  const auto left=math::MakeRelativePose(input.referenceHead,input.hands[0].grip),right=math::MakeRelativePose(input.referenceHead,input.hands[1].grip);
  if(!left||!right)return drop(SupportRelease::Tracking);
  math::Vec3 direction{left->position.x-right->position.x+contact.wristOffsetMeters.x,
@@ -70,7 +80,7 @@ SupportGripResult SupportGrip::UpdateImpl(const SupportGripOwner& owner,const In
  const float length=std::hypot(direction.x,direction.y,direction.z);
  if(!std::isfinite(length)||length<.1f||length>1.2f)return wait(SupportRelease::Separation);
  direction={direction.x/length,direction.y/length,direction.z/length};
- if(!holding_){if(!adopt&&(!armed_||!fresh||squeeze<.7f))return out;if(nextToken_==std::numeric_limits<std::uint64_t>::max())return drop(SupportRelease::Identity);token_=++nextToken_;localDirection_=Rotate(Inverse(right->orientation),direction);holding_=true;armed_=false;out.engaged=true;}
+ if(!holding_){if(!adopt&&(!armed_||!fresh||squeeze<.7f))return out;if(nextToken_==std::numeric_limits<std::uint64_t>::max())return drop(SupportRelease::Identity);token_=++nextToken_;aimMode_=contact.aimMode;localDirection_=Rotate(Inverse(right->orientation),direction);holding_=true;armed_=false;out.engaged=true;}
  const auto from=Rotate(right->orientation,localDirection_);
  const float dot=std::clamp(from.x*direction.x+from.y*direction.y+from.z*direction.z,-1.f,1.f);
  // Crossed hands must not select an arbitrary 180-degree rotation axis.

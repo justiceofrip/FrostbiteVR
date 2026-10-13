@@ -25,7 +25,7 @@ int wmain(int argc,wchar_t** argv){try{
     fvr::graphics::D3D11PairConsumer worldConsumer;fvr::graphics::TextureDescriptor worldOpened{};
     D3D11_TEXTURE2D_DESC worldDesc{};worldDesc.Width=1920;worldDesc.Height=1080;worldDesc.MipLevels=1;worldDesc.ArraySize=2;worldDesc.Format=DXGI_FORMAT_R8G8B8A8_TYPELESS;worldDesc.SampleDesc.Count=1;
     ComPtr<ID3D11Texture2D> worldEyes;if(FAILED(device->CreateTexture2D(&worldDesc,nullptr,&worldEyes)))throw std::runtime_error("World eye target");
-    unsigned worldPairs=0;std::uint64_t worldGeneration=0,gameplayAt=0,resumeClickAt=0,closeClickAt=0;
+    unsigned worldPairs=0,resumedPairs=0;std::uint64_t worldGeneration=0,gameplayAt=0,resumeClickAt=0,closeClickAt=0;
     bool resumeDone=!resumeExisting,closeDownDone=false;
     frames.SetRequestLifetime(150);
     fvr::graphics::D3D11PairConsumer consumer;fvr::graphics::TextureDescriptor opened{};
@@ -36,6 +36,19 @@ int wmain(int argc,wchar_t** argv){try{
     fvr::graphics::PairTicket pending{};bool feedback=false,consumed=false;
     while(GetTickCount64()-start<20000){
         const auto now=GetTickCount64();fvr::ipc::MenuState state;
+        // Match a connected, neutral VR player even while the menu owns input.
+        // The current body/vehicle camera requires fresh tracking input; this
+        // fixture previously requested eyes without publishing any input.
+        fvr::runtime::TrackingFrame tracking{};tracking.generation=++worldGeneration;tracking.spaceGeneration=1;
+        tracking.predictedNs=10000000000LL+std::int64_t(worldGeneration)*11000000;
+        tracking.focused=tracking.headValid=true;tracking.eyes={tracking.head,tracking.head};
+        tracking.eyes[0].position.x=-.032f;tracking.eyes[1].position.x=.032f;
+        tracking.fov={fvr::math::FovTangents{-1,1,.8f,-.8f},fvr::math::FovTangents{-1,1,.8f,-.8f}};
+        fvr::interaction::InputFrame input{};input.generation=worldGeneration;input.spaceGeneration=1;
+        input.predictedNs=tracking.predictedNs;input.focused=input.headValid=true;input.referenceHead=tracking.referenceHead;input.head=tracking.head;
+        for(unsigned h=0;h<2;++h){auto& hand=input.hands[h];hand.gripTracked=hand.aimTracked=true;hand.active=fvr::interaction::Components;
+            hand.grip.position={h?.2f:-.2f,-.25f,-.45f};hand.aim=hand.grip;}
+        frames.UpdateInput(input);
         if(menu.ReadState(state)==fvr::ipc::ChannelResult::Ok){
             if(!connectedAt){connectedAt=now;invalidInitial=resumeExisting?state.mode!=fvr::ipc::MenuMode::Menu:state.mode!=fvr::ipc::MenuMode::Gameplay;}
             if(state.mode!=previous){events<<"{\"ms\":"<<now-connectedAt<<",\"mode\":"<<unsigned(state.mode)<<",\"epoch\":"<<state.epoch<<",\"input_ready\":"<<state.inputReady<<"}\n";events.flush();previous=state.mode;}
@@ -48,18 +61,17 @@ int wmain(int argc,wchar_t** argv){try{
             }
             if(resumeDone&&state.mode==fvr::ipc::MenuMode::Gameplay){
                 if(!gameplayAt)gameplayAt=now;
-                if(worldPairs<8){fvr::runtime::TrackingFrame tracking{};tracking.generation=++worldGeneration;tracking.spaceGeneration=1;tracking.predictedNs=10000000000LL+std::int64_t(worldGeneration)*11000000;
-                    tracking.focused=tracking.headValid=true;tracking.eyes={tracking.head,tracking.head};tracking.eyes[0].position.x=-.032f;tracking.eyes[1].position.x=.032f;
-                    tracking.fov={fvr::math::FovTangents{-1,1,.8f,-.8f},fvr::math::FovTangents{-1,1,.8f,-.8f}};
+                if(!openAt||closeAt){
                     fvr::runtime::TrackingFrame rendered{};fvr::graphics::TextureDescriptor d{};fvr::graphics::PairTicket t{};
                     if(frames.TryGetCompletedPair(requirements,tracking,rendered,d,t)){
                         if(std::memcmp(&worldOpened,&d,sizeof(d))){worldOpened={};if(worldConsumer.Open(device.Get(),d)==fvr::graphics::TransferResult::Ok)worldOpened=d;}
                         const bool copied=fvr::graphics::Valid(worldOpened)&&worldConsumer.Copy(t,{{{worldEyes.Get(),0},{worldEyes.Get(),1}}})==fvr::graphics::TransferResult::Ok;
-                        frames.PairConsumed(t,copied);if(copied)++worldPairs;else ++errors;
+                        frames.PairConsumed(t,copied);if(copied){++worldPairs;if(closeAt)++resumedPairs;}else ++errors;
                     }
                 }else frames.FlushFeedback();
                 if(!openAt&&now-gameplayAt>=750&&worldPairs>=8){control.toggle=1;openAt=now;}
             }
+            else frames.Suspend();
             if(openAt&&state.mode==fvr::ipc::MenuMode::Menu)openedMenu=true;
             if(openedMenu&&!closeAt&&now-openAt>=3000){
                 if(clickClose){control.u=.791f;control.v=.124f;control.flags=fvr::ipc::MenuFocused|fvr::ipc::MenuPoint;
@@ -87,13 +99,13 @@ int wmain(int argc,wchar_t** argv){try{
             }}else ++errors;
             const auto r=menu.SurfaceConsumed(pending,consumed);if(r!=fvr::ipc::ChannelResult::Busy)feedback=false;
         }
-        if(closedMenu&&now-closeAt>=500)break;
+        if(closedMenu&&resumedPairs>=8&&now-closeAt>=500)break;
         // Bound open failure and close the menu through the same original path.
         if(connectedAt&&now-connectedAt>13000){if(openedMenu&&!closeAt){control.toggle=2;closeAt=now;}if(!openedMenu||now-connectedAt>15000)break;}
         Sleep(10);
     }
     control.sequence=++sequence;control.flags=0;menu.PublishControl(control);
-    const bool okay=resumeDone&&worldPairs>=8&&openedMenu&&closedMenu&&images&&saved&&!errors&&!invalidInitial;
-    std::ofstream(folder/L"result.json")<<"{\"opened\":"<<(openedMenu?"true":"false")<<",\"closed\":"<<(closedMenu?"true":"false")<<",\"images\":"<<images<<",\"errors\":"<<errors<<",\"saved\":"<<(saved?"true":"false")<<",\"invalid_initial\":"<<(invalidInitial?"true":"false")<<",\"passed\":"<<(okay?"true":"false")<<",\"world_pairs\":"<<worldPairs<<",\"resume_existing\":"<<resumeExisting<<",\"click_close\":"<<clickClose<<",\"headset_tested\":false}";
+    const bool okay=resumeDone&&worldPairs>=8&&resumedPairs>=8&&openedMenu&&closedMenu&&images&&saved&&!errors&&!invalidInitial;
+    std::ofstream(folder/L"result.json")<<"{\"opened\":"<<(openedMenu?"true":"false")<<",\"closed\":"<<(closedMenu?"true":"false")<<",\"images\":"<<images<<",\"errors\":"<<errors<<",\"saved\":"<<(saved?"true":"false")<<",\"invalid_initial\":"<<(invalidInitial?"true":"false")<<",\"passed\":"<<(okay?"true":"false")<<",\"world_pairs\":"<<worldPairs<<",\"resumed_pairs\":"<<resumedPairs<<",\"neutral_input_samples\":"<<worldGeneration<<",\"resume_existing\":"<<resumeExisting<<",\"click_close\":"<<clickClose<<",\"headset_tested\":false}";
     return okay?0:2;
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

@@ -71,6 +71,12 @@ bool Bc2BodyHolster::ObserveNativeInputGap(const ReloadStateOwner& before,const 
     if(before!=expected||after!=next)return false;
     inputGapOwner_=after;Invalidate(true);return true;
 }
+bool Bc2BodyHolster::ObserveNativeInputPause(const ReloadStateOwner& owner)noexcept {
+    if(!emptyIntent_||pending_||!render_||!owner.equipGeneration||
+       (phase_!=BodyHolsterPhase::Empty&&phase_!=BodyHolsterPhase::Recovering&&!(phase_==BodyHolsterPhase::HidePending&&rebindEmpty_))||
+       owner!=inputGapOwner_.value_or(renderOwner_))return false;
+    inputGapOwner_=owner;Invalidate(true);return true;
+}
 bool Bc2BodyHolster::CanRebindEmpty(const BodyHolsterSample& s)const noexcept {
     if(!emptyIntent_||pending_||!render_||!s.carried||s.carried!=emptyCarried_)return false;
     const bool changedSpace=s.nativeOwner.space!=renderOwner_.space&&s.hand.owner.space!=physicalOwner_.space;
@@ -137,6 +143,12 @@ BodyHolsterResult Bc2BodyHolster::Tick(BodyInventory& policy,const BodyHolsterSa
     const auto finish=[&](){out.phase=phase_;out.blockWeaponActions=phase_!=BodyHolsterPhase::Held||out.inventory.blockFire;
         out.allowAutomaticGunHold=phase_==BodyHolsterPhase::Held&&Fresh(s)&&!s.cancel;Record(s,out,hands);return out;};
     const auto recover=[&](bool trackingGap=false){if(!trackingGap){emptyIntent_=false;rebindEmpty_=false;inputGapOwner_.reset();}pending_.reset();phase_=BodyHolsterPhase::Recovering;body.intent={};};
+    if(s.interactionSuspended){
+        // The inventory coordinator already suspended portable requests.
+        // Keep only prior committed empty intent, revalidated on resume;
+        // suspension itself emits no pose, receipt, selection or hand claim.
+        recover(!s.cancel);return finish();
+    }
     const bool accepted=ProfileAccepted(s);
     const bool showOnly=phase_!=BodyHolsterPhase::Held&&!accepted&&OrdinaryXm8CanShow(s);
     const bool replacement=!accepted&&!showOnly&&Fresh(s)&&Replacement(s);
@@ -288,7 +300,7 @@ void Bc2BodyHolster::ObserveReplacement(const BodyHolsterSample& s,bool eligible
 }
 void Bc2BodyHolster::Record(const BodyHolsterSample& s,const BodyHolsterResult& out,const HandInteraction& hands)noexcept {
     const unsigned gates=(Fresh(s)?1u:0u)|(ProfileAccepted(s)?2u:0u)|(s.cancel?4u:0u)|
-        (s.reloadBusy?8u:0u)|(Ordinary(s)?16u:0u)|(bool(out.ordinaryRecovery)?32u:0u);
+        (s.reloadBusy?8u:0u)|(Ordinary(s)?16u:0u)|(bool(out.ordinaryRecovery)?32u:0u)|(s.interactionSuspended?64u:0u);
     if(transitionCount_){const auto& previous=transitions_[(transitionNext_+transitions_.size()-1)%transitions_.size()];
         if(previous.phase==out.phase&&previous.owner==s.nativeOwner&&previous.block==out.blockWeaponActions&&
             previous.gates==gates&&previous.physicalItem==s.gun.id&&previous.physicalEquip==s.hand.owner.equipGeneration&&

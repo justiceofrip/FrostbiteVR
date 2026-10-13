@@ -1,3 +1,785 @@
+# Current390: retirement must follow the persistent weapon operation
+
+Do not keep the only retirement fact in a current dispatch epoch. Returning to a
+previously used weapon family must see that family's exact completed retirement;
+a new operation must invalidate it.390 connects that existing policy fact to the
+shared native pump/bolt handoff. The actual-game second-draw sequence failed389
+and passes390. Native owner/configuration, current counts, physical custody and
+callback exclusion remain separate gates. See [390](NATIVE-HANDOFF-390.md).
+
+# Current388: actual empty-tube and cross-family checks pass; headset pending
+
+Both normal388 builds pass246 suites. The actual-game SCAR/SPAS run completes
+eight shots/pumps/support returns, inserts one shell into the empty tube, returns
+to the rifle through the shoulder holsters, handles its magazine and fires.
+It exposes and fixes a separate387 bug: cancellation released the native hold
+without arming the stop helper, which automatically filled seven more shells.
+388 completes all three native stop branches; the stowed SPAS remains1/23.
+
+A second actual F2000/SPAS run on the same gameplay source completes three
+magazine cycles, shoulder swaps, one pump, shell insertion, support return and
+subsequent rifle fire. Twelve sampled side-view frames show the stock/ring
+attached; this is not all-frame or human visual acceptance. Each run consumes
+240 stereo pairs without discard, drains hooks and leaves BC2 alive.
+
+Latest human result remains the October12 failed375 test. The original native
+PublishedLinks failure and intermittent385 claim loss have not been reproduced
+in388. Whole-campaign stability, full callback coverage and headset acceptance
+are not claimed. Further testing targets drawing/pumping SPAS again after using
+the rifle, without restarting persistent consumers. See [388](SHELL-STOP-388.md).
+
+# Current386: diagnosing a separately reproduced hand-claim loss
+
+Candidate384 fixes the connected aiming gap on physical-to-support return.
+Its actual-game test completes four pumps with support returned, then exposes
+a fifth-cycle input-pause timeout. Candidate385 converts a freshly validated
+suspended hold to existing guarded recovery instead of waiting for that fatal
+timeout. Both385 full builds pass all246 suites. Its actual-game run completes
+two pumps, then loses support and the gun claim before the third acquisition;
+this is a different path with no native suspension. Candidate386 adds bounded
+inner-arbiter drop evidence to identify the cause; its full builds are running. The October12 headset failure is still the latest human result.
+
+A normal384 actual-game menu run successfully restarts the checkpoint, observes
+the replacement actor, and reopens/closes its menu. All240 stereo pairs arrive,
+all hooks drain, and the game survives. This is one restart check. No whole-
+campaign, visual or expanded weapon acceptance is claimed. See
+[385 evidence and limits](INPUT-PAUSE-RECOVERY-385.md) and
+[384 aiming correction](PUMP-RETURN-AIM-384.md). Older entries below are history.
+
+# Headset375 failed; candidate381 is not accepted
+
+The October12 headset run exposed pump-to-support release, persistent cycle3
+failure and unreliable holsters. Candidate381 decouples returning the hand from
+native completion, with a reproduced regression, and preserves additional
+rejection evidence. Animation distortion and the native lockup remain unresolved.
+No additional weapon or playable-campaign acceptance is claimed. See
+[the review and correction](HEADSET-FAILURE-AND-PUMP-HANDOFF-381.md).
+
+381 passes all 246 checks on each architecture. Physical hand continuation now
+uses completed gesture/contact evidence independently of native ammunition
+completion; it does not erase native debt. The recorded third-cycle ownership
+failure remains unresolved. Shoulder reach measurements also expose geometric
+misses before that failure, rather than one shared explanation for all symptoms.
+The previous readiness statements below are historical, superseded by the
+October 12 headset failure.
+
+# Offline380: preserve valid parts when one authored track fails
+
+The shared action analyzer now isolates failed parts and their dependencies.
+The three PP2000 reload variants retain five valid parts each while rejecting
+the unresolved jntWpn_12/13 branch. This does not qualify a manual PP2000 reload.
+All231 relevant Python tests and both246-suite builds pass; the earlier five
+reload output files remain byte-identical. The379 survey retains427 action
+records across39 models, separately from the focused380 delta.
+
+Normal player375 remains the pinned headset candidate. Its two combined game
+checks exercise rifle reloads, both shoulders, pumping, shell insertion and
+tracking-loss recovery; human visual/feel and sustained campaign acceptance are
+still pending. No new native weapon is enabled by these offline results.
+See [380](PARTIAL-ACTION-DATA-380.md) and [375](SHARED-PUMP-GEOMETRY-375.md).
+
+# Offline379: shared action pipeline across 39 weapon models
+
+The new reusable batch follows exact authored animation roles and reuses measured
+geometry/contact code. It produces427 action records from93 content jobs across
+169 configuration entries and39 models. Three PP2000 reload variants remain
+explicit decoder failures; absent roles are separately recorded. Existing reload
+outputs are byte-identical. All228 relevant Python tests and both246-suite builds
+pass. Normal player375 remains unchanged and is the next headset candidate.
+See [379](AUTHORED-ACTION-PIPELINE-379.md). No new native admission is claimed.
+
+# Offline378: shared animation source lookup
+
+The extractor now follows verified shared archives for clips absent from a weapon
+bundle. All18 prior mechanism records are preserved and eight SPAS configuration
+records are added. All219 relevant Python checks and both246-suite builds pass;
+native player375 is unchanged. See [378](SHARED-ANIMATION-SOURCES-378.md).
+No new native weapon admission is claimed.
+
+# Offline377: verify unsupported file layout before adding weapon exceptions
+
+A wrapper word labelled as flags was actually a record count. Following the
+installed loader recovered10 clips across four families using one parser fix.
+Compare all prior parsed contents, retain opaque metadata, and keep native
+action semantics separate. Reuse exact mesh/clip/config joins and existing
+contact extractors; a failed contact window stays unresolved. See [377](ANIMATION-WRAPPER-377.md).
+
+# Offline376: measure the actual mechanism instead of copying a stroke
+
+Use exact part, mesh and clip identities. Separate motion extrema from the
+runtime closed stop, and component geometry from its native action semantics.
+The 870 fore-end and bolt both translate; movement alone cannot choose the pump.
+The NeoStead moves in the opposite direction. Bound the decoded spline over
+every knot interval, and retain rejected wrappers rather than guessing a prefix.
+No reference or shared rig fingerprint grants ammo/chamber authority.
+See [376](LINEAR-MECHANISM-DATA-376.md).
+
+# Local375: mechanism geometry belongs in family data
+
+Keep the pump part name, axis, travel, immutable closed pose and fixed assembly
+in explicit selected-family data. A skeleton shared across weapons cannot
+identify the stock pieces of a particular gun. Reuse the physical consumer,
+ownership/recovery and private-palette adapter; admit native operations separately.
+Validate another geometry/axis offline, then verify existing native behavior.
+Scope emulated scenarios explicitly: sideways inspection alone did not exercise
+holding support through a shot. A separate tracking-loss run did. See [375](SHARED-PUMP-GEOMETRY-375.md).
+
+# Local374: keep emulated support independent of reload enrollment
+
+An emulated player should derive its controller mapping from original tracking
+and rig evidence. Borrowing a magazine/shell contact silently prevents support
+tests on other weapon classes, even when those weapons have valid grip data.
+Keep the diagnostic observation separate from ammunition authority and check a
+continuous ordinary hand claim, genuine release and unchanged native counts.
+MG3 and TOZ pass the shared corrected path; see [374](SUPPORT-PIPELINE-374.md).
+
+# Local372: distinguish static, bounded and native-proven references
+
+Authored control data can contain tiny numerical motion. Keep strict constant
+classification intact and provide a separately labelled full-curve bound when
+choosing a reference pose. Propagate position/orientation uncertainty through
+the hierarchy and cancel common ancestry algebraically. Equal endpoints or a
+few samples cannot prove a full animation bound. Keep measured contacts separate
+from ammunition, mechanism and native interpolation admission. A named flash
+bone is not sufficient evidence of the muzzle location across a weapon catalog.
+See [the fleet audit and authoring tool](AUTHORED-REFERENCE-372.md).
+
+# Local369: obey native graphics-thread ownership during setup too
+
+Render-thread-only drawing is insufficient if injection setup still queries and
+releases a single-threaded graphics interface on its worker. Collect interface
+metadata at a verified native graphics boundary, release temporary references
+there, and publish plain values once. Keep initialization and timeout cancellation
+separate from normal rendering and retain callback code through shutdown.
+An observed integration defect is not automatically the cause of a saved crash.
+See [369](GRAPHICS-BOOTSTRAP-369.md).
+
+# Local367: publish body display as one coherent observation
+
+An immutable pose/input snapshot must not require a separately published firing
+guard to carry an identical packet number. That comparison can reject valid
+equipment while the publisher is between its stores. Keep pose and tracking
+admission together, then independently validate current native ownership and
+explicit hide/custody withdrawal. A display snapshot cannot create ammunition,
+extend its original expiry or substitute for an interaction claim.
+
+Separate game failures from the test controller:366's Windows status-file
+replacement fix uses deletion-sharing readers and ReplaceFile for existing
+destinations, with an actual open-reader replacement regression. A completed menu
+interaction plus incomplete disk evidence is recorded as partial. Single-thread
+graphics-device setup must also be audited beyond the three measured render
+callbacks. See [display367](BODY-DISPLAY-367.md) and
+[comparison366](GRAPHICS-AND-MENU-366.md).
+
+# Local361: make visual acceptance an explicit diagnostic outcome
+
+A loaded texture and successful pair composition can still display no target
+prop.360's neutral capture immediately stowed the gun; its first deliberate
+grab then selected a different shoulder's weapon. Preserve both outcomes.
+Bind a visual check to the actual inventory/contact and exact prop geometry,
+inspect the saved pixels, and distinguish requested input from native commits.
+
+The reusable361 receiver accepts a measured contact and records its one-grab
+schedule without granting native equipment/ammunition authority. This lets a
+new asset reuse the diagnostic without another weapon-specific implementation.
+Exact shader families similarly organize conversion work, but do not establish
+pass selection, parameters or reload support. [361 evidence](BODY-INSPECTION-361.md).
+
+# Local359: material conversion is separate from geometry and gameplay
+
+The shared prop renderer consumes explicit converted albedo, UVs, mips and
+color-space declarations. A private sidecar matches exact geometry identities
+and section fingerprints; malformed data cannot partially replace a catalog.
+Asset adapters must establish texture role and shader mapping before supplying
+that data. Reflection of geometry also requires matching triangle-UV order.
+
+Software previews should call the actual rendering library, and compare both
+changed target meshes and untouched assets. A successful texture upload does
+not prove visible coverage: the first SCAR Ammo preview changed almost no side
+pixels because it textured cartridges, not the casing. A separately reviewed
+base-color conversion addresses the casing; native shading remains incomplete.
+Keep preview caches separate from player packaging. [359 evidence](MATERIAL-PIPELINE-359.md).
+
+# Local357: mechanism contact and hand shape are separate references
+
+A correctly placed wrist and completed stroke can still render an unsuitable
+finger pose. Supply the authored mechanism grasp through a shared wrist-relative
+shape path; retain verified finger-chain topology, world scale and descendants.
+The adapter owns asset selection and transforms. Do not change physical contact
+or native cycle authority to compensate for a finger-presentation mismatch.
+
+The SPAS implementation and actual-game held-support test verify this distinction.
+The normal runtime consumes measured data while isolated input scripts establish
+visible pose and gameplay evidence. Support-to-pump transfer needs a continuously
+held-support case; acquiring only after the shot misses that behavior. Sampled
+images supplement completed native receipts; neither alone proves headset feel.
+See [357](AUTHORED-PUMP-HAND-357.md).
+
+Texture coordinates also require shader-interface linkage: follow semantic names
+and component swizzles through vertex/pixel arithmetic, validate the declaration
+against independently measured mesh layout, and preserve repeat coordinates.
+Unknown runtime dependencies stay unknown; cube and array sampling are distinct
+from 2D. A plausible UV set or texture name is insufficient material evidence.
+
+# Local354: make visual evidence visible; resolve material tables
+
+A mechanics pass with the weapon outside the captured view cannot establish
+rigid stock/fore-end appearance. Use an isolated input pose within actual reach
+to inspect assembly while preserving the real consumer and native completion
+requirements. The new sideways fixture does this; normal player input is unchanged.
+
+Material names in mesh files lead through level-specific compiled shader tables
+to parameter groups, textures and vertex declarations. Resolve exact mesh/material
+references and retain all candidate passes. A texture named for a weapon may be
+a packed mask rather than diffuse color; do not apply it as albedo by name. Match
+the actual shader channels before connecting local asset caches to rendering.
+BC2's table/layout details stay in its asset adapter. [Evidence](VISUAL-INSPECTION-354.md).
+
+# Local353: transport depth with the delivered color pair
+
+Depth provenance needs the complete delivered pair ticket, both eyes, adapter,
+resource generation, format and sample description. Keep shared producer copies
+immutable until consumer copies finish; compose only from host-owned local copies
+after acknowledgment. A discarded pair retires its resources. A native owner or
+device change also requires a fresh color allocation generation even when dimensions
+match. Verify world and first-person visibility separately and require successful
+composition of both eyes before publishing.353 connects and checks these rules
+in actual BC2; the transport/compositor is reusable, BC2 clear-stage detection is not.
+
+Interaction admission and physical custody also have separate lifetimes. An exact
+terminal rejection with no native dispatch can permit a new request from fresh
+input while the same valid held item/claim survives. It does not renew the old
+request, excuse uncertain execution, or retry after release/tracking/count changes.
+353 reproduces expired magazine admission across18 registered configurations;
+352 covers shoulder contact across a short visibility-receipt gap. Preserve current
+physical intent without retaining stale native authority. [Evidence](DEPTH-AND-ADMISSION-353.md).
+
+# Historical local350: preserve native depth stages and consumer ownership
+
+Frostbite may reuse the same depth resource for world and first-person rendering.
+BC2's tested8× MSAA path clears the full-resolution D24S8 resource twice per eye.
+Copy world depth before the second clear and first-person depth afterward; the
+currently bound end-eye DSV is insufficient. Never identify a pass from stencil1
+alone or promote one scene's draw counts into an engine signature. Shared MSAA
+contents are verified separately from handle creation, with producer/consumer
+GPU completion. The new host-only compositor intersects per-sample visibility
+against both layers and restores its graphics state. Frame/eye provenance and
+IPC ownership remain adapter responsibilities. Normal VR is not connected to
+this depth path yet. See [350 evidence](DEPTH-PASSES-350.md).
+
+# Local342: admission failure is not item ownership loss
+
+A busy native callback/cohort should report Deferred separately from invalid
+operation Rejected. Before admission, live hand/item custody can continue without
+minting ammo, renewing a native lease or sending reload input. Repeated packets
+cannot retry. A fresh attempt uses a new operation ID because even an unpublished
+native registration may consume an ID. Actual release, tracking or identity loss
+still ends custody. Do not discard a persistent physical item merely because an
+arbitrary pre-admission timer expires. Accepted-operation deadlines remain separate.
+342 verifies this in the actual shell consumer and passes the native combined run.
+
+Graphics research also needs exact pass coverage: an end-of-eye world-depth copy
+does not prove first-person occlusion. Draw type, texture format, dimensions,
+sampling and viewport must be measured before binding a depth source to VR props.
+Fork asset-loader findings likewise require map/save-specific verification and
+ABI validation. The proposed manifest addition crashes our SP03 Continue path;
+the original bytes were restored. These ownership/evidence rules transfer to
+future Frostbite adapters; BC2 offsets, assets and rig indices do not.
+
+# Local339: root alignment and rigid assembly are distinct references
+
+A correct hand-to-gun contact does not establish controller-to-model orientation.
+339 enrolls SCAR's reviewed model axes without changing its support contact or
+granting native firing/ammunition capability. Starting-controller orientation is
+now part of the deterministic regression. This uses the existing shared aim path.
+
+Fixed stock pieces also need the same receiver frame while a manual pump owns
+presentation.339 joins three exact SPAS authored parts to the resting/active pump
+palette, preserving its original lifetime and exact-write restoration. It does
+not freeze unrelated animation. Geometry-size checks distinguish a normal-size
+chest magazine from unresolved overlay/occlusion behavior. These distinctions
+transfer; BC2 part names and transforms do not. See [339](VISUAL-ALIGNMENT-339.md).
+Both full244-suite builds and the combined actual-game emulation pass. The
+presentation counters establish execution, not visual acceptance; native scene
+occlusion and human confirmation remain separate work.
+
+# Local338: manual mechanism presentation includes its resting state
+
+An active manual stroke target alone does not own the visual interval after a
+shot and before grip acquisition. Retaining the native animated fore-end in that
+gap plays the stock stroke before the manual one.338 overrides only the measured
+resting leaf under current selected-pump ownership; actual movement still requires
+the original hand claim and cycle lease. Resting visuals grant no firing or ammo
+authority. The pattern transfers, but BC2 part indices/calibration do not.
+Both full builds and the combined native emulation pass; headset visual acceptance
+and the reported magazine/right-hand alignment issues remain open. See
+[338 evidence](PUMP-PRESENTATION-338.md).
+
+# Private336 transfer: native melee scheduling includes prediction
+
+Read the exact firing data and native scheduler before replacing attack timing.
+The knife's500ms spawn delay is explicit; moving it into recovery preserves the
+attack interval. Eliminating it entirely passed isolated x86 emulation but lost
+the client effects callback in BC2. A50ms diagnostic windup retained both client
+and server attacks at17–49ms with exact client-copy evidence. This is not yet a
+production melee transaction or chest-knife feature. Integrate with the existing
+native callback dispatcher; do not install competing Step/Update hooks. See
+[336 evidence and limits](KNIFE-TIMING-336.md).
+
+One fresh crash occurred before the VR probe attached; a Continue helper had
+run, so do not call it a vanilla reproduction or assign an AMD offset without
+that process's module map. See [334 startup evidence](STARTUP-CRASH-334.md).
+
+# Local333: menu input owner is distinct from queue storage
+
+The BC2 adapter now preserves releases across transport-buffer growth and retires
+old input only after a complete stable replacement owner is verified. The new
+target never receives the old release; the menu epoch and neutral input baseline
+reset. Missing/blocked/unstable reads retain ownership. This lifetime distinction
+can transfer; BC2's APT/controller layout and callback bindings cannot.
+Both244-suite builds and a normal-build emulated rendered-menu restart pass.
+The replacement-owner branch itself is deterministic-tested only. Intermittent
+graphics crash326 remains open. See [333 evidence](MENU-LIFETIME-333.md).
+
+# Private330: melee pose output follows a separately owned intent
+
+Both BC2 melee effect paths reach the verified composition callback, including
+the null-context server call.330 validates changing only the caller-owned stack
+result, preserving input matrices, under a bounded diagnostic intent. Its two
+directions pass numerical checks on both sides. A missing native token remains
+missing: the private intent ordinal is not a general replacement transaction key.
+The remaining player adapter needs its own attack custody and downstream hit
+receipts. The native464–507ms delay is still present. Player329 is unchanged.
+See [330 evidence](KNIFE-AIM-330.md); no Refractor offsets or assumptions transfer.
+
+# Local329: bounded menu-press retention during contention
+
+The menu consumer retains an already-owned press through Busy only while its
+original focused pointer-down sample is unexpired in the current menu epoch.
+It emits no event and renews no deadline. Expiry/loss still releases and rearms.
+Focused regression and both244-suite builds pass. Normal329 native menu stress
+check passes35/125ms contention, balanced releases,240 stereo pairs and clean
+detach. Prior327/328 restart passes and the unresolved326 crash retain their scope.
+See [329 menu behavior](MENU-CONTENTION-329.md).
+
+# Local327: menu fix and two different emulated restart sequences
+
+Private327 passes a restart with a removed rifle magazine;328 passes a restart
+with unfinished pump debt, then rifle magazine return and a fresh pump/shell cycle.
+Each consumes240 stereo pairs, disables its hooks and leaves BC2 alive. The328
+retirement selects the new shotgun first: rifle-first native retirement is still
+unverified.326 intermittent graphics crash is not fixed by these passes.
+See [327/328 evidence and headset checklist](RESTART-EMULATION-327.md).
+
+# Local326: tracked menu release; campaign restart crash remains open
+
+Normal pointer release positions the fresh VR cursor before button-up; lost-input
+cleanup does not reuse stale coordinates. Both full builds pass244 suites. A real
+game emulated pointer restart reached the transition and crashed at the same AMD
+command-worker fault site as265, before scene recovery. Root cause remains unknown.
+See [326 evidence](MENU-RESTART-326.md).326 and318 are preserved; no new headset,
+sustained campaign or whole-roster acceptance. Latest combined equipment pass is311.
+
+# Local318: portable melee motion, separate native delivery
+
+`MeleeStroke` consumes current shared hand custody and measured blade-tip motion;
+it does not own an inventory, claim another hand or manufacture native completion.
+Drawing and reacquiring custody require quiet settling. Pose discontinuities and
+recenter epochs retire motion. A pending native attack independently blocks new
+intents until its outcome settles. Use a fixed tracking frame, not camera motion.
+
+Two simulated strokes pass private BC2 native attack/hold/return checks across
+all three firing copies. The native adapter needs separate scoped FireOnDeploy
+and automatic-return gates; do not carry these BC2 addresses into another engine.
+The knife's melee effect types differ from firearm types. Hand-directed damage,
+chest grab and tracked render integration remain unproven. Both full builds pass
+244 suites; no new player-facing knife feature is enabled. KNIFE-MOTION-318.md
+records evidence and the remaining integration.
+
+# Local312: shared mesh-layout correction
+
+The shared asset decoder now distinguishes position/skin layouts at equal vertex
+strides. It recovers six installed mesh entries across the323-archive inventory
+and preserves every previously derived skin/index signature. All58 prior support
+contacts remain unchanged; M1911 adds its own measured support contact and
+pistol-only hip classification (59 variants/33 meshes total). This does not admit
+its manual reload, chambering or body-render asset enrollment.
+
+Both full builds pass243 suites each;100 Python checks and11 focused C++ checks
+pass. Native game evidence remains311 combined rifle/holster/SPAS and309 pistol;
+no new312 native or headset acceptance is claimed. The311 player checkpoint is
+preserved. See MESH-LAYOUT-312.md and CONTROLLER-GAP-311.md. Knife draw/hold, third
+native slot and the other listed campaign/equipment gaps remain open.
+
+# Local311: native controller-gap handling and combined acceptance
+
+Two real-game failures exposed expired controller evidence cancelling an owed
+pump cycle, first while held and then between native shot receipts.311 preserves
+freshly verified native observation across that bounded input gap without
+renewing hand leases or manufacturing completion. Pump and bolt regressions
+cover all first-reporting branches, neutral resumption and invalid evidence.
+
+Both normal builds pass243 suites. The combined actual-game emulated sequence
+passes sustained rifle support, three magazine cycles across shoulder swaps,
+SPAS pump/shell insertion,102.94ms support regrip and later rifle firing. Native
+ammunition receipts independently agree across server and both clients. The
+successful run did not trigger gap suspension; those boundaries have separate
+deterministic regression evidence. See CONTROLLER-GAP-311.md.
+
+58 measured grip variants are not58 completed reloads:18 magazine prerequisite
+configurations span10 asset names. Pistol support/reload/fire evidence remains
+prior309 with unchanged pistol components; hip carry305 and menu/scene304 retain
+their original acceptance scope. No new headset or sustained campaign acceptance.
+Chest knife, third native slot, pistol chambering, belt-fed loading and broader
+manual-action enrollment remain open. Do not reuse native slot2 for a pistol:
+it participates in underbarrel switching. Physical grenades remain deferred.
+
+# Local308: shared weapon-class grips and combined native checks
+
+Measured contacts cover58 variants/32 meshes through shared grip logic, plus
+preserved SPAS baseline. Five handgun variants use primary-hand aiming and
+pistol-only hip metadata. Contact coverage does not grant native reload/action
+capability; compiled magazine prerequisites remain18. Dynamic/missing references
+remain explicit gaps. See SHARED-GRIP-BATCH-308.md.
+
+Both normal builds pass243 suites. Input-only native emulation passes rifle
+support, three magazine cycles across shoulder exchanges, SPAS pump/shell,
+immediate support regrip and subsequent rifle firing. A separate pistol test
+passes support grab/release, chest-magazine replacement and firing. Independent
+server/client receipt audits pass; both runs consume240 stereo pairs and drain
+cleanly. Normal308 is staged with diagnostics disabled;305 remains intact.
+
+No new headset or sustained campaign acceptance. Pistol support was only held
+for two sampled frames; prolonged feel remains unverified. Knife motion attacks,
+third native weapon capacity, full LMG loading and pistol chambering remain open.
+No publication. Details and exact evidence limits are in the308 document.
+
+# Carry location is separate from firing classification —305
+
+Use explicit carry metadata when an engine class is ambiguous: BC2's MP443_sp
+is wcSmg, but it belongs at the hip while actual SMGs belong on shoulders.
+Coherently capture that metadata with inventory identity, include it in pickup
+replacement detection, and share anchor lookup between contact and rendering.
+A new body location does not grant native inventory capacity, reload support,
+or slide/chamber capabilities. Native305 proves pistol hip stow/draw and firing;
+three simultaneous native weapons and headset placement remain unverified.
+See HIP-CARRY-305.md. Physical grenades are deferred; chest knife draw/hold and
+motion hit integration are the next separate capability.
+
+# Local304: queued generations use the registered-view bound
+
+303 successfully retired the old scene after a VR-pointer checkpoint restart,
+then initialized a replacement eye view. Its final shutdown still rejected
+the replacement graph. Two identical read-only snapshots proved26 registered
+views and18 queued children: the current six children had holder+queue refs2,
+and twelve previous-generation children had queue-only refs1. Every private
+child reference was accounted for. The snapshot's16-entry queue limit was
+incorrectly tied to the current holder-count bound.
+
+304 gives the pending queue the same64-entry bound already enforced on the
+native registered-view snapshot. It keeps the exact holder/queue ownership
+union introduced in303, without changing native reference counts or calling
+child Release directly. The root destructor handles all owned generations.
+Duplicate, foreign, shared, missing and unaccounted references still reject.
+Tests cover up to54 queued children/62 live registered views, along with
+overflow rejection and preserved original-view order/reference baseline.
+
+Evidence: scene303-native01/queued-generations-read.json and its failed
+scene-queue-audit.json distinguish successful scene replacement from failed
+final shutdown. The earlier301 destructor proofs apply to the same executable.
+No engine ammunition, health, gameplay timers, native menu deadlines or
+controller admission rules are changed by this work.
+
+Focused progress/graph suites pass on both architectures (23 graph groups).
+Both full normal builds pass243 suites: x64 39.43s and x86 127.88s.
+
+The native304 combined audit passed. The VR-pointer menu restarted the
+checkpoint; a replacement actor/world loaded; the old seven-view subtree and
+its six pending references retired exactly once. A replacement eye initialized.
+Final shutdown accounted for18 pending references across three generations,
+released the private19-view subtree, restored the current original seven-view
+order exactly, and returned request references27->8. Cache refresh completed,
+reload flow drained, every hook disabled, and BC2 remained alive with no captured
+native exception or camera/GPU restoration error. The old initialization view
+order differed from the current survivor order; the current order was preserved.
+
+Evidence: scene304-native01/scene-queue-audit.json. Source SHA-256:
+5eeca63b4f04cb6e9a74026c23fa51ace8266e2e2d8b49457464e2d0f5527ec1.
+Trace SHA-256:46115499c019fcb933730c0f7f803fa51d6ba70a20e83b62777b025206f4a42e.
+The no-frame receiver intentionally requested zero world frames/controller
+packets. The general stereo probe therefore exits12 (wrapper2) by design;
+the independent audit verifies scene retirement and shutdown, not image
+delivery. Prior rendered-frame and reload evidence retains its original
+checkpoint identity. The isolated304 headset package requires a fresh game.
+
+
+# Exact pending references —301
+
+For an unrendered extra eye, account for each exclusive child holder plus each
+unique entry in that same eye's pending queue. Verify the owning destructor
+loops and let the native root destructor perform cleanup. Shared/unexplained
+references remain rejected. Do not infer retired-scene or headset acceptance
+from a same-world no-frame shutdown. See SHUTDOWN-301.md.
+
+# Pending render ownership —300
+
+A never-rendered native view may retain child references in its own pending
+queue as well as child holders. Rejecting every reference count above1 can
+prevent cleanup forever. Account for exact native owners/destructors rather
+than altering counts or releasing unexplained references. See SHUTDOWN-300.md.
+
+# Build dependency boundary —299
+
+Changing a reviewed profile must invalidate its actual consumers, without forcing
+unrelated targets to rebuild. Keep verification on every build, and pin generated
+header contents as well as compiler include wiring. A source archive and normal
+build receipt do not replace native evidence from a different checkpoint.
+See [299 evidence](BUILD-PROVENANCE-299.md).
+
+# Asset catalog capacity —298
+
+Available asset count and simultaneous rendered object count are different
+bounds. The cache and both consumers must share the catalog bound, with exact
+geometry/identity validation retained. Enrollment validation must queue the
+whole generated catalog and render an entry beyond the old limit, not merely
+regenerate identical cache bytes. A successful nonblocking connection poll also
+must not be discarded by an immediate second poll that returns Busy.
+See [298 evidence](BODY-CATALOG-298.md).
+
+# Original native callbacks overlap —296
+
+Independent audits must verify native ordering rather than assume serialized
+callbacks. The server Update containing the verified helper is itself its
+server observation. A client Update can overlap it and still provide exact
+post-authority evidence. In296 both client reads matched the result, entry was
+after operation start, and exit followed the entire server Update. Retain real
+native invocation IDs, count evidence, owner identity and original deadlines.
+Likewise, temporary body metadata suspension during fire must not create a
+second synthetic trigger edge. See [296 evidence](SINGLEFIRE-EMPTY-296.md).
+
+# Single-fire magazine enrollment —295
+
+Carry exact capacity and authored insertion geometry through generic tests as
+well as production consumers. A 17-round curved pistol magazine must not inherit
+30-round or straight-path fixture assumptions. Reuse reviewed native operation
+families and existing hand/resource ownership; enroll exact asset bindings.
+Static weapon grip, sampled reload grip, slide capability and live acceptance
+are independent evidence. A finite single-mechanism input script may skip
+unrelated weapon tests without bypassing production admission or receipts.
+See [295 native evidence](SINGLEFIRE-MAGAZINE-295.md).
+
+# Record physical custody before native admission —274
+
+A hand may own a reload item before the engine is ready to begin its operation.
+Record loss of that custody independently from native-cycle cancellation; a
+zero native-start counter does not mean the player never grabbed an item.
+Retain the first rejection of each cause rather than letting expected startup
+input gating or later terminal churn hide the first useful failure.
+See [the diagnostic coverage](CUSTODY-DIAGNOSTICS-274.md).
+
+# Shared sampled magazine geometry —273
+
+Reuse the same ownership/ammunition consumer with an explicit measured path.
+Removal, original return and replacement must agree on the exact seated item
+transform. Arc progress requires fresh real motion and local orientation;
+duplicate packets/time alone never complete the gesture. Preserve the straight
+rail arithmetic and existing operation admission. Controller emulation must
+consume the same geometry as the player. A measured path and a passing mock
+receipt test do not establish native fire/reload admission or a chamber action.
+See [273 evidence and remaining work](SAMPLED-MAGAZINES-273.md).
+
+## Checkpoint272: evidence capture must not stall simulated controller input
+
+The retained support-event log identifies stale_input; the receiver had a125ms
+gap against a100ms lease after saving a pixel-checked pair. Inspect both the
+rolling samples and retained event journal before adding diagnostics. Move large
+file writes off the controller loop, with immutable buffers and bounded backlog.
+Do not extend source lifetimes to conceal a diagnostic stall. A single scripted
+pre-shot neutral/regrip may recover only from fresh evidence of unchanged native
+state, and its outcome must remain distinguishable from uninterrupted support.
+See EMULATED-PLAY-272.md. This does not change normal gameplay custody policy.
+
+## Checkpoint271: distinguish controller-script stalls from native failures
+
+Run complete input sequences against real native state before headset requests.
+SCAR/SPAS and F2000/SPAS completed on identical binaries; one F2000 attempt lost
+support before firing and the scripted player kept squeezing until timeout.
+Retain that failed evidence despite a passing repeat. A script needs explicit
+neutral/regrip recovery after input loss, with bounded retries and evidence of
+the new claim; it cannot assume continued squeeze reacquires a cancelled hand.
+Capture the actual invalid-input predicate before attributing a shared reset
+event to packet timing. No pump debt or native cancellation existed in this
+failure. See EMULATED-PLAY-271.md; the transient remains unresolved.
+
+## Checkpoint271: callback drain survives completed physical actions
+
+A native pump/bolt completion can overlap a different branch's idle callback.
+If that callback loses its final read after completion, close only its exact
+invocation; leaving it outstanding poisons the next valid prediction Restore.
+Retain the completed physical action and original acknowledgement receipt.
+Do not relax same-owner ammunition checks or erase active mechanism debt.
+The fail-before regression covers both operating classes and wrong-ID/count/
+owner negatives. See SCENE-RECOVERY-271.md for actual-game acceptance status.
+
+## Checkpoint270: test real body gestures and completed-cycle lifetime
+
+After actor replacement, the native selected item can be SPAS while both hands
+are empty. Diagnostic setup must use ordinary shoulder acquisition rather than
+legacy stick selection. Actual270 verified that transition and original rifle
+magazine custody before exposing post-pump idle Restore cancellation. A completed
+physical/native outcome and a later prediction snapshot require separate lifetime
+reasoning; the current rejecting invariant still needs reproduction. See
+SCENE-RECOVERY-270.md. Do not infer all-weapon acceptance from these specific runs.
+
+## Checkpoint269: diagnostic lifetime versus equipment publication
+
+An input-only recovery driver must not confuse same-actor equip publication churn
+with a replacement actor. Preserve its immutable old-operation witness while
+waiting neutrally; only verified actor replacement restarts the test trajectory.
+No equipment/hand/ammunition authority is renewed by diagnostic waiting.
+See SCENE-RECOVERY-269.md for actual failure evidence and validation limits.
+
+## October9: family-neutral actor retirement —267
+
+An explicit actor-lifetime retirement must not require selecting the same weapon
+class that held the old debt. A replacement player may draw a rifle first.
+Validate the replacement's native configuration independently, prove the old
+callbacks drained, archive the original outcome, and retire only that lifetime.
+Keep operating-mode selection separate and preserve sequence high-water marks.
+Same-actor equipment changes still cannot erase persistent action debt. The267
+regression covers this boundary; native and headset acceptance remain pending.
+
+## October9: menu-driven scene checks —265
+
+Exercise existing native menu input through the same IPC used by VR, verifying
+the current native raster before each dependent click. A click receipt alone is
+not scene recovery: require changed world/request owners, completed callbacks,
+actor retirement and new nonblack stereo frames. Keep idle, pending-interaction,
+death and headset outcomes distinct. The neutral264 restart now passes; it does
+not clear the prior active pump/reload crash. External command polling must use
+fresh monotonic samples and bounded retry of transient receipt-sharing failures.
+
+## October9: prediction replay ordering —262
+
+Native client prediction can withdraw an already observed provisional transfer
+before the server performs it. Admit that only with exact Restore-hook and
+immutable snapshot evidence. Withdraw the affected client's completion vote;
+retain the same request, deadlines and server authority. Test both client-first
+and server-first update order. Invalidating a prior hold must not invalidate an
+unrelated, still-fresh context timestamp or renew it. Counts alone are no proof.
+
+## October9: post-action hand return and processing clocks —260
+
+A completed ammunition transaction may retain bounded intent to reacquire
+support while fresh input and exact gun custody continue. Missing source
+publication does not undo completion, and retained intent grants no source or
+geometry authority. At the actual acquisition, use current processing time for
+the same original packet; another serialized consumer can advance the shared
+arbiter between reload and support stages. Do not renew sequence, observation or
+deadline. Both ordering and observation-gap regressions now cover this case.
+
+## October9: support, mechanisms and empty intent —259
+
+A hand-ownership transfer must not reset a two-hand aiming correction and
+thereby manufacture weapon-relative mechanism travel. Keep raw off-hand motion
+separate from claim-bound gun-hand aim continuity. Linear sliding mechanisms
+use ordered endpoint crossings; rotary bolt detents retain their own policy.
+Temporary input or mechanism unavailability cannot become an implicit draw of
+a committed holstered weapon. Retained intent grants no stale rendering or
+claims: revalidate the current carried item and obtain new presentation proof.
+Authored left-hand references can enroll support without changing a verified
+right-hand/ammunition path. See RECOVERY-259.md for validation limits.
+
+## October9: selection identity is not a per-frame native lease —258
+
+A nonblocking native view can be unavailable while a callback owns its gate.
+Retain the last accepted selection identity across that gap, but never native
+hold/readiness/count authority. Replace it on a concrete native selection
+observation; require exact weapon, epoch and tracked-space match. A failed read
+must not skip the physical coordinator and silently restore a different gun
+attachment. Pump and bolt share this policy and missing-view regressions.
+Actual recurrence and headset confirmation remain separate.
+
+## October 9: submitted physical actions survive native tail replay —256
+
+Keep physical completion separate from provisional readiness in each native
+prediction branch. An unchanged original snapshot may return an idle client to
+the server's remaining animation tail. Withdraw that client's readiness and
+require its own replay and all-branch convergence under the same transaction
+and original deadline. Do not mint another gesture, restore native holds or
+write ammunition. Exact snapshot/owner/count checks and post-acknowledgement
+rejection remain necessary. The shared selected-boundary policy has pump/bolt
+regression coverage; actual runtime and headset acceptance are separate.
+
+## October 9: original render contact and physical custody —255
+
+A missing renderer publication must not masquerade as a foreign native owner.
+Keep a bounded last successfully mapped contact for the same item and tracked
+space. Reuse only its remaining original lifetime, validate current controls
+and body mapping independently, and never replace an explicit mismatch with
+cached evidence. This preserves hand/weapon placement through a short read gap
+without minting contact, a grip edge or native completion. Regressions must run
+through the actual player coordinator after a completed cycle, including absent
+publications, resumption, expiration and foreign-owner rejection. Offline255
+passes these checks; actual-game acceptance is separate.
+
+## October 9: native prediction can replay one physical shot —254
+
+An original client Restore can undo a tentative shot before its replay and
+server confirmation. Withdraw only that client's observation after verifying
+the exact unchanged snapshot and pre-interception state. Preserve the physical
+action's original identity/deadline and require the client's own replay plus
+independent evidence from every native branch. This is not an ammo write or
+permission to roll back a held/completed physical transaction. Exact capture
+and negative regressions cover supported pump/bolt classes; broader native and
+headset acceptance remain separate.
+
+## October 8: carried supply is not a continuously renewed ammo request —250
+
+A fresh native reserve publication is required to acquire or seat replacement
+ammunition. Keeping an already acquired object in the same tracked hand is a
+separate operation. Expose an explicit custody-only renewal accepting no counts,
+geometry or receipts; retain the exact item and accept real release. An expired
+count snapshot must neither destroy custody nor authorize new ammunition. Test
+replacement carry, guidance and pending completion across missing publications,
+not only original-magazine removal. Delayed mock callbacks need fresh modeled
+own-Update convergence as well as original helper provenance.
+
+## October 8: native admission and drawing have different lifetimes —249
+
+Actual BC2 rendering can occur after a native ammunition publication expires
+even while the original pose, source and hand/weapon identity remain valid.
+Record when the immutable pose was admitted from fresh native evidence. Drawing
+checks that original admission plus current pose/mesh/family/claim deadlines.
+Keep contact acquisition, supply and ammunition operations on fresh native
+observations. Do not restamp either lease or let a new packet extend an old pose.
+
+## October 8: unavailable publications are not lost custody —248
+
+Return a typed read outcome from the same guarded channel read. A temporary
+publication gap must not erase a magazine already owned by a hand. Retain that
+custody under current independent identity/input checks and original timeouts,
+without restamping native evidence or issuing new work. Actual release remains
+release. Completed original returns must retire their presentation seat records,
+or a later cycle can be blocked by the prior one. Test at least two complete
+cycles through the actual controller coordinator; isolated first-cycle tests
+missed the retained record.
+
+## October 8: neutral input and interruption coverage —246–247
+
+Separate the first established native idle time from the latest refresh. An
+original neutral controller packet may be processed after newer callbacks;
+rejecting it solely for preceding the latest refresh can starve recovery forever.
+Keep its source timestamps and require subsequent fresh native proof before
+issuing authority. Shared shotgun and bolt-service regressions reproduce this
+ordering without a headset.
+
+Emulated tests must also fire with support already held, interrupt a partial
+gesture, and repeat the same controller packet through the outer coordinator.
+A direct consumer test misses wrappers that restore tracking flags or release
+grip on duplicates. Recovery completion still needs ordinary physical ownership,
+the full measured stroke and the actual native acknowledgement.
+
 ## October 8: processing time, submitted work and visible custody —239–241
 
 A queued hand-ownership operation needs its actual processing time even when
@@ -2083,7 +2865,7 @@ without changing the gun wrist or other branches. Optional capacitive pose input
 
 uses versioned fixed-width transport with sensor availability distinct from touch.
 
-Both build suites 48/47 pass. The launcher regression 113015-478 passes 240 pairs / 
+Both build suites 48/47 pass. The launcher regression 113015-478 passes 240 pairs /
 
 0 timeouts and both gestures; reload's 1 timeout and a preparation91ms outlier remain
 
@@ -2337,3 +3119,152 @@ can overwrite them. Functional completion and complete callback recordings
 remain separate evidence. Multi-part magazine assemblies and sampled authored
 withdrawal paths belong in shared geometry policy; exact native enrollment stays
 inside each engine adapter.
+# Headset275 sliding stops and tracking origins
+
+A held virtual mechanism has no physical controller stop. Measured part travel
+and the controller's retention envelope are separate constraints: clamp the
+displayed part to its rail, permit bounded overshoot, and still require ordered
+real motion. The prior ideal straight-stroke emulation missed actual human
+lateral motion/overshoot; the expanded test fails before the correction.
+
+Changing a tracking origin does not replace a weapon or settle its mechanical
+debt. Transfer only the coordinate epoch at a verified callback drain, preserving
+item/cycle/shot/ammunition and invalidating old pose authority. BC2-specific native
+identity and guard evidence stays in the adapter. See PUMP-HEADSET-275.md for
+validation limits; this is not headset or all-weapon acceptance.
+
+# Recovery251 shared handoff lesson
+
+Cleanup is not an input observation. A cancelled recognizer can outlive its
+replacement/recovery and the next hand owner's acquisition within the same
+controller packet. Release only exact still-owned mechanism custody; do not
+replay old processing time through the global hand arbiter. Preserve immutable
+input evidence, pending native receipts and mechanical debt. Regression251
+reproduces actual250's shell-after-recovered-pump claim loss. This rule applies
+to shared mechanisms, not a weapon-specific offset or animation workaround.
+
+# Recovery264 time domains and persistent custody
+
+A consumed physical input and the native observation used to construct it have
+different bounded lifetimes. Preserve immutable construction provenance and
+the original input deadline; native dispatch still requires fresh exact current
+authority. Never renew the physical event to compensate for delayed admission.
+
+Geometry continuity compares observation times. Processing delay belongs in
+current sample expiry, not the interval between two source observations. Apply
+this in shared insertion code so shells and magazines use the same rule.
+
+The startup deadline ends when a native hold is established. A later bounded
+publication gap may preserve existing custody without granting new hold or
+seat authority. Do not reapply startup timeout to an established interaction.
+# Actor lifetime retirement —266 candidate
+
+Persistent physical debt must survive ordinary controller, tracking and
+equipment interruptions, but must not permanently block a replacement player
+after checkpoint reload. The BC2 cycle service now has a separate retirement
+operation requiring changed client/server actors, increasing actor generation,
+fresh coherent replacement state and native callback exclusion/drain. It keeps
+the old outcome for diagnosis and retains sequence high-water marks. The new
+physical adapter is constructed only after native selection accepts retirement.
+This boundary transfers across engines; BC2's actor identities and callback
+proofs do not. Deterministic evidence is not native/headset or crash acceptance.
+
+275 native follow-up: the expanded F2000/SPAS controller sequence completed,
+including interrupted pump recovery and subsequent shell/holster/rifle actions.
+This validates the larger motion through the actual adapter, not headset feel
+or actual-runtime tracking-origin rebasing. See PUMP-HEADSET-275.md.
+
+## 276: tracking coordinates are not equipment identity
+
+Keep owed cycles and ammunition through a tracking-origin change. Route a
+same-item/newer-space input to the existing recovery adapter without granting
+new selection/fire authority. Rebase the private service before requesting its
+new observation watch, then commit under unchanged owner/config/callback-drain
+checks. An exact previously issued zero-delta held callback must be allowed to
+drain after recovery starts; mismatched or expired callbacks must still reject.
+
+Validate independently fresh snapshots against a boundary timestamp sampled
+after the read, not the earlier callback-entry clock. Preserve original lease
+deadlines. A torn native read may receive one complete bounded reread; never
+assemble state from partial reads. Actual BC2 origin recovery and subsequent
+full physical pump completed with unchanged ammunition. The passing run did
+not need the retry; deterministic tests cover it. See TRACKING-RECOVERY-276.md.
+
+277: a callback-entry clock cannot validate a publication that another thread
+created afterward. Sample freshness under the publication gate, preserving the
+lease's original deadline and revision. The forced producer/consumer regression
+fails before and passes after; actual M95 cycles passed separately. Do not claim
+the latter reproduced the race (counter0). Native pause/input epochs still need
+separation from equipment identity; see OWNER-TIMING-277.md.
+
+278: input observation generations and physical equipment generations must be
+separate. A coherent returning native read may retain the exact item across a
+scheduler pause while all old action/render leases remain expired. Likewise,
+observing the current branch of a submitted reload does not require another
+copy's previous Update context to stay fresh; holds and final transfer receipts
+still require their own evidence. Native combined pause test and fail-before
+regressions pass. Keep visual continuity and mechanical test results distinct:
+a presentation fallback must remain visible without manufacturing a mechanical
+failure by immediately removing the emulated player's controls.
+
+279: emulate complete player interactions through actual native menus and actor
+replacement. Keep rendering and mechanical outcomes separate: a visual failure
+must fail visual acceptance without forcing controller release that invents a
+mechanical failure. Record the original visual event and continue the bounded
+gesture; require real native outcomes and both results for overall acceptance.
+
+280: physical mechanism debt and the engine's authored clock need not run in
+sequence. A distinct continuous input-guard authority lets original native
+Updates advance while the same ordered physical gesture remains owed. Never
+label advancing native state as frozen or idle. Completion requires the exact
+gesture plus independent, fresh all-copy idle receipts with conserved ammunition.
+The connected M95 adapter reduced the native post-stroke wait from~2.3s to41–52ms
+in the actual game. This is a common contract, not blanket enrollment of snipers.
+
+283: a native callback frame existing does not mean it issued a hold. Unheld
+normal Updates must still run ordinary empty-ammunition suppression, including
+additional Steps after the final pump's idle commit inside the same Update.
+The full-to-empty diagnostic exposed an error invisible to positive-ammo tests.
+
+284: missing current native authority is distinct from losing the existing
+physical grasp. Retain only the same debt's already-live claim under its original
+deadline; publish no new guided target or release until fresh authority returns.
+Do not silently renew the claim, ignore changed ownership, or discard pump debt.
+
+286: one native branch can publish completion while another original Update
+is still running. Completion retires new observation admission, not an already
+issued same-cycle read before its original deadline. Nested callback checks
+must keep the parent's revision domain. Actual owner/cycle transitions still
+revoke the old read, and structural ownership must be rechecked before writes.
+
+287: physical custody may renew from fresh original controller/contact evidence
+while current native permission is missing, but only through the hand arbiter
+for the same live grasp and same observed debt. This is separate from moving a
+mechanism or renewing native authority. Repeated/forged evidence and an expired
+claim cannot acquire that permission.
+
+288: predicted clients need not execute identical local Commit tails. An exact
+unchanged snapshot may copy an independently completed server tail into a client.
+Retain the actual Restore as its evidence, require that client's own neutral
+idle Update, and keep source completion and ammunition checks. Do not manufacture
+omitted Commit records or reject a proven native transition simply because the
+three branches took different routes to the same completed state.
+
+289: once acquired, a mechanism's grip custody follows fresh recorded controller
+input; delayed render contact is a separate motion proof. Keep the original
+pose time/deadline and reject fabricated or expired geometry. Missing evidence
+before acquisition waits without inventing progress; an actual release remains
+regrippable and must not be misclassified as forged evidence.
+
+290: model the observed prediction graph rather than requiring every client to
+follow the server directly. BC2's server -> clientB -> clientA completion path
+needs a fresh completed source and each receiver's own idle Update. Forwarded
+snapshots never replace the receiving Update or create fake Commit receipts.
+
+291-293: prediction rollback can restore the final cartridge as well as a
+positive magazine count. Preserve the one real owed cycle and original deadline;
+withdraw only the rolling-back client's tentative shot evidence and require its
+own replay. Completed bolt ownership must not absorb an unrelated native
+magazine refill: separately verified passive updates observe conservation but
+grant no hand lease, manual reload or Ready. Diagnostic cycle duration and its
+recorder share one finite plan so test setup cannot silently reject its own mode.

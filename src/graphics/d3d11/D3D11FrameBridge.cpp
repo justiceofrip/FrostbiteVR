@@ -11,6 +11,26 @@ bool D3D11FrameBridge::ConnectGraphics(ID3D11Device* device,const std::wstring& 
 bool D3D11FrameBridge::TryBegin(const ipc::NativeFrameKey& native,ipc::FrameLease& lease)noexcept {
     return connected_.load(std::memory_order_acquire)&&!Fatal()&&(sharingMode_.load(std::memory_order_acquire)!=2||relay_.SourceWritable())&&channel_.TryBegin(native,lease);
 }
+bool D3D11FrameBridge::BeginDepthCapture(const ipc::FrameLease& lease,bool reversed)noexcept {
+    depthActive_=false;depthLease_={};
+    if(!connected_.load(std::memory_order_acquire)||sharingMode_.load(std::memory_order_acquire)!=3||
+       submitting_||canceling_||waitingGameCopies_||waitingLegacyExport_||!lease.channelGeneration||!lease.requestId)return false;
+    try {
+        if(!depthInitialized_){if(!depthProducer_.Initialize(device_.Get()))return false;depthInitialized_=true;}
+        const auto& t=lease.tracking;
+        if(!depthProducer_.Begin({lease.native.frameId,t.spaceGeneration,t.generation,t.predictedNs}))return false;
+        depthLease_=lease;depthReversed_=reversed;depthActive_=true;return true;
+    }catch(...){return false;}
+}
+bool D3D11FrameBridge::CaptureDepth(unsigned eye,unsigned stage,ID3D11Texture2D* source,const ipc::FrameLease& lease)noexcept {
+    if(!depthActive_||!source||lease.channelGeneration!=depthLease_.channelGeneration||lease.requestId!=depthLease_.requestId||
+       lease.native!=depthLease_.native||lease.tracking.generation!=depthLease_.tracking.generation||
+       lease.tracking.spaceGeneration!=depthLease_.tracking.spaceGeneration||lease.tracking.predictedNs!=depthLease_.tracking.predictedNs)return false;
+    D3D11_TEXTURE2D_DESC d{};source->GetDesc(&d);
+    if(d.Width!=lease.requirements.width||d.Height!=lease.requirements.height||!depthProducer_.Capture(eye,stage,source)){
+        depthProducer_.Cancel();depthActive_=false;return false;}
+    return true;
+}
 void D3D11FrameBridge::DiagnoseSharing()noexcept {
     Microsoft::WRL::ComPtr<ID3D11Device1> newer;compatibility_[0]=device_.As(&newer);
     D3D11_FEATURE_DATA_D3D11_OPTIONS options{};compatibility_[1]=device_->CheckFeatureSupport(D3D11_FEATURE_D3D11_OPTIONS,&options,sizeof(options));compatibility_[2]=options.ExtendedResourceSharing;
@@ -27,7 +47,8 @@ bool D3D11FrameBridge::CaptureEye(unsigned eye,ID3D11Texture2D* source,const ipc
     if(sourceDevice.Get()!=device_.Get()||description.Width!=req.width||description.Height!=req.height||description.MipLevels!=1||description.ArraySize!=1||description.SampleDesc.Count!=1||!CopyCompatibleFormats(description.Format,req.format))return Fail(2,E_INVALIDARG);
     if(eye==0){
         capturedRequest_=lease.requestId;mask_=0;
-        if(!sharingMode_.load()||std::memcmp(&allocated_,&req,sizeof(req))){
+        if(!sharingMode_.load()||std::memcmp(&allocated_,&req,sizeof(req))||
+           allocatedNative_.owner!=lease.native.owner||allocatedNative_.deviceEpoch!=lease.native.deviceEpoch){
             producer_.Reset();for(auto& texture:eyes_)texture.Reset();relay_.Reset();sharingMode_.store(0);
             if(!forceLegacy_&&!forceLegacyIpc_){
                 const auto result=producer_.Create(device_.Get(),req.width,req.height,DXGI_FORMAT(req.format),++epoch_);
@@ -50,7 +71,7 @@ bool D3D11FrameBridge::CaptureEye(unsigned eye,ID3D11Texture2D* source,const ipc
                 for(auto& texture:eyes_){const auto hr=device_->CreateTexture2D(&description,nullptr,&texture);if(FAILED(hr))return Fail(3,hr);}
                 sharingMode_.store(1,std::memory_order_release);
             }
-            allocated_=req;
+            allocated_=req;allocatedNative_=lease.native;
         }
         if(!Valid(producer_.Descriptor())){
             auto* exporting=sharingMode_.load()==2?relay_.Device():device_.Get();
@@ -64,7 +85,7 @@ bool D3D11FrameBridge::CaptureEye(unsigned eye,ID3D11Texture2D* source,const ipc
 }
 bool D3D11FrameBridge::PublishRestored(const ipc::FrameLease& lease)noexcept {
     if(mask_!=3||capturedRequest_!=lease.requestId||submitting_||canceling_||waitingGameCopies_||waitingLegacyExport_)return Fail(7,E_UNEXPECTED);
-    pending_=lease;mask_=0;
+    pending_=lease;mask_=0;pendingDepth_={};
     if(sharingMode_.load()==3){waitingLegacyExport_=true;PumpGraphics();return true;}
     if(sharingMode_.load()==2){relay_.SealGameCopies();waitingGameCopies_=true;PumpGraphics();return true;}
     const std::array<TextureSlice,2> sources={TextureSlice{eyes_[0].Get(),0},TextureSlice{eyes_[1].Get(),0}};
@@ -75,6 +96,7 @@ bool D3D11FrameBridge::PublishRestored(const ipc::FrameLease& lease)noexcept {
 void D3D11FrameBridge::Cancel(const ipc::FrameLease& lease)noexcept {
     // Called on the graphics thread after restoration. TryBegin is the only
     // method permitted on the visibility thread.
+    depthProducer_.Cancel();depthActive_=false;pendingDepth_={};
     pending_=lease;canceling_=true;submitting_=false;mask_=0;PumpGraphics();
 }
 void D3D11FrameBridge::PumpGraphics()noexcept {
@@ -97,21 +119,28 @@ void D3D11FrameBridge::PumpGraphics()noexcept {
     if(waitingLegacyExport_){
         const std::array<TextureSlice,2> sources={TextureSlice{eyes_[0].Get(),0},TextureSlice{eyes_[1].Get(),0}};const auto& t=pending_.tracking;
         const auto result=producer_.Publish(sources,{pending_.native.frameId,t.spaceGeneration,t.generation,t.predictedNs},ticket_);
-        if(result==TransferResult::Ok){waitingLegacyExport_=false;submitting_=true;}
-        else if(result!=TransferResult::Busy){waitingLegacyExport_=false;Fail(8,producer_.LastError());producer_.Reset();canceling_=true;}
+        if(result==TransferResult::Ok){
+            // Publish has completed the producer event query. Depth copies were
+            // queued earlier on this SAME immediate context, so it covers them.
+            if(depthActive_&&depthLease_.requestId==pending_.requestId)
+                depthProducer_.Seal(producer_.Descriptor(),ticket_,depthReversed_,pendingDepth_);
+            if(!pendingDepth_.flags)depthProducer_.Cancel();depthActive_=false;
+            waitingLegacyExport_=false;submitting_=true;}
+        else if(result!=TransferResult::Busy){waitingLegacyExport_=false;Fail(8,producer_.LastError());producer_.Reset();depthProducer_.Retire();depthActive_=false;canceling_=true;}
     }
-    if(submitting_){const auto result=channel_.Submit(pending_,producer_.Descriptor(),ticket_);
+    if(submitting_){const auto result=channel_.Submit(pending_,producer_.Descriptor(),ticket_,pendingDepth_.flags?&pendingDepth_:nullptr);
         if(result==ipc::ChannelResult::Ok){submitting_=false;++published_;}
-        else if(result!=ipc::ChannelResult::Busy){Fail(9,HRESULT(result));submitting_=false;producer_.Reset();canceling_=true;}
+        else if(result!=ipc::ChannelResult::Busy){Fail(9,HRESULT(result));submitting_=false;producer_.Reset();depthProducer_.Retire();depthActive_=false;canceling_=true;}
     }
     if(canceling_){const auto result=channel_.Cancel(pending_);if(result!=ipc::ChannelResult::Busy)canceling_=false;}
     channel_.PumpGraphics();
 }
 void D3D11FrameBridge::PairConsumed(const PairTicket& ticket,bool consumed)noexcept {
+    depthProducer_.Acknowledge(ticket,consumed);
     if(consumed){producer_.Acknowledge(ticket,true);++consumed_;}else{++discarded_;producer_.Reset();}
 }
 void D3D11FrameBridge::CloseGraphics()noexcept {
-    connected_.store(false,std::memory_order_release);channel_.CloseGraphics();producer_.Reset();relay_.Reset();waitingGameCopies_=waitingLegacyExport_=false;
+    connected_.store(false,std::memory_order_release);channel_.CloseGraphics();producer_.Reset();relay_.Reset();depthProducer_.Close();depthInitialized_=depthActive_=false;depthLease_={};pendingDepth_={};waitingGameCopies_=waitingLegacyExport_=false;
     for(auto& eye:eyes_)eye.Reset();context_.Reset();device_.Reset();submitting_=canceling_=false;mask_=0;
 }
 }

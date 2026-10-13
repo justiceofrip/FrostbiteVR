@@ -1,6 +1,7 @@
 #pragma once
 #include <atomic>
 #include <cstdint>
+#include "Bc2BoltProbePlan.h"
 namespace fvr::bc2 {
 // Diagnostic recording only. Native invocation/hold/transfer authority never
 // reads this clock. A deferred window opens once; later calls cannot renew it.
@@ -11,9 +12,10 @@ public:
   if(start_.load()||begun_||deferred_||pump_||(cycles!=1&&cycles!=2&&cycles!=8))return false;
   pump_=true;duration_=cycles==8?3*Duration:Duration;return true;
  }
- bool Bolt()noexcept {
-  if(start_.load()||begun_||deferred_||pump_)return false;
-  pump_=true;duration_=30000000000ll;return true;
+ bool Bolt(unsigned cycles=2)noexcept {
+  const auto duration=OrdinaryBoltProbeDurationMs(cycles);
+  if(!duration||start_.load()||begun_||deferred_||pump_)return false;
+  pump_=true;duration_=std::int64_t(duration)*1000000;return true;
  }
  bool Defer(bool recovery=false)noexcept {if(start_.load()||begun_||deferred_||pump_)return false;deferred_=true;duration_=recovery?2*Duration:Duration;return true;}
  bool CombinedPump()noexcept {

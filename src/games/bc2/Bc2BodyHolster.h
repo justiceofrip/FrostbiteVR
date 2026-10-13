@@ -33,6 +33,9 @@ struct BodyHolsterSample {
     std::uint64_t nativeTick=0;std::uint32_t cache=0;
     std::optional<BodyCarriedIdentity> carried; // Current exact coherent inventory, for semantic rebase only.
     bool cancel=false,reloadBusy=false;
+    // Temporary input/mechanism unavailability. Existing empty intent has no
+    // pose/claim authority until exact carried identity is proved on resume.
+    bool interactionSuspended=false;
     WeaponEquipmentIdentity equipment{};
     bool triggerNeutral=false; // Fresh actual source trigger state, never a masked action.
     std::optional<OrdinaryEquipmentPair> ordinaryPair;
@@ -68,6 +71,9 @@ public:
     std::optional<HolsterSuppressionRequest> Demand(const BodyHolsterSample&)const noexcept;
     BodyHolsterResult Tick(interaction::BodyInventory&,const BodyHolsterSample&,interaction::HandInteraction&,std::uint64_t& sharedIntent)noexcept;
     BodyHolsterPhase Phase()const noexcept{return phase_;}
+    bool EmptyRehidePending()const noexcept {
+        return phase_==BodyHolsterPhase::HidePending&&rebindEmpty_&&emptyIntent_&&!pending_;
+    }
     void Report(std::ostream&)const;
     std::uint64_t RequestId()const noexcept{return render_;}
     bool BlocksActions()const noexcept{return Enabled()&&phase_!=BodyHolsterPhase::Held;}
@@ -79,6 +85,9 @@ public:
     // owner tuple. Preserve intent across its synthetic input epoch, never a
     // render/native receipt. The next Tick still proves the carried inventory.
     bool ObserveNativeInputGap(const ReloadStateOwner& before,const ReloadStateOwner& after)noexcept;
+    // Current runtime: input rearms independently; native equipment identity
+    // stays exact. Retain empty intent, requiring new suppression/render proof.
+    bool ObserveNativeInputPause(const ReloadStateOwner&)noexcept;
     // Semantic bookkeeping only. This does not admit a pose, a claim or a
     // native write; the next Tick still requires fresh exact carried identity.
     bool PendingNativeInputGap(const ReloadStateOwner& owner)const noexcept {

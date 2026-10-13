@@ -8,7 +8,7 @@ import json, math, struct
 from bc2_body_ammo_assets import archive, text, fnv, SKELETON_ARCHIVE, SKELETON_RESOURCE, SKELETON_SHA
 from bc2_weapon_animation_pipeline import Skeleton, Clip, canonical, multiply, identity
 from bc2_authored_magazine_geometry import point, unit, sub, cross, dot
-from bc2_mesh_geometry import metadata, geometry
+from bc2_mesh_geometry import metadata, geometry, position_bytes
 from inspect_bc2_mesh_asset import bone_hash, sha
 
 PART='body_holstered_weapon'
@@ -52,7 +52,7 @@ def holster_transform(grip, muzzle):
 def bake_section(data, section, lod, known, inverse, pose, vertex_start):
     """Bake complete weighted triangles; no hand/unknown bone can enter a gun."""
     s=section;positions=[]
-    half=s['stride'] in (16,48);posbytes=8 if half else 12
+    posbytes=position_bytes(s);half=posbytes==8
     for n in range(s['vertices']):
         at=vertex_start+s['vertex_offset']+n*s['stride']
         p=struct.unpack_from('<3e' if half else '<3f',data,at);p=(p[0],p[1],-p[2])

@@ -13,7 +13,7 @@ from pathlib import Path
 import re
 import struct
 from inspect_bc2_mesh_asset import Archive, bone_hash, mesh_data, mesh_set, sha
-from bc2_mesh_geometry import metadata, geometry as decode_geometry
+from bc2_mesh_geometry import metadata, geometry as decode_geometry, position_bytes
 
 LIMITS = [
     'Derived metadata only; no game asset bytes or vertex/index arrays exported.',
@@ -81,7 +81,7 @@ def part_bounds(data, lod, sections, known):
     for section in sections:
         for n in range(section['vertices']):
             at=start+section['vertex_offset']+n*section['stride']
-            half=section['stride'] in (16,48);pos=struct.unpack_from('<3e' if half else '<3f',data,at)
+            half=position_bytes(section)==8;pos=struct.unpack_from('<3e' if half else '<3f',data,at)
             offset=8 if half else 12
             ids=data[at+offset:at+offset+4];weights=data[at+offset+4:at+offset+8]
             count=sum(w>0 for w in weights)

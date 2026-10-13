@@ -121,7 +121,7 @@ bool Bc2BodyAmmoRenderer::QueueGeometry(std::shared_ptr<const BodyAmmoGeometry> 
     if(impl_->stopping.load()||!geometry||!GeometryValid(*geometry))return false;impl_->pending.store(std::move(geometry),std::memory_order_release);return true;
 }
 bool Bc2BodyAmmoRenderer::QueueGeometryCatalog(std::shared_ptr<const BodyAmmoGeometryCatalog> catalog)noexcept {
-    if(impl_->stopping.load()||!catalog||catalog->empty()||catalog->size()>16)return false;
+    if(impl_->stopping.load()||!catalog||catalog->empty()||catalog->size()>graphics::MaxBodyPropAssets)return false;
     for(std::size_t n=0;n<catalog->size();++n){const auto& g=(*catalog)[n];if(!g||!GeometryValid(*g))return false;
         for(std::size_t previous=0;previous<n;++previous)if((*catalog)[previous]->key==g->key)return false;}
     impl_->catalog.store(std::move(catalog),std::memory_order_release);return true;

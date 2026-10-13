@@ -73,5 +73,17 @@ void ConcurrentSnapshot(){
     const auto snap=evidence.Read();Check(snap.samplesAvailable);
     Check(snap.counts[unsigned(StereoProgressReason::WorldChanged)]==80000);
 }
-int main(){GuardShortCircuit();OriginalGuardEquivalence();PersistentCounts();ConcurrentSnapshot();
-    std::cout<<"4 stereo progress groups passed\n";}
+void ShutdownRejectionSurvivesLaterSuccess(){
+    StereoProgressEvidence evidence;auto s=Sample();s.shutdownViews=14;s.shutdownReferences=15;
+    s.shutdownMainChildren=s.shutdownEyeChildren=3;s.shutdownSurvivors=7;s.shutdownReferencesAfter=8;
+    evidence.Record(StereoProgressReason::ShutdownSurvivors,s);
+    evidence.Record(StereoProgressReason::OwnerMatched,Sample());
+    const auto snapshot=evidence.Read();const auto i=unsigned(StereoProgressReason::ShutdownSurvivors);
+    Check(snapshot.samplesAvailable&&snapshot.counts[i]==1&&snapshot.rows[i].first.shutdownReferencesAfter==8);
+    std::ostringstream out;StereoProgressEvidence::WriteJson(out,snapshot);
+    Check(out.str().find("\"reason\":\"shutdown_survivors\",\"count\":1")!=std::string::npos);
+    Check(out.str().find("\"shutdown_views\":14,\"shutdown_references\":15")!=std::string::npos);
+    for(const auto* name:StereoProgressNames)Check(name&&*name);
+}
+int main(){GuardShortCircuit();OriginalGuardEquivalence();PersistentCounts();ConcurrentSnapshot();ShutdownRejectionSurvivesLaterSuccess();
+    std::cout<<"5 stereo progress groups passed\n";}

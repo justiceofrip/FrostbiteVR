@@ -14,7 +14,8 @@ auto Pose(float x=0,float y=0,float z=0){auto m=reload_insertion_detail::Identit
 struct Fixture {
     std::int64_t now=1000000000;unsigned reads=0,starts=0,keeps=0,submits=0,cancels=0;
     std::int64_t keepDelay=0;
-    bool keepDeferred=false,reserveDeferred=false,reserveRejected=false,reserveCohortGap=false;
+    unsigned startDefers=0,startAttempts=0;bool startReject=false;
+    bool keepDeferred=false,reserveDeferred=false,reserveRejected=false,reserveCohortGap=false,leaseAvailable=true;
     bool held=false,allowRetire=false,advanceAck=false,reserveAvailable=true,keepOkay=true;std::uint64_t sequence=100,cycle=0,intent=0,retirementEvent=0;
     std::uint64_t submittedInput=0;unsigned leaseChange=0,retirementVariant=0;std::int64_t retirementDelay=0;
     Bc2ReloadNativePolicy* selectedPolicy=nullptr;ReloadObservedConfig sourceConfig{}; // Test-only current-source dispatch gate.
@@ -25,6 +26,7 @@ struct Fixture {
     std::optional<HandClaim> gun;std::shared_ptr<SelectedMeshesSnapshot> mesh=std::make_shared<SelectedMeshesSnapshot>();
     std::optional<Bc2PhysicalReload> policy;PhysicalReloadResult result{};
     bool supportEnabled=false;SupportGrip support;SupportGripResult supported;SupportGripContact supportContact{true,.4f,{}};
+    std::int64_t supportProcessingAdvance=0;
     InputFrame SupportInput()const {InputFrame in;in.generation=s.input.sequence;in.spaceGeneration=s.input.owner.space;
         in.predictedNs=s.input.observedNs;in.focused=in.headValid=s.input.focused;
         for(unsigned h=0;h<2;++h){in.hands[h].gripTracked=in.hands[h].aimTracked=s.input.tracked[h];in.hands[h].active=Components;}
@@ -32,11 +34,13 @@ struct Fixture {
     SupportGripOwner SupportOwner()const{return {s.input.owner.actor,s.input.owner.actorGeneration,s.nativeOwner.weapon};}
     void SupportTick(){
         const auto original=s.raw.inputEvidence;const HandInteractionKey key{2,s.nativeOwner.weapon};
-        const auto returned=policy->ContinueSupport(SupportOwner(),SupportInput(),supportContact,original,key,hands,support,intent,s.cancel||result.ammoOwnsHand);
+        auto current=s.input;current.nowNs+=supportProcessingAdvance;
+        if(supportProcessingAdvance)hands.Update(current);
+        const auto returned=policy->ContinueSupport(SupportOwner(),SupportInput(),supportContact,original,key,hands,support,intent,s.cancel||result.ammoOwnsHand,current);
         supported=returned?*returned:support.Update(SupportOwner(),SupportInput(),supportContact,s.cancel,result.ammoOwnsHand);
         if(supported.holding){const auto left=hands.Current(InteractionHand::Left);
             const auto owned=left&&left->token.kind==HandClaimKind::WeaponSupport;
-            if(!owned||(!returned&&!hands.RenewFrom(s.input,original,left->token,{key,original.sequence,original.deadlineNs,true}).claim))
+    if(!owned||(!returned&&!hands.RenewFrom(current,original,left->token,{key,original.sequence,original.deadlineNs,true}).claim))
                 supported=support.Update(SupportOwner(),SupportInput(),supportContact,true);}
     }
     Fixture(bool enabled=true){
@@ -66,7 +70,7 @@ struct Fixture {
         api.keep=[](void* p,const ReloadCycleControl&)noexcept{auto& f=*static_cast<Fixture*>(p);++f.keeps;return f.keepOkay;};
         api.keepObserved=[](void* p,const ReloadCycleControl&)noexcept{auto& f=*static_cast<Fixture*>(p);++f.keeps;f.now+=f.keepDelay;return f.keepDeferred?ReloadKeepAliveResult::Deferred:f.keepOkay?ReloadKeepAliveResult::Accepted:ReloadKeepAliveResult::Rejected;};
         api.lease=[](void* p,const ReloadHoldIdentity& id,std::uint64_t cycle)noexcept->std::optional<ReloadRoundLease>{
-            auto& f=*static_cast<Fixture*>(p);if(!f.held&&!f.submitted)return {};
+            auto& f=*static_cast<Fixture*>(p);if(!f.leaseAvailable||(!f.held&&!f.submitted))return {};
             ReloadRoundLease out{id,cycle,f.sequence,f.now,f.now+100000000,f.reserve.loaded,f.reserve.reserve,f.reserve.capacity,true,f.held};
             if(f.leaseChange==1)++out.cycle;if(f.leaseChange==2)++out.identity.firing[2];if(f.leaseChange==3)out.allThreeHeld=false;return out;};
         api.submit=[](void* p,const Bc2ReloadNativeRequest& r)noexcept{auto& f=*static_cast<Fixture*>(p);++f.submits;f.submitted=r;f.submittedInput=f.s.input.sequence;f.held=false;return true;};
@@ -317,6 +321,24 @@ int GeometryRingIsBoundedAndKeepsOriginalSource(){
     CHECK(report.find("\"nearest\":{\"source_sequence\":"+std::to_string(nearSequence))!=std::string::npos);
     CHECK(report.find("\"nearest_front\":{\"source_sequence\":"+std::to_string(nearSequence))!=std::string::npos);
     CHECK(report.find("\"closest_unretained_contact_samples\":0")!=std::string::npos);return 0;
+}
+int CarriedShellLossBeforeNativeStartIsRetained(){
+ for(unsigned mode=0;mode<2;++mode){auto ptr=std::make_unique<Fixture>();auto& f=*ptr;
+  f.reserve.reloadInputReady=false;f.s.raw.inputEvidence=f.s.input;f.s.originalHandEvidence=f.s.input;f.Sync();f.Send(true);
+  const auto before=f.policy->ProbeState(f.now);CHECK(before.held&&!before.active&&f.starts==0);
+  const auto claim=f.hands.Current(InteractionHand::Left)->token;
+  if(mode==0){f.reserveCohortGap=true;f.Send(true);}else f.Send(false);
+  CHECK(!f.policy->ProbeState(f.now).held&&f.starts==0&&f.cancels==0&&f.submits==0);
+  const auto lost=f.Report();
+  CHECK(lost.find(mode==0?"\"event\":11,\"reason\":6":"\"event\":12,\"reason\":7")!=std::string::npos);
+  CHECK(lost.find("\"claim\":"+std::to_string(claim.id))!=std::string::npos);
+  if(mode==0){CHECK(lost.find("\"reason_name\":\"missing_source\"")!=std::string::npos);
+   CHECK(lost.find("\"total\":1,\"dropped\":0,\"native_cycle_cancellations\":0")!=std::string::npos);}
+  // Post-failure idle churn cannot overwrite this first item-loss evidence.
+  for(unsigned n=0;n<200;++n)f.Send(false);
+  CHECK(f.Report().find(mode==0?"\"event\":11,\"reason\":6":"\"event\":12,\"reason\":7")!=std::string::npos);
+ }
+ return 0;
 }
 int CarryDuringPumpWaitsForFreshNativeReadiness(){
     Fixture f;f.reserve.reloadInputReady=false;f.s.raw.inputEvidence=f.s.input;f.s.originalHandEvidence=f.s.input;f.Sync();f.Send(true);
@@ -940,7 +962,56 @@ int ShellSupportReturnNeverConsumesReplacementCustodyOrLostSqueeze(){
   if(replacement)CHECK(left&&left->token==replacement->token);
  }return 0;
 }
+int SettledShellSupportSurvivesSourceObservationGaps(){
+ {Fixture f;f.supportEnabled=true;f.reserve.loaded=7;CHECK(f.Insert());
+  f.Ack();f.Send(true,.05f);CHECK(f.policy->ProbeState(f.now).completed==1&&!f.supported.holding);
+  // Gameplay runs the pump coordinator after shell Tick and before support
+  // return. It advances the same arbiter's processing clock, not input time.
+  f.supportProcessingAdvance=1000000;f.supportContact.distanceMeters=.01f;
+  f.Send(true,.05f);CHECK(f.supported.holding&&f.supported.engaged);
+  CHECK(f.submits==1&&f.reserve.loaded==8&&f.reserve.reserve==7);
+ }
+ for(unsigned changed=0;changed<5;++changed){Fixture f;f.supportEnabled=true;f.reserve.loaded=7;CHECK(f.Insert());
+  f.Ack();f.Send(true,.05f);CHECK(f.policy->ProbeState(f.now).completed==1);
+  f.supportEnabled=false;f.Send(true,.05f);f.supportContact.distanceMeters=.01f;
+  auto current=f.s.input;current.nowNs+=1000;
+  if(changed==0)++current.observedNs;if(changed==1)++current.deadlineNs;
+  if(changed==2)++current.sequence;if(changed==3)current.nowNs=current.deadlineNs;if(changed==4)++current.owner.space;
+  CHECK(!f.policy->ContinueSupport(f.SupportOwner(),f.SupportInput(),f.supportContact,f.s.raw.inputEvidence,
+   {2,f.s.nativeOwner.weapon},f.hands,f.support,f.intent,false,current));
+  CHECK(!f.hands.Current(InteractionHand::Left)&&f.submits==1);
+ }
+ for(unsigned gap=0;gap<4;++gap){Fixture f;f.supportEnabled=true;f.reserve.loaded=7;CHECK(f.Insert());
+  f.Ack();f.Send(true,.05f);CHECK(f.policy->ProbeState(f.now).completed==1&&!f.supported.holding);
+  const auto gun=f.gun->token;
+  // Completion is proven; only the empty hand's return to the fore-end is
+  // pending. Temporary source/render observations cannot undo that intent.
+  if(gap==0)f.reserveRejected=true;if(gap==1)f.s.raw.valid=false;
+  if(gap==2)f.mesh->states[0].meshes[0].kind=SelectedMeshKind::Unknown;
+  if(gap==3)f.reserveDeferred=true;
+  for(unsigned n=0;n<3;++n){f.Send(true,.05f);CHECK(!f.supported.holding&&!f.result.ammoOwnsHand&&!f.result.tracking.preview);}
+  f.reserveRejected=f.reserveDeferred=false;f.s.raw.valid=true;f.mesh->states[0].meshes[0].kind=SelectedMeshKind::Spas12;
+  f.supportContact.distanceMeters=.01f;f.Send(true,.05f);
+  CHECK(f.supported.holding&&f.supported.engaged&&f.gun->token==gun);
+  CHECK(f.submits==1&&f.reserve.loaded==8&&f.reserve.reserve==7);
+  const auto report=f.Report();CHECK(report.find("\"support_return\":")!=std::string::npos);
+  CHECK(report.find("\"reason\":\"returned\"")!=std::string::npos);
+  if(gap<3)CHECK(report.find("\"adapter_reason\":6")!=std::string::npos);
+ }
+ for(unsigned reason=0;reason<3;++reason){Fixture f;f.supportEnabled=true;f.reserve.loaded=7;CHECK(f.Insert());
+  f.Ack();f.Send(true,.05f);CHECK(f.policy->ProbeState(f.now).completed==1);
+  if(reason==0){f.s.cancel=true;f.s.cancelFlags=ReloadCancelPumpDebt;f.Send(true,.05f);f.s.cancel=false;}
+  if(reason==1){f.Send(false,.05f);}
+  if(reason==2){f.hands.Release(f.s.input,f.gun->token);f.gun.reset();f.Send(true,.05f);}
+  f.supportContact.distanceMeters=.01f;f.Send(true,.05f);CHECK(!f.supported.holding);
+  CHECK(f.submits==1&&f.reserve.loaded==8&&f.reserve.reserve==7);
+  if(reason==0){const auto report=f.Report();CHECK(report.find("\"reason\":\"unsafe\"")!=std::string::npos);
+   CHECK(report.find("\"source_flags\":1024")!=std::string::npos);}
+ }
+ return 0;
+}
 int FinalShellSupportMayArriveDuringExactRetirementWait(){
+ CHECK(SettledShellSupportSurvivesSourceObservationGaps()==0);
  Fixture f;f.supportEnabled=true;f.reserve.loaded=7;CHECK(f.Insert());
  f.Ack();f.Send(true,.05f);CHECK(f.policy->ProbeState(f.now).completed==1&&!f.supported.holding);
  CHECK(f.policy->BlocksEquipment()); // Callback-drain retirement is still absent.
@@ -955,10 +1026,29 @@ int ShellSupportNeedsRecordedFreshRendererEvidence(){
   auto original=old;
   if(mutation==0)++original.observedNs;if(mutation==1)++original.deadlineNs;
   if(mutation==2)original.sequence+=10;if(mutation==3)original.released[0]=true;
-  const auto result=f.policy->ContinueSupport(f.SupportOwner(),f.SupportInput(),f.supportContact,original,{2,f.s.nativeOwner.weapon},f.hands,f.support,f.intent,false);
+  const auto result=f.policy->ContinueSupport(f.SupportOwner(),f.SupportInput(),f.supportContact,original,{2,f.s.nativeOwner.weapon},f.hands,f.support,f.intent,false,f.s.input);
   CHECK(!result&&!f.hands.Current(InteractionHand::Left));
  }return 0;
 }
-int main(){CHECK(SubmittedCohortGapOutlivesExpiredObservationWithoutAuthority()==0);CHECK(SubmittedCohortGapRetainsOriginalDeadlineAndGun()==0);CHECK(FinalShellSupportMayArriveDuringExactRetirementWait()==0);CHECK(HeldShellReturnsSupportOnlyAfterExactReceiptAndNewContact()==0);CHECK(ShellSupportReturnNeverConsumesReplacementCustodyOrLostSqueeze()==0);CHECK(ShellSupportNeedsRecordedFreshRendererEvidence()==0);CHECK(PumpIdleAllowsChestShellPulseAndActualInsertion()==0);CHECK(PumpDebtBlocksNewShellAndBodyActionsWithoutInventingNeutral()==0);CHECK(SubmittedShellReleasesHandBeforeNativeAmmoChanges()==0);CHECK(StartupGapKeepsOriginalClocks()==0);CHECK(StartupCohortGapRetainsOriginalShell()==0);CHECK(StartupCohortGapIsBounded()==0);CHECK(StartupCohortGapSafetyWins()==0);CHECK(HeldShellTypedGapCannotGrantOrRenew()==0);CHECK(SubmittedShellCohortGapRetainsOriginalEvidence()==0);CHECK(ObserverDeferralAndStartOrigin()==0);CHECK(DeferredKeepAliveNeverRenews()==0);if(ActualSelectorControlsFreshShellSourceAfterRevisits()||VehicleAndEquipmentSourceGapRequiresFreshNativeRecovery()||ScopedAliasRetirementUsesActualMapping()||ScopedAliasCannotGrantSpasSupply()||PendingRetirementUnblocksOnlyFreshDifferentEquipment()||AvailabilityDiagnosesBeforeAnyCycle()||AvailabilityRingIsBoundedAndTransitionOnly()||RetirementReceiptMustBeExactFreshAndReal()||SupplyReturnsAfterOrdinaryWeaponTransitions()||BeltReturnsBetweenActualAcknowledgedShells()||BetweenShellBeltRejectsLostHoldAndCancellation()||BeltAvailabilityComesFromActualConsumer()||FullGunCanShowReserveButCannotMintShell()||BeltRespectsNativeBusyAndSafetyWithoutNewAuthority()||BodyPouchBeltSharesTheExistingAlternateContact()||FeedbackDistinguishesLatchFromVerifiedReload()||FeedbackKeepsFinalReceiptButNotCancellation()||GuidedContinuityCannotBorrowNewDeadlines()||GuidedContinuityEndsOnFreshWithdrawalOrRejectedGeometry()||GuidedContinuityRequiresCurrentCycleClaimsAndHold()||GuidedPresentationSurvivesOneMissingGeometryTick()||CycleVisibilitySurvivesPendingAndReceiptOnlyWhileActive()||PartialReceiptRetainsHoldThroughSevenSecondsNeutral()||CancellationEvidenceDistinguishesSafetyCapacityAndPending()||CancellationEvidenceIsBoundedWithoutAffectingRetirement()||FreeCarryUsesCurrentRendererWrist()||UnderPortConsumerToAcknowledgement()||GeometryRingIsBoundedAndKeepsOriginalSource()||CarryDuringPumpWaitsForFreshNativeReadiness()||PendingReadyRejectsReleasedStaleOrChangedEvidence()||SecondShellCannotUseFirstReceipt()||AsyncContactSeatIsNotLost()||DeferredSeatCannotSpendExpiredOrReplacementEvidence()||CancellationStillDrainsAndReconciles()||StartRealCycleAndOriginalTime()||RailToNativeAck()||DefaultAndEvidenceGates()||SupportCannotBeStolen()||CancelPendingAndRebaseline()||
+int EstablishedHoldGapDoesNotRestartStartupTimeout(){
+ for(bool recover:{true,false}){
+  auto fp=std::make_unique<Fixture>();auto& f=*fp;CHECK(f.Begin());f.held=true;
+  for(unsigned n=0;n<165;++n)f.Send(true,-.07f);
+  CHECK(f.cancels==0&&f.starts==1&&f.submits==0);
+  const auto claim=f.hands.Current(InteractionHand::Left);CHECK(claim);
+  f.leaseAvailable=false;
+  // The prior genuine100ms lease expires. This is an observation gap in an
+  // established cycle, not failure to establish the initial hold within3s.
+  for(unsigned n=0;n<6;++n)f.Send(true,-.07f);
+  CHECK(f.cancels==0&&f.result.ammoOwnsHand&&f.submits==0);
+  CHECK(f.hands.Current(InteractionHand::Left)->token==claim->token);
+  CHECK(!f.result.tracking.preview||f.result.tracking.preview->phase==ReloadPreviewPhase::Carried);
+  if(recover){f.leaseAvailable=true;f.Send(true,-.07f);CHECK(f.cancels==0&&f.starts==1&&f.submits==0);}
+  else {for(unsigned n=0;n<3;++n)f.Send(true,-.07f);CHECK(f.cancels==1&&f.submits==0);}
+ }
+ return 0;
+}
+#include "Bc2ShellStartDeferralChecks.inc"
+int main(){CHECK(ShellStartBusyRetainsCustodyWithoutPulse()==0);CHECK(ShellStartAdmissionWaitRetainsLiveCustody()==0);CHECK(ShellStartRejectionAndReleaseStillCancel()==0);CHECK(CarriedShellLossBeforeNativeStartIsRetained()==0);CHECK(EstablishedHoldGapDoesNotRestartStartupTimeout()==0);CHECK(SubmittedCohortGapOutlivesExpiredObservationWithoutAuthority()==0);CHECK(SubmittedCohortGapRetainsOriginalDeadlineAndGun()==0);CHECK(FinalShellSupportMayArriveDuringExactRetirementWait()==0);CHECK(HeldShellReturnsSupportOnlyAfterExactReceiptAndNewContact()==0);CHECK(ShellSupportReturnNeverConsumesReplacementCustodyOrLostSqueeze()==0);CHECK(ShellSupportNeedsRecordedFreshRendererEvidence()==0);CHECK(PumpIdleAllowsChestShellPulseAndActualInsertion()==0);CHECK(PumpDebtBlocksNewShellAndBodyActionsWithoutInventingNeutral()==0);CHECK(SubmittedShellReleasesHandBeforeNativeAmmoChanges()==0);CHECK(StartupGapKeepsOriginalClocks()==0);CHECK(StartupCohortGapRetainsOriginalShell()==0);CHECK(StartupCohortGapIsBounded()==0);CHECK(StartupCohortGapSafetyWins()==0);CHECK(HeldShellTypedGapCannotGrantOrRenew()==0);CHECK(SubmittedShellCohortGapRetainsOriginalEvidence()==0);CHECK(ObserverDeferralAndStartOrigin()==0);CHECK(DeferredKeepAliveNeverRenews()==0);if(ActualSelectorControlsFreshShellSourceAfterRevisits()||VehicleAndEquipmentSourceGapRequiresFreshNativeRecovery()||ScopedAliasRetirementUsesActualMapping()||ScopedAliasCannotGrantSpasSupply()||PendingRetirementUnblocksOnlyFreshDifferentEquipment()||AvailabilityDiagnosesBeforeAnyCycle()||AvailabilityRingIsBoundedAndTransitionOnly()||RetirementReceiptMustBeExactFreshAndReal()||SupplyReturnsAfterOrdinaryWeaponTransitions()||BeltReturnsBetweenActualAcknowledgedShells()||BetweenShellBeltRejectsLostHoldAndCancellation()||BeltAvailabilityComesFromActualConsumer()||FullGunCanShowReserveButCannotMintShell()||BeltRespectsNativeBusyAndSafetyWithoutNewAuthority()||BodyPouchBeltSharesTheExistingAlternateContact()||FeedbackDistinguishesLatchFromVerifiedReload()||FeedbackKeepsFinalReceiptButNotCancellation()||GuidedContinuityCannotBorrowNewDeadlines()||GuidedContinuityEndsOnFreshWithdrawalOrRejectedGeometry()||GuidedContinuityRequiresCurrentCycleClaimsAndHold()||GuidedPresentationSurvivesOneMissingGeometryTick()||CycleVisibilitySurvivesPendingAndReceiptOnlyWhileActive()||PartialReceiptRetainsHoldThroughSevenSecondsNeutral()||CancellationEvidenceDistinguishesSafetyCapacityAndPending()||CancellationEvidenceIsBoundedWithoutAffectingRetirement()||FreeCarryUsesCurrentRendererWrist()||UnderPortConsumerToAcknowledgement()||GeometryRingIsBoundedAndKeepsOriginalSource()||CarryDuringPumpWaitsForFreshNativeReadiness()||PendingReadyRejectsReleasedStaleOrChangedEvidence()||SecondShellCannotUseFirstReceipt()||AsyncContactSeatIsNotLost()||DeferredSeatCannotSpendExpiredOrReplacementEvidence()||CancellationStillDrainsAndReconciles()||StartRealCycleAndOriginalTime()||RailToNativeAck()||DefaultAndEvidenceGates()||SupportCannotBeStolen()||CancelPendingAndRebaseline()||
     ReplacementSurvivesOriginalAck()||DeathNewOwnerAndLateOldAck()||ExpiredSourceAndStaleGeometry()||FullFinalRoundAndFlagBoundary())return 1;
-    std::cout<<"Bc2PhysicalReload: 53 actual-composition cases passed (test runtime only; no headset claim)\n";}
+    std::cout<<"Bc2PhysicalReload: 56 actual-composition cases passed (test runtime only; no headset claim)\n";}

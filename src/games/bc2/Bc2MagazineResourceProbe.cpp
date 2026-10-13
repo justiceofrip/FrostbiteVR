@@ -39,6 +39,20 @@ void Bc2MagazineResourceProbe::Begin(const AmmoResourceView& v,std::int64_t now)
     seatHandReleased_=supportReleased_=discarded_=false;roleStarts_={};baseline_=packs_;
     Move(Phase::ApproachMagazine,now);
 }
+bool Bc2MagazineResourceProbe::IdleCancellation(const MagazineResourceProbeState& s,std::int64_t now)const noexcept {
+    // No interaction has begun while the controller is approaching. An idle
+    // consumer can rearm after a native input/publication interruption. Wait
+    // for that ordinary rearm; never restore the consumer from the diagnostic.
+    if(phase_!=Phase::ApproachMagazine||removal_||seat_||seatRequest_||!lastInput_||
+       lastInput_->hands[0].squeeze>.35f||s.result.ownsLeftHand||s.result.blocksWeaponActions||
+       s.result.interaction.removalClaim||s.result.interaction.transaction.request||!s.resource)return false;
+    const auto& v=*s.resource;
+    return AmmoResourceViewFresh(v,now)&&v.identity==nativeIdentity_&&v.binding.owner==owner_&&
+        v.binding.context==context_&&v.request==requestBaseline_&&v.phase==AmmunitionLedgerPhase::Ready&&
+        !v.wellEmpty&&v.originalState!=MagazineResourceState::Held&&v.snapshot.counts==before_&&
+        s.result.interaction.phase==DetachableMagazinePhase::Cancelled&&
+        s.result.interaction.reason==DetachableMagazineReason::Explicit;
+}
 bool Bc2MagazineResourceProbe::Receipt(const AmmoResourceView& v,const AmmunitionReceipt& r,std::int64_t now)const noexcept {
     const auto& c=r.command;
     return v.request>requestBaseline_&&v.requestState==AmmoResourceRequestState::Completed&&
@@ -55,11 +69,25 @@ void Bc2MagazineResourceProbe::Prepare(InputFrame& in,const ReloadStateOwner& ow
     // The ordinary consumer already resolved the exact native configuration.
     // Asset-name lookup intentionally rejects same-name configuration variants.
     const auto published=state.result.tracking.family.binding.profile;
+    const bool idleCancelled=IdleCancellation(state,now);
     const auto selected=published&&published==FindMagazineEquipment(published->nativeId)&&
         published->Ready()&&published->geometry->asset==asset?published:nullptr;
-    if((armed_&&(owner!=owner_||!selected||!selected->Ready()||profile_!=selected))||in.spaceGeneration!=owner.space||!ValidInput(in)||
-        !in.focused||!in.headValid||!Static(in)||!in.hands[0].gripTracked||!in.hands[1].gripTracked||!in.hands[1].aimTracked||
-        observed<=0||observed>now||deadline<=now||deadline-observed>100000000)Fail(2,now);
+    const unsigned faults=(armed_&&owner!=owner_?OwnerChanged:0u)|
+        (armed_&&!selected&&!(idleCancelled&&!published)?ProfileMissing:0u)|
+        (armed_&&profile_!=selected&&!(idleCancelled&&!published)?ProfileChanged:0u)|
+        (in.spaceGeneration!=owner.space?SpaceMismatch:0u)|(!ValidInput(in)?InvalidFrame:0u)|
+        (!in.focused?Unfocused:0u)|(!in.headValid?InvalidHead:0u)|(!Static(in)?MovingHead:0u)|
+        (!in.hands[0].gripTracked?LeftGripLost:0u)|(!in.hands[1].gripTracked?RightGripLost:0u)|
+        (!in.hands[1].aimTracked?RightAimLost:0u)|(observed<=0?InvalidObservation:0u)|
+        (observed>now?FutureObservation:0u)|(deadline<=now?ExpiredInput:0u)|
+        (deadline-observed>100000000?LongLease:0u);
+    if(faults&&!CancelConsumer()){
+        guardFailure_=GuardFailure{faults,phase_,armed_,owner_,owner,in.generation,
+            lastInput_?lastInput_->generation:0,in.spaceGeneration,observed,deadline,now,
+            reinterpret_cast<std::uintptr_t>(published),reinterpret_cast<std::uintptr_t>(selected),
+            reinterpret_cast<std::uintptr_t>(profile_)};
+        Fail(2,now);
+    }
     if(lastInput_&&in.generation<=lastInput_->generation){
         if(in.generation<lastInput_->generation)Fail(3,now);
         in.hands[0].grip=lastInput_->hands[0].grip;in.hands[0].aim=lastInput_->hands[0].aim;
@@ -76,16 +104,23 @@ void Bc2MagazineResourceProbe::Prepare(InputFrame& in,const ReloadStateOwner& ow
         armed_=true;armedAt_=now;owner_=owner;profile_=selected;
     }
     if(phase_!=Phase::Warmup&&!CancelConsumer()){
-        if(state.result.interaction.phase==DetachableMagazinePhase::Cancelled)Fail(4,now);
+        if(state.result.interaction.phase==DetachableMagazinePhase::Cancelled&&!idleCancelled)Fail(4,now);
         if(!fresh){if(!gapAt_)gapAt_=now;if(now-gapAt_>=100000000)Fail(5,now);}else gapAt_=0;
         if(fresh&&state.resource->binding.context!=context_)Fail(6,now);
     }
+    if(idleCancelled&&!CancelConsumer()){
+        if(!idleRecoveryAt_){idleRecoveryAt_=now;++idleRecoveries_;}
+        if(now-idleRecoveryAt_>=300000000)Fail(4,now);
+        in.hands[0].grip=in.hands[0].aim=command_;in.hands[0].squeeze=0;
+        lastInput_=in;history_[next_]=Input{in,owner,observed,deadline};next_=(next_+1)%history_.size();return;
+    }
+    idleRecoveryAt_=0;
     const Input* source=nullptr;
     if(profile_&&raw.valid&&raw.owner==owner&&raw.rigFingerprint==profile_->geometry->rigFingerprint)
         for(const auto& h:history_)if(h&&h->owner==owner&&h->frame.generation==raw.inputEvidence.sequence&&h->observed==raw.inputEvidence.observedNs&&
             h->deadline==raw.inputEvidence.deadlineNs&&h->deadline>now){source=&*h;break;}
     const bool newRaw=source&&raw.inputEvidence.sequence>lastRaw_;
-    if(armed_&&phase_==Phase::Warmup&&now-armedAt_>=6000000000ll){
+    if(armed_&&phase_==Phase::Warmup&&now-armedAt_>=warmupNs_){
         if(fresh&&newRaw&&state.resource->phase==AmmunitionLedgerPhase::Ready&&!state.resource->wellEmpty&&
             state.result.interaction.phase==DetachableMagazinePhase::Attached&&!state.result.ownsLeftHand&&!state.result.blocksWeaponActions&&
             (originalReturn_||state.resource->snapshot.counts.reserve>0)){
@@ -103,7 +138,7 @@ void Bc2MagazineResourceProbe::Prepare(InputFrame& in,const ReloadStateOwner& ow
         if(phase_==Phase::Enter){along=outside;solve=true;}
         if(phase_==Phase::Stroke){along=outside+(p.travelMeters-outside)*std::clamp(float(now-phaseAt_)/1200000000.f,0.f,1.f);solve=true;}
         if(solve&&newRaw){
-            const auto desired=Multiply(p.itemFromHand,Multiply(*InverseRigid(p.itemFromInsertion),Multiply(TravelPose(p,along),Multiply(p.weaponFromEntry,raw.weaponWorldMeters))));
+            const auto desired=InsertionHandWorld(p,along,raw.weaponWorldMeters);
             const auto control=PhysicalReloadProbeController(raw,source->frame,desired);
             if(!control)Fail(8,now);
             else {
@@ -143,10 +178,13 @@ void Bc2MagazineResourceProbe::Observe(const MagazineResourceProbeState& state,c
     if(!enabled_||CancelConsumer())return;
     if(packs.copies<packs_.copies||packs.pairs<packs_.pairs||packs.fallbacks<packs_.fallbacks){Fail(10,now);return;}
     for(unsigned n=0;n<4;++n)if(packs.roleCopies[n]<packs_.roleCopies[n]||packs.rolePairs[n]<packs_.rolePairs[n]){Fail(10,now);return;}
+    const auto newFallbacks=packs.fallbacks-packs_.fallbacks;
     packs_=packs;if(phase_==Phase::Warmup)return;
-    if(packs.fallbacks>baseline_.fallbacks){Fail(11,now);return;}
+    if(newFallbacks){presentationFallbacks_+=newFallbacks;if(!firstPresentationFallbackNs_)firstPresentationFallbackNs_=now;}
     const auto& out=state.result;
-    if(out.interaction.phase==DetachableMagazinePhase::Cancelled){Fail(4,now);return;}
+    if(out.interaction.phase==DetachableMagazinePhase::Cancelled){
+        if(!IdleCancellation(state,now))Fail(4,now);return;
+    }
     if(!state.resource||!AmmoResourceViewFresh(*state.resource,now))return;
     const auto& v=*state.resource;
     if(v.binding.owner!=owner_||v.binding.context!=context_){Fail(6,now);return;}
@@ -196,10 +234,41 @@ void Bc2MagazineResourceProbe::Observe(const MagazineResourceProbeState& state,c
         else Move(Phase::Done,now);
     }
 }
+std::optional<AmmoResourceView> Bc2MagazineResourceProbe::DetachedOriginal(
+    const MagazineResourceProbeState& state,std::int64_t now)const noexcept {
+    if(!enabled_||!armed_||CancelConsumer()||!removal_||!original_||!removedPair_||seatRequest_||
+       !state.resource||!AmmoResourceViewFresh(*state.resource,now)||
+       state.result.interaction.phase!=DetachableMagazinePhase::RemovedHeld||!state.result.ownsLeftHand)return {};
+    const auto& v=*state.resource;
+    if(v.identity!=nativeIdentity_||v.binding.owner!=owner_||v.binding.context!=context_||
+       !v.receipt||*v.receipt!=*removal_||!Receipt(v,*removal_,now)||v.original!=original_||
+       v.originalState!=MagazineResourceState::Held||!v.wellEmpty||
+       v.snapshot.counts!=AmmunitionCounts{0,before_.reserve,before_.capacity})return {};
+    return v;
+}
 void Bc2MagazineResourceProbe::Report(std::ostream& out)const {
     out<<"{\"enabled\":"<<(enabled_?"true":"false")<<",\"synthetic_input\":true,\"resource_backend\":true,\"headset_verified\":false,\"eye_textures_verified\":false"
        <<",\"phase\":"<<unsigned(phase_)<<",\"failure\":"<<failure_<<",\"actual_consumer_completed\":"<<(Completed()?"true":"false")
-       <<",\"armed\":"<<armed_<<",\"armed_ns\":"<<armedAt_
+       <<",\"presentation_continuity_verified\":"<<(PresentationContinuityVerified()?"true":"false")
+       <<",\"presentation_fallbacks_during_interaction\":"<<presentationFallbacks_
+       <<",\"first_presentation_fallback_ns\":"<<firstPresentationFallbackNs_
+       <<",\"idle_recoveries\":"<<idleRecoveries_
+       <<",\"armed\":"<<armed_<<",\"armed_ns\":"<<armedAt_<<",\"warmup_ns\":"<<warmupNs_;
+    out<<",\"first_guard_failure\":";
+    if(!guardFailure_)out<<"null";
+    else {
+        const auto& f=*guardFailure_;
+        out<<"{\"faults\":"<<f.faults<<",\"phase\":"<<unsigned(f.phase)<<",\"armed\":"<<f.armed
+           <<",\"input\":"<<f.sequence<<",\"previous_input\":"<<f.previousSequence<<",\"space\":"<<f.space
+           <<",\"observed_ns\":"<<f.observed<<",\"deadline_ns\":"<<f.deadline<<",\"now_ns\":"<<f.now
+           <<",\"published_profile\":"<<f.publishedProfile<<",\"selected_profile\":"<<f.selectedProfile
+           <<",\"expected_profile\":"<<f.expectedProfile;
+        const auto owner=[&](const char* name,const ReloadStateOwner& o){
+            out<<",\""<<name<<"\":{\"player\":"<<o.player<<",\"soldier\":"<<o.soldier<<",\"weak\":"<<o.weak
+               <<",\"weapon\":"<<o.weapon<<",\"actor\":"<<o.actorGeneration<<",\"equip\":"<<o.equipGeneration<<",\"space\":"<<o.space<<'}';};
+        owner("expected_owner",f.expected);owner("actual_owner",f.actual);out<<'}';
+    }
+    out
        <<",\"chest_supply\":"<<(chest_?"true":"false")<<",\"profile\":"<<(profile_?profile_->geometry->interaction.insertion.id:0)
        <<",\"native_remove_receipt\":"<<bool(removal_)<<",\"native_seat_receipt\":"<<bool(seat_)<<",\"discarded\":"<<discarded_
        <<",\"seat_hand_released\":"<<seatHandReleased_<<",\"support_released\":"<<supportReleased_

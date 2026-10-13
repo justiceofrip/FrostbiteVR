@@ -14,7 +14,7 @@ struct Fixture {
     bc2::MenuBindingCandidates binding{0x1000,0x2000,0x2100,0x100,0x104,0x108,0x10c,1280,720};
     std::unordered_map<std::uint32_t,std::uint32_t> words;
     unsigned reads=0,cursorCalls=0,eventCalls=0;bool failCursor=false,failEvent=false,changeOnCursor=false,fillOnCursor=false,unstable=false;
-    std::array<std::uint32_t,3> event{};std::int32_t x=0,y=0;
+    std::array<std::uint32_t,3> event{};std::int32_t x=0,y=0,eventX=0,eventY=0;
     Fixture(){words={{base+0x100,manager},{base+0x104,1},{base+0x108,0},{manager+0x14,ui},{ui+4,target},{target+0x18,queue},{queue+8,8},{queue+0x28,0},{queue+0x2c,buffer},{buffer,0},{buffer+28,0}};}
     bc2::MenuMemory Memory(){return {this,[](void* ctx,std::uint32_t at,void* out,std::size_t n){
         auto& f=*static_cast<Fixture*>(ctx);if(n!=4)return false;
@@ -27,7 +27,7 @@ struct Fixture {
             if(f.changeOnCursor)f.words[ui+4]=target+4;if(f.fillOnCursor)f.words[queue+0x28]=8;
             return !f.failCursor;},
         [](void* ctx,std::uint32_t fn,std::uint32_t self,const std::array<std::uint32_t,3>& event){auto& f=*static_cast<Fixture*>(ctx);
-            ++f.eventCalls;f.event=event;return fn==base+f.binding.sendEvent&&self==manager&&!f.failEvent;}};}
+            ++f.eventCalls;f.event=event;f.eventX=f.x;f.eventY=f.y;return fn==base+f.binding.sendEvent&&self==manager&&!f.failEvent;}};}
 };
 int TargetAndBounds(){
     Fixture f;const auto original=f.words;const auto target=bc2::ReadMenuTarget(f.Memory(),f.binding,f.base);
@@ -111,6 +111,79 @@ int OwnedRelease(){
     CHECK(f.eventCalls==releasedEvents);
     return 0;
 }
+int TrackedReleaseAfterDesktopMove(){
+    using enum bc2::MenuDispatchResult;
+    Fixture f;const auto target=*bc2::ReadMenuTarget(f.Memory(),f.binding,f.base);
+    const bc2::MenuDispatchGuard live{2,900,true,true,true,true};
+    const auto down=*bc2::MakeMenuPointerCommand(f.binding,.6f,.2f,bc2::MenuPointerKind::PrimaryDown,1,2,1000);
+    CHECK(bc2::DispatchMenuPointer(f.Memory(),f.binding,f.base,target,down,live,f.Calls(),f.owned)==Invoked);
+    // An ordinary desktop mouse pump occurs between tracked down and up.
+    f.x=1200;f.y=650;
+    const auto up=*bc2::MakeMenuPointerCommand(f.binding,.55f,.22f,bc2::MenuPointerKind::PrimaryUp,2,2,1000);
+    CHECK(bc2::DispatchMenuPointer(f.Memory(),f.binding,f.base,target,up,live,f.Calls(),f.owned)==Invoked);
+    CHECK(!f.owned.Active()&&f.event[1]==1&&f.eventX==up.x&&f.eventY==up.y);
+    CHECK(f.cursorCalls==2&&f.eventCalls==2);
+    // Expired input cannot relocate the pointer or produce a click. Cleanup
+    // can still balance an already-owned down, without stale cursor authority.
+    CHECK(bc2::DispatchMenuPointer(f.Memory(),f.binding,f.base,target,down,live,f.Calls(),f.owned)==Invoked);
+    f.x=100;f.y=100;auto expired=live;expired.nowNs=1000;
+    const auto cursors=f.cursorCalls,events=f.eventCalls;
+    CHECK(bc2::DispatchMenuPointer(f.Memory(),f.binding,f.base,target,up,expired,f.Calls(),f.owned)==Rejected);
+    CHECK(f.owned.Active()&&f.cursorCalls==cursors&&f.eventCalls==events);
+    CHECK(bc2::ReleaseMenuPointer(f.Memory(),f.binding,f.base,target,2,expired,f.Calls(),f.owned)==Invoked);
+    CHECK(!f.owned.Active()&&f.cursorCalls==cursors&&f.eventX==100&&f.eventY==100);
+    return 0;
+}
+int LeaseLifetime(){
+    using enum bc2::MenuDispatchResult;
+    for(unsigned scenario=0;scenario<9;++scenario){
+        Fixture f;const auto original=*bc2::ReadMenuTarget(f.Memory(),f.binding,f.base);
+        const bc2::MenuDispatchGuard guard{2,900,true,true,true,true};
+        const auto down=*bc2::MakeMenuPointerCommand(f.binding,.5f,.25f,bc2::MenuPointerKind::PrimaryDown,1,2,1000);
+        CHECK(bc2::DispatchMenuPointer(f.Memory(),f.binding,f.base,original,down,guard,f.Calls(),f.owned)==Invoked);
+        if(scenario==0){ // Native queue growth does not create a new APT owner.
+            f.words[f.queue+8]=16;f.words[f.queue+0x2c]=0x40000;
+            f.words[0x40000]=0;f.words[0x40000+60]=0;
+        }
+        if(scenario==1){
+            f.words[f.target+0x18]=0x41000;
+            f.words[0x41008]=8;f.words[0x41028]=0;f.words[0x4102c]=f.buffer;
+        }
+        if(scenario>=2){f.words[f.ui+4]=0x42000;f.words[0x42018]=f.queue;}
+        if(scenario==3)f.words[f.base+f.binding.inputBlocked]=1;
+        if(scenario==4)f.unstable=true;
+        if(scenario==5)f.words.erase(f.buffer+28);
+        if(scenario==6)f.words[f.base+f.binding.inputEnabled]=0;
+        if(scenario==7){f.words[f.manager+0x14]=0x43000;f.words[0x43004]=f.target;}
+        if(scenario==8){f.words[f.base+f.binding.managerGlobal]=0x44000;f.words[0x44014]=f.ui;}
+        const auto before=f.words;const auto events=f.eventCalls,cursors=f.cursorCalls;
+        auto rejected=guard;rejected.nativeUiThread=false;
+        CHECK(bc2::ReleaseMenuPointer(f.Memory(),f.binding,f.base,original,2,rejected,f.Calls(),f.owned)==Rejected);
+        CHECK(f.owned.Active()&&f.eventCalls==events);
+        const auto result=bc2::ReleaseMenuPointer(f.Memory(),f.binding,f.base,original,2,guard,f.Calls(),f.owned);
+        const bool replaced=scenario==2||scenario==7||scenario==8;
+        CHECK(result==(scenario<2?Invoked:replaced?Retired:TargetChanged));
+        CHECK(f.owned.Active()==(scenario>=3&&scenario<=6));
+        CHECK(f.eventCalls==events+(scenario<2?1:0)&&f.cursorCalls==cursors&&f.words==before);
+        if(replaced){ // Even address reuse cannot resurrect the consumed lease.
+            Fixture restored;f.words=restored.words;
+            CHECK(bc2::ReleaseMenuPointer(f.Memory(),f.binding,f.base,original,2,guard,f.Calls(),f.owned)==Rejected);
+            CHECK(f.eventCalls==events);
+        }
+    }
+    // A tracked controller up must also survive queue growth, and still place
+    // the cursor at the current VR position before invoking that up.
+    Fixture f;const auto old=*bc2::ReadMenuTarget(f.Memory(),f.binding,f.base);
+    const bc2::MenuDispatchGuard guard{2,900,true,true,true,true};
+    auto command=*bc2::MakeMenuPointerCommand(f.binding,.4f,.6f,bc2::MenuPointerKind::PrimaryDown,1,2,1000);
+    CHECK(bc2::DispatchMenuPointer(f.Memory(),f.binding,f.base,old,command,guard,f.Calls(),f.owned)==Invoked);
+    f.words[f.queue+8]=16;f.words[f.buffer+60]=0;
+    const auto current=*bc2::ReadMenuTarget(f.Memory(),f.binding,f.base);
+    command.kind=bc2::MenuPointerKind::PrimaryUp;command.x=701;
+    CHECK(bc2::DispatchMenuPointer(f.Memory(),f.binding,f.base,current,command,guard,f.Calls(),f.owned)==Invoked);
+    CHECK(!f.owned.Active()&&f.eventX==701&&f.eventCalls==2);
+    return 0;
+}
 int ExactPumpBoundary(){
     Fixture f;f.binding.mousePumpCaller=0x1000;f.binding.mousePumpReturn=0x11ab;f.binding.inputNodeGlobal=0x110;
     constexpr std::uint32_t controller=0x60000,input=0x70000;
@@ -164,7 +237,7 @@ int StaticEvidence(const char* path){
 }
 }
 int main(int argc,char** argv){
-    CHECK(TargetAndBounds()==0);CHECK(CoordinatesAndDispatch()==0);CHECK(OwnedRelease()==0);CHECK(ExactPumpBoundary()==0);
+    CHECK(TargetAndBounds()==0);CHECK(CoordinatesAndDispatch()==0);CHECK(OwnedRelease()==0);CHECK(TrackedReleaseAfterDesktopMove()==0);CHECK(LeaseLifetime()==0);CHECK(ExactPumpBoundary()==0);
     if(argc>1)CHECK(StaticEvidence(argv[1])==0);
     return 0;
 }

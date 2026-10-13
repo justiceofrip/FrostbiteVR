@@ -89,7 +89,7 @@ void Bc2MagazinePhysicalProbe::Prepare(InputFrame& in,const ReloadStateOwner& ow
  if(phase_==Phase::WaitAck){along=.1f;solve=true;}
  if(solve&&newRaw&&!CancelConsumer()){
   const auto p=Xm8MagazineConfig().insertion;
-  const auto desired=Multiply(p.itemFromHand,Multiply(*InverseRigid(p.itemFromInsertion),Multiply(TravelPose(p,along),Multiply(p.weaponFromEntry,raw.weaponWorldMeters))));
+  const auto desired=InsertionHandWorld(p,along,raw.weaponWorldMeters);
   if(const auto control=PhysicalReloadProbeController(raw,original->frame,desired)){
    command_=Step(command_,*control);lastRaw_=raw.inputEvidence.sequence;
    const float position=Distance(raw.rawLeftWristWorldMeters,desired),angle=Angle(raw.rawLeftWristWorldMeters,desired);

@@ -97,17 +97,23 @@ int TerminalOutcomesSurviveSelection(){
 }
 int ReadReasonsPreserveAdmission(){
     Fixture f;CHECK(f.Select());const auto good=*f.service.View();
-    CHECK(!f.channel.Read(f.identity.owner,f.now));CHECK(f.channel.Publish(good));
-    CHECK(f.channel.Read(f.identity.owner,f.now));
+    const auto missing=f.channel.ReadObserved(f.identity.owner,f.now);
+    CHECK(missing.reason==AmmoResourceReadReason::NoView&&missing.Deferred());CHECK(f.channel.Publish(good));
+    const auto available=f.channel.ReadObserved(f.identity.owner,f.now);
+    CHECK(available.reason==AmmoResourceReadReason::Available&&available.view&&!available.Deferred());
     auto future=good;future.snapshot.observedNs=f.now+1;CHECK(f.channel.Publish(future));
     // Reproduce a newer publication seen against saved Gather time. Merely
     // recording actual processing time must NOT silently admit that view.
-    CHECK(!f.channel.Read(f.identity.owner,f.now,f.now+2));
+    const auto ahead=f.channel.ReadObserved(f.identity.owner,f.now,f.now+2);
+    CHECK(ahead.reason==AmmoResourceReadReason::Future&&ahead.Deferred());
     CHECK(f.channel.Read(f.identity.owner,f.now+2));
-    CHECK(!f.channel.Read(f.identity.owner,f.now+100*Ms));
-    auto wrong=f.identity.owner;++wrong.equipGeneration;CHECK(!f.channel.Read(wrong,f.now+2));
+    const auto expired=f.channel.ReadObserved(f.identity.owner,f.now+100*Ms);
+    CHECK(expired.reason==AmmoResourceReadReason::Expired&&expired.Deferred());
+    auto wrong=f.identity.owner;++wrong.equipGeneration;const auto changed=f.channel.ReadObserved(wrong,f.now+2);
+    CHECK(changed.reason==AmmoResourceReadReason::Owner&&!changed.view&&!changed.Deferred());
     auto invalid=good;invalid.snapshot.counts.loaded=31;CHECK(f.channel.Publish(invalid));
-    CHECK(!f.channel.Read(f.identity.owner,f.now));
+    const auto malformed=f.channel.ReadObserved(f.identity.owner,f.now);
+    CHECK(malformed.reason==AmmoResourceReadReason::Invalid&&!malformed.view&&!malformed.Deferred());
     std::ostringstream out;f.channel.ReportReadEvidence(out,true);const auto text=out.str();
     CHECK(text.find("\"counts\":[2,0,1,0,1,1,1,1]")!=std::string::npos);
     CHECK(text.find("\"requested_now_ns\":1000000000,\"processing_now_ns\":1000000002")!=std::string::npos);
@@ -160,6 +166,124 @@ int FailedOperationEvidenceSurvivesShutdownTail(){
         CHECK(live.str().find("first_operation_failure")==std::string::npos&&live.str().find("first_by_reason")==std::string::npos);
     }return 0;
 }
+int RejectedAdmissionCapturesExactCause(){
+    using Reason=AmmoResourceRejectionReason;
+    for(unsigned bad=0;bad<9;++bad){
+        Fixture f;if(bad!=0)CHECK(f.Select());auto r=f.Request(AmmunitionOperation::RemoveMagazine);
+        Reason expected=Reason::NoView;
+        switch(bad){
+            case 1:f.now=f.sample.deadlineNs;expected=Reason::ViewTime;break;
+            case 2:r.binding.deadlineNs=f.now;expected=Reason::SourceBindingTime;break;
+            case 3:r.binding.inventory=0;expected=Reason::SourceBindingInvalid;break;
+            case 4:r.binding.inventory++;expected=Reason::ContextBindingMismatch;break;
+            case 5:r.intent.deadlineNs=f.now;expected=Reason::IntentTime;break;
+            case 6:r.intent.original=RemovedMagazineResource{};expected=Reason::LedgerSubmit;break;
+            case 7:r.discard=true;expected=Reason::Discard;break;
+            case 8:f.identity.firing[2]=1;CHECK(f.Select());r=f.Request(AmmunitionOperation::RemoveMagazine);expected=Reason::CompletionBegin;break;
+        }
+        CHECK(!f.service.Accept(r,f.now));const auto first=f.service.FirstRejection();CHECK(first);
+        CHECK(first->reason==expected&&first->request==r&&first->processingNowNs==f.now);
+        CHECK(!first->activeCommand&&!first->adjacentSnapshot&&!first->nativeDispatched);
+        CHECK(bool(first->currentBinding)==(bad!=0)&&bool(first->currentSnapshot)==(bad!=0));
+        CHECK(!f.service.Active()&&f.service.Outcome()->state==AmmoResourceRequestState::Rejected);
+        if(bad!=0){CHECK(first->currentBinding==f.binding);CHECK(first->currentSnapshot->counts==f.sample.counts);}
+        CHECK(std::string(AmmoResourceRejectionName(expected))!="unknown");
+        CHECK(!f.service.Accept(r,f.now)); // Duplicate cannot replace the first row.
+        auto later=r;++later.intent.id;later.intent.deadlineNs=f.now;
+        CHECK(!f.service.Accept(later,f.now));
+        CHECK(f.service.FirstRejection()->request==first->request&&f.service.FirstRejection()->reason==first->reason);
+    }
+    return 0;
 }
-int main(){if(Transactions()||Rejections()||CancelAndNoAutomaticRetry()||ChannelConcurrency()||TerminalOutcomesSurviveSelection()||ReadReasonsPreserveAdmission()||ReadJournalBoundAndDrain()||ConcurrentViewReadStillCoherent()||FailedOperationEvidenceSurvivesShutdownTail())return 1;
+int CapturedSeatDeadlineSeparatesNativeViewAndSubmittedSource(){
+    using Reason=AmmoResourceRejectionReason;
+    constexpr std::int64_t publication=90593482746000,seat=90593549920800,admission=90593617173700;
+    for(bool currentRefreshed:{false,true}){
+        Fixture f;f.now=publication-Ms;CHECK(f.Run(AmmunitionOperation::RemoveMagazine)==0);
+        CHECK(!f.service.FirstRejection());f.now=seat;
+        auto r=f.Request(AmmunitionOperation::ReturnMagazine);r.intent.deadlineNs=f.binding.deadlineNs;
+        CHECK(r.binding.observedNs==publication&&r.intent.deadlineNs-seat==32825200);
+        f.now=admission;if(currentRefreshed)CHECK(f.Select());
+        CHECK(!f.service.Accept(r,admission));const auto first=f.service.FirstRejection();CHECK(first);
+        CHECK(first->reason==(currentRefreshed?Reason::SourceBindingTime:Reason::ViewTime));
+        CHECK(first->processingNowNs==admission&&first->request==r);
+        CHECK(first->request.intent.observedNs==seat&&first->request.binding.deadlineNs==90593582746000);
+        CHECK(first->currentSnapshot->observedNs==(currentRefreshed?admission:publication));
+        CHECK((first->currentSnapshot->counts==AmmunitionCounts{0,191,30}));
+        CHECK(f.service.View()->wellEmpty&&f.service.View()->original->rounds==22&&!f.service.Active());
+        f.now+=500*Ms;CHECK(f.Select());auto later=f.Request(AmmunitionOperation::ReturnMagazine);
+        later.intent.deadlineNs=f.now;CHECK(!f.service.Accept(later,f.now));
+        CHECK(f.service.FirstRejection()->request==r&&f.service.FirstRejection()->processingNowNs==admission);
+    }
+    return 0;
+}
+int DispatchAndExpiryDiagnosticsDoNotChangeOutcomes(){
+    using Reason=AmmoResourceRejectionReason;
+    for(unsigned action=0;action<3;++action){
+        Fixture f;CHECK(f.Select());const auto r=f.Request(AmmunitionOperation::RemoveMagazine);
+        const auto command=f.service.Accept(r,f.now);CHECK(command&&!f.service.FirstRejection());
+        if(action==0){auto adjacent=f.sample;adjacent.counts.loaded--;
+            CHECK(!f.service.Dispatch(adjacent,f.now));
+            CHECK(f.service.FirstRejection()->reason==Reason::Dispatch);
+            CHECK(f.service.FirstRejection()->adjacentSnapshot->counts==adjacent.counts);
+        }else{
+            if(action==2)CHECK(f.service.Dispatch(f.sample,f.now));
+            f.now=action==1?command->admissionDeadlineNs:command->deadlineNs;f.service.Expire(f.now);
+            CHECK(f.service.FirstRejection()->reason==(action==1?Reason::QueuedExpired:Reason::DispatchedExpired));
+        }
+        const auto first=f.service.FirstRejection();CHECK(first->request==r&&first->activeCommand==command);
+        CHECK(first->nativeDispatched==(action==2)&&first->processingNowNs==f.now);
+        CHECK(first->currentSnapshot->counts==f.sample.counts);
+        if(action<2){CHECK(!f.service.Active()&&f.service.Outcome()->state==AmmoResourceRequestState::Rejected);}
+        else {CHECK(f.service.Active()&&!f.service.Outcome()&&f.service.View()->requestState==AmmoResourceRequestState::Uncertain);}
+        f.service.Cancel(f.now+Ms);CHECK(f.service.FirstRejection()->processingNowNs==first->processingNowNs);
+    }
+    return 0;
+}
+int ConstructionProofCannotRenewInputOrBorrowCurrentAuthority(){
+    for(unsigned bad=0;bad<21;++bad){
+        Fixture f;CHECK(f.Select());const auto oldBinding=f.binding;const auto oldSample=f.sample;
+        f.now+=67*Ms;auto r=f.Request(AmmunitionOperation::RemoveMagazine);
+        r.sourceProof=AmmoResourceSourceProof{f.now,7,oldSample.sequence,oldSample.observedNs,oldSample.deadlineNs};
+        f.now+=67*Ms;CHECK(f.Select()); // Source expired; independent current native sample is fresh.
+        switch(bad){
+            case 0:r.sourceProof.reset();break; // Legacy admission remains strict.
+            case 1:r.sourceProof->constructedNs=r.intent.observedNs-1;break;
+            case 2:r.sourceProof->constructedNs=f.now+1;break;
+            case 3:r.sourceProof->constructedNs=oldBinding.deadlineNs;break;
+            case 4:r.sourceProof->snapshotDeadlineNs=r.sourceProof->constructedNs;break;
+            case 5:r.sourceProof->snapshotObservedNs=r.sourceProof->constructedNs+1;break;
+            case 6:r.sourceProof->inputSequence=0;break;
+            case 7:r.sourceProof->snapshotSequence=0;break;
+            case 8:r.sourceProof->snapshotSequence=f.sample.sequence+1;break;
+            case 9:r.binding.owner.weapon++;break;
+            case 10:r.binding.inventory++;break;
+            case 11:r.binding.switching++;break;
+            case 12:r.binding.data++;break;
+            case 13:r.binding.persistence++;break;
+            case 14:r.intent.context.space++;break;
+            case 15:r.intent.deadlineNs=f.now;break;
+            case 16:r.intent.deadlineNs=r.intent.observedNs+100*Ms+1;break;
+            case 17:f.now=f.sample.deadlineNs;break;
+            case 18:f.now=f.sample.observedNs-1;break;
+            case 19:r.sourceProof->snapshotDeadlineNs=r.sourceProof->snapshotObservedNs+100*Ms+1;break;
+            case 20:r.binding.deadlineNs=r.sourceProof->constructedNs;break;
+        }
+        CHECK(!f.service.Accept(r,f.now)&&!f.service.Active());
+        CHECK(f.service.FirstRejection()&&f.service.FirstRejection()->request==r);
+        CHECK(f.service.Inventory().Find(f.binding.context.resource)->Snapshot().counts==f.sample.counts);
+    }
+    Fixture f;CHECK(f.Select());const auto source=f.sample;
+    f.now+=67*Ms;auto r=f.Request(AmmunitionOperation::RemoveMagazine);
+    r.sourceProof=AmmoResourceSourceProof{f.now,7,source.sequence,source.observedNs,source.deadlineNs};
+    f.now+=67*Ms;CHECK(f.Select());const auto c=f.service.Accept(r,f.now);CHECK(c);
+    CHECK(c->admissionDeadlineNs==r.intent.deadlineNs&&c->admissionDeadlineNs<f.sample.deadlineNs);
+    CHECK(!f.service.Accept(r,f.now));f.service.Expire(r.intent.deadlineNs);
+    CHECK(!f.service.Active()&&f.service.Outcome()->request==r&&!f.service.Outcome()->nativeDispatched);
+    CHECK(f.service.FirstRejection()->reason==AmmoResourceRejectionReason::QueuedExpired);
+    CHECK(f.service.FirstRejection()->request.sourceProof==r.sourceProof);
+    return 0;
+}
+}
+int main(){if(ConstructionProofCannotRenewInputOrBorrowCurrentAuthority()||RejectedAdmissionCapturesExactCause()||CapturedSeatDeadlineSeparatesNativeViewAndSubmittedSource()||DispatchAndExpiryDiagnosticsDoNotChangeOutcomes()||Transactions()||Rejections()||CancelAndNoAutomaticRetry()||ChannelConcurrency()||TerminalOutcomesSurviveSelection()||ReadReasonsPreserveAdmission()||ReadJournalBoundAndDrain()||ConcurrentViewReadStillCoherent()||FailedOperationEvidenceSurvivesShutdownTail())return 1;
     std::puts("BC2 ammunition service: native-observer handoff, no-op/original/refill, identity, cancellation and 10000 command handoffs passed (mock Updates).");return 0;}

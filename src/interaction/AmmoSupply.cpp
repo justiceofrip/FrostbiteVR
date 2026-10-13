@@ -64,7 +64,19 @@ AmmoSupplyResult AmmoSupply::Update(const AmmoSupplySample& s,HandInteraction& h
         gun->token.item!=held_->identity.weapon||gun->inputSequence!=s.input.sequence||gun->deadlineNs<=s.input.nowNs)return out;
     history_[historyNext_]=RetainedEvidence{s,*held_,*gun};historyNext_=(historyNext_+1)%history_.size();return out;
 }
+AmmoSupplyResult AmmoSupply::RetainHeld(const HandInteractionSample& in,const AmmoSupplyIdentity& identity,
+    bool gripPressed,HandInteraction& hands)noexcept {
+    if(!held_||pending_||held_->identity!=identity||source_.identity!=identity){
+        blocked_=true;return Drop(in,hands,AmmoSupplyReason::SourceChanged);
+    }
+    AmmoSupplySample safety;safety.input=in;safety.source=source_;
+    safety.trackingEpoch=identity.trackingEpoch;safety.gripPressed=gripPressed;
+    return UpdateWithSource(safety,hands,false,true);
+}
 AmmoSupplyResult AmmoSupply::UpdateCurrent(const AmmoSupplySample& s,HandInteraction& hands,bool allowAcquire)noexcept {
+    return UpdateWithSource(s,hands,allowAcquire,false);
+}
+AmmoSupplyResult AmmoSupply::UpdateWithSource(const AmmoSupplySample& s,HandInteraction& hands,bool allowAcquire,bool sourceDeferred)noexcept {
     const auto& in=s.input;
     const auto fail=[&](AmmoSupplyReason why){blocked_=true;return Drop(in,hands,why);};
     if(!ConfigValid())return fail(AmmoSupplyReason::InvalidConfig);
@@ -84,7 +96,7 @@ AmmoSupplyResult AmmoSupply::UpdateCurrent(const AmmoSupplySample& s,HandInterac
     else {input_.focused&=in.focused;input_.tracked[h]=input_.tracked[h]&&in.tracked[h];input_.released[h]=input_.released[h]||in.released[h];}
     if(blocked_||!input_.focused||!input_.tracked[h]||s.trackingEpoch==0)
         return fail(AmmoSupplyReason::TrackingLost);
-    if(!SourceValid(s.source,in.nowNs)||s.source.observedNs<terminalCutoffNs_||s.source.identity.owner!=in.owner||s.source.identity.trackingEpoch!=s.trackingEpoch)
+    if((!sourceDeferred&&!SourceValid(s.source,in.nowNs))||s.source.observedNs<terminalCutoffNs_||s.source.identity.owner!=in.owner||s.source.identity.trackingEpoch!=s.trackingEpoch)
         return fail(AmmoSupplyReason::InvalidSource);
     const bool changed=source_.identity!=s.source.identity||source_.family!=s.source.family||source_.objectUnits!=s.source.objectUnits;
     if(!fresh&&changed)return fail(AmmoSupplyReason::SourceChanged);
@@ -95,10 +107,11 @@ AmmoSupplyResult AmmoSupply::UpdateCurrent(const AmmoSupplySample& s,HandInterac
         (s.source.sequence==settled_.sequence&&s.source!=settled_)))return fail(AmmoSupplyReason::InvalidSource);
     auto out=Snapshot();
     if(changed||gap)out=Drop(in,hands,changed?AmmoSupplyReason::SourceChanged:AmmoSupplyReason::TrackingLost);
-    source_=s.source;
+    if(!sourceDeferred)source_=s.source;
     if(!s.gripPressed||input_.released[h]){
         if(held_)out=Drop(in,hands,AmmoSupplyReason::Released);
-        if(fresh&&!s.gripPressed)armed_=true;
+        if(sourceDeferred)armed_=false;
+        else if(fresh&&!s.gripPressed)armed_=true;
         else if(!fresh&&packetGripPressed_)armed_=false; // Cannot invent neutral proof.
         return out;
     }

@@ -1,6 +1,7 @@
 #pragma once
 #include "fvr/graphics/RigidPropFrame.h"
 #include "fvr/graphics/RigidPropGeometry.h"
+#include "fvr/graphics/RigidPropMaterial.h"
 #include <array>
 #include <memory>
 #include <span>
@@ -8,7 +9,13 @@ struct ID3D11DeviceContext;
 struct ID3D11RenderTargetView;
 struct ID3D11DepthStencilView;
 namespace fvr::graphics {
-struct RigidPropSectionUpload {RigidPropMesh mesh;std::array<float,4> color{.3f,.3f,.3f,1.f};};
+struct RigidPropSectionUpload {
+    RigidPropMesh mesh;std::array<float,4> color{.3f,.3f,.3f,1.f};
+    // Optional explicit albedo. No texture requires no UV payload. Ownership is
+    // immutable after upload; rejected replacement retains the existing section.
+    std::shared_ptr<const PropAlbedoTexture> albedo;
+    std::vector<std::array<float,2>> uv;
+};
 struct RigidPropTarget {
     ID3D11RenderTargetView* color=nullptr;ID3D11DepthStencilView* depth=nullptr;
     unsigned width=0,height=0;

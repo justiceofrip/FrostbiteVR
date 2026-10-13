@@ -189,11 +189,21 @@ MenuVisibilityResult ReleaseMenuCancel(const MenuMemory& memory,const MenuStateC
        std::uint64_t(base)+c.cancelReleased>UINT32_MAX)return MenuVisibilityResult::Rejected;
     if(!retiring&&guard.nowNs<owned.releaseAtNs_)return MenuVisibilityResult::NotDue;
     const auto current=ReadMenuState(memory,c,base);const auto target=ReadMenuTarget(memory,b,base);
-    if(!current||!SameOwner(*current,owned.state_)||!target||!SameTarget(*target,owned.target_))return MenuVisibilityResult::OwnerChanged;
+    if(!current||!target||current->manager!=target->manager)return MenuVisibilityResult::OwnerChanged;
+    if(!SameOwner(*current,owned.state_)||!SameMenuTargetOwner(*target,owned.target_)){
+        // Cross-check both independently read graphs before revoking an old
+        // lease. Null, disabled or unstable loading state is not retirement.
+        const auto repeatedState=ReadMenuState(memory,c,base);
+        const auto repeatedTarget=ReadMenuTarget(memory,b,base);
+        if(!repeatedState||*repeatedState!=*current||!repeatedTarget||*repeatedTarget!=*target)
+            return MenuVisibilityResult::OwnerChanged;
+        owned.Forget();return MenuVisibilityResult::Retired;
+    }
     if(diagnostic)diagnostic->before=ObserveCancel(memory,b,base,current->manager);
     if(target->count>=target->capacity)return MenuVisibilityResult::QueueFull;
     const auto before=ReadMenuState(memory,c,base);const auto queue=ReadMenuTarget(memory,b,base);
-    if(!before||!SameOwner(*before,owned.state_)||!queue||!SameTarget(*queue,owned.target_))return MenuVisibilityResult::OwnerChanged;
+    if(!before||!SameOwner(*before,owned.state_)||!queue||!SameMenuTargetOwner(*queue,owned.target_)||
+       !SameTarget(*queue,*target))return MenuVisibilityResult::OwnerChanged;
     if(queue->count>=queue->capacity)return MenuVisibilityResult::QueueFull;
     if(!calls.input(calls.context,base+c.cancelReleased,current->inputController,owned.UiAction()))return MenuVisibilityResult::CallFailed;
     owned.Forget();

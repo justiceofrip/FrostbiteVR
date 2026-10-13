@@ -46,8 +46,7 @@ bool ExperimentalShape(const MagazineGeometryProfile& g)noexcept {
   std::find(names.begin(),names.begin()+n,names[n])!=names.begin()+n)return false;
  const auto& p=g.interaction.insertion;
  const auto inverse=interaction::InverseRigid(p.itemFromInsertion);if(!inverse)return false;
- const auto closed=interaction::Multiply(*inverse,interaction::Multiply(
-  interaction::reload_insertion_detail::TravelPose(p,p.travelMeters),p.weaponFromEntry));
+ const auto closed=interaction::reload_insertion_detail::InsertionItemPose(p,p.travelMeters);
  if(!matrix(closed))return false;
  for(unsigned r=0;r<4;++r)for(unsigned c=0;c<4;++c)
   if(std::abs(closed.values[r][c]-g.attachedItem.values[r][c])>.0001f)return false;

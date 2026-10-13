@@ -47,7 +47,7 @@ struct MenuVisibilityCalls {
     // Native release ignores8; do not synthesize an APT key-up for MenuToggle.
     bool (*input)(void*,std::uint32_t function,std::uint32_t inputController,std::uint32_t uiAction)=nullptr;
 };
-enum class MenuVisibilityResult : std::uint8_t {Rejected,OwnerChanged,AlreadyInState,CallFailed,Invoked,QueueFull,NotDue};
+enum class MenuVisibilityResult : std::uint8_t {Rejected,OwnerChanged,AlreadyInState,CallFailed,Invoked,QueueFull,NotDue,Retired};
 // Open only. Closing must use BeginMenuCancel/ReleaseMenuCancel below.
 // Invoked means the native open notification was invoked.
 // It does not mean an APT transition completed. The adapter must await a matching entered-state transition;
@@ -112,7 +112,9 @@ MenuVisibilityResult BeginMenuCancel(const MenuMemory&,const MenuStateCandidates
 // Exact original native owner/target and live code are required. Current focus,
 // tracking and menuEpoch deliberately do not block cleanup. Normally waits
 // 100ms; retiring permits earlier cleanup only while that same owner is live.
-// Failed cleanup retains ownership. Success consumes it exactly once.
+// Failed reads/calls retain ownership. A complete stable replacement owner/target
+// retires the old lease without dispatch; callers must rearm the input epoch.
+// Success consumes it exactly once. Queue storage changes alone are not retirement.
 // Both edges use the exact leased action:8 for MenuToggle,9 for Back.
 // Action8 native release is intentionally a no-op; ownership is still consumed
 // only after invoking that verified native release against the original owner.

@@ -73,8 +73,8 @@ void Bc2BodyHolsterProbe::Prepare(InputFrame& input,const ReloadStateOwner& owne
     if(phase_==BodyHolsterFixturePhase::Warmup){
         if(state&&source&&!asset.empty()&&(table||asset==BodyHolsterDiagnosticAsset(profile_))&&state->selectedSlot&&state->nativeOwner==owner&&state->phase==BodyHolsterPhase::Held){
             owner_=owner;physical_=state->hand.owner;physicalGun_=state->physicalGun;slot_=state->selectedSlot;
-            const auto a=std::find_if(state->anchors.shoulders.begin(),state->anchors.shoulders.end(),[&](const auto& x){return x.slot==slot_->slot;});
-            if(a==state->anchors.shoulders.end()||slot_->item.id!=owner.weapon)Cancel(3,now);
+            const auto* a=FindBodyWeaponAnchor(state->anchors,slot_->slot);
+            if(!a||slot_->item.id!=owner.weapon)Cancel(3,now);
             else{anchor_=*a;actual_=state;if(Held(*state,now)){baselineClaim_=state->right->token.id;PhaseTo(BodyHolsterFixturePhase::Baseline,now);}}
         }
         if(phase_==BodyHolsterFixturePhase::Warmup&&now-first_>2500000000ll)Cancel(4,now);

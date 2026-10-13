@@ -15,6 +15,31 @@ std::shared_ptr<const CarriedMeshesSnapshot> Mesh(const BodyInventoryDisplay& d,
     s.states[0].array=s.soleConfiguredArray;s.states[0].count=1;
     strcpy_s(s.states[0].meshes[0].assetPath.data(),512,"Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Mesh");return c;
 }
+int PistolHipToHost(){Run r;r.f.Word(Fixture::bd+0x84,2);r.f.Text(0x2b100,"MP443_sp");r.Tick();
+    auto d=r.adapter.Display(r.s.hand.nowNs);CHECK(d&&d->count==2);
+    unsigned i=0;while(i<d->count&&d->slots[i].native.weapon!=Fixture::b)++i;CHECK(i<d->count&&d->slots[i].assignment.slot==4);
+    auto c=std::make_shared<CarriedMeshesSnapshot>(*Mesh(*d,i));auto& s=c->configured;
+    s.weaponName={};strcpy_s(s.weaponName.data(),s.weaponName.size(),"MP443_sp");
+    s.configurationPathVerified=true;s.configurationPathPointer=0x43000;
+    s.stateTypeInfo=0x44000;s.meshTypeInfo=0x45000;
+    s.states[0].meshes[0].address=0x46000;s.states[0].meshes[0].namePointer=0x47000;s.states[0].meshes[0].typeInfo=s.meshTypeInfo;
+    strcpy_s(s.configurationPath.data(),s.configurationPath.size(),"Objects/Weapons/Handheld/RU_hg_MP443Grach/SP_hg_MP443Grach");
+    strcpy_s(s.states[0].meshes[0].assetPath.data(),512,"Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach_Mesh");
+    std::array<std::shared_ptr<const CarriedMeshesSnapshot>,8> configs{};configs[i]=c;
+    auto source=std::make_shared<const BodyInventoryDisplay>(*d);const auto now=r.s.hand.nowNs;
+    auto b=BuildBodyCarriedBatch(source,configs,r.s.input,Identity(),{},now);CHECK(b&&b->count==1);
+    graphics::BodyPropEye eye{};CHECK(AppendBodyCarriedHostInstances(*b,*b,now,d->physicalOwner.space,eye)&&eye.count==1);
+    const auto before=b->instances[0].world;
+    r.s.input.head.orientation={0,.70710678f,0,.70710678f};
+    auto looked=BuildBodyCarriedBatch(source,configs,r.s.input,Identity(),{},now);CHECK(looked);
+    CHECK(looked->instances[0].world.values==before.values);
+    auto anchors=interaction::BodyAnchorConfig{};anchors.hip.center.y-=.1f;
+    auto lowered=BuildBodyCarriedBatch(source,configs,r.s.input,Identity(),anchors,now);CHECK(lowered);
+    CHECK(std::abs(lowered->instances[0].world.values[3][1]-before.values[3][1]+.1f)<.0001f);
+    // Same native pointer but a new configured name cannot retain old carry evidence.
+    s.weaponName[0]='X';CHECK(!BuildBodyCarriedBatch(source,configs,r.s.input,Identity(),{},now));
+    return 0;
+}
 int ActualSlotsAndLease(){Run r;r.Tick();auto a=r.adapter.Display(r.s.hand.nowNs);CHECK(a&&a->count==2);
     CHECK(a->selectedOwner==r.s.owner&&a->physicalSelected.id==Fixture::a);
     const auto deadline=a->deadlineNs,observed=a->observedNs;r.Tick();a=r.adapter.Display(r.s.hand.nowNs+1);
@@ -85,5 +110,5 @@ int InPlaceAssetMutationIsRejected(){Run r;r.f.Word(Fixture::bd+12,0x39000);r.f.
     const auto c=Mesh(*d,index);const auto e=body_carried_detail::Equipment(*c);CHECK(e&&WeaponEquipmentStillCurrent(r.f.Memory(),*e));
     r.f.Text(0x39000,"XM8_sp_s");CHECK(!WeaponEquipmentStillCurrent(r.f.Memory(),*e));return 0;}
 }
-int main(){for(auto fn:{ActualSlotsAndLease,DropPickupAndSelection,LifecycleRetires,ActualSlotsToHost,CurrentSelectedAndUnknownNeverDuplicate,LinkedSelectedIsNotSpare,RenderEpochNamespaces,InPlaceAssetMutationIsRejected})if(fn())return 1;
-    std::cout<<"8 persistent body inventory/host groups passed\n";return 0;}
+int main(){for(auto fn:{PistolHipToHost,ActualSlotsAndLease,DropPickupAndSelection,LifecycleRetires,ActualSlotsToHost,CurrentSelectedAndUnknownNeverDuplicate,LinkedSelectedIsNotSpare,RenderEpochNamespaces,InPlaceAssetMutationIsRejected})if(fn())return 1;
+    std::cout<<"9 persistent body inventory/host groups passed\n";return 0;}

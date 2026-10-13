@@ -132,6 +132,35 @@ int PreviouslyRetiredFamilyCanBeRevisited(){
     CHECK(f.policy.Cycle()==1&&f.policy.Phase()==ReloadRequestCyclePhase::Cancelled);
     return 0;
 }
+int NativeMechanismAfterFamilyRoundTrip(){
+    Dispatch f;CHECK(f.policy.RetiredForNativeHandoff());
+    CHECK(f.Start(1));CHECK(!f.policy.RetiredForNativeHandoff(true));
+    f.policy.Cancel();CHECK(!f.policy.RetiredForNativeHandoff());
+    CHECK(f.Retire());CHECK(f.policy.RetiredForNativeHandoff(bool(f.retired)));
+    CHECK(f.Select(ReloadNativeFamily::Xm8Magazine));CHECK(f.Start(1));CHECK(f.Retire());
+    CHECK(f.Select(ReloadNativeFamily::SpasTube));CHECK(!f.retired);
+    // Actual389: the global dispatch-epoch receipt is consumed by selection.
+    // The old runtime predicate rejected this exact, already-retired SPAS cycle.
+    CHECK(f.policy.Cycle()==1&&f.policy.Phase()==ReloadRequestCyclePhase::Cancelled);
+    CHECK(f.policy.RetiredForNativeHandoff());
+    for(unsigned pass=0;pass<3;++pass){
+        CHECK(f.Select(ReloadNativeFamily::Xm8Magazine));CHECK(!f.retired);
+        CHECK(f.policy.RetiredForNativeHandoff());
+        CHECK(f.Select(ReloadNativeFamily::SpasTube));CHECK(f.policy.RetiredForNativeHandoff());
+    }
+    // Handoff knowledge grants no fresh hold/insertion authority.
+    CHECK(!f.policy.Lease(Identity(),1,f.now));
+    auto next=Identity();++next.owner.equipGeneration;
+    CHECK(f.Start(2,next));CHECK(!f.policy.RetiredForNativeHandoff());
+    CHECK(!f.policy.RetiredForNativeHandoff(true));
+    f.policy.Cancel();CHECK(!f.policy.RetiredForNativeHandoff());
+    CHECK(!f.Select(ReloadNativeFamily::Xm8Magazine));
+    CHECK(!f.Retire(false));CHECK(!f.policy.RetiredForNativeHandoff());
+    CHECK(f.Retire());CHECK(f.Select(ReloadNativeFamily::Xm8Magazine));
+    CHECK(f.Select(ReloadNativeFamily::SpasTube));CHECK(f.policy.RetiredForNativeHandoff());
+    CHECK(f.policy.Identity()==next&&f.policy.Cycle()==2);
+    return 0;
+}
 int SamePolicyProfileRevisitsPreserveRetirement(){
     Dispatch f;CHECK(f.Select(ReloadNativeFamily::Xm8Magazine,NativeMagazineProfileId::AuthoredAek));
     CHECK(f.Start(1));CHECK(f.Retire());
@@ -292,6 +321,6 @@ int CancellationOriginIsExact(){
     Bc2ReloadNativePolicy idle;idle.Cancel();CHECK(!idle.CancelledFromArming());return 0;
 }
 
-int main(){if(CancellationOriginIsExact()||ExplicitRetirement()||IdleAndTypedRouting()||AbortNamespaces()||CallbackExclusion()||SessionIsolation()||PreviouslyRetiredFamilyCanBeRevisited()||SamePolicyProfileRevisitsPreserveRetirement()||NewCycleAndOwnerCannotBorrowOldRetirement()||RetiredDispatchFactIsNotFreshAmmoOrControl()||CurrentConfigGateFollowsRevisitedSelection())return 1;
-    std::puts("10 reload family retirement, revisit, profile, owner, callback and session groups passed");return 0;}
+int main(){if(NativeMechanismAfterFamilyRoundTrip()||CancellationOriginIsExact()||ExplicitRetirement()||IdleAndTypedRouting()||AbortNamespaces()||CallbackExclusion()||SessionIsolation()||PreviouslyRetiredFamilyCanBeRevisited()||SamePolicyProfileRevisitsPreserveRetirement()||NewCycleAndOwnerCannotBorrowOldRetirement()||RetiredDispatchFactIsNotFreshAmmoOrControl()||CurrentConfigGateFollowsRevisitedSelection())return 1;
+    std::puts("12 reload family retirement, native handoff, revisit, profile, owner, callback and session groups passed");return 0;}
 

@@ -1,70 +1,37 @@
-> **Latest: checkpoint245 failed headset acceptance.** Start with [the receiving-agent handoff](docs/CHECKPOINT-245-HANDOFF.md). Source builds pass, but a SPAS interaction lock and subsequent checkpoint-reload crash remain open. This is a developer handoff, not a release.
-
 # FrostbiteVR
 
-An experimental, modular VR framework for Frostbite games, with **Battlefield:
-Bad Company 2 single-player** as the first adapter. Native BC2 game views feed a
-separate OpenXR host; reusable interaction code is kept separate from the game's
-rendering, input, animation and ammunition bindings.
+**Checkpoint 390 — unreleased developer source.** This repository contains a
+modular Frostbite VR framework with a Bad Company 2 adapter. The latest source
+includes the work since the previous GitHub checkpoint 245.
 
-**Developer source snapshot / unreleased WIP.** This repository is available for
-research, contributions and forks. There is no supported player installer or
-release binary yet. BF3, BF4, Hardline and other Frostbite games are future ports,
-not supported games.
+Start with the [fork handoff](handoff/checkpoint390/README.md),
+[build instructions](BUILDING.md), and
+[current weapon coverage](docs/WEAPON-COVERAGE-CURRENT.md).
 
-## Start here
+## Current evidence and limits
 
-- [Build instructions](BUILDING.md)
-- [Fork guide and code map](CONTRIBUTING.md)
-- [Current status and roadmap](docs/STATUS.md)
-- [Actual weapon coverage and integration gaps](docs/WEAPON-COVERAGE-CURRENT.md)
-- [Shared weapon-system pipeline](docs/WEAPON-SYSTEM-PIPELINE.md)
-- [Frostbite porting roadmap](docs/FROSTBITE-PORTING-ROADMAP.md)
-- [Architecture](docs/ARCHITECTURE.md)
+Both checkpoint390 architecture builds passed 246 C++ suites. Actual-game
+emulation passed repeated rifle/shotgun shoulder swaps and manual reloads,
+a second shotgun draw and pump, a VR-menu checkpoint restart during an unfinished
+pump followed by fresh reloads, and five M95 bolt cycles. The latest shared fix
+preserves completed reload retirement when returning to a weapon family, so the
+native mechanism can be selected again. See the
+[390 evidence and remaining checks](docs/NATIVE-HANDOFF-390.md).
 
-## Where the project stands
-
-Local checkpoint **227** passes all 212 suites on both x86 and x64. The private
-resource backend has completed actual BC2 simulated-hand magazine removal,
-original return, discard and chest replacement with conserved ammunition.
-Ordinary equipment activation and cross-family transitions are still being
-integrated; normal builds retain the earlier backend. See
-[native evidence and limits](docs/RESOURCE-PLAYER-223.md).
-
-The shared tests now cover 12 additional exact configurations across M416,
-XM8 Compact, MG36 and XM8 LMG. Their native responses are mocked; these are
-not 12 headset-accepted guns. Physical pump Gameplay/render integration and
-measured M24/SV98 bolt-custody sequences are implemented, with native pump
-gesture testing and sniper binding still in progress. See the
-[current coverage](docs/WEAPON-COVERAGE-CURRENT.md).
-
-Checkpoint **211** passes a combined shoulder-switch, original-magazine return
-and chest-replacement sequence through persistent normal consumers, with
-conserved ammunition and no cancellations. See [the native result](docs/RELOAD-FRAME-HITCH-211.md).
-Full-magazine discard remains unresolved in the ordinary player interaction;
-the new native operations have bounded server/client convergence evidence but
-have not replaced that older interaction contract. This local development does
-not automatically update the published fork snapshot.
+**Headset acceptance is pending.** The last human test, checkpoint375 on
+October 12, failed. These automated results do not establish a playable whole
+campaign, complete weapon coverage, or a fix for every intermittent crash.
+Controller alignment, visual artifacts and sustained stability still need testing.
+The M95 magazine refill in the bolt check uses stock fallback. Wider mechanism
+coverage, belt-fed reloads, physical zoomed scopes, full-body IK and multiplayer
+remain unfinished.
 
 Earlier headset tests demonstrated native stereo, tracked weapons and support
 hands, roomscale/recentering, controller menu interaction, chest ammunition,
 shoulder holsters, selected manual reloads and the tested boat's head aiming and
 firing. These features remain experimental, and later tests exposed regressions.
-
-The prior checkpoint, **202 (October 7, 2026, US Eastern)**, passed an automated
-controller sequence in the actual game: return a partly used XM8 magazine,
-remove it again, carry a replacement with fast motion and insert it. The strict
-audit verified conserved ammunition, no cancellations or magazine visual
-fallbacks, stereo delivery and cleanup. Shared reload-start timing and diagnostic
-completion retention were corrected. That development composition passed all
-186 C++ suites on both architectures. Two suites use local test-only fixtures
-that are excluded from this repository; the initial public build had 184 suites.
-
-**This checkpoint has not had a new headset acceptance test.** Reliable behavior
-across weapon changes, holsters, pickups, empty ammunition and campaign transitions
-still needs broader validation. Manual pumping, bolt/charging-handle mechanics,
-belt-fed reloads, physical zoomed scopes, full-body IK and multiplayer are unfinished.
-Known visual issues include the floating optic dot and some LOD/animation artifacts.
+Measured contacts and compiled capability rows are prerequisites, not a count of
+headset-accepted weapons. Historical checkpoint notes retain their original scope.
 
 ## Build without a game or headset
 

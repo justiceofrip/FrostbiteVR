@@ -1,0 +1,1356 @@
+{
+  "schema": "fvr.bc2.authored_reload_reference_bindings",
+  "schema_version": 1,
+  "profiles": [
+    {
+      "native_asset_name": "MP443_sp",
+      "weapon_class": "wcSmg",
+      "authored_rifle_support": false,
+      "weapon": {
+        "resource": "Objects/Weapons/Handheld/RU_hg_MP443Grach/SP_hg_MP443Grach.dbx",
+        "sha256": "e16f5713854ca38ab58d61bd3c568e2f87533c0e82032d71d61f27449d5484cc",
+        "instance_guid": "58098858-821b-4406-a19c-ae62e5d38bdf",
+        "type": "GameSharedResources.SoldierWeaponData"
+      },
+      "state_index": 0,
+      "state_count": 1,
+      "meshes": [
+        {
+          "reference": "objects/weapons/handheld/ru_hg_mp443grach/ru_hg_mp443grach_mesh/a2f5a385-64cf-11db-962b-86e865e73fbb",
+          "mesh_document": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach_Mesh.dbx",
+          "mesh_document_sha256": "3932900d208af3ae06d4384ef990c5778a3e4956c10a3d6a3d0af0b4a9117d11",
+          "mesh_instance_guid": "a2f5a385-64cf-11db-962b-86e865e73fbb",
+          "mesh_resource": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach_Mesh.res",
+          "configured_mesh_path": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach_Mesh",
+          "geometry": {
+            "mesh_sha256": "205b298bb56bf12eec807fc015c3ea95ba02ef20d51c5a58f449fb225242e1b5",
+            "lods": [
+              {
+                "lod": 0,
+                "data_resource": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach_Mesh_lod0_data.res",
+                "data_sha256": "9fe633a30f8f2be2d7e59478e3f61edf10fb3d2c1e12d3eff251c672d6414636"
+              }
+            ]
+          }
+        }
+      ],
+      "animation_chain": {
+        "tree": {
+          "resource": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach_AnimTree1p.dbx",
+          "sha256": "9387c267159e9ac22766790616d592f8a733cc6fa9fad88f8a5dd36eea5a2b0c",
+          "instance_guid": "02bd776e-e07c-42bd-ba59-46e3ec4229fa",
+          "type": "Animation.SpecificAnimTreeData"
+        },
+        "animation_asset": {
+          "resource": "Animations/Weapons/Handheld/RU_hg_MP443Grach/1P/HandsIKPose.dbx",
+          "sha256": "e7dba31a6eed329cc56d27557f9bd64db7e31d08b3a0c6b0b6d39015f6cdc020",
+          "instance_guid": "51b81b60-891b-4297-8d60-d2acc9bde70f",
+          "type": "Animation.AnimationAsset"
+        },
+        "animation_resource": "Animations/Weapons/Handheld/RU_hg_MP443Grach/1P/HandsIKPose.res",
+        "skeleton_asset": {
+          "resource": "Characters/Skeletons/ske01.dbx",
+          "sha256": "ebad79fb62ab383dcc4ea5179652ded99944b7f9905c6095baa8f0b7183520ba",
+          "instance_guid": "20a6d9b2-2cd5-4895-a59c-f144e6d3f061",
+          "type": "Animation.SkeletonAsset"
+        },
+        "skeleton_resource": "Characters/Skeletons/ske01.res"
+      },
+      "animation_sha256": "a9a549f7102b3baf5ec01a8e26b5f933572df66f4e3833820022fb9bc4914f61",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "animation_source": {
+        "selection": "unique_exact_resource_content_in_batch",
+        "archive": "Dist/win32/async/weapon/ai_hg_mp443grach-00.fbrb",
+        "archive_index_sha256": "14f3b4ab342ea3d36063aef7be9b78c0d36af7ad22beb01558312f63e9644d51",
+        "kind": "GrannyAnimation"
+      },
+      "skeleton_source": {
+        "selection": "exact_configuration_archive_resource",
+        "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+        "archive_index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965",
+        "kind": "GrannyModel"
+      },
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "rig_topology": [
+        {
+          "name": "grannyRootBone",
+          "parent_index": -1
+        },
+        {
+          "name": "Hips",
+          "parent_index": 0
+        },
+        {
+          "name": "Spine",
+          "parent_index": 1
+        },
+        {
+          "name": "Spine1",
+          "parent_index": 2
+        },
+        {
+          "name": "Spine2",
+          "parent_index": 3
+        },
+        {
+          "name": "LeftUpLeg",
+          "parent_index": 1
+        },
+        {
+          "name": "RightUpLeg",
+          "parent_index": 1
+        },
+        {
+          "name": "jntWpn_0",
+          "parent_index": 2
+        },
+        {
+          "name": "Spine3",
+          "parent_index": 4
+        },
+        {
+          "name": "Spine4",
+          "parent_index": 8
+        },
+        {
+          "name": "jntWpn_1",
+          "parent_index": 7
+        },
+        {
+          "name": "LeftLeg",
+          "parent_index": 5
+        },
+        {
+          "name": "RightLeg",
+          "parent_index": 6
+        },
+        {
+          "name": "Neck",
+          "parent_index": 9
+        },
+        {
+          "name": "Neck1",
+          "parent_index": 13
+        },
+        {
+          "name": "LeftShoulder",
+          "parent_index": 9
+        },
+        {
+          "name": "RightShoulder",
+          "parent_index": 9
+        },
+        {
+          "name": "jntWpn_2",
+          "parent_index": 10
+        },
+        {
+          "name": "Head",
+          "parent_index": 14
+        },
+        {
+          "name": "Eyes",
+          "parent_index": 18
+        },
+        {
+          "name": "LeftArm",
+          "parent_index": 15
+        },
+        {
+          "name": "RightArm",
+          "parent_index": 16
+        },
+        {
+          "name": "RightEye",
+          "parent_index": 19
+        },
+        {
+          "name": "LeftEye",
+          "parent_index": 19
+        },
+        {
+          "name": "RightFoot",
+          "parent_index": 12
+        },
+        {
+          "name": "LeftFoot",
+          "parent_index": 11
+        },
+        {
+          "name": "LeftArmRoll",
+          "parent_index": 20
+        },
+        {
+          "name": "RightArmRoll",
+          "parent_index": 21
+        },
+        {
+          "name": "LeftForeArm",
+          "parent_index": 26
+        },
+        {
+          "name": "RightForeArm",
+          "parent_index": 27
+        },
+        {
+          "name": "jntWpn_3",
+          "parent_index": 10
+        },
+        {
+          "name": "LeftForeArmRoll",
+          "parent_index": 28
+        },
+        {
+          "name": "RightForeArmRoll",
+          "parent_index": 29
+        },
+        {
+          "name": "jntWpn_8",
+          "parent_index": 10
+        },
+        {
+          "name": "jntWpn_9",
+          "parent_index": 10
+        },
+        {
+          "name": "jntWpn_10",
+          "parent_index": 10
+        },
+        {
+          "name": "jntWpn_11",
+          "parent_index": 10
+        },
+        {
+          "name": "jntWpn_Flash",
+          "parent_index": 10
+        },
+        {
+          "name": "jntWpn_12",
+          "parent_index": 10
+        },
+        {
+          "name": "jntWpnwpnJnt_16",
+          "parent_index": 10
+        },
+        {
+          "name": "jntWpn_7",
+          "parent_index": 10
+        },
+        {
+          "name": "jntWpn_6",
+          "parent_index": 10
+        },
+        {
+          "name": "jntWpn_5",
+          "parent_index": 10
+        },
+        {
+          "name": "jntWpn_4",
+          "parent_index": 10
+        },
+        {
+          "name": "LeftHand",
+          "parent_index": 31
+        },
+        {
+          "name": "RightHand",
+          "parent_index": 32
+        },
+        {
+          "name": "FJ_R_CheekUpper",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_L_Temple",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_R_Temple",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_L_NoseWing",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_R_NoseWing",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_R_BrowOuter",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_R_BrowInner",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_L_BrowOuter",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_L_BrowInner",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_LipRightCorner",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_LipLeftCorner",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_LipUpperRight",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_LipUpperLeft",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_LipUpperMiddle",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_L_CheekUpper",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_L_CheekLower",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_R_CheekLower",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_L_NoseSide",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_R_NoseSide",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_L_MouthUpper",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_R_MouthUpper",
+          "parent_index": 18
+        },
+        {
+          "name": "Jaw",
+          "parent_index": 18
+        },
+        {
+          "name": "RightToeBase",
+          "parent_index": 24
+        },
+        {
+          "name": "LeftToeBase",
+          "parent_index": 25
+        },
+        {
+          "name": "FJ_Chin",
+          "parent_index": 67
+        },
+        {
+          "name": "FJ_Tongue",
+          "parent_index": 67
+        },
+        {
+          "name": "FJ_LipLowerRight",
+          "parent_index": 67
+        },
+        {
+          "name": "FJ_LipLowerMiddle",
+          "parent_index": 67
+        },
+        {
+          "name": "FJ_LipLowerLeft",
+          "parent_index": 67
+        },
+        {
+          "name": "RightUpperLid",
+          "parent_index": 19
+        },
+        {
+          "name": "RightLowerLid",
+          "parent_index": 19
+        },
+        {
+          "name": "LeftUpperLid",
+          "parent_index": 19
+        },
+        {
+          "name": "LeftLowerLid",
+          "parent_index": 19
+        },
+        {
+          "name": "RightHandMiddle1",
+          "parent_index": 45
+        },
+        {
+          "name": "RightHandThumb1",
+          "parent_index": 45
+        },
+        {
+          "name": "RightHandIndex1",
+          "parent_index": 45
+        },
+        {
+          "name": "RightHandRing1",
+          "parent_index": 45
+        },
+        {
+          "name": "RightHandPinky1",
+          "parent_index": 45
+        },
+        {
+          "name": "LeftHandMiddle1",
+          "parent_index": 44
+        },
+        {
+          "name": "LeftHandThumb1",
+          "parent_index": 44
+        },
+        {
+          "name": "LeftHandIndex1",
+          "parent_index": 44
+        },
+        {
+          "name": "LeftHandRing1",
+          "parent_index": 44
+        },
+        {
+          "name": "LeftHandPinky1",
+          "parent_index": 44
+        },
+        {
+          "name": "LeftHandThumb2",
+          "parent_index": 85
+        },
+        {
+          "name": "RightHandThumb2",
+          "parent_index": 80
+        },
+        {
+          "name": "RightHandMiddle2",
+          "parent_index": 79
+        },
+        {
+          "name": "LeftHandMiddle2",
+          "parent_index": 84
+        },
+        {
+          "name": "RightHandIndex2",
+          "parent_index": 81
+        },
+        {
+          "name": "LeftHandIndex2",
+          "parent_index": 86
+        },
+        {
+          "name": "LeftHandRing2",
+          "parent_index": 87
+        },
+        {
+          "name": "RightHandRing2",
+          "parent_index": 82
+        },
+        {
+          "name": "LeftHandPinky2",
+          "parent_index": 88
+        },
+        {
+          "name": "RightHandPinky2",
+          "parent_index": 83
+        },
+        {
+          "name": "jntWpn_17",
+          "parent_index": 39
+        },
+        {
+          "name": "jntWpn_13",
+          "parent_index": 38
+        },
+        {
+          "name": "FJ_L_Ear",
+          "parent_index": 18
+        },
+        {
+          "name": "FJ_R_Ear",
+          "parent_index": 18
+        },
+        {
+          "name": "LeftHandThumb3",
+          "parent_index": 89
+        },
+        {
+          "name": "RightHandThumb3",
+          "parent_index": 90
+        },
+        {
+          "name": "LeftHandIndex3",
+          "parent_index": 94
+        },
+        {
+          "name": "RightHandIndex3",
+          "parent_index": 93
+        },
+        {
+          "name": "LeftHandMiddle3",
+          "parent_index": 92
+        },
+        {
+          "name": "RightHandMiddle3",
+          "parent_index": 91
+        },
+        {
+          "name": "LeftHandRing3",
+          "parent_index": 95
+        },
+        {
+          "name": "RightHandRing3",
+          "parent_index": 96
+        },
+        {
+          "name": "RightHandPinky3",
+          "parent_index": 98
+        },
+        {
+          "name": "LeftHandPinky3",
+          "parent_index": 97
+        },
+        {
+          "name": "jntWpn_18",
+          "parent_index": 99
+        },
+        {
+          "name": "jntWpnwpnJnt_14",
+          "parent_index": 100
+        },
+        {
+          "name": "jntWpn_19",
+          "parent_index": 113
+        },
+        {
+          "name": "jntWpn_15",
+          "parent_index": 114
+        },
+        {
+          "name": "cameraBase",
+          "parent_index": 0
+        },
+        {
+          "name": "PhysJnt_Hips",
+          "parent_index": 1
+        },
+        {
+          "name": "PhysJnt_LeftUpLeg",
+          "parent_index": 5
+        },
+        {
+          "name": "PhysJnt_RightUpLeg",
+          "parent_index": 6
+        },
+        {
+          "name": "PhysJnt_RightLeg",
+          "parent_index": 12
+        },
+        {
+          "name": "PhysJnt_LeftLeg",
+          "parent_index": 11
+        },
+        {
+          "name": "PhysJnt_Torso",
+          "parent_index": 9
+        },
+        {
+          "name": "PhysJnt_Head",
+          "parent_index": 18
+        },
+        {
+          "name": "PhysJnt_LeftArm",
+          "parent_index": 20
+        },
+        {
+          "name": "PhysJnt_RightArm",
+          "parent_index": 21
+        },
+        {
+          "name": "PhysJnt_LeftForeArm",
+          "parent_index": 28
+        },
+        {
+          "name": "PhysJnt_RightForeArm",
+          "parent_index": 29
+        },
+        {
+          "name": "cameraJoint",
+          "parent_index": 117
+        },
+        {
+          "name": "kitJoint2",
+          "parent_index": 6
+        },
+        {
+          "name": "kitJoint13",
+          "parent_index": 2
+        },
+        {
+          "name": "kitJoint7",
+          "parent_index": 2
+        },
+        {
+          "name": "kitJoint4",
+          "parent_index": 3
+        },
+        {
+          "name": "kitJoint8",
+          "parent_index": 3
+        },
+        {
+          "name": "kitJoint9",
+          "parent_index": 3
+        },
+        {
+          "name": "kitJoint5",
+          "parent_index": 3
+        },
+        {
+          "name": "kitJoint6",
+          "parent_index": 3
+        },
+        {
+          "name": "kitJoint12",
+          "parent_index": 3
+        },
+        {
+          "name": "kitJoint10",
+          "parent_index": 4
+        },
+        {
+          "name": "kitJoint11",
+          "parent_index": 4
+        },
+        {
+          "name": "kitJoint16",
+          "parent_index": 8
+        },
+        {
+          "name": "kitJoint15",
+          "parent_index": 8
+        },
+        {
+          "name": "kitJoint14",
+          "parent_index": 8
+        },
+        {
+          "name": "kitJoint17",
+          "parent_index": 8
+        },
+        {
+          "name": "kitJoint18",
+          "parent_index": 9
+        },
+        {
+          "name": "kitJoint19",
+          "parent_index": 9
+        }
+      ],
+      "weapon_bone": "jntWpn_1",
+      "coordinate_convention": "canonical reflected-Z row-vector metres; named bone relative to jntWpn_1",
+      "right_hand_in_weapon": [
+        0.5879081819661393,
+        0.7527546618040736,
+        -0.29618303244700617,
+        0.0,
+        -0.8056395647711784,
+        0.577838601223841,
+        -0.13056585545609514,
+        0.0,
+        0.07286193280840131,
+        0.31537750406126003,
+        0.9461649796306741,
+        -0.0,
+        -0.017461745616215357,
+        -0.018969807353581117,
+        0.09709265602632312,
+        1.0
+      ],
+      "left_hand_in_weapon": [
+        0.23526903058931514,
+        0.8199877537519971,
+        -0.521793605693207,
+        0.0,
+        0.8968017559834665,
+        -0.39011499547711337,
+        -0.20870290071981243,
+        0.0,
+        -0.374693332887757,
+        -0.41884409271308426,
+        -0.8271484342539847,
+        -0.0,
+        0.022324912235839538,
+        -0.05854111687008353,
+        0.10161653184652952,
+        1.0
+      ],
+      "right_hand_status": "decoded_spline_candidate",
+      "left_hand_status": "static_authored_pose",
+      "all_required_controls_constant": false,
+      "evaluation_status": "decoded_spline_candidate",
+      "static_parts_and_fingers": {
+        "jntWpn_0": [
+          0.9999999999999998,
+          -1.1720225484568303e-16,
+          6.329030181884132e-17,
+          0.0,
+          -1.1720225484568303e-16,
+          0.9999999999999999,
+          6.727474480272555e-17,
+          0.0,
+          6.329030181884132e-17,
+          6.727474480272555e-17,
+          0.9999999999999994,
+          -0.0,
+          -8.673617379884035e-18,
+          1.235990476633475e-17,
+          -1.214306433183765e-17,
+          1.0
+        ],
+        "jntWpn_1": [
+          0.9999999999999998,
+          -1.1720225484568303e-16,
+          6.329030181884132e-17,
+          0.0,
+          -1.1720225484568303e-16,
+          0.9999999999999999,
+          6.727474480272555e-17,
+          0.0,
+          6.329030181884132e-17,
+          6.727474480272555e-17,
+          0.9999999999999994,
+          -0.0,
+          -8.673617379884035e-18,
+          1.235990476633475e-17,
+          -1.214306433183765e-17,
+          1.0
+        ],
+        "jntWpn_2": [
+          0.9999999999999998,
+          -1.1720225484568303e-16,
+          6.329030181884132e-17,
+          0.0,
+          -1.1720225484568303e-16,
+          0.9999999999999999,
+          6.727474480272555e-17,
+          0.0,
+          6.329030181884132e-17,
+          6.727474480272555e-17,
+          0.9999999999999994,
+          -0.0,
+          1.596571408239711e-08,
+          0.042491387575864896,
+          -0.050814524292945785,
+          1.0
+        ],
+        "jntWpn_3": [
+          0.9999999999999998,
+          -1.1720225484568303e-16,
+          6.329030181884132e-17,
+          0.0,
+          -1.1720225484568303e-16,
+          0.9999999999999999,
+          6.727474480272555e-17,
+          0.0,
+          6.329030181884132e-17,
+          6.727474480272555e-17,
+          0.9999999999999994,
+          -0.0,
+          -2.48632190703868e-08,
+          0.08023967593908303,
+          -0.08735319972038269,
+          1.0
+        ],
+        "jntWpn_8": [
+          0.9999999999999998,
+          -1.1720225484568303e-16,
+          6.329030181884132e-17,
+          0.0,
+          -1.1720225484568303e-16,
+          0.9999999999999999,
+          6.727474480272555e-17,
+          0.0,
+          6.329030181884132e-17,
+          6.727474480272555e-17,
+          0.9999999999999994,
+          -0.0,
+          -8.673617379884035e-18,
+          1.235990476633475e-17,
+          -1.214306433183765e-17,
+          1.0
+        ],
+        "jntWpn_9": [
+          0.9999999999999998,
+          -1.1720225484568303e-16,
+          6.329030181884132e-17,
+          0.0,
+          -1.1720225484568303e-16,
+          0.9999999999999999,
+          6.727474480272555e-17,
+          0.0,
+          6.329030181884132e-17,
+          6.727474480272555e-17,
+          0.9999999999999994,
+          -0.0,
+          -8.673617379884035e-18,
+          1.235990476633475e-17,
+          -1.214306433183765e-17,
+          1.0
+        ],
+        "jntWpn_10": [
+          0.9999999999999998,
+          -1.1720225484568303e-16,
+          6.329030181884132e-17,
+          0.0,
+          -1.1720225484568303e-16,
+          0.9999999999999999,
+          6.727474480272555e-17,
+          0.0,
+          6.329030181884132e-17,
+          6.727474480272555e-17,
+          0.9999999999999994,
+          -0.0,
+          -8.673617379884035e-18,
+          1.235990476633475e-17,
+          -1.214306433183765e-17,
+          1.0
+        ],
+        "jntWpn_11": [
+          0.9999999999999998,
+          -1.1720225484568303e-16,
+          6.329030181884132e-17,
+          0.0,
+          -1.1720225484568303e-16,
+          0.9999999999999999,
+          6.727474480272555e-17,
+          0.0,
+          6.329030181884132e-17,
+          6.727474480272555e-17,
+          0.9999999999999994,
+          -0.0,
+          -8.673617379884035e-18,
+          1.235990476633475e-17,
+          -1.214306433183765e-17,
+          1.0
+        ],
+        "jntWpn_Flash": [
+          0.9999999999999998,
+          -1.1720225484568303e-16,
+          6.329030181884132e-17,
+          0.0,
+          -1.1720225484568303e-16,
+          0.9999999999999999,
+          6.727474480272555e-17,
+          0.0,
+          6.329030181884132e-17,
+          6.727474480272555e-17,
+          0.9999999999999994,
+          -0.0,
+          -2.5551676365032083e-08,
+          0.07145530730485901,
+          -0.1654550582170485,
+          1.0
+        ],
+        "jntWpn_12": [
+          0.9999999999999998,
+          -1.1720225484568303e-16,
+          6.329030181884132e-17,
+          0.0,
+          -1.1720225484568303e-16,
+          0.9999999999999999,
+          6.727474480272555e-17,
+          0.0,
+          6.329030181884132e-17,
+          6.727474480272555e-17,
+          0.9999999999999994,
+          -0.0,
+          1.3350090794991831e-08,
+          0.01137390546500696,
+          -0.0053524398244918095,
+          1.0
+        ],
+        "jntWpnwpnJnt_16": [
+          0.9999999999999998,
+          -1.1720225484568303e-16,
+          6.329030181884132e-17,
+          0.0,
+          -1.1720225484568303e-16,
+          0.9999999999999999,
+          6.727474480272555e-17,
+          0.0,
+          6.329030181884132e-17,
+          6.727474480272555e-17,
+          0.9999999999999994,
+          -0.0,
+          -8.673617379884035e-18,
+          1.235990476633475e-17,
+          -1.214306433183765e-17,
+          1.0
+        ],
+        "jntWpn_7": [
+          0.9999999999999998,
+          -1.1720225484568303e-16,
+          6.329030181884132e-17,
+          0.0,
+          -1.1720225484568303e-16,
+          0.9999999999999999,
+          6.727474480272555e-17,
+          0.0,
+          6.329030181884132e-17,
+          6.727474480272555e-17,
+          0.9999999999999994,
+          -0.0,
+          -8.673617379884035e-18,
+          1.235990476633475e-17,
+          -1.214306433183765e-17,
+          1.0
+        ],
+        "jntWpn_6": [
+          0.9999999999999998,
+          -1.1720225484568303e-16,
+          6.329030181884132e-17,
+          0.0,
+          -1.1720225484568303e-16,
+          0.9999999999999999,
+          6.727474480272555e-17,
+          0.0,
+          6.329030181884132e-17,
+          6.727474480272555e-17,
+          0.9999999999999994,
+          -0.0,
+          1.3969350986728357e-08,
+          0.07174540311098099,
+          0.03554362431168551,
+          1.0
+        ],
+        "jntWpn_5": [
+          0.9999999999999998,
+          -1.1720225484568303e-16,
+          6.329030181884132e-17,
+          0.0,
+          -1.1720225484568303e-16,
+          0.9999999999999999,
+          6.727474480272555e-17,
+          0.0,
+          6.329030181884132e-17,
+          6.727474480272555e-17,
+          0.9999999999999994,
+          -0.0,
+          -1.5210126512454902e-08,
+          0.05117620900273305,
+          0.000822735659312508,
+          1.0
+        ],
+        "jntWpn_4": [
+          0.9999999999999998,
+          -1.1720225484568303e-16,
+          6.329030181884132e-17,
+          0.0,
+          -1.1720225484568303e-16,
+          0.9999999999999999,
+          6.727474480272555e-17,
+          0.0,
+          6.329030181884132e-17,
+          6.727474480272555e-17,
+          0.9999999999999994,
+          -0.0,
+          -4.352084484460228e-09,
+          0.014508581720292445,
+          -0.029017094522714615,
+          1.0
+        ],
+        "LeftHand": [
+          0.23526903058931514,
+          0.8199877537519971,
+          -0.521793605693207,
+          0.0,
+          0.8968017559834665,
+          -0.39011499547711337,
+          -0.20870290071981243,
+          0.0,
+          -0.374693332887757,
+          -0.41884409271308426,
+          -0.8271484342539847,
+          -0.0,
+          0.022324912235839538,
+          -0.05854111687008353,
+          0.10161653184652952,
+          1.0
+        ],
+        "LeftHandMiddle1": [
+          -0.5680755227537003,
+          -0.04088725513687212,
+          -0.8219601163167728,
+          0.0,
+          0.5861333678117201,
+          -0.7211988654514655,
+          -0.36921521042504624,
+          0.0,
+          -0.5777005068249477,
+          -0.6915203748544885,
+          0.43366080705466814,
+          -0.0,
+          0.03220296107930055,
+          -0.0823277100730038,
+          0.023857376988244552,
+          1.0
+        ],
+        "LeftHandThumb1": [
+          -0.07442064004403595,
+          0.45602581363648614,
+          -0.8868494943521235,
+          0.0,
+          0.8410645861040842,
+          -0.44910946010600855,
+          -0.30151460137919733,
+          0.0,
+          -0.5357909390209974,
+          -0.768336612521147,
+          -0.35012414872802894,
+          -0.0,
+          0.0314748591697462,
+          -0.0389330839124578,
+          0.0804962162941848,
+          1.0
+        ],
+        "LeftHandIndex1": [
+          -0.6008709155172559,
+          0.03137222756049119,
+          -0.7987301961384383,
+          0.0,
+          0.700500093760834,
+          -0.46065288652431746,
+          -0.5450674607586459,
+          0.0,
+          -0.38503735082004453,
+          -0.8870257614492986,
+          0.25481667331392255,
+          -0.0,
+          0.0420983656255868,
+          -0.060593576220530396,
+          0.019886787257902112,
+          1.0
+        ],
+        "LeftHandRing1": [
+          -0.7557989375923136,
+          0.21580921745035153,
+          -0.6182186891366174,
+          0.0,
+          0.2967842790966897,
+          -0.7286840534819642,
+          -0.6172022698290679,
+          0.0,
+          -0.5836840391987675,
+          -0.6499584077958848,
+          0.4866898504387053,
+          -0.0,
+          0.01576031747172788,
+          -0.09531699355349105,
+          0.03336018927155328,
+          1.0
+        ],
+        "LeftHandPinky1": [
+          -0.8215709430053867,
+          0.4317946765592541,
+          -0.3722560179558288,
+          0.0,
+          -0.13289748917004923,
+          -0.7800234395598553,
+          -0.6114750126616054,
+          0.0,
+          -0.5544000748390441,
+          -0.45289821266185487,
+          0.6982290211572135,
+          -0.0,
+          -0.003055877178220083,
+          -0.1029737199147157,
+          0.04629550305978168,
+          1.0
+        ],
+        "LeftHandThumb2": [
+          -0.14359248196276833,
+          0.30788119721808915,
+          -0.9405266437073053,
+          0.0,
+          0.8236542992365224,
+          -0.4896669812108986,
+          -0.28604168028628274,
+          0.0,
+          -0.5486116973533884,
+          -0.8157422484531265,
+          -0.18327517457547784,
+          -0.0,
+          0.027381723989502955,
+          -0.013851664298357902,
+          0.03171949436911935,
+          1.0
+        ],
+        "LeftHandMiddle2": [
+          -0.8501305088022978,
+          0.5065189983019466,
+          -0.1439327008109696,
+          0.0,
+          -0.12158803550549499,
+          -0.45477616049561553,
+          -0.8822669626971086,
+          0.0,
+          -0.5123421392248165,
+          -0.7325415675605444,
+          0.44820573866303737,
+          -0.0,
+          0.004633605594593974,
+          -0.08431201537487303,
+          -0.016033288483735718,
+          1.0
+        ],
+        "LeftHandIndex2": [
+          -0.9102493278880988,
+          0.2926737558640056,
+          -0.292896284899146,
+          0.0,
+          0.16379942642025058,
+          -0.39514796493169263,
+          -0.9038959197356405,
+          0.0,
+          -0.38028398465312985,
+          -0.8707468968872638,
+          0.3117433761566383,
+          -0.0,
+          0.013923404236022499,
+          -0.059122525987618794,
+          -0.017565836684642257,
+          1.0
+        ],
+        "LeftHandRing2": [
+          -0.7894774476563233,
+          0.5444091156646553,
+          -0.283450303268997,
+          0.0,
+          -0.05905940790085039,
+          -0.5270481079631999,
+          -0.8477807960969703,
+          0.0,
+          -0.6109315395201483,
+          -0.652563411994298,
+          0.448245075093861,
+          -0.0,
+          -0.017030426965435982,
+          -0.08595399428923926,
+          0.006538438097444194,
+          1.0
+        ],
+        "jntWpn_17": [
+          0.9999999999999998,
+          -1.1720225484568303e-16,
+          6.329030181884132e-17,
+          0.0,
+          -1.1720225484568303e-16,
+          0.9999999999999999,
+          6.727474480272555e-17,
+          0.0,
+          6.329030181884132e-17,
+          6.727474480272555e-17,
+          0.9999999999999994,
+          -0.0,
+          -8.673617379884035e-18,
+          1.235990476633475e-17,
+          -1.214306433183765e-17,
+          1.0
+        ],
+        "jntWpn_13": [
+          0.9999999999999998,
+          -1.1720225484568303e-16,
+          6.329030181884132e-17,
+          0.0,
+          -1.1720225484568303e-16,
+          0.9999999999999999,
+          6.727474480272555e-17,
+          0.0,
+          6.329030181884132e-17,
+          6.727474480272555e-17,
+          0.9999999999999994,
+          -0.0,
+          1.3350090794991831e-08,
+          0.01137390546500696,
+          -0.0053524398244918095,
+          1.0
+        ],
+        "LeftHandThumb3": [
+          -0.010095333984306043,
+          0.35417195922509515,
+          -0.9351258244377615,
+          0.0,
+          0.8117843643599482,
+          -0.5431447904837421,
+          -0.21447583162465678,
+          0.0,
+          -0.5838700454831202,
+          -0.7612857281395929,
+          -0.28202803073189214,
+          -0.0,
+          0.02210331750393827,
+          -0.0025340654521944575,
+          -0.002853916913503637,
+          1.0
+        ],
+        "LeftHandIndex3": [
+          -0.8026359884671416,
+          0.47992762790696686,
+          0.3541820746296568,
+          0.0,
+          -0.47593624365845044,
+          -0.15739083127079095,
+          -0.8652819298957849,
+          0.0,
+          -0.3595276929384708,
+          -0.8630745032750547,
+          0.35474249788664824,
+          -0.0,
+          -0.014618057794630181,
+          -0.0499455492687875,
+          -0.026749790946673176,
+          1.0
+        ],
+        "LeftHandMiddle3": [
+          -0.6050270494120539,
+          0.6767812068897262,
+          0.4194156261760301,
+          0.0,
+          -0.6117042514703513,
+          -0.0579120889249529,
+          -0.7889639400438059,
+          0.0,
+          -0.5096667324956986,
+          -0.7339028464021891,
+          0.44902832185723296,
+          -0.0,
+          -0.022018905720486957,
+          -0.06843209671089613,
+          -0.02054573439322213,
+          1.0
+        ],
+        "LeftHandRing3": [
+          -0.5115109235845622,
+          0.7690631919246156,
+          0.38327324701887483,
+          0.0,
+          -0.5667694423642791,
+          0.033291330703979,
+          -0.8232035510747285,
+          0.0,
+          -0.6458552270097012,
+          -0.6383051731943594,
+          0.418852637114255,
+          -0.0,
+          -0.04059335138943104,
+          -0.06970543533898518,
+          -0.0019214844674295961,
+          1.0
+        ],
+        "jntWpn_18": [
+          0.9999999999999998,
+          -1.1720225484568303e-16,
+          6.329030181884132e-17,
+          0.0,
+          -1.1720225484568303e-16,
+          0.9999999999999999,
+          6.727474480272555e-17,
+          0.0,
+          6.329030181884132e-17,
+          6.727474480272555e-17,
+          0.9999999999999994,
+          -0.0,
+          -8.673617379884035e-18,
+          1.235990476633475e-17,
+          -1.214306433183765e-17,
+          1.0
+        ],
+        "jntWpnwpnJnt_14": [
+          0.9999999999999998,
+          -1.1720225484568303e-16,
+          6.329030181884132e-17,
+          0.0,
+          -1.1720225484568303e-16,
+          0.9999999999999999,
+          6.727474480272555e-17,
+          0.0,
+          6.329030181884132e-17,
+          6.727474480272555e-17,
+          0.9999999999999994,
+          -0.0,
+          1.3350090794991831e-08,
+          0.01137390546500696,
+          -0.0053524398244918095,
+          1.0
+        ],
+        "jntWpn_19": [
+          0.9999999999999998,
+          -1.1720225484568303e-16,
+          6.329030181884132e-17,
+          0.0,
+          -1.1720225484568303e-16,
+          0.9999999999999999,
+          6.727474480272555e-17,
+          0.0,
+          6.329030181884132e-17,
+          6.727474480272555e-17,
+          0.9999999999999994,
+          -0.0,
+          -8.673617379884035e-18,
+          1.235990476633475e-17,
+          -1.214306433183765e-17,
+          1.0
+        ],
+        "jntWpn_15": [
+          0.9999999999999998,
+          -1.1720225484568303e-16,
+          6.329030181884132e-17,
+          0.0,
+          -1.1720225484568303e-16,
+          0.9999999999999999,
+          6.727474480272555e-17,
+          0.0,
+          6.329030181884132e-17,
+          6.727474480272555e-17,
+          0.9999999999999994,
+          -0.0,
+          1.3350090794991831e-08,
+          0.01137390546500696,
+          -0.0053524398244918095,
+          1.0
+        ]
+      },
+      "status": "authored_reload_references_only",
+      "runtime_accepted": false,
+      "active_native_mesh_binding": false,
+      "configured_mesh_path": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach_Mesh",
+      "binding_digest": "27d24e0477d010c64a8e835bb55bf874d3a2ae5499114833c7dae583dd038d30"
+    }
+  ],
+  "gaps": [],
+  "runtime_admission": false,
+  "scope": "Exact authored reference and content binding; current native equipment/mesh/rig guards remain required",
+  "summary": {
+    "weapon_definitions": 73,
+    "bound_profiles": 72,
+    "gaps": 1
+  },
+  "archive": "Dist/win32/levels/mp_common/level-00.fbrb",
+  "archive_index_sha256": "6ec10fba796c14d2a05f86d3079e819c38a4aaab3ec9205d7345bd2869554965",
+  "parse_or_evaluation_errors": []
+}

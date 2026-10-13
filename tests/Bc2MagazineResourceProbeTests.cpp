@@ -31,9 +31,9 @@ struct Fixture {
     AmmoResourceBinding binding;AmmunitionCounts counts{27,83,30};std::int64_t now=1000*Ms;
     std::uint64_t sequence=0,intent=0,nativeSequence=0,invocation=0;unsigned calls=0;
     std::shared_ptr<SelectedMeshesSnapshot> meshes=std::make_shared<SelectedMeshesSnapshot>();
-    const MagazineEquipmentProfile* profile=&Xm8MagazineEquipment();bool completeNative=true,publishBetweenCallbacks=false,skipSelectOnce=false;
+    const MagazineEquipmentProfile* profile=&Xm8MagazineEquipment();bool completeNative=true,publishBetweenCallbacks=false,skipSelectOnce=false,freezeSelect=false;
     std::optional<AmmoResourceNativeCall> outstanding;
-    Fixture(const MagazineEquipmentProfile& equipment=Xm8MagazineEquipment()):profile(&equipment){
+    Fixture(const MagazineEquipmentProfile& equipment=Xm8MagazineEquipment(),bool typed=false):profile(&equipment){
         binding={native.owner,{{native.owner.soldier,5,native.owner.weapon,45},3,7},0xd0000,0x130000,0x140000,0x150000,now,now+100*Ms};
         s.nativeOwner=native.owner;s.weapon={0xb0000,17};s.trackingEpoch=7;
         s.input={{(std::uint64_t(0x30000)<<32)|0x20000,5,17,7},0,now,now+100*Ms,now,true,{true,true},{true,false}};
@@ -52,6 +52,8 @@ struct Fixture {
         api.context=this;api.read=[](void* p,const ReloadStateOwner& o,std::int64_t now)noexcept{return static_cast<Fixture*>(p)->channel.Read(o,now);};
         api.submit=[](void* p,const AmmoResourceRequest& r)noexcept{return static_cast<Fixture*>(p)->channel.Submit(r);};
         MagazinePhysicalApi playerApi;playerApi.context=this;playerApi.resourceRead=api.read;playerApi.resourceSubmit=api.submit;
+        if(typed)playerApi.resourceReadObserved=[](void* p,const ReloadStateOwner& o,std::int64_t now)noexcept{
+            return static_cast<Fixture*>(p)->channel.ReadObserved(o,now);};
         auto pouch=ChestAmmoSupply();const auto ids=Bc2MagazinePhysicalReload::DefaultPouch();pouch.itemNamespace=ids.itemNamespace;pouch.pouch=ids.pouch;
         adapter.emplace(true,playerApi,pouch);adapter->EnableBodyAmmo();
     }
@@ -115,7 +117,7 @@ struct Fixture {
             s.family.binding.equipment,binding.inventory,binding.switching,0,0,sequence,now,now+100*Ms,true};
         meshes->sequence=sequence;meshes->observedNs=now;meshes->deadlineNs=now+100*Ms;
         s.raw=raw;if(raw.valid)s.originalHandEvidence=raw.inputEvidence;
-        if(skipSelectOnce)skipSelectOnce=false;else Select();result=adapter->Tick(s,hands,intent);
+        if(skipSelectOnce)skipSelectOnce=false;else if(!freezeSelect)Select();result=adapter->Tick(s,hands,intent);
         if(pairs&&result.tracking.target&&MagazineTargetFresh(result.tracking,now)){
             ++packs.pairs;packs.copies+=2;const auto role=unsigned(result.tracking.target->role);++packs.rolePairs[role];packs.roleCopies[role]+=2;
         }
@@ -146,6 +148,36 @@ int RealConsumerProfiles(){unsigned profiles=0;for(const auto* profile:{&Xm8Maga
 int CombinedPersistent(){Fixture f;f.probe=Bc2MagazineResourceProbe(true,false,true);CHECK(f.Run());
     CHECK(f.calls==4&&f.counts.loaded==30&&f.counts.reserve==53);
     CHECK(Report(f.probe).find("\"completed_cycles\":2")!=std::string::npos);return 0;}
+int VisualFallbackDoesNotFabricateMechanicalCancellation(){
+    Fixture f;f.probe=Bc2MagazineResourceProbe(true,true);
+    for(unsigned n=0;n<3000&&!f.probe.CancelConsumer()&&f.probe.Current()!=Bc2MagazineResourceProbe::Phase::Pull;++n)f.Tick();
+    CHECK(f.probe.Current()==Bc2MagazineResourceProbe::Phase::Pull&&f.calls==1);
+    ++f.packs.fallbacks;f.Tick();CHECK(!f.probe.CancelConsumer());
+    CHECK(f.Run()&&f.calls==2&&f.counts.loaded==27&&f.counts.reserve==83);
+    CHECK(!f.adapter->BlocksEquipment());
+    const auto report=Report(f.probe);
+    CHECK(report.find("\"presentation_continuity_verified\":false")!=std::string::npos);
+    CHECK(report.find("\"presentation_fallbacks_during_interaction\":1")!=std::string::npos);
+    CHECK(report.find("\"actual_consumer_completed\":true")!=std::string::npos);
+    return 0;
+}
+int DiscardPublicationGapThroughController(){
+    for(const auto* profile:{&Xm8MagazineEquipment(),FindMagazineEquipment("AEK971_sp"),FindMagazineEquipment("F2000_sp")}){
+        if(!profile||!profile->Ready())continue;
+        Fixture f(*profile,true);f.probe=Bc2MagazineResourceProbe(true,false,true);
+        for(unsigned n=0;n<3000&&!f.probe.CancelConsumer()&&f.calls<3;++n)f.Tick();
+        CHECK(f.calls==3&&!f.probe.CancelConsumer());
+        for(unsigned n=0;n<300&&!f.probe.CancelConsumer()&&f.result.interaction.phase!=DetachableMagazinePhase::WellEmpty;++n)f.Tick();
+        CHECK(f.result.interaction.phase==DetachableMagazinePhase::WellEmpty);
+        f.freezeSelect=true;
+        // Expire the 100ms view for 50ms, within this diagnostic's separate
+        // 100ms missing-view timeout. Longer custody gaps have adapter tests.
+        for(unsigned n=0;n<15;++n){f.Tick();CHECK(!f.probe.CancelConsumer()&&f.calls==3);}
+        f.freezeSelect=false;CHECK(f.Run());
+        CHECK(f.calls==4&&f.counts.loaded==30&&f.counts.reserve==53&&!f.adapter->BlocksEquipment());
+        CHECK(Report(f.probe).find("\"completed_cycles\":2")!=std::string::npos);
+    }return 0;
+}
 int NoReceiptOrRenderer(){for(unsigned fault=0;fault<2;++fault){Fixture f;f.hideReceipt=fault==0;f.pairs=fault!=1;
     CHECK(!f.Run());CHECK(f.calls==1);CHECK(!f.probe.Completed());}return 0;}
 int DelayedReceiptRelease(){Fixture f;for(unsigned n=0;n<3000&&f.probe.Current()!=Bc2MagazineResourceProbe::Phase::Stroke;++n)f.Tick();
@@ -230,12 +262,108 @@ int CompletionPublicationBetweenCallbacks(){
         CHECK(f.counts.loaded==30&&f.counts.reserve==53&&!f.adapter->BlocksEquipment());
     }return 0;
 }
+int WarmupPublicationGapPreservesProfile(){
+    for(const auto* profile:{FindMagazineEquipment("F2000_sp"),&Xm8MagazineEquipment()}){
+        if(!profile||!profile->Ready())continue;
+        Fixture f(*profile);for(unsigned n=0;n<360;++n)f.Tick();
+        CHECK(f.probe.Current()==Bc2MagazineResourceProbe::Phase::Warmup&&f.calls==0);
+        const auto nativeSequence=f.service.View()->snapshot.sequence;f.freezeSelect=true;
+        // Actual246 failed about 3.65s into a six-second warmup when one
+        // native read expired. Keep the renderer/controller paths advancing.
+        for(unsigned n=0;n<35;++n){f.Tick();
+            if(f.probe.CancelConsumer())std::cerr<<Report(f.probe)<<"\n";
+            CHECK(!f.probe.CancelConsumer()&&f.probe.Current()==Bc2MagazineResourceProbe::Phase::Warmup&&f.calls==0);
+        }
+        CHECK(f.result.idleAwaitingResource&&!f.State().resource);
+        CHECK(f.service.View()->snapshot.sequence==nativeSequence);
+        f.freezeSelect=false;CHECK(f.Run());CHECK(f.calls==2);
+    }
+    Fixture unavailable;for(unsigned n=0;n<20;++n)unavailable.Tick();unavailable.freezeSelect=true;
+    for(unsigned n=0;n<1200&&!unavailable.probe.CancelConsumer();++n)unavailable.Tick();
+    CHECK(unavailable.probe.CancelConsumer()&&!unavailable.probe.Completed()&&unavailable.calls==0);
+    CHECK(!unavailable.probe.FirstGuardFailure()&&Report(unavailable.probe).find("\"failure\":7")!=std::string::npos);
+    return 0;
+}
+int CombinedWarmupStillNeedsFreshNativeAndRendererEvidence(){
+    Fixture f;CHECK(f.probe.UseCombinedWarmup());
+    for(unsigned n=0;n<20;++n)f.Tick();
+    CHECK(!f.probe.UseCombinedWarmup());f.freezeSelect=true;
+    for(unsigned n=0;n<130;++n)f.Tick();
+    CHECK(!f.probe.CancelConsumer()&&f.probe.Current()==Bc2MagazineResourceProbe::Phase::Warmup&&f.calls==0);
+    CHECK(!f.State().resource);f.freezeSelect=false;
+    CHECK(f.Run()&&f.calls==2&&f.probe.PresentationContinuityVerified());
+    CHECK(!f.probe.UseCombinedWarmup());return 0;
+}
+int FirstGuardFailureRetainsOnset(){
+    // Actual246 stopped during armed warmup with generic failure2. Distinguish
+    // a missing profile from a lifetime change or stale packet, then retain
+    // that first observation through the diagnostic's terminal neutral tail.
+    for(unsigned fault=0;fault<4;++fault){
+        Fixture f;for(unsigned n=0;n<10;++n)f.Tick();
+        CHECK(f.probe.Current()==Bc2MagazineResourceProbe::Phase::Warmup&&!f.probe.FirstGuardFailure());
+        auto state=f.State();auto owner=f.native.owner;auto in=Input(++f.sequence);f.now+=10*Ms;
+        auto observed=f.now,deadline=f.now+100*Ms;unsigned expected=0;
+        if(fault==0){state.result.tracking.family.binding.profile=nullptr;
+            expected=Bc2MagazineResourceProbe::ProfileMissing|Bc2MagazineResourceProbe::ProfileChanged;}
+        if(fault==1){++owner.equipGeneration;expected=Bc2MagazineResourceProbe::OwnerChanged;}
+        if(fault==2){++observed;expected=Bc2MagazineResourceProbe::FutureObservation;}
+        if(fault==3){observed-=100*Ms;deadline=f.now;expected=Bc2MagazineResourceProbe::ExpiredInput;}
+        f.probe.Prepare(in,owner,f.s.asset,f.raw,state,observed,deadline,f.now);
+        CHECK(f.probe.CancelConsumer()&&!f.probe.Completed()&&f.calls==0&&in.hands[0].squeeze==0);
+        CHECK(f.probe.FirstGuardFailure());const auto saved=*f.probe.FirstGuardFailure();
+        CHECK(saved.faults==expected&&saved.armed&&saved.phase==Bc2MagazineResourceProbe::Phase::Warmup);
+        CHECK(saved.actual==owner&&saved.expected==f.native.owner&&saved.sequence==in.generation);
+        CHECK(saved.observed==observed&&saved.deadline==deadline&&saved.now==f.now);
+        const auto report=Report(f.probe);
+        for(unsigned n=0;n<25;++n)f.Tick(n%2?1:0);
+        CHECK(Report(f.probe)==report&&f.calls==0);
+        CHECK(f.probe.FirstGuardFailure()->faults==expected&&f.probe.FirstGuardFailure()->now==saved.now);
+    }return 0;
+}
+int IdleApproachRearmsOnlyBeforeInteraction(){
+    const auto approach=[](Fixture& f){
+        for(unsigned n=0;n<900&&f.probe.Current()!=Bc2MagazineResourceProbe::Phase::ApproachMagazine;++n)f.Tick();
+        return f.probe.Current()==Bc2MagazineResourceProbe::Phase::ApproachMagazine&&f.calls==0;
+    };
+    auto owned=std::make_unique<Fixture>();auto& f=*owned;CHECK(approach(f));const auto counts=f.counts;
+    f.adapter->Cancel(f.s.input,f.hands);CHECK(f.State().result.interaction.phase==DetachableMagazinePhase::Cancelled);
+    f.Tick();CHECK(!f.probe.CancelConsumer()&&f.calls==0&&f.counts==counts);
+    CHECK(f.lastInput.hands[0].squeeze==0);CHECK(f.Run()&&f.calls==2);
+    CHECK(Report(f.probe).find("\"idle_recoveries\":1")!=std::string::npos);
+    // The wait cannot conceal changed ammunition/ownership or an interrupted
+    // real manipulation. It issues no input squeeze, request, ack or reset.
+    for(unsigned fault=0;fault<8;++fault){
+        auto badOwner=std::make_unique<Fixture>();auto& bad=*badOwner;
+        CHECK(approach(bad));bad.adapter->Cancel(bad.s.input,bad.hands);auto s=bad.State();
+        if(fault==0)++s.resource->snapshot.counts.loaded;
+        if(fault==1)++s.resource->binding.owner.weapon;
+        if(fault==2)++s.resource->request;
+        if(fault==3)s.resource->wellEmpty=true;
+        if(fault==4)s.result.ownsLeftHand=true;
+        if(fault==5)s.result.blocksWeaponActions=true;
+        if(fault==6)s.result.interaction.reason=DetachableMagazineReason::PoseJump;
+        if(fault==7)s.resource.reset();
+        bad.probe.Observe(s,bad.packs,bad.now);
+        CHECK(bad.probe.CancelConsumer()&&!bad.probe.Completed()&&bad.calls==0);
+    }
+    auto activeOwner=std::make_unique<Fixture>();auto& active=*activeOwner;
+    for(unsigned n=0;n<1200&&active.probe.Current()!=Bc2MagazineResourceProbe::Phase::Pull;++n)active.Tick();
+    CHECK(active.probe.Current()==Bc2MagazineResourceProbe::Phase::Pull&&active.calls==1);
+    active.adapter->Cancel(active.s.input,active.hands);active.probe.Observe(active.State(),active.packs,active.now);
+    CHECK(active.probe.CancelConsumer()&&!active.probe.Completed());
+    auto stuckOwner=std::make_unique<Fixture>();auto& stuck=*stuckOwner;CHECK(approach(stuck));stuck.s.cancel=true;
+    for(unsigned n=0;n<35&&!stuck.probe.CancelConsumer();++n)stuck.Tick();
+    CHECK(stuck.probe.CancelConsumer()&&!stuck.probe.Completed()&&stuck.calls==0);
+    return 0;
+}
 int Disabled(){Bc2MagazineResourceProbe p;auto in=Input(1);const auto before=in;p.Prepare(in,{},"",{},{},0,0,0);
     CHECK(in.hands[0].grip.position.x==before.hands[0].grip.position.x&&!p.CancelConsumer());return 0;}
 }
 int main(){
+    if(IdleApproachRearmsOnlyBeforeInteraction())return 1;
+    if(VisualFallbackDoesNotFabricateMechanicalCancellation())return 1;
 #ifdef FVR_RESOURCE_PROBE_VARIANTS
     if(ExactPublishedVariants())return 1;
 #endif
-    if(CompletionPublicationBetweenCallbacks()||DoneShutdownDoesNotCreateNewWork()||Disabled()||RealConsumerProfiles()||CombinedPersistent()||NoReceiptOrRenderer()||DelayedReceiptRelease()||InterruptedInputs()||SupportEvidenceRequired()||ExactSeatReceiptRequired()||ExistingEvidenceCannotBeReplayed()||StartupWaitsForActualResource()||SetupReceiverHasOnlyFiniteActions())return 1;
+    if(CombinedWarmupStillNeedsFreshNativeAndRendererEvidence()||DiscardPublicationGapThroughController()||WarmupPublicationGapPreservesProfile()||FirstGuardFailureRetainsOnset()||CompletionPublicationBetweenCallbacks()||DoneShutdownDoesNotCreateNewWork()||Disabled()||RealConsumerProfiles()||CombinedPersistent()||NoReceiptOrRenderer()||DelayedReceiptRelease()||InterruptedInputs()||SupportEvidenceRequired()||ExactSeatReceiptRequired()||ExistingEvidenceCannotBeReplayed()||StartupWaitsForActualResource()||SetupReceiverHasOnlyFiniteActions())return 1;
     std::cout<<"Resource controller driver: XM8/AEK, zero/partial/full originals, return/discard/refill, delayed receipt, hand/support release, N-3 geometry, interruptions passed (mock native Updates and renderer pairs).\n";}

@@ -1,0 +1,28 @@
+[
+  {
+    "asset": "MP443_sp",
+    "meshes": [
+      {
+        "archive": "Dist/win32/async/weapon/ai_hg_mp443grach-00.fbrb",
+        "mesh": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach_Mesh",
+        "expected_index_sha256": "14f3b4ab342ea3d36063aef7be9b78c0d36af7ad22beb01558312f63e9644d51",
+        "expected_metadata_sha256": "205b298bb56bf12eec807fc015c3ea95ba02ef20d51c5a58f449fb225242e1b5",
+        "expected_lod_sha256": "9fe633a30f8f2be2d7e59478e3f61edf10fb3d2c1e12d3eff251c672d6414636"
+      }
+    ],
+    "authored_configuration": {
+      "resource": "Objects/Weapons/Handheld/RU_hg_MP443Grach/SP_hg_MP443Grach.dbx",
+      "sha256": "e16f5713854ca38ab58d61bd3c568e2f87533c0e82032d71d61f27449d5484cc",
+      "instance_guid": "58098858-821b-4406-a19c-ae62e5d38bdf",
+      "type": "GameSharedResources.SoldierWeaponData",
+      "mesh_references": [
+        {
+          "reference": "objects/weapons/handheld/ru_hg_mp443grach/ru_hg_mp443grach_mesh/a2f5a385-64cf-11db-962b-86e865e73fbb",
+          "resource": "Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach_Mesh.dbx",
+          "sha256": "3932900d208af3ae06d4384ef990c5778a3e4956c10a3d6a3d0af0b4a9117d11",
+          "instance_guid": "a2f5a385-64cf-11db-962b-86e865e73fbb"
+        }
+      ]
+    }
+  }
+]

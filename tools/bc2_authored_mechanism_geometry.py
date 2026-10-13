@@ -72,7 +72,31 @@ def analyze(profile,parts,closed,clip,skeleton,receipt):
     names=set(valid)|{parents[n] for n in valid if parents[n]};hands=['LeftHand',*mag.FINGERS];hand_valid=True
     try:clip.evaluate(skeleton,0,hands);names.update(hands)
     except (ValueError,KeyError) as e:hand_valid=False;gaps.append({'hand':'left','reason':str(e)})
-    count=math.ceil(clip.duration*MOTION['sample_hz']);samples=[clip.evaluate(skeleton,min(i/MOTION['sample_hz'],clip.duration),sorted(names)) for i in range(count+1)]
+    count=math.ceil(clip.duration*MOTION['sample_hz']);samples=[]
+    for i in range(count+1):
+        time=min(i/MOTION['sample_hz'],clip.duration)
+        try:sample=clip.evaluate(skeleton,time,sorted(names))
+        except (ValueError,KeyError) as error:
+            # A malformed independent part must not invalidate the entire
+            # weapon. Keep each part's actual-parent dependency and the complete
+            # hand chain together; never substitute a missing local transform.
+            rejected=[]
+            for name in valid:
+                try:clip.evaluate(skeleton,time,[name]+([parents[name]] if parents[name] else []))
+                except (ValueError,KeyError) as part_error:
+                    rejected.append(name);gaps.append({'bone':name,'reason':str(part_error),'time_s':time})
+            hand_rejected=False
+            if hand_valid:
+                try:clip.evaluate(skeleton,time,hands)
+                except (ValueError,KeyError) as hand_error:
+                    hand_valid=False;hand_rejected=True;gaps.append({'hand':'left','reason':str(hand_error),'time_s':time})
+            if not rejected and not hand_rejected:raise error
+            valid=[name for name in valid if name not in rejected]
+            names=set(valid)|{parents[n] for n in valid if parents[n]}
+            if hand_valid:names.update(hands)
+            if not names:break
+            sample=clip.evaluate(skeleton,time,sorted(names))
+        samples.append(sample)
     output=[]
     for name in valid:
         part=parts[name];parent=parents[name]

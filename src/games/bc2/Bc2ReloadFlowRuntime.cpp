@@ -3,6 +3,9 @@
 #include "Bc2PreholdOperationJournal.h"
 #include "Bc2ReloadFlowRuntime.h"
 #include "Bc2NativeCycleRuntime.h"
+#include "Bc2NativeCycleRecovery.h"
+#include "Bc2NativeCycleFailureJournal.h"
+#include "Bc2NativeCycleUpdateRoute.h"
 #include "Bc2NativeCycleDispatch.h"
 #include "Bc2NativeCycleEvidence.h"
 #include "Bc2NativeCycleCallbacks.h"
@@ -27,6 +30,7 @@
 #include "Bc2ReloadLockBodyTelemetry.h"
 #include "Bc2ReloadPreentryDeferral.h"
 #include "Bc2ReloadCohortRetry.h"
+#include "Bc2ReloadStateRetry.h"
 #include "Bc2ReloadServer.h"
 #include "Bc2ReloadRoundGate.h"
 #ifdef FVR_BC2_NATIVE_AMMO_BACKEND
@@ -402,6 +406,7 @@ struct Lease {ReloadStateSnapshot snapshot{};std::int64_t deadline=0;std::uint64
 std::int64_t frequency=0,startNs=0;bool installed=false,started=false,drained=false;
 ReloadRecordWindow recordWindowClock;
 std::atomic<unsigned> ownerDrops=0,recordBusy=0,recordBeginBusy=0,recordEndBusy=0,ownerMisses=0,readMisses=0,contextMisses=0,nestingMisses=0,windowExpired=0;
+std::atomic<unsigned> ownerPublicationsAfterEntry=0;
 std::array<std::atomic<unsigned>,4> calls{},matches{},serverMatches{};
 std::atomic<unsigned> serverPublishAttempts=0,serverPublishMisses=0,serverReadMisses=0;
 bool diagnosticHold=false,diagnosticRound=false,requestMode=false,holdCodeVerified=false,pumpDiagnostic=false;
@@ -448,10 +453,12 @@ std::atomic<unsigned> roundContention=0;std::array<std::atomic<unsigned>,3> roun
 ReloadHoldProbe holdProbe;
 bool nativePumpCandidate=false;
 std::atomic<bool> nativeBoltCandidate=false;
+bool nativeCycleRecoveryEnabled=false; // Pre-Start opt-in; immutable during callbacks.
 bool nativeCycleDispatcher=false;
 // Serializes routing publication/handoff only. No original callback holds it.
 std::atomic_flag nativeCycleRoutingGate=ATOMIC_FLAG_INIT;
 Bc2NativeCycleService nativeCycle;
+NativeCycleFailureJournal nativeCycleFirstFailure;
 std::atomic_flag nativeCycleGate=ATOMIC_FLAG_INIT;
 std::atomic<std::uint64_t> nativeCycleCancelEpoch=0;
 std::uint64_t nativeCycleAppliedCancel=0; // nativeCycleGate only; never a readiness receipt.
@@ -464,9 +471,21 @@ std::atomic<unsigned> nativeCycleWaits=0,nativeCycleRecovered=0;
 std::atomic<std::int64_t> nativeCycleMaxWaitNs=0;
 std::atomic<unsigned> nativeCycleControls=0,nativeCycleReleases=0,nativeCycleAcks=0;
 struct NativeCycleControlRejection {std::int64_t now=0,observed=0,deadline=0;std::uint64_t sequence=0;
-    unsigned reason=0,branch=3,clientFailure=0,serverFailure=0;};
+    unsigned reason=0,branch=3,clientFailure=0,serverFailure=0;
+    ReloadFlowBoundaryDiagnostic client{};ReloadServerBoundaryDiagnostic server{};};
 std::array<NativeCycleControlRejection,32> nativeCycleControlRejections{};
 std::atomic<unsigned> nativeCycleControlRejectionCount=0;
+struct NativeObservationMiss {std::int64_t now=0;unsigned firing=0,thread=0,stage=0,status=0;};
+std::array<NativeObservationMiss,32> nativeObservationMisses{};
+std::atomic<unsigned> nativeObservationMissCount=0;
+std::atomic<unsigned> nativeObservationRetries=0,nativeObservationRecovered=0;
+void NativeObservationRejected(unsigned firing,unsigned stage,unsigned status=0)noexcept {
+    LARGE_INTEGER stamp{};QueryPerformanceCounter(&stamp);
+    const auto n=nativeObservationMissCount.fetch_add(1,std::memory_order_relaxed);
+    if(n<nativeObservationMisses.size())nativeObservationMisses[n]={
+        frequency>0?(stamp.QuadPart/frequency)*1000000000+(stamp.QuadPart%frequency)*1000000000/frequency:0,
+        firing,GetCurrentThreadId(),stage,status};
+}
 std::array<std::atomic<unsigned>,3> nativeCycleHeld{};
 std::array<std::atomic<unsigned>,3> holdApplied{},holdRestored{};
 std::array<unsigned,3> requestTransferCounts{};
@@ -496,16 +515,20 @@ std::int64_t Now()noexcept;
 struct ObservationReadMiss {
     std::int64_t observedNs=0;unsigned thread=0,firing=0,branch=3,stage=0;
     ReloadFlowEvent kind{};bool exit=false;std::uint64_t invocation=0;
+    ReloadFlowBoundaryDiagnostic client{};ReloadServerBoundaryDiagnostic server{};
+    std::int64_t leaseObservedNs=0,leaseDeadlineNs=0,readNs=0,serverObservedNs=0;
 };
 std::array<ObservationReadMiss,256> observationReadMisses{};
 std::atomic<unsigned> observationReadMissCount=0;
 void RecordObservationReadMiss(ReloadFlowEvent kind,unsigned firing,const RequestBoundaryEvidence& evidence,
-    bool exit,std::uint64_t invocation)noexcept {
+    bool exit,std::uint64_t invocation,const Lease* lease=nullptr,std::int64_t readNs=0)noexcept {
     // One unique bounded slot per failure. Rows are read only after callback
     // drain; an overflow remains explicit rather than hiding an observation gap.
     const auto n=observationReadMissCount.fetch_add(1,std::memory_order_relaxed);
     if(n<observationReadMisses.size())observationReadMisses[n]={Now(),GetCurrentThreadId(),firing,
-        evidence.readBranch,evidence.stage,kind,exit,invocation};
+        evidence.readBranch,evidence.stage,kind,exit,invocation,evidence.client,evidence.server,
+        lease?lease->snapshot.observedNs:0,lease?lease->deadline:0,readNs,
+        lease&&lease->server?lease->server->client.observedNs:0};
 }
 enum class PhaseRetryPath:unsigned {ClientBoundary,ServerBoundary,ClientOwner,ServerOwner};
 struct PhaseRetrySample {PhaseRetryPath path{};unsigned firing=0;std::uint64_t sequence=0;std::int64_t deadline=0;ReloadPhaseRetryAttempt attempt{};};
@@ -552,9 +575,17 @@ template<class F>bool WithNativeCycle(F&& fn)noexcept {
         while(elapsed>previous&&!nativeCycleMaxWaitNs.compare_exchange_weak(previous,elapsed)){}
     }
     if(!lock.Held()){++nativeCycleContention;nativeCycleCancelEpoch.fetch_add(1,std::memory_order_acq_rel);return false;}
+    const auto previousPhase=nativeCycle.Phase();
     const auto epoch=nativeCycleCancelEpoch.load(std::memory_order_acquire);
     if(epoch!=nativeCycleAppliedCancel){nativeCycle.Cancel(Bc2NativeCycleFailure::Control);nativeCycleAppliedCancel=epoch;}
-    fn();const auto previous=nativeCycleCompletionId.load(std::memory_order_acquire);
+    fn();
+    if(nativeCycle.Phase()==Bc2NativeCyclePhase::Cancelled&&!nativeCycleFirstFailure.Read()){
+        const auto now=Now();
+        nativeCycleFirstFailure.Capture({nativeCycle.View(now),previousPhase,nativeCycle.Mode(),
+            nativeCycle.LastControlInput(),now,nativeCycleCancelEpoch.load(std::memory_order_acquire),
+            nativeCycleContention.load(std::memory_order_relaxed),GetCurrentThreadId()});
+    }
+    const auto previous=nativeCycleCompletionId.load(std::memory_order_acquire);
     nativeCycleCompletionId.store(nativeCycle.ObservationAuthority(previous,Now()),std::memory_order_release);return true;
 }
 void NativeCycleMissing(unsigned firing,std::uint64_t invocation)noexcept {
@@ -629,20 +660,28 @@ std::optional<Lease> Owner(unsigned firing,std::int64_t now)noexcept{
     std::optional<Lease> regular;
     {OwnerCopyGate gate;
         if(!gate.held)++ownerDrops;
-        else if(IsCurrent(published,now)&&IsCurrent(published,Now())&&
-            (published.snapshot.branches[0].address==firing||published.snapshot.branches[1].address==firing||
-             (published.server&&published.server->links.firing==firing)))regular=published;
+        else {
+            regular=CopyPublishedOwnerAtAcquisition(published,now,Now,IsCurrent);
+            if(regular&&regular->snapshot.branches[0].address!=firing&&regular->snapshot.branches[1].address!=firing&&
+               (!regular->server||regular->server->links.firing!=firing))regular.reset();
+            if(regular&&regular->snapshot.observedNs>now)++ownerPublicationsAfterEntry;
+        }
     }
     // Exact completion or a bounded already-held interruption watch supplies
     // native-only authority. Each native read keeps its own original freshness;
     // neither path renews an XR packet or grants physical hand custody.
-    if(!NativeCycleTarget(firing)||!nativeCycleCompletionId.load(std::memory_order_acquire))return regular;
+    if(!NativeCycleTarget(firing))return regular;
+    // The first native callback after packet expiry can convert a still-proven
+    // Held debt before normal owner publication loss cancels it. No XR bounds
+    // are renewed; subsequent native reads are independently fresh.
+    if(!regular&&nativeCycleRecoveryEnabled)WithNativeCycle([&]{if(!nativeCycle.Recovering())nativeCycle.BeginRecovery(now);});
+    if(!nativeCycleCompletionId.load(std::memory_order_acquire))return regular;
     std::optional<Bc2NativeCycleCompletionWatch> watch;
     WithNativeCycle([&]{watch=nativeCycle.ObservationWatch(Now());});
     // Ending suspension keeps only already-issued original-deadline reads
     // alive. Without an active watch, a new callback still needs regular input.
-    if(!watch)return regular;
-    if(std::find(watch->identity.firing.begin(),watch->identity.firing.end(),firing)==watch->identity.firing.end()||!serverBinding)return {};
+    if(!watch){if(!regular)NativeObservationRejected(firing,1);return regular;}
+    if(std::find(watch->identity.firing.begin(),watch->identity.firing.end(),firing)==watch->identity.firing.end()||!serverBinding){NativeObservationRejected(firing,2);return {};}
     if(regular&&RoundIdentity(*regular)==watch->identity&&regular->snapshot.config==watch->config){
         // Retain the original native observation deadline. Only the independent
         // observation grant replaces a presentation ClearOwner revision barrier.
@@ -651,13 +690,18 @@ std::optional<Lease> Owner(unsigned firing,std::int64_t now)noexcept{
         if(IsCurrent(*regular,Now()))return regular;
     }
     const auto at=Now();const auto sequence=nativeCycleCompletionSequence.Next();
-    if(!sequence||at<=0||at>=watch->deadlineNs)return {};
-    const auto read=ReadReloadState(memory,binding.state,base,watch->identity.owner,sequence,at);
-    if(!read.snapshot||read.snapshot->config!=watch->config)return {};
+    if(!sequence||at<=0||at>=watch->deadlineNs){NativeObservationRejected(firing,3);return {};}
+    const auto originalDeadline=std::min(at+100000000,watch->deadlineNs);
+    ReloadStateRetryAttempt retry;
+    const auto read=ReadReloadStateCoherent([&](std::int64_t sampled){
+        return ReadReloadState(memory,binding.state,base,watch->identity.owner,sequence,sampled);
+    },Now,at,originalDeadline,retry);
+    if(retry.attempted){++nativeObservationRetries;if(retry.recovered)++nativeObservationRecovered;}
+    if(!read.snapshot||read.snapshot->config!=watch->config){NativeObservationRejected(firing,4,unsigned(read.status));return {};}
     const auto server=ReadReloadServerState(memory,*serverBinding,binding.state,base,*read.snapshot);
-    if(!server)return {};
-    Lease fresh{*read.snapshot,std::min(at+100000000,watch->deadlineNs),watch->cycle,server,watch->cycle};
-    if(RoundIdentity(fresh)!=watch->identity||!IsCurrent(fresh,Now()))return {};
+    if(!server){NativeObservationRejected(firing,5);return {};}
+    Lease fresh{*read.snapshot,originalDeadline,watch->cycle,server,watch->cycle};
+    if(RoundIdentity(fresh)!=watch->identity||!IsCurrent(fresh,Now())){NativeObservationRejected(firing,6);return {};}
     return fresh;
 }
 
@@ -708,6 +752,7 @@ bool RequestOwnerEvidence(const Lease& lease,std::int64_t now,RequestBoundaryEvi
 struct Observation {
     Frame frame{};std::optional<Lease> lease;unsigned context=0,snapshot=0;
     ReloadDeltaOverride hold{};bool holdRequested=false,finished=false;ReloadFlowEventInput entry{};RequestBoundaryEvidence evidence{};
+    NativeCycleInputGuard cycleGuard{};std::uint64_t cycleGuardEpoch=0;unsigned cycleGuardSteps=0,cycleGuardRejected=0;
     Observation(ReloadFlowEvent kind,unsigned firing,unsigned caller,unsigned ctx,unsigned argument)noexcept{
         frame.previous=currentFrame;frame.firing=firing;frame.depth=frame.previous?frame.previous->depth+1:1;currentFrame=&frame;
         if(!enabled.load(std::memory_order_acquire))return;
@@ -715,17 +760,23 @@ struct Observation {
         const bool recordWindow=recordWindowClock.Contains(now);
         if(!recordWindow){++windowExpired;if(!requestMode||now<=0||(!RequestTarget(firing)&&!NativeCycleTarget(firing)&&!combinedFamilies))return;}
         if(frame.depth>8){evidence.stage=1;++nestingMisses;return;}
-        lease=Owner(firing,now);if(!lease){evidence.stage=2;++ownerMisses;return;}
+        lease=Owner(firing,now);if(!lease){evidence.stage=2;++ownerMisses;
+            if(NativeCycleTarget(firing))RecordObservationReadMiss(kind,firing,evidence,false,0,nullptr,now);return;}
         const bool server=lease->server&&lease->server->links.firing==firing;
         evidence.readBranch=server?2:(firing==lease->snapshot.branches[0].address?0:1);
-        const auto state=BoundaryFor(*lease,firing,now,&evidence.server,&evidence.client);
+        // Owner may independently sample native debt after an XR publication
+        // expires. That fresh lease can be newer than callback-entry `now`.
+        // Read its boundary at the current clock; do not backdate the new read
+        // or restamp the original controller/native lease and its deadline.
+        const auto boundaryNow=Now();
+        const auto state=BoundaryFor(*lease,firing,boundaryNow,&evidence.server,&evidence.client);
         if(!state)evidence.stage=3;
         else if(!IsCurrent(*lease,Now()))evidence.stage=4;
         else if(requestMode&&!RequestOwnerEvidence(*lease,Now(),&evidence))evidence.stage=5;
         if(evidence.stage){if(server)++serverReadMisses;else ++readMisses;
-            RecordObservationReadMiss(kind,firing,evidence,false,0);lease.reset();return;}
+            RecordObservationReadMiss(kind,firing,evidence,false,0,&*lease,boundaryNow);lease.reset();return;}
         ReloadFlowEventInput input;input.kind=kind;input.thread=GetCurrentThreadId();input.depth=frame.depth;
-        input.caller=caller;input.context=ctx;input.argument=argument;input.nowNs=now;input.tickMs=GetTickCount64();input.boundary=*state;
+        input.caller=caller;input.context=ctx;input.argument=argument;input.nowNs=boundaryNow;input.tickMs=GetTickCount64();input.boundary=*state;
         if(kind==ReloadFlowEvent::Restore){snapshot=ctx;input.snapshotCopied=Context(ctx,input.copiedSnapshot);if(!input.snapshotCopied)++contextMisses;}
         else {context=ctx;if(ctx){input.contextCopied=Context(ctx,input.copiedContext);if(!input.contextCopied)++contextMisses;}}
         if(kind==ReloadFlowEvent::Transfer){
@@ -758,10 +809,11 @@ struct Observation {
             else if(requestMode){RequestBoundaryEvidence ownerEvidence;
                 if(!RequestOwnerEvidence(*lease,Now(),&ownerEvidence)){if(!evidence.stage){evidence=ownerEvidence;evidence.stage=7;}out.boundary.reset();}}
             if(!out.boundary){if(lease->server&&lease->server->links.firing==frame.firing)++serverReadMisses;else ++readMisses;
-                RecordObservationReadMiss(entry.kind,frame.firing,evidence,true,frame.invocation.Record().id);}
+                RecordObservationReadMiss(entry.kind,frame.firing,evidence,true,frame.invocation.Record().id,&*lease,out.nowNs);}
             if(context){out.contextCopied=Context(context,out.copiedContext);if(!out.contextCopied)++contextMisses;}
             if(snapshot){out.snapshotCopied=Context(snapshot,out.copiedSnapshot);if(!out.snapshotCopied)++contextMisses;}
             out.hold=hold;out.holdRequested=holdRequested;
+            out.cycleGuard=cycleGuard;out.cycleGuardEpoch=cycleGuardEpoch;out.cycleGuardSteps=cycleGuardSteps;out.cycleGuardRejected=cycleGuardRejected;
             const auto independent=(requestMode||pumpDiagnostic)?frame.invocation.Finish(out):std::nullopt;
             if(frame.id){Gate gate(recordGate);if(!gate.held){++recordBusy;++recordEndBusy;
                     recordCompletions.Publish(frame.id,out);if(!requestMode&&!pumpDiagnostic)return {};}
@@ -1296,8 +1348,51 @@ void RecordMagazineEmptyDiagnostic(MagazineEmptyDiagnosticRecord row)noexcept {
     Gate gate(emptyDiagnosticGate);if(!gate.held){++emptyDiagnosticLockDrops;return;}
     emptyDiagnosticJournal.Observe(row);
 }
+struct NativeGuardFrame {
+    NativeGuardFrame* previous=nullptr;Observation* observation=nullptr;
+    unsigned firing=0,context=0;std::uint64_t invocation=0;
+    const Bc2NativeCycleDecision* held=nullptr;
+    explicit NativeGuardFrame(Observation& source,unsigned f,unsigned c,const Bc2NativeCycleDecision* h=nullptr)noexcept;
+    ~NativeGuardFrame();
+};
+thread_local NativeGuardFrame* nativeGuardFrame=nullptr;
+NativeGuardFrame::NativeGuardFrame(Observation& source,unsigned f,unsigned c,const Bc2NativeCycleDecision* h)noexcept:
+    previous(nativeGuardFrame),observation(&source),firing(f),context(c),invocation(source.entry.nativeInvocation),held(h){nativeGuardFrame=this;}
+NativeGuardFrame::~NativeGuardFrame(){nativeGuardFrame=previous;}
+bool NativeInputCompare(void* context,unsigned index,unsigned expected,unsigned replacement,unsigned& observed)noexcept {
+    if(index>1)return false;
+    return DeltaCompare(reinterpret_cast<void*>(unsigned(context)+0x28+4*index),expected,replacement,observed);
+}
 void __fastcall Step(void* self,void*,void* context,float delta){
     Active activeScope;const auto firing=unsigned(self),caller=unsigned(_ReturnAddress());
+    const auto stepRoute=SelectNativeCycleStepRoute(nativeGuardFrame!=nullptr,
+        nativeGuardFrame&&nativeGuardFrame->held,nativeGuardFrame&&nativeGuardFrame->held&&nativeGuardFrame->held->hold);
+    if(stepRoute!=NativeCycleStepRoute::OrdinaryEmptyControl){
+        auto& frame=*nativeGuardFrame;auto& observed=*frame.observation;
+        std::array<std::byte,0x30> bytes{};const auto parent=currentFrame;
+        const bool own=frame.firing==firing&&frame.context==unsigned(context)&&parent&&parent->depth==1&&
+            parent->invocation.Record().id==frame.invocation&&parent->invocation.Record().entry.kind==ReloadFlowEvent::Update&&
+            parent->firing==firing&&caller==base+binding.code[0].rva+0x168&&holdCodeVerified;
+        if(stepRoute==NativeCycleStepRoute::IssuedHold){
+            // A normal held Update can already be inside OriginalUpdate when
+            // another thread converts its debt to recovery. Drain that exact
+            // issued hold; an unrelated/unprotected Step still loses the guard.
+            const bool zeroHeld=own&&observed.holdRequested&&observed.hold.applied&&!observed.hold.restored&&
+                delta==0.f&&Context(unsigned(context),bytes)&&Word<unsigned>(bytes.data(),0x18)==0;
+            WithNativeCycle([&]{if(nativeCycle.Recovering()&&
+                (!zeroHeld||!nativeCycle.DrainingHeldInvocation(*frame.held,firing,Now())))
+                    nativeCycle.Missing(firing,frame.invocation);});
+            originalStep(self,context,delta);return;
+        }
+        const bool exact=own&&
+            observed.cycleGuard.applied&&Context(unsigned(context),bytes)&&
+            Word<unsigned>(bytes.data(),0x28)==observed.cycleGuard.effective[0]&&
+            Word<unsigned>(bytes.data(),0x2c)==observed.cycleGuard.effective[1]&&
+            ValidManualReloadDelta(delta)&&delta<=Word<float>(observed.entry.copiedContext.data(),0x18);
+        if(exact)++observed.cycleGuardSteps;else ++observed.cycleGuardRejected;
+        originalStep(self,context,delta);return;
+    }
+    if(nativeCycleRecoveryEnabled&&NativeCycleTarget(firing))WithNativeCycle([&]{if(nativeCycle.Recovering())nativeCycle.Missing(firing,0);});
     MagazineEmptyStep sample;MagazineEmptyByteOverride patch;bool requested=false,magazineControl=false;
     MagazineEmptyDiagnosticRecord diagnostic;diagnostic.sample.before.address=firing;diagnostic.sample.branch=3;diagnostic.stepDeltaBits=std::bit_cast<unsigned>(delta);
     const bool cycleTarget=NativeCycleTarget(firing);
@@ -1317,7 +1412,18 @@ void __fastcall Step(void* self,void*,void* context,float delta){
     // Shared read boundary is unchanged; delta affects control, not observation.
     if(ManualEmptyDiagnosticContextReadAllowed(boundary)&&Context(unsigned(context),bytes)){
         diagnostic.stage=MagazineEmptyDiagnosticStage::OwnerOrContext;
-        lease=Owner(firing,Now());
+        // The parent may have begun under completion observation just before
+        // another native branch publishes Complete. Reacquiring Owner here
+        // can switch revision domains mid-Update and skip the empty inhibitor.
+        // Drain only this exact original read, with all its original bounds;
+        // structural owner/configuration checks below still run adjacent to
+        // the scoped write. A new callback cannot borrow this TLS frame.
+        const auto inherited=nativeGuardFrame&&nativeGuardFrame->observation&&
+            nativeGuardFrame->firing==firing&&nativeGuardFrame->context==unsigned(context)&&
+            nativeGuardFrame->invocation==parent->invocation.Record().id?
+                &nativeGuardFrame->observation->lease:nullptr;
+        if(inherited&&*inherited&&IsCurrent(**inherited,Now()))lease=*inherited;
+        else lease=Owner(firing,Now());
         // Selected local callbacks are observable before a manual cycle ever
         // registers RequestTarget. This grants no native control permission.
         diagnose=ManualEmptyDiagnosticAdmitted(combinedFamilies,requestMode,diagnose,
@@ -1434,23 +1540,65 @@ void __fastcall Update(void* self,void*,void* context,unsigned extra){
         if(!ready)++holdSampleFailures;}
     if(pumpDiagnostic&&(!quietBefore||active.load(std::memory_order_acquire)!=1||revision!=callbackRevision.load(std::memory_order_acquire)))ready=false;
     if(cycleTarget){
-        Bc2NativeCycleDecision decision;
+        // Prepare engine-owned evidence before acquiring the service gate. A
+        // concurrent interruption can convert Held during these reads; choose
+        // its route and reserve its own Update together below, never from a
+        // cached Recovering flag. Already-issued holds retain their drain path.
         const auto cycleCancelEpoch=nativeCycleCancelEpoch.load(std::memory_order_acquire);
-        // Separate native operation: never run a resource mutation or reload
-        // request helper in this invocation. Native readiness remains OriginalUpdate.
-        if(ready&&cycleCallback.Isolated())
-            WithNativeCycle([&]{if(cycleCallback.Isolated())decision=nativeCycle.Evaluate(input,cycleInvocation);
-                else nativeCycle.Missing(firing,cycleInvocation);});
-        else NativeCycleMissing(firing,cycleInvocation);
+        std::optional<NativeCycleRecoveryScope> recoveryScope;
+        int recoveryCapacity=0;std::int64_t recoveryDeadline=0;
+        if(nativeCycleRecoveryEnabled){
+            ULONG_PTR low=0,high=0;GetCurrentThreadStackLimits(&low,&high);
+            const auto capacity=observation.lease?Capacity(firing,observation.lease->snapshot.config.baseCapacity):std::nullopt;
+            const bool source=observation.lease&&capacity&&cycleCallback.Isolated()&&holdCodeVerified&&
+                caller==base+binding.code[1].rva+0x2f&&unsigned(context)>=low&&std::uint64_t(unsigned(context))+0x30<=high&&
+                !(unsigned(context)&3)&&observation.entry.contextCopied&&IsCurrent(*observation.lease,Now())&&
+                (nativeBoltCandidate?ReadM95StockShotConfig(memory,observation.lease->snapshot.config):
+                    IsDiagnosticSpasConfig(observation.lease->snapshot.config));
+            if(source){recoveryScope=NativeCycleRecoveryScope{RoundIdentity(*observation.lease),observation.lease->snapshot.config};
+                recoveryCapacity=*capacity;recoveryDeadline=std::min(observation.lease->deadline,observation.entry.nowNs+100000000);}
+        }
+        Bc2NativeCycleUpdateRoute route;
+        WithNativeCycle([&]{
+            if(!cycleCallback.Isolated()){nativeCycle.Missing(firing,cycleInvocation);return;}
+            route=EvaluateNativeCycleUpdateRoute(nativeCycle,{ready?&input:nullptr,
+                recoveryScope?&*recoveryScope:nullptr,&observation.entry,firing,cycleInvocation,recoveryCapacity,recoveryDeadline});
+        });
+        if(route.recovering){
+            const auto& decision=route.recovery;
+            bool guarded=decision&&cycleCallback.Isolated()&&observation.lease&&IsCurrent(*observation.lease,Now())&&
+                cycleCancelEpoch==nativeCycleCancelEpoch.load(std::memory_order_acquire)&&Now()<decision.deadlineNs;
+            if(!guarded)NativeCycleMissing(firing,cycleInvocation);
+            observation.cycleGuardEpoch=decision.epoch;
+            const std::array<unsigned,2> words{Word<unsigned>(observation.entry.copiedContext.data(),0x28),
+                Word<unsigned>(observation.entry.copiedContext.data(),0x2c)};
+            struct OriginalRecovery {void* self;void* context;unsigned extra;} original{self,context,extra};
+            {
+                NativeGuardFrame frame(observation,firing,unsigned(context));
+                RunNativeCycleInputGuard({context,NativeInputCompare},words,guarded,[](void* value){
+                    const auto& call=*static_cast<OriginalRecovery*>(value);originalUpdate(call.self,call.context,call.extra);
+                },&original,observation.cycleGuard);
+            }
+            const auto completed=observation.Finish();
+            WithNativeCycle([&]{
+                if(!completed||!cycleCallback.Isolated()){nativeCycle.Missing(firing,cycleInvocation);return;}
+                ++nativeCycleUpdates;nativeCycle.FinishRecovery(decision,*completed,observation.cycleGuard,
+                    observation.cycleGuardSteps,observation.cycleGuardRejected);
+            });return;
+        }
+        const auto& decision=route.normal;
         observation.holdRequested=decision.hold&&observation.lease&&IsCurrent(*observation.lease,Now())&&
             cycleCallback.Isolated()&&
             cycleCancelEpoch==nativeCycleCancelEpoch.load(std::memory_order_acquire)&&Now()<decision.deadlineNs;
         if(decision.hold&&!observation.holdRequested)NativeCycleMissing(firing,cycleInvocation);
         struct OriginalCycle {void* self;void* context;unsigned extra;} original{self,context,extra};
         const ReloadDeltaAccess access{reinterpret_cast<void*>(unsigned(context)+0x18),DeltaCompare,DeltaRestore};
-        RunReloadDeltaOverride(access,deltaBits,observation.holdRequested,[](void* value){
-            const auto& call=*static_cast<OriginalCycle*>(value);originalUpdate(call.self,call.context,call.extra);
-        },&original,observation.hold);
+        {
+            NativeGuardFrame frame(observation,firing,unsigned(context),&decision);
+            RunReloadDeltaOverride(access,deltaBits,observation.holdRequested,[](void* value){
+                const auto& call=*static_cast<OriginalCycle*>(value);originalUpdate(call.self,call.context,call.extra);
+            },&original,observation.hold);
+        }
         const auto completed=observation.Finish();
         WithNativeCycle([&]{
             if(!completed||!cycleCallback.Isolated()){nativeCycle.Missing(firing,cycleInvocation);return;}
@@ -1661,10 +1809,10 @@ void __fastcall Restore(void* self,void*,void* snapshot){
             WithRequest([&]{if(!IsCurrent(*observation.lease,Now())||requestCycle.Identity()!=RoundIdentity(*observation.lease)||!requestCycle.MatchesSelectedConfig(observation.lease->snapshot.config))return;
                 {OwnerCopyGate gate;if(!gate.held||!IsCurrent(published,Now())||
                     RoundIdentity(published)!=RoundIdentity(*observation.lease)||published.snapshot.config!=observation.lease->snapshot.config)return;}
-                ReloadMagazinePredictionRestore e{RoundIdentity(*observation.lease),requestCycle.Cycle(),complete->id,
+                ReloadPredictionRestore e{RoundIdentity(*observation.lease),requestCycle.Cycle(),complete->id,
                     entry.nowNs,complete->exit.nowNs,entry.boundary.branch,entry.caller,
                     entry.boundary.loaded,entry.boundary.reserve,after.loaded,after.reserve,true,complete->identityRetained};
-                e.config=observation.lease->snapshot.config;requestCycle.ObserveMagazinePredictionRestore(e,Now());},true);
+                e.config=observation.lease->snapshot.config;requestCycle.ObservePredictionRestore(e,Now());},true);
         }}
 }
 void Boundary(std::ostream& out,const ReloadFlowBoundary& b){
@@ -1703,10 +1851,15 @@ bool EnableMagazineRequestCycles()noexcept {
     combinedFamilies=true;return true;
 }
 bool YieldNativeCycleRouting()noexcept;
+bool RetireNativeCycleForReplacementActor(const ReloadStateOwner&)noexcept;
 bool SelectRequestProfile(ReloadNativeFamily family,NativeMagazineProfileId profileId,const ReloadStateOwner& expected)noexcept {
     ++familySelectAttempts;
     const auto reject=[](unsigned stage)noexcept{++familySelectRejected;++familySelectFailures[stage];return false;};
     if(!combinedFamilies||!requestMode||!enabled.load(std::memory_order_acquire))return reject(0);
+    // A replacement actor can draw a rifle before selecting another pump/bolt.
+    // Retire the old actor's cycle through its explicit drained proof before
+    // the ordinary family handoff; same-actor debt still cannot yield here.
+    if(!RetireNativeCycleForReplacementActor(expected))return reject(7);
     Active activeScope;if(!activeScope.requestEntryAllowed)return reject(1);
     std::optional<Lease> lease;
     {OwnerCopyGate lock;if(!lock.held)return reject(2);
@@ -1957,6 +2110,14 @@ std::optional<Bc2AmmoReserveLease> ReadReserve()noexcept {return ReadReserveObse
 std::optional<Bc2AmmoReserveLease> ReadPublishedReserve()noexcept {return publishedReserve.Read();}
 std::optional<Bc2AmmoReserveLease> ReadDiagnosticFireReserve()noexcept {return ReadReserveObservedFor(true).lease;}
 std::optional<Bc2AmmoReserveLease> ReadM95StockShotReserve()noexcept {return ReadReserveObservedFor(true,true).lease;}
+bool EnableM95EmptyRecording()noexcept {
+#if defined(FVR_BC2_M95_STOCK_SHOT_PROBE)
+    return installed&&!started&&!enabled.load()&&requestMode&&!nativePumpCandidate&&
+        records.EnablePumpCapacity()&&recordWindowClock.Bolt();
+#else
+    return false;
+#endif
+}
 
 bool YieldNativeCycleRouting()noexcept {
     if(!nativePumpCandidate)return true;
@@ -1965,18 +2126,24 @@ bool YieldNativeCycleRouting()noexcept {
         if(accepted)for(auto& target:nativeCycleTargets)target.store(0,std::memory_order_release);});
     return accepted;
 }
-bool StartRequestCycle(const ReloadCycleControl& control)noexcept {
-    const auto identity=RequestIdentity();if(!identity||*identity!=control.identity)return false;
+std::array<std::array<std::atomic<unsigned>,3>,12> shellStartResults{};
+ReloadStartResult StartRequestCycleObserved(const ReloadCycleControl& control)noexcept {
+    using Result=ReloadStartResult;
+    const auto finish=[&](Result result,unsigned stage){++shellStartResults[stage][unsigned(result)];return result;};
+    if(!requestMode||!enabled.load(std::memory_order_acquire))return finish(Result::Rejected,0);
+    const auto identity=RequestIdentity();if(!identity)return finish(Result::Deferred,1);
+    if(*identity!=control.identity)return finish(Result::Rejected,1);
 #ifdef FVR_BC2_PREHOLD_CLEANUP
-    const auto preholdPreread=ReadPreholdStartPreread(control);if(!preholdPreread)return false;
+    const auto preholdPreread=ReadPreholdStartPreread(control);if(!preholdPreread)return finish(Result::Deferred,2);
 #endif
-    Active activeScope;bool accepted=false;
+    Active activeScope;bool accepted=false;unsigned stage=6;Result result=Result::Deferred;
     ReloadInvocationExclusion entry(requestEntryGate,active,callbackRevision);
-    if(!entry.held||!activeScope.requestEntryAllowed)return false;
+    if(!entry.held||!activeScope.requestEntryAllowed)return finish(Result::Deferred,3);
     Gate route(nativeCycleRoutingGate);
-    if(!route.held||!entry.Quiet()||!YieldNativeCycleRouting()||!entry.Quiet())return false;
+    if(!route.held||!entry.Quiet())return finish(Result::Deferred,4);
+    if(!YieldNativeCycleRouting()||!entry.Quiet())return finish(Result::Deferred,5);
     const bool locked=WithRequest([&]{
-        if(!entry.Quiet())return;
+        if(!entry.Quiet()){stage=6;return;}
         // New arrivals observe requestEntryGate, cancel this attempt and cannot
         // acquire a policy decision. No callback gate spans an original.
         requestCycle.DrainCancelledInvocations(true);
@@ -1985,24 +2152,28 @@ bool StartRequestCycle(const ReloadCycleControl& control)noexcept {
         if(!PreholdAllowsNewOperation()||!PreholdStartPublishedCurrent(*preholdPreread)||!IsCurrent(preholdPreread->lease,Now())||
            !RequestConfig(preholdPreread->lease.snapshot.config)||
            !PreholdStartPrereadMayCommit(preholdPreread->key,PreholdStartKey(preholdPreread->lease),
-               preholdPreread->evidence,control,preholdPreread->lease.snapshot.config,Now()))return;
+               preholdPreread->evidence,control,preholdPreread->lease.snapshot.config,Now())){stage=7;return;}
 #endif
 #ifdef FVR_BC2_PREHOLD_CLEANUP
         const auto priorPrehold=SnapshotPreholdOperation();
 #endif
         accepted=requestCycle.Start(control,Now());
+        result=accepted?Result::Accepted:Result::Rejected;stage=accepted?11:8;
 #ifdef FVR_BC2_PREHOLD_CLEANUP
         if(accepted&&priorPrehold)preholdOperationJournal.Archive(*priorPrehold,Now(),entry.Quiet());
 #endif
         if(accepted){retiredFamily.reset();emptyControlReceipts.Clear();abortCleanup.Abandon(ReloadAbortFailure::NewCycle,Now());}
-        if(!entry.Quiet()){requestCycle.Cancel();accepted=false;}
+        if(!entry.Quiet()){requestCycle.Cancel();accepted=false;result=Result::Deferred;stage=9;}
 #ifdef FVR_BC2_PREHOLD_CLEANUP
         // Commit only the already-read immutable idle cohort after registration.
         // No native memory I/O occurs inside this callback exclusion.
-        if(accepted&&entry.Quiet()&&!PreparePreholdMonitor(preholdPreread->evidence)){requestCycle.Cancel();accepted=false;}
+        if(accepted&&entry.Quiet()&&!PreparePreholdMonitor(preholdPreread->evidence)){requestCycle.Cancel();accepted=false;result=Result::Deferred;stage=10;}
 #endif
         if(accepted)for(unsigned n=0;n<3;++n)requestTargets[n].store(control.identity.firing[n],std::memory_order_release);},true,nullptr,10);
-    return locked&&accepted;
+    return finish(locked?result:Result::Deferred,locked?stage:6);
+}
+bool StartRequestCycle(const ReloadCycleControl& control)noexcept {
+    return StartRequestCycleObserved(control)==ReloadStartResult::Accepted;
 }
 ReloadKeepAliveResult KeepAliveRequestCycleObserved(const ReloadCycleControl& control)noexcept {
     using Result=ReloadKeepAliveResult;
@@ -2175,10 +2346,16 @@ void CancelRequestCycle()noexcept {
     {OwnerCopyGate lock;if(lock.held&&IsCurrent(published,Now())&&published.server)owner=published;}
     WithRequest([&]{
         std::optional<ReloadRoundLease> held;
+        std::optional<ReloadStopIntent> shellStop;
         if(activeScope.requestEntryAllowed&&owner&&IsCurrent(*owner,Now())&&
            requestCycle.Phase()==ReloadRequestCyclePhase::Holding&&!requestCycle.PendingRequest()&&!requestCycle.UnresolvedRequest()&&
-           requestCycle.Identity()==RoundIdentity(*owner))held=requestCycle.AbortLease(requestCycle.Identity(),requestCycle.Cycle(),Now());
+           requestCycle.Identity()==RoundIdentity(*owner)){
+            if(requestCycle.IsMagazine())held=requestCycle.AbortLease(requestCycle.Identity(),requestCycle.Cycle(),Now());
+            else shellStop=requestCycle.ShellStopIntent(Now());
+        }
         requestCycle.Cancel(ReloadRequestCycleFailure::Stopped);
+        if(shellStop){shellStop->deadlineNs=std::min(shellStop->deadlineNs,std::min(owner->deadline,owner->snapshot.observedNs+200000000ll));
+            if(abortCleanup.ArmShellStop(*shellStop,owner->revision,Now()))++abortArmed;}
         if(held){held->deadlineNs=std::min(held->deadlineNs,std::min(owner->deadline,owner->snapshot.observedNs+200000000ll));
             if(requestCycle.IsMagazine()?abortCleanup.ArmMagazine(*held,owner->revision,Now(),true,requestCycle.MagazineProfile(),combinedFamilies):
                 abortCleanup.Arm(*held,owner->revision,Now(),true))++abortArmed;}
@@ -2301,6 +2478,14 @@ std::optional<AmmoResourceView> ReadAmmoResourceView(const ReloadStateOwner& own
 #endif
     return {};
 }
+AmmoResourceRead ReadAmmoResourceObserved(const ReloadStateOwner& owner,std::int64_t now)noexcept {
+#ifdef FVR_BC2_AMMO_RESOURCE_HANDS
+    if(enabled.load(std::memory_order_acquire))return ammoPlayerChannel.ReadObserved(owner,now,Now());
+#else
+    (void)owner;(void)now;
+#endif
+    return {AmmoResourceReadReason::Invalid,{}};
+}
 bool SubmitAmmoResourceRequest(const AmmoResourceRequest& request)noexcept {
 #ifdef FVR_BC2_AMMO_RESOURCE_HANDS
     return enabled.load(std::memory_order_acquire)&&ammoPlayerChannel.Submit(request);
@@ -2330,12 +2515,13 @@ void ClearOwner()noexcept{CancelNativeCycle();PublishAmmoResourceBinding({});pub
 }
 bool NativeCycleRequestRetired()noexcept {
     bool retired=false;
-    WithRequest([&]{retired=(nativeCycleDispatcher||requestCycle.Family()==ReloadNativeFamily::SpasTube)&&
-        ((!requestCycle.Cycle()&&requestCycle.Phase()==ReloadRequestCyclePhase::Idle)||
-         (retiredFamily&&retiredFamily->identity==requestCycle.Identity()&&
+    WithRequest([&]{
+        const bool currentReceipt=retiredFamily&&retiredFamily->identity==requestCycle.Identity()&&
           retiredFamily->cycle==requestCycle.Cycle()&&retiredFamily->family==requestCycle.Family()&&
-          retiredFamily->epoch==familyEpoch&&retiredFamily->event&&
-          requestCycle.Phase()==ReloadRequestCyclePhase::Cancelled));},false);
+          retiredFamily->epoch==familyEpoch&&retiredFamily->event;
+        retired=(nativeCycleDispatcher||requestCycle.Family()==ReloadNativeFamily::SpasTube)&&
+            requestCycle.RetiredForNativeHandoff(currentReceipt);
+    },false);
     return retired;
 }
 bool EnableNativeCycleDispatcher()noexcept {
@@ -2345,6 +2531,48 @@ bool EnableNativeCycleDispatcher()noexcept {
     nativeCycleDispatcher=nativePumpCandidate=true;return true;
 #else
     return false;
+#endif
+}
+bool RetireNativeCycleForReplacementActor(const ReloadStateOwner& owner)noexcept {
+#if defined(FVR_BC2_ORDINARY_MANUAL_CYCLES) && defined(FVR_BC2_MANUAL_CYCLE_CANDIDATE) && !defined(FVR_BC2_AMMO_MOVE_PROBE)
+    if(!nativeCycleDispatcher||!nativePumpCandidate)return true;
+    if(!enabled.load(std::memory_order_acquire))return false;
+    std::optional<Bc2NativeCycleView> previous;
+    WithNativeCycle([&]{previous=nativeCycle.View(Now());});
+    if(!previous)return false;
+    if(!NativeCycleClientActorReplaced(previous->native.owner,owner))return true;
+    std::optional<Lease> lease;
+    {OwnerCopyGate gate;if(gate.held&&IsCurrent(published,Now())&&published.server&&published.snapshot.owner==owner)lease=published;}
+    if(!lease||!DiagnosticFireReserveConfig(memory,lease->snapshot.config))return false;
+    // This read validates the enrolled replacement configuration independently
+    // of the currently selected request family, which may still be SpasTube.
+    std::uint64_t proofRevision=0;
+    const auto evidence=ReadReserveObservedFor(true,false,&proofRevision);
+    if(!evidence.lease||!evidence.lease->verified||!evidence.lease->allThreeIdle||
+       evidence.lease->identity!=RoundIdentity(*lease)||proofRevision>UINT64_MAX-2)return false;
+    Active activeScope;ReloadInvocationExclusion entry(requestEntryGate,active,callbackRevision);
+    if(!activeScope.requestEntryAllowed||!entry.Quiet()||
+       !NativeCycleSelectionReadCurrent(proofRevision,callbackRevision.load(std::memory_order_acquire)))return false;
+    Gate route(nativeCycleRoutingGate);if(!route.held||!NativeCycleRequestRetired()||!entry.Quiet())return false;
+    bool retired=false;
+    WithNativeCycle([&]{
+        if(!entry.Quiet())return;
+        const auto cancellation=nativeCycleCancelEpoch.load(std::memory_order_acquire);
+        auto candidate=nativeCycle;const auto now=Now();const auto old=candidate.View(now);
+        const Bc2NativeCycleActorDrain drain{old.native,old.cycle,old.shot,
+            callbackRevision.load(std::memory_order_acquire),now,
+            std::min(evidence.lease->deadlineNs,now+Bc2NativeCycleService::ContextFreshNs),entry.Quiet()};
+        if(!candidate.RetireForReplacementActor(*evidence.lease,now,drain))return;
+        OwnerCopyGate ownerGate;
+        if(!ownerGate.held||published.revision!=lease->revision||published.snapshot.owner!=owner||
+           published.snapshot.config!=lease->snapshot.config||!IsCurrent(published,Now())||
+           !entry.Quiet()||nativeCycleCancelEpoch.load(std::memory_order_acquire)!=cancellation)return;
+        for(auto& target:nativeCycleTargets)target.store(0,std::memory_order_release);
+        nativeCycle=candidate;retired=true;
+    });
+    return retired;
+#else
+    (void)owner;return true;
 #endif
 }
 bool SelectNativeCycleMode(Bc2NativeCycleMode mode,const ReloadStateOwner& owner)noexcept {
@@ -2370,7 +2598,15 @@ bool SelectNativeCycleMode(Bc2NativeCycleMode mode,const ReloadStateOwner& owner
         if(!entry.Quiet())return;
         const auto cancellation=nativeCycleCancelEpoch.load(std::memory_order_acquire);
         auto candidate=nativeCycle;
-        if(!candidate.Select({mode,*evidence.lease,lease->snapshot.config,Now()}))return;
+        const auto now=Now();
+        const Bc2NativeCycleSelection selection{mode,*evidence.lease,lease->snapshot.config,now};
+        if(!candidate.Select(selection)){
+            const auto old=candidate.View(now);
+            const Bc2NativeCycleActorDrain drain{old.native,old.cycle,old.shot,
+                callbackRevision.load(std::memory_order_acquire),now,
+                std::min(evidence.lease->deadlineNs,now+Bc2NativeCycleService::ContextFreshNs),entry.Quiet()};
+            if(!candidate.SelectReplacementActor(selection,drain))return;
+        }
         OwnerCopyGate ownerGate;
         if(!ownerGate.held||published.revision!=lease->revision||published.snapshot.owner!=owner||
            published.snapshot.config!=lease->snapshot.config||!IsCurrent(published,Now())||
@@ -2405,20 +2641,20 @@ bool EnableNativeBoltCandidate()noexcept {
     return false;
 #endif
 }
+bool EnableOrdinaryBoltInputRecording(unsigned cycles)noexcept {
+#if defined(FVR_BC2_ORDINARY_BOLT_INPUT_PROBE) && defined(FVR_BC2_ORDINARY_MANUAL_CYCLES)
+    return installed&&!started&&!enabled.load()&&nativeCycleDispatcher&&
+        OrdinaryBoltProbeDurationMs(cycles)&&records.EnablePumpCapacity()&&recordWindowClock.Bolt(cycles);
+#else
+    (void)cycles;return false;
+#endif
+}
 bool EnableOrdinaryResourceInputRecording()noexcept {
 #if defined(FVR_BC2_ORDINARY_RESOURCE_INPUT_PROBE) && defined(FVR_BC2_ORDINARY_MANUAL_CYCLES)
     return installed&&!started&&!enabled.load()&&requestMode&&combinedFamilies&&nativeCycleDispatcher&&
         records.EnablePumpCapacity()&&recordWindowClock.Defer(true)&&recordWindowClock.CombinedPump();
 #else
     return false;
-#endif
-}
-bool EnableOrdinaryBoltInputRecording(unsigned cycles)noexcept {
-#if defined(FVR_BC2_ORDINARY_BOLT_INPUT_PROBE) && defined(FVR_BC2_ORDINARY_MANUAL_CYCLES)
-    return installed&&!started&&!enabled.load()&&nativeCycleDispatcher&&
-        (cycles==1||cycles==2)&&records.EnablePumpCapacity()&&recordWindowClock.Bolt();
-#else
-    (void)cycles;return false;
 #endif
 }
 bool EnableNativeBoltRecording(unsigned cycles)noexcept {
@@ -2449,9 +2685,12 @@ bool PublishNativeCycleControl(const Bc2NativeCycleControl& source)noexcept {
     if(!nativePumpCandidate||!enabled.load(std::memory_order_acquire))return false;
     const auto reject=[&](unsigned reason,const RequestBoundaryEvidence* evidence=nullptr){
         const auto slot=nativeCycleControlRejectionCount.fetch_add(1,std::memory_order_relaxed);
-        if(slot<nativeCycleControlRejections.size())nativeCycleControlRejections[slot]={Now(),source.input.observedNs,
-            source.input.deadlineNs,source.input.sequence,reason,evidence?evidence->readBranch:3u,
-            evidence?unsigned(evidence->client.failure):0u,evidence?unsigned(evidence->server.failure):0u};
+        if(slot<nativeCycleControlRejections.size()){
+            auto& row=nativeCycleControlRejections[slot];
+            row={Now(),source.input.observedNs,source.input.deadlineNs,source.input.sequence,reason,evidence?evidence->readBranch:3u,
+                evidence?unsigned(evidence->client.failure):0u,evidence?unsigned(evidence->server.failure):0u};
+            if(evidence){row.client=evidence->client;row.server=evidence->server;}
+        }
         return false;
     };
     const auto now=Now();
@@ -2471,7 +2710,39 @@ bool PublishNativeCycleControl(const Bc2NativeCycleControl& source)noexcept {
     // durable callback-drain receipt. Mode dispatch cannot infer retirement.
     if(!NativeCycleRequestRetired())return reject(6);
     bool accepted=false;auto control=source;control.input.nowNs=Now();
-    WithNativeCycle([&]{accepted=nativeCycle.Control(control);});
+    std::optional<Bc2NativeCycleView> previous;
+    WithNativeCycle([&]{previous=nativeCycle.View(Now());});
+    auto previousOwner=source.nativeOwner;
+    if(previous)previousOwner.space=previous->native.owner.space;
+    const bool trackingChange=previous&&previous->blocksFire&&previousOwner==previous->native.owner&&
+        source.nativeOwner.space>previousOwner.space;
+    if(trackingChange){
+        // A tracking origin is not a new weapon. Exclude/drain callbacks before
+        // changing the coordinate epoch in the retained cycle. Native scope,
+        // configuration, counts and pending outcomes are not relaxed.
+        Active activeScope;ReloadInvocationExclusion entry(requestEntryGate,active,callbackRevision);
+        if(!activeScope.requestEntryAllowed||!entry.Quiet())return reject(9);
+        WithNativeCycle([&]{
+            if(!entry.Quiet())return;
+            const auto cancellation=nativeCycleCancelEpoch.load(std::memory_order_acquire);
+            auto candidate=nativeCycle;const auto old=candidate.View(Now());control.input.nowNs=Now();
+            const Bc2NativeCycleActorDrain drain{old.native,old.cycle,old.shot,
+                callbackRevision.load(std::memory_order_acquire),control.input.nowNs,
+                std::min(source.input.deadlineNs,control.input.nowNs+Bc2NativeCycleService::ContextFreshNs),true};
+            auto expected=identity;expected.owner.space=old.native.owner.space;
+            // The current held cycle need not already be suspended. Rebase
+            // converts the private candidate to observation mode after exact
+            // drain checks; validate its unchanged configuration before commit.
+            if(expected!=old.native||!candidate.RebaseTracking(control,drain))return;
+            const auto watch=candidate.ObservationWatch(control.input.nowNs);
+            if(!watch||lease->snapshot.config!=watch->config)return;
+            OwnerCopyGate ownerGate;
+            if(!ownerGate.held||published.revision!=lease->revision||published.snapshot.owner!=source.nativeOwner||
+               published.snapshot.config!=lease->snapshot.config||!IsCurrent(published,Now())||!entry.Quiet()||
+               nativeCycleCancelEpoch.load(std::memory_order_acquire)!=cancellation)return;
+            nativeCycle=std::move(candidate);accepted=true;
+        });
+    }else WithNativeCycle([&]{accepted=nativeCycle.Control(control);});
     if(accepted){++nativeCycleControls;if(source.release)++nativeCycleReleases;
         for(unsigned n=0;n<3;++n)nativeCycleTargets[n].store(identity.firing[n],std::memory_order_release);}
     return accepted?true:reject(7);
@@ -2487,19 +2758,46 @@ std::optional<Bc2NativeCycleView> ReadNativeCycleView(std::int64_t now)noexcept 
     }
     return view;
 }
+bool WriteNativeCycleFirstFailure(std::ostream& out) {
+    const auto failure=nativeCycleFirstFailure.Read();
+    if(!failure)return false;
+    NativeCycleFailureJournal::WriteJson(out,*failure);return true;
+}
 bool AcknowledgeNativeCycleReady(const interaction::WeaponCycleReady& ready)noexcept {
     if(!nativePumpCandidate)return false;bool accepted=false;
-    WithNativeCycle([&]{accepted=nativeCycle.AcknowledgeReady(ready);});
+    WithNativeCycle([&]{accepted=nativeCycle.AcknowledgeReady(ready,Now());});
     if(accepted)++nativeCycleAcks;return accepted;
 }
 void CancelNativeCycle()noexcept {
     if(!nativePumpCandidate)return;
     bool observing=false;
-    if(enabled.load(std::memory_order_acquire))WithNativeCycle([&]{observing=nativeCycle.SuspendCompletion()||nativeCycle.SuspendHeld(Now());});
+    if(enabled.load(std::memory_order_acquire))WithNativeCycle([&]{observing=nativeCycle.SuspendCompletion()||nativeCycle.BeginRecovery(Now())||nativeCycle.SuspendHeld(Now());});
     if(observing)return; // Exact native debt survives bounded presentation loss.
     nativeCycleCancelEpoch.fetch_add(1,std::memory_order_acq_rel);
     for(auto& target:nativeCycleTargets)target.store(0,std::memory_order_release);
     WithNativeCycle([&]{nativeCycle.Cancel(Bc2NativeCycleFailure::Control);});
+}
+std::optional<Bc2NativeCycleRecoveryView> ReadNativeCycleRecoveryView(std::int64_t now)noexcept {
+    if(!nativePumpCandidate||!nativeCycleRecoveryEnabled||now<=0)return {};
+    Gate lock(nativeCycleGate);if(!lock.held||nativeCycleAppliedCancel!=nativeCycleCancelEpoch.load(std::memory_order_acquire))return {};
+    return nativeCycle.RecoveryView(now);
+}
+bool SubmitNativeCycleRecovery(const interaction::WeaponCycleIdleDebtRelease& release,const interaction::HandInteractionSample& input)noexcept {
+    if(!nativePumpCandidate||!nativeCycleRecoveryEnabled)return false;bool accepted=false;auto current=input;current.nowNs=Now();
+    WithNativeCycle([&]{accepted=nativeCycle.SubmitRecovery(release,current);});return accepted;
+}
+bool AcknowledgeNativeCycleRecovery(const interaction::WeaponCycleIdleDebtReady& ready)noexcept {
+    if(!nativePumpCandidate||!nativeCycleRecoveryEnabled)return false;bool accepted=false;
+    WithNativeCycle([&]{accepted=nativeCycle.AcknowledgeRecovery(ready,Now());});if(accepted)++nativeCycleAcks;return accepted;
+}
+bool EnableNativeCycleRecovery()noexcept {
+#if defined(FVR_BC2_NATIVE_CYCLE_RECOVERY) && defined(FVR_BC2_MANUAL_CYCLE_CANDIDATE)
+    if(!installed||started||enabled.load()||!nativePumpCandidate||!holdCodeVerified)return false;
+    nativeCycleRecoveryEnabled=nativeCycle.EnableRecovery();
+    return nativeCycleRecoveryEnabled&&nativeCycle.EnableConcurrentBolt();
+#else
+    return false;
+#endif
 }
 bool EnablePumpHoldDiagnostic()noexcept {
     if(!installed||started||enabled.load()||!diagnosticHold||diagnosticRound||requestMode||!holdCodeVerified)return false;
@@ -2525,6 +2823,9 @@ void Report(std::ostream& out){
     }
     out<<"{\"reserve_read_evidence\":";reserveReadEvidence.Report(out,drained);
     out<<",\"magazine_start_attempts\":";magazineStartJournal.Report(out,drained);
+    out<<",\"shell_start_attempts\":[";
+    constexpr const char* shellStartStages[]{"disabled","identity","preread","entry","routing","yield","lock","cohort","cycle","callback_arrival","monitor","accepted"};
+    for(unsigned n=0;n<shellStartResults.size();++n){if(n)out<<',';out<<"{\"gate\":\""<<shellStartStages[n]<<"\",\"accepted\":"<<shellStartResults[n][0].load()<<",\"deferred\":"<<shellStartResults[n][1].load()<<",\"rejected\":"<<shellStartResults[n][2].load()<<'}';}out<<']';
 #ifdef FVR_BC2_AMMO_RESOURCE_HANDS
     out<<",\"ammo_resource_hands\":{\"private_candidate\":true,\"ordinary_input_build\":";
 #ifdef FVR_BC2_RESOURCE_MAGAZINES
@@ -2537,6 +2838,40 @@ void Report(std::ostream& out){
         <<",\"inventory_items\":"<<ammoPlayerService.Inventory().Size()<<",\"pending\":"<<bool(ammoPlayerService.Active());
         if(const auto& v=ammoPlayerService.View())out<<",\"phase\":"<<unsigned(v->phase)<<",\"request\":"<<v->request
             <<",\"request_state\":"<<unsigned(v->requestState)<<",\"loaded\":"<<v->snapshot.counts.loaded<<",\"reserve\":"<<v->snapshot.counts.reserve;
+        out<<",\"first_rejection\":";
+        if(const auto& failure=ammoPlayerService.FirstRejection()){
+            const auto contextJson=[&](const interaction::AmmoResourceContext& c){
+                out<<"{\"actor\":"<<c.resource.actor<<",\"actor_generation\":"<<c.resource.actorGeneration
+                   <<",\"weapon\":"<<c.resource.weapon<<",\"weapon_generation\":"<<c.resource.weaponGeneration
+                   <<",\"equip_generation\":"<<c.equipGeneration<<",\"space\":"<<c.space<<'}';};
+            const auto bindingJson=[&](const AmmoResourceBinding& b){
+                out<<"{\"observed_ns\":"<<b.observedNs<<",\"deadline_ns\":"<<b.deadlineNs
+                   <<",\"inventory\":"<<b.inventory<<",\"switching\":"<<b.switching<<",\"data\":"<<b.data
+                   <<",\"persistence\":"<<b.persistence<<",\"context\":";contextJson(b.context);out<<'}';};
+            const auto snapshotJson=[&](const std::optional<interaction::AmmunitionSnapshot>& s){
+                if(!s){out<<"null";return;}out<<"{\"observed_ns\":"<<s->observedNs<<",\"deadline_ns\":"<<s->deadlineNs
+                    <<",\"sequence\":"<<s->sequence<<",\"loaded\":"<<s->counts.loaded<<",\"reserve\":"<<s->counts.reserve
+                    <<",\"capacity\":"<<s->counts.capacity<<",\"coherent_idle\":"<<s->coherentIdleVerified
+                    <<",\"context\":";contextJson(s->context);out<<'}';};
+            const auto& f=*failure;const auto& i=f.request.intent;
+            out<<"{\"reason\":\""<<AmmoResourceRejectionName(f.reason)<<"\",\"processing_now_ns\":"<<f.processingNowNs
+               <<",\"request\":"<<i.id<<",\"operation\":"<<unsigned(i.operation)<<",\"discard\":"<<f.request.discard
+               <<",\"intent_observed_ns\":"<<i.observedNs<<",\"intent_deadline_ns\":"<<i.deadlineNs
+               <<",\"state\":"<<unsigned(f.state)<<",\"native_dispatched\":"<<f.nativeDispatched<<",\"intent_context\":";
+            contextJson(i.context);out<<",\"source_proof\":";
+            if(const auto& p=f.request.sourceProof)out<<"{\"constructed_ns\":"<<p->constructedNs
+                <<",\"input_sequence\":"<<p->inputSequence<<",\"snapshot_sequence\":"<<p->snapshotSequence
+                <<",\"snapshot_observed_ns\":"<<p->snapshotObservedNs<<",\"snapshot_deadline_ns\":"<<p->snapshotDeadlineNs<<'}';
+            else out<<"null";
+            out<<",\"source_binding\":";bindingJson(f.request.binding);
+            out<<",\"current_binding\":";if(f.currentBinding)bindingJson(*f.currentBinding);else out<<"null";
+            out<<",\"current_snapshot\":";snapshotJson(f.currentSnapshot);
+            out<<",\"adjacent_snapshot\":";snapshotJson(f.adjacentSnapshot);
+            out<<",\"active_command\":";if(f.activeCommand){const auto& c=*f.activeCommand;
+                out<<"{\"id\":"<<c.id<<",\"requested_ns\":"<<c.requestedNs<<",\"admission_deadline_ns\":"<<c.admissionDeadlineNs
+                   <<",\"deadline_ns\":"<<c.deadlineNs<<'}';}else out<<"null";
+            out<<'}';
+        }else out<<"null";
     }out<<",\"read_evidence\":";ammoPlayerChannel.ReportReadEvidence(out,drained);out<<'}';
 #endif
 #ifdef FVR_BC2_AMMO_MOVE_PROBE
@@ -2591,7 +2926,8 @@ void Report(std::ostream& out){
        <<",\"server_publish_misses\":"<<serverPublishMisses.load()<<",\"server_read_misses\":"<<serverReadMisses.load()
        <<",\"server_matched\":["<<serverMatches[0].load()<<','<<serverMatches[1].load()<<','<<serverMatches[2].load()<<','<<serverMatches[3].load()<<']'
        <<",\"capacity\":"<<records.Limit()<<",\"window_seconds\":"<<recordWindowClock.DurationNs()/1000000000<<",\"start_ns\":"<<recordWindowClock.StartNs()<<",\"runtime_start_ns\":"<<startNs<<",\"in_flight\":"<<active.load()
-       <<",\"owner_lock_drops\":"<<ownerDrops.load()<<",\"record_lock_drops\":"<<recordBusy.load()
+       <<",\"owner_lock_drops\":"<<ownerDrops.load()<<",\"owner_publications_after_entry\":"<<ownerPublicationsAfterEntry.load()
+       <<",\"record_lock_drops\":"<<recordBusy.load()
        <<",\"record_begin_lock_drops\":"<<recordBeginBusy.load()<<",\"record_end_lock_drops\":"<<recordEndBusy.load()
        <<",\"completion_journal\":{\"capacity\":"<<ReloadDeferredCompletions::Capacity<<",\"pending\":"<<recordCompletions.Pending()
        <<",\"recovered\":"<<recordCompletions.Recovered()<<",\"overflow\":"<<recordCompletions.Overflow()<<",\"rejected_drain\":"<<recordCompletions.Rejected()<<'}'
@@ -2607,7 +2943,17 @@ void Report(std::ostream& out){
         if(n)out<<',';const auto& m=observationReadMisses[n];
         out<<"{\"now_ns\":"<<m.observedNs<<",\"thread\":"<<m.thread<<",\"firing\":"<<m.firing
            <<",\"branch\":"<<m.branch<<",\"stage\":"<<m.stage<<",\"kind\":"<<unsigned(m.kind)
-           <<",\"exit\":"<<(m.exit?"true":"false")<<",\"native_invocation\":"<<m.invocation<<'}';
+           <<",\"exit\":"<<(m.exit?"true":"false")<<",\"native_invocation\":"<<m.invocation
+           <<",\"client_failure\":"<<unsigned(m.client.failure)<<",\"server_failure\":"<<unsigned(m.server.failure)
+           <<",\"server_state_failure\":"<<m.server.stateFailure<<",\"server_changed_offset\":"<<m.server.changedOffset
+           <<",\"lease_observed_ns\":"<<m.leaseObservedNs<<",\"lease_deadline_ns\":"<<m.leaseDeadlineNs
+           <<",\"read_ns\":"<<m.readNs<<",\"server_observed_ns\":"<<m.serverObservedNs<<'}';
+    }out<<"]}";
+    out<<",\"native_observation_misses\":{\"count\":"<<nativeObservationMissCount.load()
+       <<",\"coherent_retries\":"<<nativeObservationRetries.load()<<",\"coherent_recovered\":"<<nativeObservationRecovered.load()<<",\"rows\":[";
+    if(drained)for(unsigned n=0;n<std::min<unsigned>(nativeObservationMissCount.load(),unsigned(nativeObservationMisses.size()));++n){
+        if(n)out<<',';const auto& m=nativeObservationMisses[n];out<<"{\"now_ns\":"<<m.now<<",\"firing\":"<<m.firing
+            <<",\"thread\":"<<m.thread<<",\"stage\":"<<m.stage<<",\"status\":"<<m.status<<'}';
     }out<<"]}";
     const auto empty=ReadMagazineEmptyControlCounters();
     out<<",\"empty_magazine_control\":{\"requested\":["<<empty.requested[0]<<','<<empty.requested[1]<<','<<empty.requested[2]
@@ -2776,13 +3122,47 @@ void Report(std::ostream& out){
     if(drained)for(unsigned n=0;n<std::min<unsigned>(nativeCycleControlRejectionCount.load(),unsigned(nativeCycleControlRejections.size()));++n){
         const auto& r=nativeCycleControlRejections[n];if(n)out<<',';
         out<<"{\"now_ns\":"<<r.now<<",\"observed_ns\":"<<r.observed<<",\"deadline_ns\":"<<r.deadline<<",\"sequence\":"<<r.sequence
-           <<",\"reason\":"<<r.reason<<",\"read_branch\":"<<r.branch<<",\"client_failure\":"<<r.clientFailure<<",\"server_failure\":"<<r.serverFailure<<'}';
+           <<",\"reason\":"<<r.reason<<",\"read_branch\":"<<r.branch<<",\"client_failure\":"<<r.clientFailure<<",\"server_failure\":"<<r.serverFailure
+           <<",\"server_flags_expected\":"<<unsigned(r.server.expectedSoldierFlags)
+           <<",\"server_flags_observed\":"<<unsigned(r.server.observedSoldierFlags)
+           <<",\"server_flags_after\":"<<unsigned(r.server.afterSoldierFlags)
+           <<",\"server_only_published_flags\":"<<(r.server.differsOnlySoldierFlags?"true":"false")
+           <<",\"server_only_read_flags\":"<<(r.server.changedOnlySoldierFlags?"true":"false")
+           <<",\"server_state_failure\":"<<r.server.stateFailure
+           <<",\"server_link_difference_count\":"<<r.server.linkDifference.count<<",\"server_link_differences\":[";
+        for(unsigned k=0;k<std::min<unsigned>(r.server.linkDifference.count,unsigned(r.server.linkDifference.first.size()));++k){
+            const auto& d=r.server.linkDifference.first[k];if(k)out<<',';
+            out<<"{\"field\":\""<<d.field<<"\",\"index\":"<<d.index<<",\"expected\":"<<d.expected<<",\"observed\":"<<d.observed<<'}';
+        }out<<"]}";
     }out<<']';
     if(drained){const auto view=nativeCycle.View(Now());out<<",\"phase\":"<<unsigned(view.phase)<<",\"failure\":"<<unsigned(view.failure)
         <<",\"cycle\":"<<view.cycle<<",\"shot\":"<<view.shot<<",\"failure_invocation\":"<<view.failureInvocation
         <<",\"blocks_fire\":"<<(view.blocksFire?"true":"false")
         <<",\"held_suspended\":"<<(view.heldSuspended?"true":"false")
-        <<",\"held_suspensions\":"<<view.heldSuspensions<<",\"held_resumptions\":"<<view.heldResumptions;}out<<'}';
+        <<",\"held_suspensions\":"<<view.heldSuspensions<<",\"held_resumptions\":"<<view.heldResumptions
+        <<",\"recovery_enabled\":"<<nativeCycle.RecoveryEnabled()<<",\"guarded_updates\":"<<nativeCycle.RecoveryUpdates()
+        <<",\"recovery_releases\":"<<nativeCycle.RecoveryReleases()
+        <<",\"guarded_steps\":"<<nativeCycle.RecoverySteps();
+        if(view.trackingRebase){const auto& r=*view.trackingRebase;
+            out<<",\"tracking_rebase\":{\"old_space\":"<<r.previous.space<<",\"new_space\":"<<r.current.space
+               <<",\"cycle\":"<<r.cycle<<",\"shot\":"<<r.shot<<",\"callback_revision\":"<<r.callbackRevision
+               <<",\"observed_ns\":"<<r.observedNs<<'}';}
+        if(const auto& retired=nativeCycle.LastActorRetirement()){
+            out<<",\"actor_retirement\":{\"event\":"<<retired->event<<",\"callback_revision\":"<<retired->callbackRevision
+               <<",\"observed_ns\":"<<retired->observedNs<<",\"old_phase\":"<<unsigned(retired->outcome.phase)
+               <<",\"old_cycle\":"<<retired->outcome.cycle<<",\"old_shot\":"<<retired->outcome.shot
+               <<",\"old_soldier\":"<<retired->outcome.native.owner.soldier
+               <<",\"new_soldier\":"<<retired->replacement.owner.soldier
+               <<",\"old_weapon\":"<<retired->outcome.native.owner.weapon
+               <<",\"new_weapon\":"<<retired->replacement.owner.weapon
+               <<",\"old_server_soldier\":"<<retired->outcome.native.serverSoldier
+               <<",\"new_server_soldier\":"<<retired->replacement.serverSoldier
+               <<",\"old_actor_generation\":"<<retired->outcome.native.owner.actorGeneration
+               <<",\"new_actor_generation\":"<<retired->replacement.owner.actorGeneration
+               <<",\"retained_ready\":"<<(retired->outcome.ready?"true":"false")
+               <<",\"retained_release\":"<<(retired->release?"true":"false")<<'}';
+        }
+    }out<<'}';
     out<<",\"diagnostic_hold\":{\"enabled\":"<<(diagnosticHold?"true":"false")<<",\"code_verified\":"<<(holdCodeVerified?"true":"false")
        <<",\"target\":"<<unsigned(holdProbe.Target())<<",\"native_pump_accepted\":false"
        <<",\"phase\":"<<unsigned(holdProbe.Phase())<<",\"reason\":"<<unsigned(holdProbe.Reason())<<",\"begin_ns\":"<<holdProbe.BeginNs()<<",\"deadline_ns\":"<<holdProbe.DeadlineNs()
@@ -2890,7 +3270,13 @@ void Report(std::ostream& out){
         out<<",\"restore_fields_matched\":"<<(ReloadRestoreMatched(record)?"true":"false")
            <<",\"hold_requested\":"<<(record.exit.holdRequested?"true":"false")<<",\"hold_applied\":"<<(record.exit.hold.applied?"true":"false")
            <<",\"hold_restored\":"<<(record.exit.hold.restored?"true":"false")<<",\"hold_original_delta_bits\":"<<record.exit.hold.original
-           <<",\"hold_before_restore_bits\":"<<record.exit.hold.beforeRestore<<",\"hold_unexpected_native_write\":"<<(record.exit.hold.unexpectedNativeWrite?"true":"false");out<<'}';
+           <<",\"hold_before_restore_bits\":"<<record.exit.hold.beforeRestore<<",\"hold_unexpected_native_write\":"<<(record.exit.hold.unexpectedNativeWrite?"true":"false")
+           <<",\"cycle_guard\":{\"epoch\":"<<record.exit.cycleGuardEpoch<<",\"steps\":"<<record.exit.cycleGuardSteps
+           <<",\"rejected\":"<<record.exit.cycleGuardRejected<<",\"requested\":"<<record.exit.cycleGuard.requested
+           <<",\"applied\":"<<record.exit.cycleGuard.applied<<",\"restored\":"<<record.exit.cycleGuard.restored
+           <<",\"unexpected_write\":"<<record.exit.cycleGuard.unexpectedWrite<<",\"original\":["<<record.exit.cycleGuard.original[0]<<','<<record.exit.cycleGuard.original[1]
+           <<"],\"effective\":["<<record.exit.cycleGuard.effective[0]<<','<<record.exit.cycleGuard.effective[1]
+           <<"],\"before_restore\":["<<record.exit.cycleGuard.beforeRestore[0]<<','<<record.exit.cycleGuard.beforeRestore[1]<<"]}";out<<'}';
     }out<<"]}";
 }
 }
@@ -2909,6 +3295,11 @@ bool PublishNativeCycleControl(const Bc2NativeCycleControl&)noexcept{return fals
 std::optional<Bc2NativeCycleView> ReadNativeCycleView(std::int64_t)noexcept{return {};}
 bool AcknowledgeNativeCycleReady(const interaction::WeaponCycleReady&)noexcept{return false;}
 void CancelNativeCycle()noexcept{}
+std::optional<Bc2NativeCycleRecoveryView> ReadNativeCycleRecoveryView(std::int64_t)noexcept{return {};}
+bool WriteNativeCycleFirstFailure(std::ostream&){return false;}
+bool SubmitNativeCycleRecovery(const interaction::WeaponCycleIdleDebtRelease&,const interaction::HandInteractionSample&)noexcept{return false;}
+bool AcknowledgeNativeCycleRecovery(const interaction::WeaponCycleIdleDebtReady&)noexcept{return false;}
+bool EnableNativeCycleRecovery()noexcept{return false;}
 bool EnablePumpHoldDiagnostic()noexcept{return false;}
 bool Install(std::span<const std::byte>,const engine::PeImage&,std::uintptr_t,const ReloadStateMemory&,bool,bool,bool,bool){return false;}
 MagazineEmptyControlCounters ReadMagazineEmptyControlCounters()noexcept{return {};}
@@ -2927,9 +3318,11 @@ std::optional<Bc2AmmoReserveLease> ReadReserve()noexcept{return {};}
 std::optional<Bc2AmmoReserveLease> ReadPublishedReserve()noexcept{return {};}
 std::optional<Bc2AmmoReserveLease> ReadDiagnosticFireReserve()noexcept{return {};}
 std::optional<Bc2AmmoReserveLease> ReadM95StockShotReserve()noexcept{return {};}
+bool EnableM95EmptyRecording()noexcept{return false;}
 ReloadReserveObservation ReadReserveObserved()noexcept{return {};}
 std::optional<ReloadCycleRetirement> RetireRequestCycle(const ReloadHoldIdentity&,std::uint64_t)noexcept{return {};}
 bool StartRequestCycle(const ReloadCycleControl&)noexcept{return false;}
+ReloadStartResult StartRequestCycleObserved(const ReloadCycleControl&)noexcept{return ReloadStartResult::Rejected;}
 bool KeepAliveRequestCycle(const ReloadCycleControl&)noexcept{return false;}
 ReloadKeepAliveResult KeepAliveRequestCycleObserved(const ReloadCycleControl&)noexcept{return ReloadKeepAliveResult::Rejected;}
 std::optional<ReloadRoundLease> RequestLease(const ReloadHoldIdentity&,std::uint64_t)noexcept{return {};}
@@ -2951,6 +3344,7 @@ void ClearOwner()noexcept{}void Start()noexcept{}bool Stop()noexcept{return true
 void PublishAmmoResourceBinding(const std::optional<AmmoResourceBinding>&)noexcept{}
 bool ResourceHandsEnabled()noexcept{return false;}
 std::optional<AmmoResourceView> ReadAmmoResourceView(const ReloadStateOwner&,std::int64_t)noexcept{return {};}
+AmmoResourceRead ReadAmmoResourceObserved(const ReloadStateOwner&,std::int64_t)noexcept{return {AmmoResourceReadReason::Invalid,{}};}
 bool SubmitAmmoResourceRequest(const AmmoResourceRequest&)noexcept{return false;}
 std::optional<AmmoResourceOutcome> ReadAmmoResourceOutcome(std::uint64_t,const interaction::AmmoResourceContext&)noexcept{return {};}
 void Report(std::ostream& out){out<<"{\"installed\":false,\"unsupported_architecture\":true,\"observation_only\":true}";}

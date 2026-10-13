@@ -2,7 +2,8 @@
 namespace fvr::bc2 {
 using namespace interaction;
 void Bc2BoltPlayerCustody::Invalidate()noexcept {
-    references_.reset();candidate_.reset();stableAt_=0;lastRaw_=0;previous_={};returnPress_=0;neutral_=0;rightArmed_=rightHeld_=false;
+    if(debt_&&references_)recoveryReferences_=references_;
+    references_.reset();candidate_.reset();lastContact_.reset();stableAt_=0;lastRaw_=0;previous_={};returnPress_=0;neutral_=0;rightArmed_=rightHeld_=false;
     if(debt_)retirementRequired_=true;
 }
 void Bc2BoltPlayerCustody::Capture(const Bc2BoltPlayerInput& in)noexcept {
@@ -30,13 +31,22 @@ void Bc2BoltPlayerCustody::Capture(const Bc2BoltPlayerInput& in)noexcept {
     if(r.raw.input.observedNs-stableAt_>=150000000&&now-selectedAt_>=600000000)
         references_=candidate_;
 }
-std::optional<Bc2PhysicalBoltSample> Bc2BoltPlayerCustody::Prepare(const Bc2BoltPlayerInput& in,
+std::optional<Bc2PhysicalBoltSample> Bc2BoltPlayerCustody::Prepare(const Bc2BoltPlayerInput& incoming,
     const HandInteraction& hands,std::uint64_t& intent)noexcept {
+    auto in=incoming;
     const auto& s=in.safety;const auto* controls=in.controls;
     if(!calibration_||!BoltCalibrationValid(*calibration_)||!controls)return {};
     if(in.native&&in.native->blocksFire)debt_=true;
     const bool identity=owner_==in.owner&&item_==in.item&&units_==controls->worldUnitsPerMeter;
-    if(!identity){Invalidate();owner_=in.owner;item_=in.item;units_=controls->worldUnitsPerMeter;selectedAt_=s.nowNs;}
+    if(!identity){Invalidate();recoveryReferences_.reset();leftCustody_.reset();owner_=in.owner;item_=in.item;units_=controls->worldUnitsPerMeter;selectedAt_=s.nowNs;}
+    // An unavailable render publication is not evidence of a different gun.
+    // Use only previously validated, still-live original contact. Explicit
+    // mismatches remain authoritative, and current controls/body/owner still
+    // pass every mapping check below. No timestamp or grip edge is invented.
+    const bool missing=!in.contact.raw.valid&&!in.contact.mappingValid&&
+        in.contact.raw.nativeOwner==ReloadStateOwner{}&&!in.contact.raw.input.sequence&&!in.contact.raw.rigFingerprint;
+    if(missing&&lastContact_&&weapon_cycle_detail::Window(lastContact_->raw.input.observedNs,lastContact_->raw.input.deadlineNs,s.nowNs))
+        in.contact=*lastContact_;
     const bool exact=in.asset==calibration_->asset&&in.mesh==calibration_->mesh&&
         in.contact.raw.nativeOwner==in.owner&&in.contact.raw.rigFingerprint==calibration_->rigFingerprint&&
         in.owner.actorGeneration==s.owner.actorGeneration&&in.owner.space==s.owner.space&&
@@ -51,8 +61,21 @@ std::optional<Bc2PhysicalBoltSample> Bc2BoltPlayerCustody::Prepare(const Bc2Bolt
         Invalidate();lastNow_=std::max(lastNow_,s.nowNs);return {};
     }
     lastNow_=s.nowNs;
+    const auto recovering=in.recovery&&in.recovery->native.owner==in.owner&&in.recovery->authority?
+        in.recovery->authority:std::nullopt;
+    const auto left=hands.Current(InteractionHand::Left);
+    if(retirementRequired_&&recovering&&debtLease_&&recoveryReferences_&&leftCustody_&&left&&
+       left->token==*leftCustody_&&left->deadlineNs>s.nowNs&&left->token.owner==s.owner&&left->token.item==in.item&&
+       recovering->owner==debtLease_->owner&&recovering->item==debtLease_->item&&
+       recovering->mechanism==debtLease_->mechanism&&recovering->cycle==debtLease_->cycle&&recovering->shot==debtLease_->shot&&
+       recovering->owner==s.owner&&recovering->item==in.item&&
+       weapon_cycle_detail::Lease(*recovering,s.nowNs)){
+        references_=recoveryReferences_;retirementRequired_=false;custody_=BoltCustodyPhase::Manipulating;
+        submitted_=neutral_=returnPress_=0;
+    }
     const auto wrists=MapBoltTrackedWrists(in.contact,*controls,s,in.body);
     if(!wrists)return {};
+    lastContact_=in.contact;
     Capture(in);
     const bool fresh=s.sequence>previous_.sequence;
     const bool release=fresh&&previous_.sequence&&previous_.owner==s.owner&&!previous_.released[1]&&s.released[1];
@@ -94,7 +117,11 @@ std::optional<Bc2PhysicalBoltSample> Bc2BoltPlayerCustody::Prepare(const Bc2Bolt
 void Bc2BoltPlayerCustody::Observe(const Bc2PhysicalBoltResult& result)noexcept {
     // Startup admission/backpressure can block Fire before a shot exists.
     // Only actual held/gesture/custody evidence may create physical debt.
-    if(result.tracking.held||result.settled||result.tracking.custody==BoltCustodyPhase::Manipulating)debt_=true;
+    if(result.tracking.held)debtLease_=result.tracking.held;
+    if(result.tracking.gun&&result.tracking.gun->token.hand==InteractionHand::Left&&
+       result.tracking.gun->token.kind==HandClaimKind::GunHold)leftCustody_=result.tracking.gun->token;
+    if(result.tracking.held||result.tracking.recovery||result.settled||result.recovered||
+       result.tracking.custody==BoltCustodyPhase::Manipulating)debt_=true;
     if(result.tracking.enabled){
         custody_=result.tracking.custody;
         if(result.tracking.mechanismPhase==WeaponCyclePhase::AwaitingNative&&!submitted_)
@@ -102,9 +129,9 @@ void Bc2BoltPlayerCustody::Observe(const Bc2PhysicalBoltResult& result)noexcept 
     }
     if(result.custodyChange&&result.custodyChange->transaction.accepted&&custody_==BoltCustodyPhase::Returned)
         returnPress_=0;
-    if(result.settled)ready_=true;
+    if(result.settled||result.recovered)ready_=true;
     if(ready_&&custody_==BoltCustodyPhase::Returned&&!retirementRequired_){
-        debt_=false;ready_=false;submitted_=0;neutral_=0;returnPress_=0;
+        debt_=false;ready_=false;submitted_=0;neutral_=0;returnPress_=0;debtLease_.reset();leftCustody_.reset();recoveryReferences_.reset();
     }
 }
 }

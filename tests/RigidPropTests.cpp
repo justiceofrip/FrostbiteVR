@@ -1,4 +1,6 @@
 #include "fvr/graphics/D3D11RigidPropRenderer.h"
+#include "fvr/graphics/BodyPropMaterials.h"
+#include <bit>
 #include "fvr/interaction/AmmoSupplyProp.h"
 #include "Bc2Xm8MagazineCalibration.h"
 #include "Bc2BeltPropProfiles.h"
@@ -91,5 +93,6 @@ int DisabledBackendDoesNotTouchDevice(){D3D11RigidPropRenderer renderer;CHECK(!r
     Source s;const RigidPropSectionUpload section{*s.Extract()};CHECK(!renderer.Upload({1,2,3},std::span(&section,1)));
     CHECK(!renderer.Draw({1,2,3},Eye(),Eye(),1000000000,Pose(),Pose(),Pose(),{}));CHECK(!bc2::IndependentBeltPropNativeAdmitted);return 0;}
 }
-int main(){if(ExactBoneAndIndependentBytes()||BadHashesIndicesAndBase()||MixedSkinAndTriangleRejected()||BasisAndWindingAreExplicit()||HalfPositionsAndNonfinite()||DefaultOffAndEachEyeOnce()||StaleAndDifferentOwnerEye()||SamePickupAnchorAndMeasuredGrasp()||SupplyDisappearsOnClaimOrSourceChange()||DisabledBackendDoesNotTouchDevice())return 1;
-    std::cout<<"RigidProp: 10 groups passed; CPU only, no GPU/native rendering acceptance\n";}
+#include "BodyMaterials359Checks.inc"
+int main(){if(ExactBoneAndIndependentBytes()||BadHashesIndicesAndBase()||MixedSkinAndTriangleRejected()||BasisAndWindingAreExplicit()||HalfPositionsAndNonfinite()||DefaultOffAndEachEyeOnce()||StaleAndDifferentOwnerEye()||SamePickupAnchorAndMeasuredGrasp()||SupplyDisappearsOnClaimOrSourceChange()||DisabledBackendDoesNotTouchDevice()||BodyMaterialCacheChecks())return 1;
+    std::cout<<"RigidProp: 11 groups passed; CPU only, no GPU/native rendering acceptance\n";}

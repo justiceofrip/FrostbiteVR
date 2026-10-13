@@ -1,4 +1,5 @@
 #include "SceneRecoveryProbe.h"
+#include "BodyInspectionProbe.h"
 #include <cassert>
 #include <iostream>
 #include <limits>
@@ -46,5 +47,26 @@ int main(){
     std::ostringstream out;WriteNeutralSceneInput(out,NeutralSceneInput(tracking,3),4000);
     assert(out.str().find("\"tick_ms\":4000")!=std::string::npos&&out.str().find("\"generation\":3")!=std::string::npos);
     assert(out.str().find("\"axes\":[0,0,0,0]")!=std::string::npos&&out.str().back()=='\n');
-    std::cout<<"6 scene neutral receiver groups PASS\n";
+    for(const math::Vec3 contact: {math::Vec3{-.2f,-.12f,.18f},math::Vec3{.2f,-.12f,.18f},math::Vec3{.22f,-.65f,0.f}}){
+        unsigned edges=0;float previous=0;math::Vec3 last{.2f,-.25f,-.45f};
+        for(unsigned ms=0;ms<14000;++ms){
+            auto input=NeutralSceneInput(tracking,100+ms);
+            assert(BodyInspectionInput(input,contact,ms)&&BodyInspectionActions(input));
+            assert(input.generation==100+ms&&input.spaceGeneration==987&&input.worldUnitsPerMeter==2);
+            const auto& hand=input.hands[1];const auto p=hand.grip.position;
+            assert(std::abs(p.x-last.x)<.003f&&std::abs(p.y-last.y)<.003f&&std::abs(p.z-last.z)<.003f);
+            assert(p.x==hand.aim.position.x&&p.y==hand.aim.position.y&&p.z==hand.aim.position.z);
+            if(hand.squeeze>previous){++edges;assert(p.x==contact.x&&p.y==contact.y&&p.z==contact.z);}
+            if(ms>=4000)assert(p.x==.2f&&p.y==-.25f&&p.z==-.45f&&hand.squeeze==1);
+            previous=hand.squeeze;last=p;
+            for(unsigned h=0;h<2;++h){auto bad=input;bad.hands[h].trigger=.1f;assert(!BodyInspectionActions(bad));}
+        }
+        assert(edges==1);
+    }
+    for(float bad:{1.01f,-1.01f,std::numeric_limits<float>::quiet_NaN(),std::numeric_limits<float>::infinity()}){
+        for(unsigned axis=0;axis<3;++axis){math::Vec3 p{};if(axis==0)p.x=bad;else if(axis==1)p.y=bad;else p.z=bad;
+            auto input=NeutralSceneInput(tracking,5);input.hands[1].trigger=.4f;
+            assert(!ValidBodyInspectionContact(p)&&!BodyInspectionInput(input,p,2000)&&input.hands[1].trigger==.4f);}
+    }
+    std::cout<<"8 scene and body inspection receiver groups PASS\n";
 }

@@ -14,16 +14,17 @@ struct Handle {
     void Set(HANDLE value){if(h)CloseHandle(h);h=value;}
 };
 struct alignas(8) Shared {
-    std::uint32_t magic=0x31434646,version=5,bytes=3288,reserved0=0;
+    std::uint32_t magic=0x31434646,version=6,bytes=3472,reserved0=0;
     std::array<std::uint8_t,16> session{};
     std::uint32_t hostPid=0,producerPid=0;
     std::uint64_t hostStarted=0,producerStarted=0;
     FrameSlot slot{};
     graphics::BodyPropFrame props{};
+    graphics::SceneDepthFrame depth{};
     InputPacket input{};
     std::array<std::uint64_t,5> reserved{};
 };
-static_assert(sizeof(Shared)==3288 && offsetof(Shared,slot)==56);
+static_assert(sizeof(Shared)==3472 && offsetof(Shared,slot)==56);
 std::int64_t Now(){LARGE_INTEGER n{};return QueryPerformanceCounter(&n)?n.QuadPart:0;}
 std::uint64_t Started(HANDLE process){FILETIME created{},exited{},kernel{},user{};if(!GetProcessTimes(process,&created,&exited,&kernel,&user))return 0;return (std::uint64_t(created.dwHighDateTime)<<32)|created.dwLowDateTime;}
 bool TokenBytes(const std::wstring& token,std::array<std::uint8_t,16>& bytes){
@@ -37,13 +38,14 @@ struct FrameChannel::State {
     bool host=false,fault=false,pendingAck=false,ackConsumed=false;
     std::uint64_t active=0,next=0;
     graphics::PairTicket delivered{};graphics::BodyPropFrame deliveredProps{};
+    graphics::SceneDepthFrame deliveredDepth{};
     Handle mapping,mutex,response,peer;
     Shared* shared=nullptr;
     std::array<std::uint8_t,16> session{};
     std::int64_t frequency=0;
     ~State(){if(shared)UnmapViewOfFile(shared);}
     bool Header()const {
-        if(shared->magic!=0x31434646||shared->version!=5||shared->bytes!=sizeof(Shared)||shared->session!=session||shared->reserved0||!shared->hostPid||!shared->hostStarted)return false;
+        if(shared->magic!=0x31434646||shared->version!=6||shared->bytes!=sizeof(Shared)||shared->session!=session||shared->reserved0||!shared->hostPid||!shared->hostStarted)return false;
         for(auto v:shared->reserved)if(v)return false;
         return std::uint32_t(shared->slot.phase)<=std::uint32_t(Phase::Closed)&&!shared->slot.reserved&&shared->slot.consumed<=1;
     }
@@ -79,7 +81,7 @@ const std::wstring& FrameChannel::Token()const noexcept{return token_;}
 bool FrameChannel::CreateHost()noexcept {
     Close();try {
         auto s=std::make_unique<State>();s->host=true;const auto token=NewToken();if(!TokenBytes(token,s->session))return false;
-        const auto prefix=L"Local\\FrostbiteVR.Control.v5."+token;
+        const auto prefix=L"Local\\FrostbiteVR.Control.v6."+token;
         s->mutex.h=CreateMutexW(nullptr,FALSE,(prefix+L".mutex").c_str());if(!s->mutex.h||GetLastError()==ERROR_ALREADY_EXISTS)return false;
         s->response.h=CreateEventW(nullptr,FALSE,FALSE,(prefix+L".response").c_str());if(!s->response.h||GetLastError()==ERROR_ALREADY_EXISTS)return false;
         s->mapping.h=CreateFileMappingW(INVALID_HANDLE_VALUE,nullptr,PAGE_READWRITE,0,sizeof(Shared),(prefix+L".map").c_str());if(!s->mapping.h||GetLastError()==ERROR_ALREADY_EXISTS)return false;
@@ -93,7 +95,7 @@ bool FrameChannel::CreateHost()noexcept {
 }
 bool FrameChannel::ConnectProducer(const std::wstring& token)noexcept {
     Close();try {
-        auto s=std::make_unique<State>();if(!TokenBytes(token,s->session))return false;const auto prefix=L"Local\\FrostbiteVR.Control.v5."+token;
+        auto s=std::make_unique<State>();if(!TokenBytes(token,s->session))return false;const auto prefix=L"Local\\FrostbiteVR.Control.v6."+token;
         s->mutex.h=OpenMutexW(SYNCHRONIZE|MUTEX_MODIFY_STATE,FALSE,(prefix+L".mutex").c_str());if(!s->mutex.h)return false;
         s->response.h=OpenEventW(EVENT_MODIFY_STATE|SYNCHRONIZE,FALSE,(prefix+L".response").c_str());if(!s->response.h)return false;
         s->mapping.h=OpenFileMappingW(FILE_MAP_READ|FILE_MAP_WRITE,FALSE,(prefix+L".map").c_str());if(!s->mapping.h)return false;
@@ -130,7 +132,7 @@ ChannelResult FrameChannel::RequestPair(const runtime::PresentationRequirements&
         // Every producer operation still uses a zero-time try-lock.
         {State::Lock lock(s,1);if(lock){
             if(!s.Peer())return ChannelResult::Closed;
-            if(Deliver(s.shared->slot,s.active,Now(),d,t)){s.delivered=t;s.deliveredProps=s.shared->props;return ChannelResult::Ok;}
+            if(Deliver(s.shared->slot,s.active,Now(),d,t)){s.delivered=t;s.deliveredProps=s.shared->props;s.deliveredDepth=s.shared->depth;return ChannelResult::Ok;}
             const auto phase=s.shared->slot.phase;
             if(phase==Phase::Idle||phase==Phase::Complete||phase==Phase::Cancelled){s.active=0;return ChannelResult::Timeout;}
         }else if(s.fault)return ChannelResult::Closed;else retryLock=true;}
@@ -164,7 +166,7 @@ ChannelResult FrameChannel::PollRequest(graphics::TextureDescriptor& d,graphics:
     State::Lock lock(s);if(!lock)return s.fault?ChannelResult::Closed:ChannelResult::Busy;
     if(!s.Peer())return ChannelResult::Closed;
     if(!s.active)return ChannelResult::Invalid;
-    const auto now=Now();if(Deliver(s.shared->slot,s.active,now,d,t)){s.delivered=t;s.deliveredProps=s.shared->props;return ChannelResult::Ok;}
+    const auto now=Now();if(Deliver(s.shared->slot,s.active,now,d,t)){s.delivered=t;s.deliveredProps=s.shared->props;s.deliveredDepth=s.shared->depth;return ChannelResult::Ok;}
     const auto phase=s.shared->slot.phase;
     // Delivered images belong to the consumer even after their request deadline.
     if(phase==Phase::Delivered)return ChannelResult::Busy;
@@ -202,12 +204,20 @@ bool FrameChannel::ReadBodyProps(const graphics::PairTicket& ticket,graphics::Bo
     if(std::memcmp(&ticket,&s.delivered,sizeof(ticket))||!graphics::BodyPropFrameMatches(s.deliveredProps,ticket))return false;
     out=s.deliveredProps;return true;
 }
-ChannelResult FrameChannel::Publish(const graphics::TextureDescriptor& d,const graphics::PairTicket& t,const graphics::BodyPropFrame* props)noexcept {
+bool FrameChannel::ReadSceneDepth(const graphics::TextureDescriptor& descriptor,const graphics::PairTicket& ticket,graphics::SceneDepthFrame& out)noexcept {
+    out={};if(!state_||!state_->host)return false;auto& s=*state_;
+    if(!s.active||s.pendingAck||std::memcmp(&ticket,&s.delivered,sizeof(ticket))||
+       !graphics::SceneDepthMatches(s.deliveredDepth,descriptor,ticket))return false;
+    State::Lock lock(s);if(!lock||!s.Peer()||s.shared->slot.phase!=Phase::Delivered)return false;
+    out=s.deliveredDepth;return true;
+}
+ChannelResult FrameChannel::Publish(const graphics::TextureDescriptor& d,const graphics::PairTicket& t,const graphics::BodyPropFrame* props,const graphics::SceneDepthFrame* depth)noexcept {
     if(!state_||state_->host)return ChannelResult::Closed;auto& s=*state_;if(!s.active)return ChannelResult::Invalid;
     State::Lock lock(s);if(!lock)return s.fault?ChannelResult::Closed:ChannelResult::Busy;
     if(!s.Peer())return ChannelResult::Closed;
     if(ipc::Publish(s.shared->slot,s.active,Now(),d,t)){
         s.shared->props=props&&graphics::BodyPropFrameMatches(*props,t)?*props:graphics::BodyPropFrame{};
+        s.shared->depth=depth&&graphics::SceneDepthMatches(*depth,d,t)?*depth:graphics::SceneDepthFrame{};
         SetEvent(s.response.h);return ChannelResult::Ok;}
     const bool expired=s.shared->slot.phase==Phase::Idle;ipc::Skip(s.shared->slot,s.active);s.active=0;SetEvent(s.response.h);
     return expired?ChannelResult::Timeout:ChannelResult::Invalid;

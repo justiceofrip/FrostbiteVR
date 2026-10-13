@@ -125,6 +125,11 @@ public:
     AmmoSupplyResult Update(const AmmoSupplySample&,HandInteraction&)noexcept;
     // Safety/ownership only: no acquisition or retained geometry evidence.
     AmmoSupplyResult WaitHeld(const AmmoSupplySample& s,HandInteraction& h)noexcept{return UpdateCurrent(s,h,false);}
+    // A missing native publication cannot revoke an already carried object.
+    // Renew only its exact existing claim against real controller safety. This
+    // accepts no counts/geometry, never acquires, reserves, or settles supply.
+    AmmoSupplyResult RetainHeld(const HandInteractionSample&,const AmmoSupplyIdentity&,
+        bool gripPressed,HandInteraction&)noexcept;
     std::optional<AmmoSupplyReservation> Reserve(const AmmoSupplySample&,HandInteraction&,
         const ReloadInsertionSeat&,const ManualReloadRequest& physicalRequest,std::uint64_t nativeCycle)noexcept;
     // Renderer contact may arrive from N-1. Its exact original sample/claims
@@ -154,6 +159,7 @@ private:
     bool SourceValid(const AmmoSupplySource&,std::int64_t now)const noexcept;
     bool Budget(const AmmoSupplySource&,std::uint32_t units,HandInteractionKey item={})const noexcept;
     AmmoSupplyResult UpdateCurrent(const AmmoSupplySample&,HandInteraction&,bool allowAcquire=true)noexcept;
+    AmmoSupplyResult UpdateWithSource(const AmmoSupplySample&,HandInteraction&,bool allowAcquire,bool sourceDeferred)noexcept;
     std::optional<AmmoSupplyReservation> ReserveCurrent(const HandInteractionSample&,HandInteraction&,
         const ReloadInsertionSeat&,const ManualReloadRequest&,std::uint64_t cycle)noexcept;
     AmmoSupplyResult Drop(const HandInteractionSample&,HandInteraction&,AmmoSupplyReason)noexcept;

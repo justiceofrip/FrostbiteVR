@@ -5,6 +5,36 @@ from inspect_bc2_mesh_asset import cstring,sha
 def need(ok,why):
     if not ok:raise ValueError(why)
 
+def position_bytes(section):
+    """Use the validated layout, never infer the skin offset from stride."""
+    layout=section.get('position_format')
+    need(layout in ('Half4','Float3'),'validated position format required')
+    return 8 if layout=='Half4' else 12
+
+def _skin_layout(data,start,section,lod,known,layout):
+    half=layout=='Half4';posbytes=8 if half else 12
+    used=set();multi=maxweights=0
+    for n in range(section['vertices']):
+        at=start+section['vertex_offset']+n*section['stride']
+        point=struct.unpack_from('<4e' if half else '<3f',data,at)
+        need(all(math.isfinite(x) for x in point),'invalid position')
+        if half:need(point[3] in (-1,1),'packed position fourth component')
+        indices=data[at+posbytes:at+posbytes+4];weights=data[at+posbytes+4:at+posbytes+8]
+        need(len(weights)==4 and sum(weights)==255,'skin weights do not sum255')
+        active=sum(w>0 for w in weights)
+        need(active<=section['max_authored_weights'],'more weights than authored')
+        maxweights=max(maxweights,active);multi+=active>1
+        for index,weight in zip(indices,weights):
+            if weight:
+                need(index<len(section['palette']),'local weight outside palette')
+                used.add(lod['palette'][section['palette'][index]])
+    return dict(position_format=layout,
+                weighted_hashes=[f'{h:08x}' for h in sorted(used)],
+                bone_names=[known.get(h) for h in sorted(used)],
+                multi_weight_vertices=multi,max_weights=maxweights,
+                all_vertices_normalized=True,
+                vertex_skin_sha256=sha(b''.join(data[start+section['vertex_offset']+n*section['stride']:start+section['vertex_offset']+n*section['stride']+posbytes+8] for n in range(section['vertices']))))
+
 def metadata(data):
     need(data[:5]==b'\x2a\0\0\0\0','MeshSet header')
     _,at=cstring(data,5);count=struct.unpack_from('<I',data,at)[0];at+=4
@@ -42,24 +72,19 @@ def geometry(data,lod,known):
     ev=ei=0
     for s in sections:
         need(s['vertex_offset']==ev and s['first_index']==ei,'noncontiguous geometry')
-        used=set();weighted=multi=0;maxweights=0
-        for n in range(s['vertices']):
-            at=start+ev+n*s['stride'];half=s['stride'] in (16,48)
-            point=struct.unpack_from('<4e' if half else '<3f',data,at)
-            need(all(math.isfinite(x) for x in point),'invalid position')
-            if half:need(point[3] in (-1,1),'packed position fourth component')
-            posbytes=8 if half else 12;indices=data[at+posbytes:at+posbytes+4];weights=data[at+posbytes+4:at+posbytes+8]
-            need(sum(weights)==255,'skin weights do not sum255');active=sum(w>0 for w in weights);need(active<=s['max_authored_weights'],'more weights than authored');maxweights=max(maxweights,active);multi+=active>1
-            for index,weight in zip(indices,weights):
-                if weight:
-                    need(index<len(s['palette']),'local weight outside palette')
-                    used.add(lod['palette'][s['palette'][index]]);weighted+=1
+        # The installed M1911 uses Float3+skin in a 48-byte stream; other
+        # weapons use Half4+skin at that same stride. Require exactly one
+        # complete section interpretation. Never silently prefer either one.
+        layouts=('Half4','Float3') if s['stride']==48 else (('Half4',) if s['stride']==16 else ('Float3',))
+        candidates=[];errors=[]
+        for layout in layouts:
+            try:candidates.append(_skin_layout(data,start,s,lod,known,layout))
+            except ValueError as exc:errors.append(layout+': '+str(exc))
+        need(len(candidates)==1,'ambiguous position/skin layout' if candidates else 'invalid position/skin layout: '+', '.join(errors))
+        s.update(candidates[0])
         indices=struct.unpack_from('<'+'H'*(s['triangles']*3),data,start+vb+ei*2)
         need(max(indices)<s['vertices'],'triangle outside section')
-        s.update(weighted_hashes=[f'{h:08x}' for h in sorted(used)],bone_names=[known.get(h) for h in sorted(used)],
-                 multi_weight_vertices=multi,max_weights=maxweights,all_vertices_normalized=True,
-                 vertex_skin_sha256=sha(b''.join(data[start+ev+n*s['stride']:start+ev+n*s['stride']+(16 if s['stride'] in (16,48) else 20)] for n in range(s['vertices']))),
-                 index_sha256=sha(data[start+vb+ei*2:start+vb+(ei+s['triangles']*3)*2]))
+        s['index_sha256']=sha(data[start+vb+ei*2:start+vb+(ei+s['triangles']*3)*2])
         ev+=s['vertices']*s['stride'];ei+=s['triangles']*3
     return sections
 

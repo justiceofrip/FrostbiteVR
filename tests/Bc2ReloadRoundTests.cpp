@@ -54,6 +54,53 @@ int FreshCompleteEvidenceAndNewRequest(){
 int DefaultOffAndRequestLeaseRejection(){Fixture f;ReloadRoundCompletion off;CHECK(!f.Begin(off));
     for(unsigned test=0;test<7;++test){Fixture g;ReloadRoundCompletion c(true);switch(test){case 0:g.request.operation=ReloadOperation::SeatMagazine;break;case 1:g.request.owner.actorGeneration++;break;case 2:g.lease.allThreeHeld=false;break;
         case 3:g.lease.nativeBindingVerified=false;break;case 4:g.lease.loaded=8;break;case 5:g.lease.reserve=0;break;case 6:g.lease.deadlineNs=1500;break;}CHECK(!g.Begin(c));}return 0;}
+ReloadPredictionRestore Restore(const Fixture& f,unsigned branch){return {f.lease.identity,f.lease.cycle,200,4500,4600,branch,0x8bb438,3,7,2,8,true,true};}
+int ExactClientRestoreRetainsOneShellTransaction(){
+    for(unsigned branch:{0u,1u}){
+        Fixture f;ReloadRoundCompletion c(true);CHECK(f.Begin(c));CHECK(c.Observe(f.Transfer(branch)));
+        const auto restore=Restore(f,branch);CHECK(c.ObservePredictionRestore(restore));
+        CHECK(c.AdvancedMask()==0&&!c.ObservePredictionRestore(restore));
+        auto sample=f.Sample();sample.branches[branch].loaded=2;sample.branches[branch].reserve=8;
+        CHECK(!c.Observe(sample,5001)&&c.Phase()==ReloadRoundPhase::Awaiting);
+        CHECK(!c.TakeAcknowledgement(f.lease.identity,f.lease.cycle,5001));
+        auto replay=f.Transfer(branch);replay.invocation=201;replay.beginNs=5100;replay.endNs=5200;
+        CHECK(c.Observe(replay));CHECK(c.Observe(replay));
+        CHECK(!c.TakeAcknowledgement(f.lease.identity,f.lease.cycle,5300));
+        auto server=f.Transfer(2);server.invocation=202;server.beginNs=5400;server.endNs=5500;CHECK(c.Observe(server));
+        sample=f.Sample();++sample.sequence;sample.observedNs=5600;
+        CHECK(c.Observe(sample,5601));const auto ack=c.TakeAcknowledgement(f.lease.identity,f.lease.cycle,5700);
+        CHECK(ack&&ack->serverInvocation==202&&ack->semantic.request==f.request.id);
+        CHECK(!c.TakeAcknowledgement(f.lease.identity,f.lease.cycle,5700));
+        CHECK(!c.ObservePredictionRestore(restore));
+    }
+    return 0;
 }
-int main(){if(ExactOnceAfterServerAndSettledCopies()||ClientRestoreIsNotServerAuthority()||IdentityExpiryAndNoDoubleRound()||RevertedCopyAndUnknownSettlement()||FullWeaponCanFinishNativeReturn()||ReserveExhaustionCanFinishNativeReturn()||AckCannotOutliveCurrentOwnerOrFreshness()||FreshCompleteEvidenceAndNewRequest()||DefaultOffAndRequestLeaseRejection())return 1;
-    std::printf("Nine single-round completion groups passed; no runtime capability enabled.\n");return 0;}
+int ClientRestoreCannotForgeCompletionOrRenewAuthority(){
+    for(unsigned mutation=0;mutation<16;++mutation){
+        Fixture f;ReloadRoundCompletion c(true);CHECK(f.Begin(c));CHECK(c.Observe(f.Transfer(1)));
+        auto r=Restore(f,1);
+        switch(mutation){
+            case 0:r.branch=2;break;case 1:r.identity.owner.equipGeneration++;break;case 2:r.cycle++;break;
+            case 3:r.invocation=0;break;case 4:r.caller=0;break;case 5:r.immutableSnapshotMatched=false;break;
+            case 6:r.identityRetained=false;break;case 7:r.beginNs=1999;break;case 8:r.endNs=r.beginNs-1;break;
+            case 9:r.endNs=1000000000;break;case 10:r.branch=0;break;case 11:r.invocation=101;break;
+            case 12:r.beginNs=3999;break;case 13:r.loadedBefore++;break;case 14:r.reserveAfter--;break;
+            case 15:CHECK(c.Observe(f.Transfer(2)));break;
+        }
+        CHECK(!c.ObservePredictionRestore(r));CHECK(c.AdvancedMask()&2u);
+    }
+    for(unsigned stale=0;stale<2;++stale){
+        Fixture f;ReloadRoundCompletion c(true);CHECK(f.Begin(c));CHECK(c.Observe(f.Transfer(1)));
+        CHECK(c.ObservePredictionRestore(Restore(f,1)));auto old=f.Transfer(1);
+        if(stale){old.invocation=201;old.beginNs=4599;old.endNs=4700;}
+        CHECK(!c.Observe(old)&&c.Failure()==ReloadRoundFailure::InvalidEvidence);
+    }
+    Fixture f;ReloadRoundCompletion c(true);CHECK(f.Begin(c));CHECK(c.Observe(f.Transfer(1)));
+    CHECK(c.ObservePredictionRestore(Restore(f,1)));auto late=f.Transfer(1);
+    late.invocation=201;late.beginNs=999999999;late.endNs=1000000000;
+    CHECK(!c.Observe(late)&&c.Failure()==ReloadRoundFailure::Expired);
+    return 0;
+}
+}
+int main(){if(ExactClientRestoreRetainsOneShellTransaction()||ClientRestoreCannotForgeCompletionOrRenewAuthority()||ExactOnceAfterServerAndSettledCopies()||ClientRestoreIsNotServerAuthority()||IdentityExpiryAndNoDoubleRound()||RevertedCopyAndUnknownSettlement()||FullWeaponCanFinishNativeReturn()||ReserveExhaustionCanFinishNativeReturn()||AckCannotOutliveCurrentOwnerOrFreshness()||FreshCompleteEvidenceAndNewRequest()||DefaultOffAndRequestLeaseRejection())return 1;
+    std::printf("Eleven single-round completion groups passed; no runtime capability enabled.\n");return 0;}

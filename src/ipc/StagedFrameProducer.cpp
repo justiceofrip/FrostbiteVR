@@ -8,7 +8,7 @@ void StagedFrameProducer::CloseGraphics()noexcept {
     // Caller has stopped both hooks; no callback may race destruction/connection.
     channel_.Close();
     if(step_==Step::Publishing||step_==Step::Waiting)feedback_.PairConsumed(ticket_,false);
-    step_=Step::Idle;lease_={};ticket_={};descriptor_={};
+    step_=Step::Idle;lease_={};ticket_={};descriptor_={};sceneDepth_={};
 }
 bool StagedFrameProducer::Matches(const FrameLease& lease)const noexcept {
     return lease.channelGeneration==generation_&&lease.requestId&&lease.requestId==lease_.requestId&&lease.native==lease_.native;
@@ -20,7 +20,7 @@ bool StagedFrameProducer::TryBegin(const NativeFrameKey& native,FrameLease& out)
     FrameRequest request{};if(channel_.TryTake(request)!=ChannelResult::Ok)return false;
     FrameLease next{};next.channelGeneration=generation_;next.requestId=request.requestId;next.native=native;
     if(!Decode(request,next.requirements,next.tracking)){step_=Step::Skipping;return false;}
-    bodyProps_={};bodyProps_.frameId=native.frameId;bodyProps_.spaceGeneration=next.tracking.spaceGeneration;bodyProps_.trackingGeneration=next.tracking.generation;
+    sceneDepth_={};bodyProps_={};bodyProps_.frameId=native.frameId;bodyProps_.spaceGeneration=next.tracking.spaceGeneration;bodyProps_.trackingGeneration=next.tracking.generation;
     lease_=next;lastNative_=native;step_=Step::Rendering;out=next;return true;
 }
 ChannelResult StagedFrameProducer::SetBodyProps(const FrameLease& lease,unsigned eye,const graphics::BodyPropEye& props)noexcept {
@@ -34,11 +34,12 @@ ChannelResult StagedFrameProducer::SetBodyPropPair(const FrameLease& lease,const
         return ChannelResult::Invalid;
     bodyProps_.eyes=eyes;return ChannelResult::Ok;
 }
-ChannelResult StagedFrameProducer::Submit(const FrameLease& lease,const graphics::TextureDescriptor& descriptor,const graphics::PairTicket& ticket)noexcept {
+ChannelResult StagedFrameProducer::Submit(const FrameLease& lease,const graphics::TextureDescriptor& descriptor,const graphics::PairTicket& ticket,const graphics::SceneDepthFrame* depth)noexcept {
     Lock lock(gate_);if(!lock)return ChannelResult::Busy;
     if(step_!=Step::Rendering||!Matches(lease)||ticket.frameId!=lease_.native.frameId||
-       !runtime::PairMatchesFrame(lease_.requirements,lease_.tracking,descriptor,ticket))return ChannelResult::Invalid;
-    descriptor_=descriptor;ticket_=ticket;step_=Step::Publishing;return ChannelResult::Ok;
+       !runtime::PairMatchesFrame(lease_.requirements,lease_.tracking,descriptor,ticket)||
+       (depth&&!graphics::SceneDepthMatches(*depth,descriptor,ticket)))return ChannelResult::Invalid;
+    sceneDepth_=depth?*depth:graphics::SceneDepthFrame{};descriptor_=descriptor;ticket_=ticket;step_=Step::Publishing;return ChannelResult::Ok;
 }
 ChannelResult StagedFrameProducer::Cancel(const FrameLease& lease)noexcept {
     Lock lock(gate_);if(!lock)return ChannelResult::Busy;
@@ -48,7 +49,7 @@ ChannelResult StagedFrameProducer::Cancel(const FrameLease& lease)noexcept {
 void StagedFrameProducer::PumpGraphics()noexcept {
     Lock lock(gate_);if(!lock)return;
     if(step_==Step::Skipping){if(channel_.Skip()!=ChannelResult::Busy){step_=Step::Idle;lease_={};}return;}
-    if(step_==Step::Publishing){const auto result=channel_.Publish(descriptor_,ticket_,&bodyProps_);
+    if(step_==Step::Publishing){const auto result=channel_.Publish(descriptor_,ticket_,&bodyProps_,&sceneDepth_);
         if(result==ChannelResult::Busy)return;
         if(result==ChannelResult::Ok)step_=Step::Waiting;
         else{feedback_.PairConsumed(ticket_,false);step_=Step::Idle;lease_={};return;}

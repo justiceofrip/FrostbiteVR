@@ -107,6 +107,108 @@ void ShutdownRejectsUnownedOrSharedSubtrees(){
         if(fault==7)g.nativeOwnersVerified=false;if(fault==8)g.eye=g.main;if(fault==9)g.world=0;
         Check(!CaptureLiveStereoSurvivors(g,s));}
 }
+LiveStereoRetirementGraph PendingGraph(unsigned count=6){
+    auto g=LiveGraph();g.pendingEyeOwnershipVerified=true;g.pendingEyeCount=count;
+    for(unsigned h=0;h<3;++h)g.eyeHolders[h]={0x50000000u+h*0x100u,0x60000000u+h*4u,1,g.views[h*4+3].address,g.views[h*4+5].address};
+    for(unsigned i=0;i<count;++i){g.pendingEye[i]=g.views[i*2+3].address;++g.views[i*2+3].references;}
+    return g;
+}
+void ShutdownOwnsUnconsumedChildQueue(){
+    // Native300: six child pointers remained at refs2 in the extra eye's own
+    // queue; all original children and both roots had refs1. The main native
+    // destructor releases each holder then every pending reference itself.
+    const auto normal=LiveGraph();StereoSurvivors expected;Check(CaptureLiveStereoSurvivors(normal,expected));
+    for(unsigned count=0;count<=6;++count){auto g=PendingGraph(count);StereoSurvivors actual;
+        Check(CaptureLiveStereoSurvivors(g,actual)&&actual==expected);}
+    for(unsigned fault=0;fault<12;++fault){auto g=PendingGraph();StereoSurvivors unchanged=expected;
+        if(fault==0)g.pendingEyeOwnershipVerified=false;
+        if(fault==1)g.pendingEyeCount=65;
+        if(fault==2)g.pendingEye[0]=g.main;
+        if(fault==3)g.pendingEye[0]=g.eye;
+        if(fault==4)g.pendingEye[0]=g.pendingEye[1];
+        if(fault==5)g.eyeHolders[0].owners=2;
+        if(fault==6)g.eyeHolders[1].control=g.eyeHolders[0].control;
+        if(fault==7)g.eyeHolders[1].first=g.eyeHolders[0].first;
+        if(fault==8)g.views[3].references=1;
+        if(fault==9)g.views[2].references=2;
+        if(fault==10)g.views[1].references=2;
+        if(fault==11)g.eyeHolders[0].second=0;
+        Check(!CaptureLiveStereoSurvivors(g,unchanged)&&unchanged==expected);
+    }
+}
+RetiredStereoGraph PendingRetiredGraph(unsigned count=6){
+    // Native scene302-beforefix02: seven old registered views, world refs1,
+    // request refs7, root refs1, six children refs2 and six owned queued refs.
+    auto g=Graph();g.pendingEyeOwnershipVerified=true;g.pendingEyeCount=count;
+    for(unsigned h=0;h<3;++h)g.eyeHolders[h]={0x50000000u+h*0x100u,0x60000000u+h*4u,1,g.views[h*2+1].address,g.views[h*2+2].address};
+    for(unsigned i=0;i<count;++i){g.pendingEye[i]=g.views[i+1].address;++g.views[i+1].references;}
+    return g;
+}
+void SceneRetirementOwnsUnconsumedChildQueue(){
+    for(unsigned count=0;count<=6;++count){const auto g=PendingRetiredGraph(count);
+        Check(CanRetireStereoGraph(g)&&g.requestReferences==7&&OwnedStereoViewReferences(g,g.eye,g.children)==1);
+        for(unsigned i=1;i<7;++i)Check(OwnedStereoViewReferences(g,g.views[i].address,g.children)==(i<=count?2u:1u));
+    }
+    for(unsigned fault=0;fault<18;++fault){auto g=PendingRetiredGraph();
+        if(fault==0)g.pendingEyeOwnershipVerified=false;
+        if(fault==1)g.pendingEyeCount=65;
+        if(fault==2)g.pendingEye[0]=g.eye;
+        if(fault==3)g.pendingEye[0]=g.pendingEye[1];
+        if(fault==4)g.eyeHolders[0].owners=2;
+        if(fault==5)g.eyeHolders[1].control=g.eyeHolders[0].control;
+        if(fault==6)g.eyeHolders[1].object=g.eyeHolders[0].object;
+        if(fault==7)g.eyeHolders[0].first=g.eyeHolders[0].second;
+        if(fault==8)g.eyeHolders[0].first=0;
+        if(fault==9)g.views[1].references=1;
+        if(fault==10)g.views[1].references=3;
+        if(fault==11)g.views[0].references=2;
+        if(fault==12)g.views[1].parent=g.currentWorld;
+        if(fault==13)g.views[1].request=g.currentRequest;
+        if(fault==14)g.views[1].nativeTypeVerified=false;
+        if(fault==15)g.pendingEye[0]=0x7fffffffu;
+        if(fault==16)g.requestReferences+=6; // queued CHILD refs are not request refs
+        if(fault==17)g.worldReferences=2;
+        Check(!CanRetireStereoGraph(g));
+    }
+    auto before=PendingRetiredGraph(),changed=before;
+    Check(before==changed);++changed.eyeHolders[0].control;Check(before!=changed);
+}
+template<class Graph> void AddQueuedGeneration(Graph& g){
+    for(unsigned i=0;i<6;++i){const auto address=0x70000000u+g.pendingEyeCount*0x10000u;
+        g.views[g.count++]={address,g.request,g.eye,1,true};g.pendingEye[g.pendingEyeCount++]=address;++g.requestReferences;
+    }
+}
+void QueueOwnsPreviousChildGeneration(){
+    auto live=PendingGraph();StereoSurvivors original;Check(CaptureLiveStereoSurvivors(live,original));
+    AddQueuedGeneration(live);StereoSurvivors result;Check(CaptureLiveStereoSurvivors(live,result));
+    Check(live.count==20&&live.pendingEyeCount==12&&result.count==7&&result.removed==13&&result.referencesAfter==8&&result.ordered==original.ordered);
+    auto retired=PendingRetiredGraph();AddQueuedGeneration(retired);
+    Check(retired.count==13&&retired.requestReferences==13&&CanRetireStereoGraph(retired));
+    for(unsigned fault=0;fault<6;++fault){auto l=live;auto r=retired;
+        if(fault==0){l.views[14].references=2;r.views[7].references=2;}
+        if(fault==1){l.pendingEye[6]=l.pendingEye[7];r.pendingEye[6]=r.pendingEye[7];}
+        if(fault==2){l.views[14].parent=l.main;r.views[7].parent=r.currentWorld;}
+        if(fault==3){--l.pendingEyeCount;--r.pendingEyeCount;}
+        if(fault==4){l.views[14].nativeTypeVerified=false;r.views[7].nativeTypeVerified=false;}
+        if(fault==5){l.views[14].references=0;r.views[7].references=0;}
+        Check(!CaptureLiveStereoSurvivors(l,result)&&!CanRetireStereoGraph(r));
+    }
+}
+void QueuedGenerationsUseRegistryBound(){
+    // Native303 had18 queued children and26 registered views. The queue spans
+    // generations, whereas the current holder count remains three throughout.
+    auto live=PendingGraph();auto retired=PendingRetiredGraph();
+    for(unsigned generations=1;generations<=8;++generations){
+        AddQueuedGeneration(live);AddQueuedGeneration(retired);StereoSurvivors survivors;
+        Check(CaptureLiveStereoSurvivors(live,survivors)&&CanRetireStereoGraph(retired));
+        Check(live.pendingEyeCount==6+6*generations&&live.count==14+6*generations&&live.eyeChildren==3);
+        Check(survivors.count==7&&survivors.removed==7+6*generations&&survivors.referencesAfter==8);
+    }
+    Check(live.count==62&&retired.count==55);
+    auto overflow=live;overflow.pendingEyeCount=65;StereoSurvivors survivors;
+    Check(!CaptureLiveStereoSurvivors(overflow,survivors));
+    retired.pendingEyeCount=65;Check(!CanRetireStereoGraph(retired));
+}
 int main(){
     Check(CanRetireStereoGraph(Graph()));
     for(unsigned i=0;i<7;++i){auto g=Graph();g.views[i].request=g.currentRequest;Check(!CanRetireStereoGraph(g));
@@ -125,6 +227,9 @@ int main(){
     {auto g=Graph();g.nativeOwnersVerified=false;Check(!CanRetireStereoGraph(g));}
     {auto g=Graph();g.worldReferences=0;Check(!CanRetireStereoGraph(g));}
     UnloadedSceneCacheRetirement();CacheFailurePreservesNativeOwnership();ActualRetirementOrdersCacheBeforeOwner();
-    ShutdownUsesCurrentOrderedGeneration();ShutdownRejectsUnownedOrSharedSubtrees();
-    std::cout<<"19 retired stereo graph/cache and current shutdown generation groups passed\n";
+    ShutdownUsesCurrentOrderedGeneration();ShutdownRejectsUnownedOrSharedSubtrees();ShutdownOwnsUnconsumedChildQueue();
+    SceneRetirementOwnsUnconsumedChildQueue();
+    QueueOwnsPreviousChildGeneration();
+    QueuedGenerationsUseRegistryBound();
+    std::cout<<"23 retired stereo graph/cache and current shutdown generation groups passed\n";
 }

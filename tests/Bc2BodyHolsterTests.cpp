@@ -1,4 +1,6 @@
 #include "Test.h"
+#include "Bc2NativeInputEpochs.h"
+#include "fvr/interaction/ControllerInput.h"
 #include "Bc2BodyHolster.h"
 #include "Bc2BodyHolsterObservation.h"
 #include "Bc2BodyHolsterLifecycle.h"
@@ -599,6 +601,53 @@ int DiagnosticDrawAndOriginalSource(){Fixture f;f.adapter=Bc2BodyHolster{};
     CHECK(f.out.select&&f.out.select->id==f.s.nativeOwner.weapon);f.Cycle();f.Cycle();
     CHECK(f.out.phase==BodyHolsterPhase::Held&&f.hands.Current(InteractionHand::Right));
     CHECK(!f.out.freeRight&&!f.out.visibility.enabled);return 0;}
+int NativePauseSeparatesEquipmentAndButtons(){
+    auto generations=AdvanceNativeInputEpochs({},true,false);CHECK(generations);
+    CHECK(generations->equipment==1&&generations->input==1);
+    ControllerActions actions;InputFrame input;input.generation=1;input.spaceGeneration=1;
+    input.predictedNs=1000000000;input.focused=input.headValid=true;
+    for(auto& h:input.hands){h.gripTracked=h.aimTracked=true;h.active=Components;}
+    const auto step=[&]{++input.generation;input.predictedNs+=16000000;
+        return actions.Update(input,{0x20000,generations->input,true,true},input.predictedNs);};
+    step();step();step();input.hands[1].trigger=1;CHECK(step().pressed&Fire);
+    const ReloadStateOwner native{0x10000,0x20000,0x30000,A,4,generations->equipment,1};
+    generations=AdvanceNativeInputEpochs(*generations,false,true);CHECK(generations);
+    auto after=native;after.equipGeneration=generations->equipment;
+    CHECK(after==native&&generations->input==2);
+    input.predictedNs+=180000000;auto out=step();CHECK((out.released&Fire)&&!(out.held&Fire));
+    CHECK(!(step().held&Fire));CHECK(!(step().held&Fire));
+    input.hands[1].trigger=0;step();step();input.hands[1].trigger=1;CHECK(step().pressed&Fire);
+    generations=AdvanceNativeInputEpochs(*generations,true,true);CHECK(generations);
+    CHECK(generations->equipment==2&&generations->input==3); // Native replacement still advances both.
+    CHECK(!AdvanceNativeInputEpochs({UINT64_MAX,2},true,false));
+    CHECK(!AdvanceNativeInputEpochs({1,UINT64_MAX},false,true));
+    CHECK(!AdvanceNativeInputEpochs({},false,true));return 0;
+}
+int NativePauseKeepsEmptyWithFreshEvidence(){
+    Fixture f;CHECK(f.Empty());const auto before=f.s.nativeOwner;const auto old=*f.out.freeRight;
+    CHECK(f.adapter.ObserveNativeInputPause(before));
+    ActionOutput inactive;inactive.owner=before.soldier;
+    CHECK(BodyHolsterInputRearm(f.adapter,before,inactive,false));
+    f.s.hand.observedNs+=180000000;f.s.hand.deadlineNs+=180000000;
+    f.Cycle(false,false);CHECK(f.out.phase==BodyHolsterPhase::HidePending);
+    CHECK(f.s.nativeOwner==before&&!f.out.freeRight&&!f.out.select&&!f.hands.Current(InteractionHand::Right));
+    CHECK(f.adapter.RequestId()>old.visibility.request);
+    f.Cycle(false,false);CHECK(!f.out.visibility.enabled&&!f.out.freeRight);
+    f.Cycle(false);CHECK(f.out.visibility.enabled&&f.out.visibility.hide&&!f.out.freeRight);
+    f.Advance();CHECK(f.Suppress());f.s.visibility=old.receipt;f.Tick();
+    CHECK(!f.out.freeRight&&f.out.phase==BodyHolsterPhase::HidePending);
+    f.Cycle();CHECK(f.out.phase==BodyHolsterPhase::Empty&&f.out.freeRight);
+    CHECK(f.out.freeRight->visibility.nativeOwner==before&&!f.out.select&&!f.hands.Current(InteractionHand::Right));
+    return 0;
+}
+int NativePauseRejectsChangedEquipment(){
+    for(unsigned bad=0;bad<6;++bad){Fixture f;CHECK(f.Empty());auto owner=f.s.nativeOwner;
+        if(bad==0)++owner.weapon;if(bad==1)++owner.equipGeneration;if(bad==2)++owner.actorGeneration;
+        if(bad==3)++owner.space;if(bad==4)++owner.player;if(bad==5)f.adapter.Invalidate();
+        CHECK(!f.adapter.ObserveNativeInputPause(owner));
+    }
+    Fixture held;CHECK(!held.adapter.ObserveNativeInputPause(held.s.nativeOwner));return 0;
+}
 int ProcessingClockKeepsOriginalInput(){
     // Native selected-mesh observation can complete AFTER the gather's input
     // processing sample. Using the old time rejects good current metadata.
@@ -611,7 +660,7 @@ int ProcessingClockKeepsOriginalInput(){
         if(mode!=1)CHECK(!f.out.freeRight&&!f.out.visibility.enabled);
     }return 0;}
 }
-int main(){if(FailedInputApplyCannotInventDraw()||NativeExchangeReconcilesRebuiltCarriedInventory()||CarriedMutationInvalidatesPendingOrdinaryPair()||UnsupportedExchangeRequiresNewOrdinaryPair()||OrdinaryRetirementRejectsStaleOrForgedPair()||OrdinaryRetirementIsOnlyExactSelectedSlotReplacement()||OrdinaryRetirementCancellationCannotReplayPair()||OrdinaryRetirementCannotStealLeftClaimOrSkipSuppression()||OrdinaryRetirementNeedsReleasedThenNewTrigger()||ReceiptGapBeforePauseEpochKeepsEmpty()||ReceiptGapDoesNotMigrateChangedIdentity()||ReceiptRehideRequiresNewSuppressionAndPair()||PauseEpochNeedsFreshRehide()||NativeGapAdmissionRequiresCommittedExactEpoch()||NativeGapDoesNotHideReplacementOrCancellation()||NativeGapCannotBlessAnUnobservedEpoch()||RepeatedNativeGapStillNeedsLatestReceipt()||SameSpaceTrackingGapKeepsCommittedEmpty()||SameSpaceExplicitCancellationStillShows()||SecondGapWhileRebindingDoesNotDraw()||TrackingGapRebindRequiresNewEvidence()||RebaseCannotMigrateCancellationOrIdentity()||RebaseDuringRebindGetsAnotherRequest()||IncompleteHolsterDoesNotBecomeCommittedOnRebase()||RebaseKeepsCommittedEmptyIntent()||ScopedXm8AdmissionIsBoundedAndSeparate()||CrossDrawSourceOnlyGestures()||DrawIntoOrdinaryXm8()||OrdinaryXm8RecoveryNeedsFreshOwner()||ProcessingClockKeepsOriginalInput()||DiagnosticAdmission()||DiagnosticBoundsActualSequence()||DiagnosticDrawAndOriginalSource()||DefaultOff()||BothCapabilities()||UnsupportedProfile()||NativeMask()||NativeFailure()||ProtectedEquipment()||HideThenRelease()||NoPackOnlyEmpty()||InvalidReceipt()||ExpiryRecovery()||SameItemDraw()||ChangedEquipDraw()||ReplacementAndTracking()||SharedClaims()||LostTrackingSuppression()||ActualRenderGuard()||FreePose())return 1;std::puts("50 holster coordinator groups passed");return 0;}
+int main(){if(NativePauseSeparatesEquipmentAndButtons()||NativePauseKeepsEmptyWithFreshEvidence()||NativePauseRejectsChangedEquipment()||FailedInputApplyCannotInventDraw()||NativeExchangeReconcilesRebuiltCarriedInventory()||CarriedMutationInvalidatesPendingOrdinaryPair()||UnsupportedExchangeRequiresNewOrdinaryPair()||OrdinaryRetirementRejectsStaleOrForgedPair()||OrdinaryRetirementIsOnlyExactSelectedSlotReplacement()||OrdinaryRetirementCancellationCannotReplayPair()||OrdinaryRetirementCannotStealLeftClaimOrSkipSuppression()||OrdinaryRetirementNeedsReleasedThenNewTrigger()||ReceiptGapBeforePauseEpochKeepsEmpty()||ReceiptGapDoesNotMigrateChangedIdentity()||ReceiptRehideRequiresNewSuppressionAndPair()||PauseEpochNeedsFreshRehide()||NativeGapAdmissionRequiresCommittedExactEpoch()||NativeGapDoesNotHideReplacementOrCancellation()||NativeGapCannotBlessAnUnobservedEpoch()||RepeatedNativeGapStillNeedsLatestReceipt()||SameSpaceTrackingGapKeepsCommittedEmpty()||SameSpaceExplicitCancellationStillShows()||SecondGapWhileRebindingDoesNotDraw()||TrackingGapRebindRequiresNewEvidence()||RebaseCannotMigrateCancellationOrIdentity()||RebaseDuringRebindGetsAnotherRequest()||IncompleteHolsterDoesNotBecomeCommittedOnRebase()||RebaseKeepsCommittedEmptyIntent()||ScopedXm8AdmissionIsBoundedAndSeparate()||CrossDrawSourceOnlyGestures()||DrawIntoOrdinaryXm8()||OrdinaryXm8RecoveryNeedsFreshOwner()||ProcessingClockKeepsOriginalInput()||DiagnosticAdmission()||DiagnosticBoundsActualSequence()||DiagnosticDrawAndOriginalSource()||DefaultOff()||BothCapabilities()||UnsupportedProfile()||NativeMask()||NativeFailure()||ProtectedEquipment()||HideThenRelease()||NoPackOnlyEmpty()||InvalidReceipt()||ExpiryRecovery()||SameItemDraw()||ChangedEquipDraw()||ReplacementAndTracking()||SharedClaims()||LostTrackingSuppression()||ActualRenderGuard()||FreePose())return 1;std::puts("53 holster coordinator groups passed");return 0;}
 
 
 

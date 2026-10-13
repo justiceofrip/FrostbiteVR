@@ -1,5 +1,6 @@
 #pragma once
 #include "Bc2ReloadHold.h"
+#include "Bc2ReloadPredictionRestore.h"
 #include "fvr/interaction/ManualReload.h"
 #include <algorithm>
 #include <cmath>
@@ -51,13 +52,28 @@ public:
            !Fresh(lease.observedNs,lease.deadlineNs,nowNs)||lease.loaded<0||lease.reserve<=0||lease.reserve>1000000||lease.capacity<=lease.loaded||lease.capacity>1000000||
            completionDeadlineNs<=nowNs||completionDeadlineNs-nowNs>1500000000)return false;
         request_=request;lease_=lease;lastRequest_=request.id;started_=nowNs;deadline_=completionDeadlineNs;
-        phase_=ReloadRoundPhase::Awaiting;failure_=ReloadRoundFailure::None;transfers_={};advanced_=0;ackTaken_=false;lastSample_=lease.sequence;lastObserved_=lease.observedNs;completedNs_=ackDeadline_=0;return true;
+        phase_=ReloadRoundPhase::Awaiting;failure_=ReloadRoundFailure::None;transfers_={};restores_={};advanced_=0;ackTaken_=false;lastSample_=lease.sequence;lastObserved_=lease.observedNs;completedNs_=ackDeadline_=0;return true;
+    }
+    bool ObservePredictionRestore(const ReloadPredictionRestore& e)noexcept {
+        if(phase_!=ReloadRoundPhase::Awaiting||e.branch>=2||transfers_[2]||
+           e.identity!=lease_.identity||e.cycle!=lease_.cycle||!e.invocation||!e.caller||
+           !e.immutableSnapshotMatched||!e.identityRetained||e.beginNs<started_||e.endNs<e.beginNs||e.endNs>=deadline_||
+           !transfers_[e.branch]||e.invocation<=transfers_[e.branch]->invocation||e.beginNs<transfers_[e.branch]->endNs||
+           e.loadedBefore!=lease_.loaded+1||e.reserveBefore!=lease_.reserve-1||
+           e.loadedAfter!=lease_.loaded||e.reserveAfter!=lease_.reserve)return false;
+        // Actual260's client snapshot withdrew its tentative shell before the
+        // server transferred. Preserve the one request and original deadlines;
+        // only this client's receipt must be observed again. No ammo is written.
+        restores_[e.branch]=e;transfers_[e.branch].reset();advanced_&=~(1u<<e.branch);return true;
     }
     bool Observe(const ReloadRoundTransfer& e)noexcept {
         if(phase_!=ReloadRoundPhase::Awaiting)return false;
         if(e.identity!=lease_.identity||e.cycle!=lease_.cycle)return Fail(ReloadRoundFailure::OwnerChanged);
         if(e.branch>=3||!e.invocation||!e.ordinaryState12Verified||!e.identityRetained||e.beginNs<started_||e.endNs<e.beginNs)return Fail(ReloadRoundFailure::InvalidEvidence);
         if(e.endNs>=deadline_)return Fail(ReloadRoundFailure::Expired);
+        if(e.branch<2&&restores_[e.branch]&&
+           (e.invocation<=restores_[e.branch]->invocation||e.beginNs<restores_[e.branch]->endNs))
+            return Fail(ReloadRoundFailure::InvalidEvidence);
         if(transfers_[e.branch]){
             if(*transfers_[e.branch]==e)return true; // Same diagnostic record, no new credit.
             return Fail(ReloadRoundFailure::RepeatedTransfer);
@@ -115,5 +131,6 @@ private:
     interaction::ManualReloadRequest request_{};ReloadRoundLease lease_{};
     std::uint64_t lastRequest_=0,lastSample_=0;std::int64_t started_=0,deadline_=0,lastObserved_=0,completedNs_=0,ackDeadline_=0;unsigned advanced_=0;
     std::array<std::optional<ReloadRoundTransfer>,3> transfers_{};
+    std::array<std::optional<ReloadPredictionRestore>,2> restores_{};
 };
 }

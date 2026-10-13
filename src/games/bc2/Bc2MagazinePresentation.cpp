@@ -21,10 +21,11 @@ bool AssemblyVisibleRigid(const RigSnapshot& rig,const MagazinePresentationBindi
  }return true;
 }
 }
-bool MagazineTrackingFresh(const MagazineTracking& t,std::int64_t now)noexcept {
+namespace {
+bool TrackingFresh(const MagazineTracking& t,std::int64_t now,std::int64_t resourceAt)noexcept {
  const auto& in=t.inputEvidence;
  if(t.resource&&(t.detach||t.retainedVisualSuppression||!MagazineResourcePresentationFresh(*t.resource,t.family,t.reserve,
-     in.owner,t.family.binding.weapon,now)))return false;
+     in.owner,t.family.binding.weapon,resourceAt)))return false;
  if(t.retainedVisualSuppression){
   if(!t.detach||t.detach->restoring||!t.target||t.target->role!=MagazinePropRole::Removed)return false;
   const auto& r=*t.retainedVisualSuppression;const auto& original=t.detach->suppression;
@@ -33,7 +34,8 @@ bool MagazineTrackingFresh(const MagazineTracking& t,std::int64_t now)noexcept {
   if(r.cache!=original.cache||r.nativeTick<original.nativeTick||r.input.sequence<original.input.sequence||
    r.input.observedNs<original.input.observedNs||!HolsterSuppressionCurrent(r,expected))return false;
  }
- const auto map=BindMagazineOwners(in.owner,t.family.binding.weapon,t.reserve,t.cycle,now,t.family);
+ const auto map=BindMagazineOwners(in.owner,t.family.binding.weapon,t.reserve,t.cycle,resourceAt,t.family);
+ if(!MagazineFamilyFresh(t.family,t.owner,in.owner,t.family.binding.weapon,now))return false;
  if(t.detach&&(!MagazineDetachAuthorizationFresh(*t.detach,now)||t.detach->request!=t.cycle||
   t.detach->current.identity!=t.reserve.identity||t.detach->current.sequence!=t.reserve.sequence||
   t.detach->current.loaded!=t.reserve.loaded||t.detach->current.reserve!=t.reserve.reserve||t.detach->current.capacity!=t.reserve.capacity||
@@ -47,10 +49,10 @@ bool MagazineTrackingFresh(const MagazineTracking& t,std::int64_t now)noexcept {
  in.sequence&&in.focused&&in.tracked[0]&&in.tracked[1]&&!in.released[1]&&in.observedNs>0&&in.observedNs<=now&&
  in.deadlineNs>now&&in.deadlineNs-in.observedNs<=100000000;
 }
-bool MagazineTargetFresh(const MagazineTracking& t,std::int64_t now)noexcept {
- if(!MagazineTrackingFresh(t,now)||!t.target)return false;
+bool TargetFresh(const MagazineTracking& t,std::int64_t now,std::int64_t resourceAt)noexcept {
+ if(!TrackingFresh(t,now,resourceAt)||!t.target)return false;
  const auto& v=*t.target;const auto p=t.family.binding.profile->geometry->interaction.insertion;const auto& g=v.gunClaim;
- if(t.resource&&!MagazineResourceRoleAllowed(*t.resource,v.role,t.cycle,now))return false;
+ if(t.resource&&!MagazineResourceRoleAllowed(*t.resource,v.role,t.cycle,resourceAt))return false;
  if(t.replacementFrame&&t.removalFrame)return false;
  const auto& carry=t.removalFrame?t.removalFrame:t.replacementFrame;
  if(carry){const auto& f=*carry;
@@ -75,8 +77,20 @@ bool MagazineTargetFresh(const MagazineTracking& t,std::int64_t now)noexcept {
    v.originalMagazine->trackingEpoch==v.trackingEpoch&&v.originalMagazine->capacity&&v.originalMagazine->rounds<=v.originalMagazine->capacity)))||
  (v.role==MagazinePropRole::Replacement&&h.kind==HandClaimKind::AmmoObject&&h.item!=v.weapon));
 }
+}
+bool MagazineTrackingFresh(const MagazineTracking& t,std::int64_t now)noexcept {return TrackingFresh(t,now,now);}
+bool MagazineTargetFresh(const MagazineTracking& t,std::int64_t now)noexcept {return TargetFresh(t,now,now);}
+bool MagazinePaletteTargetFresh(const MagazineTracking& t,std::int64_t now)noexcept {
+ if(!t.resource||!t.resource->presentationObservedNs)return MagazineTargetFresh(t,now);
+ const auto admitted=t.resource->presentationObservedNs;
+ if(t.detach||t.retainedVisualSuppression||admitted!=t.inputEvidence.nowNs||
+    admitted<t.inputEvidence.observedNs||admitted>now)return false;
+ // Validate the original admission without modifying any source timestamp,
+ // then independently enforce every pose/owner/claim/selection deadline now.
+ return TargetFresh(t,admitted,admitted)&&TargetFresh(t,now,admitted);
+}
 bool MagazineTargetRetained(const MagazineTracking& old,const MagazineTracking& current,std::int64_t now)noexcept {
- if(!MagazineTargetFresh(old,now)||!MagazineTargetFresh(current,now)||old.owner!=current.owner||
+ if(!MagazinePaletteTargetFresh(old,now)||!MagazinePaletteTargetFresh(current,now)||old.owner!=current.owner||
  old.family.binding!=current.family.binding||old.cycle!=current.cycle||old.reserve.identity!=current.reserve.identity||old.inputEvidence.owner!=current.inputEvidence.owner||
  old.inputEvidence.sequence>current.inputEvidence.sequence||old.inputEvidence.observedNs>current.inputEvidence.observedNs)return false;
  const auto& a=*old.target;const auto& b=*current.target;
@@ -160,10 +174,10 @@ MagazineRawContact BuildMagazineRawContact(const MagazineTracking& t,const RigSn
 }
 MagazinePresentationPlan BuildMagazinePresentation(const RigSnapshot& rig,const MagazinePresentationBinding& binding,
  const MagazineTracking& t,const math::Matrix4& weapon,float units,std::int64_t now){
- MagazinePresentationPlan out;if(!MagazineTargetFresh(t,now))return out;
+ MagazinePresentationPlan out;if(!MagazinePaletteTargetFresh(t,now))return out;
  const auto& geometry=*t.family.binding.profile->geometry;
  const auto actual=magazine_presentation_detail::Derive(rig,geometry);
- if(!actual||*actual!=binding||!MagazineTargetFresh(t,now)||rig.identity.soldier!=t.owner.soldier||rig.identity.weak!=t.owner.weak||
+ if(!actual||*actual!=binding||!MagazinePaletteTargetFresh(t,now)||rig.identity.soldier!=t.owner.soldier||rig.identity.weak!=t.owner.weak||
  !std::isfinite(units)||units<=0||!Rigid(weapon)||!AssemblyVisibleRigid(rig,binding,units)||
  std::find(rig.nativeHiddenLeaves.begin(),rig.nativeHiddenLeaves.end(),binding.magazine)!=rig.nativeHiddenLeaves.end())return out;
  const auto& v=*t.target;if(!Rigid(v.weaponFromItemMeters)||(v.handTarget&&!Rigid(v.weaponFromHandMeters)))return out;
@@ -203,7 +217,8 @@ std::uint64_t ClassifyMagazinePaletteFallback(const MagazineTracking& old,const 
  std::uint64_t flags=0;
  const auto expired=[&](const MagazineTracking& t){
   const auto past=[&](std::int64_t deadline){return deadline>0&&now>=deadline;};
-  return past(t.inputEvidence.deadlineNs)||past(t.reserve.deadlineNs)||past(t.family.deadlineNs)||
+  const bool poseAdmission=t.resource&&t.resource->presentationObservedNs>0;
+  return past(t.inputEvidence.deadlineNs)||(!poseAdmission&&past(t.reserve.deadlineNs))||past(t.family.deadlineNs)||
    (t.selected&&past(t.selected->deadlineNs))||(t.target&&past(t.target->deadlineNs))||
    (t.removalFrame&&past(t.removalFrame->deadlineNs))||(t.replacementFrame&&past(t.replacementFrame->deadlineNs));
  };

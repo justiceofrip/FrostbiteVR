@@ -37,12 +37,13 @@ Bc2BoltRawContact BuildBoltRawContact(const Bc2BoltTracking& t,const RigSnapshot
 }
 std::optional<Bc2BoltPresentation> BuildBoltPresentation(const Bc2BoltTracking& t,const RigSnapshot& rig,
     const math::Matrix4& placed,float units,std::int64_t now)noexcept {
-    if(!Base(t,rig,now)||!Units(units)||!t.target||!t.held||!t.mechanism||!t.gun||!t.weapon||
+    if(!Base(t,rig,now)||!Units(units)||!t.mechanism||!t.gun||!t.weapon||
         t.custody!=BoltCustodyPhase::Manipulating||!feed_mechanism_detail::Pose(placed))return {};
-    const auto& p=t.calibration->profile;const auto& target=*t.target;
+    const auto& p=t.calibration->profile;
     auto input=t.input;input.nowNs=now;
-    if(!CurrentPhysicalWeaponCycleTarget(target,*t.held,input,*t.mechanism,*t.gun,p.hands)||
-       t.held->item!=HandInteractionKey{t.nativeOwner.weapon,t.input.owner.equipGeneration}||
+    const auto build=[&](const auto& target,const auto& authority)->std::optional<Bc2BoltPresentation>{
+    if(!CurrentPhysicalWeaponCycleTarget(target,authority,input,*t.mechanism,*t.gun,p.hands)||
+       authority.item!=HandInteractionKey{t.nativeOwner.weapon,t.input.owner.equipGeneration}||
        !CurrentBoltCustodyWeaponTarget(*t.weapon,input,*t.gun)||target.profile!=p.id||target.revision!=p.revision||
        target.travel>p.stroke||target.rotation<std::min(0.f,p.unlockRadians)||target.rotation>std::max(0.f,p.unlockRadians))return {};
     const auto binding=DeriveBoltPart(rig,t.calibration->partName);
@@ -55,6 +56,10 @@ std::optional<Bc2BoltPresentation> BuildBoltPresentation(const Bc2BoltTracking& 
     for(unsigned n=0;n<3;++n){part.values[3][n]*=units;wrist.values[3][n]*=units;}
     // Absolute closed-reference target; animated native poses are never added.
     return Bc2BoltPresentation{{binding->part,Multiply(part,placed)},Multiply(wrist,placed)};
+    };
+    if(t.target&&t.held&&!t.recoveryTarget&&!t.recovery)return build(*t.target,*t.held);
+    if(t.recoveryTarget&&t.recovery&&!t.target&&!t.held)return build(*t.recoveryTarget,*t.recovery);
+    return {};
 }
 std::optional<RigPosePlan> BuildBoltPartPlan(const Bc2BoltTracking& t,const RigSnapshot& rig,
     const math::Matrix4& placed,float units,std::int64_t now){

@@ -22,8 +22,8 @@ int TwelveCarried(){unsigned count=0;
     CHECK(!body_carried_detail::SameConfig(*ptr,*c)||fault==2||fault==3||fault==4);ptr=c;}
    CHECK(!BuildBodyCarriedBatch(d,changed,f.r.s.input,Identity(),{},f.Now()));}
  }
- CHECK(count==15);return 0;
+ CHECK(count==16);return 0;
 }
 }
 int main(){if(TwelveCarried()||ActualPairAndDistinctCounters()||FrameAndOwnerChanges()||OriginalExpiryAndNoNewLease()||ResetAndConcurrentSeed()||ActualInventoryReplacementAndRecenter())return 1;
- std::cout<<"15 exact carried body configurations and 90 invalid sources passed through actual paired-body consumer; CPU only\n";}
+ std::cout<<"16 exact carried body configurations and 96 invalid sources passed through actual paired-body consumer; CPU only\n";}

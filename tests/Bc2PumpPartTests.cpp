@@ -1,6 +1,7 @@
 #include "Bc2PumpPart.h"
 #include "Test.h"
 #include "CapturedSpasPumpMotion.h"
+#include "Bc2PumpFixedParts.h"
 #include <cstring>
 using namespace fvr;using namespace fvr::bc2;using namespace fvr::interaction;
 namespace {
@@ -84,5 +85,52 @@ int PhysicalConsumerToPrivatePalette(){
     CHECK(physical.Phase()==WeaponCyclePhase::AwaitingNative);return 0;
 }
 }
-int main(){if(SingleLeafPrivateCopy()||CurrentAnimationDoesNotDoubleMovePart()||ExactLifetimeAndClaims()||CapturedChannelTravelReplay()||PhysicalConsumerToPrivatePalette())return 1;
-    std::puts("5 SPAS private part adapter groups passed; real physical consumer/private palette, mocked native boundaries, no runtime admission.");}
+int FixedStockSurvivesAnimatedStretchWithoutChangingPump(){
+ Fixture f;f.rig.names={"root","jntWpn_1","jntWpn_4","jntWpn_6","jntWpn_12","jntWpn_13","trigger"};
+ f.rig.parents={-1,0,1,1,1,4,1};f.rig.identity.count=7;
+ f.rig.world.assign(7,Pose());f.rig.inverseBind.assign(7,Pose());f.rig.evaluatedWorld.assign(7,Pose());
+ f.rig.nativeEvaluated.resize(7);for(auto& bytes:f.rig.nativeEvaluated)bytes.fill(std::byte{0x5a});
+ const auto original=f.rig.nativeEvaluated;
+ for(float units:{1.f,2.f})for(float stretch:{0.f,.04f,.15f}){
+  f.rig.evaluatedWorld[4]=Pose(stretch);f.rig.evaluatedWorld[5]=Pose(-stretch);
+  auto placed=Pose(5);placed.values[0]={0,0,1,0};placed.values[2]={-1,0,0,0};
+  auto writes=RetargetRigSubtree(f.rig.parents,f.rig.evaluatedWorld,1,placed);CHECK(writes);
+  const auto fixed=bc2_pump_detail::FixedAssembly(f.rig,placed,units);CHECK(fixed&&fixed->size()==3);
+  for(const auto& part:*fixed)for(auto& w:*writes)if(w.index==part.index)w=part;
+  const auto palette=BuildRigPosePlan(f.rig,*writes);CHECK(palette);
+  for(unsigned n=0;n<fixed->size();++n){
+   auto relative=Multiply((*fixed)[n].transform,*InverseRigid(placed));
+   const auto& expected=bc2_pump_detail::SpasFixedParts[n].inWeapon;
+   for(unsigned row=0;row<4;++row)for(unsigned col=0;col<3;++col)
+    CHECK(Near(relative.values[row][col],expected.values[row][col]*(row==3?units:1.f),.00001f));
+  }
+  CHECK(std::none_of(fixed->begin(),fixed->end(),[](const auto& w){return w.index==2||w.index==6;}));
+  CHECK(f.rig.nativeEvaluated==original);
+ }
+ for(unsigned fault=0;fault<4;++fault){auto bad=f.rig;
+  if(fault==0)bad.names[3]="unknown";if(fault==1)bad.parents[5]=1;
+  if(fault==2)bad.nativeHiddenLeaves={3};if(fault==3)bad.names[6]="jntWpn_6";
+  CHECK(!bc2_pump_detail::FixedAssembly(bad,Pose(),1));
+ }
+ return 0;
+}
+int FixedAssemblyIsExplicitProfileData(){
+ Fixture f;f.rig.names.push_back("fixedRing");f.rig.parents.push_back(1);
+ const std::array<Bc2PumpFixedPart,1> parts{{{"fixedRing","jntWpn_1",Pose(.27f)}}};
+ const auto none=bc2_pump_detail::FixedAssembly(f.rig,Pose(),1,SpasPumpGeometry,{});
+ CHECK(none&&none->empty());
+ const auto selected=bc2_pump_detail::FixedAssembly(f.rig,Pose(3),100,SpasPumpGeometry,parts);
+ CHECK(selected&&selected->size()==1&&selected->front().index==4&&Near(selected->front().transform.values[3][2],30));
+ // Same skeleton alone never selects SPAS fixed parts. A moving part cannot
+ // become fixed, including by fixing a descendant while its parent moves.
+ CHECK(!bc2_pump_detail::FixedAssembly(f.rig,Pose(),1));
+ auto bad=parts;bad[0].name=SpasForeEndBone;
+ CHECK(!bc2_pump_detail::FixedAssembly(f.rig,Pose(),1,SpasPumpGeometry,bad));
+ bad=parts;bad[0].parent=SpasForeEndBone;f.rig.parents[4]=2;
+ CHECK(!bc2_pump_detail::FixedAssembly(f.rig,Pose(),1,SpasPumpGeometry,bad));
+ f.rig.parents[4]=1;const std::array<Bc2PumpFixedPart,2> duplicate{{parts[0],parts[0]}};
+ CHECK(!bc2_pump_detail::FixedAssembly(f.rig,Pose(),1,SpasPumpGeometry,duplicate));
+ return 0;
+}
+int main(){if(FixedAssemblyIsExplicitProfileData()||FixedStockSurvivesAnimatedStretchWithoutChangingPump()||SingleLeafPrivateCopy()||CurrentAnimationDoesNotDoubleMovePart()||ExactLifetimeAndClaims()||CapturedChannelTravelReplay()||PhysicalConsumerToPrivatePalette())return 1;
+    std::puts("7 pump private part adapter groups passed; real physical consumer/private palette, mocked native boundaries, no runtime admission.");}

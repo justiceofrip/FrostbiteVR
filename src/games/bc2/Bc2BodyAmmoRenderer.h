@@ -1,6 +1,7 @@
 #pragma once
 #include "Bc2BeltPropProfiles.h"
 #include "fvr/graphics/D3D11RigidPropRenderer.h"
+#include "fvr/graphics/BodyPropFrame.h"
 #include "fvr/interaction/AmmoSupplyProp.h"
 #include <atomic>
 #include <memory>

@@ -36,7 +36,7 @@ public:
     // a same-numbered cycle belonging to another native reload family.
     bool BeginDispatchEpoch(std::uint64_t epoch,bool callbacksDrained)noexcept {
         if(!callbacksDrained||active_||!epoch||epoch<=dispatchEpoch_)return false;
-        dispatchEpoch_=epoch;lastCycle_=0;lease_={};invocation_={};revision_=0;
+        dispatchEpoch_=epoch;lastCycle_=0;lease_={};source_={};invocation_={};revision_=0;
         claimed_=completed_=0;deadline_=began_=0;failure_=ReloadAbortFailure::None;return true;
     }
     bool Arm(const ReloadRoundLease& lease,std::uint64_t revision,std::int64_t now,
@@ -48,7 +48,23 @@ public:
         bool heldNoPending,const MagazineNativeProfile& profile,bool emptyStepControl=false)noexcept {
         return profile.Reviewed()&&ArmWithCeiling(lease,revision,now,heldNoPending,profile.HoldCeiling(),emptyStepControl);
     }
+    bool ArmShellStop(const ReloadStopIntent& intent,std::uint64_t revision,std::int64_t now)noexcept {
+        if(!revision||!intent.cycle||intent.cycle<=lastCycle_||!intent.sequence||intent.loaded<=0||
+           intent.reserve<0||intent.capacity!=8||intent.loaded>intent.capacity||intent.observedNs<=0||
+           now<intent.observedNs||now>=intent.deadlineNs||intent.deadlineNs-intent.observedNs>200000000)return false;
+        // This source remains a stop intent. It never becomes an all-held
+        // lease and cannot be passed to any ammunition operation.
+        lease_={};ArmSource(intent,revision,now,1.f);return true;
+    }
 private:
+    void ArmSource(const ReloadStopIntent& source,std::uint64_t revision,std::int64_t now,float ceiling)noexcept {
+        Abandon(ReloadAbortFailure::NewCycle,now);
+        timerCeiling_=ceiling;source_=source;lastCycle_=source.cycle;revision_=revision;began_=now;
+        deadline_=source.deadlineNs;claimed_=completed_=0;
+        invocation_={};active_=true;failure_=ReloadAbortFailure::None;
+        auto& r=history_[historyTotal_++%HistoryCapacity];r={};r.cycle=source.cycle;r.revision=revision;r.dispatchEpoch=dispatchEpoch_;
+        r.armedNs=now;r.deadlineNs=deadline_;r.loaded=source.loaded;r.reserve=source.reserve;r.active=true;
+    }
     bool ArmWithCeiling(const ReloadRoundLease& lease,std::uint64_t revision,std::int64_t now,
         bool heldNoPending,float ceiling,bool emptyStepControl=false)noexcept {
         if(!std::isfinite(ceiling)||ceiling<=0||ceiling>10||!heldNoPending||!revision||!lease.cycle||lease.cycle<=lastCycle_||!lease.sequence||
@@ -56,12 +72,9 @@ private:
            lease.capacity<lease.loaded||lease.capacity>1000000||lease.observedNs<=0||
            now<lease.observedNs||now>=lease.deadlineNs||lease.deadlineNs-lease.observedNs>200000000||
            now>std::numeric_limits<std::int64_t>::max()-200000000)return false;
-        Abandon(ReloadAbortFailure::NewCycle,now);
-        timerCeiling_=ceiling;lease_=lease;lastCycle_=lease.cycle;revision_=revision;began_=now;
-        deadline_=std::min(lease.deadlineNs,now+200000000);claimed_=completed_=0;
-        invocation_={};active_=true;failure_=ReloadAbortFailure::None;
-        auto& r=history_[historyTotal_++%HistoryCapacity];r={};r.cycle=lease.cycle;r.revision=revision;r.dispatchEpoch=dispatchEpoch_;
-        r.armedNs=now;r.deadlineNs=deadline_;r.loaded=lease.loaded;r.reserve=lease.reserve;r.active=true;return true;
+        ArmSource({lease.identity,lease.cycle,lease.sequence,lease.observedNs,
+            std::min(lease.deadlineNs,now+200000000),lease.loaded,lease.reserve,lease.capacity},revision,now,ceiling);
+        lease_=lease;return true;
     }
 public:
     void Abandon(ReloadAbortFailure why,std::int64_t now=0)noexcept {
@@ -76,9 +89,9 @@ public:
         if(report.claims==1)report.first=report.last;
         const auto fail=[&](ReloadAbortFailure why){report.lastAdmission=ReloadAbortAdmission::Rejected;Abandon(why,now);return d;};
         if(now<began_||now>=deadline_)return fail(ReloadAbortFailure::Expired);
-        if(!in.verified||in.identity!=lease_.identity||revision!=revision_||
+        if(!in.verified||in.identity!=source_.identity||revision!=revision_||
            in.nowNs<began_||in.nowNs>now||now>=in.leaseDeadlineNs)return fail(ReloadAbortFailure::Owner);
-        if(!policyCancelled||policyCycle!=lease_.cycle)return fail(ReloadAbortFailure::Cycle);
+        if(!policyCancelled||policyCycle!=source_.cycle)return fail(ReloadAbortFailure::Cycle);
         if(in.branch>=3||!invocation||!nativeConfigVerified)return fail(ReloadAbortFailure::State);
         if(claimed_&(1u<<in.branch)){report.lastAdmission=ReloadAbortAdmission::AlreadyClaimed;return d;}
         const auto& c=in.context;
@@ -87,8 +100,8 @@ public:
            (!fireOnly&&(c.inputFlags||c.fireRequested||c.orderRequested||c.reloadRequested))||
            c.flags24Through28[2]||c.flags24Through28[3]||c.flags24Through28[4])return fail(ReloadAbortFailure::Input);
         const auto& b=in.branches[in.branch];
-        if(b.address!=lease_.identity.firing[in.branch]||b.wrapperOffset!=(in.branch==0?0x3cu:in.branch==1?0x40u:0x10u)||
-           b.loaded!=lease_.loaded||b.reserve!=lease_.reserve||(b.flagsA8&(8|16))||
+        if(b.address!=source_.identity.firing[in.branch]||b.wrapperOffset!=(in.branch==0?0x3cu:in.branch==1?0x40u:0x10u)||
+           b.loaded!=source_.loaded||b.reserve!=source_.reserve||(b.flagsA8&(8|16))||
            !std::isfinite(b.phaseTimer)||b.phaseTimer<0||b.phaseTimer>timerCeiling_)return fail(ReloadAbortFailure::State);
         const bool idle=(b.currentState==1||b.currentState==2)&&(b.nextState==1||b.nextState==2);
         if(!idle&&(b.currentState<10||b.currentState>12||(b.nextState!=1&&(b.nextState<10||b.nextState>12))))return fail(ReloadAbortFailure::State);
@@ -108,18 +121,18 @@ public:
         report.lastAdmission=ReloadAbortAdmission::HelperClaimed;
         claimed_|=1u<<in.branch;invocation_[in.branch]=invocation;
         SyncHistory(now);
-        d={lease_.cycle,invocation,revision_,in.branch,deadline_,b,true,dispatchEpoch_};return d;
+        d={source_.cycle,invocation,revision_,in.branch,deadline_,b,true,dispatchEpoch_};return d;
     }
     bool Allows(const ReloadAbortDecision& d,std::uint64_t revision,std::uint64_t policyCycle,
         bool cancelled,std::int64_t now)noexcept {
-        if(d.dispatchEpoch!=dispatchEpoch_||!active_||!d.call||d.branch>=3||d.invocation!=invocation_[d.branch]||d.cycle!=lease_.cycle)return false;
+        if(d.dispatchEpoch!=dispatchEpoch_||!active_||!d.call||d.branch>=3||d.invocation!=invocation_[d.branch]||d.cycle!=source_.cycle)return false;
         if(now<began_||now>=deadline_){Abandon(ReloadAbortFailure::Expired,now);return false;}
         if(revision!=revision_){Abandon(ReloadAbortFailure::Owner,now);return false;}
-        if(policyCycle!=lease_.cycle||!cancelled){Abandon(ReloadAbortFailure::Cycle,now);return false;}return true;
+        if(policyCycle!=source_.cycle||!cancelled){Abandon(ReloadAbortFailure::Cycle,now);return false;}return true;
     }
     bool Finish(const ReloadAbortDecision& d,const ReloadFiringObservation& after,
         bool ownerRetained,bool helperExact,std::int64_t now)noexcept {
-        if(d.dispatchEpoch!=dispatchEpoch_||!d.call||d.branch>=3||d.cycle!=lease_.cycle||d.invocation!=invocation_[d.branch])return false;
+        if(d.dispatchEpoch!=dispatchEpoch_||!d.call||d.branch>=3||d.cycle!=source_.cycle||d.invocation!=invocation_[d.branch])return false;
         if(!helperExact){Abandon(ReloadAbortFailure::NativePostcondition,now);return false;}
         if(now<began_||now>=deadline_){Abandon(ReloadAbortFailure::Expired,now);return false;}
         if(!ownerRetained||after.address!=d.before.address||after.wrapperOffset!=d.before.wrapperOffset||
@@ -132,7 +145,7 @@ public:
     bool Active()const noexcept{return active_;}
     unsigned Claimed()const noexcept{return claimed_;}
     unsigned Completed()const noexcept{return completed_;}
-    std::uint64_t Cycle()const noexcept{return lease_.cycle;}
+    std::uint64_t Cycle()const noexcept{return source_.cycle;}
     std::uint64_t Revision()const noexcept{return revision_;}
     std::int64_t Deadline()const noexcept{return deadline_;}
     const ReloadRoundLease& OriginalLease()const noexcept{return lease_;}
@@ -153,7 +166,7 @@ private:
     }
     std::uint64_t dispatchEpoch_=0;
     float timerCeiling_=1.f;
-    ReloadRoundLease lease_{};std::array<std::uint64_t,3> invocation_{};
+    ReloadRoundLease lease_{};ReloadStopIntent source_{};std::array<std::uint64_t,3> invocation_{};
     std::uint64_t revision_=0,lastCycle_=0;std::int64_t began_=0,deadline_=0;
     unsigned claimed_=0,completed_=0;bool active_=false;ReloadAbortFailure failure_{};
     std::array<ReloadAbortCycleReport,HistoryCapacity> history_{};std::uint64_t historyTotal_=0;

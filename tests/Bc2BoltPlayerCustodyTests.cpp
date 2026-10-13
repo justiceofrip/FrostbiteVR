@@ -90,7 +90,7 @@ int StableReferencesFreezeAndRecenterInvalidates(){
     CHECK(!player.Prepare(in,hands,intent));CHECK(!player.ReferencesReady()&&player.BlocksFire()&&player.NeedsOwnerRetirement());
     return 0;
 }
-int PlayerReleaseUsesActualAdapterAndImmutableControls(){
+int PlayerReleaseUsesActualAdapterAndImmutableControls(bool expireGap=false){
     Fixture f;Bc2BoltPlayerCustody player(f.calibration);InputFrame controls;
     CHECK(f.hands.Release(f.sample.input,f.originalSupport).accepted);
     auto supportRequest=f.Request(left,HandClaimKind::WeaponSupport,2,f.originalGun.id);
@@ -102,8 +102,9 @@ int PlayerReleaseUsesActualAdapterAndImmutableControls(){
     const auto inverse=InverseRigid(originalWeapon);CHECK(inverse);
     const std::array<math::Matrix4,2> refs={Multiply(f.sample.wristWorld[0],*inverse),Multiply(f.sample.wristWorld[1],*inverse)};
     f.native.view.phase=Bc2NativeCyclePhase::Watching;f.native.view.held.reset();f.native.view.blocksFire=false;
-    const auto prepare=[&](bool release)->std::optional<Bc2PhysicalBoltSample>{
+    const auto prepare=[&](bool release,unsigned contactMutation=0)->std::optional<Bc2PhysicalBoltSample>{
         Bc2BoltControllerContact raw;raw.raw={f.sample.nativeOwner,f.rig.identity,f.calibration->rigFingerprint,f.sample.input,Pose(),true};
+        raw.raw.mechanismWristInWeapon=M95BoltWristFromPart(f.calibration->profile.closedContact);
         raw.mappingValid=true;raw.bodyWorldMeters=Pose();raw.weaponWorldMeters=originalWeapon;
         raw.rawWristWorldMeters=f.sample.wristWorld;raw.wristToGrip={Pose(),Pose()};raw.nativeWristInWeapon=refs;
         raw.nativePartValid=true;raw.nativePartInWeapon=f.calibration->profile.closedContact;
@@ -118,6 +119,8 @@ int PlayerReleaseUsesActualAdapterAndImmutableControls(){
         ammo.observedNs=f.sample.input.observedNs;ammo.deadlineNs=f.sample.input.deadlineNs;ammo.verified=ammo.allThreeIdle=true;ammo.loaded=ammo.capacity=5;
         Bc2BoltPlayerInput input{f.sample.nativeOwner,f.sample.item,f.sample.asset,f.sample.mesh,&controls,f.sample.input,
             {f.sample.nativeOwner,f.sample.input,controls.referenceHead,Pose(),1},raw,f.native.view,ammo};
+        if(contactMutation==1)input.contact={};
+        if(contactMutation==2)++input.contact.raw.nativeOwner.weapon;
         const auto before=controls;auto out=player.Prepare(input,f.hands,f.intent);
         if(std::memcmp(&before,&controls,sizeof(controls)))return {};
         return out;
@@ -152,7 +155,41 @@ int PlayerReleaseUsesActualAdapterAndImmutableControls(){
     const auto second=prepare(true);CHECK(second&&second->custodyTransfer&&second->custodyTransfer->releaseDepartingGun);
     const auto enteredAgain=f.bolt->Tick(*second,f.hands,f.intent);player.Observe(enteredAgain);
     CHECK(enteredAgain.custodyChange&&enteredAgain.custodyChange->transaction.accepted&&enteredAgain.tracking.weapon);
-    CHECK(!f.hands.Current(right)&&f.hands.Current(left)&&player.BlocksFire());return 0;
+    CHECK(!f.hands.Current(right)&&f.hands.Current(left)&&player.BlocksFire());
+    // Actual252 entered the second cycle, then stalled at the new grip edge.
+    // Keep the real player coordinator and delayed renderer packet in the loop
+    // beyond the atomic custody exchange, rather than stopping at EnterCustody.
+    for(unsigned n=0;n<8;++n){const auto s=prepare(true);CHECK(s);
+        const auto r=f.bolt->Tick(*s,f.hands,f.intent);player.Observe(r);
+        CHECK(r.tracking.weapon&&!r.ownsMechanism);}
+    for(unsigned n=0;n<2;++n){const auto s=prepare(false);CHECK(s);
+        f.last=f.bolt->Tick(*s,f.hands,f.intent);player.Observe(f.last);}
+    CHECK(f.last.ownsMechanism&&f.last.tracking.target);
+    CHECK(f.last.tracking.target->lease.cycle==2&&f.native.releases==1);
+    // Actual254 lost the contact publication for one update while the gun
+    // and mechanism claims stayed live. Empty publication is not a new owner.
+    // Continue only using the previous original contact's remaining lifetime.
+    const auto originalRaw=f.last.tracking.rawInputSequence;
+    const auto gap=prepare(false,1);CHECK(gap&&gap->raw.input.sequence==originalRaw);
+    const auto originalDeadline=gap->raw.input.deadlineNs;
+    f.last=f.bolt->Tick(*gap,f.hands,f.intent);player.Observe(f.last);
+    CHECK(f.last.ownsMechanism&&f.last.tracking.weapon&&player.ReferencesReady());
+    CHECK(f.last.tracking.rawInputSequence==originalRaw&&f.native.releases==1&&f.native.acks==1);
+    const auto repeatedGap=prepare(false,1);CHECK(repeatedGap);
+    CHECK(repeatedGap->raw.input.sequence==originalRaw&&repeatedGap->raw.input.deadlineNs==originalDeadline);
+    f.last=f.bolt->Tick(*repeatedGap,f.hands,f.intent);player.Observe(f.last);
+    CHECK(f.last.ownsMechanism&&f.last.tracking.weapon);
+    if(expireGap){
+        for(unsigned n=0;n<20;++n)f.Next();
+        CHECK(!prepare(false,1)); // Repeated reads never renew cached evidence.
+    }else{
+        const auto resumed=prepare(false);CHECK(resumed&&resumed->raw.input.sequence>originalRaw);
+        f.last=f.bolt->Tick(*resumed,f.hands,f.intent);player.Observe(f.last);
+        CHECK(f.last.ownsMechanism&&f.last.tracking.weapon);
+        CHECK(!prepare(false,2)); // A foreign publication is never hidden by cache.
+    }
+    CHECK(player.NeedsOwnerRetirement()&&player.BlocksFire()&&!player.ReferencesReady());
+    return 0;
 }
 
 int RendererAndPlayerShareCurrentBodyBase(){
@@ -174,6 +211,43 @@ int StartupBlockDoesNotInventOwedAction(){
     blocked.tracking.custody=BoltCustodyPhase::Manipulating;player.Observe(blocked);CHECK(player.BlocksFire());return 0;
 }
 
+int SameLeftCustodyRecoveryRequiresTypedAuthority(){
+    for(unsigned mutation=0;mutation<6;++mutation){Setup f;
+        auto calibration=std::make_shared<Bc2BoltCalibration>(M95AuthoredBoltCalibration(1));calibration->nativeJoined=true;calibration->rigFingerprint=17;
+        f.raw.nativePartInWeapon=calibration->profile.closedContact;
+        Bc2BoltPlayerCustody player(calibration);HandInteraction hands;std::uint64_t intent=0;
+        Bc2BoltPlayerInput in;in.owner=f.owner;in.item={f.owner.weapon,3};in.asset=calibration->asset;in.mesh=calibration->mesh;
+        in.native=Bc2NativeCycleView{};in.native->native.owner=f.owner;
+        Bc2AmmoReserveLease ammo;ammo.identity.owner=f.owner;ammo.verified=ammo.allThreeIdle=true;ammo.capacity=5;ammo.loaded=5;ammo.reserve=45;
+        const auto sync=[&]{f.raw.raw.input=f.safety;in.controls=&f.input;in.safety=f.safety;in.body=f.frame;in.contact=f.raw;
+            ammo.sequence=f.safety.sequence;ammo.observedNs=f.safety.observedNs;ammo.deadlineNs=f.safety.deadlineNs;in.ammunition=ammo;};
+        for(unsigned n=0;n<70;++n){f.Next();sync();CHECK(player.Prepare(in,hands,intent));}
+        CHECK(player.ReferencesReady());const auto references=*player.References();
+        hands.Update(f.safety);const auto acquired=hands.Acquire(f.safety,{f.safety.owner,InteractionHand::Left,HandClaimKind::GunHold,in.item,
+            {{1,3},f.safety.sequence,f.safety.deadlineNs,true},++intent,0});CHECK(acquired.claim);
+        WeaponCycleLease held{f.safety.owner,in.item,{calibration->profile.id,3},1,1,50,f.safety.observedNs,f.safety.deadlineNs,true};
+        Bc2PhysicalBoltResult owned;owned.tracking.enabled=true;owned.tracking.held=held;owned.tracking.gun=acquired.claim;
+        owned.tracking.custody=BoltCustodyPhase::Manipulating;player.Observe(owned);
+        f.Next();f.safety.tracked[1]=f.input.hands[1].gripTracked=false;sync();CHECK(!player.Prepare(in,hands,intent));
+        CHECK(player.NeedsOwnerRetirement()&&!player.ReferencesReady());
+        f.Next();f.safety.tracked[1]=f.input.hands[1].gripTracked=true;f.safety.released[1]=true;f.input.hands[1].squeeze=0;f.frame.input=f.safety;sync();
+        CHECK(hands.Renew(f.safety,acquired.claim->token,{{1,3},f.safety.sequence,f.safety.deadlineNs,true}).accepted);
+        WeaponCycleDebt debt{held.owner,held.item,held.mechanism,held.cycle,held.shot,77,4,45,5};
+        WeaponCycleRecoveryGrant grant{debt,f.safety,1};
+        WeaponCycleIdleDebtLease authority{held.owner,held.item,held.mechanism,1,1,106,
+            f.safety.observedNs,f.safety.deadlineNs,grant,{101,102,103},{104,105,106}};
+        CHECK(weapon_cycle_detail::Lease(authority,f.safety.nowNs));
+        in.recovery=Bc2NativeCycleRecoveryView{};in.recovery->native.owner=f.owner;in.recovery->authority=authority;
+        if(mutation==1)in.recovery.reset();if(mutation==2)++in.recovery->authority->shot;
+        if(mutation==3)++in.recovery->native.owner.weapon;
+        if(mutation==4){CHECK(hands.Release(f.safety,acquired.claim->token).accepted);}
+        if(mutation==5)in.recovery->authority->deadlineNs=f.safety.nowNs;
+        const auto prepared=player.Prepare(in,hands,intent);CHECK(prepared);
+        if(!mutation){CHECK(!prepared->cancel&&!player.NeedsOwnerRetirement()&&player.ReferencesReady()&&player.BlocksFire());
+            CHECK(Distance((*player.References())[0],references[0])<.000001f);}
+        else CHECK(prepared->cancel&&player.NeedsOwnerRetirement()&&player.BlocksFire());
+    }return 0;
 }
-int main(){CHECK(!OrdinaryBoltCompiled);if(RendererAndPlayerShareCurrentBodyBase()||StartupBlockDoesNotInventOwedAction()||RebasedHeadAndCurrentBodyAnchor()||MappingRejectsStaleOrMismatchedFrame()||StableReferencesFreezeAndRecenterInvalidates()||PlayerReleaseUsesActualAdapterAndImmutableControls())return 1;
-    std::puts("6 ordinary bolt mapping/reference/real-adapter groups passed; default OFF, original packets immutable.");return 0;}
+}
+int main(){if(SameLeftCustodyRecoveryRequiresTypedAuthority())return 1;CHECK(!OrdinaryBoltCompiled);if(RendererAndPlayerShareCurrentBodyBase()||StartupBlockDoesNotInventOwedAction()||RebasedHeadAndCurrentBodyAnchor()||MappingRejectsStaleOrMismatchedFrame()||StableReferencesFreezeAndRecenterInvalidates()||PlayerReleaseUsesActualAdapterAndImmutableControls()||PlayerReleaseUsesActualAdapterAndImmutableControls(true))return 1;
+    std::puts("7 ordinary bolt mapping/reference/recovery/real-adapter groups passed; default OFF, original packets immutable.");return 0;}

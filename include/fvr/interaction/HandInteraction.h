@@ -72,6 +72,32 @@ enum class HandInteractionReason:std::uint8_t {
     TokenExhausted,Released,Transferred,DependencyLost,Reset
 };
 struct HandClaimRelease {HandClaimToken token{};HandInteractionReason reason=HandInteractionReason::None;};
+// Bounded observation only. Records the input that caused custody to disappear,
+// including failures inside a consumer before the next outer adapter Update.
+struct HandClaimDropObservation {
+    HandClaim claim{};HandInteractionReason reason=HandInteractionReason::None;
+    HandInteractionSample attempted{};std::int64_t previousNowNs=0;
+};
+struct HandDropObserver {
+    void* context=nullptr;
+    void(*input)(void*,const HandInteractionSample&,std::int64_t)noexcept=nullptr;
+    void(*drop)(void*,const HandClaim&,HandInteractionReason)noexcept=nullptr;
+};
+// Allocate once in the owning diagnostic, not in every interaction consumer.
+template<std::size_t Capacity> struct HandClaimDropJournal {
+    std::array<HandClaimDropObservation,Capacity> entries{};
+    std::size_t count=0;std::uint64_t omitted=0;
+    HandInteractionSample attempted{};std::int64_t previousNowNs=0;
+    HandDropObserver Observer()noexcept {
+        return {this,[](void* p,const HandInteractionSample& s,std::int64_t previous)noexcept {
+            auto& j=*static_cast<HandClaimDropJournal*>(p);j.attempted=s;j.previousNowNs=previous;
+        },[](void* p,const HandClaim& claim,HandInteractionReason reason)noexcept {
+            auto& j=*static_cast<HandClaimDropJournal*>(p);
+            if(j.count<j.entries.size())j.entries[j.count++]={claim,reason,j.attempted,j.previousNowNs};
+            else ++j.omitted;
+        }};
+    }
+};
 struct HandInteractionResult {
     bool inputValid=false,accepted=false;
     HandInteractionReason reason=HandInteractionReason::None;
@@ -110,7 +136,7 @@ struct HandInteractionConfig {
 // unique within this instance across Reset. Do not copy/recreate it to reset.
 class HandInteraction {
 public:
-    explicit HandInteraction(HandInteractionConfig config={})noexcept:config_(config){}
+    explicit HandInteraction(HandInteractionConfig config={},HandDropObserver observer={})noexcept:config_(config),dropObserver_(observer){}
     HandInteraction(const HandInteraction&)=delete;
     HandInteraction& operator=(const HandInteraction&)=delete;
     HandInteractionResult Update(const HandInteractionSample&)noexcept;
@@ -134,10 +160,21 @@ public:
     HandGunCustodyResult TransferGunCustody(const HandInteractionSample& currentSafety,const HandGunCustodyTransfer&)noexcept;
     HandInteractionResult Release(const HandInteractionSample&,const HandClaimToken&)noexcept;
     HandInteractionResult Reset()noexcept;
+    void ObserveDrops(HandDropObserver observer)noexcept{dropObserver_=observer;}
     // Inspect only after Update with the current clock/input. This is not a
     // clock source and cannot expire a lease while the adapter is not ticking.
     std::optional<HandClaim> Current(InteractionHand hand)const noexcept {
         return ValidHand(hand)?claims_[Index(hand)]:std::nullopt;
+    }
+    // Validate delayed geometry provenance independently of a newer held-grip
+    // claim. Read-only: callers must Update with current safety first. This
+    // neither acquires custody nor renews the source packet's original bounds.
+    bool HasRecordedEvidence(const HandInteractionSample& source,InteractionHand hand)const noexcept {
+        HandInteractionResult result;
+        // Neutral packets are meaningful to a gesture recognizer. This is not
+        // permission to acquire a claim; acquisition still requires Available.
+        return ValidHand(hand)&&initialized_&&!blocked_&&sample_.focused&&sample_.tracked[Index(hand)]&&
+            Evidence(source,hand,result);
     }
 private:
     static bool ValidHand(InteractionHand h)noexcept {return h==InteractionHand::Left||h==InteractionHand::Right;}
@@ -169,9 +206,11 @@ private:
     std::uint64_t nextClaim_=0;
     std::int64_t lastNow_=0;
     bool initialized_=false,blocked_=false;
+    HandDropObserver dropObserver_{};
 };
 inline void HandInteraction::Drop(std::size_t hand,HandInteractionReason reason,HandInteractionResult& out)noexcept {
     if(!claims_[hand])return;
+    if(dropObserver_.drop)dropObserver_.drop(dropObserver_.context,*claims_[hand],reason);
     for(auto& event:out.released)if(!event){event=HandClaimRelease{claims_[hand]->token,reason};break;}
     claims_[hand].reset();
 }
@@ -188,6 +227,7 @@ inline void HandInteraction::DropDependents(HandInteractionResult& out)noexcept 
     }
 }
 inline HandInteractionResult HandInteraction::Reset()noexcept {
+    if(dropObserver_.input)dropObserver_.input(dropObserver_.context,sample_,lastNow_);
     HandInteractionResult out;out.reason=HandInteractionReason::Reset;DropAll(out.reason,out);
     // Preserve token/intent high-water marks and the last input sequence:
     // queued work cannot reuse the packet that preceded an explicit reset.
@@ -196,6 +236,7 @@ inline HandInteractionResult HandInteraction::Reset()noexcept {
 }
 inline HandInteractionResult HandInteraction::Update(const HandInteractionSample& s)noexcept {return UpdateImpl(s);}
 inline HandInteractionResult HandInteraction::UpdateImpl(const HandInteractionSample& s,const HandClaimToken* deferredGun)noexcept {
+    if(dropObserver_.input)dropObserver_.input(dropObserver_.context,s,lastNow_);
     HandInteractionResult out;
     const auto reject=[&](HandInteractionReason reason){
         out.reason=reason;DropAll(reason,out);blocked_=true;

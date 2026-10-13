@@ -12,6 +12,8 @@ Bc2MagazineResourceReload::Bc2MagazineResourceReload(MagazineResourceApi api,Amm
  api_(api),pouch_(pouch),supply_(pouch),interaction_(Config(Xm8MagazineEquipment())){}
 void Bc2MagazineResourceReload::Cancel(const HandInteractionSample& in,HandInteraction& hands)noexcept {
     last_=interaction_.Cancel(in,hands);supply_.Cancel(in,hands);carry_.reset();submittedSeat_.reset();needRestore_=true;
+    boundGun_.reset();viewDeferred_=false;
+    removalBefore_.reset();removalBegan_=0;
     // The selected item may now be a shell weapon, vehicle, or unsupported
     // pickup. Settling an old exact request must not require a fresh magazine
     // view for that new selection. Uncertain or mismatched outcomes stay blocked.
@@ -22,12 +24,15 @@ void Bc2MagazineResourceReload::Cancel(const HandInteractionSample& in,HandInter
     latestResult_={};latestResult_.interaction=last_;latestResult_.blocksWeaponActions=busy_;
 }
 MagazineResourceProbeState Bc2MagazineResourceReload::ProbeState(std::int64_t now)const noexcept {
-    return {latestResult_,latestView_&&AmmoResourceViewFresh(*latestView_,now)?latestView_:std::nullopt};
+    return {latestResult_,!viewDeferred_&&latestView_&&AmmoResourceViewFresh(*latestView_,now)?latestView_:std::nullopt};
 }
 bool Bc2MagazineResourceReload::Send(const AmmoResourceView& v,const MagazinePhysicalSample& s,AmmunitionOperation op,bool discard,std::uint64_t& intent)noexcept {
     if(pending_||!api_.submit||intent==UINT64_MAX)return false;
     const auto request=MagazineResourceRequestFor(v,s.family,s.input,s.weapon,++intent,op,discard);
     if(!request||!api_.submit(api_.context,*request))return false;
+    if(!discard&&op==AmmunitionOperation::RemoveMagazine&&!removalBegan_){
+        removalBegan_=s.input.nowNs;removalBefore_=v.snapshot.counts;
+    }
     if(!discard&&(op==AmmunitionOperation::ReturnMagazine||op==AmmunitionOperation::RefillMagazine))submittedSeat_=request;
     pendingRequest_=request;event_=request->intent.id;operation_=op;discard_=discard;pending_=true;++submitted_;return true;
 }
@@ -75,11 +80,63 @@ bool Bc2MagazineResourceReload::RecoverTerminal(const AmmoResourceOutcome& outco
 }
 MagazinePhysicalResult Bc2MagazineResourceReload::TickImpl(const MagazinePhysicalSample& s,HandInteraction& hands,std::uint64_t& intent)noexcept {
     MagazinePhysicalResult out;const auto now=s.input.nowNs;
+    diagnosticReadReason_=~0u;diagnosticSameOwner_=false;
     const auto cancel=[&](CancelCause cause=CancelCause::Other){NoteCancel(cause,s.input);Cancel(s.input,hands);out.interaction=last_;out.blocksWeaponActions=busy_;return out;};
     if(s.cancel||!s.input.focused||!s.input.tracked[0]||!s.input.tracked[1]||s.input.released[1])return cancel(CancelCause::Input);
     if(!api_.read||!api_.submit)return cancel(CancelCause::Api);
-    const auto view=api_.read(api_.context,s.nativeOwner,now);
-    if(!view)return cancel(CancelCause::View);
+    const auto read=api_.readObserved?api_.readObserved(api_.context,s.nativeOwner,now):
+        AmmoResourceRead{AmmoResourceReadReason::NoView,api_.read(api_.context,s.nativeOwner,now)};
+    const auto& view=read.view;viewDeferred_=!view;
+    diagnosticReadReason_=unsigned(read.reason);
+    if(!view){
+        const auto gun=hands.Current(InteractionHand::Right);
+        const bool sameOwner=!needRestore_&&owner_&&latestView_&&
+            latestView_->snapshot.context==owner_->native&&latestView_->identity.owner==s.nativeOwner&&
+            owner_->physical==s.input.owner&&owner_->weapon==s.weapon&&profile_&&profile_==s.family.binding.profile&&
+            latestResult_.tracking.family.binding==s.family.binding&&s.asset==profile_->geometry->asset&&
+            MagazineFamilyFresh(s.family,s.nativeOwner,s.input.owner,s.weapon,now)&&
+            boundGun_&&gun&&gun->token==*boundGun_&&gun->inputSequence==s.input.sequence&&gun->deadlineNs>now&&
+            boundEpoch_==s.trackingEpoch;
+        diagnosticSameOwner_=sameOwner;
+        const bool idle=sameOwner&&read.Deferred()&&last_.phase==DetachableMagazinePhase::Attached&&!cycle_&&!pending_&&
+            !physical_&&!reservation_&&!supply_.Held()&&!supply_.Pending()&&!carry_&&!submittedSeat_&&
+            !last_.removalClaim&&latestView_->phase==AmmunitionLedgerPhase::Ready&&
+            !latestView_->wellEmpty&&latestView_->originalState!=MagazineResourceState::Held;
+        const auto phase=last_.phase;
+        // Typed publication gaps preserve existing custody, not ammunition
+        // authority. No new object, seat or native request can start here.
+        const bool original=sameOwner&&api_.readObserved&&read.Deferred()&&!reservation_&&!supply_.Held()&&!supply_.Pending()&&
+            !submittedSeat_&&(phase==DetachableMagazinePhase::PreparingRemoval||phase==DetachableMagazinePhase::Pulling||
+                phase==DetachableMagazinePhase::RemovedHeld||phase==DetachableMagazinePhase::WellEmpty);
+        const bool replacement=sameOwner&&api_.readObserved&&read.Deferred()&&!pending_&&!reservation_&&
+            !supply_.Pending()&&!submittedSeat_&&supply_.Held()&&
+            (phase==DetachableMagazinePhase::ReplacementHeld||phase==DetachableMagazinePhase::Guided);
+        const bool submitted=sameOwner&&api_.readObserved&&read.Deferred()&&pending_&&pendingRequest_&&
+            submittedSeat_&&*submittedSeat_==*pendingRequest_&&!discard_&&!supply_.Held()&&
+            ((phase==DetachableMagazinePhase::AwaitingSeat&&operation_==AmmunitionOperation::RefillMagazine&&
+              reservation_&&supply_.Pending()==reservation_&&physical_&&physical_->id==reservation_->request)||
+             (phase==DetachableMagazinePhase::AwaitingOriginalReturn&&operation_==AmmunitionOperation::ReturnMagazine&&
+              !reservation_&&!supply_.Pending()));
+        if(!idle&&!original&&!replacement&&!submitted)return cancel(CancelCause::View);
+        if(replacement){
+            const auto identity=supply_.Held()->identity;
+            const auto held=supply_.RetainHeld(s.input,identity,s.gripPressed,hands);
+            if(!held.held&&s.gripPressed&&!s.input.released[0])return cancel(CancelCause::Supply);
+        }
+        DetachableMagazineSample waiting;waiting.input=s.input;waiting.weapon=s.weapon;waiting.trackingEpoch=s.trackingEpoch;
+        waiting.gripPressed=s.gripPressed;
+        waiting.native={s.input.owner,s.weapon,cycle_,0,0,true,false,false,{}};waiting.nativeObservationDeferred=true;
+        // Keep real controller safety clocks current without feeding expired
+        // native evidence, geometry, gestures, acknowledgements or a new lease.
+        last_=interaction_.Update(waiting,hands);sequence_=std::max(sequence_,s.input.sequence);
+        if(last_.phase!=phase&&!(replacement&&last_.phase==DetachableMagazinePhase::WellEmpty))return cancel(CancelCause::Interaction);
+        busy_=true;auto& waits=idle?idleViewWaits_:activeViewWaits_;if(waits!=UINT64_MAX)++waits;
+        out.interaction=last_;out.interaction.prop.reset();out.blocksWeaponActions=true;out.idleAwaitingResource=idle;
+        out.ownsLeftHand=bool(last_.removalClaim)||bool(supply_.Held());
+        out.acquired=acquired_;out.submitted=submitted_;out.completed=completed_;
+        out.tracking.family=s.family;out.tracking.owner=s.nativeOwner;
+        return out;
+    }
     const auto observation=MagazineResourceObservationFor(*view,s.family,s.input.owner,s.weapon,now);
     const auto reserve=MagazineResourceReserve(*view,now);
     if(!observation||!reserve)return cancel(CancelCause::Mapping);
@@ -99,8 +156,39 @@ MagazinePhysicalResult Bc2MagazineResourceReload::TickImpl(const MagazinePhysica
     owner_=mapping;
     if(view->phase==AmmunitionLedgerPhase::NeedsReconciliation){busy_=true;return cancel(CancelCause::Reconciliation);}
     if(pending_&&view->request==event_&&view->requestState==AmmoResourceRequestState::Rejected){
-        Cancel(s.input,hands);
+        // Admission can miss one short controller lease while waiting for the
+        // three native copies to become coherent. An exact terminal result
+        // proving NO dispatch permits a new request from the still-held grab.
+        // Never renew the old request or retry a mutation that may have run.
+        const auto left=hands.Current(InteractionHand::Left);
+        const bool retryRemoval=same&&!needRestore_&&!discard_&&pendingRequest_&&physical_&&
+            physical_->operation==ReloadOperation::UnseatMagazine&&operation_==AmmunitionOperation::RemoveMagazine&&
+            last_.phase==DetachableMagazinePhase::PreparingRemoval&&!cycle_&&!reservation_&&!submittedSeat_&&
+            !supply_.Held()&&!supply_.Pending()&&s.gripPressed&&!s.input.released[0]&&s.input.sequence>sequence_&&
+            boundGun_&&gun->token==*boundGun_&&last_.removalClaim&&left&&left->token==last_.removalClaim->token&&
+            left->deadlineNs>now&&left->token.prerequisiteClaim==gun->token.id&&
+            removalBefore_&&view->snapshot.counts==*removalBefore_&&removalBegan_>0&&
+            now>=removalBegan_&&now-removalBegan_<600000000&&
+            view->phase==AmmunitionLedgerPhase::Ready&&!view->wellEmpty&&view->originalState!=MagazineResourceState::Held&&
+            view->terminal&&view->terminal->request==*pendingRequest_&&
+            view->terminal->state==AmmoResourceRequestState::Rejected&&!view->terminal->nativeDispatched&&!view->terminal->receipt&&
+            view->terminal->resolvedNs>=pendingRequest_->intent.deadlineNs&&view->terminal->resolvedNs<=now;
+        // A released original has no physical hand left to cancel. If its
+        // data-only discard expired before acceptance, settle that exact
+        // rejection, then dispose of the same still-held native token using
+        // this fresh view below. No remove/refill/return write is retried.
+        const bool retryDiscard=same&&!needRestore_&&discard_&&pendingRequest_&&pendingRequest_->discard&&
+            last_.phase==DetachableMagazinePhase::WellEmpty&&!last_.removalClaim&&!reservation_&&
+            !supply_.Held()&&!supply_.Pending()&&view->phase==AmmunitionLedgerPhase::Ready&&view->wellEmpty&&
+            view->originalState==MagazineResourceState::Held&&view->original==pendingRequest_->intent.original;
+        const auto retainedPhysical=physical_;
+        if(!retryDiscard&&!retryRemoval)Cancel(s.input,hands);
         if(!view->terminal||!RecoverTerminal(*view->terminal,s.input,hands))return cancel(CancelCause::Terminal);
+        if(retryRemoval){
+            physical_=retainedPhysical;
+            if(!Send(*view,s,AmmunitionOperation::RemoveMagazine,false,intent))return cancel(CancelCause::Submit);
+            ++removalAdmissionRetries_;
+        }
     }
     const bool fresh=s.input.sequence>sequence_;
     DetachableMagazineSample physical;physical.input=s.input;physical.weapon=s.weapon;physical.trackingEpoch=s.trackingEpoch;
@@ -142,9 +230,10 @@ MagazinePhysicalResult Bc2MagazineResourceReload::TickImpl(const MagazinePhysica
            view->snapshot.observedNs<r.completedNs)return cancel(CancelCause::Receipt);
         if(operation_==AmmunitionOperation::RemoveMagazine){
             if(!physical_||!view->original||r.command.id!=view->original->id)return cancel(CancelCause::Receipt);cycle_=r.command.id;physical.native.cycle=cycle_;
+            removalBefore_.reset();removalBegan_=0;
         }else if(operation_==AmmunitionOperation::ReturnMagazine){
             if(!interaction_.CompleteOriginalResourceReturn(s.input,hands,r))return cancel(CancelCause::Receipt);
-            last_={};cycle_=seatedEvent_=0;original_.reset();physical_.reset();physical.native.cycle=0;
+            last_={};cycle_=seatedEvent_=0;original_.reset();physical_.reset();submittedSeat_.reset();physical.native.cycle=0;
         }else if(operation_==AmmunitionOperation::RefillMagazine){
             if(!reservation_||!physical_||r.before.reserve-r.after.reserve!=int(reservation_->units)||r.before.reserve!=int(reservation_->reserveBefore))return cancel(CancelCause::Receipt);
             const auto after=MagazineSupply(*owners,*reserve,s.trackingEpoch,now,reservation_->units);
@@ -170,7 +259,10 @@ MagazinePhysicalResult Bc2MagazineResourceReload::TickImpl(const MagazinePhysica
         for(const auto& e:history_)if(e&&SameInput(e->supply.input,s.raw.inputEvidence)){geometry=&*e;break;}
         // Extraction with zero reserve still uses actual retained hand packets.
         {physical.geometryInput=s.raw.inputEvidence;physical.geometrySequence=s.raw.inputEvidence.sequence;
-            if(Rigid(s.raw.rawLeftWristWorldMeters)&&Rigid(s.raw.weaponWorldMeters))physical.weaponFromHandMeters=Multiply(s.raw.rawLeftWristWorldMeters,*InverseRigid(s.raw.weaponWorldMeters));}
+            if(Rigid(s.raw.rawLeftWristWorldMeters)&&Rigid(s.raw.weaponWorldMeters)){
+                physical.weaponFromHandMeters=Multiply(s.raw.rawLeftWristWorldMeters,*InverseRigid(s.raw.weaponWorldMeters));
+                physical.competingGripDistanceMeters=s.raw.supportContactDistanceMeters;
+            }}
     }
     if(intent>UINT64_MAX-2)return cancel(CancelCause::Counter);physical.intent=++intent;physical.replacement=supply_.Held();
     if(!cycle_&&!pending_)original_=OriginalMagazine{s.input.owner,s.weapon,{0x424332524d4147ull,intent},
@@ -203,8 +295,9 @@ MagazinePhysicalResult Bc2MagazineResourceReload::TickImpl(const MagazinePhysica
     if(last_.phase==DetachableMagazinePhase::Complete)busy_=false;
     out.interaction=last_;out.blocksWeaponActions=busy_;out.ownsLeftHand=bool(last_.removalClaim)||bool(supply_.Held());
     out.acquired=acquired_;out.submitted=submitted_;out.completed=completed_;
+    boundGun_=gun->token;boundEpoch_=s.trackingEpoch;
     out.tracking={s.family,true,s.nativeOwner,s.input,s.meshes,*reserve,cycle_,last_.prop};
-    out.tracking.resource=std::make_shared<const MagazineResourcePresentation>(MagazineResourcePresentation{*view,mapping,seatedEvent_,submittedSeat_});
+    out.tracking.resource=std::make_shared<const MagazineResourcePresentation>(MagazineResourcePresentation{*view,mapping,seatedEvent_,submittedSeat_,now});
     Carry(out.tracking,s);if(!MagazineTargetFresh(out.tracking,now))out.tracking.target.reset();
     if(bodyAmmo_&&!supply_.Held()&&!supply_.Pending())out.bodyAmmo=BuildMagazineBodyAmmo(out.tracking,gun,
         {pouch_.pouchCenterMeters,pouch_.pouchRadiusMeters},frame_,now);
@@ -212,18 +305,24 @@ MagazinePhysicalResult Bc2MagazineResourceReload::TickImpl(const MagazinePhysica
 }
 void Bc2MagazineResourceReload::NoteCancel(CancelCause cause,const HandInteractionSample& in)noexcept {
     auto& count=cancelCounts_[unsigned(cause)];if(count!=UINT64_MAX)++count;
-    const CancelEvent event{cause,in.nowNs,in.sequence,event_,cycle_,unsigned(last_.phase),unsigned(last_.reason),unsigned(last_.nativeFailureCheck),pending_};
+    const CancelEvent event{cause,in.nowNs,in.sequence,event_,cycle_,unsigned(last_.phase),unsigned(last_.reason),unsigned(last_.nativeFailureCheck),pending_,diagnosticReadReason_,diagnosticSameOwner_};
     if(!firstCancel_)firstCancel_=event;
     if(!firstActiveCancel_&&(pending_||cycle_||reservation_))firstActiveCancel_=event;
+    if(!firstCancelByCause_[unsigned(cause)])firstCancelByCause_[unsigned(cause)]=event;
 }
 void Bc2MagazineResourceReload::Report(std::ostream& out)const {
     out<<"\"magazine_resource_hands\":{\"submitted\":"<<submitted_<<",\"completed\":"<<completed_<<",\"rejected\":"<<rejected_
-       <<",\"phase\":"<<unsigned(last_.phase)<<",\"pending\":"<<pending_<<",\"cycle\":"<<cycle_;
+       <<",\"phase\":"<<unsigned(last_.phase)<<",\"pending\":"<<pending_<<",\"cycle\":"<<cycle_
+       <<",\"idle_view_waits\":"<<idleViewWaits_<<",\"active_view_waits\":"<<activeViewWaits_
+       <<",\"removal_admission_retries\":"<<removalAdmissionRetries_;
     out<<",\"cancel_cause_names\":[\"other\",\"input\",\"api\",\"view\",\"mapping\",\"gun\",\"terminal\",\"reconciliation\",\"restore\",\"owner\",\"receipt\",\"supply\",\"counter\",\"interaction\",\"submit\"],\"cancel_counts\":[";
     for(std::size_t n=0;n<cancelCounts_.size();++n){if(n)out<<',';out<<cancelCounts_[n];}out<<']';
     const auto event=[&](const std::optional<CancelEvent>& e){if(!e){out<<"null";return;}
         out<<"{\"cause\":"<<unsigned(e->cause)<<",\"now_ns\":"<<e->now<<",\"input\":"<<e->input<<",\"request\":"<<e->request
-           <<",\"cycle\":"<<e->cycle<<",\"phase\":"<<e->phase<<",\"reason\":"<<e->reason<<",\"native_check\":"<<e->nativeCheck<<",\"pending\":"<<e->pending<<'}';};
-    out<<",\"first_cancel\":";event(firstCancel_);out<<",\"first_active_cancel\":";event(firstActiveCancel_);out<<'}';
+           <<",\"cycle\":"<<e->cycle<<",\"phase\":"<<e->phase<<",\"reason\":"<<e->reason<<",\"native_check\":"<<e->nativeCheck<<",\"pending\":"<<e->pending
+           <<",\"resource_read_reason\":"<<e->resourceReadReason<<",\"same_owner\":"<<e->sameOwner<<'}';};
+    out<<",\"first_cancel\":";event(firstCancel_);out<<",\"first_active_cancel\":";event(firstActiveCancel_);
+    out<<",\"first_cancel_by_cause\":[";
+    for(unsigned n=0;n<firstCancelByCause_.size();++n){if(n)out<<',';event(firstCancelByCause_[n]);}out<<"]}";
 }
 }

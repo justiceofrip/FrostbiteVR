@@ -68,6 +68,9 @@ struct DetachableMagazineSample {
     // Explicit adapter observation gap; never fabricates native hold evidence.
     bool nativeObservationDeferred=false;
     math::Matrix4 weaponFromHandMeters{}; // RAW wrist, coherent with input.
+    // Another reachable grab target from the SAME independent wrist/geometry
+    // packet. Only resolves initial contact; never steals an existing claim.
+    std::optional<float> competingGripDistanceMeters;
     MagazineNativeObservation native{};
     // Produced/renewed by the EXISTING AmmoSupply. Removed magazines are never
     // represented here: they cannot replenish reserve or become replacement ammo.
@@ -106,7 +109,7 @@ struct MagazineClaimFailure {
     std::int64_t nativeDeadlineNs=0;
 };
 enum class MagazineNativeFailureCheck:std::uint8_t {None,Observation,UnseatAcknowledgement,HeldCycle};
-enum class MagazineMotionFailureCheck:std::uint8_t {GripReleased,TranslationStep,RotationStep,OffAxis,ReversePull};
+enum class MagazineMotionFailureCheck:std::uint8_t {GripReleased,TranslationStep,RotationStep,OffAxis,ReversePull,PathAmbiguous,PathOrientation,PathProgressStep};
 struct MagazineMotionFailure {
     MagazineMotionFailureCheck check{};
     bool gripPressed=false,released=false,pulled=false;

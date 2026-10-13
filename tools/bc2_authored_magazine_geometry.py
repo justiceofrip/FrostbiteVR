@@ -7,11 +7,11 @@ from __future__ import annotations
 import argparse,collections,json,math,statistics,struct
 from pathlib import Path
 from inspect_bc2_mesh_asset import Archive,bone_hash,sha
-from bc2_mesh_geometry import metadata,geometry
+from bc2_mesh_geometry import metadata,geometry, position_bytes
 from bc2_weapon_animation_pipeline import Clip,Skeleton,canonical,identity,inverse_rigid,multiply
 from bc2_weapon_config_pipeline import parse,named,scalar,guid
 from bc2_weapon_mesh_bindings import reference_resource
-from bc2_authored_grip_bindings import digest,path_key,matrix,read_json,checked_hash
+from bc2_authored_grip_bindings import digest,path_key,matrix,read_json,checked_hash,fields
 
 FINGERS=[f'LeftHand{digit}{n}' for digit in ('Thumb','Index','Middle','Ring','Pinky') for n in (1,2,3)]
 UX={'travel_m':.1,'capture_m':.07,'release_m':.15,'post_capture_travel_m':.035,'seat_tolerance_m':.004,
@@ -50,7 +50,7 @@ def rigid_parts(mesh_data,lod,skeleton,strict_assembly_skin=False):
     for s in sections:
         vertices=[];owners=[];raw=[];influences=[]
         for n in range(s['vertices']):
-            at=start+s['vertex_offset']+n*s['stride'];half=s['stride'] in (16,48);posbytes=8 if half else 12
+            at=start+s['vertex_offset']+n*s['stride'];posbytes=position_bytes(s);half=posbytes==8
             p=struct.unpack_from('<3e' if half else '<3f',mesh_data,at)
             ids=mesh_data[at+posbytes:at+posbytes+4];weights=mesh_data[at+posbytes+4:at+posbytes+8]
             active=[k for k,w in enumerate(weights) if w]
@@ -393,21 +393,110 @@ def exact_resource(archive,name,kind,expected=None):
     data=archive.read_selected([entries[0].name])[entries[0].name]
     if expected and sha(data)!=expected:raise ValueError('Exact resource content changed')
     return data
+def selected_animation_resource(sources,name):
+    """Resolve an exact authored name only in explicitly bound archives.
+
+    The hand-pose and skeleton/tree bundles can split a weapon's animations.
+    Check all supplied sources: equal contents are interchangeable offline,
+    but two different contents require explicit selection and cannot be ranked
+    by path or guessed engine mount order. This grants no active native binding.
+    """
+    path_key(name)
+    if not isinstance(sources,(tuple,list)) or not 0<len(sources)<=8:raise ValueError('Bounded selected animation sources required')
+    found=[];seen={}
+    for source,archive in sources:
+        key=path_key(source['archive']);expected=checked_hash(source['archive_index_sha256'])
+        if archive.index_sha256!=expected:raise ValueError('Selected animation archive index changed')
+        if key in seen:
+            if seen[key]!=expected:raise ValueError('Conflicting selected archive identity')
+        seen[key]=expected
+        matches=[e for e in archive.entries if e.flags==65536 and path_key(e.name)==path_key(name)]
+        if not matches:continue
+        data=exact_resource(archive,name,'GrannyAnimation')
+        found.append((data,{'archive':source['archive'],'archive_index_sha256':expected}))
+    if not found:raise ValueError('Exact animation absent from all selected bound archives: '+name)
+    if any(data!=found[0][0] for data,_ in found[1:]):raise ValueError('Conflicting exact animation contents across bound archives: '+name)
+    return found[0]
 def bound_reference(reference,receipt):
     if path_key(reference_resource(reference))!=path_key(receipt['resource']) or guid(reference.rsplit('/',1)[1])!=guid(receipt['instance_guid']):
         raise ValueError('Exact bound reference resource/GUID differs')
     return True
+
+def checked_action_roles(roles):
+    if not isinstance(roles,(tuple,list)) or not 0<len(roles)<=32:raise ValueError('Bounded explicit action roles required')
+    if any(not isinstance(s,str) or not s or len(s)>64 or any(c not in 'abcdefghijklmnopqrstuvwxyz0123456789_' for c in s) for s in roles):
+        raise ValueError('Normalized action role required')
+    if len(set(roles))!=len(roles):raise ValueError('Duplicate action roles')
+    return tuple(roles)
+
+def bound_action_assets(profile,archive,roles):
+    """Resolve selected absolute actions through their exact authored tree.
+
+    Role names identify authored replacements, not live animation states or
+    native gameplay completion. Missing roles are returned as absent; duplicate
+    roles, stale graph receipts and differently bound skeletons are errors.
+    """
+    roles=checked_action_roles(roles)
+    chain=profile['animation_chain'];source=profile['skeleton_source'];path_key(source['archive'])
+    if archive.index_sha256!=checked_hash(source['archive_index_sha256']):raise ValueError('Action graph source index changed')
+    docs={}
+    def prime(paths):
+        names={}
+        for path in paths:
+            key=path_key(path)
+            if key in docs or key in names:continue
+            entries=[e for e in archive.entries if e.flags==65536 and path_key(e.name)==key]
+            if len(entries)!=1 or entries[0].kind!='<non-resource>':raise ValueError('Exact action document absent or ambiguous: '+path)
+            names[key]=entries[0].name
+        if names:
+            blobs=archive.read_selected(list(names.values()))
+            for key,name in names.items():docs[key]=parse(name,blobs[name])
+    def document(path,expected=None):
+        key=path_key(path)
+        if expected is not None:checked_hash(expected)
+        if key not in docs:prime([path])
+        doc=docs[key]
+        if expected is not None and doc.sha256!=expected:raise ValueError('Action graph content changed')
+        return doc
+    tree=chain['tree'];bound=chain['skeleton_asset']
+    prime([tree['resource'],bound['resource']])
+    tree_doc=document(tree['resource'],tree['sha256'])
+    root=tree_doc.instances[guid(tree['instance_guid'])]
+    if root.attributes['type']!='Animation.SpecificAnimTreeData':raise ValueError('Action tree type differs')
+    sk_doc=document(bound['resource'],bound['sha256'])
+    sk=sk_doc.instances[guid(bound['instance_guid'])]
+    if sk.attributes['type']!='Animation.SkeletonAsset' or scalar(named(sk,'Name'),'string')+'.res'!=chain['skeleton_resource']:
+        raise ValueError('Action skeleton typed Name differs from bound model')
+    result={}
+    references=fields(root,'ReplacmentAnimations')
+    # Common archives are compressed streams: fetch the selected documents as
+    # one bounded read, not one full decompression for every action asset.
+    prime([ref.rsplit('/',1)[0]+'.dbx' for ref in references if '/' in ref])
+    for reference in references:
+        if '/' in reference:
+            path,identifier=reference.rsplit('/',1);doc=document(path+'.dbx')
+        else:doc=tree_doc;identifier=reference
+        identifier=guid(identifier);asset=doc.instances[identifier]
+        name=scalar(named(asset,'Name'),'string');path_key(name);role=name.rsplit('/',1)[-1].lower()
+        if role not in roles:continue
+        if role in result:raise ValueError('Ambiguous authored action role: '+role)
+        if asset.attributes['type']!='Animation.AnimationAsset':raise ValueError('Action role is not absolute authored animation')
+        skeleton_ref=named(asset,'Skeleton').attributes['ref'];bound_reference(skeleton_ref,bound)
+        result[role]={'role':role,'resource':name+'.res','asset_document':doc.resource,'asset_document_sha256':doc.sha256,
+                      'asset_guid':identifier,'skeleton_reference':skeleton_ref}
+    return result
 def mesh_weapon_matches(weapon,profile):
     return (weapon['native_name']==profile['native_asset_name'] and guid(weapon['instance_guid'])==guid(profile['weapon']['instance_guid']) and
             path_key(weapon['resource'])==path_key(profile['weapon']['resource']) and weapon['resource_sha256']==profile['weapon']['sha256'])
 
-def derive(game,bindings,mesh_bindings,assets,evidence_sink=None,paired_grasp_assets=(),mechanism_sink=None,rigid_assembly_assets=(),reviewed_contacts=()):
+def derive(game,bindings,mesh_bindings,assets,evidence_sink=None,paired_grasp_assets=(),mechanism_sink=None,rigid_assembly_assets=(),reviewed_contacts=(),sampled_path_assets=()):
     if bindings.get('schema') not in ('fvr.bc2.authored_grip_bindings','fvr.bc2.authored_reload_reference_bindings') or bindings.get('schema_version')!=1:raise ValueError('Grip binding schema')
     if bindings['schema']=='fvr.bc2.authored_reload_reference_bindings' and set(paired_grasp_assets)!=set(assets):raise ValueError('Reload-only references require complete paired grasp extraction')
     if mesh_bindings.get('schema')!='fvr.bc2.authored_weapon_mesh_bindings':raise ValueError('Mesh binding schema')
     if not assets or len(assets)>128 or len(bindings['profiles'])>2048:raise ValueError('Asset selection bound')
     if not set(paired_grasp_assets)<=set(assets):raise ValueError('Paired grasp assets must be explicitly inspected')
     if not set(rigid_assembly_assets)<=set(paired_grasp_assets):raise ValueError('Rigid assembly requires explicitly paired contact assets')
+    if not set(sampled_path_assets)<=set(paired_grasp_assets):raise ValueError('Sampled path requires explicit paired contact assets')
     from bc2_reviewed_magazine_contact import index_reviews,verify_context,select_reviewed_pair
     reviews=index_reviews(reviewed_contacts,set(paired_grasp_assets))
     if not set(reviews)<={p['weapon']['resource'] for p in bindings['profiles'] if p['native_asset_name'] in assets}:
@@ -450,33 +539,16 @@ def derive(game,bindings,mesh_bindings,assets,evidence_sink=None,paired_grasp_as
             static=Clip(exact_resource(clip_archive,profile['animation_chain']['animation_resource'],'GrannyAnimation',profile['animation_sha256']))
             names=[n for n in skeleton.names if n in static.tracks and n.startswith(('jntWpn','LeftHand'))]
             closed=static.evaluate(skeleton,0.,names)
-            tree=profile['animation_chain']['tree'];tree_doc=parse(tree['resource'],exact_resource(sk_archive,tree['resource'],'<non-resource>',tree['sha256']))
-            tree_instance=tree_doc.instances[tree['instance_guid']];refs=[]
-            for child in named(tree_instance,'ReplacmentAnimations').children:
-                ref=child.attributes['ref'];path,identifier=ref.rsplit('/',1)
-                refs.append((path+'.dbx',guid(identifier)))
-            # Typed graph resolves role from AnimationAsset.Name, not list index.
-            entries={path_key(e.name):e for e in sk_archive.entries if e.flags==65536}
-            docs=sk_archive.read_selected([entries[path_key(p)].name for p,g in refs]);reload_assets=[]
-            for path,g in refs:
-                doc=parse(entries[path_key(path)].name,docs[entries[path_key(path)].name]);asset=doc.instances[g]
-                name=scalar(named(asset,'Name'),'string')
-                if name.rsplit('/',1)[-1].lower()=='1p_reload':
-                    if asset.attributes['type']!='Animation.AnimationAsset':raise ValueError('Reload role is not absolute authored animation')
-                    skeleton_ref=named(asset,'Skeleton').attributes['ref'];bound=profile['animation_chain']['skeleton_asset']
-                    bound_reference(skeleton_ref,bound)
-                    skeleton_doc=parse(bound['resource'],exact_resource(sk_archive,bound['resource'],'<non-resource>',bound['sha256']))
-                    skeleton_asset=skeleton_doc.instances[guid(bound['instance_guid'])]
-                    if skeleton_asset.attributes['type']!='Animation.SkeletonAsset' or scalar(named(skeleton_asset,'Name'),'string')+'.res'!=profile['animation_chain']['skeleton_resource']:
-                        raise ValueError('Reload skeleton typed Name differs from bound model')
-                    reload_assets.append((name+'.res',doc.sha256,g,doc.resource,skeleton_ref))
-            if len(reload_assets)!=1:raise ValueError('Exact authored reload role missing/ambiguous')
-            reload_name,reload_doc_hash,reload_guid,reload_document,reload_skeleton_ref=reload_assets[0]
-            reload_raw=exact_resource(clip_archive,reload_name,'GrannyAnimation');reload_clip=Clip(reload_raw)
+            actions=bound_action_assets(profile,sk_archive,('1p_reload',))
+            if '1p_reload' not in actions:raise ValueError('Exact authored reload role missing/ambiguous')
+            action=actions['1p_reload'];reload_name=action['resource'];reload_doc_hash=action['asset_document_sha256']
+            reload_guid=action['asset_guid'];reload_document=action['asset_document'];reload_skeleton_ref=action['skeleton_reference']
+            reload_raw,reload_source=selected_animation_resource(((clip_source,clip_archive),(sk_source,sk_archive)),reload_name)
+            reload_clip=Clip(reload_raw)
             parts=rigid_parts(lod_data,metadata(mesh_raw)[0],skeleton,assembly_report is not None)
             if mechanism_sink is not None:
                 mechanism_sink(profile,parts,closed,reload_clip,skeleton,{
-                    'resource':reload_name,'sha256':reload_clip.sha256,'archive':clip_source['archive'],
+                    'resource':reload_name,'sha256':reload_clip.sha256,'archive':reload_source['archive'],
                     'asset_document':reload_document,'asset_document_sha256':reload_doc_hash,'asset_guid':reload_guid,
                     'skeleton_reference':reload_skeleton_ref,'mesh_sha256':variant['mesh_sha256'],'lod_sha256':lods[0]['data_sha256'],
                     'skin_sections':geometry(lod_data,metadata(mesh_raw)[0],{bone_hash(n):n for n in skeleton.names})})
@@ -521,7 +593,15 @@ def derive(game,bindings,mesh_bindings,assets,evidence_sink=None,paired_grasp_as
                     rail_status='unresolved',runtime_admitted=False,native_role_verified=False)
                 if bone in assemblies:contact['assembly']=assemblies[bone]
                 reviewed_candidates.append(contact)
-            try:proposal=contact_proposal(part,closed['weapon_relative'][bone],weapon_points,closed,paired)
+            try:
+                if profile['native_asset_name'] in sampled_path_assets:
+                    from bc2_sampled_magazine_path import derive as sampled_path,proposal as sampled_proposal
+                    path_source={'clip_sha256':reload_clip.sha256,'skeleton_sha256':skeleton.sha256,'rig_fingerprint':skeleton.fingerprint,
+                        'magazine_bone':bone,'static_clip_sha256':static.sha256,'mesh_sha256':variant['mesh_sha256'],
+                        'lod_sha256':lods[0]['data_sha256'],'grip_binding_digest':profile['binding_digest'],'weapon':profile['weapon']}
+                    path=sampled_path(reload_clip,skeleton,bone,closed['weapon_relative'][bone],path_source)
+                    proposal=sampled_proposal(part,closed['weapon_relative'][bone],paired,path,UX)
+                else:proposal=contact_proposal(part,closed['weapon_relative'][bone],weapon_points,closed,paired)
             except (ValueError,KeyError,TypeError) as exc:
                 if contact is not None:
                     contact['rail_failure']=str(exc);contact['candidate_digest']=digest(contact)
@@ -532,7 +612,7 @@ def derive(game,bindings,mesh_bindings,assets,evidence_sink=None,paired_grasp_as
                  'weapon':dict(profile['weapon']),
                  'grip_binding_digest':profile['binding_digest'],'mesh_sha256':variant['mesh_sha256'],'lod_sha256':lods[0]['data_sha256'],
                  'skeleton_sha256':skeleton.sha256,'rig_fingerprint':skeleton.fingerprint,'static_clip_sha256':static.sha256,
-                 'reload_clip':{'resource':reload_name,'sha256':reload_clip.sha256,'archive':clip_source['archive'],'archive_index_sha256':clip_archive.index_sha256,
+                 'reload_clip':{'resource':reload_name,'sha256':reload_clip.sha256,'archive':reload_source['archive'],'archive_index_sha256':reload_source['archive_index_sha256'],
                     'asset_document':reload_document,'asset_document_sha256':reload_doc_hash,'asset_guid':reload_guid,
                     'asset_archive':sk_source['archive'],'asset_archive_index_sha256':sk_archive.index_sha256,'skeleton_reference':reload_skeleton_ref},
                  'role_evidence':role,'rejected_parts':rejected,'bones':{'weapon':'jntWpn_1','magazine':bone,'wrist':'LeftHand','fingers':FINGERS},
@@ -574,7 +654,10 @@ def cpp_header(result,assets):
         s=format(v,'.9g');return s+('f' if '.' in s or 'e' in s else '.f')
     def transform(values):
         matrix(values);return 'math::Matrix4{{{'+','.join('{{'+','.join(number(v) for v in values[n:n+4])+'}}' for n in range(0,16,4))+'}}}'
-    lines=['// Private experimental geometry. Carry/rail are design estimates, not native animation calibration.',
+    introduction=('// Private experimental geometry. Sampled authored withdrawal poses do not grant native admission.'
+                  if any('sampled_path' in p['geometry'] for p in profiles) else
+                  '// Private experimental geometry. Carry/rail are design estimates, not native animation calibration.')
+    lines=[introduction,
            '#pragma once','#include "Bc2MagazineGeometryProfile.h"','#include <array>',
            'namespace fvr::bc2::generated {',f'inline const std::array<MagazineGeometryProfile,{len(profiles)}> ExperimentalMagazineGeometry = [] {{',
            f' std::array<MagazineGeometryProfile,{len(profiles)}> out{{}};']
@@ -592,7 +675,7 @@ def cpp_header(result,assets):
             if paired.get('selection_mode')=='reviewed_authored_frame':
                 from bc2_reviewed_magazine_contact import validate_export
                 validate_export(p,paired)
-            if paired.get('selection_mode')=='stable_relative_co_motion':
+            if paired.get('selection_mode')=='stable_relative_co_motion' and 'sampled_path' not in p['geometry']:
                 entry=p['geometry']['design'].get('entry_evidence',{})
                 probe=paired.get('entry_probe',{})
                 if (paired.get('co_motion_error_multiple')!=4 or paired['window'].get('co_motion_travel_m',0)<=4*PAIRED_GRASP['max_wrist_translation_m'] or
@@ -629,6 +712,9 @@ def cpp_header(result,assets):
                 paired.get('grasp_digest')!=digest({k:p['geometry'][k] for k in ('item_from_hand','wrist_from_fingers')})):
                 raise ValueError('Paired grasp source/transform coherence differs')
         g=p['geometry'];bones=p['bones'];identifier=int(p['profile_digest'][:16],16) or 1
+        if 'sampled_path' in g:
+            from bc2_sampled_magazine_path import validate as validate_sampled_path
+            validate_sampled_path(g['sampled_path'],p)
         lines+=[' {',f'  auto& g=out[{n}];g.asset={json.dumps(p["native_asset_name"])};g.mesh={json.dumps(p["configured_mesh_path"])};',
                 f'  g.configurationPath={json.dumps(configuration_path(p))};',
                 '  g.meshKind=SelectedMeshKind::Unknown;g.rigFingerprint=0x'+p['rig_fingerprint'].split(':')[1]+'ULL;',
@@ -642,7 +728,11 @@ def cpp_header(result,assets):
                            ('postCaptureTravelMeters','post_capture_travel_m'),('seatToleranceMeters','seat_tolerance_m'),
                            ('captureAngleRadians','capture_angle_rad'),('releaseAngleRadians','release_angle_rad'),
                            ('maxStepMeters','max_step_m'),('maxStepRadians','max_step_angle_rad')):
-            lines.append('  p.'+member+'='+number(UX[key])+';')
+            value=g['sampled_path']['travel_m'] if member=='travelMeters' and 'sampled_path' in g else UX[key]
+            lines.append('  p.'+member+'='+number(value)+';')
+        if 'sampled_path' in g:
+            path=g['sampled_path'];lines.append(f"  p.pathCount={len(path['points'])};p.path.resize(p.pathCount);")
+            for i,point in enumerate(path['points']):lines.append(f'  p.path[{i}]={{'+transform(point['weapon_from_item'])+','+number(point['arc_m'])+'};')
         for member,key in (('alignmentNs','alignment_ns'),('seatDwellNs','seat_dwell_ns'),('maxSampleGapNs','max_sample_gap_ns'),('maxGuidedNs','max_guided_ns')):
             lines.append('  p.'+member+'='+str(UX[key])+'LL;')
         lines+=[f'  c.removalContact={{0x{(identifier^0x47454f4d45545259) or 1:016x}ULL,1}};',
@@ -668,9 +758,10 @@ def main(argv=None):
     p.add_argument('--paired-reload-grasp',action='append',default=[],help='Explicit experimental same-frame authored carry pose asset; default keeps geometric estimate')
     p.add_argument('--rigid-assembly',action='append',default=[],help='Explicit complete rigid child-subtree extraction; paired contact remains mandatory')
     p.add_argument('--reviewed-contacts',type=Path,help='Explicit exact semantic root and complete authored frame annotations; never native admission')
+    p.add_argument('--sampled-magazine-path',action='append',default=[],help='Explicit reverse authored initial withdrawal path asset')
     args=p.parse_args(argv);bindings,bh=read_json(args.grip_bindings);meshes,mh=read_json(args.mesh_bindings)
     reviews,rh=read_json(args.reviewed_contacts) if args.reviewed_contacts else ([],None)
-    result=derive(args.game,bindings,meshes,set(args.asset),paired_grasp_assets=set(args.paired_reload_grasp),rigid_assembly_assets=set(args.rigid_assembly),reviewed_contacts=reviews);result['input_sha256']={'grip_bindings':bh,'mesh_bindings':mh}
+    result=derive(args.game,bindings,meshes,set(args.asset),paired_grasp_assets=set(args.paired_reload_grasp),rigid_assembly_assets=set(args.rigid_assembly),reviewed_contacts=reviews,sampled_path_assets=set(args.sampled_magazine_path));result['input_sha256']={'grip_bindings':bh,'mesh_bindings':mh}
     if rh is not None:result['input_sha256']['reviewed_contacts']=rh
     args.output.parent.mkdir(parents=True,exist_ok=True);args.output.write_text(json.dumps(result,indent=2,allow_nan=False)+'\n',encoding='utf-8')
     if args.header:

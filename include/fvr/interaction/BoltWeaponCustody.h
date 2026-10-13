@@ -4,9 +4,9 @@
 
 namespace fvr::interaction {
 enum class BoltCustodyPhase:unsigned {Idle,AwaitingCustody,Manipulating,Returned};
-struct BoltCustodySample {
+template<class Authority> struct BoltCustodySampleT {
     HandInteractionSample source{};
-    WeaponCycleLease lease{};
+    Authority lease{};
     // Current custody-hand wrist in world; mechanism wrist in canonical weapon
     // space from original raw controller evidence, never a guided hand target.
     math::Matrix4 gunWristInWorld{},mechanismWristInWeapon{};
@@ -32,9 +32,9 @@ inline bool CurrentBoltCustodyWeaponTarget(const BoltCustodyWeaponTarget& target
         target.observedNs==input.observedNs&&Window(target.observedNs,target.deadlineNs,input.nowNs)&&
         target.deadlineNs<=gun.deadlineNs&&gun.deadlineNs<=input.deadlineNs&&feed_mechanism_detail::Pose(target.weaponInWorld);
 }
-struct BoltCustodyResult {
+template<class Authority> struct BoltCustodyResultT {
     BoltCustodyPhase custody=BoltCustodyPhase::Idle;
-    PhysicalWeaponCycleResult physical{};
+    PhysicalWeaponCycleResultT<Authority> physical{};
     std::optional<BoltCustodyWeaponTarget> weapon;
     bool blocksFire=false;
 };
@@ -42,8 +42,16 @@ struct BoltCustodyResult {
 // Portable custody/gesture coordinator, not native admission or a rig writer.
 // The adapter supplies a held native cycle and verified calibration. Offline
 // authored fixtures may exercise this API without claiming live calibration.
-class BoltWeaponCustody {
+template<class Authority> class BoltWeaponCustodyT {
+    template<class> friend class BoltWeaponCustodyT;
 public:
+    using WeaponCycleLease=Authority;
+    using WeaponCycleRelease=WeaponCycleReleaseT<Authority>;
+    using WeaponCycleReady=WeaponCycleReadyT<Authority>;
+    using PhysicalWeaponCycle=PhysicalWeaponCycleT<Authority>;
+    using PhysicalWeaponCycleSample=PhysicalWeaponCycleSampleT<Authority>;
+    using BoltCustodySample=BoltCustodySampleT<Authority>;
+    using BoltCustodyResult=BoltCustodyResultT<Authority>;
     bool Arm(const WeaponCycleProfile& profile,const WeaponCycleLease& lease,
         const math::Matrix4& contactFromMechanismWrist,std::int64_t now)noexcept {
         if((phase_!=BoltCustodyPhase::Idle&&!(phase_==BoltCustodyPhase::Returned&&cycle_.Phase()==WeaponCyclePhase::Complete))||
@@ -52,6 +60,32 @@ public:
         profile_=profile;identity_=lease;contactFromWrist_=contactFromMechanismWrist;
         phase_=BoltCustodyPhase::AwaitingCustody;gun_.reset();submitted_.reset();returnNeutral_=0;
         deadline_=now+profile.maximumCycleNs;return true;
+    }
+    // Transfer only still-live physical custody when a retained debt changes
+    // its authority kind. This neither mints a hand claim nor accepts a native
+    // completion. Expired/lost custody must return through ordinary gun/support
+    // acquisition and the normal atomic exchange instead.
+    template<class Previous> bool AdoptRetainedCustody(BoltWeaponCustodyT<Previous>& previous,
+        const HandInteractionSample& source,const math::Matrix4& wrist,
+        const HandContactProof& contact,HandInteraction& hands)noexcept {
+        using namespace weapon_cycle_detail;
+        if(phase_!=BoltCustodyPhase::AwaitingCustody||source.nowNs>=deadline_||previous.submitted_||
+           previous.phase_!=BoltCustodyPhase::Manipulating||!previous.gun_||
+           profile_.hands!=previous.profile_.hands||source.owner!=identity_.owner||
+           identity_.owner!=previous.identity_.owner||identity_.item!=previous.identity_.item||
+           identity_.mechanism!=previous.identity_.mechanism||identity_.cycle!=previous.identity_.cycle||
+           identity_.shot!=previous.identity_.shot||!source.released[HandIndex(profile_.hands.mechanism)]||
+           source.released[HandIndex(profile_.hands.gun)]||!feed_mechanism_detail::Pose(wrist)||
+           hands.Current(profile_.hands.mechanism)||!source.focused||!source.tracked[0]||!source.tracked[1]||
+           !Window(source.observedNs,source.deadlineNs,source.nowNs))return false;
+        const auto gun=hands.Current(profile_.hands.gun);
+        if(!gun||gun->token!=*previous.gun_||gun->token.item!=identity_.item||
+           contact.key!=gun->token.contact||!contact.eligible||contact.inputSequence!=source.sequence||
+           !hands.Renew(source,gun->token,contact).accepted)return false;
+        gun_=previous.gun_;attachment_=previous.attachment_;
+        originalGunContact_=previous.originalGunContact_;originalSupportContact_=previous.originalSupportContact_;
+        phase_=BoltCustodyPhase::Manipulating;previous.gun_.reset();previous.phase_=BoltCustodyPhase::Idle;
+        return true;
     }
     HandGunCustodyResult EnterCustody(const HandInteractionSample& current,const HandGunCustodyTransfer& transfer,
         const math::Matrix4& weaponInWorld,const math::Matrix4& receivingWristInWorld,HandInteraction& hands)noexcept {
@@ -150,4 +184,10 @@ private:
     std::int64_t deadline_=0;
     BoltCustodyPhase phase_=BoltCustodyPhase::Idle;
 };
+using BoltCustodySample=BoltCustodySampleT<WeaponCycleLease>;
+using BoltCustodyResult=BoltCustodyResultT<WeaponCycleLease>;
+using BoltWeaponCustody=BoltWeaponCustodyT<WeaponCycleLease>;
+using BoltCustodyIdleDebtSample=BoltCustodySampleT<WeaponCycleIdleDebtLease>;
+using BoltCustodyIdleDebtResult=BoltCustodyResultT<WeaponCycleIdleDebtLease>;
+using BoltWeaponIdleDebtCustody=BoltWeaponCustodyT<WeaponCycleIdleDebtLease>;
 }

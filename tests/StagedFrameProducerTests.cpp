@@ -56,6 +56,7 @@ int main(){
     wrong=first;++wrong.native.deviceEpoch;CHECK(producer.Cancel(wrong)==ipc::ChannelResult::Invalid);
     auto bad=ticket;++bad.frameId;CHECK(producer.Submit(first,d,bad)==ipc::ChannelResult::Invalid);
     bad=ticket;++bad.trackingGeneration;CHECK(producer.Submit(first,d,bad)==ipc::ChannelResult::Invalid);
+    graphics::SceneDepthFrame invalidDepth;CHECK(producer.Submit(first,d,ticket,&invalidDepth)==ipc::ChannelResult::Invalid);
     std::array<graphics::BodyPropEye,2> props{};
     for(auto& eye:props)eye.ammo={1,1000000000,1100000000,1,2,tracking.spaceGeneration,24,111,30};
     CHECK(producer.SetBodyPropPair(wrong,props)==ipc::ChannelResult::Invalid);
@@ -68,7 +69,7 @@ int main(){
     CHECK(producer.Cancel(first)==ipc::ChannelResult::Invalid);
     // Deterministic lost-wakeup regression: Publish signals while a recursive
     // outer hold keeps the named mutex unavailable to the awakened host.
-    const auto mutexName=L"Local\\FrostbiteVR.Control.v5."+host.Token()+L".mutex";
+    const auto mutexName=L"Local\\FrostbiteVR.Control.v6."+host.Token()+L".mutex";
     HANDLE heldMutex=OpenMutexW(SYNCHRONIZE|MUTEX_MODIFY_STATE,FALSE,mutexName.c_str());CHECK(heldMutex);
     CHECK(WaitForSingleObject(heldMutex,10)==WAIT_OBJECT_0);
     const auto firstPublished=GetTickCount64();producer.PumpGraphics();Sleep(8);CHECK(ReleaseMutex(heldMutex));CloseHandle(heldMutex);

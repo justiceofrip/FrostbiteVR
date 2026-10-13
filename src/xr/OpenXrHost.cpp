@@ -1,6 +1,7 @@
 #include "fvr/xr/OpenXrHost.h"
 #include "fvr/runtime/RetainedPresentation.h"
 #include "fvr/graphics/D3D11SharedPair.h"
+#include "fvr/graphics/D3D11SceneDepthPair.h"
 #include <Windows.h>
 #include <d3d11.h>
 #include <dxgi1_2.h>
@@ -79,6 +80,7 @@ struct Host {
     ComPtr<ID3D11Device> device;
     ComPtr<ID3D11DeviceContext> context;
     graphics::D3D11PairConsumer consumer;
+    graphics::D3D11SceneDepthConsumer sceneDepth;bool sceneDepthSeen=false;
     graphics::TextureDescriptor openedDescriptor{};
     runtime::RetainedPresentation retained;
     std::array<ComPtr<ID3D11Texture2D>,2> scratch;
@@ -202,6 +204,7 @@ struct Host {
             auto compositor=std::make_unique<graphics::D3D11BodyPropCompositor>();
             if(compositor->Initialize(context.Get(),req.width,req.height,req.format,options.bodyProps)){bodyProps=std::move(compositor);report.bodyPropsReady=true;}
         }
+        Require(sceneDepth.Initialize(device.Get()),"Initialize local scene-depth consumer");
         if(!options.readyPath.empty()){
             Require(options.readyPath.is_absolute()&&!std::filesystem::exists(options.readyPath),"Readiness report requires a new absolute path");
             std::ofstream ready(options.readyPath);ready<<"{\"session_created\":true,\"width\":"<<req.width<<",\"height\":"<<req.height<<",\"format\":"<<req.format<<",\"user_presence_supported\":"<<(report.userPresenceSupported?"true":"false")<<"}\n";
@@ -330,11 +333,19 @@ struct Host {
                        renderedTracking.spaceGeneration==tracking.spaceGeneration&&renderedTracking.predictedNs<=tracking.predictedNs&&
                        tracking.predictedNs-renderedTracking.predictedNs<=runtime::RetainedPresentation::MaxAgeNs){
                         if(!graphics::Valid(openedDescriptor)||std::memcmp(&descriptor,&openedDescriptor,sizeof(descriptor))!=0){
-                            retained.Reset();if(ammoHud)ammoHud->Reset();
+                            retained.Reset();sceneDepth.Reset();sceneDepthSeen=false;if(ammoHud)ammoHud->Reset();
                             if(consumer.Open(device.Get(),descriptor)==graphics::TransferResult::Ok)openedDescriptor=descriptor;else openedDescriptor={};
                         }
                         if(graphics::Valid(openedDescriptor)){
                             const std::array<graphics::TextureSlice,2> destinations{{{scratch[0].Get(),0},{scratch[1].Get(),0}}};
+                            graphics::SceneDepthFrame depthFrame;graphics::SceneDepthViews depthViews;
+                            const bool hasDepth=provider->ReadSceneDepth(descriptor,ticket,depthFrame);
+                            sceneDepthSeen|=hasDepth;
+                            // The following color Copy fences the same context,
+                            // including every queued shared-depth source read.
+                            const bool depthCopied=hasDepth&&sceneDepth.CopyBeforeColor(depthFrame,descriptor,ticket)&&sceneDepth.Views(ticket,depthViews);
+                            if(hasDepth)++report.sceneDepthReceived;if(depthCopied)++report.sceneDepthCopied;
+                            if(sceneDepthSeen&&!depthCopied)++report.sceneDepthOmitted;
                             const bool copied=consumer.Copy(ticket,destinations)==graphics::TransferResult::Ok;
                             feedback.consumed=copied;
                             if(copied){
@@ -342,7 +353,7 @@ struct Host {
                                 const bool propsRead=provider->ReadBodyProps(ticket,props);
                                 if(ammoHud)ammoHud->Receive(propsRead?&props:nullptr,ticket,BodyPropClockNs());
                                 if(bodyProps){
-                                    if(propsRead)bodyProps->Compose(props,ticket,{scratch[0].Get(),scratch[1].Get()},BodyPropClockNs);
+                                    if(propsRead&&(!sceneDepthSeen||depthCopied))bodyProps->Compose(props,ticket,{scratch[0].Get(),scratch[1].Get()},BodyPropClockNs,depthCopied?&depthViews:nullptr);
                                     report.bodyProps=bodyProps->Statistics();
                                 }
                                 for(unsigned eye=0;eye<2;++eye){uint32_t index=0;XrSwapchainImageAcquireInfo acquire{XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO};

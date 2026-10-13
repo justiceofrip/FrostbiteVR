@@ -1,6 +1,7 @@
 #pragma once
 #include "fvr/graphics/D3D11SharedPair.h"
 #include "fvr/graphics/D3D11LegacyRelay.h"
+#include "fvr/graphics/D3D11SceneDepthPair.h"
 #include "fvr/ipc/StagedFrameProducer.h"
 #include <wrl/client.h>
 #include <atomic>
@@ -17,6 +18,8 @@ public:
     ipc::ChannelResult ReadInput(interaction::InputFrame& out,std::int64_t* deadlineQpc=nullptr)noexcept{return channel_.ReadInput(out,deadlineQpc);}
     bool PublishFeedback(const interaction::FeedbackEvent& event)noexcept{return channel_.PublishFeedback(event);}
     bool CaptureEye(unsigned,ID3D11Texture2D*,const ipc::FrameLease&)noexcept;
+    bool BeginDepthCapture(const ipc::FrameLease&,bool reversedDepth)noexcept;
+    bool CaptureDepth(unsigned eye,unsigned stage,ID3D11Texture2D*,const ipc::FrameLease&)noexcept;
     ipc::ChannelResult SetBodyProps(const ipc::FrameLease& lease,unsigned eye,const BodyPropEye& props)noexcept {
         return channel_.SetBodyProps(lease,eye,props);
     }
@@ -46,9 +49,12 @@ private:
     D3D11LegacyRelay relay_;bool forceLegacy_=false,forceLegacyIpc_=false,waitingGameCopies_=false,waitingLegacyExport_=false;
     std::atomic<unsigned> sharingMode_=0;
     ipc::StagedFrameProducer channel_;D3D11PairProducer producer_;
+    D3D11SceneDepthProducer depthProducer_;bool depthInitialized_=false,depthActive_=false,depthReversed_=false;
+    ipc::FrameLease depthLease_{};SceneDepthFrame pendingDepth_{};
     Microsoft::WRL::ComPtr<ID3D11Device> device_;Microsoft::WRL::ComPtr<ID3D11DeviceContext> context_;
     std::array<Microsoft::WRL::ComPtr<ID3D11Texture2D>,2> eyes_;
     runtime::PresentationRequirements allocated_{};std::uint64_t epoch_=0,capturedRequest_=0;unsigned mask_=0;
+    ipc::NativeFrameKey allocatedNative_{};
     ipc::FrameLease pending_{};PairTicket ticket_{};bool submitting_=false,canceling_=false;
     void DiagnoseSharing()noexcept;
     std::array<std::atomic<long>,9> compatibility_{};

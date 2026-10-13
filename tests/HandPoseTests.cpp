@@ -1,5 +1,6 @@
 #include "Test.h"
 #include "fvr/interaction/HandPose.h"
+#include "fvr/interaction/AuthoredHandPose.h"
 #include <limits>
 using namespace fvr;using namespace interaction;
 namespace {
@@ -119,6 +120,40 @@ int WristPlacementAndIndexOrder(){
     for(const auto& write:unordered->writes)CHECK(Close(write.transform,placed[remap(write.index)]));
     return 0;
 }
+int AuthoredMechanismShape(){
+    Fixture f;f.targets.role=HandPoseRole::MechanismGrip;f.targets.curl={.3f,.8f,.7f,.6f,.5f};
+    const auto reference=f.Generate(f.current[1]);CHECK(reference);const auto source=f.Apply(*reference);
+    AuthoredHandShape shape;
+    for(unsigned finger=0;finger<5;++finger){shape.counts[finger]=3;
+        for(unsigned joint=0;joint<3;++joint){const auto index=f.binding.fingers[finger].joints[joint].index;
+            shape.wristFromJoint[finger][joint]=Multiply(source[index],*InverseAnimatedTransform(source[1]));}}
+    // A very different current animation cannot replace the stored grasp.
+    f.targets.curl.fill(.05f);const auto animation=f.Generate(f.current[1]);CHECK(animation);f.current=f.Apply(*animation);
+    const auto unchanged=f.current;
+    auto wrist=At(2,3,4);wrist.values[0]={0,1,0,0};wrist.values[1]={-1,0,0,0};
+    for(float units:{1.f,100.f}){
+        auto current=f.current;for(auto& m:current)for(unsigned a=0;a<3;++a)m.values[3][a]*=units;
+        const auto out=GenerateAuthoredHandPose(f.parents,current,f.binding,wrist,shape,units);CHECK(out);
+        auto placed=current;for(const auto& write:out->writes)placed[write.index]=write.transform;
+        CHECK(Close(placed[1],wrist)&&Close(placed[17],current[17])&&Close(placed[0],current[0]));
+        const auto inverse=*InverseAnimatedTransform(wrist);
+        for(unsigned finger=0;finger<5;++finger)for(unsigned joint=0;joint<3;++joint){
+            const auto index=f.binding.fingers[finger].joints[joint].index;
+            auto expected=shape.wristFromJoint[finger][joint];for(unsigned a=0;a<3;++a)expected.values[3][a]*=units;
+            CHECK(Close(Multiply(placed[index],inverse),expected,.0001f));}
+        for(unsigned leaf:{18u,19u})CHECK(Close(Multiply(placed[leaf],*InverseAnimatedTransform(placed[f.parents[leaf]])),
+            Multiply(current[leaf],*InverseAnimatedTransform(current[f.parents[leaf]])),.0001f));
+    }
+    for(unsigned n=0;n<f.current.size();++n)CHECK(f.current[n].values==unchanged[n].values);
+    auto invalid=shape;invalid.counts[0]=2;CHECK(!GenerateAuthoredHandPose(f.parents,f.current,f.binding,wrist,invalid,1));
+    invalid=shape;invalid.wristFromJoint[1][2].values[0][0]=0;invalid.wristFromJoint[1][2].values[0][1]=0;invalid.wristFromJoint[1][2].values[0][2]=0;
+    CHECK(!GenerateAuthoredHandPose(f.parents,f.current,f.binding,wrist,invalid,1));
+    CHECK(!GenerateAuthoredHandPose(f.parents,f.current,f.binding,wrist,shape,0));
+    auto binding=f.binding;binding.fingers[1].joints[0].index=2;
+    CHECK(!GenerateAuthoredHandPose(f.parents,f.current,binding,wrist,shape,1));
+    f.parents[3]=19;CHECK(!GenerateAuthoredHandPose(f.parents,f.current,f.binding,wrist,shape,1));
+    return 0;
+}
 int InvalidInputs(){
     const float nan=std::numeric_limits<float>::quiet_NaN();
     for(unsigned kind=0;kind<15;++kind){
@@ -150,6 +185,6 @@ int InvalidInputs(){
 }
 int main(){
     if(ReferenceShapeAndLengths()||SupportAndUnbound()||ParameterizedCurlAndPinch()||
-       WristPlacementAndIndexOrder()||InvalidInputs())return 1;
+       WristPlacementAndIndexOrder()||AuthoredMechanismShape()||InvalidInputs())return 1;
     return 0;
 }

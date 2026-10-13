@@ -462,6 +462,20 @@ int QueuedOwnershipAfterConsumerAdoption(){
     }
     return 0;
 }
+int ClaimDropPreservesInnerFailureEvidence(){
+    Fixture f;HandClaimDropJournal<64> journal;f.arbiter.ObserveDrops(journal.Observer());
+    const auto gun=f.Gun();CHECK(gun.claim);CHECK(f.Support(gun.claim->token).accepted);
+    auto advanced=f.sample;advanced.nowNs+=ms;CHECK(f.arbiter.Update(advanced).inputValid);
+    const auto failure=f.arbiter.Update(f.sample);CHECK(failure.reason==HandInteractionReason::ClockReversed);
+    CHECK(!f.arbiter.Current(left)&&!f.arbiter.Current(right));CHECK(journal.count==2);
+    for(unsigned n=0;n<2;++n){const auto& d=journal.entries[n];
+        CHECK(d.reason==HandInteractionReason::ClockReversed&&d.attempted.nowNs==f.sample.nowNs);
+        CHECK(d.previousNowNs==advanced.nowNs&&d.claim.deadlineNs==f.sample.deadlineNs);}
+    f.Next();CHECK(f.Gun().accepted);CHECK(journal.count==2);
+    for(unsigned n=0;n<80;++n){f.arbiter.Reset();f.Next();CHECK(f.Gun().accepted);}
+    CHECK(journal.count==64&&journal.omitted==18);
+    return 0;
+}
 int FailedIntentCannotLaterWin(){
     Fixture f;auto gun=f.Gun();CHECK(gun.claim);
     auto request=f.Request(left,HandClaimKind::AmmoObject,rifle,5);
@@ -475,8 +489,9 @@ int FailedIntentCannotLaterWin(){
 }
 }
 static_assert(!std::is_copy_constructible_v<HandInteraction>);
+static_assert(sizeof(HandInteraction)<8192,"Diagnostic history must stay outside the shared controller");
 int main(){
-    if(QueuedOwnershipAfterConsumerAdoption()||FailedAndSuccessfulTransfers()||ExplicitSharingAndCrossHandTransfer()||DependencyAndPerHandTracking()||
+    if(ClaimDropPreservesInnerFailureEvidence()||QueuedOwnershipAfterConsumerAdoption()||FailedAndSuccessfulTransfers()||ExplicitSharingAndCrossHandTransfer()||DependencyAndPerHandTracking()||
        IdentityFocusResetAndFreshIntent()||LeasesRenewalAndContactIdentity()||MalformedAndImmutableInput()||
         UnavailableIntentCannotReplay()||HistoricalTransferAndExactSource()||HistoricalReleaseAndTrackingBarriers()||
         DelayedGeometryWithinOneNeutralRun()||NewReleaseRunRejectsEarlierNeutralGeometry()||

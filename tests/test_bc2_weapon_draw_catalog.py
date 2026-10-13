@@ -11,6 +11,13 @@ def rows(stride=48):
  return out
 
 class CatalogTests(unittest.TestCase):
+ def test_float48_fingerprint_includes_twelve_position_bytes(self):
+  data,lod,_=sample(48,position='Float3');lod['lod']=0
+  row=c.derive_sections('T.res',b'm','D.res',data,lod)[0]
+  start=len(data)-150
+  expected=b''.join(data[start+n*48:start+n*48+12] for n in range(3))
+  self.assertEqual(row['position_format'],'Float3')
+  self.assertEqual(row['position_fnv1a64'],c.fnv(expected))
  def test_indexed_not_unindexed_and_format_bounds(self):
   for stride in (16,48,32,64,68):
    result=rows(stride)[0];self.assertEqual(result['index_count'],3);self.assertEqual(result['position_format'],'Half4' if stride in (16,48) else 'Float3');self.assertFalse(result['native_association_verified'])

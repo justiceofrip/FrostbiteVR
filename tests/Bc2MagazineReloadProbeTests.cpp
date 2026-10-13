@@ -59,12 +59,18 @@ int DefaultScheduleAndSchema(){Mock::Reset();Bc2MagazineReloadProbe p;Tick(p,580
     CHECK(ValidOrdinaryResourceInputSession(0,0,0,0,0,0,0,0,0,0));
     CHECK(ValidOrdinaryResourceInputSession(1,0x12197809u,60000,3,0,0,0,0,0,0));
     for(unsigned bit=0;bit<32;++bit)CHECK(!ValidOrdinaryResourceInputSession(1,0x12197809u^(1u<<bit),60000,3,0,0,0,0,0,0));
-    CHECK(!ValidOrdinaryResourceInputSession(2,0x12197809u,60000,3,0,0,0,0,0,0));
+    CHECK(ValidOrdinaryResourceInputSession(2,0x12197809u,60000,3,0,0,0,0,0,0));
+    CHECK(!ValidOrdinaryResourceInputSession(3,0x12197809u,60000,3,0,0,0,0,0,0));
+    CHECK(!ValidOrdinaryResourceInputSession(2,0x12197809u,30000,3,0,0,0,0,0,0));
     CHECK(!ValidOrdinaryResourceInputSession(1,0x12197809u,30000,3,0,0,0,0,0,0));
     CHECK(!ValidOrdinaryResourceInputSession(1,0x12197809u,60000,7,0,0,0,0,0,0));
     for(unsigned n=0;n<6;++n){unsigned x[6]={};x[n]=1;
         CHECK(!ValidOrdinaryResourceInputSession(1,0x12197809u,60000,3,x[0],x[1],x[2],x[3],x[4],x[5]));}
     CHECK(ValidM95OrdinaryBoltInputSession(0,0,0,0,0,0,0,0,0));
+    CHECK(ValidM95OrdinaryBoltInputSession(5,0x12197809u,60000,3,0,0,0,0,0));
+    CHECK(!ValidM95OrdinaryBoltInputSession(5,0x12197809u,30000,3,0,0,0,0,0));
+    CHECK(!ValidM95OrdinaryBoltInputSession(2,0x12197809u,60000,3,0,0,0,0,0));
+    CHECK(!ValidM95OrdinaryBoltInputSession(4,0x12197809u,60000,3,0,0,0,0,0));
     for(auto cycles:{1u,2u}){
         CHECK(ValidM95OrdinaryBoltInputSession(cycles,0x12197809u,30000,3,0,0,0,0,0));
         for(unsigned bit=0;bit<32;++bit)CHECK(!ValidM95OrdinaryBoltInputSession(cycles,0x12197809u^(1u<<bit),30000,3,0,0,0,0,0));

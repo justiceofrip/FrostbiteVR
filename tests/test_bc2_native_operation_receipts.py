@@ -3,6 +3,7 @@ from pathlib import Path
 TOOLS=Path(__file__).resolve().parents[1]/'tools'
 sys.path.insert(0,str(TOOLS))
 import bc2_native_operation_receipts as r
+import bc2_operation_build_provenance as build_pins
 class Tests(unittest.TestCase):
  def fixture(self,root):
   for name in r.ROOTS:
@@ -33,6 +34,43 @@ class Tests(unittest.TestCase):
    for d in ('one','two'):
     p=root/'src'/d/'Common.cpp';p.parent.mkdir();p.write_text('',encoding='utf8')
    with self.assertRaises(ValueError):r.source_receipt(root)
+ def test_generated_build_configuration_and_provenance(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   root=Path(tmp);self.fixture(root)
+   tools=root/'tools';tools.mkdir();(tools/'bc2_native_operation_receipts.py').write_bytes(Path(r.__file__).read_bytes())
+   header=root/'reviewed.h';header.write_text('reviewed table')
+   proof=r.source_receipt(root,header);receipt=root/'receipt.json';receipt.write_text(json.dumps(proof));digest=proof['source_sha256']
+   build=root/'build';config=build/'generated/bc2-operation/Bc2NativeOperationBuild.generated.h';config.parent.mkdir(parents=True)
+   config.write_bytes(r.build_config_bytes(header,digest))
+   values=dict(zip(build_pins.KEYS,(str(header),str(receipt),digest)))
+   values.update(BC2_NATIVE_OPERATION_BUILD_CONFIG=str(config),CMAKE_CACHEFILE_DIR=str(build))
+   cache='\n'.join(k+':STRING='+v for k,v in values.items())
+   ninja='INCLUDES = -I"'+config.parent.as_posix()+'"\nCOMMAND = verify-build-config --config "'+config.as_posix()+'"'
+   self.assertTrue(build_pins.collect(root,cache,ninja)['compiled_configuration_verified'])
+   for broken in (ninja.replace('-I','-D'),ninja.replace('verify-build-config','no_guard'),ninja+' -DFVR_BC2_NATIVE_OPERATION_BUILD_SHA256=bad'):
+    with self.assertRaises(ValueError):build_pins.collect(root,cache,broken)
+   original=config.read_bytes()
+   for broken in (b'',original+b'#define EXTRA 1\n',r.build_config_bytes(header,'f'*64)):
+    config.write_bytes(broken)
+    with self.assertRaises(ValueError):build_pins.collect(root,cache,ninja)
+   config.write_bytes(original)
+   with self.assertRaises(ValueError):build_pins.collect(root,cache+'\n'+build_pins.CONFIG+':STRING=duplicate',ninja)
+   with self.assertRaises(ValueError):build_pins.collect(root,cache.replace(digest,''),ninja)
+   (root/r.ROOTS[0]).write_text('changed code')
+   with self.assertRaises(ValueError):build_pins.collect(root,cache,ninja)
+ def test_disabled_and_legacy_build_configuration(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   root=Path(tmp);build=root/'build';config=build/'generated/bc2-operation/Bc2NativeOperationBuild.generated.h';config.parent.mkdir(parents=True)
+   config.write_bytes(r.build_config_bytes())
+   cache=build_pins.CONFIG+':INTERNAL='+str(config)+'\nCMAKE_CACHEFILE_DIR:INTERNAL='+str(build)
+   ninja='INCLUDES = -I'+config.parent.as_posix()+'\nCOMMAND = verify-build-config --config '+config.as_posix()
+   self.assertFalse(build_pins.collect(root,cache,ninja)['configured'])
+   self.assertFalse(build_pins.collect(root,'','')['configured'])
+   with self.assertRaises(ValueError):build_pins.collect(root,'','-DFVR_BC2_NATIVE_OPERATION_BUILD_SHA256=bad')
+   with self.assertRaises(ValueError):r.build_config_bytes(root/'absent.h','a'*64)
+   with self.assertRaises(ValueError):r.build_config_bytes(digest='a'*64)
+   config.write_bytes(config.read_bytes()+b'#define MALICIOUS 1\n')
+   with self.assertRaises(ValueError):build_pins.collect(root,cache,ninja)
  def trace(self):
   masks=[0xffffffff,0xffffffff,(1<<12)|(1<<14)|(1<<29),(1<<1)|(1<<4)|(1<<5)|(1<<6)]
   challenge=dict(input=10,native_tick=20,request=1,cache=100,staged=True,committed=True,unrelated_preserved=True,

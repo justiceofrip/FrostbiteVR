@@ -134,6 +134,43 @@ int StructuralOwnerRetainsExactLinks(){
     CHECK(d.failure==ReloadServerBoundaryFailure::ChangedLinks&&d.changedOnlySoldierFlags);
     return 0;
 }
+int RejectedLinksRetainNamedEvidence(){
+    for(bool owner:{false,true})for(unsigned scenario=0;scenario<6;++scenario){
+        Fixture f;const auto published=f.Read();CHECK(published);auto expected=*published;
+        const char* field="";unsigned index=UINT32_MAX,before=0,after=0;
+        if(scenario==0){field="capacity";before=65;after=64;expected.links.capacity=before;}
+        if(scenario==1){field="clientPlayerFlags";before=9;after=8;expected.links.clientPlayerFlags=std::uint8_t(before);}
+        if(scenario==2){field="clientSoldierFlags";before=3;after=1;expected.links.clientSoldierFlags=std::uint8_t(before);}
+        if(scenario==3){field="items";index=1;before=0;after=0x30000;f.Put(f.sa+4,after);}
+        if(scenario==4){field="clientItems";index=1;before=0;after=0x31000;f.Put(f.ca+4,after);}
+        if(scenario==5){field="effectsTable";before=f.base+0x700;after=before+4;f.Put(f.effects,after);}
+        ReloadServerBoundaryDiagnostic d;
+        const bool okay=owner?ReadReloadServerOwner(f.Memory(),f.binding,f.state,f.base,expected,200000100,200,&d):
+            bool(ReadReloadServerBoundary(f.Memory(),f.binding,f.state,f.base,expected,200000100,200,&d));
+        CHECK(!okay&&d.failure==ReloadServerBoundaryFailure::PublishedLinks&&d.linkDifference.count==1);
+        const auto& changed=d.linkDifference.first[0];CHECK(!std::strcmp(changed.field,field));
+        CHECK(changed.index==index&&changed.expected==before&&changed.observed==after);
+        // The next coherent read must clear prior evidence, including pointer labels.
+        const auto fresh=f.Read();CHECK(fresh);
+        CHECK(ReadReloadServerOwner(f.Memory(),f.binding,f.state,f.base,*fresh,200000100,200,&d));
+        CHECK(d.linkDifference.count==0&&!std::strcmp(d.linkDifference.first[0].field,""));
+    }
+    // Record a complete mismatch count even when the four-detail budget is full.
+    Fixture f;auto expected=f.Read();CHECK(expected);
+    for(unsigned n=8;n<18;++n)expected->links.items[n]=n;
+    ReloadServerBoundaryDiagnostic d;
+    CHECK(!ReadReloadServerOwner(f.Memory(),f.binding,f.state,f.base,*expected,200000100,200,&d));
+    CHECK(d.linkDifference.count==10);
+    for(unsigned n=0;n<4;++n)CHECK(d.linkDifference.first[n].index==n+8&&d.linkDifference.first[n].expected==n+8&&d.linkDifference.first[n].observed==0);
+    // A change within the bracket reports actual before/after values as well.
+    Fixture race;const auto snapshot=race.Read();CHECK(snapshot);
+    race.raceAt=race.base+0x108;race.raceTarget=race.sa+4;race.raceValue=0x30000;
+    CHECK(!ReadReloadServerOwner(race.Memory(),race.binding,race.state,race.base,*snapshot,200000100,200,&d));
+    CHECK(d.failure==ReloadServerBoundaryFailure::ChangedLinks&&d.linkDifference.count==1);
+    CHECK(!std::strcmp(d.linkDifference.first[0].field,"items")&&d.linkDifference.first[0].index==1);
+    CHECK(d.linkDifference.first[0].expected==0&&d.linkDifference.first[0].observed==0x30000);
+    return 0;
+}
 int ServerPhaseRetryUsesOnlyFreshCompleteReads(){
     ReloadServerBoundaryDiagnostic policy;policy.changedOnlySoldierFlags=true;policy.observedSoldierFlags=19;policy.afterSoldierFlags=3;
     for(unsigned n=0;n<=unsigned(ReloadServerBoundaryFailure::ChangedLinks);++n){policy.failure=ReloadServerBoundaryFailure(n);
@@ -185,5 +222,5 @@ int Installed(const char* path){
     CHECK(!DiscoverReloadServer(bytes,pe));std::printf("Installed server ownership: 11 complete function proofs, mutation/ambiguity rejection passed.\n");return 0;
 }
 }
-int main(int argc,char** argv){if(ValidSnapshotAndBoundary()||RelationRejections()||LeasesAndPointerRaces()||MalformedState()||PublishedFlagDiagnostic()||StructuralOwnerRetainsExactLinks()||ServerPhaseRetryUsesOnlyFreshCompleteReads())return 1;
-    std::printf("Seven read-only server ownership groups passed. Native authority remains unproven.\n");return argc==2?Installed(argv[1]):0;}
+int main(int argc,char** argv){if(ValidSnapshotAndBoundary()||RelationRejections()||LeasesAndPointerRaces()||MalformedState()||PublishedFlagDiagnostic()||StructuralOwnerRetainsExactLinks()||RejectedLinksRetainNamedEvidence()||ServerPhaseRetryUsesOnlyFreshCompleteReads())return 1;
+    std::printf("Eight read-only server ownership groups passed. Native authority remains unproven.\n");return argc==2?Installed(argv[1]):0;}

@@ -42,7 +42,8 @@ inline std::optional<AmmoResourceRequest> MagazineResourceRequestFor(
        v.phase!=AmmunitionLedgerPhase::Ready)return {};
     const auto original=discard||operation==AmmunitionOperation::ReturnMagazine?v.original:std::nullopt;
     return AmmoResourceRequest{v.binding,{v.snapshot.context,event,input.observedNs,
-        std::min(input.deadlineNs,v.snapshot.deadlineNs),operation,original},discard};
+        input.deadlineNs,operation,original},discard,
+        AmmoResourceSourceProof{input.nowNs,input.sequence,v.snapshot.sequence,v.snapshot.observedNs,v.snapshot.deadlineNs}};
 }
 // Render custody has native inventory evidence, but no authority to dispatch or
 // finish an operation. A rail-confirmed submitted seat may draw attached while
@@ -54,6 +55,11 @@ struct MagazineResourcePresentation {
     // Accepted by the request channel after a real rail seat. This grants
     // drawing only while server admission is pending, never ammo completion.
     std::optional<AmmoResourceRequest> submittedSeat;
+    // Actual time this immutable pose publication was admitted from fresh
+    // native evidence. Rendering may finish within its original tracked-input,
+    // family, mesh and target lifetimes; this timestamp grants no new native
+    // operation, resource read, geometry contact or ammunition completion.
+    std::int64_t presentationObservedNs=0;
 };
 inline bool MagazineResourceSeatInFlight(const AmmoResourceView& v)noexcept {
     using namespace interaction;

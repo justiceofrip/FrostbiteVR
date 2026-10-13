@@ -1,3 +1,6 @@
+#include "Bc2NativeCycleSelectionTracker.h"
+#include "Bc2NativeInputEpochs.h"
+#include "Bc2SceneMilestones.h"
 #include <Windows.h>
 #include <intrin.h>
 #include <MinHook.h>
@@ -11,6 +14,7 @@
 #include "Bc2PumpActions.h"
 #include "Bc2PumpCalibration225.h"
 #include "fvr/interaction/ReloadGrip.h"
+#include "fvr/interaction/MechanismAimContinuation.h"
 #include "Bc2EmptyFireProbe.h"
 #ifdef FVR_BC2_ARMING_EMPTY_PROBE
 #include "Bc2ArmingEmptyProbe.h"
@@ -29,6 +33,7 @@
 #include "Bc2WeaponProfiles.h"
 #include "Bc2WeaponMode.h"
 #include "Bc2BodyInventory.h"
+#include "Bc2StowedAmmoReserve.h"
 #include "Bc2BodyHolster.h"
 #include "Bc2BodyHolsterLifecycle.h"
 #include "Bc2ReloadState.h"
@@ -135,23 +140,40 @@ bool ordinaryManualCycles=false;
 std::optional<Bc2BoltPlayerCustody> ordinaryBoltPlayer;
 std::optional<Bc2BoltControllerProbe> ordinaryBoltInputFixture;
 ReloadStateOwner ordinaryAdapterOwner{};
+Bc2NativeCycleSelectionTracker ordinaryCycleSelection;
+std::uint64_t ordinarySelectionReadGaps=0,ordinarySelectionRetainedGaps=0,ordinarySelectionCustodyGaps=0;
+std::uint64_t ordinarySelectionFirstCustodyGap=0;
+std::array<std::uint64_t,6> ordinaryBoltPreparationSkips{},ordinaryBoltPreparationFirstOwnedSkip{};
+void RecordOrdinaryBoltPreparationSkip(unsigned reason,const interaction::InputFrame& input)noexcept {
+    ++ordinaryBoltPreparationSkips[reason];
+    if(ordinaryBoltPlayer&&ordinaryBoltPlayer->OwnsGunCustody()&&!ordinaryBoltPreparationFirstOwnedSkip[reason])
+        ordinaryBoltPreparationFirstOwnedSkip[reason]=input.generation;
+}
 std::optional<Bc2PhysicalBoltSample> ordinaryBoltSample;
 Bc2PhysicalBoltResult ordinaryBoltResult;
 Bc2BoltControllerContact ordinaryBoltContact;
-bool ordinaryBoltEarlyTick=false,ordinarySelectionReady=false;
+bool ordinaryBoltEarlyTick=false,ordinarySelectionReady=false,ordinaryTrackingRecovery=false;
 Bc2PhysicalBoltApi OrdinaryBoltApi()noexcept {
     return {nullptr,
         [](void*,const Bc2NativeCycleControl& c)noexcept{return reloadFlowRuntime::PublishNativeCycleControl(c);},
         [](void*,std::int64_t now)noexcept{return reloadFlowRuntime::ReadNativeCycleView(now);},
         [](void*,const interaction::WeaponCycleReady& r)noexcept{return reloadFlowRuntime::AcknowledgeNativeCycleReady(r);},
-        [](void*)noexcept{reloadFlowRuntime::CancelNativeCycle();}};
+        [](void*)noexcept{reloadFlowRuntime::CancelNativeCycle();},
+        {[](void*,std::int64_t now)noexcept{return reloadFlowRuntime::ReadNativeCycleRecoveryView(now);},
+         [](void*,const interaction::WeaponCycleIdleDebtRelease& r,const interaction::HandInteractionSample& input)noexcept{
+             return reloadFlowRuntime::SubmitNativeCycleRecovery(r,input);},
+         [](void*,const interaction::WeaponCycleIdleDebtReady& r)noexcept{return reloadFlowRuntime::AcknowledgeNativeCycleRecovery(r);}}};
 }
 Bc2PhysicalPumpApi OrdinaryPumpApi()noexcept {
     return {nullptr,
         [](void*,const Bc2NativeCycleControl& c)noexcept{return reloadFlowRuntime::PublishNativeCycleControl(c);},
         [](void*,std::int64_t now)noexcept{return reloadFlowRuntime::ReadNativeCycleView(now);},
         [](void*,const interaction::WeaponCycleReady& r)noexcept{return reloadFlowRuntime::AcknowledgeNativeCycleReady(r);},
-        [](void*)noexcept{reloadFlowRuntime::CancelNativeCycle();}};
+        [](void*)noexcept{reloadFlowRuntime::CancelNativeCycle();},
+        {[](void*,std::int64_t now)noexcept{return reloadFlowRuntime::ReadNativeCycleRecoveryView(now);},
+         [](void*,const interaction::WeaponCycleIdleDebtRelease& r,const interaction::HandInteractionSample& input)noexcept{
+             return reloadFlowRuntime::SubmitNativeCycleRecovery(r,input);},
+         [](void*,const interaction::WeaponCycleIdleDebtReady& r)noexcept{return reloadFlowRuntime::AcknowledgeNativeCycleRecovery(r);}}};
 }
 std::optional<Bc2PumpControllerProbe> physicalPumpFixture;
 std::optional<Bc2M95StockShotProbe> m95StockShotFixture;
@@ -167,6 +189,7 @@ std::optional<Bc2MagazineDetachedProbe> magazineDetachedFixture;
 std::atomic<unsigned> magazineRecoverySuppressionCommits=0,magazineRecoverySuppressionFailures=0;
 std::optional<Bc2BodyInventory> bodyInventory;
 std::optional<Bc2BodyHolster> bodyHolster;
+StowedAmmoReserveCache stowedAmmoReserveCache;
 std::atomic<std::shared_ptr<const BodyHolsterProbeSample>> bodyHolsterSample;
 std::optional<Bc2BodyHolsterProbe> bodyHolsterFixture;
 std::atomic<std::shared_ptr<const BodyHolsterFixtureSample>> bodyHolsterFixtureSample;
@@ -254,6 +277,8 @@ std::array<ModeRecord,32> modeRecords{};unsigned modeRecordCount=0,modeRecordNex
 std::optional<unsigned> pendingMode;
 std::atomic<unsigned> modeRequests=0,modeRejections=0,modeAcknowledgements=0;
 interaction::SupportGrip supportGrip;
+interaction::MechanismAimContinuation pumpAimContinuation;
+std::atomic<unsigned> pumpAimCaptures=0,pumpAimApplications=0,pumpAimRejected=0;
 std::atomic<unsigned> supportSamples=0,supportGrabs=0,supportReleases=0,supportPreservationFailures=0,supportFireSamples=0,supportAimSamples=0;
 float supportAimResidual=0;
 struct SupportRecord {ULONGLONG ms=0;std::uint64_t generation=0;float distance=0,squeeze=0,angle=0;bool contact=false,holding=false,engaged=false,released=false;math::Quaternion rawAim{},aim{};unsigned weaponKind=0;unsigned reason=0,actions=0;std::uint64_t token=0;};
@@ -280,7 +305,7 @@ void ResetSupportGrip(const char* reason)noexcept {
         auto event=lastSupportSample;event.eventMs=GetTickCount64();event.previousToken=event.sample.token;
         event.resetReason=reason;RetainSupportEvent(event);++supportForcedResets;
     }
-    supportGrip.Reset();lastSupportSample.sample.holding=false;lastSupportSample.sample.token=0;
+    supportGrip.Reset();pumpAimContinuation.Reset();lastSupportSample.sample.holding=false;lastSupportSample.sample.token=0;
 }
 
 std::atomic<unsigned> equipCommands=0,vehicleInteractions=0,nextWeaponCommands=0,previousWeaponCommands=0;
@@ -359,6 +384,7 @@ std::atomic<unsigned> vehicleThrottleNonzero=0,vehicleSteerNonzero=0,vehicleRead
 std::atomic<float> vehicleThrottleMaximum=0,vehicleSteerMaximum=0;
 struct VehicleGatherRecord {
     unsigned entity=0,entry=0,soldier=0,weak=0,mask=0,permissions=0;
+    unsigned flagsWritten=0,flagsObserved=0;bool exitHeld=false,flagsVerified=false;
     std::uint64_t actorGeneration=0,seatGeneration=0,space=0,inputSequence=0;
     ULONGLONG ms=0;std::array<float,2> before{},written{},observed{};bool verified=false;
 };
@@ -452,10 +478,17 @@ bool Writable(unsigned at,unsigned n)noexcept {
 }
 struct Callback {Callback(){++active;}~Callback(){--active;}};
 struct Scope {Owner owner{};InputOverride patch;bool used=false;std::uint64_t nativeTick=0;};thread_local Scope* scope=nullptr;
-Owner lastOwner{};std::uint64_t epoch=0,rigEpoch=0,renderEquipmentEpoch=0;ULONGLONG lastTick=0;
+Owner lastOwner{};NativeInputEpochs nativeEpochs{};
+auto& epoch=nativeEpochs.equipment;auto& inputEpoch=nativeEpochs.input;
+std::uint64_t rigEpoch=0,renderEquipmentEpoch=0,nativeInputPauses=0;ULONGLONG lastTick=0;
+#ifdef FVR_BC2_ORDINARY_RESOURCE_PAUSE_PROBE
+struct NativeInputPauseProbe {bool ran=false,sameOwner=false;ULONGLONG begin=0,end=0;
+    NativeInputEpochs before{},after{};} nativeInputPauseProbe;
+#endif
 // Ownership consumes current safety and separately identified original contact
 // evidence. It never retimestamps the renderer's N-1 geometry as raw packet N.
-interaction::HandInteraction handOwnership;
+interaction::HandClaimDropJournal<64> handDropJournal;
+interaction::HandInteraction handOwnership{{},handDropJournal.Observer()};
 interaction::HandInteractionSample handSample{};
 interaction::HandInteractionKey handItem{};
 struct HandEvidence {interaction::HandInteractionSample sample{};unsigned weapon=0;};
@@ -553,6 +586,7 @@ void SuppressMagazineRecovery()noexcept {
 }
 BodyHolsterLifecycleLog bodyHolsterLifecycle;
 void InvalidateBodyHolsterState(BodyHolsterLifecycleReason reason,bool preserve=false)noexcept {
+    stowedAmmoReserveCache.Clear();
     if(!bodyHolster)return;auto source=handSample;LARGE_INTEGER now{};
     if(QueryPerformanceCounter(&now))source.nowNs=HandNanos(now.QuadPart);
     bodyHolsterLifecycle.Invalidate(*bodyHolster,reason,preserve,source,epoch);
@@ -682,7 +716,7 @@ void PrepareTrackedBodyAnchor(const Owner& owner,const interaction::InputFrame& 
         }
  }
 void SelectOrdinaryCycle(const Owner& owner,const interaction::InputFrame& input)noexcept {
-    ordinarySelectionReady=false;
+    ordinarySelectionReady=false;ordinaryTrackingRecovery=false;
     if(!ordinaryManualCycles)return;
     const auto asset=owner.equipment.Asset();
     if(asset!=SpasReloadAsset&&asset!="M95_sp")return;
@@ -690,13 +724,30 @@ void SelectOrdinaryCycle(const Owner& owner,const interaction::InputFrame& input
     const ReloadStateOwner current{owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,input.spaceGeneration};
     LARGE_INTEGER stamp{};if(!QueryPerformanceCounter(&stamp))return;
     const auto view=reloadFlowRuntime::ReadNativeCycleView(HandNanos(stamp.QuadPart));
-    ordinarySelectionReady=view&&view->selectedMode==mode&&view->selectedOwner==current;
+    ordinarySelectionReady=ordinaryCycleSelection.Observe(mode,current,view);
+    ordinaryTrackingRecovery=physicalPump&&physicalPump->BlocksFire()&&
+        ordinaryCycleSelection.RoutesTrackingRecovery(mode,current);
+    if(!view){
+        ++ordinarySelectionReadGaps;
+        if(ordinarySelectionReady){
+            ++ordinarySelectionRetainedGaps;
+            if(ordinaryBoltPlayer&&ordinaryBoltPlayer->OwnsGunCustody()){
+                ++ordinarySelectionCustodyGaps;
+                if(!ordinarySelectionFirstCustodyGap)ordinarySelectionFirstCustodyGap=input.generation;
+            }
+        }
+    }
     if(ordinarySelectionReady)return;
     // The native selector also refuses debt/Ready/open calls. Physical custody
     // must have completed its own return before that native handoff is asked.
-    if((ordinaryBoltPlayer&&(ordinaryBoltPlayer->BlocksFire()||ordinaryBoltPlayer->OwnsGunCustody()))||
-       (physicalPump&&physicalPump->BlocksFire()))return;
+    const bool replacementActor=NativeCycleClientActorReplaced(ordinaryAdapterOwner,current);
+    if(!replacementActor&&((ordinaryBoltPlayer&&(ordinaryBoltPlayer->BlocksFire()||ordinaryBoltPlayer->OwnsGunCustody()))||
+       (physicalPump&&physicalPump->BlocksFire())))return;
+    // A resolved replacement actor may request retirement despite old physical
+    // debt. Native selection still requires fresh all-branch ownership plus an
+    // excluded/drained callback boundary. No physical state changes on rejection.
     if(!reloadFlowRuntime::SelectNativeCycleMode(mode,current))return;
+    ordinaryCycleSelection.Selected(mode,current);
     ordinarySelectionReady=true;
     if(ordinaryAdapterOwner!=current){
         // Selection succeeded only after exact old native/physical retirement.
@@ -713,19 +764,20 @@ void PrepareOrdinaryBoltBeforeHands(const Owner& owner,const interaction::InputF
     const ReloadStateOwner current{owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,input.spaceGeneration};
     ordinaryBoltResult.tracking={true,current,handSample,physicalBoltCalibration};ordinaryBoltResult.blocksFire=true;
     ordinaryBoltContact=rigPublication::ReadBoltContact(current);
-    if(!ordinarySelectionReady)return;
-    math::Vec3 actor{};if(!BodyPosition(owner,actor))return;
+    if(!ordinarySelectionReady){RecordOrdinaryBoltPreparationSkip(1,input);return;}
+    math::Vec3 actor{};if(!BodyPosition(owner,actor)){RecordOrdinaryBoltPreparationSkip(2,input);return;}
     rigPublication::Tracking tracked{input,owner.soldier,owner.weak,owner.weapon,rigEpoch,inputDeadline,baseYaw,consumedOffset,actor};
-    auto body=rigPublication::BuildCurrentEyeBase(tracked);if(!body)return;
+    auto body=rigPublication::BuildCurrentEyeBase(tracked);if(!body){RecordOrdinaryBoltPreparationSkip(3,input);return;}
     for(unsigned n=0;n<3;++n)body->values[3][n]/=input.worldUnitsPerMeter;
     const auto ammo=reloadFlowRuntime::ReadM95StockShotReserve();
-    if(!RefreshHandProcessingTime())return;
+    if(!RefreshHandProcessingTime()){RecordOrdinaryBoltPreparationSkip(4,input);return;}
     Bc2BoltPlayerInput player;player.owner=current;player.item=handItem;player.asset=physicalBoltCalibration->asset;
     player.mesh=physicalBoltCalibration->mesh;player.controls=&input;player.safety=handSample;
     player.body={current,handSample,input.referenceHead,*body,input.worldUnitsPerMeter};player.contact=ordinaryBoltContact;
     player.native=reloadFlowRuntime::ReadNativeCycleView(handSample.nowNs);player.ammunition=ammo;
+    player.recovery=reloadFlowRuntime::ReadNativeCycleRecoveryView(handSample.nowNs);
     ordinaryBoltSample=ordinaryBoltPlayer->Prepare(player,handOwnership,handIntent);
-    if(!ordinaryBoltSample)return;
+    if(!ordinaryBoltSample){RecordOrdinaryBoltPreparationSkip(5,input);return;}
     ordinaryBoltSample->cancel=cancelling||ordinaryBoltSample->cancel;
     if(ordinaryBoltSample->custodyTransfer&&ordinaryBoltSample->custodyTransfer->releaseDepartingGun){
         // This explicit atomic transaction consumes the real release edge before
@@ -1125,6 +1177,9 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         // just the requested axes or final neutral sample in the stop report.
         VehicleGatherRecord record;record.entity=owner.controlled;record.entry=owner.entry;record.soldier=owner.soldier;record.weak=owner.weak;
         record.actorGeneration=rigEpoch;record.seatGeneration=epoch;record.space=input.spaceGeneration;record.inputSequence=input.generation;record.ms=GetTickCount64();record.permissions=allowed;
+        record.exitHeld=command.exitHeld;record.flagsWritten=allowed;
+        for(unsigned n=0;n<plan.count;++n)if(plan.edits[n].offset==0x98)record.flagsWritten=plan.edits[n].after;
+        record.flagsVerified=Read(owner.cache+0x98,&record.flagsObserved,4)&&record.flagsObserved==record.flagsWritten;
         bool readback=true;
         for(unsigned n=0;n<plan.count;++n){const auto& edit=plan.edits[n];if(edit.offset!=8&&edit.offset!=24)continue;
             const unsigned axis=edit.offset==8?0u:1u;record.mask|=1u<<axis;
@@ -1138,7 +1193,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
             if((record.mask&1)&&std::abs(record.observed[0])>0){++vehicleThrottleNonzero;vehicleThrottleMaximum.store(std::max(vehicleThrottleMaximum.load(),std::abs(record.observed[0])));}
             if((record.mask&2)&&std::abs(record.observed[1])>0){++vehicleSteerNonzero;vehicleSteerMaximum.store(std::max(vehicleSteerMaximum.load(),std::abs(record.observed[1])));}
         }
-        const bool changed=!havePreviousVehicleGather||record.entity!=previousVehicleGather.entity||record.entry!=previousVehicleGather.entry||record.actorGeneration!=previousVehicleGather.actorGeneration||record.seatGeneration!=previousVehicleGather.seatGeneration||record.space!=previousVehicleGather.space||record.mask!=previousVehicleGather.mask||record.written!=previousVehicleGather.written||record.verified!=previousVehicleGather.verified;
+        const bool changed=!havePreviousVehicleGather||record.entity!=previousVehicleGather.entity||record.entry!=previousVehicleGather.entry||record.actorGeneration!=previousVehicleGather.actorGeneration||record.seatGeneration!=previousVehicleGather.seatGeneration||record.space!=previousVehicleGather.space||record.mask!=previousVehicleGather.mask||record.written!=previousVehicleGather.written||record.verified!=previousVehicleGather.verified||record.exitHeld!=previousVehicleGather.exitHeld||record.flagsWritten!=previousVehicleGather.flagsWritten||record.flagsObserved!=previousVehicleGather.flagsObserved||record.flagsVerified!=previousVehicleGather.flagsVerified;
         const bool held=(record.written[0]!=0||record.written[1]!=0)&&record.ms-vehicleGatherRecordedAt>=100;
         const auto count=vehicleGatherCount.load();
         if(count<vehicleGatherRecords.size()&&(changed||held)){vehicleGatherRecords[count]=record;vehicleGatherRecordedAt=record.ms;vehicleGatherCount.store(count+1,std::memory_order_release);}
@@ -1192,7 +1247,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     const bool pumpFireFixture=physicalPumpFixture&&physicalPump;
     const bool deferActions=(holsterFireFixture||pumpFireFixture||physicalBoltFixture.has_value()||ordinaryBoltInputFixture.has_value()||resourceInventoryFixture.has_value())&&fresh&&nativePlaying&&
         interaction::ValidInput(input)&&input.focused&&input.headValid;
-    auto out=deferActions?interaction::ActionOutput{}:actions.Update(actionInput,{owner.soldier,epoch,nativePlaying,true},input.predictedNs);
+    auto out=deferActions?interaction::ActionOutput{}:actions.Update(actionInput,{owner.soldier,inputEpoch,nativePlaying,true},input.predictedNs);
     if(m95StockShotFixture&&actionInput.hands[1].trigger<.75f){out.held&=~interaction::Fire;out.pressed&=~interaction::Fire;}
     if(!fresh||!nativePlaying||!interaction::ValidInput(input)||!input.focused||!input.headValid){ClearReloadOwner();CancelSight();weaponModeHeld=true;ResetSupportGrip(!fresh?"stale_input":!nativePlaying?"native_inactive":!interaction::ValidInput(input)?"invalid_input":!input.focused?"focus_loss":"head_untracked");ResetHandOwnership("input_unavailable"); {std::lock_guard lock(shotPoseMutex);shotHistory.Reset();} rigPublication::PublishTracking({});roomscale.Suspend();return;}
     if(!out.active||out.owner!=owner.soldier){out={};out.owner=owner.soldier;}
@@ -1264,7 +1319,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         ordinaryBoltInputFixture->Prepare(input,current,asset,raw,native,reserve,
             HandNanos(inputDeadline-handFrequency/10),HandNanos(inputDeadline),now);
         actionInput=input;if(reloadRequestMode)actionInput.hands[0].trigger=0;
-        out=actions.Update(actionInput,{owner.soldier,epoch,nativePlaying&&!ordinaryBoltInputFixture->Failed(),true},input.predictedNs);
+        out=actions.Update(actionInput,{owner.soldier,inputEpoch,nativePlaying&&!ordinaryBoltInputFixture->Failed(),true},input.predictedNs);
         if(ordinaryBoltInputFixture->NeedsNeutralFire(now)){out.held&=~interaction::Fire;out.pressed&=~interaction::Fire;}
         if(!out.active||out.owner!=owner.soldier){out={};out.owner=owner.soldier;}
     }
@@ -1275,7 +1330,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         physicalBoltFixture->Prepare(input,current,asset,raw,reloadFlowRuntime::ReadNativeCycleView(now),reserve,
             HandNanos(inputDeadline-handFrequency/10),HandNanos(inputDeadline),now);
         actionInput=input;if(reloadRequestMode)actionInput.hands[0].trigger=0;
-        out=actions.Update(actionInput,{owner.soldier,epoch,nativePlaying&&!physicalBoltFixture->Failed(),true},input.predictedNs);
+        out=actions.Update(actionInput,{owner.soldier,inputEpoch,nativePlaying&&!physicalBoltFixture->Failed(),true},input.predictedNs);
         if(!out.active||out.owner!=owner.soldier){out={};out.owner=owner.soldier;}
     }
     if(physicalPumpFixture&&physicalPump){
@@ -1285,7 +1340,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         physicalPumpFixture->Prepare(input,current,asset,raw,reloadFlowRuntime::ReadNativeCycleView(now),
             HandNanos(inputDeadline-handFrequency/10),HandNanos(inputDeadline),now);
         actionInput=input;if(reloadRequestMode)actionInput.hands[0].trigger=0;
-        out=actions.Update(actionInput,{owner.soldier,epoch,nativePlaying&&!physicalPumpFixture->Failed(),true},input.predictedNs);
+        out=actions.Update(actionInput,{owner.soldier,inputEpoch,nativePlaying&&!physicalPumpFixture->Failed(),true},input.predictedNs);
         if(!out.active||out.owner!=owner.soldier){out={};out.owner=owner.soldier;}
     }
     if(magazineResourceFixture&&magazinePhysical){
@@ -1306,12 +1361,17 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         if(!observed.magazine.resource)observed.magazine.resource=reloadFlowRuntime::ReadAmmoResourceView(current,now);
         observed.shellRaw=rigPublication::ReadReloadContact(current);observed.shell=physicalReload->ProbeState(now);
         observed.shellBlocks=physicalReload->BlocksEquipment();
+        if(const auto frame=rigPublication::ReadWeaponSupportFrame(owner.soldier,owner.weak,owner.weapon)){
+            observed.supportRaw=frame->controllerMapping;observed.supportTarget=frame->targetWristWorldMeters;
+            observed.supportVerified=frame->support.valid&&(frame->authoredSupportReference||
+                interaction::WeaponFeatureEnabled(coreProfile,interaction::WeaponFeature::SupportGrip));
+        }
         if(resourcePumpCombination){observed.pumpRaw=rigPublication::ReadPumpContact(current);observed.pumpNative=reloadFlowRuntime::ReadNativeCycleView(now);}
         resourceInventoryFixture->Prepare(input,current,asset,observed,HandNanos(inputDeadline-handFrequency/10),HandNanos(inputDeadline),now);
         if(resourceInventoryFixture->Recording())reloadFlowRuntime::BeginInventoryReloadRecords();
         // First and only mapping for this generation, after fixture Prepare.
         actionInput=input;if(reloadRequestMode)actionInput.hands[0].trigger=0;
-        out=actions.Update(actionInput,{owner.soldier,epoch,nativePlaying&&!resourceInventoryFixture->CancelConsumer(),true},input.predictedNs);
+        out=actions.Update(actionInput,{owner.soldier,inputEpoch,nativePlaying&&!resourceInventoryFixture->CancelConsumer(),true},input.predictedNs);
         if(!out.active||out.owner!=owner.soldier){out={};out.owner=owner.soldier;}
     }
     if(inventoryReloadFixture&&magazinePhysical&&bodyInventory){
@@ -1348,7 +1408,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         bodyHolsterFixture->Prepare(input,current,asset,ReadBodyHolsterProbe(ns),HandNanos(inputDeadline-handFrequency/10),HandNanos(inputDeadline),ns,diagnosticAmmo);
         if(bodyHolsterFixture->Failed())InvalidateBodyHolster(false,BodyHolsterLifecycleReason::DiagnosticFailed);
         if(holsterFireFixture){actionInput=input;if(reloadRequestMode)actionInput.hands[0].trigger=0;
-            out=actions.Update(actionInput,{owner.soldier,epoch,nativePlaying&&!bodyHolsterFixture->Failed(),true},input.predictedNs);
+            out=actions.Update(actionInput,{owner.soldier,inputEpoch,nativePlaying&&!bodyHolsterFixture->Failed(),true},input.predictedNs);
             if(!out.active||out.owner!=owner.soldier){out={};out.owner=owner.soldier;}
             if(bodyHolsterFixture->NeedsNeutralFire()){out.held&=~interaction::Fire;out.pressed&=~interaction::Fire;}}
     }
@@ -1382,7 +1442,8 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     }
     PhysicalReloadResult physicalResult;MagazinePhysicalResult magazineResult;Bc2PhysicalPumpResult pumpResult;Bc2PhysicalBoltResult boltResult;
     Bc2BoltControllerContact boltContact;
-    const bool pumpSelected=physicalPump&&(!ordinaryManualCycles||(asset==SpasReloadAsset&&ordinarySelectionReady));
+    const bool pumpSelected=physicalPump&&(!ordinaryManualCycles||
+        (asset==SpasReloadAsset&&(ordinarySelectionReady||ordinaryTrackingRecovery)));
     const auto currentPump=pumpSelected?reloadFlowRuntime::ReadNativeCycleView(handSample.nowNs):std::nullopt;
     const bool pumpDebt=pumpSelected&&(physicalPump->BlocksFire()||!currentPump||currentPump->blocksFire);
     ApplyPumpActionGate(out,pumpDebt);
@@ -1489,7 +1550,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
             (!aimValid?ReloadCancelAimInvalid:0u)|(!out.active?ReloadCancelInactive:0u)|
             ((reloadActions&interaction::Fire)?ReloadCancelFire:0u)|((reloadActions&interaction::Use)?ReloadCancelUse:0u)|
             ((reloadActions&interaction::NextWeapon)?ReloadCancelNextWeapon:0u)|((reloadActions&interaction::PreviousWeapon)?ReloadCancelPreviousWeapon:0u)|
-            (!pouch?ReloadCancelNoPouch:0u);
+            (!pouch?ReloadCancelNoPouch:0u)|(pumpDebt?ReloadCancelPumpDebt:0u);
 #ifdef FVR_BC2_ARMING_EMPTY_PROBE
         if(armingEmptyFixture&&armingEmptyFixture->CancelConsumer()){sample.cancel=true;sample.cancelFlags|=ReloadCancelFixture;}
 #endif
@@ -1517,6 +1578,9 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         resourceInventoryFixture->Observe(observed,rigPublication::ReadMagazinePackCounters(),now);
     }
     if(pumpSelected){
+        // Shell/resource consumers above may advance the arbiter's processing
+        // clock. Preserve the original controller evidence; refresh only now.
+        RefreshHandProcessingTime();
         Bc2PhysicalPumpSample sample;sample.nativeOwner={owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,input.spaceGeneration};
         sample.input=handSample;sample.item=handItem;sample.asset=asset;
         sample.raw=rigPublication::ReadPumpContact(sample.nativeOwner);
@@ -1749,17 +1813,26 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         auto proposed=supportGrip;
         const interaction::SupportGripOwner supportOwner{(std::uint64_t(owner.weak)<<32)|owner.soldier,rigEpoch,owner.weapon};
         std::optional<interaction::SupportGripResult> pumpSupport;
+        std::optional<interaction::InputFrame> pumpReturnInput;
         if(pumpSelected){
+            const auto gun=handOwnership.Current(interaction::InteractionHand::Right);
+            if(gun&&!cancel&&!handBusy&&!handOwnership.Current(interaction::InteractionHand::Left)){
+                if(const auto submitted=physicalPump->SupportReturnStarted(handSample,*gun))
+                    pumpReturnInput=pumpAimContinuation.ApplyReturning(boltRawInput,handSample,*gun,*submitted);
+            }
             const auto source=supportEvidence?FindHandEvidence(supportEvidence->generation,owner.weapon):nullptr;
-            pumpSupport=physicalPump->ContinueSupport(supportOwner,input,contact,source?source->sample:interaction::HandInteractionSample{},
+            pumpSupport=physicalPump->ContinueSupport(supportOwner,pumpReturnInput?*pumpReturnInput:input,contact,source?source->sample:interaction::HandInteractionSample{},
                 {2,std::uint64_t(owner.weapon)},handOwnership,proposed,handIntent,cancel||handBusy);
             if(pumpSupport)HandChanged("pump_support_return");
         }
         std::optional<interaction::SupportGripResult> shellSupport;
         if(physicalReload&&!pumpSupport){
             const auto source=supportEvidence?FindHandEvidence(supportEvidence->generation,owner.weapon):nullptr;
+            // Pump/native polling may have advanced the shared arbiter since
+            // shell Tick. Keep input evidence unchanged; refresh processing now.
+            const bool current=RefreshHandProcessingTime();
             shellSupport=physicalReload->ContinueSupport(supportOwner,input,contact,source?source->sample:interaction::HandInteractionSample{},
-                {2,std::uint64_t(owner.weapon)},handOwnership,proposed,handIntent,cancel||handBusy);
+                {2,std::uint64_t(owner.weapon)},handOwnership,proposed,handIntent,cancel||handBusy||!current,handSample);
             if(shellSupport)HandChanged("shell_support_return");
         }
         std::optional<interaction::SupportGripResult> boltSupport;
@@ -1782,6 +1855,22 @@ void __fastcall GatherHook(void* self,void*,void* cache){
             }
         }else ReleaseLeftOwnership(interaction::HandClaimKind::WeaponSupport);
         supportGrip=proposed;
+        // Support ownership moves to the fore-end mechanism, but that handoff
+        // must not rotate the gun under stationary raw controllers. Preserve
+        // only the exact previous support/gun pair's aim correction; pump
+        // travel still reads the independent original left-controller pose.
+        if(pumpSelected){
+            const auto left=handOwnership.Current(interaction::InteractionHand::Left);
+            const auto gun=handOwnership.Current(interaction::InteractionHand::Right);
+            if(supported.holding&&left&&gun){
+                if(pumpAimContinuation.Capture(boltRawInput,supported.input,handSample,*left,*gun))++pumpAimCaptures;
+            }
+            else if(pumpResult.ownsHand&&left&&gun){
+                if(const auto guided=pumpAimContinuation.Apply(boltRawInput,handSample,*left,*gun)){supported.input=*guided;++pumpAimApplications;}
+                else ++pumpAimRejected;
+            }else if(pumpReturnInput){supported.input=*pumpReturnInput;++pumpAimApplications;}
+            else pumpAimContinuation.Reset();
+        }else pumpAimContinuation.Reset();
         if(ordinaryBoltInputFixture){LARGE_INTEGER supportObserved{};QueryPerformanceCounter(&supportObserved);
             ordinaryBoltInputFixture->ObserveSupport(supported.holding,HandNanos(supportObserved.QuadPart));}
         if(physicalBoltFixture){LARGE_INTEGER supportObserved{};QueryPerformanceCounter(&supportObserved);
@@ -1857,6 +1946,8 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         if(handPoses){math::Vec3 actorPosition{};
             if(BodyPosition(owner,actorPosition)){
                 rigPublication::Tracking sample{input,owner.soldier,owner.weak,owner.weapon,rigEpoch,inputDeadline,baseYaw,consumedOffset,actorPosition};
+                sample.controllerOwner={owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,input.spaceGeneration};
+                sample.controllerEvidence=handSample;
                 sample.equipmentGeneration=twoHandGrip?handEquip:renderEquipmentEpoch;sample.nativeEquipment=owner.equipment;sample.sightPhysicalItem=familyBinding?familyBinding->persistent:0;sample.sightAdapter=familyBinding?SightAdapterForFamily(familyBinding->family):nullptr;sample.sightSecondary=familyBinding&&familyBinding->selectedSecondary;sample.weaponProfile=itemProfile;sample.assetName=weaponAsset;sample.supportHolding=supportHeld;sample.supportToken=supportToken;sample.sightPreview=sightPreview;sample.reload=physicalResult.tracking;sample.pump=pumpResult.tracking;sample.bolt=boltResult.tracking;sample.boltRawInput=boltRawInput;sample.magazine=magazineResult.tracking;sample.bodyMagazine=magazineResult.bodyAmmo;sample.weaponActionsBlocked=magazineResult.blocksWeaponActions||pumpResult.blocksFire||boltResult.blocksFire;if(bodyHolster||magazineDetached)holsterTracking=sample;else rigPublication::PublishTracking(sample);
             }
             else{++bodyReadFailures;rigPublication::PublishTracking({});}
@@ -2027,10 +2118,23 @@ void __fastcall GatherHook(void* self,void*,void* cache){
             else if(holsterOutcome.ordinaryDraw.command)holsterQueuedDraw=holsterOutcome.ordinaryDraw.command;
             rigPublication::PublishWeaponVisibility(holsterOutcome.visibility);
             rigPublication::PublishOrdinaryEquipment(holsterOutcome.ordinaryRecovery);
+            if(!holsterOutcome.freeRight)stowedAmmoReserveCache.Clear();
             if(holsterTracking){holsterTracking->weaponActionsBlocked=holsterOutcome.blockWeaponActions||magazineResult.blocksWeaponActions;
                 if(holsterOutcome.freeRight){try{holsterTracking->freeRight=std::make_shared<const BodyFreeRightEvidence>(*holsterOutcome.freeRight);
                     holsterTracking->bodyHolsterSlot=bodyInventory->AssignedSlot(holsterSample.nativeOwner.weapon);
                     holsterTracking->bodyAnchors=bodyAnchors;++holsterFreePublications;
+                    // Separate display-only reserve for the actually stowed
+                    // selected weapon. Never acquire a gun or enter a reload.
+                    // The render adapter revalidates owner, hide and input leases.
+                    const auto reserve=reloadFlowRuntime::ReadReserveObserved();
+                    LARGE_INTEGER reserveNow{};const auto displayNow=QueryPerformanceCounter(&reserveNow)?HandNanos(reserveNow.QuadPart):0;
+                    // Display-only cache survives busy/cohort reads through
+                    // the original lease. It is never passed to reload or HUD.
+                    holsterTracking->stowedAmmoReserve=stowedAmmoReserveCache.Observe(reserve,
+                        holsterSample.nativeOwner,displayNow).value_or(Bc2AmmoReserveLease{});
+                    holsterTracking->stowedAmmoMagazine=magazineProfile;
+                    if(magazineProfile&&magazinePhysical)holsterTracking->stowedAmmoContact=magazinePhysical->BodyAmmoContact();
+                    else if(asset==SpasReloadAsset&&physicalReload)holsterTracking->stowedAmmoContact=physicalReload->BodyAmmoContact();
                 }catch(...){InvalidateBodyHolsterState(BodyHolsterLifecycleReason::FreePoseAllocationFailed);}}
                 holsterTracking->bodyAnchors=bodyAnchors;
                 if(const auto display=bodyInventory->Display(holsterBodySample->hand.nowNs)){
@@ -2102,11 +2206,56 @@ void __fastcall GatherHook(void* self,void*,void* cache){
 }
 void __fastcall UpdateHook(void* self,void*,float dt){
     Callback callback;++updates;
+    namespace trace=fvr::bc2::sceneMilestones;
+    using fvr::runtime::SceneMilestoneKind;using fvr::runtime::SceneMilestoneStage;
+    using fvr::runtime::SceneOwnerOutcome;
+    fvr::runtime::SceneMilestoneContext observed{};observed.self=reinterpret_cast<unsigned>(self);
+    const auto updateMilestone=trace::Begin(SceneMilestoneKind::GameplayUpdate,observed);
     Scope local{};
-    if(!enabled.load(std::memory_order_acquire)||scope||!Resolve(local.owner)||local.owner.player!=reinterpret_cast<unsigned>(self)){updateOriginal(self,dt);return;}
+    const auto returnOriginal=[&](SceneOwnerOutcome outcome){
+        observed.outcome=static_cast<unsigned>(outcome);
+        const auto ownerTransition=outcome==SceneOwnerOutcome::Unknown?fvr::runtime::SceneMilestoneToken{}:
+            trace::journal.Owner(static_cast<unsigned>(observed.self),outcome,observed,trace::Stamp);
+        trace::Mark(ownerTransition,SceneMilestoneStage::CallingOriginal,observed);
+        trace::Mark(updateMilestone,SceneMilestoneStage::CallingOriginal,observed);
+        updateOriginal(self,dt);
+        trace::Mark(ownerTransition,SceneMilestoneStage::OriginalReturned,observed);
+        trace::Mark(ownerTransition,SceneMilestoneStage::Exit,observed);
+        trace::Mark(updateMilestone,SceneMilestoneStage::OriginalReturned,observed);
+        trace::Mark(updateMilestone,SceneMilestoneStage::Exit,observed);
+    };
+    // Preserve original short-circuit order and exactly one owner read. These
+    // diagnostics do not revoke publications, rebind threads or admit an actor.
+    if(!enabled.load(std::memory_order_acquire)){returnOriginal(SceneOwnerOutcome::Disabled);return;}
+    if(scope){returnOriginal(SceneOwnerOutcome::Unknown);return;}
+    const bool resolved=Resolve(local.owner);
+    observed.player=local.owner.player;observed.soldier=local.owner.soldier;observed.weak=local.owner.weak;
+    observed.controlled=local.owner.controlled;observed.manager=local.owner.manager;observed.entry=local.owner.entry;
+    observed.inputThread=inputThread.load(std::memory_order_acquire);
+    if(!resolved){returnOriginal(SceneOwnerOutcome::Unresolved);return;}
+    if(local.owner.player!=reinterpret_cast<unsigned>(self)){returnOriginal(SceneOwnerOutcome::PlayerMismatch);return;}
     const auto thread=GetCurrentThreadId();unsigned expected=0;inputThread.compare_exchange_strong(expected,thread);
-    if(inputThread.load()!=thread){++mismatches;updateOriginal(self,dt);return;}
+    if(inputThread.load()!=thread){++mismatches;returnOriginal(SceneOwnerOutcome::WrongThread);return;}
+    observed.inputThread=thread;observed.outcome=static_cast<unsigned>(SceneOwnerOutcome::Valid);
+    observed.actorGeneration=rigEpoch;observed.inputEpoch=inputEpoch;
+    const auto localMilestone=trace::Begin(SceneMilestoneKind::LocalGameplayUpdate,observed);
+    const auto ownerTransition=trace::journal.Owner(static_cast<unsigned>(observed.self),SceneOwnerOutcome::Valid,observed,trace::Stamp);
     ++localUpdates;if(local.owner.foot)++onFoot;else ++vehicle;
+#ifdef FVR_BC2_ORDINARY_RESOURCE_PAUSE_PROBE
+    // One scheduling interruption at the final rifle's ordinary reload entry.
+    // No input, ammunition, equipment generation or outcome is fabricated.
+    bool pausedHere=false;
+    if(!nativeInputPauseProbe.ran&&resourceInventoryFixture&&local.owner==lastOwner&&local.owner.foot&&
+       resourceInventoryFixture->State()==Bc2ResourceInventoryProbe::Phase::FullReturn){
+        nativeInputPauseProbe.ran=true;nativeInputPauseProbe.before=nativeEpochs;
+        nativeInputPauseProbe.begin=GetTickCount64();Sleep(180);
+        nativeInputPauseProbe.end=GetTickCount64();pausedHere=true;
+        // Re-resolve after the pause before using any saved native pointer.
+        Owner checked{};
+        nativeInputPauseProbe.sameOwner=Resolve(checked)&&checked==local.owner;
+        if(!nativeInputPauseProbe.sameOwner){returnOriginal(SceneOwnerOutcome::Unresolved);return;}
+    }
+#endif
     const auto now=GetTickCount64();
     const bool actorChanged=local.owner.manager!=lastOwner.manager||local.owner.player!=lastOwner.player||local.owner.soldier!=lastOwner.soldier||local.owner.weak!=lastOwner.weak||local.owner.controlled!=lastOwner.controlled||local.owner.entry!=lastOwner.entry;
     if(actorChanged)++rigEpoch;
@@ -2115,19 +2264,37 @@ void __fastcall UpdateHook(void* self,void*,float dt){
     // input epoch change or missing read is not an observed vehicle exit.
     if(bodyInventory)bodyInventory->ObserveNativeActor(local.owner.manager,local.owner.player,local.owner.soldier,local.owner.weak,local.owner.foot);
     // Item changes still re-arm semantic actions, but cannot recalibrate anatomy.
-    // A pause timeout advances only the input observation epoch when the full
-    // resolved native owner is unchanged. It is not a physical draw request.
-    if(bodyHolster&&local.owner==lastOwner&&local.owner.foot&&now-lastTick>150&&epoch&&epoch<UINT64_MAX){
+    // A pause rearms button input independently of durable native equipment.
+    // The complete resolved owner tuple still detects actual replacement.
+    const bool ownerChanged=local.owner!=lastOwner;
+    const bool inputPause=lastTick&&now-lastTick>150;
+    if(inputPause&&!ownerChanged)++nativeInputPauses;
+    if(bodyHolster&&!ownerChanged&&local.owner.foot&&inputPause&&epoch){
         const ReloadStateOwner before{local.owner.player,local.owner.soldier,local.owner.weak,local.owner.weapon,rigEpoch,epoch,handSample.owner.space};
-        auto after=before;++after.equipGeneration;const auto previous=bodyHolster->Phase();
-        const bool accepted=bodyHolster->ObserveNativeInputGap(before,after);auto source=handSample;
+        const auto previous=bodyHolster->Phase();
+        const bool accepted=bodyHolster->ObserveNativeInputPause(before);auto source=handSample;
         LARGE_INTEGER stamp{};if(QueryPerformanceCounter(&stamp))source.nowNs=HandNanos(stamp.QuadPart);
         bodyHolsterLifecycle.Observe(accepted?BodyHolsterLifecycleReason::NativeInputGapAccepted:BodyHolsterLifecycleReason::NativeInputGapRejected,
-            accepted,previous,bodyHolster->Phase(),source,after.equipGeneration);
+            accepted,previous,bodyHolster->Phase(),source,before.equipGeneration);
     }
-    if(local.owner!=lastOwner||now-lastTick>150){++epoch;lastOwner=local.owner;}lastTick=now;
+    const auto advanced=AdvanceNativeInputEpochs(nativeEpochs,ownerChanged,inputPause);
+    if(!advanced){ClearReloadOwner();returnOriginal(SceneOwnerOutcome::Unresolved);return;}
+    nativeEpochs=*advanced;lastOwner=local.owner;lastTick=now;
+#ifdef FVR_BC2_ORDINARY_RESOURCE_PAUSE_PROBE
+    if(pausedHere)nativeInputPauseProbe.after=nativeEpochs;
+#endif
     struct Current {Scope*& slot;~Current(){slot=nullptr;}} current{scope};scope=&local;
+    observed.actorGeneration=rigEpoch;observed.inputEpoch=inputEpoch;
+    trace::Mark(localMilestone,SceneMilestoneStage::CallingOriginal,observed);
+    trace::Mark(ownerTransition,SceneMilestoneStage::CallingOriginal,observed);
+    trace::Mark(updateMilestone,SceneMilestoneStage::CallingOriginal,observed);
     updateOriginal(self,dt);
+    trace::Mark(localMilestone,SceneMilestoneStage::OriginalReturned,observed);
+    trace::Mark(localMilestone,SceneMilestoneStage::Exit,observed);
+    trace::Mark(ownerTransition,SceneMilestoneStage::OriginalReturned,observed);
+    trace::Mark(ownerTransition,SceneMilestoneStage::Exit,observed);
+    trace::Mark(updateMilestone,SceneMilestoneStage::OriginalReturned,observed);
+    trace::Mark(updateMilestone,SceneMilestoneStage::Exit,observed);
 }
 std::optional<std::size_t> Offset(const engine::PeImage& pe,unsigned rva,unsigned n){for(const auto& s:pe.sections)if(rva>=s.rva&&rva-s.rva<=s.rawSize&&n<=s.rawSize-(rva-s.rva))return std::size_t(s.rawOffset)+rva-s.rva;return {};}
 }
@@ -2217,12 +2384,13 @@ bool EnableBoatHeadAim(bool enableFire)noexcept {
     const auto verified=VerifyBoatAimCode(memory,unsigned(image));if(!verified.verified)return false;
     boatAimBinding=verified;boatHeadFire=enableFire;boatHeadAim=true;return true;
 }
-bool EnableM95StockShotProbe()noexcept {
+bool EnableM95StockShotProbe(unsigned mode)noexcept {
 #if defined(FVR_BC2_M95_STOCK_SHOT_PROBE) && defined(FVR_BC2_MANUAL_CYCLE_CANDIDATE) && !defined(FVR_BC2_AMMO_MOVE_PROBE)
-    if(enabled.load()||m95StockShotFixture||!hooks[0]||!handPoses||!twoHandGrip||!reloadRequestMode||
+    if((mode!=1&&mode!=2)||enabled.load()||m95StockShotFixture||!hooks[0]||!handPoses||!twoHandGrip||!reloadRequestMode||
        physicalPump||physicalPumpFixture||physicalReloadMode||bodyInventory||reloadRequestFixture||magazineReloadFixture||
        emptyFireFixture||bodyHolsterFixture)return false;
-    m95StockShotFixture.emplace();rigPublication::PublishM95ShotCapturePhase(1);return true;
+    if(mode==2&&!reloadFlowRuntime::EnableM95EmptyRecording())return false;
+    m95StockShotFixture.emplace(mode==2);rigPublication::PublishM95ShotCapturePhase(1);return true;
 #else
     return false;
 #endif
@@ -2235,6 +2403,9 @@ bool EnableOrdinaryManualCycles()noexcept {
     const auto calibration=M95OrdinaryBoltCalibration235();
     if(!calibration||!BoltCalibrationValid(*calibration)||!PumpCalibrationValid(MeasuredSpasPump225())||
        !reloadFlowRuntime::EnableNativeCycleDispatcher())return false;
+#ifdef FVR_BC2_NATIVE_CYCLE_RECOVERY
+    if(!reloadFlowRuntime::EnableNativeCycleRecovery())return false;
+#endif
     physicalBoltCalibration=std::make_shared<const Bc2BoltCalibration>(*calibration);
     physicalBolt.emplace(physicalBoltCalibration,OrdinaryBoltApi());ordinaryBoltPlayer.emplace(physicalBoltCalibration);
     physicalPump.emplace(std::make_shared<const Bc2PumpCalibration>(MeasuredSpasPump225()),OrdinaryPumpApi());
@@ -2243,22 +2414,57 @@ bool EnableOrdinaryManualCycles()noexcept {
     return false;
 #endif
 }
-bool EnableOrdinaryResourceInputProbe()noexcept {
+bool EnableOrdinaryResourceInputProbe(bool interruptPump,bool emptyPump)noexcept {
 #if defined(FVR_BC2_ORDINARY_RESOURCE_INPUT_PROBE) && defined(FVR_BC2_ORDINARY_MANUAL_CYCLES)
     if(enabled.load()||!ordinaryManualCycles||!physicalPump||!physicalBolt||!bodyInventory||!bodyHolster||
        !magazinePhysical||!physicalReload||!magazinePhysicalApi.resourceRead||!magazinePhysicalApi.resourceSubmit||
        resourcePumpCombination||resourceInventoryFixture||ordinaryBoltInputFixture||physicalBoltFixture||physicalPumpFixture||m95StockShotFixture)return false;
+#ifndef FVR_BC2_NATIVE_CYCLE_RECOVERY
+    if(interruptPump)return false;
+#endif
     Bc2ResourceInventoryProbe candidate;
-    if(!candidate.EnablePump(MeasuredSpasPump225()))return false;
+#ifdef FVR_BC2_ORDINARY_SUPPORT_ONLY_PROBE
+    if(interruptPump||emptyPump||!candidate.EnableSupportOnly())return false;
+#elif defined(FVR_BC2_ORDINARY_RESOURCE_MAGAZINE_ONLY_PROBE)
+#ifdef FVR_BC2_ORDINARY_RESOURCE_MAGAZINE_EMPTY_PROBE
+    constexpr bool fireMagazineEmpty=true;
+#else
+    constexpr bool fireMagazineEmpty=false;
+#endif
+#ifdef FVR_BC2_ORDINARY_RESOURCE_MAGAZINE_POSTFIRE_PROBE
+    constexpr bool fireAfterMagazine=true;
+#else
+    constexpr bool fireAfterMagazine=false;
+#endif
+    if(interruptPump||emptyPump||!candidate.EnableMagazineOnly(fireMagazineEmpty,fireAfterMagazine,!fireMagazineEmpty))return false;
+#else
+    if(interruptPump&&emptyPump)return false;
+    if(!emptyPump&&!candidate.RequireRifleSupport())return false;
+    if(!candidate.EnablePump(MeasuredSpasPump225(),interruptPump?Bc2PumpControllerProbe::Scenario::HeldSupportNaturalTrackingLoss:
+        emptyPump?Bc2PumpControllerProbe::Scenario::HeldSupportNatural:Bc2PumpControllerProbe::Scenario::None,emptyPump?8:1))return false;
+#ifdef FVR_BC2_ORDINARY_RESOURCE_INSPECTION_PROBE
+    if(interruptPump||emptyPump||!candidate.UsePumpInspectionPose())return false;
+#endif
+#ifdef FVR_BC2_ORDINARY_RESOURCE_REVISIT_PROBE
+    if(interruptPump||emptyPump||!candidate.EnablePumpRevisit())return false;
+#endif
+#ifdef FVR_BC2_ORDINARY_RESOURCE_SCENE_PROBE
+#ifdef FVR_BC2_ORDINARY_RESOURCE_SCENE_MAGAZINE_PROBE
+    if(!candidate.EnableActorReplacement(true))return false;
+#else
+    if(!candidate.EnableActorReplacement())return false;
+#endif
+#endif
+#endif
     resourceInventoryFixture.emplace(std::move(candidate));resourcePumpCombination=true;
     return true; // Reuses existing ordinary consumers/dispatcher; no new authority.
 #else
-    return false;
+    (void)interruptPump;(void)emptyPump;return false;
 #endif
 }
 bool EnableOrdinaryBoltInputProbe(unsigned cycles)noexcept {
 #if defined(FVR_BC2_ORDINARY_BOLT_INPUT_PROBE) && defined(FVR_BC2_ORDINARY_BOLT) && defined(FVR_BC2_ORDINARY_MANUAL_CYCLES)
-    if(cycles<1||cycles>2||enabled.load()||!ordinaryManualCycles||!ordinaryBoltPlayer||!physicalBoltCalibration||
+    if((cycles!=1&&cycles!=2&&cycles!=5)||enabled.load()||!ordinaryManualCycles||!ordinaryBoltPlayer||!physicalBoltCalibration||
        ordinaryBoltInputFixture||physicalBoltFixture||physicalPumpFixture||resourceInventoryFixture||m95StockShotFixture)return false;
     ordinaryBoltInputFixture.emplace(*physicalBoltCalibration,cycles,Bc2BoltControllerProbe::Controls::OrdinaryPlayer);return true;
 #else
@@ -2402,6 +2608,7 @@ bool Install(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uin
             api.reserve=[](void*)noexcept{return reloadFlowRuntime::ReadReserve();};
             api.identity=[](void*)noexcept{return reloadFlowRuntime::RequestIdentity();};
             api.start=[](void*,const ReloadCycleControl& c)noexcept{return reloadFlowRuntime::StartRequestCycle(c);};
+            api.startObserved=[](void*,const ReloadCycleControl& c)noexcept{return reloadFlowRuntime::StartRequestCycleObserved(c);};
             api.keep=[](void*,const ReloadCycleControl& c)noexcept{return reloadFlowRuntime::KeepAliveRequestCycle(c);};
             api.keepObserved=[](void*,const ReloadCycleControl& c)noexcept{return reloadFlowRuntime::KeepAliveRequestCycleObserved(c);};
             api.reserveObserved=[](void*)noexcept{return reloadFlowRuntime::ReadReserveObserved();};
@@ -2432,6 +2639,7 @@ bool Install(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uin
             api.clock=[](void*)noexcept{LARGE_INTEGER now{};QueryPerformanceCounter(&now);return HandNanos(now.QuadPart);};
             if(reloadFlowRuntime::ResourceHandsEnabled()&&(magazineReloadSession==3||magazinePhysicalProbe||resourceInventoryProbe)){
                 api.resourceRead=[](void*,const ReloadStateOwner& owner,std::int64_t now)noexcept{return reloadFlowRuntime::ReadAmmoResourceView(owner,now);};
+                api.resourceReadObserved=[](void*,const ReloadStateOwner& owner,std::int64_t now)noexcept{return reloadFlowRuntime::ReadAmmoResourceObserved(owner,now);};
                 api.resourceSubmit=[](void*,const AmmoResourceRequest& r)noexcept{return reloadFlowRuntime::SubmitAmmoResourceRequest(r);};
                 api.resourceOutcome=[](void*,std::uint64_t request,const interaction::AmmoResourceContext& context)noexcept{return reloadFlowRuntime::ReadAmmoResourceOutcome(request,context);};
             }
@@ -2628,6 +2836,7 @@ bool Stop()noexcept {
     return okay&&!active.load();
 }
 void Report(std::ostream& out){out<<"{\"installed\":"<<(hooks[0]&&hooks[1]?"true":"false")
+    <<",\"native_equipment_epoch\":"<<epoch<<",\"native_input_epoch\":"<<inputEpoch<<",\"native_input_pauses\":"<<nativeInputPauses
     <<",\"thread\":"<<inputThread.load()<<",\"updates\":"<<updates.load()<<",\"local_updates\":"<<localUpdates.load()
     <<",\"gathers\":"<<gathers.load()<<",\"on_foot\":"<<onFoot.load()<<",\"vehicle_gated\":"<<vehicle.load()
     <<",\"stale_or_missing\":"<<stale.load()<<",\"applied\":"<<applied.load()<<",\"committed\":"<<committed.load()
@@ -2647,9 +2856,18 @@ void Report(std::ostream& out){out<<"{\"installed\":"<<(hooks[0]&&hooks[1]?"true
     <<",\"vehicle_throttle_max_abs\":"<<vehicleThrottleMaximum.load()<<",\"vehicle_steer_max_abs\":"<<vehicleSteerMaximum.load()<<",\"vehicle_cache_readback_failures\":"<<vehicleReadbackFailures.load()
     <<",\"vehicle_driver_native_look\":false,\"vehicle_driver_native_fire\":false,\"vehicle_gather_evidence\":[";
     for(unsigned i=0;i<vehicleGatherCount.load(std::memory_order_acquire);++i){const auto& row=vehicleGatherRecords[i];if(i)out<<',';
-        out<<"{\"entity\":"<<row.entity<<",\"entry\":"<<row.entry<<",\"soldier\":"<<row.soldier<<",\"weak\":"<<row.weak<<",\"actor_generation\":"<<row.actorGeneration<<",\"seat_generation\":"<<row.seatGeneration<<",\"space\":"<<row.space<<",\"input_sequence\":"<<row.inputSequence<<",\"ms\":"<<row.ms<<",\"axis_mask\":"<<row.mask<<",\"permissions\":"<<row.permissions<<",\"before\":["<<row.before[0]<<','<<row.before[1]<<"],\"written\":["<<row.written[0]<<','<<row.written[1]<<"],\"observed\":["<<row.observed[0]<<','<<row.observed[1]<<"],\"readback_verified\":"<<(row.verified?"true":"false")<<'}';
+        out<<"{\"exit_held\":"<<(row.exitHeld?"true":"false")<<",\"flags_written\":"<<row.flagsWritten<<",\"flags_observed\":"<<row.flagsObserved<<",\"flags_verified\":"<<(row.flagsVerified?"true":"false");
+        out<<",\"entity\":"<<row.entity<<",\"entry\":"<<row.entry<<",\"soldier\":"<<row.soldier<<",\"weak\":"<<row.weak<<",\"actor_generation\":"<<row.actorGeneration<<",\"seat_generation\":"<<row.seatGeneration<<",\"space\":"<<row.space<<",\"input_sequence\":"<<row.inputSequence<<",\"ms\":"<<row.ms<<",\"axis_mask\":"<<row.mask<<",\"permissions\":"<<row.permissions<<",\"before\":["<<row.before[0]<<','<<row.before[1]<<"],\"written\":["<<row.written[0]<<','<<row.written[1]<<"],\"observed\":["<<row.observed[0]<<','<<row.observed[1]<<"],\"readback_verified\":"<<(row.verified?"true":"false")<<'}';
     }
     out<<']';ReportVehicleCameraEvidence(out);ReportBoatAimEvidence(out);
+#ifdef FVR_BC2_ORDINARY_RESOURCE_PAUSE_PROBE
+    out<<",\"native_input_pause_probe\":{\"ran\":"<<(nativeInputPauseProbe.ran?"true":"false")
+       <<",\"same_owner\":"<<(nativeInputPauseProbe.sameOwner?"true":"false")
+       <<",\"begin_ms\":"<<nativeInputPauseProbe.begin<<",\"end_ms\":"<<nativeInputPauseProbe.end
+       <<",\"equipment_before\":"<<nativeInputPauseProbe.before.equipment<<",\"equipment_after\":"<<nativeInputPauseProbe.after.equipment
+       <<",\"input_before\":"<<nativeInputPauseProbe.before.input<<",\"input_after\":"<<nativeInputPauseProbe.after.input
+       <<",\"ammunition_written\":false,\"controller_input_written\":false}";
+#endif
     out
     <<",\"vehicle_interact_samples\":"<<vehicleInteractions.load()<<",\"next_weapon_commands\":"<<nextWeaponCommands.load()<<",\"previous_weapon_commands\":"<<previousWeaponCommands.load()
     <<",\"native_input_inactive\":"<<nativeInactive.load()<<",\"mismatches\":"<<mismatches.load()
@@ -2684,6 +2902,16 @@ void Report(std::ostream& out){out<<"{\"installed\":"<<(hooks[0]&&hooks[1]?"true
            <<",\"sight_phase\":"<<r.sightPhase<<",\"sight_request\":"<<r.sightRequest<<",\"sight_ack\":"<<r.sightAck
            <<",\"sight_commit\":"<<(r.sightCommit?"true":"false")<<'}';
     }
+    out<<"],\"claim_drops_omitted\":"<<handDropJournal.omitted<<",\"claim_drops\":[";
+    for(std::size_t n=0;n<handDropJournal.count;++n){
+        if(n)out<<',';const auto& d=handDropJournal.entries[n];const auto& s=d.attempted;
+        out<<"{\"reason\":"<<unsigned(d.reason)<<",\"claim\":";claimJson(d.claim);
+        out<<",\"input\":"<<s.sequence<<",\"observed_ns\":"<<s.observedNs<<",\"deadline_ns\":"<<s.deadlineNs
+           <<",\"now_ns\":"<<s.nowNs<<",\"previous_now_ns\":"<<d.previousNowNs
+           <<",\"focused\":"<<(s.focused?"true":"false")
+           <<",\"tracked\":["<<(s.tracked[0]?"true":"false")<<','<<(s.tracked[1]?"true":"false")
+           <<"],\"released\":["<<(s.released[0]?"true":"false")<<','<<(s.released[1]?"true":"false")<<"]}";
+    }
     out<<"]}";
     out<<",\"selected_meshes_observer\":";selectedMeshes.Report(out);
     out<<",\"reload_flow\":";reloadFlowRuntime::Report(out);
@@ -2698,9 +2926,20 @@ void Report(std::ostream& out){out<<"{\"installed\":"<<(hooks[0]&&hooks[1]?"true
 #endif
     if(physicalReloadFixture){out<<",\"physical_reload_probe\":";physicalReloadFixture->Report(out);}
     if(physicalReload){out<<",\"physical_reload\":";physicalReload->Report(out);}
-    if(physicalPump){out<<",\"physical_pump\":";physicalPump->Report(out);}
+    if(physicalPump){out<<",\"physical_pump\":";physicalPump->Report(out);
+        out<<",\"pump_aim_continuation\":{\"captures\":"<<pumpAimCaptures.load()<<",\"applications\":"<<pumpAimApplications.load()<<",\"rejected\":"<<pumpAimRejected.load()<<'}';}
     if(physicalPumpFixture){out<<",\"physical_pump_probe\":";physicalPumpFixture->Report(out);}
     if(physicalBoltFixture){out<<",\"physical_bolt_probe\":";physicalBoltFixture->Report(out);}
+    if(ordinaryManualCycles){
+        out<<",\"ordinary_cycle_selection\":{\"read_gaps\":"<<ordinarySelectionReadGaps
+           <<",\"retained_gaps\":"<<ordinarySelectionRetainedGaps<<",\"custody_gaps\":"<<ordinarySelectionCustodyGaps
+           <<",\"first_custody_gap_input\":"<<ordinarySelectionFirstCustodyGap
+           <<",\"bolt_preparation_skips\":[";
+        for(unsigned n=0;n<ordinaryBoltPreparationSkips.size();++n){if(n)out<<',';out<<ordinaryBoltPreparationSkips[n];}
+        out<<"],\"bolt_preparation_first_owned_skip_inputs\":[";
+        for(unsigned n=0;n<ordinaryBoltPreparationFirstOwnedSkip.size();++n){if(n)out<<',';out<<ordinaryBoltPreparationFirstOwnedSkip[n];}
+        out<<"]}";
+    }
     if(ordinaryBoltInputFixture){out<<",\"ordinary_bolt_input_probe\":";ordinaryBoltInputFixture->Report(out);}
     out<<",\"context_interact\":";contextInteractEvidence.Report(out);
     if(magazinePhysical){out<<',';magazinePhysical->Report(out);}

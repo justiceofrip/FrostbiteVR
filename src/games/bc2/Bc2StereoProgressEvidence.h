@@ -12,14 +12,22 @@ enum class StereoProgressReason : unsigned {
     RequestFlagsChanged, EyeTypeChanged, EyeOwnerChanged,
     FrameNotAdvanced, RetirementFrameWait, BeginActiveTransaction,
     BeginRestoreFailure, BridgeNoLease, ViewportUnreadable, ViewportSizeChanged,
-    BeginAccepted, RetirementBorrowedWait, RetirementReferenceWait, Count
+    BeginAccepted, RetirementBorrowedWait, RetirementReferenceWait,
+    ShutdownScene, ShutdownQuiescence, ShutdownCallbacks, ShutdownView,
+    ShutdownActiveEye, ShutdownCode, ShutdownLists, ShutdownCallbackIdentity,
+    ShutdownCallbackViews, ShutdownGraph, ShutdownSurvivors, ShutdownListMutation,
+    ShutdownFinalBoundary, ShutdownGenerationChanged, Count
 };
 constexpr std::array<const char*, unsigned(StereoProgressReason::Count)> StereoProgressNames{
     "owner_matched", "world_changed", "request_changed", "request_world_changed",
     "request_flags_changed", "eye_type_changed", "eye_owner_changed",
     "frame_not_advanced", "retirement_frame_wait", "begin_active_transaction",
     "begin_restore_failure", "bridge_no_lease", "viewport_unreadable", "viewport_size_changed",
-    "begin_accepted", "retirement_borrowed_wait", "retirement_reference_wait"
+    "begin_accepted", "retirement_borrowed_wait", "retirement_reference_wait",
+    "shutdown_scene", "shutdown_quiescence", "shutdown_callbacks", "shutdown_view",
+    "shutdown_active_eye", "shutdown_code", "shutdown_lists", "shutdown_callback_identity",
+    "shutdown_callback_views", "shutdown_graph", "shutdown_survivors", "shutdown_list_mutation",
+    "shutdown_final_boundary", "shutdown_generation_changed"
 };
 struct StereoProgressSample {
     std::uint64_t tickMs=0;
@@ -27,6 +35,9 @@ struct StereoProgressSample {
     std::uint32_t world=0, request=0, expectedWorld=0, expectedRequest=0, eye=0, expectedEyeType=0;
     std::uint32_t checked=0, requestWorld=0, requestFlags=0, eyeType=0, eyeOwner=0;
     std::uint32_t trackedState=0, sampling=0;
+    // Captured values only; diagnostic reporting never rereads a rejected owner.
+    std::uint32_t shutdownViews=0, shutdownReferences=0, shutdownMainChildren=0, shutdownEyeChildren=0;
+    std::uint32_t shutdownSurvivors=0, shutdownReferencesAfter=0;
 };
 // Mirrors the existing native guard's exact short-circuit order. The caller
 // supplies U32; this adds no memory read and never dereferences a rejected owner.
@@ -101,7 +112,10 @@ private:
            <<",\"checked\":"<<s.checked<<",\"request_world\":"<<s.requestWorld
            <<",\"request_flags\":"<<s.requestFlags<<",\"eye_type\":"<<s.eyeType
            <<",\"eye_owner\":"<<s.eyeOwner<<",\"tracked_state\":"<<s.trackedState
-           <<",\"sampling\":"<<s.sampling<<'}';
+           <<",\"sampling\":"<<s.sampling
+           <<",\"shutdown_views\":"<<s.shutdownViews<<",\"shutdown_references\":"<<s.shutdownReferences
+           <<",\"shutdown_main_children\":"<<s.shutdownMainChildren<<",\"shutdown_eye_children\":"<<s.shutdownEyeChildren
+           <<",\"shutdown_survivors\":"<<s.shutdownSurvivors<<",\"shutdown_references_after\":"<<s.shutdownReferencesAfter<<'}';
     }
     std::array<std::atomic<std::uint64_t>,Size> counts_{};
     std::atomic<std::uint64_t> dropped_=0;

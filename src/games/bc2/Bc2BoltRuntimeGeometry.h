@@ -39,16 +39,24 @@ inline bool BoltCustodyFresh(const Bc2BoltTracking& t,std::int64_t now)noexcept 
     auto input=t.input;input.nowNs=now;return interaction::CurrentBoltCustodyWeaponTarget(*t.weapon,input,*t.gun);
 }
 inline bool BoltTargetFresh(const Bc2BoltTracking& t,std::int64_t now)noexcept {
-    if(!BoltCustodyFresh(t,now)||!t.target||!t.held||!t.mechanism)return false;
+    if(!BoltCustodyFresh(t,now)||!t.mechanism)return false;
     auto input=t.input;input.nowNs=now;
-    return interaction::CurrentPhysicalWeaponCycleTarget(*t.target,*t.held,input,*t.mechanism,*t.gun,t.calibration->profile.hands);
+    if(t.target&&t.held&&!t.recoveryTarget&&!t.recovery)
+        return interaction::CurrentPhysicalWeaponCycleTarget(*t.target,*t.held,input,*t.mechanism,*t.gun,t.calibration->profile.hands);
+    if(t.recoveryTarget&&t.recovery&&!t.target&&!t.held)
+        return interaction::CurrentPhysicalWeaponCycleTarget(*t.recoveryTarget,*t.recovery,input,*t.mechanism,*t.gun,t.calibration->profile.hands);
+    return false;
 }
 inline bool BoltCustodyRetained(const Bc2BoltTracking& old,const Bc2BoltTracking& current,std::int64_t now)noexcept {
     if(!BoltCustodyFresh(old,now)||!BoltCustodyFresh(current,now)||old.nativeOwner!=current.nativeOwner||
        old.calibration!=current.calibration||old.input.sequence>current.input.sequence||old.gun->token!=current.gun->token)return false;
-    if(!old.target)return true;
+    if(!old.target&&!old.recoveryTarget)return true;
     if(!BoltTargetFresh(old,now)||!BoltTargetFresh(current,now)||old.mechanism->token!=current.mechanism->token)return false;
     auto input=current.input;input.nowNs=now;
-    return interaction::CurrentPhysicalWeaponCycleTarget(*old.target,*current.held,input,*current.mechanism,*current.gun,current.calibration->profile.hands);
+    if(old.target&&current.held&&!current.recovery)
+        return interaction::CurrentPhysicalWeaponCycleTarget(*old.target,*current.held,input,*current.mechanism,*current.gun,current.calibration->profile.hands);
+    if(old.recoveryTarget&&current.recovery&&!current.held)
+        return interaction::CurrentPhysicalWeaponCycleTarget(*old.recoveryTarget,*current.recovery,input,*current.mechanism,*current.gun,current.calibration->profile.hands);
+    return false;
 }
 }

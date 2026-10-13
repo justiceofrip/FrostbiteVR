@@ -6,6 +6,9 @@
 #include <type_traits>
 namespace fvr::graphics {
 inline constexpr unsigned MaxBodyProps=8;
+// Catalog entries are available assets, not simultaneously rendered instances.
+// Share this bound between the private cache and both rendering backends.
+inline constexpr unsigned MaxBodyPropAssets=64;
 // Wire-only identity namespace, never a gameplay/native equipment generation.
 // Prevent dynamic packet offsets from matching equal geometry produced by two
 // different source types. Slot ordinal also distinguishes identical carried

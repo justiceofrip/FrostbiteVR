@@ -22,12 +22,14 @@ thread_local bool nativeBoundary=false;
 MenuOwnedPress press;std::atomic<bool> pressActive=false;
 MenuOwnedCancel nativeCancel;std::atomic<bool> cancelActive=false;
 std::atomic<unsigned> cancelUps=0,cancelReleaseFailures=0;
+std::atomic<unsigned> pointerRetirements=0,cancelRetirements=0;
 std::array<MenuCancelDiagnostic,32> cancelEvidence{};unsigned cancelEvidenceCount=0;
 std::optional<MenuStateSnapshot> lastState;
 std::uint64_t menuEpoch=1,stateSequence=0,lastPointerSequence=0;
 MenuControlSequence controlSequence;
 std::array<std::atomic<unsigned>,5> controlReadResults{}; // Ok, Busy, Invalid, Timeout, Closed
 std::atomic<unsigned> controlRearms=0,controlInactive=0,toggleEdges=0,cancelEdges=0,edgesWhilePending=0;
+std::atomic<unsigned> controlBusyRetained=0;
 struct ControlEvidence {
     std::uint64_t sequence=0,space=0,toggle=0,cancel=0;
     MenuControlRead read=MenuControlRead::Inactive;
@@ -43,19 +45,26 @@ bool Copy(unsigned address,void* dst,std::size_t n)noexcept {
 const MenuMemory memory{nullptr,[](void*,unsigned at,void* dst,std::size_t n){return Copy(at,dst,n);}};
 std::int64_t frequency=0;
 std::int64_t Nanos(std::int64_t qpc){if(qpc<=0||frequency<=0)return 0;return (qpc/frequency)*1000000000+(qpc%frequency)*1000000000/frequency;}
-std::int64_t Now(){LARGE_INTEGER n{};return QueryPerformanceCounter(&n)?Nanos(n.QuadPart):0;}
+std::int64_t NowQpc(){LARGE_INTEGER n{};return QueryPerformanceCounter(&n)?n.QuadPart:0;}
+std::int64_t Now(){return Nanos(NowQpc());}
 const MenuNativeCalls calls{nullptr,
     [](void*,unsigned fn,unsigned owner,std::int32_t x,std::int32_t y){reinterpret_cast<void(__thiscall*)(void*,int,int)>(fn)(reinterpret_cast<void*>(owner),x,y);return true;},
     [](void*,unsigned fn,unsigned owner,const std::array<unsigned,3>& event){reinterpret_cast<void(__thiscall*)(void*,const unsigned*)>(fn)(reinterpret_cast<void*>(owner),event.data());return true;}};
 const MenuVisibilityCalls visibilityCalls{nullptr,[](void*,unsigned fn,unsigned owner,const std::array<unsigned,4>& args){
     reinterpret_cast<void(__thiscall*)(void*,unsigned,unsigned,unsigned,unsigned)>(fn)(reinterpret_cast<void*>(owner),args[0],args[1],args[2],args[3]);return true;},
     [](void*,unsigned fn,unsigned owner,unsigned action){reinterpret_cast<void(__thiscall*)(void*,unsigned)>(fn)(reinterpret_cast<void*>(owner),action);return true;}};
+void RetireInputEpoch()noexcept {
+    ++menuEpoch;buttonArmed=false;lastPointerSequence=0;
+    controlSequence={};pendingUntil=0;
+}
 void ReleaseOwned()noexcept {
     if(!press.Active()){releasePending=false;return;}
     releasePending=true;
     MenuDispatchGuard guard;guard.nativeUiThread=nativeBoundary;guard.nowNs=Now();
     const auto result=ReleaseMenuPointer(memory,binding,base,press.Target(),press.Epoch(),guard,calls,press);
-    if(result==MenuDispatchResult::Invoked)++ups;else ++releaseFailures;
+    if(result==MenuDispatchResult::Invoked)++ups;
+    else if(result==MenuDispatchResult::Retired){++pointerRetirements;RetireInputEpoch();}
+    else ++releaseFailures;
     pressActive.store(press.Active(),std::memory_order_release);releasePending=press.Active();
 }
 void ReleaseCancel(bool retiring=false)noexcept {
@@ -64,7 +73,9 @@ void ReleaseCancel(bool retiring=false)noexcept {
     MenuCancelDiagnostic diagnostic;
     const auto result=ReleaseMenuCancel(memory,states,binding,base,guard,visibilityCalls,nativeCancel,&diagnostic,retiring);
     if(diagnostic.invoked&&cancelEvidenceCount<cancelEvidence.size())cancelEvidence[cancelEvidenceCount++]=diagnostic;
-    if(result==MenuVisibilityResult::Invoked)++cancelUps;else if(result!=MenuVisibilityResult::NotDue)++cancelReleaseFailures;
+    if(result==MenuVisibilityResult::Invoked)++cancelUps;
+    else if(result==MenuVisibilityResult::Retired){++cancelRetirements;RetireInputEpoch();}
+    else if(result!=MenuVisibilityResult::NotDue)++cancelReleaseFailures;
     cancelActive.store(nativeCancel.Active(),std::memory_order_release);
 }
 void __fastcall Pump(void* self,void*,void* input){
@@ -81,10 +92,19 @@ void __fastcall Pump(void* self,void*,void* input){
     ++pumps;
     if(stopping.load(std::memory_order_acquire)){ReleaseOwned();ReleaseCancel(true);return;}
     ReleaseCancel();
+    // The APT routing target can change without entered/owner changing. Check
+    // an active lease even while the controller is still down; otherwise its
+    // eventual up is rejected forever against the replacement target.
+    if(press.Active()){
+        const auto current=ReadMenuTarget(memory,binding,base);
+        if(current&&!SameMenuTargetOwner(*current,press.Target()))ReleaseOwned();
+    }
     if(releasePending){ReleaseOwned();if(press.Active())return;}
     ++stateReads;
     if(!lastState||lastState->owner!=state->owner||lastState->manager!=state->manager||lastState->entered!=state->entered){
-        ReleaseOwned();if(press.Active())return;++menuEpoch;buttonArmed=false;lastPointerSequence=0;
+        ReleaseOwned();if(press.Active())return;
+        if(lastState&&(lastState->owner!=state->owner||lastState->manager!=state->manager))RetireInputEpoch();
+        else {++menuEpoch;buttonArmed=false;lastPointerSequence=0;}
     }
     lastState=state;
     if(pendingUntil){
@@ -97,10 +117,13 @@ void __fastcall Pump(void* self,void*,void* input){
     ipc::MenuControl control;
     const auto controlResult=channel.ReadControl(control);
     if(unsigned(controlResult)<controlReadResults.size())++controlReadResults[unsigned(controlResult)];
-    const auto edge=controlSequence.Observe(controlResult,control);
+    const auto controlNow=NowQpc();
+    const auto edge=controlSequence.Observe(controlResult,control,controlNow);
     if(edge.read==MenuControlRead::Busy){
-        // Contention supplies no usable pointer/control sample, but it must not
-        // absorb a new toggle published while the channel lock was occupied.
+        // A briefly busy channel is not a release gesture. Preserve only the
+        // existing press under its original unexpired input lease. No cursor
+        // or button event is sent; prolonged loss still enters cleanup below.
+        if(controlSequence.RetainPointerAcrossContention(menuEpoch,controlNow)){++controlBusyRetained;return;}
         ReleaseOwned();buttonArmed=false;return;
     }
     if(edge.read==MenuControlRead::Inactive){
@@ -134,14 +157,23 @@ void __fastcall Pump(void* self,void*,void* input){
     }
     if(!state->entered||!target||control.menuEpoch!=menuEpoch||!(control.flags&ipc::MenuPoint)||pendingUntil||nativeCancel.Active()){ReleaseOwned();buttonArmed=false;return;}
     const bool down=(control.flags&ipc::MenuDown)!=0;
-    if(!down){ReleaseOwned();if(press.Active())return;buttonArmed=true;}
+    if(!down&&!press.Active())buttonArmed=true;
     if(control.sequence==lastPointerSequence)return;
     lastPointerSequence=control.sequence;lastU=control.u;lastV=control.v;
-    const auto kind=down&&buttonArmed&&!press.Active()?MenuPointerKind::PrimaryDown:MenuPointerKind::Move;
+    // A normal tracked release must position the native cursor before its up
+    // event. The original mouse pump above can have moved it since the prior
+    // VR packet. ReleaseOwned is cleanup for lost input/ownership; using that
+    // event-only path here lets the desktop cursor decide which button clicks.
+    const auto kind=!down&&press.Active()?MenuPointerKind::PrimaryUp:
+        down&&buttonArmed&&!press.Active()?MenuPointerKind::PrimaryDown:MenuPointerKind::Move;
     const auto command=MakeMenuPointerCommand(binding,lastU,lastV,kind,control.sequence,menuEpoch,Nanos(control.deadlineQpc));
     const MenuDispatchGuard guard{menuEpoch,Now(),true,true,true,true};
     if(command){const auto result=DispatchMenuPointer(memory,binding,base,*target,*command,guard,calls,press);
-        if(result==MenuDispatchResult::Invoked){if(kind==MenuPointerKind::PrimaryDown){++downs;buttonArmed=false;}else ++moves;}else ++rejected;
+        if(result==MenuDispatchResult::Invoked){
+            if(kind==MenuPointerKind::PrimaryDown){++downs;buttonArmed=false;}
+            else if(kind==MenuPointerKind::PrimaryUp){++ups;buttonArmed=true;}
+            else ++moves;
+        }else ++rejected;
     }
     pressActive.store(press.Active(),std::memory_order_release);
 }
@@ -179,13 +211,14 @@ void Report(std::ostream& out){
     out<<"{\"installed\":"<<(hook?"true":"false")<<",\"ui_thread\":"<<uiThread.load()<<",\"pumps\":"<<pumps.load()<<",\"state_reads\":"<<stateReads.load()<<",\"state_misses\":"<<stateMisses.load()
        <<",\"visibility_requests\":"<<visibilityRequests.load()<<",\"visibility_acknowledgements\":"<<visibilityAcks.load()<<",\"visibility_timeouts\":"<<visibilityTimeouts.load()
        <<",\"moves\":"<<moves.load()<<",\"downs\":"<<downs.load()<<",\"ups\":"<<ups.load()<<",\"rejected\":"<<rejected.load()<<",\"release_failures\":"<<releaseFailures.load()
+       <<",\"pointer_owner_retirements\":"<<pointerRetirements.load()<<",\"cancel_owner_retirements\":"<<cancelRetirements.load()
        <<",\"foreign_boundary\":"<<foreignBoundary.load()<<",\"concurrent_boundary\":"<<concurrentBoundary.load()<<",\"worker_thread_changes\":"<<threadChanges.load()
        <<",\"button_still_owned\":"<<(pressActive.load()?"true":"false")<<",\"captured\":"<<raster.Captured()<<",\"published\":"<<raster.Published()<<",\"discarded_rasters\":"<<raster.Discarded()<<",\"graphics_failures\":"<<raster.Failed()<<",\"cancel_ups\":"<<cancelUps.load()<<",\"cancel_release_failures\":"<<cancelReleaseFailures.load()<<",\"cancel_still_owned\":"<<cancelActive.load()<<",\"cancel_evidence\":[";
     const auto observation=[&](const MenuCancelObservation& o){out<<"{\"target_valid\":"<<o.targetValid<<",\"queue\":"<<o.target.queue<<",\"count\":"<<o.target.count<<",\"last_word_valid\":"<<o.lastWordValid<<",\"last_word\":"<<o.lastWord<<",\"press_disabled_valid\":"<<o.pressDisabledValid<<",\"press_disabled\":"<<unsigned(o.pressDisabled)<<",\"modal_valid\":"<<o.modalValid<<",\"modal_selected\":"<<o.modalSelected<<",\"modal_vtable\":"<<o.modalVtable<<",\"modal_predicate\":"<<o.modalPredicate<<'}';};
     for(unsigned n=0;n<cancelEvidenceCount;++n){if(n)out<<',';const auto& e=cancelEvidence[n];out<<"{\"action\":"<<unsigned(e.action)<<",\"release\":"<<e.release<<",\"invoked\":"<<e.invoked<<",\"before\":";observation(e.before);out<<",\"after\":";observation(e.after);out<<'}';}
     out<<"],\"control_reads\":{\"ok\":"<<controlReadResults[0].load()<<",\"busy\":"<<controlReadResults[1].load()
        <<",\"invalid\":"<<controlReadResults[2].load()<<",\"timeout\":"<<controlReadResults[3].load()<<",\"closed\":"<<controlReadResults[4].load()<<'}'
-       <<",\"control_rearms\":"<<controlRearms.load()<<",\"control_inactive\":"<<controlInactive.load()
+       <<",\"control_rearms\":"<<controlRearms.load()<<",\"control_inactive\":"<<controlInactive.load()<<",\"control_busy_retained\":"<<controlBusyRetained.load()
        <<",\"toggle_edges\":"<<toggleEdges.load()<<",\"cancel_edges\":"<<cancelEdges.load()<<",\"edges_while_pending\":"<<edgesWhilePending.load()
        <<",\"control_edge_evidence\":[";
     for(unsigned n=0;n<controlEvidenceCount;++n){if(n)out<<',';const auto& e=controlEvidence[n];

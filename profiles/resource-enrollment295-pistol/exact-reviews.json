@@ -1,0 +1,9 @@
+[
+  {
+    "key": "bc2:magazine-descriptor:52bfa481c525136589096989304d8b22ec43cc3d684f36b42a97846a54cb5e4a",
+    "descriptor_digest": "22e837a6b3b2f22c55587d7a31a1381556b5f253e11fb7b24d7e212077aada48",
+    "family_proof": "bc2.singlefire-magazine-zero-bolt.v1",
+    "evidence_sha256": "50d149c5c147061a39e04d0eec07efeefd2e0267956fbd3b258ec58dc0ed6a4e",
+    "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee"
+  }
+]

@@ -25,7 +25,7 @@ struct Reader {
 };
 }
 const char* BodyAmmoCacheStatusName(BodyAmmoCacheStatus s)noexcept {
-    constexpr const char* names[]{"loaded","missing","size","read","header","count","identity","section","geometry","trailing","exception"};
+    constexpr const char* names[]{"loaded","missing","size","read","header","count","identity","section","geometry","trailing","exception","catalog"};
     const auto n=unsigned(s);return n<std::size(names)?names[n]:"unknown";
 }
 BodyAmmoCacheResult ParseBodyAmmoGeometryCache(std::span<const std::byte> bytes)noexcept {
@@ -36,7 +36,7 @@ BodyAmmoCacheResult ParseBodyAmmoGeometryCacheForProfiles(std::span<const std::b
     if(bytes.size()<12||bytes.size()>MaxBytes){out.status=BodyAmmoCacheStatus::Size;return out;}
     try {
         Reader r{bytes};const auto magic=r.Take(8);if(std::memcmp(magic.data(),"BC2PROP1",8)){out.status=BodyAmmoCacheStatus::Header;return out;}
-        const auto count=r.Number(4);if(!count||count>64){out.status=BodyAmmoCacheStatus::Count;return out;}
+        const auto count=r.Number(4);if(!count||count>graphics::MaxBodyPropAssets){out.status=BodyAmmoCacheStatus::Count;return out;}
         auto catalog=std::make_shared<BodyAmmoGeometryCatalog>();catalog->reserve(std::size_t(count));
         for(unsigned part=0;part<count;++part){out.part=part;const auto asset=r.Text(),mesh=r.Text(),bone=r.Text();const auto rig=r.Number(8),sectionCount=r.Number(4);
             const BodyAmmoAssetProfile* profile=nullptr;

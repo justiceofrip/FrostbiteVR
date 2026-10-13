@@ -10,6 +10,7 @@
 #include "Bc2ReloadPreview.h"
 #include "Bc2MagazinePresentation.h"
 #include "Bc2BodyAmmoRenderer.h"
+#include "Bc2StowedAmmo.h"
 #include "Bc2BodyEquipment.h"
 #include "Bc2PersistentBodyEquipment.h"
 #include "Bc2MagazinePhysicalProbe.h"
@@ -66,6 +67,12 @@ struct Tracking {
     interaction::BodyAnchorConfig bodyAnchors{};
     std::shared_ptr<const BodyInventoryDisplay> bodyInventoryDisplay;
     std::array<std::shared_ptr<const CarriedMeshesSnapshot>,8> bodyCarriedMeshes{};
+    Bc2AmmoReserveLease stowedAmmoReserve{}; // Read-only availability; no synthetic GunHold.
+    const MagazineEquipmentProfile* stowedAmmoMagazine=nullptr;
+    std::optional<interaction::AmmoSupplyContact> stowedAmmoContact;
+    // Same original packet for support-only diagnostics, independent of ammo.
+    ReloadStateOwner controllerOwner{};
+    interaction::HandInteractionSample controllerEvidence{};
 
 };
 // Read-only shot candidate from the same immutable pose as the rendered gun.
@@ -93,6 +100,10 @@ struct WeaponShotFrame {
  // Returned only through the publication's original configured-mesh/input lease.
  // Experimental authored contact, never a native aim/muzzle/holster capability.
  bool authoredSupportReference=false;
+ // Observation-only controller mapping for input diagnostics. Original source
+ // input/owner/pose lifetime; this cannot grant support or native authority.
+ ReloadRawContact controllerMapping{};
+ math::Matrix4 targetWristWorldMeters{};
 };
 std::optional<WeaponShotFrame> ReadWeaponShotFrame(unsigned soldier,unsigned weak,unsigned weapon)noexcept;
 // Contact-only capability: pending native ammo transfer can block firing while
@@ -102,6 +113,8 @@ struct WeaponSupportFrame {
  std::uint64_t generation=0;std::int64_t deadline=0;
  std::uint64_t ownerGeneration=0,space=0;
  bool authoredSupportReference=false;
+ ReloadRawContact controllerMapping{};
+ math::Matrix4 targetWristWorldMeters{};
 };
 std::optional<WeaponSupportFrame> ReadWeaponSupportFrame(unsigned soldier,unsigned weak,unsigned weapon)noexcept;
 // Body transaction ownership observation only; it may describe hidden geometry.
@@ -123,6 +136,7 @@ void PublishTracking(const Tracking&)noexcept;
 // Original current input/native source only; never renews a visual lease.
 std::optional<BodyAmmoRenderSource> ReadBodyAmmoRenderSource(std::int64_t now)noexcept;
 std::optional<BodyHolsteredRenderSource> ReadHolsteredBodyRenderSource(std::int64_t now)noexcept;
+std::optional<StowedAmmoRenderSource> ReadStowedAmmoRenderSource(std::int64_t now)noexcept;
 std::optional<BodyCarriedRenderBatch> ReadCarriedBodyRenderSource(std::int64_t now)noexcept;
 // Disabled by default; original request/input/mesh lease is never renewed here.
 void PublishWeaponVisibility(const WeaponVisibilityRequest&)noexcept;

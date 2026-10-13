@@ -1,6 +1,7 @@
 #pragma once
 #include "fvr/ipc/FrameProtocol.h"
 #include "fvr/graphics/BodyPropFrame.h"
+#include "fvr/graphics/SceneDepthFrame.h"
 #include "fvr/ipc/InputProtocol.h"
 #include "fvr/interaction/Feedback.h"
 #include <memory>
@@ -39,8 +40,9 @@ public:
     // Producer: call at the verified render boundary, on the graphics thread.
     ChannelResult TryTake(FrameRequest&) noexcept;
     ChannelResult Publish(const graphics::TextureDescriptor&,const graphics::PairTicket&,
-        const graphics::BodyPropFrame* props=nullptr) noexcept;
+        const graphics::BodyPropFrame* props=nullptr,const graphics::SceneDepthFrame* depth=nullptr) noexcept;
     bool ReadBodyProps(const graphics::PairTicket&,graphics::BodyPropFrame&)noexcept;
+    bool ReadSceneDepth(const graphics::TextureDescriptor&,const graphics::PairTicket&,graphics::SceneDepthFrame&)noexcept;
     ChannelResult Skip() noexcept;
     Outcome PollOutcome() noexcept;
 private:struct State;std::unique_ptr<State> state_;std::wstring token_;

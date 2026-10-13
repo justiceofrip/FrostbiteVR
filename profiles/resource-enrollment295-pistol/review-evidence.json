@@ -1,0 +1,36 @@
+{
+  "schema": "fvr.bc2.singlefire-magazine-enrollment.v1",
+  "family": "bc2.singlefire-magazine-zero-bolt.v1",
+  "instruction_proof_digest": "0111a8ca1e74bc6558341d38d60b0790a684909faea1e566eb08777457c966ee",
+  "source_proofs": [
+    {
+      "path": "profiles/singlefire238/static-proof.json",
+      "sha256": "513aaee389e14d98f59cab742b00508f6b2f03689af10a2518271a42bbcacbae"
+    },
+    {
+      "path": "profiles/singlefire238/instruction-evidence.json",
+      "sha256": "76c083751b0fb33bc2161b0158673ca1fa0d3d1d31f7296a31e5d4a389a90351"
+    },
+    {
+      "path": "profiles/experimental-pistol-sampled242/exact-geometry.json",
+      "sha256": "bf3d5339930a38f4125bf64497ed3df33e8c5183a4a2f40d0e7ba248d15a0ff6"
+    }
+  ],
+  "private_cache": {
+    "rows": 46,
+    "bytes": 16473040,
+    "maximum_bytes": 16777216,
+    "sha256": "bb8663974198249eb38780493c1b505242203350c173375cbbb51b42880148e5",
+    "preserved_baseline_sha256": "ad189a784d1a637eef62e919a7346441aa2204e3203a87414536a44df0b8e735",
+    "preserved_baseline_record_bytes": 16363665,
+    "assembly_bytes": 14209,
+    "body_bytes": 95154,
+    "private_installed_assets_only": true,
+    "native_calls": false
+  },
+  "native_runtime_tested": false,
+  "headset_verified": false,
+  "chamber_knowledge": "Unknown",
+  "slide_capability": false,
+  "scope": "Exact MP443_sp zero-bolt SingleFire magazine family. Existing authored sampled path, native resource service and hand arbitration; no new native ABI or per-weapon gesture."
+}

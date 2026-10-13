@@ -317,7 +317,12 @@ ReloadRequestDecision Bc2MagazineReloadCycle::Evaluate(const ReloadHoldInput &in
     }
     if (b.loaded == loaded_ && b.reserve == reserve_)
     {
-        if ((completion_.AdvancedMask() & (1u << in.branch)) || !profile_.Wait(b) || !Recent(contexts_, now))
+        // As with the tube policy, this tracks the current verified native
+        // Update without a context override. Older copies' Update timestamps
+        // cannot cancel an already submitted insertion. They remain required
+        // for a held-cohort publication, and no acknowledgement is issued until
+        // the exact transfers and native tail have actually completed.
+        if ((completion_.AdvancedMask() & (1u << in.branch)) || !profile_.Wait(b))
         {
             Cancel(ReloadRequestCycleFailure::State);
             return {};

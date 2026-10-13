@@ -4,6 +4,7 @@
 #include "Bc2ReloadState.h"
 #include "Bc2AmmoResourceBinding.h"
 #include "Bc2WeaponMode.h"
+#include "Bc2BodyCarry.h"
 #include "fvr/interaction/BodyAnchors.h"
 #include "fvr/interaction/BodyInventory.h"
 #include <ostream>
@@ -12,6 +13,14 @@ namespace fvr::bc2 {
 class Bc2BodyHolster;struct BodyHolsterSample;struct BodyHolsterResult;
 struct BodyNativeItem {
     std::uint32_t weapon=0,data=0,persistence=0,category=20,slot=0;
+    // wcSmg includes both rifles/SMGs and pistols. Read its asset identity in
+    // both coherent inventory samples; never infer a pistol from category2.
+    std::array<char,64> carryAsset{};
+    BodyCarryClass Carry()const noexcept {
+        const auto end=std::find(carryAsset.begin(),carryAsset.end(),'\0');
+        return ResolveBodyCarry(category,end==carryAsset.end()?std::string_view{}:
+            std::string_view(carryAsset.data(),std::size_t(end-carryAsset.begin())));
+    }
     bool operator==(const BodyNativeItem&)const=default;
 };
 // Complete carried-item identity from one coherent native read. Space/input
@@ -137,6 +146,15 @@ private:
     bool enabled_=false,armed_=false;interaction::BodyAnchorConfig config_{};
     interaction::BodyGripApproach heldApproach_;
     interaction::BodyGripRelease heldRelease_;
+    // A deliberate shoulder draw can coincide with loss of a paired hide
+    // receipt. Retain only that still-held contact while NEW proof is obtained.
+    // No render receipt, pose, hand claim or native request is retained here.
+    struct DeferredDrawContact {
+        ReloadStateOwner nativeOwner{};interaction::HandInteractionOwner owner{};
+        interaction::HandInteractionKey gun{};interaction::BodySlotAssignment contact{};
+        std::uint64_t revision=0,input=0;std::int64_t started=0,lastObserved=0;
+    };
+    std::optional<DeferredDrawContact> deferredDraw_;
     interaction::BodyInventory policy_{};std::vector<Life> life_;
     std::vector<interaction::BodyInventoryItem> items_;std::vector<interaction::BodySlotAssignment> slots_;
     interaction::BodyInventoryOwner owner_{};
@@ -145,7 +163,7 @@ private:
     std::int64_t lastNow_=0,nativeProofNs_=0;
     ReloadStateOwner nativeOwner_{};
     std::optional<interaction::BodyInventoryRequest> pending_;
-    std::uint64_t requests_=0,commits_=0,cancels_=0,blocked_=0,unavailable_=0;
+    std::uint64_t requests_=0,commits_=0,cancels_=0,blocked_=0,unavailable_=0,metadataPauses_=0;
     struct Event {unsigned kind=0;std::uint64_t request=0,input=0;std::int64_t now=0;unsigned from=0,to=0,action=0;};
     std::array<Event,128> events_{};unsigned eventCount_=0,eventDropped_=0;
     void EventRow(unsigned,const BodyDrawSample&,std::uint64_t,unsigned=0,unsigned=0)noexcept;

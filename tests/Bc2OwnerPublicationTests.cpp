@@ -1,8 +1,49 @@
 #include "Bc2OwnerPublication.h"
 #include "Bc2ReloadRequestCycle.h"
 #include "Test.h"
+#include <barrier>
+#include <mutex>
+#include <thread>
 using namespace fvr::bc2;
+namespace {
+int PublicationArrivesAfterCallbackEntry(){
+ // Force the real producer/consumer ordering: callback entry, then a newer
+ // publication under the gate, then the callback acquires that same gate.
+ struct Lease {std::int64_t observed=90,deadline=200;std::uint64_t revision=4;
+  int loaded=7,reserve=24;};
+ Lease published;std::optional<Lease> copied;
+ std::mutex gate;std::unique_lock producer(gate);
+ std::barrier entered(2),release(2);
+ const auto current=[](const Lease& value,std::int64_t at){
+  return value.revision==4&&at>=value.observed&&at<value.deadline;};
+ std::thread callback([&]{
+  const std::int64_t entry=100;
+  entered.arrive_and_wait();release.arrive_and_wait();
+  std::lock_guard hold(gate);
+  copied=CopyPublishedOwnerAtAcquisition(published,entry,[]{return 120ll;},current);
+ });
+ entered.arrive_and_wait();published.observed=110;
+ producer.unlock();release.arrive_and_wait();callback.join();
+ CHECK(copied&&copied->observed==110&&copied->deadline==200);
+ CHECK(copied->revision==4&&copied->loaded==7&&copied->reserve==24);
+ // Reject expired, genuinely future, revoked and backwards-clock copies.
+ for(unsigned mode=0;mode<5;++mode){
+  Lease invalid=published;std::int64_t at=120,entry=100;
+  if(mode==0)at=invalid.deadline;
+  if(mode==1)invalid.observed=at+1;
+  if(mode==2)++invalid.revision;
+  if(mode==3)at=entry-1;
+  if(mode==4)entry=0;
+  CHECK(!CopyPublishedOwnerAtAcquisition(invalid,entry,[&]{return at;},current));
+ }
+ // Admission is not a renewal: the same original copy expires at200.
+ CHECK(!CopyPublishedOwnerAtAcquisition(*copied,199,[]{return 200ll;},current));
+ CHECK(copied->observed==110&&copied->deadline==200);
+ return 0;
+}
+}
 int main(){
+ if(PublicationArrivesAfterCallbackEntry())return 1;
  const std::int64_t observed=1000000000,deadline=1100000000;
  ReloadHoldIdentity id;id.owner={0x10000,0x20000,0x30000,0x40000,1,2,3};
  id.firing={0x50000,0x60000,0x70000};id.serverPlayer=0x80000;id.serverSoldier=0x90000;id.serverItem=0xa0000;

@@ -1,5 +1,6 @@
 #include "fvr/xr/OpenXrHost.h"
 #include "Bc2BodyAmmoGeometryCache.h"
+#include "fvr/graphics/BodyPropMaterials.h"
 #include "fvr/xr/DiagnosticScene.h"
 #include "fvr/ipc/RemoteFrameProvider.h"
 #include "fvr/ipc/MenuChannel.h"
@@ -17,7 +18,7 @@ int wmain(int argc,wchar_t** argv){
     try {
         wchar_t module[32768]{};const auto length=GetModuleFileNameW(nullptr,module,32768);if(!length||length>=32768)throw std::runtime_error("Cannot locate host executable");
         fvr::platform::ProcessLifetime gameLifetime;unsigned gamePid=0;
-        fvr::xr::DiagnosticScene diagnostic;fvr::ipc::RemoteFrameProvider remote;fvr::ipc::MenuChannel menu;bool testScene=false,ipcMode=false;std::filesystem::path channelFile,stopFile,bodyPropsCache;fvr::xr::HostOptions options;options.loaderPath=std::filesystem::path(module).parent_path()/L"runtime/openxr/win64/openxr_loader.dll";
+        fvr::xr::DiagnosticScene diagnostic;fvr::ipc::RemoteFrameProvider remote;fvr::ipc::MenuChannel menu;bool testScene=false,ipcMode=false;std::filesystem::path channelFile,stopFile,bodyPropsCache,bodyPropsMaterials;fvr::xr::HostOptions options;options.loaderPath=std::filesystem::path(module).parent_path()/L"runtime/openxr/win64/openxr_loader.dll";
         for(int i=1;i<argc;++i){const std::wstring arg=argv[i];if(arg==L"--probe")options.probeOnly=true;else if(arg==L"--session")options.probeOnly=false;else if(arg==L"--test-scene"){options.probeOnly=false;testScene=true;options.provider=&diagnostic;}
             else if(arg==L"--ipc"){options.probeOnly=false;ipcMode=true;options.provider=&remote;}
             else if(arg==L"--controllers")options.controllers=true;
@@ -28,6 +29,7 @@ int wmain(int argc,wchar_t** argv){
             else if(arg==L"--eye-width"&&i+1<argc){options.eyeWidth=std::stoul(argv[++i]);if(!options.eyeWidth||options.eyeWidth>16384)throw std::runtime_error("Eye width must be 1..16384");}
             else if(arg==L"--eye-height"&&i+1<argc){options.eyeHeight=std::stoul(argv[++i]);if(!options.eyeHeight||options.eyeHeight>16384)throw std::runtime_error("Eye height must be 1..16384");}
             else if(arg==L"--body-props-cache"&&i+1<argc)bodyPropsCache=std::filesystem::absolute(argv[++i]);
+            else if(arg==L"--body-props-materials"&&i+1<argc){if(!bodyPropsMaterials.empty())throw std::runtime_error("Specify one body material cache");bodyPropsMaterials=std::filesystem::absolute(argv[++i]);}
             else if(arg==L"--channel-file"&&i+1<argc)channelFile=std::filesystem::absolute(argv[++i]);
             else if(arg==L"--ready-file"&&i+1<argc)options.readyPath=std::filesystem::absolute(argv[++i]);
             else if(arg==L"--stop-file"&&i+1<argc)stopFile=std::filesystem::absolute(argv[++i]);
@@ -44,14 +46,22 @@ int wmain(int argc,wchar_t** argv){
         if(!channelFile.empty()&&(!ipcMode||std::filesystem::exists(channelFile)))throw std::runtime_error("Channel output requires IPC mode and a new file");
         if(ipcMode){if(testScene||options.probeOnly)throw std::runtime_error("IPC mode cannot be combined with probe/test-scene");
             if(!remote.Create())throw std::runtime_error("Cannot create frame channel");if(!menu.CreateHost(remote.Token()))throw std::runtime_error("Cannot create menu channel");options.menu=&menu;std::wcerr<<L"frame_channel="<<remote.Token()<<L'\n';if(!channelFile.empty()){std::wofstream output(channelFile);output<<remote.Token();output.close();if(!output)throw std::runtime_error("Cannot write channel token");}}
-        fvr::bc2::BodyAmmoCacheResult propCache;
+        if(!bodyPropsMaterials.empty()&&(!ipcMode||bodyPropsCache.empty()))throw std::runtime_error("Body materials require IPC and a body geometry cache");
+        fvr::bc2::BodyAmmoCacheResult propCache;fvr::graphics::BodyPropMaterialResult propMaterials;
         if(ipcMode&&!bodyPropsCache.empty()){
             propCache=fvr::bc2::LoadBodyAmmoGeometryCache(bodyPropsCache);
             if(propCache.catalog){auto catalog=std::make_shared<fvr::graphics::BodyPropCatalog>();
                 for(const auto& asset:*propCache.catalog)catalog->push_back({asset->key,asset->sections});options.bodyProps=std::move(catalog);}
         }
+        if(!bodyPropsMaterials.empty()){
+            if(!options.bodyProps)throw std::runtime_error("Body materials require valid body geometry");
+            propMaterials=fvr::graphics::LoadBodyPropMaterials(bodyPropsMaterials,*options.bodyProps);
+            if(!propMaterials.catalog)throw std::runtime_error(std::string("Body materials rejected: ")+propMaterials.error);
+            options.bodyProps=propMaterials.catalog;
+        }
         const auto report=fvr::xr::RunOpenXrHost(options);
         const auto& delivery=remote.Statistics();
+        std::cerr<<"body_materials="<<propMaterials.error<<" textures="<<propMaterials.textures<<" sections="<<propMaterials.sections<<'\n';
         std::cerr<<"body_props_cache="<<fvr::bc2::BodyAmmoCacheStatusName(propCache.status)<<" parts="<<(propCache.catalog?propCache.catalog->size():0)<<" ready="<<report.bodyPropsReady
             <<" pairs="<<report.bodyProps.pairs<<" instances="<<report.bodyProps.instances<<" expired="<<report.bodyProps.expired<<" missing="<<report.bodyProps.missing<<" invalid="<<report.bodyProps.invalid<<" failures="<<report.bodyProps.failures<<'\n';
         std::cerr<<"ammo_counter_ready="<<report.ammoCounterReady<<" visible_frames="<<report.ammoCounterFrames
@@ -63,7 +73,9 @@ int wmain(int argc,wchar_t** argv){
             <<",\n  \"adapter_luid_low\":"<<report.requirements.adapterLow<<",\n  \"adapter_luid_high\":"<<report.requirements.adapterHigh
             <<",\n  \"body_props\":{\"cache\":"<<Json(fvr::bc2::BodyAmmoCacheStatusName(propCache.status))<<",\"ready\":"<<report.bodyPropsReady
             <<",\"frames\":"<<report.bodyProps.frames<<",\"pairs\":"<<report.bodyProps.pairs<<",\"instances\":"<<report.bodyProps.instances
-            <<",\"expired\":"<<report.bodyProps.expired<<",\"missing\":"<<report.bodyProps.missing<<",\"invalid\":"<<report.bodyProps.invalid<<",\"failures\":"<<report.bodyProps.failures<<",\"scene_depth\":false}"
+            <<",\"expired\":"<<report.bodyProps.expired<<",\"missing\":"<<report.bodyProps.missing<<",\"invalid\":"<<report.bodyProps.invalid<<",\"failures\":"<<report.bodyProps.failures
+            <<",\"scene_depth_pairs\":"<<report.bodyProps.sceneDepthPairs<<",\"scene_depth_failures\":"<<report.bodyProps.sceneDepthFailures
+            <<",\"scene_depth_received\":"<<report.sceneDepthReceived<<",\"scene_depth_copied\":"<<report.sceneDepthCopied<<",\"scene_depth_omitted\":"<<report.sceneDepthOmitted<<'}'
             <<",\n  \"ammo_counter\":{\"initialized\":"<<report.ammoCounterReady<<",\"visible_frames\":"<<report.ammoCounterFrames
             <<",\"uploads\":"<<report.ammoCounterUploads<<",\"errors\":"<<report.ammoCounterErrors
             <<",\"valid_samples\":"<<report.ammoCounterValidSamples<<",\"invalid_samples\":"<<report.ammoCounterInvalidSamples<<'}'

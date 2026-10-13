@@ -44,6 +44,51 @@ int main(){
     restoredSrv.Reset();context->PSGetShaderResources(7,1,&restoredSrv);CHECK(restoredSrv==nativeSrv);
     context->CopyResource(readback.Get(),propColor.Get());D3D11_MAPPED_SUBRESOURCE mapped{};CHECK(SUCCEEDED(context->Map(readback.Get(),0,D3D11_MAP_READ,0,&mapped)));
     const auto* pixel=static_cast<const unsigned char*>(mapped.pData)+16*mapped.RowPitch+16*4;const bool visible=pixel[0]>80&&pixel[1]>10;
-    context->Unmap(readback.Get(),0);CHECK(visible);context->ClearState();
-    std::cout<<"RigidPropGpu: WARP two-eye draws and conflicting native SRV/RTV state restored; no native-game/headset proof\n";
+    context->Unmap(readback.Get(),0);CHECK(visible);
+    // Actual texture sampling, not a mock of the upload's validation. Keep a
+    // conflicting native SRV and sampler at the slots used by the prop shader.
+    context->PSSetShaderResources(0,1,&priorSrv);
+    D3D11_SAMPLER_DESC sd{};sd.Filter=D3D11_FILTER_MIN_MAG_MIP_POINT;
+    sd.AddressU=sd.AddressV=sd.AddressW=D3D11_TEXTURE_ADDRESS_CLAMP;sd.MaxLOD=D3D11_FLOAT32_MAX;
+    ComPtr<ID3D11SamplerState> nativeSampler;CHECK(SUCCEEDED(device->CreateSamplerState(&sd,&nativeSampler)));
+    auto* priorSampler=nativeSampler.Get();context->PSSetSamplers(0,1,&priorSampler);
+    source.color={1,1,1,1};for(auto& v:source.mesh.vertices){v.ny=1;v.nz=0;}
+    auto texture=std::make_shared<PropAlbedoTexture>();texture->width=texture->height=2;
+    texture->mips={{{255,0,0,255,0,255,0,255,0,0,255,255,255,255,255,255}}};
+    auto drawPixel=[&]()->std::array<unsigned char,4>{
+        context->ClearRenderTargetView(propRtv.Get(),black);context->ClearDepthStencilView(dsv.Get(),D3D11_CLEAR_DEPTH,1,0);
+        ++eye.frame;++eye.input;
+        if(!renderer.Draw({1,2,3},eye,eye,eye.observedNs,world,identity,*projection,{propRtv.Get(),dsv.Get(),32,32}))return {};
+        context->CopyResource(readback.Get(),propColor.Get());D3D11_MAPPED_SUBRESOURCE sample{};
+        if(FAILED(context->Map(readback.Get(),0,D3D11_MAP_READ,0,&sample)))return {};
+        const auto* p=static_cast<const unsigned char*>(sample.pData)+16*sample.RowPitch+16*4;
+        std::array<unsigned char,4> result{p[0],p[1],p[2],p[3]};context->Unmap(readback.Get(),0);return result;
+    };
+    for(unsigned c=0;c<4;++c){
+        auto t=std::make_shared<PropAlbedoTexture>(*texture);t->address=c==3?PropTextureAddress::Clamp:PropTextureAddress::Wrap;
+        source.albedo=t;source.uv.assign(3,{c==0?.25f:c==1?.75f:-.25f,.25f});
+        CHECK(renderer.Upload({1,2,3},std::span(&source,1)));const auto p=drawPixel();
+        CHECK(p[3]==255&&((c==0||c==3)?(p[0]>250&&p[1]<5):(p[0]<5&&p[1]>250)));
+    }
+    for(auto space:{PropTextureColorSpace::Linear,PropTextureColorSpace::Srgb}){
+        auto t=std::make_shared<PropAlbedoTexture>();t->width=t->height=1;t->colorSpace=space;t->mips={{{128,128,128,255}}};
+        source.albedo=t;source.uv.assign(3,{0,0});CHECK(renderer.Upload({1,2,3},std::span(&source,1)));
+        const auto p=drawPixel();const int expected=space==PropTextureColorSpace::Linear?128:55;
+        CHECK(std::abs(int(p[0])-expected)<=1&&p[0]==p[1]&&p[1]==p[2]);
+    }
+    // A minified supplied mip is sampled, rather than silently dropping mips.
+    auto mipTexture=std::make_shared<PropAlbedoTexture>(*texture);
+    mipTexture->mips[0].rgba={255,0,0,255,255,0,0,255,255,0,0,255,255,0,0,255};
+    mipTexture->mips.push_back({{0,255,0,255}});source.albedo=mipTexture;source.uv={{{0,0}},{{0,64}},{{64,0}}};
+    CHECK(renderer.Upload({1,2,3},std::span(&source,1)));{const auto p=drawPixel();CHECK(p[0]<5&&p[1]>250);}
+    // Invalid replacements preserve the preceding GPU upload transactionally.
+    for(unsigned c=0;c<6;++c){auto bad=source;auto t=std::make_shared<PropAlbedoTexture>(*mipTexture);bad.albedo=t;
+        if(c==0)bad.uv.pop_back();if(c==1)bad.uv[0][0]=NAN;if(c==2)t->mips[0].rgba.pop_back();
+        if(c==3)t->mips.push_back({{0,0,0,255}});if(c==4)t->width=4096;if(c==5)bad.albedo.reset();
+        CHECK(!renderer.Upload({1,2,3},std::span(&bad,1)));const auto p=drawPixel();CHECK(p[0]<5&&p[1]>250);
+    }
+    restoredSrv.Reset();context->PSGetShaderResources(0,1,&restoredSrv);CHECK(restoredSrv==nativeSrv);
+    ComPtr<ID3D11SamplerState> restoredSampler;context->PSGetSamplers(0,1,&restoredSampler);CHECK(restoredSampler==nativeSampler);
+    context->ClearState();
+    std::cout<<"RigidPropGpu: WARP two-eye state restoration; explicit albedo UV, wrap/clamp, color space, mip sampling and transactional rejection passed; no game/headset proof\n";
 }

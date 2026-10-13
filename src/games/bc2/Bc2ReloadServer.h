@@ -28,6 +28,12 @@ std::optional<ReloadServerSnapshot> ReadReloadServerState(const ReloadStateMemor
     const ReloadStateBinding&,std::uint32_t base,const ReloadStateSnapshot&)noexcept;
 // Read-only failure evidence; no rejected observation grants access.
 enum class ReloadServerBoundaryFailure : std::uint8_t {None,Lease,ScopeBefore,PublishedLinks,State,ScopeAfter,ChangedLinks};
+struct ReloadServerLinkChange {
+    const char* field="";std::uint32_t index=UINT32_MAX,expected=0,observed=0;
+};
+struct ReloadServerLinkDifference {
+    unsigned count=0;std::array<ReloadServerLinkChange,4> first{};
+};
 struct ReloadServerBoundaryDiagnostic {
     ReloadServerBoundaryFailure failure=ReloadServerBoundaryFailure::None;
     std::uint8_t expectedSoldierFlags=0,observedSoldierFlags=0;
@@ -35,6 +41,9 @@ struct ReloadServerBoundaryDiagnostic {
     std::uint8_t afterSoldierFlags=0,changedBefore=0,changedAfter=0;
     unsigned stateFailure=0,changedOffset=UINT32_MAX;
     bool changedOnlySoldierFlags=false;
+    // Compare named fields, not object bytes/padding. Values are diagnostic
+    // observations only; no failure is retried or accepted because of them.
+    ReloadServerLinkDifference linkDifference{};
 };
 // Fast callback-time relation/state validation under the same <=200ms lease.
 // Reflection is checked at publication and exact vtable identity thereafter.

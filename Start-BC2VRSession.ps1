@@ -1,6 +1,11 @@
 [CmdletBinding()]
-param([string]$ReportFolder,[ValidateRange(1,200)][int]$RequestLifetimeMs=150,[switch]$Controllers,[switch]$MotionAim,[switch]$BodyFollow,[switch]$Hands,[switch]$MuzzleFire,[switch]$TwoHandGrip,[switch]$SightFlip,[switch]$PhysicalReload,[switch]$MagazineReload,[switch]$BodyInventory,[switch]$BoatHeadAim,[switch]$BoatHeadFire,[switch]$Roomscale,[ValidateRange(0.01,1000)][float]$WorldUnitsPerMeter=1,[string]$Python)
+param([string]$ReportFolder,[ValidateRange(1,200)][int]$RequestLifetimeMs=150,[switch]$Controllers,[switch]$MotionAim,[switch]$BodyFollow,[switch]$Hands,[switch]$MuzzleFire,[switch]$TwoHandGrip,[switch]$SightFlip,[switch]$PhysicalReload,[switch]$MagazineReload,[switch]$BodyInventory,[switch]$BoatHeadAim,[switch]$BoatHeadFire,[switch]$Roomscale,[ValidateRange(0.01,1000)][float]$WorldUnitsPerMeter=1,[string]$Python,[string]$BodyPropMaterials)
 $ErrorActionPreference='Stop'
+if($BodyPropMaterials){
+ if(-not $BodyInventory){throw 'BodyPropMaterials requires BodyInventory'}
+ if(-not(Test-Path -LiteralPath $BodyPropMaterials -PathType Leaf)){throw 'Explicit body material cache not found'}
+ $BodyPropMaterials=[IO.Path]::GetFullPath($BodyPropMaterials)
+}
 if($BoatHeadFire -and -not $BoatHeadAim){throw 'BoatHeadFire requires explicit BoatHeadAim'}
 if($BoatHeadAim){$BodyFollow=$true}
 # Candidate headset feature: opt-in native launcher sight interaction.
@@ -63,6 +68,7 @@ function Invoke-BC2WindowRecovery([string]$Phase) {
 $state | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $folder 'session.json')
 $hostArgs=@('--ipc','--until-game-exit',$target.Id,'--request-lifetime',$RequestLifetimeMs,'--eye-width','1920','--eye-height','1080','--channel-file',('"'+$channel+'"'),'--ready-file',('"'+$ready+'"'),'--stop-file',('"'+$stopFile+'"'))
 if($BodyInventory){$hostArgs+=@('--body-props-cache',('"'+(Join-Path $PSScriptRoot 'build\body-ammo-assets.fvrprop')+'"'))}
+if($BodyPropMaterials){$hostArgs+=@('--body-props-materials',('"'+$BodyPropMaterials+'"'))}
 if($Controllers){$hostArgs+='--controllers'}
 if($Roomscale){$hostArgs+='--roomscale'}
 $hostArgs+=@('--world-units-per-meter',$WorldUnitsPerMeter.ToString([Globalization.CultureInfo]::InvariantCulture))

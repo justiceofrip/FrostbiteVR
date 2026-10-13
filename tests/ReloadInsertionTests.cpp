@@ -346,6 +346,43 @@ int RailContactIsExplicitSingleShellAssistance(){
     auto keyed=Profile(ReloadInsertionFamily::SingleShell);Fixture old(keyed);old.SendRail(AssistedPose(.02f,.06f,1.4f));
     CHECK(!old.SendRail(AssistedPose(.02f,.02f,1.4f)).captured);return 0;
 }
+int FreshGeometryContinuityUsesObservedInterval(){
+    for(bool shell:{false,true})for(unsigned outcome=0;outcome<5;++outcome){
+        auto p=shell?AssistedProfile():Profile();
+        if(shell){p.travelMeters=.05f;p.captureDistanceMeters=.06f;p.releaseDistanceMeters=.12f;
+            p.maxStepMeters=.04f;p.alignmentNs=120*Ms;p.seatDwellNs=60*Ms;}
+        Fixture f(p);f.Send(-.07f);f.Send(-.04f);CHECK(f.Send(-.02f).phase==ReloadInsertionPhase::Guided);
+        f.Send(.01f);CHECK(f.Send(.029512f).phase==ReloadInsertionPhase::Guided);
+        const auto oldObserved=f.s.observedNs;
+        // Actual263: accepted raw2111, then fresh raw2117 observed94.0121ms
+        // later and processed22.6264ms after that. Both sample interval and
+        // current input age are in bounds; now-oldObserved is116.6385ms.
+        f.s.nowNs=oldObserved+33431600;CHECK(!f.policy.Update(f.s).cancelled);
+        f.s.sequence+=6;f.s.geometrySequence=f.s.sequence;
+        f.s.observedNs=oldObserved+(outcome==1?101*Ms:94012100);
+        f.s.nowNs=f.s.observedNs+22626400;f.s.deadlineNs=f.s.observedNs+100*Ms;
+        f.s.itemClaim.inputSequence=f.s.weaponClaim.inputSequence=f.s.sequence;
+        f.s.itemClaim.deadlineNs=f.s.weaponClaim.deadlineNs=f.s.deadlineNs;
+        f.s.weaponFromHand=f.Hand(Pose(0,0,.0368885f));
+        if(outcome==2)f.s.nowNs=f.s.deadlineNs;
+        if(outcome==3)f.s.itemClaim.deadlineNs=f.s.nowNs;
+        if(outcome==4)f.s.weaponClaim.deadlineNs=f.s.nowNs;
+        const auto r=f.policy.Update(f.s);
+        if(outcome){CHECK(r.cancelled&&!r.seat&&!r.guidedItem);
+            CHECK(r.reason==(outcome<=2?ReloadInsertionReason::StaleInput:ReloadInsertionReason::LeaseExpired));continue;}
+        CHECK(!r.cancelled&&!r.captured&&r.phase==ReloadInsertionPhase::Guided);
+        CHECK(Near(r.progress,.0368885f/p.travelMeters)&&!r.seat);
+        // Original capture survives; no new20mm stroke is secretly demanded.
+        // The genuine remaining motion and fresh endpoint dwell still seat once.
+        unsigned seats=0;for(float along:{.05f,.075f,.1f}){
+            if(along>p.travelMeters+1e-6f)break;seats+=f.Send(along).seat.has_value();}
+        for(unsigned n=0;n<10;++n)seats+=f.Send(p.travelMeters).seat.has_value();
+        CHECK(seats==1);
+        f.s.nowNs=f.s.deadlineNs;
+        const auto duplicate=f.policy.Update(f.s);CHECK(duplicate.cancelled&&duplicate.reason==ReloadInsertionReason::StaleInput&&!duplicate.seat);
+    }
+    return 0;
+}
 int InvalidGeometryAndProfile(){
     for(unsigned n=0;n<3;++n){Fixture f;f.Start();++f.s.sequence;f.s.geometrySequence=f.s.sequence;f.s.nowNs+=Ms;f.s.observedNs=f.s.nowNs;
         if(n==0)f.s.weaponFromHand.values[0][0]=std::numeric_limits<float>::quiet_NaN();
@@ -371,5 +408,6 @@ int main(){
     CHECK(RailContactCapturesPathBeforeOrientationAlignment()==0);CHECK(RailContactAtMouthNeedsPostCaptureMotion()==0);
     CHECK(RailContactInitialAssistNeverAutomaticallySeats()==0);CHECK(RailContactBoundsStayPhysical()==0);CHECK(RailContactMaintainsTrackingAndLeaseSafety()==0);
     CHECK(RailContactAntiparallelShellRemainsRigid()==0);CHECK(RailContactIsExplicitSingleShellAssistance()==0);
+    CHECK(FreshGeometryContinuityUsesObservedInterval()==0);
     std::cout<<"Reload insertion: authored grasp, continuous rail capture, reversal, exact ownership, packet safety, single seat and native-ack separation passed\n";return 0;
 }

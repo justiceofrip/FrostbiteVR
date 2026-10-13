@@ -74,6 +74,16 @@ struct Reader {
             if(std::count(raw.begin(),raw.end(),raw[n])!=1||!Get(std::uint64_t(raw[n])+4,item.data)||!Type(item.data,"SoldierWeaponData")||
                !Read(std::uint64_t(item.data)+0x64,itemFields.data(),sizeof(itemFields)))return false;
             item.persistence=itemFields[0];item.category=itemFields[8];if(item.category>20)return false;
+            if(item.category==2){
+                unsigned name=0;
+                // SoldierWeaponData::Name at+c is the existing equipment
+                // identity binding; it supplies policy metadata, not a hook.
+                if(!Get(std::uint64_t(item.data)+0xc,name)||!Read(name,item.carryAsset.data(),item.carryAsset.size()))return false;
+                const auto end=std::find(item.carryAsset.begin(),item.carryAsset.end(),'\0');
+                if(end==item.carryAsset.begin()||end==item.carryAsset.end())return false;
+                for(auto it=item.carryAsset.begin();it!=end;++it)if(static_cast<unsigned char>(*it)<32||static_cast<unsigned char>(*it)>126)return false;
+                std::fill(end,item.carryAsset.end(),'\0');
+            }
             if(!layoutData){layoutData=item.data;if(!ClassLayout(layoutData)){status=BodyReadStatus::Layout;return false;}}
         }
         std::array<unsigned,2> mapRange{};
@@ -180,7 +190,7 @@ void Bc2BodyInventory::ObserveAutomaticSelection(const BodyNativeItem& item)noex
 }
 void Bc2BodyInventory::Cancel()noexcept {
     display_.reset();
-    heldApproach_.Reset();heldRelease_.Reset();
+    heldApproach_.Reset();heldRelease_.Reset();deferredDraw_.reset();
     if(pending_)++cancels_;pending_.reset();armed_=false;lastInput_=0;automaticNeutral_=false;
     policy_.Update({});
     // Loss of observation is a lifetime gap; a returning pointer is not assumed
@@ -188,7 +198,7 @@ void Bc2BodyInventory::Cancel()noexcept {
     life_.clear();items_.clear();slots_.clear();owner_={};inventory_=switching_=0;nativeProofNs_=0;
 }
 void Bc2BodyInventory::SuspendInteraction()noexcept {
-    display_.reset();heldApproach_.Reset();heldRelease_.Reset();
+    display_.reset();heldApproach_.Reset();heldRelease_.Reset();deferredDraw_.reset();
     if(pending_)++cancels_;pending_.reset();armed_=false;automaticNeutral_=false;
     // Retire portable pending selection/ack authority while keeping exact item
     // metadata. No presentation or hand claim is inferred from these slots.
@@ -210,22 +220,27 @@ BodyDrawResult Bc2BodyInventory::ObserveSuspended(const WeaponModeMemory& memory
     out.blockFire=out.cancelled!=0;++blocked_;return out;
 }
 bool Bc2BodyInventory::Observe(const BodyNativeInventory& native,const BodyDrawSample& s)noexcept {
-    // Native metadata continuity is bounded independently of input/render leases.
-    // A returning pointer after an unobserved interval receives a new lifetime.
-    if(nativeProofNs_&&(s.hand.nowNs<nativeProofNs_||s.hand.nowNs-nativeProofNs_>=150000000))Cancel();
+    // A scheduling gap expires interaction authority, not physical equipment.
+    // This entry is reached only after a new coherent native read: retain an
+    // item key only if the actor generation, weak owner, container and complete
+    // item metadata below still match. A failed read or explicit lifetime
+    // cancellation clears these keys. Never renew the old native/render lease.
+    if(nativeProofNs_&&s.hand.nowNs<nativeProofNs_)Cancel();
+    else if(nativeProofNs_&&s.hand.nowNs-nativeProofNs_>=150000000){SuspendInteraction();++metadataPauses_;}
     nativeProofNs_=s.hand.nowNs;
-    const auto owner=Owner(s.owner);bool changed=owner.actor!=owner_.actor||owner.generation!=owner_.generation||inventory_!=native.inventory||switching_!=native.switching;
+    const auto owner=Owner(s.owner);bool changed=owner.actor!=owner_.actor||owner.generation!=owner_.generation||nativeOwner_.player!=native.owner.player||inventory_!=native.inventory||switching_!=native.switching;
     std::vector<Life> next;std::vector<BodyInventoryItem> items;
     for(unsigned n=0;n<native.count;++n){const auto& item=native.items[n];if(!item.weapon)continue;
         auto found=changed?life_.end():std::find_if(life_.begin(),life_.end(),[&](const Life& l){auto prior=l.native;prior.slot=item.slot;return prior==item;});
         BodyItemKey key{};
         if(found==life_.end()){if(generation_==UINT64_MAX)return false;key={item.weapon,++generation_};}else key=found->key;
         next.push_back({item,key});BodyInventoryItem policy;policy.key=key;
-        if(BodyLongGunCategory(item.category)){const unsigned preferred=item.category==1?1u:0u;policy.preferredSlots={config_.shoulders[preferred].slot,config_.shoulders[1-preferred].slot,0,0};policy.preferenceCount=2;policy.priority=item.category==1?100:50;}
+        if(item.Carry()==BodyCarryClass::Sidearm){policy.preferredSlots={config_.hip.slot,0,0,0};policy.preferenceCount=1;policy.priority=50;}
+        else if(item.Carry()==BodyCarryClass::LongGun){const unsigned preferred=item.category==1?1u:0u;policy.preferredSlots={config_.shoulders[preferred].slot,config_.shoulders[1-preferred].slot,0,0};policy.preferenceCount=2;policy.priority=item.category==1?100:50;}
         items.push_back(policy);
     }
     changed=changed||items!=items_;
-    if(changed||owner.space!=owner_.space){if(revision_==UINT64_MAX)return false;++revision_;armed_=false;heldApproach_.Reset();heldRelease_.Reset();}
+    if(changed||owner.space!=owner_.space){if(revision_==UINT64_MAX)return false;++revision_;armed_=false;heldApproach_.Reset();heldRelease_.Reset();deferredDraw_.reset();}
     // Retained metadata names only the same proven native lifetime. Never
     // transfer an old shoulder to a replacement owner/container/item key.
     std::erase_if(slots_,[&](const BodySlotAssignment& slot){
@@ -290,7 +305,7 @@ BodyDrawResult Bc2BodyInventory::TickDraw(const WeaponModeMemory& memory,const B
         const auto left=hands.Current(InteractionHand::Left),right=hands.Current(InteractionHand::Right);
         // Do not steal support/sight/ammo ownership or silently retire a reload.
         if(point&&!left&&right&&right->token.kind==HandClaimKind::GunHold&&right->token.owner==s.hand.owner&&right->token.item==s.gun&&right->deadlineNs>s.hand.nowNs){
-            for(const auto& anchor:config_.shoulders){if(!BodyAnchorContains(anchor,*point))continue;
+            for(const auto& anchor:BodyWeaponAnchors(config_)){if(!BodyWeaponContactContains(config_,anchor.slot,*point))continue;
                 const auto assigned=std::find_if(slots_.begin(),slots_.end(),[&](const auto& a){return a.slot==anchor.slot;});
                 if(assigned==slots_.end())continue;
                 if(assigned->item==selected->key){
@@ -343,16 +358,26 @@ BodyHolsterResult Bc2BodyInventory::TickHolster(const WeaponModeMemory& memory,c
             source.hand.deadlineNs-source.hand.observedNs<=150000000&&gun&&gun->token.kind==HandClaimKind::GunHold&&
             gun->token.owner==source.hand.owner&&gun->token.item==source.gun&&gun->deadlineNs>source.hand.nowNs;
         const auto metadata=ObserveSuspended(memory,source);BodyHolsterResult out;
-        // Existing native holster cancellation remains authoritative for any
-        // in-flight hide/draw. Metadata retention never acknowledges it.
-        sample.cancel=true;sample.hand=source.hand;sample.nativeOwner=source.owner;
+        const bool samePhysicalItem=priorKey.id&&std::any_of(life_.begin(),life_.end(),[&](const Life& item){return item.key==priorKey;});
+        // A temporarily unavailable gesture is not a request to draw the gun.
+        // Retire all pending/pose/receipt authority, retaining only a committed
+        // empty intent. Observation gaps may renew portable item generations;
+        // CanRebindEmpty independently checks the complete native carried and
+        // physical owner identity before fresh suppression/paired hide receipts.
+        // Explicit cancellation revokes intent now; changed metadata fails that
+        // resume check. No missing observation grants current hide authority.
+        // Do not turn suspension into sample.cancel in Tick: that would clear
+        // Empty and enter ShowPending on resume without any shoulder contact.
+        sample.cancel=source.cancel||sample.cancel;
+        sample.interactionSuspended=true;sample.reloadBusy=source.reloadBusy;
+        sample.hand=source.hand;sample.nativeOwner=source.owner;sample.gun=source.gun;
         if(holster.Phase()!=BodyHolsterPhase::Held)out=holster.Tick(policy_,sample,hands,intent);
-        out.ordinaryDraw=metadata;out.phase=holster.Phase();const bool samePhysicalItem=priorKey.id&&std::any_of(life_.begin(),life_.end(),[&](const Life& item){return item.key==priorKey;});
+        out.ordinaryDraw=metadata;out.phase=holster.Phase();
         out.blockWeaponActions=pendingOperation||holster.BlocksActions()||!existingHold||!samePhysicalItem;out.allowAutomaticGunHold=false;
         return out;
     }
     if(s.cancel||s.reloadBusy)display_.reset();
-    const auto ordinary=[&](std::optional<DrawApproach> approach=std::nullopt){heldApproach_.Reset();heldRelease_.Reset();BodyHolsterResult out;out.ordinaryDraw=TickDraw(memory,s,hands,intent,approach);out.blockWeaponActions=out.ordinaryDraw.blockFire;
+    const auto ordinary=[&](std::optional<DrawApproach> approach=std::nullopt){heldApproach_.Reset();heldRelease_.Reset();deferredDraw_.reset();BodyHolsterResult out;out.ordinaryDraw=TickDraw(memory,s,hands,intent,approach);out.blockWeaponActions=out.ordinaryDraw.blockFire;
         // An observed but unaccepted scoped XM8 stays on ordinary input. Do not
         // surprise-stow a later supported weapon because the entry was pending.
         if(automaticPending_&&!s.cancel&&!s.reloadBusy&&sample.selected&&sample.selected->owner==s.owner&&
@@ -372,9 +397,9 @@ BodyHolsterResult Bc2BodyInventory::TickHolster(const WeaponModeMemory& memory,c
     const bool fresh=ValidBodyAnchors(config_)&&ValidInput(s.input)&&s.input.generation==s.hand.sequence&&
         s.input.spaceGeneration==s.owner.space&&s.hand.nowNs>=lastNow_;
     const auto read=ReadBodyInventory(memory,s.owner,fresh);++readStatuses_[unsigned(read.status)];
-    if(!read.snapshot||!Observe(*read.snapshot,s)||sequence_==UINT64_MAX){display_.reset();heldApproach_.Reset();heldRelease_.Reset();sample.cancel=true;return holster.Tick(policy_,sample,hands,intent);}
+    if(!read.snapshot||!Observe(*read.snapshot,s)||sequence_==UINT64_MAX){display_.reset();heldApproach_.Reset();heldRelease_.Reset();deferredDraw_.reset();sample.cancel=true;return holster.Tick(policy_,sample,hands,intent);}
     const auto selected=std::find_if(life_.begin(),life_.end(),[&](const auto& item){return item.native.weapon==s.owner.weapon;});
-    if(selected==life_.end()){display_.reset();heldApproach_.Reset();heldRelease_.Reset();sample.cancel=true;return holster.Tick(policy_,sample,hands,intent);}
+    if(selected==life_.end()){display_.reset();heldApproach_.Reset();heldRelease_.Reset();deferredDraw_.reset();sample.cancel=true;return holster.Tick(policy_,sample,hands,intent);}
     ObserveAutomaticSelection(selected->native);
     const auto& native=*read.snapshot;
     sample.carried=BodyCarriedIdentity{native.inventory,native.switching,native.count,native.items};
@@ -386,7 +411,7 @@ BodyHolsterResult Bc2BodyInventory::TickHolster(const WeaponModeMemory& memory,c
     const auto point=BodyAnchorHandPose(s.input,InteractionHand::Right);
     std::optional<BodySlotAssignment> observedContact;
     if(point)
-        for(const auto& anchor:config_.shoulders)if(BodyAnchorContains(anchor,*point)){
+        for(const auto& anchor:BodyWeaponAnchors(config_))if(BodyWeaponContactContains(config_,anchor.slot,*point)){
             const auto found=std::find_if(slots_.begin(),slots_.end(),[&](const auto& slot){return slot.slot==anchor.slot;});
             if(found!=slots_.end())observedContact=*found;break;}
     // A fresh press may precede reaching either shoulder. Own-slot contact
@@ -410,12 +435,28 @@ BodyHolsterResult Bc2BodyInventory::TickHolster(const WeaponModeMemory& memory,c
         available&&s.input.hands[1].squeeze>=.75f,available&&s.input.hands[1].squeeze<=.35f,
         available&&approachEligible&&sample.triggerNeutral,
         observedContact&&observedContact->item==selected->key?observedContact:std::nullopt);
-    const auto contact=release?release:(pressed||approach)?observedContact:std::nullopt;
+    bool deferredContact=false;
+    const bool heldEmptyContact=!sample.cancel&&!s.reloadBusy&&sample.triggerNeutral&&point&&observedContact&&
+        available&&s.input.hands[1].squeeze>.35f&&!currentRight&&!hands.Current(InteractionHand::Left)&&
+        s.hand.focused&&s.hand.tracked[0]&&s.hand.tracked[1]&&s.hand.observedNs>0&&s.hand.observedNs<=s.hand.nowNs&&
+        s.hand.deadlineNs>s.hand.nowNs&&s.hand.deadlineNs-s.hand.observedNs<=BodyGripApproach::SampleGapNs;
+    if(deferredDraw_){auto& waiting=*deferredDraw_;
+        if(!heldEmptyContact||(phase!=BodyHolsterPhase::Empty&&!holster.EmptyRehidePending())||
+           waiting.nativeOwner!=s.owner||waiting.owner!=s.hand.owner||waiting.gun!=s.gun||waiting.revision!=revision_||
+           waiting.contact!=observedContact||s.hand.sequence<waiting.input||s.hand.observedNs<waiting.lastObserved||
+           s.hand.observedNs-waiting.lastObserved>BodyGripApproach::SampleGapNs||s.hand.nowNs<lastNow_||
+           s.hand.nowNs-waiting.started>=BodyGripApproach::WindowNs)deferredDraw_.reset();
+        else if(newInput&&s.hand.sequence>waiting.input){
+            waiting.input=s.hand.sequence;waiting.lastObserved=s.hand.observedNs;
+            deferredContact=phase==BodyHolsterPhase::Empty;
+        }
+    }
+    const auto contact=release?release:(pressed||approach||deferredContact)?observedContact:std::nullopt;
     Gesture gesture;gesture.input=s.input.generation;gesture.space=s.owner.space;
     gesture.observed=s.hand.observedNs;gesture.deadline=s.hand.deadlineNs;gesture.now=s.hand.nowNs;
     gesture.weapon=s.owner.weapon;gesture.phase=unsigned(phase);gesture.squeeze=s.input.hands[1].squeeze;
     gesture.flags=(available?1u:0u)|(wasArmed?2u:0u)|(pressed?4u:0u)|(point?8u:0u)|
-        (s.hand.focused?16u:0u)|(s.hand.tracked[1]?32u:0u)|(s.reloadBusy?64u:0u)|(sample.cancel?128u:0u)|(approach?256u:0u)|(release?512u:0u);
+        (s.hand.focused?16u:0u)|(s.hand.tracked[1]?32u:0u)|(s.reloadBusy?64u:0u)|(sample.cancel?128u:0u)|(approach?256u:0u)|(release?512u:0u)|(deferredContact?1024u:0u);
     if(point)for(unsigned n=0;n<3;++n)gesture.point[n]=point->values[3][n];
     if(observedContact){gesture.slot=observedContact->slot;gesture.contactWeapon=unsigned(observedContact->item.id);}
     if(const auto claim=hands.Current(InteractionHand::Left))gesture.left=1u+unsigned(claim->token.kind);
@@ -451,6 +492,12 @@ BodyHolsterResult Bc2BodyInventory::TickHolster(const WeaponModeMemory& memory,c
             sample.body.intent={++intent,BodyInventoryOperation::Holster,assigned->slot,assigned->item};automaticIntent=true;}
     }
     auto out=holster.Tick(policy_,sample,hands,intent);
+    if(sample.body.intent.operation==BodyInventoryOperation::Draw&&!out.inventory.request&&
+       phase==BodyHolsterPhase::Empty&&holster.EmptyRehidePending()&&heldEmptyContact){
+        if(!deferredDraw_)deferredDraw_=DeferredDrawContact{s.owner,s.hand.owner,s.gun,*observedContact,
+            revision_,s.hand.sequence,s.hand.observedNs,s.hand.observedNs};
+    }else if(sample.body.intent.operation!=BodyInventoryOperation::None||out.inventory.request||out.inventory.cancelledRequest)
+        deferredDraw_.reset();
     if(out.inventoryEvaluation==BodyInventoryEvaluation::Evaluated)slots_=out.inventory.slots;
     if(newInput)automaticNeutral_=sample.body.intent.operation==BodyInventoryOperation::None;
     if(out.inventory.request&&automaticPending_){automaticPending_=false;
@@ -477,13 +524,13 @@ void Bc2BodyInventory::EventRow(unsigned kind,const BodyDrawSample& s,std::uint6
 }
 void Bc2BodyInventory::Report(std::ostream& out)const {
     out<<",\"body_inventory\":{\"enabled\":"<<(enabled_?"true":"false")<<",\"requests\":"<<requests_<<",\"committed\":"<<commits_
-       <<",\"cancelled\":"<<cancels_<<",\"blocked\":"<<blocked_<<",\"unavailable\":"<<unavailable_<<",\"empty_hands_enabled\":false"
+       <<",\"cancelled\":"<<cancels_<<",\"blocked\":"<<blocked_<<",\"unavailable\":"<<unavailable_<<",\"metadata_pauses\":"<<metadataPauses_<<",\"empty_hands_enabled\":false"
        <<",\"automatic_stow\":{\"enabled\":"<<(automaticEnabled_?"true":"false")<<",\"pending\":"<<(automaticPending_?"true":"false")
        <<",\"entries\":"<<automaticEntries_<<",\"requests\":"<<automaticRequests_<<",\"unsupported\":"<<automaticUnsupported_<<",\"superseded\":"<<automaticSuperseded_<<"},\"read_status\":[";
     for(unsigned n=0;n<readStatuses_.size();++n){if(n)out<<',';out<<readStatuses_[n];}
     out<<"],\"event_kind4\":\"own_slot_stow_unavailable\",\"event_kind4_action\":\"contact_slot\",\"events_dropped\":"<<eventDropped_<<",\"events\":[";
     for(unsigned n=0;n<eventCount_;++n){if(n)out<<',';const auto& e=events_[n];out<<"{\"kind\":"<<e.kind<<",\"request\":"<<e.request<<",\"input\":"<<e.input<<",\"now_ns\":"<<e.now<<",\"from\":"<<e.from<<",\"to\":"<<e.to<<",\"action\":"<<e.action<<'}';}
-    out<<"],\"gesture_flags\":{\"available\":1,\"armed\":2,\"pressed\":4,\"point_valid\":8,\"focused\":16,\"right_tracked\":32,\"reload_busy\":64,\"cancelled\":128,\"held_approach\":256,\"grip_release\":512},"
+    out<<"],\"gesture_flags\":{\"available\":1,\"armed\":2,\"pressed\":4,\"point_valid\":8,\"focused\":16,\"right_tracked\":32,\"reload_busy\":64,\"cancelled\":128,\"held_approach\":256,\"grip_release\":512,\"deferred_draw\":1024},"
        <<"\"gesture_claim_encoding\":\"0 none; otherwise HandClaimKind + 1\",\"gestures_dropped\":"<<gestureDropped_<<",\"gestures\":[";
     for(unsigned n=0;n<gestureCount_;++n){if(n)out<<',';const auto& e=gestures_[(gestureCount_==gestures_.size()?gestureNext_+n:n)%gestures_.size()];
         out<<"{\"input\":"<<e.input<<",\"space\":"<<e.space<<",\"observed_ns\":"<<e.observed<<",\"deadline_ns\":"<<e.deadline<<",\"now_ns\":"<<e.now

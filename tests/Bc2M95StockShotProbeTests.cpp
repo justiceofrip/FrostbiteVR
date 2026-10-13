@@ -9,7 +9,7 @@ struct Fixture {
  Bc2M95StockShotProbe probe;interaction::ControllerActions actions;interaction::InputFrame input{};
  ReloadStateOwner owner{1,2,3,4,5,6,7};Bc2AmmoReserveLease lease{};std::int64_t now=1000000000;
  unsigned pressed=0,held=0;float trigger=0;bool exact=true,safe=true,missing=false;
- Fixture(){input.generation=1;input.spaceGeneration=7;input.predictedNs=now;input.focused=input.headValid=true;
+ Fixture(bool empty=false):probe(empty){input.generation=1;input.spaceGeneration=7;input.predictedNs=now;input.focused=input.headValid=true;
   for(auto& h:input.hands){h.gripTracked=h.aimTracked=true;h.active=interaction::Components;}
   lease.identity.owner=owner;lease.identity.firing={0x10000,0x20000,0x30000};lease.identity.serverPlayer=11;lease.identity.serverSoldier=12;lease.identity.serverItem=13;
   lease.sequence=1;lease.loaded=5;lease.reserve=25;lease.capacity=5;lease.verified=lease.allThreeIdle=true;
@@ -26,6 +26,24 @@ struct Fixture {
  void arm(){for(unsigned n=0;n<210&&probe.Current()==Bc2M95StockShotProbe::Phase::Preflight;++n)tick();CHECK(trigger==1&&pressed==1);}
 };
 int main(){unsigned groups=0;
+ {Fixture f(true);f.arm();
+  for(unsigned shot=1;shot<=5;++shot){
+   CHECK(f.pressed==shot&&f.trigger==1);--f.lease.loaded;f.lease.allThreeIdle=false;
+   for(unsigned n=0;n<20;++n)f.tick();CHECK(f.trigger==0&&f.pressed==shot);
+   if(shot<5){f.lease.allThreeIdle=true;for(unsigned n=0;n<400&&f.pressed==shot;++n)f.tick();
+    CHECK(f.pressed==shot+1&&!f.probe.Failed());}
+  }
+  CHECK(f.probe.Completed()&&f.lease.loaded==0&&f.pressed==5);
+  f.lease.loaded=5;f.lease.reserve-=5;for(unsigned n=0;n<400;++n){f.tick();CHECK(f.trigger==0&&f.pressed==5);}++groups;}
+ {Fixture f(true);f.lease.loaded=4;for(unsigned n=0;n<300;++n)f.tick();CHECK(!f.pressed&&!f.trigger);++groups;}
+ {Fixture f(true);f.arm();--f.lease.loaded;
+  for(unsigned n=0;n<400&&f.probe.Current()!=Bc2M95StockShotProbe::Phase::Preflight;++n)f.tick();
+  CHECK(f.probe.Current()==Bc2M95StockShotProbe::Phase::Preflight);++f.owner.equipGeneration;f.tick();
+  CHECK(f.probe.Failed()&&f.pressed==1&&f.trigger==0);++groups;}
+ {CHECK(ValidM95StockShotSession(2,0x197809,25000,0,0,0,0));
+  CHECK(!ValidM95StockShotSession(2,0x197809,15000,0,0,0,0));
+  CHECK(!ValidM95StockShotSession(3,0x197809,25000,0,0,0,0));
+  CHECK(!ValidM95StockShotSession(2,0x197809,25000,1,0,0,0));++groups;}
  {Fixture f;f.arm();f.lease.loaded=4;f.lease.allThreeIdle=false;
   for(unsigned n=0;n<20;++n)f.tick();CHECK(f.trigger==0&&f.pressed==1&&f.held<=10);
   f.lease.allThreeIdle=true;for(unsigned n=0;n<310;++n)f.tick();CHECK(f.probe.Completed()&&f.pressed==1);++groups;}

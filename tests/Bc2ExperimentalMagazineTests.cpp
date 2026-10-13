@@ -117,18 +117,18 @@ int RegisteredGeometryReachesActualConsumer(){for(const auto& registered:Registe
  Fixture f(true,*p);CHECK(Insert(f));CHECK(f.starts==1&&f.submits==1&&f.submitted&&f.submitted->reservedUnits==3);
  CHECK(f.result.tracking.family.binding.launcher==0&&f.result.tracking.family.carried);
  CHECK(f.submitted->request.owner.actor==f.s.nativeOwner.soldier&&f.submitted->heldLease.identity==f.reserve.identity);
- CHECK(f.reserve.loaded==27&&f.reserve.reserve==83); // No geometry event writes ammunition.
+ CHECK(f.reserve.loaded==f.reserve.capacity-3&&f.reserve.reserve==83); // No geometry event writes ammunition.
  f.Complete();f.Send();f.allowRetire=true;f.Send();f.Send();
- CHECK(f.policy->ProbeState(f.now).completed==1&&f.reserve.loaded==30&&f.reserve.reserve==80&&!f.policy->BlocksEquipment());
+ CHECK(f.policy->ProbeState(f.now).completed==1&&f.reserve.loaded==f.reserve.capacity&&f.reserve.reserve==80&&!f.policy->BlocksEquipment());
  auto offset=Pose(.012f,-.005f,.014f);offset.values[0]={.995004165f,0,-.0998334166f,0};offset.values[2]={.0998334166f,0,.995004165f,0};
  for(const auto& grasp:{Identity(),offset}){Fixture original(true,*p);CHECK(ReturnOriginal(original,grasp));
-  CHECK(original.result.interaction.originalSeat&&original.submits==0&&original.result.interaction.original->rounds==27);
+  CHECK(original.result.interaction.originalSeat&&original.submits==0&&original.result.interaction.original->rounds==original.reserve.capacity-3);
   CHECK(original.result.tracking.target&&original.result.tracking.target->role==MagazinePropRole::Attached);
   CHECK(Same(original.result.tracking.target->weaponFromItemMeters,p->geometry->attachedItem));
   original.allowRetire=true;original.Send();CHECK(original.policy->BlocksEquipment());
   original.reserve.reloadInputReady=true;original.Send();
   CHECK(original.policy->ProbeState(original.now).originalReturns==1&&!original.policy->BlocksEquipment());
-  CHECK(original.reserve.loaded==27&&original.reserve.reserve==83&&original.submits==0);
+  CHECK(original.reserve.loaded==original.reserve.capacity-3&&original.reserve.reserve==83&&original.submits==0);
  }
  Fixture replaced(true,*p);CHECK(replaced.Eject());++replaced.equipment.data;replaced.meshes->weaponData=replaced.equipment.data;
  replaced.Send();CHECK(replaced.cancels==1&&replaced.submits==0&&!replaced.result.tracking.target);

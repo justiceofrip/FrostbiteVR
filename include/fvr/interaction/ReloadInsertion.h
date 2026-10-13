@@ -7,11 +7,19 @@
 #include <cmath>
 #include <limits>
 #include <optional>
+#include <vector>
 
 namespace fvr::interaction {
 enum class ReloadInsertionFamily : std::uint8_t {Unknown,Magazine,SingleShell};
 enum class ReloadInsertionOrientation : std::uint8_t {Keyed,AxialSymmetry};
 enum class ReloadInsertionApproach : std::uint8_t {AxialFront,FrontHemisphere,EntrySphere,RailContact};
+inline constexpr unsigned ReloadInsertionPathLimit=32;
+struct ReloadInsertionPathPoint {
+    // Canonical row-vector item-local -> weapon-local pose, in metres.
+    // Ordered from withdrawn entry toward the exact seated item pose.
+    math::Matrix4 weaponFromItem{};
+    float arcMeters=0;
+};
 struct ReloadInsertionProfile {
     std::uint64_t id=0,revision=0;
     ReloadInsertionFamily family=ReloadInsertionFamily::Unknown;
@@ -47,6 +55,16 @@ struct ReloadInsertionProfile {
     float captureAngleRadians=0,releaseAngleRadians=0,seatToleranceMeters=0;
     float maxStepMeters=0,maxStepRadians=0;
     std::int64_t alignmentNs=0,seatDwellNs=0,maxSampleGapNs=0,maxGuidedNs=0;
+    // Explicit keyed-magazine path. Zero retains every legacy rail operation.
+    // The bounded source samples, including the seated endpoint, are immutable.
+    // itemFromInsertion/weaponFromEntry/travelDirection describe only the
+    // legacy rail when this is nonzero; itemFromHand still defines the grasp.
+    // Owned samples only for opted-in profiles. An inline maximum-sized array
+    // bloats every legacy profile and can overflow bounded registry stack frames.
+    // Copying a profile keeps its samples independent; there are no borrowed
+    // lifetimes or shared mutable paths. Validation retains the 32-point bound.
+    std::vector<ReloadInsertionPathPoint> path;
+    unsigned pathCount=0;
 };
 struct ReloadInsertionIdentity {
     HandInteractionOwner owner{};
@@ -184,6 +202,83 @@ inline math::Matrix4 Align(const math::Matrix4& raw,float blend)noexcept {
     }
     for(unsigned i=0;i<3;++i)out.values[3][i]=r[3][i];return out;
 }
+inline std::array<double,4> RotationQuaternion(const math::Matrix4& m)noexcept {
+    const auto& r=m.values;std::array<double,4> q{};const double trace=r[0][0]+r[1][1]+r[2][2];
+    if(trace>0){const double s=2*std::sqrt(trace+1);q={s/4,(r[1][2]-r[2][1])/s,(r[2][0]-r[0][2])/s,(r[0][1]-r[1][0])/s};}
+    else {unsigned i=r[1][1]>r[0][0]?1:0;if(r[2][2]>r[i][i])i=2;const unsigned j=(i+1)%3,k=(i+2)%3;
+        const double s=2*std::sqrt(1+double(r[i][i])-r[j][j]-r[k][k]);q[0]=(r[j][k]-r[k][j])/s;
+        q[i+1]=s/4;q[j+1]=(r[i][j]+r[j][i])/s;q[k+1]=(r[i][k]+r[k][i])/s;}
+    double norm=0;for(double v:q)norm+=v*v;for(double& v:q)v/=std::sqrt(norm);return q;
+}
+inline math::Matrix4 BlendRigid(const math::Matrix4& a,const math::Matrix4& b,double t)noexcept {
+    if(t<=0)return a;if(t>=1)return b;
+    auto x=RotationQuaternion(a),y=RotationQuaternion(b);double dot=0;for(unsigned n=0;n<4;++n)dot+=x[n]*y[n];
+    if(dot<0){for(double& v:y)v=-v;dot=-dot;}dot=std::clamp(dot,0.,1.);
+    double wa=1-t,wb=t;if(dot<.9995){const double angle=std::acos(dot),denom=std::sin(angle);wa=std::sin((1-t)*angle)/denom;wb=std::sin(t*angle)/denom;}
+    std::array<double,4> q{};double norm=0;for(unsigned n=0;n<4;++n){q[n]=wa*x[n]+wb*y[n];norm+=q[n]*q[n];}
+    for(double& v:q)v/=std::sqrt(norm);const auto [w,u,v,z]=q;auto out=Identity();
+    out.values[0][0]=float(1-2*(v*v+z*z));out.values[0][1]=float(2*(u*v+z*w));out.values[0][2]=float(2*(u*z-v*w));
+    out.values[1][0]=float(2*(u*v-z*w));out.values[1][1]=float(1-2*(u*u+z*z));out.values[1][2]=float(2*(v*z+u*w));
+    out.values[2][0]=float(2*(u*z+v*w));out.values[2][1]=float(2*(v*z-u*w));out.values[2][2]=float(1-2*(u*u+v*v));
+    for(unsigned n=0;n<3;++n)out.values[3][n]=float(a.values[3][n]+t*(b.values[3][n]-a.values[3][n]));return out;
+}
+inline bool PathShape(const ReloadInsertionProfile& p)noexcept {
+    if(p.path.size()!=p.pathCount)return false;
+    if(!p.pathCount)return true;
+    if(p.pathCount<2||p.pathCount>ReloadInsertionPathLimit||p.family!=ReloadInsertionFamily::Magazine||
+       p.approach!=ReloadInsertionApproach::RailContact||p.orientation!=ReloadInsertionOrientation::Keyed||
+       p.path[0].arcMeters!=0||p.travelMeters>.5f)return false;
+    const auto& seat=p.path[p.pathCount-1].weaponFromItem;
+    for(unsigned n=0;n<p.pathCount;++n){const auto& point=p.path[n];
+        if(!Rigid(point.weaponFromItem)||!std::isfinite(point.arcMeters)||
+           std::hypot(point.weaponFromItem.values[3][0],point.weaponFromItem.values[3][1],point.weaponFromItem.values[3][2])>1.5f)return false;
+        if(!n)continue;const auto& previous=p.path[n-1];const auto length=Distance(previous.weaponFromItem,point.weaponFromItem);
+        if(length<.0001f||length>.25f||std::abs(double(point.arcMeters)-previous.arcMeters-length)>1e-5||
+           Angle(previous.weaponFromItem,point.weaponFromItem)>p.maxStepRadians)return false;
+        // A finite initial withdrawal has no loops or inward/outward reversals.
+        // Distance to the exact seat must decrease over the entire segment,
+        // not only at its vertices. This does not fit the samples to an axis.
+        double endDot=0;for(unsigned k=0;k<3;++k)endDot+=(double(seat.values[3][k])-point.weaponFromItem.values[3][k])*
+            (double(point.weaponFromItem.values[3][k])-previous.weaponFromItem.values[3][k]);
+        if(endDot< -1e-9)return false;
+        for(unsigned j=0;j<n;++j)if(Distance(p.path[j].weaponFromItem,point.weaponFromItem)<.0001f)return false;
+    }
+    return std::abs(double(p.path[p.pathCount-1].arcMeters)-p.travelMeters)<1e-5;
+}
+inline math::Matrix4 InsertionItemPose(const ReloadInsertionProfile& p,double along)noexcept {
+    if(p.path.size()!=p.pathCount)return {};
+    if(!p.pathCount)return Multiply(*InverseRigid(p.itemFromInsertion),Multiply(TravelPose(p,float(along)),p.weaponFromEntry));
+    if(p.pathCount<2||p.pathCount>ReloadInsertionPathLimit||!std::isfinite(along))return {};
+    unsigned n=0;while(n+2<p.pathCount&&along>p.path[n+1].arcMeters)++n;
+    const auto& a=p.path[n];const auto& b=p.path[n+1];
+    if(!std::isfinite(a.arcMeters)||!std::isfinite(b.arcMeters)||b.arcMeters<=a.arcMeters)return {};
+    const double t=(along-a.arcMeters)/(b.arcMeters-a.arcMeters);
+    auto out=BlendRigid(a.weaponFromItem,b.weaponFromItem,std::clamp(t,0.,1.));
+    if(t<0||t>1)for(unsigned k=0;k<3;++k)out.values[3][k]=float(a.weaponFromItem.values[3][k]+t*(b.weaponFromItem.values[3][k]-a.weaponFromItem.values[3][k]));
+    return out;
+}
+struct InsertionPathProjection {double along=0,distance=0,captureDistance=0;float angle=0;math::Matrix4 pose{};};
+// Controller diagnostics consume the same authored path as the player. Preserve
+// the original multiplication order for legacy rails to avoid changing their
+// measured controller solutions merely by adding sampled-path support.
+inline math::Matrix4 InsertionHandWorld(const ReloadInsertionProfile& p,float along,const math::Matrix4& weaponWorld)noexcept {
+    if(p.pathCount)return Multiply(p.itemFromHand,Multiply(InsertionItemPose(p,along),weaponWorld));
+    return Multiply(p.itemFromHand,Multiply(*InverseRigid(p.itemFromInsertion),Multiply(TravelPose(p,along),Multiply(p.weaponFromEntry,weaponWorld))));
+}
+inline std::optional<InsertionPathProjection> ProjectInsertionItem(const math::Matrix4& raw,const ReloadInsertionProfile& p)noexcept {
+    if(p.pathCount<2||p.pathCount>ReloadInsertionPathLimit||p.path.size()!=p.pathCount||!Rigid(raw))return {};
+    std::optional<InsertionPathProjection> best;double bestSquared=std::numeric_limits<double>::infinity();bool ambiguous=false;
+    for(unsigned n=0;n+1<p.pathCount;++n){const auto& a=p.path[n];const auto& b=p.path[n+1];double numerator=0,square=0;
+        for(unsigned k=0;k<3;++k){const double d=double(b.weaponFromItem.values[3][k])-a.weaponFromItem.values[3][k];square+=d*d;numerator+=(double(raw.values[3][k])-a.weaponFromItem.values[3][k])*d;}
+        if(square<=0)return {};double t=numerator/square;if(n)t=std::max(t,0.);if(n+2<p.pathCount)t=std::min(t,1.);
+        const double along=a.arcMeters+t*(b.arcMeters-a.arcMeters);auto pose=InsertionItemPose(p,along);
+        const double distance=Distance(raw,pose),d2=distance*distance;
+        if(best&&std::abs(d2-bestSquared)<=1e-10&&std::abs(along-best->along)>2*p.seatToleranceMeters)ambiguous=true;
+        if(d2+1e-10<bestSquared){bestSquared=d2;ambiguous=false;
+            best=InsertionPathProjection{along,distance,Distance(raw,InsertionItemPose(p,std::clamp(along,0.,double(p.travelMeters)))),Angle(raw,pose),pose};}
+    }
+    return ambiguous?std::nullopt:best;
+}
 }
 [[nodiscard]] inline bool ValidateReloadInsertionProfile(const ReloadInsertionProfile& p)noexcept {
     using namespace reload_insertion_detail;
@@ -194,7 +289,7 @@ inline math::Matrix4 Align(const math::Matrix4& raw,float blend)noexcept {
        (p.approach!=ReloadInsertionApproach::AxialFront&&p.approach!=ReloadInsertionApproach::RailContact&&p.family!=ReloadInsertionFamily::SingleShell)||
        (p.approach==ReloadInsertionApproach::EntrySphere&&p.captureDistanceMeters>=p.travelMeters-2*p.seatToleranceMeters)||
        (p.orientation==ReloadInsertionOrientation::AxialSymmetry&&p.family!=ReloadInsertionFamily::SingleShell))return false;
-    if(!std::isfinite(p.postCaptureTravelMeters)||p.postCaptureTravelMeters<0)return false;
+    if(!std::isfinite(p.postCaptureTravelMeters)||p.postCaptureTravelMeters<0||!PathShape(p))return false;
     if(p.approach==ReloadInsertionApproach::RailContact){
         if((p.family==ReloadInsertionFamily::SingleShell?p.orientation!=ReloadInsertionOrientation::AxialSymmetry:p.orientation!=ReloadInsertionOrientation::Keyed)||
            p.postCaptureTravelMeters<=2*p.seatToleranceMeters||p.postCaptureTravelMeters>=p.travelMeters)return false;
@@ -226,7 +321,7 @@ public:
 private:
     ReloadInsertionResult Cancel(ReloadInsertionReason reason)noexcept {
         const bool active=phase_!=ReloadInsertionPhase::Free;phase_=ReloadInsertionPhase::Free;
-        armed_=rawHistory_=false;originalMinimumAlong_.reset();captureNs_=seatNs_=0;captureAlong_=captureOffset_=0;cached_={};cached_.reason=reason;cached_.cancelled=active;return cached_;
+        armed_=rawHistory_=false;originalMinimumAlong_.reset();previousPathAlong_.reset();captureNs_=seatNs_=0;captureAlong_=captureOffset_=0;cached_={};cached_.reason=reason;cached_.cancelled=active;return cached_;
     }
     ReloadInsertionResult Snapshot()const noexcept {
         auto r=cached_;r.captured=r.cancelled=false;r.reason=ReloadInsertionReason::None;r.seat.reset();r.haptic=ReloadInsertionHaptic::None;return r;
@@ -243,7 +338,7 @@ private:
     std::uint64_t sequence_=0,nextSeat_=0;
     std::int64_t lastNow_=0,lastObserved_=0,captureNs_=0,seatNs_=0;
     double captureAlong_=0,captureOffset_=0;
-    std::optional<double> originalMinimumAlong_;
+    std::optional<double> originalMinimumAlong_,previousPathAlong_;
     bool initialized_=false,armed_=false,rawHistory_=false;
 };
 inline bool ReloadInsertion::Claims(const ReloadInsertionSample& s)const noexcept {
@@ -284,20 +379,29 @@ inline ReloadInsertionResult ReloadInsertion::Update(const ReloadInsertionSample
         if(s.sequence<sequence_)return Cancel(ReloadInsertionReason::SequenceRollback);
         fresh=s.sequence>sequence_;
         if(!fresh&&s.observedNs!=lastObserved_)return Cancel(ReloadInsertionReason::InvalidSample);
-        if(s.nowNs-lastObserved_>profile_.maxSampleGapNs){auto r=Cancel(ReloadInsertionReason::StaleInput);Adopt(s);return r;}
+        // Continuity joins two actual geometry observations. A fresh packet's
+        // own deadline was checked above; its processing delay must not be
+        // added to the preceding sample interval and cause false recapture.
+        // Duplicate packets still age against the last original observation.
+        const auto gap=fresh?s.observedNs-lastObserved_:s.nowNs-lastObserved_;
+        if(gap>profile_.maxSampleGapNs){auto r=Cancel(ReloadInsertionReason::StaleInput);Adopt(s);return r;}
         if(fresh){sequence_=s.sequence;lastObserved_=s.observedNs;}
     }else Adopt(s);
     if(phase_!=ReloadInsertionPhase::Free&&s.nowNs-captureNs_>profile_.maxGuidedNs)return Cancel(ReloadInsertionReason::Timeout);
     if(!fresh)return Snapshot(); // Safety can cancel duplicates; geometry/seat cannot advance.
     if(!Rigid(s.weaponFromHand))return Cancel(ReloadInsertionReason::InvalidGeometry);
     const auto rawItem=Multiply(*InverseRigid(profile_.itemFromHand),s.weaponFromHand);
-    const auto raw=Multiply(Multiply(profile_.itemFromInsertion,rawItem),*InverseRigid(profile_.weaponFromEntry));
+    const bool sampled=profile_.pathCount!=0;
+    const auto raw=sampled?rawItem:Multiply(Multiply(profile_.itemFromInsertion,rawItem),*InverseRigid(profile_.weaponFromEntry));
     if(!Rigid(rawItem)||!Rigid(raw))return Cancel(ReloadInsertionReason::InvalidGeometry);
     if(rawHistory_&&(Distance(raw,previousRaw_)>profile_.maxStepMeters||Angle(raw,previousRaw_)>profile_.maxStepRadians))
         return Cancel(ReloadInsertionReason::PoseJump);
     previousRaw_=raw;rawHistory_=true;
-    const auto& p=raw.values[3];const float angle=AlignmentAngle(raw,profile_.orientation);
-    const double along=TravelCoordinate(raw,profile_),radial=TravelRadial(raw,profile_);
+    const auto projection=sampled?ProjectInsertionItem(rawItem,profile_):std::optional<InsertionPathProjection>{};
+    if(sampled&&!projection)return Cancel(ReloadInsertionReason::InvalidGeometry);
+    const auto& p=raw.values[3];const float angle=sampled?projection->angle:AlignmentAngle(raw,profile_.orientation);
+    const double along=sampled?projection->along:TravelCoordinate(raw,profile_),radial=sampled?projection->distance:TravelRadial(raw,profile_);
+    if(sampled){if(previousPathAlong_&&std::abs(along-*previousPathAlong_)>profile_.maxStepMeters)return Cancel(ReloadInsertionReason::PoseJump);previousPathAlong_=along;}
     const bool assisted=profile_.approach==ReloadInsertionApproach::RailContact;
     auto r=Snapshot();r.rawItem=rawItem;r.guidedItem.reset();r.guidedHand.reset();
     if(phase_==ReloadInsertionPhase::Free){
@@ -305,8 +409,8 @@ inline ReloadInsertionResult ReloadInsertion::Update(const ReloadInsertionSample
         // Legacy modes still need observed outside motion. Front-only modes
         // additionally require their entry hemisphere; RailContact instead uses
         // explicit item ownership plus new post-capture motion to prevent seat.
-        if(OutsideEntryApproach(raw,profile_))armed_=true;
-        if(!EntrySideAllowed(raw,profile_))armed_=false;
+        if(sampled?projection->captureDistance>profile_.captureDistanceMeters:OutsideEntryApproach(raw,profile_))armed_=true;
+        if(!sampled&&!EntrySideAllowed(raw,profile_))armed_=false;
         // A claimed RailContact item may begin inside the assist volume:
         // native arming can finish after the player has reached the mouth.
         // Its post-capture displacement requirement still forbids automatic seat.
@@ -319,7 +423,8 @@ inline ReloadInsertionResult ReloadInsertion::Update(const ReloadInsertionSample
             originalMinimumAlong_=originalMinimumAlong_?std::min(*originalMinimumAlong_,along):along;
             if(along-*originalMinimumAlong_>=profile_.postCaptureTravelMeters-1e-6)armed_=true;
         }
-        if(((!assisted||needsWithdrawal)&&!armed_)||!CaptureGeometry(raw,profile_)){cached_=r;return r;}
+        const bool captureGeometry=sampled?projection->captureDistance<=profile_.captureDistanceMeters&&angle<=profile_.captureAngleRadians:CaptureGeometry(raw,profile_);
+        if(((!assisted||needsWithdrawal)&&!armed_)||!captureGeometry){cached_=r;return r;}
         phase_=ReloadInsertionPhase::Guided;captureNs_=s.observedNs;seatNs_=0;armed_=false;r.captured=true;
         captureAlong_=along;
         // A catch near the terminal mouth is staged short of the seat, smoothly
@@ -345,6 +450,12 @@ inline ReloadInsertionResult ReloadInsertion::Update(const ReloadInsertionSample
                 profile_.family==ReloadInsertionFamily::Magazine?ReloadOperation::SeatMagazine:ReloadOperation::InsertRound};
             r.haptic=ReloadInsertionHaptic::Seated;
         }
+    }
+    if(sampled){
+        const double target=phase_==ReloadInsertionPhase::Seated?profile_.travelMeters:std::clamp(insertionAlong,-double(profile_.captureDistanceMeters),double(profile_.travelMeters));
+        r.guidedItem=BlendRigid(rawItem,InsertionItemPose(profile_,target),r.alignment);
+        r.guidedHand=Multiply(profile_.itemFromHand,*r.guidedItem);if(phase_==ReloadInsertionPhase::Seated)r.progress=1;
+        r.phase=phase_;cached_=r;return r;
     }
     auto guided=profile_.orientation==ReloadInsertionOrientation::AxialSymmetry?AlignSymmetric(raw,r.alignment):Align(raw,r.alignment);
     const double targetAlong=phase_==ReloadInsertionPhase::Seated?profile_.travelMeters:std::clamp(insertionAlong,-double(profile_.captureDistanceMeters),double(profile_.travelMeters));

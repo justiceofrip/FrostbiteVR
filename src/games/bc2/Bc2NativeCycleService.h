@@ -1,6 +1,7 @@
 #pragma once
 #include "Bc2ReloadFlowRuntime.h"
 #include "Bc2AmmoReserve.h"
+#include "Bc2NativeCycleRecoveryState.h"
 #include "fvr/interaction/PhysicalWeaponCycle.h"
 
 namespace fvr::bc2 {
@@ -13,7 +14,7 @@ struct Bc2NativeCycleControl {
     std::optional<interaction::WeaponCycleRelease> release;
     bool permitted=false;
 };
-enum class Bc2NativeCyclePhase:unsigned {Watching,ShotObserved,Arming,Held,Releasing,Complete,Cancelled};
+enum class Bc2NativeCyclePhase:unsigned {Watching,ShotObserved,Arming,Held,Releasing,Complete,Cancelled,Converging,Advancing};
 enum class Bc2NativeCycleFailure:unsigned {None,Control,Owner,Input,State,Shot,Hold,Restore,Expired,Completion};
 enum class Bc2NativeCycleMode:unsigned {Spas,M95};
 // Selection uses original coherent native reads, not a completion substitute.
@@ -26,6 +27,13 @@ struct Bc2NativeCycleDecision {
     unsigned branch=3;
     bool tracked=false,hold=false;
     std::int64_t deadlineNs=0;
+};
+struct Bc2NativeCycleTrackingRebase {
+    ReloadStateOwner previous{},current{};
+    interaction::HandInteractionOwner previousHand{},currentHand{};
+    interaction::HandInteractionKey item{},mechanism{};
+    std::uint64_t cycle=0,shot=0,callbackRevision=0;
+    std::int64_t observedNs=0;
 };
 struct Bc2NativeCycleView {
     Bc2NativeCyclePhase phase=Bc2NativeCyclePhase::Watching;
@@ -41,12 +49,38 @@ struct Bc2NativeCycleView {
     std::optional<Bc2NativeCycleMode> selectedMode;ReloadStateOwner selectedOwner{};
     bool heldSuspended=false;
     std::uint64_t heldSuspensions=0,heldResumptions=0;
+    std::optional<Bc2NativeCycleTrackingRebase> trackingRebase;
 };
 struct Bc2NativeCycleCompletionWatch {
     ReloadHoldIdentity identity{};ReloadObservedConfig config{};
     std::uint64_t cycle=0;
     std::int64_t beganNs=0,deadlineNs=0;
     bool holdsNativeCycle=false;
+};
+// Supplied only inside the runtime's verified callback exclusion. Cancelling
+// a service does not prove that old native OriginalUpdate calls have returned.
+struct Bc2NativeCycleActorDrain {
+    ReloadHoldIdentity expected{};
+    std::uint64_t cycle=0,shot=0,callbackRevision=0;
+    std::int64_t observedNs=0,deadlineNs=0;
+    bool callbacksDrained=false;
+};
+inline bool NativeCycleClientActorReplaced(const ReloadStateOwner& previous,const ReloadStateOwner& current)noexcept {
+    return previous.soldier>=0x10000&&previous.weak>=0x10000&&previous.actorGeneration&&
+        current.soldier>=0x10000&&current.weak>=0x10000&&current.actorGeneration>previous.actorGeneration&&
+        (current.soldier!=previous.soldier||current.weak!=previous.weak);
+}
+// Durable diagnostic/physical-retirement receipt, never a new Ready or lease.
+struct Bc2NativeCycleActorRetirement {
+    std::uint64_t event=0,callbackRevision=0;
+    std::int64_t observedNs=0;
+    Bc2NativeCycleMode mode{};
+    Bc2NativeCycleView outcome{};
+    ReloadHoldIdentity replacement{};
+    std::optional<interaction::WeaponCycleRelease> release;
+    std::optional<Bc2NativeCycleRecoveryView> recovery;
+    std::optional<interaction::WeaponCycleIdleDebtRelease> recoveryRelease;
+    bool recoveryUncertain=false;
 };
 // Serialized BC2 callback service. The runtime owns its short, nonblocking
 // gate and never retains that gate across OriginalUpdate. No native pointers
@@ -59,11 +93,42 @@ public:
     // Explicit pre-control private operating class. Default remains SPAS;
     // changing a configured or previously observed service is forbidden.
     bool Configure(Bc2NativeCycleMode)noexcept;
+    bool EnableRecovery()noexcept;
+    bool EnableConcurrentBolt()noexcept;
+    bool RecoveryEnabled()const noexcept{return recoveryEnabled_;}
+    bool BeginRecovery(std::int64_t now)noexcept;
+    // Exact pre-conversion held Update may finish its zero-delta Step after
+    // recovery starts. This does not authorize a new native update or gesture.
+    bool DrainingHeldInvocation(const Bc2NativeCycleDecision&,std::uint32_t firing,std::int64_t now)const noexcept;
+    bool Recovering()const noexcept{return phase_==Bc2NativeCyclePhase::Converging||phase_==Bc2NativeCyclePhase::Advancing;}
+    NativeCycleRecoveryDecision EvaluateRecovery(const NativeCycleRecoveryScope&,const ReloadFlowEventInput&,int capacity,std::int64_t deadline)noexcept;
+    void FinishRecovery(const NativeCycleRecoveryDecision&,const ReloadFlowRecord&,const NativeCycleInputGuard&,unsigned steps,unsigned rejected)noexcept;
+    std::optional<Bc2NativeCycleRecoveryView> RecoveryView(std::int64_t now)noexcept{return concurrentCycle_?std::nullopt:recovery_.View(now);}
+    bool SubmitRecovery(const interaction::WeaponCycleIdleDebtRelease&,const interaction::HandInteractionSample&)noexcept;
+    bool AcknowledgeRecovery(const interaction::WeaponCycleIdleDebtReady&,std::int64_t now)noexcept;
+    // Session diagnostics survive selection and operation handoffs. These
+    // counters do not grant authority or substitute for retained receipts.
+    std::uint64_t RecoveryUpdates()const noexcept{return recoveryUpdates_;}
+    std::uint64_t RecoverySteps()const noexcept{return recoverySteps_;}
+    std::uint64_t RecoveryReleases()const noexcept{return recoveryReleases_;}
     // Host must exclude new callback decisions and drain all original calls.
     // Never discards debt/Ready or resets sequence high-water marks.
     bool Select(const Bc2NativeCycleSelection&)noexcept;
+    // A real client/server actor replacement may retire old obligations after
+    // callback drain. Same-actor equipment/tracking changes still use Select.
+    std::optional<Bc2NativeCycleActorRetirement> SelectReplacementActor(
+        const Bc2NativeCycleSelection&,const Bc2NativeCycleActorDrain&)noexcept;
+    // A verified replacement actor may first carry a rifle or other family.
+    // Retire old debt without choosing a pump/bolt class or granting Control.
+    // Consumes the reserve sequence; later Select needs a newer publication.
+    std::optional<Bc2NativeCycleActorRetirement> RetireForReplacementActor(
+        const Bc2AmmoReserveLease&,std::int64_t now,const Bc2NativeCycleActorDrain&)noexcept;
+    const auto& LastActorRetirement()const noexcept{return actorRetirement_;}
     Bc2NativeCycleMode Mode()const noexcept{return mode_;}
+    Bc2NativeCyclePhase Phase()const noexcept{return phase_;}
+    const interaction::HandInteractionSample& LastControlInput()const noexcept{return control_.input;}
     bool Control(const Bc2NativeCycleControl&)noexcept;
+    bool RebaseTracking(const Bc2NativeCycleControl&,const Bc2NativeCycleActorDrain&)noexcept;
     // Called only at a drained runtime operation handoff. Pending outcomes and
     // unresolved manual debt cannot yield to shell/resource mutations.
     bool YieldForReload()noexcept;
@@ -74,10 +139,11 @@ public:
     std::optional<Bc2NativeCycleCompletionWatch> CompletionWatch(std::int64_t now)const noexcept;
     std::optional<Bc2NativeCycleCompletionWatch> ObservationWatch(std::int64_t now)const noexcept;
     // Finishing an already-issued native observation may overlap neutral
-    // resumption. Preserve its original deadline while the SAME debt remains;
-    // this token alone never authorizes a new native-only observation.
+    // resumption or another branch completing this same cycle. Preserve its
+    // original deadline through that completion; no new watch is granted in
+    // Complete, and owner cancellation/selection retires this drain authority.
     std::uint64_t ObservationAuthority(std::uint64_t previous,std::int64_t now)const noexcept;
-    bool AcknowledgeReady(const interaction::WeaponCycleReady&)noexcept;
+    bool AcknowledgeReady(const interaction::WeaponCycleReady&,std::int64_t now=0)noexcept;
     Bc2NativeCycleDecision Evaluate(const ReloadHoldInput&,std::uint64_t invocation)noexcept;
     void Commit(const ReloadFlowRecord&)noexcept;
     void ObserveRestore(const ReloadFlowRecord&)noexcept;
@@ -86,9 +152,13 @@ public:
     void Cancel(Bc2NativeCycleFailure)noexcept;
     Bc2NativeCycleView View(std::int64_t now)const noexcept;
 private:
+    bool ReserveValid(const Bc2AmmoReserveLease&,std::int64_t now)const noexcept;
+    bool SelectionValid(const Bc2NativeCycleSelection&)const noexcept;
+    void ApplySelection(const Bc2NativeCycleSelection&)noexcept;
     bool Mapping(const Bc2NativeCycleControl&)const noexcept;
     std::optional<Bc2NativeCycleCompletionWatch> HeldWatch(std::int64_t now)const noexcept;
-    bool Current(const ReloadHoldInput&)const noexcept;
+    bool Current(const ReloadHoldInput&,bool nativeOnly=false)const noexcept;
+    bool SuspendExpiredController(const ReloadHoldInput&)noexcept;
     bool Release(const interaction::WeaponCycleRelease&,std::int64_t now)noexcept;
     void PublishHeld(std::int64_t observed,std::int64_t deadline)noexcept;
     void ContradictoryRestore()noexcept;
@@ -99,6 +169,8 @@ private:
     bool selectionRequired_=false;
     std::optional<Bc2NativeCycleSelection> selection_;
     std::uint64_t selectionSequence_=0;std::int64_t selectionTime_=0;
+    std::optional<Bc2NativeCycleActorRetirement> actorRetirement_;
+    std::optional<Bc2NativeCycleTrackingRebase> trackingRebase_;
     ReloadHoldIdentity native_{};ReloadObservedConfig config_{};
     Bc2NativeCyclePhase phase_=Bc2NativeCyclePhase::Watching;
     Bc2NativeCycleFailure failure_=Bc2NativeCycleFailure::None;
@@ -107,8 +179,8 @@ private:
     // Only exact post-shot client Restore receipts qualify repeated previous7.
     std::array<std::int64_t,2> restoredAt_{};
     std::array<unsigned,2> restoredPrevious_{}; // Exact own snapshot output provenance.
-    // Measured clientA forward ready snapshot; never an invented Commit tail.
-    std::int64_t forwardReadyAt_=0;
+    // Exact client forward-ready snapshots; never invented Commit tails.
+    std::array<std::int64_t,2> forwardReadyAt_{};
     std::array<std::int64_t,2> preRestoredAt_{};
     std::array<std::int64_t,2> preRewindAt_{};
     std::array<unsigned,3> cycleState_{};
@@ -122,7 +194,14 @@ private:
     std::int64_t suspendedAt_=0,suspendedUntil_=0;
     std::uint64_t heldSuspensions_=0,heldResumptions_=0;
     int loaded_=0,reserve_=0,capacity_=0;
-    bool emptyCycle_=false;
+    bool emptyCycle_=false,recoveryEnabled_=false;
+    bool concurrentBoltEnabled_=false,concurrentCycle_=false;
+    std::uint64_t guardEpoch_=0;
+    Bc2NativeCycleRecoveryState recovery_{};
+    std::uint64_t recoveryUpdates_=0,recoverySteps_=0,recoveryReleases_=0;
+    std::optional<interaction::WeaponCycleIdleDebtRelease> lastRecoveryRelease_;
+    std::array<bool,3> openHold_{};
+    std::array<std::int64_t,3> openDeadline_{};
     std::optional<interaction::WeaponCycleLease> held_;
     // Processing time of the first accepted submission; original release
     // source bounds stay immutable and remain the completion envelope.

@@ -10,6 +10,7 @@ struct MagazineResourceApi {
     bool (*submit)(void*,const AmmoResourceRequest&)noexcept=nullptr;
     // Durable outcome only: never current ammunition or hand authority.
     std::optional<AmmoResourceOutcome> (*outcome)(void*,std::uint64_t,const interaction::AmmoResourceContext&)noexcept=nullptr;
+    AmmoResourceRead (*readObserved)(void*,const ReloadStateOwner&,std::int64_t)noexcept=nullptr;
 };
 // Resource-backed BC2 hand adapter. Uses the same measured profiles, hand
 // arbiter, chest supply, rail and native rig presentation as ordinary gameplay.
@@ -27,10 +28,13 @@ public:
 private:
     enum class CancelCause:unsigned {Other,Input,Api,View,Mapping,Gun,Terminal,Reconciliation,Restore,Owner,Receipt,Supply,Counter,Interaction,Submit,Count};
     struct CancelEvent {CancelCause cause{};std::int64_t now=0;std::uint64_t input=0,request=0,cycle=0;
-        unsigned phase=0,reason=0,nativeCheck=0;bool pending=false;};
+        unsigned phase=0,reason=0,nativeCheck=0;bool pending=false;
+        unsigned resourceReadReason=~0u;bool sameOwner=false;};
     void NoteCancel(CancelCause,const interaction::HandInteractionSample&)noexcept;
     std::array<std::uint64_t,unsigned(CancelCause::Count)> cancelCounts_{};
     std::optional<CancelEvent> firstCancel_,firstActiveCancel_;
+    std::array<std::optional<CancelEvent>,unsigned(CancelCause::Count)> firstCancelByCause_{};
+    unsigned diagnosticReadReason_=~0u;bool diagnosticSameOwner_=false;
     MagazinePhysicalResult TickImpl(const MagazinePhysicalSample&,interaction::HandInteraction&,std::uint64_t&)noexcept;
     bool RecoverTerminal(const AmmoResourceOutcome&,const interaction::HandInteractionSample&,interaction::HandInteraction&)noexcept;
     bool Send(const AmmoResourceView&,const MagazinePhysicalSample&,interaction::AmmunitionOperation,bool,std::uint64_t&)noexcept;
@@ -46,8 +50,14 @@ private:
     std::optional<interaction::OriginalMagazine> original_;
     std::optional<AmmoResourceRequest> submittedSeat_;
     std::optional<AmmoResourceRequest> pendingRequest_;
+    std::optional<interaction::AmmunitionCounts> removalBefore_;
+    std::int64_t removalBegan_=0;
+    unsigned removalAdmissionRetries_=0;
     std::optional<AmmoResourceView> latestView_;
     MagazinePhysicalResult latestResult_;
+    std::optional<interaction::HandClaimToken> boundGun_;
+    std::uint64_t boundEpoch_=0,idleViewWaits_=0,activeViewWaits_=0;
+    bool viewDeferred_=false;
     struct InputEvidence {interaction::AmmoSupplySample supply;};
     std::array<std::optional<InputEvidence>,32> history_{};std::size_t historyNext_=0;
     std::uint64_t event_=0,cycle_=0,sequence_=0,seatedEvent_=0;

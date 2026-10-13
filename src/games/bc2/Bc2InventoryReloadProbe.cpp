@@ -58,12 +58,18 @@ void Bc2InventoryReloadProbe::Prepare(InputFrame& in,const ReloadStateOwner& own
  // A transient first Held sample does not prove that startup is finished.
  if(phase_==Phase::Warmup&&now-first_>=2000000000ll&&body&&display&&BodyInventoryDisplayFresh(*display,now)&&(inventoryOnly_||asset==Xm8MagazineAsset)&&
  display->selectedOwner==owner&&body->nativeOwner==owner&&body->selectedSlot){
-  original_=body->selectedSlot;anchors_=body->anchors;
+  original_=body->selectedSlot;anchors_=body->anchors;other_.reset();unsigned candidates=0;
   for(unsigned n=0;n<display->count;++n){const auto slot=display->slots[n].assignment;
-   if(slot!=*original_&&(slot.slot==anchors_.shoulders[0].slot||slot.slot==anchors_.shoulders[1].slot))other_=slot;}
-  if(other_&&Current(*body,now)){
+   if(slot!=*original_&&(slot.slot==anchors_.shoulders[0].slot||slot.slot==anchors_.shoulders[1].slot)){other_=slot;++candidates;}}
+  if(initialTarget_){
+   if(candidates!=1||other_!=initialTarget_||
+      (original_->slot!=anchors_.shoulders[0].slot&&original_->slot!=anchors_.shoulders[1].slot))Fail(14,now);
+   else std::swap(original_,other_);
+  }
+  if(!CancelConsumer()&&other_&&Current(*body,now)){
    if(Held(*body,*original_,now)){baselineClaim_=body->right->token.id;To(inventoryOnly_?Phase::InitialHeld:Phase::ReachStow,now);}
    else if(Empty(*body,now))To(Phase::ReachInitial,now);
+   else if(initialTarget_&&Held(*body,*other_,now))To(Phase::ReachOtherStow,now);
   }
  }
  const bool fresh=body&&Current(*body,now);
@@ -73,7 +79,7 @@ void Bc2InventoryReloadProbe::Prepare(InputFrame& in,const ReloadStateOwner& own
  }
  math::Vec3 target=Neutral;squeeze_=0;
  const auto shoulder=[&](bool other){const auto slot=other?other_:original_;if(!slot){Fail(6,now);return Neutral;}
-  for(const auto& a:anchors_.shoulders)if(a.slot==slot->slot)return math::Vec3{a.center.x,a.center.y,-a.center.z};Fail(6,now);return Neutral;};
+  if(const auto* a=FindBodyWeaponAnchor(anchors_,slot->slot))return math::Vec3{a->center.x,a->center.y,-a->center.z};Fail(6,now);return Neutral;};
  const auto reach=[&](bool other,Phase press){target=shoulder(other);if(Distance(command_.position,target)<.001f&&now-phaseAt_>=300000000)To(press,now);};
  const auto draw=[&](bool other,Phase clear){target=shoulder(other);squeeze_=1;
   if(fresh&&Held(*body,*(other?other_:original_),now)){const auto claim=body->right->token.id;
@@ -96,7 +102,7 @@ void Bc2InventoryReloadProbe::Prepare(InputFrame& in,const ReloadStateOwner& own
  case Phase::ClearOther:clear(true,inventoryOnly_?Phase::OtherHeld:Phase::ReachOtherStow);break;
  case Phase::ReachOtherStow:reach(true,Phase::StowOther);break;
  case Phase::StowOther:stow(true,Phase::ClearOtherEmpty);break;
- case Phase::ClearOtherEmpty:clear(false,Phase::ReachOriginal);break;
+ case Phase::ClearOtherEmpty:clear(false,initialTarget_&&!baselineClaim_?Phase::ReachInitial:Phase::ReachOriginal);break;
  case Phase::ReachOriginal:reach(false,Phase::DrawOriginal);break;
  case Phase::DrawOriginal:draw(false,Phase::ClearOriginal);break;
  case Phase::ClearOriginal:
@@ -143,6 +149,7 @@ void Bc2InventoryReloadProbe::Observe(const MagazinePhysicalProbeState& s,const 
 }
 void Bc2InventoryReloadProbe::Report(std::ostream& o)const{
  o<<"{\"synthetic_input\":true,\"headset_verified\":false,\"persistent_consumers\":true,\"inventory_only\":"<<(inventoryOnly_?"true":"false")<<",\"phase\":"<<unsigned(phase_)<<",\"failure\":"<<failure_
+ <<",\"initial_other_shoulder\":"<<(initialTarget_?"true":"false")<<",\"initial_target_weapon\":"<<(initialTarget_?initialTarget_->item.id:0)
  <<",\"completed\":"<<(Completed()?"true":"false")<<",\"original_weapon\":"<<(original_?original_->item.id:0)<<",\"other_weapon\":"<<(other_?other_->item.id:0)
  <<",\"baseline_claim\":"<<baselineClaim_<<",\"other_claim\":"<<otherClaim_<<",\"restored_claim\":"<<restoredClaim_<<",\"rows\":[";
  for(unsigned n=0;n<count_;++n){const auto& r=rows_[n];if(n)o<<',';o<<"{\"phase\":"<<r.phase<<",\"reason\":"<<r.reason<<",\"now_ns\":"<<r.now

@@ -116,4 +116,35 @@ class Composition(unittest.TestCase):
   self.assertEqual((c['model_count'],c['native_asset_name_count'],c['configuration_count'],c['state_record_count']),(1,2,2,2))
   self.assertFalse(c['models'][0]['native_manual_reload_enabled']);self.assertIsNone(c['models'][0]['parts'][0]['semantic_role'])
 
+class PartialMotion(unittest.TestCase):
+ def analyze(self,fail_hand=False,fail_root=False):
+  names=['jntWpn_1','good','bad','child','LeftHand',*m.mag.FINGERS]
+  sk=SimpleNamespace(names=names,parents=[-1,0,0,2,0]+[4]*15,sha256='s',fingerprint='r')
+  class Clip:
+   duration=.6
+   def evaluate(self,sk,t,names):
+    # The real evaluator automatically includes each requested ancestor.
+    if t>=.2 and (fail_root or any(n in ('bad','child') for n in names) or (fail_hand and 'LeftHand' in names)):
+     raise ValueError('Non-unit authored orientation')
+    rel={n:tr() for n in names};rel['good']=tr(0,0,t)
+    return {'time_seconds':t,'weapon_relative':rel}
+  profile={'native_asset_name':'synthetic','configured_mesh_path':'mesh','binding_digest':'b','weapon':{},'state_index':0}
+  return m.analyze(profile,{n:part() for n in ('good','bad','child')},{'weapon_relative':{}},Clip(),sk,{'skin_sections':[]})
+ def test_failed_part_and_its_child_do_not_discard_independent_motion(self):
+  result=self.analyze()
+  self.assertEqual([p['bone'] for p in result['parts']],['good'])
+  self.assertEqual(result['parts'][0]['motion']['kind'],'slider_candidate')
+  self.assertEqual({g['bone'] for g in result['gaps']},{'bad','child'})
+  self.assertTrue(all(g['time_s']==.2 for g in result['gaps']))
+  self.assertEqual(result['sample_count'],19);self.assertFalse(result['runtime_admitted'])
+ def test_failed_hand_never_becomes_partial_finger_contact(self):
+  result=self.analyze(fail_hand=True)
+  self.assertEqual([p['bone'] for p in result['parts']],['good'])
+  self.assertIsNone(result['parts'][0]['contact'])
+  self.assertEqual(sum(g.get('hand')=='left' for g in result['gaps']),1)
+ def test_failed_common_root_preserves_no_dependent_part(self):
+  result=self.analyze(fail_root=True)
+  self.assertEqual(result['parts'],[]);self.assertEqual(len(result['gaps']),4)
+  self.assertEqual(result['sample_count'],6);self.assertFalse(result['runtime_admitted'])
+
 if __name__=='__main__':unittest.main()

@@ -3,10 +3,15 @@
 #include "HandInteraction.h"
 namespace fvr::interaction {
 struct SupportGripOwner {std::uint64_t actor=0,generation=0,equipped=0;bool operator==(const SupportGripOwner&)const=default;};
+enum class SupportAimMode : std::uint8_t {TwoPoint,PrimaryHand};
+inline constexpr float SupportGripAcquireRadiusMeters=.16f;
 struct SupportGripContact {
  bool valid=false;float distanceMeters=0;
  // Calibrated minus raw wrist separation, in upright reference-space metres.
  math::Vec3 wristOffsetMeters{};
+ // Close hands can support a pistol without defining a stable two-point axis.
+ // Contact/claim/release still apply; the primary hand retains aiming.
+ SupportAimMode aimMode=SupportAimMode::TwoPoint;
 };
 enum class SupportRelease : std::uint8_t {None,Tracking,Contact,Action,Identity,Button,Distance,Separation,Crossed};
 struct SupportGripResult {InputFrame input{};bool holding=false,engaged=false,released=false;float correctionRadians=0;std::uint64_t token=0;SupportRelease reason=SupportRelease::None;};
@@ -27,5 +32,6 @@ private:
  SupportGripOwner owner_{};std::uint64_t space_=0,generation_=0;std::int64_t time_=0;
  std::uint64_t nextToken_=0,token_=0;
  float units_=0;bool armed_=false,holding_=false;math::Vec3 localDirection_{};
+ SupportAimMode aimMode_=SupportAimMode::TwoPoint;
 };
 }

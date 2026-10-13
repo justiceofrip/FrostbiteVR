@@ -35,7 +35,7 @@ public:
     bool PublishFeedback(const interaction::FeedbackEvent& e)noexcept {Lock lock(gate_);return lock&&channel_.PublishFeedback(e);}
     // Ok transfers ticket ownership. On Busy/Invalid caller still owns the pair
     // and must retry or reclaim it. Submit ONLY after exact native restoration.
-    ChannelResult Submit(const FrameLease&,const graphics::TextureDescriptor&,const graphics::PairTicket&)noexcept;
+    ChannelResult Submit(const FrameLease&,const graphics::TextureDescriptor&,const graphics::PairTicket&,const graphics::SceneDepthFrame* depth=nullptr)noexcept;
     ChannelResult Cancel(const FrameLease&)noexcept;
     ChannelResult SetBodyProps(const FrameLease&,unsigned eye,const graphics::BodyPropEye&)noexcept;
     // One lock commits both stereo metadata eyes, or neither on contention.
@@ -56,6 +56,7 @@ private:
     Step step_=Step::Idle;std::uint64_t generation_=0;
     NativeFrameKey lastNative_{};
     graphics::BodyPropFrame bodyProps_{};
+    graphics::SceneDepthFrame sceneDepth_{};
     FrameLease lease_{};graphics::TextureDescriptor descriptor_{};graphics::PairTicket ticket_{};
 };
 }

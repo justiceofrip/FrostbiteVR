@@ -6,8 +6,10 @@
 #include "fvr/interaction/ControllerInput.h"
 #include "fvr/interaction/TrackedRig.h"
 #include "fvr/interaction/ReloadGrip.h"
+#include "fvr/interaction/MechanismAimContinuation.h"
 #include <iostream>
 #include <sstream>
+#include <functional>
 using namespace fvr;using namespace bc2;using namespace interaction;using namespace reload_insertion_detail;
 namespace {
 constexpr std::int64_t Ms=1000000;
@@ -56,11 +58,16 @@ struct Loop {
  unsigned queuedSupportRejected=0,queuedSupportRetained=0;HandInteractionReason queuedSupportReason=HandInteractionReason::None;
  bool splitShellTransfer=false;unsigned submittedCohortWaits=0;
  bool manualPump=false,allowPumpPairs=true,allowPumpSupport=true,allowShellSupport=true,allowRifleShot=true;
+ // Automatic native fire is deliberately independent of diagnostic phases.
+ bool singleFireMagazine=false;
+ bool automaticRifle=false;std::int64_t rifleInterval=70*Ms,lastRifleFire=0,secondPublicationDelay=0,publicationUntil=0;
+ std::optional<AmmunitionCounts> delayedRifleCounts;std::function<void(Loop&)> beforeDriver;
  unsigned pumpSupports=0,shellSupports=0,rifleShots=0;bool pumpFirePose=false,pumpRightJump=false;std::optional<math::Pose> previousPumpRight;SupportGrip support;
  PumpNativeBoundary pumpNative;std::optional<Bc2PhysicalPump> pump;Bc2PumpRawContact pumpRaw;Bc2PumpPackCounters pumpPacks;
  Bc2PumpCalibration calibration=MeasuredSpasPump225();Bc2PhysicalPumpResult pumpResult;
- explicit Loop(bool withPump=false):manualPump(withPump){
-  if(manualPump){if(!driver.EnablePump(calibration))throw std::runtime_error("pump enable");pump.emplace(std::make_shared<Bc2PumpCalibration>(calibration),pumpNative.Api());}
+ MechanismAimContinuation pumpAim;InputFrame renderedInput{};bool guidePumpRendering=false;
+ explicit Loop(bool withPump=false,unsigned pumpCycles=1,Bc2PumpControllerProbe::Scenario scenario=Bc2PumpControllerProbe::Scenario::None):manualPump(withPump){
+  if(manualPump){if(!driver.EnablePump(calibration,scenario,pumpCycles))throw std::runtime_error("pump enable");pump.emplace(std::make_shared<Bc2PumpCalibration>(calibration),pumpNative.Api());}
   memory.Word(NativeInventory::ad+0x64,0x15000);memory.Word(NativeInventory::bd+0x64,0x15200);
   native={memory.owner,{0x50000,0x60000,0x70000},0x80000,0x90000,0xa0000};
   MagazinePhysicalApi ma;ma.context=this;
@@ -119,7 +126,7 @@ struct Loop {
   if(const auto request=holster.Demand(s)){HolsterInputOverride patch;if(patch.Apply(cache,*request,{nullptr,[](void*,const HolsterSuppressionRequest&)noexcept{return true;}}))s.suppression=patch.Commit();}
   return s;
  }
- AmmunitionSnapshot Snapshot(){return {binding.context,++nativeSequence,now,now+100*Ms,rifle,true};}
+ AmmunitionSnapshot Snapshot(){return {binding.context,++nativeSequence,now,now+100*Ms,delayedRifleCounts&&now<publicationUntil?*delayedRifleCounts:rifle,true};}
  AmmoResourceOwnUpdate Row(unsigned branch,const AmmoResourceNativeCall& c){AmmoResourceOwnUpdate r;r.beforeOwner=r.afterOwner=c.identity.owner;r.firing=c.identity.firing[branch];
   r.serverPlayer=c.identity.serverPlayer;r.serverSoldier=c.identity.serverSoldier;r.serverItem=c.identity.serverItem;r.invocation=c.invocation+100+branch;
   r.beginNs=now;r.endNs=now+10+branch;r.branch=branch;r.depth=1;r.loadedBefore=r.loadedAfter=c.after.loaded;r.reserveBefore=r.reserveAfter=c.after.reserve;
@@ -145,6 +152,7 @@ struct Loop {
   observed.shell=shell->ProbeState(now);observed.shellBlocks=shell->BlocksEquipment();observed.magazineRaw=magRaw;observed.shellRaw=shellRaw;if(manualPump){observed.pumpRaw=pumpRaw;observed.pumpNative=pumpNative.view;}
   if(fault==1)input.focused=false;if(fault==2)++native.owner.weak;
   if(earlyMapping){actions.Update(input,{native.owner.soldier,native.owner.equipGeneration,true,true},now);++mappings;}
+  if(beforeDriver)beforeDriver(*this);
   driver.Prepare(input,native.owner,Asset(),observed,now,now+100*Ms,now);
   if(manualPump){const auto phase=driver.State();
    if(phase==Bc2ResourceInventoryProbe::Phase::Pump||phase==Bc2ResourceInventoryProbe::Phase::Shell||
@@ -189,15 +197,24 @@ struct Loop {
    ApplyPumpActionGate(action,pumpResult.blocksFire);ApplyPumpResourceHandoffGate(action,shell->BlocksEquipment()||magResult.blocksWeaponActions);
    if(allowPumpPairs&&pumpResult.tracking.target&&PumpTargetFresh(pumpResult.tracking,now)){++pumpPacks.pairs;pumpPacks.copies+=2;}
    driver.ObservePump(pumpResult,pumpNative.view,pumpPacks,now);
+  }
+  renderedInput=input;
+  if(manualPump||singleFireMagazine){
    SupportGripOwner so{hand.owner.actor,hand.owner.actorGeneration,native.owner.weapon};
-   const auto source=pumpRaw.valid?pumpRaw.input:shellRaw.inputEvidence;
+   const auto source=Rifle()?magRaw.inputEvidence:pumpRaw.valid?pumpRaw.input:shellRaw.inputEvidence;
    const auto inverse=InverseRigid(shellRaw.weaponWorldMeters);
    float distance=10;if(!Rifle()&&shellRaw.valid&&inverse)distance=Distance(Multiply(shellRaw.rawLeftWristWorldMeters,*inverse),calibration.closedWrist);
-   const SupportGripContact contact{!Rifle()&&shellRaw.valid,distance,{}};auto proposed=support;
+   if(Rifle()&&observed.supportVerified)distance=Distance(magRaw.rawLeftWristWorldMeters,observed.supportTarget);
+   const SupportGripContact contact{Rifle()?observed.supportVerified: shellRaw.valid,distance,{}};auto proposed=support;
    const bool busy=pumpResult.ownsHand||shellResult.ammoOwnsHand||magResult.ownsLeftHand||bodyResult.blockWeaponActions;
-   auto returned=pump->ContinueSupport(so,input,contact,source,{2,native.owner.weapon},hands,proposed,intent,busy||driver.CancelConsumer());
+   std::optional<InputFrame> returnInput;
+   const auto returningGun=hands.Current(InteractionHand::Right);
+   if(pump&&!Rifle()&&returningGun&&!busy&&!driver.CancelConsumer()&&!hands.Current(InteractionHand::Left))
+    if(const auto submitted=pump->SupportReturnStarted(hand,*returningGun))returnInput=pumpAim.ApplyReturning(input,hand,*returningGun,*submitted);
+   auto returned=pump?pump->ContinueSupport(so,returnInput?*returnInput:input,contact,source,{2,native.owner.weapon},hands,proposed,intent,busy||driver.CancelConsumer()):std::optional<SupportGripResult>{};
    if(returned)++pumpSupports;
-   auto shellReturned=returned?std::optional<SupportGripResult>{}:shell->ContinueSupport(so,input,contact,source,{2,native.owner.weapon},hands,proposed,intent,busy||driver.CancelConsumer());
+   auto shellCurrent=hand;shellCurrent.nowNs=processingNow;
+   auto shellReturned=returned?std::optional<SupportGripResult>{}:shell->ContinueSupport(so,input,contact,source,{2,native.owner.weapon},hands,proposed,intent,busy||driver.CancelConsumer(),shellCurrent);
    if(shellReturned)++shellSupports;
    auto supported=returned?*returned:shellReturned?*shellReturned:proposed.Update(so,input,contact,driver.CancelConsumer(),busy);
    if(shellReturned&&expireAfterAdoption)processingNow=hand.deadlineNs+1;
@@ -217,7 +234,15 @@ struct Loop {
      owned=(left?hands.TransferFrom(hand,source,left->token,request):hands.AcquireFrom(hand,source,request)).accepted;}
     if(!owned){supported=support.Update(so,input,contact,true);proposed=support;const auto c=hands.Current(InteractionHand::Left);if(c&&c->token.kind==HandClaimKind::WeaponSupport)hands.Release(hand,c->token);}
    }else {const auto c=hands.Current(InteractionHand::Left);if(c&&c->token.kind==HandClaimKind::WeaponSupport)hands.Release(hand,c->token);}
-   support=proposed;pump->BindSupport(pumpResult.tracking,supported,hands);
+   support=proposed;if(pump)pump->BindSupport(pumpResult.tracking,supported,hands);
+   if(manualPump&&!Rifle()){
+    const auto left=hands.Current(InteractionHand::Left),right=hands.Current(InteractionHand::Right);
+    if(supported.holding&&left&&right)pumpAim.Capture(input,supported.input,hand,*left,*right);
+    else if(pumpResult.ownsHand&&left&&right){if(const auto guided=pumpAim.Apply(input,hand,*left,*right))supported.input=*guided;}
+    else if(returnInput)supported.input=*returnInput;
+    else pumpAim.Reset();
+   }else pumpAim.Reset();
+   renderedInput=!Rifle()&&guidePumpRendering?supported.input:input;
    if((driver.State()!=Bc2ResourceInventoryProbe::Phase::Pump||allowPumpSupport)&&
       (driver.State()!=Bc2ResourceInventoryProbe::Phase::ShellSupport||allowShellSupport))
     driver.ObserveSupport(pumpResult.tracking,supported,hand,source,hands.Current(InteractionHand::Left),hands.Current(InteractionHand::Right),shellReturned.has_value(),now);
@@ -229,11 +254,15 @@ struct Loop {
   if(allowSelect&&bodyResult.select){const auto read=ReadBodyInventory(memory.Memory(),native.owner,true);if(read.snapshot&&ResolveBodyDraw(*read.snapshot,unsigned(bodyResult.select->id))){selectedNext=bodyResult.select->id==NativeInventory::b?1:0;++selectionCalls;}}
   if(allowShot&&!Rifle()&&(action.pressed&Fire)&&!bodyResult.blockWeaponActions){--shellLoaded;++shots;shotAt=now;if(manualPump){pumpNative.firedAt=now;const auto p=input.hands[1].grip.position;
    pumpFirePose=std::hypot(p.x,p.y+.40f,p.z)<.001f;}}
-  if(manualPump&&allowRifleShot&&Rifle()&&(action.pressed&Fire)&&!bodyResult.blockWeaponActions){--rifle.loaded;++rifleShots;}
+  if((manualPump||singleFireMagazine)&&allowRifleShot&&Rifle()&&!bodyResult.blockWeaponActions&&
+     ((action.pressed&Fire)||(automaticRifle&&(action.held&Fire)&&now-lastRifleFire>=rifleInterval))){
+   const auto before=rifle;--rifle.loaded;++rifleShots;lastRifleFire=now;
+   if(rifleShots==2&&secondPublicationDelay){delayedRifleCounts=before;publicationUntil=now+secondPublicationDelay;}
+  }
   NativeDrain();
   const auto body=Pose(5,2,3),left=Multiply(Pose(-.2f,-.25f,.45f),body),right=Multiply(Pose(.15f,-.1f,.2f),body);
   std::array<ArmAnchor,2> arms{{{{4.8f,1.8f,3},{0,1,0}},{{5.2f,1.8f,3},{0,1,0}}}};
-  if(const auto posed=rig.Update({1,2,3,4},input,body,left,right,right,arms)){auto attachment=Pose();attachment.values[1][1]=attachment.values[2][2]=-1;
+  if(const auto posed=rig.Update({1,2,3,4},renderedInput,body,left,right,right,arms)){auto attachment=Pose();attachment.values[1][1]=attachment.values[2][2]=-1;
    auto wrist=Multiply(attachment,Multiply(Matrix(input.hands[0].grip),body));wrist.values[3]=posed->left.values[3];
    if(Rifle()){magRaw={};magRaw.valid=true;magRaw.owner=native.owner;magRaw.rigFingerprint=profile->geometry->rigFingerprint;magRaw.inputEvidence=hand;
     magRaw.weaponWorldMeters=posed->weapon;magRaw.trackingBodyWorldMeters=body;magRaw.rawLeftWristWorldMeters=wrist;magRaw.nativeMagazineAttached=!service.View()||!service.View()->wellEmpty;}
@@ -249,6 +278,202 @@ struct Loop {
  bool Run(bool showFailure=true){for(unsigned n=0;n<(manualPump?5900u:5600u)&&!driver.Completed()&&!driver.CancelConsumer();++n)Tick();if(showFailure&&!driver.Completed())std::cerr<<Report()<<'\n';return driver.Completed();}
 };
 
+std::string ProbeReport(const Bc2ResourceInventoryProbe& driver){std::ostringstream out;driver.Report(out);return out.str();}
+bool FirstPumpShot(Loop& f){
+ for(unsigned n=0;n<5000&&!f.shots&&!f.driver.CancelConsumer();++n)f.Tick();
+ return f.shots==1&&f.driver.State()==Bc2ResourceInventoryProbe::Phase::Pump&&!f.driver.CancelConsumer();
+}
+Bc2NativeCycleView UnfinishedView(const Loop& f){Bc2NativeCycleView v;
+ v.native=f.native;v.phase=Bc2NativeCyclePhase::ShotObserved;v.blocksFire=true;v.cycle=v.shot=1;
+ v.loaded=f.shellLoaded;v.reserve=f.shellReserve;v.capacity=8;return v;
+}
+ReloadStateOwner NewActor(const Loop& f){auto owner=f.native.owner;owner.weak+=4;++owner.actorGeneration;
+ owner.weapon=NativeInventory::a;++owner.equipGeneration;return owner;}
+int RestartEquipChurnWaitsForRealActor(){
+ auto storage=std::make_unique<Loop>(true);auto& f=*storage;
+ CHECK(f.driver.EnableActorReplacement()&&FirstPumpShot(f));
+ f.driver.ObservePump({},UnfinishedView(f),{},f.now);CHECK(f.driver.ActorReplacementWitnessed());
+ const auto calls=f.calls,shots=f.shots,submits=f.shellSubmits;
+ // scene268-recovery-01: witness838 at99865784654300; frame1056 at
+ // 99869189407700 keeps the actor/weapon/space and advances equip2->3.
+ // The old fixture failed18 before actor2 existed. These measured deltas
+ // replay that boundary through the same Prepare policy, without native calls.
+ auto owner=f.native.owner;++owner.equipGeneration;auto input=f.input;input.generation+=218;
+ auto now=f.now+3404753400ll,observed=now-10570600ll,deadline=observed+100*Ms;
+ input.predictedNs=now;input.hands[0].squeeze=input.hands[1].squeeze=input.hands[1].trigger=1;
+ f.driver.Prepare(input,owner,SpasReloadAsset,{},observed,deadline,now);
+ CHECK(!f.driver.CancelConsumer()&&!f.driver.ActorReplacementResumed()&&f.driver.State()==Bc2ResourceInventoryProbe::Phase::Pump);
+ CHECK(!input.hands[0].squeeze&&!input.hands[1].squeeze&&!input.hands[1].trigger);
+ const auto pending=f.Report();CHECK(pending.find("\"prior_report\":null")!=std::string::npos);
+ auto duplicate=input;f.driver.Prepare(duplicate,owner,SpasReloadAsset,{},observed,deadline,now+1);
+ CHECK(f.Report()==pending&&!f.driver.CancelConsumer());
+ CHECK(f.calls==calls&&f.shots==shots&&f.shellSubmits==submits&&!f.pumpNative.releases&&!f.pumpNative.acks);
+ for(unsigned fault=0;fault<8;++fault){auto candidate=std::make_unique<Bc2ResourceInventoryProbe>(f.driver);
+  auto wrong=owner;auto next=input;++next.generation;const auto t=now+10*Ms;next.predictedNs=t;
+  if(fault==0)--wrong.equipGeneration;
+  if(fault==1)++wrong.weapon;
+  if(fault==2){++wrong.space;next.spaceGeneration=wrong.space;}
+  if(fault==3)++wrong.weak;
+  if(fault==4)++wrong.actorGeneration;
+  if(fault==5)next.focused=false;
+  if(fault==6)next.hands[0].gripTracked=false;
+  candidate->Prepare(next,wrong,SpasReloadAsset,{},t,fault==7?t:t+100*Ms,t);
+  CHECK(candidate->CancelConsumer()&&!candidate->ActorReplacementResumed());
+ }
+ // Before an unfinished-shot witness, equip churn is still strict.
+ auto missing=std::make_unique<Loop>(true);CHECK(missing->driver.EnableActorReplacement()&&FirstPumpShot(*missing));
+ auto changed=missing->native.owner;++changed.equipGeneration;auto next=missing->input;++next.generation;
+ missing->driver.Prepare(next,changed,SpasReloadAsset,{},missing->now+10*Ms,missing->now+110*Ms,missing->now+10*Ms);
+ CHECK(missing->driver.CancelConsumer()&&!missing->driver.ActorReplacementWitnessed());
+ // Only the later genuine actor lifetime change restarts the input script.
+ auto fresh=NewActor(f);fresh.equipGeneration=owner.equipGeneration+1;++input.generation;input.predictedNs=now+20*Ms;
+ f.driver.Prepare(input,fresh,Xm8MagazineAsset,{},now+20*Ms,now+120*Ms,now+20*Ms);
+ CHECK(f.driver.ActorReplacementResumed()&&!f.driver.CancelConsumer()&&f.driver.State()==Bc2ResourceInventoryProbe::Phase::Setup);
+ CHECK(f.Report().find("\"prior_report\":"+pending)!=std::string::npos);
+ CHECK(f.calls==calls&&f.shots==shots&&f.shellSubmits==submits&&!f.pumpNative.releases&&!f.pumpNative.acks);
+ std::cout<<"Recorded checkpoint equip-only churn stays neutral with exact old witness; only replacement actor resumes input script\n";
+ return 0;
+}
+int ReplacementDriverOptInAndEvidence(){
+ auto storage=std::make_unique<Loop>(true);auto& f=*storage;
+ CHECK(f.driver.EnableActorReplacement()&&!f.driver.EnableActorReplacement());CHECK(FirstPumpShot(f));
+ CHECK(!f.driver.EnableActorReplacement());const auto witness=UnfinishedView(f);
+ const auto base=std::make_unique<Bc2ResourceInventoryProbe>(f.driver);
+ for(unsigned fault=0;fault<12;++fault){auto candidate=std::make_unique<Bc2ResourceInventoryProbe>(*base);auto v=witness;auto now=f.now;
+  if(fault==0)v.native.owner.weak+=4;if(fault==1)v.cycle=0;if(fault==2)v.shot=0;
+  if(fault==3)v.blocksFire=false;if(fault==4)v.phase=Bc2NativeCyclePhase::Complete;
+  if(fault==5)v.loaded++;if(fault==6)v.reserve++;if(fault==7)v.capacity=30;
+  if(fault==8)v.native.firing[1]=v.native.firing[0];if(fault==9)v.native.serverSoldier=0;
+  if(fault==10)now+=100*Ms;if(fault==11)v.ready=WeaponCycleReady{};
+  candidate->ObservePump({},v,{},now);CHECK(!candidate->ActorReplacementWitnessed());
+ }
+ f.driver.ObservePump({},witness,{},f.now);CHECK(f.driver.ActorReplacementWitnessed()&&!f.driver.ActorReplacementResumed());
+ CHECK(f.calls==0&&f.shellSubmits==0&&f.shots==1); // No repeated rifle acceptance work.
+ const auto report=f.Report();const auto calls=f.calls,shots=f.shots,submits=f.shellSubmits,releases=f.pumpNative.releases,acks=f.pumpNative.acks;
+ auto duplicate=f.input;duplicate.hands[0].squeeze=duplicate.hands[1].squeeze=duplicate.hands[1].trigger=1;
+ f.driver.Prepare(duplicate,f.native.owner,f.Asset(),f.observed,f.now,f.now+100*Ms,f.now+1);
+ CHECK(!f.driver.CancelConsumer()&&!duplicate.hands[0].squeeze&&!duplicate.hands[1].squeeze&&!duplicate.hands[1].trigger);
+ CHECK(f.Report()==report); // Same packet cannot create another witness or script action.
+ auto next=f.input;++next.generation;next.predictedNs=f.now+10*Ms;
+ f.driver.Prepare(next,f.native.owner,f.Asset(),f.observed,f.now+10*Ms,f.now+110*Ms,f.now+10*Ms);
+ CHECK(!next.hands[0].squeeze&&!next.hands[1].squeeze&&!next.hands[1].trigger);
+ CHECK(f.calls==calls&&f.shots==shots&&f.shellSubmits==submits&&f.pumpNative.releases==releases&&f.pumpNative.acks==acks);
+ Bc2ResourceInventoryProbe disabled;CHECK(!disabled.EnableActorReplacement());
+ CHECK(disabled.EnablePump(f.calibration));
+ // The same ordinary sequence and owner change retains the default failure.
+ auto normal=std::make_unique<Loop>(true);CHECK(FirstPumpShot(*normal));
+ normal->driver.ObservePump({},UnfinishedView(*normal),{},normal->now);CHECK(!normal->driver.ActorReplacementWitnessed());
+ auto input=normal->input;++input.generation;input.predictedNs=normal->now+10*Ms;
+ normal->driver.Prepare(input,NewActor(*normal),Xm8MagazineAsset,{},normal->now+10*Ms,normal->now+110*Ms,normal->now+10*Ms);
+ CHECK(normal->driver.CancelConsumer()&&!normal->driver.ActorReplacementResumed());return 0;
+}
+int ReplacementDriverOnlyRestartsInputOnce(){
+ auto storage=std::make_unique<Loop>(true);auto& f=*storage;CHECK(f.driver.EnableActorReplacement()&&FirstPumpShot(f));
+ f.driver.ObservePump({},UnfinishedView(f),{},f.now);CHECK(f.driver.ActorReplacementWitnessed());
+ const auto prior=f.Report();const auto counts=f.rifle;const auto calls=f.calls,shots=f.shots,submits=f.shellSubmits;
+ auto next=f.input;++next.generation;next.predictedNs=f.now+10*Ms;const auto owner=NewActor(f);
+ f.driver.Prepare(next,owner,Xm8MagazineAsset,{},f.now+10*Ms,f.now+110*Ms,f.now+10*Ms);
+ CHECK(f.driver.ActorReplacementResumed()&&f.driver.State()==Bc2ResourceInventoryProbe::Phase::Setup);
+ CHECK(f.Report().find("\"prior_report\":"+prior)!=std::string::npos);
+ CHECK(f.Report().find("\"resumed\":true")!=std::string::npos&&!f.driver.Completed());
+ CHECK(!next.hands[0].squeeze&&!next.hands[1].trigger);
+ CHECK(f.calls==calls&&f.shots==shots&&f.shellSubmits==submits&&f.rifle==counts&&!f.pumpNative.releases&&!f.pumpNative.acks);
+ const auto accepted=f.Report();
+ f.driver.Prepare(next,owner,Xm8MagazineAsset,{},f.now+10*Ms,f.now+110*Ms,f.now+11*Ms);
+ CHECK(f.Report()==accepted&&!f.driver.CancelConsumer());
+ // Independently construct the replacement scene's synthetic native boundary.
+ // Transplant only the resumed input script. It performs the declared bounded
+ // recovery scope through real consumers, inside the original58s session.
+ for(const bool spasFirst:{true,false})for(const int loaded:{22,30}){
+ auto replacement=std::make_unique<Loop>(true);replacement->now=f.now+11*Ms;replacement->sequence=next.generation;
+ replacement->memory.owner=owner;replacement->native.owner=owner;
+ replacement->memory.Word(NativeInventory::player+0xc54,owner.weak);
+ replacement->memory.Word(owner.weak,owner.soldier+4);
+ replacement->rifle={loaded,191,30};
+ if(spasFirst){replacement->selected=1;replacement->memory.Select(1);replacement->native.owner=replacement->memory.owner;}
+ replacement->driver=f.driver;
+ CHECK(replacement->calls==0&&!replacement->shots&&!replacement->pumpNative.acks);
+ CHECK(replacement->Run());
+ CHECK(replacement->calls==2&&replacement->shots==1&&replacement->shellSubmits==1&&replacement->selectionCalls==(spasFirst?2u:1u));
+ CHECK(replacement->pumpNative.releases==1&&replacement->pumpNative.acks==1&&replacement->rifleShots==0);
+ CHECK(replacement->rifle==AmmunitionCounts(loaded,191,30)&&replacement->shellLoaded==8&&replacement->shellReserve==23);
+ CHECK(replacement->pumpSupports==1&&replacement->shellSupports==1);
+ CHECK(replacement->now<1010*Ms+58000*Ms);
+ CHECK(replacement->Report().find("\"prior_report\":"+prior)!=std::string::npos);
+ CHECK(f.calls==calls&&f.shots==shots&&f.shellSubmits==submits&&f.rifle==counts);
+ std::cout<<"Replacement actor "<<(spasFirst?"SPAS-first shoulder bootstrap, ":"rifle-first, ")<<"original magazine "<<loaded<<"/30 conserved, pump/shell/support completed at "
+          <<(replacement->now-1010*Ms)/Ms<<"ms within original58000ms bound\n";
+ }
+ // Same original 58s deadline, even though the local input scripts restarted.
+ auto expired=std::make_unique<Bc2ResourceInventoryProbe>(f.driver);auto late=next;++late.generation;
+ const auto end=1010*Ms+58000*Ms;late.predictedNs=end;
+ expired->Prepare(late,owner,Xm8MagazineAsset,{},end,end+100*Ms,end);
+ CHECK(expired->CancelConsumer()&&ProbeReport(*expired).find("\"failure\":1")!=std::string::npos);
+ auto second=owner;second.weak+=4;++second.actorGeneration;++next.generation;next.predictedNs=f.now+20*Ms;
+ f.driver.Prepare(next,second,Xm8MagazineAsset,{},f.now+20*Ms,f.now+120*Ms,f.now+20*Ms);
+ CHECK(f.driver.CancelConsumer()&&f.Report().find("\"prior_report\":"+prior)!=std::string::npos);
+ return 0;
+}
+int ReplacementDriverRejectsFalseOrStaleReplacement(){
+ auto storage=std::make_unique<Loop>(true);auto& f=*storage;CHECK(f.driver.EnableActorReplacement()&&FirstPumpShot(f));
+ const auto unwitnessed=std::make_unique<Bc2ResourceInventoryProbe>(f.driver);
+ f.driver.ObservePump({},UnfinishedView(f),{},f.now);CHECK(f.driver.ActorReplacementWitnessed());
+ for(unsigned fault=0;fault<13;++fault){auto candidate=std::make_unique<Bc2ResourceInventoryProbe>(fault==12?*unwitnessed:f.driver);
+  auto owner=NewActor(f);auto input=f.input;++input.generation;auto now=f.now+10*Ms,observed=now,deadline=now+100*Ms;input.predictedNs=now;
+  if(fault==0){owner=f.native.owner;++owner.equipGeneration;++owner.weapon;}
+  if(fault==1){owner=f.native.owner;++owner.space;input.spaceGeneration=owner.space;}
+  if(fault==2)owner.actorGeneration=f.native.owner.actorGeneration;
+  if(fault==3)owner.weak=f.native.owner.weak;
+  if(fault==4)input.generation=f.input.generation;
+  if(fault==5)input.generation=f.input.generation-1;
+  if(fault==6)deadline=now;
+  if(fault==7)observed=now+1;
+  if(fault==8)input.focused=false;
+  if(fault==9)input.hands[0].gripTracked=false;
+  if(fault==10)now=f.now-1;
+  if(fault==11)observed=f.now-1;
+  candidate->Prepare(input,owner,Xm8MagazineAsset,{},observed,deadline,now);
+  CHECK(!candidate->ActorReplacementResumed()&&candidate->CancelConsumer());
+ }
+ auto completed=UnfinishedView(f);completed.phase=Bc2NativeCyclePhase::Complete;
+ f.driver.ObservePump({},completed,{},f.now+1);CHECK(f.driver.CancelConsumer()&&!f.driver.ActorReplacementResumed());
+ CHECK(f.Report().find("\"failure\":24")!=std::string::npos);return 0;
+}
+int ReplacementShoulderRequiresUniqueCurrentRifle(){
+ Bc2InventoryReloadProbe ordinary;CHECK(!ordinary.PreferOtherInitialShoulder({1,{NativeInventory::a,1}}));
+ Bc2InventoryReloadProbe inputOnly{false,true};CHECK(!inputOnly.PreferOtherInitialShoulder({}));
+ CHECK(inputOnly.PreferOtherInitialShoulder({1,{NativeInventory::a,1}}));
+ CHECK(!inputOnly.PreferOtherInitialShoulder({1,{NativeInventory::a,1}}));
+ auto old=std::make_unique<Loop>(true);CHECK(old->driver.EnableActorReplacement()&&FirstPumpShot(*old));
+ old->driver.ObservePump({},UnfinishedView(*old),{},old->now);
+ const auto owner=NewActor(*old);auto input=old->input;++input.generation;input.predictedNs=old->now+10*Ms;
+ old->driver.Prepare(input,owner,Xm8MagazineAsset,{},old->now+10*Ms,old->now+110*Ms,old->now+10*Ms);
+ CHECK(old->driver.ActorReplacementResumed());
+ for(unsigned fault=0;fault<4;++fault){auto replacement=std::make_unique<Loop>(true);
+  replacement->now=old->now+11*Ms;replacement->sequence=input.generation;
+  replacement->memory.owner=owner;
+  replacement->memory.Word(NativeInventory::player+0xc54,owner.weak);replacement->memory.Word(owner.weak,owner.soldier+4);
+  replacement->selected=1;replacement->memory.Select(1);replacement->native.owner=replacement->memory.owner;
+  replacement->driver=old->driver;bool injected=false;
+  replacement->beforeDriver=[&](Loop& f){if(!f.observed.display)return;auto& display=*f.observed.display;
+   if(!BodyInventoryDisplayFresh(display,f.now))return;
+   if(fault==0){ // A second shotgun is not an enrolled rifle target.
+    for(unsigned n=0;n<display.count;++n)if(display.slots[n].native.weapon!=f.native.owner.weapon){
+     auto& slot=display.slots[n];slot.native.category=1;display.carried.items[slot.native.slot]=slot.native;injected=true;}
+   }else if(fault==1){ // No unique other shoulder can be chosen.
+    for(unsigned n=0;n<display.count;++n)if(display.slots[n].native.weapon==f.native.owner.weapon){
+     display.slots[0]=display.slots[n];display.count=1;injected=true;break;}
+   }else if(fault==2){display.deadlineNs=f.now;injected=true;}
+   else if(f.driver.State()==Bc2ResourceInventoryProbe::Phase::InitialDraw){
+    for(unsigned n=0;n<display.count;++n)if(display.slots[n].native.weapon!=f.native.owner.weapon){
+     ++display.slots[n].assignment.item.generation;injected=true;}
+   }
+  };
+  CHECK(!replacement->Run(false)&&injected&&replacement->driver.CancelConsumer());
+  CHECK(!replacement->calls&&!replacement->shots&&!replacement->shellSubmits&&!replacement->selectionCalls);
+ }
+ return 0;
+}
 int QueuedShellSupportUsesCurrentClock(){Loop stale(true);stale.advancingShellClock=true;
  CHECK(!stale.Run(false));CHECK(stale.Report().find("\"failure\":22")!=std::string::npos);
  CHECK(stale.shellSubmits==1&&stale.shellSupports==1&&stale.pumpSupports==1&&stale.rifleShots==0);
@@ -269,13 +494,125 @@ int CombinedPartialNativeTransferAfterPriorLeaseExpiry(){Loop f(true);
  CHECK(f.pumpNative.releases==1&&f.pumpNative.acks==1&&f.calls==6&&!f.shellPairLost&&!f.sourceRestamped);
  CHECK(f.rifle==AmmunitionCounts(29,161,30)&&f.shellLoaded==8&&f.shellReserve==23);
  std::cout<<"Combined original pending shell survives partial native transfer after old lease expiry; exact completion/support/rifle return conserved\n";return 0;}
-int CombinedManualPump(){Loop f(true);CHECK(f.Run());
+int PumpInspectionPreservesConsumers(){
+ for(bool missing:{false,true}){
+  auto f=std::make_unique<Loop>(true);
+  CHECK(f->driver.UsePumpInspectionPose()&&!f->driver.UsePumpInspectionPose());
+  CHECK(!f->driver.EnableActorReplacement());
+  f->allowPumpPairs=!missing;bool sidewaysAtFire=false;
+  f->beforeDriver=[&](Loop& loop){
+   if(loop.shots&&loop.driver.State()==Bc2ResourceInventoryProbe::Phase::Pump&&loop.previousPumpRight){const auto& p=*loop.previousPumpRight;
+    sidewaysAtFire|=std::hypot(p.position.x,p.position.y+.22f,p.position.z+.40f)<.001f&&std::abs(p.orientation.y-.7071067812f)<.001f;}
+  };
+  CHECK(f->Run(false)==!missing);
+  CHECK(sidewaysAtFire&&!f->pumpRightJump);
+  if(!missing){CHECK(f->pumpNative.releases==1&&f->pumpNative.acks==1&&f->calls==6&&f->shellSubmits==1&&f->rifleShots==1);
+   CHECK(f->rifle==AmmunitionCounts(29,161,30)&&f->shellLoaded==8&&f->shellReserve==23);}
+  else CHECK(!f->pumpNative.releases&&!f->shellSubmits&&!f->rifleShots);
+  CHECK(!f->driver.UsePumpInspectionPose());
+ }
+ Bc2ResourceInventoryProbe unconfigured;CHECK(!unconfigured.UsePumpInspectionPose());
+ std::cout<<"Sideways pump inspection preserves real input/consumer completion and rejects missing native evidence\n";return 0;
+}
+int CombinedManualPump(){CHECK(!PumpInspectionPreservesConsumers());Loop f(true);CHECK(f.Run());
  CHECK(f.calls==6&&f.shots==1&&f.shellSubmits==1&&f.selectionCalls==2&&f.rifleShots==1);
  CHECK(f.pumpFirePose&&!f.pumpRightJump);
  CHECK(f.pumpNative.releases==1&&f.pumpNative.acks==1&&f.pumpSupports==1&&f.shellSupports==1);
  CHECK(f.rifle==AmmunitionCounts(29,161,30)&&f.shellLoaded==8&&f.shellReserve==23);
  CHECK(f.Report().find("\"manual_pump\":true")!=std::string::npos&&f.Report().find("\"input_rows_dropped\":0")!=std::string::npos);
  std::cout<<"Combined pump: real persistent body, resource, shell, pump and support consumers; one physical pump, two support returns, final rifle shot\n";return 0;}
+int CombinedRequiresRifleSupportBeforeReload(){
+ CHECK(!RestartEquipChurnWaitsForRealActor());
+ CHECK(!ReplacementShoulderRequiresUniqueCurrentRifle());
+ CHECK(!ReplacementDriverOptInAndEvidence());
+ CHECK(!ReplacementDriverOnlyRestartsInputOnce());
+ CHECK(!ReplacementDriverRejectsFalseOrStaleReplacement());
+ for(unsigned missing=0;missing<2;++missing){auto storage=std::make_unique<Loop>(true);auto& f=*storage;
+  CHECK(f.driver.RequireRifleSupport());
+  f.beforeDriver=[&](Loop& loop){
+   loop.observed.supportVerified=!missing&&loop.Rifle()&&loop.magRaw.valid;
+   loop.observed.supportRaw=loop.magRaw;
+   loop.observed.supportTarget=Multiply(Pose(-.2f,-.25f,.45f),Pose(5,2,3));
+  };
+  CHECK(f.Run(false)==!missing);
+  CHECK(f.Report().find("\"rifle_support_required\":true")!=std::string::npos);
+  if(!missing){CHECK(f.Report().find("\"rifle_support_released\":true")!=std::string::npos);CHECK(f.calls==6);}
+  else CHECK(f.calls==0&&f.Report().find("\"failure\":23")!=std::string::npos);
+ }
+ return 0;
+}
+int FinalAutomaticRifleShots(){
+ // 70ms stock cadence under the unchanged100ms trigger reproduces actual245:
+ // two native shots can precede the first coherent observation after release.
+ for(const auto delay:{0ll,150*Ms}){auto storage=std::make_unique<Loop>(true);auto& f=*storage;f.automaticRifle=true;f.secondPublicationDelay=delay;
+  bool sawOneDuringDwell=false,sawTwoDuringDwell=false;std::int64_t sawTwoAt=0;
+  f.beforeDriver=[&](Loop& loop){if(loop.driver.State()==Bc2ResourceInventoryProbe::Phase::Dwell){
+   if(loop.Report().find("\"rifle_shot_count\":1")!=std::string::npos)sawOneDuringDwell=true;
+   if(loop.Report().find("\"rifle_shot_count\":2")!=std::string::npos){sawTwoDuringDwell=true;if(!sawTwoAt)sawTwoAt=loop.now;}
+  }};
+  CHECK(f.Run());CHECK(f.rifleShots==2&&f.rifle==AmmunitionCounts(28,161,30));
+  CHECK(f.calls==6&&f.shellSubmits==1&&f.selectionCalls==2&&f.mappings==f.sequence);
+  CHECK(sawTwoDuringDwell);if(delay)CHECK(sawOneDuringDwell&&f.now-sawTwoAt>=390*Ms);
+  CHECK(f.Report().find("\"rifle_shot_count\":2")!=std::string::npos);
+  CHECK(!f.input.hands[1].trigger&&!f.magazine->BlocksEquipment()&&!f.shell->BlocksEquipment());
+ }
+ auto singleStorage=std::make_unique<Loop>(true);auto& single=*singleStorage;CHECK(single.Run(false));CHECK(single.rifleShots==1&&single.rifle==AmmunitionCounts(29,161,30));
+ CHECK(single.Report().find("\"rifle_shot_count\":1")!=std::string::npos);
+ std::cout<<"Final rifle pulse accepts exact one/two-shot decreases, including delayed second-shot publication and stable dwell\n";return 0;
+}
+int FinalRifleRejectsForeignAmmunition(){
+ for(unsigned fault=0;fault<10;++fault){auto storage=std::make_unique<Loop>(true);auto& f=*storage;bool injected=false;
+  f.beforeDriver=[&](Loop& loop){
+   if(loop.driver.State()!=Bc2ResourceInventoryProbe::Phase::Dwell||!loop.observed.magazine.resource)return;
+   injected=true;auto& v=*loop.observed.magazine.resource;
+   switch(fault){
+   case 0:++v.snapshot.counts.reserve;break; // foreign grant
+   case 1:--v.snapshot.counts.reserve;break; // reload/foreign consumption
+   case 2:++v.snapshot.counts.capacity;break;
+   case 3:v.snapshot.counts.loaded=30;break; // refill after accepted shot
+   case 4:v.snapshot.counts.loaded=27;break; // unbounded extra shots
+   case 5:++v.binding.context.resource.weaponGeneration;v.snapshot.context=v.binding.context;break;
+   case 6:++v.binding.owner.equipGeneration;++v.identity.owner.equipGeneration;
+          ++v.binding.context.equipGeneration;v.snapshot.context=v.binding.context;break;
+   case 7:++v.binding.data;break;
+   case 8:++v.request;break; // fresh counts cannot conceal another resource operation
+   case 9:v.requestState=AmmoResourceRequestState::Dispatched;v.phase=AmmunitionLedgerPhase::Dispatched;break;
+   }
+  };
+  CHECK(!f.Run(false)&&f.driver.CancelConsumer()&&injected);
+  CHECK(f.Report().find("\"failure\":21")!=std::string::npos);CHECK(!f.input.hands[1].trigger);
+  CHECK(f.calls==6&&f.rifleShots==1); // driver never writes ammo or adds a request
+ }
+ auto excessiveStorage=std::make_unique<Loop>(true);auto& excessive=*excessiveStorage;excessive.automaticRifle=true;excessive.rifleInterval=40*Ms;
+ CHECK(!excessive.Run(false)&&excessive.driver.CancelConsumer()&&excessive.rifleShots==3);
+ CHECK(excessive.Report().find("\"failure\":21")!=std::string::npos);
+ std::cout<<"Final rifle rejects foreign owner/context/data/request, reload-like reserve/refill/capacity changes and excess rounds\n";return 0;
+}
+int FinalRifleRequiresFreshObservation(){
+ for(unsigned fault=0;fault<3;++fault){auto storage=std::make_unique<Loop>(true);auto& f=*storage;bool injected=false;
+  f.beforeDriver=[&](Loop& loop){
+   const auto phase=loop.driver.State();
+   if((phase!=Bc2ResourceInventoryProbe::Phase::RifleFire&&phase!=Bc2ResourceInventoryProbe::Phase::WaitRifleShot)||!loop.observed.magazine.resource)return;
+   injected=true;auto& v=*loop.observed.magazine.resource;
+   if(fault==0){v.snapshot.deadlineNs=loop.now;v.binding.deadlineNs=loop.now;}
+   if(fault==1)v.snapshot.sequence=1;
+   if(fault==2)v.snapshot.observedNs=loop.now+1;
+  };
+  CHECK(!f.Run(false)&&f.driver.CancelConsumer()&&injected);
+  CHECK(f.Report().find("\"rifle_shot_count\":0")!=std::string::npos);
+  CHECK(f.Report().find("\"failure\":13")!=std::string::npos);
+ }
+ return 0;
+}
+int FinalRifleCannotCompleteFromRegressedSnapshot(){
+ auto storage=std::make_unique<Loop>(true);auto& f=*storage;bool injected=false;
+ f.beforeDriver=[&](Loop& loop){if(loop.driver.State()==Bc2ResourceInventoryProbe::Phase::Dwell&&loop.observed.magazine.resource){
+  injected=true;loop.observed.magazine.resource->snapshot.sequence=1;
+ }};
+ CHECK(!f.Run(false)&&f.driver.CancelConsumer()&&injected&&f.rifleShots==1);
+ CHECK(f.Report().find("\"rifle_shot_count\":1")!=std::string::npos);
+ return 0;
+}
 int CombinedPumpMissingEvidence(){for(unsigned fault=0;fault<4;++fault){Loop f(true);
  if(fault==0)f.allowPumpPairs=false;if(fault==1)f.allowPumpSupport=false;if(fault==2)f.allowShellSupport=false;if(fault==3)f.allowRifleShot=false;
  CHECK(!f.Run(false)&&f.driver.CancelConsumer());
@@ -329,5 +666,241 @@ int BoundedInputJournal(){
  input.hands[1].squeeze=.8f;tick();CHECK(rows()==before+1);owner.weapon=888778;tick();CHECK(rows()==before+2);
  CHECK(report().find("\"input_logging_version\":2")!=std::string::npos);return 0;
 }
+int QueuedPumpInterruptionPreservesTrackingOverride(){
+ // This test exercises the real top-level same-generation replay. The native
+ // boundary remains synthetic; stop after the first loss packet, so no native
+ // recovery completion or grant is asserted by this wrapper-only regression.
+ auto storage=std::make_unique<Loop>(true);auto& f=*storage;
+ f.driver=Bc2ResourceInventoryProbe{};
+ CHECK(f.driver.EnablePump(f.calibration,Bc2PumpControllerProbe::Scenario::LeftTrackingLoss));
+ for(unsigned n=0;n<5000&&(n==0||f.input.hands[0].gripTracked)&&!f.driver.CancelConsumer();++n)f.Tick();
+ CHECK(f.driver.State()==Bc2ResourceInventoryProbe::Phase::Pump&&!f.driver.CancelConsumer());
+ CHECK(!f.input.hands[0].gripTracked&&!f.input.hands[0].aimTracked&&f.input.hands[0].squeeze==0);
+ CHECK(f.input.hands[1].gripTracked&&f.input.hands[1].aimTracked&&f.shots==1&&f.pumpNative.releases==0);
+ const auto source=f.input;const auto deadline=f.now+100*Ms;
+ for(unsigned duplicate=1;duplicate<=3;++duplicate){
+  auto replay=source;replay.hands[0].gripTracked=replay.hands[0].aimTracked=true;
+  f.driver.Prepare(replay,f.native.owner,f.Asset(),f.observed,f.now,deadline,f.now+duplicate*Ms);
+  CHECK(!replay.hands[0].gripTracked&&!replay.hands[0].aimTracked);
+  CHECK(replay.hands[1].gripTracked&&replay.hands[1].aimTracked);
+  CHECK(replay.hands[0].squeeze==0&&replay.hands[1].trigger==0);
+  CHECK(replay.generation==source.generation&&replay.predictedNs==source.predictedNs);
+ }
+ auto expired=source;expired.hands[0].gripTracked=expired.hands[0].aimTracked=true;
+ expired.hands[0].squeeze=expired.hands[1].trigger=1;
+ f.driver.Prepare(expired,f.native.owner,f.Asset(),f.observed,f.now,deadline,deadline);
+ CHECK(f.driver.CancelConsumer()&&expired.hands[0].squeeze==0&&expired.hands[1].trigger==0);
+ CHECK(!expired.hands[0].gripTracked&&!expired.hands[0].aimTracked);
+ std::cout<<"Top-level duplicate pump loss retains tracking overrides and original source time; expiry emits neutral actions\n";
+ return 0;
 }
-int main(){if(CombinedPartialNativeTransferAfterPriorLeaseExpiry()||QueuedShellSupportUsesCurrentClock()||ExpiryDuringQueuedShellSupport()||AdvancingShellClockAfterAcknowledgedPump()||CombinedManualPump()||CombinedPumpMissingEvidence()||Combined()||MissingEvidence()||Interruptions()||BoundedInputJournal())return 1;std::puts("Persistent real body/resource/shell consumer composition and negative boundaries passed");return 0;}
+}
+int EmptyTubeAcrossPersistentConsumers(){
+ for(const auto scenario:{Bc2PumpControllerProbe::Scenario::None,Bc2PumpControllerProbe::Scenario::HeldSupportNatural}){
+ auto storage=std::make_unique<Loop>(true,8,scenario);auto& f=*storage;f.rifle.loaded=30;
+ f.guidePumpRendering=scenario==Bc2PumpControllerProbe::Scenario::HeldSupportNatural;
+ CHECK(f.Run());CHECK(f.shots==8&&f.pumpNative.releases==8&&f.pumpNative.acks==8);
+ CHECK(f.pumpSupports==8&&f.shellSupports==1&&f.shellSubmits==1);
+ CHECK(f.shellLoaded==1&&f.shellReserve==23&&f.calls==2&&f.rifleShots==1&&f.selectionCalls==2);
+ CHECK(f.rifle==AmmunitionCounts(29,191,30));
+ CHECK(f.now<45000*Ms); // Leave time for real native/render scheduling inside the original session bound.
+ CHECK(f.Report().find("\"requested_cycles\":8")!=std::string::npos);
+ std::cout<<"Eight ordinary pump strokes, empty tube to one shell, support return and shoulder/rifle return at "<<f.now/Ms<<"ms\n";
+ // An extra native round cannot be concealed by the final shell check.
+ auto bad=std::make_unique<Loop>(true,8);bad->rifle.loaded=30;bool changed=false;
+ bad->beforeDriver=[&](Loop& x){if(!changed&&x.driver.State()==Bc2ResourceInventoryProbe::Phase::Shell){++x.shellLoaded;changed=true;}};
+ CHECK(!bad->Run(false)&&changed&&bad->driver.CancelConsumer());
+ Bc2ResourceInventoryProbe rejected;CHECK(!rejected.EnablePump(f.calibration,Bc2PumpControllerProbe::Scenario::LeftTrackingLoss,8));
+ CHECK(!rejected.EnablePump(f.calibration,Bc2PumpControllerProbe::Scenario::None,9));
+ CHECK(rejected.EnablePump(f.calibration,Bc2PumpControllerProbe::Scenario::None,8));
+ CHECK(!rejected.EnableActorReplacement());
+ }return 0;
+}
+
+int PumpAgainAfterOtherWeapon(){
+ auto storage=std::make_unique<Loop>(true);auto& f=*storage;
+ CHECK(f.driver.EnablePumpRevisit());CHECK(!f.driver.EnablePumpRevisit());
+ CHECK(!f.driver.UsePumpInspectionPose()&&!f.driver.EnableActorReplacement());
+ f.guidePumpRendering=true;CHECK(f.Run());
+ CHECK(f.shots==2&&f.pumpNative.releases==2&&f.pumpNative.acks==2&&f.pumpSupports==2);
+ CHECK(f.shellSubmits==1&&f.shellSupports==1&&f.selectionCalls==4&&f.rifleShots==1);
+ CHECK(f.shellLoaded==7&&f.shellReserve==23&&f.selected==0);
+ CHECK(f.Report().find("\"pump_revisit\":{\"enabled\":true,\"completed\":true")!=std::string::npos);
+ CHECK(!f.shell->BlocksEquipment()&&!f.magazine->BlocksEquipment()&&!f.pump->BlocksFire());
+ CHECK(f.now<58000*Ms);
+ std::cout<<"SPAS pump after rifle reload/fire and two shoulder round trips with persistent consumers at "<<f.now/Ms<<"ms\n";
+ for(unsigned fault=0;fault<2;++fault){
+  auto storage=std::make_unique<Loop>(true);auto& bad=*storage;
+  CHECK(bad.driver.EnablePumpRevisit());bad.guidePumpRendering=true;bool injected=false;
+  bad.beforeDriver=[&](Loop& x){
+   if(!injected&&x.driver.State()==(fault?Bc2ResourceInventoryProbe::Phase::RevisitPump:Bc2ResourceInventoryProbe::Phase::RevisitDraw)){
+    injected=true;if(fault)x.allowPumpPairs=false;else ++x.shellLoaded;
+   }
+  };
+  CHECK(!bad.Run(false)&&injected&&bad.driver.CancelConsumer());
+ }
+ return 0;
+}
+
+int MagazineReplacementKeepsActualRemovedResource(){
+ auto storage=std::make_unique<Loop>(true);auto& f=*storage;
+ CHECK(f.driver.EnableActorReplacement(true)&&!f.driver.EnableActorReplacement(true));
+ for(unsigned n=0;n<2200&&!f.driver.ActorReplacementWitnessed()&&!f.driver.CancelConsumer();++n)f.Tick();
+ if(!f.driver.ActorReplacementWitnessed())std::cerr<<f.Report()<<'\n';
+ CHECK(f.driver.ActorReplacementWitnessed()&&!f.driver.ActorReplacementResumed()&&!f.driver.CancelConsumer());
+ CHECK(f.driver.State()==Bc2ResourceInventoryProbe::Phase::FirstMagazine&&f.calls==1&&!f.shots&&!f.shellSubmits);
+ CHECK(f.rifle==AmmunitionCounts(0,191,30)&&f.magResult.ownsLeftHand&&f.packs.rolePairs[1]>0);
+ CHECK(f.Report().find("\"original_rounds\":22")!=std::string::npos);
+ const auto witness=f.Report();const auto oldCounts=f.rifle;
+ for(unsigned n=0;n<40;++n)f.Tick();
+ CHECK(f.calls==1&&f.rifle==oldCounts&&!f.driver.CancelConsumer());
+ CHECK(f.input.hands[0].squeeze==1&&f.input.hands[1].squeeze==1&&!f.input.hands[1].trigger);
+ // Fresh contradictory ammunition after the witness cannot pass as waiting.
+ for(unsigned fault=0;fault<4;++fault){auto candidate=std::make_unique<Bc2ResourceInventoryProbe>(f.driver);
+  auto obs=f.observed;CHECK(obs.magazine.resource);auto& v=*obs.magazine.resource;
+  if(fault==0)v.wellEmpty=false;
+  if(fault==1)++v.original->id;
+  if(fault==2)++v.snapshot.counts.loaded;
+  if(fault==3)++v.request;
+  auto in=f.input;++in.generation;const auto now=f.now+1;
+  candidate->Prepare(in,f.native.owner,f.Asset(),obs,f.now,f.now+100*Ms,now);
+  CHECK(candidate->CancelConsumer()&&!candidate->ActorReplacementResumed());
+ }
+ // Owner, input time and tracking replacement rules are identical for the
+ // magazine and pump witnesses; no controller input can create a new actor.
+ for(unsigned fault=0;fault<12;++fault){auto candidate=std::make_unique<Bc2ResourceInventoryProbe>(f.driver);
+  auto owner=NewActor(f);auto in=f.input;++in.generation;auto now=f.now+10*Ms,observed=now,deadline=now+100*Ms;
+  if(fault==0){owner=f.native.owner;++owner.equipGeneration;++owner.weapon;}
+  if(fault==1){owner=f.native.owner;++owner.space;in.spaceGeneration=owner.space;}
+  if(fault==2)owner.actorGeneration=f.native.owner.actorGeneration;
+  if(fault==3)owner.weak=f.native.owner.weak;
+  if(fault==4)in.generation=f.input.generation;
+  if(fault==5)--in.generation;
+  if(fault==6)deadline=now;
+  if(fault==7)observed=now+1;
+  if(fault==8)in.focused=false;
+  if(fault==9)in.hands[0].gripTracked=false;
+  if(fault==10)now=f.now-1;
+  if(fault==11)observed=f.now-1;
+  in.predictedNs=now;
+  candidate->Prepare(in,owner,Xm8MagazineAsset,{},observed,deadline,now);
+  CHECK(!candidate->ActorReplacementResumed()&&candidate->CancelConsumer());
+ }
+ auto owner=NewActor(f);auto in=f.input;++in.generation;in.predictedNs=f.now+10*Ms;
+ f.driver.Prepare(in,owner,Xm8MagazineAsset,{},f.now+10*Ms,f.now+110*Ms,f.now+10*Ms);
+ CHECK(f.driver.ActorReplacementResumed()&&!f.driver.CancelConsumer()&&!in.hands[0].squeeze&&!in.hands[1].trigger);
+ CHECK(f.calls==1&&f.rifle==oldCounts&&!f.shots&&!f.shellSubmits);
+ // Only the input script is moved to independently initialized new-world
+ // fixtures. These native receipts remain explicitly simulated.
+ for(const bool spasFirst:{false,true}){
+  auto replacement=std::make_unique<Loop>(true);replacement->now=f.now+11*Ms;replacement->sequence=in.generation;
+  replacement->memory.owner=owner;replacement->native.owner=owner;
+  replacement->memory.Word(NativeInventory::player+0xc54,owner.weak);
+  replacement->memory.Word(owner.weak,owner.soldier+4);replacement->rifle={22,191,30};
+  if(spasFirst){replacement->selected=1;replacement->memory.Select(1);replacement->native.owner=replacement->memory.owner;}
+  replacement->driver=f.driver;CHECK(replacement->Run());
+  CHECK(replacement->calls==2&&replacement->shots==1&&replacement->shellSubmits==1);
+  CHECK(replacement->rifle==AmmunitionCounts(22,191,30)&&replacement->shellLoaded==8&&replacement->shellReserve==23);
+  CHECK(replacement->pumpSupports==1&&replacement->shellSupports==1);
+  CHECK(replacement->now<1010*Ms+58000*Ms);
+ }
+ auto late=f.input;late.generation+=2;const auto end=1010*Ms+58000*Ms;late.predictedNs=end;
+ auto expired=std::make_unique<Bc2ResourceInventoryProbe>(f.driver);
+ expired->Prepare(late,owner,Xm8MagazineAsset,{},end,end+100*Ms,end);CHECK(expired->CancelConsumer());
+ std::cout<<"Removed original magazine waits under real custody; actor replacement resumes only the finite input driver, then magazine/pump/shell/support complete\n";
+ return 0;
+}
+
+int MagazineRefillThenFire(){
+ auto f=std::make_unique<Loop>();f->singleFireMagazine=true;CHECK(f->driver.EnableMagazineOnly(false,true));
+ CHECK(f->Run()&&f->driver.Completed()&&f->calls==2&&f->rifleShots==1);
+ CHECK(f->rifle==AmmunitionCounts(29,161,30)&&!f->shots&&!f->shellSubmits&&!f->selectionCalls);
+ auto denied=std::make_unique<Loop>();denied->singleFireMagazine=true;denied->allowRifleShot=false;
+ CHECK(denied->driver.EnableMagazineOnly(false,true)&&!denied->Run(false));CHECK(denied->calls==2&&!denied->rifleShots);
+ Bc2ResourceInventoryProbe mixed;CHECK(!mixed.EnableMagazineOnly(true,true));
+ return 0;
+}
+int EmptyMagazineOrdinaryInput(){
+ auto f=std::make_unique<Loop>();f->singleFireMagazine=true;CHECK(f->driver.EnableMagazineOnly(true));
+ CHECK(f->Run()&&f->driver.Completed());
+ CHECK(f->calls==2&&f->rifleShots==22&&f->rifle==AmmunitionCounts(30,161,30));
+ CHECK(!f->shellSubmits&&!f->shots&&!f->selectionCalls);
+ CHECK(f->Report().find("\"shots\":22")!=std::string::npos);
+ // Independent native boundary refuses the trigger: no shot may be inferred
+ // from the input or from elapsed time, and no reload request is submitted.
+ auto missing=std::make_unique<Loop>();missing->singleFireMagazine=true;missing->allowRifleShot=false;
+ CHECK(missing->driver.EnableMagazineOnly(true)&&!missing->Run(false));CHECK(!missing->calls&&!missing->rifleShots);
+ for(unsigned fault=0;fault<4;++fault){
+  auto bad=std::make_unique<Loop>();bad->singleFireMagazine=true;CHECK(bad->driver.EnableMagazineOnly(true));bool changed=false;
+  bad->beforeDriver=[&](Loop& v){
+   if(changed||v.driver.State()!=Bc2ResourceInventoryProbe::Phase::EmptyDwell)return;
+   changed=true;auto& view=*v.observed.magazine.resource;
+   if(fault==0){v.rifle.loaded=v.rifle.capacity;view.snapshot.counts.loaded=v.rifle.loaded;}
+   if(fault==1)--view.snapshot.counts.reserve;
+   if(fault==2)++view.request;
+   if(fault==3)++view.identity.firing[1];
+  };
+  CHECK(!bad->Run(false)&&changed&&bad->driver.CancelConsumer()&&!bad->calls);
+ }
+ return 0;
+}
+int MagazineOnlyRequiresSupport(){
+ for(bool missing:{false,true}){
+  auto f=std::make_unique<Loop>();f->singleFireMagazine=true;
+  CHECK(f->driver.EnableMagazineOnly(false,true,true));
+  f->beforeDriver=[&](Loop& loop){
+   loop.observed.supportVerified=!missing&&loop.Rifle()&&loop.magRaw.valid;
+   loop.observed.supportRaw=loop.magRaw;
+   loop.observed.supportTarget=Multiply(Pose(-.2f,-.25f,.45f),Pose(5,2,3));
+  };
+  unsigned heldTicks=0;
+  for(unsigned n=0;n<5600&&!f->driver.Completed()&&!f->driver.CancelConsumer();++n){
+   // Count actual arbiter custody before each ordinary input/consumer tick.
+   const auto left=f->hands.Current(InteractionHand::Left);
+   if(f->driver.State()==Bc2ResourceInventoryProbe::Phase::RifleSupport&&left&&left->token.kind==HandClaimKind::WeaponSupport)++heldTicks;
+   f->Tick();
+  }
+  CHECK(f->driver.Completed()==!missing);
+  if(!missing){CHECK(f->calls==2&&f->rifleShots==1);CHECK(f->Report().find("\"rifle_support_released\":true")!=std::string::npos);}
+  if(!missing)CHECK(heldTicks>=75);
+  else CHECK(f->calls==0&&!f->rifleShots);
+ }
+ Bc2ResourceInventoryProbe incompatible;CHECK(!incompatible.EnableMagazineOnly(true,false,true));
+ for(unsigned fault=0;fault<2;++fault){
+  auto f=std::make_unique<Loop>();f->singleFireMagazine=true;
+  CHECK(f->driver.EnableMagazineOnly(false,true,true));
+  unsigned heldTicks=0;bool interrupted=false;
+  f->beforeDriver=[&](Loop& loop){
+   loop.observed.supportVerified=loop.Rifle()&&loop.magRaw.valid;
+   loop.observed.supportRaw=loop.magRaw;
+   loop.observed.supportTarget=Multiply(Pose(-.2f,-.25f,.45f),Pose(5,2,3));
+   const auto left=loop.hands.Current(InteractionHand::Left);
+   if(loop.driver.State()==Bc2ResourceInventoryProbe::Phase::RifleSupport&&left&&left->token.kind==HandClaimKind::WeaponSupport&&++heldTicks==20){
+    if(fault==0)loop.hands.Release(loop.hand,left->token);
+    else loop.observed.supportVerified=false;
+    interrupted=true;
+   }
+  };
+  CHECK(!f->Run(false)&&interrupted&&f->driver.CancelConsumer()&&!f->calls&&!f->rifleShots);
+  CHECK(f->Report().find("\"failure\":23")!=std::string::npos);
+ }
+ return 0;
+}
+int MagazineOnlySubset(){
+ auto f=std::make_unique<Loop>();CHECK(f->driver.EnableMagazineOnly());
+ CHECK(!f->driver.EnableMagazineOnly()&&!f->driver.RequireRifleSupport()&&!f->driver.EnablePump(f->calibration));
+ CHECK(f->Run()&&f->calls==4&&!f->shots&&!f->shellSubmits&&!f->selectionCalls);
+ CHECK(f->rifle==AmmunitionCounts(30,161,30)&&f->shellLoaded==8&&f->shellReserve==24);
+ CHECK(f->Report().find("\"magazine_only\":true")!=std::string::npos);
+ // A missing native receipt must still fail; the subset cannot declare success
+ // merely because its gesture ended or because the other mechanism was omitted.
+ auto missing=std::make_unique<Loop>();CHECK(missing->driver.EnableMagazineOnly());
+ missing->allowSeatReceipt=false;CHECK(!missing->Run()&&!missing->driver.Completed());
+ CHECK(!missing->shots&&!missing->shellSubmits);
+ auto started=std::make_unique<Loop>();started->Tick();CHECK(!started->driver.EnableMagazineOnly());
+ Bc2ResourceInventoryProbe mixed;CHECK(mixed.RequireRifleSupport()&&!mixed.EnableMagazineOnly());
+ return 0;
+}
+
+#include "SupportOnly373Checks.inc"
+int main(){if(PumpAgainAfterOtherWeapon()||SupportWithoutMagazineEnrollment()||MagazineOnlyRequiresSupport()||MagazineRefillThenFire()||EmptyMagazineOrdinaryInput()||MagazineOnlySubset()||MagazineReplacementKeepsActualRemovedResource()||EmptyTubeAcrossPersistentConsumers()||CombinedRequiresRifleSupportBeforeReload()||QueuedPumpInterruptionPreservesTrackingOverride()||FinalAutomaticRifleShots()||FinalRifleCannotCompleteFromRegressedSnapshot()||FinalRifleRejectsForeignAmmunition()||FinalRifleRequiresFreshObservation()||CombinedPartialNativeTransferAfterPriorLeaseExpiry()||QueuedShellSupportUsesCurrentClock()||ExpiryDuringQueuedShellSupport()||AdvancingShellClockAfterAcknowledgedPump()||CombinedManualPump()||CombinedPumpMissingEvidence()||Combined()||MissingEvidence()||Interruptions()||BoundedInputJournal())return 1;std::puts("Persistent real body/resource/shell consumer composition and negative boundaries passed");return 0;}

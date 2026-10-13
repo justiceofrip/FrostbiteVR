@@ -47,6 +47,7 @@ def clip_document():
 def make_clip(doc=None):
     with patch('bc2_weapon_animation_pipeline.Resource') as reader:
         reader.return_value.read_root_fields.return_value=doc or clip_document()
+        reader.return_value.wrapper_records=[]
         return Clip(b'synthetic')
 
 class ContainerTests(unittest.TestCase):
@@ -89,6 +90,32 @@ class ContainerTests(unittest.TestCase):
         b=resource();model=b[:4]+b[8:]
         self.assertEqual(Resource(model,'GrannyModel').read()['Value'],42)
         with self.assertRaises(ValueError):Resource(model)
+    def test_animation_wrapper_records_preserve_opaque_pairs(self):
+        records=struct.pack('<2I2f',41,1,.5,1.)+struct.pack('<2I4f',99,2,2.,1.,-1.,0.)
+        data=struct.pack('<2I',10,2)+records+resource()[8:]
+        parsed=Resource(data)
+        self.assertEqual(parsed.read()['Value'],42)
+        self.assertEqual(parsed.wrapper_records,[{'identifier':41,'float_pairs':[(.5,1.)]},
+                                                {'identifier':99,'float_pairs':[(2.,1.),(-1.,0.)]}])
+        self.assertEqual(Resource(resource()).wrapper_records,[])
+    def test_animation_wrapper_empty_records_preserve_ids(self):
+        parsed=Resource(struct.pack('<2I',10,2)+struct.pack('<4I',0,0,0xffffffff,0)+resource()[8:])
+        self.assertEqual(parsed.read()['Value'],42)
+        self.assertEqual([x['identifier'] for x in parsed.wrapper_records],[0,0xffffffff])
+        self.assertEqual([x['float_pairs'] for x in parsed.wrapper_records],[[],[]])
+    def test_animation_wrapper_bounds_and_nonfinite_pairs(self):
+        broken=[struct.pack('<2I',10,4097)+bytes(16),
+                struct.pack('<4I',10,1,41,100001)+resource()[8:],
+                struct.pack('<4I',10,1,41,1),
+                struct.pack('<2I',10,2)+struct.pack('<2I',41,0),
+                struct.pack('<4I2f',10,1,41,1,0.,float('inf'))+resource()[8:],
+                struct.pack('<4I2f',10,1,41,1,float('nan'),0.)+resource()[8:]]
+        for data in broken:
+            with self.subTest(prefix=data[:16].hex()),self.assertRaises(ValueError):Resource(data)
+    def test_wrapper_pairs_cannot_hide_invalid_granny_data(self):
+        base=bytearray(resource());base[base.index(MAGIC)]^=255
+        with self.assertRaisesRegex(ValueError,'magic'):
+            Resource(struct.pack('<4I2f',10,1,41,1,.5,1.)+base[8:])
 
 class CurveTests(unittest.TestCase):
     def test_constants_and_identity(self):
@@ -156,5 +183,14 @@ class TransformTests(unittest.TestCase):
         summary=make_clip().summary()
         self.assertIn('not active native mesh proof',summary['clip_skeleton_pairing'])
         self.assertIn('not_stored_in_clip',summary['clip_basis_provenance'])
+    def test_clip_summary_retains_wrapper_without_claiming_event_semantics(self):
+        records=[{'identifier':41,'float_pairs':[(.5,1.)]}]
+        with patch('bc2_weapon_animation_pipeline.Resource') as reader:
+            reader.return_value.read_root_fields.return_value=clip_document()
+            reader.return_value.wrapper_records=records
+            summary=Clip(b'fixture').summary()
+        self.assertEqual(summary['wrapper_records'],records)
+        self.assertFalse(summary['wrapper_record_semantics_verified'])
+        self.assertFalse(summary['target_runtime_interpolation_verified'])
 
 if __name__=='__main__':unittest.main()

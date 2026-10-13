@@ -1,8 +1,11 @@
 #include "Bc2ReloadRequestCycle.h"
+#include "Bc2ReloadNativePolicy.h"
 #include "Bc2ReloadPolicyLock.h"
+#include "Bc2ReloadAbort.h"
 #include "Test.h"
 #include <cstring>
 #include <limits>
+#include <type_traits>
 using namespace fvr::bc2;
 using namespace fvr::interaction;
 namespace
@@ -53,14 +56,15 @@ ReloadHoldInput Input()
     }
     return i;
 }
-struct Simulation
+template<class Policy=Bc2ReloadRequestCycle> struct SimulationFor
 {
-    Bc2ReloadRequestCycle gate{true};
+    static Policy MakePolicy(){if constexpr(std::is_same_v<Policy,Bc2ReloadRequestCycle>)return Policy(true);else return Policy{};}
+    Policy gate=MakePolicy();
     ReloadHoldInput input = Input();
     ReloadCycleControl control{};
     std::uint64_t id = 0, transfers = 1000;
     unsigned originals = 0;
-    Simulation()
+    SimulationFor()
     {
         control = {input.identity, 93, 1, input.nowNs, input.nowNs + 100000000, true};
     }
@@ -76,7 +80,7 @@ struct Simulation
     ReloadRequestDecision Begin(unsigned b, bool stable = true, bool timing = true)
     {
         input.branch = b;
-        return gate.Evaluate(input, timing, stable, ++id);
+        return gate.Evaluate(input, timing, stable, ++id,input.nowNs);
     }
     bool End(const ReloadRequestDecision &d, bool okay = true)
     {
@@ -188,6 +192,7 @@ struct Simulation
         return d.tracked ? End(d) : gate.Phase() == ReloadRequestCyclePhase::Finished;
     }
 };
+using Simulation=SimulationFor<>;
 int ExplicitRequestOnlyAndTruthfulHold()
 {
     Simulation s;
@@ -701,6 +706,30 @@ int PolicyWaitCannotExtendLeaseOrAuthorizeAnOverlappingOriginal()
         CHECK(!overlap.Begin(0).tracked&&overlap.gate.Failure()==ReloadRequestCycleFailure::Overlap);}
     CHECK(!gate.test());return 0;
 }
+template<class Policy> int SubmittedShellSurvivesOtherBranchSchedulingGap()
+{
+    // Native278-02: a 56 ms scheduling gap occurs during the already submitted
+    // shell. Current input and native leases remain valid, but another copy's
+    // previous Update is older than the 50 ms hold-publication freshness bound.
+    // The current callback must observe its own progress without borrowing that
+    // old context for a zero-delta patch or acknowledging an unobserved transfer.
+    SimulationFor<Policy> s;for(auto& b:s.input.branches){b.loaded=7;b.reserve=24;}
+    CHECK(s.Arm());const auto request=s.Request();CHECK(s.gate.Submit(request,s.input.nowNs));
+    CHECK(s.Tick(58000000));s.input.context.deltaSeconds=.0587298f;
+    const auto current=s.Begin(2);CHECK(current.tracked&&!current.hold);
+    CHECK(current.deadlineNs<=s.control.deadlineNs&&current.deadlineNs<=s.input.leaseDeadlineNs);
+    CHECK(!s.gate.Allows(current,s.input.nowNs));
+    CHECK(s.End(current)&&s.gate.Phase()==ReloadRequestCyclePhase::Advancing);
+    CHECK(!s.gate.TakeAcknowledgement(s.input.identity,s.control.cycle,s.input.nowNs));
+    CHECK(s.Advance(1)&&s.Advance(0));
+    CHECK(!s.gate.TakeAcknowledgement(s.input.identity,s.control.cycle,s.input.nowNs));
+    CHECK(s.Advance(2)&&s.Tick());CHECK(!s.Begin(0).tracked);
+    const auto ack=s.gate.TakeAcknowledgement(s.input.identity,s.control.cycle,s.input.nowNs);
+    CHECK(ack&&ack->acknowledgement.semantic.request==request.request.id);
+    CHECK(!s.gate.TakeAcknowledgement(s.input.identity,s.control.cycle,s.input.nowNs));
+    for(const auto& b:s.input.branches)CHECK(b.loaded==8&&b.reserve==23);
+    return 0;
+}
 int CurrentShellHoldSurvivesBoundedFrameHitch()
 {
     for(float delta:{.0596221f,.1f}){
@@ -716,8 +745,129 @@ int CurrentShellHoldSurvivesBoundedFrameHitch()
     CHECK(!expired.Tick(100000000)&&expired.gate.Failure()==ReloadRequestCycleFailure::Control);
     return 0;
 }
+template<class Policy> int ExactTubePredictionReplay()
+{
+    // Actual260: client1 transferred 7/23->8/22, then immutable Restore
+    // native12131 rewound it to 7/23 before server12137 applied the shell.
+    for(bool serverFirst:{false,true}){
+        SimulationFor<Policy> s;for(auto& b:s.input.branches){b.loaded=7;b.reserve=23;}
+        CHECK(s.Arm());const auto request=s.Request();CHECK(s.gate.Submit(request,s.input.nowNs));
+        CHECK(s.Advance(0)&&s.Advance(1));CHECK(s.Tick());
+        ReloadPredictionRestore restore{s.input.identity,s.control.cycle,++s.transfers,
+            s.input.nowNs,s.input.nowNs+100,1,0x8bb438,8,22,7,23,true,true,s.input.config};
+        s.input.nowNs+=100;
+        CHECK(s.gate.ObservePredictionRestore(restore,s.input.nowNs));
+        CHECK(!s.gate.ObservePredictionRestore(restore,s.input.nowNs));
+        auto& b=s.input.branches[1];b.loaded=7;b.reserve=23;b.currentState=11;b.previousState=1;b.nextState=12;b.phaseTimer=.0107767f;
+        CHECK(!s.gate.TakeAcknowledgement(s.input.identity,s.control.cycle,s.input.nowNs));
+        // Actual260 starts server12132 before replaying client1's12133. Both
+        // callback orders must preserve the same submitted physical shell.
+        if(serverFirst){CHECK(s.Advance(2)&&s.Advance(1));}
+        else {CHECK(s.Advance(1)&&s.Advance(2));}
+        CHECK(s.Tick());
+        CHECK(!s.Begin(0).tracked&&s.gate.Phase()==ReloadRequestCyclePhase::Finished);
+        const auto ack=s.gate.TakeAcknowledgement(s.input.identity,s.control.cycle,s.input.nowNs);
+        CHECK(ack&&ack->acknowledgement.semantic.request==request.request.id);
+        CHECK(!s.gate.TakeAcknowledgement(s.input.identity,s.control.cycle,s.input.nowNs));
+        CHECK(s.input.branches[0].loaded==8&&s.input.branches[1].loaded==8&&s.input.branches[2].loaded==8);
+    }
+    return 0;
+}
+int PredictionRestoreDoesNotBorrowConfigOrControl(){
+    for(unsigned mutation=0;mutation<5;++mutation){
+        Simulation s;CHECK(s.Arm());const auto request=s.Request();CHECK(s.gate.Submit(request,s.input.nowNs));
+        CHECK(s.Advance(1)&&s.Tick());
+        ReloadPredictionRestore restore{s.input.identity,s.control.cycle,++s.transfers,
+            s.input.nowNs,s.input.nowNs+100,1,0x8bb438,7,20,6,21,true,true,s.input.config};
+        s.input.nowNs+=100;
+        switch(mutation){
+            case 0:restore.config.weaponData++;break;
+            case 1:restore.endNs=s.input.nowNs+1;break;
+            case 2:s.input.nowNs=s.control.deadlineNs;break;
+            case 3:CHECK(s.Begin(1).tracked);break; // Same branch original still open.
+            case 4:restore.identity.owner.space++;break;
+        }
+        CHECK(!s.gate.ObservePredictionRestore(restore,s.input.nowNs));
+    }
+    return 0;
+}
+int PredictionRestoreDoesNotRestampContext(){
+    Simulation s;for(auto& b:s.input.branches){b.loaded=7;b.reserve=23;}
+    CHECK(s.Arm());const auto request=s.Request();CHECK(s.gate.Submit(request,s.input.nowNs));
+    CHECK(s.Advance(0)&&s.Advance(1));
+    CHECK(s.Tick(ReloadHoldProbe::ContextFreshNs-1000000));
+    const auto currentOtherClient=s.Begin(0);CHECK(currentOtherClient.tracked&&!currentOtherClient.hold);
+    CHECK(s.End(currentOtherClient));
+    ReloadPredictionRestore restore{s.input.identity,s.control.cycle,++s.transfers,
+        s.input.nowNs,s.input.nowNs+100,1,0x8bb438,8,22,7,23,true,true,s.input.config};
+    s.input.nowNs+=100;CHECK(s.gate.ObservePredictionRestore(restore,s.input.nowNs));
+    auto& b=s.input.branches[1];b.loaded=7;b.reserve=23;b.currentState=11;b.previousState=1;b.nextState=12;b.phaseTimer=.0107767f;
+    CHECK(s.Tick(2000000));
+    // Only restored client1's original context is now expired. Client0 was
+    // freshly observed above; server2 is observed by this current Evaluate.
+    // A Restore must never replace that missing own Update timing evidence.
+    // Current server progress is independently observable, however: it grants
+    // neither a hold on the stale client nor completion until client1 performs
+    // its own new, verified transfer following that restoration.
+    CHECK(s.Advance(2));
+    CHECK(!s.Lease()); // mixed copies after the restore cannot publish a new lease
+    CHECK(!s.gate.TakeAcknowledgement(s.input.identity,s.control.cycle,s.input.nowNs));
+    CHECK(s.Advance(1)&&s.Tick());CHECK(!s.Begin(0).tracked);
+    const auto ack=s.gate.TakeAcknowledgement(s.input.identity,s.control.cycle,s.input.nowNs);
+    CHECK(ack&&ack->acknowledgement.semantic.request==request.request.id);
+    return 0;
+}
+template<class Policy> int CompletedShellStopAcrossPublicationGap(){
+    const auto stop=[](auto& policy,std::int64_t now){
+        if constexpr(std::is_same_v<Policy,Bc2ReloadNativePolicy>)return policy.ShellStopIntent(now);
+        else return policy.StopIntent(now);
+    };
+    for(unsigned mode=0;mode<3;++mode){
+        SimulationFor<Policy> s;for(auto& b:s.input.branches){b.loaded=0;b.reserve=24;}
+        CHECK(s.Arm());CHECK(!stop(s.gate,s.input.nowNs)); // empty tube is not stop-ready
+        CHECK(s.gate.Submit(s.Request(),s.input.nowNs));
+        CHECK(!stop(s.gate,s.input.nowNs)); // never cancel uncertain ammunition through this path
+        CHECK(s.CompleteRound());CHECK(!stop(s.gate,s.input.nowNs)); // deliver the receipt first
+        CHECK(s.gate.TakeAcknowledgement(s.input.identity,s.control.cycle,s.input.nowNs));
+        CHECK(s.HoldAll());
+        if(mode==1){ // Own Updates remain verified while no new quiet cohort publishes.
+            for(unsigned n=0;n<15;++n)CHECK(s.Tick(10000000)&&s.HoldAll(false));
+            CHECK(!s.Lease());
+        }
+        if(mode==2){CHECK(s.Tick());const auto d=s.Begin(0);CHECK(d.hold);CHECK(!s.Lease());}
+        const auto intent=stop(s.gate,s.input.nowNs);CHECK(intent&&intent->loaded==1&&intent->reserve==23);
+        CHECK(intent->deadlineNs<=s.control.deadlineNs);
+        ReloadAbortCleanup cleanup;CHECK(cleanup.ArmShellStop(*intent,7,s.input.nowNs));
+        CHECK(!cleanup.OriginalLease().allThreeHeld&&!cleanup.OriginalLease().nativeBindingVerified);
+        s.gate.Cancel();CHECK(!stop(s.gate,s.input.nowNs));
+        for(unsigned b=0;b<3;++b){
+            s.input.branch=b;s.input.nowNs+=1000;s.input.leaseDeadlineNs=s.input.nowNs+100000000;
+            const auto d=cleanup.Claim(s.input,7,s.control.cycle,true,100+b,true,s.input.nowNs);
+            CHECK(d.call);auto after=s.input.branches[b];after.currentState=after.nextState=2;after.phaseTimer=0;
+            CHECK(cleanup.Finish(d,after,true,true,s.input.nowNs));
+        }
+        CHECK(cleanup.Completed()==7&&!cleanup.Active());
+        CHECK(!cleanup.ArmShellStop(*intent,7,s.input.nowNs)); // cannot renew/replay
+        for(const auto& b:s.input.branches)CHECK(b.loaded==1&&b.reserve==23);
+        for(unsigned fault=0;fault<4;++fault){
+            ReloadAbortCleanup bad;CHECK(bad.ArmShellStop(*intent,7,intent->observedNs));auto in=s.input;
+            in.branch=0;in.nowNs=intent->observedNs+1;
+            if(fault==0)++in.branches[0].loaded;
+            if(fault==1)--in.branches[0].reserve;
+            if(fault==2)++in.identity.owner.equipGeneration;
+            if(fault==3)in.nowNs=intent->deadlineNs;
+            CHECK(!bad.Claim(in,7,s.control.cycle,true,200,true,in.nowNs).call&&!bad.Active());
+        }
+    }
+    SimulationFor<Policy> stale;CHECK(stale.Arm());
+    CHECK(stale.Tick(60000000));CHECK(!stop(stale.gate,stale.input.nowNs));
+    return 0;
+}
 int main()
 {
+    if(CompletedShellStopAcrossPublicationGap<Bc2ReloadRequestCycle>()||CompletedShellStopAcrossPublicationGap<Bc2ReloadNativePolicy>())return 1;
+    if(SubmittedShellSurvivesOtherBranchSchedulingGap<Bc2ReloadRequestCycle>()||SubmittedShellSurvivesOtherBranchSchedulingGap<Bc2ReloadNativePolicy>())return 1;
+    if(ExactTubePredictionReplay<Bc2ReloadRequestCycle>()||ExactTubePredictionReplay<Bc2ReloadNativePolicy>()||PredictionRestoreDoesNotBorrowConfigOrControl()||PredictionRestoreDoesNotRestampContext())return 1;
     if(CurrentShellHoldSurvivesBoundedFrameHitch())return 1;
     if (ExplicitRequestOnlyAndTruthfulHold() || RealRequestTwoRoundsAndFinalAck() || QuietCohortAndActualReholds() ||
         NoBorrowedLeaseDuringOriginal() || OwnerControlAndTimingCancel() || DeadmanAndExactDuplicateControl() ||
@@ -729,6 +879,6 @@ int main()
         CancelledOrphanRequiresProvenCallbackDrain() || PreholdMissCannotReuseContextOrExtendLease() || ActiveMissingEvidenceAlwaysCancels() ||
         NativeObservationCanBeOvertakenByControl() || DelayedEvidenceDoesNotExtendAnyDeadline() || TrueProcessingClockRegressionStillCancels() || PolicyWaitCannotExtendLeaseOrAuthorizeAnOverlappingOriginal())
         return 1;
-    std::printf("Twenty-three request-driven reload lifecycle groups passed; capability remains off.\n");
+    std::printf("Request-driven reload lifecycle and exact tube prediction replay groups passed; capability remains off.\n");
     return 0;
 }

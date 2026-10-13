@@ -3,6 +3,12 @@
 #include <cstdint>
 #include <span>
 #include <string_view>
+#if __has_include(<Bc2NativeOperationBuild.generated.h>)
+#if defined(FVR_BC2_NATIVE_OPERATION_CAPABILITIES_HEADER) || defined(FVR_BC2_NATIVE_OPERATION_BUILD_SHA256)
+#error "Generated operation configuration cannot be combined with legacy command-line definitions"
+#endif
+#include <Bc2NativeOperationBuild.generated.h>
+#endif
 namespace fvr::bc2 {
 // Runtime content discriminator, not a cryptographic binary attestation. Review
 // receipts must additionally pin the executable SHA256 and compiled source set.

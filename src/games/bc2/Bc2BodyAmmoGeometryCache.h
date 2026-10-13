@@ -3,7 +3,7 @@
 #include "Bc2BodyAmmoAssetProfile.h"
 #include <filesystem>
 namespace fvr::bc2 {
-enum class BodyAmmoCacheStatus:unsigned {Loaded,Missing,Size,Read,Header,Count,Identity,Section,Geometry,Trailing,Exception};
+enum class BodyAmmoCacheStatus:unsigned {Loaded,Missing,Size,Read,Header,Count,Identity,Section,Geometry,Trailing,Exception,Catalog};
 struct BodyAmmoCacheResult {
     BodyAmmoCacheStatus status=BodyAmmoCacheStatus::Missing;
     std::shared_ptr<const BodyAmmoGeometryCatalog> catalog;

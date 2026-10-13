@@ -31,6 +31,27 @@ struct Reader {
     bool Eq(std::uint64_t at,unsigned wanted)const noexcept{unsigned value=0;return Get(at,value)&&value==wanted;}
     bool Type(unsigned at,const char* name)const noexcept{return m.type&&at>=0x10000&&m.type(m.context,at,name);}
 };
+void RecordLinkDifference(const ReloadServerLinks& expected,const ReloadServerLinks& observed,
+    ReloadServerBoundaryDiagnostic* diagnostic)noexcept {
+    if(!diagnostic)return;
+    auto& out=diagnostic->linkDifference;out={};
+    const auto field=[&](const char* name,unsigned before,unsigned after,unsigned index=UINT32_MAX){
+        if(before==after)return;
+        if(out.count<out.first.size())out.first[out.count]={name,index,before,after};
+        ++out.count;
+    };
+#define FVR_LINK_FIELD(name) field(#name,expected.name,observed.name)
+    FVR_LINK_FIELD(manager);FVR_LINK_FIELD(players);FVR_LINK_FIELD(capacity);FVR_LINK_FIELD(playerId);
+    FVR_LINK_FIELD(player);FVR_LINK_FIELD(playerTable);FVR_LINK_FIELD(soldier);FVR_LINK_FIELD(soldierTable);
+    FVR_LINK_FIELD(soldierData);FVR_LINK_FIELD(inventory);FVR_LINK_FIELD(inventoryData);FVR_LINK_FIELD(begin);
+    FVR_LINK_FIELD(end);FVR_LINK_FIELD(slot);FVR_LINK_FIELD(item);FVR_LINK_FIELD(effects);
+    FVR_LINK_FIELD(effectsTable);FVR_LINK_FIELD(callback);FVR_LINK_FIELD(firing);FVR_LINK_FIELD(clientInventory);
+    FVR_LINK_FIELD(clientBegin);FVR_LINK_FIELD(clientEnd);FVR_LINK_FIELD(clientSlot);
+    FVR_LINK_FIELD(clientPlayerFlags);FVR_LINK_FIELD(clientSoldierFlags);
+#undef FVR_LINK_FIELD
+    for(unsigned n=0;n<expected.items.size();++n)field("items",expected.items[n],observed.items[n],n);
+    for(unsigned n=0;n<expected.clientItems.size();++n)field("clientItems",expected.clientItems[n],observed.clientItems[n],n);
+}
 bool Valid(const ReloadServerBinding& b,unsigned base,const ReloadStateSnapshot& s){
     const auto& o=s.owner;
     return base&&base==b.preferredBase&&std::uint64_t(base)+b.imageSize<=UINT32_MAX&&s.sequence&&s.observedNs>0&&
@@ -141,7 +162,7 @@ bool ReadReloadServerOwner(const ReloadStateMemory& m,const ReloadServerBinding&
     // scope reads remain exact, including all flags and bounded item arrays.
     auto leased=before;
     leased.clientSoldierFlags^=std::uint8_t((before.clientSoldierFlags^snapshot.links.clientSoldierFlags)&0x10);
-    if(leased!=snapshot.links)return fail(ReloadServerBoundaryFailure::PublishedLinks);
+    if(leased!=snapshot.links){RecordLinkDifference(snapshot.links,leased,diagnostic);return fail(ReloadServerBoundaryFailure::PublishedLinks);}
     const auto identity=[&]{return r.Eq(before.firing,base+state.firingVtableRva)&&
         r.Eq(std::uint64_t(before.firing)+8,snapshot.client.config.firingData)&&
         r.Eq(std::uint64_t(before.firing)+12,snapshot.client.config.ammoAddress);};
@@ -149,7 +170,7 @@ bool ReadReloadServerOwner(const ReloadStateMemory& m,const ReloadServerBinding&
     if(!Scope(r,b,base,snapshot.client,after))return fail(ReloadServerBoundaryFailure::ScopeAfter);
     if(diagnostic){diagnostic->afterSoldierFlags=after.clientSoldierFlags;auto same=after;same.clientSoldierFlags=before.clientSoldierFlags;
         diagnostic->changedOnlySoldierFlags=before!=after&&same==before;}
-    if(after!=before)return fail(ReloadServerBoundaryFailure::ChangedLinks);
+    if(after!=before){RecordLinkDifference(before,after,diagnostic);return fail(ReloadServerBoundaryFailure::ChangedLinks);}
     if(!identity()){if(diagnostic)diagnostic->stateFailure=4;return fail(ReloadServerBoundaryFailure::State);}
     return true;
 }
@@ -170,12 +191,12 @@ std::optional<ReloadFiringObservation> ReadReloadServerBoundary(const ReloadStat
     // inventory, other flag, or within-read race. Both Scope reads stay exact.
     auto leased=before;
     leased.clientSoldierFlags^=std::uint8_t((before.clientSoldierFlags^snapshot.links.clientSoldierFlags)&0x10);
-    if(leased!=snapshot.links)return fail(ReloadServerBoundaryFailure::PublishedLinks);
+    if(leased!=snapshot.links){RecordLinkDifference(snapshot.links,leased,diagnostic);return fail(ReloadServerBoundaryFailure::PublishedLinks);}
     const auto sampled=State(r,state,base,snapshot,diagnostic);
     if(!sampled)return fail(ReloadServerBoundaryFailure::State);
     if(!Scope(r,b,base,snapshot.client,after))return fail(ReloadServerBoundaryFailure::ScopeAfter);
     if(diagnostic){diagnostic->afterSoldierFlags=after.clientSoldierFlags;auto same=after;same.clientSoldierFlags=before.clientSoldierFlags;
         diagnostic->changedOnlySoldierFlags=before!=after&&same==before;}
-    if(after!=before)return fail(ReloadServerBoundaryFailure::ChangedLinks);return sampled;
+    if(after!=before){RecordLinkDifference(before,after,diagnostic);return fail(ReloadServerBoundaryFailure::ChangedLinks);}return sampled;
 }
 }

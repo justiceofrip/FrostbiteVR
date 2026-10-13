@@ -1,8 +1,20 @@
 #pragma once
 #include "Bc2ReloadHold.h"
+#include "Bc2NativeCycleInputGuard.h"
 
 namespace fvr::bc2 {
 struct ReloadFlowRecord;
+// Guarded convergence is a distinct path. Original context must be restored,
+// own Update/Step provenance exact, counts conserved. Busy never votes idle.
+bool CycleConvergencePhase(unsigned current,unsigned next,float timer,bool m95,bool empty)noexcept;
+bool CycleGuardedUpdate(const ReloadFlowRecord&,const ReloadHoldIdentity&,unsigned branch,
+    const NativeCycleInputGuard&,unsigned guardedSteps,unsigned rejectedSteps,bool m95,bool empty)noexcept;
+bool CycleGuardedCommit(const ReloadFlowRecord&,const ReloadHoldIdentity&,unsigned branch,std::uint64_t parent,bool m95,bool empty)noexcept;
+bool CycleConvergenceRestore(const ReloadFlowRecord&,const ReloadHoldIdentity&,unsigned branch,bool m95,bool empty)noexcept;
+// Original client prediction may undo its tentative shot before any manual
+// interception, then replay that same shot. This is not an ammunition grant or
+// native Ready receipt; the service must re-observe that client's own Update.
+bool CyclePredictedShotRollback(const ReloadFlowRecord&,const ReloadHoldIdentity&,unsigned branch,bool empty=false)noexcept;
 // Exact original M95 client prediction rewind observed in stock234. This is
 // usable only before any native hold; it never grants or completes a lease.
 bool CycleM95PreHoldRewind(const ReloadFlowRecord&,const ReloadHoldIdentity&,unsigned branch)noexcept;
@@ -11,6 +23,13 @@ struct NativeCycleHeldBoundary {
     float minArmTimer=0,maxTimer=0;
     bool emptyAmmunition=false; // Explicit zero-loaded last-shot boundary only.
 };
+// A client's original snapshot can advance a held tail to idle after another
+// branch completed. This proves the Restore only; the service must prove the
+// source branch's completion and this client's subsequent own idle Update.
+bool CycleForwardReadyRestore(const ReloadFlowRecord&,const ReloadHoldIdentity&,unsigned branch,
+    const NativeCycleHeldBoundary&)noexcept;
+bool CycleForwardIdleUpdate(const ReloadFlowRecord&,const ReloadHoldIdentity&,unsigned branch,
+    unsigned previous)noexcept;
 // Original snapshot progression between a configured post-shot wait and its
 // manual hold boundary. Only pre-hold service policy may consume this proof.
 bool CyclePreHoldSnapshotProgression(const ReloadFlowRecord&,const ReloadHoldIdentity&,unsigned branch,
@@ -37,8 +56,12 @@ struct NativeCycleRestoreEvidence {
 // protection, all-three cohort agreement, and exclusion of ammunition commands.
 bool ValidateCycleUpdate(const ReloadFlowRecord&,const ReloadHoldIdentity&,unsigned branch)noexcept;
 bool CycleShot(const ReloadFlowRecord&,const ReloadHoldIdentity&,unsigned branch)noexcept;
-// Exact last-round SPAS exit differs from its positive-loaded pump path.
+// Exact last-round SPAS212/M95281 exit differs from positive-loaded cycles.
 bool CycleEmptyShot(const ReloadFlowRecord&,const ReloadHoldIdentity&,unsigned branch)noexcept;
+// Observation-only fallback for a separately unimplemented magazine adapter.
+// Caller must have no owned cycle/debt/Ready. These never publish authority.
+bool CyclePassiveMagazineUpdate(const ReloadFlowRecord&,const ReloadHoldIdentity&,unsigned branch,int capacity)noexcept;
+bool CyclePassiveMagazineRestore(const ReloadFlowRecord&,const ReloadHoldIdentity&,unsigned branch,int capacity)noexcept;
 bool CycleHold(const ReloadFlowRecord&,const ReloadHoldIdentity&,unsigned branch,
     const NativeCycleHeldBoundary&,bool arming=false)noexcept;
 // Exact client prediction Restore may repeat current7 as previous7. This

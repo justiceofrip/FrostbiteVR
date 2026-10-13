@@ -299,7 +299,15 @@ ReloadRequestDecision Bc2ReloadRequestCycle::Evaluate(const ReloadHoldInput &in,
     }
     if (b.loaded == loaded_ && b.reserve == reserve_)
     {
-        if ((completion_.AdvancedMask() & (1u << in.branch)) || !Wait(b) || !Recent(contexts_, now))
+        // This is observation of the current branch's own advancing Update,
+        // not a zero-delta hold. Common already verified its current context,
+        // coherent native identity and original lease. A previous Update from
+        // another copy may expire during a scheduler hitch; it cannot cancel
+        // the submitted shell or substitute for that copy's later transfer.
+        // Recent contexts/holds are still required by Publish for allThreeHeld,
+        // and completion still needs every actual branch transfer or verified
+        // prediction restoration under the original insertion deadline.
+        if ((completion_.AdvancedMask() & (1u << in.branch)) || !Wait(b))
         {
             Cancel(ReloadRequestCycleFailure::State);
             return {};
@@ -404,6 +412,23 @@ std::optional<ReloadRoundLease> Bc2ReloadRequestCycle::Lease(const ReloadHoldIde
     auto lease = *published_;
     lease.allThreeHeld &= phase_ == ReloadRequestCyclePhase::Holding && Recent(holds_, now) && Recent(contexts_, now);
     return lease;
+}
+std::optional<ReloadStopIntent> Bc2ReloadRequestCycle::StopIntent(std::int64_t now) noexcept
+{
+    // A cancelled hold must not resume automatic tube filling just because a
+    // callback is open or an older quiet-cohort publication expired. Holding
+    // carries the acknowledged counts; advancing/unresolved work cannot stop
+    // through this route. Actual helper calls still need new native evidence.
+    if (!Current(now) || phase_ != ReloadRequestCyclePhase::Holding || !configured_ ||
+        pendingRequest_ || unresolved_ || ack_ || loaded_ <= 0 || loaded_ > capacity_ || reserve_ < 0 ||
+        !Recent(holds_, now) || !Recent(contexts_, now)) return {};
+    // Original controller deadline bounds the request. Old hold observations
+    // establish its provenance only; every helper call needs its own new
+    // native Update evidence, not an extended hold/context timestamp.
+    const auto deadline = control_.deadlineNs;
+    if (deadline<=now) return {};
+    return ReloadStopIntent{control_.identity,control_.cycle,control_.sequence,now,deadline,
+                            loaded_,reserve_,capacity_};
 }
 bool Bc2ReloadRequestCycle::Submit(const Bc2ReloadNativeRequest &request, std::int64_t now) noexcept
 {

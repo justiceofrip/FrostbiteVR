@@ -37,6 +37,9 @@ bool Read(const MenuMemory& m,std::uint64_t at,void* dst,std::size_t size){retur
 bool ReadWord(const MenuMemory& m,std::uint64_t at,std::uint32_t& value){return Read(m,at,&value,4);}
 bool SameOwner(const MenuTargetSnapshot& a,const MenuTargetSnapshot& b){return a.manager==b.manager&&a.ui==b.ui&&a.target==b.target&&a.queue==b.queue&&a.buffer==b.buffer&&a.capacity==b.capacity;}
 }
+bool SameMenuTargetOwner(const MenuTargetSnapshot& a,const MenuTargetSnapshot& b) noexcept {
+    return a.manager==b.manager&&a.ui==b.ui&&a.target==b.target;
+}
 std::optional<MenuBindingCandidates> DiscoverMenuBinding(std::span<const std::byte> b,const engine::PeImage& pe){
     if(pe.machine!=0x14c||b.size()<0x40)return {};
     const auto nt=Word(b,0x3c);if(nt>b.size()||56>b.size()-nt)return {};const auto base=Word(b,std::size_t(nt)+52);
@@ -144,7 +147,7 @@ MenuDispatchResult DispatchMenuPointer(const MenuMemory& memory,const MenuBindin
        (command.kind!=MenuPointerKind::Move&&!calls.event))return MenuDispatchResult::Rejected;
     if(command.kind==MenuPointerKind::PrimaryDown&&owned.Active())return MenuDispatchResult::Rejected;
     if(command.kind==MenuPointerKind::PrimaryUp&&(!owned.Active()||owned.epoch_!=command.menuEpoch||
-       owned.base_!=base||owned.binding_!=b||!SameOwner(owned.target_,expected)))return MenuDispatchResult::Rejected;
+       owned.base_!=base||owned.binding_!=b||!SameMenuTargetOwner(owned.target_,expected)))return MenuDispatchResult::Rejected;
     const auto target=ReadMenuTarget(memory,b,base);if(!target||!SameOwner(*target,expected))return MenuDispatchResult::TargetChanged;
     const auto needed=command.kind==MenuPointerKind::Move?1u:2u;if(target->capacity-target->count<needed)return MenuDispatchResult::QueueFull;
     if(!calls.cursor(calls.context,base+b.setCursor,target->manager,command.x,command.y))return MenuDispatchResult::CallFailed;
@@ -165,7 +168,12 @@ MenuDispatchResult ReleaseMenuPointer(const MenuMemory& memory,const MenuBinding
        base!=owned.base_||b!=owned.binding_||!SameOwner(expected,owned.target_)||!calls.event||
        !b.sendEvent||std::uint64_t(base)+b.sendEvent>UINT32_MAX)return MenuDispatchResult::Rejected;
     const auto target=ReadMenuTarget(memory,b,base);
-    if(!target||!SameOwner(*target,owned.target_))return MenuDispatchResult::TargetChanged;
+    if(!target)return MenuDispatchResult::TargetChanged;
+    if(!SameMenuTargetOwner(*target,owned.target_)){
+        // ReadMenuTarget proved a stable, complete replacement routing graph.
+        // The lease belongs to the old active owner, never the replacement.
+        owned.Forget();return MenuDispatchResult::Retired;
+    }
     if(target->count>=target->capacity)return MenuDispatchResult::QueueFull;
     if(!calls.event(calls.context,base+b.sendEvent,target->manager,{0,1,1}))return MenuDispatchResult::CallFailed;
     owned.Forget();return MenuDispatchResult::Invoked;

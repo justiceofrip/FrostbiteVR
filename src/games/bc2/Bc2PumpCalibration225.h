@@ -1,5 +1,7 @@
 #pragma once
 #include "Bc2PhysicalPump.h"
+#include "Bc2PumpFixedParts.h"
+#include "../../../profiles/pump357/Bc2SpasPumpHand.generated.h"
 namespace fvr::bc2 {
 // Original native rig observation, not production native-cycle admission.
 // Trace SHA256 c712a64becad8b59591c792c891cdb7d8e3fff17cccc2ab29c09f47ff680d03c.
@@ -16,6 +18,9 @@ inline Bc2PumpCalibration MeasuredSpasPump225()noexcept {
                     {.642518103f,-.465114027f,-.60896492f,0},
                     {-.717144251f,-.0850247592f,-.691717625f,0},
                     {.0363464355f,-.100265503f,-.662780762f,1}}}};
+    c.handShape=&SpasPumpHand357;
+    c.asset=SpasReloadAsset;c.profileId=0x5350415350554d50ull;c.geometry=SpasPumpGeometry;
+    c.fixedParts=bc2_pump_detail::SpasFixedParts;
     return c;
 }
 }

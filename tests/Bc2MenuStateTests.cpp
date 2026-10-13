@@ -176,6 +176,40 @@ int CancelFailures(){
     return 0;
 }
 
+int CancelLifetime(){
+    using R=bc2::MenuVisibilityResult;
+    for(unsigned scenario=0;scenario<7;++scenario){
+        Fixture f;f.words[f.owner+0xac]=1;
+        const auto open=*bc2::ReadMenuState(f.Memory(),f.binding,f.base);
+        bc2::MenuVisibilityGuard guard{4,1'000'000'000,true,true,true,true};
+        bc2::MenuOwnedCancel owned;
+        CHECK(bc2::BeginMenuCancel(f.Memory(),f.binding,f.pointer,f.base,open,{7,4,2'000'000'000,false},guard,f.Calls(),owned)==R::Invoked);
+        guard.nowNs+=bc2::MenuOwnedCancel::HoldNs;
+        if(scenario==0){f.words[f.queue+8]=16;f.words[f.buffer+60]=0;}
+        if(scenario==1){f.words[f.queue+0x2c]=0x7000000;f.words[0x7000000]=0;f.words[0x700001c]=0;}
+        if(scenario==2){
+            constexpr auto next=0x7100000u;f.words[f.manager+0x82b20]=next;
+            for(const auto offset:{0u,0x2cu,0x30u,0x94u,0xacu})f.words[next+offset]=f.words[f.owner+offset];
+        }
+        if(scenario>=3){f.words[f.ui+4]=0x7200000;f.words[0x7200018]=f.queue;}
+        if(scenario==4)f.words[f.base+f.pointer.inputBlocked]=1;
+        if(scenario==5)f.unstable=true;
+        if(scenario==6)f.words.erase(f.owner+0xac);
+        const auto calls=f.inputCalls;
+        auto wrong=guard;wrong.liveCodeVerified=false;
+        CHECK(bc2::ReleaseMenuCancel(f.Memory(),f.binding,f.pointer,f.base,wrong,f.Calls(),owned)==R::Rejected);
+        CHECK(owned.Active()&&f.inputCalls==calls);
+        const auto result=bc2::ReleaseMenuCancel(f.Memory(),f.binding,f.pointer,f.base,guard,f.Calls(),owned);
+        CHECK(result==(scenario<2?R::Invoked:scenario<4?R::Retired:R::OwnerChanged));
+        CHECK(owned.Active()==(scenario>=4)&&f.inputCalls==calls+(scenario<2?1:0));
+        if(scenario==2||scenario==3){
+            Fixture restored;f.words=restored.words;
+            CHECK(bc2::ReleaseMenuCancel(f.Memory(),f.binding,f.pointer,f.base,guard,f.Calls(),owned)==R::Rejected);
+            CHECK(f.inputCalls==calls);
+        }
+    }
+    return 0;
+}
 int MenuToggle(){
     using R=bc2::MenuVisibilityResult;
     Fixture f;f.words[f.owner+0xac]=1;
@@ -216,4 +250,4 @@ int StaticEvidence(const char* path){
     return 0;
 }
 }
-int main(int argc,char** argv){CHECK(Reader()==0);CHECK(Dispatch()==0);CHECK(HeldCancel()==0);CHECK(CancelFailures()==0);CHECK(MenuToggle()==0);if(argc>1)CHECK(StaticEvidence(argv[1])==0);return 0;}
+int main(int argc,char** argv){CHECK(Reader()==0);CHECK(Dispatch()==0);CHECK(HeldCancel()==0);CHECK(CancelFailures()==0);CHECK(CancelLifetime()==0);CHECK(MenuToggle()==0);if(argc>1)CHECK(StaticEvidence(argv[1])==0);return 0;}

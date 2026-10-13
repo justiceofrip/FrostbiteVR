@@ -4,11 +4,12 @@ import contextlib,copy,hashlib,json,shutil,struct,sys,unittest,uuid
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
 import bc2_weapon_asset_pipeline as p
 from inspect_bc2_mesh_asset import Entry,bone_hash
-def sample(stride=48,weights=(255,0,0,0),palette=(11,),influences=1):
+def sample(stride=48,weights=(255,0,0,0),palette=(11,),influences=1,position=None):
  header=b'\x01\0\0\0\0\0\x01'+b'test\0'+struct.pack('<4I4BH',1,3,0,0,stride,3,influences,len(palette),len(palette))+struct.pack('<'+'H'*len(palette),*palette)
  vertices=[]
  for n in range(3):
-  pos=struct.pack('<4e',float(n),.2,.3,1) if stride in (16,48) else struct.pack('<3f',float(n),.2,.3)
+  half=position=='Half4' if position is not None else stride in (16,48)
+  pos=struct.pack('<4e',float(n),.2,.3,1) if half else struct.pack('<3f',float(n),.2,.3)
   vertices.append((pos+bytes((0,1,0,0))+bytes(weights)).ljust(stride,b'\0'))
  data=header+struct.pack('<3I',stride*3,6,0)+b''.join(vertices)+struct.pack('<3H',0,1,2)
  lod={'section_count':1,'buffer_bytes':stride*3+6+12,'palette':{11:bone_hash('jntWpn_1'),12:bone_hash('LeftHand')}}
@@ -47,6 +48,26 @@ class BatchTests(unittest.TestCase):
    data,lod,known=sample(stride);parts=p.part_bounds(data,lod,p.decode_geometry(data,lod,known),known)
    self.assertEqual(len(parts),1);self.assertEqual(parts[0]['minimum'][0],0);self.assertEqual(parts[0]['maximum'][0],2)
    self.assertEqual(parts[0]['role'],'unassigned_weighted_part');self.assertTrue(parts[0]['all_vertices_single_weight']);self.assertNotIn('vertices',parts[0])
+ def test_same_stride_can_have_different_position_and_skin_offsets(self):
+  for position in ('Half4','Float3'):
+   data,lod,known=sample(48,position=position)
+   sections=p.decode_geometry(data,lod,known)
+   self.assertEqual(sections[0]['position_format'],position)
+   parts=p.part_bounds(data,lod,sections,known)
+   self.assertEqual(len(parts),1);self.assertEqual(parts[0]['minimum'][0],0)
+   self.assertEqual(parts[0]['maximum'][0],2)
+   self.assertAlmostEqual(parts[0]['minimum'][1],.2,places=3)
+ def test_invalid_skin_is_not_rescued_by_alternative_layout(self):
+  for position in ('Half4','Float3'):
+   data,lod,known=sample(48,weights=(200,0,0,0),position=position)
+   with self.assertRaises(ValueError):p.decode_geometry(data,lod,known)
+ def test_ambiguous_layout_is_rejected_without_stride_preference(self):
+  data,lod,known=sample(48);data=bytearray(data);start=len(data)-150
+  for n in range(3):
+   at=start+n*48
+   data[at+8:at+20]=bytes((0,0,0,0,0,255,0,0,255,0,0,0))
+  with self.assertRaisesRegex(ValueError,'ambiguous position/skin layout'):
+   p.decode_geometry(data,lod,known)
  def test_mixed_skin_not_reported_as_rigid_magazine(self):
   data,lod,known=sample(weights=(204,51,0,0),palette=(11,12),influences=2)
   parts=p.part_bounds(data,lod,p.decode_geometry(data,lod,known),known)

@@ -69,6 +69,41 @@ int InactiveCycleCannotInvalidateOtherConsumers(){for(unsigned state=0;state<2;+
 int ActiveCycleStillRejectsReversedClock(){Fixture f;CHECK(f.Grip());auto later=f.sample.source;later.nowNs+=10000;
     CHECK(f.hands.Update(later).inputValid);f.Run();CHECK(!f.result.ownsMechanism&&!f.result.target&&f.result.cycle.blocksFire);
     CHECK(!f.hands.Current(InteractionHand::Left)&&!f.hands.Current(InteractionHand::Right));return 0;}
+int PhysicalCleanupKeepsOtherCustodyAndPendingOutcome(){for(unsigned state=0;state<5;++state){
+    Fixture f;
+    if(state){CHECK(f.Grip());
+        if(state>=3){f.Stroke();if(state==4){const auto ready=f.Ready();CHECK(f.physical.ObserveReady(ready,ready.observedNs));}}
+        else f.physical.CancelPhysical(f.sample.source,f.hands);
+    }
+    const auto saved=f.sample.source;auto later=saved;later.nowNs+=10000;
+    CHECK(f.hands.Update(later).inputValid);const auto gun=f.hands.Current(InteractionHand::Right);CHECK(gun);
+    const auto ammo=f.hands.Acquire(later,{later.owner,InteractionHand::Left,HandClaimKind::AmmoObject,
+        {111,222},{{333,444},later.sequence,later.deadlineNs,true},++f.intent,0});CHECK(ammo.claim);
+    for(unsigned n=0;n<3;++n)f.physical.CancelPhysical(saved,f.hands);
+    CHECK(f.hands.Current(InteractionHand::Left)&&f.hands.Current(InteractionHand::Left)->token==ammo.claim->token);
+    CHECK(f.hands.Current(InteractionHand::Right)&&f.hands.Current(InteractionHand::Right)->token==gun->token);
+    CHECK(f.hands.Current(InteractionHand::Left)->deadlineNs==later.deadlineNs);
+    if(state==3){CHECK(f.physical.Phase()==WeaponCyclePhase::AwaitingNative);CHECK(!f.Begin());
+        const auto ready=f.Ready();CHECK(f.physical.ObserveReady(ready,ready.observedNs));}
+    later.nowNs=later.deadlineNs;CHECK(!f.hands.Update(later).inputValid);
+    CHECK(!f.hands.Current(InteractionHand::Left)&&!f.hands.Current(InteractionHand::Right));
+    }return 0;
+}
+int PhysicalCleanupReleasesOwnClaimAndAllowsNeutralRegrip(){Fixture f;CHECK(f.Grip());f.Step(.02f);
+    const auto gun=f.hands.Current(InteractionHand::Right);CHECK(gun);
+    f.physical.CancelPhysical(f.sample.source,f.hands);
+    CHECK(f.physical.Phase()==WeaponCyclePhase::Cancelled&&!f.hands.Current(InteractionHand::Left));
+    CHECK(f.hands.Current(InteractionHand::Right)&&f.hands.Current(InteractionHand::Right)->token==gun->token);
+    f.Step(0);CHECK(!f.result.ownsMechanism&&f.result.cycle.blocksFire);
+    f.Step(0,false);f.Step(0);CHECK(f.result.ownsMechanism);f.Stroke();CHECK(f.submissions==1);return 0;}
+int PhysicalCleanupCannotTouchAReplacementClaim(){Fixture f;CHECK(f.Grip());
+    CHECK(f.hands.Release(f.sample.source,f.hands.Current(InteractionHand::Left)->token).accepted);
+    auto later=f.sample.source;later.nowNs+=10000;
+    const auto ammo=f.hands.Acquire(later,{later.owner,InteractionHand::Left,HandClaimKind::AmmoObject,
+        {111,222},{{333,444},later.sequence,later.deadlineNs,true},++f.intent,0});CHECK(ammo.claim);
+    f.physical.CancelPhysical(f.sample.source,f.hands);
+    CHECK(f.hands.Current(InteractionHand::Left)&&f.hands.Current(InteractionHand::Left)->token==ammo.claim->token);
+    CHECK(f.hands.Current(InteractionHand::Right)&&f.hands.Current(InteractionHand::Right)->token==f.sample.gun);return 0;}
 int CompletePumpAndRepeatedShot(){Fixture f;CHECK(f.Grip());CHECK(f.result.ownsMechanism&&f.result.target&&f.result.cycle.blocksFire);
     f.Stroke();CHECK(f.submissions==1&&f.physical.Phase()==WeaponCyclePhase::AwaitingNative&&f.result.cycle.blocksFire);
     CHECK(!f.result.ownsMechanism&&!f.result.target&&!f.hands.Current(InteractionHand::Left));
@@ -220,7 +255,9 @@ int OriginalRendererPacketControlsGesture(){DelayedFixture d;CHECK(d.Grip());aut
 int OriginalContactKeepsClaimDeadline(){DelayedFixture d;CHECK(d.Grip());auto& f=d.f;const auto token=f.hands.Current(InteractionHand::Left)->token;
     const auto prior=f.sample.source;const auto result=d.Step(.02f);
     CHECK(result.target&&result.ownsMechanism&&result.target->inputSequence==prior.sequence&&result.target->observedNs==prior.observedNs);
-    CHECK(f.hands.Current(InteractionHand::Left)->token==token&&f.hands.Current(InteractionHand::Left)->deadlineNs==prior.deadlineNs);
+    // Held custody uses the live grip packet; geometry keeps its original
+    // earlier bound and cannot be refreshed merely by continuing to squeeze.
+    CHECK(f.hands.Current(InteractionHand::Left)->token==token&&f.hands.Current(InteractionHand::Left)->deadlineNs==f.sample.source.deadlineNs);
     CHECK(result.target->deadlineNs<=prior.deadlineNs);return 0;}
 int RestampedContactCannotRenew(){for(unsigned mutation=0;mutation<3;++mutation){DelayedFixture d;CHECK(d.Grip());auto& f=d.f;
     auto original=f.sample;f.Advance(.02f);f.sample.contactSource=original.source;f.sample.rawContact=original.rawContact;
@@ -261,7 +298,7 @@ int HeldSupportCannotReplaySpentPress(){Fixture f;CHECK(f.Begin());f.Step(0,fals
     CHECK(f.hands.Current(InteractionHand::Left)->token==token);return 0;
 }
 }
-int main(){if(InactiveCycleCannotInvalidateOtherConsumers()||ActiveCycleStillRejectsReversedClock()||CompletePumpAndRepeatedShot()||ExplicitSupportTransfer()||HeldBitAndPartialStrokeCannotCycle()||
+int main(){if(PhysicalCleanupKeepsOtherCustodyAndPendingOutcome()||PhysicalCleanupReleasesOwnClaimAndAllowsNeutralRegrip()||PhysicalCleanupCannotTouchAReplacementClaim()||InactiveCycleCannotInvalidateOtherConsumers()||ActiveCycleStillRejectsReversedClock()||CompletePumpAndRepeatedShot()||ExplicitSupportTransfer()||HeldBitAndPartialStrokeCannotCycle()||
     ReleaseRegripRestartsFullStroke()||TrackingInterruptionNeedsNeutral()||NativeSubmissionSurvivesPhysicalInterruptions()||
     NativeReadyAndRejectionAreExact()||ContactAndOtherRolesAreNotStolen()||NativeLeaseLossCannotRearm()||
     OriginalCycleDeadlineSurvivesRecovery()||PresentationExpiresAndRejectsNewOwners()||DuplicateInputCannotCompleteOrRenew()||
@@ -269,4 +306,4 @@ int main(){if(InactiveCycleCannotInvalidateOtherConsumers()||ActiveCycleStillRej
     OwnerRetirementDoesNotRearm()||PhysicalClaimOutlivesShortNativeView()||OriginalRendererPacketControlsGesture()||OriginalContactKeepsClaimDeadline()||
     RestampedContactCannotRenew()||OriginalSupportTransferAndImmediateCurrentRelease()||
     SupportRenewedByPreviousRendererPacket()||DelayedSupportTransferRejectsStaleEvidence()||HeldSupportCannotReplaySpentPress())return 1;
-    std::puts("26 physical weapon-cycle groups passed; real arbiter/controller policy, mocked native held/ready receipts.");}
+    std::puts("29 physical weapon-cycle groups passed; real arbiter/controller policy, mocked native held/ready receipts.");}

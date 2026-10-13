@@ -7,6 +7,14 @@
 #include <algorithm>
 
 namespace fvr::bc2 {
+// Display admission belongs to the same immutable input snapshot as its body
+// pose. Do not borrow a separately published firing guard's input generation.
+// Callers still verify live native ownership, explicit hide/custody and expiry.
+inline bool BodyDisplayInputFresh(const interaction::InputFrame& input,
+    std::int64_t deadlineNs,std::int64_t now,bool requireLeft=true)noexcept {
+    return now>0&&deadlineNs>now&&interaction::ValidInput(input)&&input.focused&&input.headValid&&
+        (!requireLeft||input.hands[0].gripTracked)&&input.hands[1].gripTracked&&input.hands[1].aimTracked;
+}
 // Visual copy of the CURRENT selected, actually hidden weapon only. The slot
 // remains owned by BodyInventory; this source grants no item, draw or ammo.
 struct BodyHolsteredRenderSource {
@@ -107,8 +115,8 @@ inline std::optional<BodyHolsteredRenderSource> BuildBodyHolsteredSource(std::sh
        input.spaceGeneration!=free->input.owner.space)return {};
     const auto* profile=body_equipment_detail::Profile(*free,equipment,now);
     const auto lease=body_equipment_detail::Lease(*free,now);if(!profile||!lease)return {};
-    const auto anchor=std::find_if(anchors.shoulders.begin(),anchors.shoulders.end(),[&](const auto& a){return a.slot==slot.slot;});
-    if(anchor==anchors.shoulders.end())return {};
+    const auto* anchor=interaction::FindBodyWeaponAnchor(anchors,slot.slot);
+    if(!anchor)return {};
     const auto pose=BodyEquipmentPose(input,eyeBase,*anchor,profile->modelToAnchor);if(!pose)return {};
     BodyHolsteredRenderSource out{{MakeBodyAmmoGeometryKey(profile->asset,profile->mesh,profile->part,profile->rig),
         *pose,lease->first,lease->second},std::move(free),slot,equipment,input.spaceGeneration};

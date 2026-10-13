@@ -248,4 +248,37 @@ class PairedGrasp(unittest.TestCase):
                 p.cpp_header(report(changed),{'SyntheticRifle'})
 
 
+class AnimationSources(unittest.TestCase):
+    def source(self,path,data=None,kind='GrannyAnimation'):
+        name='Animations/Weapon/Reload.res';entries=[] if data is None else [SimpleNamespace(name=name,kind=kind,flags=65536)]
+        archive=SimpleNamespace(index_sha256='1'*64,entries=entries,read_selected=lambda names:{name:data for name in names})
+        return {'archive':path,'archive_index_sha256':'1'*64},archive
+    def test_common_clip_keeps_actual_source(self):
+        hand=self.source('async/weapon.fbrb');common=self.source('levels/common.fbrb',b'same named animation')
+        raw,receipt=p.selected_animation_resource([hand,common],'Animations/Weapon/Reload.res')
+        self.assertEqual(raw,b'same named animation');self.assertEqual(receipt,common[0])
+    def test_equal_contents_keep_existing_source(self):
+        hand=self.source('async/weapon.fbrb',b'exact');common=self.source('levels/common.fbrb',b'exact')
+        raw,receipt=p.selected_animation_resource([hand,common],'Animations/Weapon/Reload.res')
+        self.assertEqual(raw,b'exact');self.assertEqual(receipt,hand[0])
+    def test_conflicts_never_choose_mount_priority(self):
+        a=self.source('async/weapon.fbrb',b'a');b=self.source('levels/common.fbrb',b'b')
+        for sources in ([a,b],[b,a]):
+            with self.assertRaisesRegex(ValueError,'Conflicting exact'):p.selected_animation_resource(sources,'Animations/Weapon/Reload.res')
+    def test_missing_ambiguous_wrong_type_and_stale_source_reject(self):
+        for fault in range(4):
+            a=self.source('async/weapon.fbrb',b'exact');b=self.source('levels/common.fbrb',b'exact')
+            if fault==0:a[1].entries=[];b[1].entries=[]
+            if fault==1:b[1].entries*=2
+            if fault==2:b[1].entries[0].kind='DeltaAnimation'
+            if fault==3:b[0]['archive_index_sha256']='2'*64
+            with self.subTest(fault=fault),self.assertRaises(ValueError):p.selected_animation_resource([a,b],'Animations/Weapon/Reload.res')
+    def test_source_count_paths_and_duplicate_receipts(self):
+        source=self.source('levels/common.fbrb',b'exact')
+        self.assertEqual(p.selected_animation_resource([source,source],'Animations/Weapon/Reload.res')[0],b'exact')
+        with self.assertRaisesRegex(ValueError,'Conflicting exact'):
+            p.selected_animation_resource([source,self.source('levels/common.fbrb',b'changed')],'Animations/Weapon/Reload.res')
+        for sources in ([],[source]*9,[self.source('../escape.fbrb',b'exact')]):
+            with self.assertRaises(ValueError):p.selected_animation_resource(sources,'Animations/Weapon/Reload.res')
+
 if __name__=='__main__':unittest.main()

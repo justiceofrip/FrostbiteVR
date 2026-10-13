@@ -371,7 +371,36 @@ int TerminalOutcomeDoesNotRenewResource(){
     f.Next(true);CHECK(f.Tick().held);
  }return 0;
 }
-int main(){CHECK(TerminalOutcomeDoesNotRenewResource()==0);CHECK(ReleaseSubmittedPreservesPendingResourceAndOtherClaims()==0);if(PhysicalCarrySurvivesFreshShortSourceObservations()||FreshSourceNeverRevivesExpiredPhysicalClaim())return 1;
+int RetainedCustodyHasNoReserveAuthority(){
+ for(auto family:{ReloadInsertionFamily::Magazine,ReloadInsertionFamily::SingleShell}){
+    Fixture f;f.s.source.family=family;f.s.source.objectUnits=family==ReloadInsertionFamily::Magazine?3:1;
+    CHECK(f.Grab().held);const auto object=*f.supply.Held();const auto old=f.s;
+    for(unsigned n=0;n<30;++n){f.Next(true);f.hands.Update(f.s.input);
+        f.gun=f.hands.Renew(f.s.input,f.gun->token,{{1002,1},f.s.input.sequence,f.s.input.deadlineNs,true}).claim;
+        auto result=f.supply.RetainHeld(f.s.input,object.identity,true,f.hands);
+        CHECK(result.held&&result.held->item==object.item&&result.held->claim.token==object.claim.token);
+        CHECK(result.held->units==object.units&&!result.acquired&&!f.supply.Pending());
+    }
+    CHECK(f.s.input.nowNs>old.source.deadlineNs);
+    // The carried claim cannot turn expired counts into a seat reservation.
+    f.s.source=old.source;CHECK(!f.Reserve()&&!f.supply.Held()&&!f.supply.Pending());
+ }
+ for(unsigned bad=0;bad<10;++bad){Fixture f;CHECK(f.Grab().held);auto identity=f.supply.Held()->identity;
+    const auto old=*f.supply.Held();f.Next(true);
+    if(bad==0)++identity.pool.generation;if(bad==1)++identity.trackingEpoch;
+    if(bad==2)++f.s.input.owner.equipGeneration;if(bad==3)f.s.input.focused=false;
+    if(bad==4)f.s.input.tracked[0]=false;if(bad==5)f.s.input.deadlineNs=f.s.input.nowNs;
+    if(bad==6)f.s.input.released[0]=true;if(bad==7)f.s.input.observedNs=f.s.input.nowNs=f.s.input.deadlineNs;
+    if(bad==8)f.hands.Release(f.s.input,old.claim.token);
+    if(bad==9){CHECK(f.Tick().held);CHECK(f.Reserve());}
+    f.hands.Update(f.s.input);CHECK(!f.supply.RetainHeld(f.s.input,identity,true,f.hands).held);
+    CHECK(!f.supply.Held());
+    CHECK(!f.supply.RetainHeld(f.s.input,identity,true,f.hands).acquired);
+    if(bad==9)CHECK(f.supply.Pending());
+ }
+ return 0;
+}
+int main(){CHECK(RetainedCustodyHasNoReserveAuthority()==0);CHECK(TerminalOutcomeDoesNotRenewResource()==0);CHECK(ReleaseSubmittedPreservesPendingResourceAndOtherClaims()==0);if(PhysicalCarrySurvivesFreshShortSourceObservations()||FreshSourceNeverRevivesExpiredPhysicalClaim())return 1;
     if(AlternateContactSharesProvider()||AlternateContactCannotBypassReservation()||AlternateContactsKeepExactGeometryAndEdge()||RealEdgeBodyPouchAndReserve()||ContactFailureNeedsNewEdge()||NoStealingSupportOrSight()||IdentityAndSafetyInvalidation()||
         DuplicateAndStalePackets()||ReservationReplacementAndExactConsumption()||ExhaustionAndUnresolvedCannotMint()||
         PendingEquipChangeAndWrongReceipts()||MagazineExplicitUnitsAndNoEffect()||ActualInsertionConsumesSuppliedClaim()||
