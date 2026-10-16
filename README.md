@@ -64,7 +64,7 @@ Tools can prepare the required body geometry locally from your own installation.
 
 Historical research notes describe the checkpoint at which they were written.
 Some refer to local evidence that is intentionally not published. Use
-[STATUS.md](docs/STATUS.md) for current claims; a data row or passing unit test
+[CURRENT.md](docs/CURRENT.md) for current claims; a data row or passing unit test
 does not mean a weapon or future game is playable.
 
 ## Lineage and license

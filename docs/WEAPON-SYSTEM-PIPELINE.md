@@ -371,7 +371,7 @@ acceptance remain open. Published245 is a separate forkable snapshot.
 ## Historical composition — October 8, checkpoint206
 
 The active checkout is this repository. Read [current weapon coverage](WEAPON-COVERAGE-CURRENT.md)
-and [the handoff](HANDOFF.md) before using the historical paths below. The normal
+and [the current state](CURRENT.md) before using the historical paths below. The normal
 checkpoint integrates two exact detachable-magazine profiles, scoped XM8 and
 AEK971_sp. Prepared descriptors, grip data and visibility qualifications are
 separate from compiled reload coverage. The wider registry is not selected.

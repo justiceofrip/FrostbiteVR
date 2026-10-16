@@ -45,7 +45,7 @@ its saved timestamp by a short interval.
 ## Evidence
 
 - BC2 workspace created: 2026-09-25T07:12:23.919222+00:00 — Filesystem creation timestamp; start marker, not a stopwatch.
-- First distinct same-frame native eye pair: 2026-09-25T18:37:33.545000+00:00 — docs/2142-TRANSFER.md; native-trace-20260925-183733-545.
+- First distinct same-frame native eye pair: 2026-09-25T18:37:33.545000+00:00 — docs/history/2142-TRANSFER.md; native-trace-20260925-183733-545.
 - First headset test: double image/flicker: 2026-09-25T20:34:09.570000+00:00 — native-xr-20260925-203409-570; documented failed visual acceptance.
 - First positive headset stereo result; dots remained: 2026-09-27T20:59:00+00:00 — Approximate user-result minute from HANDOFF; first image test start20:58:55.
 - Continuous corrected session launched: 2026-09-28T13:35:33.072573+00:00 — native-xr-session-20260928-133532-537/session.json.
