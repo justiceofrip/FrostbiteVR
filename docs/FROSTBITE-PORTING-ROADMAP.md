@@ -16,7 +16,7 @@ launcher sight interaction. The user accepted the free-left-hand animation, whil
 launcher hand placement still needs polish. Acceptance is feature-specific: the
 new right-index/touch/support-retention candidate needs a headset check, grenade
 muzzle translation remains disabled, and known rendering/lifecycle issues are
-not declared solved. See the [current checkpoint](HANDOFF.md),
+not declared solved. See the [current checkpoint](CURRENT.md),
 [hand-input candidate](HAND-INPUT-RELOAD-20261001.md), and
 [weapon pipeline](WEAPON-PROFILE-PIPELINE.md).
 
@@ -29,7 +29,7 @@ anchors and dynamic shoulder selection are integrated behind `-BodyInventory`;
 their native/headset acceptance is pending. Reversible weapon hiding and true
 holstering are still being validated. See [reload](MANUAL-RELOAD-20261001.md),
 [body consumer](BODY-INVENTORY-CONSUMER-20261001.md), and the
-[current checkpoint](HANDOFF.md).
+[current checkpoint](CURRENT.md).
 
 No BF3, BF4, Hardline, BF1, BFV, 2042, or newer native binding is verified in this
 repository. The interfaces and milestones below distinguish existing source from

@@ -1,7 +1,7 @@
 # Forking and contributing
 
 Fork the repository and start with the offline builds in [BUILDING.md](BUILDING.md).
-Read [STATUS.md](docs/STATUS.md), [ARCHITECTURE.md](docs/ARCHITECTURE.md) and
+Read [CURRENT.md](docs/CURRENT.md), [ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 [AGENTS.md](AGENTS.md) before changing native integration.
 
 | Area | Location | Responsibility |

@@ -657,7 +657,7 @@ M416, XM8 Compact, MG36 and XM8 LMG exercise the common resource consumer with
 mock native receipts. Optional reviewed private profiles are preserved under
 `profiles/resource-batch227`; ordinary builds still enable only the two prior
 magazine registrations. Physical pump and bolt custody implementation does not
-yet constitute enabled native pump/sniper coverage. See [status](STATUS.md).
+yet constitute enabled native pump/sniper coverage. See [status](history/STATUS.md).
 
 Checkpoint225 adds **zero newly enabled weapons**. Its private resource-backed
 XM8 consumer now passes actual BC2 simulated-controller removal/original return

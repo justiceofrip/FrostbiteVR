@@ -1,7 +1,8 @@
 # Frostbite VR development rules
 
-Read README.md, docs/ARCHITECTURE.md, docs/2142-TRANSFER.md and docs/HANDOFF.md
-before modifying this workspace.
+Read AGENTS.md and docs/CURRENT.md before modifying this workspace. Also read
+docs/ARCHITECTURE.md when changing native integration. The logs in docs/history/
+are append-only history, not required reading; search them by checkpoint number.
 
 - Keep VR policy/math, engine integration, graphics, XR runtime, and game rules
   separate. Do not add Refractor native offsets/types/rig indices to this port.
@@ -30,7 +31,9 @@ before modifying this workspace.
 - Do not include game binaries/assets or private credentials in source.
 - Run relevant deterministic regressions, then Build.ps1 for x86 and x64.
   Headset/runtime claims require actual game and headset checks.
-- Update the transfer ledger and handoff with implementation and validation gaps.
+- Overwrite docs/CURRENT.md to reflect the new state, including implementation
+  and validation gaps. Append a short dated entry to docs/history/ only for
+  decisions worth keeping.
 - Storage is bounded: call tools/StorageBudget.ps1 before builds, captures or
   sessions, including private recovery wrappers. Do not bypass a failed budget.
   Use the existing x86/x64 build trees; archive source patches and small result

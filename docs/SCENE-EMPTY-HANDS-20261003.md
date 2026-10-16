@@ -7,7 +7,7 @@ output rejected by InputOverride. All require new suppression and paired hide
 before free-hand authority resumes. A bounded reason journal distinguishes
 semantic cancellation from input rearm and final source/session retirement.
 This monitor check did not restart the mission, cause death, reload or use XR.
-See HANDOFF.md and recovery/empty-pause-native-audit/audit-022310.json.
+See history/HANDOFF.md and recovery/empty-pause-native-audit/audit-022310.json.
 
 # Default empty hands and checkpoint coverage — October 3
 
