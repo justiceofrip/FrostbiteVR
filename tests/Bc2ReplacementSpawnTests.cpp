@@ -132,7 +132,7 @@ int BodyAmmoUsesSamePoolAndContactWithoutAllocatingItem(){
   for(bool alternate:{false,true}){Fixture f(true,*profile);auto pouch=ChestAmmoSupply();if(!alternate)pouch.alternateContact.reset();
    f.policy.reset();f.policy.emplace(true,f.api,pouch);f.Send();CHECK(!f.result.bodyAmmo);
    f.policy->EnableBodyAmmo(true,SupplyAnchorFrame::RecenteredBody);f.Send();CHECK(f.result.bodyAmmo&&AmmoSupplyVisualFresh(*f.result.bodyAmmo,f.now));
-   const auto v=*f.result.bodyAmmo;CHECK(v.contact.centerMeters==(alternate?pouch.alternateContact->centerMeters:pouch.pouchCenterMeters));
+   const auto v=*f.result.bodyAmmo;CHECK(v.contact.centerMeters==pouch.pouchCenterMeters);
    CHECK(v.source.reserveUnits==83&&v.source.objectUnits==3&&v.source.identity.pool.id==f.reserve.identity.serverItem);
    CHECK(v.source.observedNs==f.reserve.observedNs&&v.source.deadlineNs==f.reserve.deadlineNs&&v.input.observedNs==f.s.input.observedNs);
    CHECK(!f.hands.Current(InteractionHand::Left)&&f.result.acquired==0&&f.starts==0&&f.submits==0);

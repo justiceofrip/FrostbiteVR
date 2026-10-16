@@ -82,7 +82,10 @@ public:
         interaction::AmmoSupplyConfig pouch=DefaultPouch())noexcept;
     void EnableBeltAmmo(bool enabled=true,interaction::SupplyAnchorFrame frame=interaction::SupplyAnchorFrame::HeadYaw)noexcept {beltEnabled_=enabled;beltFrame_=frame;}
     interaction::AmmoSupplyContact BodyAmmoContact()const noexcept {
-        return pouch_.alternateContact.value_or(interaction::AmmoSupplyContact{pouch_.pouchCenterMeters,pouch_.pouchRadiusMeters});
+        const interaction::AmmoSupplyContact primary{pouch_.pouchCenterMeters,pouch_.pouchRadiusMeters};
+        // Body inventory displays the same lower-chest contact for every ammo
+        // family. The alternate belt reach remains a pickup convenience only.
+        return beltFrame_==interaction::SupplyAnchorFrame::RecenteredBody?primary:pouch_.alternateContact.value_or(primary);
     }
     PhysicalReloadResult Tick(const PhysicalReloadSample&,interaction::HandInteraction&,std::uint64_t& sharedIntent)noexcept;
     std::optional<interaction::SupportGripResult> ContinueSupport(const interaction::SupportGripOwner& owner,

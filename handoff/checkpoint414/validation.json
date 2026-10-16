@@ -1,0 +1,153 @@
+{
+  "schema": "fvr.checkpoint414.public-validation.v1",
+  "recorded_utc": "2026-10-16T10:57:53.411260+00:00",
+  "branch": "checkpoint/414-chest-ammo",
+  "tag": "checkpoint-414",
+  "source_parent": "898525327002d575614a01d335c2e9f4eeb4fdf6",
+  "final_source_sha256": "3d976c48307f0f6559269f8e197b384563033cf5c3401b96a8bcf3e43efdd7a0",
+  "normal_build_receipt_sha256": "36cbe0a46c81530800bb1997704c1af5769c9ba356f7092cd620847fb6577bf6",
+  "normal_binaries_sha256": {
+    "probe": "9fa1d5f7c14fe2e0a6919520570ad83289e9efa46485126cde378363f29c9406",
+    "trace": "ebd819ac1c15b9a70998d7579e53de68d9be306bfcc13c1f11c8d39f52a14f2b",
+    "receiver": "5fb2c82af4c88f8ebf5176369e19c4f058e4d2e2da2865f7210d8569d18b8374",
+    "host": "320c65151325da8550e81c6cc04c68b546dc640837c42cbcbed183ae2c184ce0"
+  },
+  "implementation": {
+    "shared_anchor_metres": [
+      -0.16,
+      -0.55,
+      0.06
+    ],
+    "body_display_uses_primary_contact": true,
+    "alternate_belt_pickup_retained": true,
+    "native_reload_operations_changed": false,
+    "grasp_calibrations_changed": false,
+    "inherits_cycle_recovery_and_audio_checkpoint": 413
+  },
+  "tests": {
+    "x86_passed": 284,
+    "x86_total": 284,
+    "x64_passed": 284,
+    "x64_total": 284,
+    "focused_suites_passed": 4,
+    "registered_magazine_configurations": 18,
+    "physical_poses": 6048,
+    "actual_cache_parts_validated": 46,
+    "resolved_magazine_mesh_clearance_profiles": 6,
+    "initial_x86_old_contact_expectations_failed": 2,
+    "corrected_expectations_full_rerun_passed": true
+  },
+  "actual_game": {
+    "magazine": {
+      "asset": "XM8_sp_s",
+      "paired_fresh_ammo_samples": 239,
+      "asymmetric_ammo_pairs": 0,
+      "ammo_window_ms": [
+        109,
+        13968
+      ],
+      "expected_grasp_body_metres": [
+        -0.16,
+        -0.55,
+        0.06
+      ],
+      "maximum_contact_error_metres": 6.055637376754103e-05,
+      "actual_mesh_body_min_metres": [
+        -0.17636971642863766,
+        -0.6226400059838427,
+        0.09884881937207164
+      ],
+      "actual_mesh_body_max_metres": [
+        0.0058158700971473075,
+        -0.4611902216071803,
+        0.1825497713759967
+      ]
+    },
+    "shell": {
+      "asset": "SPAS12_sp",
+      "paired_fresh_ammo_samples": 188,
+      "asymmetric_ammo_pairs": 0,
+      "ammo_window_ms": [
+        2594,
+        13985
+      ],
+      "expected_grasp_body_metres": [
+        -0.16,
+        -0.55,
+        0.06
+      ],
+      "maximum_contact_error_metres": 3.9608699085716403e-05,
+      "actual_mesh_body_min_metres": [
+        -0.1702978699600574,
+        -0.5602773068238643,
+        0.028130547818580293
+      ],
+      "actual_mesh_body_max_metres": [
+        -0.14969501150623685,
+        -0.5397299222810071,
+        0.0918586663002477
+      ]
+    },
+    "magazine_audit_sha256": "2fa492f65a07db45045085fcfb3a3807caec5f6095527e1f39e51b0ae70c6d8c",
+    "shell_audit_sha256": "4bfe73d31bec376b469c570ca3e2890f62e2917e02c913dae4c2a277a2eea030",
+    "magazine_ammo_before": {
+      "loaded": 22,
+      "reserve": 191
+    },
+    "magazine_ammo_after": {
+      "loaded": 22,
+      "reserve": 191
+    },
+    "fire_or_reload_requested": false,
+    "os_input": false,
+    "one_magazine_raster_frame_visually_inspected": true,
+    "diagnostic_prop_materials": "untextured",
+    "initial_setup_rejection": "Unsupported no-image option; receiver exited before IPC/injection.",
+    "shotgun_fixture_selection_mismatch": "Right shoulder selected SPAS, so XM8 postflight failed. Separate shell placement audit passed; original failure retained.",
+    "corrected_rifle_fixture": "Fresh game, right hand draws left shoulder; complete rifle collection and audit passed."
+  },
+  "deployment": {
+    "desktop_launcher_profile": 414,
+    "launcher_app_version": "0.1.2",
+    "profile_sha256": "4D35BFF2CA391433E7389E1EB55330E19E78FA9770D913BC36F3BBA4F0DF59D3",
+    "rollback_checkpoint": 413,
+    "shared_game_asset_cache_copied": false,
+    "shared_audio_cache_copied": false
+  },
+  "storage": {
+    "captures": [
+      {
+        "run": "placement02",
+        "raw_files": 52,
+        "raw_bytes": 431308800.0,
+        "retained_allocated_bytes": 218632192,
+        "hooks_drained": true,
+        "game_responsive": true,
+        "compositor_errors": 0
+      },
+      {
+        "run": "placement03",
+        "raw_files": 52,
+        "raw_bytes": 431308800.0,
+        "retained_allocated_bytes": 213811200,
+        "hooks_drained": true,
+        "game_responsive": true,
+        "compositor_errors": 0
+      }
+    ],
+    "raw_limit_per_run_bytes": 536870912,
+    "generated_allocated_bytes": 40226170449,
+    "generated_limit_bytes": 42949672960,
+    "new_generated_files_on_c_drive": false,
+    "source_and_user_recordings_deleted": false
+  },
+  "limits": [
+    "No headset comfort acceptance or complete campaign playthrough.",
+    "Actual-game observations cover XM8 and SPAS placement; other registered configurations have deterministic coverage.",
+    "The preceding real-game recording already placed ammo below the head; the historical face-level report cannot be reconstructed from old headset logs.",
+    "This shared placement change does not add missing reload adapters or establish every weapon works.",
+    "No new pumping, spent-shell ejection, immediate-cycle timing, native audio or hand-calibration change."
+  ],
+  "headset_verified": false,
+  "full_campaign_accepted": false
+}

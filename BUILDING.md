@@ -28,7 +28,9 @@ this development workspace; see [storage policy](docs/STORAGE-BUDGET.md).
 `requirements-dev.txt` pins NumPy and Pillow for offline geometry and image tests.
 Use a virtual environment if you keep other projects' Python dependencies separate.
 
-## Checkpoint413 player composition
+<a id="checkpoint413-player-composition"></a>
+
+## Checkpoint414 player composition
 
 Use the existing build directories and run the architectures sequentially:
 
@@ -37,21 +39,22 @@ Use the existing build directories and run the architectures sequentially:
 .\Build-Checkpoint.ps1 -Architecture x64 -Jobs 2 -OrdinaryManualCycles -NativeCycleRecovery -BodySceneDepth -PlayerGrenades -PlayerKnife -ContextualTools
 ```
 
-These switches reproduce the normal413 composition. Player knife, grenade and
+These switches reproduce the normal414 composition. Player knife, grenade and
 contextual-tool code is compiled, but those runtime opt-ins remain disabled in
 the current personal launch profile. Synthetic controller drivers remain OFF.
 Omitting these switches builds a different feature composition. The script selects
-`profiles/checkpoint413` for the operation header and exact source receipt,
+`profiles/checkpoint414` for the operation header and exact source receipt,
 `profiles/aim339` for gun-hand calibration, `profiles/support373` for support
 contacts, and `profiles/resource-enrollment295-pistol` for magazine registration
 and geometry. Older profile numbers identify retained data, not the current build.
 
 The full build results and prior actual-game evidence are recorded in the
-[413 handoff](handoff/checkpoint413/README.md). This is a development source
-checkpoint;413 headset acceptance and whole-campaign stability remain pending.
+[414 handoff](handoff/checkpoint414/README.md). This is a development source
+checkpoint;414 headset acceptance and whole-campaign stability remain pending.
 The preserved `checkpoint/410-headset-rollback` branch is the previous normal
-headset source. The tested413 changes are on `checkpoint/413-recovery-audio`;
-main's newer build/documentation changes remain separate pending integration.
+headset source. Tag `checkpoint-413` retains the prior composition and instructions;
+the414 placement changes are on `checkpoint/414-chest-ammo`.
+Main's newer build/documentation changes remain separate pending integration.
 
 The script saves compiled capability output under
 `reports/<architecture>-compiled-capabilities.json`. Its count describes exact

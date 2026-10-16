@@ -1,4 +1,12 @@
-# Current413: shared pump/bolt recovery; real-game emulation passes
+# Current 414: lower-chest ammo display and pickup
+
+Shared placement moves down 10 cm and back 4 cm. Body-mode magazine and shell
+displays now agree on the chest contact. Focused emulation covers 18 registered
+magazine configurations and 6,048 poses; final validation/deployment is tracked in
+[the 414 handoff](../handoff/checkpoint414/README.md). Both full builds and actual
+XM8/SPAS placement checks passed. Desktop launcher: 414. Headset acceptance is pending.
+
+# Previous413: shared pump/bolt recovery; real-game emulation passes
 
 The shared mechanism changes preserve shot debt while allowing fresh recovery
 after tracking loss and distinguishing temporary policy contention from native
@@ -6,7 +14,7 @@ mutation failure. Real BC2 passed an interrupted pump sequence and a separate
 eight-shot pump/manual-shell/holster/rifle sequence. SPAS movement and closure
 audio passed a bounded PC endpoint capture. Final output-route hardening passed
 both full builds and an actual-game check with512 successful route checks.
-The desktop launcher selects normal413; [current details](CHECKPOINT-413.md)
+The desktop launcher selected normal413 at that checkpoint; [details](CHECKPOINT-413.md)
 record exact scope and the separately published checkpoint branch.
 Latest human result remains412 below; no complete campaign acceptance.
 

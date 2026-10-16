@@ -1,14 +1,22 @@
 # FrostbiteVR
 
-**Checkpoint 413 — unreleased developer source.** This repository contains a
+**Checkpoint 414 — unreleased developer source.** This repository contains a
 modular Frostbite VR framework with a Bad Company 2 adapter. The latest source
-adds shared pump/bolt recovery fixes and movement-driven mechanism audio.
+places magazine and shell supplies together on the lower chest, retaining the
+shared pump/bolt recovery fixes and movement-driven mechanism audio from checkpoint 413.
 
-Start with the [fork handoff](handoff/checkpoint413/README.md),
+Start with the [fork handoff](handoff/checkpoint414/README.md),
 [build instructions](BUILDING.md), and
 [current weapon coverage](docs/WEAPON-COVERAGE-CURRENT.md).
 
 ## Current evidence and limits
+
+Checkpoint 414 lowers the shared ammo contact by 10 cm and brings it 4 cm closer.
+The display and pickup point agree across ammo families. Expanded emulation
+covers 18 magazine configurations and 6,048 physical poses; exact final validation
+is recorded in [the 414 handoff](handoff/checkpoint414/README.md). Both full builds
+passed 284 suites; actual BC2 placement checks passed for magazines and shells.
+The local desktop launcher selects 414. No new headset acceptance is claimed.
 
 Checkpoint413 corrects shared pump/bolt dispatch and interruption handling.
 Actual BC2 with synthetic controllers passed interrupted-pump recovery and a

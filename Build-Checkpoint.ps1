@@ -19,7 +19,7 @@ New-Item -ItemType Directory -Path $scratch -Force | Out-Null
 $env:TEMP=$scratch
 $env:TMP=$scratch
 $profiles=Join-Path $PSScriptRoot 'profiles/checkpoint202'
-$operation=Join-Path $PSScriptRoot 'profiles/checkpoint413'
+$operation=Join-Path $PSScriptRoot 'profiles/checkpoint414'
 $receipt=Join-Path $operation 'source-with-header.json'
 $proof=Get-Content -LiteralPath $receipt -Raw | ConvertFrom-Json
 $vswhere=Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'

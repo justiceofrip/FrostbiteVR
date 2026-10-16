@@ -1,4 +1,14 @@
-# Current413: shared mechanism recovery and staged audio
+# Current 414: shared lower-chest ammunition
+
+The shared contact is now 55 cm below the HMD and 6 cm forward. Body-mode shell
+and magazine displays use the same primary contact; alternate belt pickup stays
+available. The focused 18-configuration/6,048-pose stereo and pickup sweep passes.
+Both full builds pass 284 suites; actual BC2 placement checks pass for XM8
+magazines and SPAS shells. The desktop launcher selects checkpoint 414.
+See [414 handoff](../handoff/checkpoint414/README.md) for final build/deployment
+status and [placement evidence](CHEST-AMMO-414.md). No headset claim.
+
+# Previous413: shared mechanism recovery and staged audio
 
 The latest human result remains failed412. Candidate413 distinguishes busy or
 proven-undispatched policy requests from ambiguous native failures, preserves
@@ -8,7 +18,7 @@ recovery and a separate eight-shot empty-tube reload/holster/rifle sequence.
 PC endpoint audio evidence detects rear and closure cues at their physical stages.
 Final route/driver-ownership hardening passed both full builds and a real-game
 cycle with512 successful route checks and clean cue completion. The desktop
-launcher now selects normal413; source is isolated on
+launcher selected normal413 at that checkpoint; its source remains on
 `checkpoint/413-recovery-audio` to preserve remote main's newer build/docs work. Use
 [checkpoint413](CHECKPOINT-413.md) and [its fork handoff](../handoff/checkpoint413/README.md)
 for exact source, deployment and remaining limits. No new headset claim.

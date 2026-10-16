@@ -119,7 +119,7 @@ public:
  bool ResourceBackend()const noexcept{return bool(resource_);}
  interaction::AmmoSupplyContact BodyAmmoContact()const noexcept {
   const interaction::AmmoSupplyContact primary{pouch_.pouchCenterMeters,pouch_.pouchRadiusMeters};
-  return ResourceBackend()?primary:pouch_.alternateContact.value_or(primary);
+  return ResourceBackend()||bodyAmmoFrame_==interaction::SupplyAnchorFrame::RecenteredBody?primary:pouch_.alternateContact.value_or(primary);
  }
  MagazineResourceProbeState ResourceProbeState(std::int64_t now)const noexcept;
  void Report(std::ostream&)const;

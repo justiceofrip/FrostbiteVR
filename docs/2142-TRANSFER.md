@@ -1,3 +1,12 @@
+# 414: test the visible ammo through the camera path
+
+One body contact must drive acquisition and both held/stowed availability
+displays across ammo families. Alternate reach regions need not move the prop.
+Validate the measured mesh as well as the pickup handle, then compare final
+stereo projection against an independent physical XR hand. Anchor self-tests
+alone miss errors in the body/camera bridge. Test recenter, roomscale, stance,
+head rotation and weapon identity changes. See [414](CHEST-AMMO-414.md).
+
 # 413: preserve debt and distinguish dispatch from presentation
 
 Shared pump/bolt consumers now distinguish a busy gate, proven non-dispatch,

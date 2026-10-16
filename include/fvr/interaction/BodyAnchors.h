@@ -14,7 +14,7 @@ struct BodyAnchor {std::uint32_t slot=0;math::Vec3 center{};float radius=.16f;};
 struct BodyAnchorConfig {
     // Lower chest, measured from the HMD rather than from an animated neck.
     // Keep the render handle and acquisition volume on this same contact.
-    BodyAnchor chest{3,{-.16f,-.45f,.10f},.16f};
+    BodyAnchor chest{3,{-.16f,-.55f,.06f},.16f};
     std::array<BodyAnchor,2> shoulders{{{1,{-.20f,-.12f,-.18f},.17f},{2,{.20f,-.12f,-.18f},.17f}}};
     BodyAnchor hip{4,{.24f,-.62f,.02f},.16f};
     // Acquisition reaches toward the shoulder without moving the displayed gun.

@@ -11,6 +11,20 @@ MagazinePhysicalResult DetachedIdle(Fixture& f,Bc2MagazineDetached& detached,
 std::optional<AmmoSupplyVisualSample> Display(Fixture& f,const MagazineTracking& tracking,std::int64_t now=0) {
  return f.policy->BodyAmmoDisplay(tracking,f.hands.Current(InteractionHand::Right),now?now:f.now);
 }
+int EveryRegisteredMagazineUsesTheBodyContact(){
+ const auto config=ChestAmmoSupply();unsigned checked=0;
+ for(const auto& registered:RegisteredMagazineNativeProfiles()){
+  const auto* profile=FindMagazineEquipment(registered.id);if(!profile||!profile->Ready())continue;
+  Fixture f(true,*profile);f.policy.emplace(true,f.api,config);
+  f.policy->EnableBodyAmmo(true,SupplyAnchorFrame::RecenteredBody);f.Send();
+  const auto display=Display(f,f.result.tracking);CHECK(display);
+  CHECK(display->contact.centerMeters==config.pouchCenterMeters&&display->contact.radiusMeters==config.pouchRadiusMeters);
+  CHECK(f.policy->BodyAmmoContact().centerMeters==display->contact.centerMeters);
+  CHECK(display->contact.centerMeters[1]<=-.50f&&display->contact.centerMeters[2]<=.08f);
+  CHECK(f.starts==0&&f.submits==0);++checked;
+ }
+ CHECK(checked);std::cout<<"Registered magazine lower-chest contacts: "<<checked<<"\n";return 0;
+}
 int FullMagazineUsesSameSourceAcrossRoutes(){
  Fixture f;f.policy->EnableBodyAmmo(true,SupplyAnchorFrame::RecenteredBody);
  f.reserve.loaded=f.reserve.capacity;f.reserve.allThreeIdle=true;f.reserve.reloadInputReady=false;f.Send();
@@ -113,7 +127,7 @@ int HeldLeaseAndInteractionOccupancy(){
 }
 }
 int main(){
- if(FullMagazineUsesSameSourceAcrossRoutes()||PartialFullZeroTransitionsUseFinalPublication()||
+ if(EveryRegisteredMagazineUsesTheBodyContact()||FullMagazineUsesSameSourceAcrossRoutes()||PartialFullZeroTransitionsUseFinalPublication()||
     CurrentOwnerClaimsAndOriginalDeadlines()||HeldLeaseAndInteractionOccupancy())return 1;
- std::cout<<"MagazineBodyAmmo: 4 CPU groups passed; display-only source, no headset acceptance\n";
+ std::cout<<"MagazineBodyAmmo: 5 CPU groups passed; display-only source, no headset acceptance\n";
 }
