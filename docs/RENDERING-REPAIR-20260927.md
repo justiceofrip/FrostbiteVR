@@ -40,7 +40,7 @@ is unchanged. The left contexts were proven distinct and unchanged, correcting t
 earlier allocator-overwrite hypothesis. This is a camera-binding fix within the
 bounded probe, not complete renderer/history isolation or production VR completion.
 
-See [current handoff](HANDOFF.md) and
+See [the handoff log](history/HANDOFF.md) and
 [hashed evidence](../reports/rendering-fix-20260927-2053/summary.json).
 The initial corrected 8-pair run passed all image checks (-97 px measured vs -96
 expected) and both sampled GPU matrices exactly. Subsequent checks delivered 240

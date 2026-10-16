@@ -1,59 +1,35 @@
 # FrostbiteVR
 
-**Checkpoint 414 — unreleased developer source.** This repository contains a
-modular Frostbite VR framework with a Bad Company 2 adapter. The latest source
-places magazine and shell supplies together on the lower chest, retaining the
-shared pump/bolt recovery fixes and movement-driven mechanism audio from checkpoint 413.
+**Checkpoint 415 integration — unreleased developer source.** A modular
+Frostbite VR framework with a Bad Company 2 adapter. This source combines the
+checkpoint 414 lower-chest ammunition placement and checkpoint 413 pump/bolt
+recovery/audio work with main's build optimizations and documentation cleanup.
 
-Start with the [fork handoff](handoff/checkpoint414/README.md),
-[build instructions](BUILDING.md), and
-[current weapon coverage](docs/WEAPON-COVERAGE-CURRENT.md).
+Start with [current state and known limits](docs/CURRENT.md), the
+[415 integration handoff](handoff/checkpoint415/README.md),
+[build instructions](BUILDING.md), and [weapon coverage](docs/WEAPON-COVERAGE-CURRENT.md).
 
-## Current evidence and limits
+## Evidence and limits
 
-Checkpoint 414 lowers the shared ammo contact by 10 cm and brings it 4 cm closer.
-The display and pickup point agree across ammo families. Expanded emulation
-covers 18 magazine configurations and 6,048 physical poses; exact final validation
-is recorded in [the 414 handoff](handoff/checkpoint414/README.md). Both full builds
-passed 284 suites; actual BC2 placement checks passed for magazines and shells.
-The local desktop launcher selects 414. No new headset acceptance is claimed.
+Both integrated builds passed 284/284 suites, and all four runtime binaries are
+byte-for-byte identical to frozen checkpoint 414. The desktop launcher stays on
+that verified runtime; no new game/headset test is needed for this merge.
+Python and launcher validation also passed. The changes improve build/test organization
+and documentation; they do not add weapon support or headset performance claims.
 
-Checkpoint413 corrects shared pump/bolt dispatch and interruption handling.
-Actual BC2 with synthetic controllers passed interrupted-pump recovery and a
-separate eight-shot pump/reload/holster/rifle sequence. Movement-driven SPAS
-audio has PC endpoint evidence; final audio-output recovery and bolt custody
-checks are documented in [checkpoint413](docs/CHECKPOINT-413.md).
-No413 headset acceptance or full campaign playthrough is claimed.
+Checkpoint 414 passed 284 suites on each architecture and a 6,048-pose sweep
+across 18 magazine configurations. Bounded actual BC2 checks confirmed lower-chest
+magazine and shell placement. Checkpoint 413 has actual-game emulation evidence
+for pump recovery, reload/holster sequences and movement-driven SPAS audio.
+See [414](handoff/checkpoint414/README.md) and [413](handoff/checkpoint413/README.md)
+for their exact scope and retained failures.
 
-**The October16 checkpoint412 headset run exposed a SPAS lockout:** firing,
-pumping and holstering stopped while grip remained usable. Actual loaded binary
-hashes match412. Two distinct cancelled native-cycle states are recorded; their
-complete original causes were not captured. See [the retained failure investigation](docs/HEADSET-FAILURE-412.md).
-The corrective automated results do not establish headset reliability.
-
-The latest normal410 headset feedback reports substantially better pumping and
-reliable manual shotgun loading, with remaining shell-animation and placement
-issues. Checkpoint412 lowers shared chest ammunition, moves the read-only ammo
-counter beside the gun hand, retains stock loading-shell suppression after a
-reload finishes, and removes repeated launch storage scans. See the
-[current changes and validation limits](docs/CHECKPOINT-412.md).
-
-Prior actual-game checks cover selected rifle/shotgun reloads and holsters,
-five M95 bolt cycles, campaign checkpoint recovery, mounted firing, knife
-session-close recovery and paired-eye damage/death presentation. These are
-bounded observations, not a complete campaign playthrough or weapon acceptance.
-The new412 visual changes have no headset acceptance; the user requested a
-checkpoint without another headset test. Spent-shell ejection remains open;
-immediate pump timing is unchanged. M95 magazine refill still uses stock fallback.
-Wider mechanism coverage, belt-fed reloads, physical zoomed scopes, full-body IK
-and multiplayer remain unfinished.
-
-Earlier headset tests demonstrated native stereo, tracked weapons and support
-hands, roomscale/recentering, controller menu interaction, chest ammunition,
-shoulder holsters, selected manual reloads and the tested boat's head aiming and
-firing. These features remain experimental, and later tests exposed regressions.
-Measured contacts and compiled capability rows are prerequisites, not a count of
-headset-accepted weapons. Historical checkpoint notes retain their original scope.
+**The latest human headset run was checkpoint 412 and exposed a SPAS lockout.**
+Later automated passes are not headset acceptance. No complete campaign
+playthrough, all-weapons acceptance or public player release is claimed.
+Spent-shell ejection, wider reload/mechanism coverage, scopes, full-body IK and
+multiplayer remain unfinished. [CURRENT.md](docs/CURRENT.md) tracks the current
+implementation and validation gaps; historical notes describe their own checkpoint.
 
 ## Build without a game or headset
 
@@ -85,7 +61,7 @@ Tools can prepare the required body geometry locally from your own installation.
 
 Historical research notes describe the checkpoint at which they were written.
 Some refer to local evidence that is intentionally not published. Use
-[STATUS.md](docs/STATUS.md) for current claims; a data row or passing unit test
+[CURRENT.md](docs/CURRENT.md) for current claims; a data row or passing unit test
 does not mean a weapon or future game is playable.
 
 ## Lineage and license

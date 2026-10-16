@@ -29,8 +29,9 @@ this development workspace; see [storage policy](docs/STORAGE-BUDGET.md).
 Use a virtual environment if you keep other projects' Python dependencies separate.
 
 <a id="checkpoint413-player-composition"></a>
+<a id="checkpoint414-player-composition"></a>
 
-## Checkpoint414 player composition
+## Checkpoint415 player composition
 
 Use the existing build directories and run the architectures sequentially:
 
@@ -39,7 +40,7 @@ Use the existing build directories and run the architectures sequentially:
 .\Build-Checkpoint.ps1 -Architecture x64 -Jobs 2 -OrdinaryManualCycles -NativeCycleRecovery -BodySceneDepth -PlayerGrenades -PlayerKnife -ContextualTools
 ```
 
-These switches reproduce the normal414 composition. Player knife, grenade and
+Checkpoint 415 retains the normal414 runtime composition. Player knife, grenade and
 contextual-tool code is compiled, but those runtime opt-ins remain disabled in
 the current personal launch profile. Synthetic controller drivers remain OFF.
 Omitting these switches builds a different feature composition. The script selects
@@ -48,13 +49,18 @@ Omitting these switches builds a different feature composition. The script selec
 contacts, and `profiles/resource-enrollment295-pistol` for magazine registration
 and geometry. Older profile numbers identify retained data, not the current build.
 
-The full build results and prior actual-game evidence are recorded in the
-[414 handoff](handoff/checkpoint414/README.md). This is a development source
-checkpoint;414 headset acceptance and whole-campaign stability remain pending.
-The preserved `checkpoint/410-headset-rollback` branch is the previous normal
-headset source. Tag `checkpoint-413` retains the prior composition and instructions;
-the414 placement changes are on `checkpoint/414-chest-ammo`.
-Main's newer build/documentation changes remain separate pending integration.
+The build integration combines checkpoint414 with main's build/test optimizations.
+Both architectures passed 284/284 suites and native source verification; all
+four rebuilt runtime binaries match frozen414 byte-for-byte. Python/launcher
+checks also passed. See the [415 handoff](handoff/checkpoint415/README.md) and its
+[validation record](handoff/checkpoint415/validation.json). These are local
+integration results; no remote CI pass for the combined merge is claimed.
+The [414 handoff](handoff/checkpoint414/README.md) retains the earlier full build
+results and actual-game placement evidence. The desktop launcher remains on
+the exact frozen414 profile; no new game/headset run is needed for this merge.
+Headset acceptance and whole-campaign stability remain pending. Tags
+`checkpoint-414` and `checkpoint-413` retain their prior source/instructions,
+and `checkpoint/410-headset-rollback` remains available.
 
 The script saves compiled capability output under
 `reports/<architecture>-compiled-capabilities.json`. Its count describes exact
@@ -73,6 +79,15 @@ not new native evidence. Default builds remain available for policy development.
 
 Build caches retain options. To return to defaults, use a fresh checkout/build
 directory or explicitly clear the optional CMake variables listed in the script.
+
+CTest runs in parallel using `-Jobs`; run the architecture builds sequentially
+to keep memory and storage bounded. Tests using the standard reload-flow flags
+share `Bc2ReloadFlowRuntimeTestObjects`; tests with distinct definitions retain a
+private copy. The static CRT is selected once before targets through
+`CMAKE_MSVC_RUNTIME_LIBRARY`, not through scattered per-target overrides.
+GitHub Actions builds the default composition on x86 and x64, and runs Python
+and launcher/source-package checks on x64. Local checkpoint results and default
+CI results describe different feature compositions.
 
 ## Running development code
 

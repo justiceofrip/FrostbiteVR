@@ -1,0 +1,67 @@
+{
+  "schema": "fvr.integration-validation.v1",
+  "checkpoint": 415,
+  "completed_utc": "2026-10-16T11:21:18.1751216Z",
+  "integration_parents": {
+    "checkpoint414": "b1d593ee55454881c1aae2313b2c3da200661835",
+    "github_main": "c345db7e7a3b843243715c823c580a00f0821442"
+  },
+  "runtime": {
+    "source_checkpoint": 414,
+    "native_dependency_closure_sha256": "3d976c48307f0f6559269f8e197b384563033cf5c3401b96a8bcf3e43efdd7a0",
+    "source_receipt_verified": true,
+    "src_include_profiles_unchanged": true,
+    "desktop_profile_checkpoint": 414,
+    "desktop_profile_changed": false,
+    "all_binaries_identical_to_frozen414": true,
+    "binary_sha256": {
+      "BC2NativeProbe.dll": "9fa1d5f7c14fe2e0a6919520570ad83289e9efa46485126cde378363f29c9406",
+      "BC2NativeTrace.exe": "ebd819ac1c15b9a70998d7579e53de68d9be306bfcc13c1f11c8d39f52a14f2b",
+      "BC2NativeIpcProbe.exe": "5fb2c82af4c88f8ebf5176369e19c4f058e4d2e2da2865f7210d8569d18b8374",
+      "BC2XrHost.exe": "320c65151325da8550e81c6cc04c68b546dc640837c42cbcbed183ae2c184ce0"
+    }
+  },
+  "local_validation": {
+    "checkpoint_composition": [
+      "OrdinaryManualCycles", "NativeCycleRecovery", "BodySceneDepth",
+      "PlayerGrenades", "PlayerKnife", "ContextualTools"
+    ],
+    "x86": { "build_passed": true, "ctest_passed": 284, "ctest_failed": 0, "ctest_seconds": 12.96 },
+    "x64": { "build_passed": true, "ctest_passed": 284, "ctest_failed": 0, "ctest_seconds": 5.81 },
+    "timing_is_controlled_benchmark": false,
+    "python_discovery": { "ran": 986, "passed": 985, "skipped": 1, "failed": 0 },
+    "resource_inventory_tool": { "passed": 9, "failed": 0 },
+    "preview_launcher_checks": {
+      "passed": true,
+      "parser_scripts": 5,
+      "coverage": ["UTC/culture", "preview/session routes", "native forwarding", "setup preservation/hashes"]
+    },
+    "reviewed_document_links": 41,
+    "merge_markers_remaining": false,
+    "game_launched": false,
+    "headset_launched": false
+  },
+  "storage": {
+    "generated_volume": "G:",
+    "allocated_bytes_at_offline_admission": 39602295894,
+    "generated_limit_bytes": 42949672960,
+    "minimum_free_bytes": 16106127360,
+    "raw_capture_bytes": 0,
+    "lossless_compression_saved_bytes": 637853424,
+    "compressed_file_content_hashes_unchanged": true,
+    "files_deleted": false,
+    "whole_build_trees_archived": false
+  },
+  "publication": {
+    "branch": "main",
+    "tag": "checkpoint-415",
+    "remote_ci_result_claimed": false,
+    "player_release": false
+  },
+  "acceptance_limits": [
+    "This build and documentation integration does not change player binaries.",
+    "No new game or headset acceptance is claimed.",
+    "Prior checkpoint413/414 automated evidence and checkpoint412 human failure remain in their handoffs.",
+    "A complete campaign and all weapon classes remain unaccepted."
+  ]
+}

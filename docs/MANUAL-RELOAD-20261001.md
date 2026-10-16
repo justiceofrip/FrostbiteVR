@@ -8,7 +8,7 @@ Reuse shared hand ownership, raw contact versus guided presentation, ammunition 
 
 Keep XM8 rifle magazine integration and boat head-aim work active. The survey should deliver a family matrix, current evidence/missing bindings, and the smallest monitor diagnostic needed for the first XM8 launcher reload. Do not infer a total weapon count or enable unverified launchers from generic category names. Canonical source must not include extracted game assets.
 
-Current verified reload evidence: accepted SPAS headset run030952 (audited after session end), and scoped-XM8 native Cancel040421/Insert040613. Physical magazine integration is in progress, including persistent-family/native-rifle identity mapping and truthful start-failure recovery. Refer to HANDOFF.md for current build/test counts and historical limitations.
+Current verified reload evidence: accepted SPAS headset run030952 (audited after session end), and scoped-XM8 native Cancel040421/Insert040613. Physical magazine integration is in progress, including persistent-family/native-rifle identity mapping and truthful start-failure recovery. Refer to CURRENT.md for current build/test counts and history/HANDOFF.md for historical limitations.
 
 ## SPAS headset acceptance — October 1 Eastern
 
@@ -18,19 +18,19 @@ The user accepted manual SPAS loading in trace030952: it worked, felt decent, an
 
 Headset020931 failed user acceptance despite two verified shell insertions. Revision5 replaces the tiny entry-only catch with explicit round-shell RailContact assistance around the full bottom-entry path. A60mm capture capsule,120mm release distance and120ms alignment are UX choices; a20mm new net raw inward stroke plus dwell is still required. The first near-mouth owned sample may latch but cannot auto-load. Existing magazine/keyed profiles keep their prior behavior. Guided previews survive only an unsampled tick within the original deadline/claims; real cancellation or rejected geometry wins.
 
-Optional haptics now distinguish capture from accepted native receipt. This has software/fake-runtime verification, not new headset acceptance. Closed loading-mouth geometry, held-trigger/other cancellation paths, full-capacity animation tails and other weapon families remain open. The launcher sight also has a tested anatomical-calibration repair awaiting headset verification. Read HANDOFF.md for the exact current build and runtime limits.
+Optional haptics now distinguish capture from accepted native receipt. This has software/fake-runtime verification, not new headset acceptance. Closed loading-mouth geometry, held-trigger/other cancellation paths, full-capacity animation tails and other weapon families remain open. The launcher sight also has a tested anatomical-calibration repair awaiting headset verification. Read CURRENT.md for the exact current build and runtime limits.
 
 ## Stop after a manual SPAS insertion — October 2 UTC
 
 The native cancellation repair is integrated and monitor verified: trace015932 completes one physical 6/15 -> 7/14 insertion and returns all three firing copies to idle without filling the last slot. Two exact native abort-helper calls plus one ordinary native restore to idle account for all three copies. Final read-only postflight retains7/14. This closes the demonstrated neutral, post-receipt cancellation case from trace013308; it is not headset acceptance or coverage of every cancellation path.
 
-Full builds pass98/97. Wrist calibration and active-cycle shell hiding are integrated; the same run verifies49 paired hide operations. Full-capacity animation tails, early Arming, pending/expired controls and zero-loaded cancellation remain outside the verified abort subset. Haptic capture feedback and an open underside loading aperture are still absent. See the current HANDOFF and reports/reload-native-abort-review-015932.json for scope, recording coverage and excluded preparation attempts.
+Full builds pass98/97. Wrist calibration and active-cycle shell hiding are integrated; the same run verifies49 paired hide operations. Full-capacity animation tails, early Arming, pending/expired controls and zero-loaded cancellation remain outside the verified abort subset. Haptic capture feedback and an open underside loading aperture are still absent. See the HANDOFF log (history/HANDOFF.md) and reports/reload-native-abort-review-015932.json for scope, recording coverage and excluded preparation attempts.
 
 ## SPAS headset failure and presentation repairs — October 2 UTC
 
 Actual headset trace010416 completed three physical native receipts but the user rejected inverted pickup, floaty guidance and native animated shells. Use the failed headset verdict, not completion counters, for release readiness. Raw reload contact now uses the same anatomical wrist calibration as the open hand. Active-cycle shell suppression covers pending advancement and gaps between real physical items without granting ammo authority. Bounded cancellation diagnostics distinguish input, ownership, expiry, capacity and other exits.
 
-Full97/96 suites pass. New headset feel remains unverified. Full-capacity completion tails and extra native loading after cancellation remain separate issues; active-only shell suppression does not solve them. The bottom-entry profile remains revision4. Closed underside faces/open-port validation and haptic capture feedback remain limitations. See current HANDOFF for runtime results and exact scope.
+Full97/96 suites pass. New headset feel remains unverified. Full-capacity completion tails and extra native loading after cancellation remain separate issues; active-only shell suppression does not solve them. The bottom-entry profile remains revision4. Closed underside faces/open-port validation and haptic capture feedback remain limitations. See the HANDOFF log (history/HANDOFF.md) for runtime results and exact scope.
 
 Actual monitor check013308-369 (IPC013307) ran the updated DLL E15A2E4E9E6B2170BE81E8E26F57C92A239469AB5A368C1855359132EBDA5AF6 with scripted controller motion. One physical insertion completed4/19→5/18. Active-cycle shell suppression was verified by51 paired/102 individual native Pack destination comparisons, with0 source rejections or packing failures. All240 stereo pairs arrived with0 timeouts and0 camera restore/GPU failures; one completion exceeded50ms (maximum138.886ms). All974 temporary holds restored; hooks detached and15.234s stability passed. Ordinary ownership-expiry fallback was not exercised, so the existing audit's aggregate verdict remains false despite consumer/receipt/private-Pack/delivery/cleanup sections passing.
 
@@ -42,7 +42,7 @@ The fixture's post-Tick completion now clears its unpublished output BEFORE canc
 
 User clarification: load from underneath, never through the side ejection port. Saved native geometry puts the target under the centerline, but the previous guide incorrectly followed the shell's almost horizontal nose direction. SPAS revision 4 keeps shell orientation/grasp and the observed endpoint, while guiding upward and forward from below the receiver. Item orientation and insertion travel are now separate reusable profile fields.
 
-Both complete architecture suites pass (97/96). No new native or headset acceptance is claimed. The most recent headset run001451 acquired six shells and completed zero insertions. The sampled underside still has closed render faces; actual visual clearance during insertion remains to be checked. See the latest HANDOFF and loading-port source/independent evidence reports.
+Both complete architecture suites pass (97/96). No new native or headset acceptance is claimed. The most recent headset run001451 acquired six shells and completed zero insertions. The sampled underside still has closed render faces; actual visual clearance during insertion remains to be checked. See the HANDOFF log (history/HANDOFF.md) and loading-port source/independent evidence reports.
 
 ## Headset guidance feedback and repair — October 1, 23:58 UTC
 
@@ -55,7 +55,7 @@ capture/seat state and nearest approach per item. No haptic cue was added.
 Full97/96 builds pass; scripted native regression235641-321 proves two captures,
 two seats and6/9 ->7/8 ->8/7 native receipts after the changes. One recovered
 frame timeout and unexercised fallback remain explicit. New headset feel is
-unverified. See PHYSICAL-RELOAD-GUIDANCE-20261001.md and current HANDOFF.md.
+unverified. See PHYSICAL-RELOAD-GUIDANCE-20261001.md and CURRENT.md.
 
 ## Repeated physical SPAS insertion verified — October 1, 23:20 UTC
 

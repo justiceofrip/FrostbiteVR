@@ -1,12 +1,12 @@
-# Current 414: shared lower-chest ammunition
+# Historical 414: shared lower-chest ammunition
 
 The shared contact is now 55 cm below the HMD and 6 cm forward. Body-mode shell
 and magazine displays use the same primary contact; alternate belt pickup stays
 available. The focused 18-configuration/6,048-pose stereo and pickup sweep passes.
 Both full builds pass 284 suites; actual BC2 placement checks pass for XM8
 magazines and SPAS shells. The desktop launcher selects checkpoint 414.
-See [414 handoff](../handoff/checkpoint414/README.md) for final build/deployment
-status and [placement evidence](CHEST-AMMO-414.md). No headset claim.
+See [414 handoff](../../handoff/checkpoint414/README.md) for final build/deployment
+status and [placement evidence](../CHEST-AMMO-414.md). No headset claim.
 
 # Previous413: shared mechanism recovery and staged audio
 
@@ -20,7 +20,7 @@ Final route/driver-ownership hardening passed both full builds and a real-game
 cycle with512 successful route checks and clean cue completion. The desktop
 launcher selected normal413 at that checkpoint; its source remains on
 `checkpoint/413-recovery-audio` to preserve remote main's newer build/docs work. Use
-[checkpoint413](CHECKPOINT-413.md) and [its fork handoff](../handoff/checkpoint413/README.md)
+[checkpoint413](../CHECKPOINT-413.md) and [its fork handoff](../../handoff/checkpoint413/README.md)
 for exact source, deployment and remaining limits. No new headset claim.
 
 # Previous human412: pump debt blocks weapon actions
@@ -32,10 +32,10 @@ tracked; after actor recovery a later cycle ends Cancelled/Input. Holster
 transitions themselves completed, but pump debt blocks inventory actions. The
 precise failed gate caller and later native input context remain unrecorded.
 The mod was stopped with permission; BC2 and SteamVR remain open. No new build
-is deployed. See [failure evidence and next boundaries](HEADSET-FAILURE-412.md)
-and [separate audio work](PUMP-AUDIO-INVESTIGATION.md).
+is deployed. See [failure evidence and next boundaries](../HEADSET-FAILURE-412.md)
+and [separate audio work](../PUMP-AUDIO-INVESTIGATION.md).
 
-# Previous412: presentation follow-up and launch overhead
+# Historical412: presentation follow-up and launch overhead
 
 The normal410 headset run reported substantially better pumping and reliable
 shell loading, with residual stock shell visuals, absent spent-shell ejection,
@@ -48,8 +48,8 @@ not acceptance of the entire campaign.
 transaction, lowers the shared chest anchor20cm, and places the native loaded/
 reserve counter beside the gun hand. Startup uses one measured fresh storage
 inventory with restricted single-use child handoffs; builds never reuse it.
-See [412 details](CHECKPOINT-412.md) and
-[current fork/build handoff](../handoff/checkpoint412/README.md).
+See [412 details](../CHECKPOINT-412.md) and
+[current fork/build handoff](../../handoff/checkpoint412/README.md).
 No412 headset run is requested or claimed. Spent-shell ejection remains open,
 and immediate post-shot pump timing is deliberately unchanged.
 
@@ -58,7 +58,7 @@ and immediate post-shot pump timing is deliberately unchanged.
 Desktop launcher 0.1.1 is installed on G: with a **BC2 VR** desktop shortcut.
 It references the same pinned normal410 candidate below, starts SteamVR and
 continues campaign without builds or manual menu clicks, and includes graceful
-Stop VR, update checks and rollback. See [desktop launcher](DESKTOP-LAUNCHER.md)
+Stop VR, update checks and rollback. See [desktop launcher](../DESKTOP-LAUNCHER.md)
 for tests, packaging and remaining public-runtime work. Native sources/binaries
 are unchanged. UI/setup/update-feed checks passed; native headset launch was
 not run. User storage policy is now explicit: keep our generated data/scratch
@@ -73,7 +73,7 @@ neutral release, and all 240 stereo pairs. All 38 collection checks passed;
 root reviewed all 23 saved pairs, with both eyes darkening and recovering
 together. The owned game and diagnostic children closed; profiles restored.
 Earlier startup/preflight/argument failures remain recorded separately. See
-[411 diagnostics](CAMPAIGN-DIAGNOSTICS-411.md). Normal 410 binaries remain the
+[411 diagnostics](../CAMPAIGN-DIAGNOSTICS-411.md). Normal 410 binaries remain the
 current player build. Headset acceptance and any flash before event export
 remain unverified; do not repeat this unchanged native run.
 
@@ -93,7 +93,7 @@ delivered 240 pairs, passed 31 collection and 17 postprocess checks, and restore
 all scoped writes. Root reviewed all 24 saved pairs: prior strong eye0 tint,
 darkening and blur mismatch is absent in the captured damage window. One Busy
 publication and one image/observation boundary gap remain explicitly recorded.
-See [410 diagnostics](CAMPAIGN-DIAGNOSTICS-410.md). Its missing native death
+See [410 diagnostics](../CAMPAIGN-DIAGNOSTICS-410.md). Its missing native death
 witness is supplied by the separate 411 run above; no full campaign acceptance.
 Keep 409's partial visual failure and knife success as separate evidence.
 
@@ -106,7 +106,7 @@ comparisons without saving images. Both full builds pass 283 suites. Actual
 game40 held-close passes the corrected 22-check assessment, returning the knife
 in 738 ms with unchanged ammunition and drained hooks. The original numeric-
 Boolean checker failure is preserved. See
-[409 evidence and limits](CAMPAIGN-DIAGNOSTICS-409.md).
+[409 evidence and limits](../CAMPAIGN-DIAGNOSTICS-409.md).
 
 The actual mission 06 supplied useful legacy scalar evidence, but failed its
 overall 240-pair requirement. Its newer opaque-field observer refused all rows
@@ -138,13 +138,13 @@ loading, before any VR receiver was attached. Knife partial return and one-eye
 damage presentation remain open.
 
 All new or resumed private wrappers must use the storage preflight before heavy
-output. See [storage limits](STORAGE-BUDGET.md):40GiB of generated disk usage,
+output. See [storage limits](../STORAGE-BUDGET.md):40GiB of generated disk usage,
 15GiB free reserve and512MiB per planned raw capture. Reuse build trees and keep
 compact evidence. Some current linker outputs inherited an old C: temporary
 directory; directory age is not proof of obsolete content. Matching runtime/tool
 symbols were retained. Prefer process-local build scratch on the output drive.
 
-# Current408: pump appearance passes; normal knife close and stereo damage remain open
+# Historical408: pump appearance passes; normal knife close and stereo damage remain open
 
 Reviewed408 source now integrates the fixed SPAS ring and axial bolt movement,
 shared unscoped XM8/launcher eligibility, moving knife custody, held contextual
@@ -167,21 +167,21 @@ The damage observer remains a private overlay. No guessed native field copies,
 extra simulation replay, or unchanged recipe repetitions are authorized by these
 results. Actual407 pump mechanics pass but old companion appearance fails.
 Latest human headset result remains failed390; no full campaign acceptance.
-See [407 retained results](CAMPAIGN-DIAGNOSTICS-407.md) and
-[408 work](CAMPAIGN-DIAGNOSTICS-408.md).
+See [407 retained results](../CAMPAIGN-DIAGNOSTICS-407.md) and
+[408 work](../CAMPAIGN-DIAGNOSTICS-408.md).
 
-# Current405: combined corrections, verification in progress
+# Historical405: combined corrections, verification in progress
 
 The source now includes the held pump-to-support handoff correction, the completed
 holster sample for contextual tools, and actual knife-recognizer readiness for the
 finite test. A private fixed-part palette capture investigates the stock distortion
 reproduced in both native eyes. Full builds and new native results are recorded in
-[405 evidence](CAMPAIGN-DIAGNOSTICS-405.md). They remain pending at this snapshot.
+[405 evidence](../CAMPAIGN-DIAGNOSTICS-405.md). They remain pending at this snapshot.
 The exact SP_04 fixture produced three coherent mounted-weapon snapshots, then
 closed normally and restored all profile files. Firing during VR remains unproved.
 Human390 remains the last failed headset result; no full campaign acceptance.
 
-# Current404: full builds pass; actual interaction gaps remain
+# Historical404: full builds pass; actual interaction gaps remain
 
 Both full builds pass275 suites. The knife physical draw/stroke/return recipe now
 completes, but this run delivers no native attack. The contextual draw fails
@@ -190,7 +190,7 @@ Fresh actual dock-map reads identify SP_03; earlier SP_02 shorthand is corrected
 A bounded read-only damage predicate returns0, not proof of grenade hit/death.
 Mounted-shot and stock-side pump captures are next. A held off-axis pump-to-support
 retention mismatch is being fixed privately. No headset/campaign acceptance;
-human390 remains failed. See [404 evidence](CAMPAIGN-DIAGNOSTICS-404.md).
+human390 remains failed. See [404 evidence](../CAMPAIGN-DIAGNOSTICS-404.md).
 
 # Previous403 built;404 private diagnostic corrections in progress
 
@@ -204,7 +204,7 @@ designator is a real scripted binocular tool; the finite fixture's asset-name
 assumption was wrong.404 work corrects the finite gesture and tool fixture,
 and adds actionable vehicle rejection evidence.403 artifacts remain frozen.
 Normal knife/contextual enable remains OFF; human390 is the last failed headset
-run. No campaign acceptance. See [403 evidence](CAMPAIGN-DIAGNOSTICS-403.md).
+run. No campaign acceptance. See [403 evidence](../CAMPAIGN-DIAGNOSTICS-403.md).
 
 # Previous402: delivered focus recovery and knife draw/return
 
@@ -215,7 +215,7 @@ with a new paired hide and17 coherent postcapture samples. The separate motion
 check fails after one native branch consumes the attack; drain is refused and
 the exact owned game closes normally. One grenade completes without damage/death.
 Normal knife remains OFF; human390 remains failed. No full-campaign acceptance.
-See [402 evidence and next work](CAMPAIGN-DIAGNOSTICS-402.md).
+See [402 evidence and next work](../CAMPAIGN-DIAGNOSTICS-402.md).
 
 # Previous401: shell retention verified; input and knife checks remain open
 
@@ -225,7 +225,7 @@ is untested. Death capture sends no grenade after premature test-driver health
 admission cancellation. Helicopter Fire8 delivery and240 stereo pairs pass;
 discharge is unobserved. Knife draw/return occurs but held custody and recipe
 completion fail; normal knife remains OFF. Human390 remains failed.
-See [401 evidence and next work](CAMPAIGN-DIAGNOSTICS-401.md).
+See [401 evidence and next work](../CAMPAIGN-DIAGNOSTICS-401.md).
 
 # Previous400: held-shell read gap isolated; helicopter seat observed
 
@@ -237,7 +237,7 @@ file publication and native admission are separate issues. A later mission
 reached its helicopter gunner seat and passed three native profile observations;
 active VR firing remains untested. Human390 remains the latest failed headset
 run; no full-campaign acceptance is claimed.
-See [400 evidence and remaining work](CAMPAIGN-DIAGNOSTICS-400.md).
+See [400 evidence and remaining work](../CAMPAIGN-DIAGNOSTICS-400.md).
 
 # Previous399: builds pass; changed diagnostic startup corrections pending
 
@@ -248,7 +248,7 @@ being checked at their actual startup boundaries. The completed398 mechanical
 recovery evidence remains valid and was not repeated. Direct newSP launch now
 has three native loaded-map confirmations for SP_04; no vehicle seat was observed.
 Human390 remains failed; no full campaign or new headset acceptance is claimed.
-See [399 evidence and limits](CAMPAIGN-DIAGNOSTICS-399.md).
+See [399 evidence and limits](../CAMPAIGN-DIAGNOSTICS-399.md).
 
 # Previous398: native recovery passes; visual readiness remains open
 
@@ -258,7 +258,7 @@ retain7/22 without an unwanted extra shell. Active PBL camera selection also
 passes three coherent native snapshots. Saved shoulder-transition pixels expose
 near-eye clipping or deformation still under investigation. No headset candidate
 is staged; human390 remains the latest failed run and campaign acceptance is open.
-See [398 evidence and limits](RECOVERY-AND-CAMERA-398.md).
+See [398 evidence and limits](../RECOVERY-AND-CAMERA-398.md).
 
 # Previous397: pump gap recovers; subsequent shell-stop race reproduced
 
@@ -271,7 +271,7 @@ separate presentation-clear cancellation are under correction for398.
 
 Normal player grenade startup is explicitly available; physical knife handling
 remains private. The steeper grenade capture was nonlethal, leaving actual death
-unverified. Human390 remains failed. See [397 evidence](RECEIVER-GAP-397.md).
+unverified. Human390 remains failed. See [397 evidence](../RECEIVER-GAP-397.md).
 
 # Previous396: native menu passes; full disconnect replay correction pending
 
@@ -285,7 +285,7 @@ the corrected driver needs one replay before completion can be claimed.
 
 Forced passenger and UAV campaign paths need additional native coverage.
 Actual death remains unverified. Human390 remains failed; full campaign is not
-accepted. See [396 evidence and limits](CAMPAIGN-INTEGRATION-396.md).
+accepted. See [396 evidence and limits](../CAMPAIGN-INTEGRATION-396.md).
 
 # Previous394: tracked pump wrist and combined sequence verified in game
 
@@ -303,9 +303,9 @@ All three original and grenade ammunition copies remain unchanged. Retain that
 failed result;395 adds targeted evidence before another attempt. It is not an
 enabled player grenade binding. The393 checkpoint fade fix is retained; actual
 death and whole-campaign acceptance remain open. Human390 is still the latest
-failed headset run. See [394 evidence and limits](TRACKED-WRIST-394.md).
+failed headset run. See [394 evidence and limits](../TRACKED-WRIST-394.md).
 
-# Current393: native fade corrected; mechanical pump fallback exercised
+# Historical393: native fade corrected; mechanical pump fallback exercised
 
 Both full builds pass249 suites. The actual checkpoint capture and independent
 review pass27 checks: both eyes share the active fade values, seven temporary
@@ -319,7 +319,7 @@ through both verified native copies. The strict post-detach wrapper fails on
 one rejected read; all30 coherent retained samples remain7/22. Keep that gap.
 The hand itself can still clamp away from the pump, so shared tracked-wrist
 placement remains next work. Human390 remains failed; campaign is not accepted.
-See [393 evidence and limits](NATIVE-PRESENTATION-393.md).
+See [393 evidence and limits](../NATIVE-PRESENTATION-393.md).
 
 # Previous392: expired pump control and two-shell native checks pass
 
@@ -335,7 +335,7 @@ and menu-transition checks pass. Bounded host timing/input diagnostics are added
 The separate graphics-only checkpoint transition capture passes and records a
 native per-view RGB divergence under investigation. Human390 remains
 failed; pump visuals, death recovery and full campaign are not accepted.
-See [392 evidence and limits](NATIVE-RECOVERY-392.md).
+See [392 evidence and limits](../NATIVE-RECOVERY-392.md).
 
 # Previous391: failed headset390 under investigation
 
@@ -351,9 +351,9 @@ Both full builds pass246 suites. One actual-game eight-pump, shell insertion,
 shoulder swap and rifle reload/fire sequence passes; inactive shell counts remain
 1/23 after detach. Independent callback review passes87 checks, with two
 unretained cycle/branch tails and six aggregate-only empty receipt rejections.
-No full-campaign or new headset acceptance. See [391](HEADSET-RECOVERY-391.md).
+No full-campaign or new headset acceptance. See [391](../HEADSET-RECOVERY-391.md).
 
-# Current390: continuous weapon swaps and checkpoint recovery verified in game
+# Historical390: continuous weapon swaps and checkpoint recovery verified in game
 
 The new second-SPAS-visit diagnostic first failed389, then passed390 after a
 shared native handoff fix. A completed reload's retirement now survives family
@@ -372,9 +372,9 @@ builds pass246 suites. Normal390 is a local headset candidate, not headset accep
 The latest human375 failure, failed389 reproduction and historical intermittent
 graphics crashes remain documented. No claim of all weapons, death recovery,
 sustained campaign stability or new native admissions. See
-[390 evidence and player checklist](NATIVE-HANDOFF-390.md).
+[390 evidence and player checklist](../NATIVE-HANDOFF-390.md).
 
-# Current388: actual empty-tube and cross-family checks pass; headset pending
+# Historical388: actual empty-tube and cross-family checks pass; headset pending
 
 Both normal388 builds pass246 suites. The actual-game SCAR/SPAS run completes
 eight shots/pumps/support returns, inserts one shell into the empty tube, returns
@@ -393,9 +393,9 @@ Latest human result remains the October12 failed375 test. The original native
 PublishedLinks failure and intermittent385 claim loss have not been reproduced
 in388. Whole-campaign stability, full callback coverage and headset acceptance
 are not claimed. Further testing targets drawing/pumping SPAS again after using
-the rifle, without restarting persistent consumers. See [388](SHELL-STOP-388.md).
+the rifle, without restarting persistent consumers. See [388](../SHELL-STOP-388.md).
 
-# Current386: diagnosing a separately reproduced hand-claim loss
+# Historical386: diagnosing a separately reproduced hand-claim loss
 
 Candidate384 fixes the connected aiming gap on physical-to-support return.
 Its actual-game test completes four pumps with support returned, then exposes
@@ -410,8 +410,8 @@ A normal384 actual-game menu run successfully restarts the checkpoint, observes
 the replacement actor, and reopens/closes its menu. All240 stereo pairs arrive,
 all hooks drain, and the game survives. This is one restart check. No whole-
 campaign, visual or expanded weapon acceptance is claimed. See
-[385 evidence and limits](INPUT-PAUSE-RECOVERY-385.md) and
-[384 aiming correction](PUMP-RETURN-AIM-384.md). Older entries below are history.
+[385 evidence and limits](../INPUT-PAUSE-RECOVERY-385.md) and
+[384 aiming correction](../PUMP-RETURN-AIM-384.md). Older entries below are history.
 
 # Headset375 failed; candidate381 is not accepted
 
@@ -420,7 +420,7 @@ failure and unreliable holsters. Candidate381 decouples returning the hand from
 native completion, with a reproduced regression, and preserves additional
 rejection evidence. Animation distortion and the native lockup remain unresolved.
 No additional weapon or playable-campaign acceptance is claimed. See
-[the review and correction](HEADSET-FAILURE-AND-PUMP-HANDOFF-381.md).
+[the review and correction](../HEADSET-FAILURE-AND-PUMP-HANDOFF-381.md).
 
 Both 381 full builds pass all 246 checks. The new delayed-native-completion
 regression fails on the previous implementation and passes on 381. A first x64
@@ -446,7 +446,7 @@ Normal player375 remains the pinned headset candidate. Its two combined game
 checks exercise rifle reloads, both shoulders, pumping, shell insertion and
 tracking-loss recovery; human visual/feel and sustained campaign acceptance are
 still pending. No new native weapon is enabled by these offline results.
-See [380](PARTIAL-ACTION-DATA-380.md) and [375](SHARED-PUMP-GEOMETRY-375.md).
+See [380](../PARTIAL-ACTION-DATA-380.md) and [375](../SHARED-PUMP-GEOMETRY-375.md).
 
 # Offline379: shared action pipeline across 39 weapon models
 
@@ -456,14 +456,14 @@ geometry/contact code. It produces427 action records from93 content jobs across
 explicit decoder failures; absent roles are separately recorded. Existing reload
 outputs are byte-identical. All228 relevant Python tests and both246-suite builds
 pass. Normal player375 remains unchanged and is the next headset candidate.
-See [379](AUTHORED-ACTION-PIPELINE-379.md). No new native admission is claimed.
+See [379](../AUTHORED-ACTION-PIPELINE-379.md). No new native admission is claimed.
 
 # Offline378: shared animation source lookup
 
 The extractor now follows verified shared archives for clips absent from a weapon
 bundle. All18 prior mechanism records are preserved and eight SPAS configuration
 records are added. All219 relevant Python checks and both246-suite builds pass;
-native player375 is unchanged. See [378](SHARED-ANIMATION-SOURCES-378.md).
+native player375 is unchanged. See [378](../SHARED-ANIMATION-SOURCES-378.md).
 No new native weapon admission is claimed.
 
 # Offline377: recovered animation data across four weapon families
@@ -472,7 +472,7 @@ The installed loader proved an unsupported wrapper word was a record count.
 The corrected reader recovers10 clips across TOZ, NeoStead,870 and MP412 while
 preserving415 previously readable contents. Shared tools process18 exact
 configuration records in four content jobs; no new native operation is enabled.
-All214 relevant Python tests and both246-suite builds pass. See [377](ANIMATION-WRAPPER-377.md).
+All214 relevant Python tests and both246-suite builds pass. See [377](../ANIMATION-WRAPPER-377.md).
 
 Normal player375 remains the next headset candidate and its files are unchanged.
 Its combined game checks cover rifle reloads, holsters, SPAS pump/shell and
@@ -485,7 +485,7 @@ The shared tooling now measures linear moving parts directly from exact authored
 clips. It identifies separate 870 fore-end/bolt geometry and the NeoStead's
 opposite-direction stroke, while retaining unknown native boundaries explicitly.
 All144 authored tests and both246-suite builds pass. No new weapon is enabled
-solely from this asset evidence. See [376](LINEAR-MECHANISM-DATA-376.md).
+solely from this asset evidence. See [376](../LINEAR-MECHANISM-DATA-376.md).
 
 Normal375 remains the headset candidate with combined game/recovery evidence;
 its staged files are unchanged. Human pump feel and controller alignment remain
@@ -499,7 +499,7 @@ fixed-assembly data instead of assuming SPAS throughout. Both full builds pass
 SPAS pump/shell and subsequent fire; the second also recovers tracking loss
 while holding the pump. No additional native pump weapon is admitted.
 
-See [375's evidence and limits](SHARED-PUMP-GEOMETRY-375.md), including incomplete
+See [375's evidence and limits](../SHARED-PUMP-GEOMETRY-375.md), including incomplete
 client shot-transition capture, a stock loading exit and pending human feel.
 Normal375 is the next local headset candidate;374 and369 remain preserved.
 
@@ -509,7 +509,7 @@ Ten measured contact variants join the existing59 through the same binding and
 grip path. A support-only diagnostic exposed and fixed its dependency on ammo
 geometry. Fresh MG3 and TOZ game runs each completed sustained grip/release and
 240 stereo pairs without ammo changes or renderer/packing failures. Both full
-builds pass246 suites. See [374's evidence and limits](SUPPORT-PIPELINE-374.md).
+builds pass246 suites. See [374's evidence and limits](../SUPPORT-PIPELINE-374.md).
 
 The next normal headset candidate is374;369 remains preserved. This is69 support
 contact variants, not69 accepted manual reloads. Existing combined reload/pump,
@@ -524,7 +524,7 @@ support candidates across M416, M249, MG3, Saiga and TOZ through one shared path
 They remain unselected; existing contacts and native behavior are unchanged.
 The133 authored-reference Python checks pass. Both full builds pass246 suites;
 the generated candidate header also compiles on both architectures.
-See [the method, evidence and limits](AUTHORED-REFERENCE-372.md).
+See [the method, evidence and limits](../AUTHORED-REFERENCE-372.md).
 
 The next headset stage is still369. No new native gameplay or headset acceptance
 is claimed by the offline audit. Local369's results and remaining gaps follow.
@@ -554,8 +554,8 @@ passing depth observation does not explain367's earlier all-depth rejection.
 Intermittent depth/startup failures and human SCAR/SPAS feel remain open. Existing
 357/358 reload/pump evidence is retained at its original scope; this work adds no
 weapon enrollment, knife damage, belt-fed acceptance or whole-campaign claim.
-See [369 implementation and evidence](GRAPHICS-BOOTSTRAP-369.md) and the
-[coverage index](WEAPON-COVERAGE-CURRENT.md). No GitHub upload or headset test.
+See [369 implementation and evidence](../GRAPHICS-BOOTSTRAP-369.md) and the
+[coverage index](../WEAPON-COVERAGE-CURRENT.md). No GitHub upload or headset test.
 
 # Local367: coherent body display; startup/restart investigation continues
 
@@ -563,11 +563,11 @@ Both full367 builds pass245 suites. Selected-holster, carried-equipment and
 stowed-ammunition rendering now use a coherent input publication while retaining
 native identity, hide/custody, expiry and lifecycle checks. Actual-game display
 checks are pending. Normal363 already verified matching chest placement through
-draw, but had two omissions in92 stationary pairs. See [367](BODY-DISPLAY-367.md)
-and [363](STOWED-AMMO-363.md).
+draw, but had two omissions in92 stationary pairs. See [367](../BODY-DISPLAY-367.md)
+and [363](../STOWED-AMMO-363.md).
 
 Private364 graphics observations, stock365 load/restart, and corrected-controller
-366 VR-menu restart are documented in [the comparison](GRAPHICS-AND-MENU-366.md).
+366 VR-menu restart are documented in [the comparison](../GRAPHICS-AND-MENU-366.md).
 366 reached the replacement level and menu with zero observed exceptions, but
 full-disk capture failure makes its evidence partial. The intermittent null
 graphics-worker crash remains unresolved. Private diagnostic source is restored;
@@ -584,8 +584,8 @@ unverified. Neither the neutral empty-hands capture nor the earlier SPAS draw
 was counted as SCAR visual acceptance.
 
 361 adds a reusable receiver-only contact/approach/grab input and packet recording;
-native gameplay dependency digest remains identical to359. The next local player candidate is361, with357 preserved and materials optional. See [inspection, startup comparison and evidence361](BODY-INSPECTION-361.md)
-and the [consolidated weapon coverage index](WEAPON-COVERAGE-CURRENT.md).
+native gameplay dependency digest remains identical to359. The next local player candidate is361, with357 preserved and materials optional. See [inspection, startup comparison and evidence361](../BODY-INSPECTION-361.md)
+and the [consolidated weapon coverage index](../WEAPON-COVERAGE-CURRENT.md).
 Both full361 builds pass245 suites. Its normal receiver also passes the actual
 game capture with884 recorded inputs, one intended grab,240 pairs and no render
 failure. Binaries/source and optional-preview launcher are saved in the local
@@ -613,7 +613,7 @@ AMD-worker call with the prior relative stack site. The Continue helper had run,
 so do not label them unmodified baselines or assert a driver defect. Dumps are
 saved, no third launch was attempted, and no game/mod process remains. The new
 passive material capture is untested. Original settings/manifest remain unchanged.
-See [material implementation, actual tests and remaining work](MATERIAL-PIPELINE-359.md).
+See [material implementation, actual tests and remaining work](../MATERIAL-PIPELINE-359.md).
 Next work: fresh player357 headset acceptance, startup-crash isolation, then
 native material color-space/pass evidence and remaining campaign/mechanic gaps.
 
@@ -623,7 +623,7 @@ Both full normal builds pass245 suites. The shared authored-hand path places
 adapter-supplied finger transforms at the resolved mechanism wrist. BC2 supplies
 its SPAS fore-end shape from verified installed animation endpoints. This replaces
 the inappropriate small-mechanism pinch while retaining the working pump contact,
-rail and persistent gameplay ownership. See [357 evidence](AUTHORED-PUMP-HAND-357.md).
+rail and persistent gameplay ownership. See [357 evidence](../AUTHORED-PUMP-HAND-357.md).
 
 Private358 starts two-handed before firing and completes three rifle-magazine
 cycles, shoulder swaps, manual pump, shell insertion, immediate support return
@@ -655,7 +655,7 @@ the complete actual-game rifle/holster/pump/shell sequence and gives usable view
 of the receiver, folded stock and locking ring. They stay attached in the sampled
 before/during/after frames; controller feel and all-frame visual acceptance still
 require a headset. Support returns111ms after shell completion. The inspection
-input option is explicitly disabled in normal builds. [354 evidence](VISUAL-INSPECTION-354.md).
+input option is explicitly disabled in normal builds. [354 evidence](../VISUAL-INSPECTION-354.md).
 
 The reusable material reader resolves75/77 exact catalog material pairs using
 MP001's shader database; a bounded texture reader decodes seven local textures.
@@ -679,7 +679,7 @@ agree across the server and both clients. The shared magazine adapter now preser
 a still-held grab after a proven pre-dispatch expired rejection, using a new
 request and fresh evidence. Regression coverage includes all18 enrolled magazine
 profiles. A separate correction retains deliberate shoulder contact through a
-short visibility-receipt gap. See [353 evidence and limits](DEPTH-AND-ADMISSION-353.md).
+short visibility-receipt gap. See [353 evidence and limits](../DEPTH-AND-ADMISSION-353.md).
 
 IPC version6 carries both eyes' world and first-person depth alongside their
 exact color pair. Producer/consumer GPU fences cover every added copy. The host
@@ -707,7 +707,7 @@ Both full normal builds pass244 suites, and the explicit software compositor
 passes96 D24/D32 sample-coverage cases plus four color formats on x86 and x64.
 Normal gameplay remains342;350 adds a reusable host rendering component that is
 not yet called by the normal body compositor. It does not claim to fix the gray
-magazine in the headset. See [depth sources, GPU evidence and remaining wiring](DEPTH-PASSES-350.md).
+magazine in the headset. See [depth sources, GPU evidence and remaining wiring](../DEPTH-PASSES-350.md).
 
 Private348 captured world and first-person depth separately in BOTH eyes with
 the original8× MSAA setting.349's GPU composition agrees with a CPU reference
@@ -733,7 +733,7 @@ receipts agree; shell support returns in152.827ms.342 preserves a physically hel
 shell through deferred native admission under fresh ownership, without granting
 ammo or native authority. Release/tracking/identity loss still cancels.339's SCAR
 authored axes and fixed SPAS stock/ring assembly are included. Human visual
-acceptance remains pending. See [342 evidence](CUSTODY-AND-DEPTH-342.md).
+acceptance remains pending. See [342 evidence](../CUSTODY-AND-DEPTH-342.md).
 
 Player stage `bc2vr-recovery/headset342-20261011`; source checkpoint
 `bc2vr-recovery/checkpoint342-local`; normal binaries
@@ -744,7 +744,7 @@ or retained native hook remained after the run.
 
 The fork's asset/settings findings partly verify, but its package mounting recipe
 crashes this saved SP03 campaign before VR injection. Exact original manifest
-restored. No REST service enabled. See [loading audit](FORK-LOADING-AUDIT-340.md).
+restored. No REST service enabled. See [loading audit](../FORK-LOADING-AUDIT-340.md).
 Gray body magazines still lack textures and first-person depth occlusion. Paired
 world-depth capture is insufficient;342 identifies excluded geometry targets.
 Keep investigation isolated from the accepted gameplay checkpoint. Intermittent
@@ -765,7 +765,7 @@ magazine presentation fallbacks are zero; human visual acceptance is pending.
 
 The gray magazine is normal asset size; host body props still lack native scene
 occlusion and textures. Do not call that report fixed or shrink the mesh to hide
-it. See [339 evidence and limits](VISUAL-ALIGNMENT-339.md). Normal binaries are
+it. See [339 evidence and limits](../VISUAL-ALIGNMENT-339.md). Normal binaries are
 frozen at `bc2vr-recovery/normal339-player-checkpoint`; raw x86 build output
 contains the subsequent input diagnostic and must not be staged for players.
 Player stage: `bc2vr-recovery/headset339-20261011`; source checkpoint:
@@ -781,7 +781,7 @@ The user reports more reliable functionality and working SCAR support, but a
 stock pump animation before the manual stroke, a wrong right-hand angle and a
 magazine appearing in front of them. The run ended in a graphics-stack crash;
 final native logs were lost, periodic telemetry survived. See
-[338 changes, tests and limits](PUMP-PRESENTATION-338.md).
+[338 changes, tests and limits](../PUMP-PRESENTATION-338.md).
 
 338 keeps the measured fore-end closed outside an active manual stroke and adds
 periodic presentation counters. Both244-suite builds pass, followed by one real
@@ -797,7 +797,7 @@ input diagnostic; normal338 and the staged headset package have scripted input O
 The user requested a checkpoint for headset testing. Production code is unchanged
 from333. Rechecked staged files/source pins, restarted BC2 on the left monitor,
 loaded campaign through the native helper, and prepared SCAR/SPAS without desktop
-input. See [the short acceptance checklist](HEADSET-CHECKPOINT-337.md) and the
+input. See [the short acceptance checklist](../HEADSET-CHECKPOINT-337.md) and the
 local337 readiness manifest for process identity, ammunition and hook cleanup.
 No headset session has been launched or accepted by this checkpoint. Private336
 knife experiments remain separate. Next action is to attach the pinned player
@@ -811,11 +811,11 @@ attempt failed client-effects coverage and is preserved as failed. Exact native
 client snapshot copies explain why scheduling needs prediction-aware integration.
 Rifle/ammo restore and all hook/code cleanup pass. Player chest custody/rendering,
 hit/damage and production transaction integration remain open. See
-[336 timing evidence](KNIFE-TIMING-336.md).
+[336 timing evidence](../KNIFE-TIMING-336.md).
 
 A separate fresh game crashed before VR injection after the Continue helper;
 one monitored retry reached campaign without exceptions. No module attribution
-is available for that crash. See [334 evidence](STARTUP-CRASH-334.md). Normal333
+is available for that crash. See [334 evidence](../STARTUP-CRASH-334.md). Normal333
 build/package pins remain unchanged. No new headset acceptance or publication.
 
 # Local333: menu input ownership and normal-build scene recovery
@@ -828,7 +828,7 @@ One normal-build emulated checkpoint restart passes rendered pointer interaction
 replacement-menu open/capture/close and240 stereo pairs (196 after recovery),
 with zero exceptions and exact native view cleanup. Retirement branches are
 deterministic-tested; neither fired in that native run.326's intermittent crash
-remains unresolved. See [333 implementation and scope](MENU-LIFETIME-333.md).
+remains unresolved. See [333 implementation and scope](../MENU-LIFETIME-333.md).
 
 # Private330: knife direction proof; player candidate remains329
 
@@ -837,7 +837,7 @@ both native client/server melee composition outputs. The independent audit
 passes numerical checks, unchanged input matrices, exact two-cycle observations,
 rifle restoration and native-hook cleanup. No player feature was enabled.
 Downstream hit/damage, chest integration and the measured464–507ms native delay
-remain open. See [330 proof and limits](KNIFE-AIM-330.md).322's extra recovery
+remain open. See [330 proof and limits](../KNIFE-AIM-330.md).322's extra recovery
 transition and326's intermittent restart crash remain unresolved.
 
 # Local329: bounded menu-press retention during contention
@@ -848,7 +848,7 @@ It emits no event and renews no deadline. Expiry/loss still releases and rearms.
 Focused regression and both244-suite builds pass. Normal329 native menu stress
 check passes35/125ms contention, balanced releases,240 stereo pairs and clean
 detach. Prior327/328 restart passes and the unresolved326 crash retain their scope.
-See [329 menu behavior](MENU-CONTENTION-329.md).
+See [329 menu behavior](../MENU-CONTENTION-329.md).
 
 # Local327: menu fix and two different emulated restart sequences
 
@@ -857,7 +857,7 @@ with unfinished pump debt, then rifle magazine return and a fresh pump/shell cyc
 Each consumes240 stereo pairs, disables its hooks and leaves BC2 alive. The328
 retirement selects the new shotgun first: rifle-first native retirement is still
 unverified.326 intermittent graphics crash is not fixed by these passes.
-See [327/328 evidence and headset checklist](RESTART-EMULATION-327.md).
+See [327/328 evidence and headset checklist](../RESTART-EMULATION-327.md).
 
 # Local326: tracked menu release; campaign restart crash remains open
 
@@ -865,7 +865,7 @@ Normal pointer release positions the fresh VR cursor before button-up; lost-inpu
 cleanup does not reuse stale coordinates. Both full builds pass244 suites. A real
 game emulated pointer restart reached the transition and crashed at the same AMD
 command-worker fault site as265, before scene recovery. Root cause remains unknown.
-See [326 evidence](MENU-RESTART-326.md).326 and318 are preserved; no new headset,
+See [326 evidence](../MENU-RESTART-326.md).326 and318 are preserved; no new headset,
 sustained campaign or whole-roster acceptance. Latest combined equipment pass is311.
 
 # Local318: shared melee groundwork; player behavior unchanged from312
@@ -1288,8 +1288,8 @@ Seventeen compiled magazine prerequisites are not seventeen accepted weapons.
 Evidence: `pipeline-runtime-20261005/root-monitor/m95-empty293-01/concurrent-timing-review.json`.
 Trace: `8271f6b4b477e511b139f603d59aa97bafb24dc468205a80b8ba20adb9a196c3`.
 Source: `3e317aa671ebd5c596f33eeb28291651705d0592f8598080e063901d5f7a6071`.
-See [final-shot prediction](EMPTY-PREDICTION-293.md) and
-[last-round bolt/fallback ownership](LAST-ROUND-BOLT-291.md).
+See [final-shot prediction](../EMPTY-PREDICTION-293.md) and
+[last-round bolt/fallback ownership](../LAST-ROUND-BOLT-291.md).
 
 # Local290: combined empty-tube, pump and rifle sequence passed
 
@@ -1321,8 +1321,8 @@ magazine prerequisites do not mean seventeen accepted weapons.
 Evidence: `pipeline-runtime-20261005/root-monitor/resource-empty290-01/empty-tube-receipt-review.json`.
 Source: `fb11a03db956d779a22dc1b50f557ab49cc4ccb2ecf48f5b25dad2cff66d1bc7`.
 Trace: `4661e1a2b9a5ebb9ede4ff293bc085b08afbccbe75d411aa9b45b123015f8277`.
-See [prediction chain](PREDICTION-CHAIN-290.md) and
-[controller custody](CONTROLLER-CUSTODY-289.md).
+See [prediction chain](../PREDICTION-CHAIN-290.md) and
+[controller custody](../CONTROLLER-CUSTODY-289.md).
 
 # Historical287 work: empty pump completion and grip continuity
 
@@ -1336,8 +1336,8 @@ native-read gap.287 permits fresh recorded controller evidence to renew only
 the existing same-debt grasp. Both focused architectures pass eight suites;
 the287 combined native run and full normal builds are pending.
 
-See [completion reads](NATIVE-COMPLETION-DRAIN-286.md) and
-[physical custody](PUMP-CUSTODY-287.md). No headset session is active. Continue
+See [completion reads](../NATIVE-COMPLETION-DRAIN-286.md) and
+[physical custody](../PUMP-CUSTODY-287.md). No headset session is active. Continue
 without desktop input and preserve every failed trace. Native sequence success
 does not establish fleet, headset or sustained campaign acceptance. No GitHub
 publication.
@@ -1350,7 +1350,7 @@ entered inside the final native Update;283 corrects the Step dispatch bypass.
 The283 recheck instead stopped on a brief missing held lease during stroke3;
 284 retains only the same existing grasp under its original deadline. Both have
 focused regressions; native acceptance and normal284 builds are pending.
-See [empty dispatch](EMPTY-PUMP-283.md) and [grasp gap](PUMP-LEASE-GAP-284.md).
+See [empty dispatch](../EMPTY-PUMP-283.md) and [grasp gap](../PUMP-LEASE-GAP-284.md).
 
 No headset session is active. Keep testing without desktop input while the
 user sleeps. Preserve failed native traces. Do not stage this as playable or
@@ -1377,7 +1377,7 @@ restart followed by XM8/SPAS use remains the preceding campaign recovery evidenc
 it was not redundantly rerun for280. Last-round M95 behavior, native pistol and
 belt-fed reloading, wider weapon enrollment, sustained campaign/death recovery and
 headset visual acceptance remain incomplete. No GitHub publication.
-See [280 evidence](CONCURRENT-BOLT-280.md).
+See [280 evidence](../CONCURRENT-BOLT-280.md).
 
 # Local279: native checkpoint, menu and reload recovery pass
 
@@ -1400,7 +1400,7 @@ death-recovery proof, headset approval or whole-roster acceptance. Seventeen
 exact magazine prerequisites are enabled; pistols, belt-fed native reloading,
 wider enrollment and last-round bolt handling remain incomplete. M95 has a
 measured roughly2.3-second post-stroke native wait. No GitHub publication.
-See [279 evidence and limits](DIAGNOSTIC-CONTINUITY-279.md).
+See [279 evidence and limits](../DIAGNOSTIC-CONTINUITY-279.md).
 
 # Local278: combined reload/pump test passes through an input pause
 
@@ -1424,7 +1424,7 @@ render target. It did not complete reinsertion; that full check remains failed.
 The renderer missed the target deadline by 3.25 ms, and the diagnostic then
 neutralized input. Next: retain the visual failure while continuing independent
 mechanical checks. No headset, full campaign or whole-roster acceptance claimed.
-No new weapons or GitHub publication. See [278 evidence](INPUT-EQUIPMENT-LIFETIME-278.md).
+No new weapons or GitHub publication. See [278 evidence](../INPUT-EQUIPMENT-LIFETIME-278.md).
 
 # Local277: shared timestamp correction; actual M95 cycles pass
 
@@ -1441,7 +1441,7 @@ bounded campaign recovery check, not a campaign playthrough or headset approval.
 The M95 still waits about2.3seconds for native completion after its physical
 stroke. Native input pauses still share an equipment-generation counter; that
 earlier failure is the next target. No new weapon enrollment or GitHub update.
-See [277 evidence and limits](OWNER-TIMING-277.md).
+See [277 evidence and limits](../OWNER-TIMING-277.md).
 
 Normal player binaries and symbols: `bc2vr-recovery/normal277-player-checkpoint/`.
 Source checkpoint: `bc2vr-recovery/checkpoint277-local/checkpoint.json`.
@@ -1463,7 +1463,7 @@ The native menu opened, accepted pointer input, closed and resumed stereo world
 rendering in a separate finite check. Headset laser visibility, animation and
 hand placement remain unverified. Earlier intermittent reload/input-epoch
 failures and startup exits remain open. No new weapon enrollment or publication.
-See [276 evidence and limits](TRACKING-RECOVERY-276.md).
+See [276 evidence and limits](../TRACKING-RECOVERY-276.md).
 
 Normal player binaries and symbols: `bc2vr-recovery/normal276-player-checkpoint/`.
 Source checkpoint: `bc2vr-recovery/checkpoint276-local/checkpoint.json`.
@@ -1485,7 +1485,7 @@ Both full builds pass all243 suites. Restoring the old rail limits fails the new
 measured-motion and expanded controller regressions. The actual F2000/SPAS test
 now completes three magazine cycles, holsters, an interrupted pump with22cm
 rearward/8cm lateral controller motion, a shell, support return in130ms, and
-rifle firing. See [275 evidence and limits](PUMP-HEADSET-275.md).
+rifle firing. See [275 evidence and limits](../PUMP-HEADSET-275.md).
 
 This is a development checkpoint, not headset acceptance. Actual-runtime
 tracking-origin rebase and stock-animation/hand-placement checks remain. Earlier
@@ -1509,7 +1509,7 @@ reload admission and first-per-cause magazine cancellation records. Actual-game
 emulation verifies two rifle magazine cycles, interrupted pump recovery, one
 shell and prompt support return, then fails on the final rifle warmup after a
 native input pause advances the equipment generation for the unchanged rifle.
-See [274 evidence and next work](CUSTODY-DIAGNOSTICS-274.md).
+See [274 evidence and next work](../CUSTODY-DIAGNOSTICS-274.md).
 
 This is a development checkpoint, not a headset-ready promotion. The earlier273
 failures remain unresolved;274 did not reproduce them. Headset272 is unchanged.
@@ -1525,7 +1525,7 @@ the saved agent payload without replacing later recovery/ownership fixes.
 Measured M9/MP443 removal, original return and replacement pass the shared-policy
 tests with simulated native receipts. This adds geometry support, not native
 pistol enrollment or slide/chamber completion. The normal registry remains
-seventeen exact magazine prerequisites. See [273 integration](SAMPLED-MAGAZINES-273.md).
+seventeen exact magazine prerequisites. See [273 integration](../SAMPLED-MAGAZINES-273.md).
 
 Both full normal builds pass243 suites, and101 affected Python tests pass.
 Two native F2000/SPAS emulated runs failed: the first at an idle magazine-view
@@ -1676,7 +1676,7 @@ unchanged. No background agents or active native test remain after265 run06.
 
 # Previous265: checkpoint transition investigation
 
-Read [SCENE-RECOVERY-265.md](SCENE-RECOVERY-265.md). User requested continued
+Read [SCENE-RECOVERY-265.md](../SCENE-RECOVERY-265.md). User requested continued
 autonomous development/emulation without repeating passed checks. Root owns a
 single instrumented scene restart; one scoped agent builds a private native-menu
 IPC/capture helper. Shipping264 source/binaries remain unchanged. Current process
@@ -1690,13 +1690,13 @@ Current BC2 contains a detached resident264 probe; restart before reinjection.
 
 # Local checkpoint264: ready for headset acceptance
 
-Read [RECOVERY-264.md](RECOVERY-264.md). Three shared timing regressions are fixed.
+Read [RECOVERY-264.md](../RECOVERY-264.md). Three shared timing regressions are fixed.
 Fresh SCAR/SPAS and F2000/SPAS campaigns passed the same combined controller
 sequence using identical code: magazine return/replacement, natural interrupted
 pump, shell insertion, immediate support return, holster return and firing.
 Both normal player builds passed all240 suites; emulated drivers are disabled.
 The off-body draw recovery fix and measured SCAR support are included. Their
-headset feel remains unverified. Use [the checklist](CHECKPOINT-264-PLAYER.md).
+headset feel remains unverified. Use [the checklist](../CHECKPOINT-264-PLAYER.md).
 
 Private artifacts: `bc2vr-recovery/normal264-player-checkpoint`,
 `headset264-20261009`, `checkpoint264-local`. Restart current BC2 before player
@@ -1707,7 +1707,7 @@ by the user does not change checkpoint264 or authorize an unverified spawn call.
 
 # Previous263: record native magazine rejection
 
-Read [RECOVERY-263.md](RECOVERY-263.md). Full262 builds passed240 per architecture,
+Read [RECOVERY-263.md](../RECOVERY-263.md). Full262 builds passed240 per architecture,
 but the actual game run failed on the first SCAR full-magazine return before
 the pump/shell stage. Hand ownership remained intact; native service rejected
 request789 before dispatch. Scoped diagnostics retain its first exact reason.
@@ -1716,7 +1716,7 @@ headset-ready candidate exists. GitHub245 remains unchanged.
 
 # Previous262: tube prediction ordering
 
-Read [RECOVERY-262.md](RECOVERY-262.md). The261 full builds were intentionally
+Read [RECOVERY-262.md](../RECOVERY-262.md). The261 full builds were intentionally
 stopped after review found a server-first timing regression; no261 DLL was
 injected. The fix retains original context freshness while withdrawing the
 old client hold. Both update orders must pass before full builds and actual
@@ -1724,7 +1724,7 @@ combined testing. Root owns integration. No headset candidate is ready yet.
 
 # Previous261: exact tube prediction Restore
 
-Read [RECOVERY-261.md](RECOVERY-261.md). The full260 builds passed240 suites
+Read [RECOVERY-261.md](../RECOVERY-261.md). The full260 builds passed240 suites
 per architecture. Its actual combined run passed SCAR support, magazine work
 and interrupted natural pumping, then failed at shell completion because the
 tube policy rejected a verified client prediction Restore. Root owns runtime
@@ -1734,7 +1734,7 @@ game identity and exact state. Do not inject into a process with a retained prob
 
 # Previous260: final-shell support return
 
-Read [RECOVERY-260.md](RECOVERY-260.md). Source is pinned at
+Read [RECOVERY-260.md](../RECOVERY-260.md). Source is pinned at
 `0b534dd1e11027a32e75d15cea8da9a810c87b43d67f8856b194d9fb03f0e347`.
 The expanded259 actual run passed SCAR support and natural interrupted pumping,
 but FAILED later shell-support return. Two narrower regressions are fixed:
@@ -1744,13 +1744,13 @@ the earlier shell prediction Restore, so the new support return was not reached.
 
 # Checkpoint259: pump, support contact and empty-hand recovery
 
-See [RECOVERY-259.md](RECOVERY-259.md). Source is pinned at
+See [RECOVERY-259.md](../RECOVERY-259.md). Source is pinned at
 `6de675b233a78f651198f53606a23d87342bdde77bf6da74682a468633ff29e4`.
 Focused regressions and all240 suites pass on both architectures. The expanded
 actual run failed later shell support; see260. Root owns integration; scoped
 support and empty-hand/aim-continuity agents finished without overlapping work.
 
-# Latest headset258: failed pump and missing SCAR support
+# Historical headset258: failed pump and missing SCAR support
 
 The user reports SCAR magazine reload works, but its left support grip is absent.
 SPAS pump slides with incorrect hand placement, does not complete, and locks
@@ -1767,9 +1767,9 @@ phase diagnostics and tests with natural strokes instead of endpoint dwell.
 This was the failure state before259/260. Consult ACTIVE-WORK.json for current
 game identity and compiled candidate; the original258 process is no longer active.
 
-# Current local work: checkpoint258 player candidate
+# Historical local work: checkpoint258 player candidate
 
-[RECOVERY-258.md](RECOVERY-258.md) records the shared selection correction and
+[RECOVERY-258.md](../RECOVERY-258.md) records the shared selection correction and
 its failing-before/passing-after regression. Two fresh M95 runs completed two
 cycles each. The combined SCAR/SPAS actual-game run completed three magazine
 cycles, interrupted pump recovery, shell insertion, support return and holster
@@ -1786,7 +1786,7 @@ GitHub stays245; no automatic push. Current game identity is in ACTIVE-WORK.json
 
 # Recovery257 missing-contact diagnostic
 
-[RECOVERY-257.md](RECOVERY-257.md) adds observation-only renderer reach/expiry
+[RECOVERY-257.md](../RECOVERY-257.md) adds observation-only renderer reach/expiry
 counters to separate causes of the second-cycle contact loss. No lifetime or
 interaction behavior changed. Full builds pass240 suites each. Actual257-01
 completes both physical/native cycles and hand returns with correct5->3 ammo;
@@ -1796,7 +1796,7 @@ checkpoint256 remains the latest functional correction; see its evidence below.
 
 # Recovery256 native tail replay
 
-[RECOVERY-256.md](RECOVERY-256.md) implements the shared provisional-ready
+[RECOVERY-256.md](../RECOVERY-256.md) implements the shared provisional-ready
 withdrawal after an unchanged original client snapshot replays the native
 tail. The completed physical release, debt and deadline survive. The regression
 fails before the fix and passes afterward on both architectures, alongside the
@@ -1810,7 +1810,7 @@ identity and current results. GitHub remains245; no automatic push.
 
 # Recovery255 bolt contact publication gap
 
-[RECOVERY-255.md](RECOVERY-255.md) reproduces an absent render contact incorrectly
+[RECOVERY-255.md](../RECOVERY-255.md) reproduces an absent render contact incorrectly
 invalidating otherwise live bolt custody. The real player/adapter regression
 fails before the fix and passes afterwards on both architectures, including
 expiry and foreign-owner negatives. All240 full suites pass per architecture.
@@ -1825,7 +1825,7 @@ session or active agents; GitHub remains245 without an automatic update.
 
 Actual253 failed earlier than the second grip: a native client restored its
 pre-shot snapshot then replayed the same shot before server confirmation.
-[RECOVERY-254.md](RECOVERY-254.md) describes the narrow shared correction and
+[RECOVERY-254.md](../RECOVERY-254.md) describes the narrow shared correction and
 failing-before/passing-after regressions. Seven focused suites and all 240 full
 suites pass on both architectures. The first actual254 run aborted on a startup
 equipment-generation change before firing. The fresh retry reached the first
@@ -1838,15 +1838,15 @@ Checkpoint252 combined monitor passes are retained below. Its separate M95
 ordinary-input trial completed one cycle, then stalled at the second bolt grip
 after successful custody transfer. Native holds continued until the driver
 timed out; the final Owner cancellation is later, not an established onset.
-Read [RECOVERY-253.md](RECOVERY-253.md). The253 candidate adds bounded physical
+Read [RECOVERY-253.md](../RECOVERY-253.md). The253 candidate adds bounded physical
 transition diagnostics and extends the offline player test past the second
 exchange. It does not yet contain a production fix. Consult ACTIVE-WORK.json
 for build/run state and exact process identity; no headset session is active.
 
 # Recovery252 combined monitor checks passed
 
-Read [RECOVERY-252.md](RECOVERY-252.md) for the common native snapshot-transition
-fix and [RECOVERY-251.md](RECOVERY-251.md) for the last actual-game failure.
+Read [RECOVERY-252.md](../RECOVERY-252.md) for the common native snapshot-transition
+fix and [RECOVERY-251.md](../RECOVERY-251.md) for the last actual-game failure.
 Actual251 completed both initial rifle cycles, then rejected a valid conserved
 SPAS prediction restore before reaching the pump gesture or shell handoff. The
 same pre-hold transition was already handled for M95;252 applies the shared
@@ -1864,7 +1864,7 @@ no automatic push.
 
 # Receiving agent: checkpoint245 GitHub handoff
 
-Read [CHECKPOINT-245-HANDOFF.md](CHECKPOINT-245-HANDOFF.md) first. It includes public build commands, failed headset results, next work and links to separately saved unmerged agent payloads. Local evidence paths below are historical references, not downloadable repository files.
+Read [CHECKPOINT-245-HANDOFF.md](../CHECKPOINT-245-HANDOFF.md) first. It includes public build commands, failed headset results, next work and links to separately saved unmerged agent payloads. Local evidence paths below are historical references, not downloadable repository files.
 
 # Checkpoint245 FAILED headset acceptance
 
@@ -1900,7 +1900,7 @@ the checkpoint. Sampled rails/recovery/pistol work remains isolated.
 
 # Active244 player checkpoint
 
-Read [CHECKPOINT-244-PLAYER.md](CHECKPOINT-244-PLAYER.md) first. User requests
+Read [CHECKPOINT-244-PLAYER.md](../CHECKPOINT-244-PLAYER.md) first. User requests
 a headset check and checkpoint next; hold further feature integration. Both244
 ordinary diagnostic variants passed230 C++ suites per architecture; tooling874
 passed/1skip. M95 ordinary244 cleared startup then failed native Owner, before
@@ -1910,7 +1910,7 @@ current process identity and frozen artifact pointers.
 
 # Active243 integration — continue emulated and actual-game testing
 
-Read [CHECKPOINT-243-INTEGRATION.md](CHECKPOINT-243-INTEGRATION.md) first.
+Read [CHECKPOINT-243-INTEGRATION.md](../CHECKPOINT-243-INTEGRATION.md) first.
 Current source adds ordinary input-only M95 testing and first resource-failure
 retention. Full243 builds are running. Normal242 passed229 C++ suites per arch;
 the last frozen normal receipt remains240. M95 physical242 completed both native
@@ -1922,7 +1922,7 @@ Use ACTIVE-WORK.json for the current process identity, never these historical PI
 
 # Historical239 integration
 
-Read [CHECKPOINT-238-INTEGRATION.md](CHECKPOINT-238-INTEGRATION.md) for the latest
+Read [CHECKPOINT-238-INTEGRATION.md](../CHECKPOINT-238-INTEGRATION.md) for the latest
 native results and limits. The full normal238 build passed225 C++ suites on
 both architectures. Current239 includes shared support ownership processing-time
 and completed bolt placement fixes. Combined20 focused suites passed both
@@ -1963,7 +1963,7 @@ SP registry/body/identity payload pending.12MP profiles alreadymerged are notSP.
 Keep source236 immutable for frozenreceipt unless snapshot/binarysourcepins are
 preserved. No needretest unrelated234completedtrials. Continueuserlarge-test goal.
 
-# Current235 composition — full normal builds passed
+# Historical235 composition — full normal builds passed
 
 Both complete architectures passed221 C++ suites. Source digest:
 `2217a381a9fdb1c4c4565608af07f2ab10a7a4dbe5266423bc0396f5c884b9f1`.
@@ -1999,7 +1999,7 @@ Root alone owns game actions; three agents stage nonoverlapping isolated payload
 Continue through this checkpoint: user explicitly requests a large combined test,
 not a stop at the magazine classes. No headset requested until substantive bundle.
 
-# Latest234 actual result —eight manual pump strokes completed
+# Historical234 actual result —eight manual pump strokes completed
 
 Actual physical-pump234-01 completed eight shots, eight physical strokes, eight
 native acknowledgements and eight ordinary held-support returns. Read-only
@@ -2281,7 +2281,7 @@ are separate evidence; do not describe them as full normal224 verification.
 
 # Earlier checkpoint 222 — magazine seat publication boundary
 
-Read [222 reproduction and fix](RESOURCE-SEAT-HANDOFF-222.md). The actual BC2
+Read [222 reproduction and fix](../RESOURCE-SEAT-HANDOFF-222.md). The actual BC2
 resource consumer lost its attached magazine target before server admission
 and again during delayed completion. Exact submitted-seat presentation bridges
 those boundaries without completing ammunition early. Tests cover both enrolled
@@ -2301,7 +2301,7 @@ responsive with no active mod; no process controls or injection ran here.
 
 # Earlier checkpoint 221 — BC2 adapter connection
 
-Read [221 implementation and limits](RESOURCE-ADAPTERS-221.md). The private x86
+Read [221 implementation and limits](../RESOURCE-ADAPTERS-221.md). The private x86
 resource-hand candidate builds and passes 12 focused suites, including the same
 BC2 physical consumer with both XM8 and AEK profiles. Native Updates are mocked
 in those consumer tests. The exact private binary/source receipt is
@@ -2329,7 +2329,7 @@ the previously detached private DLL; a fresh process is needed before attach.
 
 # Earlier checkpoint 220 — resource inventory and hand/rail contract tested
 
-Read [220 implementation and limits](RESOURCE-HANDOFF-220.md). Both full builds
+Read [220 implementation and limits](../RESOURCE-HANDOFF-220.md). Both full builds
 pass **196 suites** with profile `checkpoint220b`, geometry 202 and private probes
 OFF. The normal frozen build is `normal220-resource-hands-20261008`; evidence is
 in private `recovery220-evidence.json`. The immutable headset212 stage and the
@@ -2372,7 +2372,7 @@ with simulated controller inputs before requesting another headset test.
 
 # Earlier October 8 checkpoint 219 — native inventory lifetime and completion verified
 
-Read [native ammunition evidence](NATIVE-AMMUNITION-216.md). Both ordinary
+Read [native ammunition evidence](../NATIVE-AMMUNITION-216.md). Both ordinary
 builds select profile 219, geometry 202, private ammunition probes OFF, and pass
 195 suites. The normal snapshot is `normal219-resource-20261008`; the immutable
 headset212 stage is unchanged. No player resource dispatch or headset fix is
@@ -2408,7 +2408,7 @@ still need live evidence. Underbarrels retain existing stock reload behavior.
 
 # Earlier October 8 checkpoint 217 — ledger-controlled native operation verified
 
-Read [the live-ledger section](NATIVE-AMMUNITION-216.md). The private module now
+Read [the live-ledger section](../NATIVE-AMMUNITION-216.md). The private module now
 queues resource commands before native dispatch and accepts completion from the
 actual server callback plus both client Updates. `root-monitor/rifle-ledger217-01`
 passes `native-resource-audit.json` with type 1 and live ledger required: two
@@ -2430,7 +2430,7 @@ not established. No other games, headset sessions or GitHub content were changed
 
 # Earlier October 8 checkpoint 216 — direct native ammunition and shared ledger
 
-Read [216 evidence and limits](NATIVE-AMMUNITION-216.md). Private native
+Read [216 evidence and limits](../NATIVE-AMMUNITION-216.md). Private native
 diagnostics now verify original-round remove/return, single-shell refill and
 XM8 magazine refill without stock reload animations. The corrected rifle run
 is `root-monitor/rifle-refill216-02`: 22/191 -> 0/191 -> 30/161, exactly two
@@ -2461,7 +2461,7 @@ There were no agents, headset tests or GitHub pushes in this continuation.
 
 # Earlier October 8 checkpoint 212 — native empty-ammo test and machine-code emulation
 
-Read [212 evidence and limits](RELOAD-EMULATION-212.md). The actual x86 reload
+Read [212 evidence and limits](../RELOAD-EMULATION-212.md). The actual x86 reload
 instructions reproduced an empty-ammo guard bypass on a 59.6 ms frame. Shared
 Step admission now uses the same bounded 100 ms delta policy as ordinary holds,
 preserving the original owner/context deadlines and explicit reload behavior.
@@ -2495,7 +2495,7 @@ do not publish its game bytes or claim additional weapon coverage.
 
 # Earlier October 8 checkpoint 211 — combined native sequence verified
 
-Read [the frame-hitch investigation and evidence](RELOAD-FRAME-HITCH-211.md).
+Read [the frame-hitch investigation and evidence](../RELOAD-FRAME-HITCH-211.md).
 The shared magazine and shell policies now tolerate bounded native frame hitches
 without renewing controller, context or ownership evidence. Three focused suites,
 all 190 C++ suites per architecture and software-D3D HUD readback pass. The native
@@ -2515,7 +2515,7 @@ HUD/support acceptance remain open. No agent is active; no GitHub push occurred.
 
 # Earlier monitor follow-up — 209 and 210
 
-Read [209 monitor evidence](MONITOR-PRESENTATION-209.md) first. The strict native
+Read [209 monitor evidence](../MONITOR-PRESENTATION-209.md) first. The strict native
 XM8 original-return/replacement sequence passed with conserved ammo and 240
 stereo pairs. A separate background SPAS holster run verified live paired HUD
 counts and reproduced eight missing chest props among 175 valid-counter frames.
@@ -2537,7 +2537,7 @@ routine launch. Do not change campaign movies, gameplay audio or BF2142 files.
 
 # Earlier October 8 headset follow-up — candidate checkpoint 208
 
-Read [208 investigation](RELOAD-FEEDBACK-208.md) first. Checkpoint 207 **ran in
+Read [208 investigation](../RELOAD-FEEDBACK-208.md) first. Checkpoint 207 **ran in
 the headset** and was not accepted: no ammo counter, chest flicker, unreliable
 AEK reload starts, grip handoff and full-magazine discard recovery remain in
 the user's report. The permitted mod stop finished cleanly with BC2 responsive.
@@ -2556,7 +2556,7 @@ not expanded. Historical entries below describe their original validation.
 
 # Historical checkpoint 207 preparation
 
-Read [207](RELOAD-PRESENTATION-207.md) first. Frozen 206d **did run in the headset**:
+Read [207](../RELOAD-PRESENTATION-207.md) first. Frozen 206d **did run in the headset**:
 much more stable per user, but magazine/chest flicker and post-insertion support
 delay remained. The permitted mod stop completed without closing BC2. Current
 source added ammo HUD telemetry, separate support-contact admission,
@@ -2567,7 +2567,7 @@ recorded in 208 above.
 
 # Fork handoff
 
-Local checkpoint [206](RELOAD-RECOVERY-206.md) fixes a reproduced shared hand
+Local checkpoint [206](../RELOAD-RECOVERY-206.md) fixes a reproduced shared hand
 admission failure with N-2/N-3 renderer geometry. Targeted hand and actual-policy
 reload tests pass. Its explicit native interruption driver retains consumers
 through tracking loss, retirement, shoulder changes and chest reload. One
@@ -2589,7 +2589,7 @@ push is authorized by this continuation. The user's later instruction to let
 root continue superseded the earlier reservation for launch-switch experiments.
 
 The current registry has two compiled magazine profiles, scoped XM8 and AEK971_sp.
-The wider prepared data is not enabled. Read [current weapon coverage](WEAPON-COVERAGE-CURRENT.md)
+The wider prepared data is not enabled. Read [current weapon coverage](../WEAPON-COVERAGE-CURRENT.md)
 before reporting gun counts. The offline batch tool now uses exact configuration
 and original component bindings. Its 89 focused Python tests pass, and the saved
 batch initially regenerated seven exact profiles with zero enabled production rows.
@@ -2599,7 +2599,7 @@ on both architectures. See the private `weapon-pipeline206-variant-extraction`
 manifest and consumer audit. This tooling work does not alter the frozen 206d
 native binaries or enable these profiles in the game.
 
-Local checkpoint [205](RELOAD-RECOVERY-205.md) extends the reload motion driver
+Local checkpoint [205](../RELOAD-RECOVERY-205.md) extends the reload motion driver
 to repeated episodes without resetting persistent consumers. Offline tests now
 cover 30 tracking/focus/input interruption cases followed by recovery, repeated
 reloads and rejection of old evidence. Native responses and renderer receipts
@@ -2610,7 +2610,7 @@ The x86 205 output is `build/x86-checkpoint205`, because the old DLL at
 `build/x86/BC2NativeProbe.dll` remained locked. Do not select the old path by
 habit. The new offline build receipt pins the separate output directory.
 
-Local development now adds [204](COMBINED-INVENTORY-RELOAD-204.md), a bounded
+Local development now adds [204](../COMBINED-INVENTORY-RELOAD-204.md), a bounded
 combined shoulder-switch/chest-reload controller sequence. All 186 suites pass
 on x86 and x64. The corrected live run passed its strict combined, reload and
 startup-pulse audits: 20/191 to 30/181 ammo, zero cancellations/fallbacks, 240 pairs
@@ -2619,7 +2619,7 @@ DLL still mapped. That historical PID is not authority to close any later game
 session; verify the current process before future tests. No GitHub push was
 made; the public repository remains the user's fork snapshot.
 
-The prior [checkpoint 203](RELOAD-TRANSITIONS-203.md) corrected a reproduced
+The prior [checkpoint 203](../RELOAD-TRANSITIONS-203.md) corrected a reproduced
 cross-profile magazine-retirement deadlock in the shared consumer.
 All 185 public C++ suites passed on each architecture, and the rebuilt module passed
 the existing strict native original-return/replacement sequence. Cross-profile
@@ -2628,14 +2628,14 @@ holster/switch/reload coverage without interrupting an active reload.
 The prior 203 receipt is retained for its exact historical source.
 
 This public source snapshot starts at checkpoint 202. Read [STATUS.md](STATUS.md)
-for current acceptance and [../BUILDING.md](../BUILDING.md) for ordinary and
+for current acceptance and [../BUILDING.md](../../BUILDING.md) for ordinary and
 checkpoint builds. The latest human feedback is the mixed 206d result recorded above.
 
 The shared magazine startup pulse now has immutable original input timing and
 requires genuinely fresh native contexts before Holding. A bounded diagnostic
 completion journal retains exact End data when the record gate is contended.
 The actual original-magazine return then replacement sequence passed its strict
-native audit. See [SIMULATED-PLAYER-202.md](SIMULATED-PLAYER-202.md).
+native audit. See [SIMULATED-PLAYER-202.md](../SIMULATED-PLAYER-202.md).
 
 Do not revive old absolute launch paths or treat historical research notes as
 current release instructions. Raw traces, media, game content and local config

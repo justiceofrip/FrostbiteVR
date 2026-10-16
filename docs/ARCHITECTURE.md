@@ -326,7 +326,7 @@ unchanged. Complete temporal-history and render-subsystem isolation remains
 unverified, and production capabilities stay zero pending integration gates.
 The September 27 combined native/OpenXR retest received positive user feedback
 for the image, with a direction-dependent black-dot artifact still open. See the
-latest HANDOFF checkpoint for the exact scope and remaining integration gates.
+history/HANDOFF.md entries for the exact scope and remaining integration gates.
 
 ## Contract versus engine implementation
 
