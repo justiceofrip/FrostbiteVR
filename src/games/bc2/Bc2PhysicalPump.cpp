@@ -1,5 +1,6 @@
 #include "Bc2PhysicalPump.h"
 #include "Bc2SightContact.h"
+#include "Bc2PhysicalCycleDispatch.h"
 #include <ostream>
 namespace fvr::bc2 {
 using namespace interaction;
@@ -124,6 +125,9 @@ Bc2PhysicalPump::Bc2PhysicalPump(std::shared_ptr<const Bc2PumpCalibration> calib
     calibration_(std::move(calibration)),api_(api){}
 void Bc2PhysicalPump::Cancel(const HandInteractionSample& source,HandInteraction& hands)noexcept {
     ++cancels_;supportReturn_.reset();supportCapture_.reset();
+    if(deferredControl_&&pending_&&physical_.RejectUndispatched(*pending_)){pending_.reset();deferredControl_.reset();}
+    if(deferredRecovery_&&recoveryPending_&&recoveryPhysical_.RejectUndispatched(*recoveryPending_)){
+        recoveryPending_.reset();deferredRecovery_.reset();}
     if(api_.cancel)api_.cancel(api_.context);
     // Physical loss cannot settle an outstanding native transaction.
     blocks_=blocks_||bool(cycle_)||bool(pending_)||bool(acknowledged_)||bool(recoveryCycle_)||bool(recoveryPending_);
@@ -136,7 +140,7 @@ void Bc2PhysicalPump::DropPhysical(const HandInteractionSample& source,HandInter
 Bc2PhysicalPumpResult Bc2PhysicalPump::Tick(const Bc2PhysicalPumpSample& s,HandInteraction& hands,std::uint64_t& intent)noexcept {
     ++ticks_;
     Bc2PhysicalPumpResult out;
-    if(!calibration_||!PumpCalibrationValid(*calibration_)||!api_.control||!api_.view||!api_.ack||!api_.cancel)return out;
+    if(!calibration_||!PumpCalibrationValid(*calibration_)||(!api_.control&&!api_.controlResult)||!api_.view||!api_.ack||!api_.cancel)return out;
     // A native outcome survives interrupted presentation, but permission to
     // continue a held hand does not. Observe actual input throughout the tail.
     supportRaw_=s.raw;
@@ -157,7 +161,7 @@ Bc2PhysicalPumpResult Bc2PhysicalPump::Tick(const Bc2PhysicalPumpSample& s,HandI
     if(view&&view->ready){
         if(!acknowledged_&&physical_.ReconcileReady(*view->ready,s.input.nowNs))acknowledged_=view->ready;
         if(acknowledged_&&api_.ack(api_.context,*acknowledged_)){++acks_;out.settled=acknowledged_;
-            acknowledged_.reset();pending_.reset();cycle_.reset();}
+            acknowledged_.reset();pending_.reset();deferredControl_.reset();cycle_.reset();}
         view=api_.view(api_.context,s.input.nowNs);
     }
     if(api_.recovery.Complete()){
@@ -166,7 +170,7 @@ Bc2PhysicalPumpResult Bc2PhysicalPump::Tick(const Bc2PhysicalPumpSample& s,HandI
             if(!recoveryAcknowledged_&&recoveryPhysical_.ReconcileReady(*recovered->ready,s.input.nowNs))recoveryAcknowledged_=recovered->ready;
             if(recoveryAcknowledged_&&api_.recovery.ack(api_.context,*recoveryAcknowledged_)){
                 ++acks_;out.recovered=recoveryAcknowledged_;
-                recoveryAcknowledged_.reset();recoveryPending_.reset();recoveryCycle_.reset();cycle_.reset();
+                recoveryAcknowledged_.reset();recoveryPending_.reset();deferredRecovery_.reset();recoveryCycle_.reset();cycle_.reset();
             }
         }
     }
@@ -177,6 +181,31 @@ Bc2PhysicalPumpResult Bc2PhysicalPump::Tick(const Bc2PhysicalPumpSample& s,HandI
         s.input.focused&&s.input.tracked[0]&&s.input.tracked[1]&&!s.input.released[1]&&
         weapon_cycle_detail::Window(s.input.observedNs,s.input.deadlineNs,s.input.nowNs);
     if(!safe){blocks_=view?view->blocksFire:(blocks_||bool(cycle_)||bool(pending_));Record(s,1,{});Cancel(s.input,hands);out.blocksFire=blocks_;return out;}
+    if(deferredControl_&&pending_){
+        if(!UndispatchedCycleSourceCurrent(*deferredControl_,s.nativeOwner,s.item,s.input)){
+            physical_.RejectUndispatched(*pending_);pending_.reset();deferredControl_.reset();supportReturn_.reset();
+        }else{
+            auto exact=*deferredControl_;exact.input.nowNs=s.input.nowNs;
+            const auto submitted=DispatchCycleControl(api_,exact);
+            if((submitted==Bc2NativeCycleSubmitResult::RecoveryRequired||submitted==Bc2NativeCycleSubmitResult::NotDispatched)&&physical_.RejectUndispatched(*pending_)){
+                pending_.reset();supportReturn_.reset();supportCapture_.reset();}
+            if(submitted!=Bc2NativeCycleSubmitResult::Busy)deferredControl_.reset();
+            out.tracking={true,s.nativeOwner,s.input,calibration_};out.blocksFire=blocks_=true;return out;
+        }
+    }
+    if(deferredRecovery_&&recoveryPending_){
+        if(!UndispatchedCycleSourceCurrent(*deferredRecovery_,s.nativeOwner,s.item,s.input)||
+           !weapon_cycle_detail::Window(recoveryPending_->observedNs,recoveryPending_->deadlineNs,s.input.nowNs)){
+            recoveryPhysical_.RejectUndispatched(*recoveryPending_);recoveryPending_.reset();deferredRecovery_.reset();supportReturn_.reset();
+        }else{
+            auto original=deferredRecovery_->input;original.nowNs=s.input.nowNs;
+            const auto submitted=DispatchCycleRecovery(api_.recovery,api_.context,*recoveryPending_,original);
+            if(submitted==Bc2NativeCycleSubmitResult::NotDispatched&&recoveryPhysical_.RejectUndispatched(*recoveryPending_)){
+                recoveryPending_.reset();supportReturn_.reset();supportCapture_.reset();}
+            if(submitted!=Bc2NativeCycleSubmitResult::Busy)deferredRecovery_.reset();
+            out.tracking={true,s.nativeOwner,s.input,calibration_};out.blocksFire=blocks_=true;return out;
+        }
+    }
     if(pending_&&view&&view->phase==Bc2NativeCyclePhase::Releasing){
         // Submission ended gesture authority. Native completion is independent
         // of later hand generations or tracking loss; poll its exact outcome.
@@ -184,7 +213,16 @@ Bc2PhysicalPumpResult Bc2PhysicalPump::Tick(const Bc2PhysicalPumpSample& s,HandI
         out.tracking={true,s.nativeOwner,s.input,calibration_};return out;
     }
     Bc2NativeCycleControl control{s.nativeOwner,s.input,s.item,{calibration_->profileId,s.item.generation},{},true};
-    if(!api_.control(api_.context,control)){
+    const auto controlled=DispatchCycleControl(api_,control);
+    if(controlled==Bc2NativeCycleSubmitResult::Busy){
+        // Current controller proof retains an existing grasp, but a skipped
+        // native admission cannot advance the recognizer or publish a target.
+        out.tracking={true,s.nativeOwner,s.input,calibration_};out.blocksFire=blocks_=true;
+        out.ownsHand=s.grip&&!s.input.released[0]&&
+            (physical_.RetainGrasp(s.input,s.input,gun->token,hands)||recoveryPhysical_.RetainGrasp(s.input,s.input,gun->token,hands));
+        Record(s,6,{});return out;
+    }
+    if(controlled!=Bc2NativeCycleSubmitResult::Accepted){
         ++controlRejected_;Record(s,2,{});DropPhysical(s.input,hands);blocks_=true;out.blocksFire=true;return out;
     }
     out.tracking={true,s.nativeOwner,s.input,calibration_};
@@ -270,6 +308,7 @@ Bc2PhysicalPumpResult Bc2PhysicalPump::Tick(const Bc2PhysicalPumpSample& s,HandI
     const auto left=hands.Current(InteractionHand::Left);
     if(left&&left->token.kind==HandClaimKind::WeaponSupport)sample.support=left->token;
     const auto result=physical_.Update(sample,hands);out.ownsHand=result.ownsMechanism;
+    out.audio=PhysicalCycleAudio(sample.lease,result,profile_,s.input);
     Record(s,0,result.cycle);
     out.tracking.profile=profile_;out.tracking.held=view->held;out.tracking.pointWrist=pointWrist_;out.tracking.target=result.target;
     out.tracking.companionReturning=result.cycle.phase==WeaponCyclePhase::Forward||result.cycle.phase==WeaponCyclePhase::Lock;
@@ -280,9 +319,14 @@ Bc2PhysicalPumpResult Bc2PhysicalPump::Tick(const Bc2PhysicalPumpSample& s,HandI
         if(!s.input.released[0]&&left&&left->token.kind==HandClaimKind::Mechanism)
             supportReturn_=SupportReturn{*result.release,gun->token,s.nativeOwner,s.input,s.input.nowNs,s.input.sequence,
                 {left->token,gun->token,s.input}};
-        // An unavailable runtime gate is ambiguous; retain the exact submitted
-        // transaction. Never synthesize RejectNative from a boolean failure.
-        if(!api_.control(api_.context,control))++controlRejected_;out.tracking.target.reset();out.ownsHand=false;
+        const auto submitted=DispatchCycleControl(api_,control);
+        if(submitted==Bc2NativeCycleSubmitResult::Busy)deferredControl_=control;
+        else if((submitted==Bc2NativeCycleSubmitResult::RecoveryRequired||submitted==Bc2NativeCycleSubmitResult::NotDispatched)&&physical_.RejectUndispatched(*pending_)){
+            // The adapter proved this exact normal release never began. Keep
+            // its shot debt for a fresh stroke or native guarded recovery.
+            pending_.reset();supportReturn_.reset();supportCapture_.reset();}
+        else if(submitted!=Bc2NativeCycleSubmitResult::Accepted)++controlRejected_;
+        out.tracking.target.reset();out.ownsHand=false;
     }
     return out;
 }
@@ -320,6 +364,7 @@ Bc2PhysicalPumpResult Bc2PhysicalPump::TickRecovery(const Bc2PhysicalPumpSample&
     if(left&&left->token.kind==HandClaimKind::WeaponSupport)sample.support=left->token;
     const auto previous=recoveryPhysical_.Phase();
     const auto result=recoveryPhysical_.Update(sample,hands);out.ownsHand=result.ownsMechanism;
+    out.audio=PhysicalCycleAudio(sample.lease,result,profile_,s.input);
     Record(s,0,{result.cycle.phase,result.cycle.failure,result.cycle.blocksFire,result.cycle.travel,result.cycle.rotation},true);
     if(result.cycle.phase==WeaponCyclePhase::Cancelled&&previous!=WeaponCyclePhase::Cancelled)api_.cancel(api_.context);
     out.tracking.profile=profile_;out.tracking.recovery=view.authority;out.tracking.pointWrist=pointWrist_;out.tracking.recoveryTarget=result.target;
@@ -330,7 +375,12 @@ Bc2PhysicalPumpResult Bc2PhysicalPump::TickRecovery(const Bc2PhysicalPumpSample&
         if(!s.input.released[0]&&left&&left->token.kind==HandClaimKind::Mechanism)
             supportReturn_=SupportReturn{*result.release,gun->token,s.nativeOwner,s.input,s.input.nowNs,s.input.sequence,
                 {left->token,gun->token,s.input}};
-        if(!api_.recovery.submit(api_.context,*result.release,s.input))++controlRejected_;
+        const auto submitted=DispatchCycleRecovery(api_.recovery,api_.context,*result.release,s.input);
+        if(submitted==Bc2NativeCycleSubmitResult::Busy)
+            deferredRecovery_=Bc2NativeCycleControl{s.nativeOwner,s.input,s.item,{calibration_->profileId,s.item.generation},{},true};
+        else if(submitted==Bc2NativeCycleSubmitResult::NotDispatched&&recoveryPhysical_.RejectUndispatched(*recoveryPending_)){
+            recoveryPending_.reset();supportReturn_.reset();supportCapture_.reset();}
+        else if(submitted!=Bc2NativeCycleSubmitResult::Accepted)++controlRejected_;
         out.tracking.recoveryTarget.reset();out.ownsHand=false;
     }
     return out;
@@ -425,7 +475,7 @@ void Bc2PhysicalPump::Report(std::ostream& out)const {
        <<",\"releases\":"<<releases_.load()<<",\"acknowledgements\":"<<acks_.load()
        <<",\"support_returns\":"<<supportReturns_.load()<<",\"support_return_lost\":"<<supportReturnLost_.load();
     std::lock_guard lock(journalMutex_);
-    out<<",\"gesture_gates\":{\"updated\":0,\"unsafe\":1,\"control_rejected\":2,\"view_missing\":3,\"not_held\":4,\"raw_invalid\":5}"
+    out<<",\"gesture_gates\":{\"updated\":0,\"unsafe\":1,\"control_rejected\":2,\"view_missing\":3,\"not_held\":4,\"raw_invalid\":5,\"control_busy\":6}"
        <<",\"gesture_rows_dropped\":"<<journalDropped_<<",\"gestures\":[";
     for(unsigned n=0;n<journalCount_;++n){if(n)out<<',';const auto& r=journal_[n];
         out<<"{\"input\":"<<r.input<<",\"raw_input\":"<<r.rawInput<<",\"cycle\":"<<r.cycle<<",\"now_ns\":"<<r.now

@@ -91,6 +91,14 @@ public:
         // missing callback is not permission to discard an ambiguous request.
         if(awaitingOutcome_&&submittedRelease_==release){policy_.Cancel(WeaponCycleFailure::NativeRejected);target_.reset();awaitingOutcome_=false;}
     }
+    // Only adapter proof that this exact request NEVER entered native dispatch
+    // permits another gesture. Keep the same debt, original cycle timeout and
+    // request high-water mark; a fresh neutral and full stroke are required.
+    bool RejectUndispatched(const WeaponCycleRelease& release)noexcept {
+        if(!awaitingOutcome_||submittedRelease_!=release)return false;
+        policy_.Cancel(WeaponCycleFailure::Released);target_.reset();
+        awaitingOutcome_=false;submitted_=false;adoptSupport_=false;return true;
+    }
     void CancelPhysical(const HandInteractionSample& source,HandInteraction& hands)noexcept {
         // Cleanup is not a new input observation. An older cancelled recognizer
         // may outlive its recovery and the next consumer's acquisition in this

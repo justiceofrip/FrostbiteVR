@@ -17,6 +17,17 @@ struct Bc2NativeCycleControl {
 enum class Bc2NativeCyclePhase:unsigned {Watching,ShotObserved,Arming,Held,Releasing,Complete,Cancelled,Converging,Advancing};
 enum class Bc2NativeCycleFailure:unsigned {None,Control,Owner,Input,State,Shot,Hold,Restore,Expired,Completion};
 enum class Bc2NativeCycleMode:unsigned {Spas,M95};
+// First actual Held -> Cancelled(Input) rejection for this service lifetime.
+// Fixed-size captured values only: no IO, native reads or fresh authority.
+// Retained across actor retirement so a late failure survives a bounded trace.
+struct Bc2NativeCycleInputRejection {
+    ReloadHoldIdentity native{};
+    ReloadUpdateContext context{};
+    std::uint64_t invocation=0,cycle=0,shot=0;
+    unsigned branch=3;
+    std::int64_t contextObservedNs=0,processingNs=0,leaseDeadlineNs=0;
+    bool contextSafe=false,contextFresh=false;
+};
 // Selection uses original coherent native reads, not a completion substitute.
 struct Bc2NativeCycleSelection {
     Bc2NativeCycleMode mode{};Bc2AmmoReserveLease reserve{};ReloadObservedConfig config{};
@@ -97,6 +108,14 @@ public:
     bool EnableConcurrentBolt()noexcept;
     bool RecoveryEnabled()const noexcept{return recoveryEnabled_;}
     bool BeginRecovery(std::int64_t now)noexcept;
+    // Before opening an own Update, an established exact hold may encounter
+    // ordinary action bits again (prediction/held trigger). Convert to the
+    // existing guarded convergence route; the SAME callback must be guarded.
+    // Invalid/stale native context and unobserved mutations never qualify.
+    bool BeginInputRecovery(const ReloadHoldInput&,std::uint64_t invocation)noexcept;
+    // Definitive non-dispatch of an original held-lease release overtaken by
+    // guarded recovery. This denies only that command; no debt/Ready is cleared.
+    bool ReleaseSupersededByRecovery(const Bc2NativeCycleControl&)const noexcept;
     // Exact pre-conversion held Update may finish its zero-delta Step after
     // recovery starts. This does not authorize a new native update or gesture.
     bool DrainingHeldInvocation(const Bc2NativeCycleDecision&,std::uint32_t firing,std::int64_t now)const noexcept;
@@ -126,6 +145,7 @@ public:
     const auto& LastActorRetirement()const noexcept{return actorRetirement_;}
     Bc2NativeCycleMode Mode()const noexcept{return mode_;}
     Bc2NativeCyclePhase Phase()const noexcept{return phase_;}
+    const auto& FirstInputRejection()const noexcept{return firstInputRejection_;}
     const interaction::HandInteractionSample& LastControlInput()const noexcept{return control_.input;}
     bool Control(const Bc2NativeCycleControl&)noexcept;
     bool RebaseTracking(const Bc2NativeCycleControl&,const Bc2NativeCycleActorDrain&)noexcept;
@@ -155,6 +175,7 @@ private:
     bool ReserveValid(const Bc2AmmoReserveLease&,std::int64_t now)const noexcept;
     bool SelectionValid(const Bc2NativeCycleSelection&)const noexcept;
     void ApplySelection(const Bc2NativeCycleSelection&)noexcept;
+    bool MappingScope(const Bc2NativeCycleControl&)const noexcept;
     bool Mapping(const Bc2NativeCycleControl&)const noexcept;
     std::optional<Bc2NativeCycleCompletionWatch> HeldWatch(std::int64_t now)const noexcept;
     bool Current(const ReloadHoldInput&,bool nativeOnly=false)const noexcept;
@@ -174,6 +195,7 @@ private:
     ReloadHoldIdentity native_{};ReloadObservedConfig config_{};
     Bc2NativeCyclePhase phase_=Bc2NativeCyclePhase::Watching;
     Bc2NativeCycleFailure failure_=Bc2NativeCycleFailure::None;
+    std::optional<Bc2NativeCycleInputRejection> firstInputRejection_;
     std::array<std::uint64_t,3> lastInvocation_{},openUpdate_{};
     std::array<std::int64_t,3> contexts_{},heldAt_{},finishedAt_{};
     // Only exact post-shot client Restore receipts qualify repeated previous7.

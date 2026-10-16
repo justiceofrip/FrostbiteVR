@@ -148,6 +148,22 @@ public:
         sample.gunContact=contact;sample.lease=identity_;
         return Update(sample,hands);
     }
+    // A pre-dispatch Busy result pauses mechanism recognition, not controller
+    // custody. Current real hand evidence may retain this exact gun and grasp;
+    // no native lease, mechanism target or gesture endpoint is renewed here.
+    BoltCustodyResult RetainCustody(const HandInteractionSample& source,
+        const math::Matrix4& wrist,const HandContactProof& contact,HandInteraction& hands)noexcept {
+        BoltCustodyResult out;out.custody=phase_;out.blocksFire=true;
+        if((phase_!=BoltCustodyPhase::Manipulating&&phase_!=BoltCustodyPhase::Returned)||!gun_||
+           source.owner!=identity_.owner||!feed_mechanism_detail::Pose(wrist)||contact.key!=gun_->contact||
+           !contact.eligible||!hands.Renew(source,*gun_,contact).accepted)return out;
+        const auto gun=hands.Current(gun_->hand);if(!gun||gun->token!=*gun_)return out;
+        const BoltCustodyWeaponTarget target{*gun_,source.sequence,source.observedNs,
+            std::min(source.deadlineNs,gun->deadlineNs),Multiply(attachment_,wrist)};
+        if(CurrentBoltCustodyWeaponTarget(target,source,*gun))out.weapon=target;
+        out.physical.ownsMechanism=cycle_.RetainGrasp(source,source,*gun_,hands);
+        out.physical.cycle.phase=cycle_.Phase();out.physical.cycle.blocksFire=true;return out;
+    }
     // Return is physical custody only. It cannot mark the cycle ready or clear
     // an owed action; the exact native outcome remains independently pending.
     HandGunCustodyResult ReturnCustody(const HandInteractionSample& current,const HandGunCustodyTransfer& transfer,
@@ -170,6 +186,10 @@ public:
     bool ObserveReady(const WeaponCycleReady& ready,std::int64_t now)noexcept {return cycle_.ObserveReady(ready,now);}
     bool ReconcileReady(const WeaponCycleReady& ready,std::int64_t now)noexcept {return cycle_.ReconcileReady(ready,now);}
     void RejectNative(const WeaponCycleRelease& release)noexcept {cycle_.RejectNative(release);}
+    bool RejectUndispatched(const WeaponCycleRelease& release)noexcept {
+        if(!submitted_||*submitted_!=release||!cycle_.RejectUndispatched(release))return false;
+        submitted_.reset();returnNeutral_=0;return true;
+    }
     BoltCustodyPhase Custody()const noexcept{return phase_;}
     WeaponCyclePhase CyclePhase()const noexcept{return cycle_.Phase();}
     std::optional<HandClaimToken> Gun()const noexcept{return gun_;}

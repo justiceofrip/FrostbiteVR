@@ -21,6 +21,15 @@ struct Bc2NativeCycleUpdateRoute {
 };
 inline Bc2NativeCycleUpdateRoute EvaluateNativeCycleUpdateRoute(Bc2NativeCycleService& service,
     const Bc2NativeCycleUpdateEvidence& proof)noexcept {
+    // Admit conversion before Evaluate opens an unheld Update. Preparing both
+    // proof sets does not choose a route: conversion and this callback's guard
+    // reservation share the same service gate. A controller action is not a
+    // native mutation failure, and it cannot forgive the still-owed stroke.
+    if(!service.Recovering()&&proof.normal&&proof.recovery&&proof.entry&&
+       proof.recovery->identity==proof.normal->identity&&proof.recovery->config==proof.normal->config&&
+       proof.entry->nativeInvocation==proof.invocation&&proof.entry->boundary.firing==proof.firing&&
+       proof.entry->boundary.branch==proof.normal->branch)
+        service.BeginInputRecovery(*proof.normal,proof.invocation);
     Bc2NativeCycleUpdateRoute out;out.recovering=service.Recovering();
     if(out.recovering){
         if(proof.recovery&&proof.entry)

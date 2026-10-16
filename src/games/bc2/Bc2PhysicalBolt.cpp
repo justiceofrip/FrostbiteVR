@@ -1,4 +1,5 @@
 #include "Bc2PhysicalBolt.h"
+#include "Bc2PhysicalCycleDispatch.h"
 namespace fvr::bc2 {
 using namespace interaction;
 namespace {
@@ -11,6 +12,19 @@ bool CurrentGun(const HandClaim& gun,const HandInteractionSample& input,HandInte
     return gun.token.kind==HandClaimKind::GunHold&&gun.token.owner==input.owner&&gun.token.item==item&&
         gun.inputSequence==input.sequence&&gun.deadlineNs>input.nowNs&&gun.deadlineNs<=input.deadlineNs;
 }
+template<class Custody> Bc2PhysicalBoltResult RetainBoltCustody(const Bc2PhysicalBoltSample& s,
+    const std::shared_ptr<const Bc2BoltCalibration>& calibration,Custody* custody,HandInteraction& hands)noexcept {
+    Bc2PhysicalBoltResult out;out.blocksFire=true;out.tracking={true,s.nativeOwner,s.input,calibration};
+    const auto token=custody?custody->Gun():std::nullopt;
+    if(!token)return out;
+    const auto hand=weapon_cycle_detail::HandIndex(token->hand);
+    const auto contact=s.gunContacts[hand].eligible?s.gunContacts[hand]:s.gunContact;
+    const auto retained=custody->RetainCustody(s.input,s.wristWorld[hand],contact,hands);
+    out.tracking.weapon=retained.weapon;out.tracking.custody=retained.custody;
+    out.tracking.mechanismPhase=retained.physical.cycle.phase;
+    out.tracking.gun=hands.Current(token->hand);out.tracking.mechanism=hands.Current(calibration->profile.hands.mechanism);
+    out.ownsGunCustody=bool(retained.weapon);out.ownsMechanism=retained.physical.ownsMechanism;return out;
+}
 }
 bool BoltCalibrationValid(const Bc2BoltCalibration& c)noexcept {
     return c.nativeJoined&&!c.asset.empty()&&!c.mesh.empty()&&!c.partName.empty()&&c.rigFingerprint&&
@@ -20,6 +34,9 @@ bool BoltCalibrationValid(const Bc2BoltCalibration& c)noexcept {
 Bc2PhysicalBolt::Bc2PhysicalBolt(std::shared_ptr<const Bc2BoltCalibration> c,Bc2PhysicalBoltApi api)noexcept:
     calibration_(std::move(c)),api_(api){}
 void Bc2PhysicalBolt::Cancel(const HandInteractionSample& input,HandInteraction& hands)noexcept {
+    if(deferredControl_&&pending_&&custody_->RejectUndispatched(*pending_)){pending_.reset();deferredControl_.reset();}
+    if(deferredRecovery_&&recoveryPending_&&recoveryCustody_&&recoveryCustody_->RejectUndispatched(*recoveryPending_)){
+        recoveryPending_.reset();deferredRecovery_.reset();}
     if(api_.cancel)api_.cancel(api_.context);
     hands.Update(input);blocks_=blocks_||bool(cycle_)||bool(pending_)||bool(recoveryCycle_)||bool(recoveryPending_);
     if(recoveryCustody_&&recoveryCycle_){BoltCustodyIdleDebtSample loss;loss.source=input;loss.lease=*recoveryCycle_;recoveryCustody_->Update(loss,hands);}
@@ -27,8 +44,18 @@ void Bc2PhysicalBolt::Cancel(const HandInteractionSample& input,HandInteraction&
 }
 Bc2PhysicalBoltResult Bc2PhysicalBolt::Tick(const Bc2PhysicalBoltSample& s,HandInteraction& hands,std::uint64_t& intent)noexcept {
     Bc2PhysicalBoltResult out;
-    if(!calibration_||!BoltCalibrationValid(*calibration_)||!api_.control||!api_.view||!api_.ack||!api_.cancel)return out;
+    if(!calibration_||!BoltCalibrationValid(*calibration_)||(!api_.control&&!api_.controlResult)||!api_.view||!api_.ack||!api_.cancel)return out;
     const auto& p=calibration_->profile;
+    const bool samePresentation=!s.cancel&&s.asset==calibration_->asset&&s.mesh==calibration_->mesh;
+    if(deferredControl_&&pending_&&(!samePresentation||!UndispatchedCycleSourceCurrent(*deferredControl_,s.nativeOwner,s.item,s.input))){
+        custody_->RejectUndispatched(*pending_);pending_.reset();deferredControl_.reset();
+    }
+    if(deferredRecovery_&&recoveryPending_&&(!samePresentation||
+       !UndispatchedCycleSourceCurrent(*deferredRecovery_,s.nativeOwner,s.item,s.input)||
+       !weapon_cycle_detail::Window(recoveryPending_->observedNs,recoveryPending_->deadlineNs,s.input.nowNs))){
+        if(recoveryCustody_)recoveryCustody_->RejectUndispatched(*recoveryPending_);
+        recoveryPending_.reset();deferredRecovery_.reset();
+    }
     if(s.asset==calibration_->asset&&s.mesh==calibration_->mesh&&Mapped(s.nativeOwner,s.input,s.item)&&
        s.input.focused&&s.input.tracked[0]&&s.input.tracked[1]&&
        weapon_cycle_detail::Window(s.input.observedNs,s.input.deadlineNs,s.input.nowNs))
@@ -39,7 +66,7 @@ Bc2PhysicalBoltResult Bc2PhysicalBolt::Tick(const Bc2PhysicalBoltSample& s,HandI
     if(view&&view->ready){
         if(!acknowledged_&&custody_->ReconcileReady(*view->ready,s.input.nowNs))acknowledged_=view->ready;
         if(acknowledged_&&api_.ack(api_.context,*acknowledged_)){
-            out.settled=acknowledged_;acknowledged_.reset();pending_.reset();settled_=true;
+            out.settled=acknowledged_;acknowledged_.reset();pending_.reset();deferredControl_.reset();settled_=true;
         }
         view=api_.view(api_.context,s.input.nowNs);
     }
@@ -48,7 +75,7 @@ Bc2PhysicalBoltResult Bc2PhysicalBolt::Tick(const Bc2PhysicalBoltSample& s,HandI
         if(!recoveryAcknowledged_&&recoveryPending_&&recovery->ready->release==*recoveryPending_&&
            recoveryCustody_->ReconcileReady(*recovery->ready,s.input.nowNs))recoveryAcknowledged_=recovery->ready;
         if(recoveryAcknowledged_&&api_.recovery.ack(api_.context,*recoveryAcknowledged_)){
-            out.recovered=recoveryAcknowledged_;recoveryAcknowledged_.reset();recoveryPending_.reset();recoverySettled_=true;
+            out.recovered=recoveryAcknowledged_;recoveryAcknowledged_.reset();recoveryPending_.reset();deferredRecovery_.reset();recoverySettled_=true;
         }
         recovery=api_.recovery.view(api_.context,s.input.nowNs);
         if(recoverySettled_){
@@ -125,7 +152,19 @@ Bc2PhysicalBoltResult Bc2PhysicalBolt::Tick(const Bc2PhysicalBoltSample& s,HandI
         blocks_=blocks_||bool(cycle_)||(view&&view->blocksFire);out.blocksFire=blocks_;return out;
     }
     Bc2NativeCycleControl control{s.nativeOwner,s.input,s.item,{p.id,s.item.generation},{},true};
-    if(!api_.control(api_.context,control)){
+    if(deferredControl_&&pending_){
+        auto exact=*deferredControl_;exact.input.nowNs=s.input.nowNs;
+        const auto submitted=DispatchCycleControl(api_,exact);
+        if((submitted==Bc2NativeCycleSubmitResult::RecoveryRequired||submitted==Bc2NativeCycleSubmitResult::NotDispatched)&&custody_->RejectUndispatched(*pending_))pending_.reset();
+        if(submitted!=Bc2NativeCycleSubmitResult::Busy)deferredControl_.reset();
+        blocks_=true;return RetainBoltCustody(s,calibration_,custody_.get(),hands);
+    }
+    const auto controlled=DispatchCycleControl(api_,control);
+    if(controlled==Bc2NativeCycleSubmitResult::Busy){
+        blocks_=true;auto retained=RetainBoltCustody(s,calibration_,custody_.get(),hands);
+        retained.settled=out.settled;retained.recovered=out.recovered;return retained;
+    }
+    if(controlled!=Bc2NativeCycleSubmitResult::Accepted){
         blocks_=true;out.blocksFire=true;out.ownsGunCustody=bool(existingGun);hands.Update(s.input);return out;
     }
     view=api_.view(api_.context,s.input.nowNs);
@@ -183,6 +222,7 @@ Bc2PhysicalBoltResult Bc2PhysicalBolt::Tick(const Bc2PhysicalBoltSample& s,HandI
         sample.mechanismContact={sample.lease.mechanism,raw.input.sequence,raw.input.deadlineNs,true};}
     if(intent!=UINT64_MAX)sample.acquireIntent=++intent;
     const auto result=custody_->Update(sample,hands);
+    out.audio=PhysicalCycleAudio(sample.lease,result.physical,p,s.input);
     out.tracking.held=sample.lease;out.tracking.target=result.physical.target;out.tracking.weapon=result.weapon;
     out.tracking.custody=result.custody;
     out.tracking.mechanismPhase=result.physical.cycle.phase;
@@ -197,9 +237,11 @@ Bc2PhysicalBoltResult Bc2PhysicalBolt::Tick(const Bc2PhysicalBoltSample& s,HandI
     blocks_=!view||view->blocksFire||result.blocksFire||bool(pending_)||bool(acknowledged_);out.blocksFire=blocks_;
     if(result.physical.release){
         pending_=result.physical.release;control.release=pending_;
-        // Failure is ambiguous, not proof of non-dispatch. Keep the receipt and
-        // do not reissue it or fabricate RejectNative on a later frame.
-        api_.control(api_.context,control);out.tracking.target.reset();out.ownsMechanism=false;
+        const auto submitted=DispatchCycleControl(api_,control);
+        if(submitted==Bc2NativeCycleSubmitResult::Busy)deferredControl_=control;
+        else if((submitted==Bc2NativeCycleSubmitResult::RecoveryRequired||submitted==Bc2NativeCycleSubmitResult::NotDispatched)&&custody_->RejectUndispatched(*pending_))pending_.reset();
+        // A rejected/legacy false result is never treated as non-dispatch.
+        out.tracking.target.reset();out.ownsMechanism=false;
     }
     // Publish the actual returned custody/current gun for the completion tick
     // before retiring the cycle. Consumers must observe this concrete handoff.
@@ -226,7 +268,18 @@ Bc2PhysicalBoltResult Bc2PhysicalBolt::TickRecovery(const Bc2PhysicalBoltSample&
         (!(cycle_||recoveryCycle_)||owner_==s.nativeOwner);
     if(!safe){Cancel(s.input,hands);out.ownsGunCustody=bool(existing);return out;}
     const Bc2NativeCycleControl control{s.nativeOwner,s.input,s.item,{p.id,s.item.generation},{},true};
-    if(!api_.control(api_.context,control)){hands.Update(s.input);out.ownsGunCustody=bool(existing);return out;}
+    if(deferredRecovery_&&recoveryPending_){
+        auto original=deferredRecovery_->input;original.nowNs=s.input.nowNs;
+        const auto submitted=DispatchCycleRecovery(api_.recovery,api_.context,*recoveryPending_,original);
+        if(submitted==Bc2NativeCycleSubmitResult::NotDispatched&&recoveryCustody_->RejectUndispatched(*recoveryPending_))recoveryPending_.reset();
+        if(submitted!=Bc2NativeCycleSubmitResult::Busy)deferredRecovery_.reset();
+        return RetainBoltCustody(s,calibration_,recoveryCustody_.get(),hands);
+    }
+    const auto controlled=DispatchCycleControl(api_,control);
+    if(controlled==Bc2NativeCycleSubmitResult::Busy)
+        return recoveryCustody_?RetainBoltCustody(s,calibration_,recoveryCustody_.get(),hands):
+            RetainBoltCustody(s,calibration_,custody_.get(),hands);
+    if(controlled!=Bc2NativeCycleSubmitResult::Accepted){hands.Update(s.input);out.ownsGunCustody=bool(existing);return out;}
     const auto refreshed=api_.recovery.view(api_.context,s.input.nowNs);
     const auto& view=refreshed?*refreshed:initial;
     out.tracking={true,s.nativeOwner,s.input,calibration_};
@@ -261,7 +314,12 @@ Bc2PhysicalBoltResult Bc2PhysicalBolt::TickRecovery(const Bc2PhysicalBoltSample&
             recoveryCustody_=std::move(next);recoveryCycle_=authority;owner_=s.nativeOwner;
         }
     }
-    if(!recoveryCycle_||!recoveryCustody_)return out;
+    if(!recoveryCycle_||!recoveryCustody_){
+        // Native recovery still needs a fresh neutral boundary. Keeping the
+        // current supporting gun hand cannot grant a stroke or native release.
+        return recoveryCustody_?RetainBoltCustody(s,calibration_,recoveryCustody_.get(),hands):
+            RetainBoltCustody(s,calibration_,custody_.get(),hands);
+    }
     if(view.authority&&!weapon_cycle_detail::Same(*recoveryCycle_,*view.authority))return out;
     if(s.custodyTransfer){
         if(recoveryCustody_->Custody()==BoltCustodyPhase::AwaitingCustody)
@@ -286,6 +344,7 @@ Bc2PhysicalBoltResult Bc2PhysicalBolt::TickRecovery(const Bc2PhysicalBoltSample&
     if(intent!=UINT64_MAX)sample.acquireIntent=++intent;
     const auto prior=recoveryCustody_->CyclePhase();
     const auto result=recoveryCustody_->Update(sample,hands);
+    out.audio=PhysicalCycleAudio(sample.lease,result.physical,p,s.input);
     if(prior!=WeaponCyclePhase::Cancelled&&result.physical.cycle.phase==WeaponCyclePhase::Cancelled&&!recoveryPending_)
         api_.cancel(api_.context);
     out.tracking.recovery=sample.lease;out.tracking.recoveryTarget=result.physical.target;
@@ -294,7 +353,9 @@ Bc2PhysicalBoltResult Bc2PhysicalBolt::TickRecovery(const Bc2PhysicalBoltSample&
     out.ownsMechanism=result.physical.ownsMechanism;out.ownsGunCustody=bool(result.weapon);
     out.blocksFire=blocks_=view.blocksFire||result.blocksFire||bool(recoveryPending_)||bool(recoveryAcknowledged_);
     if(result.physical.release){recoveryPending_=result.physical.release;
-        api_.recovery.submit(api_.context,*recoveryPending_,s.input);
+        const auto submitted=DispatchCycleRecovery(api_.recovery,api_.context,*recoveryPending_,s.input);
+        if(submitted==Bc2NativeCycleSubmitResult::Busy)deferredRecovery_=control;
+        else if(submitted==Bc2NativeCycleSubmitResult::NotDispatched&&recoveryCustody_->RejectUndispatched(*recoveryPending_))recoveryPending_.reset();
         out.tracking.recoveryTarget.reset();out.ownsMechanism=false;}
     if(recoverySettled_&&result.custody==BoltCustodyPhase::Returned){
         recoveryCycle_.reset();cycle_.reset();recoverySettled_=false;recoveryPlacement_=true;

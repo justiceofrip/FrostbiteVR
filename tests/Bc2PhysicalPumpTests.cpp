@@ -13,8 +13,9 @@ namespace {
 math::Matrix4 Pose(float z=0){math::Matrix4 m{};for(unsigned n=0;n<4;++n)m.values[n][n]=1;m.values[3][2]=z;return m;}
 struct Native {
     Bc2NativeCycleView state;unsigned controls=0,released=0,acked=0,cancelled=0;bool unavailable=false,rejectControl=false,deferReady=false;std::optional<WeaponCycleReady> pendingReady;
+    unsigned busyControls=0,busyReleases=0;bool precheckExpired=false;std::vector<Bc2NativeCycleControl> releaseAttempts;
     void Finish(std::int64_t now){state.ready=pendingReady;state.ready->observedNs=now;state.ready->deadlineNs=now+50000000;state.phase=Bc2NativeCyclePhase::Complete;}
-    Bc2PhysicalPumpApi Api(){return {this,
+    Bc2PhysicalPumpApi Api(){auto api=Bc2PhysicalPumpApi{this,
         [](void* p,const Bc2NativeCycleControl& c)noexcept{auto& n=*static_cast<Native*>(p);
             ++n.controls;if(n.rejectControl)return false;
             if(c.release){++n.released;n.state.ready=WeaponCycleReady{*c.release,c.release->cycle.sequence+1,c.input.nowNs,c.input.nowNs+50000000,true,true};
@@ -23,12 +24,18 @@ struct Native {
         [](void* p,std::int64_t)noexcept->std::optional<Bc2NativeCycleView>{auto& n=*static_cast<Native*>(p);if(n.unavailable)return {};return n.state;},
         [](void* p,const WeaponCycleReady& r)noexcept{auto& n=*static_cast<Native*>(p);if(!n.state.ready||n.state.ready->release!=r.release)return false;
             ++n.acked;n.state.ready.reset();n.state.blocksFire=false;return true;},
-        [](void* p)noexcept{++static_cast<Native*>(p)->cancelled;}};}
+        [](void* p)noexcept{++static_cast<Native*>(p)->cancelled;}};
+        api.controlResult=[](void* p,const Bc2NativeCycleControl& c)noexcept{auto& n=*static_cast<Native*>(p);
+            if(c.release){n.releaseAttempts.push_back(c);if(n.busyReleases){--n.busyReleases;return Bc2NativeCycleSubmitResult::Busy;}
+                if(n.precheckExpired){n.precheckExpired=false;return Bc2NativeCycleSubmitResult::NotDispatched;}}
+            else if(n.busyControls){--n.busyControls;return Bc2NativeCycleSubmitResult::Busy;}
+            return n.Api().control(p,c)?Bc2NativeCycleSubmitResult::Accepted:Bc2NativeCycleSubmitResult::Rejected;};return api;}
 };
 struct Fixture {
     RigSnapshot rig;std::shared_ptr<Bc2PumpCalibration> calibration=std::make_shared<Bc2PumpCalibration>();Native native;
     HandInteraction hands;Bc2PhysicalPumpSample sample;Bc2PhysicalPump pump;Bc2PhysicalPumpResult result;
     std::uint64_t intent=0,lease=0;Bc2PumpRawContact prior{};std::optional<Bc2PumpTracking> lastTarget;
+    MechanismAudioLedger<> audioLedger;std::vector<MechanismAudioEvent> sounds;
     SupportGrip support;SupportGripResult supported;bool useSupport=false,suppressHeld=false,freezeRaw=false;float pressure=.5f;
     SupportGripContact contact{true,.01f,{}};
     InputFrame Input()const {InputFrame in;in.generation=sample.input.sequence;in.spaceGeneration=sample.input.owner.space;in.predictedNs=sample.input.nowNs;in.focused=in.headValid=sample.input.focused;
@@ -63,6 +70,7 @@ struct Fixture {
         if(suppressHeld)native.state.held.reset();
         else if(native.state.phase==Bc2NativeCyclePhase::Held)native.state.held=WeaponCycleLease{s.owner,sample.item,{calibration->profileId,4},1,1,++lease,s.nowNs,s.deadlineNs,true};
         sample.raw=prior;result=pump.Tick(sample,hands,intent);
+        if(result.audio&&audioLedger.Accept(*result.audio,s.nowNs)==MechanismAudioAdmission::Accepted)sounds.push_back(*result.audio);
         if(useSupport)SupportTick();
         auto wrist=calibration->closedWrist;
         for(unsigned n=0;n<3;++n)wrist.values[3][n]+=calibration->geometry.axis[n]*calibration->rearDirection*travel;
@@ -84,7 +92,9 @@ int RendererToPhysicalToNativeAndPart(){Fixture f;CHECK(f.Grip());unsigned targe
             CHECK(Near(plan.wrist->values[3][2],r.tracking.target->travel));}
         if(f.native.released)break;
     }
-    CHECK(targets>8&&f.native.released==1);f.Tick(0);CHECK(f.native.acked==1&&!f.result.blocksFire&&!f.result.tracking.target);
+    CHECK(targets>8&&f.native.released==1);CHECK(f.sounds.size()==2&&f.sounds[0].stage==MechanismAudioStage::RearTravel&&f.sounds[1].stage==MechanismAudioStage::Closure);
+    CHECK(f.sounds[0].identity==f.sounds[1].identity&&f.sounds[1].sequence>f.sounds[0].sequence);
+    f.Tick(0);CHECK(f.native.acked==1&&!f.result.blocksFire&&!f.result.tracking.target&&!f.result.audio&&f.sounds.size()==2);
     CHECK(f.rig.nativeEvaluated==source);return 0;}
 int ReleaseImmediatelyRevokesPresentation(){Fixture f;CHECK(f.Grip());const auto old=*f.lastTarget;
     auto released=f.Tick(.02f,false);CHECK(!released.tracking.target&&!released.ownsHand&&released.blocksFire);
@@ -121,6 +131,58 @@ bool OffAxisStroke(Fixture& f,float lateral){
     for(unsigned n=1;n<=6;++n)f.Tick(.095f*(1-float(n)/6),true,{lateral,0,0});
     for(unsigned n=0;n<3&&!f.native.released;++n)f.Tick(0,true,{lateral,0,0});
     return f.native.released==1;
+}
+int BusyControlRetainsOnlyCurrentGrasp(){
+    Fixture f;CHECK(f.Grip());const auto left=f.hands.Current(InteractionHand::Left)->token;
+    const auto controls=f.native.controls;f.native.busyControls=2;
+    for(unsigned n=0;n<2;++n){const auto r=f.Tick(.02f);CHECK(r.blocksFire&&r.ownsHand&&!r.tracking.target&&!r.audio);
+        CHECK(f.hands.Current(InteractionHand::Left)->token==left&&f.native.controls==controls&&!f.native.cancelled);}
+    CHECK(f.Tick(.02f).ownsHand&&!f.native.released);return 0;
+}
+int BusyReleaseRetriesExactOriginalPacket(){
+    Fixture f;CHECK(f.Grip());f.native.busyReleases=2;CHECK(OffAxisStroke(f,0));
+    CHECK(f.native.releaseAttempts.size()==3&&f.native.released==1);
+    const auto first=f.native.releaseAttempts.front();
+    for(const auto& attempt:f.native.releaseAttempts){CHECK(attempt.release==first.release);
+        CHECK(attempt.input.sequence==first.input.sequence&&attempt.input.observedNs==first.input.observedNs&&attempt.input.deadlineNs==first.input.deadlineNs);
+        CHECK(attempt.input.nowNs<first.release->deadlineNs);}
+    for(unsigned n=0;n<8;++n)f.Tick(0);CHECK(f.native.released==1&&f.native.acked==1&&!f.result.blocksFire);return 0;
+}
+int ExpiredUndispatchedReleaseNeedsNewWholeStroke(){
+    Fixture f;CHECK(f.Grip());f.native.busyReleases=1000;CHECK(!OffAxisStroke(f,0));
+    CHECK(!f.native.releaseAttempts.empty());const auto old=*f.native.releaseAttempts.front().release;
+    for(unsigned n=0;n<18;++n)f.Tick(0);const auto attempts=f.native.releaseAttempts.size();
+    CHECK(!f.native.released&&!f.native.acked&&f.result.blocksFire);
+    f.native.busyReleases=0;for(unsigned n=0;n<4;++n)f.Tick(0);
+    CHECK(f.native.releaseAttempts.size()==attempts&&!f.native.released);
+    f.Tick(0,false);f.Tick(0,false);f.Tick(0);f.Tick(0);CHECK(f.result.ownsHand);
+    CHECK(OffAxisStroke(f,0));const auto next=*f.native.releaseAttempts.back().release;
+    CHECK(next.request>old.request&&next.cycle.cycle==old.cycle.cycle&&next.cycle.shot==old.cycle.shot);
+    f.Tick(0);CHECK(f.native.acked==1&&!f.result.blocksFire);return 0;
+}
+int PredispatchExpiredReleaseNeedsNewGesture(unsigned busy){
+    Fixture f;CHECK(f.Grip());f.native.precheckExpired=true;f.native.busyReleases=busy;
+    OffAxisStroke(f,0);for(unsigned n=0;n<5;++n)f.Tick(0);
+    CHECK(f.native.releaseAttempts.size()==busy+1&&!f.native.released&&!f.native.acked&&f.result.blocksFire);
+    const auto old=*f.native.releaseAttempts.back().release;
+    for(unsigned n=0;n<4;++n)f.Tick(0);CHECK(f.native.releaseAttempts.size()==busy+1);
+    f.Tick(0,false);f.Tick(0,false);f.Tick(0);f.Tick(0);CHECK(f.result.ownsHand);
+    CHECK(OffAxisStroke(f,0));for(unsigned n=0;n<6;++n)f.Tick(0);
+    CHECK(f.native.released==1&&f.native.acked==1&&!f.result.blocksFire);
+    CHECK(f.native.releaseAttempts.back().release->request>old.request&&
+        f.native.releaseAttempts.back().release->cycle.cycle==old.cycle.cycle&&f.native.releaseAttempts.back().release->cycle.shot==old.cycle.shot);return 0;
+}
+int UndispatchedRequestCannotCrossSourceLossOrRenewCycleDeadline(){
+    for(unsigned change=0;change<4;++change){Fixture f;CHECK(f.Grip());f.native.busyReleases=1000;
+        CHECK(!OffAxisStroke(f,0));const auto attempts=f.native.releaseAttempts.size();CHECK(attempts);
+        if(change==0)++f.sample.nativeOwner.weapon;
+        if(change==1)f.sample.input.tracked[0]=false;
+        if(change==2)f.sample.cancel=true;
+        if(change==3)f.sample.input.nowNs+=31000000000ll;
+        f.native.busyReleases=0;f.Tick(0,false);f.Tick(0,false);
+        CHECK(f.native.releaseAttempts.size()==attempts&&!f.native.released&&!f.native.acked&&f.result.blocksFire);
+        if(change==3){CHECK(!OffAxisStroke(f,0));CHECK(f.native.releaseAttempts.size()==attempts);}
+    }return 0;
 }
 int OffAxisHeldEndpointReturnsSupport(){
     for(float displacement:{.11f,.18f,.27f}){
@@ -749,6 +811,8 @@ int CompanionGeometryIsRigidBoundedAndIndependent(){
 }
 #include "PumpGeometry375Checks.inc"
 int main(int argc,char** argv){
+    if(PredispatchExpiredReleaseNeedsNewGesture(0)||PredispatchExpiredReleaseNeedsNewGesture(2))return 1;
+    if(BusyControlRetainsOnlyCurrentGrasp()||BusyReleaseRetriesExactOriginalPacket()||ExpiredUndispatchedReleaseNeedsNewWholeStroke()||UndispatchedRequestCannotCrossSourceLossOrRenewCycleDeadline())return 1;
     if(argc==2&&std::string_view(argv[1])=="--companions")return Captured407DetachmentCannotBecomeMechanicalMotion()||RecordedNativeCycleCannotMoveClosedCompanions()||ActualPhysicalLegDrivesMeasuredCompanions()||CompanionGeometryIsRigidBoundedAndIndependent();
     if(Captured407DetachmentCannotBecomeMechanicalMotion()||RecordedNativeCycleCannotMoveClosedCompanions()||ActualPhysicalLegDrivesMeasuredCompanions()||CompanionGeometryIsRigidBoundedAndIndependent())return 1;
     if(argc==2&&std::string_view(argv[1])=="--held-endpoint")return OffAxisHeldEndpointReturnsSupport()||OffAxisReturnHonorsActualCancellation()||FreshSupportStillUsesAcquisitionRadius();

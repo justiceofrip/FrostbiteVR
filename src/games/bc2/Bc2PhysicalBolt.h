@@ -1,4 +1,5 @@
 #pragma once
+#include "fvr/interaction/MechanismAudio.h"
 #include "Bc2NativeCycleService.h"
 #include "Bc2NativeCycleRecovery.h"
 #include "Bc2Rig.h"
@@ -48,6 +49,7 @@ struct Bc2PhysicalBoltApi {
     bool (*ack)(void*,const interaction::WeaponCycleReady&)noexcept=nullptr;
     void (*cancel)(void*)noexcept=nullptr;
     Bc2PhysicalCycleRecoveryApi recovery{};
+    Bc2NativeCycleSubmitResult (*controlResult)(void*,const Bc2NativeCycleControl&)noexcept=nullptr;
 };
 struct Bc2PhysicalBoltSample {
     ReloadStateOwner nativeOwner{};
@@ -73,6 +75,7 @@ struct Bc2PhysicalBoltResult {
     std::optional<interaction::HandGunCustodyResult> custodyChange;
     std::optional<interaction::WeaponCycleReady> settled;
     std::optional<interaction::WeaponCycleIdleDebtReady> recovered;
+    std::optional<interaction::MechanismAudioEvent> audio;
 };
 // One instance per interaction domain. The ordinary gun/support adapter must
 // yield its claims while ownsGunCustody is true and adopt custodyChange claims
@@ -91,6 +94,7 @@ private:
     std::unique_ptr<interaction::BoltWeaponCustody> custody_=std::make_unique<interaction::BoltWeaponCustody>();
     std::optional<interaction::WeaponCycleLease> cycle_;
     std::optional<interaction::WeaponCycleRelease> pending_;
+    std::optional<Bc2NativeCycleControl> deferredControl_,deferredRecovery_;
     std::optional<interaction::WeaponCycleReady> acknowledged_;
     std::unique_ptr<interaction::BoltWeaponIdleDebtCustody> recoveryCustody_;
     std::optional<interaction::WeaponCycleIdleDebtLease> recoveryCycle_;

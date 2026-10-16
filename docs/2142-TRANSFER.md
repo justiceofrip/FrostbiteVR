@@ -1,3 +1,34 @@
+# 413: preserve debt and distinguish dispatch from presentation
+
+Shared pump/bolt consumers now distinguish a busy gate, proven non-dispatch,
+ambiguous rejection and a release overtaken by guarded recovery. Only proof that
+the exact request was never submitted permits retiring that attempt. Preserve
+its shot debt and require a fresh full physical stroke. A pure read timeout
+cannot cancel native state; missing native execution evidence remains stricter.
+Supporting-hand custody needs renewal even while recovery awaits neutral input
+or cannot enter its policy gate. These rules transfer; BC2's three firing-copy
+relationships and exact callback proofs do not.
+
+Accepted physical stages generate audio presentation events independently of
+cycle completion. Match replacement sound to the exact native suppression
+receipt and current output route. Audio must never grant ammo, release debt or
+own hands. The SPAS cue mapping is adapter data, not a generic weapon waveform.
+See [413 results and limits](CHECKPOINT-413.md).
+
+# Human412: distinguish unavailable policy access from failed native execution
+
+A busy policy gate is not itself evidence that a physical gesture or owner
+became invalid. The current native-cycle wrapper applies permanent cancellation
+even to failed internal reads; observed412 Control cancellation is consistent
+with that path but lacks its caller identity. Native callbacks that may have
+advanced without observation require stricter treatment than pure reads or
+undispatched control retries. Do not replace all failures with success or discard
+outstanding ammunition/mechanism debt. See [412 failure](HEADSET-FAILURE-412.md).
+
+Visual mechanism travel and stock audio have independent ownership in BC2.
+Shared accepted-stage events can support future pump/bolt/magazine sound mapping;
+exact sound templates and runtime audio calls remain adapter-specific.
+
 # 412: cosmetic lifetime and shared body placement
 
 A completed native ammo transfer does not imply that its stock loading prop is

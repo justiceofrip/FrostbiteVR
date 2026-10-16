@@ -24,7 +24,8 @@ struct NativeBase {
         [](void* p)noexcept{++static_cast<NativeBase*>(p)->cancelled;}};}
 };
 struct Native:NativeBase {
-    bool recoveryMode=false,stopEvidence=false,wrongOwner=false;unsigned recoveryReleased=0,recoveryAcked=0;
+    bool recoveryMode=false,stopEvidence=false,wrongOwner=false,convertNormalRelease=false;unsigned recoveryReleased=0,recoveryAcked=0,busyNormal=0,normalAttempts=0;
+    unsigned busyRecovery=0;bool recoveryPrecheckExpired=false;std::vector<WeaponCycleIdleDebtRelease> attempts;std::vector<HandInteractionSample> sources;
     WeaponCycleConvergence<ReloadHoldIdentity> convergence;
     WeaponCycleDebt debt{};std::optional<WeaponCycleRecoveryGrant> grant;
     std::uint64_t invocation=1000;std::int64_t clock=0;
@@ -45,6 +46,12 @@ struct Native:NativeBase {
         if(!grant)grant=convergence.ArmRecovery(state.native,c.input);
     }
     Bc2PhysicalPumpApi Api(){auto api=NativeBase::Api();api.context=this;
+        api.controlResult=[](void* p,const Bc2NativeCycleControl& c)noexcept{auto& n=*static_cast<Native*>(p);
+            if(c.release){++n.normalAttempts;
+                if(n.busyNormal){--n.busyNormal;return Bc2NativeCycleSubmitResult::Busy;}
+                if(n.convertNormalRelease){n.convertNormalRelease=false;Bc2PhysicalPumpSample s;s.nativeOwner=c.nativeOwner;s.input=c.input;s.item=c.item;
+                    n.Recover(s);return Bc2NativeCycleSubmitResult::RecoveryRequired;}}
+            return n.Api().control(p,c)?Bc2NativeCycleSubmitResult::Accepted:Bc2NativeCycleSubmitResult::Rejected;};
         api.control=[](void* p,const Bc2NativeCycleControl& c)noexcept{auto& n=*static_cast<Native*>(p);
             if(!n.recoveryMode){const auto base=n.NativeBase::Api();return base.control(base.context,c);}
             ++n.controls;if(c.release)return false;n.Originals(c);return true;};
@@ -64,6 +71,11 @@ struct Native:NativeBase {
                 if(!outcome||!std::holds_alternative<WeaponCycleIdleDebtRelease>(outcome->release)||
                    std::get<WeaponCycleIdleDebtRelease>(outcome->release)!=r.release||!n.convergence.Acknowledge(*outcome))return false;
                 ++n.recoveryAcked;n.state.blocksFire=false;n.state.phase=Bc2NativeCyclePhase::Complete;return true;}};
+        api.recovery.submitResult=[](void* p,const WeaponCycleIdleDebtRelease& r,const HandInteractionSample& input)noexcept{
+            auto& n=*static_cast<Native*>(p);n.attempts.push_back(r);n.sources.push_back(input);
+            if(n.busyRecovery){--n.busyRecovery;return Bc2NativeCycleSubmitResult::Busy;}
+            if(n.recoveryPrecheckExpired){n.recoveryPrecheckExpired=false;return Bc2NativeCycleSubmitResult::NotDispatched;}
+            return n.Api().recovery.submit(p,r,input)?Bc2NativeCycleSubmitResult::Accepted:Bc2NativeCycleSubmitResult::Rejected;};
         return api;
     }
 };
@@ -71,6 +83,7 @@ struct Fixture {
     RigSnapshot rig;std::shared_ptr<Bc2PumpCalibration> calibration=std::make_shared<Bc2PumpCalibration>();Native native;
     HandInteraction hands;Bc2PhysicalPumpSample sample;Bc2PhysicalPump pump;Bc2PhysicalPumpResult result;
     std::uint64_t intent=0,lease=0;Bc2PumpRawContact prior{};std::optional<Bc2PumpTracking> lastTarget;
+    MechanismAudioLedger<> audioLedger;std::vector<MechanismAudioEvent> sounds;
     SupportGrip support;SupportGripResult supported;bool useSupport=false;float pressure=.5f;
     SupportGripContact contact{true,.01f,{}};
     InputFrame Input()const {InputFrame in;in.generation=sample.input.sequence;in.spaceGeneration=sample.input.owner.space;in.predictedNs=sample.input.nowNs;in.focused=in.headValid=sample.input.focused;
@@ -104,13 +117,14 @@ struct Fixture {
         else hands.Acquire(s,{s.owner,InteractionHand::Right,HandClaimKind::GunHold,sample.item,{{1,4},s.sequence,s.deadlineNs,true},++intent,0});
         if(native.state.phase==Bc2NativeCyclePhase::Held)native.state.held=WeaponCycleLease{s.owner,sample.item,{0x5350415350554d50ull,4},1,1,++lease,s.nowNs,s.deadlineNs,true};
         sample.raw=prior;result=pump.Tick(sample,hands,intent);
+        if(result.audio&&audioLedger.Accept(*result.audio,s.nowNs)==MechanismAudioAdmission::Accepted)sounds.push_back(*result.audio);
         if(useSupport)SupportTick();
         prior=BuildPumpRawContact(result.tracking,rig,Pose(travel),Pose(),{.02f,0,0},1,s.nowNs);
         if(result.tracking.target)lastTarget=result.tracking;return result;
     }
     bool Grip(){Tick(0,false);Tick(0,false);Shot();Tick(0,false);Tick(0);Tick(0);return result.ownsHand&&result.tracking.target.has_value();}
 };
-int DisconnectedPumpRetainsDebtThenRealRecoveredStroke(){
+int DisconnectedPumpRetainsDebtThenRealRecoveredStroke(unsigned busy=0){
     Fixture f;CHECK(f.Grip());f.Tick(.02f);f.sample.input.tracked[0]=false;f.Tick(.04f);
     CHECK(f.result.blocksFire&&!f.result.ownsHand&&!f.native.released);
     f.sample.input.nowNs+=61000000000ll;f.Tick(0,false);CHECK(f.result.blocksFire&&!f.native.acked);
@@ -120,6 +134,7 @@ int DisconnectedPumpRetainsDebtThenRealRecoveredStroke(){
     CHECK(!f.native.recoveryReleased&&!f.native.recoveryAcked&&!f.result.ownsHand&&f.result.blocksFire);
     f.Tick(0);f.Tick(0);CHECK(f.result.ownsHand&&f.result.tracking.recoveryTarget&&!f.result.tracking.target&&!f.result.tracking.held);
     f.EnableSupport();unsigned targets=0;const auto original=f.rig.nativeEvaluated;
+    f.native.busyRecovery=busy;
     for(float t:{.02f,.04f,.06f,.08f,SpasObservedForeEndStroke,SpasObservedForeEndStroke,SpasObservedForeEndStroke,SpasObservedForeEndStroke,
                  .075f,.055f,.035f,.015f,0.f,0.f,0.f,0.f,0.f,0.f}){
         f.Tick(t);
@@ -130,6 +145,12 @@ int DisconnectedPumpRetainsDebtThenRealRecoveredStroke(){
     }
     for(unsigned n=0;n<6;++n)f.Tick(0);
     CHECK(targets>8&&f.native.recoveryReleased==1&&f.native.recoveryAcked==1&&!f.native.released&&!f.native.acked);
+    CHECK(f.sounds.size()==2&&f.sounds[0].stage==MechanismAudioStage::RearTravel&&f.sounds[1].stage==MechanismAudioStage::Closure);
+    CHECK(f.sounds[0].identity==f.sounds[1].identity&&f.sounds[0].identity.shot==1);
+    CHECK(f.native.attempts.size()==busy+1);
+    for(unsigned n=0;n<f.native.attempts.size();++n){CHECK(f.native.attempts[n]==f.native.attempts[0]);
+        CHECK(f.native.sources[n].sequence==f.native.sources[0].sequence&&
+            f.native.sources[n].observedNs==f.native.sources[0].observedNs&&f.native.sources[n].deadlineNs==f.native.sources[0].deadlineNs);}
     CHECK(!f.result.blocksFire&&f.supported.holding&&f.hands.Current(InteractionHand::Left));
     CHECK(f.native.debt.loaded==7&&f.native.debt.reserve==24&&f.native.debt.shot==1);
     CHECK(f.rig.nativeEvaluated==original);
@@ -197,6 +218,43 @@ int OriginalNativeIdleWithoutAnyHeldLeaseStillOwesRealStroke(){
 }
 
 }
-int main(){if(OriginalNativeIdleWithoutAnyHeldLeaseStillOwesRealStroke()||DisconnectedPumpRetainsDebtThenRealRecoveredStroke()||RecoveryCannotBorrowSqueezedOrExpiredOrForeignAuthority()||
+int ExpiredBusyRecoveryRequiresNewFullGesture(){
+    Fixture f;f.Tick(0,false);f.Tick(0,false);f.native.Recover(f.sample);
+    for(unsigned n=0;n<6;++n)f.Tick(0,false);f.Tick(0);f.Tick(0);CHECK(f.result.ownsHand);
+    auto stroke=[&]{for(float t:{.02f,.04f,.06f,.08f,.095f,.095f,.095f,.095f,.075f,.055f,.035f,.015f,0.f,0.f,0.f,0.f})f.Tick(t);};
+    f.native.busyRecovery=1000;stroke();CHECK(!f.native.attempts.empty());const auto old=f.native.attempts.front();
+    for(unsigned n=0;n<18;++n)f.Tick(0);const auto attempts=f.native.attempts.size();
+    CHECK(!f.native.recoveryReleased&&!f.native.recoveryAcked&&f.result.blocksFire);
+    f.native.busyRecovery=0;for(unsigned n=0;n<4;++n)f.Tick(0);CHECK(f.native.attempts.size()==attempts);
+    for(unsigned n=0;n<3;++n)f.Tick(0,false);f.Tick(0);f.Tick(0);CHECK(f.result.ownsHand);stroke();
+    for(unsigned n=0;n<6;++n)f.Tick(0);
+    CHECK(f.native.recoveryReleased==1&&f.native.recoveryAcked==1&&!f.result.blocksFire);
+    CHECK(f.native.attempts.back().request>old.request&&f.native.attempts.back().cycle.cycle==old.cycle.cycle);
+    CHECK(f.native.debt.loaded==7&&f.native.debt.reserve==24&&f.native.debt.shot==1);return 0;
+}
+int ReleaseRacingNativeRecoveryRequiresFreshWholeStroke(unsigned busy){
+    Fixture f;CHECK(f.Grip());f.native.convertNormalRelease=true;f.native.busyNormal=busy;
+    auto stroke=[&]{for(float t:{.02f,.04f,.06f,.08f,.095f,.095f,.095f,.095f,.075f,.055f,.035f,.015f,0.f,0.f,0.f,0.f,0.f,0.f})f.Tick(t);};
+    stroke();for(unsigned n=0;n<6;++n)f.Tick(0);
+    CHECK(f.native.normalAttempts==busy+1&&f.native.recoveryMode&&!f.native.released&&!f.native.acked);
+    CHECK(!f.native.grant&&!f.native.recoveryReleased&&f.result.blocksFire);
+    for(unsigned n=0;n<6;++n)f.Tick(0,false);f.Tick(0);f.Tick(0);
+    CHECK(f.native.grant&&f.result.tracking.recoveryTarget);stroke();for(unsigned n=0;n<6;++n)f.Tick(0);
+    CHECK(f.native.recoveryReleased==1&&f.native.recoveryAcked==1&&!f.result.blocksFire);
+    CHECK(f.native.normalAttempts==busy+1&&f.native.debt.shot==1&&f.native.debt.loaded==7&&f.native.debt.reserve==24);
+    CHECK(f.sounds.size()==2&&f.sounds[0].identity==f.sounds[1].identity);return 0;
+}
+int RecoveryPrecheckExpiryNeedsNewGesture(unsigned busy){
+    Fixture f;f.Tick(0,false);f.Tick(0,false);f.native.Recover(f.sample);
+    for(unsigned n=0;n<6;++n)f.Tick(0,false);f.Tick(0);f.Tick(0);CHECK(f.result.ownsHand);
+    auto stroke=[&]{for(float t:{.02f,.04f,.06f,.08f,.095f,.095f,.095f,.095f,.075f,.055f,.035f,.015f,0.f,0.f,0.f,0.f,0.f,0.f})f.Tick(t);};
+    f.native.recoveryPrecheckExpired=true;f.native.busyRecovery=busy;stroke();for(unsigned n=0;n<5;++n)f.Tick(0);
+    CHECK(f.native.attempts.size()==busy+1&&!f.native.recoveryReleased&&!f.native.recoveryAcked&&f.result.blocksFire);
+    const auto old=f.native.attempts.back();for(unsigned n=0;n<5;++n)f.Tick(0);CHECK(f.native.attempts.size()==busy+1);
+    for(unsigned n=0;n<3;++n)f.Tick(0,false);f.Tick(0);f.Tick(0);CHECK(f.result.ownsHand);stroke();for(unsigned n=0;n<6;++n)f.Tick(0);
+    CHECK(f.native.recoveryReleased==1&&f.native.recoveryAcked==1&&!f.result.blocksFire&&f.native.attempts.back().request>old.request);
+    CHECK(f.native.attempts.back().cycle.cycle==old.cycle.cycle&&f.native.debt.shot==1&&f.native.debt.loaded==7&&f.native.debt.reserve==24);return 0;
+}
+int main(){if(RecoveryPrecheckExpiryNeedsNewGesture(0)||RecoveryPrecheckExpiryNeedsNewGesture(2)||ReleaseRacingNativeRecoveryRequiresFreshWholeStroke(0)||ReleaseRacingNativeRecoveryRequiresFreshWholeStroke(2)||ExpiredBusyRecoveryRequiresNewFullGesture()||DisconnectedPumpRetainsDebtThenRealRecoveredStroke(2)||OriginalNativeIdleWithoutAnyHeldLeaseStillOwesRealStroke()||DisconnectedPumpRetainsDebtThenRealRecoveredStroke()||RecoveryCannotBorrowSqueezedOrExpiredOrForeignAuthority()||
     RecoveryInterruptionRequiresNewGrantAndFreshStroke())return 1;
     std::puts("Pump disconnect recovery: 4 groups; shared gesture, hand arbitration, private part and support return; native convergence mocked.");}

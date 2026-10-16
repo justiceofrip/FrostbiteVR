@@ -289,7 +289,7 @@ int wmain(int argc,wchar_t** argv){try{
         else if(option==L"--controls-roomscale"){controlsObserve=controlsRoomscale=true;}
         else if(option==L"--controls-aim"){controlsObserve=true;controlsAim=true;}else if(option==L"--controls-buttons"){controlsObserve=true;controlsButtons=true;}else if(option==L"--controls-turn"){controlsObserve=true;controlsTurn=true;}else if(option==L"--controls-fire"){controlsObserve=true;controlsFire=true;}else if(option==L"--controls-pulse"){controlsObserve=true;controlsPulse=true;}else if(option==L"--controls-observe")controlsObserve=true;else if(option==L"--asymmetric")asymmetric=true;else if(option==L"--static-pose")staticPose=true;else if(option==L"--async")async=true;else if(option==L"--fov-sweep")fovSweep=true;
         else throw std::runtime_error("Unknown native probe option");}
-    Require(!noImageFiles||normalKnifeClose,"Image-file opt-out requires the isolated normal held-close recipe");
+    Require(!noImageFiles||normalKnifeClose||resourceInventoryProbe,"Image-file opt-out requires an isolated held-close or resource inventory recipe");
     Require(!normalKnifeClose||(normalKnifeOptionsOnly&&!contextualToolProbe&&!chestKnifeProbe&&!playerGrenadeProbe&&!ordinaryGrenadeProbe&&
         !twoGrenadeFade&&staticPose&&async&&targetPairs==240&&requestLifetimeMs==150),"Normal held-close requires isolated static async240");
     Require(!normalKnifeClose||normalKnifeTarget.Open(normalKnifePid,normalKnifeCreation),"Normal held-close original game identity differs");

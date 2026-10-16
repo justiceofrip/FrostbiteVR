@@ -22,8 +22,9 @@ bool EnableOrdinaryResourceInputRecording()noexcept;
 bool EnableNativePumpRecording(unsigned cycles)noexcept;
 // Pre-Start only; does not extend an opened recorder or a native control lease.
 bool EnableResourcePumpRecording()noexcept;
+Bc2NativeCycleSubmitResult PublishNativeCycleControlResult(const Bc2NativeCycleControl&)noexcept;
 bool PublishNativeCycleControl(const Bc2NativeCycleControl&)noexcept;
 std::optional<Bc2NativeCycleView> ReadNativeCycleView(std::int64_t now)noexcept;
 bool AcknowledgeNativeCycleReady(const interaction::WeaponCycleReady&)noexcept;
-void CancelNativeCycle()noexcept;
+void CancelNativeCycle(bool lifetimeEnded=false)noexcept;
 }

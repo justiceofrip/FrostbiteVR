@@ -45,8 +45,10 @@ bool Bc2NativeCycleService::BeginRecovery(std::int64_t now)noexcept {
         // submission, an interruption revokes advancing hand authority and
         // requires the existing neutral/regrip recovery after native idle.
         if(concurrentCycle_&&release_)return !recovery_.Uncertain();
-        recovery_.Interrupt(now);concurrentCycle_=false;phase_=Bc2NativeCyclePhase::Converging;
-        held_.reset();issued_={};return !recovery_.Uncertain();
+        recovery_.Interrupt(now);
+        if(concurrentCycle_)issued_={}; // Advancing leases are not original held-release denial evidence.
+        concurrentCycle_=false;phase_=Bc2NativeCyclePhase::Converging;
+        held_.reset();return !recovery_.Uncertain();
     }
     if(!recoveryEnabled_||phase_!=Bc2NativeCyclePhase::Held||release_||ready_||firedMask_!=7||heldMask_!=7||
        now<began_||guardEpoch_==UINT64_MAX)return false;
@@ -61,7 +63,44 @@ bool Bc2NativeCycleService::BeginRecovery(std::int64_t now)noexcept {
         cycle_,shot_,guardEpoch_+1,loaded_,reserve_,capacity_},began_,mode_==Bc2NativeCycleMode::M95,emptyCycle_))return false;
     for(unsigned b=0;b<3;++b)if(openUpdate_[b]&&!candidate.BeginHold(b,openUpdate_[b],before_[b].nowNs,openDeadline_[b]))return false;
     recovery_=std::move(candidate);++guardEpoch_;phase_=Bc2NativeCyclePhase::Converging;
-    held_.reset();issued_={};suspendedAt_=suspendedUntil_=0;return true;
+    // Retain issued held-lease identity only to identify an overtaken release.
+    // Converging cannot call Release or publish held_, so this grants no pose,
+    // motion or completion authority. Cancel/new cycle/rebase still clear it.
+    held_.reset();suspendedAt_=suspendedUntil_=0;return true;
+}
+bool Bc2NativeCycleService::BeginInputRecovery(const ReloadHoldInput& in,std::uint64_t invocation)noexcept {
+    // Safe() also rejects bad timing and unsupported context flags. Only the
+    // action bits covered by the existing invocation-local guard can convert;
+    // neither an expired native observation nor changed ammo is recoverable here.
+    const auto& c=in.context;
+    if(phase_!=Bc2NativeCyclePhase::Held||!recoveryEnabled_||!invocation||
+       in.branch>=3||openUpdate_[in.branch]||invocation<=lastInvocation_[in.branch]||
+       !Current(in,true)||native_!=in.identity||config_!=in.config||
+       in.contextObservedNs<=0||in.contextObservedNs>in.nowNs||in.nowNs-in.contextObservedNs>ContextFreshNs||
+       !ValidManualReloadDelta(c.deltaSeconds)||!std::isfinite(c.reloadTimeMultiplier)||
+       c.reloadTimeMultiplier<=0||c.reloadTimeMultiplier>4||c.flags24Through28[2]||
+       (c.inputFlags&~7u)||c.fireRequested!=bool(c.inputFlags&1u)||
+       c.orderRequested!=bool(c.inputFlags&2u)||c.reloadRequested!=bool(c.inputFlags&4u)||
+       (!c.inputFlags&&!c.flags24Through28[3]&&!c.flags24Through28[4]))return false;
+    for(unsigned b=0;b<3;++b)
+        if(!Held(in.branches[b],b<2&&restoredAt_[b]>=began_&&restoredAt_[b]<=in.nowNs,
+            b<2?restoredPrevious_[b]:0u,Boundary(mode_,emptyCycle_))||
+           in.branches[b].loaded!=loaded_||in.branches[b].reserve!=reserve_||in.capacities[b]!=capacity_)return false;
+    return BeginRecovery(in.nowNs);
+}
+bool Bc2NativeCycleService::ReleaseSupersededByRecovery(const Bc2NativeCycleControl& c)const noexcept {
+    if(phase_!=Bc2NativeCyclePhase::Converging||!recovery_.Active()||recovery_.Uncertain()||
+       concurrentCycle_||release_||ready_||!c.release||!Mapping(c)||
+       c.nativeOwner!=control_.nativeOwner||c.input.owner!=control_.input.owner||
+       c.item!=control_.item||c.mechanism!=control_.mechanism||
+       c.input.sequence<control_.input.sequence||c.input.observedNs<control_.input.observedNs||c.input.nowNs<control_.input.nowNs||
+       (c.input.sequence==control_.input.sequence&&(c.input.observedNs!=control_.input.observedNs||c.input.deadlineNs!=control_.input.deadlineNs)))return false;
+    const auto& r=*c.release;const auto& lease=r.cycle;
+    return r.request&&r.inputSequence&&r.inputSequence<=c.input.sequence&&r.observedNs<=c.input.nowNs&&
+        weapon_cycle_detail::Window(r.observedNs,r.deadlineNs,r.observedNs)&&r.deadlineNs<=lease.deadlineNs&&
+        lease.held&&!lease.advancing&&lease.owner==control_.input.owner&&lease.item==control_.item&&
+        lease.mechanism==control_.mechanism&&lease.cycle==cycle_&&lease.shot==shot_&&
+        std::find(issued_.begin(),issued_.end(),lease)!=issued_.end();
 }
 NativeCycleRecoveryDecision Bc2NativeCycleService::EvaluateRecovery(const NativeCycleRecoveryScope& scope,
     const ReloadFlowEventInput& entry,int capacity,std::int64_t deadline)noexcept {
@@ -182,13 +221,16 @@ std::optional<Bc2NativeCycleActorRetirement> Bc2NativeCycleService::RetireForRep
     selectionRequired_=true;selection_.reset();selectionSequence_=reserve.sequence;selectionTime_=now;
     actorRetirement_=retired;return retired;
 }
-bool Bc2NativeCycleService::Mapping(const Bc2NativeCycleControl& c)const noexcept {
+bool Bc2NativeCycleService::MappingScope(const Bc2NativeCycleControl& c)const noexcept {
     const auto& n=c.nativeOwner;const auto& h=c.input.owner;
     return c.permitted&&n.player>=0x10000&&n.soldier>=0x10000&&n.weak>=0x10000&&n.weapon>=0x10000&&
         weapon_cycle_detail::Owner(h)&&n.actorGeneration==h.actorGeneration&&n.equipGeneration&&n.space==h.space&&
         h.actor==((std::uint64_t(n.weak)<<32)|n.soldier)&&c.item.id==n.weapon&&c.item.generation==h.equipGeneration&&
-        weapon_cycle_detail::Key(c.mechanism)&&c.input.sequence&&c.input.focused&&c.input.tracked[0]&&c.input.tracked[1]&&
+        weapon_cycle_detail::Key(c.mechanism)&&c.input.sequence&&
         weapon_cycle_detail::Window(c.input.observedNs,c.input.deadlineNs,c.input.nowNs);
+}
+bool Bc2NativeCycleService::Mapping(const Bc2NativeCycleControl& c)const noexcept {
+    return MappingScope(c)&&c.input.focused&&c.input.tracked[0]&&c.input.tracked[1];
 }
 bool Bc2NativeCycleService::Control(const Bc2NativeCycleControl& c)noexcept {
     if(phase_==Bc2NativeCyclePhase::Cancelled)return false;
@@ -201,6 +243,16 @@ bool Bc2NativeCycleService::Control(const Bc2NativeCycleControl& c)noexcept {
     // SuspendExpiredController; its fixed bound and recovery remain unchanged.
     // Do not copy or restamp this packet, including a submitted old release.
     if(c.input.observedNs>0&&c.input.deadlineNs>c.input.observedNs&&c.input.nowNs>=c.input.deadlineNs)return false;
+    // A fresh same-owner tracking/focus-loss packet revokes physical control,
+    // not the known native debt. It cannot renew control or submit a stroke.
+    // Preserve an already submitted outcome; otherwise require the existing
+    // own-Update conversion/drain proof before guarded recovery can proceed.
+    if(!c.release&&MappingScope(c)&&(!c.input.focused||!c.input.tracked[0]||!c.input.tracked[1])&&
+       c.nativeOwner==control_.nativeOwner&&c.input.owner==control_.input.owner&&
+       c.item==control_.item&&c.mechanism==control_.mechanism&&
+       c.input.sequence>control_.input.sequence&&c.input.observedNs>control_.input.observedNs&&
+       c.input.nowNs>=control_.input.nowNs&&
+       (SuspendCompletion()||BeginRecovery(c.input.nowNs)||SuspendHeld(c.input.nowNs)))return false;
     if(!Mapping(c)){if(Active(phase_))Cancel(Bc2NativeCycleFailure::Control);return false;}
     if(control_.input.sequence){
         if(c.input.nowNs<control_.input.nowNs||c.input.observedNs<control_.input.observedNs||
@@ -367,9 +419,16 @@ Bc2NativeCycleDecision Bc2NativeCycleService::Evaluate(const ReloadHoldInput& in
     if(phase_==Bc2NativeCyclePhase::Watching||phase_==Bc2NativeCyclePhase::Complete)return out;
     if(in.nowNs>=deadline_){Cancel(Bc2NativeCycleFailure::Expired);return out;}
     if(phase_==Bc2NativeCyclePhase::Releasing)return out;
-    if(!Safe(in.context)||in.contextObservedNs<=0||in.contextObservedNs>in.nowNs||in.nowNs-in.contextObservedNs>ContextFreshNs){
+    const bool contextSafe=Safe(in.context);
+    const bool contextFresh=in.contextObservedNs>0&&in.contextObservedNs<=in.nowNs&&in.nowNs-in.contextObservedNs<=ContextFreshNs;
+    if(!contextSafe||!contextFresh){
         contexts_[in.branch]=0;
-        if(phase_==Bc2NativeCyclePhase::Held)Cancel(Bc2NativeCycleFailure::Input);
+        if(phase_==Bc2NativeCyclePhase::Held){
+            if(!firstInputRejection_)firstInputRejection_=Bc2NativeCycleInputRejection{
+                native_,in.context,invocation,cycle_,shot_,in.branch,in.contextObservedNs,in.nowNs,in.leaseDeadlineNs,
+                contextSafe,contextFresh};
+            Cancel(Bc2NativeCycleFailure::Input);
+        }
         return out;
     }
     for(unsigned n=0;n<3;++n)if(!Held(in.branches[n],n<2&&restoredAt_[n]>=began_&&restoredAt_[n]<=in.nowNs,n<2?restoredPrevious_[n]:0u,Boundary(mode_,emptyCycle_))||in.branches[n].loaded!=loaded_||in.branches[n].reserve!=reserve_||

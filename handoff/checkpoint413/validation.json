@@ -1,0 +1,93 @@
+{
+  "schema": "fvr.checkpoint413.public-validation.v1",
+  "recorded_utc": "2026-10-16T09:32:05.7002904Z",
+  "branch": "checkpoint/413-recovery-audio",
+  "source_parent": "6faca19b10050ddb9b68154f1e47859f37ef4efc",
+  "separately_preserved_remote_main": "c345db7e7a3b843243715c823c580a00f0821442",
+  "final_source_sha256": "e0b5940640f31346f9ebb26b62ef0a197691210e16d94c0b70843a5e4a65364d",
+  "final_normal_build_receipt_sha256": "abd2c2db918763cca6b3b3683611dfa6848908e5ade5414e94b739e419593e07",
+  "final_normal_binaries_sha256": {
+    "probe": "caaf3a33d872467bfaee36707895f3c0cc843c218d77903e8878f0a2e393026b",
+    "trace": "7ef290d6fb08fceafbd3783a9db005162ddbb9f91294bf700ea22b16a19cbf1a",
+    "receiver": "432d95ba33a5207f8dcb3e2383c5a750beb986341100f7fb2e02a775412e9573",
+    "host": "fa0822e2df7aa0ae2d0f7585bd12893c1de8cc8069954c5abc6b128cbeb08e04"
+  },
+  "tests": {
+    "x86_cpp_passed": 284,
+    "x86_cpp_total": 284,
+    "x64_cpp_passed": 284,
+    "x64_cpp_total": 284,
+    "audio_python_passed": 9,
+    "source_package_python_passed": 35
+  },
+  "evidence": {
+    "earlier_native_source_sha256": "137749ee42125e16380654e3db175e42255b5fa7ffecf95461a3bea955de5d52",
+    "interrupted_pump": "Partial stroke, tracking loss, fresh recovery stroke, conserved shell insertion, holster and rifle reload/refire. SPAS refire after interruption not exercised.",
+    "full_tube": "Eight SPAS shots/full manual cycles/acks/support returns; manual shell from empty, holster/rifle return; 16 audio cues completed.",
+    "endpoint_waveform": "One rear and closure reference each, approximately 37.744/49.189 ms after accepted physical stages; about 1 ms clock uncertainty. PC endpoint only.",
+    "final_hardened_source_sha256": "e0b5940640f31346f9ebb26b62ef0a197691210e16d94c0b70843a5e4a65364d",
+    "final_hardened_run": "One pump cycle, conserved shell 7/24 to 8/23, holster/rifle return, full-magazine return and two trigger-linked rifle shots.",
+    "final_audio": {
+      "suppressed": 1,
+      "physical_stages": 2,
+      "queued": 2,
+      "played": 2,
+      "play_failed": 0,
+      "stale": 0,
+      "route_checks": 512,
+      "route_failures": 0,
+      "cleanup_failures": 0,
+      "retained_driver_storage_bytes": 0,
+      "stock_pass_veto": 0
+    },
+    "final_hooks_drained": true,
+    "private_audit_receipts": {
+      "audit-interruption.json": {
+        "sha256": "d444c9667437dc9a3638ec3a84b9e7b9ccffcb1a1437ac233a7e6a4e3c4268a3",
+        "passed_with_documented_limits": true,
+        "trace_sha256": "c040760dc42600b8c4d017513f50303645f33dac57c497e2bf8c022907e76a8a"
+      },
+      "audit-empty413.json": {
+        "sha256": "d758475f1d7c7bb545b8d0013bf51918b4ed7b25216f4b95c8d4c62912cacb35",
+        "passed_with_documented_limits": true,
+        "trace_sha256": "cb9916890c633042af70aa8709c59d529fbfe6409bb1abb5e7fe6423eb609ddf"
+      },
+      "audit-audio-final413.json": {
+        "sha256": "667a9c6707366b8096ac87cc4cf99acb9bef4f4c5318fffd773a47e61a8821cb",
+        "passed_with_documented_limits": true,
+        "trace_sha256": "035feafbb08d83e6bcb32c3b852ad1e6be30664a8207d738ee59be7bd81ac99d"
+      }
+    }
+  },
+  "deployment": {
+    "desktop_launcher_profile": 413,
+    "launcher_app_version": "0.1.2",
+    "profile_sha256": "96cf547a53b8683cbb4f2d81cebfcabdf0bac51fc54652e2e7e3d03071e74aa7",
+    "spas_replacement_enabled_for_fresh_game": true,
+    "previous_412_profile_preserved": true,
+    "game_launched_by_promotion": false
+  },
+  "capture_accounting": {
+    "receiver_images_disabled": true,
+    "native_snapshots_per_inspected_run": 8,
+    "native_raw_bytes_per_inspected_run": 66355200,
+    "past_raw_sub_budget_incorrectly_zero": true,
+    "past_total_session_budget_bytes": 268435456,
+    "future_raw_budget_bytes": 536870912,
+    "future_total_session_budget_bytes": 805306368,
+    "four_run_lossless_compression_saved_bytes": 129101824,
+    "compression_hashes_unchanged": true,
+    "evidence_files_deleted": 0
+  },
+  "limits": [
+    "No checkpoint413 headset acceptance or full campaign playthrough.",
+    "Shared pump/bolt fixes and deterministic coverage do not register or live-validate every weapon.",
+    "SPAS native readiness remains approximately 0.50 to 0.70 seconds after closure.",
+    "Final stable audio route exercised; hardware unplug/reconnect and driver-failure branches are deterministic coverage only.",
+    "M95 audio replacement disabled; its stock sound contains casing impacts.",
+    "No spent-shell ejection or immediate post-shot pump timing fix claimed."
+  ],
+  "headset_verified": false,
+  "full_campaign_accepted": false,
+  "all_weapon_models_live_validated": false
+}

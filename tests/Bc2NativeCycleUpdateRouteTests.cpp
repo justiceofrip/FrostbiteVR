@@ -106,6 +106,82 @@ void PrepareRouteUpdate(RecoveryFixture& f,unsigned branch){
     f.update.exit.thread=a.thread;f.update.exit.nowNs=++f.clock;f.update.exit.boundary=a.boundary;
     f.update.exit.contextCopied=true;f.update.exit.copiedContext=a.copiedContext;f.update.finished=f.update.identityRetained=true;
 }
+int HeldActionInputConvertsSameUpdateAndPreservesDebt(){
+    for(bool m95:{false,true})for(bool empty:{false,true})for(unsigned action:{1u,2u,4u,7u,8u,16u}){
+        RecoveryFixture f(m95);
+        if(empty){
+            for(auto& b:f.input.branches){b.loaded=0;b.currentState=6;b.previousState=5;b.nextState=1;b.phaseTimer=.2f;}
+            for(unsigned b=0;b<3;++b)f.Shot(b,1);
+            for(unsigned pass=0;pass<2;++pass){CHECK(f.Advance());for(unsigned b=0;b<3;++b){f.Begin(b);f.Finish();}}
+            CHECK(f.service.View(f.clock).held);
+        }else CHECK(f.Held());
+        const auto debt=f.service.View(f.clock);const auto original=*debt.held;
+        auto& context=f.input.context;context.inputFlags=action&7u;
+        context.fireRequested=bool(action&1u);context.orderRequested=bool(action&2u);context.reloadRequested=bool(action&4u);
+        context.flags24Through28[3]=bool(action&8u);context.flags24Through28[4]=bool(action&16u);
+        PrepareRouteUpdate(f,0);
+        f.update.entry.copiedContext[0x27]=std::byte(context.flags24Through28[3]);
+        f.update.entry.copiedContext[0x28]=std::byte(context.flags24Through28[4]);
+        f.update.exit.copiedContext=f.update.entry.copiedContext;
+        // Reproduce the prior terminal Input path without changing the live
+        // service used below. This is modeled native input, not a headset proof.
+        auto legacy=f.service;legacy.Evaluate(f.input,f.update.id);
+        CHECK(legacy.Phase()==Bc2NativeCyclePhase::Cancelled&&legacy.View(f.clock).failure==Bc2NativeCycleFailure::Input);
+        const NativeCycleRecoveryScope scope{f.input.identity,f.input.config};
+        const auto route=EvaluateNativeCycleUpdateRoute(f.service,{&f.input,&scope,&f.update.entry,
+            f.input.identity.firing[0],f.update.id,m95?5:8,f.input.leaseDeadlineNs});
+        CHECK(route.recovering&&route.recovery&&!route.normal.tracked&&!route.normal.hold);
+        NativeCycleInputGuard guard;guard.requested=guard.applied=guard.restored=true;
+        guard.original={unsigned(context.flags24Through28[4]),context.inputFlags};guard.effective=guard.beforeRestore={1,0};
+        f.update.exit.cycleGuard=guard;f.update.exit.cycleGuardEpoch=route.recovery.epoch;
+        f.service.FinishRecovery(route.recovery,f.update,guard,0,0);
+        CHECK(f.service.RecoveryUpdates()==1&&f.service.Recovering());
+        CHECK(!f.service.FirstInputRejection()); // guarded action input is not a failed native callback
+        const auto current=f.service.View(f.clock);
+        CHECK(current.cycle==debt.cycle&&current.shot==debt.shot&&current.loaded==debt.loaded&&current.reserve==debt.reserve);
+        CHECK(current.blocksFire&&!current.held&&!current.ready&&!f.service.YieldForReload());
+        f.control.release=WeaponCycleRelease{original,1,f.control.input.sequence,f.clock,original.deadlineNs};
+        CHECK(!f.service.Control(f.control));f.control.release.reset(); // old stroke cannot complete recovery
+        context.inputFlags=0;context.fireRequested=context.orderRequested=context.reloadRequested=false;
+        context.flags24Through28[3]=context.flags24Through28[4]=false;
+        f.Rounds();CHECK(!f.service.RecoveryView(f.clock)->authority); // idle alone never forgives pump/bolt
+        CHECK(f.Grant());const auto authority=*f.service.RecoveryView(f.clock)->authority;
+        CHECK(f.Advance());const WeaponCycleIdleDebtRelease release{authority,2,f.control.input.sequence,
+            f.control.input.observedNs,std::min(f.control.input.deadlineNs,authority.deadlineNs)};
+        CHECK(f.service.SubmitRecovery(release,f.control.input));f.Rounds();const auto ready=f.service.RecoveryView(f.clock)->ready;
+        CHECK(ready&&f.service.AcknowledgeRecovery(*ready,f.clock)&&!f.service.View(f.clock).blocksFire);
+        CHECK(f.service.View(f.clock).loaded==debt.loaded&&f.service.View(f.clock).reserve==debt.reserve);
+        CHECK(f.service.YieldForReload()); // equipment is no longer trapped after proven completion
+    }return 0;
+}
+int InputRecoveryCannotReclassifyBadNativeEvidence(){
+    for(bool m95:{false,true})for(unsigned mutation=0;mutation<15;++mutation){
+        RecoveryFixture f(m95);CHECK(f.Held());f.input.context.inputFlags=1;f.input.context.fireRequested=true;
+        PrepareRouteUpdate(f,0);
+        if(mutation==0)++f.input.identity.owner.weapon;
+        if(mutation==1)++f.input.identity.serverItem;
+        if(mutation==2)++f.input.config.primaryFire;
+        if(mutation==3)--f.input.branches[1].loaded;
+        if(mutation==4)++f.input.branches[2].reserve;
+        if(mutation==5)++f.input.capacities[1];
+        if(mutation==6)f.input.context.flags24Through28[2]=true;
+        if(mutation==7)f.input.context.deltaSeconds=-1;
+        if(mutation==8)f.input.context.reloadTimeMultiplier=0;
+        if(mutation==9)f.input.contextObservedNs=f.input.nowNs-Bc2NativeCycleService::ContextFreshNs-1;
+        if(mutation==10)f.input.verified=false;
+        if(mutation==11)f.input.context.inputFlags=9;
+        if(mutation==12)f.input.context.fireRequested=false;
+        if(mutation==13){f.input.context.inputFlags=0;f.input.context.fireRequested=false;} // ordinary neutral stays held
+        if(mutation==14){f.service.Cancel(Bc2NativeCycleFailure::Restore);}
+        CHECK(!f.service.BeginInputRecovery(f.input,f.update.id));
+        CHECK(!f.service.Recovering()&&f.service.View(f.clock).blocksFire&&!f.service.View(f.clock).ready);
+    }
+    RecoveryFixture pending;CHECK(pending.Held()&&pending.Release());PrepareRouteUpdate(pending,0);
+    pending.input.context.inputFlags=1;pending.input.context.fireRequested=true;
+    CHECK(!pending.service.BeginInputRecovery(pending.input,pending.update.id));
+    CHECK(pending.service.Phase()==Bc2NativeCyclePhase::Releasing);
+    return 0;
+}
 int SerializedRouteAdmitsInterveningRecovery(){
     RecoveryFixture f;CHECK(f.Held());PrepareRouteUpdate(f,0);
     // Native reads already completed before cancellation's serialized turn.
@@ -266,6 +342,8 @@ int ControllerGapBetweenOwnShotReceiptsCannotDiscardDebt(){
     }return 0;
 }
 int main(){
+    CHECK(!HeldActionInputConvertsSameUpdateAndPreservesDebt());
+    CHECK(!InputRecoveryCannotReclassifyBadNativeEvidence());
     CHECK(!HeldInputAfterNativePauseMustNotBecomeTerminalTimeout());
     CHECK(!ControllerGapBetweenOwnShotReceiptsCannotDiscardDebt());
     CHECK(!ExpiredControllerKeepsExactNativeDebtUntilNeutral());

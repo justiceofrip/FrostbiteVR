@@ -9,19 +9,26 @@ math::Matrix4 Identity(){math::Matrix4 m{};for(unsigned n=0;n<4;++n)m.values[n][
 bool Equal(const math::Matrix4& a,const math::Matrix4& b){for(unsigned r=0;r<4;++r)for(unsigned c=0;c<4;++c)if(std::abs(a.values[r][c]-b.values[r][c])>1e-5f)return false;return true;}
 struct Native {
     Bc2NativeCycleView view{};unsigned controls=0,releases=0,acks=0,cancels=0;bool rejectRelease=false;
+    unsigned busyControls=0,busyReleases=0;bool precheckExpired=false;std::vector<Bc2NativeCycleControl> releaseAttempts;
     std::optional<WeaponCycleRelease> release;
-    Bc2PhysicalBoltApi Api(){return {this,
+    Bc2PhysicalBoltApi Api(){auto api=Bc2PhysicalBoltApi{this,
         [](void* p,const Bc2NativeCycleControl& c)noexcept{auto& n=*static_cast<Native*>(p);++n.controls;
             if(c.release){++n.releases;n.release=c.release;n.view.phase=Bc2NativeCyclePhase::Releasing;n.view.held.reset();return !n.rejectRelease;}return true;},
         [](void* p,std::int64_t)noexcept->std::optional<Bc2NativeCycleView>{return static_cast<Native*>(p)->view;},
         [](void* p,const WeaponCycleReady& r)noexcept{auto& n=*static_cast<Native*>(p);if(!n.view.ready||n.view.ready->release!=r.release||n.view.ready->sequence!=r.sequence)return false;
             ++n.acks;n.view.ready.reset();n.view.phase=Bc2NativeCyclePhase::Complete;n.view.blocksFire=false;return true;},
-        [](void* p)noexcept{++static_cast<Native*>(p)->cancels;}};}
+        [](void* p)noexcept{++static_cast<Native*>(p)->cancels;}};
+        api.controlResult=[](void* p,const Bc2NativeCycleControl& c)noexcept{auto& n=*static_cast<Native*>(p);
+            if(c.release){n.releaseAttempts.push_back(c);if(n.busyReleases){--n.busyReleases;return Bc2NativeCycleSubmitResult::Busy;}
+                if(n.precheckExpired){n.precheckExpired=false;return Bc2NativeCycleSubmitResult::NotDispatched;}}
+            else if(n.busyControls){--n.busyControls;return Bc2NativeCycleSubmitResult::Busy;}
+            return n.Api().control(p,c)?Bc2NativeCycleSubmitResult::Accepted:Bc2NativeCycleSubmitResult::Rejected;};return api;}
 };
 struct Fixture {
     Native native;HandInteraction hands;RigSnapshot rig;std::shared_ptr<Bc2BoltCalibration> calibration;
     std::unique_ptr<Bc2PhysicalBolt> bolt;Bc2PhysicalBoltSample sample;Bc2PhysicalBoltResult last;
     HandClaimToken originalGun{},originalSupport{};std::uint64_t intent=10;bool entered=false;
+    MechanismAudioLedger<> audioLedger;std::vector<MechanismAudioEvent> sounds;
     Fixture(){
         rig.names={"root","jntWpn_1","jntWpn_3","other"};rig.parents={-1,0,1,0};rig.weaponBone=1;
         rig.identity={0x20000,0x30000,0x50000,0x60000,0x70000,0x80000,0x90000,0xa0000,0xb0000,4,false};
@@ -55,14 +62,15 @@ struct Fixture {
         const auto contact=sample.custodyTransfer?sample.custodyTransfer->nextGun.request.contact.key:gun?gun->token.contact:HandInteractionKey{};
         sample.gunContact={contact,sample.input.sequence,sample.input.deadlineNs,true};
         if(!entered&&gun)hands.Renew(sample.input,gun->token,sample.gunContact);
-        last=bolt->Tick(sample,hands,intent);sample.custodyTransfer.reset();return last;
+        last=bolt->Tick(sample,hands,intent);sample.custodyTransfer.reset();
+        if(last.audio&&audioLedger.Accept(*last.audio,sample.input.nowNs)==MechanismAudioAdmission::Accepted)sounds.push_back(*last.audio);return last;
     }
     int Enter(){
         sample.custodyTransfer=HandGunCustodyTransfer{originalGun,originalSupport,{Request(left,HandClaimKind::GunHold,2),sample.input},{}};
         const auto r=Tick(calibration->profile.closedContact,true,false);
         CHECK(r.custodyChange&&r.custodyChange->transaction.accepted&&r.ownsGunCustody&&!hands.Current(right)&&hands.Current(left));entered=true;return 0;
     }
-    int Stroke(){
+    int Stroke(bool expectDispatch=true){
         auto r=Tick(calibration->profile.closedContact,false);CHECK(r.blocksFire&&r.tracking.weapon&&!r.ownsMechanism);
         r=Tick(calibration->profile.closedContact);CHECK(r.ownsMechanism&&r.tracking.target);
         const auto& p=calibration->profile;
@@ -75,7 +83,7 @@ struct Fixture {
         for(unsigned n=0;n<5;++n)step(0,p.unlockRadians);
         for(unsigned n=1;n<=4;++n)step(0,p.unlockRadians*(1.f-float(n)/4));
         for(unsigned n=0;n<5;++n)step(0,0);
-        CHECK(native.releases==1&&native.release&&!hands.Current(right)&&hands.Current(left)&&last.blocksFire);return 0;
+        CHECK((!expectDispatch||(native.releases==1&&native.release))&&!hands.Current(right)&&hands.Current(left)&&last.blocksFire);return 0;
     }
     int Return(){
         Tick(calibration->profile.closedContact,false);Next();sample.input.released[1]=false;
@@ -94,9 +102,11 @@ int AdmissionRemainsDisabled(){
 }
 int OrderedPhysicalNativeHandshake(){
     Fixture f;CHECK(f.Enter()==0&&f.Stroke()==0);const auto release=*f.native.release;
+    CHECK(f.sounds.size()==2&&f.sounds[0].stage==MechanismAudioStage::RearTravel&&f.sounds[1].stage==MechanismAudioStage::Closure);
+    CHECK(f.sounds[0].identity==f.sounds[1].identity&&f.sounds[1].sequence>f.sounds[0].sequence);
     for(unsigned n=0;n<20;++n){auto r=f.Tick(f.calibration->profile.closedContact);CHECK(r.blocksFire&&!r.ownsMechanism&&f.native.releases==1);}
     CHECK(f.Return()==0);f.Ready();for(unsigned n=0;n<8;++n)f.Tick(f.calibration->profile.closedContact);
-    CHECK(f.native.acks==1&&f.native.releases==1&&!f.last.blocksFire&&f.native.release==release);return 0;
+    CHECK(f.native.acks==1&&f.native.releases==1&&!f.last.blocksFire&&f.native.release==release&&!f.last.audio&&f.sounds.size()==2);return 0;
 }
 int NativeReadyDoesNotReturnCustody(){
     Fixture f;CHECK(f.Enter()==0&&f.Stroke()==0);f.Ready();auto r=f.Tick(f.calibration->profile.closedContact);
@@ -125,6 +135,31 @@ int AmbiguousSubmissionNeverRetries(){
     for(unsigned n=0;n<30;++n)f.Tick(f.calibration->profile.closedContact);
     CHECK(f.native.releases==1&&f.last.blocksFire&&!f.native.acks);return 0;
 }
+int BusyControlRetainsCustodyWithoutMechanismMotion(){
+    Fixture f;CHECK(f.Enter()==0);f.Tick(f.calibration->profile.closedContact,false);
+    CHECK(f.Tick(f.calibration->profile.closedContact).ownsMechanism);
+    const auto gun=f.hands.Current(left)->token,mechanism=f.hands.Current(right)->token;
+    f.native.busyControls=2;const auto controls=f.native.controls;
+    for(unsigned n=0;n<2;++n){const auto r=f.Tick(f.calibration->profile.closedContact);
+        CHECK(r.ownsGunCustody&&r.ownsMechanism&&r.tracking.weapon&&!r.tracking.target&&r.blocksFire&&!r.audio);
+        CHECK(f.hands.Current(left)->token==gun&&f.hands.Current(right)->token==mechanism&&f.native.controls==controls);}
+    CHECK(!f.native.cancels&&!f.native.releases);return 0;
+}
+int BusyReleaseRetriesExactPacketAndExpiresWithoutDispatch(){
+    for(bool expires:{false,true}){Fixture f;CHECK(f.Enter()==0);f.native.busyReleases=expires?1000:2;
+        CHECK(f.Stroke(!expires)==0);CHECK(!f.native.releaseAttempts.empty());const auto first=f.native.releaseAttempts.front();
+        if(expires){for(unsigned n=0;n<20;++n)f.Tick(f.calibration->profile.closedContact);
+            const auto attempts=f.native.releaseAttempts.size();CHECK(!f.native.releases&&f.last.blocksFire);
+            f.native.busyReleases=0;for(unsigned n=0;n<4;++n)f.Tick(f.calibration->profile.closedContact);
+            CHECK(f.native.releaseAttempts.size()==attempts);CHECK(f.Stroke()==0);
+            CHECK(f.native.release->request>first.release->request&&f.native.release->cycle.cycle==first.release->cycle.cycle);
+        }else{CHECK(f.native.releaseAttempts.size()==3);for(const auto& attempt:f.native.releaseAttempts){
+            CHECK(attempt.release==first.release&&attempt.input.sequence==first.input.sequence&&
+                attempt.input.observedNs==first.input.observedNs&&attempt.input.deadlineNs==first.input.deadlineNs);}}
+        CHECK(f.native.releases==1&&f.Return()==0);f.Ready();f.Tick(f.calibration->profile.closedContact);
+        CHECK(f.native.acks==1&&!f.last.blocksFire);
+    }return 0;
+}
 int PrivatePartAndRawMapping(){
     Fixture f;CHECK(f.Enter()==0);f.Tick(f.calibration->profile.closedContact,false);auto r=f.Tick(f.calibration->profile.closedContact);
     CHECK(r.tracking.target&&r.tracking.weapon);const auto before=f.rig.nativeEvaluated;
@@ -146,6 +181,16 @@ int PrivatePartAndRawMapping(){
         CHECK(!BuildBoltPartPlan(bad,rig,placed,1,f.sample.input.nowNs));}
     return 0;
 }
+int PredispatchExpiredReleaseKeepsGunAndNeedsNewGesture(unsigned busy){
+    Fixture f;CHECK(f.Enter()==0);const auto gun=f.hands.Current(left)->token;
+    f.native.precheckExpired=true;f.native.busyReleases=busy;CHECK(f.Stroke(false)==0);
+    for(unsigned n=0;n<5;++n)f.Tick(f.calibration->profile.closedContact);
+    CHECK(f.native.releaseAttempts.size()==busy+1&&!f.native.releases&&!f.native.acks&&f.last.blocksFire);
+    const auto old=*f.native.releaseAttempts.back().release;
+    CHECK(f.hands.Current(left)->token==gun);CHECK(f.Stroke()==0&&f.Return()==0);f.Ready();f.Tick(f.calibration->profile.closedContact);
+    CHECK(f.native.releases==1&&f.native.acks==1&&!f.last.blocksFire);
+    CHECK(f.native.release->request>old.request&&f.native.release->cycle.cycle==old.cycle.cycle&&f.native.release->cycle.shot==old.cycle.shot);return 0;
+}
 int PhysicalLossNeverSettlesDebt(){
     Fixture f;CHECK(f.Enter()==0);f.Tick(f.calibration->profile.closedContact,false);f.Tick(f.calibration->profile.closedContact);
     f.sample.input.tracked[0]=false;auto r=f.Tick(f.calibration->profile.closedContact);
@@ -164,6 +209,8 @@ int NativeOwnerAndHandOwnerStaySeparate(){
 }
 }
 int main(){
+    if(PredispatchExpiredReleaseKeepsGunAndNeedsNewGesture(0)||PredispatchExpiredReleaseKeepsGunAndNeedsNewGesture(2))return 1;
+    if(BusyControlRetainsCustodyWithoutMechanismMotion()||BusyReleaseRetriesExactPacketAndExpiresWithoutDispatch())return 1;
     if(CompletedCycleRetainsOnlyCurrentGunPlacement()||AdmissionRemainsDisabled()||OrderedPhysicalNativeHandshake()||NativeReadyDoesNotReturnCustody()||AmbiguousSubmissionNeverRetries()||
        PrivatePartAndRawMapping()||PhysicalLossNeverSettlesDebt()||NativeOwnerAndHandOwnerStaySeparate())return 1;
     std::puts("Physical bolt adapter: 8 groups passed; real custody/cycle, synthetic native receipts, private one-leaf palette, admission OFF.");return 0;

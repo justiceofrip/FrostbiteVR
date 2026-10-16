@@ -527,6 +527,170 @@ int ControllerExpiryAtAdmissionRetainsNativeDebt(){
     }return 0;
 }
 
+int FreshControllerLossRetainsDebtWithoutAdmittingThePacket(){
+    for(bool m95:{false,true})for(unsigned lost=0;lost<3;++lost){
+        RecoveryFixture f(m95);CHECK(f.Held());const auto debt=f.service.View(f.clock);
+        const auto previous=f.service.LastControlInput();auto unavailable=f.control;
+        ++unavailable.input.sequence;unavailable.input.observedNs=unavailable.input.nowNs=(f.clock+=1000000);
+        unavailable.input.deadlineNs=f.clock+100000000;
+        if(lost==0)unavailable.input.focused=false;else unavailable.input.tracked[lost-1]=false;
+        CHECK(!f.service.Control(unavailable));
+        CHECK(f.service.Phase()==Bc2NativeCyclePhase::Converging);
+        CHECK(f.service.LastControlInput().sequence==previous.sequence&&
+            f.service.LastControlInput().observedNs==previous.observedNs&&
+            f.service.LastControlInput().deadlineNs==previous.deadlineNs);
+        const auto after=f.service.View(f.clock);
+        CHECK(after.blocksFire&&!after.held&&!after.ready&&after.cycle==debt.cycle&&after.shot==debt.shot);
+        CHECK(after.loaded==debt.loaded&&after.reserve==debt.reserve&&!f.service.YieldForReload());
+        f.control.input.sequence=unavailable.input.sequence; // next emulated packet is genuinely newer
+        // Current native Updates keep the original debt safe during a headset
+        // gap; the rejected packet cannot become the neutral recovery edge.
+        f.Rounds();CHECK(!f.service.RecoveryView(f.clock)->authority);
+        CHECK(f.Grant());const auto authority=*f.service.RecoveryView(f.clock)->authority;
+        CHECK(f.Advance());const WeaponCycleIdleDebtRelease release{authority,1,f.control.input.sequence,
+            f.control.input.observedNs,std::min(f.control.input.deadlineNs,authority.deadlineNs)};
+        CHECK(f.service.SubmitRecovery(release,f.control.input));f.Rounds();const auto ready=f.service.RecoveryView(f.clock)->ready;
+        CHECK(ready&&f.service.AcknowledgeRecovery(*ready,f.clock)&&!f.service.View(f.clock).blocksFire);
+        CHECK(f.service.YieldForReload());
+    }return 0;
 }
-int main(){CHECK(!ControllerExpiryAtAdmissionRetainsNativeDebt());CHECK(!ConcurrentBoltRequiresFullGestureDespiteNativeIdle());CHECK(!ConcurrentReleaseWaitsForEveryFreshNativeBranch());CHECK(!ConcurrentAuthorityCannotBeForgedOrRefreshedByIdleTime());CHECK(!ConcurrentInterruptionReturnsToNeutralRecoveryWithoutForgivingDebt());CHECK(!ConcurrentGuardFailureNeverPermitsFire());CHECK(!RecenterFromUnsuspendedHoldCreatesFreshObservation());CHECK(!RecenterPreservesShotAndInvalidatesOldAuthority());CHECK(!RecenterRejectsOtherOwnersOpenCallbacksAndPendingOutcomes());CHECK(!PumpRecenterNeedsNewNeutralAndFullStroke());CHECK(!QueuedNeutralAfterSameTickNativeUpdatesArmsWithoutRestamping());CHECK(!EmptyShotRecoveryRetainsZeroAndStillRequiresGesture());CHECK(!GuardedCommitsRequireOwnOpenParentAndConservedProjection());CHECK(!RestoreNeverVotesAndBusyRewindsRevokeOnlyUnsubmittedAuthority());CHECK(!ExactGuardedIdleRecordMutations());CHECK(!RealPumpAdapterTrackingLossRegrabThroughNativeService());CHECK(!NativeIdleRequiresActualGesture());CHECK(!LongTrackingLossRetainsDebt());CHECK(!MissingGuardAndConservationNeverRecover());
+int ControllerLossCannotHideInvalidOwnerOrForgedRelease(){
+    for(bool m95:{false,true})for(unsigned mutation=0;mutation<8;++mutation){
+        RecoveryFixture f(m95);CHECK(f.Held());auto bad=f.control;
+        ++bad.input.sequence;bad.input.observedNs=bad.input.nowNs=(f.clock+=1000000);bad.input.deadlineNs=f.clock+100000000;
+        bad.input.focused=false;
+        if(mutation==0)++bad.nativeOwner.weapon;
+        if(mutation==1)++bad.nativeOwner.actorGeneration;
+        if(mutation==2)++bad.input.owner.equipGeneration;
+        if(mutation==3)++bad.mechanism.generation;
+        if(mutation==4)bad.permitted=false;
+        if(mutation==5)bad.input.sequence=f.control.input.sequence;
+        if(mutation==6){const auto old=*f.service.View(f.clock).held;
+            bad.release=WeaponCycleRelease{old,1,bad.input.sequence,bad.input.observedNs,bad.input.deadlineNs};}
+        if(mutation==7){f.clock+=101000000;bad.input.observedNs=bad.input.nowNs=f.clock;bad.input.deadlineNs=f.clock+100000000;}
+        CHECK(!f.service.Control(bad));CHECK(f.service.Phase()==Bc2NativeCyclePhase::Cancelled);
+        CHECK(f.service.View(f.clock).blocksFire&&!f.service.View(f.clock).ready&&!f.service.Recovering());
+    }
+    for(bool m95:{false,true}){RecoveryFixture f(m95);CHECK(f.Held()&&f.Release());const auto before=f.service.View(f.clock);
+        auto unavailable=f.control;unavailable.release.reset();++unavailable.input.sequence;
+        unavailable.input.observedNs=unavailable.input.nowNs=(f.clock+=1000000);unavailable.input.deadlineNs=f.clock+100000000;
+        unavailable.input.tracked[0]=false;
+        CHECK(!f.service.Control(unavailable));CHECK(f.service.Phase()==Bc2NativeCyclePhase::Releasing);
+        for(unsigned b=0;b<3;++b)f.Resume(b,m95);
+        const auto ready=f.service.View(f.clock).ready;
+        CHECK(ready&&f.service.AcknowledgeReady(*ready)&&!f.service.View(f.clock).blocksFire);
+        CHECK(f.service.View(f.clock).cycle==before.cycle&&f.service.View(f.clock).shot==before.shot);
+    }
+    return 0;
+}
+int InputRejectionCapturesExactCauseOnceAndSurvivesActorRetirement(){
+    for(bool m95:{false,true})for(unsigned cause=0;cause<10;++cause){
+        RecoveryFixture f(m95);CHECK(f.Held());CHECK(!f.service.FirstInputRejection());
+        const auto debt=f.service.View(f.clock);auto& in=f.input;
+        in.branch=1;in.contextObservedNs=in.nowNs=++f.clock;in.leaseDeadlineNs=f.clock+100000000;
+        if(cause==0){in.context.inputFlags=1;in.context.fireRequested=true;}
+        if(cause==1)in.contextObservedNs=in.nowNs-Bc2NativeCycleService::ContextFreshNs-1;
+        if(cause==2)in.contextObservedNs=in.nowNs+1;
+        if(cause==3)in.contextObservedNs=0;
+        if(cause==4)in.context.deltaSeconds=-.1f;
+        if(cause==5)in.context.reloadTimeMultiplier=0;
+        if(cause>=6&&cause<=8)in.context.flags24Through28[cause-4]=true;
+        if(cause==9)in.context.reloadTimeMultiplier=5;
+        in.context.rawWord1c=0x1234;
+        const auto invocation=++f.event;f.service.Evaluate(in,invocation);
+        CHECK(f.service.Phase()==Bc2NativeCyclePhase::Cancelled&&f.service.View(f.clock).failure==Bc2NativeCycleFailure::Input);
+        CHECK(f.service.FirstInputRejection());const auto captured=*f.service.FirstInputRejection();
+        CHECK(captured.native==in.identity&&captured.invocation==invocation&&captured.branch==in.branch);
+        CHECK(captured.cycle==debt.cycle&&captured.shot==debt.shot&&captured.processingNs==in.nowNs&&
+            captured.contextObservedNs==in.contextObservedNs&&captured.leaseDeadlineNs==in.leaseDeadlineNs);
+        CHECK(captured.contextSafe==(cause>=1&&cause<=3)&&captured.contextFresh==!(cause>=1&&cause<=3));
+        CHECK(captured.context.inputFlags==in.context.inputFlags&&captured.context.flags24Through28==in.context.flags24Through28&&
+            captured.context.deltaSeconds==in.context.deltaSeconds&&captured.context.reloadTimeMultiplier==in.context.reloadTimeMultiplier&&
+            captured.context.rawWord1c==in.context.rawWord1c&&captured.context.fireRequested==in.context.fireRequested);
+        // Teardown, another rejected callback and actor replacement cannot
+        // rewrite the first cause; only a true new service starts empty.
+        f.service.Cancel(Bc2NativeCycleFailure::Control);in.context.rawWord1c=99;
+        f.service.Evaluate(in,++f.event);
+        Bc2AmmoReserveLease replacement;replacement.identity=in.identity;
+        replacement.identity.owner.soldier+=0x10000;replacement.identity.owner.weak+=0x10000;
+        ++replacement.identity.owner.actorGeneration;replacement.identity.serverSoldier+=0x10000;
+        replacement.sequence=100;replacement.observedNs=++f.clock;replacement.deadlineNs=f.clock+50000000;
+        replacement.loaded=replacement.capacity=m95?5:8;replacement.reserve=debt.reserve;
+        replacement.verified=replacement.allThreeIdle=true;
+        const Bc2NativeCycleActorDrain drain{debt.native,debt.cycle,debt.shot,10,f.clock,replacement.deadlineNs,true};
+        CHECK(f.service.RetireForReplacementActor(replacement,f.clock,drain));
+        const auto retained=f.service.FirstInputRejection();
+        CHECK(retained&&retained->native==captured.native&&retained->invocation==captured.invocation&&
+            retained->processingNs==captured.processingNs&&retained->context.rawWord1c==0x1234);
+        Bc2NativeCycleService fresh;CHECK(!fresh.FirstInputRejection());
+    }
+    RecoveryFixture other;CHECK(other.Held());other.service.Cancel(Bc2NativeCycleFailure::Restore);
+    CHECK(!other.service.FirstInputRejection());return 0;
+}
+Bc2NativeCycleControl PendingHeldRelease(RecoveryFixture& f){
+    auto c=f.control;c.input.nowNs=f.clock;
+    const auto lease=*f.service.View(f.clock).held;
+    c.release=WeaponCycleRelease{lease,1,c.input.sequence,c.input.observedNs,std::min(c.input.deadlineNs,lease.deadlineNs)};
+    return c;
+}
+int RecoveryConversionDefinitivelyRejectsOnlyTheUndeliveredHeldRelease(){
+    for(bool m95:{false,true}){RecoveryFixture f(m95);CHECK(f.Held());
+        auto pending=PendingHeldRelease(f);const auto debt=f.service.View(f.clock);
+        CHECK(!f.service.ReleaseSupersededByRecovery(pending));
+        CHECK(f.service.BeginRecovery(f.clock));
+        CHECK(f.service.ReleaseSupersededByRecovery(pending));
+        CHECK(!f.service.View(f.clock).held&&!f.service.View(f.clock).ready&&f.service.View(f.clock).blocksFire);
+        CHECK(f.service.BeginRecovery(f.clock));CHECK(f.service.ReleaseSupersededByRecovery(pending));
+        // Denial is not a renewed lease. Even after its original deadline,
+        // exact nonacceptance can retire a queued command while current input
+        // is valid; it must never accept the old stroke as recovery completion.
+        f.clock=pending.release->deadlineNs;pending.input.nowNs=f.clock;
+        CHECK(f.service.ReleaseSupersededByRecovery(pending));CHECK(!f.service.Control(pending));
+        CHECK(!f.service.YieldForReload()&&f.service.View(f.clock).blocksFire);
+        CHECK(f.Grant());const auto authority=*f.service.RecoveryView(f.clock)->authority;
+        CHECK(f.Advance());const WeaponCycleIdleDebtRelease release{authority,2,f.control.input.sequence,
+            f.control.input.observedNs,std::min(f.control.input.deadlineNs,authority.deadlineNs)};
+        CHECK(f.service.SubmitRecovery(release,f.control.input));f.Rounds();const auto ready=f.service.RecoveryView(f.clock)->ready;
+        CHECK(ready&&f.service.AcknowledgeRecovery(*ready,f.clock));
+        CHECK(!f.service.View(f.clock).blocksFire&&!f.service.ReleaseSupersededByRecovery(pending));
+        CHECK(f.service.View(f.clock).cycle==debt.cycle&&f.service.View(f.clock).shot==debt.shot&&
+            f.service.View(f.clock).loaded==debt.loaded&&f.service.View(f.clock).reserve==debt.reserve);
+        CHECK(f.service.YieldForReload());
+    }return 0;
+}
+int RecoveryReleaseDenialCannotBeBorrowedOrHideAcceptedWork(){
+    for(bool m95:{false,true})for(unsigned mutation=0;mutation<19;++mutation){
+        RecoveryFixture f(m95);CHECK(f.Held());auto command=PendingHeldRelease(f);CHECK(f.service.BeginRecovery(f.clock));
+        if(mutation==0)++command.nativeOwner.weapon;
+        if(mutation==1)++command.input.owner.actorGeneration;
+        if(mutation==2)++command.item.generation;
+        if(mutation==3)++command.mechanism.id;
+        if(mutation==4)++command.release->cycle.cycle;
+        if(mutation==5)++command.release->cycle.shot;
+        if(mutation==6)++command.release->cycle.sequence;
+        if(mutation==7)command.release->request=0;
+        if(mutation==8)command.release->inputSequence=command.input.sequence+1;
+        if(mutation==9)command.release->deadlineNs=command.release->cycle.deadlineNs+1;
+        if(mutation==10)command.release->observedNs=0;
+        if(mutation==11)command.input.focused=false;
+        if(mutation==12)command.input.nowNs=command.input.deadlineNs;
+        if(mutation==13)--command.input.sequence;
+        if(mutation==14)--command.input.observedNs;
+        if(mutation==15)command.permitted=false;
+        if(mutation==16)command.release->cycle.held=false;
+        if(mutation==17)command.release->cycle.advancing=WeaponCycleGuardedAdvance{};
+        if(mutation==18)f.service.Cancel(Bc2NativeCycleFailure::Restore);
+        CHECK(!f.service.ReleaseSupersededByRecovery(command));
+        CHECK(f.service.View(f.clock).blocksFire&&!f.service.View(f.clock).ready);
+    }
+    for(bool m95:{false,true}){RecoveryFixture f(m95);CHECK(f.Held());auto accepted=PendingHeldRelease(f);
+        CHECK(f.service.Control(accepted));CHECK(!f.service.BeginRecovery(f.clock));
+        CHECK(!f.service.ReleaseSupersededByRecovery(accepted));
+        CHECK(f.service.Phase()==Bc2NativeCyclePhase::Releasing&&f.service.View(f.clock).blocksFire);
+    }
+    return 0;
+}
+
+}
+int main(){CHECK(!RecoveryConversionDefinitivelyRejectsOnlyTheUndeliveredHeldRelease());CHECK(!RecoveryReleaseDenialCannotBeBorrowedOrHideAcceptedWork());CHECK(!InputRejectionCapturesExactCauseOnceAndSurvivesActorRetirement());CHECK(!FreshControllerLossRetainsDebtWithoutAdmittingThePacket());CHECK(!ControllerLossCannotHideInvalidOwnerOrForgedRelease());CHECK(!ControllerExpiryAtAdmissionRetainsNativeDebt());CHECK(!ConcurrentBoltRequiresFullGestureDespiteNativeIdle());CHECK(!ConcurrentReleaseWaitsForEveryFreshNativeBranch());CHECK(!ConcurrentAuthorityCannotBeForgedOrRefreshedByIdleTime());CHECK(!ConcurrentInterruptionReturnsToNeutralRecoveryWithoutForgivingDebt());CHECK(!ConcurrentGuardFailureNeverPermitsFire());CHECK(!RecenterFromUnsuspendedHoldCreatesFreshObservation());CHECK(!RecenterPreservesShotAndInvalidatesOldAuthority());CHECK(!RecenterRejectsOtherOwnersOpenCallbacksAndPendingOutcomes());CHECK(!PumpRecenterNeedsNewNeutralAndFullStroke());CHECK(!QueuedNeutralAfterSameTickNativeUpdatesArmsWithoutRestamping());CHECK(!EmptyShotRecoveryRetainsZeroAndStillRequiresGesture());CHECK(!GuardedCommitsRequireOwnOpenParentAndConservedProjection());CHECK(!RestoreNeverVotesAndBusyRewindsRevokeOnlyUnsubmittedAuthority());CHECK(!ExactGuardedIdleRecordMutations());CHECK(!RealPumpAdapterTrackingLossRegrabThroughNativeService());CHECK(!NativeIdleRequiresActualGesture());CHECK(!LongTrackingLossRetainsDebt());CHECK(!MissingGuardAndConservationNeverRecover());
     CHECK(!NativeBusyRevokesGrantButNotSubmittedReceipt());CHECK(!ExistingHoldDrainsBeforeConvergence());CHECK(!NoConversionOfNormalPendingOrStaleHold());return 0;}

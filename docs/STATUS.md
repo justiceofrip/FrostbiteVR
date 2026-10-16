@@ -1,4 +1,26 @@
-# Current412: presentation candidate after improved410 headset feedback
+# Current413: shared pump/bolt recovery; real-game emulation passes
+
+The shared mechanism changes preserve shot debt while allowing fresh recovery
+after tracking loss and distinguishing temporary policy contention from native
+mutation failure. Real BC2 passed an interrupted pump sequence and a separate
+eight-shot pump/manual-shell/holster/rifle sequence. SPAS movement and closure
+audio passed a bounded PC endpoint capture. Final output-route hardening passed
+both full builds and an actual-game check with512 successful route checks.
+The desktop launcher selects normal413; [current details](CHECKPOINT-413.md)
+record exact scope and the separately published checkpoint branch.
+Latest human result remains412 below; no complete campaign acceptance.
+
+# Previous412 headset result: SPAS action lockout and independent audio mismatch
+
+The loaded binary matches412. A first pump cycle cancels with Control failure
+and one gate-contention event while controllers remain tracked; after actor
+recovery a later cycle cancels with Input failure. Unresolved pump debt blocks
+firing and inventory actions, while holster transitions themselves completed.
+The native callback window does not capture the precise causes. Audio still
+follows the stock fixed sample, independently of hand-driven pump visuals.
+No corrective build is deployed. [Full investigation](HEADSET-FAILURE-412.md).
+
+# Previous412: presentation candidate after improved410 headset feedback
 
 The latest human run reports much better pumping and reliable shell loading.
 412 addresses residual loading-shell presentation, lowers chest ammo20cm, moves

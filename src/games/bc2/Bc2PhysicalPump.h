@@ -1,4 +1,5 @@
 #pragma once
+#include "fvr/interaction/MechanismAudio.h"
 #include "Bc2NativeCycleService.h"
 #include "Bc2NativeCycleRecovery.h"
 #include "Bc2PumpPart.h"
@@ -82,6 +83,7 @@ struct Bc2PhysicalPumpApi {
     bool (*ack)(void*,const interaction::WeaponCycleReady&)noexcept=nullptr;
     void (*cancel)(void*)noexcept=nullptr;
     Bc2PhysicalCycleRecoveryApi recovery{};
+    Bc2NativeCycleSubmitResult (*controlResult)(void*,const Bc2NativeCycleControl&)noexcept=nullptr;
 };
 struct Bc2PhysicalPumpSample {
     ReloadStateOwner nativeOwner{};
@@ -98,6 +100,7 @@ struct Bc2PhysicalPumpResult {
     // successful acknowledgement by the real native API.
     std::optional<interaction::WeaponCycleReady> settled;
     std::optional<interaction::WeaponCycleIdleDebtReady> recovered;
+    std::optional<interaction::MechanismAudioEvent> audio;
 };
 struct Bc2PumpPackCounters {unsigned contacts=0,poses=0,copies=0,pairs=0,fallbacks=0,restPoses=0,restCopies=0,restPairs=0;};
 class Bc2PhysicalPump {
@@ -124,6 +127,7 @@ private:
     interaction::WeaponCycleProfile profile_{};
     std::optional<interaction::WeaponCycleLease> cycle_;
     std::optional<interaction::WeaponCycleRelease> pending_;
+    std::optional<Bc2NativeCycleControl> deferredControl_,deferredRecovery_;
     std::optional<interaction::WeaponCycleReady> acknowledged_;
     interaction::PhysicalWeaponCycleIdleDebt recoveryPhysical_;
     std::optional<interaction::WeaponCycleIdleDebtLease> recoveryCycle_;

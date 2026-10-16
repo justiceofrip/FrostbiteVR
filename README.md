@@ -1,14 +1,27 @@
 # FrostbiteVR
 
-**Checkpoint 412 — unreleased developer source.** This repository contains a
+**Checkpoint 413 — unreleased developer source.** This repository contains a
 modular Frostbite VR framework with a Bad Company 2 adapter. The latest source
-includes the work since the previous GitHub checkpoint 390.
+adds shared pump/bolt recovery fixes and movement-driven mechanism audio.
 
-Start with the [fork handoff](handoff/checkpoint412/README.md),
+Start with the [fork handoff](handoff/checkpoint413/README.md),
 [build instructions](BUILDING.md), and
 [current weapon coverage](docs/WEAPON-COVERAGE-CURRENT.md).
 
 ## Current evidence and limits
+
+Checkpoint413 corrects shared pump/bolt dispatch and interruption handling.
+Actual BC2 with synthetic controllers passed interrupted-pump recovery and a
+separate eight-shot pump/reload/holster/rifle sequence. Movement-driven SPAS
+audio has PC endpoint evidence; final audio-output recovery and bolt custody
+checks are documented in [checkpoint413](docs/CHECKPOINT-413.md).
+No413 headset acceptance or full campaign playthrough is claimed.
+
+**The October16 checkpoint412 headset run exposed a SPAS lockout:** firing,
+pumping and holstering stopped while grip remained usable. Actual loaded binary
+hashes match412. Two distinct cancelled native-cycle states are recorded; their
+complete original causes were not captured. See [the retained failure investigation](docs/HEADSET-FAILURE-412.md).
+The corrective automated results do not establish headset reliability.
 
 The latest normal410 headset feedback reports substantially better pumping and
 reliable manual shotgun loading, with remaining shell-animation and placement

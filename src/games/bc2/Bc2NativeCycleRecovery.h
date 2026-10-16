@@ -1,5 +1,6 @@
 #pragma once
 #include "Bc2ReloadHold.h"
+#include "Bc2NativeCycleDispatch.h"
 #include "fvr/interaction/WeaponCycle.h"
 namespace fvr::bc2 {
 // Separate, exact native convergence channel. This cannot renew a held timer
@@ -15,10 +16,13 @@ struct Bc2PhysicalCycleRecoveryApi {
     bool (*submit)(void*,const interaction::WeaponCycleIdleDebtRelease&,
         const interaction::HandInteractionSample&)noexcept=nullptr;
     bool (*ack)(void*,const interaction::WeaponCycleIdleDebtReady&)noexcept=nullptr;
-    bool Complete()const noexcept{return view&&submit&&ack;}
+    Bc2NativeCycleSubmitResult (*submitResult)(void*,const interaction::WeaponCycleIdleDebtRelease&,
+        const interaction::HandInteractionSample&)noexcept=nullptr;
+    bool Complete()const noexcept{return view&&(submit||submitResult)&&ack;}
 };
 namespace reloadFlowRuntime {
 std::optional<Bc2NativeCycleRecoveryView> ReadNativeCycleRecoveryView(std::int64_t now)noexcept;
+Bc2NativeCycleSubmitResult SubmitNativeCycleRecoveryResult(const interaction::WeaponCycleIdleDebtRelease&,const interaction::HandInteractionSample&)noexcept;
 bool SubmitNativeCycleRecovery(const interaction::WeaponCycleIdleDebtRelease&,const interaction::HandInteractionSample&)noexcept;
 bool AcknowledgeNativeCycleRecovery(const interaction::WeaponCycleIdleDebtReady&)noexcept;
 bool EnableNativeCycleRecovery()noexcept;

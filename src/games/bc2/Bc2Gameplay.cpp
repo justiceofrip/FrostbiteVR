@@ -14,6 +14,7 @@
 #endif
 #include "Bc2M95StockShotProbe.h"
 #include "Bc2NativeCycleRuntime.h"
+#include "Bc2MechanismAudio.h"
 #include "Bc2PumpControllerProbe.h"
 #include "Bc2BoltCustodyBridge.h"
 #include "Bc2BoltPlayerCustody.h"
@@ -159,6 +160,25 @@ void PublishTwoGrenadeDeathReadiness(const std::optional<private_grenade::Native
 #endif
 SelectedMeshesObservation selectedMeshes;
 std::atomic<std::shared_ptr<const AmmoCounterOwner>> ammoCounterOwner;
+std::uint64_t mechanismAudioActor=0,mechanismAudioGeneration=0;
+void PublishMechanismAudio(const ReloadStateOwner& native,const interaction::HandInteractionSample& input,
+    interaction::HandInteractionKey item,mechanismAudio::Cue cue,
+    const std::optional<interaction::MechanismAudioEvent>& event,bool manual) {
+    if(mechanismAudioActor&&(mechanismAudioActor!=input.owner.actor||mechanismAudioGeneration!=input.owner.actorGeneration))
+        mechanismAudio::RetireActor(mechanismAudioActor,mechanismAudioGeneration);
+    mechanismAudioActor=input.owner.actor;mechanismAudioGeneration=input.owner.actorGeneration;
+    mechanismAudio::Source source;
+    source.soldier=native.soldier;source.weak=native.weak;source.weapon=native.weapon;
+    source.identity={input.owner.actor,input.owner.actorGeneration,item.id,item.generation,0,0};
+    if(const auto view=reloadFlowRuntime::ReadNativeCycleView(input.nowNs);view&&view->native.owner==native){
+        source.identity.cycle=view->cycle;source.identity.shot=view->shot;
+    }
+    if(event)source.identity=event->identity;
+    source.cue=cue;source.observedNs=input.observedNs;source.deadlineNs=input.deadlineNs;
+    source.manual=manual;source.focused=input.focused;source.tracked=input.tracked[0]&&input.tracked[1];
+    mechanismAudio::Publish(source);
+    if(event)mechanismAudio::Emit(*event);
+}
 void CancelPhysicalReload(PhysicalReloadResult* unpublished=nullptr,unsigned sourceFlags=0)noexcept;
 void CancelWeaponVisibilityProbe()noexcept;
 std::optional<Bc2EmptyFireProbe> emptyFireFixture;
@@ -167,6 +187,11 @@ std::optional<Bc2ArmingEmptyProbe> armingEmptyFixture;
 #endif
 void ClearReloadOwner(ReloadOwnerLoss loss=ReloadOwnerLoss::LifetimeEnded)noexcept {
     ammoCounterOwner.store({},std::memory_order_release);
+    mechanismAudio::Publish({});
+    if(loss==ReloadOwnerLoss::LifetimeEnded&&mechanismAudioActor){
+        mechanismAudio::RetireActor(mechanismAudioActor,mechanismAudioGeneration);
+        mechanismAudioActor=mechanismAudioGeneration=0;
+    }
 #ifdef FVR_BC2_ARMING_EMPTY_PROBE
 if(armingEmptyFixture)armingEmptyFixture->Cancel();
 #endif
@@ -210,7 +235,10 @@ Bc2PhysicalBoltApi OrdinaryBoltApi()noexcept {
         {[](void*,std::int64_t now)noexcept{return reloadFlowRuntime::ReadNativeCycleRecoveryView(now);},
          [](void*,const interaction::WeaponCycleIdleDebtRelease& r,const interaction::HandInteractionSample& input)noexcept{
              return reloadFlowRuntime::SubmitNativeCycleRecovery(r,input);},
-         [](void*,const interaction::WeaponCycleIdleDebtReady& r)noexcept{return reloadFlowRuntime::AcknowledgeNativeCycleRecovery(r);}}};
+         [](void*,const interaction::WeaponCycleIdleDebtReady& r)noexcept{return reloadFlowRuntime::AcknowledgeNativeCycleRecovery(r);},
+         [](void*,const interaction::WeaponCycleIdleDebtRelease& r,const interaction::HandInteractionSample& input)noexcept{
+             return reloadFlowRuntime::SubmitNativeCycleRecoveryResult(r,input);}},
+        [](void*,const Bc2NativeCycleControl& c)noexcept{return reloadFlowRuntime::PublishNativeCycleControlResult(c);}};
 }
 Bc2PhysicalPumpApi OrdinaryPumpApi()noexcept {
     return {nullptr,
@@ -221,7 +249,10 @@ Bc2PhysicalPumpApi OrdinaryPumpApi()noexcept {
         {[](void*,std::int64_t now)noexcept{return reloadFlowRuntime::ReadNativeCycleRecoveryView(now);},
          [](void*,const interaction::WeaponCycleIdleDebtRelease& r,const interaction::HandInteractionSample& input)noexcept{
              return reloadFlowRuntime::SubmitNativeCycleRecovery(r,input);},
-         [](void*,const interaction::WeaponCycleIdleDebtReady& r)noexcept{return reloadFlowRuntime::AcknowledgeNativeCycleRecovery(r);}}};
+         [](void*,const interaction::WeaponCycleIdleDebtReady& r)noexcept{return reloadFlowRuntime::AcknowledgeNativeCycleRecovery(r);},
+         [](void*,const interaction::WeaponCycleIdleDebtRelease& r,const interaction::HandInteractionSample& input)noexcept{
+             return reloadFlowRuntime::SubmitNativeCycleRecoveryResult(r,input);}},
+        [](void*,const Bc2NativeCycleControl& c)noexcept{return reloadFlowRuntime::PublishNativeCycleControlResult(c);}};
 }
 std::optional<Bc2PumpControllerProbe> physicalPumpFixture;
 std::optional<Bc2M95StockShotProbe> m95StockShotFixture;
@@ -1804,6 +1835,8 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         sample.cancel=(physicalPumpFixture&&physicalPumpFixture->Failed())||(resourcePumpCombination&&resourceInventoryFixture&&resourceInventoryFixture->CancelConsumer())||!aimValid||!out.active||bodyDraw.pending||(physicalReload&&physicalReload->BlocksEquipment())||physicalResult.ammoOwnsHand||magazineResult.blocksWeaponActions||
             ((out.pressed|out.held)&(interaction::Use|interaction::NextWeapon|interaction::PreviousWeapon));
         pumpResult=physicalPump->Tick(sample,handOwnership,handIntent);
+        PublishMechanismAudio(sample.nativeOwner,sample.input,sample.item,mechanismAudio::Cue::Spas,
+            pumpResult.audio,!sample.cancel&&ordinarySelectionReady);
         if(physicalPumpFixture){LARGE_INTEGER processed{};QueryPerformanceCounter(&processed);const auto now=HandNanos(processed.QuadPart);
             physicalPumpFixture->Observe(pumpResult,reloadFlowRuntime::ReadNativeCycleView(now),rigPublication::ReadPumpPackCounters(),now);}
         if(resourcePumpCombination&&resourceInventoryFixture){LARGE_INTEGER processed{};QueryPerformanceCounter(&processed);const auto now=HandNanos(processed.QuadPart);
@@ -1827,6 +1860,8 @@ void __fastcall GatherHook(void* self,void*,void* cache){
             physicalBoltCustody=boltResult.tracking.custody;
             if(boltResult.custodyChange&&boltResult.custodyChange->transaction.accepted)HandChanged("bolt_player_return");
         }
+        if(ordinaryBoltSample)PublishMechanismAudio(ordinaryBoltSample->nativeOwner,ordinaryBoltSample->input,
+            ordinaryBoltSample->item,mechanismAudio::Cue::M95,boltResult.audio,!ordinaryBoltSample->cancel&&ordinarySelectionReady);
         if(ordinaryBoltInputFixture){LARGE_INTEGER processed{};QueryPerformanceCounter(&processed);const auto now=HandNanos(processed.QuadPart);
             ordinaryBoltInputFixture->Observe(boltResult,reloadFlowRuntime::ReadNativeCycleView(now),rigPublication::ReadBoltPackCounters(),now);}
         ApplyPumpActionGate(out,ordinaryBoltPlayer->BlocksFire());
@@ -1837,6 +1872,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         ApplyPumpResourceHandoffGate(out,!ordinarySelectionReady||!ordinaryBoltPlayer->ReferencesReady()||boltResult.blocksFire||!currentTriggerGun);
     }
     if(ordinaryManualCycles&&asset==SpasReloadAsset)ApplyPumpResourceHandoffGate(out,!ordinarySelectionReady);
+    if(!pumpSelected&&!(ordinaryManualCycles&&asset=="M95_sp"))mechanismAudio::Publish({});
     if(!ordinaryManualCycles&&physicalBolt&&physicalBoltCalibration){
         Bc2PhysicalBoltSample sample;sample.nativeOwner={owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,input.spaceGeneration};
         LARGE_INTEGER boltProcessed{};QueryPerformanceCounter(&boltProcessed);handSample.nowNs=HandNanos(boltProcessed.QuadPart);

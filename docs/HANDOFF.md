@@ -1,4 +1,31 @@
-# Current412: presentation follow-up and launch overhead
+# Current413: shared mechanism recovery and staged audio
+
+The latest human result remains failed412. Candidate413 distinguishes busy or
+proven-undispatched policy requests from ambiguous native failures, preserves
+owed pump/bolt steps through tracking interruption, and retains bolt gun custody
+while waiting for neutral input. Actual BC2 emulation passed interrupted-pump
+recovery and a separate eight-shot empty-tube reload/holster/rifle sequence.
+PC endpoint audio evidence detects rear and closure cues at their physical stages.
+Final route/driver-ownership hardening passed both full builds and a real-game
+cycle with512 successful route checks and clean cue completion. The desktop
+launcher now selects normal413; source is isolated on
+`checkpoint/413-recovery-audio` to preserve remote main's newer build/docs work. Use
+[checkpoint413](CHECKPOINT-413.md) and [its fork handoff](../handoff/checkpoint413/README.md)
+for exact source, deployment and remaining limits. No new headset claim.
+
+# Previous human412: pump debt blocks weapon actions
+
+October16 headset feedback reports SPAS firing/pumping/holstering lockout while
+grip remained functional. The actual loaded module hash matches normal412.
+First failure is Held to Cancelled/Control with contention1 while input remains
+tracked; after actor recovery a later cycle ends Cancelled/Input. Holster
+transitions themselves completed, but pump debt blocks inventory actions. The
+precise failed gate caller and later native input context remain unrecorded.
+The mod was stopped with permission; BC2 and SteamVR remain open. No new build
+is deployed. See [failure evidence and next boundaries](HEADSET-FAILURE-412.md)
+and [separate audio work](PUMP-AUDIO-INVESTIGATION.md).
+
+# Previous412: presentation follow-up and launch overhead
 
 The normal410 headset run reported substantially better pumping and reliable
 shell loading, with residual stock shell visuals, absent spent-shell ejection,

@@ -7,6 +7,7 @@
 #include "Bc2StereoRecovery.h"
 #include "fvr/runtime/RenderOwnerRecovery.h"
 #include "Bc2Gameplay.h"
+#include "Bc2MechanismAudio.h"
 #include "Bc2PumpCalibration225.h"
 #include "Bc2ReloadFlowRuntime.h"
 #include "Bc2NativeCycleRuntime.h"
@@ -2034,6 +2035,7 @@ bool DisableProbeHooks()noexcept {
     fvr::bc2::opticFilterRuntime::Disable();
     fvr::bc2::rigWorkerRuntime::Disable();
     workerViewLease.store({},std::memory_order_release);
+    const bool audioDisabled=fvr::bc2::mechanismAudio::Stop();
     const bool gameplayDisabled=fvr::bc2::gameplay::Stop();
     const bool menuDisabled=fvr::bc2::menu::Stop();
     deferredCleanup.store(true,std::memory_order_release);bool allDisabled=true;
@@ -2051,7 +2053,8 @@ bool DisableProbeHooks()noexcept {
     for(unsigned attempt=0;attempt<200;++attempt){if(fvr::bc2::rigWorkerRuntime::Quiescent()){workerDrained=true;break;}Sleep(1);}
     bool opticDrained=false;
     for(unsigned attempt=0;attempt<200;++attempt){if(fvr::bc2::opticFilterRuntime::Quiescent()){opticDrained=true;break;}Sleep(1);}
-    return allDisabled&&gameplayDisabled&&menuDisabled&&drawCaptureDrained&&workerDrained&&opticDrained&&bodyAmmoRenderer.Quiescent();
+    const bool audioDrained=fvr::bc2::mechanismAudio::DrainAndRemove();
+    return allDisabled&&gameplayDisabled&&menuDisabled&&audioDisabled&&audioDrained&&drawCaptureDrained&&workerDrained&&opticDrained&&bodyAmmoRenderer.Quiescent();
 }
 void Require(bool okay,const char* message){if(!okay)throw std::runtime_error(message);}
 std::size_t Offset(const fvr::engine::PeImage& pe,unsigned rva,std::size_t count){for(const auto& s:pe.sections)if(rva>=s.rva&&rva-s.rva<=s.rawSize&&count<=s.rawSize-(rva-s.rva))return std::size_t(s.rawOffset)+rva-s.rva;throw std::runtime_error("Unbacked profile address");}
@@ -2281,6 +2284,20 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
         if(viewAnchorMode){const auto candidate=fvr::bc2::DiscoverViewAnchor(bytes,pe.image);Require(bool(candidate),"Native view anchor unverified");viewAnchor=*candidate;
             Require(same(viewAnchor.getter,4)&&same(viewAnchor.setter,0x56)&&same(viewAnchor.objectPrepare,0x2a4),"Native view anchor modified");}
         if(config.flags&0x800u)Require(fvr::bc2::gameplay::Install(bytes,pe.image,imageBase,[](fvr::interaction::InputFrame& out,std::int64_t& deadline)noexcept{return frameBridge.ReadInput(out,&deadline);},bool(config.flags&0x1000u),bool(config.flags&0x2000u),bool(config.flags&0x4000u),bool(config.flags&0x8000u),bool(config.flags&0x10000u),bool(config.flags&0x20000u),bool(config.flags&0x40000u),bool(config.flags&0x80000u),bool(config.flags&0x100000u),bool(config.flags&0x200000u),bool(config.flags&0x400000u),bool(config.flags&0x800000u),bool(config.flags&0x1000000u),bool(config.flags&0x2000000u),bool(config.flags&0x4000000u),config.magazineReloadSession),"Native gameplay binding unverified");
+        if(config.flags&0x800u){
+            fvr::bc2::mechanismAudio::Config audioConfig{};
+            // Default is observation only. The private replacement opt-in may
+            // be used only after the local 1P dispatch witness is reviewed.
+            wchar_t replace[4]{},cache[1024]{};
+            if(GetEnvironmentVariableW(L"BC2_MECHANISM_AUDIO_REPLACE_SPAS",replace,4)==1&&replace[0]==L'1'){
+                const auto size=GetEnvironmentVariableW(L"BC2_MECHANISM_AUDIO_CACHE",cache,1024);
+                Require(size>0&&size<1024,"Mechanism audio requires its private G-drive cue cache");
+                audioConfig.replaceSpas=true;audioConfig.rearWave=std::filesystem::path(cache)/L"spas-rear.wav";
+                audioConfig.closureWave=std::filesystem::path(cache)/L"spas-closure.wav";
+            }
+            const bool audioInstalled=fvr::bc2::mechanismAudio::Install(imageBase,audioConfig);
+            if(audioConfig.replaceSpas)Require(audioInstalled,"Mechanism audio callback binding or private cache unverified");
+        }
         if(config.boatHeadAim!=fvr::bc2::BoatHeadAimMode::Disabled)
             Require(fvr::bc2::gameplay::EnableBoatHeadAim(config.boatHeadAim==fvr::bc2::BoatHeadAimMode::AimAndFire),
                 "Boat head aim native ownership binding unverified");
@@ -2786,6 +2803,7 @@ Sleep(DWORD(std::min<std::uint64_t>((toolFixture||config.ordinaryGrenadeInput==4
             <<",\"normal_player_knife\":"<<(config.normalPlayerKnife?"true":"false")
             <<",\"normal_contextual_tools\":"<<(config.normalContextualTools?"true":"false");
         report<<",\"gameplay\":";fvr::bc2::gameplay::Report(report);
+        report<<",\"mechanism_audio\":";fvr::bc2::mechanismAudio::Report(report);
         report<<",\"weapon_visibility_clock_frequency\":"<<(weaponVisibilityProbeMode?reloadDrawFrequency:0);
         report<<",\"weapon_visibility_eyes\":[";
         for(unsigned n=0;n<weaponVisibilityEyeCount;++n){if(n)report<<',';const auto& r=weaponVisibilityEyes[n];
@@ -2973,7 +2991,8 @@ Sleep(DWORD(std::min<std::uint64_t>((toolFixture||config.ordinaryGrenadeInput==4
             else{
                 fvr::bc2::opticFilterRuntime::Disable();fvr::bc2::rigWorkerRuntime::Disable();
                 const bool gameplayStopped=fvr::bc2::gameplay::Stop(),menuStopped=fvr::bc2::menu::Stop();
-                disabled=gameplayStopped&&menuStopped&&fvr::bc2::rigWorkerRuntime::Quiescent()&&fvr::bc2::opticFilterRuntime::Quiescent();
+                const bool audioStopped=fvr::bc2::mechanismAudio::DrainAndRemove();
+                disabled=gameplayStopped&&menuStopped&&audioStopped&&fvr::bc2::rigWorkerRuntime::Quiescent()&&fvr::bc2::opticFilterRuntime::Quiescent();
             }
         }
         if(report)report<<"{\"state\":\"failed\",\"error\":\""<<e.what()<<"\",\"hooks_disabled\":"<<(disabled?"true":"false")<<"}\n";return 20;}
