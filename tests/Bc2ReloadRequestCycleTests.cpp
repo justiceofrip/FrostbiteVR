@@ -3,6 +3,7 @@
 #include "Bc2ReloadPolicyLock.h"
 #include "Bc2ReloadAbort.h"
 #include "Test.h"
+#include <string_view>
 #include <cstring>
 #include <limits>
 #include <type_traits>
@@ -863,8 +864,44 @@ template<class Policy> int CompletedShellStopAcrossPublicationGap(){
     CHECK(stale.Tick(60000000));CHECK(!stop(stale.gate,stale.input.nowNs));
     return 0;
 }
-int main()
+
+template<class Policy> int CompletedShellsThenPresentationLoss(){
+    const auto stop=[](auto& policy,std::int64_t now){
+        if constexpr(std::is_same_v<Policy,Bc2ReloadNativePolicy>)return policy.ShellStopIntent(now);
+        else return policy.StopIntent(now);
+    };
+    for(unsigned shells=1;shells<=2;++shells){
+        SimulationFor<Policy> s;for(auto& b:s.input.branches){b.loaded=5;b.reserve=24;}
+        CHECK(s.Arm());
+        for(unsigned n=0;n<shells;++n){CHECK(s.gate.Submit(s.Request(47+n),s.input.nowNs));
+            CHECK(!stop(s.gate,s.input.nowNs)); // uncommitted native transfer
+            CHECK(s.CompleteRound());CHECK(!stop(s.gate,s.input.nowNs)); // undelivered acknowledgement
+            CHECK(s.gate.TakeAcknowledgement(s.input.identity,s.control.cycle,s.input.nowNs));CHECK(s.HoldAll());}
+        auto prearm=s.input;const auto intent=stop(s.gate,s.input.nowNs);CHECK(intent);
+        const auto armNs=s.input.nowNs+200;ReloadAbortCleanup cleanup;CHECK(cleanup.ArmShellStop(*intent,7,armNs));
+        s.gate.Cancel();
+#ifdef FVR_TEST_LEGACY_CLEAR
+        cleanup.Abandon(ReloadAbortFailure::Owner,armNs+100);
+#else
+        cleanup.OwnerCleared(ReloadOwnerLoss::PresentationUnavailable,armNs+100);
+#endif
+        CHECK(cleanup.Active()&&cleanup.Deadline()==intent->deadlineNs);
+        CHECK(!cleanup.Claim(prearm,7,s.control.cycle,true,100,true,armNs+200).call&&cleanup.Active());
+        for(unsigned b=0;b<3;++b){s.input.branch=b;s.input.nowNs=armNs+1000+b*1000;
+            const auto d=cleanup.Claim(s.input,7,s.control.cycle,true,101+b,true,s.input.nowNs);CHECK(d.call);
+            auto after=s.input.branches[b];after.currentState=after.nextState=2;after.phaseTimer=0;
+            CHECK(cleanup.Allows(d,7,s.control.cycle,true,s.input.nowNs));
+            CHECK(cleanup.Finish(d,after,true,true,s.input.nowNs+100));
+            CHECK(after.loaded==5+int(shells)&&after.reserve==24-int(shells));}
+        CHECK(cleanup.Completed()==7&&!cleanup.Active());
+        CHECK(!s.gate.Submit(s.Request(99),s.input.nowNs));
+        CHECK(!cleanup.OriginalLease().nativeBindingVerified&&!cleanup.OriginalLease().allThreeHeld);
+    }return 0;
+}
+int main(int argc,char** argv)
 {
+    if(argc>1&&std::string_view(argv[1])=="--shell-interruption")return CompletedShellsThenPresentationLoss<Bc2ReloadRequestCycle>()||CompletedShellsThenPresentationLoss<Bc2ReloadNativePolicy>();
+    if(CompletedShellsThenPresentationLoss<Bc2ReloadRequestCycle>()||CompletedShellsThenPresentationLoss<Bc2ReloadNativePolicy>())return 1;
     if(CompletedShellStopAcrossPublicationGap<Bc2ReloadRequestCycle>()||CompletedShellStopAcrossPublicationGap<Bc2ReloadNativePolicy>())return 1;
     if(SubmittedShellSurvivesOtherBranchSchedulingGap<Bc2ReloadRequestCycle>()||SubmittedShellSurvivesOtherBranchSchedulingGap<Bc2ReloadNativePolicy>())return 1;
     if(ExactTubePredictionReplay<Bc2ReloadRequestCycle>()||ExactTubePredictionReplay<Bc2ReloadNativePolicy>()||PredictionRestoreDoesNotBorrowConfigOrControl()||PredictionRestoreDoesNotRestampContext())return 1;

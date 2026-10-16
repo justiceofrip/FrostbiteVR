@@ -70,14 +70,22 @@ struct WeaponSightObservation {
     // Only the adapter's settled authored attachment is contact evidence.
     bool hidden=false,attachmentReady=false;
 };
+// A measured geometry identity can be shared only by an explicitly enrolled
+// configuration pair. Asset/configuration admission stays with that adapter.
+struct OpposedSightGeometry {
+    std::uint64_t skeletonFingerprint=0;
+    std::string_view root,rear,front;
+};
+inline constexpr OpposedSightGeometry Xm320OpposedSightGeometry{
+    0xa7f219a1426216abull,"jntWpn_1","jntWpn_9","jntWpn_11"};
 // October 1 source/projection evidence: scoped XM8 and its XM320 mode share this
 // rig. jntWpn_9 is the rear ladder, direct child of jntWpn_1. Its observed ladder
 // extends about11cm along joint-local -Z; row0 is the hinge axis. This function
 // measures contact only. It never edits native sight matrices or enables a mode.
-inline WeaponSightContact MeasureWeaponSightContact(const WeaponSightObservation& s)noexcept {
+inline WeaponSightContact MeasureWeaponSightContact(const WeaponSightObservation& s,const OpposedSightGeometry& geometry)noexcept {
     WeaponSightContact out;
-    if((s.assetName!="XM8_sp_s"&&s.assetName!="40mmgl")||s.skeletonFingerprint!=0xa7f219a1426216abull||
-       s.rootName!="jntWpn_1"||s.sightName!="jntWpn_9"||s.sightParentName!=s.rootName||s.hidden||!s.attachmentReady||!s.palmValid||
+    if(!geometry.skeletonFingerprint||s.skeletonFingerprint!=geometry.skeletonFingerprint||
+       s.rootName!=geometry.root||s.sightName!=geometry.rear||s.sightParentName!=s.rootName||s.hidden||!s.attachmentReady||!s.palmValid||
        !s.generation||s.deadline<=0||!std::isfinite(s.unitsPerMetre)||s.unitsPerMetre<=0||
        !std::isfinite(s.segmentLengthMeters)||s.segmentLengthMeters<=0||s.segmentLengthMeters>.3f||
        !std::isfinite(s.minGrabAlongMeters)||s.minGrabAlongMeters<0||s.minGrabAlongMeters>=s.segmentLengthMeters||
@@ -127,5 +135,11 @@ inline WeaponSightContact MeasureWeaponSightContact(const WeaponSightObservation
         }
     }
     out.axis=*axis;out.generation=s.generation;out.deadline=s.deadline;out.valid=true;return out;
+}
+// Preserve the original standalone scoped reader. New variants use the exact
+// family/configuration adapter below; they never impersonate a scoped asset.
+inline WeaponSightContact MeasureWeaponSightContact(const WeaponSightObservation& s)noexcept {
+    if(s.assetName!="XM8_sp_s"&&s.assetName!="40mmgl")return {};
+    return MeasureWeaponSightContact(s,Xm320OpposedSightGeometry);
 }
 }

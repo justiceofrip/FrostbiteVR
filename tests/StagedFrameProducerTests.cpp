@@ -69,7 +69,7 @@ int main(){
     CHECK(producer.Cancel(first)==ipc::ChannelResult::Invalid);
     // Deterministic lost-wakeup regression: Publish signals while a recursive
     // outer hold keeps the named mutex unavailable to the awakened host.
-    const auto mutexName=L"Local\\FrostbiteVR.Control.v6."+host.Token()+L".mutex";
+    const auto mutexName=L"Local\\FrostbiteVR.Control.v7."+host.Token()+L".mutex";
     HANDLE heldMutex=OpenMutexW(SYNCHRONIZE|MUTEX_MODIFY_STATE,FALSE,mutexName.c_str());CHECK(heldMutex);
     CHECK(WaitForSingleObject(heldMutex,10)==WAIT_OBJECT_0);
     const auto firstPublished=GetTickCount64();producer.PumpGraphics();Sleep(8);CHECK(ReleaseMutex(heldMutex));CloseHandle(heldMutex);

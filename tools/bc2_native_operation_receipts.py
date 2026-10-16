@@ -8,7 +8,8 @@ from pathlib import Path
 SCHEMA='fvr.bc2.native-operation-source.v1'
 ROOTS=tuple('src/games/bc2/'+n+'.cpp' for n in (
  'Bc2SelectedMeshes1p','Bc2WeaponVisibility','Bc2HolsterInput','Bc2BodyHolster',
- 'Bc2BodyInventory','Bc2InputBinding','Bc2RigPublication','Bc2Gameplay','NativeProbe','Bc2RigWorkerRuntime','Bc2ReloadFlowRuntime'))+tuple(
+ 'Bc2BodyInventory','Bc2InputBinding','Bc2RigPublication','Bc2Gameplay','NativeProbe','Bc2RigWorkerRuntime','Bc2ReloadFlowRuntime',
+ 'Bc2ContextualToolControl'))+tuple(
  'third_party/minhook-1.3.4/src/'+n for n in ('buffer.c','hook.c','trampoline.c','hde/hde32.c'))
 DATA_EXCLUSIONS=frozenset('src/games/bc2/'+n for n in (
  'Bc2VisibilityDescriptorData.h','Bc2BodyEquipmentProfiles.h','Bc2BodyAmmoAssetProfiles.h','Bc2BeltPropProfiles.h'))

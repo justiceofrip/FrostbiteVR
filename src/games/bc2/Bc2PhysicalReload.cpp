@@ -240,15 +240,34 @@ PhysicalReloadResult Bc2PhysicalReload::Tick(const PhysicalReloadSample& supplie
             pendingTargets_.reset();guidedPreview_.reset();return out;
         }
         const bool held=lease_&&lease_->nativeBindingVerified&&lease_->allThreeHeld;
+        const bool heldObservation=lease_&&lease_->observedNs>0&&lease_->observedNs<=s.input.nowNs&&
+            lease_->deadlineNs>lease_->observedNs&&lease_->deadlineNs-lease_->observedNs<=200000000&&
+            (lease_->deadlineNs>s.input.nowNs||holdEstablished_);
         const bool original=active_&&!retiring_&&safe&&!s.cancel&&s.asset==SpasReloadAsset&&
             native_.owner==s.nativeOwner&&physical_==s.input.owner&&s.meshes&&
             FindSelectedMesh(*s.meshes,s.nativeOwner,SelectedMeshKind::Spas12,s.input.nowNs)&&
             reserve_&&reserve_->verified&&reserve_->identity==native_&&
             Fresh(reserve_->observedNs,reserve_->deadlineNs,s.input.nowNs)&&
-            lease_&&lease_->identity==native_&&lease_->cycle==cycle_&&
-            Fresh(lease_->observedNs,lease_->deadlineNs,s.input.nowNs)&&
+            heldObservation&&lease_->identity==native_&&lease_->cycle==cycle_&&
+            gun&&gun->deadlineNs>s.input.nowNs&&ReloadTrackingFresh(out.tracking,s.input.nowNs)&&
             ReloadKeepAliveDeferredWithinOriginalDeadline(ReloadKeepAliveResult::Deferred,s.input.nowNs,acceptedControlDeadline_);
-        if(original&&held){out.ammoOwnsHand=bool(supply_.Held());return out;}
+        if(original&&held){
+            // A callback overlap can outlive the last hold publication while
+            // the exact native owner/config and original reserve remain valid.
+            // Retain only existing physical custody within a fixed observation
+            // gap. Do not renew native control/hold or run seating geometry.
+            if(!Fresh(lease_->observedNs,lease_->deadlineNs,s.input.nowNs)){
+                if(!holdObservationGapDeadline_)
+                    holdObservationGapDeadline_=s.input.nowNs+std::min<std::int64_t>(50000000,acceptedControlDeadline_-s.input.nowNs);
+                if(s.input.nowNs>=holdObservationGapDeadline_){cancel(CancelReason::MissingSource);return out;}
+            }
+            if(supply_.Held()){
+                const auto identity=supply_.Held()->identity;
+                const auto retained=supply_.RetainHeld(s.input,identity,s.gripPressed,hands);
+                if(!retained.held){cancel(CancelReason::MissingSource);return out;}
+            }
+            out.ammoOwnsHand=bool(supply_.Held());return out;
+        }
         reserve_.reset();cancel(CancelReason::MissingSource);return out;
     }
     if(api_.reserveObserved&&reserveObservation.result==ReloadObservationResult::Rejected)reserve_.reset();

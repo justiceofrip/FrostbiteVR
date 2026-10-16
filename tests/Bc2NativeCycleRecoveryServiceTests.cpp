@@ -497,6 +497,36 @@ int QueuedNeutralAfterSameTickNativeUpdatesArmsWithoutRestamping(){
     }return 0;
 }
 
+int ControllerExpiryAtAdmissionRetainsNativeDebt(){
+    for(bool m95:{false,true}){RecoveryFixture f(m95);CHECK(f.Held());
+        const auto old=f.service.View(f.clock);const auto input=f.control.input;
+        // Headset390: the runtime's earlier freshness check passed, but the
+        // same packet reached Control 1.2us after its original deadline.
+        f.clock=input.deadlineNs+1200;f.control.input.nowNs=f.clock;
+        CHECK(!f.service.Control(f.control));
+        CHECK(f.service.Phase()==Bc2NativeCyclePhase::Held);
+        CHECK(f.service.LastControlInput().sequence==input.sequence);
+        CHECK(f.service.LastControlInput().observedNs==input.observedNs);
+        CHECK(f.service.LastControlInput().deadlineNs==input.deadlineNs);
+        CHECK(!f.service.View(f.clock).held&&f.service.View(f.clock).blocksFire);
+        // The expired packet grants neither a release nor fresh authority.
+        f.control.release=WeaponCycleRelease{*old.held,1,input.sequence,f.clock,f.clock+1000000};
+        CHECK(!f.service.Control(f.control));CHECK(!f.service.View(f.clock).ready);
+        f.control.release.reset();
+        // Fresh own-Update evidence alone may suspend the native hold. The
+        // next tracked packet then follows existing guarded recovery.
+        for(unsigned branch=0;branch<3;++branch){CHECK(f.Begin(branch).hold);f.Finish();}
+        CHECK(f.service.View(f.clock).heldSuspended);
+        CHECK(f.Advance());CHECK(f.service.Recovering());
+        f.Rounds();CHECK(!f.service.RecoveryView(f.clock)->authority);
+        CHECK(f.Grant());const auto recovered=f.service.RecoveryView(f.clock);
+        CHECK(recovered&&recovered->authority&&recovered->blocksFire&&!recovered->ready);
+        CHECK(f.service.View(f.clock).cycle==old.cycle&&f.service.View(f.clock).shot==old.shot);
+        CHECK(f.service.View(f.clock).loaded==old.loaded&&f.service.View(f.clock).reserve==old.reserve);
+        CHECK(!f.service.YieldForReload());
+    }return 0;
 }
-int main(){CHECK(!ConcurrentBoltRequiresFullGestureDespiteNativeIdle());CHECK(!ConcurrentReleaseWaitsForEveryFreshNativeBranch());CHECK(!ConcurrentAuthorityCannotBeForgedOrRefreshedByIdleTime());CHECK(!ConcurrentInterruptionReturnsToNeutralRecoveryWithoutForgivingDebt());CHECK(!ConcurrentGuardFailureNeverPermitsFire());CHECK(!RecenterFromUnsuspendedHoldCreatesFreshObservation());CHECK(!RecenterPreservesShotAndInvalidatesOldAuthority());CHECK(!RecenterRejectsOtherOwnersOpenCallbacksAndPendingOutcomes());CHECK(!PumpRecenterNeedsNewNeutralAndFullStroke());CHECK(!QueuedNeutralAfterSameTickNativeUpdatesArmsWithoutRestamping());CHECK(!EmptyShotRecoveryRetainsZeroAndStillRequiresGesture());CHECK(!GuardedCommitsRequireOwnOpenParentAndConservedProjection());CHECK(!RestoreNeverVotesAndBusyRewindsRevokeOnlyUnsubmittedAuthority());CHECK(!ExactGuardedIdleRecordMutations());CHECK(!RealPumpAdapterTrackingLossRegrabThroughNativeService());CHECK(!NativeIdleRequiresActualGesture());CHECK(!LongTrackingLossRetainsDebt());CHECK(!MissingGuardAndConservationNeverRecover());
+
+}
+int main(){CHECK(!ControllerExpiryAtAdmissionRetainsNativeDebt());CHECK(!ConcurrentBoltRequiresFullGestureDespiteNativeIdle());CHECK(!ConcurrentReleaseWaitsForEveryFreshNativeBranch());CHECK(!ConcurrentAuthorityCannotBeForgedOrRefreshedByIdleTime());CHECK(!ConcurrentInterruptionReturnsToNeutralRecoveryWithoutForgivingDebt());CHECK(!ConcurrentGuardFailureNeverPermitsFire());CHECK(!RecenterFromUnsuspendedHoldCreatesFreshObservation());CHECK(!RecenterPreservesShotAndInvalidatesOldAuthority());CHECK(!RecenterRejectsOtherOwnersOpenCallbacksAndPendingOutcomes());CHECK(!PumpRecenterNeedsNewNeutralAndFullStroke());CHECK(!QueuedNeutralAfterSameTickNativeUpdatesArmsWithoutRestamping());CHECK(!EmptyShotRecoveryRetainsZeroAndStillRequiresGesture());CHECK(!GuardedCommitsRequireOwnOpenParentAndConservedProjection());CHECK(!RestoreNeverVotesAndBusyRewindsRevokeOnlyUnsubmittedAuthority());CHECK(!ExactGuardedIdleRecordMutations());CHECK(!RealPumpAdapterTrackingLossRegrabThroughNativeService());CHECK(!NativeIdleRequiresActualGesture());CHECK(!LongTrackingLossRetainsDebt());CHECK(!MissingGuardAndConservationNeverRecover());
     CHECK(!NativeBusyRevokesGrantButNotSubmittedReceipt());CHECK(!ExistingHoldDrainsBeforeConvergence());CHECK(!NoConversionOfNormalPendingOrStaleHold());return 0;}

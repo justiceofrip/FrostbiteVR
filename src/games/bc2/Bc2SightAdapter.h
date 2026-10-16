@@ -11,6 +11,8 @@ struct SightAdapterProfile {
  const AuthoredSightGeometry* authored=nullptr;
  float travelRadians=1.570796327f;
  bool nativeSightAccepted=false;
+ const OpposedSightGeometry* opposed=nullptr;
+ bool sharedGeometryEligible=false;
 };
 inline constexpr std::array<std::string_view,3> Gp30SightChain{"jntWpn_17","jntWpnwpnJnt_16","jntWpn_1"};
 inline const AuthoredSightGeometry Gp30SightGeometry{
@@ -20,10 +22,25 @@ inline const AuthoredSightGeometry Gp30SightGeometry{
  Gp30SightChain,0xa7f219a1426216abull,
  {-.003534470918f,-.006739854813f,-.03502561152f},{.003235569922f,.01918625832f,.002518229187f},
  {-.000007675875633f,-1.f,0.f},.7179032976f};
-inline const std::array<SightAdapterProfile,2> SightAdapterProfiles{{
- {&WeaponModeFamilies[0],SightAssemblyKind::OpposedLeaves,"jntWpn_9","jntWpn_11","jntWpn_1",nullptr,1.570796327f,true},
+inline const std::array<SightAdapterProfile,3> SightAdapterProfiles{{
+ {&WeaponModeFamilies[0],SightAssemblyKind::OpposedLeaves,"jntWpn_9","jntWpn_11","jntWpn_1",nullptr,1.570796327f,true,&Xm320OpposedSightGeometry,false},
  {&WeaponModeFamilies[1],SightAssemblyKind::Subtree,"jntWpn_17","","jntWpn_1",&Gp30SightGeometry,.7179032976f,false},
+ // Installed mesh, skeleton, HandsIkPose and AltDeploy bytes match the scoped
+ // pair. Its observed native acceptance is still false until a retained run.
+ {&WeaponModeFamilies[2],SightAssemblyKind::OpposedLeaves,"jntWpn_9","jntWpn_11","jntWpn_1",nullptr,1.570796327f,false,&Xm320OpposedSightGeometry,true},
 }};
+inline bool SightAdapterEnabled(const SightAdapterProfile& p)noexcept {
+ return p.family&&WeaponModeFamilyEligible(*p.family)&&(p.nativeSightAccepted||p.sharedGeometryEligible);
+}
+inline WeaponSightContact MeasureOpposedSightAdapterContact(const SightAdapterProfile& p,
+ const WeaponSightObservation& s,std::string_view configuration)noexcept {
+ if(!SightAdapterEnabled(p)||p.assembly!=SightAssemblyKind::OpposedLeaves||!p.opposed||
+    p.rear!=p.opposed->rear||p.front!=p.opposed->front||p.root!=p.opposed->root)return {};
+ const auto& family=*p.family;
+ if(!((s.assetName==family.primaryAsset&&configuration==family.primaryConfiguration)||
+      (s.assetName==family.secondaryAsset&&configuration==family.secondaryConfiguration)))return {};
+ return MeasureWeaponSightContact(s,*p.opposed);
+}
 inline const SightAdapterProfile* SightAdapterForFamily(const WeaponModeFamilyProfile* family)noexcept {
  if(!family)return nullptr;
  for(const auto& p:SightAdapterProfiles)if(p.family==family)return &p;

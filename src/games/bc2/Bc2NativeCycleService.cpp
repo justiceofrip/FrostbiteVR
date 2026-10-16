@@ -195,6 +195,12 @@ bool Bc2NativeCycleService::Control(const Bc2NativeCycleControl& c)noexcept {
     if(selectionRequired_&&(!selection_||c.nativeOwner!=selection_->reserve.identity.owner))return false;
     lastEvent_=0; // Controller admission is not a native invocation.
     if(suspendedAt_&&c.input.nowNs>=suspendedUntil_){Cancel(Bc2NativeCycleFailure::Expired);return false;}
+    // Runtime owner checks can overtake a packet's original deadline. Reject
+    // its hand/release authority without turning that observation gap into
+    // permanent native cancellation. Fresh own Updates still have to prove
+    // SuspendExpiredController; its fixed bound and recovery remain unchanged.
+    // Do not copy or restamp this packet, including a submitted old release.
+    if(c.input.observedNs>0&&c.input.deadlineNs>c.input.observedNs&&c.input.nowNs>=c.input.deadlineNs)return false;
     if(!Mapping(c)){if(Active(phase_))Cancel(Bc2NativeCycleFailure::Control);return false;}
     if(control_.input.sequence){
         if(c.input.nowNs<control_.input.nowNs||c.input.observedNs<control_.input.observedNs||

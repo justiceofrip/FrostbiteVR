@@ -1,5 +1,6 @@
 #pragma once
 #include "Bc2BodyInventory.h"
+#include "Bc2TemporaryToolCustody.h"
 #include "Bc2OrdinaryEquipment.h"
 #include "Bc2BodyHolsterDiagnostic.h"
 #include "Bc2HolsterInput.h"
@@ -20,7 +21,7 @@ struct BodyHolsterCapabilities {
 // for native hide/show/post-draw evidence and remaining headset/shot-pair limits.
 inline constexpr BodyHolsterCapabilities BodyInventoryHolsterAcceptance{true,true,3u};
 
-enum class BodyHolsterPhase:unsigned {Disabled,Held,HidePending,Empty,ShowPending,Recovering};
+enum class BodyHolsterPhase:unsigned {Disabled,Held,HidePending,Empty,ShowPending,Recovering,TemporaryTool};
 struct BodyHolsterSample {
     interaction::BodyInventorySample body{}; // Existing assigned items/contact intent.
     ReloadStateOwner nativeOwner{};
@@ -32,6 +33,11 @@ struct BodyHolsterSample {
     std::optional<HolsterSuppressionReceipt> suppression;
     std::uint64_t nativeTick=0;std::uint32_t cache=0;
     std::optional<BodyCarriedIdentity> carried; // Current exact coherent inventory, for semantic rebase only.
+    // Same-call coherent body publication; never retained as a pointer.
+    const BodyInventoryDisplay* temporaryDisplay=nullptr;
+    // Set only by a completed coherent ReadBodyInventory in this call. Actor
+    // replacement can remove every old slot before a display can be published.
+    bool temporaryNativeObserved=false;
     bool cancel=false,reloadBusy=false;
     // Temporary input/mechanism unavailability. Existing empty intent has no
     // pose/claim authority until exact carried identity is proved on resume.
@@ -71,6 +77,27 @@ public:
     std::optional<HolsterSuppressionRequest> Demand(const BodyHolsterSample&)const noexcept;
     BodyHolsterResult Tick(interaction::BodyInventory&,const BodyHolsterSample&,interaction::HandInteraction&,std::uint64_t& sharedIntent)noexcept;
     BodyHolsterPhase Phase()const noexcept{return phase_;}
+    // One exact existing tool may temporarily replace a committed hidden gun.
+    // Entry consumes current empty evidence plus its deliberate shared claim;
+    // it supplies no native selector, hide or attack capability.
+    bool BeginTemporaryTool(const BodyHolsterSample&,const BodyInventoryDisplay&,
+        interaction::BodyItemKey tool,std::uint64_t operation,const BodyFreeRightEvidence&,
+        const interaction::HandClaimToken&,const interaction::HandInteraction&)noexcept;
+    bool TemporaryToolActive()const noexcept{return temporaryTool_.has_value();}
+    std::uint64_t TemporaryToolOperation()const noexcept{return temporaryTool_?temporaryTool_->Serial():0;}
+    // Native adapter calls only after accepting the matching explicit return,
+    // or proving the staged draw had NO effect and can never execute later.
+    // This requests a new original hide, never a native selector operation.
+    bool RequestTemporaryToolRehide(std::uint64_t operation)noexcept {
+        if(!temporaryTool_||temporaryTool_->Serial()!=operation)return false;
+        temporaryReturnWanted_=true;return true;
+    }
+    std::uint64_t LastTemporaryToolReturn()const noexcept{return lastTemporaryReturn_;}
+    // Serialized proposal only. BeginTemporaryTool is the sole commit point;
+    // every tool shares this domain instead of its local command serial.
+    std::uint64_t NextTemporaryToolOperation()const noexcept {
+        return lastTemporaryOperation_==UINT64_MAX?0:lastTemporaryOperation_+1;
+    }
     bool EmptyRehidePending()const noexcept {
         return phase_==BodyHolsterPhase::HidePending&&rebindEmpty_&&emptyIntent_&&!pending_;
     }
@@ -79,7 +106,9 @@ public:
     bool BlocksActions()const noexcept{return Enabled()&&phase_!=BodyHolsterPhase::Held;}
     // A tracking gap can retain a committed user intent, never its old pose or
     // native receipt. All ordinary cancellation/owner paths discard that intent.
-    void Invalidate(bool trackingGap=false)noexcept{ordinaryRecovery_.reset();if(!trackingGap){emptyIntent_=false;rebindEmpty_=false;inputGapOwner_.reset();}
+    void Invalidate(bool trackingGap=false)noexcept{ordinaryRecovery_.reset();
+        if(temporaryTool_){pending_.reset();phase_=BodyHolsterPhase::TemporaryTool;temporaryRehiding_=false;return;}
+        if(!trackingGap){emptyIntent_=false;rebindEmpty_=false;inputGapOwner_.reset();}
         if(BlocksActions()){pending_.reset();phase_=BodyHolsterPhase::Recovering;}}
     // UpdateHook calls only after an observed timeout with the EXACT same native
     // owner tuple. Preserve intent across its synthetic input epoch, never a
@@ -123,6 +152,9 @@ private:
         std::uint64_t physicalItem=0,physicalEquip=0;
         bool block=false,free=false,hidden=false,receiptCurrent=false,suppressionCurrent=false;};
     std::array<Transition,64> transitions_{};unsigned transitionCount_=0,transitionNext_=0;std::uint64_t transitionDropped_=0;
+    std::optional<Bc2TemporaryToolCustody> temporaryTool_;
+    bool temporaryRehiding_=false,temporaryReturnWanted_=false;
+    std::uint64_t lastTemporaryOperation_=0,lastTemporaryReturn_=0;
     BodyHolsterCapabilities capabilities_{};
     std::int64_t diagnosticStart_=0,diagnosticDeadline_=0;
     BodyHolsterDiagnosticProfile diagnosticProfile_=BodyHolsterDiagnosticProfile::Disabled;

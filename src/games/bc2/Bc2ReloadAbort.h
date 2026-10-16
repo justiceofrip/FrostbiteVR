@@ -1,5 +1,6 @@
 #pragma once
 #include "Bc2ReloadRequestCycle.h"
+#include "Bc2ReloadOwnerLoss.h"
 #include "Bc2MagazineNativeProfile.h"
 #include <cstring>
 #include <limits>
@@ -7,18 +8,19 @@ namespace fvr::bc2 {
 // Stop-only cleanup, not a reload request or a retirement/transfer receipt.
 // Serialized by the adapter's request lock; no lock spans any native call.
 enum class ReloadAbortFailure:unsigned {None,Expired,Owner,Cycle,Input,State,NativePostcondition,UpdatePostcondition,NewCycle,Stopped};
-enum class ReloadAbortAdmission:unsigned {None,DeferredFire,AlreadyClaimed,AlreadyIdle,HelperClaimed,Rejected};
+enum class ReloadAbortAdmission:unsigned {None,DeferredFire,AlreadyClaimed,AlreadyIdle,HelperClaimed,Rejected,DeferredBeforeArm,DeferredUncalled};
 // Value-only history, serialized by the existing request lock. No additional
 // native reads, input writes, allocations, or capability deadline renewal.
 struct ReloadAbortAdmissionSample {
     std::int64_t observedNs=0;std::uint64_t invocation=0;
     unsigned branch=3;ReloadUpdateContext context{};ReloadFiringObservation before{};
+    std::int64_t sourceObservedNs=0,sourceDeadlineNs=0;std::uint64_t sourceRevision=0;
 };
 struct ReloadAbortCycleReport {
     std::uint64_t cycle=0,revision=0,claims=0,fireDeferred=0,dispatchEpoch=0;
     std::int64_t armedNs=0,deadlineNs=0,terminalNs=0;
     std::int32_t loaded=0,reserve=0;
-    unsigned claimed=0,completed=0;std::array<std::uint64_t,3> deferredByBranch{};
+    unsigned claimed=0,completed=0;std::array<std::uint64_t,3> deferredByBranch{};std::uint64_t beforeArmDeferred=0,uncalledDeferred=0;
     ReloadAbortFailure failure{};ReloadAbortAdmission lastAdmission{};bool active=false;
     ReloadAbortAdmissionSample first{},last{},firstDeferred{};
 };
@@ -77,6 +79,9 @@ private:
         lease_=lease;return true;
     }
 public:
+    void OwnerCleared(ReloadOwnerLoss loss,std::int64_t now)noexcept {
+        if(loss==ReloadOwnerLoss::LifetimeEnded)Abandon(ReloadAbortFailure::Owner,now);
+    }
     void Abandon(ReloadAbortFailure why,std::int64_t now=0)noexcept {
         if(active_){active_=false;failure_=why;SyncHistory(now);}
     }
@@ -85,14 +90,22 @@ public:
         bool nativeConfigVerified,std::int64_t now)noexcept {
         ReloadAbortDecision d;if(!active_)return d;
         auto& report=CurrentHistory();++report.claims;
-        report.last={now,invocation,in.branch,in.context,in.branch<3?in.branches[in.branch]:ReloadFiringObservation{}};
+        report.last={now,invocation,in.branch,in.context,in.branch<3?in.branches[in.branch]:ReloadFiringObservation{},
+            in.nowNs,in.leaseDeadlineNs,revision};
         if(report.claims==1)report.first=report.last;
         const auto fail=[&](ReloadAbortFailure why){report.lastAdmission=ReloadAbortAdmission::Rejected;Abandon(why,now);return d;};
         if(now<began_||now>=deadline_)return fail(ReloadAbortFailure::Expired);
         if(!in.verified||in.identity!=source_.identity||revision!=revision_||
-           in.nowNs<began_||in.nowNs>now||now>=in.leaseDeadlineNs)return fail(ReloadAbortFailure::Owner);
+           in.nowNs<=0||in.nowNs>now||now>=in.leaseDeadlineNs)return fail(ReloadAbortFailure::Owner);
         if(!policyCancelled||policyCycle!=source_.cycle)return fail(ReloadAbortFailure::Cycle);
         if(in.branch>=3||!invocation||!nativeConfigVerified)return fail(ReloadAbortFailure::State);
+        // A concurrent Update can prepare its native evidence just before this
+        // stop is armed. It may not claim the helper, but is not owner loss.
+        // Wait for another own Update inside the unchanged original deadline.
+        if(in.nowNs<began_){report.lastAdmission=ReloadAbortAdmission::DeferredBeforeArm;++report.beforeArmDeferred;return d;}
+        // A skipped helper retains its invocation high-water mark. A retry
+        // must be a genuinely later own Update, never the old decision again.
+        if(invocation_[in.branch]&&invocation<=invocation_[in.branch]){report.lastAdmission=ReloadAbortAdmission::AlreadyClaimed;return d;}
         if(claimed_&(1u<<in.branch)){report.lastAdmission=ReloadAbortAdmission::AlreadyClaimed;return d;}
         const auto& c=in.context;
         const bool fireOnly=c.inputFlags==1&&c.fireRequested&&!c.orderRequested&&!c.reloadRequested;
@@ -125,14 +138,38 @@ public:
     }
     bool Allows(const ReloadAbortDecision& d,std::uint64_t revision,std::uint64_t policyCycle,
         bool cancelled,std::int64_t now)noexcept {
-        if(d.dispatchEpoch!=dispatchEpoch_||!active_||!d.call||d.branch>=3||d.invocation!=invocation_[d.branch]||d.cycle!=source_.cycle)return false;
+        if(d.dispatchEpoch!=dispatchEpoch_||!active_||!d.call||d.branch>=3||d.invocation!=invocation_[d.branch]||d.cycle!=source_.cycle||
+           !(claimed_&(1u<<d.branch))||(completed_&(1u<<d.branch)))return false;
         if(now<began_||now>=deadline_){Abandon(ReloadAbortFailure::Expired,now);return false;}
         if(revision!=revision_){Abandon(ReloadAbortFailure::Owner,now);return false;}
         if(policyCycle!=source_.cycle||!cancelled){Abandon(ReloadAbortFailure::Cycle,now);return false;}return true;
     }
+    // Only after original Update returns: no helper was attempted and the
+    // adapter proves exact retained native owner/counts under the original
+    // deadline. Release this branch reservation, not its stop obligation.
+    bool DeferUncalled(const ReloadAbortDecision& d,const ReloadFiringObservation& after,
+        bool ownerRetained,bool helperCalled,std::int64_t now)noexcept {
+        if(!active_||d.dispatchEpoch!=dispatchEpoch_||!d.call||d.branch>=3||d.cycle!=source_.cycle||
+           d.ownerRevision!=revision_||d.invocation!=invocation_[d.branch]||
+           !(claimed_&(1u<<d.branch))||(completed_&(1u<<d.branch)))return false;
+        const auto fail=[&](ReloadAbortFailure why){Abandon(why,now);return false;};
+        if(helperCalled)return fail(ReloadAbortFailure::NativePostcondition);
+        if(now<began_||now>=deadline_||d.deadlineNs!=deadline_)return fail(ReloadAbortFailure::Expired);
+        if(!ownerRetained||after.address!=d.before.address||after.wrapperOffset!=d.before.wrapperOffset||
+           after.loaded!=source_.loaded||after.reserve!=source_.reserve||(after.flagsA8&(8|16))||
+           !std::isfinite(after.phaseTimer)||after.phaseTimer<0||after.phaseTimer>timerCeiling_)
+            return fail(ReloadAbortFailure::UpdatePostcondition);
+        const bool idle=(after.currentState==1||after.currentState==2)&&(after.nextState==1||after.nextState==2);
+        if(!idle&&(after.currentState<10||after.currentState>12||
+           (after.nextState!=1&&(after.nextState<10||after.nextState>12))))return fail(ReloadAbortFailure::UpdatePostcondition);
+        claimed_&=~(1u<<d.branch); // Keep invocation_[branch] to reject an old callback.
+        auto& report=CurrentHistory();++report.uncalledDeferred;report.lastAdmission=ReloadAbortAdmission::DeferredUncalled;
+        SyncHistory(now);return true;
+    }
     bool Finish(const ReloadAbortDecision& d,const ReloadFiringObservation& after,
         bool ownerRetained,bool helperExact,std::int64_t now)noexcept {
-        if(d.dispatchEpoch!=dispatchEpoch_||!d.call||d.branch>=3||d.cycle!=source_.cycle||d.invocation!=invocation_[d.branch])return false;
+        if(d.dispatchEpoch!=dispatchEpoch_||!d.call||d.branch>=3||d.cycle!=source_.cycle||d.invocation!=invocation_[d.branch]||
+           !(claimed_&(1u<<d.branch))||(completed_&(1u<<d.branch)))return false;
         if(!helperExact){Abandon(ReloadAbortFailure::NativePostcondition,now);return false;}
         if(now<began_||now>=deadline_){Abandon(ReloadAbortFailure::Expired,now);return false;}
         if(!ownerRetained||after.address!=d.before.address||after.wrapperOffset!=d.before.wrapperOffset||

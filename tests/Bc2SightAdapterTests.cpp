@@ -9,7 +9,46 @@
 #undef main
 #undef Fixture
 #include "Bc2SightAdapter.h"
+#include <string_view>
 namespace {
+int MeasuredUnscopedVariant(){
+ const auto& profile=WeaponModeFamilies[2];const auto* adapter=SightAdapterForFamily(&profile);
+ CHECK(profile.primaryAsset=="XM8_sp"&&profile.persistentId=="sp_xm8");
+ CHECK(!profile.nativeAccepted&&profile.linkedVariantEligible&&WeaponModeFamilyEligible(profile));
+ CHECK(adapter&&!adapter->nativeSightAccepted&&adapter->sharedGeometryEligible&&SightAdapterEnabled(*adapter));
+ CHECK(adapter->opposed==SightAdapterProfiles[0].opposed); // Measured bytes, not an asset-name alias.
+ ModeFixture f;f.Text(0x16000,profile.primaryAsset.data());f.Text(0x16200,profile.primaryConfiguration.data());
+ f.Text(0x16300,profile.secondaryConfiguration.data());f.Text(0x16400,profile.persistentId.data());
+ const auto original=f.bytes;
+ auto mode=ResolveWeaponMode(f.Memory(),f.soldier,f.rifle);
+ CHECK(mode&&mode->family==&profile&&!mode->selectedSecondary&&mode->action==33&&mode->targetWeapon==f.launcher&&f.bytes==original);
+ f.Word(f.inventory+0x14c,3);mode=ResolveWeaponMode(f.Memory(),f.soldier,f.launcher);
+ CHECK(mode&&mode->family==&profile&&mode->selectedSecondary&&mode->action==36&&mode->targetWeapon==f.rifle);
+ // The shared launcher name and exact geometry cannot invent native linkage.
+ f.Word(f.launcherData+0x64,f.persistent+4);f.types[f.persistent+4]="PersistentWeapon";
+ CHECK(!ResolveWeaponMode(f.Memory(),f.soldier,f.launcher));f.Word(f.launcherData+0x64,f.persistent);
+ f.Text(0x16400,"40mmgl");CHECK(!ResolveWeaponMode(f.Memory(),f.soldier,f.launcher));f.Text(0x16400,"sp_xm8");
+ f.Text(0x16300,WeaponModeFamilies[0].secondaryConfiguration.data());CHECK(!ResolveWeaponMode(f.Memory(),f.soldier,f.launcher));
+ f.Text(0x16300,profile.secondaryConfiguration.data());f.Word(f.map+24+16,33);
+ CHECK(!ResolveWeaponMode(f.Memory(),f.soldier,f.launcher));f.Word(f.map+24+16,36);
+ f.Word(f.inventory+0x14c,1);f.changeCurrent=true;CHECK(!ResolveWeaponMode(f.Memory(),f.soldier,f.rifle));
+ WeaponSightObservation s;s.assetName=profile.primaryAsset;s.rootName=s.sightParentName="jntWpn_1";s.sightName="jntWpn_9";
+ s.skeletonFingerprint=adapter->opposed->skeletonFingerprint;s.generation=12;s.deadline=34;
+ s.attachmentReady=s.palmValid=true;
+ for(auto m:{&s.nativeWeapon,&s.nativeSight,&s.placedWeapon,&s.rawLeftTarget})for(unsigned n=0;n<4;++n)m->values[n][n]=1;
+ s.nativeSight.values[3]={.1f,.2f,.3f,1};s.rawLeftTarget.values[3]={.1f,.2f,.245f,1};
+ CHECK(!MeasureWeaponSightContact(s).valid); // Standalone scoped admission is unchanged.
+ const auto contact=MeasureOpposedSightAdapterContact(*adapter,s,profile.primaryConfiguration);
+ CHECK(contact.valid&&contact.generation==12&&contact.deadline==34&&contact.contactDistanceMeters<.0001f);
+ CHECK(!MeasureOpposedSightAdapterContact(*adapter,s,WeaponModeFamilies[0].primaryConfiguration).valid);
+ s.assetName=profile.secondaryAsset;CHECK(MeasureOpposedSightAdapterContact(*adapter,s,profile.secondaryConfiguration).valid);
+ CHECK(!MeasureOpposedSightAdapterContact(*adapter,s,WeaponModeFamilies[0].secondaryConfiguration).valid);
+ s.attachmentReady=false;CHECK(!MeasureOpposedSightAdapterContact(*adapter,s,profile.secondaryConfiguration).valid);s.attachmentReady=true;
+ ++s.skeletonFingerprint;CHECK(!MeasureOpposedSightAdapterContact(*adapter,s,profile.secondaryConfiguration).valid);--s.skeletonFingerprint;
+ s.hidden=true;CHECK(!MeasureOpposedSightAdapterContact(*adapter,s,profile.secondaryConfiguration).valid);s.hidden=false;
+ s.sightParentName="foreign";CHECK(!MeasureOpposedSightAdapterContact(*adapter,s,profile.secondaryConfiguration).valid);
+ return 0;
+}
 int ExactFamilyAndGate(){
  ModeFixture f;const auto& p=WeaponModeFamilies[1];
  f.Text(0x16000,"AEK971_sp");f.Text(0x16200,"Objects/Weapons/Handheld/RU_rgl_AEK971/SP_rgl_AEK971");
@@ -75,5 +114,7 @@ int InterruptionAndHandHandoff(){
  return 0;
 }
 }
-int main(){CHECK(!ExistingModeTests());CHECK(!ExistingAuthoredTests());CHECK(!ExactFamilyAndGate());CHECK(!ActualAssemblyConsumer());CHECK(!InterruptionAndHandHandoff());
+int main(int argc,char** argv){
+ if(argc==2&&std::string_view(argv[1])=="--variant-only")return MeasuredUnscopedVariant();
+ CHECK(!MeasuredUnscopedVariant());CHECK(!ExistingModeTests());CHECK(!ExistingAuthoredTests());CHECK(!ExactFamilyAndGate());CHECK(!ActualAssemblyConsumer());CHECK(!InterruptionAndHandHandoff());
  std::puts("Sight adapter: exact family gate, descendant plan and interrupted hand handoff passed; no native admission");return 0;}

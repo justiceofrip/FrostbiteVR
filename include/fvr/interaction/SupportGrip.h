@@ -5,6 +5,12 @@ namespace fvr::interaction {
 struct SupportGripOwner {std::uint64_t actor=0,generation=0,equipped=0;bool operator==(const SupportGripOwner&)const=default;};
 enum class SupportAimMode : std::uint8_t {TwoPoint,PrimaryHand};
 inline constexpr float SupportGripAcquireRadiusMeters=.16f;
+inline constexpr float SupportGripRetentionRadiusMeters=.28f;
+// Historical completed-mechanism custody, not a live input/native capability.
+// The adapter emits this only with its exact accepted full-stroke release.
+struct SupportGripMechanismReturn {
+ HandClaimToken mechanism{},gun{};HandInteractionSample completed{};
+};
 struct SupportGripContact {
  bool valid=false;float distanceMeters=0;
  // Calibrated minus raw wrist separation, in upright reference-space metres.
@@ -26,9 +32,16 @@ public:
  SupportGripResult AdoptHeld(const SupportGripOwner&,const InputFrame&,const SupportGripContact&,
      const HandInteractionSample& current,const HandInteractionSample& original,
      const HandClaim& support,const HandClaim& gun) noexcept;
+ // Same held hand returning from an accepted mechanism stroke uses the
+ // existing retention envelope. Ordinary acquisition/other adoption is unchanged.
+ SupportGripResult AdoptReturnedMechanism(const SupportGripOwner&,const InputFrame&,const SupportGripContact&,
+     const HandInteractionSample& current,const HandInteractionSample& original,
+     const HandClaim& support,const HandClaim& gun,const SupportGripMechanismReturn&) noexcept;
  void Reset()noexcept {const auto next=nextToken_;*this={};nextToken_=next;}
 private:
- SupportGripResult UpdateImpl(const SupportGripOwner&,const InputFrame&,const SupportGripContact&,bool cancel,bool handBusy,bool adopt) noexcept;
+ SupportGripResult Adopt(const SupportGripOwner&,const InputFrame&,const SupportGripContact&,
+     const HandInteractionSample&,const HandInteractionSample&,const HandClaim&,const HandClaim&,bool retained) noexcept;
+ SupportGripResult UpdateImpl(const SupportGripOwner&,const InputFrame&,const SupportGripContact&,bool cancel,bool handBusy,bool adopt,bool retained=false) noexcept;
  SupportGripOwner owner_{};std::uint64_t space_=0,generation_=0;std::int64_t time_=0;
  std::uint64_t nextToken_=0,token_=0;
  float units_=0;bool armed_=false,holding_=false;math::Vec3 localDirection_{};

@@ -8,9 +8,16 @@ namespace fvr::interaction {
 class BodyGripRelease {
 public:
     void Reset()noexcept {contact_.reset();held_=false;}
+    // The release of the squeeze used to draw is not a new stow gesture.
+    // Retain only this inhibition until a fresh hand pose leaves that slot;
+    // tracking loss must not be mistaken for leaving the shoulder.
+    void DrawnAt(const HandInteractionOwner& owner,HandInteractionKey weapon,
+        std::uint64_t revision,BodySlotAssignment slot)noexcept {
+        Reset();drawExit_=DrawExit{owner,weapon,revision,slot};
+    }
     std::optional<BodySlotAssignment> Update(const HandInteractionSample& in,HandInteractionKey weapon,
         std::uint64_t revision,std::uint64_t claim,bool held,bool released,bool eligible,
-        std::optional<BodySlotAssignment> contact)noexcept {
+        std::optional<BodySlotAssignment> contact,bool contactObserved=true)noexcept {
         const bool fresh=in.owner.actor&&in.owner.actorGeneration&&in.owner.equipGeneration&&in.owner.space&&
             weapon.id&&weapon.generation==in.owner.equipGeneration&&revision&&claim&&in.sequence&&
             in.focused&&in.tracked[0]&&in.tracked[1]&&in.observedNs>0&&in.observedNs<=in.nowNs&&
@@ -21,6 +28,14 @@ public:
         }
         if(in.sequence<sequence_){Reset();return {};}
         if(in.sequence==sequence_)return {};sequence_=in.sequence;
+        if(!contactObserved){Reset();return {};}
+        if(drawExit_){
+            if(drawExit_->owner==in.owner&&drawExit_->weapon==weapon&&drawExit_->revision==revision&&
+               contact&&*contact==drawExit_->slot){Reset();return {};}
+            drawExit_.reset();Reset();
+        }
+        // A tracked exit is still an exit while support/trigger owns another
+        // interaction. It clears inhibition, without authorizing a stow.
         if(!eligible){Reset();return {};}
         if(contact_&&(in.observedNs<contact_->observed||in.nowNs>=contact_->deadline))Reset();
         // A strong squeeze establishes held state. Its middle hysteresis band
@@ -32,6 +47,8 @@ public:
         Reset();return result;
     }
 private:
+    struct DrawExit {HandInteractionOwner owner;HandInteractionKey weapon;std::uint64_t revision;BodySlotAssignment slot;};
+    std::optional<DrawExit> drawExit_;
     struct Contact {BodySlotAssignment slot;std::int64_t observed=0,deadline=0;};
     std::optional<Contact> contact_;bool held_=false;
     HandInteractionOwner owner_{};HandInteractionKey weapon_{};

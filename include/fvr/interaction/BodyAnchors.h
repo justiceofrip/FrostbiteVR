@@ -16,7 +16,8 @@ struct BodyAnchorConfig {
     std::array<BodyAnchor,2> shoulders{{{1,{-.20f,-.12f,-.18f},.17f},{2,{.20f,-.12f,-.18f},.17f}}};
     BodyAnchor hip{4,{.24f,-.62f,.02f},.16f};
     // Acquisition reaches toward the shoulder without moving the displayed gun.
-    float shoulderReachForwardMeters=.04f;
+    float shoulderReachForwardMeters=.08f;
+    float shoulderReachUpMeters=.04f;
 };
 // Weapon contact and rendering share one slot lookup. Ammunition retains its
 // own chest/belt contacts and cannot become a weapon slot by proximity.
@@ -33,7 +34,8 @@ inline bool ValidBodyAnchor(const BodyAnchor& a)noexcept {
 }
 inline bool ValidBodyAnchors(const BodyAnchorConfig& c)noexcept {
     if(!ValidBodyAnchor(c.chest)||!std::isfinite(c.shoulderReachForwardMeters)||
-       c.shoulderReachForwardMeters<0||c.shoulderReachForwardMeters>.10f)return false;
+       c.shoulderReachForwardMeters<0||c.shoulderReachForwardMeters>.10f||
+       !std::isfinite(c.shoulderReachUpMeters)||c.shoulderReachUpMeters<0||c.shoulderReachUpMeters>.06f)return false;
     const auto weapons=BodyWeaponAnchors(c);
     for(unsigned n=0;n<weapons.size();++n){
         if(!ValidBodyAnchor(weapons[n])||weapons[n].slot==c.chest.slot)return false;
@@ -58,11 +60,14 @@ inline bool BodyWeaponContactContains(const BodyAnchorConfig& c,std::uint32_t sl
     if(!ValidBodyAnchors(c))return false;
     const auto* anchor=FindBodyWeaponAnchor(c,slot);if(!anchor)return false;
     if(slot==c.hip.slot)return BodyAnchorContains(*anchor,hand);
-    // A short forward capsule retains the old sphere, including rear reaches.
-    // It adds no downward allowance toward chest ammunition or the pistol hip.
+    // Retain the old sphere and rear reaches, extending acquisition forward/up
+    // for measured cross-body shoulder reaches. Do not move the rendered gun
+    // or extend downward toward chest ammunition/the pistol hip.
     auto nearest=*anchor;
     const float z=hand.values[3][2];if(!std::isfinite(z))return false;
     nearest.center.z=std::clamp(z,anchor->center.z,anchor->center.z+c.shoulderReachForwardMeters);
+    const float y=hand.values[3][1];if(!std::isfinite(y))return false;
+    nearest.center.y=std::clamp(y,anchor->center.y,anchor->center.y+c.shoulderReachUpMeters);
     return BodyAnchorContains(nearest,hand);
 }
 inline AmmoSupplyConfig ChestAmmoSupply(const BodyAnchorConfig& c={})noexcept {

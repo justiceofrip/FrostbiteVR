@@ -10,7 +10,7 @@
 #include <ostream>
 
 namespace fvr::bc2 {
-class Bc2BodyHolster;struct BodyHolsterSample;struct BodyHolsterResult;
+class Bc2BodyHolster;struct BodyHolsterSample;struct BodyHolsterResult;struct BodyFreeRightEvidence;
 struct BodyNativeItem {
     std::uint32_t weapon=0,data=0,persistence=0,category=20,slot=0;
     // wcSmg includes both rifles/SMGs and pistols. Read its asset identity in
@@ -102,7 +102,18 @@ public:
     // Called only AFTER current gather suppression commit. Reuses this exact
     // reader/lifetime/slot/policy domain, including the ordinary draw fallback.
     BodyHolsterResult TickHolster(const WeaponModeMemory&,const BodyDrawSample&,BodyHolsterSample,
-        Bc2BodyHolster&,interaction::HandInteraction&,std::uint64_t& intent)noexcept;
+        Bc2BodyHolster&,interaction::HandInteraction&,std::uint64_t& intent,
+        std::optional<BodyHolsterSample>* evaluatedSample=nullptr)noexcept;
+    // Optional output is reset on entry and copies the exact sample passed to
+    // holster.Tick, including its coherent body owner/time/focus. Same-call use
+    // only: its inventory span and display pointer are not retained authority.
+    // Same-gather entry AFTER TickHolster and deliberate shared hand acquisition.
+    // Repeats the native read and fills the inventory sample internally; callers
+    // cannot fabricate the inventory/assignment half of the empty-hand proof.
+    bool BeginTemporaryTool(const WeaponModeMemory&,const BodyDrawSample&,BodyHolsterSample,
+        Bc2BodyHolster&,interaction::BodyItemKey,std::uint64_t operation,
+        const BodyFreeRightEvidence&,const interaction::HandClaimToken&,
+        const interaction::HandInteraction&)noexcept;
     bool Pending()const noexcept{return pending_.has_value();}
     // Same lifetime domain as shoulders; equip and reference-space changes do
     // not mint a new physical weapon. Available during interaction suspension.
@@ -113,6 +124,10 @@ public:
     }
     std::optional<BodyInventoryDisplay> Display(std::int64_t now)const noexcept {
         return display_&&BodyInventoryDisplayFresh(*display_,now)?display_:std::nullopt;
+    }
+    std::optional<interaction::BodyItemKey> ItemKey(std::uint32_t weapon)const noexcept {
+        const auto found=std::find_if(life_.begin(),life_.end(),[&](const auto& item){return item.native.weapon==weapon;});
+        return found==life_.end()?std::nullopt:std::optional(found->key);
     }
     // Production preference only. Verified actor/seat observations queue one
     // stow on first on-foot entry, actor replacement, or actual vehicle exit.

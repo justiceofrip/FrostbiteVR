@@ -1,6 +1,7 @@
 #pragma once
 #include "fvr/math/StereoMath.h"
 #include "fvr/interaction/ActionPolicy.h"
+#include "fvr/interaction/InputMenuOwnership.h"
 #include <array>
 namespace fvr::interaction {
 // Runtime-neutral input. Poses use the same reference space/time as the eyes.
@@ -24,6 +25,7 @@ struct InputFrame {
     float worldUnitsPerMeter=1;
     math::Pose referenceHead{},head{};
     std::array<ControllerState,2> hands{}; // Left, right. No native pointers.
+    InputMenuOwnership menu{}; // Unknown unless the real host menu policy supplied it.
 };
 bool ValidInput(const InputFrame&) noexcept;
 struct InputOwner {

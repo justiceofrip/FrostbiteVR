@@ -86,16 +86,16 @@ int PhysicalConsumerToPrivatePalette(){
 }
 }
 int FixedStockSurvivesAnimatedStretchWithoutChangingPump(){
- Fixture f;f.rig.names={"root","jntWpn_1","jntWpn_4","jntWpn_6","jntWpn_12","jntWpn_13","trigger"};
- f.rig.parents={-1,0,1,1,1,4,1};f.rig.identity.count=7;
- f.rig.world.assign(7,Pose());f.rig.inverseBind.assign(7,Pose());f.rig.evaluatedWorld.assign(7,Pose());
- f.rig.nativeEvaluated.resize(7);for(auto& bytes:f.rig.nativeEvaluated)bytes.fill(std::byte{0x5a});
+ Fixture f;f.rig.names={"root","jntWpn_1","jntWpn_4","jntWpn_6","jntWpn_12","jntWpn_13","trigger","jntWpn_5"};
+ f.rig.parents={-1,0,1,1,1,4,1,1};f.rig.identity.count=8;
+ f.rig.world.assign(8,Pose());f.rig.inverseBind.assign(8,Pose());f.rig.evaluatedWorld.assign(8,Pose());
+ f.rig.nativeEvaluated.resize(8);for(auto& bytes:f.rig.nativeEvaluated)bytes.fill(std::byte{0x5a});
  const auto original=f.rig.nativeEvaluated;
  for(float units:{1.f,2.f})for(float stretch:{0.f,.04f,.15f}){
-  f.rig.evaluatedWorld[4]=Pose(stretch);f.rig.evaluatedWorld[5]=Pose(-stretch);
+  f.rig.evaluatedWorld[4]=Pose(stretch);f.rig.evaluatedWorld[5]=Pose(-stretch);f.rig.evaluatedWorld[7]=Pose(stretch);
   auto placed=Pose(5);placed.values[0]={0,0,1,0};placed.values[2]={-1,0,0,0};
   auto writes=RetargetRigSubtree(f.rig.parents,f.rig.evaluatedWorld,1,placed);CHECK(writes);
-  const auto fixed=bc2_pump_detail::FixedAssembly(f.rig,placed,units);CHECK(fixed&&fixed->size()==3);
+  const auto fixed=bc2_pump_detail::FixedAssembly(f.rig,placed,units);CHECK(fixed&&fixed->size()==4);
   for(const auto& part:*fixed)for(auto& w:*writes)if(w.index==part.index)w=part;
   const auto palette=BuildRigPosePlan(f.rig,*writes);CHECK(palette);
   for(unsigned n=0;n<fixed->size();++n){

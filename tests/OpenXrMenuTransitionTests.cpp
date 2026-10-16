@@ -14,12 +14,26 @@ struct WorldAndMenu final:runtime::IFrameProvider {
     graphics::D3D11PairProducer textures;ComPtr<ID3D11Device> device;ComPtr<ID3D11DeviceContext> context;
     std::array<ComPtr<ID3D11Texture2D>,2> images;graphics::PairTicket waitingTicket{};
     bool waiting=false,publishedMenu=false,expectedMenu=false;unsigned frame=0,errors=0,consumed=0,discarded=0,menuSuspends=0,menuFrames=0,oldPairDelivered=0;
-    bool cancelledOpeningPair=false,resumedFresh=false;std::uint64_t epoch=0,stateSequence=0;
+    bool cancelledOpeningPair=false,resumedFresh=false,sourceAttempted=false,sourceReady=false;std::uint64_t epoch=0,stateSequence=0;
     unsigned (*layers)()=nullptr;unsigned previousLayers=0;
     bool Initialize(){return remote.Create()&&producer.ConnectProducer(remote.Token())&&menuHost.CreateHost(remote.Token())&&menuProducer.ConnectProducer(remote.Token());}
+    void Failure(const char* stage,long result=0){++errors;std::cerr<<"fixture_failure stage="<<stage<<" result="<<result<<" frame="<<frame<<'\n';}
+    bool PrepareSource(const runtime::PresentationRequirements& req){
+        if(sourceAttempted)return sourceReady;sourceAttempted=true;
+        // Cold GPU setup must finish before BeginRequest starts its150ms
+        // lease. A setup timeout changes the fixture's opening-pair sequence.
+        D3D_FEATURE_LEVEL level{};auto result=D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_HARDWARE,nullptr,0,nullptr,0,D3D11_SDK_VERSION,&device,&level,&context);
+        if(FAILED(result)){Failure("device",result);return false;}
+        D3D11_TEXTURE2D_DESC desc{};desc.Width=req.width;desc.Height=req.height;desc.Format=DXGI_FORMAT(req.format);desc.MipLevels=desc.ArraySize=desc.SampleDesc.Count=1;
+        for(auto& image:images)if(FAILED(result=device->CreateTexture2D(&desc,nullptr,&image))){Failure("source_texture",result);return false;}
+        const auto created=textures.Create(device.Get(),req.width,req.height,DXGI_FORMAT(req.format),++epoch);
+        if(created!=graphics::TransferResult::Ok){Failure("shared_texture",long(created));return false;}
+        sourceReady=true;return true;
+    }
     bool TryGetPair(const runtime::PresentationRequirements&,const runtime::TrackingFrame&,graphics::TextureDescriptor&,graphics::PairTicket&)noexcept override{return false;}
     bool TryGetCompletedPair(const runtime::PresentationRequirements& r,const runtime::TrackingFrame& t,runtime::TrackingFrame& rendered,graphics::TextureDescriptor& d,graphics::PairTicket& p)noexcept override {
-        if(expectedMenu)++errors;
+        if(expectedMenu)Failure("world_requested_in_menu");
+        if(!PrepareSource(r))return false;
         const bool okay=remote.TryGetCompletedPair(r,t,rendered,d,p);
         if(okay){const auto source=unsigned((rendered.predictedNs-1000000000)/11000000);if(source==9&&frame>=19)++oldPairDelivered;if(frame>=19&&source>=19)resumedFresh=true;}
         return okay;
@@ -34,16 +48,16 @@ struct WorldAndMenu final:runtime::IFrameProvider {
         }
         ipc::FrameRequest request;if(producer.TryTake(request)!=ipc::ChannelResult::Ok)return;
         runtime::PresentationRequirements req;runtime::TrackingFrame tracking;
-        if(!ipc::Decode(request,req,tracking)){++errors;producer.Skip();return;}
-        if(!device){D3D_FEATURE_LEVEL level{};if(FAILED(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_HARDWARE,nullptr,0,nullptr,0,D3D11_SDK_VERSION,&device,&level,&context))){++errors;producer.Skip();return;}
-            D3D11_TEXTURE2D_DESC desc{};desc.Width=req.width;desc.Height=req.height;desc.Format=DXGI_FORMAT(req.format);desc.MipLevels=desc.ArraySize=desc.SampleDesc.Count=1;
-            for(auto& image:images)if(FAILED(device->CreateTexture2D(&desc,nullptr,&image))){++errors;producer.Skip();return;}}
-        if(!graphics::Valid(textures.Descriptor())&&textures.Create(device.Get(),req.width,req.height,DXGI_FORMAT(req.format),++epoch)!=graphics::TransferResult::Ok){++errors;producer.Skip();return;}
+        if(!ipc::Decode(request,req,tracking)){Failure("decode");producer.Skip();return;}
+        if(!device){Failure("source_not_prepared");producer.Skip();return;}
+        if(!graphics::Valid(textures.Descriptor())&&textures.Create(device.Get(),req.width,req.height,DXGI_FORMAT(req.format),++epoch)!=graphics::TransferResult::Ok){Failure("recreate_shared_texture");producer.Skip();return;}
         const auto source=unsigned((tracking.predictedNs-1000000000)/11000000);
         for(unsigned eye=0;eye<2;++eye){std::vector<std::uint32_t> pixels(std::size_t(req.width)*req.height,0xff5a0000u|((eye+1)<<8)|source);context->UpdateSubresource(images[eye].Get(),0,nullptr,pixels.data(),req.width*4,0);}
         const std::array<graphics::TextureSlice,2> slices{{{images[0].Get(),0},{images[1].Get(),0}}};
-        if(textures.Publish(slices,{source,tracking.spaceGeneration,tracking.generation,tracking.predictedNs},waitingTicket)!=graphics::TransferResult::Ok||
-           producer.Publish(textures.Descriptor(),waitingTicket)!=ipc::ChannelResult::Ok){++errors;textures.Reset();producer.Skip();return;}
+        const auto copied=textures.Publish(slices,{source,tracking.spaceGeneration,tracking.generation,tracking.predictedNs},waitingTicket);
+        if(copied!=graphics::TransferResult::Ok){Failure("publish_pixels",long(copied));textures.Reset();producer.Skip();return;}
+        const auto published=producer.Publish(textures.Descriptor(),waitingTicket);
+        if(published!=ipc::ChannelResult::Ok){Failure("publish_channel",long(published));textures.Reset();producer.Skip();return;}
         waiting=true;
     }
     void UpdateInput(const interaction::InputFrame& input)noexcept override {
@@ -51,13 +65,13 @@ struct WorldAndMenu final:runtime::IFrameProvider {
             frame=unsigned((input.predictedNs-1000000000)/11000000);expectedMenu=publishedMenu;
             // Counter observes EndFrame of the preceding frame. No world image
             // may survive menu entry, even while the menu raster is unavailable.
-            const auto nowLayers=layers();if(frame>=11&&frame<=19&&nowLayers!=previousLayers)++errors;previousLayers=nowLayers;
-            if(expectedMenu){++menuFrames;if(input.focused||input.hands[0].active||input.hands[1].active)++errors;}
+            const auto nowLayers=layers();if(frame>=11&&frame<=19&&nowLayers!=previousLayers)Failure("world_layer_during_menu");previousLayers=nowLayers;
+            if(expectedMenu){++menuFrames;if(input.focused||input.hands[0].active||input.hands[1].active)Failure("menu_input_not_filtered");}
             publishedMenu=frame>=9&&frame<=17;
             const ipc::MenuState state{++stateSequence,publishedMenu?2u:3u,0,publishedMenu?ipc::MenuMode::Menu:ipc::MenuMode::Gameplay,1280,720,1};
-            if(menuProducer.PublishState(state)!=ipc::ChannelResult::Ok)++errors;
+            const auto published=menuProducer.PublishState(state);if(published!=ipc::ChannelResult::Ok)Failure("publish_menu_state",long(published));
             remote.UpdateInput(input);Pump();
-        }catch(...){++errors;}
+        }catch(...){Failure("input_exception");}
     }
 };
 int wmain(int argc,wchar_t** argv){
@@ -69,7 +83,8 @@ int wmain(int argc,wchar_t** argv){
     xr::HostOptions options;options.loaderPath=path;options.probeOnly=false;options.seconds=3;options.provider=&provider;options.menu=&provider.menuHost;
     const auto report=xr::RunOpenXrHost(options);provider.Pump();if(!report.okay)std::cerr<<report.error<<'\n';
     std::cout<<"menu_frames="<<provider.menuFrames<<" menu_suspends="<<provider.menuSuspends<<" opening_pair_cancelled="<<provider.cancelledOpeningPair
-        <<" old_pair_delivered="<<provider.oldPairDelivered<<" fresh_resume="<<provider.resumedFresh<<" consumed="<<provider.consumed<<" discarded="<<provider.discarded<<" errors="<<provider.errors+errors()<<'\n';
+        <<" old_pair_delivered="<<provider.oldPairDelivered<<" fresh_resume="<<provider.resumedFresh<<" consumed="<<provider.consumed<<" discarded="<<provider.discarded<<" errors="<<provider.errors+errors()
+        <<" provider_errors="<<provider.errors<<" runtime_errors="<<errors()<<" ended="<<report.endedFrames<<" okay="<<report.okay<<'\n';
     CHECK(report.okay&&report.endedFrames==100&&errors()==0&&provider.errors==0);
     CHECK(provider.menuFrames==9&&provider.menuSuspends>=provider.menuFrames&&provider.cancelledOpeningPair&&!provider.oldPairDelivered&&provider.resumedFresh);
     CHECK(report.submittedPairs>20&&report.submittedPairs==provider.consumed&&!provider.waiting);

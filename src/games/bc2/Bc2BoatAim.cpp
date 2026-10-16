@@ -1,4 +1,5 @@
 #include "Bc2BoatAim.h"
+#include "Bc2ActiveEntryCamera.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -88,12 +89,15 @@ std::optional<BoatAimSnapshot> ReadPblDriverAim(const VehicleRouteMemory& memory
     for(unsigned n=0;n<count;++n){const auto parent=Parent(rows[n]);if(parent!=255&&parent>=count)return {};
         unsigned char index=0;if(!rows[n].component||r.Word(rows[n].component+0x24)!=collection||!r.Read(rows[n].component+0x28,&index,1)||index!=n)return {};}
     if(!memory.type(memory.context,rows[0].component,"ClientVehicleComponent"))return {};
-    // Actual selected camera record, not the nearest named camera in the asset.
+    // Retain the proven PBL first-person route and additionally verify that
+    // the native camera state currently selects its exact camera/provider.
+    const auto activeCamera=ReadActiveEntryCamera(entry,binding.image,[&](unsigned at){return r.Word(at);});
+    if(!activeCamera||activeCamera->selected!=0)return {};
     const auto begin=r.Word(entry+0x19c),end=r.Word(entry+0x1a0),selector=r.Word(entry+0xd8);
     if(!begin||end-begin!=24||r.Word(selector)!=0)return {};
     std::array<unsigned,3> cameraRecord{};if(!r.Read(begin,cameraRecord.data(),12))return {};
     const auto camera=cameraRecord[0],wrapper=cameraRecord[1],table=r.Word(wrapper);
-    if(r.Word(table+4)!=binding.image+0x3df4e0||r.Word(table+8)!=binding.image+0x3c4cb0)return {};
+    if(camera!=activeCamera->camera||wrapper!=activeCamera->wrapper||r.Word(table+4)!=binding.image+0x3df4e0||r.Word(table+8)!=binding.image+0x3c4cb0)return {};
     const auto cameraComponent=r.Word(wrapper+4);unsigned cameraIndex=count,weaponIndex=count;
     for(unsigned n=0;n<count;++n){
         if(rows[n].component==cameraComponent)cameraIndex=n;
@@ -147,7 +151,7 @@ std::optional<BoatAimSnapshot> ReadPblDriverAim(const VehicleRouteMemory& memory
     if(!r.Read(collection,headerAfter.data(),16)||headerAfter!=header||!r.Read(collection+16,after.data(),count*16)||!r.Read(begin,cameraAfter.data(),12)||cameraAfter!=cameraRecord||
        r.Word(entry+0x24)!=collection||r.Word(entry+0x1c4)!=seat.player||r.Word(entry+0x19c)!=begin||r.Word(entry+0x1a0)!=end||r.Word(entry+0xd8)!=selector||r.Word(selector)!=0||r.Word(wrapper+4)!=cameraComponent||r.Word(weaponComponent+0xd0)!=nativeWeapon)return {};
     for(unsigned n=0;n<count;++n)if(rows[n].component!=after[n].component||rows[n].entry!=after[n].entry||Parent(rows[n])!=Parent(after[n]))return {};
-    if(!r.okay)return {};
+    if(ReadActiveEntryCamera(entry,binding.image,[&](unsigned at){return r.Word(at);})!=activeCamera||!r.okay)return {};
     BoatAimSnapshot out;out.owner=seat.identity;out.player=seat.player;out.collection=collection;out.camera=camera;out.cameraComponent=cameraComponent;out.weaponComponent=weaponComponent;out.nativeWeapon=nativeWeapon;
     out.cameraIndex=cameraIndex;out.weaponIndex=weaponIndex;out.yawIndex=joints[0][0];out.pitchIndex=joints[0][1];out.hull=*hull;out.cameraWorld=*selected;out.neutralCameraLocal=neutral;
     out.jointYaw=std::atan2(yaw->values[2][0],yaw->values[2][2]);out.jointPitch=std::atan2(pitch->values[2][1],pitch->values[2][2]);return out;

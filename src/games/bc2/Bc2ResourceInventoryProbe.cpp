@@ -19,12 +19,36 @@ math::Pose Approach(const math::Pose& from,const math::Pose& target)noexcept {
 }
 bool Bc2ResourceInventoryProbe::EnablePump(const Bc2PumpCalibration& calibration,Bc2PumpControllerProbe::Scenario scenario,unsigned cycles)noexcept {
     if(first_||pump_||magazineOnly_||supportOnly_||phase_!=Phase::Setup||!PumpCalibrationValid(calibration))return false;
-    if(unsigned(scenario)>unsigned(Bc2PumpControllerProbe::Scenario::HeldSupportNatural))return false;
-    if((cycles!=1&&cycles!=8)||(cycles==8&&scenario!=Bc2PumpControllerProbe::Scenario::None&&
-       scenario!=Bc2PumpControllerProbe::Scenario::HeldSupportNatural))return false;
+    if(unsigned(scenario)>unsigned(Bc2PumpControllerProbe::Scenario::HeldSupportNaturalReceiverGap))return false;
+    if((cycles!=1&&cycles!=3&&cycles!=8)||(cycles!=1&&scenario!=Bc2PumpControllerProbe::Scenario::None&&
+       scenario!=Bc2PumpControllerProbe::Scenario::HeldSupportNatural&&scenario!=Bc2PumpControllerProbe::Scenario::HeldSupportNaturalReceiverGap))return false;
     if(cycles==8&&!fullReturn_.UseCombinedWarmup())return false;
     calibration_=calibration;pumpScenario_=scenario;pumpCycles_=cycles;pump_.emplace(calibration,cycles,scenario);
     return true;
+}
+bool Bc2ResourceInventoryProbe::EnableTwoShells()noexcept {
+    if(first_||!pump_||pumpCycles_!=3||shellRounds_!=1||replacementEnabled_||revisitEnabled_||
+       (pumpScenario_!=Bc2PumpControllerProbe::Scenario::HeldSupportNatural&&pumpScenario_!=Bc2PumpControllerProbe::Scenario::HeldSupportNaturalReceiverGap))return false;
+    shell_=Bc2PhysicalReloadProbe{true,2};shellRounds_=2;return true;
+}
+bool Bc2ResourceInventoryProbe::EnableShellFocusLoss()noexcept {
+    if(first_||!pump_||pumpCycles_!=3||shellRounds_!=2||shellFocus_||replacementEnabled_||revisitEnabled_||
+       pumpUnreachablePose_||pumpInspectionPose_||pumpScenario_!=Bc2PumpControllerProbe::Scenario::HeldSupportNatural)return false;
+    shellFocus_.emplace();rifleSupportRequired_=false;return true;
+}
+void Bc2ResourceInventoryProbe::ObserveShellFocusLoss(const InputFrame& in,const ReloadStateOwner& owner,
+    std::int64_t observed,std::int64_t deadline,std::int64_t now)noexcept {
+    if(!shellFocus_||phase_!=Phase::ShellFocusLoss)return;
+    bool neutral=true;for(const auto& h:in.hands)neutral=neutral&&!h.held&&!h.touched&&!h.touchActive&&
+        h.trigger==0&&h.squeeze==0&&h.stickX==0&&h.stickY==0;
+    if(owner!=shellOwner_||!ValidInput(in)||in.focused||!in.headValid||
+       !shellFocus_->Source(in.generation,in.spaceGeneration,observed,deadline,now,false,neutral))Fail(37,now);
+}
+bool Bc2ResourceInventoryProbe::EnableUnreachablePumpPose()noexcept {
+    if(first_||!pump_||pumpCycles_!=3||shellRounds_!=2||pumpUnreachablePose_||replacementEnabled_||
+       pumpInspectionPose_||revisitEnabled_||phase_!=Phase::Setup||
+       pumpScenario_!=Bc2PumpControllerProbe::Scenario::HeldSupportNatural)return false;
+    pumpUnreachablePose_=true;return true;
 }
 bool Bc2ResourceInventoryProbe::EnableActorReplacement(bool magazine)noexcept {
     if(first_||!pump_||pumpCycles_!=1||replacementEnabled_||pumpInspectionPose_||revisitEnabled_||phase_!=Phase::Setup)return false;
@@ -190,6 +214,11 @@ void Bc2ResourceInventoryProbe::PrepareEmptyMagazine(InputFrame& in,const Reload
 
 void Bc2ResourceInventoryProbe::Prepare(InputFrame& in,const ReloadStateOwner& owner,std::string_view asset,
     const ResourceInventoryObservation& o,std::int64_t observed,std::int64_t deadline,std::int64_t now)noexcept {
+    // A receiver gap provides no controller input. The diagnostic waits; real
+    // ordinary consumers and native own Updates still observe that absence.
+    if(pump_&&pump_->AwaitingReceiver()&&(!ValidInput(in)||!in.focused||!in.headValid||observed<=0||deadline<=now)){
+        if(!pump_->ObserveMissingReceiver(now))Fail(36,now);return;
+    }
     if(ObserveOriginInput(in,owner,o,observed,deadline,now))return;
     if(!first_)first_=phaseAt_=now;
     if(now<=0||now<lastNow_||now-first_>=(pump_?58000000000ll:55000000000ll)||
@@ -208,6 +237,14 @@ void Bc2ResourceInventoryProbe::Prepare(InputFrame& in,const ReloadStateOwner& o
     if(awaitingReplacement&&!CancelConsumer()){
         auto sameActorWeapon=*ReplacementSourceOwner();sameActorWeapon.equipGeneration=owner.equipGeneration;
         if(owner!=sameActorWeapon||owner.equipGeneration<replacementPendingEquip_)Fail(18,now);
+    }
+    if(shellFocus_&&(phase_==Phase::ShellFocusLoss||phase_==Phase::Done)){
+        // This finite episode ends after fresh neutral return, not a resumed
+        // support-return claim. The actual focus path owns all cancellation.
+        bool neutral=true;for(const auto& h:in.hands)neutral=neutral&&!h.held&&!h.touched&&!h.touchActive&&
+            h.trigger==0&&h.squeeze==0&&h.stickX==0&&h.stickY==0;
+        if(owner!=shellOwner_||!shellFocus_->Source(in.generation,in.spaceGeneration,observed,deadline,now,true,neutral))Fail(37,now);
+        observed_=observed;deadline_=deadline;RecordInput(in,owner,observed,deadline,now);return;
     }
     if(lastInput_&&in.generation==lastInput_->generation){
         if(observed!=observed_||deadline!=deadline_)Fail(4,now);
@@ -297,7 +334,9 @@ void Bc2ResourceInventoryProbe::Prepare(InputFrame& in,const ReloadStateOwner& o
     }
     if(phase_==Phase::OtherDraw&&inventory_.State()==Bc2InventoryReloadProbe::Phase::OtherHeld&&Held(o,owner,now)){
         if(owner.weapon==initial_.weapon||asset!=SpasReloadAsset)Fail(7,now);
-        else if(Reserve(o,owner,now)&&o.reserve->loaded>=int(pumpCycles_==8?8:2)&&!o.shellBlocks&&!o.shell.pending){
+        else if(Reserve(o,owner,now)&&o.reserve->loaded>=int(pumpCycles_==8?8:pumpCycles_==3?3:2)&&
+                o.reserve->capacity-o.reserve->loaded+int(pump_?pumpCycles_:1)>=int(shellRounds_)&&
+                o.reserve->reserve>=int(shellRounds_)&&!o.shellBlocks&&!o.shell.pending){
             shellOwner_=owner;shellLoaded_=o.reserve->loaded;shellReserve_=o.reserve->reserve;shotSequence_=o.reserve->sequence;
             if(!shell_.Episode(o.body->anchors))Fail(8,now);else Move(pump_?Phase::Pump:Phase::Fire,now);
         }
@@ -311,6 +350,11 @@ void Bc2ResourceInventoryProbe::Prepare(InputFrame& in,const ReloadStateOwner& o
         auto desired=in.hands[1].grip;
         const bool returning=phase_==Phase::ShellSettle||phase_==Phase::RevisitSettle;
         if(!returning)desired.position={0,-.40f,0};
+        // Deliberately request a farther fore-end during the finite Pump phase.
+        // Fresh renderer contact still drives the real left-hand rail gesture;
+        // only the ordinary arm solver decides whether that hand can reach.
+        // Shell returns through this existing smoother, with no claim changes.
+        if(pumpUnreachablePose_&&phase_==Phase::Pump)desired.position={0,-.22f,-.40f};
         if(pumpInspectionPose_&&phase_!=Phase::ShellSettle){
             desired.position={0,-.22f,-.40f};
             desired.orientation={0,.7071067812f,0,.7071067812f};
@@ -326,7 +370,8 @@ void Bc2ResourceInventoryProbe::Prepare(InputFrame& in,const ReloadStateOwner& o
         if(pump_->Failed())Fail(19,now);
         else if(pump_->Completed()&&Reserve(o,owner,now)&&o.reserve->sequence>shotSequence_){
             if(o.reserve->loaded!=shellLoaded_-int(pumpCycles_)||o.reserve->reserve!=shellReserve_)Fail(9,now);
-            else {shotObserved_=o.reserve->sequence;Move(Phase::Shell,now);}
+            else {if(pump_->ReceiverGap()&&originResumed_)originStroke_=true;
+                shotObserved_=o.reserve->sequence;Move(Phase::Shell,now);}
         }
     }
     if(phase_==Phase::Fire){if(now-phaseAt_<100000000)in.hands[1].trigger=1;else Move(Phase::WaitShot,now);}
@@ -337,7 +382,7 @@ void Bc2ResourceInventoryProbe::Prepare(InputFrame& in,const ReloadStateOwner& o
     if(phase_==Phase::Shell)shell_.Prepare(in,owner,asset,o.shellRaw,o.shell,observed,deadline,now);
     if(phase_==Phase::ShellSupport)PrepareShellSupport(in,owner,o.shellRaw,now);
     if(phase_==Phase::ShellSettle&&(!pump_||pumpRightReturned_)&&Reserve(o,owner,now)&&!o.shellBlocks&&!o.shell.pending&&!o.shell.held){
-        if(o.reserve->loaded!=shellLoaded_-int(pump_?pumpCycles_:1)+1||o.reserve->reserve!=shellReserve_-1)Fail(10,now);
+        if(o.reserve->loaded!=shellLoaded_-int(pump_?pumpCycles_:1)+int(shellRounds_)||o.reserve->reserve!=shellReserve_-int(shellRounds_))Fail(10,now);
         else if(replacementResumed_)Move(Phase::Done,now);
         else if(inventory_.ResumeOther(now))Move(Phase::OriginalDraw,now);else Fail(11,now);
     }
@@ -440,8 +485,11 @@ bool Bc2ResourceInventoryProbe::ObserveOriginInput(InputFrame& in,const ReloadSt
     if(!ValidInput(in)||!in.focused||!in.headValid||!in.hands[0].gripTracked||!in.hands[1].gripTracked||
        owner!=originAfter_||!lastInput_||in.generation<lastInput_->generation||
        observed<=0||observed>now||deadline<=now||deadline-observed>100000000||now<phaseAt_){Fail(23,now);return false;}
+    // Observe the actual incoming neutral before the fixture changes any
+    // controller field; the later dwell handoff is not a new neutral boundary.
+    if(pump_->ReceiverGap()&&!pump_->ObserveReceiverReturnNeutral(in,owner,observed,deadline,now)){Fail(37,now);return false;}
     for(unsigned h=0;h<2;++h){in.hands[h].grip=lastInput_->hands[h].grip;in.hands[h].aim=lastInput_->hands[h].aim;
-        in.hands[h].trigger=0;in.hands[h].held=0;in.hands[h].stickX=in.hands[h].stickY=0;in.hands[h].squeeze=h?1.f:0.f;}
+        in.hands[h].trigger=0;in.hands[h].held=0;in.hands[h].stickX=in.hands[h].stickY=0;in.hands[h].squeeze=h&&(!pump_->ReceiverGap()||now-phaseAt_>=200000000)?1.f:0.f;}
     if(o.pumpNative){const auto& v=*o.pumpNative;const auto& old=*originBefore_;
         auto expected=old.native;expected.owner=originAfter_;
         if(v.trackingRebase&&v.trackingRebase->previous==old.native.owner&&v.trackingRebase->current==originAfter_&&
@@ -451,10 +499,19 @@ bool Bc2ResourceInventoryProbe::ObserveOriginInput(InputFrame& in,const ReloadSt
         }
     }
     if(!originVerified_&&now-phaseAt_>5000000000ll){Fail(24,now);return false;}
-    if(originVerified_&&pump_&&o.pumpNative){
+    if(originVerified_&&pump_&&o.pumpNative&&(!pump_->ReceiverGap()||now-phaseAt_>=200000000)){
         if(!originResumed_){
             if(!pump_->FollowTrackingRebase(in,owner,*o.pumpNative,now)){Fail(27,now);return false;}
             originResumed_=true;
+            if(pump_->ReceiverGap()){
+                const auto& rebase=*o.pumpNative->trackingRebase;
+                if(!inventory_.FollowReceiverSpace(rebase.previous,rebase.current,now)){Fail(36,now);return false;}
+                // Resume this same bounded input episode only after the real
+                // native debt has changed space. Counts/receipts are retained.
+                initial_.space=owner.space;shellOwner_=owner;history_={};
+                Move(Phase::Pump,now);lastInput_.reset();observed_=observed;deadline_=deadline;lastNow_=now;
+                return true;
+            }
         }
         if(!originStroke_){
             if(pumpRightCommand_)in.hands[1].grip=in.hands[1].aim=*pumpRightCommand_;
@@ -501,8 +558,21 @@ void Bc2ResourceInventoryProbe::Observe(const ResourceInventoryObservation& o,co
     }
     if(phase_==Phase::Shell){shell_.Observe(o.shell,now);if(shell_.Completed()){
         shellCompletedAt_=now;if(lastInput_)supportCommand_=lastInput_->hands[0].grip;
-        Move(pump_?Phase::ShellSupport:Phase::ShellSettle,now);
+        if(shellFocus_){
+            if(!o.shell.reserve||o.shell.pending||o.shell.held||o.shell.completed!=2||o.shell.submitted!=2||
+               o.shell.reserve->loaded!=7||o.shell.reserve->reserve!=22||
+               !shellFocus_->Arm(o.shell.cycle,shellOwner_.space,7,22,o.shell.reserve->capacity,now))Fail(37,now);
+            else Move(Phase::ShellFocusLoss,now);
+        }else Move(pump_?Phase::ShellSupport:Phase::ShellSettle,now);
     }else if(shell_.Failed())Fail(16,now);}
+    if(shellFocus_&&phase_==Phase::ShellFocusLoss){
+        if(now-phaseAt_>6000000000ll)Fail(37,now);
+        else if(Reserve(o,shellOwner_,now)){
+            if(!shellFocus_->Counts(o.reserve->loaded,o.reserve->reserve,
+                !o.shellBlocks&&!o.shell.pending&&!o.shell.held&&o.shell.completed==2&&o.shell.submitted==2,now))Fail(37,now);
+            else if(shellFocus_->Completed())Move(Phase::Done,now);
+        }
+    }
     if(phase_==Phase::FullReturn){fullReturn_.Observe(o.magazine,packs,now);if(fullReturn_.Completed()){
         if(pump_){if(!o.magazine.resource||o.magazine.result.blocksWeaponActions||
                        !AmmoResourceViewFresh(*o.magazine.resource,now)||o.magazine.resource->snapshot.counts!=afterFirst_||
@@ -584,7 +654,10 @@ void Bc2ResourceInventoryProbe::PrepareShellSupport(InputFrame& in,const ReloadS
 }
 void Bc2ResourceInventoryProbe::ObservePump(const Bc2PhysicalPumpResult& physical,const std::optional<Bc2NativeCycleView>& native,Bc2PumpPackCounters packs,std::int64_t now)noexcept {
     if(WitnessReplacement(native,now))return;
-    if(pump_&&(phase_==Phase::Pump||(phase_==Phase::OriginObservation&&originResumed_))){pump_->Observe(physical,native,packs,now);if(pump_->Failed())Fail(19,now);}
+    if(pump_&&(phase_==Phase::Pump||(phase_==Phase::OriginObservation&&originResumed_))){
+        pump_->Observe(physical,native,packs,now);if(pump_->Failed())Fail(19,now);
+        if(pump_->ReceiverGap()&&originResumed_&&pump_->Completed())originStroke_=true;
+    }
     if(revisitPump_&&phase_==Phase::RevisitPump){revisitPump_->Observe(physical,native,packs,now);if(revisitPump_->Failed())Fail(33,now);}
 }
 void Bc2ResourceInventoryProbe::ObserveSupport(const Bc2PumpTracking& tracking,const SupportGripResult& supported,
@@ -635,13 +708,14 @@ void Bc2ResourceInventoryProbe::Report(std::ostream& out)const {
     out<<"{\"input_only\":true,\"persistent_consumers\":true,\"headset_verified\":false,\"phase\":"<<unsigned(phase_)<<",\"failure\":"<<failure_
        <<",\"magazine_postfire\":"<<(magazinePostFire_?"true":"false")
        <<",\"pump_inspection_pose\":"<<(pumpInspectionPose_?"true":"false")
+       <<",\"pump_unreachable_hand_probe\":"<<(pumpUnreachablePose_?"true":"false")
        <<",\"support_only\":"<<(supportOnly_?"true":"false")
        <<",\"magazine_only\":"<<(magazineOnly_?"true":"false")
        <<",\"rifle_support_required\":"<<(rifleSupportRequired_?"true":"false")<<",\"rifle_support_claim\":"<<rifleSupportClaim_
        <<",\"rifle_support_source\":"<<rifleSupportSequence_<<",\"rifle_support_released\":"<<(rifleSupportReleased_?"true":"false")
        <<",\"rifle_support_began_ns\":"<<rifleSupportBegan_<<",\"rifle_support_last_ns\":"<<rifleSupportLast_
        <<",\"rifle_support_samples\":"<<rifleSupportSamples_<<",\"rifle_support_max_gap_ns\":"<<rifleSupportMaxGap_
-       <<",\"manual_pump\":"<<(pump_?"true":"false")<<",\"active_budget_ns\":"<<(pump_?50000000000ll:35000000000ll)
+       <<",\"manual_pump\":"<<(pump_?"true":"false")<<",\"requested_shells\":"<<shellRounds_<<",\"active_budget_ns\":"<<(pump_?50000000000ll:35000000000ll)
        <<",\"completed\":"<<(Completed()?"true":"false")<<",\"began_ns\":"<<began_<<",\"shot_sequence\":"<<shotObserved_<<",\"shell_loaded_before\":"<<shellLoaded_<<",\"shell_reserve_before\":"<<shellReserve_
        <<",\"shell_support\":{\"returned\":"<<(shellSupportToken_?"true":"false")<<",\"token\":"<<shellSupportToken_
        <<",\"claim\":"<<shellSupportClaim_<<",\"source_sequence\":"<<shellSupportSource_<<",\"observed_ns\":"<<shellSupportObserved_
@@ -650,7 +724,8 @@ void Bc2ResourceInventoryProbe::Report(std::ostream& out)const {
     for(unsigned n=0;n<transitionCount_;++n){if(n)out<<',';const auto& r=transitions_[n];out<<"{\"phase\":"<<r.phase<<",\"failure\":"<<r.failure<<",\"now_ns\":"<<r.now<<'}';}
     out<<"],\"input_logging_version\":2,\"active_sample_ns\":100000000,\"setup_sample_ns\":1000000000,\"terminal_sample_ns\":0,\"input_rows_dropped\":"<<inputDropped_<<",\"effective_input\":[";
     for(unsigned n=0;n<inputCount_;++n){if(n)out<<',';const auto& r=inputs_[n];out<<"{\"generation\":"<<r.generation<<",\"now_ns\":"<<r.now<<",\"phase\":"<<r.phase<<",\"weapon\":"<<r.weapon<<",\"trigger\":"<<r.trigger<<",\"left_squeeze\":"<<r.left<<",\"right_squeeze\":"<<r.right<<'}';}
-    out<<"],\"origin_observation\":{\"started\":"<<(originBefore_?"true":"false")<<",\"verified\":"<<(originVerified_?"true":"false")
+    out<<"],\"shell_focus_loss\":";if(shellFocus_)shellFocus_->Report(out);else out<<"{\"enabled\":false}";
+    out<<",\"origin_observation\":{\"started\":"<<(originBefore_?"true":"false")<<",\"verified\":"<<(originVerified_?"true":"false")
        <<",\"old_space\":"<<(originBefore_?originBefore_->native.owner.space:0)<<",\"new_space\":"<<originAfter_.space
        <<",\"cycle\":"<<(originBefore_?originBefore_->cycle:0)<<",\"shot\":"<<(originBefore_?originBefore_->shot:0)
        <<",\"loaded\":"<<(originBefore_?originBefore_->loaded:-1)<<",\"reserve\":"<<(originBefore_?originBefore_->reserve:-1)

@@ -21,6 +21,11 @@ int ShoulderEarlyDirectSwap(){using namespace interaction;
   h.r.s.gun={Fixture::b,h.r.s.hand.owner.equipGeneration};h.r.Advance(.55f);h.r.Gun();h.Tick();
   CHECK(h.out.ordinaryDraw.committed&&!h.out.ordinaryDraw.pending&&!h.out.blockWeaponActions);
   CHECK(h.r.hands.Current(InteractionHand::Right)->token.item==h.r.s.gun);
+  const auto drawn=h.r.hands.Current(InteractionHand::Right)->token;
+  h.Step(1);CHECK(h.holster.Phase()==bc2::BodyHolsterPhase::Held&&!h.out.inventory.request);
+  h.Step(0);CHECK(h.holster.Phase()==bc2::BodyHolsterPhase::Held&&!h.out.inventory.request&&
+      !h.out.blockWeaponActions&&!h.out.visibility.enabled&&!h.out.freeRight);
+  CHECK(h.r.hands.Current(InteractionHand::Right)->token==drawn);
  }
  std::puts("Shoulder direct swap: mirrored early grab, unchanged .55 input, single native command and actual selected-item acknowledgement passed");return 0;
 }

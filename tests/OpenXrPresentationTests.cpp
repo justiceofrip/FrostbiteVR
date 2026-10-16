@@ -56,6 +56,9 @@ struct InputObserver final:runtime::IFrameProvider {
             else sawValidPose=true;
         }
     }
+    runtime::InputPublicationResult UpdateInputObserved(const interaction::InputFrame& f)noexcept override {
+        UpdateInput(f);return {true,samples%7!=0,samples%7?0u:1u};
+    }
 };
 int wmain(int argc,wchar_t** argv){if(argc==2&&std::wstring(argv[1])==L"--lifetime-child"){Sleep(1000);return 0;}CHECK(argc==2);const auto path=std::filesystem::absolute(argv[1]);HMODULE runtime=LoadLibraryExW(path.c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_SYSTEM32);CHECK(runtime);
     Delayed provider;xr::HostOptions options;options.loaderPath=path;options.probeOnly=false;options.seconds=3;options.provider=&provider;
@@ -68,6 +71,16 @@ int wmain(int argc,wchar_t** argv){if(argc==2&&std::wstring(argv[1])==L"--lifeti
     CHECK(report.presentedFrames==report.submittedPairs+report.reusedFrames);CHECK(report.endedFrames==report.presentedFrames+report.blankFrames);
     CHECK(report.submittedPairs==provider.consumed);CHECK(provider.faultInjected&&provider.invalidPoseInjected&&provider.discarded==2&&report.rejectedPairs==2);
     CHECK(report.maxRetainedAgeNs<=250000000&&report.maxRetainedAgeNs>100000000);CHECK(provider.error.empty());
+    const auto& diagnostic=report.frameDiagnostics;
+    CHECK(diagnostic.frames==report.endedFrames&&diagnostic.noWorldFrames==report.blankFrames);
+    CHECK(diagnostic.zeroLayerFrames==report.blankFrames&&diagnostic.menuOnlyFrames==0);
+    CHECK(diagnostic.inputUnknown==report.inputFrames&&diagnostic.inputSuccesses==0);
+    CHECK(diagnostic.noWorldReasonFrames[1]>0&&diagnostic.noWorldReasonFrames[2]>0);
+    // The fixture's frame51 space reset discards the retained pair before it
+    // reaches250ms; age expiry is covered by HostFrameDiagnosticsTests.
+    CHECK(diagnostic.noWorldReasonFrames[4]>0&&diagnostic.noWorldReasonFrames[7]>0);
+    CHECK(diagnostic.noWorldReasonFrames[10]==0&&diagnostic.noWorldReasonFrames[14]>0);
+    CHECK(diagnostic.count<=xr::HostFrameDiagnostics::Capacity);
     // Unlimited mode must have a stop source, and must exit when it signals.
     xr::HostOptions continuous;continuous.loaderPath=path;continuous.probeOnly=false;continuous.seconds=0;
     const auto invalid=xr::RunOpenXrHost(continuous);CHECK(!invalid.okay&&!invalid.instanceCreated);
@@ -91,6 +104,9 @@ int wmain(int argc,wchar_t** argv){if(argc==2&&std::wstring(argv[1])==L"--lifeti
         CHECK(observed.okay&&observed.controllersEnabled&&observed.controllerProfiles==3&&observed.floorRelative==floor);
         CHECK(input.invalid==0&&input.samples==101&&input.released>=5&&input.tracked>80&&input.floor==floor);
         CHECK(input.sawUntracked&&input.sawInactive&&input.sawBadStick&&input.sawValidPose&&errors()==0);
+        CHECK(observed.frameDiagnostics.inputAttempts==observed.inputFrames);
+        CHECK(observed.frameDiagnostics.inputFailures>0&&observed.frameDiagnostics.inputSuccesses>0);
+        CHECK(observed.frameDiagnostics.inputUnknown==0&&observed.frameDiagnostics.lastInputSuccessGeneration>0);
     }
     std::cout<<"OpenXR controller lifecycle, predicted poses, loss handling, scale and STAGE/LOCAL fallback passed\n";
     FreeLibrary(runtime);return 0;

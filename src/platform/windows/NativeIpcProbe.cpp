@@ -7,16 +7,27 @@
 #include "Bc2BodyAmmoGeometryCache.h"
 #include "Bc2ReloadRequestProbe.h"
 #include "Bc2PumpDiagnostic.h"
+#include "Bc2PumpReceiverGapProbe.h"
+#include "Bc2ShellFocusLossProbe.h"
 #include "Bc2MagazineReloadProbe.h"
 #include "Bc2PhysicalReloadPreparation.h"
 #include "BoatFireProbe.h"
 #include "SceneRecoveryProbe.h"
 #include "BodyCrossDrawProbe.h"
+#include "OrdinaryGrenadeProbeInput.h"
+#include "OrdinaryGrenadeFadeProbe.h"
+#include "TwoGrenadeFadeProbe.h"
+#include "PlayerGrenadeReceiver.h"
+#include "ChestKnifeProbeReceiver.h"
+#include "ContextualToolProbeReceiver.h"
+#include "NormalKnifeHeldCloseReceiver.h"
+#include "fvr/ipc/MenuChannel.h"
 #include "BodyInspectionProbe.h"
 #include "ResourceMagazineProbeInput.h"
 #include "PhysicalPumpProbeInput.h"
 #include "SightGestureFixtureGeometry.h"
 #include "DiagnosticImageWriter.h"
+#include "PumpSideCaptureWindow.h"
 #include <Windows.h>
 #include <wrl/client.h>
 #include <filesystem>
@@ -76,9 +87,42 @@ std::vector<unsigned char> Pixels(ID3D11DeviceContext* context,ID3D11Texture2D* 
     context->CopySubresourceRegion(staging,0,0,0,0,output,eye,nullptr);D3D11_MAPPED_SUBRESOURCE map{};Hr(context->Map(staging,0,D3D11_MAP_READ,0,&map),"Read native image");
     std::vector<unsigned char> pixels(1920u*1080u*4u);for(unsigned row=0;row<1080;++row)std::memcpy(pixels.data()+std::size_t(row)*1920*4,static_cast<const char*>(map.pData)+std::size_t(row)*map.RowPitch,1920*4);context->Unmap(staging,0);return pixels;
 }
+template<class T> bool ReadDeathWitness(const fs::path& path,T& out)noexcept {
+    HANDLE file=CreateFileW(path.c_str(),GENERIC_READ,FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,nullptr,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,nullptr);
+    if(file==INVALID_HANDLE_VALUE)return false;
+    LARGE_INTEGER length{};DWORD copied=0;T value{};
+    const bool okay=GetFileSizeEx(file,&length)&&length.QuadPart==sizeof(T)&&ReadFile(file,&value,sizeof(T),&copied,nullptr)&&copied==sizeof(T);
+    CloseHandle(file);if(okay)out=value;return okay;
+}
+// Read-only held handle: original process identity survives PID reuse.
+struct NormalToolTargetLifetime {
+    HANDLE handle=nullptr;
+    ~NormalToolTargetLifetime(){if(handle)CloseHandle(handle);}
+    bool Open(std::uint64_t pid,std::uint64_t creation) {
+        if(handle||!pid||pid>UINT32_MAX||!creation)return false;
+        handle=OpenProcess(SYNCHRONIZE|PROCESS_QUERY_LIMITED_INFORMATION,FALSE,DWORD(pid));
+        if(!handle)return false;
+        FILETIME made{},exited{},kernel{},user{};std::wstring path(32768,L'\0');DWORD count=DWORD(path.size());
+        if(!GetProcessTimes(handle,&made,&exited,&kernel,&user)||
+           ((std::uint64_t(made.dwHighDateTime)<<32)|made.dwLowDateTime)!=creation||
+           !QueryFullProcessImageNameW(handle,0,path.data(),&count))return false;
+        path.resize(count);return fs::path(path).filename()==L"BFBC2Game.exe"&&Current();
+    }
+    bool Current()const noexcept{return handle&&WaitForSingleObject(handle,0)==WAIT_TIMEOUT;}
+};
 int wmain(int argc,wchar_t** argv){try{
     Require(argc>=3&&std::wstring(argv[1])==L"--output","Usage: BC2NativeIpcProbe --output new-folder [--pairs N] [--asymmetric] [--static-pose] [--async]");
     unsigned targetPairs=8,requestLifetimeMs=150,shotPrimaryPulses=2;bool asymmetric=false,staticPose=false,async=false,fovSweep=false,controlsObserve=false,controlsPulse=false,controlsTurn=false,controlsFire=false,controlsButtons=false,controlsAim=false,controlsRoomscale=false,capturePoses=false,controlsHands=false,controlsIndependence=false,trackingRecovery=false,controlsEquip=false,controlsWeaponCycle=false,weaponModeCapture=false,sightGesture=false,sightStartSecondary=false,controlsUse=false,controlsVehicle=false,shotProbe=false,shotReload=false,deathProbe=false,supportProbe=false,supportReload=false,supportPrepareShots=false,reloadRequestProbe=false,physicalReloadProbe=false,weaponVisibilityProbe=false,bodyHolsterProbe=false,sceneRecoveryProbe=false,magazineReloadProbe=false,magazinePhysicalProbe=false;
+    std::uint64_t fadeStartTick=0,fadeNextTick=0;unsigned fadeDurationMs=0,fadeIntervalMs=0,fadePixelPairs=0;
+    bool ordinaryGrenadeFade=false,ordinaryGrenadeFadeOptionsOnly=true;probe::GrenadeFadeGesture grenadeFadeGesture;bool grenadeFadeHeld=false;
+    bool twoGrenadeFade=false,twoGrenadeOptionsOnly=true;std::uint64_t deathPid=0,deathCreation=0;probe::TwoGrenadeFadeGesture twoGrenadeGesture;bool secondWitnessSaved=false;
+    bool normalKnifeClose=false,normalKnifeOptionsOnly=true,noImageFiles=false;std::uint64_t normalKnifePid=0,normalKnifeCreation=0;
+    probe::NormalKnifeHeldCloseReceiver normalKnifeReceiver;NormalToolTargetLifetime normalKnifeTarget;
+    bool contextualToolProbe=false,toolOptionsOnly=true;std::uint64_t toolPid=0,toolCreation=0;probe::ContextualToolProbeReceiver toolReceiver;
+    unsigned chestKnifeProbe=0;bool knifeOptionsOnly=true;std::uint64_t knifePid=0,knifeCreation=0;probe::ChestKnifeProbeReceiver knifeReceiver;
+    bool playerGrenadeProbe=false,playerGrenadeOptionsOnly=true;probe::PlayerGrenadeReceiver playerGrenadeReceiver;
+    bool ordinaryGrenadeProbe=false,ordinaryGrenadeOptionsOnly=true,ordinaryGrenadeHeld=false;
+    unsigned ordinaryGrenadeSamples=0,ordinaryGrenadePresses=0,ordinaryGrenadeReleases=0;
     bool physicalBoltProbe=false,boltEmptyCycle=false,physicalBoltOptionsOnly=true;
     bool m95StockShotNeutral=false,m95OptionsOnly=true;
     bool pumpEmptyCycle=false,physicalPumpProbe=false,physicalPumpOptionsOnly=true;
@@ -89,11 +133,70 @@ int wmain(int argc,wchar_t** argv){try{
     bool inventoryReloadProbe=false,inventoryOptionsOnly=true,resourceInventoryProbe=false,resourceInventoryOptionsOnly=true,resourceStartHeld=false;
     bool resourceSceneResume=false;probe::ResourceSceneResume sceneResume;std::uint64_t resumePolled=0;
     bool resourceOriginProbe=false,originChanged=false;std::uint64_t originPolled=0;
+    bool resourceReceiverGap=false;bc2::PumpReceiverGapProbe receiverGap;
+    bool resourceShellFocus=false;bc2::ShellFocusReceiver shellFocus;
+    probe::PumpSideCaptureWindow pumpSideCapture;
+    std::uint64_t gapLastInput=0,gapPreInput=0;std::int64_t gapLastPublishNs=0,gapPrePublishNs=0;
+    const auto gapNow=[](){LARGE_INTEGER q{},f{};QueryPerformanceCounter(&q);QueryPerformanceFrequency(&f);
+        return (q.QuadPart/f.QuadPart)*1000000000ll+(q.QuadPart%f.QuadPart)*1000000000ll/f.QuadPart;};
     float roomscaleStepX=.4f,shotCycleDirection=-1,supportPrimaryDirection=0,weaponCycleDirection=1;
     bool weaponCycleDirectionSet=false,weaponCycleRepeat=false,weaponCycleExitVehicle=false;
     fs::path bodyPropsCache,bodyPropsMaterials;bool bodyLookDown=false,bodyViewOptionsOnly=true;
     bool bodyInspection=false;math::Vec3 bodyInspectionContact{};
     for(int i=3;i<argc;++i){const std::wstring option=argv[i];
+        normalKnifeOptionsOnly=normalKnifeOptionsOnly&&probe::NormalKnifeHeldCloseOption(option);
+        if(option==L"--no-image-files"){
+            Require(!noImageFiles,"Select image-file opt-out once");noImageFiles=true;continue;}
+        if(option==L"--normal-knife-held-close"){
+            Require(!normalKnifeClose&&i+2<argc,"One normal held-close recipe requires exact PID and creation");
+            const auto number=[&](){const std::wstring text=argv[++i];std::size_t used=0;const auto n=std::stoull(text,&used);
+                Require(!text.empty()&&text.front()!=L'-'&&used==text.size()&&n,"Invalid normal tool process identity");return n;};
+            normalKnifePid=number();normalKnifeCreation=number();Require(normalKnifePid<=UINT32_MAX,"Normal tool PID outside DWORD");
+            normalKnifeClose=controlsObserve=true;continue;}
+        toolOptionsOnly=toolOptionsOnly&&probe::ContextualToolProbeOption(option);
+        if(option==L"--contextual-tool-draw-probe"){
+            Require(!contextualToolProbe&&i+2<argc,"One contextual fixture requires exact PID and creation time");
+            const auto number=[&](){const std::wstring value=argv[++i];std::size_t used=0;const auto n=std::stoull(value,&used);
+                Require(!value.empty()&&value.front()!=L'-'&&used==value.size()&&n,"Invalid tool process identity");return n;};
+            toolPid=number();toolCreation=number();Require(toolPid<=UINT32_MAX,"Tool PID outside DWORD");
+            contextualToolProbe=controlsObserve=true;continue;}
+        twoGrenadeOptionsOnly=twoGrenadeOptionsOnly&&probe::TwoGrenadeFadeOption(option);
+        if(option==L"--two-grenade-fade-probe"){
+            Require(!twoGrenadeFade&&!ordinaryGrenadeProbe&&!playerGrenadeProbe&&i+2<argc,"One two-grenade fixture requires exact PID and creation time");
+            const auto number=[&](){const std::wstring value=argv[++i];std::size_t used=0;const auto n=std::stoull(value,&used);Require(!value.empty()&&value.front()!=L'-'&&used==value.size()&&n,"Invalid death process identity");return n;};
+            deathPid=number();deathCreation=number();Require(deathPid<=MAXDWORD,"PID outside DWORD");twoGrenadeFade=ordinaryGrenadeFade=controlsObserve=true;continue;
+        }
+        knifeOptionsOnly=knifeOptionsOnly&&probe::ChestKnifeProbeOption(option);
+        if(option==L"--chest-knife-draw-probe"||option==L"--chest-knife-motion-probe"){
+            Require(!chestKnifeProbe&&i+2<argc,"Knife receiver requires exact PID and creation time once");
+            chestKnifeProbe=option==L"--chest-knife-motion-probe"?2:1;
+            const auto number=[&](){const std::wstring value=argv[++i];std::size_t used=0;const auto n=std::stoull(value,&used);
+                Require(!value.empty()&&value.front()!=L'-'&&used==value.size()&&n,"Invalid knife process identity");return n;};
+            knifePid=number();knifeCreation=number();
+            Require(knifePid&&knifePid<=UINT32_MAX&&knifeCreation,"Invalid knife process identity");controlsObserve=true;continue;}
+        playerGrenadeOptionsOnly=playerGrenadeOptionsOnly&&probe::PlayerGrenadeOption(option);
+        if(option==L"--player-grenade-probe"){Require(!playerGrenadeProbe,"Specify player grenade receiver once");playerGrenadeProbe=controlsObserve=true;continue;}
+        ordinaryGrenadeOptionsOnly=ordinaryGrenadeOptionsOnly&&probe::OrdinaryGrenadeOption(option);
+        ordinaryGrenadeFadeOptionsOnly=ordinaryGrenadeFadeOptionsOnly&&probe::OrdinaryGrenadeFadeOption(option);
+        if(option==L"--ordinary-grenade-probe"||option==L"--ordinary-grenade-fade-probe"){
+            Require(!ordinaryGrenadeProbe,"Specify grenade receiver once");ordinaryGrenadeFade=option==L"--ordinary-grenade-fade-probe";
+            ordinaryGrenadeProbe=controlsObserve=true;continue;}
+        if(option==L"--fade-window"){
+            Require(!fadeStartTick&&i+3<argc,"One fade window requires absolute start tick, duration and interval");
+            const auto number=[&](){const std::wstring value=argv[++i];std::size_t used=0;
+                const auto n=std::stoull(value,&used);Require(used==value.size()&&value.front()!=L'-',"Invalid fade timing");return n;};
+            fadeStartTick=number();const auto duration=number(),interval=number();
+            Require(fadeStartTick&&duration>=1&&duration<=12000&&interval>=100&&interval<=1000&&
+                fadeStartTick<=UINT64_MAX-duration&&(duration+interval-1)/interval<=48,"Fade window outside diagnostic bounds or pixel budget");
+            fadeDurationMs=unsigned(duration);fadeIntervalMs=unsigned(interval);fadeNextTick=fadeStartTick;continue;
+        }
+        if(option==L"--pump-side-capture"){
+            Require(i+3<argc,"Pump capture requires start, duration and interval in milliseconds");
+            const auto number=[&](){const std::wstring value=argv[++i];std::size_t used=0;
+                const auto n=std::stoull(value,&used);Require(!value.empty()&&value.front()!=L'-'&&used==value.size(),"Invalid pump capture timing");return n;};
+            const auto begin=number(),duration=number(),interval=number();
+            Require(pumpSideCapture.Configure(begin,duration,interval),"Pump capture exceeds one6s/120-pair window");continue;
+        }
         // Render-only option: it adds no controller/native simulation input.
         if(option==L"--body-props-cache"){
             Require(bodyPropsCache.empty()&&i+1<argc,"Specify one body geometry cache");bodyPropsCache=fs::absolute(argv[++i]);continue;}
@@ -110,7 +213,7 @@ int wmain(int argc,wchar_t** argv){try{
         }
         bodyViewOptionsOnly=bodyViewOptionsOnly&&(option==L"--pairs"||option==L"--static-pose"||option==L"--async"||
             option==L"--capture-poses"||option==L"--request-lifetime"||option==L"--controls-observe");
-        resourceInventoryOptionsOnly=resourceInventoryOptionsOnly&&(option==L"--resource-origin-probe"||option==L"--resource-scene-resume"||option==L"--resource-start-held"||option==L"--resource-inventory-probe"||option==L"--pairs"||option==L"--static-pose"||option==L"--async"||option==L"--capture-poses"||option==L"--request-lifetime"||option==L"--weapon-cycle-direction"||option==L"--weapon-cycle-exit-vehicle");
+        resourceInventoryOptionsOnly=resourceInventoryOptionsOnly&&(option==L"--resource-shell-focus-loss"||option==L"--resource-receiver-gap"||option==L"--resource-origin-probe"||option==L"--resource-scene-resume"||option==L"--resource-start-held"||option==L"--resource-inventory-probe"||option==L"--pairs"||option==L"--static-pose"||option==L"--async"||option==L"--capture-poses"||option==L"--request-lifetime"||option==L"--weapon-cycle-direction"||option==L"--weapon-cycle-exit-vehicle");
         resourceMagazineOptionsOnly=resourceMagazineOptionsOnly&&(option==L"--resource-magazine-probe"||option==L"--pairs"||
             option==L"--static-pose"||option==L"--async"||option==L"--capture-poses"||option==L"--request-lifetime"||
             option==L"--weapon-cycle-direction"||option==L"--weapon-cycle-exit-vehicle");
@@ -134,6 +237,12 @@ int wmain(int argc,wchar_t** argv){try{
         else if(option==L"--inventory-reload-probe"||option==L"--inventory-recovery-probe"){Require(!inventoryReloadProbe,"Select one inventory diagnostic");inventoryReloadProbe=magazinePhysicalProbe=controlsObserve=true;}
         else if(option==L"--resource-inventory-probe"){resourceInventoryProbe=inventoryReloadProbe=magazinePhysicalProbe=controlsObserve=capturePoses=true;}
         else if(option==L"--resource-origin-probe"){resourceOriginProbe=true;}
+#ifdef FVR_BC2_SHELL_FOCUS_LOSS_PROBE
+        else if(option==L"--resource-shell-focus-loss"){Require(!resourceShellFocus,"One shell focus episode only");resourceShellFocus=true;}
+#endif
+#ifdef FVR_BC2_PUMP_RECEIVER_GAP_PROBE
+        else if(option==L"--resource-receiver-gap"){Require(!resourceReceiverGap,"One receiver gap only");resourceReceiverGap=true;}
+#endif
         else if(option==L"--resource-start-held")resourceStartHeld=true;
         else if(option==L"--resource-scene-resume")resourceSceneResume=true;
         else if(option==L"--resource-magazine-probe"){resourceMagazineProbe=magazinePhysicalProbe=controlsObserve=capturePoses=true;}
@@ -180,14 +289,39 @@ int wmain(int argc,wchar_t** argv){try{
         else if(option==L"--controls-roomscale"){controlsObserve=controlsRoomscale=true;}
         else if(option==L"--controls-aim"){controlsObserve=true;controlsAim=true;}else if(option==L"--controls-buttons"){controlsObserve=true;controlsButtons=true;}else if(option==L"--controls-turn"){controlsObserve=true;controlsTurn=true;}else if(option==L"--controls-fire"){controlsObserve=true;controlsFire=true;}else if(option==L"--controls-pulse"){controlsObserve=true;controlsPulse=true;}else if(option==L"--controls-observe")controlsObserve=true;else if(option==L"--asymmetric")asymmetric=true;else if(option==L"--static-pose")staticPose=true;else if(option==L"--async")async=true;else if(option==L"--fov-sweep")fovSweep=true;
         else throw std::runtime_error("Unknown native probe option");}
+    Require(!noImageFiles||normalKnifeClose,"Image-file opt-out requires the isolated normal held-close recipe");
+    Require(!normalKnifeClose||(normalKnifeOptionsOnly&&!contextualToolProbe&&!chestKnifeProbe&&!playerGrenadeProbe&&!ordinaryGrenadeProbe&&
+        !twoGrenadeFade&&staticPose&&async&&targetPairs==240&&requestLifetimeMs==150),"Normal held-close requires isolated static async240");
+    Require(!normalKnifeClose||normalKnifeTarget.Open(normalKnifePid,normalKnifeCreation),"Normal held-close original game identity differs");
+#ifndef FVR_BC2_CONTEXTUAL_TOOLS
+    Require(!contextualToolProbe,"Contextual receiver requires its explicit private build");
+#endif
+    Require(!contextualToolProbe||(toolOptionsOnly&&!chestKnifeProbe&&!playerGrenadeProbe&&!twoGrenadeFade&&!ordinaryGrenadeProbe&&
+        staticPose&&async&&targetPairs==240&&requestLifetimeMs==150),"Contextual receiver requires isolated static async240 and exact identity");
+#ifndef FVR_BC2_CHEST_KNIFE_PROBE
+    Require(!chestKnifeProbe,"Knife receiver requires its explicit private build");
+#endif
+    Require(!chestKnifeProbe||(knifeOptionsOnly&&staticPose&&async&&targetPairs==240&&requestLifetimeMs==150),
+        "Knife receiver requires isolated static async240 with exact identity");
+    Require(!twoGrenadeFade||(twoGrenadeOptionsOnly&&!playerGrenadeProbe&&!ordinaryGrenadeProbe&&staticPose&&async&&targetPairs==240&&requestLifetimeMs==150),"Two-grenade receiver requires isolated static async240 and exact identity");
+    Require(!playerGrenadeProbe||(playerGrenadeOptionsOnly&&!ordinaryGrenadeProbe&&staticPose&&async&&targetPairs==240&&requestLifetimeMs==150),
+        "Player grenade receiver requires isolated static async240 pairs with actual native menu state");
     Require(!boltEmptyCycle||physicalBoltProbe,"Empty bolt requires physical bolt receiver");
     Require(!physicalBoltProbe||(physicalBoltOptionsOnly&&staticPose&&async&&targetPairs==240&&requestLifetimeMs==150),"Physical bolt receiver requires isolated30s neutral stream");
     Require(!m95StockShotNeutral||(m95OptionsOnly&&staticPose&&async&&targetPairs==240&&requestLifetimeMs==150),"M95 stock-shot receiver requires isolated15s neutral stream");
     Require(!resourceUseProbe||(resourceUseOptionsOnly&&staticPose&&async&&targetPairs==240),"Resource-use receiver requires isolated static async240-pair stream; preflight vehicle before use");
     Require(!resourceMagazineProbe||(resourceMagazineOptionsOnly&&staticPose&&async&&targetPairs==240),"Resource magazine receiver requires isolated static async240-pair stream and verified setup route");
     Require(!resourceInventoryProbe||(resourceInventoryOptionsOnly&&staticPose&&async&&targetPairs==240&&requestLifetimeMs==150),"Resource inventory receiver requires finite60s static async240 pairs and isolated setup input");
+    Require(!pumpSideCapture.Enabled()||(resourceInventoryProbe&&resourceStartHeld&&resourceInventoryOptionsOnly&&
+        !resourceReceiverGap&&!resourceShellFocus&&!resourceSceneResume&&!resourceOriginProbe&&!fadeStartTick),
+        "Pump capture requires isolated ordinary held-start resource input");
     Require(probe::ValidResourceMagazineStartHeld(resourceStartHeld,resourceInventoryProbe,weaponCycleExitVehicle,weaponCycleDirectionSet),"Resource start-held requires resource inventory mode without vehicle-exit or selection options");
     Require(!resourceSceneResume||(resourceInventoryProbe&&resourceStartHeld&&resourceInventoryOptionsOnly),"Scene resume requires isolated resource inventory start-held mode");
+#ifndef FVR_BC2_SHELL_FOCUS_LOSS_PROBE
+    Require(!resourceShellFocus,"Shell focus episode requires its private build");
+#endif
+    Require(!resourceShellFocus||(resourceInventoryProbe&&resourceStartHeld&&!resourceReceiverGap&&!resourceSceneResume&&!resourceOriginProbe&&resourceInventoryOptionsOnly),"Shell focus requires isolated held-start resource input");
+    Require(!resourceReceiverGap||(resourceInventoryProbe&&resourceStartHeld&&!resourceSceneResume&&!resourceOriginProbe&&resourceInventoryOptionsOnly),"Receiver gap requires isolated held-start resource input");
     Require(!resourceOriginProbe||(resourceInventoryProbe&&resourceStartHeld&&!resourceSceneResume&&resourceInventoryOptionsOnly),"Origin probe requires isolated resource inventory start-held mode");
     Require(!weaponCycleDirectionSet||controlsWeaponCycle||resourceMagazineProbe||resourceInventoryProbe,"Weapon cycle direction requires its controller fixture");
     Require(!weaponCycleRepeat||controlsWeaponCycle,"Repeated weapon cycle requires its controller fixture");
@@ -216,6 +350,14 @@ int wmain(int argc,wchar_t** argv){try{
     Require(!bodyLookDown||(!bodyPropsCache.empty()&&staticPose&&async&&controlsObserve&&bodyViewOptionsOnly),
         "Body look-down requires isolated static async body composition; only the explicit inspection contact may add a grab");
     Require(!bodyInspection||(bodyLookDown&&targetPairs==240),"Body inspection requires look-down and240 paced pairs");
+    Require(!fadeStartTick||((twoGrenadeFade?twoGrenadeOptionsOnly:ordinaryGrenadeFade?ordinaryGrenadeFadeOptionsOnly:
+        (sceneRecoveryProbe&&neutralSceneOptionsOnly&&!controlsObserve))&&staticPose&&async&&targetPairs==240&&
+        bodyPropsCache.empty()&&bodyPropsMaterials.empty()&&!bodyLookDown&&!bodyInspection),
+        "Fade pixels require an isolated scene or combined ordinary grenade receiver");
+    Require(!ordinaryGrenadeFade||(twoGrenadeFade?probe::TwoGrenadeFadeWindow(fadeStartTick,fadeDurationMs,fadeIntervalMs):probe::GrenadeFadeWindow(fadeStartTick,fadeDurationMs,fadeIntervalMs)),
+        "Combined grenade observation requires an8s window with250ms paired pixels");
+    if(fadeStartTick){const auto now=GetTickCount64();Require(fadeStartTick>=now&&fadeStartTick-now<=60000,"Fade start must be within the next60s");}
+    Require(!ordinaryGrenadeProbe||((twoGrenadeFade?twoGrenadeOptionsOnly:ordinaryGrenadeFade?ordinaryGrenadeFadeOptionsOnly:ordinaryGrenadeOptionsOnly)&&staticPose&&async&&targetPairs==240),"Grenade requires exclusive static async240 receiver");
     const auto folder=fs::absolute(argv[2]);Require(!fs::exists(folder),"New output directory required");fs::create_directories(folder);
     ComPtr<ID3D11Device> device;ComPtr<ID3D11DeviceContext> context;D3D_FEATURE_LEVEL level{};const D3D_FEATURE_LEVEL levels[]={D3D_FEATURE_LEVEL_11_0};
     Hr(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_HARDWARE,nullptr,D3D11_CREATE_DEVICE_BGRA_SUPPORT,levels,1,D3D11_SDK_VERSION,&device,&level,&context),"Create receiver device");
@@ -243,10 +385,26 @@ int wmain(int argc,wchar_t** argv){try{
         output->GetDesc(&d);Hr(device->CreateTexture2D(&d,nullptr,&nativeOutput),"Receiver native comparison");
         fs::create_directories(folder/L"native");nativeImageWriter=std::make_unique<probe::DiagnosticImageWriter>(folder/L"native");
     }
-    ipc::RemoteFrameProvider host;Require(host.Create()&&host.SetBudget(50)&&host.SetRequestLifetime(requestLifetimeMs),"Create native receiver channel");{std::wofstream token(folder/L"channel.txt");token<<host.Token();Require(bool(token),"Write channel token");}
+    Require(!noImageFiles||!nativeImageWriter,"Image-file opt-out cannot include native/composed image capture");
+    ipc::RemoteFrameProvider host;Require(host.Create()&&host.SetBudget(50)&&host.SetRequestLifetime(requestLifetimeMs),"Create native receiver channel");
+    ipc::MenuChannel playerMenu;LARGE_INTEGER playerMenuFrequency{};
+    if(normalKnifeClose||contextualToolProbe||playerGrenadeProbe||twoGrenadeFade||chestKnifeProbe)Require(playerMenu.CreateHost(host.Token())&&QueryPerformanceFrequency(&playerMenuFrequency)&&
+        playerMenuFrequency.QuadPart>0&&playerMenuFrequency.QuadPart<=1000000000,"Create actual player menu observation lane");
+    {std::wofstream token(folder/L"channel.txt");token<<host.Token();Require(bool(token),"Write channel token");}
     const auto start=GetTickCount64();Require(ipc::WaitForConnection([&]{return host.Connected();},
         []{return GetTickCount64();},[]{Sleep(2);},start,15000),"Native producer connection timed out");
     const auto controlsStarted=GetTickCount64();
+    if(ordinaryGrenadeFade){
+        const bool leadOkay=probe::GrenadeFadeLead(fadeStartTick,controlsStarted);
+        std::ofstream timing(folder/L"grenade-fade-startup.json");
+        timing<<"{\"connection_wait_started_ms\":"<<start<<",\"connected_tick_ms\":"<<controlsStarted
+              <<",\"window_start_tick_ms\":"<<fadeStartTick<<",\"window_end_tick_ms\":"<<(fadeStartTick+fadeDurationMs)
+              <<",\"lead_ms\":"<<(fadeStartTick>=controlsStarted?fadeStartTick-controlsStarted:0)
+              <<",\"late_ms\":"<<(controlsStarted>fadeStartTick?controlsStarted-fadeStartTick:0)
+              <<",\"minimum_lead_ms\":4000,\"maximum_lead_ms\":12000,\"input_publications\":0,\"lead_accepted\":"<<(leadOkay?"true":"false")<<"}\n";
+        timing.flush();Require(bool(timing),"Save combined startup timing before input");
+        Require(leadOkay,"Combined window must start4..12s after connection, after setup and before producer drain");
+    }
     probe::BoatFireProbe boatFireSchedule;unsigned boatFireInputSamples=0;std::uint64_t boatFireFirstInputMs=0,boatFireLastInputMs=0;
     unsigned consumed=0,timeouts=0,gpuBusy=0;std::uint64_t lastFrame=0;graphics::D3D11PairConsumer consumer;graphics::TextureDescriptor opened{};
     std::shared_ptr<const probe::DiagnosticImageWriter::Pixels> prior;
@@ -260,8 +418,27 @@ int wmain(int argc,wchar_t** argv){try{
     std::ofstream bodyInspectionRecords;unsigned bodyInspectionSamples=0;
     if(bodyInspection){bodyInspectionRecords.open(folder/L"body-inspection-input.jsonl");
         Require(bool(bodyInspectionRecords),"Open body inspection input log");}
-    if(physicalBoltProbe||m95StockShotNeutral||resourceInventoryProbe||physicalPumpProbe||pumpHoldProbe||sceneControlsNeutral||resourceMagazineProbe||resourceUseProbe||magazineOriginalReturnProbe||magazineFullReturnProbe){neutralInputRecords.open(folder/(physicalBoltProbe?L"physical-bolt-input.jsonl":m95StockShotNeutral?L"m95-stock-shot-input.jsonl":resourceInventoryProbe?L"resource-inventory-input.jsonl":physicalPumpProbe?L"physical-pump-input.jsonl":pumpHoldProbe?L"pump-input.jsonl":resourceMagazineProbe?L"resource-magazine-input.jsonl":resourceUseProbe?L"resource-use-input.jsonl":magazineFullReturnProbe?L"full-return-input.jsonl":magazineOriginalReturnProbe?L"original-return-input.jsonl":L"scene-input.jsonl"));Require(bool(neutralInputRecords),"Open neutral scene input log");}
-    for(std::uint64_t attempt=1;(consumed<targetPairs||(m95StockShotNeutral&&GetTickCount64()-controlsStarted<15000ull)||(weaponCycleRepeat&&GetTickCount64()-controlsStarted<13500ull)||(inventoryReloadProbe&&GetTickCount64()-controlsStarted<60000ull)||((physicalBoltProbe||physicalPumpProbe||emptyFireNeutral||resourceUseProbe)&&GetTickCount64()-controlsStarted<((pumpEmptyCycle||boltEmptyCycle)?60000ull:30000ull))||((magazineReloadProbe||magazinePhysicalProbe)&&GetTickCount64()-controlsStarted<30000ull)||((shotProbe||supportProbe)&&GetTickCount64()-controlsStarted<((reloadRequestProbe||physicalReloadProbe)?30000ull:11000ull))||(weaponModeCapture&&GetTickCount64()-controlsStarted<13000)||(controlsVehicle&&GetTickCount64()-controlsStarted<6500))&&GetTickCount64()-start<((inventoryReloadProbe||pumpEmptyCycle||boltEmptyCycle)?75000ull:(physicalBoltProbe||physicalPumpProbe||emptyFireNeutral||resourceUseProbe)?45000ull:sceneRecoveryProbe?70000ull:(reloadRequestProbe||physicalReloadProbe||magazineReloadProbe||magazinePhysicalProbe)?45000ull:25000ull);++attempt){
+    if(ordinaryGrenadeFade||physicalBoltProbe||m95StockShotNeutral||resourceInventoryProbe||physicalPumpProbe||pumpHoldProbe||sceneControlsNeutral||resourceMagazineProbe||resourceUseProbe||magazineOriginalReturnProbe||magazineFullReturnProbe){neutralInputRecords.open(folder/(ordinaryGrenadeFade?L"grenade-fade-input.jsonl":physicalBoltProbe?L"physical-bolt-input.jsonl":m95StockShotNeutral?L"m95-stock-shot-input.jsonl":resourceInventoryProbe?L"resource-inventory-input.jsonl":physicalPumpProbe?L"physical-pump-input.jsonl":pumpHoldProbe?L"pump-input.jsonl":resourceMagazineProbe?L"resource-magazine-input.jsonl":resourceUseProbe?L"resource-use-input.jsonl":magazineFullReturnProbe?L"full-return-input.jsonl":magazineOriginalReturnProbe?L"original-return-input.jsonl":L"scene-input.jsonl"));Require(bool(neutralInputRecords),"Open neutral scene input log");}
+    for(std::uint64_t attempt=1;(normalKnifeClose?GetTickCount64()-controlsStarted<probe::NormalKnifeHeldCloseReceiver::DurationMs:(consumed<targetPairs||(contextualToolProbe&&GetTickCount64()-controlsStarted<probe::ContextualToolProbeReceiver::DurationMs)||(chestKnifeProbe&&GetTickCount64()-controlsStarted<probe::ChestKnifeProbeReceiver::DurationMs)||(twoGrenadeFade&&GetTickCount64()<fadeStartTick+fadeDurationMs+500)||(playerGrenadeProbe&&GetTickCount64()-controlsStarted<probe::PlayerGrenadeReceiver::DurationMs)||(ordinaryGrenadeProbe&&GetTickCount64()-controlsStarted<18500ull)||(m95StockShotNeutral&&GetTickCount64()-controlsStarted<15000ull)||(weaponCycleRepeat&&GetTickCount64()-controlsStarted<13500ull)||(inventoryReloadProbe&&GetTickCount64()-controlsStarted<60000ull)||((physicalBoltProbe||physicalPumpProbe||emptyFireNeutral||resourceUseProbe)&&GetTickCount64()-controlsStarted<((pumpEmptyCycle||boltEmptyCycle)?60000ull:30000ull))||((magazineReloadProbe||magazinePhysicalProbe)&&GetTickCount64()-controlsStarted<30000ull)||((shotProbe||supportProbe)&&GetTickCount64()-controlsStarted<((reloadRequestProbe||physicalReloadProbe)?30000ull:11000ull))||(weaponModeCapture&&GetTickCount64()-controlsStarted<13000)||(controlsVehicle&&GetTickCount64()-controlsStarted<6500)))&&GetTickCount64()-start<((inventoryReloadProbe||pumpEmptyCycle||boltEmptyCycle)?75000ull:(physicalBoltProbe||physicalPumpProbe||emptyFireNeutral||resourceUseProbe)?45000ull:twoGrenadeFade?35000ull:sceneRecoveryProbe?70000ull:(reloadRequestProbe||physicalReloadProbe||magazineReloadProbe||magazinePhysicalProbe)?45000ull:25000ull);++attempt){
+        if(resourceShellFocus&&!shellFocus.Began()){
+            std::ifstream ready(folder.parent_path()/L"shell-focus-ready.txt");
+            if(ready){bc2::ShellFocusWitness w;std::string extra;
+                Require(bool(ready>>w.space>>w.cycle>>w.input>>w.observedNs>>w.deadlineNs>>w.completedObservedNs
+                    >>w.loaded>>w.reserve>>w.capacity)&&!(ready>>extra),"Malformed shell focus witness");
+                Require(w.space==0x200000001ULL&&shellFocus.Begin(w,gapNow()),"Stale shell focus witness");
+            }
+        }
+        if(resourceReceiverGap&&!receiverGap.Began()){
+            std::ifstream ready(folder.parent_path()/L"pump-receiver-gap-ready.txt");
+            if(ready){bc2::PumpReceiverGapWitness w;std::string extra;
+                Require(bool(ready>>w.space>>w.cycle>>w.shot>>w.input>>w.observedNs>>w.deadlineNs>>w.loaded>>w.reserve>>w.capacity>>w.travel)&&!(ready>>extra),"Malformed receiver gap witness");
+                Require(w.space==0x200000001ULL&&gapLastInput>=w.input&&gapLastPublishNs>0&&receiverGap.Begin(w,gapNow()),"Stale or invalid receiver gap witness");
+                gapPreInput=gapLastInput;gapPrePublishNs=gapLastPublishNs;
+            }
+        }
+        if(resourceReceiverGap&&receiverGap.Withhold(gapNow())){
+            Require(!receiverGap.Failed(),"Receiver gap clock reversed");Sleep(5);continue;
+        }
         if(resourceOriginProbe&&!originChanged&&GetTickCount64()-originPolled>=25){
             originPolled=GetTickCount64();std::ifstream ready(folder.parent_path()/L"pump-origin-ready.txt");
             if(ready){std::uint64_t space=0,cycle=0,shot=0;std::string extra;
@@ -273,8 +450,8 @@ int wmain(int argc,wchar_t** argv){try{
                 receipt.flush();Require(bool(receipt),"Save origin change receipt");
             }
         }
-        runtime::TrackingFrame tracking{};tracking.generation=0x100000000ULL+attempt;tracking.spaceGeneration=0x200000001ULL+(originChanged?1:0);tracking.predictedNs=10000000000LL+std::int64_t(attempt)*11000000;
-        tracking.focused=tracking.headValid=true;const float angle=staticPose?0:float(consumed)*.025f;tracking.head.orientation={0,std::sin(angle*.5f),0,std::cos(angle*.5f)};tracking.head.position.x=staticPose?0:float(consumed)*.035f;
+        runtime::TrackingFrame tracking{};tracking.generation=0x100000000ULL+attempt;tracking.spaceGeneration=receiverGap.Space(0x200000001ULL+(originChanged?1:0));tracking.predictedNs=10000000000LL+std::int64_t(attempt)*11000000;
+        tracking.focused=tracking.headValid=true;if(resourceShellFocus)tracking.focused=shellFocus.Focused(gapNow());const float angle=staticPose?0:float(consumed)*.025f;tracking.head.orientation={0,std::sin(angle*.5f),0,std::cos(angle*.5f)};tracking.head.position.x=staticPose?0:float(consumed)*.035f;
         if(controlsRoomscale){const auto ms=GetTickCount64()-controlsStarted;tracking.head={};tracking.head.position.x=(ms>=500&&ms<4000)?roomscaleStepX:0;}
         if(boatHeadAimProbe){const auto ms=GetTickCount64()-controlsStarted;
             // Aim-only sweeps; the separate fire fixture remains completely stationary.
@@ -302,6 +479,25 @@ int wmain(int argc,wchar_t** argv){try{
             const auto elapsed=GetTickCount64()-controlsStarted;
             probe::ResourceMagazineSetup resourceSetup{};
             if(physicalBoltProbe||m95StockShotNeutral||sceneControlsNeutral||resourceUseProbe||bodyLookDown)controls=probe::NeutralSceneInput(tracking,attempt);
+            if(twoGrenadeFade){
+                bc2::TwoGrenadeHealthWitness health{};bc2::TwoGrenadeNativeWitness native{};
+                const bool hasHealth=ReadDeathWitness(folder.parent_path()/L"two-grenade-health.bin",health),hasNative=ReadDeathWitness(folder.parent_path()/L"two-grenade-native.bin",native);
+                const auto now=GetTickCount64();grenadeFadeHeld=twoGrenadeGesture.Held(now,PresentationClockNs(),fadeStartTick,fadePixelPairs>0,deathPid,deathCreation,hasHealth?&health:nullptr,hasNative?&native:nullptr);
+                controls=probe::NeutralSceneInput(tracking,attempt);probe::OrdinaryGrenadeFadeInput(controls,elapsed,now,fadeStartTick,grenadeFadeHeld);
+                if(twoGrenadeGesture.SecondAt()&&!secondWitnessSaved){
+                    const auto& n=twoGrenadeGesture.SecondNative();const auto& h=twoGrenadeGesture.SecondHealth();
+                    std::ofstream a(folder/L"second-native-witness.bin",std::ios::binary),b(folder/L"second-health-witness.bin",std::ios::binary);
+                    a.write(reinterpret_cast<const char*>(&n),sizeof(n));b.write(reinterpret_cast<const char*>(&h),sizeof(h));a.close();b.close();
+                    Require(bool(a)&&bool(b),"Save exact second-gesture witnesses");secondWitnessSaved=true;
+                }
+            }
+            if(normalKnifeClose&&elapsed>=probe::NormalKnifeHeldCloseReceiver::DurationMs)break;
+            if(normalKnifeClose||contextualToolProbe||chestKnifeProbe)controls=probe::NeutralSceneInput(tracking,attempt);
+            if(playerGrenadeProbe){controls=probe::NeutralSceneInput(tracking,attempt);probe::OrdinaryGrenadeInput(controls,elapsed);}
+            if(ordinaryGrenadeProbe){controls=probe::NeutralSceneInput(tracking,attempt);
+                if(ordinaryGrenadeFade){const auto now=GetTickCount64();grenadeFadeHeld=grenadeFadeGesture.Held(now,fadeStartTick,fadePixelPairs>0);
+                    probe::OrdinaryGrenadeFadeInput(controls,elapsed,now,fadeStartTick,grenadeFadeHeld);}
+                else probe::OrdinaryGrenadeInput(controls,elapsed);}
             if(bodyCrossDrawProbe)probe::BodyCrossDrawInput(controls,elapsed);
             if(bodyInspection)Require(probe::BodyInspectionInput(controls,bodyInspectionContact,elapsed),"Invalid body inspection input");
             if(controlsHands&&!supportProbe&&!shotProbe&&!controlsIndependence&&!trackingRecovery&&!controlsEquip&&!controlsWeaponCycle&&!weaponModeCapture&&!deathProbe){
@@ -535,6 +731,13 @@ int wmain(int argc,wchar_t** argv){try{
                 probe::WriteNeutralSceneInput(neutralInputRecords,controls,GetTickCount64());neutralInputRecords.flush();
                 Require(bool(neutralInputRecords),"Save resource setup input evidence");
             }
+            if(resourceShellFocus){
+                bc2::ShellFocusReceiver::ApplyFocus(controls,tracking.focused);
+                Require(probe::NeutralSceneActions(controls),"Shell focus receiver must stay neutral");
+            }
+            if(resourceReceiverGap&&receiverGap.Returned()){
+                Require(probe::NeutralSceneActions(controls),"Receiver gap returned nonneutral input");
+            }
             if(resourceMagazineProbe||resourceInventoryProbe){
                 const auto setup=resourceSetup;
                 auto neutral=controls;neutral.hands[0].held=0;neutral.hands[1].stickY=0;
@@ -560,15 +763,82 @@ int wmain(int argc,wchar_t** argv){try{
                 probe::WriteNeutralSceneInput(bodyInspectionRecords,controls,GetTickCount64());bodyInspectionRecords.flush();
                 Require(bool(bodyInspectionRecords),"Save body inspection input evidence");++bodyInspectionSamples;
             }
-            host.UpdateInput(controls); // Each gameplay pulse has its own explicit opt-in diagnostic flag.
+            if(ordinaryGrenadeProbe){
+                Require(ordinaryGrenadeFade?probe::OrdinaryGrenadeFadeControls(controls,elapsed,grenadeFadeHeld):
+                    probe::OrdinaryGrenadeControls(controls,elapsed),"Grenade receiver contract violation");
+                if(ordinaryGrenadeFade){probe::WriteNeutralSceneInput(neutralInputRecords,controls,GetTickCount64());
+                    neutralInputRecords.flush();Require(bool(neutralInputRecords),"Save combined grenade input evidence");}
+                const bool held=(controls.hands[1].held&interaction::StickClick)!=0;
+                ordinaryGrenadePresses+=held&&!ordinaryGrenadeHeld;ordinaryGrenadeReleases+=!held&&ordinaryGrenadeHeld;
+                ordinaryGrenadeHeld=held;++ordinaryGrenadeSamples;
+                Require(ordinaryGrenadePresses<=1&&ordinaryGrenadeReleases<=1,"No second grenade gesture");
+            }
+            if(normalKnifeClose){
+                ipc::MenuState state{};const auto read=playerMenu.ReadState(state);LARGE_INTEGER q{};QueryPerformanceCounter(&q);
+                normalKnifeReceiver.Update(controls,elapsed,PresentationClockNs(),normalKnifeTarget.Current(),consumed,
+                    read,state,q.QuadPart,playerMenuFrequency.QuadPart);
+                const auto before=PresentationClockNs();const auto publication=host.UpdateInputObserved(controls);
+                normalKnifeReceiver.Published(controls,publication.known,publication.succeeded,publication.code,before,PresentationClockNs());
+                if(normalKnifeReceiver.Failed()){
+                    std::ofstream record(folder/L"normal-knife-held-close.json");normalKnifeReceiver.Report(record);record<<'\n';record.close();
+                    Require(bool(record),"Save failed normal held-close evidence");
+                    throw std::runtime_error("Normal held-close source guard failed; receipt retained");
+                }
+            }else if(contextualToolProbe){
+                bc2::ContextualToolProbeWitness witness{};const bool observed=ReadDeathWitness(folder.parent_path()/L"contextual-tool.bin",witness);
+                ipc::MenuState menuState{};const auto menuRead=playerMenu.ReadState(menuState);LARGE_INTEGER q{};QueryPerformanceCounter(&q);
+                toolReceiver.Update(controls,elapsed,PresentationClockNs(),toolPid,toolCreation,observed?&witness:nullptr,
+                    menuRead,menuState,q.QuadPart,playerMenuFrequency.QuadPart);
+                const auto publication=host.UpdateInputObserved(controls);
+                toolReceiver.Published(controls,publication.known,publication.succeeded,publication.code,PresentationClockNs());
+            }else if(chestKnifeProbe){
+                bc2::ChestKnifeProbeWitness witness{};const bool observed=ReadDeathWitness(folder.parent_path()/L"chest-knife.bin",witness);
+                ipc::MenuState menuState{};const auto menuRead=playerMenu.ReadState(menuState);LARGE_INTEGER q{};QueryPerformanceCounter(&q);
+                knifeReceiver.Update(controls,elapsed,PresentationClockNs(),chestKnifeProbe,knifePid,knifeCreation,
+                    observed?&witness:nullptr,menuRead,menuState,q.QuadPart,playerMenuFrequency.QuadPart);
+                const auto publication=host.UpdateInputObserved(controls);
+                knifeReceiver.Published(controls,publication.known,publication.succeeded,publication.code,PresentationClockNs());
+            }else if(playerGrenadeProbe||twoGrenadeFade){
+                Require(twoGrenadeFade?probe::OrdinaryGrenadeFadeControls(controls,elapsed,grenadeFadeHeld):probe::OrdinaryGrenadeControls(controls,elapsed),"Player grenade recipe permits no extra action");
+                ipc::MenuState menuState{};const auto menuRead=playerMenu.ReadState(menuState);
+                LARGE_INTEGER sampled{};QueryPerformanceCounter(&sampled);
+                playerGrenadeReceiver.Decorate(controls,twoGrenadeFade?(grenadeFadeHeld?5000:0):elapsed,menuRead,menuState,sampled.QuadPart,playerMenuFrequency.QuadPart);
+                if(twoGrenadeFade){probe::WriteNeutralSceneInput(neutralInputRecords,controls,GetTickCount64());neutralInputRecords.flush();Require(bool(neutralInputRecords),"Save actual menu-filtered two-grenade input");}
+                const auto published=host.UpdateInputObserved(controls);
+                playerGrenadeReceiver.Published(controls,published.known,published.succeeded,published.code,PresentationClockNs());
+                if(twoGrenadeFade)twoGrenadeGesture.ObservePublished(grenadeFadeHeld,bool(controls.hands[1].held&interaction::StickClick),published.known,published.succeeded,published.code);
+            }else if(resourceShellFocus){
+                const auto publication=host.UpdateInputObserved(controls);
+                if(!shellFocus.Publication(controls,publication.known,publication.succeeded,publication.code,
+                    probe::NeutralSceneActions(controls),gapNow())){
+                    // Persist the actual rejected outcome before unwinding;
+                    // attempted input rows never count as delivered focus loss.
+                    std::ofstream receipt(folder/L"receiver-shell-focus.json");shellFocus.Report(receipt);receipt<<'\n';
+                    receipt.flush();Require(bool(receipt),"Save rejected shell focus publication");
+                    throw std::runtime_error("Shell focus publication rejected; see receiver-shell-focus.json");
+                }
+            }else if(resourceReceiverGap){
+                const auto publication=host.UpdateInputObserved(controls);
+                Require(publication.known,"Receiver gap requires observed input publication");
+                if(publication.succeeded){gapLastInput=controls.generation;gapLastPublishNs=gapNow();
+                    if(receiverGap.Returned())Require(receiverGap.Published(controls.generation,controls.spaceGeneration,gapLastPublishNs,
+                        probe::NeutralSceneActions(controls)),"Receiver return publication rejected");}
+                else Require(publication.code==unsigned(ipc::ChannelResult::Busy),"Receiver gap input publication failed");
+            }else host.UpdateInput(controls); // Each gameplay pulse has its own explicit opt-in diagnostic flag.
 
         }
-        if((physicalBoltProbe||m95StockShotNeutral||physicalPumpProbe||weaponCycleRepeat||emptyFireNeutral||resourceUseProbe||shotProbe||supportProbe||weaponModeCapture||controlsVehicle||magazineReloadProbe||magazinePhysicalProbe)&&consumed>=targetPairs){Sleep(5);continue;}
+        if(normalKnifeClose&&!probe::NormalKnifeHeldCloseReceiver::PairRequestDue(GetTickCount64()-controlsStarted,consumed)){Sleep(5);continue;}
+        if(contextualToolProbe&&!probe::ContextualToolProbeReceiver::PairRequestDue(GetTickCount64()-controlsStarted,consumed)){Sleep(5);continue;}
+        if(chestKnifeProbe&&!probe::ChestKnifeProbeReceiver::PairRequestDue(GetTickCount64()-controlsStarted,consumed)){Sleep(5);continue;}
+        if(ordinaryGrenadeFade&&!(twoGrenadeFade?probe::TwoGrenadeFadeRequest(GetTickCount64(),fadeStartTick,consumed):probe::GrenadeFadeRequest(GetTickCount64(),fadeStartTick,consumed))){Sleep(2);continue;}
+        if((contextualToolProbe||chestKnifeProbe||twoGrenadeFade||playerGrenadeProbe||ordinaryGrenadeProbe||physicalBoltProbe||m95StockShotNeutral||physicalPumpProbe||weaponCycleRepeat||emptyFireNeutral||resourceUseProbe||shotProbe||supportProbe||weaponModeCapture||controlsVehicle||magazineReloadProbe||magazinePhysicalProbe)&&consumed>=targetPairs){Sleep(5);continue;}
         // The producer's 30-second deadline starts before the receiver connects.
         // Finish the requested pairs with drain margin; keep publishing neutral
         // controls for the unchanged 30-second observation window above.
         // Scheduling pair239 at29.875s lost the last pair at producer shutdown.
-        if(inventoryReloadProbe&&GetTickCount64()-controlsStarted<std::uint64_t(consumed)*55000/targetPairs){Sleep(5);continue;}
+        if(inventoryReloadProbe&&(pumpSideCapture.Enabled()?
+            !pumpSideCapture.Due(GetTickCount64()-controlsStarted,consumed):
+            GetTickCount64()-controlsStarted<std::uint64_t(consumed)*55000/targetPairs)){Sleep(5);continue;}
         if(!inventoryReloadProbe&&(physicalBoltProbe||physicalPumpProbe||reloadRequestProbe||physicalReloadProbe||magazineReloadProbe||magazinePhysicalProbe)&&GetTickCount64()-controlsStarted<std::uint64_t(consumed)*((pumpEmptyCycle||boltEmptyCycle)?55000:28000)/targetPairs){Sleep(5);continue;}
         if((pumpHoldProbe||weaponVisibilityProbe||bodyHolsterProbe||bodyCrossDrawProbe||bodyInspection)&&GetTickCount64()-controlsStarted<std::uint64_t(consumed)*14000/targetPairs){Sleep(5);continue;}
         if(controlsVehicle&&GetTickCount64()-controlsStarted<std::uint64_t(consumed)*6500/targetPairs){Sleep(5);continue;}
@@ -576,13 +846,16 @@ int wmain(int argc,wchar_t** argv){try{
         // Deliberately spread neutral requests across checkpoint loads. This
         // original diagnostic publishes no controllers; explicit neutral mode
         // publishes stationary tracked poses with every action axis/button zero.
-        if(sceneRecoveryProbe&&GetTickCount64()-controlsStarted<std::uint64_t(consumed)*55000/targetPairs){Sleep(5);continue;}
+        const auto fadeNow=GetTickCount64();
+        const bool fadeInside=fadeStartTick&&fadeNow>=fadeStartTick&&fadeNow-fadeStartTick<fadeDurationMs;
+        if(fadeInside){if(fadeNow<fadeNextTick){Sleep(2);continue;}}
+        else if(sceneRecoveryProbe&&fadeNow-controlsStarted<std::uint64_t(consumed)*55000/targetPairs){Sleep(5);continue;}
         graphics::TextureDescriptor descriptor;graphics::PairTicket ticket;runtime::TrackingFrame rendered=tracking;
         const bool ready=async?host.TryGetCompletedPair(requirements,tracking,rendered,descriptor,ticket):host.TryGetPair(requirements,tracking,descriptor,ticket);
         if(!ready){++timeouts;Sleep(async?11:2);continue;}tracking=rendered;
         // A replacement scene may restart its native frame serial. Request/tracking
         // identity is still checked for every pair; owner changes are audited in the native trace.
-        Require(runtime::PairMatchesFrame(requirements,tracking,descriptor,ticket)&&(sceneRecoveryProbe||ticket.frameId>lastFrame),"Native frame identity mismatch");
+        Require(runtime::PairMatchesFrame(requirements,tracking,descriptor,ticket)&&(sceneRecoveryProbe||ordinaryGrenadeFade||ticket.frameId>lastFrame),"Native frame identity mismatch");
         if(std::memcmp(&descriptor,&opened,sizeof(descriptor))){Require(consumer.Open(device.Get(),descriptor)==graphics::TransferResult::Ok,"Open native shared eyes");opened=descriptor;sceneDepth.Reset();}
         const std::array<graphics::TextureSlice,2> targets={graphics::TextureSlice{output.Get(),0},graphics::TextureSlice{output.Get(),1}};
         graphics::SceneDepthFrame depthFrame;graphics::SceneDepthViews depthViews;
@@ -612,25 +885,63 @@ int wmain(int argc,wchar_t** argv){try{
         // Half-second paired eye evidence throughout the expected physical
         // manipulation window; bounded full-resolution files, no phase guessing
         // used as authority. Correlate elapsed times with fixture/Pack logs.
-        const bool inspectPixels=boatFireProbe?(boatFireSchedule.Capture(GetTickCount64()-controlsStarted)||consumed+1==targetPairs):magazinePhysicalProbe?(consumed<4||consumed+1==targetPairs||(consumed>=40&&consumed<=176&&consumed%4==0)):sceneRecoveryProbe?(consumed%24==0||consumed+1==targetPairs):(weaponVisibilityProbe||bodyHolsterProbe||bodyCrossDrawProbe||bodyInspection)?(consumed%24==0||consumed+1==targetPairs):consumed<8||consumed+1==targetPairs||((controlsAim||controlsRoomscale||capturePoses)&&(consumed==30||consumed==60||(controlsHands&&(consumed==45||consumed==75||consumed==90||consumed==120||consumed==150))));
+        const auto fadeCapturedTick=GetTickCount64();
+        const bool fadeCapture=fadeStartTick&&fadeCapturedTick>=fadeStartTick&&
+            fadeCapturedTick-fadeStartTick<fadeDurationMs&&fadePixelPairs<(twoGrenadeFade?48u:32u);
+        if(fadeCapture)fadeNextTick=fadeCapturedTick+fadeIntervalMs;
+        const auto pumpCaptureElapsed=GetTickCount64()-controlsStarted;
+        const bool pumpPixels=pumpSideCapture.Pixels(pumpCaptureElapsed);
+        const bool inspectPixels=pumpSideCapture.Enabled()?pumpPixels:fadeStartTick?fadeCapture:boatFireProbe?(boatFireSchedule.Capture(GetTickCount64()-controlsStarted)||consumed+1==targetPairs):magazinePhysicalProbe?(consumed<4||consumed+1==targetPairs||(consumed>=40&&consumed<=176&&consumed%4==0)):sceneRecoveryProbe?(consumed%24==0||consumed+1==targetPairs):(weaponVisibilityProbe||bodyHolsterProbe||bodyCrossDrawProbe||bodyInspection)?(consumed%24==0||consumed+1==targetPairs):consumed<8||consumed+1==targetPairs||((controlsAim||controlsRoomscale||capturePoses)&&(consumed==30||consumed==60||(controlsHands&&(consumed==45||consumed==75||consumed==90||consumed==120||consumed==150))));
         if(inspectPixels){
+        if(fadeCapture){++fadePixelPairs;
+            records<<"{\"fade_pixel_pair\":"<<consumed<<",\"tick_ms\":"<<fadeCapturedTick
+                <<",\"sample_ns\":"<<PresentationClockNs()<<",\"native_frame\":"<<ticket.frameId
+                <<",\"sequence\":"<<ticket.sequence<<",\"tracking\":"<<ticket.trackingGeneration
+                <<",\"space\":"<<ticket.spaceGeneration<<",\"native_color_only\":true}\n";
+        }
+        bool nativeQueued=true;
         if(nativeImageWriter){
             auto native=std::make_shared<const probe::DiagnosticImageWriter::Pixels>(probe::DiagnosticImageWriter::Pixels{
                 Pixels(context.Get(),nativeOutput.Get(),staging.Get(),0),Pixels(context.Get(),nativeOutput.Get(),staging.Get(),1)});
-            nativeImageWriter->Queue(consumed,std::move(native));
+            nativeQueued=nativeImageWriter->Queue(consumed,std::move(native));
         }
         std::array<std::vector<unsigned char>,2> pixels{Pixels(context.Get(),output.Get(),staging.Get(),0),Pixels(context.Get(),output.Get(),staging.Get(),1)};
         const bool distinct=pixels[0]!=pixels[1],changed=!prior||(pixels[0]!=(*prior)[0]&&pixels[1]!=(*prior)[1]);
         records<<"{\"elapsed_ms\":"<<(GetTickCount64()-controlsStarted)<<",\"pair\":"<<consumed<<",\"native_frame\":"<<ticket.frameId<<",\"copy_ms\":"<<copyMs<<",\"sharing_mode\":"<<unsigned(descriptor.sharing)<<",\"tracking\":"<<ticket.trackingGeneration<<",\"distinct\":"<<distinct<<",\"changed\":"<<changed<<"}\n";records.flush();
-        if(!sceneRecoveryProbe)Require(distinct&&(staticPose||changed),"Native images did not vary across eyes/tracking");
+        if(!sceneRecoveryProbe&&!ordinaryGrenadeFade)Require(distinct&&(staticPose||changed),"Native images did not vary across eyes/tracking");
         prior=std::make_shared<const probe::DiagnosticImageWriter::Pixels>(std::move(pixels));
-        imageWriter.Queue(consumed,prior); // Backlog/failure is reported after input publication ends.
+        // Preserve the actual readback/comparison above; this normal close check
+        // needs causal native receipts, not another copy of the same raw images.
+        const bool pixelsQueued=!noImageFiles&&imageWriter.Queue(consumed,prior);
+        if(pumpPixels){const auto sampled=PresentationClockNs();
+            const bool observed=pumpSideCapture.Observe(pumpCaptureElapsed,sampled,pixelsQueued&&nativeQueued);
+            records<<"{\"pump_side_pixel_pair\":"<<consumed<<",\"elapsed_ms\":"<<pumpCaptureElapsed
+                <<",\"sample_ns\":"<<sampled<<",\"native_frame\":"<<ticket.frameId<<",\"sequence\":"<<ticket.sequence
+                <<",\"tracking\":"<<ticket.trackingGeneration<<",\"space\":"<<ticket.spaceGeneration
+                <<",\"queue_accepted\":"<<(pixelsQueued&&nativeQueued)<<",\"observation_recorded\":"<<observed<<"}\n";records.flush();
+        }
         }else{records<<"{\"elapsed_ms\":"<<(GetTickCount64()-controlsStarted)<<",\"pair\":"<<consumed<<",\"native_frame\":"<<ticket.frameId<<",\"tracking\":"<<ticket.trackingGeneration<<",\"copy_ms\":"<<copyMs<<",\"pixels_checked\":false}\n";records.flush();}
         records<<"{\"tracking_sample\":"<<ticket.trackingGeneration<<",\"asymmetric\":"<<asymmetric<<",\"static_pose\":"<<staticPose<<",\"async\":"<<async<<",\"fov\":[";
         for(unsigned eye=0;eye<2;++eye){if(eye)records<<',';const auto& f=tracking.fov[eye];records<<'['<<f.left<<','<<f.right<<','<<f.up<<','<<f.down<<']';}records<<"]}\n";records.flush();
         lastFrame=ticket.frameId;++consumed;if(async)Sleep(11);
     }
+    if(normalKnifeClose){
+        normalKnifeReceiver.Finish(GetTickCount64()-controlsStarted,PresentationClockNs());
+        std::ofstream record(folder/L"normal-knife-held-close.json");normalKnifeReceiver.Report(record);record<<'\n';record.close();
+        Require(bool(record)&&normalKnifeReceiver.Complete(),"Normal held-close did not finish its original source window");
+    }
     const auto feedbackUntil=GetTickCount64()+1000;while(host.FlushFeedback()==ipc::ChannelResult::Busy&&GetTickCount64()<feedbackUntil)Sleep(1);
+    if(fadeStartTick)std::ofstream(folder/L"fade-window-result.json")
+        <<"{\"start_tick_ms\":"<<fadeStartTick<<",\"duration_ms\":"<<fadeDurationMs
+        <<",\"interval_ms\":"<<fadeIntervalMs<<",\"pixel_pair_limit\":"<<(twoGrenadeFade?48:32)<<",\"pixel_pairs\":"<<fadePixelPairs
+        <<",\"native_color_only\":true,\"controller_input\":"<<(ordinaryGrenadeFade?"true":"false")
+        <<",\"ordinary_downward_gesture\":"<<(ordinaryGrenadeFade?"true":"false")
+        <<",\"gesture_admitted\":"<<((twoGrenadeFade?twoGrenadeGesture.FirstAdmitted():grenadeFadeGesture.Admitted())?"true":"false")
+        <<",\"transition_induced\":false,\"actual_death\":false,\"headset_tested\":false}\n";
+    if(pumpSideCapture.Enabled()){
+        std::ofstream receipt(folder/L"pump-side-capture.json");pumpSideCapture.Report(receipt);receipt<<'\n';receipt.close();
+        Require(bool(receipt),"Save pump capture schedule and actual gaps");
+    }
     const auto imageWrites=imageWriter.Finish();
     if(nativeImageWriter){const auto writes=nativeImageWriter->Finish();Require(writes.queued==writes.written&&!writes.failed&&!writes.rejected,"Native comparison image evidence incomplete");}
     const auto& composeStats=bodyProps.Statistics();
@@ -639,14 +950,48 @@ int wmain(int argc,wchar_t** argv){try{
         <<",\"missing_geometry\":"<<composeStats.missing<<",\"expired_props\":"<<composeStats.expired
         <<",\"invalid_props\":"<<composeStats.invalid<<",\"render_failures\":"<<composeStats.failures
         <<",\"headset_tested\":false}\n";
-    std::ofstream(folder/L"image-writes.json")<<"{\"queued\":"<<imageWrites.queued<<",\"written\":"<<imageWrites.written
+    std::ofstream(folder/L"image-writes.json")<<"{\"files_disabled\":"<<(noImageFiles?"true":"false")<<",\"queued\":"<<imageWrites.queued<<",\"written\":"<<imageWrites.written
         <<",\"rejected\":"<<imageWrites.rejected<<",\"failed\":"<<imageWrites.failed<<"}\n";
     Require(imageWrites.queued==imageWrites.written&&!imageWrites.failed&&!imageWrites.rejected,"Diagnostic image evidence incomplete");
+    Require(!pumpSideCapture.Enabled()||pumpSideCapture.Complete(),"Pump pixel window incomplete; retain recorded gaps");
     const auto& delivery=host.Statistics();
     if(bodyInspection)std::ofstream(folder/L"body-inspection-result.json")
         <<"{\"contact\":["<<bodyInspectionContact.x<<','<<bodyInspectionContact.y<<','<<bodyInspectionContact.z
         <<"],\"input_samples\":"<<bodyInspectionSamples<<",\"hand\":1,\"single_grip_edge\":true,\"native_authority\":false,\"headset_tested\":false}\n";
     std::ofstream(folder/L"resource-setup.json")<<"{\"enabled\":"<<(resourceUseProbe?"true":"false")<<",\"use_window_ms\":[400,500],\"gameplay_transition_verified\":false,\"os_input\":false}\n";
+    if(twoGrenadeFade){
+        std::ofstream record(folder/L"two-grenade-receiver.json");
+        record<<"{\"contract\":399,\"maximum_gestures\":2,\"first_admitted\":"<<(twoGrenadeGesture.FirstAdmitted()?"true":"false")
+            <<",\"second_at_ms\":"<<twoGrenadeGesture.SecondAt()<<",\"second_at_ns\":"<<twoGrenadeGesture.SecondAtNs()<<",\"click_presses\":"<<twoGrenadeGesture.Presses()<<",\"click_releases\":"<<twoGrenadeGesture.Releases()
+            <<",\"aborted\":"<<(twoGrenadeGesture.Aborted()?"true":"false")<<",\"health_zero_seen\":"<<(twoGrenadeGesture.ZeroObserved()?"true":"false")
+            <<",\"actual_death\":false,\"real_menu\":";playerGrenadeReceiver.Report(record);record<<"}\n";record.close();Require(bool(record),"Save two-grenade receiver result");
+        Require(!twoGrenadeGesture.Aborted()&&twoGrenadeGesture.Presses()>=1&&twoGrenadeGesture.Presses()<=2&&twoGrenadeGesture.Presses()==twoGrenadeGesture.Releases(),"Two-grenade recipe did not complete its bounded publications");
+    }
+    if(contextualToolProbe){std::ofstream report(folder/L"contextual-tool-receiver.json");toolReceiver.Report(report);report<<'\n';
+        report.flush();Require(bool(report),"Save contextual receiver recipe report");}
+    if(chestKnifeProbe){std::ofstream record(folder/L"chest-knife-receiver.json");knifeReceiver.Report(record);record<<'\n';record.flush();
+        Require(bool(record),"Save finite knife receiver evidence");}
+    if(playerGrenadeProbe){std::ofstream record(folder/L"player-grenade-receiver.json");playerGrenadeReceiver.Report(record);record<<'\n';record.flush();
+        Require(bool(record),"Save bounded player grenade receiver evidence");
+        Require(playerGrenadeReceiver.OneGesture(),"Player receiver did not publish exactly one uninterrupted menu-owned gesture");}
+    if(ordinaryGrenadeProbe){std::ofstream record(folder/L"ordinary-grenade-receiver.json");
+        record<<"{\"contract\":"<<(ordinaryGrenadeFade?395:394)<<",\"combined_fade\":"<<(ordinaryGrenadeFade?"true":"false")<<",\"samples\":"<<ordinaryGrenadeSamples<<",\"click_presses\":"<<ordinaryGrenadePresses
+            <<",\"click_releases\":"<<ordinaryGrenadeReleases<<",\"trigger_samples\":0,\"setup\":\"one ordinary left shoulder draw\",\"native_acceptance\":false}\n";
+        Require(bool(record),"Save bounded grenade receiver summary");}
+    if(resourceShellFocus){std::ofstream receipt(folder/L"receiver-shell-focus.json");shellFocus.Report(receipt);receipt<<'\n';
+        receipt.close();Require(bool(receipt)&&shellFocus.Completed(),"Shell focus loss was not exercised");}
+    if(resourceReceiverGap){const auto& w=receiverGap.Witness();
+        std::ofstream receipt(folder/L"receiver-input-gap.json");
+        receipt<<"{\"completed\":"<<(receiverGap.Completed()?"true":"false")<<",\"failed\":"<<(receiverGap.Failed()?"true":"false")
+            <<",\"begin_ns\":"<<receiverGap.BeganNs()<<",\"return_ns\":"<<receiverGap.ReturnedNs()<<",\"first_return_ns\":"<<receiverGap.FirstReturnNs()
+            <<",\"first_return_input\":"<<receiverGap.FirstReturnInput()<<",\"old_space\":"<<w.space<<",\"new_space\":"<<receiverGap.Space(w.space)
+            <<",\"last_pregap_input\":"<<gapPreInput<<",\"last_pregap_publish_after_ns\":"<<gapPrePublishNs
+            <<",\"last_pregap_deadline_upper_ns\":"<<gapPrePublishNs+bc2::PumpReceiverGapProbe::OriginalLeaseNs
+            <<",\"cycle\":"<<w.cycle<<",\"shot\":"<<w.shot<<",\"input\":"<<w.input<<",\"original_deadline_ns\":"<<w.deadlineNs
+            <<",\"loaded\":"<<w.loaded<<",\"reserve\":"<<w.reserve<<",\"capacity\":"<<w.capacity<<",\"travel_m\":"<<w.travel
+            <<",\"input_and_tracking_withheld\":true,\"native_authority\":false}\n";
+        receipt.close();Require(bool(receipt)&&receiverGap.Completed(),"Full receiver input gap was not completed");
+    }
     std::ofstream(folder/L"result.json")<<"{\"physical_bolt_empty_cycle\":"<<(boltEmptyCycle?"true":"false")<<",\"physical_bolt_receiver\":"<<(physicalBoltProbe?"true":"false")<<",\"m95_stock_shot_neutral\":"<<(m95StockShotNeutral?"true":"false")<<",\"physical_pump_receiver\":"<<(physicalPumpProbe?"true":"false")<<",\"physical_pump_empty_cycle\":"<<(pumpEmptyCycle?"true":"false")<<",\"physical_pump_exit_vehicle\":"<<(physicalPumpProbe&&pumpExitVehicle?"true":"false")<<",\"resource_magazine_receiver\":"<<(resourceMagazineProbe?"true":"false")
         <<",\"resource_setup_exit_vehicle\":"<<((resourceMagazineProbe||resourceInventoryProbe)&&weaponCycleExitVehicle?"true":"false")
         <<",\"resource_setup_start_held\":"<<(resourceStartHeld?"true":"false")

@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include "Bc2ChestKnifeProbeConfig.h"
 #include "Bc2BodyHolsterDiagnostic.h"
 #include "Bc2PumpDiagnostic.h"
 #include "Bc2M95StockShotDiagnostic.h"
@@ -54,8 +55,32 @@ constexpr bool ValidPhysicalReloadRepeatProbeConfig(std::uint32_t flags,std::uin
 // Bit 0x80000 enables opt-in post-configuration muzzle placement for verified campaign firearms.
 // Bit 0x800 opts into verified local on-foot controller input.
 // Bit 0x400 runs until hostPid exits (stream only); the duration word holds its PID.
+// Finite input-only trials: stock1/2, or explicitly compiled player-policy3.
+// Default false preserves every pre-player caller and does not enable normal XR.
+constexpr bool ValidOrdinaryGrenadeInputSession(unsigned mode,unsigned flags,unsigned duration,
+    unsigned magazineSession,bool otherDiagnostic,bool combinedCompiled,bool playerCompiled=false,bool twoDeathCompiled=false)noexcept {
+    constexpr unsigned required=9u|0x800u|0x1000u|0x2000u|0x4000u|0x10000u|0x80000u|0x100000u|0x2000000u|0x10000000u;
+    return !mode||((mode==1||(mode==2&&combinedCompiled)||(mode==3&&playerCompiled)||(mode==4&&playerCompiled&&twoDeathCompiled))&&duration==(mode==4?30000u:20000u)&&magazineSession==3&&
+        (flags&~0x300u)==required&&!otherDiagnostic);
+}
+// Normal player opt-in is separate from every finite diagnostic. The existing
+// controller still requires fresh native menu ownership for each gesture stage.
+constexpr bool ValidNormalPlayerGrenades(unsigned enabled,unsigned flags,unsigned hostPid,
+    unsigned magazineSession,bool otherDiagnostic,bool compiled)noexcept {
+    if(!enabled)return true;
+    constexpr unsigned required=9u|0x197800u|0x2000000u|0x10000000u|0x400u;
+    constexpr unsigned allowed=required|0x200u|0x200000u; // mirror pacing, sight
+    return enabled==1&&compiled&&hostPid&&magazineSession==3&&!otherDiagnostic&&
+        (flags&0xffu)==9&&(flags&required)==required&&!(flags&~allowed);
+}
+// Independent normal capabilities; compile support alone enables no item.
+constexpr bool ValidNormalPlayerTools(unsigned knife,unsigned contextual,unsigned flags,unsigned hostPid,
+    unsigned magazineSession,bool otherDiagnostic,bool knifeCompiled,bool contextualCompiled)noexcept {
+    return ValidNormalPlayerGrenades(knife,flags,hostPid,magazineSession,otherDiagnostic,knifeCompiled)&&
+        ValidNormalPlayerGrenades(contextual,flags,hostPid,magazineSession,otherDiagnostic,contextualCompiled);
+}
 struct NativeProbeConfig {
-    std::uint32_t magic=0x32504246,bytes=1200;
+    std::uint32_t magic=0x32504246,bytes=1220;
     union {std::uint32_t durationMs=3000;std::uint32_t hostPid;};
     std::uint32_t flags=0;
     wchar_t reportPath[512]{};
@@ -66,8 +91,13 @@ struct NativeProbeConfig {
     std::uint32_t m95PhysicalBoltCycles=0; // Explicit finite private physical bolt trial only.
     std::uint32_t m95StockShot=0; // 1: one loaded shot, 2: five shots through empty. No manual hold.
     std::uint32_t m95OrdinaryBoltInputCycles=0; // Bounded real-control trajectory; ordinary adapters only.
+    std::uint32_t ordinaryGrenadeInput=0; // 1: stock forward;2: stock/fade;3: real-menu player;4: bounded two-grenade/fade. Never normal XR.
     std::uint32_t ordinaryResourceInput=0; // 1: combined; 2: eight pumps/empty tube, ordinary input only.
     PumpHoldDiagnostic pumpHoldDiagnostic=PumpHoldDiagnostic::Disabled; // Isolated one-shot350ms trial, never ordinary activation.
+    std::uint32_t chestKnifeProbe=0; // Private finite1 draw/hold/return,2 one physical stroke. Default OFF.
+    std::uint32_t normalPlayerGrenades=0; // Explicit continuous real-host option; never a finite recipe.
+    std::uint32_t normalPlayerKnife=0; // Normal chest draw, motion-triggered stock melee, explicit release-return.
+    std::uint32_t normalContextualTools=0; // Normal authored slot4 tool custody/controls; real menu required.
 };
-static_assert(sizeof(NativeProbeConfig)==1200);
+static_assert(sizeof(NativeProbeConfig)==1220);
 }

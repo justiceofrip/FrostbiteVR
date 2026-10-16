@@ -1,4 +1,5 @@
 #include "Bc2ReloadObservation.h"
+#include "Bc2ReloadOwnerLoss.h"
 #include "Bc2PreholdEntryObservation.h"
 #include "Bc2ReloadKeepAlive.h"
 #include "Bc2ReloadStart.h"
@@ -326,7 +327,7 @@ std::optional<ReloadCycleRetirement> RetireRequestCycle(const ReloadHoldIdentity
 // QPC-derived nanoseconds (same epoch as QueryPerformanceCounter), max250ms.
 OwnerPublicationResult PublishOwnerObserved(const ReloadStateSnapshot&,std::int64_t deadlineNs)noexcept;
 bool PublishOwner(const ReloadStateSnapshot&,std::int64_t deadlineNs)noexcept;
-void ClearOwner()noexcept;
+void ClearOwner(ReloadOwnerLoss loss=ReloadOwnerLoss::LifetimeEnded)noexcept;
 // Private resource backend consumes the body's native lifetime, independently
 // of rendering or active hand claims. Normal builds do not dispatch from it.
 void PublishAmmoResourceBinding(const std::optional<AmmoResourceBinding>&)noexcept;

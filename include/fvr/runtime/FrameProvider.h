@@ -7,6 +7,7 @@
 namespace fvr::runtime {
 // Local C++ contract shared by native producers, IPC and XR presentation.
 // Not an exported ABI: serialize explicitly at process/module boundaries.
+struct InputPublicationResult {bool known=false,succeeded=false;std::uint32_t code=0;};
 class IFrameProvider {
 public:
     virtual ~IFrameProvider()=default;
@@ -24,6 +25,11 @@ public:
     virtual bool ReadBodyProps(const graphics::PairTicket&,graphics::BodyPropFrame& out)noexcept {out={};return false;}
     virtual bool ReadSceneDepth(const graphics::TextureDescriptor&,const graphics::PairTicket&,graphics::SceneDepthFrame& out)noexcept {out={};return false;}
     virtual void UpdateInput(const interaction::InputFrame&) noexcept {}
+    // Optional local diagnostic result. Legacy providers still receive exactly
+    // one UpdateInput call; lack of an acknowledgement remains UNKNOWN.
+    virtual InputPublicationResult UpdateInputObserved(const interaction::InputFrame& input)noexcept {
+        UpdateInput(input);return {};
+    }
     virtual bool TakeFeedback(interaction::FeedbackEvent& event)noexcept {event={};return false;}
     virtual void Suspend() noexcept {}
     // False means the pair was not consumed; reset/reclaim that texture stream.

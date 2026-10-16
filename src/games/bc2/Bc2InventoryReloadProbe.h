@@ -35,6 +35,15 @@ public:
   if(!inventoryOnly_||phase_!=Phase::Done||!restoredClaim_||now<lastNow_)return false;
   baselineClaim_=restoredClaim_;otherClaim_=restoredClaim_=0;To(Phase::ReachStow,now);return true;
  }
+ // Private script bookkeeping after the caller observed the production
+ // tracking-rebase receipt. It cannot change any inventory/hand consumer.
+ bool FollowReceiverSpace(const ReloadStateOwner& previous,const ReloadStateOwner& current,std::int64_t now)noexcept {
+  auto expected=previous;expected.space=current.space;
+  if(!inventoryOnly_||phase_!=Phase::OtherHeld||previous==current||expected!=current||
+     initial_.player!=previous.player||initial_.soldier!=previous.soldier||initial_.weak!=previous.weak||
+     initial_.actorGeneration!=previous.actorGeneration||initial_.space!=previous.space||now<lastNow_)return false;
+  initial_.space=current.space;lastInput_=0;observed_=deadline_=0;return true;
+ }
  void Report(std::ostream&)const;
 private:
  void To(Phase,std::int64_t)noexcept;

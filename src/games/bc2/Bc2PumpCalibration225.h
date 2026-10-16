@@ -1,6 +1,7 @@
 #pragma once
 #include "Bc2PhysicalPump.h"
 #include "Bc2PumpFixedParts.h"
+#include "Bc2PumpCompanions407.generated.h"
 #include "../../../profiles/pump357/Bc2SpasPumpHand.generated.h"
 namespace fvr::bc2 {
 // Original native rig observation, not production native-cycle admission.
@@ -21,6 +22,7 @@ inline Bc2PumpCalibration MeasuredSpasPump225()noexcept {
     c.handShape=&SpasPumpHand357;
     c.asset=SpasReloadAsset;c.profileId=0x5350415350554d50ull;c.geometry=SpasPumpGeometry;
     c.fixedParts=bc2_pump_detail::SpasFixedParts;
+    c.companions=bc2_pump_detail::SpasCycleCompanions;
     return c;
 }
 }

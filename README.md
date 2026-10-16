@@ -18,8 +18,8 @@ preserves completed reload retirement when returning to a weapon family, so the
 native mechanism can be selected again. See the
 [390 evidence and remaining checks](docs/NATIVE-HANDOFF-390.md).
 
-**Headset acceptance is pending.** The last human test, checkpoint375 on
-October 12, failed. These automated results do not establish a playable whole
+**The October 13 checkpoint390 headset test failed.** Local391 corrections
+are in development; see [the current investigation](docs/HEADSET-RECOVERY-391.md). These automated results do not establish a playable whole
 campaign, complete weapon coverage, or a fix for every intermittent crash.
 Controller alignment, visual artifacts and sustained stability still need testing.
 The M95 magazine refill in the bolt check uses stock fallback. Wider mechanism

@@ -2,6 +2,7 @@
 #include "Bc2NativeCycleService.h"
 #include "Bc2NativeCycleRecovery.h"
 #include "Bc2PumpPart.h"
+#include "Bc2PumpCompanionParts.h"
 #include "fvr/interaction/SupportGrip.h"
 #include "fvr/interaction/AuthoredHandPose.h"
 #include <atomic>
@@ -22,6 +23,7 @@ struct Bc2PumpCalibration {
     std::uint64_t profileId=0;
     Bc2PumpGeometry geometry{};
     std::span<const Bc2PumpFixedPart> fixedParts{}; // Static adapter-owned lifetime.
+    std::span<const Bc2PumpCompanionPart> companions{}; // Spatial presentation only.
 };
 bool PumpCalibrationValid(const Bc2PumpCalibration&)noexcept;
 struct Bc2PumpRawContact {
@@ -50,6 +52,7 @@ struct Bc2PumpTracking {
     std::optional<Bc2PumpSupportCapture> supportCapture;
     std::optional<interaction::WeaponCycleIdleDebtLease> recovery;
     std::optional<interaction::PhysicalWeaponCycleIdleDebtTarget> recoveryTarget;
+    bool companionReturning=false; // This target's accepted recognizer leg, never a clock.
 };
 // Returned support is a new current support claim, never the expired mechanism.
 std::optional<math::Matrix4> ResolvePumpSupportWrist(const Bc2PumpTracking&,const RigSnapshot&,
@@ -68,6 +71,7 @@ struct Bc2PumpPresentation {
     std::optional<math::Matrix4> wrist;
     std::optional<interaction::BoneWrite> part;
     std::vector<interaction::BoneWrite> fixedAssembly;
+    std::vector<interaction::BoneWrite> cycleAssembly;
 };
 Bc2PumpPresentation BuildPumpPresentation(const Bc2PumpTracking&,const RigSnapshot&,const math::Matrix4& placedWeapon,
     float units,std::int64_t now)noexcept;
@@ -130,6 +134,7 @@ private:
         std::variant<interaction::WeaponCycleRelease,interaction::WeaponCycleIdleDebtRelease> release{};
         interaction::HandClaimToken gun{};ReloadStateOwner nativeOwner{};
         interaction::HandInteractionSample last{};std::int64_t submittedNs=0;std::uint64_t releasedAtSequence=0;
+        interaction::SupportGripMechanismReturn custody{};
     };
     std::optional<SupportReturn> supportReturn_;
     std::optional<Bc2PumpSupportCapture> supportCapture_;

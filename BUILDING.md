@@ -19,32 +19,32 @@ probes. The x86 native module matches BC2's architecture; the x64 OpenXR host is
 separate process. A successful x64 build does not provide a native BF3/BF4 adapter.
 
 If a running BC2 session still maps a previous DLL, build into a separate folder
-without closing it: `./Build-Checkpoint.ps1 -Architecture x86 -BuildDirectory build/x86-checkpoint390`.
+without closing it: `./Build-Checkpoint.ps1 -Architecture x86 -BuildDirectory build/x86-checkpoint391`.
 Both build scripts accept `-BuildDirectory`; relative paths resolve from the
 repository root. Binaries in the previous folder remain the previous build.
 
 `requirements-dev.txt` pins NumPy and Pillow for offline geometry and image tests.
 Use a virtual environment if you keep other projects' Python dependencies separate.
 
-## Checkpoint390 player composition
+## Checkpoint391 player composition
 
 Use fresh build directories and run the architectures sequentially:
 
 ```powershell
-.\Build-Checkpoint.ps1 -Architecture x86 -Jobs 1 -BuildDirectory build/x86-checkpoint390 -OrdinaryManualCycles -NativeCycleRecovery -BodySceneDepth
-.\Build-Checkpoint.ps1 -Architecture x64 -Jobs 1 -BuildDirectory build/x64-checkpoint390 -OrdinaryManualCycles -NativeCycleRecovery -BodySceneDepth
+.\Build-Checkpoint.ps1 -Architecture x86 -Jobs 1 -BuildDirectory build/x86-checkpoint391 -OrdinaryManualCycles -NativeCycleRecovery -BodySceneDepth
+.\Build-Checkpoint.ps1 -Architecture x64 -Jobs 1 -BuildDirectory build/x64-checkpoint391 -OrdinaryManualCycles -NativeCycleRecovery -BodySceneDepth
 ```
 
-These switches reproduce the normal390 manual-cycle, recovery and body-depth
+These switches reproduce the normal391 manual-cycle, recovery and body-depth
 configuration. Synthetic controller drivers remain OFF. Omitting these switches
 builds a different feature composition. The checkpoint script selects
-`profiles/checkpoint390` for the operation header and exact source receipt,
+`profiles/checkpoint391` for the operation header and exact source receipt,
 `profiles/aim339` for gun-hand calibration, `profiles/support373` for support
 contacts, and `profiles/resource-enrollment295-pistol` for magazine registration
 and geometry. Older profile numbers identify retained data, not the current build.
 
-Both full normal390 builds passed 246 C++ suites. Actual-game emulation and its
-limits are documented in [NATIVE-HANDOFF-390.md](docs/NATIVE-HANDOFF-390.md).
+Both full normal391 builds passed 246 C++ suites. Actual-game emulation and its
+limits are documented in [HEADSET-RECOVERY-391.md](docs/HEADSET-RECOVERY-391.md).
 This is a source checkpoint for development; human headset acceptance and
 whole-campaign stability remain pending. For a comparison with checkpoint245,
 start with the [fork handoff](handoff/checkpoint390/README.md).

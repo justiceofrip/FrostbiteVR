@@ -13,7 +13,7 @@ struct WeaponModeCommand {
     std::uint32_t action=0,targetWeapon=0,targetSlot=0,inventory=0,persistent=0;
     const WeaponModeFamilyProfile* family=nullptr;bool selectedSecondary=false;
 };
-// Read-only candidate for the exact inspected scoped-XM8/XM320 pair. Native
+// Read-only candidate for an exact enrolled linked pair. Native
 // eligibility, ammo, equipment animation and selection remain authoritative.
 // Invoke no native function and never write the equipped pointer.
 std::optional<WeaponModeCommand> ResolveWeaponMode(const WeaponModeMemory&,

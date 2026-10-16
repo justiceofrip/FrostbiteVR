@@ -2,9 +2,13 @@
 #include "Bc2PreholdOrder.h"
 #include "Bc2PreholdOperationJournal.h"
 #include "Bc2ReloadFlowRuntime.h"
+#include "Bc2OriginalFiringObserver.h"
 #include "Bc2NativeCycleRuntime.h"
 #include "Bc2NativeCycleRecovery.h"
 #include "Bc2NativeCycleFailureJournal.h"
+#ifdef FVR_BC2_NATIVE_CYCLE_EXPIRED_CONTROL_PROBE
+#include "Bc2NativeCycleExpiredControlProbe.h"
+#endif
 #include "Bc2NativeCycleUpdateRoute.h"
 #include "Bc2NativeCycleDispatch.h"
 #include "Bc2NativeCycleEvidence.h"
@@ -283,7 +287,7 @@ PreholdOperationJournal preholdOperationJournal;
 std::optional<PreholdCleanupEvidence> preholdLastCoherent; // already-read Update evidence only
 #endif
 AbortFn nativeAbort=nullptr;ReloadHoldCodeProof abortCode{};ReloadAbortCleanup abortCleanup;
-struct AbortRecord {std::uint64_t cycle=0,invocation=0,revision=0,dispatchEpoch=0;std::int64_t begin=0,end=0,deadline=0;unsigned branch=3;ReloadFiringObservation before{},after{};bool called=false,helperExact=false,contextUnchanged=false,ownerRetained=false,completed=false;};
+struct AbortRecord {std::uint64_t cycle=0,invocation=0,revision=0,dispatchEpoch=0;std::int64_t begin=0,end=0,deadline=0;unsigned branch=3;ReloadFiringObservation before{},after{};bool called=false,helperExact=false,contextUnchanged=false,ownerRetained=false,completed=false,retryDeferred=false;};
 std::array<AbortRecord,32> abortRecords{};std::atomic<unsigned> abortRecordCount=0,abortArmed=0,abortCalls=0,abortCompleted=0;
 StepFn originalStep=nullptr;
 #ifdef FVR_BC2_NATIVE_AMMO_BACKEND
@@ -402,8 +406,13 @@ std::array<void*,5> hooks{};ReloadFlowRecords records;ReloadDeferredCompletions 
 std::atomic_flag recordGate=ATOMIC_FLAG_INIT,ownerGate=ATOMIC_FLAG_INIT;
 std::atomic<bool> enabled=false;std::atomic<unsigned> active=0;
 std::atomic<std::uint64_t> ownerRevision=1;
-struct Lease {ReloadStateSnapshot snapshot{};std::int64_t deadline=0;std::uint64_t revision=0;std::optional<ReloadServerSnapshot> server;std::uint64_t completionCycle=0;};Lease published;
+struct Lease {ReloadStateSnapshot snapshot{};std::int64_t deadline=0;std::uint64_t revision=0;std::optional<ReloadServerSnapshot> server;std::uint64_t completionCycle=0,cleanupEpoch=0;};Lease published;
+// Request-lock protected original owner; the independent epoch is invalidated
+// only by actual native lifetime replacement. No observation deadline renews.
+std::optional<Lease> abortOwner;std::atomic<std::uint64_t> cleanupOwnerEpoch=1;
+std::atomic<std::int64_t> cleanupObservationDeadline=0;
 std::int64_t frequency=0,startNs=0;bool installed=false,started=false,drained=false;
+OriginalFiringObserver independentFiringObserver{};
 ReloadRecordWindow recordWindowClock;
 std::atomic<unsigned> ownerDrops=0,recordBusy=0,recordBeginBusy=0,recordEndBusy=0,ownerMisses=0,readMisses=0,contextMisses=0,nestingMisses=0,windowExpired=0;
 std::atomic<unsigned> ownerPublicationsAfterEntry=0;
@@ -459,6 +468,9 @@ bool nativeCycleDispatcher=false;
 std::atomic_flag nativeCycleRoutingGate=ATOMIC_FLAG_INIT;
 Bc2NativeCycleService nativeCycle;
 NativeCycleFailureJournal nativeCycleFirstFailure;
+#ifdef FVR_BC2_NATIVE_CYCLE_EXPIRED_CONTROL_PROBE
+NativeCycleExpiredControlProbe nativeCycleExpiredControlProbe; // nativeCycleGate; reported only after drain.
+#endif
 std::atomic_flag nativeCycleGate=ATOMIC_FLAG_INIT;
 std::atomic<std::uint64_t> nativeCycleCancelEpoch=0;
 std::uint64_t nativeCycleAppliedCancel=0; // nativeCycleGate only; never a readiness receipt.
@@ -508,7 +520,7 @@ std::array<std::atomic<unsigned>,3> cohortRetryAttempts{},cohortRetryRecovered{}
 struct CohortRetrySample {unsigned firing=0;std::uint64_t sequence=0;std::int64_t deadline=0;ReloadCohortRetryAttempt attempt{};};
 std::array<CohortRetrySample,16> cohortRetrySamples{};std::atomic<unsigned> cohortRetrySampleCount=0;
 
-struct Frame {Frame* previous=nullptr;std::uint64_t id=0,update=0,ownerRevision=0;unsigned firing=0,depth=0;ReloadStateOwner owner{};ReloadFlowInvocation invocation;};
+struct Frame {Frame* previous=nullptr;std::uint64_t id=0,update=0,ownerRevision=0;unsigned firing=0,depth=0;ReloadStateOwner owner{};ReloadFlowInvocation invocation;bool cleanupOnly=false;};
 thread_local Frame* currentFrame=nullptr;
 struct RequestBoundaryEvidence {unsigned stage=0,readBranch=3;ReloadFlowBoundaryDiagnostic client{};ReloadServerBoundaryDiagnostic server{};};
 std::int64_t Now()noexcept;
@@ -649,6 +661,9 @@ void RequestMissing(unsigned firing,unsigned stage,unsigned kind,const RequestBo
 std::int64_t Now()noexcept{LARGE_INTEGER value{};if(frequency<=0||!QueryPerformanceCounter(&value)||value.QuadPart<=0)return 0;
     return (value.QuadPart/frequency)*1000000000+(value.QuadPart%frequency)*1000000000/frequency;}
 bool IsCurrent(const Lease& lease,std::int64_t now)noexcept{
+    if(lease.cleanupEpoch)return enabled.load(std::memory_order_acquire)&&
+        ReloadCleanupObservationCurrent(lease.cleanupEpoch,cleanupOwnerEpoch.load(std::memory_order_acquire),
+            lease.snapshot.observedNs,lease.deadline,now);
     if(lease.completionCycle)return enabled.load(std::memory_order_acquire)&&
         nativeCycleCompletionId.load(std::memory_order_acquire)==lease.completionCycle&&
         now>=lease.snapshot.observedNs&&now<lease.deadline&&now-lease.snapshot.observedNs<=200000000;
@@ -667,6 +682,16 @@ std::optional<Lease> Owner(unsigned firing,std::int64_t now)noexcept{
             if(regular&&regular->snapshot.observedNs>now)++ownerPublicationsAfterEntry;
         }
     }
+    // A stop keeps only its original owner/configuration/deadline. This lease
+    // enters the dedicated cleanup-only Update route, never action/ammo policy.
+    std::optional<Lease> cleanup;
+    if(requestMode&&now>0&&now<cleanupObservationDeadline.load(std::memory_order_acquire))WithRequest([&]{if(abortCleanup.Active()&&abortOwner&&IsCurrent(*abortOwner,Now())&&
+        abortCleanup.Revision()==abortOwner->revision&&abortCleanup.Cycle()==requestCycle.Cycle()&&
+        requestCycle.Phase()==ReloadRequestCyclePhase::Cancelled){
+        const auto identity=RoundIdentity(*abortOwner);
+        if(std::find(identity.firing.begin(),identity.firing.end(),firing)!=identity.firing.end())cleanup=abortOwner;
+    }},false);
+    if(cleanup)return cleanup;
     // Exact completion or a bounded already-held interruption watch supplies
     // native-only authority. Each native read keeps its own original freshness;
     // neither path renews an XR packet or grants physical hand custody.
@@ -762,6 +787,7 @@ struct Observation {
         if(frame.depth>8){evidence.stage=1;++nestingMisses;return;}
         lease=Owner(firing,now);if(!lease){evidence.stage=2;++ownerMisses;
             if(NativeCycleTarget(firing))RecordObservationReadMiss(kind,firing,evidence,false,0,nullptr,now);return;}
+        frame.cleanupOnly=lease->cleanupEpoch!=0;
         const bool server=lease->server&&lease->server->links.firing==firing;
         evidence.readBranch=server?2:(firing==lease->snapshot.branches[0].address?0:1);
         // Owner may independently sample native debt after an XR publication
@@ -1292,7 +1318,15 @@ ReloadAbortDecision TryAbort(Observation& observation,const ReloadHoldInput& inp
     void* self,void* context,AbortRecord& report)noexcept {
     ReloadAbortDecision decision;
     if(!requestMode||!observation.lease)return decision;
-    bool wanted=false;WithRequest([&]{wanted=abortCleanup.Active();},false,nullptr,3);if(!wanted)return decision;
+    bool wanted=false;WithRequest([&]{wanted=abortCleanup.Active();
+        if(wanted&&abortOwner&&observation.lease->revision==abortOwner->revision&&
+           RoundIdentity(*observation.lease)==RoundIdentity(*abortOwner)&&IsCurrent(*abortOwner,Now())){
+            // Preserve the invocation's own source clock; only replace the
+            // presentation revision barrier with its exact cleanup epoch.
+            observation.lease->cleanupEpoch=abortOwner->cleanupEpoch;
+            observation.lease->deadline=std::min(observation.lease->deadline,abortOwner->deadline);
+            observation.frame.cleanupOnly=true;
+        }},false,nullptr,3);if(!wanted)return decision;
     const auto& lease=*observation.lease;
     const bool config=AbortConfig(input.config);
     WithRequest([&]{decision=abortCleanup.Claim(input,lease.revision,requestCycle.Cycle(),
@@ -1303,7 +1337,7 @@ ReloadAbortDecision TryAbort(Observation& observation,const ReloadHoldInput& inp
     std::array<std::byte,0xac> before{},after{};std::array<std::byte,0x30> originalContext{},afterContext{};
     const auto fresh=BoundaryFor(lease,unsigned(self),Now());
     bool allowed=false;
-    const bool policy=WithRequest([&]{allowed=abortCleanup.Allows(decision,ownerRevision.load(std::memory_order_acquire),
+    const bool policy=WithRequest([&]{allowed=abortCleanup.Allows(decision,IsCurrent(lease,Now())?lease.revision:0,
         requestCycle.Cycle(),requestCycle.Phase()==ReloadRequestCyclePhase::Cancelled,Now());},true);
     if(policy&&allowed&&fresh&&fresh->current==decision.before.currentState&&fresh->next==decision.before.nextState&&
        fresh->timer==decision.before.phaseTimer&&fresh->loaded==decision.before.loaded&&fresh->reserve==decision.before.reserve&&
@@ -1321,14 +1355,16 @@ ReloadAbortDecision TryAbort(Observation& observation,const ReloadHoldInput& inp
     }
     return decision;
 }
-void FinishAbort(const ReloadAbortDecision& decision,AbortRecord& report,const std::optional<ReloadFlowRecord>& completed)noexcept {
+void FinishAbort(const ReloadAbortDecision& decision,AbortRecord& report,const std::optional<ReloadFlowRecord>& completed,const Lease* lease)noexcept {
     if(!decision.call)return;
     report.end=Now();report.ownerRetained=completed&&completed->identityRetained&&bool(completed->exit.boundary);
     if(report.ownerRetained)report.after=RoundState(*completed->exit.boundary);
     WithRequest([&]{
-        report.ownerRetained=report.ownerRetained&&ownerRevision.load(std::memory_order_acquire)==decision.ownerRevision&&
+        report.ownerRetained=report.ownerRetained&&lease&&IsCurrent(*lease,Now())&&lease->revision==decision.ownerRevision&&
             requestCycle.Cycle()==decision.cycle&&requestCycle.Phase()==ReloadRequestCyclePhase::Cancelled;
-        report.completed=abortCleanup.Finish(decision,report.after,report.ownerRetained,report.helperExact,report.end);
+        if(!report.called)report.retryDeferred=abortCleanup.DeferUncalled(decision,report.after,
+            report.ownerRetained,false,report.end);
+        else report.completed=abortCleanup.Finish(decision,report.after,report.ownerRetained,report.helperExact,report.end);
     },true);
     if(report.completed)++abortCompleted;
     const auto slot=abortRecordCount.fetch_add(1);if(slot<abortRecords.size())abortRecords[slot]=report;
@@ -1365,6 +1401,7 @@ bool NativeInputCompare(void* context,unsigned index,unsigned expected,unsigned 
 }
 void __fastcall Step(void* self,void*,void* context,float delta){
     Active activeScope;const auto firing=unsigned(self),caller=unsigned(_ReturnAddress());
+    if(currentFrame&&currentFrame->cleanupOnly){originalStep(self,context,delta);return;}
     const auto stepRoute=SelectNativeCycleStepRoute(nativeGuardFrame!=nullptr,
         nativeGuardFrame&&nativeGuardFrame->held,nativeGuardFrame&&nativeGuardFrame->held&&nativeGuardFrame->held->hold);
     if(stepRoute!=NativeCycleStepRoute::OrdinaryEmptyControl){
@@ -1519,6 +1556,12 @@ void __fastcall Step(void* self,void*,void* context,float delta){
 }
 void __fastcall Update(void* self,void*,void* context,unsigned extra){
     Active activeScope;const auto firing=unsigned(self),caller=unsigned(_ReturnAddress());
+    OriginalFiringScope independentObservation(independentFiringObserver,{firing,unsigned(context),caller,extra});
+    // Explicit independent tool input at this original boundary. The supplied
+    // context is a stack copy; native dt/argument and original context stay intact.
+    if(auto toolInput=independentObservation.InputCopy()){
+        alignas(16) auto nativeInput=*toolInput;originalUpdate(self,nativeInput.data(),extra);return;
+    }
     NativeCycleCallback cycleCallback(NativeCycleCallbackKind::Update,firing,unsigned(context));
     Observation observation(ReloadFlowEvent::Update,firing,caller,unsigned(context),extra);
     const auto cycleInvocation=observation.frame.invocation.Record().id;cycleCallback.scope.BindInvocation(cycleInvocation);
@@ -1539,6 +1582,12 @@ void __fastcall Update(void* self,void*,void* context,unsigned extra){
     if(observation.lease){ready=PrepareHold(observation,firing,caller,unsigned(context),input,deltaBits);
         if(!ready)++holdSampleFailures;}
     if(pumpDiagnostic&&(!quietBefore||active.load(std::memory_order_acquire)!=1||revision!=callbackRevision.load(std::memory_order_acquire)))ready=false;
+    if(observation.lease&&observation.lease->cleanupEpoch){
+        AbortRecord report;ReloadAbortDecision decision;
+        if(ready)decision=TryAbort(observation,input,self,context,report);
+        originalUpdate(self,context,extra);
+        FinishAbort(decision,report,observation.Finish(),&*observation.lease);return;
+    }
     if(cycleTarget){
         // Prepare engine-owned evidence before acquiring the service gate. A
         // concurrent interruption can convert Held during these reads; choose
@@ -1707,7 +1756,7 @@ void __fastcall Update(void* self,void*,void* context,unsigned extra){
             }
         }
 #endif
-        FinishAbort(abortDecision,abortReport,completed);
+        FinishAbort(abortDecision,abortReport,completed,observation.lease?&*observation.lease:nullptr);
 #ifdef FVR_BC2_PREHOLD_CLEANUP
         if(preholdMonitorCancelled&&observation.lease&&quietBefore&&active.load(std::memory_order_acquire)==1&&revision==callbackRevision.load(std::memory_order_acquire)){
             WithRequest([&]{
@@ -1764,6 +1813,7 @@ void __fastcall Commit(void* self,void*,void* context){
     Observation observation(ReloadFlowEvent::Commit,unsigned(self),unsigned(_ReturnAddress()),unsigned(context),0);
     const auto cycleInvocation=observation.frame.invocation.Record().id;cycleCallback.scope.BindInvocation(cycleInvocation);
     originalCommit(self,context);
+    if(observation.frame.cleanupOnly)return;
     if(requestMode){const auto completed=observation.Finish();
         if(NativeCycleTarget(unsigned(self)))WithNativeCycle([&]{
             if(completed&&cycleCallback.Isolated()){++nativeCycleCommits;nativeCycle.Commit(*completed);}else nativeCycle.Missing(unsigned(self),cycleInvocation);
@@ -1775,6 +1825,7 @@ void __fastcall Transfer(void* self,void*,unsigned rawArgument){
     Active activeScope;NativeCycleCallback cycleCallback(NativeCycleCallbackKind::Transfer,unsigned(self),0);
     Observation observation(ReloadFlowEvent::Transfer,unsigned(self),unsigned(_ReturnAddress()),0,rawArgument);
     const auto cycleInvocation=observation.frame.invocation.Record().id;cycleCallback.scope.BindInvocation(cycleInvocation);
+    if(observation.frame.cleanupOnly){originalTransfer(self,rawArgument);return;}
     // Ammo transfer is outside the admitted positive-ammunition pump cycle.
     if(NativeCycleTarget(unsigned(self)))NativeCycleMissing(unsigned(self),cycleInvocation);
     originalTransfer(self,rawArgument);
@@ -1786,6 +1837,7 @@ void __fastcall Restore(void* self,void*,void* snapshot){
     Observation observation(ReloadFlowEvent::Restore,unsigned(self),unsigned(_ReturnAddress()),unsigned(snapshot),0);
     const auto cycleInvocation=observation.frame.invocation.Record().id;cycleCallback.scope.BindInvocation(cycleInvocation);
     originalRestore(self,snapshot);
+    if(observation.frame.cleanupOnly)return;
     if(NativeCycleTarget(unsigned(self))){const auto complete=observation.Finish();
         WithNativeCycle([&]{if(complete&&cycleCallback.Isolated())nativeCycle.ObserveRestore(*complete);else nativeCycle.Missing(unsigned(self),cycleInvocation);});return;}
     if(pumpDiagnostic){const auto complete=observation.Finish();
@@ -2342,23 +2394,30 @@ std::optional<ReloadMagazineAckEvidence> TakeMagazineAcknowledgement(const Reloa
 }
 void CancelRequestCycle()noexcept {
     if(!requestMode)return;Active activeScope;
-    std::optional<Lease> owner;
-    {OwnerCopyGate lock;if(lock.held&&IsCurrent(published,Now())&&published.server)owner=published;}
+    std::optional<Lease> owner;std::uint64_t capturedCleanupEpoch=0;
+    {OwnerCopyGate lock;if(lock.held&&IsCurrent(published,Now())&&published.server){
+        owner=published;capturedCleanupEpoch=cleanupOwnerEpoch.load(std::memory_order_acquire);}}
     WithRequest([&]{
         std::optional<ReloadRoundLease> held;
         std::optional<ReloadStopIntent> shellStop;
         if(activeScope.requestEntryAllowed&&owner&&IsCurrent(*owner,Now())&&
+           capturedCleanupEpoch==cleanupOwnerEpoch.load(std::memory_order_acquire)&&
            requestCycle.Phase()==ReloadRequestCyclePhase::Holding&&!requestCycle.PendingRequest()&&!requestCycle.UnresolvedRequest()&&
            requestCycle.Identity()==RoundIdentity(*owner)){
             if(requestCycle.IsMagazine())held=requestCycle.AbortLease(requestCycle.Identity(),requestCycle.Cycle(),Now());
             else shellStop=requestCycle.ShellStopIntent(Now());
         }
         requestCycle.Cancel(ReloadRequestCycleFailure::Stopped);
+        bool armed=false;
         if(shellStop){shellStop->deadlineNs=std::min(shellStop->deadlineNs,std::min(owner->deadline,owner->snapshot.observedNs+200000000ll));
-            if(abortCleanup.ArmShellStop(*shellStop,owner->revision,Now()))++abortArmed;}
+            if(abortCleanup.ArmShellStop(*shellStop,owner->revision,Now())){++abortArmed;armed=true;}}
         if(held){held->deadlineNs=std::min(held->deadlineNs,std::min(owner->deadline,owner->snapshot.observedNs+200000000ll));
             if(requestCycle.IsMagazine()?abortCleanup.ArmMagazine(*held,owner->revision,Now(),true,requestCycle.MagazineProfile(),combinedFamilies):
-                abortCleanup.Arm(*held,owner->revision,Now(),true))++abortArmed;}
+                abortCleanup.Arm(*held,owner->revision,Now(),true)){++abortArmed;armed=true;}}
+        if(armed){abortOwner=*owner;abortOwner->completionCycle=0;
+            abortOwner->cleanupEpoch=capturedCleanupEpoch;
+            abortOwner->deadline=std::min(abortOwner->deadline,abortCleanup.Deadline());
+            cleanupObservationDeadline.store(abortOwner->deadline,std::memory_order_release);}
     },true);
     RequestCancelAsync(6);WithRequest([]{},true);
 }
@@ -2386,6 +2445,15 @@ std::optional<ReloadCycleRetirement> RetireRequestCycle(const ReloadHoldIdentity
     retireLastEvent.store(receipt->event,std::memory_order_release);retireLastCycle.store(receipt->cycle,std::memory_order_release);
     retireLastObserved.store(receipt->observedNs,std::memory_order_release);retireLastDeadline.store(receipt->deadlineNs,std::memory_order_release);
     ++retireSuccesses;return receipt;
+}
+bool RegisterOriginalFiringObserver(const OriginalFiringObserver& observer)noexcept {
+    if(!installed||started||enabled.load()||active.load()||independentFiringObserver.enter||
+       !observer.context||!observer.enter||!observer.leave)return false;
+    independentFiringObserver=observer;return true;
+}
+bool RemoveOriginalFiringObserver(void* context)noexcept {
+    if(!drained||enabled.load()||active.load()||independentFiringObserver.context!=context)return false;
+    independentFiringObserver={};return true;
 }
 bool Install(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uintptr_t image,const ReloadStateMemory& reader,bool enableDiagnosticHold,bool enableDiagnosticRound,bool enableRequestCycle,bool enableMagazineRequests){
     if(installed||started||image>UINT32_MAX||!reader.read||!reader.type||unsigned(enableDiagnosticHold)+unsigned(enableDiagnosticRound)+unsigned(enableRequestCycle)+unsigned(enableMagazineRequests)>1)return false;
@@ -2439,6 +2507,12 @@ OwnerPublicationResult PublishOwnerObserved(const ReloadStateSnapshot& snapshot,
     if(snapshot.observedNs<published.snapshot.observedNs)return {Status::Superseded,Reason::OlderSnapshot};
     if(revision!=ownerRevision.load(std::memory_order_acquire))return {Status::Superseded,Reason::RevisionChanged};
     Reason reason=Reason::Published;
+    if(!SameReloadCleanupLifetime(published.snapshot.owner,snapshot.owner)||
+       published.snapshot.config!=snapshot.config||published.snapshot.branches[0].address!=snapshot.branches[0].address||
+       published.snapshot.branches[1].address!=snapshot.branches[1].address||
+       (published.server&&server&&(published.server->links.firing!=server->links.firing||
+        published.server->links.item!=server->links.item||published.server->links.player!=server->links.player||
+        published.server->links.soldier!=server->links.soldier)))cleanupOwnerEpoch.fetch_add(1,std::memory_order_acq_rel);
     if(published.snapshot.owner!=snapshot.owner||published.snapshot.branches[0].address!=snapshot.branches[0].address||
        published.snapshot.branches[1].address!=snapshot.branches[1].address){
         if(requestMode)RequestCancelAsync(5);reason=Reason::NativeOwnerChanged;
@@ -2500,11 +2574,17 @@ std::optional<AmmoResourceOutcome> ReadAmmoResourceOutcome(std::uint64_t request
     (void)request;(void)context;return {};
 #endif
 }
-void ClearOwner()noexcept{CancelNativeCycle();PublishAmmoResourceBinding({});publishedReserve.Clear();ownerRevision.fetch_add(1,std::memory_order_acq_rel);holdProbe.Abort(ReloadHoldReason::OwnerOrRead);
+void ClearOwner(ReloadOwnerLoss loss)noexcept{
+    // Physical cancellation may already have armed a post-commit stop. Capture
+    // it before retiring general publication, keeping the exact old deadline.
+    if(loss==ReloadOwnerLoss::PresentationUnavailable&&requestMode)CancelRequestCycle();
+    if(loss==ReloadOwnerLoss::LifetimeEnded)cleanupOwnerEpoch.fetch_add(1,std::memory_order_acq_rel);
+    CancelNativeCycle();PublishAmmoResourceBinding({});publishedReserve.Clear();ownerRevision.fetch_add(1,std::memory_order_acq_rel);holdProbe.Abort(ReloadHoldReason::OwnerOrRead);
 #ifdef FVR_BC2_AMMO_RESOURCE_HANDS
     ammoPlayerChannel.Publish({});
 #endif
-    if(requestMode)WithRequest([]{emptyControlReceipts.Clear();abortCleanup.Abandon(ReloadAbortFailure::Owner,Now());},true);
+    if(requestMode)WithRequest([&]{emptyControlReceipts.Clear();abortCleanup.OwnerCleared(loss,Now());
+        if(loss==ReloadOwnerLoss::LifetimeEnded)abortOwner.reset();},true);
     if(requestMode)CancelRequestCycle();
     if(diagnosticRound){Gate lock(roundGateLock);
         if(!lock.held){roundCancelled.store(true,std::memory_order_release);return;}
@@ -2742,7 +2822,18 @@ bool PublishNativeCycleControl(const Bc2NativeCycleControl& source)noexcept {
                nativeCycleCancelEpoch.load(std::memory_order_acquire)!=cancellation)return;
             nativeCycle=std::move(candidate);accepted=true;
         });
-    }else WithNativeCycle([&]{accepted=nativeCycle.Control(control);});
+    }else WithNativeCycle([&]{
+#ifdef FVR_BC2_NATIVE_CYCLE_EXPIRED_CONTROL_PROBE
+        nativeCycleExpiredControlProbe.BeforeControl(nativeCycle,control,Now(),
+            nativeCycleCancelEpoch.load(std::memory_order_acquire),nativeCycleUpdates.load(std::memory_order_relaxed));
+        control.input.nowNs=Now();
+#endif
+        accepted=nativeCycle.Control(control);
+#ifdef FVR_BC2_NATIVE_CYCLE_EXPIRED_CONTROL_PROBE
+        nativeCycleExpiredControlProbe.AfterControl(nativeCycle,control,accepted,
+            nativeCycleCancelEpoch.load(std::memory_order_acquire),nativeCycleUpdates.load(std::memory_order_relaxed));
+#endif
+    });
     if(accepted){++nativeCycleControls;if(source.release)++nativeCycleReleases;
         for(unsigned n=0;n<3;++n)nativeCycleTargets[n].store(identity.firing[n],std::memory_order_release);}
     return accepted?true:reject(7);
@@ -3078,7 +3169,7 @@ void Report(std::ostream& out){
            out<<"{\"cycle\":"<<r.cycle<<",\"dispatch_epoch\":"<<r.dispatchEpoch<<",\"invocation\":"<<r.invocation<<",\"branch\":"<<r.branch<<",\"owner_revision\":"<<r.revision
               <<",\"begin_ns\":"<<r.begin<<",\"end_ns\":"<<r.end<<",\"deadline_ns\":"<<r.deadline<<",\"called\":"<<(r.called?"true":"false")
               <<",\"helper_exact\":"<<(r.helperExact?"true":"false")<<",\"context_unchanged\":"<<(r.contextUnchanged?"true":"false")
-              <<",\"owner_retained\":"<<(r.ownerRetained?"true":"false")<<",\"completed\":"<<(r.completed?"true":"false")
+              <<",\"owner_retained\":"<<(r.ownerRetained?"true":"false")<<",\"completed\":"<<(r.completed?"true":"false")<<",\"retry_deferred\":"<<(r.retryDeferred?"true":"false")
               <<",\"before\":{\"current\":"<<r.before.currentState<<",\"next\":"<<r.before.nextState<<",\"timer\":"<<r.before.phaseTimer<<",\"loaded\":"<<r.before.loaded<<",\"reserve\":"<<r.before.reserve
               <<"},\"after\":{\"current\":"<<r.after.currentState<<",\"next\":"<<r.after.nextState<<",\"timer\":"<<r.after.phaseTimer<<",\"loaded\":"<<r.after.loaded<<",\"reserve\":"<<r.after.reserve<<"}}";
        }out<<']';
@@ -3087,6 +3178,7 @@ void Report(std::ostream& out){
        const auto admissionSample=[&](const ReloadAbortAdmissionSample& s){
            unsigned flags=0;for(unsigned n=0;n<5;++n)if(s.context.flags24Through28[n])flags|=1u<<n;
            out<<"{\"observed_ns\":"<<s.observedNs<<",\"invocation\":"<<s.invocation<<",\"branch\":"<<s.branch
+              <<",\"source_observed_ns\":"<<s.sourceObservedNs<<",\"source_deadline_ns\":"<<s.sourceDeadlineNs<<",\"source_revision\":"<<s.sourceRevision
               <<",\"input_flags\":"<<s.context.inputFlags<<",\"flags24_28_mask\":"<<flags
               <<",\"fire\":"<<(s.context.fireRequested?"true":"false")<<",\"order\":"<<(s.context.orderRequested?"true":"false")
               <<",\"reload\":"<<(s.context.reloadRequested?"true":"false")<<",\"delta_seconds\":";
@@ -3103,6 +3195,7 @@ void Report(std::ostream& out){
            out<<"{\"cycle\":"<<r.cycle<<",\"dispatch_epoch\":"<<r.dispatchEpoch<<",\"owner_revision\":"<<r.revision<<",\"armed_ns\":"<<r.armedNs
               <<",\"deadline_ns\":"<<r.deadlineNs<<",\"terminal_ns\":"<<r.terminalNs<<",\"initial_loaded\":"<<r.loaded
               <<",\"initial_reserve\":"<<r.reserve<<",\"claims\":"<<r.claims<<",\"fire_deferred\":"<<r.fireDeferred
+              <<",\"before_arm_deferred\":"<<r.beforeArmDeferred<<",\"uncalled_deferred\":"<<r.uncalledDeferred
               <<",\"deferred_by_branch\":["<<r.deferredByBranch[0]<<','<<r.deferredByBranch[1]<<','<<r.deferredByBranch[2]
               <<"],\"claimed_mask\":"<<r.claimed<<",\"completed_mask\":"<<r.completed<<",\"failure\":"<<unsigned(r.failure)
               <<",\"last_admission\":"<<unsigned(r.lastAdmission)<<",\"active\":"<<(r.active?"true":"false")<<",\"first\":";
@@ -3111,6 +3204,12 @@ void Report(std::ostream& out){
        }out<<']';}out<<'}';
     out<<",\"pump_part_reads\":{\"attempts\":"<<pumpPartReads<<",\"accepted\":"<<pumpPartAccepted<<",\"rejected\":[";
     for(unsigned n=0;n<5;++n){if(n)out<<',';out<<pumpPartReadRejected[n];}out<<"]}";
+    out<<",\"expired_control_probe\":";
+#ifdef FVR_BC2_NATIVE_CYCLE_EXPIRED_CONTROL_PROBE
+    nativeCycleExpiredControlProbe.Report(out,drained);
+#else
+    out<<"{\"enabled\":false,\"exercised\":false,\"passed\":false}";
+#endif
     out<<",\"native_cycle_candidate\":{\"enabled\":"<<(nativePumpCandidate?"true":"false")
        <<",\"operating_class\":\""<<(nativeBoltCandidate?"M95_sp":"SPAS")<<"\",\"admitted\":false,\"headset_verified\":false,\"updates\":"<<nativeCycleUpdates.load()
        <<",\"commits\":"<<nativeCycleCommits.load()<<",\"controls\":"<<nativeCycleControls.load()
@@ -3235,7 +3334,13 @@ void Report(std::ostream& out){
                 <<",\"server_failure\":"<<unsigned(d.server.failure)<<",\"server_flags_published\":"<<unsigned(d.server.expectedSoldierFlags)
                 <<",\"server_flags_before\":"<<unsigned(d.server.observedSoldierFlags)<<",\"server_flags_after\":"<<unsigned(d.server.afterSoldierFlags)
                 <<",\"server_only_flags\":"<<(d.server.changedOnlySoldierFlags?"true":"false")<<",\"server_state_failure\":"<<d.server.stateFailure
-                <<",\"server_changed_offset\":"<<d.server.changedOffset<<",\"server_changed_before\":"<<unsigned(d.server.changedBefore)<<",\"server_changed_after\":"<<unsigned(d.server.changedAfter)<<"}}";}
+                <<",\"server_only_published_flags\":"<<(d.server.differsOnlySoldierFlags?"true":"false")
+                <<",\"server_changed_offset\":"<<d.server.changedOffset<<",\"server_changed_before\":"<<unsigned(d.server.changedBefore)<<",\"server_changed_after\":"<<unsigned(d.server.changedAfter)
+                <<",\"server_link_difference_count\":"<<d.server.linkDifference.count<<",\"server_link_differences\":[";
+            for(unsigned k=0;k<std::min<unsigned>(d.server.linkDifference.count,unsigned(d.server.linkDifference.first.size()));++k){
+                const auto& change=d.server.linkDifference.first[k];if(k)out<<',';
+                out<<"{\"field\":\""<<change.field<<"\",\"index\":"<<change.index<<",\"expected\":"<<change.expected<<",\"observed\":"<<change.observed<<'}';
+            }out<<"]}}";}
         out<<"],\"cancellations\":[";
         for(unsigned n=0;n<std::min(unsigned(requestCancellations.size()),requestCancellationCount.load());++n){const auto& e=requestCancellations[n];if(n)out<<',';out<<"{\"now_ns\":"<<e.now<<",\"reason\":"<<e.reason<<",\"epoch\":"<<e.epoch<<'}';}
         out<<']';}
@@ -3301,6 +3406,8 @@ bool SubmitNativeCycleRecovery(const interaction::WeaponCycleIdleDebtRelease&,co
 bool AcknowledgeNativeCycleRecovery(const interaction::WeaponCycleIdleDebtReady&)noexcept{return false;}
 bool EnableNativeCycleRecovery()noexcept{return false;}
 bool EnablePumpHoldDiagnostic()noexcept{return false;}
+bool RegisterOriginalFiringObserver(const OriginalFiringObserver&)noexcept{return false;}
+bool RemoveOriginalFiringObserver(void*)noexcept{return false;}
 bool Install(std::span<const std::byte>,const engine::PeImage&,std::uintptr_t,const ReloadStateMemory&,bool,bool,bool,bool){return false;}
 MagazineEmptyControlCounters ReadMagazineEmptyControlCounters()noexcept{return {};}
 void PublishMagazineInteractionDiagnostic(const MagazineInteractionDiagnostic&)noexcept{}
@@ -3340,7 +3447,7 @@ void CancelRequestCycle()noexcept{}
 std::optional<ReloadPreholdEntryObservation> ReadPreholdEntry(const ReloadHoldIdentity&,std::uint64_t,std::int64_t)noexcept{return {};}
 OwnerPublicationResult PublishOwnerObserved(const ReloadStateSnapshot&,std::int64_t)noexcept{return {};}
 bool PublishOwner(const ReloadStateSnapshot&,std::int64_t)noexcept{return false;}
-void ClearOwner()noexcept{}void Start()noexcept{}bool Stop()noexcept{return true;}
+void ClearOwner(ReloadOwnerLoss)noexcept{}void Start()noexcept{}bool Stop()noexcept{return true;}
 void PublishAmmoResourceBinding(const std::optional<AmmoResourceBinding>&)noexcept{}
 bool ResourceHandsEnabled()noexcept{return false;}
 std::optional<AmmoResourceView> ReadAmmoResourceView(const ReloadStateOwner&,std::int64_t)noexcept{return {};}

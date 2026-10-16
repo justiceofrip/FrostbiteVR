@@ -1,4 +1,9 @@
 #pragma once
+#include "Bc2ChestKnifeProbeWitness.h"
+#include "Bc2ContextualToolProbeWitness.h"
+#include "Bc2PumpReceiverGapProbe.h"
+#include "Bc2TwoGrenadeDeathWitness.h"
+#include "Bc2ShellFocusLossProbe.h"
 #include "Bc2Profile.h"
 #include "Bc2PhysicalPump.h"
 #include "Bc2AmmoCounterHost.h"
@@ -32,6 +37,8 @@ bool EnableOrdinaryManualCycles()noexcept;
 // Private input-only diagnostic, after ordinary activation and before Start.
 bool EnableOrdinaryBoltInputProbe(unsigned cycles=1)noexcept;
 bool EnableOrdinaryResourceInputProbe(bool interruptPump=false,bool emptyPump=false)noexcept;
+std::optional<PumpReceiverGapWitness> ReadPumpReceiverGapReady(std::int64_t now)noexcept;
+std::optional<ShellFocusWitness> ReadShellFocusReady(std::int64_t now)noexcept;
 bool EnablePhysicalPumpProbe(unsigned cycles=2)noexcept;
 // Private finite persistent body/resource/shell composition; after setup, before Start.
 bool EnableResourcePumpCombination()noexcept;
@@ -69,6 +76,20 @@ bool AdjustViewBase(std::array<RenderViewCopy,2>&,const runtime::TrackingFrame&)
 bool ObserveVehicleCameraPlan(unsigned,const runtime::TrackingFrame&,const RenderViewCopy&,const RenderViewCopy&,const std::array<RenderViewCopy,2>&)noexcept;
 void ObserveVehicleCameraApplied(unsigned,unsigned,const RenderViewCopy&)noexcept;
 void Start()noexcept;
+// Normal owned-knife close before disabling render/shared Update dependencies.
+// Existing session thread only; bounded wait, no new diagnostic worker.
+bool PrepareSessionStop()noexcept;
 bool Stop()noexcept;
+// Private draw/hold/return; the explicit finite mode separately admits motion.
+// Real menu and normal body custody must be installed first.
+std::optional<ChestKnifeProbeWitness> ReadChestKnifeProbeWitness(std::int64_t nowNs)noexcept;
+bool EnableChestKnifeDrawReturn(std::span<const std::byte>,const engine::PeImage&,std::uintptr_t,bool motionEnabled=false)noexcept;
+// Default-OFF contextual tool binding; private finite fixture only.
+std::optional<ContextualToolProbeWitness> ReadContextualToolProbeWitness(std::int64_t nowNs)noexcept;
+bool EnableContextualTools()noexcept;
+bool EnablePlayerGrenades()noexcept;
+bool EnableTwoGrenadeDeathObservation()noexcept;
+std::optional<TwoGrenadeNativeWitness> ReadTwoGrenadeDeathReadiness(std::int64_t nowNs)noexcept; // Normal setup only; real fresh XR menu ownership required.
+bool EnableOrdinaryGrenadeProbe()noexcept; // Private finite direct-receiver contract only.
 void Report(std::ostream&);
 }

@@ -13,7 +13,7 @@ namespace {
 auto Pose(float x=0,float y=0,float z=0){auto m=reload_insertion_detail::Identity();m.values[3]={x,y,z,1};return m;}
 struct Fixture {
     std::int64_t now=1000000000;unsigned reads=0,starts=0,keeps=0,submits=0,cancels=0;
-    std::int64_t keepDelay=0;
+    std::int64_t keepDelay=0,reserveReadDelay=0,leaseLifetimeNs=100000000;
     unsigned startDefers=0,startAttempts=0;bool startReject=false;
     bool keepDeferred=false,reserveDeferred=false,reserveRejected=false,reserveCohortGap=false,leaseAvailable=true;
     bool held=false,allowRetire=false,advanceAck=false,reserveAvailable=true,keepOkay=true;std::uint64_t sequence=100,cycle=0,intent=0,retirementEvent=0;
@@ -59,7 +59,7 @@ struct Fixture {
         api.context=this;
         api.clock=[](void* p)noexcept{return static_cast<Fixture*>(p)->now;};
         api.reserve=[](void* p)noexcept->std::optional<Bc2AmmoReserveLease>{auto& f=*static_cast<Fixture*>(p);++f.reads;return f.reserveAvailable&&(!f.selectedPolicy||f.selectedPolicy->MatchesSelectedConfig(f.sourceConfig))?std::optional(f.reserve):std::nullopt;};
-        api.reserveObserved=[](void* p)noexcept{auto& f=*static_cast<Fixture*>(p);
+        api.reserveObserved=[](void* p)noexcept{auto& f=*static_cast<Fixture*>(p);f.now+=f.reserveReadDelay;
    if(f.reserveDeferred)return ReloadReserveObservation{ReloadObservationResult::Deferred,{}};
    if(f.reserveRejected)return ReloadReserveObservation{ReloadObservationResult::Rejected,{}};
    if(f.reserveCohortGap)return ReloadReserveObservation{ReloadObservationResult::CohortGap,{}};
@@ -71,7 +71,7 @@ struct Fixture {
         api.keepObserved=[](void* p,const ReloadCycleControl&)noexcept{auto& f=*static_cast<Fixture*>(p);++f.keeps;f.now+=f.keepDelay;return f.keepDeferred?ReloadKeepAliveResult::Deferred:f.keepOkay?ReloadKeepAliveResult::Accepted:ReloadKeepAliveResult::Rejected;};
         api.lease=[](void* p,const ReloadHoldIdentity& id,std::uint64_t cycle)noexcept->std::optional<ReloadRoundLease>{
             auto& f=*static_cast<Fixture*>(p);if(!f.leaseAvailable||(!f.held&&!f.submitted))return {};
-            ReloadRoundLease out{id,cycle,f.sequence,f.now,f.now+100000000,f.reserve.loaded,f.reserve.reserve,f.reserve.capacity,true,f.held};
+            ReloadRoundLease out{id,cycle,f.sequence,f.now,f.now+f.leaseLifetimeNs,f.reserve.loaded,f.reserve.reserve,f.reserve.capacity,true,f.held};
             if(f.leaseChange==1)++out.cycle;if(f.leaseChange==2)++out.identity.firing[2];if(f.leaseChange==3)out.allThreeHeld=false;return out;};
         api.submit=[](void* p,const Bc2ReloadNativeRequest& r)noexcept{auto& f=*static_cast<Fixture*>(p);++f.submits;f.submitted=r;f.submittedInput=f.s.input.sequence;f.held=false;return true;};
         api.ack=[](void* p,const ReloadHoldIdentity&,std::uint64_t)noexcept->std::optional<Bc2ReloadAckEvidence>{auto& f=*static_cast<Fixture*>(p);
@@ -821,7 +821,7 @@ int StartupCohortGapSafetyWins(){
 }
 int StartupGapKeepsOriginalClocks(){
  auto fp=std::make_unique<Fixture>();auto& f=*fp;CHECK(f.Begin());
- const auto started=f.now;for(unsigned n=0;n<6;++n)f.Send(true);CHECK(f.cancels==0&&!f.result.reloadHeld);
+ for(unsigned n=0;n<6;++n)f.Send(true);CHECK(f.cancels==0&&!f.result.reloadHeld);
  f.reserveCohortGap=true;f.Send(true);CHECK(f.cancels==0&&!f.result.reloadHeld);
  // Duplicate input is allowed to cancel but cannot reset the first gap.
  f.now+=50*1000000;f.Sync();CHECK(f.cancels==1&&f.submits==0);
@@ -1048,7 +1048,80 @@ int EstablishedHoldGapDoesNotRestartStartupTimeout(){
  }
  return 0;
 }
+
+// Actual400: callback overlap starts78us before the last held lease expires,
+// is processed153.5us after it; original controller and reserve remain current.
+void CohortPacketAt(Fixture& f,std::int64_t at,bool pressed=true){
+ const auto old=f.s.input;f.now=at;++f.s.input.sequence;f.s.input.observedNs=f.s.input.nowNs=at;
+ f.s.input.deadlineNs=at+100000000;f.s.input.released[0]=!pressed;f.s.gripPressed=pressed;
+ f.s.geometrySequence=f.s.input.sequence;f.s.raw.inputEvidence=old;f.s.originalHandEvidence=old;f.Geometry(.05f);f.Sync();
+}
+int SecondHeldShellSurvivesTypedReadAcrossHoldExpiry(){
+ auto fp=std::make_unique<Fixture>();auto& f=*fp;f.reserve.loaded=5;f.reserve.reserve=24;
+ CHECK(f.Insert());f.Ack();f.Send(true,.05f);CHECK(f.policy->ProbeState(f.now).completed==1);
+ f.held=true;f.submitted.reset();f.ack.reset();f.Send(false);f.Send(false);f.Send(true);
+ f.leaseLifetimeNs=83400700;f.Send(true,-.05f);f.Send(true,-.02f);
+ const auto prior=f.now;f.leaseAvailable=false;
+ // Ordinary original input/count observations continue while the published
+ // native hold remains the older exact snapshot, as in the actual trace.
+ for(unsigned n=0;n<3;++n)f.Send(true,-.02f);
+ const auto original=f.policy->ProbeState(f.now);CHECK(original.held&&original.nativeHolding&&original.reserve);
+ const auto shell=f.hands.Current(InteractionHand::Left)->token;const auto keeps=f.keeps;
+ f.reserveCohortGap=true;f.reserveReadDelay=231500;CohortPacketAt(f,prior+83322700);
+ const auto gap=f.policy->ProbeState(f.now);CHECK(f.now==prior+83554200);
+ CHECK(f.cancels==0&&gap.active&&gap.held&&!gap.pending&&!gap.nativeHolding);
+ CHECK(f.keeps==keeps&&f.starts==1&&f.submits==1&&gap.completed==1);
+ CHECK(f.hands.Current(InteractionHand::Left)->token==shell);
+ CHECK(gap.reserve&&gap.reserve->sequence==original.reserve->sequence&&gap.reserve->observedNs==original.reserve->observedNs&&gap.reserve->deadlineNs==original.reserve->deadlineNs);
+ CHECK(!f.result.reloadHeld&&!f.result.tracking.preview&&!f.result.tracking.belt&&!f.result.tracking.shellControl);
+ CHECK(f.reserve.loaded==6&&f.reserve.reserve==23);
+ f.reserveCohortGap=false;f.reserveReadDelay=0;f.leaseAvailable=true;f.Send(true,-.02f);
+ CHECK(f.cancels==0&&f.hands.Current(InteractionHand::Left)->token==shell&&f.policy->ProbeState(f.now).nativeHolding);
+ for(float z:{0.f,.025f,.05f,.05f,.05f,.05f,.05f,.05f,.05f})f.Send(true,z);
+ CHECK(f.submits==2&&f.policy->ProbeState(f.now).completed==1&&f.reserve.loaded==6);
+ f.Ack();f.Send(true,.05f);CHECK(f.policy->ProbeState(f.now).completed==2&&f.reserve.loaded==7&&f.reserve.reserve==22);
+ return 0;
+}
+int ExpiredHoldGapKeepsOriginalBoundaries(){
+ for(bool originalDeadline:{false,true}){
+  auto fp=std::make_unique<Fixture>();auto& f=*fp;CHECK(f.Begin());f.held=true;
+  f.leaseLifetimeNs=originalDeadline?83400700:20000000;f.Send(true,-.05f);
+  const auto prior=f.now,deadline=f.s.input.deadlineNs;const auto keeps=f.keeps;
+  f.reserveCohortGap=true;CohortPacketAt(f,prior+(originalDeadline?83554300:21000000));CHECK(f.cancels==0);
+  const auto end=originalDeadline?deadline:f.now+50000000;
+  for(auto now=f.now+10000000;now<end;now+=10000000){CohortPacketAt(f,now);CHECK(f.cancels==0&&f.submits==0&&f.keeps==keeps);}
+  CohortPacketAt(f,end);CHECK(f.cancels==1&&f.submits==0&&f.keeps==keeps&&!f.hands.Current(InteractionHand::Left));
+ }
+ return 0;
+}
+int ExpiredHoldGapRequiresCurrentCustodyAndOwner(){
+ for(unsigned fault=0;fault<8;++fault){
+  auto fp=std::make_unique<Fixture>();auto& f=*fp;CHECK(f.Begin());f.held=true;f.leaseLifetimeNs=20000000;f.Send(true,-.05f);
+  const auto prior=f.now;f.reserveCohortGap=true;
+  if(fault==0)f.s.input.focused=false;if(fault==1)f.s.input.tracked[0]=false;
+  if(fault==2)++f.s.nativeOwner.equipGeneration;if(fault==3)f.reserveRejected=true;
+  if(fault==4)f.s.cancel=true;if(fault==5)f.s.asset="foreign";
+  if(fault==6)CHECK(f.hands.Release(f.s.input,f.hands.Current(InteractionHand::Left)->token).accepted);
+  CohortPacketAt(f,prior+21000000,fault!=7);
+  CHECK(f.cancels==1&&f.submits==0&&!f.policy->ProbeState(f.now).held);
+ }
+ return 0;
+}
+
 #include "Bc2ShellStartDeferralChecks.inc"
-int main(){CHECK(ShellStartBusyRetainsCustodyWithoutPulse()==0);CHECK(ShellStartAdmissionWaitRetainsLiveCustody()==0);CHECK(ShellStartRejectionAndReleaseStillCancel()==0);CHECK(CarriedShellLossBeforeNativeStartIsRetained()==0);CHECK(EstablishedHoldGapDoesNotRestartStartupTimeout()==0);CHECK(SubmittedCohortGapOutlivesExpiredObservationWithoutAuthority()==0);CHECK(SubmittedCohortGapRetainsOriginalDeadlineAndGun()==0);CHECK(FinalShellSupportMayArriveDuringExactRetirementWait()==0);CHECK(HeldShellReturnsSupportOnlyAfterExactReceiptAndNewContact()==0);CHECK(ShellSupportReturnNeverConsumesReplacementCustodyOrLostSqueeze()==0);CHECK(ShellSupportNeedsRecordedFreshRendererEvidence()==0);CHECK(PumpIdleAllowsChestShellPulseAndActualInsertion()==0);CHECK(PumpDebtBlocksNewShellAndBodyActionsWithoutInventingNeutral()==0);CHECK(SubmittedShellReleasesHandBeforeNativeAmmoChanges()==0);CHECK(StartupGapKeepsOriginalClocks()==0);CHECK(StartupCohortGapRetainsOriginalShell()==0);CHECK(StartupCohortGapIsBounded()==0);CHECK(StartupCohortGapSafetyWins()==0);CHECK(HeldShellTypedGapCannotGrantOrRenew()==0);CHECK(SubmittedShellCohortGapRetainsOriginalEvidence()==0);CHECK(ObserverDeferralAndStartOrigin()==0);CHECK(DeferredKeepAliveNeverRenews()==0);if(ActualSelectorControlsFreshShellSourceAfterRevisits()||VehicleAndEquipmentSourceGapRequiresFreshNativeRecovery()||ScopedAliasRetirementUsesActualMapping()||ScopedAliasCannotGrantSpasSupply()||PendingRetirementUnblocksOnlyFreshDifferentEquipment()||AvailabilityDiagnosesBeforeAnyCycle()||AvailabilityRingIsBoundedAndTransitionOnly()||RetirementReceiptMustBeExactFreshAndReal()||SupplyReturnsAfterOrdinaryWeaponTransitions()||BeltReturnsBetweenActualAcknowledgedShells()||BetweenShellBeltRejectsLostHoldAndCancellation()||BeltAvailabilityComesFromActualConsumer()||FullGunCanShowReserveButCannotMintShell()||BeltRespectsNativeBusyAndSafetyWithoutNewAuthority()||BodyPouchBeltSharesTheExistingAlternateContact()||FeedbackDistinguishesLatchFromVerifiedReload()||FeedbackKeepsFinalReceiptButNotCancellation()||GuidedContinuityCannotBorrowNewDeadlines()||GuidedContinuityEndsOnFreshWithdrawalOrRejectedGeometry()||GuidedContinuityRequiresCurrentCycleClaimsAndHold()||GuidedPresentationSurvivesOneMissingGeometryTick()||CycleVisibilitySurvivesPendingAndReceiptOnlyWhileActive()||PartialReceiptRetainsHoldThroughSevenSecondsNeutral()||CancellationEvidenceDistinguishesSafetyCapacityAndPending()||CancellationEvidenceIsBoundedWithoutAffectingRetirement()||FreeCarryUsesCurrentRendererWrist()||UnderPortConsumerToAcknowledgement()||GeometryRingIsBoundedAndKeepsOriginalSource()||CarryDuringPumpWaitsForFreshNativeReadiness()||PendingReadyRejectsReleasedStaleOrChangedEvidence()||SecondShellCannotUseFirstReceipt()||AsyncContactSeatIsNotLost()||DeferredSeatCannotSpendExpiredOrReplacementEvidence()||CancellationStillDrainsAndReconciles()||StartRealCycleAndOriginalTime()||RailToNativeAck()||DefaultAndEvidenceGates()||SupportCannotBeStolen()||CancelPendingAndRebaseline()||
+int main(int argc,char** argv){
+ if(argc==2&&std::strcmp(argv[1],"--expired-held-cohort")==0){
+  CHECK(SecondHeldShellSurvivesTypedReadAcrossHoldExpiry()==0);
+  CHECK(ExpiredHoldGapKeepsOriginalBoundaries()==0);
+  CHECK(ExpiredHoldGapRequiresCurrentCustodyAndOwner()==0);
+  CHECK(HeldShellTypedGapCannotGrantOrRenew()==0);
+  CHECK(StartupGapKeepsOriginalClocks()==0);
+  CHECK(SubmittedCohortGapOutlivesExpiredObservationWithoutAuthority()==0);
+  std::cout<<"Expired held cohort: six focused groups passed; no native run\n";return 0;
+ }
+ CHECK(SecondHeldShellSurvivesTypedReadAcrossHoldExpiry()==0);
+ CHECK(ExpiredHoldGapKeepsOriginalBoundaries()==0);
+ CHECK(ExpiredHoldGapRequiresCurrentCustodyAndOwner()==0);
+CHECK(ShellStartBusyRetainsCustodyWithoutPulse()==0);CHECK(ShellStartAdmissionWaitRetainsLiveCustody()==0);CHECK(ShellStartRejectionAndReleaseStillCancel()==0);CHECK(CarriedShellLossBeforeNativeStartIsRetained()==0);CHECK(EstablishedHoldGapDoesNotRestartStartupTimeout()==0);CHECK(SubmittedCohortGapOutlivesExpiredObservationWithoutAuthority()==0);CHECK(SubmittedCohortGapRetainsOriginalDeadlineAndGun()==0);CHECK(FinalShellSupportMayArriveDuringExactRetirementWait()==0);CHECK(HeldShellReturnsSupportOnlyAfterExactReceiptAndNewContact()==0);CHECK(ShellSupportReturnNeverConsumesReplacementCustodyOrLostSqueeze()==0);CHECK(ShellSupportNeedsRecordedFreshRendererEvidence()==0);CHECK(PumpIdleAllowsChestShellPulseAndActualInsertion()==0);CHECK(PumpDebtBlocksNewShellAndBodyActionsWithoutInventingNeutral()==0);CHECK(SubmittedShellReleasesHandBeforeNativeAmmoChanges()==0);CHECK(StartupGapKeepsOriginalClocks()==0);CHECK(StartupCohortGapRetainsOriginalShell()==0);CHECK(StartupCohortGapIsBounded()==0);CHECK(StartupCohortGapSafetyWins()==0);CHECK(HeldShellTypedGapCannotGrantOrRenew()==0);CHECK(SubmittedShellCohortGapRetainsOriginalEvidence()==0);CHECK(ObserverDeferralAndStartOrigin()==0);CHECK(DeferredKeepAliveNeverRenews()==0);if(ActualSelectorControlsFreshShellSourceAfterRevisits()||VehicleAndEquipmentSourceGapRequiresFreshNativeRecovery()||ScopedAliasRetirementUsesActualMapping()||ScopedAliasCannotGrantSpasSupply()||PendingRetirementUnblocksOnlyFreshDifferentEquipment()||AvailabilityDiagnosesBeforeAnyCycle()||AvailabilityRingIsBoundedAndTransitionOnly()||RetirementReceiptMustBeExactFreshAndReal()||SupplyReturnsAfterOrdinaryWeaponTransitions()||BeltReturnsBetweenActualAcknowledgedShells()||BetweenShellBeltRejectsLostHoldAndCancellation()||BeltAvailabilityComesFromActualConsumer()||FullGunCanShowReserveButCannotMintShell()||BeltRespectsNativeBusyAndSafetyWithoutNewAuthority()||BodyPouchBeltSharesTheExistingAlternateContact()||FeedbackDistinguishesLatchFromVerifiedReload()||FeedbackKeepsFinalReceiptButNotCancellation()||GuidedContinuityCannotBorrowNewDeadlines()||GuidedContinuityEndsOnFreshWithdrawalOrRejectedGeometry()||GuidedContinuityRequiresCurrentCycleClaimsAndHold()||GuidedPresentationSurvivesOneMissingGeometryTick()||CycleVisibilitySurvivesPendingAndReceiptOnlyWhileActive()||PartialReceiptRetainsHoldThroughSevenSecondsNeutral()||CancellationEvidenceDistinguishesSafetyCapacityAndPending()||CancellationEvidenceIsBoundedWithoutAffectingRetirement()||FreeCarryUsesCurrentRendererWrist()||UnderPortConsumerToAcknowledgement()||GeometryRingIsBoundedAndKeepsOriginalSource()||CarryDuringPumpWaitsForFreshNativeReadiness()||PendingReadyRejectsReleasedStaleOrChangedEvidence()||SecondShellCannotUseFirstReceipt()||AsyncContactSeatIsNotLost()||DeferredSeatCannotSpendExpiredOrReplacementEvidence()||CancellationStillDrainsAndReconciles()||StartRealCycleAndOriginalTime()||RailToNativeAck()||DefaultAndEvidenceGates()||SupportCannotBeStolen()||CancelPendingAndRebaseline()||
     ReplacementSurvivesOriginalAck()||DeathNewOwnerAndLateOldAck()||ExpiredSourceAndStaleGeometry()||FullFinalRoundAndFlagBoundary())return 1;
     std::cout<<"Bc2PhysicalReload: 56 actual-composition cases passed (test runtime only; no headset claim)\n";}
