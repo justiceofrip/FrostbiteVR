@@ -62,7 +62,9 @@ and `headset_tested` are false in validation.json).
 
 | Check | Result and scope |
 | --- | --- |
-| Full x86/x64 builds | 283 C++ suites each |
+| Checkpoint composition, x86/x64 | 283 C++ suites each; source receipt verified (local, after #1) |
+| Default `Build.ps1` composition, x86/x64 | 281 C++ suites each; `Bc2MagazineResourceProbe` is checkpoint-only (see Build and test) |
+| GitHub Actions CI | First passing run, on `main` `e773ac3`: x86/x64 default builds with 281 suites each; x64 also runs 977 Python tests (1 skipped), launcher checks and the source export |
 | Ammo HUD | D3D11 WARP pixel readback; mocked OpenXR lifecycle, stereo layer, pose and freshness. No headset |
 | Installed body cache | 46 parts rebuilt; six magazine profiles (XM8, AEK, SCAR suppressed/unsuppressed, F2000, MP443) clear the face. CPU geometry only |
 | Storage accounting / launch handoff | 34 / 19 checks; handoff includes a real hidden child process |
@@ -102,7 +104,8 @@ Actual-game checks, not headset acceptance. Sources: [history/HANDOFF](history/H
 ## Broken, open or unverified
 
 Sources: [412 handoff](../handoff/checkpoint412/README.md), [CHECKPOINT-412](CHECKPOINT-412.md),
-[411](CAMPAIGN-DIAGNOSTICS-411.md), [history/HANDOFF](history/HANDOFF.md) (storage cleanup), [README](../README.md).
+[411](CAMPAIGN-DIAGNOSTICS-411.md), [history/HANDOFF](history/HANDOFF.md) (storage cleanup), [README](../README.md),
+[#1](https://github.com/justiceofrip/FrostbiteVR/pull/1).
 
 - No 412 headset run. The chest, counter and shell changes have automated
   coverage only. Counter comfort and chest/holster alignment are still
@@ -123,12 +126,21 @@ Sources: [412 handoff](../handoff/checkpoint412/README.md), [CHECKPOINT-412](CHE
 - Superseded raw test frames were pruned on 2026-10-15 with user approval; bulk
   raw captures from 390, 407 and 408 remain. Older reports may name raw files
   that no longer exist; do not regenerate them.
+- CI covers only the default composition. The checkpoint composition is checked
+  locally; on 2026-10-16 it passed 283/283 on x86 and x64.
+- 19 targets, including FvrCore, BC2Camera, BC2Profile, FrostbiteCamera and
+  FrostbiteDiscovery, compile without `/W4 /permissive-` because
+  `add_compile_options` comes after they are defined. Moving it changes how
+  receipt-covered native code compiles, so validate that before changing it.
+- Ten `tools/test_*.py` files (89 tests) are not run by CI or any documented
+  command. Run directly on 2026-10-16 they passed, except three modules that
+  need NumPy/Pillow, which that machine lacked.
 
 ## Build and test
 
-Requirements: Windows, VS C++ x86/x64 tools, Windows SDK, CMake 3.24+, Ninja,
-PowerShell 7, Python 3.11+ ([BUILDING](../BUILDING.md)). None of these commands start
-BC2 or a headset runtime.
+Requirements: Windows, VS C++ x86/x64 tools (VS 2022, as on CI, or VS 18), Windows
+SDK, CMake 3.24+, Ninja, PowerShell 7, Python 3.11+ ([BUILDING](../BUILDING.md)).
+None of these commands start BC2 or a headset runtime.
 
 ```powershell
 .\Build.ps1 -Architecture x86 -Jobs 2
@@ -150,6 +162,22 @@ the existing build trees):
 - Compiled capability output goes to `reports/<architecture>-compiled-capabilities.json`.
 - Shell-presentation suites: `Bc2ReloadPreviewTests`, `Bc2PhysicalReloadTests`.
 - The installed-game signature test is opt-in: `FVR_TEST_INSTALLED_BC2=1`.
+- `Build.ps1` runs CTest in parallel with its `-Jobs` value. Right after a fresh
+  build, Windows Defender's first-run scan of each new test executable dominates
+  the test time.
+- Both build scripts pass `amd64` to `Launch-VsDevShell` for x64; VS 2022
+  rejects `x64`.
+- `Bc2MagazineResourceProbeTests` is built only when
+  `BC2_EXPERIMENTAL_MAGAZINE_HEADER` is set, which the checkpoint composition
+  does: its real-consumer cases need the generated AEK geometry.
+- The static CRT is set once with `CMAKE_MSVC_RUNTIME_LIBRARY` before any target.
+  Do not add per-target `MSVC_RUNTIME_LIBRARY` settings.
+- Tests that need `Bc2ReloadFlowRuntime.cpp` with the standard test flags link
+  the shared `Bc2ReloadFlowRuntimeTestObjects` library. A test with its own
+  defines, like `Bc2BoltControllerProbeTests`, compiles a private copy.
+- CI (`.github/workflows/build.yml`) builds and tests the default composition
+  on x86 and x64 and runs the Python suite on x64. Before #1 the workflow file
+  was invalid YAML and no CI job had ever run.
 
 ## Pinned native-operation receipt
 
