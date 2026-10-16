@@ -216,7 +216,7 @@ int RecordedShoulderReachesKeepDisplayAnchor(){
   {-.242981f,-.0553565f,-.0179569f},{-.233523f,-.0591148f,-.0503592f},
   {-.20487f,-.0523991f,-.0350384f},{-.217553f,-.0591738f,-.00722751f},
   {-.217402f,-.0881056f,-.0117807f},{-.22134f,-.0634803f,-.0262862f}}};
- BodyAnchorConfig anchors;auto strict=anchors;strict.shoulderReachForwardMeters=0;
+ BodyAnchorConfig anchors;auto strict=anchors;strict.shoulderReachForwardMeters=0;strict.shoulderReachUpMeters=0;
  Fixture f;const auto input=BodyInput(f);
  for(unsigned side=0;side<2;++side){const auto slot=anchors.shoulders[side].slot;
   unsigned oldContacts=0,newContacts=0;
@@ -229,6 +229,14 @@ int RecordedShoulderReachesKeepDisplayAnchor(){
    CHECK(!BodyWeaponContactContains(anchors,anchors.hip.slot,hand));
   }
   CHECK(oldContacts==5&&newContacts==13);
+  // Actual390 high/cross-body press samples that narrowly missed the old zone.
+  auto previous=anchors;previous.shoulderReachForwardMeters=.04f;previous.shoulderReachUpMeters=0;
+  for(const auto p:{math::Vec3{-.239495f,-.0123334f,.0136615f},
+      math::Vec3{-.247835f,-.0202546f,.0055302f},math::Vec3{-.121497f,.032602f,-.174814f}}){
+   auto hand=IdentityBody();hand.values[3]={side?-p.x:p.x,p.y,p.z,1};
+   CHECK(!BodyWeaponContactContains(previous,slot,hand));
+   CHECK(BodyWeaponContactContains(anchors,slot,hand));
+  }
   const auto before=BodyEquipmentPose(input,IdentityBody(),strict.shoulders[side],IdentityBody());
   const auto after=BodyEquipmentPose(input,IdentityBody(),anchors.shoulders[side],IdentityBody());
   CHECK(before&&after&&MatrixNear(*before,*after));
@@ -244,6 +252,10 @@ int RecordedShoulderReachesKeepDisplayAnchor(){
  CHECK(!BodyWeaponContactContains(anchors,anchors.chest.slot,hip));
  for(float invalid:{-.01f,.11f,std::numeric_limits<float>::infinity(),std::numeric_limits<float>::quiet_NaN()}){
   auto bad=anchors;bad.shoulderReachForwardMeters=invalid;CHECK(!ValidBodyAnchors(bad));
+  CHECK(!BodyWeaponContactContains(bad,anchors.shoulders[0].slot,IdentityBody()));
+ }
+ for(float invalid:{-.01f,.07f,std::numeric_limits<float>::infinity(),std::numeric_limits<float>::quiet_NaN()}){
+  auto bad=anchors;bad.shoulderReachUpMeters=invalid;CHECK(!ValidBodyAnchors(bad));
   CHECK(!BodyWeaponContactContains(bad,anchors.shoulders[0].slot,IdentityBody()));
  }
  return 0;

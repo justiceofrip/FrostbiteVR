@@ -18,6 +18,24 @@ SupportGripResult SupportGrip::Update(const SupportGripOwner& owner,const InputF
 }
 SupportGripResult SupportGrip::AdoptHeld(const SupportGripOwner& owner,const InputFrame& input,const SupportGripContact& contact,
  const HandInteractionSample& current,const HandInteractionSample& original,const HandClaim& support,const HandClaim& gun)noexcept {
+ return Adopt(owner,input,contact,current,original,support,gun,false);
+}
+SupportGripResult SupportGrip::AdoptReturnedMechanism(const SupportGripOwner& owner,const InputFrame& input,const SupportGripContact& contact,
+ const HandInteractionSample& current,const HandInteractionSample& original,const HandClaim& support,const HandClaim& gun,
+ const SupportGripMechanismReturn& returned)noexcept {
+ SupportGripResult rejected;rejected.input=input;
+ const auto& old=returned.mechanism;const auto& completed=returned.completed;
+ if(!old.id||old.id==support.token.id||old.kind!=HandClaimKind::Mechanism||old.hand!=InteractionHand::Left||
+    old.owner!=current.owner||old.item!=support.token.item||old.prerequisiteClaim!=gun.token.id||
+    !old.contact.id||!old.contact.generation||returned.gun!=gun.token||completed.owner!=current.owner||
+    !completed.sequence||original.sequence<=completed.sequence||completed.observedNs<=0||completed.observedNs>completed.nowNs||
+    completed.deadlineNs<=completed.nowNs||completed.deadlineNs-completed.observedNs>200000000||
+    !completed.focused||!completed.tracked[0]||!completed.tracked[1]||completed.released[0]||completed.released[1]||
+    current.nowNs<completed.nowNs||current.nowNs-completed.nowNs>200000000||original.observedNs<completed.nowNs)return rejected;
+ return Adopt(owner,input,contact,current,original,support,gun,true);
+}
+SupportGripResult SupportGrip::Adopt(const SupportGripOwner& owner,const InputFrame& input,const SupportGripContact& contact,
+ const HandInteractionSample& current,const HandInteractionSample& original,const HandClaim& support,const HandClaim& gun,bool retained)noexcept {
  SupportGripResult rejected;rejected.input=input;
  const auto window=[&](const auto& source){return source.observedNs>0&&source.observedNs<=current.nowNs&&current.nowNs<source.deadlineNs&&source.deadlineNs-source.observedNs<=200000000;};
  if(holding_||owner_!=owner||space_!=input.spaceGeneration||units_!=input.worldUnitsPerMeter||
@@ -32,9 +50,9 @@ SupportGripResult SupportGrip::AdoptHeld(const SupportGripOwner& owner,const Inp
     !support.token.id||!gun.token.id||support.token.item!=gun.token.item||support.token.prerequisiteClaim!=gun.token.id||
     support.inputSequence!=original.sequence||support.deadlineNs!=original.deadlineNs||
     gun.inputSequence!=current.sequence||gun.deadlineNs<=current.nowNs||gun.deadlineNs>current.deadlineNs)return rejected;
- return UpdateImpl(owner,input,contact,false,false,true);
+ return UpdateImpl(owner,input,contact,false,false,true,retained);
 }
-SupportGripResult SupportGrip::UpdateImpl(const SupportGripOwner& owner,const InputFrame& input,const SupportGripContact& contact,bool cancel,bool handBusy,bool adopt)noexcept {
+SupportGripResult SupportGrip::UpdateImpl(const SupportGripOwner& owner,const InputFrame& input,const SupportGripContact& contact,bool cancel,bool handBusy,bool adopt,bool retained)noexcept {
  SupportGripResult out;out.input=input;const bool previouslyHeld=holding_;
  const auto drop=[&](SupportRelease reason){out.reason=reason;holding_=armed_=false;token_=0;out.holding=out.engaged=false;out.released=previouslyHeld;return out;};
  const auto wait=[&](SupportRelease reason){const bool pending=armed_&&!previouslyHeld;out=drop(reason);armed_=pending;return out;};
@@ -64,7 +82,7 @@ SupportGripResult SupportGrip::UpdateImpl(const SupportGripOwner& owner,const In
  }
  if(holding_&&aimMode_!=contact.aimMode)return drop(SupportRelease::Identity);
  if(squeeze<=.35f){holding_=false;token_=0;out.reason=SupportRelease::Button;if(fresh)armed_=true;out.released=previouslyHeld;return out;}
- if(contact.distanceMeters>(holding_?.28f:SupportGripAcquireRadiusMeters))return wait(SupportRelease::Distance);
+ if(contact.distanceMeters>(holding_||retained?SupportGripRetentionRadiusMeters:SupportGripAcquireRadiusMeters))return wait(SupportRelease::Distance);
  if(contact.aimMode==SupportAimMode::PrimaryHand){
   if(!holding_){
    if(!adopt&&(!armed_||!fresh||squeeze<.7f))return out;

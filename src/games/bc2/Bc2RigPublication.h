@@ -1,5 +1,8 @@
 #pragma once
 #include "Bc2Profile.h"
+#ifdef FVR_BC2_CONTEXTUAL_TOOLS
+#include "Bc2ContextualToolSource.h"
+#endif
 #include "Bc2PhysicalPump.h"
 #include "Bc2BoltRuntimeGeometry.h"
 #include "Bc2EquipmentIdentity.h"
@@ -21,6 +24,9 @@
 #include "fvr/interaction/SupportGrip.h"
 #include "fvr/interaction/SightFlip.h"
 #include <ostream>
+#ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
+#include "Bc2ChestKnifeRendering.h"
+#endif
 namespace fvr::bc2::rigPublication {
 using WeaponSightContact=bc2::WeaponSightContact;
 using ResolveOwner=bool(*)(unsigned soldier,unsigned& weak)noexcept;
@@ -73,6 +79,9 @@ struct Tracking {
     // Same original packet for support-only diagnostics, independent of ammo.
     ReloadStateOwner controllerOwner{};
     interaction::HandInteractionSample controllerEvidence{};
+#ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
+    std::optional<ChestKnifeRenderSource> chestKnife;
+#endif
 
 };
 // Read-only shot candidate from the same immutable pose as the rendered gun.
@@ -104,6 +113,9 @@ struct WeaponShotFrame {
  // input/owner/pose lifetime; this cannot grant support or native authority.
  ReloadRawContact controllerMapping{};
  math::Matrix4 targetWristWorldMeters{};
+#ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
+ std::optional<ChestKnifeRenderReceipt> chestKnife;
+#endif
 };
 std::optional<WeaponShotFrame> ReadWeaponShotFrame(unsigned soldier,unsigned weak,unsigned weapon)noexcept;
 // Contact-only capability: pending native ammo transfer can block firing while
@@ -120,6 +132,10 @@ std::optional<WeaponSupportFrame> ReadWeaponSupportFrame(unsigned soldier,unsign
 // Body transaction ownership observation only; it may describe hidden geometry.
 // Never use this getter for firing, support, or EmptyHands acknowledgement.
 std::optional<WeaponShotFrame> ReadBodyWeaponFrame(unsigned soldier,unsigned weak,unsigned weapon)noexcept;
+#ifdef FVR_BC2_CONTEXTUAL_TOOLS
+// Settled tracked wrist/weapon observation; independent of muzzle names.
+std::optional<ContextualToolAttachment> ReadContextualToolAttachment(const ReloadStateOwner&)noexcept;
+#endif
 ReloadRawContact ReadReloadContact(const ReloadStateOwner&)noexcept;
 Bc2PumpRawContact ReadPumpContact(const ReloadStateOwner&)noexcept;
 Bc2BoltControllerContact ReadBoltContact(const ReloadStateOwner&)noexcept;

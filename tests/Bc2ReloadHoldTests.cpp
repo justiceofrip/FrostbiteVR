@@ -61,7 +61,7 @@ int PumpPredictionRestoreQualification(){
     CHECK(p.Phase()==ReloadHoldPhase::Aborted);return 0;
 }
 int PumpSchemaAndTriggerIsolation(){
-    NativeProbeConfig c;CHECK(sizeof(c)==1200&&c.bytes==1200&&c.ordinaryResourceInput==0&&c.m95OrdinaryBoltInputCycles==0&&c.m95StockShot==0&&c.m95PhysicalBoltCycles==0&&c.pumpHoldDiagnostic==PumpHoldDiagnostic::Disabled);
+    NativeProbeConfig c;CHECK(sizeof(c)==1220&&c.bytes==1220&&c.chestKnifeProbe==0&&c.ordinaryGrenadeInput==0&&c.ordinaryResourceInput==0&&c.m95OrdinaryBoltInputCycles==0&&c.m95StockShot==0&&c.m95PhysicalBoltCycles==0&&c.pumpHoldDiagnostic==PumpHoldDiagnostic::Disabled);
     constexpr auto mode=PumpHoldDiagnostic::SpasOneShot;constexpr unsigned flags=9u|0x197800u|0x400000u;
     CHECK(ValidPumpHoldDiagnostic(mode,flags,15000));
     for(unsigned bit=0;bit<32;++bit)if(!(flags&(1u<<bit))&&bit!=9)CHECK(!ValidPumpHoldDiagnostic(mode,flags|(1u<<bit),15000));

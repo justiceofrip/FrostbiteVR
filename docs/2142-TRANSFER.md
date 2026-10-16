@@ -1,3 +1,273 @@
+# 412: cosmetic lifetime and shared body placement
+
+A completed native ammo transfer does not imply that its stock loading prop is
+already gone. Retain presentation ownership separately, bound to the exact gun,
+claim and mesh; let physical props and equipment recovery take priority. This
+policy transfers across adapters; the SPAS leaf binding remains BC2-specific.
+Never extend ammunition transactions merely to hide an unwanted animation.
+
+Displayed chest ammo and its grab region share one body anchor. Moving this
+anchor lowers every supported ammo type together. A read-only counter uses
+native ammo samples and current XR poses with independent freshness checks;
+neither render placement nor retained pixels authorize gameplay operations.
+See [412 evidence and limits](CHECKPOINT-412.md).
+
+# 410: verify view-specific postprocess state separately from cameras
+
+Paired observations identified 24 numeric values whose primary-view state was
+stable through drawing while the extra view retained defaults. Native copy and
+downstream float consumers distinguish these from adjacent opaque fields. The
+BC2 adapter now uses three independent scoped spans with aggregate rollback;
+one failed group cannot skip restoration of another. These offset/type proofs
+are BC2-specific. The ownership and all-groups cleanup policy can transfer to
+future adapters. Both full 283-suite builds passed. Actual mission08 delivered
+240 pairs and exact restoration; all 24 saved eye pairs now show consistent
+damage tint, blur and darkening. This bounded visual result does not establish
+actual death/restart or headset acceptance. See
+[410 diagnostics](CAMPAIGN-DIAGNOSTICS-410.md).
+
+# 409: independent native consumers and scoped render effects
+
+The knife's session-close transition initially checks all three native copies,
+then validates each pending native consumer independently. A copy already
+deselected by the engine must not block the remaining consumer merely because
+its old knife is no longer idle. Final convergence and ammunition checks remain
+mandatory. This distinction applies to future Frostbite adapters; the concrete
+BC2 offsets and state values do not transfer automatically.
+
+Native stereo also needs per-view presentation state beyond camera matrices.
+Measured BC2 damage effects at +1650 differ between its primary and extra view.
+The 409 adapter copies only four verified inline scalars around the extra draw
+and restores exact bytes afterward, using the same scoped machinery as RGB
+modulation. Render-phase admission is separate from identity-based restoration.
+Both normal and exceptional exits are covered by deterministic regressions.
+Actual 409 testing confirms 118 exact restorations and blood borders in both
+eyes, but stronger blur/tint remains in eye0: per-view scalars alone are not the
+whole postprocess state. The remaining fields need measured adapter work. See
+[the 409 evidence record](CAMPAIGN-DIAGNOSTICS-409.md).
+
+# Development storage — 2026-10-15
+
+Build and diagnostic storage is now a shared workflow constraint. Standard
+launchers check generated disk usage, output/TEMP free space and planned raw
+capture bytes; private wrappers must perform the same admission. Keep source
+patches, concise results and current recovery artifacts instead of copying a
+complete build for every experiment. These changes do not alter engine bindings
+or extend weapon/campaign acceptance. See [storage limits](STORAGE-BUDGET.md).
+
+Historical raw test sequences were pruned with explicit user approval. Source,
+logs, compact visual evidence and current390/407/408 capture sets are preserved;
+local cleanup manifests record missing historical raw paths. No2142 files changed.
+
+# Current408: pump appearance passes; normal knife close and stereo damage remain open
+
+Reviewed408 source now integrates the fixed SPAS ring and axial bolt movement,
+shared unscoped XM8/launcher eligibility, moving knife custody, held contextual
+tool Fire admission, and normal knife/tool configuration with held-session-close
+handback. Native config is1220bytes; input3/frame7 are unchanged. Normal tools
+compile behind separate options and remain runtime opt-in. Both full builds pass283 suites against source6950eac3…abf16d. Actual
+pump mechanics and both-eye stock appearance pass120 pairs. Normal knife draw
+works, but host close returns only mask2 and truthfully retains its hooks; the
+owned game was then closed normally. That transition needs correction.
+
+Actual407 mounted firing now passes: a900ms held trigger reached two exact
+selected-gun Shoot callbacks and240paired frames. The SP009 jump traversed the
+doorway and reached real damage100→7.13, then replacement actors appeared at
+spawn. Both-eye review found damage/vignette/blur in eye0 only: visual FAIL.
+Health zero was not sampled; missing reads are not evidence of zero health.
+
+The next changed native checks are pump appearance, normal held-knife session
+close, and a passive per-view damage-field capture on the established jump route.
+The damage observer remains a private overlay. No guessed native field copies,
+extra simulation replay, or unchanged recipe repetitions are authorized by these
+results. Actual407 pump mechanics pass but old companion appearance fails.
+Latest human headset result remains failed390; no full campaign acceptance.
+See [407 retained results](CAMPAIGN-DIAGNOSTICS-407.md) and
+[408 work](CAMPAIGN-DIAGNOSTICS-408.md).
+
+# Current405: combined corrections, verification in progress
+
+The source now includes the held pump-to-support handoff correction, the completed
+holster sample for contextual tools, and actual knife-recognizer readiness for the
+finite test. A private fixed-part palette capture investigates the stock distortion
+reproduced in both native eyes. Full builds and new native results are recorded in
+[405 evidence](CAMPAIGN-DIAGNOSTICS-405.md). They remain pending at this snapshot.
+The exact SP_04 fixture produced three coherent mounted-weapon snapshots, then
+closed normally and restored all profile files. Firing during VR remains unproved.
+Human390 remains the last failed headset result; no full campaign acceptance.
+
+# Current404: preserve held-contact tolerance across interaction transitions
+
+An accepted held rail stroke must not immediately become a new grip acquisition
+with a smaller radius. Keep continued custody distinct from fresh grabs, using
+the same verified item/lifetime and current tracking. The existing straight-line
+pump fixture misses an off-axis completion which the rail itself accepts.
+
+Likewise distinguish elapsed driver time from recognizer readiness. A delivered
+physical knife stroke and native GunHold do not alone prove the stroke recognizer
+was armed. Record the actual prerequisite/reset leaf before repeating a failure.
+Mission identity must come from loaded-level observations, not save shorthand.
+See [404 evidence](CAMPAIGN-DIAGNOSTICS-404.md).
+
+# Previous403: distinguish prediction copies, physical intent and mission assets
+
+A native state copy is not an additional input consumer. Verify the engine's
+copy/export/restore path, send input only to actual consumers, and still observe
+every state used for completion.403 corrects this distinction for knife motion.
+
+An emulated player's already-admitted bounded physical grip must not turn into
+a release merely because the native effect briefly lacks a held witness.
+Keep readiness admission separate from physical intent, retaining original
+gesture timing and lifetime/menu stops. Record the first failed predicate with
+its actual witness; aggregate rejection counts alone can hide the root cause.
+
+Asset names also do not establish mission semantics. SP_02 intentionally uses
+SP_LaserDesignator_Dummy with binocular effects and a scripted designation
+chain. Follow the authored graph and verified native consumer rather than
+substituting a differently named asset. See [403 evidence](CAMPAIGN-DIAGNOSTICS-403.md).
+
+# Previous402: missing observation is not a release or a native failure
+
+Keep an accepted initial draw across a transient native selection overlap,
+without granting stale grip or attack authority. Require fresh selected native
+and rendered contact before first hold. A transport Busy result is nondelivery,
+not a release; retain the original deadlines and do not replay old input.
+
+402 proves actual focus-loss delivery/recovery and native knife draw/hold/return.
+Strict external read gaps remain explicit even where coherent observations and
+native receipts agree. Native grenade aim and expenditure do not prove damage
+or death. Independent client/server callback tokens are not assumed identical.
+See [402 evidence and limits](CAMPAIGN-DIAGNOSTICS-402.md).
+
+# Previous401: test the delivered input and native outcome separately
+
+An intended disconnect is not exercised if its unfocused controller packet
+fails the actual input codec. Keep original deadlines and clear inactive hand
+payloads. A missed health sample grants no input authority, but need not abort
+an admission before its existing window expires. Preserve publication failures
+and distinguish them from native failures. JSON serialization changes tuples to
+arrays; comparison fixtures must preserve values without rejecting that format.
+
+Vehicle input readback and paired stereo establish those boundaries, not native
+discharge. Similarly, knife draw/return counters do not prove a held physical
+knife. Observe the consumer's custody and native selection transition before
+enabling a feature.401 evidence and remaining limits are in
+[the campaign diagnostic record](CAMPAIGN-DIAGNOSTICS-401.md).
+
+# Previous400: held-shell read gap isolated; helicopter seat observed
+
+Both normal builds pass261 suites. The changed actual reload case exposed a
+brief native observation gap cancelling shell2 before focus loss. Its scoped401
+correction reproduces fail-old/pass-new without granting stale native authority.
+Death capture reached42 paired images but no native grenade action or damage;
+file publication and native admission are separate issues. A later mission
+reached its helicopter gunner seat and passed three native profile observations;
+active VR firing remains untested. Human390 remains the latest failed headset
+run; no full-campaign acceptance is claimed.
+See [400 evidence and remaining work](CAMPAIGN-DIAGNOSTICS-400.md).
+
+# Previous399: builds pass; changed diagnostic startup corrections pending
+
+Both normal builds pass261 suites. The focus receiver rejected its option before
+injection; the death fixture stopped before hooks/gestures because its file
+duration limit lagged its direct configuration. These narrow400 corrections are
+being checked at their actual startup boundaries. The completed398 mechanical
+recovery evidence remains valid and was not repeated. Direct newSP launch now
+has three native loaded-map confirmations for SP_04; no vehicle seat was observed.
+Human390 remains failed; no full campaign or new headset acceptance is claimed.
+See [399 evidence and limits](CAMPAIGN-DIAGNOSTICS-399.md).
+
+# Previous398: native recovery passes; visual readiness remains open
+
+Both normal builds pass259 suites. The actual five-second input gap recovers,
+three pumps and two manual shells complete, and31 coherent post-detach samples
+retain7/22 without an unwanted extra shell. Active PBL camera selection also
+passes three coherent native snapshots. Saved shoulder-transition pixels expose
+near-eye clipping or deformation still under investigation. No headset candidate
+is staged; human390 remains the latest failed run and campaign acceptance is open.
+See [398 evidence and limits](RECOVERY-AND-CAMERA-398.md).
+
+# Previous397: separate cleanup authority from presentation authority
+
+An exact pending native stop can outlive a controller or presentation gap without
+granting any new interaction. Keep its original owner, counts and deadline. A
+same-owner callback prepared just before the stop was armed must wait for a fresh
+callback rather than discard the stop. Actual owner replacement still retires it.
+The397 game run reaches three recovered pumps and two shell transfers, then
+exposes a failed stop and unwanted shell. The398 correction is not yet validated.
+See [397 evidence and limits](RECEIVER-GAP-397.md).
+
+# Previous396: retain event time across recovery and distinguish test failures
+
+A native recovery can begin before a diagnostic's delayed observer handoff.
+Compare the recovery grant with the first genuinely fresh neutral packet in the
+new tracking space, preserving that packet's original time and deadline. Do not
+replace it with a later observer timestamp or extend expired input authority.
+
+Menu ownership is a fresh native observation, not an assumption made when a
+channel is absent. A publisher's Busy result must retain unknown delivery unless
+the exact implementation proves no write occurred; gesture edges and later
+neutral publication failures are different evidence. Keep strict failed reports
+when a narrower functional interpretation is justified by source and logs.
+
+Campaign vehicle labels are insufficient: an attached soldier can still own a
+personal weapon, while a mounted gun or UAV has a different native control path.
+Keep each verified ownership chain distinct. See [396](CAMPAIGN-INTEGRATION-396.md).
+
+# Previous394: preserve admitted wrist contact through the shared arm solver
+
+An avatar's native limb length must not move an already admitted controller
+attachment away from its target. Keep normal reachable poses unchanged, extend
+only segment translations for overreach, and measure the final wrist after hand
+and finger posing in both successful native copies.394 records357 paired poses
+with zero wrist error; this does not establish natural-looking arm extension.
+Mechanical pose, hand placement, input freshness and native ownership remain
+separate checks. The policy is shared; Frostbite supplies verified rig data.
+
+A fresh input rejected for an aggregate admission reason needs the individual
+predicate recorded before a retry or policy change. The grenade394 run emitted
+no native edge; do not call its untouched ammunition evidence of a successful
+throw. Native FireOnDeploy belongs to the exact firing-data object: the held
+rifle and unselected grenade intentionally have different values.
+See [394](TRACKED-WRIST-394.md). No headset or campaign acceptance.
+
+# Current393: separate mechanical parts, tracked hands and per-view effects
+
+Do not discard a valid measured weapon-part pose because the avatar arm cannot
+reach its target.393 retains the mechanical plan and independently tests that
+path in both native pack callbacks. This does not itself keep a clamped hand on
+the controller; shared tracked-wrist placement is a separate constraint problem.
+
+Stereo camera correctness does not imply matching native postprocess state.
+The original view receives a colour fade that an added eye did not. Verify the
+actual consumer, copy only the exact same-frame field during its draw/capture,
+and restore before pair publication. Do not infer other nearby fields are safe
+to copy. A rejected external observation is not a recorded ammo mismatch, and
+must stay visible when reporting retained stable samples.
+See [393](NATIVE-PRESENTATION-393.md). No headset or campaign acceptance.
+
+# Previous392: preserve exact identity and test the actual timing boundary
+
+The actual expired-control check now crosses the original deadline with only
+processing time changed. It rejects that packet while preserving the pending
+mechanism, then accepts fresh input. Persistent item identity includes its
+generation: successive supply items can intentionally share a namespace ID.
+Rejecting that reuse produced a false integration failure despite two conserved
+native shell transactions. Fix validators against the shared identity contract;
+retain the old result and re-audit captured evidence instead of repeating play.
+See [392](NATIVE-RECOVERY-392.md). No new headset or campaign acceptance.
+
+# Previous391: separate input gaps, equipment ownership and gesture intent
+
+An expired packet is not a request to cancel an owed mechanism. Reject its
+movement/release authority while existing bounded native recovery owns the gap.
+Likewise, independently verified mutable state flags are not pointer identity:
+allow only proven publication differences, keeping current reads and object
+links exact. Drawing and immediately releasing at the same shoulder is not a
+second deliberate stow; require a fresh observed departure before release-stow.
+A supported carry can establish that departure without acquiring stow authority.
+See [391 evidence and limits](HEADSET-RECOVERY-391.md). Human390 failed.
+
 # Current390: retirement must follow the persistent weapon operation
 
 Do not keep the only retirement fact in a current dispatch epoch. Returning to a
@@ -3268,3 +3538,59 @@ own replay. Completed bolt ownership must not absorb an unrelated native
 magazine refill: separately verified passive updates observe conservation but
 grant no hand lease, manual reload or Ready. Diagnostic cycle duration and its
 recorder share one finite plan so test setup cannot silently reject its own mode.
+# BC2 411: distinguish a native death from a missing observation
+
+The 410 damage-window images could not establish death merely because health
+reads disappeared and a new actor later appeared. Private 411 joined a verified
+native lethal caller, exact local client/server ownership, zero server health
+at entry and the original function's return. The changed actual run then joined
+positive health on a new actor with bounded input, neutral release and stereo
+frames. This verified post-death recovery without requiring a headset or a
+repeat of unchanged reload/pump tests. Both-eye captured death/fade presentation
+passed, with a 312 ms pre-capture gap explicitly untested.
+
+Keep event evidence separate from input-publication success and physical
+movement causality. A missed read is unavailable evidence, never zero health.
+Keep storage scanning before a timing-sensitive game fixture; a reusable
+admission must stay bound to the same invocation/output and recheck free space.
+Lossless compression preserved the new raw evidence and recovered 359 MiB.
+Complete generated storage measured 37.43 GiB after this checkpoint, below 40 GiB.
+
+## Desktop launcher / updater 0.1.0
+
+Keep the player's launch path separate from research/build orchestration. The
+desktop app reuses pinned normal410 launch helpers; its Launch button never
+compiles, provisions weapons or starts emulated fixtures. Update packages are
+verified in versioned directories and selected atomically, with one rollback
+version and persistent user settings outside the payload. Game-derived caches
+and absolute-path private helpers are not portable release assets. A tested
+local launch profile is distinct from a clean-machine native installer.
+
+The actual WPF button/worker path, local dependency verification, GitHub feed
+lookup and updater transaction/rejection checks were exercised. No new native
+or headset proof: C: free space blocks the existing launch guard. The G: text
+application adds under 100 KiB locally; no native build tree was duplicated.
+See DESKTOP-LAUNCHER.md for the release contract and remaining portability work.
+
+### Storage correction, launcher 0.1.1
+
+The user explicitly reserves C: for the OS. Route actual process TEMP/TMP/TMPDIR
+to G: before checking storage; do not merely ignore a full drive while continuing
+to write scratch there. A real child-process temporary-file test verifies G:
+inheritance and an unchanged Windows user TEMP setting. Both launcher and
+native/build admission use this routing. The prior C: blocker is superseded;
+the 15 GiB reserve on used volumes and 40 GiB generated ceiling remain intact.
+
+### 412 desktop startup: bounded admission instead of repeated inventories
+
+The player launch path had four complete inventories of the same 235k-file
+retained evidence tree, including one after it reported VR startup. A compiled
+four-reader traversal retains exact compressed-byte accounting and reduces the
+measured fresh scan from 27.08 to 7.50 seconds. The quick launcher shares that
+single 640 MiB session reservation through exactly three ordered startup stages,
+with authenticated receipt, process ancestry/creation, a 180-second lifetime,
+covered roots, unchanged limits and fresh free-space checks at every stage.
+Standalone builds/captures still inventory independently. The parent waits for
+trace admission before reporting startup. Offline real-child tests passed;
+new cold-start and headset performance remain unmeasured. Do not generalize this
+handoff into a persistent cache or grant larger/concurrent output budgets.

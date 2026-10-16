@@ -21,6 +21,7 @@
 #include "OpenXrInput.h"
 #include "OpenXrMenu.h"
 #include "OpenXrAmmoHud.h"
+#include "fvr/graphics/D3D11StereoComfort.h"
 #include "fvr/interaction/RecenterPolicy.h"
 
 namespace fvr::xr {
@@ -76,6 +77,7 @@ struct Host {
     XrSessionState sessionState=XR_SESSION_STATE_UNKNOWN;
     std::array<XrSwapchain,2> swapchains{};
     std::array<std::vector<XrSwapchainImageD3D11KHR>,2> images;
+    std::array<std::vector<ComPtr<ID3D11RenderTargetView>>,2> imageTargets;
     std::array<bool,2> acquired{},waited{};
     ComPtr<ID3D11Device> device;
     ComPtr<ID3D11DeviceContext> context;
@@ -84,6 +86,7 @@ struct Host {
     graphics::TextureDescriptor openedDescriptor{};
     runtime::RetainedPresentation retained;
     std::array<ComPtr<ID3D11Texture2D>,2> scratch;
+    graphics::D3D11StereoComfort stereoComfort;
     std::unique_ptr<graphics::D3D11BodyPropCompositor> bodyProps;
     HostReport& report;
     bool running=false,exit=false,frameOpen=false,referenceValid=false;
@@ -93,7 +96,13 @@ struct Host {
     std::uint64_t trackingGeneration=0,spaceGeneration=1;
     explicit Host(HostReport& r):report(r){}
     ~Host(){
-        AbortFrame();consumer.Reset();controls.reset();menu.reset();ammoHud.reset();bodyProps.reset();
+        AbortFrame();
+        // One bounded shutdown snapshot in the existing event stream. Frame
+        // diagnostics never perform per-frame file I/O or change XR scheduling.
+        if(eventLog){eventLog<<"{\"event\":\"host_frame_diagnostics\",\"wall_ms\":"<<GetTickCount64()<<",\"diagnostics\":";
+            report.frameDiagnostics.Write(eventLog);eventLog<<"}\n";eventLog.flush();}
+        consumer.Reset();controls.reset();menu.reset();ammoHud.reset();bodyProps.reset();
+        for(auto& targets:imageTargets)targets.clear();
         for(auto chain:swapchains)if(chain&&api.DestroySwapchain)api.DestroySwapchain(chain);
         if(headSpace&&api.DestroySpace)api.DestroySpace(headSpace);
         if(local&&api.DestroySpace)api.DestroySpace(local);
@@ -109,7 +118,9 @@ struct Host {
         }
         if(frameOpen&&api.EndFrame){
             XrFrameEndInfo end{XR_TYPE_FRAME_END_INFO};end.displayTime=frameTime;end.environmentBlendMode=XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
-            api.EndFrame(session,&end);frameOpen=false;
+            const auto started=BodyPropClockNs();const auto result=api.EndFrame(session,&end);
+            report.frameDiagnostics.CleanupEnd(started,BodyPropClockNs(),std::int32_t(result),XR_SUCCEEDED(result));
+            frameOpen=false;
         }
     }
     void Initialize(const HostOptions& options){
@@ -191,13 +202,18 @@ struct Host {
             Check(api.EnumerateSwapchainImages(swapchains[eye],0,&count,nullptr),"Eye image count");Require(count&&count<=64,"Invalid eye image count");
             images[eye].resize(count,{XR_TYPE_SWAPCHAIN_IMAGE_D3D11_KHR});
             Check(api.EnumerateSwapchainImages(swapchains[eye],count,&count,reinterpret_cast<XrSwapchainImageBaseHeader*>(images[eye].data())),"Eye images");
+            imageTargets[eye].resize(count);
+            D3D11_RENDER_TARGET_VIEW_DESC targetDesc{};targetDesc.Format=DXGI_FORMAT(req.format);targetDesc.ViewDimension=D3D11_RTV_DIMENSION_TEXTURE2D;
+            for(unsigned n=0;n<count;++n)Hr(device->CreateRenderTargetView(images[eye][n].texture,&targetDesc,&imageTargets[eye][n]),"Create eye presentation target");
         }
         // Copy incoming pairs into private scratch first. A failed/partial copy must
         // never replace the swapchain images that supply the retained pair.
         D3D11_TEXTURE2D_DESC scratchDesc{};scratchDesc.Width=req.width;scratchDesc.Height=req.height;
         scratchDesc.Format=DXGI_FORMAT(req.format);scratchDesc.MipLevels=scratchDesc.ArraySize=1;
         scratchDesc.SampleDesc.Count=1;scratchDesc.Usage=D3D11_USAGE_DEFAULT;
+        scratchDesc.BindFlags=D3D11_BIND_SHADER_RESOURCE;
         for(auto& texture:scratch)Hr(device->CreateTexture2D(&scratchDesc,nullptr,&texture),"Create private eye scratch");
+        Require(stereoComfort.Initialize(context.Get()),"Initialize paired eye comfort safeguard");
         if(options.provider){auto hud=std::make_unique<OpenXrAmmoHud>();
             if(hud->Initialize(instance,session,api.get,device.Get(),req.format)){ammoHud=std::move(hud);report.ammoCounterReady=true;}}
         if(options.bodyProps&&!options.bodyProps->empty()){
@@ -268,11 +284,37 @@ struct Host {
         }
     }
     void Frame(IFrameProvider* provider){
+        static_assert(runtime::RetainedPresentation::MaxAgeNs==250000000);
+        HostFrameObservation diagnostic;diagnostic.frame=report.waitedFrames+1;
+        diagnostic.wallMs=GetTickCount64();diagnostic.startedNs=BodyPropClockNs();
+        diagnostic.provider=provider!=nullptr;diagnostic.present=userPresent;
+        diagnostic.focused=sessionState==XR_SESSION_STATE_FOCUSED;diagnostic.space=spaceGeneration;
+        struct Record {HostReport& report;HostFrameObservation& frame;~Record(){
+            frame.endedNs=BodyPropClockNs();report.frameDiagnostics.Observe(frame);
+        }} record{report,diagnostic};
+        const auto timed=[&](HostStage stage,auto&& operation)->decltype(auto){
+            HostStageTimer timer(diagnostic,stage,BodyPropClockNs);return operation();
+        };
+        const auto publishInput=[&](const interaction::InputFrame& input){
+            if(!provider)return;
+            diagnostic.priorInputSuccessGeneration=report.frameDiagnostics.lastInputSuccessGeneration;
+            diagnostic.priorInputSuccessReturnedNs=report.frameDiagnostics.lastInputSuccessReturnedNs;
+            diagnostic.inputAttempted=true;diagnostic.inputGeneration=input.generation;
+            diagnostic.inputFocused=input.focused;diagnostic.inputHeadValid=input.headValid;
+            diagnostic.inputHandsTracked=input.hands[0].gripTracked&&input.hands[1].gripTracked;
+            diagnostic.inputStartedNs=BodyPropClockNs();
+            const auto result=timed(HostStage::Input,[&]{return provider->UpdateInputObserved(input);});
+            diagnostic.inputReturnedNs=BodyPropClockNs();diagnostic.inputKnown=result.known;
+            diagnostic.inputSucceeded=result.succeeded;diagnostic.inputResult=result.code;
+            report.frameDiagnostics.Input(input.generation,diagnostic.inputReturnedNs,result.known,result.succeeded);
+        };
         XrFrameWaitInfo wait{XR_TYPE_FRAME_WAIT_INFO};XrFrameState frame{XR_TYPE_FRAME_STATE};
-        Check(api.WaitFrame(session,&wait,&frame),"Wait frame");++report.waitedFrames;frameTime=frame.predictedDisplayTime;
-        XrFrameBeginInfo begin{XR_TYPE_FRAME_BEGIN_INFO};Check(api.BeginFrame(session,&begin),"Begin frame");frameOpen=true;
+        Check(timed(HostStage::WaitFrame,[&]{return api.WaitFrame(session,&wait,&frame);}),"Wait frame");++report.waitedFrames;frameTime=frame.predictedDisplayTime;
+        diagnostic.predictedNs=frameTime;diagnostic.shouldRender=frame.shouldRender==XR_TRUE;
+        XrFrameBeginInfo begin{XR_TYPE_FRAME_BEGIN_INFO};Check(timed(HostStage::BeginFrame,[&]{return api.BeginFrame(session,&begin);}),"Begin frame");frameOpen=true;
         for(auto at=spaceChanges.begin();at!=spaceChanges.end();)if(*at<=frameTime){++spaceGeneration;referenceValid=false;retained.Reset();at=spaceChanges.erase(at);}else ++at;
         const auto wall=GetTickCount64();
+        diagnostic.focused=sessionState==XR_SESSION_STATE_FOCUSED&&userPresent&&(!presenceReturnAt||wall-presenceReturnAt>=250);
         // Some wireless runtimes stop delivering frames instead of reporting a
         // tracking-loss frame. Treat a long delivery gap as a reference break.
         if(roomscale&&referenceValid&&lastFrameWall&&wall-lastFrameWall>=1500)recoveryPending=true;
@@ -280,13 +322,16 @@ struct Host {
         std::array<XrCompositionLayerProjectionView,2> projectionViews{{{XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW},{XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW}}};
         XrCompositionLayerProjection layer{XR_TYPE_COMPOSITION_LAYER_PROJECTION};layer.space=local;layer.viewCount=2;layer.views=projectionViews.data();
         bool submit=false,fresh=false,inputSent=false,menuActive=false;runtime::TrackingFrame tracking{};
+        interaction::InputFrame hudInput{};
         if(frame.shouldRender){
             std::array<XrView,2> views{{{XR_TYPE_VIEW},{XR_TYPE_VIEW}}};XrViewState viewState{XR_TYPE_VIEW_STATE};
             XrViewLocateInfo locate{XR_TYPE_VIEW_LOCATE_INFO};locate.viewConfigurationType=XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;locate.displayTime=frameTime;locate.space=local;uint32_t count=0;
-            Check(api.LocateViews(session,&locate,&viewState,2,&count,views.data()),"Locate stereo views");
-            XrSpaceLocation head{XR_TYPE_SPACE_LOCATION};Check(api.LocateSpace(headSpace,local,frameTime,&head),"Locate head");
+            Check(timed(HostStage::LocateViews,[&]{return api.LocateViews(session,&locate,&viewState,2,&count,views.data());}),"Locate stereo views");
+            XrSpaceLocation head{XR_TYPE_SPACE_LOCATION};Check(timed(HostStage::LocateHead,[&]{return api.LocateSpace(headSpace,local,frameTime,&head);}),"Locate head");
             constexpr auto validViews=XR_VIEW_STATE_POSITION_VALID_BIT|XR_VIEW_STATE_ORIENTATION_VALID_BIT;
             constexpr auto validHead=XR_SPACE_LOCATION_POSITION_VALID_BIT|XR_SPACE_LOCATION_ORIENTATION_VALID_BIT|XR_SPACE_LOCATION_POSITION_TRACKED_BIT|XR_SPACE_LOCATION_ORIENTATION_TRACKED_BIT;
+            diagnostic.viewsValid=count==2&&(viewState.viewStateFlags&validViews)==validViews;
+            diagnostic.headValid=(head.locationFlags&validHead)==validHead;
             if(count==2&&(viewState.viewStateFlags&validViews)==validViews&&(head.locationFlags&validHead)==validHead){
                 tracking.generation=++trackingGeneration;tracking.spaceGeneration=spaceGeneration;tracking.predictedNs=frameTime;
                 tracking.worldUnitsPerMeter=worldUnitsPerMeter;
@@ -310,17 +355,20 @@ struct Host {
                 interaction::InputFrame input{};input.generation=++inputGeneration;input.spaceGeneration=spaceGeneration;input.predictedNs=frameTime;
                 input.focused=tracking.focused;input.headValid=tracking.headValid;input.floorRelative=report.floorRelative;input.worldUnitsPerMeter=worldUnitsPerMeter;
                 input.referenceHead=referenceHead;input.head=tracking.head;
-                if(controls)controls->Sample(local,frameTime,input);
+                if(controls)timed(HostStage::Controls,[&]{controls->Sample(local,frameTime,input);});
                 if(roomscale&&recenter.Update(input))if(const auto reference=interaction::ExplicitRecenterReference(tracking.head,referenceHead)){
                     referenceHead=*reference;++spaceGeneration;retained.Reset();if(provider)provider->Suspend();++report.recenters;
                     tracking.referenceHead=input.referenceHead=referenceHead;tracking.spaceGeneration=input.spaceGeneration=spaceGeneration;Log("manual_recenter");
                 }
-                if(menu){menuActive=menu->Frame(input);menu->FilterGameplayInput(input);if(menuActive){input.focused=false;input.hands={};retained.Reset();}}
-                if(provider)provider->UpdateInput(input);DispatchFeedback(provider,input);inputSent=true;++report.inputFrames;
+                if(menu){menuActive=timed(HostStage::Menu,[&]{return menu->Frame(input);});menu->FilterGameplayInput(input);if(menuActive){input.focused=false;input.hands={};retained.Reset();}}
+                hudInput=input;
+                publishInput(input);timed(HostStage::Feedback,[&]{DispatchFeedback(provider,input);});inputSent=true;++report.inputFrames;
                 if(input.hands[0].gripTracked&&input.hands[1].aimTracked)++report.trackedHandFrames;
                 graphics::TextureDescriptor descriptor{};graphics::PairTicket ticket{};runtime::TrackingFrame renderedTracking{};
                 const auto requestStart=std::chrono::steady_clock::now();
-                const bool available=!menuActive&&valid&&tracking.focused&&provider&&provider->TryGetCompletedPair(report.requirements,tracking,renderedTracking,descriptor,ticket);
+                diagnostic.providerQueried=!menuActive&&valid&&tracking.focused&&provider;
+                const bool available=!menuActive&&valid&&tracking.focused&&provider&&timed(HostStage::Provider,[&]{return provider->TryGetCompletedPair(report.requirements,tracking,renderedTracking,descriptor,ticket);});
+                diagnostic.newPair=available;
                 const auto requestUs=std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-requestStart).count();
                 report.maxProviderWaitUs=(std::max)(report.maxProviderWaitUs,std::uint64_t(requestUs));
                 if(!menuActive&&valid&&tracking.focused&&provider&&!available)++report.providerMisses;
@@ -334,7 +382,7 @@ struct Host {
                        tracking.predictedNs-renderedTracking.predictedNs<=runtime::RetainedPresentation::MaxAgeNs){
                         if(!graphics::Valid(openedDescriptor)||std::memcmp(&descriptor,&openedDescriptor,sizeof(descriptor))!=0){
                             retained.Reset();sceneDepth.Reset();sceneDepthSeen=false;if(ammoHud)ammoHud->Reset();
-                            if(consumer.Open(device.Get(),descriptor)==graphics::TransferResult::Ok)openedDescriptor=descriptor;else openedDescriptor={};
+                            if(timed(HostStage::SharedOpen,[&]{return consumer.Open(device.Get(),descriptor);})==graphics::TransferResult::Ok)openedDescriptor=descriptor;else openedDescriptor={};
                         }
                         if(graphics::Valid(openedDescriptor)){
                             const std::array<graphics::TextureSlice,2> destinations{{{scratch[0].Get(),0},{scratch[1].Get(),0}}};
@@ -343,12 +391,16 @@ struct Host {
                             sceneDepthSeen|=hasDepth;
                             // The following color Copy fences the same context,
                             // including every queued shared-depth source read.
-                            const bool depthCopied=hasDepth&&sceneDepth.CopyBeforeColor(depthFrame,descriptor,ticket)&&sceneDepth.Views(ticket,depthViews);
+                            const bool depthCopied=hasDepth&&timed(HostStage::DepthCopy,[&]{return sceneDepth.CopyBeforeColor(depthFrame,descriptor,ticket)&&sceneDepth.Views(ticket,depthViews);});
                             if(hasDepth)++report.sceneDepthReceived;if(depthCopied)++report.sceneDepthCopied;
                             if(sceneDepthSeen&&!depthCopied)++report.sceneDepthOmitted;
-                            const bool copied=consumer.Copy(ticket,destinations)==graphics::TransferResult::Ok;
+                            const bool copied=timed(HostStage::ColorCopy,[&]{return consumer.Copy(ticket,destinations);})==graphics::TransferResult::Ok;
                             feedback.consumed=copied;
                             if(copied){
+                                // Classify the native pair before optional props. One GPU
+                                // flag must govern both eyes, without a readback or a wait.
+                                {HostStageTimer propsTimer(diagnostic,HostStage::Props,BodyPropClockNs);
+                                Require(stereoComfort.Prepare(destinations),"Prepare paired eye comfort safeguard");
                                 graphics::BodyPropFrame props;
                                 const bool propsRead=provider->ReadBodyProps(ticket,props);
                                 if(ammoHud)ammoHud->Receive(propsRead?&props:nullptr,ticket,BodyPropClockNs());
@@ -356,20 +408,23 @@ struct Host {
                                     if(propsRead&&(!sceneDepthSeen||depthCopied))bodyProps->Compose(props,ticket,{scratch[0].Get(),scratch[1].Get()},BodyPropClockNs,depthCopied?&depthViews:nullptr);
                                     report.bodyProps=bodyProps->Statistics();
                                 }
-                                for(unsigned eye=0;eye<2;++eye){uint32_t index=0;XrSwapchainImageAcquireInfo acquire{XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO};
-                                    Check(api.AcquireSwapchainImage(swapchains[eye],&acquire,&index),"Acquire eye image");acquired[eye]=true;
-                                    XrSwapchainImageWaitInfo imageWait{XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO};imageWait.timeout=50000000;
-                                    const auto ready=api.WaitSwapchainImage(swapchains[eye],&imageWait);Check(ready,"Wait eye image");Require(ready!=XR_TIMEOUT_EXPIRED,"OpenXR eye image wait timed out");waited[eye]=true;
-                                    Require(index<images[eye].size(),"Invalid acquired eye index");
-                                    context->CopyResource(images[eye][index].texture,scratch[eye].Get());
                                 }
+                                std::array<ID3D11RenderTargetView*,2> outputTargets{};
+                                for(unsigned eye=0;eye<2;++eye){uint32_t index=0;XrSwapchainImageAcquireInfo acquire{XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO};
+                                    Check(timed(HostStage::SwapchainAcquire,[&]{return api.AcquireSwapchainImage(swapchains[eye],&acquire,&index);}),"Acquire eye image");acquired[eye]=true;
+                                    XrSwapchainImageWaitInfo imageWait{XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO};imageWait.timeout=50000000;
+                                    const auto ready=timed(HostStage::SwapchainWait,[&]{return api.WaitSwapchainImage(swapchains[eye],&imageWait);});Check(ready,"Wait eye image");Require(ready!=XR_TIMEOUT_EXPIRED,"OpenXR eye image wait timed out");waited[eye]=true;
+                                    Require(index<images[eye].size(),"Invalid acquired eye index");
+                                    outputTargets[eye]=imageTargets[eye][index].Get();
+                                }
+                                Require(timed(HostStage::Present,[&]{return stereoComfort.Present(outputTargets);}),"Present paired eye comfort safeguard");
                                 for(unsigned eye=0;eye<2;++eye){XrSwapchainImageReleaseInfo release{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
-                                    Check(api.ReleaseSwapchainImage(swapchains[eye],&release),"Release eye image");waited[eye]=acquired[eye]=false;}
+                                    Check(timed(HostStage::SwapchainRelease,[&]{return api.ReleaseSwapchainImage(swapchains[eye],&release);}),"Release eye image");waited[eye]=acquired[eye]=false;}
                                 retained=candidate;fresh=true;
                             }
                         }
                     }
-                    if(!fresh)++report.rejectedPairs;
+                    if(!fresh){++report.rejectedPairs;diagnostic.pairRejected=true;}
                 }
             }
         }
@@ -377,7 +432,7 @@ struct Host {
             if(roomscale)trackingRecovery.Update(false,wall);
             interaction::InputFrame inactive{};inactive.generation=++inputGeneration;inactive.spaceGeneration=spaceGeneration;inactive.predictedNs=frameTime;
             inactive.worldUnitsPerMeter=worldUnitsPerMeter;inactive.floorRelative=report.floorRelative;
-            recenter.Update(inactive);if(menu)menuActive=menu->Frame(inactive);if(provider)provider->UpdateInput(inactive);DispatchFeedback(provider,inactive);++report.inputFrames;
+            recenter.Update(inactive);if(menu)menuActive=timed(HostStage::Menu,[&]{return menu->Frame(inactive);});publishInput(inactive);timed(HostStage::Feedback,[&]{DispatchFeedback(provider,inactive);});++report.inputFrames;
         }
         report.recenterInput=recenter.Evidence();
         // Menu entry also cancels an outstanding world request/flushes deferred
@@ -385,6 +440,11 @@ struct Host {
         // IPC gate cannot carry a pre-menu pair through to the resumed world.
         if(menuActive)retained.Reset();
         if(provider&&(menuActive||!frame.shouldRender||!tracking.focused||!tracking.headValid))provider->Suspend();
+        diagnostic.space=spaceGeneration;diagnostic.menu=menuActive;
+        diagnostic.trackingValid=tracking.headValid;
+        if(const auto* old=retained.SavedTracking()){diagnostic.retained=true;
+            diagnostic.retainedGeneration=old->generation;diagnostic.retainedSpace=old->spaceGeneration;
+            diagnostic.retainedPredictedNs=old->predictedNs;diagnostic.retainedAgeNs=frameTime-old->predictedNs;}
         if(const auto* rendered=retained.Select(report.requirements,tracking,frame.shouldRender&&!menuActive)){
             for(unsigned eye=0;eye<2;++eye){auto& projection=projectionViews[eye];const auto& pose=rendered->eyes[eye];const auto& fov=rendered->fov[eye];
                 projection.pose={{pose.orientation.x,pose.orientation.y,pose.orientation.z,pose.orientation.w},{pose.position.x,pose.position.y,pose.position.z}};
@@ -395,16 +455,20 @@ struct Host {
         }
         std::vector<const XrCompositionLayerBaseHeader*> layers;
         if(submit)layers.push_back(reinterpret_cast<const XrCompositionLayerBaseHeader*>(&layer));
-        if(ammoHud){if(const auto* hud=ammoHud->Layer(headSpace,tracking.spaceGeneration,BodyPropClockNs,
+        if(ammoHud){if(const auto* hud=ammoHud->Layer(local,hudInput,BodyPropClockNs,
             submit&&!menuActive&&tracking.focused&&tracking.headValid)){
                 layers.push_back(reinterpret_cast<const XrCompositionLayerBaseHeader*>(hud));++report.ammoCounterFrames;}
             report.ammoCounterUploads=ammoHud->Uploads();report.ammoCounterErrors=ammoHud->Errors();
             report.ammoCounterValidSamples=ammoHud->ValidSamples();report.ammoCounterInvalidSamples=ammoHud->InvalidSamples();
         }
-        if(menu){menu->Layers(local,layers);report.menuFrames=menu->Frames();report.menuErrors=menu->Errors();}
+        if(menu){const auto before=layers.size();timed(HostStage::Menu,[&]{menu->Layers(local,layers);});
+            diagnostic.menuLayers=std::uint32_t(layers.size()-before);report.menuFrames=menu->Frames();report.menuErrors=menu->Errors();}
         XrFrameEndInfo end{XR_TYPE_FRAME_END_INFO};end.displayTime=frameTime;end.environmentBlendMode=XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
         end.layerCount=std::uint32_t(layers.size());end.layers=layers.data();
-        const auto result=api.EndFrame(session,&end);frameOpen=false;Check(result,"End frame");++report.endedFrames;
+        diagnostic.worldLayer=submit;diagnostic.layers=end.layerCount;diagnostic.endAttempted=true;
+        const auto result=timed(HostStage::EndFrame,[&]{return api.EndFrame(session,&end);});
+        diagnostic.endResult=std::int32_t(result);diagnostic.endSucceeded=XR_SUCCEEDED(result);
+        frameOpen=false;Check(result,"End frame");++report.endedFrames;
         if(submit){++report.presentedFrames;if(fresh)++report.submittedPairs;else ++report.reusedFrames;}
         else ++report.blankFrames;
     }

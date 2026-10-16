@@ -47,19 +47,31 @@ std::optional<ArmPose> SolveTrackedArms(std::span<const std::int32_t> parents,
         if(!InverseRigid(target.wrist)||!Finite(target.poleDirection)||!std::isfinite(Dot(target.poleDirection,target.poleDirection)))return {};
         const auto nativeShoulder=Position(native[j.shoulder]),shoulder=target.shoulder.value_or(nativeShoulder),elbow=Position(native[j.elbow]),wrist=Position(native[j.wrist]),desired=Position(target.wrist);
         if(!Finite(shoulder))return {};
-        const float upper=Length(Sub(elbow,nativeShoulder)),lower=Length(Sub(wrist,elbow)),total=upper+lower;
+        const float nativeUpper=Length(Sub(elbow,nativeShoulder)),nativeLower=Length(Sub(wrist,elbow));
+        float upper=nativeUpper,lower=nativeLower;const float total=upper+lower;
         if(!std::isfinite(total)||upper<1e-5f||lower<1e-5f)return {};
         const float epsilon=std::max(1e-6f,total*1e-4f);
         const float minimum=std::abs(upper-lower)+epsilon,maximum=total-epsilon;if(minimum>=maximum)return {};
         auto direction=Sub(desired,shoulder);const float requested=Length(direction);if(!std::isfinite(requested))return {};
         if(requested>epsilon)direction=Scale(direction,1/requested);
         else {direction=Sub(wrist,nativeShoulder);const auto distance=Length(direction);direction=distance>epsilon?Scale(direction,1/distance):V{0,0,1};}
-        const float distance=std::clamp(requested,minimum,maximum);result.reachClamped[side]=requested<minimum||requested>maximum;
+        float distance=std::clamp(requested,minimum,maximum);
+        result.reachClamped[side]=requested<minimum||requested>maximum;
+        if(target.reach==ArmReachPolicy::ExtendToAdmittedWrist&&requested>maximum){
+            // The caller has already bounded/admitted the current controller or
+            // attachment. Extend segment translations proportionally and retain
+            // a small elbow bend. Never rescale wrist/finger or weapon geometry.
+            const float factor=(requested+epsilon)/total;
+            if(!std::isfinite(factor)||factor<1.f)return {};
+            upper*=factor;lower*=factor;distance=requested;
+            result.segmentScale[side]=factor;result.reachClamped[side]=false;
+        }
         auto pole=Perpendicular(target.poleDirection,direction);
         if(Length(pole)<1e-5f)pole=Perpendicular(Sub(elbow,nativeShoulder),direction);
         pole=Length(pole)>1e-5f?Scale(pole,1/Length(pole)):Fallback(direction);
         const float along=(upper*upper-lower*lower+distance*distance)/(2*distance),height=std::sqrt(std::max(0.f,upper*upper-along*along));
-        const auto newElbow=Add(shoulder,Add(Scale(direction,along),Scale(pole,height))),newWrist=Add(shoulder,Scale(direction,distance));
+        const auto newElbow=Add(shoulder,Add(Scale(direction,along),Scale(pole,height)));
+        const auto newWrist=result.segmentScale[side]>1.f?desired:Add(shoulder,Scale(direction,distance));
         const auto upperDelta=SegmentDelta(Sub(elbow,nativeShoulder),Sub(newElbow,shoulder),nativeShoulder,shoulder,pole);
         const auto lowerDelta=SegmentDelta(Sub(wrist,elbow),Sub(newWrist,newElbow),elbow,newElbow,pole);
         auto placedWrist=target.wrist;SetPosition(placedWrist,newWrist);
@@ -67,7 +79,20 @@ std::optional<ArmPose> SolveTrackedArms(std::span<const std::int32_t> parents,
         result.targetError[side]=Length(Sub(newWrist,desired));
         for(unsigned n=0;n<parents.size();++n){if(!Below(parents,n,j.shoulder))continue;
             const auto& delta=Below(parents,n,j.wrist)?wristDelta:(Below(parents,n,j.elbow)?lowerDelta:upperDelta);
-            auto transformed=Multiply(native[n],delta);if(!InverseAnimatedTransform(transformed))return {};
+            auto transformed=Multiply(native[n],delta);
+            if(result.segmentScale[side]>1.f&&Below(parents,n,j.wrist))
+                transformed=n==j.wrist?placedWrist:Multiply(Multiply(native[n],*InverseAnimatedTransform(native[j.wrist])),placedWrist);
+            if(result.segmentScale[side]>1.f&&!Below(parents,n,j.wrist)){
+                // Twist/intermediate joints follow their segment's longitudinal
+                // extension. Keep their basis (and lateral offset) unchanged.
+                const bool lowerBranch=Below(parents,n,j.elbow);
+                const auto sourcePivot=lowerBranch?elbow:nativeShoulder;
+                const auto sourceAxis=lowerBranch?Scale(Sub(wrist,elbow),1/nativeLower):Scale(Sub(elbow,nativeShoulder),1/nativeUpper);
+                const auto targetAxis=lowerBranch?Scale(Sub(newWrist,newElbow),1/lower):Scale(Sub(newElbow,shoulder),1/upper);
+                const float offset=Dot(Sub(Position(native[n]),sourcePivot),sourceAxis)*(result.segmentScale[side]-1.f);
+                SetPosition(transformed,Add(Position(transformed),Scale(targetAxis,offset)));
+            }
+            if(!InverseAnimatedTransform(transformed))return {};
             result.writes.push_back({n,transformed});
         }
     }

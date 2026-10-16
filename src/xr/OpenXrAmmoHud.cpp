@@ -1,4 +1,5 @@
 #include "OpenXrAmmoHud.h"
+#include "fvr/graphics/AmmoCounterPlacement.h"
 namespace fvr::xr {
 OpenXrAmmoHud::~OpenXrAmmoHud(){if(chain_&&DestroySwapchain)DestroySwapchain(chain_);}
 bool OpenXrAmmoHud::Initialize(XrInstance instance,XrSession session,PFN_xrGetInstanceProcAddr get,
@@ -55,20 +56,25 @@ bool OpenXrAmmoHud::Upload(const graphics::AmmoCounterSample* sample)noexcept {
     else hasImage_=false;
     return copied;
 }
-const XrCompositionLayerQuad* OpenXrAmmoHud::Layer(XrSpace headSpace,std::uint64_t space,
+const XrCompositionLayerQuad* OpenXrAmmoHud::Layer(XrSpace localSpace,const interaction::InputFrame& input,
     std::int64_t (*clockNs)()noexcept,bool active)noexcept {
     if(!chain_||failed_||!clockNs)return nullptr;
-    if(!active||!headSpace)presentation_.Reset();
-    const auto* sample=active&&headSpace?presentation_.Select(space,clockNs()):nullptr;
+    const auto& right=input.hands[1];
+    const bool tracked=active&&localSpace&&interaction::ValidInput(input)&&input.focused&&input.headValid&&
+        right.gripTracked&&right.aimTracked;
+    if(!tracked)presentation_.Reset();
+    const auto placement=tracked?graphics::AmmoCounterBesideGun(input.head,right.grip,right.aim):std::nullopt;
+    const auto* sample=placement?presentation_.Select(input.spaceGeneration,clockNs()):nullptr;
     if(!sample){if(pending_)Upload(nullptr);return nullptr;}
     if(pending_||!hasImage_||loaded_!=sample->loaded||reserve_!=sample->reserve)if(!Upload(sample))return nullptr;
-    if(!presentation_.Select(space,clockNs()))return nullptr;
-    layer_={XR_TYPE_COMPOSITION_LAYER_QUAD};layer_.space=headSpace;
+    if(!presentation_.Select(input.spaceGeneration,clockNs()))return nullptr;
+    layer_={XR_TYPE_COMPOSITION_LAYER_QUAD};layer_.space=localSpace;
     layer_.layerFlags=XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
     layer_.eyeVisibility=XR_EYE_VISIBILITY_BOTH;
     layer_.subImage.swapchain=chain_;
     layer_.subImage.imageRect.extent={std::int32_t(graphics::AmmoCounterBitmap::Width),std::int32_t(graphics::AmmoCounterBitmap::Height)};
-    layer_.pose.orientation.w=1;layer_.pose.position={0.f,-.30f,-1.f};
-    layer_.size={.42f,.07875f};return &layer_;
+    const auto& p=placement->position;const auto& q=placement->orientation;
+    layer_.pose={{q.x,q.y,q.z,q.w},{p.x,p.y,p.z}};
+    layer_.size={graphics::AmmoCounterWidthMeters,graphics::AmmoCounterHeightMeters};return &layer_;
 }
 } // namespace fvr::xr

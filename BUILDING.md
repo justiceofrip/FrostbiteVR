@@ -18,36 +18,39 @@ does not launch BC2, select the installed XR runtime or run optional hardware GP
 probes. The x86 native module matches BC2's architecture; the x64 OpenXR host is a
 separate process. A successful x64 build does not provide a native BF3/BF4 adapter.
 
-If a running BC2 session still maps a previous DLL, build into a separate folder
-without closing it: `./Build-Checkpoint.ps1 -Architecture x86 -BuildDirectory build/x86-checkpoint390`.
-Both build scripts accept `-BuildDirectory`; relative paths resolve from the
-repository root. Binaries in the previous folder remain the previous build.
+Use the existing architecture build trees. If a running BC2 session maps a DLL
+from a build tree, preserve the live module and arrange a fresh game process
+before replacing it; a stopped mod can remain mapped. An explicitly bounded
+alternative build directory is supported, but do not create a full build tree
+for every checkpoint. Generated data and process-local scratch belong on G: in
+this development workspace; see [storage policy](docs/STORAGE-BUDGET.md).
 
 `requirements-dev.txt` pins NumPy and Pillow for offline geometry and image tests.
 Use a virtual environment if you keep other projects' Python dependencies separate.
 
-## Checkpoint390 player composition
+## Checkpoint412 player composition
 
-Use fresh build directories and run the architectures sequentially:
+Use the existing build directories and run the architectures sequentially:
 
 ```powershell
-.\Build-Checkpoint.ps1 -Architecture x86 -Jobs 1 -BuildDirectory build/x86-checkpoint390 -OrdinaryManualCycles -NativeCycleRecovery -BodySceneDepth
-.\Build-Checkpoint.ps1 -Architecture x64 -Jobs 1 -BuildDirectory build/x64-checkpoint390 -OrdinaryManualCycles -NativeCycleRecovery -BodySceneDepth
+.\Build-Checkpoint.ps1 -Architecture x86 -Jobs 2 -OrdinaryManualCycles -NativeCycleRecovery -BodySceneDepth -PlayerGrenades -PlayerKnife -ContextualTools
+.\Build-Checkpoint.ps1 -Architecture x64 -Jobs 2 -OrdinaryManualCycles -NativeCycleRecovery -BodySceneDepth -PlayerGrenades -PlayerKnife -ContextualTools
 ```
 
-These switches reproduce the normal390 manual-cycle, recovery and body-depth
-configuration. Synthetic controller drivers remain OFF. Omitting these switches
-builds a different feature composition. The checkpoint script selects
-`profiles/checkpoint390` for the operation header and exact source receipt,
+These switches reproduce the normal412 composition. Player knife, grenade and
+contextual-tool code is compiled, but those runtime opt-ins remain disabled in
+the current personal launch profile. Synthetic controller drivers remain OFF.
+Omitting these switches builds a different feature composition. The script selects
+`profiles/checkpoint412` for the operation header and exact source receipt,
 `profiles/aim339` for gun-hand calibration, `profiles/support373` for support
 contacts, and `profiles/resource-enrollment295-pistol` for magazine registration
 and geometry. Older profile numbers identify retained data, not the current build.
 
-Both full normal390 builds passed 246 C++ suites. Actual-game emulation and its
-limits are documented in [NATIVE-HANDOFF-390.md](docs/NATIVE-HANDOFF-390.md).
-This is a source checkpoint for development; human headset acceptance and
-whole-campaign stability remain pending. For a comparison with checkpoint245,
-start with the [fork handoff](handoff/checkpoint390/README.md).
+The full build results and prior actual-game evidence are recorded in the
+[412 handoff](handoff/checkpoint412/README.md). This is a development source
+checkpoint;412 headset acceptance and whole-campaign stability remain pending.
+The preserved `checkpoint/410-headset-rollback` branch is the previous normal
+headset source, while main includes the current changes.
 
 The script saves compiled capability output under
 `reports/<architecture>-compiled-capabilities.json`. Its count describes exact

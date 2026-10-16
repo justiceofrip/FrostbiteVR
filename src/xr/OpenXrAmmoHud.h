@@ -1,5 +1,6 @@
 #pragma once
 #include "fvr/graphics/BodyPropFrame.h"
+#include "fvr/interaction/ControllerInput.h"
 #include <Windows.h>
 #include <d3d11.h>
 #include <wrl/client.h>
@@ -20,7 +21,7 @@ public:
     bool Initialize(XrInstance,XrSession,PFN_xrGetInstanceProcAddr,ID3D11Device*,std::int64_t format)noexcept;
     void Receive(const graphics::BodyPropFrame*,const graphics::PairTicket&,std::int64_t now)noexcept;
     void Reset()noexcept {presentation_.Reset();}
-    const XrCompositionLayerQuad* Layer(XrSpace headSpace,std::uint64_t space,
+    const XrCompositionLayerQuad* Layer(XrSpace localSpace,const interaction::InputFrame& input,
         std::int64_t (*clockNs)()noexcept,bool active)noexcept;
     std::uint64_t Uploads()const noexcept{return uploads_;}
     std::uint64_t Errors()const noexcept{return errors_;}

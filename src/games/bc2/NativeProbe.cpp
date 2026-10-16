@@ -1,4 +1,6 @@
 #include "Bc2TrackedViews.h"
+#include "Bc2StereoColorScale.h"
+#include "Bc2NativeFadeDiagnostic.h"
 #include "Bc2SceneMilestoneWriter.h"
 #include "Bc2GraphicsThreadObservation.h"
 #include "Bc2StereoProgressEvidence.h"
@@ -394,6 +396,11 @@ struct TrackedTransaction {
     fvr::bc2::BodyPropPair bodyPropPair;
     std::array<float,16> savedAnchor{},writtenAnchor{};bool anchorWritten=false;
 } tracked;
+fvr::bc2::stereoColorScale::Pair stereoColorScalePair;
+fvr::bc2::stereoColorScale::EffectPair stereoEffectPair;
+fvr::bc2::stereoColorScale::PostProcessPair stereoPostProcessPair;
+bool stereoColorScaleVerified=false;
+fvr::bc2::stereoColorScale::Key CurrentColorScaleKey(unsigned world,unsigned request)noexcept;
 fvr::bc2::ViewAnchorCandidates viewAnchor{};bool viewAnchorMode=false;std::atomic<unsigned> anchorCopies=0;
 bool burstMode=false;bool initializationOnly=false;HANDLE stereoProgress=INVALID_HANDLE_VALUE;
 struct StereoExperiment {
@@ -919,10 +926,10 @@ void BeginTrackedFrame(unsigned incomingFrame)noexcept {
         RecordStereoProgress(fvr::bc2::StereoProgressReason::BeginActiveTransaction,incomingFrame);return;}
     reinterpret_cast<fvr::bc2::SetViewActiveFn>(imageBase+lifecycle.setActive)(reinterpret_cast<void*>(e.eye),false);
     e.drawMask.store(0,std::memory_order_release);e.visibilityMask.store(0,std::memory_order_release);e.frame.store(incomingFrame,std::memory_order_release);
-    if(tracked.restoreFailures.load()||contextRestoreFailures.load()){RecordStereoProgress(fvr::bc2::StereoProgressReason::BeginRestoreFailure,incomingFrame);return;}
+    if(tracked.restoreFailures.load()||contextRestoreFailures.load()||(stereoColorScalePair.counts.restoreFailures||stereoEffectPair.counts.restoreFailures||stereoPostProcessPair.RestoreFailed())){RecordStereoProgress(fvr::bc2::StereoProgressReason::BeginRestoreFailure,incomingFrame);return;}
     fvr::ipc::FrameLease lease{};if(!frameBridge.TryBegin({(std::uint64_t(e.world)<<32)|e.request,incomingFrame,1},lease)){RecordStereoProgress(fvr::bc2::StereoProgressReason::BridgeNoLease,incomingFrame);return;}
     weaponContextCount.store(0);derivedCount.store(0);derivedFrameFailed.store(false);for(auto& binding:derivedProjections)binding.frame.store(0);
-    tracked.lease=lease;tracked.bodyPropPair.Reset();tracked.capturesOkay=true;tracked.state.store(3,std::memory_order_release);
+    tracked.lease=lease;tracked.bodyPropPair.Reset();stereoColorScalePair.Reset();stereoEffectPair.Reset();stereoPostProcessPair.Reset();tracked.capturesOkay=true;tracked.state.store(3,std::memory_order_release);
     std::array<unsigned,4> viewport{};if(!Read(e.main+layout.viewportOffset,viewport.data(),16)){stereoRecovery.cancelUnwrittenRequest.store(lease.requestId,std::memory_order_release);RecordStereoProgress(fvr::bc2::StereoProgressReason::ViewportUnreadable,incomingFrame);return;}
     if(viewport[2]!=lease.requirements.width||viewport[3]!=lease.requirements.height){stereoRecovery.cancelUnwrittenRequest.store(lease.requestId,std::memory_order_release);RecordStereoProgress(fvr::bc2::StereoProgressReason::ViewportSizeChanged,incomingFrame);return;}
     // Acquire before native update, but apply after its per-view far/LOD edits.
@@ -982,7 +989,7 @@ void FinishTrackedFrame(bool completePair)noexcept {
             tracked.anchorWritten=false;
         }
     }
-    const bool published=completePair&&restored&&tracked.capturesOkay&&e.visibilityMask.load(std::memory_order_acquire)==3&&frameBridge.PublishRestored(tracked.lease);
+    const bool published=completePair&&restored&&tracked.capturesOkay&&stereoColorScalePair.Ready(CurrentColorScaleKey(e.world,e.request))&&stereoEffectPair.Ready(CurrentColorScaleKey(e.world,e.request))&&stereoPostProcessPair.Ready(CurrentColorScaleKey(e.world,e.request))&&e.visibilityMask.load(std::memory_order_acquire)==3&&frameBridge.PublishRestored(tracked.lease);
     if(!published)frameBridge.Cancel(tracked.lease);
     milestoneResult.outcome|=(restored?2u:0u)|(tracked.capturesOkay?4u:0u)|(published?8u:0u);
     tracked.bodyPropPair.Reset();
@@ -1154,11 +1161,96 @@ HRESULT STDMETHODCALLTYPE DesktopPresentHook(IDXGISwapChain* chain,UINT interval
     }
     return result;
 }
+// No new native hook: verified inline color/effect scalars share the view lifetime.
+bool ReadColorScale(void*,std::uint32_t address,void* out,std::size_t bytes)noexcept {
+    if(address<0x10000||!bytes||bytes>0x2000||address>UINT32_MAX-bytes)return false;
+    // Local protected reads avoid ReadProcessMemory syscalls on every eye.
+    __try {std::memcpy(out,reinterpret_cast<const void*>(address),bytes);return true;}
+    __except(EXCEPTION_EXECUTE_HANDLER) {return false;}
+}
+template<std::size_t N> bool ReplaceColorScale(void*,std::uint32_t address,const std::array<float,N>& expected,
+    const std::array<float,N>& replacement)noexcept {
+    if(address<0x10000||address>UINT32_MAX-sizeof(expected)||(address&3))return false;
+    // Native view draw lifetime is confined to the proven graphics thread.
+    // A changed owner/value is never overwritten during restoration.
+    MEMORY_BASIC_INFORMATION region{};
+    if(!VirtualQuery(reinterpret_cast<void*>(address),&region,sizeof(region))||region.State!=MEM_COMMIT||
+       (region.Protect&(PAGE_GUARD|PAGE_NOACCESS))||
+       (region.Protect&0xff)!=PAGE_READWRITE||
+       address-reinterpret_cast<std::uintptr_t>(region.BaseAddress)>region.RegionSize||
+       sizeof(expected)>region.RegionSize-(address-reinterpret_cast<std::uintptr_t>(region.BaseAddress)))return false;
+    __try {
+        if(std::memcmp(reinterpret_cast<void*>(address),expected.data(),sizeof(expected)))return false;
+        std::memcpy(reinterpret_cast<void*>(address),replacement.data(),sizeof(replacement));return true;
+    } __except(EXCEPTION_EXECUTE_HANDLER) {return false;}
+}
+fvr::bc2::stereoColorScale::Key CurrentColorScaleKey(unsigned world,unsigned request)noexcept {
+    const auto& e=stereoExperiment;
+    if(!stereoColorScaleVerified||!streamMode||tracked.state.load(std::memory_order_acquire)!=1||
+       e.stage.load(std::memory_order_acquire)!=StereoExperiment::Armed||world!=e.world||request!=e.request||
+       tracked.lease.native.frameId!=e.frame.load(std::memory_order_acquire))return {};
+    return {world,request,e.main,e.eye,e.frame.load(std::memory_order_acquire),graphicsBootstrapEvidence.thread,
+        GetCurrentThreadId(),tracked.lease.requestId,tracked.lease.tracking.generation,tracked.lease.tracking.spaceGeneration};
+}
+// A native structured exception does not unwind C++ RAII under /EHsc. This
+// leaf owns no C++ destructors: __finally restores all scalar scopes on that path.
+void OriginalDrawWithColorScope(void* self,void* request,void* view,void* data,
+    fvr::bc2::stereoColorScale::Pair::Scope* color,fvr::bc2::stereoColorScale::EffectPair::Scope* effect,fvr::bc2::stereoColorScale::PostProcessPair::Scope* postProcess,bool wasDrawing){
+    __try {drawOriginal(self,request,view,data);}
+    __finally {
+        drawingNativeView=wasDrawing;
+        if(AbnormalTermination()){postProcess->Abort();effect->Abort();color->Abort();tracked.capturesOkay=false;}
+    }
+}
+
+#if defined(FVR_BC2_NATIVE_FADE_DIAGNOSTIC)
+fvr::bc2::fadeDiagnostic::Observer nativeFadeObserver;
+#endif
+void ObserveNativeFade(fvr::bc2::fadeDiagnostic::Phase phase,std::uintptr_t world,
+    std::uintptr_t request,std::uintptr_t view=0,ID3D11DeviceContext* captureContext=nullptr,
+    ID3D11RenderTargetView* captureTarget=nullptr,ID3D11Texture2D* captureSource=nullptr,
+    const fvr::ipc::FrameLease* lease=nullptr)noexcept {
+#if defined(FVR_BC2_NATIVE_FADE_DIAGNOSTIC)
+    if(!nativeFadeObserver.Enabled()||!nativeFadeObserver.Due(GetTickCount64()))return;
+    fvr::bc2::fadeDiagnostic::Key key;key.world=world;key.request=request;key.view=view;
+    // Ordinary brackets report the first two request-list candidates, not guessed eye ownership.
+    unsigned begin=0,end=0;
+    fvr::bc2::fadeDiagnostic::ReadField(Read,request,0x24,&begin,4);
+    fvr::bc2::fadeDiagnostic::ReadField(Read,request,0x28,&end,4);
+    if(begin&&end>=begin&&end-begin<=64&&(end-begin)%4==0){
+        key.candidateCount=(end-begin)/4;unsigned candidates[2]{};
+        if(fvr::bc2::fadeDiagnostic::ReadField(Read,begin,0,candidates,(std::min)(key.candidateCount,2u)*4))
+            for(unsigned i=0;i<2;++i)key.candidates[i]=candidates[i];
+    }
+    // CaptureTrackedEye supplies the same lease and stereo identities it will copy.
+    if(lease){key.candidates={stereoExperiment.main,stereoExperiment.eye};
+        key.candidateCount=2;key.candidatesAreStereoPair=true;key.pairRequest=lease->requestId;
+        key.tracking=lease->tracking.generation;key.space=lease->tracking.spaceGeneration;
+        key.leaseFrame=lease->native.frameId;}
+    // Acquire the existing immutable Present bootstrap before reading its identity.
+    // A World/Prepare callback on another thread still records native fields, but
+    // introduces no COM/context access. Explicit CaptureSource also obeys this gate.
+    const bool graphicsReady=graphicsRuntimeReady.load(std::memory_order_acquire);
+    auto* context=graphicsReady?(captureContext?captureContext:observedImmediateContext):nullptr;
+    key.graphicsThread=graphicsReady?graphicsBootstrapEvidence.thread:0;
+    key.contextStatus=fvr::bc2::fadeDiagnostic::CheckContext(graphicsReady,key.graphicsThread,
+        GetCurrentThreadId(),graphicsReady?graphicsBootstrapEvidence.context:0,
+        reinterpret_cast<std::uintptr_t>(context));
+    if(key.contextStatus!=fvr::bc2::fadeDiagnostic::ContextStatus::Ready)context=nullptr;
+    nativeFadeObserver.Sample(phase,key,context,captureTarget,captureSource);
+#else
+    (void)phase;(void)world;(void)request;(void)view;(void)captureContext;
+    (void)captureTarget;(void)captureSource;(void)lease;
+#endif
+}
+
 bool CaptureTrackedEye(unsigned eye)noexcept {
     const auto renderer=U32(imageBase+profile.rendererGlobal);if(U32(renderer)!=imageBase+profile.rendererVtable)return false;
     auto* device=reinterpret_cast<ID3D11Device*>(U32(renderer+0x7c));ComPtr<ID3D11DeviceContext> context;device->GetImmediateContext(&context);
     ComPtr<ID3D11RenderTargetView> target;context->OMGetRenderTargets(1,&target,nullptr);if(!target)return false;
     ComPtr<ID3D11Resource> resource;target->GetResource(&resource);ComPtr<ID3D11Texture2D> texture;if(FAILED(resource.As(&texture)))return false;
+    ObserveNativeFade(fvr::bc2::fadeDiagnostic::Phase::CaptureSource,stereoExperiment.world,stereoExperiment.request,
+        eye?stereoExperiment.eye:stereoExperiment.main,context.Get(),target.Get(),texture.Get(),&tracked.lease);
     return frameBridge.CaptureEye(eye,texture.Get(),tracked.lease);
 }
 
@@ -1692,7 +1784,9 @@ void __fastcall WorldHook(void* self,void*,void* request){
             reinterpret_cast<fvr::bc2::SetViewActiveFn>(imageBase+lifecycle.setActive)(reinterpret_cast<void*>(stereoExperiment.eye),false);
         }
     }
+    ObserveNativeFade(fvr::bc2::fadeDiagnostic::Phase::WorldBefore,reinterpret_cast<std::uintptr_t>(self),reinterpret_cast<std::uintptr_t>(request));
     worldOriginal(self,request); // Exactly one original call; no simulation/render replay.
+    ObserveNativeFade(fvr::bc2::fadeDiagnostic::Phase::WorldAfter,reinterpret_cast<std::uintptr_t>(self),reinterpret_cast<std::uintptr_t>(request));
     if(workPool.stage.load(std::memory_order_acquire)==1&&GetCurrentThreadId()==workPool.thread){const auto begin=U32(workPool.owner+0x850),end=U32(workPool.owner+0x854);if(end>=begin&&end-begin<=workPool.storage.size())workPool.peak=(std::max)(workPool.peak,(end-begin)/40);}
     if(streamMode)FinishTrackedFrame(false);
     current=previous;
@@ -1711,7 +1805,9 @@ void* __fastcall PrepareHook(void* self,void*,void* request,void* view){
         std::optional<fvr::bc2::Bc2ReloadProducerBinding::Scope> producerScope;
         if(fvr::bc2::ReloadProducerBinding().Enabled())producerScope.emplace(fvr::bc2::ReloadProducerBinding(),
             producerKey.value_or(fvr::bc2::ReloadProducerView{}),bool(producerKey),ReloadDrawNowNs());
+        ObserveNativeFade(fvr::bc2::fadeDiagnostic::Phase::PrepareBefore,reinterpret_cast<std::uintptr_t>(self),reinterpret_cast<std::uintptr_t>(request),reinterpret_cast<std::uintptr_t>(view));
         data=prepareOriginal(self,request,view);
+        ObserveNativeFade(fvr::bc2::fadeDiagnostic::Phase::PrepareAfter,reinterpret_cast<std::uintptr_t>(self),reinterpret_cast<std::uintptr_t>(request),reinterpret_cast<std::uintptr_t>(view));
         if(producerScope)producerScope->Complete(producerKey&&ReloadProducerViewKey(reinterpret_cast<std::uintptr_t>(self),reinterpret_cast<std::uintptr_t>(request),reinterpret_cast<std::uintptr_t>(view))==producerKey,ReloadDrawNowNs());
     }
     if(current&&current->request==reinterpret_cast<std::uintptr_t>(request)&&current->world==reinterpret_cast<std::uintptr_t>(self))++current->prepared;
@@ -1737,6 +1833,9 @@ void __fastcall DrawHook(void* self,void*,void* request,void* view,void* data){
     const bool trackedEvidence=streamMode&&tracked.state.load(std::memory_order_acquire)==1&&
         (address==stereoExperiment.main||address==stereoExperiment.eye);
     const unsigned evidenceEye=address==stereoExperiment.eye?1u:0u;
+    fvr::bc2::stereoColorScale::Pair::Scope colorScope(stereoColorScalePair);
+    fvr::bc2::stereoColorScale::EffectPair::Scope effectScope(stereoEffectPair);
+    fvr::bc2::stereoColorScale::PostProcessPair::Scope postProcessScope(stereoPostProcessPair);
     const bool bodyAmmoEyeOwned=bodyAmmoObservationEnabled&&trackedEvidence&&
         reinterpret_cast<unsigned>(self)==stereoExperiment.world&&reinterpret_cast<unsigned>(request)==stereoExperiment.request&&
         U32(stereoExperiment.world+0x88)==stereoExperiment.frame&&U32(address)==imageBase+layout.vtable&&
@@ -1787,8 +1886,16 @@ void __fastcall DrawHook(void* self,void*,void* request,void* view,void* data){
         if(trackedEvidence&&reinterpret_cast<unsigned>(self)==stereoExperiment.world&&reinterpret_cast<unsigned>(request)==stereoExperiment.request)
             opticView=fvr::bc2::opticFilterRuntime::View{reinterpret_cast<unsigned>(request),unsigned(address),stereoExperiment.frame.load(),int(evidenceEye)};
         OpticViewScope opticScope(opticView);
+        if(trackedEvidence&&!colorScope.Begin(CurrentColorScaleKey(reinterpret_cast<unsigned>(self),reinterpret_cast<unsigned>(request)),evidenceEye))tracked.capturesOkay=false;
+        if(trackedEvidence&&!effectScope.Begin(CurrentColorScaleKey(reinterpret_cast<unsigned>(self),reinterpret_cast<unsigned>(request)),evidenceEye))tracked.capturesOkay=false;
+        if(trackedEvidence&&!postProcessScope.Begin(CurrentColorScaleKey(reinterpret_cast<unsigned>(self),reinterpret_cast<unsigned>(request)),evidenceEye))tracked.capturesOkay=false;
         const auto wasDrawing=drawingNativeView;drawingNativeView=true;sceneTrace::Mark(milestone,SceneMilestoneStage::CallingOriginal);
-    drawOriginal(self,request,view,data);drawingNativeView=wasDrawing;
+    ObserveNativeFade(fvr::bc2::fadeDiagnostic::Phase::DrawBefore,reinterpret_cast<std::uintptr_t>(self),reinterpret_cast<std::uintptr_t>(request),reinterpret_cast<std::uintptr_t>(view));
+    OriginalDrawWithColorScope(self,request,view,data,&colorScope,&effectScope,&postProcessScope,wasDrawing);
+    if(trackedEvidence&&!colorScope.DrawReturned(CurrentColorScaleKey(reinterpret_cast<unsigned>(self),reinterpret_cast<unsigned>(request))))tracked.capturesOkay=false;
+    if(trackedEvidence&&!effectScope.DrawReturned(CurrentColorScaleKey(reinterpret_cast<unsigned>(self),reinterpret_cast<unsigned>(request))))tracked.capturesOkay=false;
+    if(trackedEvidence&&!postProcessScope.DrawReturned(CurrentColorScaleKey(reinterpret_cast<unsigned>(self),reinterpret_cast<unsigned>(request))))tracked.capturesOkay=false;
+    ObserveNativeFade(fvr::bc2::fadeDiagnostic::Phase::DrawAfter,reinterpret_cast<std::uintptr_t>(self),reinterpret_cast<std::uintptr_t>(request),reinterpret_cast<std::uintptr_t>(view));
     sceneTrace::Mark(milestone,SceneMilestoneStage::OriginalReturned);
     }drawingEvidenceEye=priorEvidenceEye;
 #ifdef FVR_BC2_BODY_SCENE_DEPTH
@@ -1887,8 +1994,18 @@ void __fastcall DrawHook(void* self,void*,void* request,void* view,void* data){
     if(stereoMode){
         const auto& e=stereoExperiment;
         if((!streamMode||tracked.state.load(std::memory_order_acquire)==1)&&e.stage.load(std::memory_order_acquire)==StereoExperiment::Armed&&reinterpret_cast<unsigned>(self)==e.world&&reinterpret_cast<unsigned>(request)==e.request&&U32(e.world+0x88)==e.frame){
-            if(address==e.main){if(streamMode&&tracked.state.load(std::memory_order_acquire)==1)tracked.capturesOkay&=CaptureTrackedEye(0);CaptureWorldColor(colorCaptures[1],e.frame);stereoExperiment.drawMask.fetch_or(1,std::memory_order_release);}
-            if(address==e.eye){if(streamMode&&tracked.state.load(std::memory_order_acquire)==1)tracked.capturesOkay=tracked.capturesOkay&&CaptureTrackedEye(1);CaptureWorldColor(colorCaptures[2],e.frame);if(stereoExperiment.drawMask.fetch_or(2,std::memory_order_acq_rel)==1)stereoExperiment.framesRendered.fetch_add(1,std::memory_order_release);if(streamMode)FinishTrackedFrame(true);}
+            if(address==e.main){if(streamMode&&tracked.state.load(std::memory_order_acquire)==1){const bool captured=CaptureTrackedEye(0);tracked.capturesOkay=tracked.capturesOkay&&captured;
+                const bool capturesOkay=tracked.capturesOkay;
+                const bool colorComplete=colorScope.Complete(CurrentColorScaleKey(e.world,e.request),capturesOkay);
+                const bool effectComplete=effectScope.Complete(CurrentColorScaleKey(e.world,e.request),capturesOkay);
+                const bool postProcessComplete=postProcessScope.Complete(CurrentColorScaleKey(e.world,e.request),capturesOkay);
+                if(!colorComplete||!effectComplete||!postProcessComplete)tracked.capturesOkay=false;}CaptureWorldColor(colorCaptures[1],e.frame);stereoExperiment.drawMask.fetch_or(1,std::memory_order_release);}
+            if(address==e.eye){if(streamMode&&tracked.state.load(std::memory_order_acquire)==1){const bool captured=tracked.capturesOkay&&CaptureTrackedEye(1);tracked.capturesOkay=tracked.capturesOkay&&captured;
+                const bool capturesOkay=tracked.capturesOkay;
+                const bool colorComplete=colorScope.Complete(CurrentColorScaleKey(e.world,e.request),capturesOkay);
+                const bool effectComplete=effectScope.Complete(CurrentColorScaleKey(e.world,e.request),capturesOkay);
+                const bool postProcessComplete=postProcessScope.Complete(CurrentColorScaleKey(e.world,e.request),capturesOkay);
+                if(!colorComplete||!effectComplete||!postProcessComplete)tracked.capturesOkay=false;}CaptureWorldColor(colorCaptures[2],e.frame);if(stereoExperiment.drawMask.fetch_or(2,std::memory_order_acq_rel)==1)stereoExperiment.framesRendered.fetch_add(1,std::memory_order_release);if(streamMode)FinishTrackedFrame(true);}
         }
         for(unsigned i=0;i<3;++i)if(colorCaptures[i].step==ColorCapture::Step::Pending||(i==0&&colorCaptures[0].step==ColorCapture::Step::Idle))CaptureWorldColor(colorCaptures[i],U32(reinterpret_cast<unsigned>(self)+0x88));
     }
@@ -1909,6 +2026,9 @@ void __fastcall DrawHook(void* self,void*,void* request,void* view,void* data){
     sceneTrace::Mark(milestone,SceneMilestoneStage::Exit);
 }
 bool DisableProbeHooks()noexcept {
+    // A normal owned knife must return before its native observer/guards stop.
+    // Failure preserves the dependencies and reports hooks_disabled=false.
+    if(!fvr::bc2::gameplay::PrepareSessionStop())return false;
     graphicsBootstrap.Cancel();
     bodyAmmoRenderer.RequestStop();
     fvr::bc2::opticFilterRuntime::Disable();
@@ -1953,7 +2073,78 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
        config.pumpHoldDiagnostic!=fvr::bc2::PumpHoldDiagnostic::Disabled||
        config.bodyHolsterDiagnostic!=fvr::bc2::BodyHolsterDiagnosticProfile::Disabled)return 10;
 #endif
+#ifdef FVR_BC2_PLAYER_GRENADE_NORMAL
+    constexpr bool normalPlayerGrenadesCompiled=true;
+#else
+    constexpr bool normalPlayerGrenadesCompiled=false;
+#endif
+    if(!fvr::bc2::ValidNormalPlayerGrenades(config.normalPlayerGrenades,config.flags,config.hostPid,
+        config.magazineReloadSession,config.chestKnifeProbe||config.ordinaryGrenadeInput||config.ordinaryResourceInput||
+        config.m95OrdinaryBoltInputCycles||config.m95PhysicalBoltCycles||config.m95StockShot||
+        unsigned(config.bodyHolsterDiagnostic)||unsigned(config.pumpHoldDiagnostic),normalPlayerGrenadesCompiled))return 10;
+#ifdef FVR_BC2_PLAYER_KNIFE_NORMAL
+    constexpr bool normalKnifeCompiled=true;
+#else
+    constexpr bool normalKnifeCompiled=false;
+#endif
+#ifdef FVR_BC2_PLAYER_CONTEXTUAL_NORMAL
+    constexpr bool normalContextualCompiled=true;
+#else
+    constexpr bool normalContextualCompiled=false;
+#endif
+    if(!fvr::bc2::ValidNormalPlayerTools(config.normalPlayerKnife,config.normalContextualTools,config.flags,config.hostPid,
+        config.magazineReloadSession,config.chestKnifeProbe||config.ordinaryGrenadeInput||config.ordinaryResourceInput||
+        config.m95OrdinaryBoltInputCycles||config.m95PhysicalBoltCycles||config.m95StockShot||
+        unsigned(config.bodyHolsterDiagnostic)||unsigned(config.pumpHoldDiagnostic),normalKnifeCompiled,normalContextualCompiled))return 10;
+#ifdef FVR_BC2_CHEST_KNIFE_PROBE
+    constexpr bool knifeCompiled=true;
+#else
+    constexpr bool knifeCompiled=false;
+#endif
+    if(!fvr::bc2::ValidChestKnifeProbe(config.chestKnifeProbe,config.flags,config.durationMs,config.magazineReloadSession,
+        continuous||config.normalPlayerGrenades||config.normalPlayerKnife||config.normalContextualTools||config.ordinaryGrenadeInput||config.ordinaryResourceInput||config.m95OrdinaryBoltInputCycles||
+        config.m95PhysicalBoltCycles||config.m95StockShot||unsigned(config.boatHeadAim)||unsigned(config.bodyHolsterDiagnostic)||
+        unsigned(config.pumpHoldDiagnostic),knifeCompiled))return 10;
+#ifdef FVR_BC2_CONTEXTUAL_TOOL_PROBE
+    constexpr bool contextualFixtureCompiled=true;
+#else
+    constexpr bool contextualFixtureCompiled=false;
+#endif
+    (void)contextualFixtureCompiled;
+#ifdef FVR_BC2_CONTEXTUAL_TOOL_PROBE
+    if(!fvr::bc2::ValidContextualToolFixture(config.flags,config.durationMs,config.magazineReloadSession,
+        continuous||config.normalPlayerGrenades||config.normalPlayerKnife||config.normalContextualTools||config.chestKnifeProbe||config.ordinaryGrenadeInput||config.ordinaryResourceInput||
+        config.m95OrdinaryBoltInputCycles||config.m95PhysicalBoltCycles||config.m95StockShot||unsigned(config.boatHeadAim)||
+        unsigned(config.bodyHolsterDiagnostic)||unsigned(config.pumpHoldDiagnostic)))return 10;
+#endif
     if(InterlockedCompareExchange(&started,1,0))return 11;
+    if(config.ordinaryGrenadeInput){
+#ifdef FVR_BC2_ORDINARY_GRENADE_PROBE
+        constexpr bool stockCompiled=true;
+#else
+        constexpr bool stockCompiled=false;
+#endif
+#if defined(FVR_BC2_PLAYER_GRENADE) && !defined(FVR_BC2_PLAYER_GRENADE_NORMAL)
+        constexpr bool playerCompiled=true;
+#else
+        constexpr bool playerCompiled=false;
+#endif
+#if defined(FVR_BC2_ORDINARY_GRENADE_FADE_PROBE) && defined(FVR_BC2_NATIVE_FADE_DIAGNOSTIC)
+        constexpr bool combinedCompiled=true;
+#else
+        constexpr bool combinedCompiled=false;
+#endif
+#if defined(FVR_BC2_TWO_GRENADE_DEATH_PROBE) && defined(FVR_BC2_NATIVE_FADE_DIAGNOSTIC)
+        constexpr bool twoDeathCompiled=true;
+#else
+        constexpr bool twoDeathCompiled=false;
+#endif
+        if(!((config.ordinaryGrenadeInput==3||config.ordinaryGrenadeInput==4)?playerCompiled:stockCompiled)||
+           !fvr::bc2::ValidOrdinaryGrenadeInputSession(config.ordinaryGrenadeInput,config.flags,config.durationMs,
+           config.magazineReloadSession,continuous||config.ordinaryResourceInput||config.m95OrdinaryBoltInputCycles||
+           config.m95PhysicalBoltCycles||config.m95StockShot||unsigned(config.boatHeadAim)||
+           unsigned(config.bodyHolsterDiagnostic)||unsigned(config.pumpHoldDiagnostic),combinedCompiled,playerCompiled,twoDeathCompiled))return 10;
+    }
     cameraPulseMode=mode<=2?mode:0;lifecycleMode=mode==4;streamMode=mode==9;streamToken=config.frameChannel;stereoMode=mode==5||mode==6||mode==8||streamMode;burstMode=mode==8||streamMode;initializationOnly=mode==6;poolOnly=mode==7;
     opticEvidenceEnabled=bool(config.flags&0x8000000u);
     bool hooksEnabled=false,disabled=true,workerObservation=false;std::ofstream report;fvr::platform::ProcessLifetime hostLifetime;
@@ -1970,6 +2161,23 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
         profile=*discovered;layout=*view;imageBase=reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
         const auto same=[&](unsigned rva,std::size_t n){std::vector<std::byte> live(n);return Read(imageBase+rva,live.data(),n)&&std::memcmp(live.data(),bytes.data()+Offset(pe.image,rva,n),n)==0;};
         Require(same(render->worldRender,streamMode?0x199:40)&&same(render->prepareView,41)&&same(render->drawView,16),"Native code already modified");
+        if(streamMode){
+            const fvr::bc2::stereoColorScale::Memory colorMemory{nullptr,ReadColorScale,ReplaceColorScale<3>};
+            const fvr::bc2::stereoColorScale::EffectMemory effectMemory{nullptr,ReadColorScale,ReplaceColorScale<4>};
+            Require(fvr::bc2::stereoColorScale::VerifyCode(colorMemory,unsigned(imageBase+layout.vtable),unsigned(imageBase+render->drawView))&&
+                same(render->drawView+0x1820,646),"Native view color modulation consumer changed");
+            Require(fvr::bc2::stereoColorScale::VerifyEffectCode(effectMemory,unsigned(imageBase+layout.vtable),unsigned(imageBase+render->drawView))&&
+                same(render->drawView+0x1b3f,161),"Native view four-float effect consumer changed");
+            Require(fvr::bc2::stereoColorScale::VerifyPostProcessCode(colorMemory,unsigned(imageBase+layout.vtable),unsigned(imageBase+render->drawView),unsigned(imageBase))&&
+                same(render->drawView+0x12ac,224)&&same(render->drawView+0x1a94,18),"Native view numeric postprocess consumer changed");
+            stereoColorScalePair.Configure(colorMemory,{unsigned(imageBase+layout.vtable),
+                unsigned(imageBase+lifecycle.requestVtable),unsigned(imageBase+render->worldRendererVtable)});
+            stereoEffectPair.Configure(effectMemory,{unsigned(imageBase+layout.vtable),
+                unsigned(imageBase+lifecycle.requestVtable),unsigned(imageBase+render->worldRendererVtable)});
+            stereoPostProcessPair.Configure(colorMemory,{nullptr,ReadColorScale,ReplaceColorScale<5>},{nullptr,ReadColorScale,ReplaceColorScale<16>},
+                {unsigned(imageBase+layout.vtable),unsigned(imageBase+lifecycle.requestVtable),unsigned(imageBase+render->worldRendererVtable)});
+            stereoColorScaleVerified=true;
+        }
         Require(same(visibility->worldUpdate,35)&&same(visibility->worldUpdate+0x383,5)&&same(visibility->worldUpdate+0x3e8,9)&&same(visibility->prepareVisibility,37)&&same(visibility->prepareVisibility+0x2e9a,9),"Visibility code changed");
         Require(same(caches->getView,21)&&same(caches->getProjection,21)&&same(caches->getFrustum,21)&&same(caches->updateView,26)&&same(caches->updateProjection,22)&&same(caches->updateFrustum,20),"Camera math code changed");
         Require(same(caches->updateView+0x1d5,10)&&same(caches->updateProjection+0x1c1,10)&&same(caches->updateFrustum+0x7c,6),"Camera math epilogues changed");
@@ -1978,6 +2186,12 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
         }
         if(lifecycleMode||stereoMode)Require(same(viewCallbacks.rememberMain,59)&&same(viewCallbacks.registerView,57)&&same(viewCallbacks.unregisterView,61),"View lifecycle callbacks modified");
         if(stereoMode)Require(same(initialization.rebuild,0xa26)&&same(initialization.parentGetter,7)&&same(initialization.refreshRegistered,0x164),"Native initialization code modified");
+#if defined(FVR_BC2_NATIVE_FADE_DIAGNOSTIC)
+        Require(streamMode,"Native fade observer requires the existing stream capture path");
+        Require(nativeFadeObserver.ConfigureFile(output.parent_path()/L"native-fade-window.txt",imageBase+layout.vtable,Read),
+            "Native fade window or verified getter bytes invalid");
+        Require((config.ordinaryGrenadeInput!=2&&config.ordinaryGrenadeInput!=4)||nativeFadeObserver.Enabled(),"Combined grenade observation requires an enabled native fade window");
+#endif
 
         if(streamMode){
             stereoRecovery.worldType=unsigned(imageBase+render->worldRendererVtable);stereoRecovery.subsystemType=unsigned(imageBase+render->subsystemVtable);
@@ -2124,6 +2338,9 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
 #else
         constexpr bool interruptOrdinaryPump=false;
 #endif
+        if(config.ordinaryGrenadeInput==4)Require(fvr::bc2::gameplay::EnableTwoGrenadeDeathObservation(),"Private two-grenade death observation setup rejected");
+        else if(config.ordinaryGrenadeInput==3)Require(fvr::bc2::gameplay::EnablePlayerGrenades(),"Private player grenade setup rejected");
+        else if(config.ordinaryGrenadeInput)Require(fvr::bc2::gameplay::EnableOrdinaryGrenadeProbe(),"Private ordinary grenade setup rejected");
         if(config.ordinaryResourceInput)
             Require(fvr::bc2::reloadFlowRuntime::EnableOrdinaryResourceInputRecording()&&
                 fvr::bc2::gameplay::EnableOrdinaryResourceInputProbe(interruptOrdinaryPump,config.ordinaryResourceInput==2),
@@ -2214,7 +2431,20 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
             auto* projectionEntry=reinterpret_cast<void*>(imageBase+overrides->setter);
             Require(MH_CreateHook(projectionEntry,ProjectionContextHook,reinterpret_cast<void**>(&projectionContextOriginal))==MH_OK,"Create projection override observer");hookEntries[9]=projectionEntry;
         }
-        if(streamMode)fvr::bc2::menu::Install(bytes,pe.image,imageBase,streamToken);
+        if(streamMode){const bool menuInstalled=fvr::bc2::menu::Install(bytes,pe.image,imageBase,streamToken);
+            Require(((config.ordinaryGrenadeInput!=3&&config.ordinaryGrenadeInput!=4)&&!config.normalPlayerGrenades&&!config.chestKnifeProbe&&!config.normalPlayerKnife&&!config.normalContextualTools)||menuInstalled,"Player grenade requires the real native menu source");
+            // Ordinary setup and actual menu binding must succeed first. This
+            // enables the unchanged player policy, never the finite stock probe.
+            if(config.chestKnifeProbe||config.normalPlayerKnife)Require(fvr::bc2::gameplay::EnableChestKnifeDrawReturn(
+                bytes,pe.image,imageBase,config.normalPlayerKnife||config.chestKnifeProbe==2),"Chest knife setup rejected");
+            if(config.normalPlayerGrenades)Require(fvr::bc2::gameplay::EnablePlayerGrenades(),"Normal player grenade setup rejected");
+#ifdef FVR_BC2_CONTEXTUAL_TOOLS
+            if(config.normalContextualTools||contextualFixtureCompiled){
+            Require(menuInstalled,"Contextual tools require the current native menu source");
+            Require(fvr::bc2::gameplay::EnableContextualTools(),"Contextual tool setup rejected");
+            }
+#endif
+        }
         // Retain trampolines/module until process exit, including partial setup.
         // Disabling entry patches is safe even if a callback is still returning.
         if(streamMode&&!continuous&&config.durationMs<=15000&&(passEvidenceEnabled||(config.flags&0xc00000u))){
@@ -2247,7 +2477,40 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
         sampling.store(true,std::memory_order_release);fvr::bc2::menu::Start();if(config.flags&0x800u)fvr::bc2::gameplay::Start();
         sceneTrace::Writer sceneWriter(output.parent_path()/L"scene-milestones.jsonl");
         bool cycleFailureSaved=false,originObservationSaved=false;
+#ifdef FVR_BC2_PUMP_RECEIVER_GAP_PROBE
+        bool receiverGapObservationSaved=false;
+#endif
+#ifdef FVR_BC2_SHELL_FOCUS_LOSS_PROBE
+        bool shellFocusSaved=false;
+#endif
         const auto persistCycleFailure=[&]{
+#ifdef FVR_BC2_SHELL_FOCUS_LOSS_PROBE
+            if(!shellFocusSaved){
+                LARGE_INTEGER q{},f{};QueryPerformanceCounter(&q);QueryPerformanceFrequency(&f);
+                const auto now=(q.QuadPart/f.QuadPart)*1000000000ll+(q.QuadPart%f.QuadPart)*1000000000ll/f.QuadPart;
+                if(const auto w=fvr::bc2::gameplay::ReadShellFocusReady(now)){
+                    const auto pending=output.parent_path()/L"shell-focus-ready.pending";
+                    std::ofstream ready(pending,std::ios::binary);
+                    ready<<w->space<<' '<<w->cycle<<' '<<w->input<<' '<<w->observedNs<<' '<<w->deadlineNs<<' '
+                        <<w->completedObservedNs<<' '<<w->loaded<<' '<<w->reserve<<' '<<w->capacity<<'\n';
+                    ready.close();Require(bool(ready),"Save shell focus witness");
+                    std::filesystem::rename(pending,output.parent_path()/L"shell-focus-ready.txt");shellFocusSaved=true;
+                }
+            }
+#endif
+#ifdef FVR_BC2_PUMP_RECEIVER_GAP_PROBE
+            if(!receiverGapObservationSaved){
+                LARGE_INTEGER q{},f{};QueryPerformanceCounter(&q);QueryPerformanceFrequency(&f);
+                const auto now=(q.QuadPart/f.QuadPart)*1000000000ll+(q.QuadPart%f.QuadPart)*1000000000ll/f.QuadPart;
+                if(const auto w=fvr::bc2::gameplay::ReadPumpReceiverGapReady(now)){
+                    const auto pending=output.parent_path()/L"pump-receiver-gap-ready.pending";
+                    std::ofstream ready(pending,std::ios::binary);ready<<w->space<<' '<<w->cycle<<' '<<w->shot<<' '<<w->input<<' '
+                        <<w->observedNs<<' '<<w->deadlineNs<<' '<<w->loaded<<' '<<w->reserve<<' '<<w->capacity<<' '<<w->travel<<'\n';
+                    ready.close();Require(bool(ready),"Save receiver gap witness");
+                    std::filesystem::rename(pending,output.parent_path()/L"pump-receiver-gap-ready.txt");receiverGapObservationSaved=true;
+                }
+            }
+#endif
 #if defined(FVR_BC2_ORDINARY_RESOURCE_INPUT_PROBE)
             // A diagnostic observer only: publish an existing native debt to
             // the external input receiver. It never changes game state. The
@@ -2272,6 +2535,78 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
             std::ofstream evidence(output.parent_path()/L"native-cycle-first-failure.json",std::ios::binary);
             evidence<<captured.str();evidence.flush();cycleFailureSaved=bool(evidence);
         };
+        // File IO stays on this existing bounded worker, never a native callback.
+        FILETIME deathCreated{},deathExit{},deathKernel{},deathUser{};
+        if(config.ordinaryGrenadeInput==4)Require(GetProcessTimes(GetCurrentProcess(),&deathCreated,&deathExit,&deathKernel,&deathUser)!=0,"Read exact death fixture process identity");
+        std::ofstream deathWitnessLog;if(config.ordinaryGrenadeInput==4)deathWitnessLog.open(output.parent_path()/L"two-grenade-native.jsonl");
+        unsigned deathWitnessRows=0;std::uint64_t deathWitnessLastTick=0;
+        const auto persistDeathReadiness=[&](){
+            if(config.ordinaryGrenadeInput!=4)return;
+            const auto tick=GetTickCount64();if(deathWitnessLastTick&&tick-deathWitnessLastTick<50)return;deathWitnessLastTick=tick;
+            Require(deathWitnessRows<650,"Two-grenade readiness output limit");
+            LARGE_INTEGER q{},f{};QueryPerformanceCounter(&q);QueryPerformanceFrequency(&f);
+            const auto now=(q.QuadPart/f.QuadPart)*1000000000ll+(q.QuadPart%f.QuadPart)*1000000000ll/f.QuadPart;
+            auto w=fvr::bc2::gameplay::ReadTwoGrenadeDeathReadiness(now).value_or(fvr::bc2::TwoGrenadeNativeWitness{});
+            w.pid=GetCurrentProcessId();w.creation=(std::uint64_t(deathCreated.dwHighDateTime)<<32)|deathCreated.dwLowDateTime;w.tickMs=tick;
+            const auto temporary=output.parent_path()/L"two-grenade-native.pending",final=output.parent_path()/L"two-grenade-native.bin";
+            std::ofstream file(temporary,std::ios::binary|std::ios::trunc);file.write(reinterpret_cast<const char*>(&w),sizeof(w));file.close();Require(bool(file),"Write two-grenade readiness");
+            // Existing receiver handles share DELETE but MoveFileEx replacement
+            // still fails while they are open. ReplaceFile preserves their old
+            // complete snapshot and publishes these unchanged witness bytes.
+            const bool published=GetFileAttributesW(final.c_str())!=INVALID_FILE_ATTRIBUTES?
+                ReplaceFileW(final.c_str(),temporary.c_str(),nullptr,0,nullptr,nullptr)!=0:
+                MoveFileExW(temporary.c_str(),final.c_str(),MOVEFILE_WRITE_THROUGH)!=0;
+            Require(published,"Publish two-grenade readiness");
+            deathWitnessLog<<"{\"index\":"<<deathWitnessRows++<<",\"tick_ms\":"<<tick<<",\"witness\":[";
+            std::array<std::uint64_t,sizeof(w)/sizeof(std::uint64_t)> words{};std::memcpy(words.data(),&w,sizeof(w));
+            for(unsigned i=0;i<words.size();++i){if(i)deathWitnessLog<<',';deathWitnessLog<<words[i];}deathWitnessLog<<"]}\n";
+            deathWitnessLog.flush();Require(bool(deathWitnessLog),"Save two-grenade readiness evidence");
+        };
+        FILETIME knifeCreated{},knifeExit{},knifeKernel{},knifeUser{};
+        if(config.chestKnifeProbe)Require(GetProcessTimes(GetCurrentProcess(),&knifeCreated,&knifeExit,&knifeKernel,&knifeUser)!=0,"Read exact knife fixture identity");
+        unsigned knifeWitnessRows=0,knifeWitnessFailures=0,knifeWitnessLastError=0;
+        const auto persistKnifeWitness=[&](){
+            if(!config.chestKnifeProbe)return;
+            Require(knifeWitnessRows++<450,"Knife witness output bound");
+            LARGE_INTEGER q{},f{};QueryPerformanceCounter(&q);QueryPerformanceFrequency(&f);
+            const auto now=(q.QuadPart/f.QuadPart)*1000000000ll+(q.QuadPart%f.QuadPart)*1000000000ll/f.QuadPart;
+            auto w=fvr::bc2::gameplay::ReadChestKnifeProbeWitness(now).value_or(fvr::bc2::ChestKnifeProbeWitness{});
+            w.pid=GetCurrentProcessId();w.creation=(std::uint64_t(knifeCreated.dwHighDateTime)<<32)|knifeCreated.dwLowDateTime;w.tickMs=GetTickCount64();
+            const auto temporary=output.parent_path()/L"chest-knife.pending",final=output.parent_path()/L"chest-knife.bin";
+            std::ofstream file(temporary,std::ios::binary|std::ios::trunc);file.write(reinterpret_cast<const char*>(&w),sizeof(w));file.close();
+            // ReplaceFile permits an existing delete-shared snapshot reader.
+            // A failed diagnostic publication retains its old source deadline;
+            // it cannot stop an accepted operation or invent fresh authority.
+            if(!file){++knifeWitnessFailures;knifeWitnessLastError=GetLastError();return;}
+            const bool exists=GetFileAttributesW(final.c_str())!=INVALID_FILE_ATTRIBUTES;
+            const bool published=exists?ReplaceFileW(final.c_str(),temporary.c_str(),nullptr,0,nullptr,nullptr)!=0:
+                MoveFileExW(temporary.c_str(),final.c_str(),MOVEFILE_WRITE_THROUGH)!=0;
+            if(!published){++knifeWitnessFailures;knifeWitnessLastError=GetLastError();}
+        };
+#ifdef FVR_BC2_CONTEXTUAL_TOOL_PROBE
+        FILETIME toolCreated{},toolExit{},toolKernel{},toolUser{};
+        Require(GetProcessTimes(GetCurrentProcess(),&toolCreated,&toolExit,&toolKernel,&toolUser)!=0,"Read exact tool fixture identity");
+        unsigned toolWitnessRows=0,toolWitnessFailures=0,toolWitnessLastError=0;
+        const auto persistToolWitness=[&](){
+            Require(toolWitnessRows++<450,"Tool witness output bound");
+            LARGE_INTEGER q{},f{};QueryPerformanceCounter(&q);QueryPerformanceFrequency(&f);
+            const auto now=(q.QuadPart/f.QuadPart)*1000000000ll+(q.QuadPart%f.QuadPart)*1000000000ll/f.QuadPart;
+            auto w=fvr::bc2::gameplay::ReadContextualToolProbeWitness(now).value_or(fvr::bc2::ContextualToolProbeWitness{});
+            w.pid=GetCurrentProcessId();w.creation=(std::uint64_t(toolCreated.dwHighDateTime)<<32)|toolCreated.dwLowDateTime;w.tickMs=GetTickCount64();
+            const auto temporary=output.parent_path()/L"contextual-tool.pending",final=output.parent_path()/L"contextual-tool.bin";
+            std::ofstream file(temporary,std::ios::binary|std::ios::trunc);file.write(reinterpret_cast<const char*>(&w),sizeof(w));file.close();
+            // ReplaceFile permits an existing delete-shared snapshot reader.
+            // A failed diagnostic publication retains its old source deadline;
+            // it cannot stop an accepted operation or invent fresh authority.
+            if(!file){++toolWitnessFailures;toolWitnessLastError=GetLastError();return;}
+            const bool exists=GetFileAttributesW(final.c_str())!=INVALID_FILE_ATTRIBUTES;
+            const bool published=exists?ReplaceFileW(final.c_str(),temporary.c_str(),nullptr,0,nullptr,nullptr)!=0:
+                MoveFileExW(temporary.c_str(),final.c_str(),MOVEFILE_WRITE_THROUGH)!=0;
+            if(!published){++toolWitnessFailures;toolWitnessLastError=GetLastError();}
+        };
+#else
+        const auto persistToolWitness=[](){};
+#endif
         if(continuous){
             std::ofstream telemetry(output.parent_path()/L"session-telemetry.jsonl");
             const auto sessionStarted=GetTickCount64();auto nextSample=sessionStarted;
@@ -2306,11 +2641,16 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
         }else {
             const auto until=GetTickCount64()+config.durationMs;
             for(auto now=GetTickCount64();now<until;now=GetTickCount64()){
-                persistCycleFailure();sceneWriter.Flush();
+                persistCycleFailure();persistDeathReadiness();persistKnifeWitness();persistToolWitness();sceneWriter.Flush();
 #if defined(FVR_BC2_ORDINARY_RESOURCE_SCENE_PROBE)
                 fvr::bc2::graphicsThreadObservation::Flush(output.parent_path()/L"graphics-threads.jsonl");
 #endif
-Sleep(DWORD(std::min<std::uint64_t>(100,until-now)));
+#ifdef FVR_BC2_CONTEXTUAL_TOOL_PROBE
+                constexpr bool toolFixture=true;
+#else
+                constexpr bool toolFixture=false;
+#endif
+Sleep(DWORD(std::min<std::uint64_t>((toolFixture||config.ordinaryGrenadeInput==4||config.chestKnifeProbe)?50:100,until-now)));
             }
         }
         persistCycleFailure();sceneWriter.Flush();
@@ -2328,6 +2668,12 @@ Sleep(DWORD(std::min<std::uint64_t>(100,until-now)));
             if(diagnosticImageLifetime.TryQuiesce(true))break;Sleep(1);
         }
         Sleep(50);sceneWriter.Flush();unsigned complete=0;for(const auto& r:records)if(r.complete.load(std::memory_order_acquire))++complete;
+#if defined(FVR_BC2_NATIVE_FADE_DIAGNOSTIC)
+        if(nativeFadeObserver.Enabled()){
+            std::ofstream fade(output.parent_path()/L"native-fade-observation.jsonl");
+            nativeFadeObserver.Write(fade);fade.close();Require(bool(fade),"Write native fade observation");
+        }
+#endif
         report<<"{\"state\":\"observed\",\"pid\":"<<GetCurrentProcessId()<<",\"hooks_disabled\":"<<(disabled?"true":"false")<<",\"module_retained_until_exit\":true,\"native_render_replayed\":false,\"camera_written\":"<<(cameraPulse.complete.load(std::memory_order_acquire)&&cameraPulse.applied?"true":"false")<<",\"world_calls\":"<<worldCalls.load()<<",\"prepare_calls\":"<<prepareCalls.load()<<",\"draw_calls\":"<<drawCalls.load()<<",\"complete_records\":"<<complete<<",\"records\":[";
         bool first=true;for(const auto& r:records)if(r.complete.load(std::memory_order_acquire)){
             if(!first)report<<',';first=false;report<<"{\"thread\":"<<r.thread<<",\"frame\":"<<r.frame<<",\"world_frame\":"<<r.worldFrame<<",\"world\":"<<r.world<<",\"request\":"<<r.request<<",\"view\":"<<r.view<<",\"begin_qpc\":"<<r.beginQpc<<",\"end_qpc\":"<<r.endQpc<<",\"request_before\":"<<r.requestBefore<<",\"request_after\":"<<r.requestAfter<<",\"views\":"<<r.viewCount<<",\"prepare_calls\":"<<r.prepared<<",\"draw_calls\":"<<r.drawn<<",\"arena_before\":"<<r.arenaBefore<<",\"arena_after\":"<<r.arenaAfter<<",\"view_items_before\":"<<r.viewItemsBefore<<",\"view_items_after\":"<<r.viewItemsAfter<<",\"camera_hash_before\":"<<r.cameraBefore<<",\"camera_hash_after\":"<<r.cameraAfter<<",\"prepared_hash_before\":"<<r.dataBefore<<",\"prepared_hash_after\":"<<r.dataAfter<<",\"target_before\":";WriteTarget(report,r.targetBefore);report<<",\"target_after\":";WriteTarget(report,r.targetAfter);report<<",\"children\":[";for(unsigned i=0;i<r.childrenCount;++i){if(i)report<<',';const auto& child=r.children[i];report<<"{\"entry\":"<<child.entry<<",\"view\":"<<child.view<<",\"vtable\":"<<child.vtable<<",\"owner\":"<<child.owner<<",\"active\":"<<child.active<<",\"shadow\":"<<child.shadow<<",\"primary_hash\":"<<child.primary<<",\"secondary_hash\":"<<child.secondary<<'}';}report<<"]}";}
@@ -2431,6 +2777,14 @@ Sleep(DWORD(std::min<std::uint64_t>(100,until-now)));
             <<",\"before_windowed\":"<<windowMode.before.windowed<<",\"before_fullscreen\":"<<windowMode.before.fullscreen
             <<",\"before_visible\":"<<windowMode.before.visible<<",\"after_visible\":"<<windowMode.after.visible<<"}";
         report<<",\"menu\":";fvr::bc2::menu::Report(report);
+        report<<",\"chest_knife_probe\":"<<config.chestKnifeProbe<<",\"knife_witness_publications\":"<<(knifeWitnessRows-knifeWitnessFailures)<<",\"knife_witness_failures\":"<<knifeWitnessFailures<<",\"knife_witness_last_error\":"<<knifeWitnessLastError;
+#ifdef FVR_BC2_CONTEXTUAL_TOOL_PROBE
+        report<<",\"contextual_tool_fixture\":true,\"tool_witness_publications\":"<<(toolWitnessRows-toolWitnessFailures)
+            <<",\"tool_witness_failures\":"<<toolWitnessFailures<<",\"tool_witness_last_error\":"<<toolWitnessLastError;
+#endif
+        report<<",\"normal_player_grenades\":"<<(config.normalPlayerGrenades?"true":"false")
+            <<",\"normal_player_knife\":"<<(config.normalPlayerKnife?"true":"false")
+            <<",\"normal_contextual_tools\":"<<(config.normalContextualTools?"true":"false");
         report<<",\"gameplay\":";fvr::bc2::gameplay::Report(report);
         report<<",\"weapon_visibility_clock_frequency\":"<<(weaponVisibilityProbeMode?reloadDrawFrequency:0);
         report<<",\"weapon_visibility_eyes\":[";
@@ -2468,6 +2822,24 @@ Sleep(DWORD(std::min<std::uint64_t>(100,until-now)));
         report<<",\"reload_palette_producer\":";fvr::bc2::ReloadProducerBinding().Report(report);
         report<<",\"optic_filter_observation\":";fvr::bc2::opticFilterRuntime::Report(report);
         report<<",\"reload_worker_binding\":";fvr::bc2::rigWorkerRuntime::Report(report);
+        report<<",\"stereo_postprocess_scalars\":{\"verified\":"<<(stereoColorScaleVerified?"true":"false")<<",\"groups\":[";
+        const auto postGroup=[&](unsigned offset,unsigned count,const fvr::bc2::stereoColorScale::Counters& value){
+            report<<"{\"offset\":"<<offset<<",\"count\":"<<count<<",\"main\":"<<value.main<<",\"right\":"<<value.right
+                <<",\"writes\":"<<value.writes<<",\"restores\":"<<value.restores<<",\"rejected\":"<<value.rejected<<",\"restore_failures\":"<<value.restoreFailures<<"}";
+        };
+        postGroup(0x1560,3,stereoPostProcessPair.triplet.counts);report<<",";
+        postGroup(0x1570,5,stereoPostProcessPair.five.counts);report<<",";
+        postGroup(0x1590,16,stereoPostProcessPair.matrix.counts);report<<"]}";
+        const auto& effect=stereoEffectPair.counts;
+        report<<",\"stereo_effect_scalars\":{\"verified\":"<<(stereoColorScaleVerified?"true":"false")
+            <<",\"offset\":5712,\"count\":4,\"main\":"<<effect.main<<",\"right\":"<<effect.right
+            <<",\"writes\":"<<effect.writes<<",\"restores\":"<<effect.restores<<",\"rejected\":"<<effect.rejected
+            <<",\"restore_failures\":"<<effect.restoreFailures<<"}";
+        const auto& color=stereoColorScalePair.counts;
+        report<<",\"stereo_color_scale\":{\"verified\":"<<(stereoColorScaleVerified?"true":"false")
+            <<",\"main\":"<<color.main<<",\"right\":"<<color.right<<",\"writes\":"<<color.writes
+            <<",\"restores\":"<<color.restores<<",\"rejected\":"<<color.rejected
+            <<",\"restore_failures\":"<<color.restoreFailures<<'}';
         report<<",\"native_stream\":{\"published\":"<<frameBridge.Published()<<",\"consumed\":"<<frameBridge.Consumed()<<",\"discarded\":"<<frameBridge.Discarded()<<",\"camera_restore_failures\":"<<tracked.restoreFailures.load()<<",\"captured_eyes\":"<<frameBridge.CapturedEyes()<<",\"sharing_mode\":"<<frameBridge.SharingMode()<<",\"gpu_failure_stage\":"<<frameBridge.FailureStage()<<",\"gpu_failure_code\":"<<frameBridge.FailureCode()<<",\"gpu_failure_operation\":"<<frameBridge.FailureOperation()<<",\"device_flags\":"<<frameBridge.DeviceFlags()<<",\"feature_level\":"<<frameBridge.FeatureLevel()<<",\"sharing_compatibility\":["<<frameBridge.Compatibility(0)<<","<<frameBridge.Compatibility(1)<<","<<frameBridge.Compatibility(2)<<","<<frameBridge.Compatibility(3)<<","<<frameBridge.Compatibility(4)<<","<<frameBridge.Compatibility(5)<<","<<frameBridge.Compatibility(6)<<","<<frameBridge.Compatibility(7)<<","<<frameBridge.Compatibility(8)<<"]"<<"}";
         report<<",\"update_calls\":"<<updateCalls.load();
         report<<",\"world_color_captures\":[";
@@ -2589,14 +2961,20 @@ Sleep(DWORD(std::min<std::uint64_t>(100,until-now)));
             <<",\"released_pixel_bytes\":"<<releasedPixelBytes<<",\"released_capacity_bytes\":"<<releasedPixelCapacity<<"}\n";
         const bool lifecyclePassed=!lifecycleMode||(lifecycleComplete&&lifecycleResult.created&&lifecycleResult.registered&&lifecycleResult.inactive&&lifecycleResult.restored&&lifecycleResult.refsBefore==0&&lifecycleResult.refsOwned==1&&lifecycleResult.refsReleased==0&&lifecycleResult.borrowedRedirects>0&&lifecycleResult.borrowedRedirects==lifecycleResult.borrowedRestores&&lifecycleResult.allRestored&&lifecycleResult.callbacksRestored&&lifecycleResult.requestRefsBefore==lifecycleResult.requestRefsAfter);
         bool stereoPassed=!stereoMode;
-        if(stereoMode&&stereoState==StereoExperiment::Released){stereoPassed=(!streamMode||(!tracked.restoreFailures.load()&&!contextPatchFailures.load()&&!contextRestoreFailures.load()&&!derivedFailures.load()&&frameBridge.Published()>=4&&frameBridge.Consumed()>=3))&&((e.listsRestored&&e.callbacksRestored&&e.refsBefore==e.refsAfter&&e.initialized&&e.cachedViewsRestored)||
+        if(stereoMode&&stereoState==StereoExperiment::Released){stereoPassed=(!streamMode||(!tracked.restoreFailures.load()&&!(stereoColorScalePair.counts.restoreFailures||stereoEffectPair.counts.restoreFailures||stereoPostProcessPair.RestoreFailed())&&!contextPatchFailures.load()&&!contextRestoreFailures.load()&&!derivedFailures.load()&&frameBridge.Published()>=4&&frameBridge.Consumed()>=3))&&((e.listsRestored&&e.callbacksRestored&&e.refsBefore==e.refsAfter&&e.initialized&&e.cachedViewsRestored)||
             (stereoRecovery.completedOnStop.load()&&stereoRecovery.completed.load()&&!stereoRecovery.failure.load()&&
              stereoRecovery.retirementStep.load()==unsigned(fvr::runtime::RetirementStep::Complete)))&&(!burstMode||streamMode||e.framesRendered.load()==120)&&(initializationOnly||streamMode||(e.visibilityMask.load()==3&&e.drawMask.load()==3));
             for(unsigned i=1;!initializationOnly&&i<3;++i)stereoPassed&=colorCaptures[i].complete.load(std::memory_order_acquire)&&colorCaptures[i].step==ColorCapture::Step::Finished&&colorCaptures[i].frame==e.initialColorFrame;
         }
         if(disabled&&stereoProgress!=INVALID_HANDLE_VALUE){CloseHandle(stereoProgress);stereoProgress=INVALID_HANDLE_VALUE;}
         return report&&disabled&&complete&&cameraPassed&&lifecyclePassed&&stereoPassed&&(!(poolOnly||(stereoMode&&!initializationOnly))||poolStage==2)&&(!cameraPulseMode||(pulseComplete&&cameraPulse.applied&&cameraPulse.restored&&(cameraPulseMode==2||cameraPulse.drawLeftCopiesUnchanged)))?0:12;
-    }catch(const std::exception& e){sampling.store(false,std::memory_order_release);if(hooksEnabled)disabled=DisableProbeHooks();else {fvr::bc2::opticFilterRuntime::Disable();fvr::bc2::rigWorkerRuntime::Disable();disabled=fvr::bc2::rigWorkerRuntime::Quiescent()&&fvr::bc2::opticFilterRuntime::Quiescent();fvr::bc2::gameplay::Stop();fvr::bc2::menu::Stop();}
+    }catch(const std::exception& e){sampling.store(false,std::memory_order_release);if(hooksEnabled)disabled=DisableProbeHooks();else {
+            if(!fvr::bc2::gameplay::PrepareSessionStop())disabled=false;
+            else{
+                fvr::bc2::opticFilterRuntime::Disable();fvr::bc2::rigWorkerRuntime::Disable();
+                const bool gameplayStopped=fvr::bc2::gameplay::Stop(),menuStopped=fvr::bc2::menu::Stop();
+                disabled=gameplayStopped&&menuStopped&&fvr::bc2::rigWorkerRuntime::Quiescent()&&fvr::bc2::opticFilterRuntime::Quiescent();
+            }
+        }
         if(report)report<<"{\"state\":\"failed\",\"error\":\""<<e.what()<<"\",\"hooks_disabled\":"<<(disabled?"true":"false")<<"}\n";return 20;}
 }
-

@@ -1,5 +1,6 @@
 #pragma once
 #include "fvr/runtime/FrameProvider.h"
+#include "fvr/xr/HostFrameDiagnostics.h"
 #include "fvr/graphics/D3D11BodyPropCompositor.h"
 #include "fvr/interaction/ControllerInput.h"
 #include <filesystem>
@@ -41,6 +42,7 @@ struct HostReport {
     std::uint64_t feedbackApplied=0,feedbackRejected=0,feedbackErrors=0;
     std::uint64_t captureFeedbackApplied=0,receiptFeedbackApplied=0,lastFeedbackEvent=0;
     std::int32_t lastSessionState=0;
+    HostFrameDiagnostics frameDiagnostics{};
 };
 // Uses the installed active runtime; never changes the registry or game settings.
 HostReport RunOpenXrHost(const HostOptions&) noexcept;

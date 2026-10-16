@@ -27,10 +27,21 @@ int main(){
     CHECK(!host.TryGetCompletedPair(req,now,rendered,d,ticket));CHECK(producer.TryTake(request)==ipc::ChannelResult::Ok);
     // Controls update while the immutable render request stays in flight.
     interaction::InputFrame input{};input.generation=1;input.spaceGeneration=now.spaceGeneration;input.predictedNs=now.predictedNs;input.focused=input.headValid=true;
-    input.hands[1].active=interaction::Trigger;input.hands[1].trigger=.9f;host.UpdateInput(input);
+    input.hands[1].active=interaction::Trigger;input.hands[1].trigger=.9f;
+    const auto accepted=host.UpdateInputObserved(input);
+    CHECK(accepted.known&&accepted.succeeded&&accepted.code==std::uint32_t(ipc::ChannelResult::Ok));
     std::int64_t inputDeadline=0;interaction::InputFrame controls{};CHECK(producer.ReadInput(controls,&inputDeadline)==ipc::ChannelResult::Ok&&controls.hands[1].trigger==.9f);
     CHECK(inputDeadline>0);const auto originalDeadline=inputDeadline;CHECK(producer.ReadInput(controls,&inputDeadline)==ipc::ChannelResult::Ok&&inputDeadline==originalDeadline);
-    input.focused=false;input.hands={};++input.generation;host.UpdateInput(input);
+    // The real transport result must remain known; diagnostic observation
+    // cannot republish a duplicate generation or extend the accepted lease.
+    auto duplicate=input;duplicate.hands[1].trigger=.1f;
+    const auto rejected=host.UpdateInputObserved(duplicate);
+    CHECK(rejected.known&&!rejected.succeeded&&rejected.code==std::uint32_t(ipc::ChannelResult::Invalid));
+    CHECK(producer.ReadInput(controls,&inputDeadline)==ipc::ChannelResult::Ok&&controls.generation==input.generation&&
+        controls.hands[1].trigger==.9f&&inputDeadline==originalDeadline);
+    input.focused=false;input.hands={};++input.generation;
+    const auto released=host.UpdateInputObserved(input);
+    CHECK(released.known&&released.succeeded&&released.code==std::uint32_t(ipc::ChannelResult::Ok));
     CHECK(producer.ReadInput(controls)==ipc::ChannelResult::Ok&&!controls.focused&&!controls.hands[1].trigger);
     const auto original=now;++now.generation;now.predictedNs+=11000000;now.eyes[0].position.x+=.1f;
     CHECK(!host.TryGetCompletedPair(req,now,rendered,d,ticket)); // No CPU wait or request replacement.

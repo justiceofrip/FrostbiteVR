@@ -55,7 +55,7 @@ int OwnershipAndNoFakeGate(){for(unsigned mode=0;mode<3;++mode){Mock::Reset();Bc
 int DefaultScheduleAndSchema(){Mock::Reset();Bc2MagazineReloadProbe p;Tick(p,5800);CHECK(!Mock::starts);
     unsigned reload=0,seats=0;for(unsigned ms=0;ms<30000;++ms){auto s=MagazineProbeSchedule(ms);reload+=s.reload;seats+=s.marker==1;}
     CHECK(reload==200&&seats==200&&MagazineProbeSchedule(14000).marker==0);
-    NativeProbeConfig c;CHECK(c.bytes==1200&&sizeof(c)==1200&&c.ordinaryResourceInput==0&&c.m95OrdinaryBoltInputCycles==0&&c.m95StockShot==0&&c.m95PhysicalBoltCycles==0&&c.magazineReloadSession==0&&c.boatHeadAim==BoatHeadAimMode::Disabled&&c.bodyHolsterDiagnostic==BodyHolsterDiagnosticProfile::Disabled);
+    NativeProbeConfig c;CHECK(c.bytes==1220&&sizeof(c)==1220&&c.chestKnifeProbe==0&&c.ordinaryGrenadeInput==0&&c.ordinaryResourceInput==0&&c.m95OrdinaryBoltInputCycles==0&&c.m95StockShot==0&&c.m95PhysicalBoltCycles==0&&c.magazineReloadSession==0&&c.boatHeadAim==BoatHeadAimMode::Disabled&&c.bodyHolsterDiagnostic==BodyHolsterDiagnosticProfile::Disabled);
     CHECK(ValidOrdinaryResourceInputSession(0,0,0,0,0,0,0,0,0,0));
     CHECK(ValidOrdinaryResourceInputSession(1,0x12197809u,60000,3,0,0,0,0,0,0));
     for(unsigned bit=0;bit<32;++bit)CHECK(!ValidOrdinaryResourceInputSession(1,0x12197809u^(1u<<bit),60000,3,0,0,0,0,0,0));

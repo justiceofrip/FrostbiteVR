@@ -14,6 +14,11 @@ import zipfile
 LOADER_SHA256 = "a69729a3348bc4dcb9be126a49d594074e477be7312f65180b0d082bf100fa5f"
 CODE = {".cpp", ".c", ".h", ".inc", ".def"}
 EXACT = (
+    "launcher/Launcher.Core.ps1", "launcher/Launcher.ps1", "launcher/Worker.ps1",
+    "launcher/Start-Launcher.ps1", "launcher/Install-BC2VRLauncher.ps1",
+    "launcher/Install-Package.ps1", "launcher/Install.cmd",
+    "launcher/Create-DesktopShortcut.ps1", "tools/Build-DesktopLauncher.ps1",
+    "tests/Test-DesktopLauncher.ps1", "docs/DESKTOP-LAUNCHER.md",
     "cmake/ManualEmptyRegistryCoverage.cmake",
     "cmake/Bc2NativeOperationCapability.cmake",
     "tools/bc2_native_operation_receipts.py", "tests/test_bc2_native_operation_receipts.py",

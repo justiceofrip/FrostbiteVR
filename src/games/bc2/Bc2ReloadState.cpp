@@ -199,6 +199,30 @@ ReloadStateResult ReadReloadState(const ReloadStateMemory& memory,const ReloadSt
     out.branchesAgreeOnPhase=out.branches[0].currentState==out.branches[1].currentState;
     return {ReloadStateStatus::Observed,out};
 }
+
+std::optional<ReloadInventoryItem> ReadReloadInventoryItem(const ReloadStateMemory& memory,
+    const ReloadStateBinding& binding,std::uint32_t base,const ReloadStateOwner& owner,
+    std::uint32_t target)noexcept {
+    if(!memory.read||!memory.type||!target||!owner.actorGeneration||!owner.equipGeneration||!owner.space||
+       base!=binding.preferredBase||!binding.imageSize||std::uint64_t(base)+binding.imageSize>UINT32_MAX||
+       std::uint64_t(binding.firingVtableRva)+12>binding.imageSize)return {};
+    Reader r{memory,base,binding.imageSize};NativeOwner before{},after{};
+    if(!ReadOwner(r,owner,before)||std::count(before.items.begin(),before.items.end(),target)!=1)return {};
+    ReloadInventoryItem out;out.selectedOwner=owner;out.target=target;out.inventory=before.inventory;
+    out.slot=unsigned(std::find(before.items.begin(),before.items.end(),target)-before.items.begin());
+    ConfigBytes config{},againConfig{};ReloadObservedConfig again{};
+    if(!ReadConfig(r,target,out.config,config))return {};
+    std::array<FiringBytes,2> raw{};
+    for(unsigned n=0;n<2;++n)if(!ReadBranch(r,binding,target,out.config,n?0x40:0x3c,out.branches[n],raw[n]))return {};
+    if(out.branches[0].address==out.branches[1].address)return {};
+    for(unsigned n=0;n<2;++n){ReloadFiringObservation observed;FiringBytes bytes{};
+        if(!ReadBranch(r,binding,target,out.config,n?0x40:0x3c,observed,bytes)||
+           observed.address!=out.branches[n].address||bytes!=raw[n])return {};}
+    if(!ReadConfig(r,target,again,againConfig)||again!=out.config||againConfig!=config||
+       !ReadOwner(r,owner,after)||after!=before)return {};
+    return out;
+}
+
 }
 
 

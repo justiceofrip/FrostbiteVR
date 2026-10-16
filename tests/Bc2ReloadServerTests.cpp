@@ -77,6 +77,30 @@ int MalformedState(){
     for(unsigned offset:{0x7cu,0x80u}){Fixture f;f.Put(f.firing+offset,-2);CHECK(!f.Read());}
     Fixture f;f.Put(f.firing+0x50,std::numeric_limits<float>::quiet_NaN());CHECK(!f.Read());return 0;
 }
+int PublishedMutableFlagsRetainExactOwnership(){
+    // Native234 records 3->11/27 with identical owner links; headset390's
+    // pending second shell observes 11->19. Both mutable bits are independent
+    // of the bit-0 inventory selector and may differ only from publication.
+    for(bool owner:{false,true})for(unsigned before:{3u,11u,19u,27u})for(unsigned after:{3u,11u,19u,27u}){
+        Fixture f;f.Put<std::uint8_t>(f.cs+0x114,std::uint8_t(before));const auto published=f.Read();CHECK(published);
+        f.Put<std::uint8_t>(f.cs+0x114,std::uint8_t(after));const auto memory=f.bytes;
+        ReloadServerBoundaryDiagnostic d;
+        CHECK(owner?ReadReloadServerOwner(f.Memory(),f.binding,f.state,f.base,*published,200000100,200,&d):
+            bool(ReadReloadServerBoundary(f.Memory(),f.binding,f.state,f.base,*published,200000100,200,&d)));
+        CHECK(d.failure==ReloadServerBoundaryFailure::None&&d.linkDifference.count==0&&f.bytes==memory);
+    }
+    // A mutable bit changing between the two current Scope reads is still a
+    // rejected race. Do not turn the publication allowance into a loose read.
+    for(bool owner:{false,true})for(unsigned change:{8u,16u,24u}){
+        Fixture f;f.Put<std::uint8_t>(f.cs+0x114,3);const auto published=f.Read();CHECK(published);
+        f.raceAt=f.cs+0x114;f.raceTarget=f.cs+0x114;f.raceValue=3^change;
+        ReloadServerBoundaryDiagnostic d;
+        CHECK(!(owner?ReadReloadServerOwner(f.Memory(),f.binding,f.state,f.base,*published,200000100,200,&d):
+            bool(ReadReloadServerBoundary(f.Memory(),f.binding,f.state,f.base,*published,200000100,200,&d))));
+        CHECK(d.failure==ReloadServerBoundaryFailure::ChangedLinks&&d.changedOnlySoldierFlags);
+    }
+    return 0;
+}
 int PublishedFlagDiagnostic(){
     Fixture f;const auto s=f.Read();CHECK(s);ReloadServerBoundaryDiagnostic d;
     f.Put<std::uint8_t>(f.cs+0x114,17);
@@ -87,7 +111,7 @@ int PublishedFlagDiagnostic(){
     CHECK(ReadReloadServerBoundary(f.Memory(),f.binding,f.state,f.base,*other,200000100,200,&d));
     // No other soldier or player flag may differ, even with valid pointers.
     f.Put(f.cs+0x248,f.ci);
-    for(unsigned bit:{1u,2u,4u,8u,32u,64u,128u}){
+    for(unsigned bit:{1u,2u,4u,32u,64u,128u}){
         f.Put<std::uint8_t>(f.cs+0x114,std::uint8_t(1^bit));
         CHECK(!ReadReloadServerBoundary(f.Memory(),f.binding,f.state,f.base,*s,200000100,200,&d));
         CHECK(d.failure==ReloadServerBoundaryFailure::PublishedLinks);
@@ -222,5 +246,5 @@ int Installed(const char* path){
     CHECK(!DiscoverReloadServer(bytes,pe));std::printf("Installed server ownership: 11 complete function proofs, mutation/ambiguity rejection passed.\n");return 0;
 }
 }
-int main(int argc,char** argv){if(ValidSnapshotAndBoundary()||RelationRejections()||LeasesAndPointerRaces()||MalformedState()||PublishedFlagDiagnostic()||StructuralOwnerRetainsExactLinks()||RejectedLinksRetainNamedEvidence()||ServerPhaseRetryUsesOnlyFreshCompleteReads())return 1;
-    std::printf("Eight read-only server ownership groups passed. Native authority remains unproven.\n");return argc==2?Installed(argv[1]):0;}
+int main(int argc,char** argv){if(PublishedMutableFlagsRetainExactOwnership()||ValidSnapshotAndBoundary()||RelationRejections()||LeasesAndPointerRaces()||MalformedState()||PublishedFlagDiagnostic()||StructuralOwnerRetainsExactLinks()||RejectedLinksRetainNamedEvidence()||ServerPhaseRetryUsesOnlyFreshCompleteReads())return 1;
+    std::printf("Nine read-only server ownership groups passed. Native authority remains unproven.\n");return argc==2?Installed(argv[1]):0;}

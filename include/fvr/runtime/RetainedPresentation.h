@@ -10,6 +10,8 @@ class RetainedPresentation {
 public:
     static constexpr std::int64_t MaxAgeNs=250000000;
     void Reset() noexcept { saved_.reset(); }
+    // Passive diagnostic observation; Select remains the only admission path.
+    const TrackingFrame* SavedTracking()const noexcept {return saved_?&*saved_:nullptr;}
     bool Commit(const PresentationRequirements& requirements,const TrackingFrame& rendered,
                 const graphics::TextureDescriptor& descriptor,const graphics::PairTicket& ticket) noexcept {
         if(!PairMatchesFrame(requirements,rendered,descriptor,ticket)||!ValidViews(rendered))return false;

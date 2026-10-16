@@ -40,7 +40,7 @@ DWORD Run(HANDLE process,std::uintptr_t function,Allocation& memory,DWORD timeou
 }
 int wmain(int argc,wchar_t** argv){try {
     static_assert(sizeof(void*)==4);Require(argc>=7&&std::wstring(argv[1])==L"--game"&&std::wstring(argv[3])==L"--dll"&&std::wstring(argv[5])==L"--report","Usage: BC2NativeTrace --game folder --dll dll --report json [diagnostic mode | --stream CHANNEL] [--seconds N] [--optic-filter-observe] [--body-inventory]");
-    unsigned physicalBoltCycles=0,ordinaryBoltInputCycles=0,ordinaryResourceInput=0;
+    unsigned physicalBoltCycles=0,ordinaryBoltInputCycles=0,ordinaryResourceInput=0,ordinaryGrenadeInput=0,normalPlayerGrenades=0,chestKnifeProbe=0,normalPlayerKnife=0,normalContextualTools=0;
     unsigned m95StockShot=0;
     bool physicalPumpProbe=false,pumpCyclesSet=false;unsigned pumpCycles=2;bool emptyFireProbe=false,pumpHoldProbe=false;bool passEvidence=false,uncapMirror=false,controllers=false,motionAim=false,bodyFollow=false,poseObserve=false,rigPulse=false,handPoses=false,deathProbe=false,equipProbe=false,muzzleFire=false,twoHandGrip=false,sightFlip=false,reloadHoldProbe=false,reloadRoundProbe=false,reloadRequestProbe=false,physicalReload=false,physicalReloadProbe=false,opticFilterObserve=false,bodyInventory=false,physicalReloadRepeatProbe=false,weaponVisibilityProbe=false,bodyHolsterProbe=false;unsigned flags=0,duration=3000,hostPid=0,magazineSession=0;bool boatHeadAim=false,boatHeadFire=false;auto bodyDiagnostic=fvr::bc2::BodyHolsterDiagnosticProfile::Disabled;std::wstring channel;
     for(int i=7;i<argc;++i){const std::wstring option=argv[i];
@@ -64,6 +64,13 @@ int wmain(int argc,wchar_t** argv){try {
         if(option==L"--sight-flip"){controllers=motionAim=bodyFollow=poseObserve=handPoses=muzzleFire=twoHandGrip=sightFlip=true;continue;}
         if((option==L"--muzzle-fire-probe"||option==L"--muzzle-fire")){controllers=motionAim=bodyFollow=poseObserve=handPoses=muzzleFire=true;continue;}
         if(option==L"--reload-hold-probe"){controllers=motionAim=bodyFollow=poseObserve=handPoses=reloadHoldProbe=true;continue;}
+        if(option==L"--chest-knife-draw-probe"||option==L"--chest-knife-motion-probe"){
+            Require(!chestKnifeProbe&&!magazineSession,"Select one finite knife mode");chestKnifeProbe=option==L"--chest-knife-motion-probe"?2:1;
+            magazineSession=3;controllers=motionAim=bodyFollow=poseObserve=handPoses=muzzleFire=twoHandGrip=physicalReload=bodyInventory=true;continue;}
+        if(option==L"--player-grenades"){Require(!normalPlayerGrenades,"Specify player grenades once");normalPlayerGrenades=1;continue;}
+        if(option==L"--player-knife"){Require(!normalPlayerKnife,"Specify player knife once");normalPlayerKnife=1;continue;}
+        if(option==L"--contextual-tools"){Require(!normalContextualTools,"Specify contextual tools once");normalContextualTools=1;continue;}
+        if(option==L"--ordinary-grenade-probe"||option==L"--ordinary-grenade-fade-probe"||option==L"--player-grenade-probe"||option==L"--two-grenade-fade-probe"){Require(!ordinaryGrenadeInput&&!magazineSession,"Select one ordinary action diagnostic");ordinaryGrenadeInput=option==L"--two-grenade-fade-probe"?4:option==L"--player-grenade-probe"?3:option==L"--ordinary-grenade-fade-probe"?2:1;magazineSession=3;controllers=motionAim=bodyFollow=poseObserve=handPoses=muzzleFire=twoHandGrip=physicalReload=bodyInventory=true;continue;}
         if(option==L"--ordinary-resource-input-probe"){Require(!magazineSession,"Select one ordinary input diagnostic");ordinaryResourceInput=1;magazineSession=3;controllers=motionAim=bodyFollow=poseObserve=handPoses=muzzleFire=twoHandGrip=physicalReload=bodyInventory=true;continue;}
         if(option==L"--ordinary-resource-empty-probe"){Require(!magazineSession,"Select one ordinary input diagnostic");ordinaryResourceInput=2;magazineSession=3;controllers=motionAim=bodyFollow=poseObserve=handPoses=muzzleFire=twoHandGrip=physicalReload=bodyInventory=true;continue;}
         if(option==L"--ordinary-bolt-input-probe"&&i+1<argc){Require(!ordinaryBoltInputCycles&&!magazineSession,"Select ordinary bolt input once");ordinaryBoltInputCycles=std::stoul(argv[++i]);Require(ordinaryBoltInputCycles==1||ordinaryBoltInputCycles==2||ordinaryBoltInputCycles==5,"Ordinary bolt input supports one/two loaded cycles or five through empty");magazineSession=3;controllers=motionAim=bodyFollow=poseObserve=handPoses=muzzleFire=twoHandGrip=physicalReload=bodyInventory=true;continue;}
@@ -123,6 +130,50 @@ int wmain(int argc,wchar_t** argv){try {
     Require(fvr::bc2::ValidM95OrdinaryBoltInputSession(ordinaryBoltInputCycles,configFlags,duration,magazineSession,unsigned(pumpMode),unsigned(boatMode),unsigned(bodyDiagnostic),unsigned(m95StockShot),physicalBoltCycles),"Ordinary bolt input requires an isolated30s resource/body stream");
     Require(fvr::bc2::ValidM95PhysicalBoltSession(physicalBoltCycles,configFlags,duration,magazineSession,unsigned(pumpMode),unsigned(boatMode),unsigned(bodyDiagnostic),unsigned(m95StockShot)),"Physical bolt requires isolated30s tracked stream");
     Require(fvr::bc2::ValidM95StockShotSession(unsigned(m95StockShot),configFlags,duration,magazineSession,unsigned(pumpMode),unsigned(boatMode),unsigned(bodyDiagnostic)),"M95 stock shot requires an isolated15s tracked stream without other action fixtures");
+#if defined(FVR_BC2_PLAYER_GRENADE) && !defined(FVR_BC2_PLAYER_GRENADE_NORMAL)
+    constexpr bool playerGrenadeCompiled=true;
+#else
+    constexpr bool playerGrenadeCompiled=false;
+#endif
+#ifdef FVR_BC2_PLAYER_GRENADE_NORMAL
+    constexpr bool normalPlayerGrenadesCompiled=true;
+#else
+    constexpr bool normalPlayerGrenadesCompiled=false;
+#endif
+    Require(fvr::bc2::ValidNormalPlayerGrenades(normalPlayerGrenades,configFlags,hostPid,magazineSession,
+        chestKnifeProbe||ordinaryGrenadeInput||ordinaryResourceInput||ordinaryBoltInputCycles||physicalBoltCycles||m95StockShot||
+        unsigned(pumpMode)||unsigned(bodyDiagnostic),normalPlayerGrenadesCompiled),
+        "Player grenades require their normal build, continuous real host, body/resource controls and no diagnostic mode");
+#ifdef FVR_BC2_PLAYER_KNIFE_NORMAL
+    constexpr bool normalKnifeCompiled=true;
+#else
+    constexpr bool normalKnifeCompiled=false;
+#endif
+#ifdef FVR_BC2_PLAYER_CONTEXTUAL_NORMAL
+    constexpr bool normalContextualCompiled=true;
+#else
+    constexpr bool normalContextualCompiled=false;
+#endif
+    Require(fvr::bc2::ValidNormalPlayerTools(normalPlayerKnife,normalContextualTools,configFlags,hostPid,magazineSession,
+        chestKnifeProbe||ordinaryGrenadeInput||ordinaryResourceInput||ordinaryBoltInputCycles||physicalBoltCycles||m95StockShot||
+        unsigned(pumpMode)||unsigned(bodyDiagnostic),normalKnifeCompiled,normalContextualCompiled),
+        "Normal tools require their matching build, continuous real host, body/resource controls and no finite recipe");
+#ifdef FVR_BC2_TWO_GRENADE_DEATH_PROBE
+    constexpr bool twoDeathCompiled=true;
+#else
+    constexpr bool twoDeathCompiled=false;
+#endif
+    Require(fvr::bc2::ValidOrdinaryGrenadeInputSession(ordinaryGrenadeInput,configFlags,duration,magazineSession,
+        hostPid||ordinaryResourceInput||ordinaryBoltInputCycles||physicalBoltCycles||m95StockShot||unsigned(pumpMode)||
+        unsigned(boatMode)||unsigned(bodyDiagnostic),true,playerGrenadeCompiled,twoDeathCompiled),"Grenade requires isolated20s (two-death30s) direct receiver and normal body/resource controls; player mode requires its private build");
+#ifdef FVR_BC2_CHEST_KNIFE_PROBE
+    constexpr bool knifeCompiled=true;
+#else
+    constexpr bool knifeCompiled=false;
+#endif
+    Require(fvr::bc2::ValidChestKnifeProbe(chestKnifeProbe,configFlags,duration,magazineSession,
+        hostPid||normalPlayerGrenades||normalPlayerKnife||normalContextualTools||ordinaryGrenadeInput||ordinaryResourceInput||ordinaryBoltInputCycles||physicalBoltCycles||m95StockShot||
+        unsigned(pumpMode)||unsigned(boatMode)||unsigned(bodyDiagnostic),knifeCompiled),"Knife requires its private build and isolated20s real-menu body stream");
     const auto game=(fs::absolute(argv[2])/L"BFBC2Game.exe").lexically_normal(),dll=fs::absolute(argv[4]).lexically_normal(),report=fs::absolute(argv[6]).lexically_normal();
     Require(fs::is_regular_file(dll)&&!fs::exists(report),"Probe DLL missing or report already exists");DWORD type=0;Require(GetBinaryTypeW(game.c_str(),&type)&&type==SCS_32BIT_BINARY,"Expected the installed 32-bit game");
     const auto pid=FindProcess(game);Handle process{OpenProcess(PROCESS_QUERY_INFORMATION|PROCESS_VM_READ|PROCESS_VM_WRITE|PROCESS_VM_OPERATION|PROCESS_CREATE_THREAD|SYNCHRONIZE,FALSE,pid)};Require(process.h!=nullptr,"Open authorized game process");Require(!_wcsicmp(ProcessPath(process.h).c_str(),game.c_str()),"Target process identity changed");
@@ -131,7 +182,7 @@ int wmain(int argc,wchar_t** argv){try {
     const auto loader=GetProcAddress(GetModuleHandleW(L"kernel32.dll"),"LoadLibraryW");Require(loader!=nullptr,"LoadLibrary entry unavailable");const auto remoteLoader=RemoteFunction(pid,loader);
     const auto dllText=dll.wstring();Allocation pathMemory(process.h,(dllText.size()+1)*sizeof(wchar_t));Write(process.h,pathMemory.pointer,dllText.c_str(),(dllText.size()+1)*sizeof(wchar_t));
     const auto module=Run(process.h,remoteLoader,pathMemory,8000);Require(module!=0,"Game did not load the probe module");
-    fvr::bc2::NativeProbeConfig config{};config.ordinaryResourceInput=ordinaryResourceInput;config.m95OrdinaryBoltInputCycles=ordinaryBoltInputCycles;config.m95PhysicalBoltCycles=physicalBoltCycles;config.m95StockShot=unsigned(m95StockShot);config.bodyHolsterDiagnostic=bodyDiagnostic;config.magazineReloadSession=magazineSession;config.boatHeadAim=boatMode;config.flags=configFlags;config.pumpHoldDiagnostic=pumpMode;if(hostPid)config.hostPid=hostPid;else config.durationMs=duration;Require(channel.size()<std::size(config.frameChannel),"Channel token too long");std::copy(channel.begin(),channel.end(),config.frameChannel);const auto output=report.wstring();Require(output.size()<std::size(config.reportPath),"Report path too long");std::copy(output.begin(),output.end(),config.reportPath);
+    fvr::bc2::NativeProbeConfig config{};config.chestKnifeProbe=chestKnifeProbe;config.normalPlayerGrenades=normalPlayerGrenades;config.normalPlayerKnife=normalPlayerKnife;config.normalContextualTools=normalContextualTools;config.ordinaryGrenadeInput=ordinaryGrenadeInput;config.ordinaryResourceInput=ordinaryResourceInput;config.m95OrdinaryBoltInputCycles=ordinaryBoltInputCycles;config.m95PhysicalBoltCycles=physicalBoltCycles;config.m95StockShot=unsigned(m95StockShot);config.bodyHolsterDiagnostic=bodyDiagnostic;config.magazineReloadSession=magazineSession;config.boatHeadAim=boatMode;config.flags=configFlags;config.pumpHoldDiagnostic=pumpMode;if(hostPid)config.hostPid=hostPid;else config.durationMs=duration;Require(channel.size()<std::size(config.frameChannel),"Channel token too long");std::copy(channel.begin(),channel.end(),config.frameChannel);const auto output=report.wstring();Require(output.size()<std::size(config.reportPath),"Report path too long");std::copy(output.begin(),output.end(),config.reportPath);
     Allocation request(process.h,sizeof(config));Write(process.h,request.pointer,&config,sizeof(config));const auto result=Run(process.h,std::uintptr_t(module)+entryRva,request,hostPid?INFINITE:config.durationMs+8000);
     std::cout<<"{\"pid\":"<<pid<<",\"probe_exit\":"<<result<<",\"module_retained_until_game_exit\":true,\"game_files_modified\":false}\n";return result?2:0;
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}}

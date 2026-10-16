@@ -1,4 +1,59 @@
-# Current390: continuous weapon swaps and checkpoint recovery verified in game
+# Current412: shared presentation changes, unchanged weapon admissions
+
+The latest normal410 headset feedback reports much better pumping and reliable
+manual SPAS shell insertion. It does not accept every weapon or campaign level.
+412 lowers the shared ammo anchor and moves the read-only counter beside the
+gun hand; the verified SPAS loading-shell presentation now survives reload
+retirement. No native operation/configuration rows are added. Spent-shell ejection
+and immediate pump timing remain outstanding/deferred respectively. New412
+headset acceptance is not claimed; see [the current handoff](../handoff/checkpoint412/README.md).
+
+The pipeline retains measured geometry and shared ownership/ammunition services.
+Registrations are prerequisites, not a count of fully working guns. Prior
+actual-game coverage and outstanding classes are preserved below and in the
+feature-specific notes.
+
+# Historical394: tracked pump wrist and combined sequence verified in game
+
+Both full builds pass252 suites. The raised-gun controller sequence completes
+three shots/pumps, two shell insertions, shoulder return and rifle use. All357
+extended-hand paired publications contain the authored hand with zero recorded
+wrist error, no reach rejection and no mechanical-only fallback. Both inactive
+shotgun copies retain7/22 through31 coherent post-detach samples with no rejected
+reads. The shared arm policy extends segment translations; its appearance still
+needs headset acceptance. Maximum observed extension scale is1.4634.
+
+The separate default-off grenade diagnostic sends no native edge: its gesture
+is rejected by an unidentified admission condition while input remains fresh.
+All three original and grenade ammunition copies remain unchanged. Retain that
+failed result;395 adds targeted evidence before another attempt. It is not an
+enabled player grenade binding. The393 checkpoint fade fix is retained; actual
+death and whole-campaign acceptance remain open. Human390 is still the latest
+failed headset run. See [394 evidence and limits](TRACKED-WRIST-394.md).
+
+# Current392: targeted recovery evidence, unchanged weapon admissions
+
+The expired original pump input is now exercised in the actual game: rejection
+preserves the pending mechanism, fresh input resumes it, and the combined run
+completes three pumps and two manual shells. Both inactive shotgun copies remain
+7/22 after detach. This adds evidence for the existing shared services, not new
+weapons. Both normal architectures have248 passing distinct suites, with the
+original failed and corrected test results retained. No new headset or campaign
+acceptance. See [392](NATIVE-RECOVERY-392.md).
+
+# Previous391: failed human390 and targeted corrections
+
+The October13 headset390 test failed. Local391 corrects expired pump/bolt input
+cancelling persistent debt, verified mutable native publication flags rejecting
+shell reloads, and shoulder draw-release immediately stowing again. Both full
+builds pass246 checks. One actual-game run completes eight pumps, one shell,
+rifle reload and shoulder return; inactive shotgun ammunition stays1/23.
+No new weapon admissions or campaign/headset acceptance. Death rendering and
+the reported interruptions remain under targeted investigation. See
+[391 evidence and limits](HEADSET-RECOVERY-391.md). Older candidate statements
+below describe their historical scope, not current human acceptance.
+
+# Historical390: continuous weapon swaps and checkpoint recovery verified in game
 
 The new second-SPAS-visit diagnostic first failed389, then passed390 after a
 shared native handoff fix. A completed reload's retirement now survives family

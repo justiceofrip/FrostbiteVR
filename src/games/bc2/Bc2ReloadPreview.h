@@ -26,6 +26,14 @@ struct ReloadShellControl {
     interaction::HandClaim weaponClaim{};
     std::shared_ptr<const SelectedMeshesSnapshot> selectedMeshes;
 };
+// Visual ownership outlives an individual native reload transaction. The stock
+// clip may keep its shell visible after the final round is acknowledged. This
+// lease only excludes that exact rig leaf when no physical shell is displayed;
+// it grants no cycle, hand, reserve, firing or insertion authority.
+struct ReloadShellPresentation {
+    interaction::HandClaim weaponClaim{};
+    std::shared_ptr<const SelectedMeshesSnapshot> selectedMeshes;
+};
 struct ReloadTracking {
     bool enabled=false;
     ReloadStateOwner owner{};
@@ -34,6 +42,7 @@ struct ReloadTracking {
     std::shared_ptr<const ReloadPreview> preview;
     std::shared_ptr<const ReloadShellControl> shellControl;
     std::shared_ptr<const BeltAmmoTracking> belt; // Reserve visual; optional held-cycle evidence, no shell claim or ammo authority.
+    std::shared_ptr<const ReloadShellPresentation> manualShell;
 };
 struct ReloadRawContact {
     bool valid=false,nativeShellVisible=false;
@@ -71,10 +80,12 @@ struct ReloadShellHidePlan {
     std::vector<std::array<std::byte,64>> ordinary,hidden;
 };
 bool ReloadShellControlFresh(const ReloadTracking&,std::int64_t nowNs)noexcept;
+bool ReloadShellPresentationFresh(const ReloadTracking&,std::int64_t nowNs)noexcept;
 bool ReloadBeltCompatible(const ReloadTracking&,std::int64_t nowNs)noexcept;
 bool ReloadShellControlRetained(const ReloadTracking& source,const ReloadTracking& current,std::int64_t nowNs)noexcept;
 std::optional<ReloadShellHidePlan> BuildReloadShellHidePalette(const ReloadTracking&,const RigSnapshot&,
-    std::span<const std::array<std::byte,64>> ordinary,std::string_view asset,std::int64_t nowNs);
+    std::span<const std::array<std::byte,64>> ordinary,std::string_view asset,std::int64_t nowNs,
+    bool ordinaryEquipmentRecovery=false);
 // Call before EACH actual native Pack, so cancellation between eyes restores
 // ordinary bytes immediately and invalidates paired-hide evidence.
 ReloadPackedPaletteChoice SelectReloadShellPackedPalette(const ReloadShellHidePlan&,const ReloadTracking* current,

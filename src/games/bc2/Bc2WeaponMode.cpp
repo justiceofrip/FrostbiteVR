@@ -119,7 +119,7 @@ std::optional<WeaponModeCommand> ObserveWeaponModeFamily(const WeaponModeMemory&
 }
 std::optional<WeaponModeCommand> ResolveWeaponMode(const WeaponModeMemory& memory,std::uint32_t soldier,std::uint32_t currentWeapon){
     std::optional<WeaponModeCommand> found;
-    for(const auto& p:WeaponModeFamilies)if(p.nativeAccepted&&!p.persistentId.empty()){
+    for(const auto& p:WeaponModeFamilies)if(WeaponModeFamilyEligible(p)&&!p.persistentId.empty()){
         const auto candidate=ObserveWeaponModeFamily(memory,soldier,currentWeapon,p);
         if(candidate){if(found)return {};found=candidate;}
     }

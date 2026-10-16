@@ -94,6 +94,18 @@ bool ReloadShellControlFresh(const ReloadTracking& t,std::int64_t now)noexcept {
     return mesh&&meshes.sequence&&Fresh(meshes.observedNs,meshes.deadlineNs,now,250000000)&&
         std::find(mesh->assetPath.begin(),mesh->assetPath.end(),'\0')!=mesh->assetPath.end()&&std::string_view(mesh->assetPath.data())==SpasReloadMesh;
 }
+bool ReloadShellPresentationFresh(const ReloadTracking& t,std::int64_t now)noexcept {
+    if(!ReloadTrackingFresh(t,now)||!t.manualShell)return false;
+    const auto& p=*t.manualShell;
+    if(!Claim(p.weaponClaim,t,InteractionHand::Right,HandClaimKind::GunHold,now)||
+       t.inputEvidence.released[1]||p.weaponClaim.token.item.id!=t.owner.weapon||
+       p.weaponClaim.token.item.generation!=t.inputEvidence.owner.equipGeneration||!p.selectedMeshes)return false;
+    const auto& meshes=*p.selectedMeshes;
+    const auto* mesh=FindSelectedMesh(meshes,t.owner,SelectedMeshKind::Spas12,now);
+    return mesh&&meshes.sequence&&Fresh(meshes.observedNs,meshes.deadlineNs,now,250000000)&&
+        std::find(mesh->assetPath.begin(),mesh->assetPath.end(),'\0')!=mesh->assetPath.end()&&
+        std::string_view(mesh->assetPath.data())==SpasReloadMesh;
+}
 bool ReloadBeltCompatible(const ReloadTracking& t,std::int64_t now)noexcept {
     if(!t.belt||t.preview||!ReloadTrackingFresh(t,now)||!SpasBeltAmmoFresh(*t.belt,now)||
        t.belt->owner!=t.owner||t.belt->visual.input.owner!=t.inputEvidence.owner||
@@ -107,11 +119,23 @@ bool ReloadBeltCompatible(const ReloadTracking& t,std::int64_t now)noexcept {
         b.meshes->weaponData==c.selectedMeshes->weaponData&&b.meshes->states==c.selectedMeshes->states;
 }
 bool ReloadShellControlRetained(const ReloadTracking& source,const ReloadTracking& current,std::int64_t now)noexcept {
-    if(source.preview||current.preview||!ReloadShellControlFresh(source,now)||!ReloadShellControlFresh(current,now)||
+    if(source.preview||current.preview||
        source.owner!=current.owner||source.inputEvidence.owner!=current.inputEvidence.owner||
        source.inputEvidence.sequence>current.inputEvidence.sequence||source.inputEvidence.observedNs>current.inputEvidence.observedNs)return false;
     if(source.inputEvidence.sequence==current.inputEvidence.sequence&&
        (source.inputEvidence.observedNs!=current.inputEvidence.observedNs||source.inputEvidence.deadlineNs!=current.inputEvidence.deadlineNs))return false;
+    // Never borrow a new transaction's authority to hide an old render pose.
+    // The manual-weapon presentation lease is independent of transactions and
+    // retains both original and current input/claim/mesh expiry checks.
+    if(source.manualShell){
+        if(!ReloadShellPresentationFresh(source,now)||!ReloadShellPresentationFresh(current,now))return false;
+        const auto& a=*source.manualShell;const auto& b=*current.manualShell;
+        return a.weaponClaim.token==b.weaponClaim.token&&a.selectedMeshes->owner==b.selectedMeshes->owner&&
+            a.selectedMeshes->sequence<=b.selectedMeshes->sequence&&a.selectedMeshes->observedNs<=b.selectedMeshes->observedNs&&
+            a.selectedMeshes->weaponData==b.selectedMeshes->weaponData&&
+            a.selectedMeshes->soleConfiguredArray==b.selectedMeshes->soleConfiguredArray&&a.selectedMeshes->states==b.selectedMeshes->states;
+    }
+    if(!ReloadShellControlFresh(source,now)||!ReloadShellControlFresh(current,now))return false;
     const auto& a=*source.shellControl;const auto& b=*current.shellControl;
     return a.cycle==b.cycle&&a.reserve.identity==b.reserve.identity&&a.weaponClaim.token==b.weaponClaim.token&&
         b.reserve.sequence>=a.reserve.sequence&&b.reserve.observedNs>=a.reserve.observedNs&&
@@ -120,8 +144,11 @@ bool ReloadShellControlRetained(const ReloadTracking& source,const ReloadTrackin
         a.selectedMeshes->states==b.selectedMeshes->states;
 }
 std::optional<ReloadShellHidePlan> BuildReloadShellHidePalette(const ReloadTracking& t,const RigSnapshot& rig,
-    std::span<const std::array<std::byte,64>> ordinary,std::string_view asset,std::int64_t now) {
-    if(t.preview||!ReloadShellControlFresh(t,now)||rig.identity.soldier!=t.owner.soldier||rig.identity.weak!=t.owner.weak||
+    std::span<const std::array<std::byte,64>> ordinary,std::string_view asset,std::int64_t now,bool ordinaryEquipmentRecovery) {
+    // Holster recovery explicitly needs the unmodified ordinary palette pair.
+    // A cosmetic stock-shell exclusion must never obstruct that acknowledgement.
+    if(ordinaryEquipmentRecovery||t.preview||!(t.manualShell?ReloadShellPresentationFresh(t,now):ReloadShellControlFresh(t,now))||
+       rig.identity.soldier!=t.owner.soldier||rig.identity.weak!=t.owner.weak||
        !rig.identity.evaluatedMatrices||rig.identity.count!=rig.names.size()||ordinary.size()!=rig.names.size()||
        rig.nativeEvaluated.size()!=rig.names.size())return {};
     const auto binding=BindBc2ReloadPresentation(rig,asset,SpasReloadMesh);if(!binding)return {};

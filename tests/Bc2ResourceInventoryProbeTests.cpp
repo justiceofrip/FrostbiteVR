@@ -10,6 +10,7 @@
 #include <iostream>
 #include <sstream>
 #include <functional>
+#include <memory>
 using namespace fvr;using namespace bc2;using namespace interaction;using namespace reload_insertion_detail;
 namespace {
 constexpr std::int64_t Ms=1000000;
@@ -358,7 +359,7 @@ int ReplacementDriverOptInAndEvidence(){
  f.driver.Prepare(next,f.native.owner,f.Asset(),f.observed,f.now+10*Ms,f.now+110*Ms,f.now+10*Ms);
  CHECK(!next.hands[0].squeeze&&!next.hands[1].squeeze&&!next.hands[1].trigger);
  CHECK(f.calls==calls&&f.shots==shots&&f.shellSubmits==submits&&f.pumpNative.releases==releases&&f.pumpNative.acks==acks);
- Bc2ResourceInventoryProbe disabled;CHECK(!disabled.EnableActorReplacement());
+ auto disabledStorage=std::make_unique<Bc2ResourceInventoryProbe>();auto& disabled=*disabledStorage;CHECK(!disabled.EnableActorReplacement());
  CHECK(disabled.EnablePump(f.calibration));
  // The same ordinary sequence and owner change retains the default failure.
  auto normal=std::make_unique<Loop>(true);CHECK(FirstPumpShot(*normal));
@@ -474,21 +475,21 @@ int ReplacementShoulderRequiresUniqueCurrentRifle(){
  }
  return 0;
 }
-int QueuedShellSupportUsesCurrentClock(){Loop stale(true);stale.advancingShellClock=true;
+int QueuedShellSupportUsesCurrentClock(){auto staleStorage=std::make_unique<Loop>(true);auto& stale=*staleStorage;stale.advancingShellClock=true;
  CHECK(!stale.Run(false));CHECK(stale.Report().find("\"failure\":22")!=std::string::npos);
  CHECK(stale.shellSubmits==1&&stale.shellSupports==1&&stale.pumpSupports==1&&stale.rifleShots==0);
  CHECK(stale.queuedSupportRejected==1&&stale.queuedSupportRetained==1&&stale.queuedSupportReason==HandInteractionReason::StaleInput);
  CHECK(stale.shellPairObserved&&!stale.shellPairLost&&!stale.sourceRestamped);
  std::cout<<"Original queued shell support renewal reproduces failure22 with one stale rejection and retained claim\n";
  return 0;}
-int ExpiryDuringQueuedShellSupport(){Loop f(true);f.advancingShellClock=f.refreshOwnershipClock=f.expireAfterAdoption=true;
+int ExpiryDuringQueuedShellSupport(){auto fStorage=std::make_unique<Loop>(true);auto& f=*fStorage;f.advancingShellClock=f.refreshOwnershipClock=f.expireAfterAdoption=true;
  CHECK(!f.Run(false));CHECK(f.shellSupports==1&&f.shellSubmits==1&&f.rifleShots==0);
  CHECK(f.queuedSupportRejected==1&&f.queuedSupportRetained==0&&f.queuedSupportReason==HandInteractionReason::StaleInput);
  CHECK(!f.sourceRestamped);std::cout<<"Forward clock expiry rejects support renewal without restamping input or source\n";return 0;}
-int AdvancingShellClockAfterAcknowledgedPump(){Loop f(true);f.advancingShellClock=f.refreshOwnershipClock=true;CHECK(f.Run(false));
+int AdvancingShellClockAfterAcknowledgedPump(){auto fStorage=std::make_unique<Loop>(true);auto& f=*fStorage;f.advancingShellClock=f.refreshOwnershipClock=true;CHECK(f.Run(false));
  CHECK(f.shellPairObserved&&!f.shellPairLost);CHECK(f.shellSubmits==1&&f.shellSupports==1&&f.pumpSupports==1&&f.rifleShots==1);
  CHECK(f.pumpNative.releases==1&&f.pumpNative.acks==1&&f.calls==6);CHECK(!f.queuedSupportRejected&&!f.sourceRestamped);return 0;}
-int CombinedPartialNativeTransferAfterPriorLeaseExpiry(){Loop f(true);
+int CombinedPartialNativeTransferAfterPriorLeaseExpiry(){auto fStorage=std::make_unique<Loop>(true);auto& f=*fStorage;
  f.advancingShellClock=f.refreshOwnershipClock=f.splitShellTransfer=true;CHECK(f.Run(false));
  CHECK(f.submittedCohortWaits==4&&f.shellSubmits==1&&f.shellSupports==1&&f.pumpSupports==1&&f.rifleShots==1);
  CHECK(f.pumpNative.releases==1&&f.pumpNative.acks==1&&f.calls==6&&!f.shellPairLost&&!f.sourceRestamped);
@@ -511,10 +512,10 @@ int PumpInspectionPreservesConsumers(){
   else CHECK(!f->pumpNative.releases&&!f->shellSubmits&&!f->rifleShots);
   CHECK(!f->driver.UsePumpInspectionPose());
  }
- Bc2ResourceInventoryProbe unconfigured;CHECK(!unconfigured.UsePumpInspectionPose());
+ auto unconfiguredStorage=std::make_unique<Bc2ResourceInventoryProbe>();auto& unconfigured=*unconfiguredStorage;CHECK(!unconfigured.UsePumpInspectionPose());
  std::cout<<"Sideways pump inspection preserves real input/consumer completion and rejects missing native evidence\n";return 0;
 }
-int CombinedManualPump(){CHECK(!PumpInspectionPreservesConsumers());Loop f(true);CHECK(f.Run());
+int CombinedManualPump(){CHECK(!PumpInspectionPreservesConsumers());auto storage=std::make_unique<Loop>(true);auto& f=*storage;CHECK(f.Run());
  CHECK(f.calls==6&&f.shots==1&&f.shellSubmits==1&&f.selectionCalls==2&&f.rifleShots==1);
  CHECK(f.pumpFirePose&&!f.pumpRightJump);
  CHECK(f.pumpNative.releases==1&&f.pumpNative.acks==1&&f.pumpSupports==1&&f.shellSupports==1);
@@ -613,14 +614,14 @@ int FinalRifleCannotCompleteFromRegressedSnapshot(){
  CHECK(f.Report().find("\"rifle_shot_count\":1")!=std::string::npos);
  return 0;
 }
-int CombinedPumpMissingEvidence(){for(unsigned fault=0;fault<4;++fault){Loop f(true);
+int CombinedPumpMissingEvidence(){for(unsigned fault=0;fault<4;++fault){auto fStorage=std::make_unique<Loop>(true);auto& f=*fStorage;
  if(fault==0)f.allowPumpPairs=false;if(fault==1)f.allowPumpSupport=false;if(fault==2)f.allowShellSupport=false;if(fault==3)f.allowRifleShot=false;
  CHECK(!f.Run(false)&&f.driver.CancelConsumer());
  if(fault<2)CHECK(f.shellSubmits==0&&f.selectionCalls==1);
  if(fault==2)CHECK(f.shellSubmits==1&&f.selectionCalls==1&&f.rifleShots==0);
  if(fault==3)CHECK(f.shellSubmits==1&&f.selectionCalls==2&&f.rifleShots==0);
  }return 0;}
-int Combined(){Loop f;CHECK(f.profile->Ready());CHECK(f.Run());CHECK(f.calls==6&&f.shots==1&&f.shellSubmits==1&&f.selectionCalls==2);
+int Combined(){auto fStorage=std::make_unique<Loop>();auto& f=*fStorage;CHECK(f.profile->Ready());CHECK(f.Run());CHECK(f.calls==6&&f.shots==1&&f.shellSubmits==1&&f.selectionCalls==2);
  CHECK(f.rifle==AmmunitionCounts(30,161,30));CHECK(f.shellLoaded==8&&f.shellReserve==23);CHECK(f.mappings==f.sequence);
  CHECK(f.magReceipts.size()==6&&f.shellReceipts.size()==1);CHECK(!f.magazine->BlocksEquipment()&&!f.shell->BlocksEquipment());
  CHECK(f.hands.Current(InteractionHand::Right)&&!f.hands.Current(InteractionHand::Left));CHECK(f.selected==0);
@@ -628,11 +629,11 @@ int Combined(){Loop f;CHECK(f.profile->Ready());CHECK(f.Run());CHECK(f.calls==6&
  CHECK(f.Report().find("\"input_rows_dropped\":0")!=std::string::npos);
  // Only replace the input coordinator. Real consumer, service, inventory, hand,
  // native request and shell completion counters survive this second lap.
- f.driver=Bc2ResourceInventoryProbe{};CHECK(f.Run());CHECK(f.calls==12&&f.shots==2&&f.shellSubmits==2&&f.selectionCalls==4);
+ f.driver=std::move(*std::make_unique<Bc2ResourceInventoryProbe>());CHECK(f.Run());CHECK(f.calls==12&&f.shots==2&&f.shellSubmits==2&&f.selectionCalls==4);
  CHECK(f.rifle==AmmunitionCounts(30,131,30)&&f.shellLoaded==8&&f.shellReserve==22);
  CHECK(f.shell->ProbeState(f.now).completed==2&&f.Report().find("\"counter_baseline\":{\"acquired\":1,\"submitted\":1,\"completed\":1}")!=std::string::npos);
  std::cout<<"Two persistent laps:12 native magazine operations,2 mapped shots,2 shell receipts,4 verified selections; final rifle30/131,SPAS8/22\n";return 0;}
-int MissingEvidence(){for(unsigned failure=0;failure<6;++failure){Loop f;
+int MissingEvidence(){for(unsigned failure=0;failure<6;++failure){auto fStorage=std::make_unique<Loop>();auto& f=*fStorage;
  if(failure==0)f.allowSeatReceipt=false;if(failure==1)f.allowVisibility=false;if(failure==2)f.allowSelect=false;
  if(failure==3)f.allowShot=false;if(failure==4)f.allowRetirement=false;if(failure==5)f.earlyMapping=true;
  CHECK(!f.Run(false)&&f.driver.CancelConsumer());CHECK(f.calls<=4&&f.selectionCalls<=1&&!f.driver.Completed());
@@ -640,7 +641,7 @@ int MissingEvidence(){for(unsigned failure=0;failure<6;++failure){Loop f;
  if(failure==3||failure==5)CHECK(f.shots==0&&f.shellSubmits==0);if(failure==4)CHECK(f.shots==1&&f.shellSubmits==1&&f.shell->BlocksEquipment());
  std::cout<<"Rejected boundary fault "<<failure<<" after actual magazine calls="<<f.calls<<",shots="<<f.shots<<",shell submits="<<f.shellSubmits<<'\n';}
  return 0;}
-int Interruptions(){for(unsigned failure=0;failure<4;++failure){Loop f;
+int Interruptions(){for(unsigned failure=0;failure<4;++failure){auto fStorage=std::make_unique<Loop>();auto& f=*fStorage;
  const auto target=failure==3?Bc2ResourceInventoryProbe::Phase::Fire:Bc2ResourceInventoryProbe::Phase::FirstMagazine;
  for(unsigned n=0;n<4000&&f.driver.State()!=target&&!f.driver.CancelConsumer();++n)f.Tick();CHECK(f.driver.State()==target);
  if(failure<2)f.Tick(failure+1);
@@ -649,7 +650,7 @@ int Interruptions(){for(unsigned failure=0;failure<4;++failure){Loop f;
  CHECK(f.driver.CancelConsumer()&&!f.driver.Completed());}
  return 0;}
 int BoundedInputJournal(){
- Bc2ResourceInventoryProbe driver;ResourceInventoryObservation unavailable;ReloadStateOwner owner{1,2,3,4,5,6,7};
+ auto driverStorage=std::make_unique<Bc2ResourceInventoryProbe>();auto& driver=*driverStorage;ResourceInventoryObservation unavailable;ReloadStateOwner owner{1,2,3,4,5,6,7};
  InputFrame input;input.spaceGeneration=owner.space;input.focused=input.headValid=true;
  for(auto& h:input.hands){h.active=Components;h.gripTracked=h.aimTracked=true;}
  std::int64_t now=1000*Ms;
@@ -671,7 +672,7 @@ int QueuedPumpInterruptionPreservesTrackingOverride(){
  // boundary remains synthetic; stop after the first loss packet, so no native
  // recovery completion or grant is asserted by this wrapper-only regression.
  auto storage=std::make_unique<Loop>(true);auto& f=*storage;
- f.driver=Bc2ResourceInventoryProbe{};
+ f.driver=std::move(*std::make_unique<Bc2ResourceInventoryProbe>());
  CHECK(f.driver.EnablePump(f.calibration,Bc2PumpControllerProbe::Scenario::LeftTrackingLoss));
  for(unsigned n=0;n<5000&&(n==0||f.input.hands[0].gripTracked)&&!f.driver.CancelConsumer();++n)f.Tick();
  CHECK(f.driver.State()==Bc2ResourceInventoryProbe::Phase::Pump&&!f.driver.CancelConsumer());
@@ -695,6 +696,33 @@ int QueuedPumpInterruptionPreservesTrackingOverride(){
  return 0;
 }
 }
+int ThreePumpsTwoShellsAcrossPersistentConsumers(){
+ auto f=std::make_unique<Loop>(true,3,Bc2PumpControllerProbe::Scenario::HeldSupportNatural);
+ f->guidePumpRendering=true;CHECK(f->driver.EnableTwoShells()&&!f->driver.EnableTwoShells());
+ CHECK(f->Run());CHECK(f->shots==3&&f->pumpNative.releases==3&&f->pumpNative.acks==3);
+ CHECK(f->pumpSupports==3&&f->shellSupports==1&&f->shellSubmits==2&&f->shellReceipts.size()==2);
+ CHECK(f->shellLoaded==7&&f->shellReserve==22&&f->calls==6&&f->rifleShots==1&&f->selectionCalls==2);
+ CHECK(f->now<50000*Ms);
+ CHECK(f->Report().find("\"requested_shells\":2")!=std::string::npos);
+ CHECK(f->Report().find("\"requested_rounds\":2")!=std::string::npos);
+ CHECK(!f->driver.EnableTwoShells());
+ for(unsigned fault=0;fault<3;++fault){
+  auto bad=std::make_unique<Loop>(true,3,Bc2PumpControllerProbe::Scenario::HeldSupportNatural);
+  bad->guidePumpRendering=true;CHECK(bad->driver.EnableTwoShells());bool changed=false;
+  bad->beforeDriver=[&](Loop& x){
+   if(fault==2&&x.shellSubmits==2&&!x.shellApplied){x.submittedAt=x.now;changed=true;return;}
+   if(changed)return;
+   if((fault==0&&x.shellReceipts.size()==1)||(fault==1&&x.driver.State()==Bc2ResourceInventoryProbe::Phase::ShellSupport)){
+    ++x.shellLoaded;--x.shellReserve;changed=true;
+   }
+  };
+  CHECK(!bad->Run(false)&&changed&&bad->driver.CancelConsumer());
+ }
+ auto ordinaryStorage=std::make_unique<Bc2ResourceInventoryProbe>();auto& ordinary=*ordinaryStorage;CHECK(!ordinary.EnableTwoShells());
+ CHECK(ordinary.EnablePump(f->calibration)&&!ordinary.EnableTwoShells());
+ std::cout<<"Three pumps conserve8->5, two independent shell gestures conserve5->7/24->22; extra native fill and missing second receipt fail\n";
+ return 0;
+}
 int EmptyTubeAcrossPersistentConsumers(){
  for(const auto scenario:{Bc2PumpControllerProbe::Scenario::None,Bc2PumpControllerProbe::Scenario::HeldSupportNatural}){
  auto storage=std::make_unique<Loop>(true,8,scenario);auto& f=*storage;f.rifle.loaded=30;
@@ -710,7 +738,7 @@ int EmptyTubeAcrossPersistentConsumers(){
  auto bad=std::make_unique<Loop>(true,8);bad->rifle.loaded=30;bool changed=false;
  bad->beforeDriver=[&](Loop& x){if(!changed&&x.driver.State()==Bc2ResourceInventoryProbe::Phase::Shell){++x.shellLoaded;changed=true;}};
  CHECK(!bad->Run(false)&&changed&&bad->driver.CancelConsumer());
- Bc2ResourceInventoryProbe rejected;CHECK(!rejected.EnablePump(f.calibration,Bc2PumpControllerProbe::Scenario::LeftTrackingLoss,8));
+ auto rejectedStorage=std::make_unique<Bc2ResourceInventoryProbe>();auto& rejected=*rejectedStorage;CHECK(!rejected.EnablePump(f.calibration,Bc2PumpControllerProbe::Scenario::LeftTrackingLoss,8));
  CHECK(!rejected.EnablePump(f.calibration,Bc2PumpControllerProbe::Scenario::None,9));
  CHECK(rejected.EnablePump(f.calibration,Bc2PumpControllerProbe::Scenario::None,8));
  CHECK(!rejected.EnableActorReplacement());
@@ -817,7 +845,7 @@ int MagazineRefillThenFire(){
  CHECK(f->rifle==AmmunitionCounts(29,161,30)&&!f->shots&&!f->shellSubmits&&!f->selectionCalls);
  auto denied=std::make_unique<Loop>();denied->singleFireMagazine=true;denied->allowRifleShot=false;
  CHECK(denied->driver.EnableMagazineOnly(false,true)&&!denied->Run(false));CHECK(denied->calls==2&&!denied->rifleShots);
- Bc2ResourceInventoryProbe mixed;CHECK(!mixed.EnableMagazineOnly(true,true));
+ auto mixedStorage=std::make_unique<Bc2ResourceInventoryProbe>();auto& mixed=*mixedStorage;CHECK(!mixed.EnableMagazineOnly(true,true));
  return 0;
 }
 int EmptyMagazineOrdinaryInput(){
@@ -865,7 +893,7 @@ int MagazineOnlyRequiresSupport(){
   if(!missing)CHECK(heldTicks>=75);
   else CHECK(f->calls==0&&!f->rifleShots);
  }
- Bc2ResourceInventoryProbe incompatible;CHECK(!incompatible.EnableMagazineOnly(true,false,true));
+ auto incompatibleStorage=std::make_unique<Bc2ResourceInventoryProbe>();auto& incompatible=*incompatibleStorage;CHECK(!incompatible.EnableMagazineOnly(true,false,true));
  for(unsigned fault=0;fault<2;++fault){
   auto f=std::make_unique<Loop>();f->singleFireMagazine=true;
   CHECK(f->driver.EnableMagazineOnly(false,true,true));
@@ -898,9 +926,34 @@ int MagazineOnlySubset(){
  missing->allowSeatReceipt=false;CHECK(!missing->Run()&&!missing->driver.Completed());
  CHECK(!missing->shots&&!missing->shellSubmits);
  auto started=std::make_unique<Loop>();started->Tick();CHECK(!started->driver.EnableMagazineOnly());
- Bc2ResourceInventoryProbe mixed;CHECK(mixed.RequireRifleSupport()&&!mixed.EnableMagazineOnly());
+ auto mixedStorage=std::make_unique<Bc2ResourceInventoryProbe>();auto& mixed=*mixedStorage;CHECK(mixed.RequireRifleSupport()&&!mixed.EnableMagazineOnly());
  return 0;
 }
 
 #include "SupportOnly373Checks.inc"
-int main(){if(PumpAgainAfterOtherWeapon()||SupportWithoutMagazineEnrollment()||MagazineOnlyRequiresSupport()||MagazineRefillThenFire()||EmptyMagazineOrdinaryInput()||MagazineOnlySubset()||MagazineReplacementKeepsActualRemovedResource()||EmptyTubeAcrossPersistentConsumers()||CombinedRequiresRifleSupportBeforeReload()||QueuedPumpInterruptionPreservesTrackingOverride()||FinalAutomaticRifleShots()||FinalRifleCannotCompleteFromRegressedSnapshot()||FinalRifleRejectsForeignAmmunition()||FinalRifleRequiresFreshObservation()||CombinedPartialNativeTransferAfterPriorLeaseExpiry()||QueuedShellSupportUsesCurrentClock()||ExpiryDuringQueuedShellSupport()||AdvancingShellClockAfterAcknowledgedPump()||CombinedManualPump()||CombinedPumpMissingEvidence()||Combined()||MissingEvidence()||Interruptions()||BoundedInputJournal())return 1;std::puts("Persistent real body/resource/shell consumer composition and negative boundaries passed");return 0;}
+int UnreachablePoseKeepsRealThreePumpTwoShellConsumers(){
+ auto f=std::make_unique<Loop>(true,3,Bc2PumpControllerProbe::Scenario::HeldSupportNatural);
+ f->guidePumpRendering=true;
+ CHECK(!f->driver.EnableUnreachablePumpPose());
+ CHECK(f->driver.EnableTwoShells()&&f->driver.EnableUnreachablePumpPose());
+ CHECK(!f->driver.EnableUnreachablePumpPose());
+ unsigned alternate=0,returned=0;
+ for(unsigned n=0;n<5900&&!f->driver.Completed()&&!f->driver.CancelConsumer();++n){
+  f->Tick();const auto& p=f->input.hands[1].grip.position;
+  if(f->driver.State()==Bc2ResourceInventoryProbe::Phase::Pump&&
+     std::abs(p.x)<.001f&&std::abs(p.y+.22f)<.001f&&std::abs(p.z+.40f)<.001f)++alternate;
+  if(f->driver.State()==Bc2ResourceInventoryProbe::Phase::Shell&&
+     std::abs(p.x)<.001f&&std::abs(p.y+.40f)<.001f&&std::abs(p.z)<.001f)++returned;
+ }
+ if(!f->driver.Completed())std::cerr<<f->Report()<<'\n';
+ CHECK(f->driver.Completed()&&alternate>0&&returned>0);
+ CHECK(f->shots==3&&f->pumpNative.releases==3&&f->pumpNative.acks==3&&f->pumpSupports==3);
+ CHECK(f->shellSubmits==2&&f->shellReceipts.size()==2&&f->shellLoaded==7&&f->shellReserve==22);
+ CHECK(f->calls==6&&f->rifleShots==1&&f->selectionCalls==2&&!f->pumpRightJump);
+ CHECK(!f->driver.EnableUnreachablePumpPose());
+ auto ordinaryStorage=std::make_unique<Bc2ResourceInventoryProbe>();auto& ordinary=*ordinaryStorage;CHECK(!ordinary.EnableUnreachablePumpPose());
+ CHECK(ordinary.EnablePump(f->calibration)&&!ordinary.EnableUnreachablePumpPose());
+ std::puts("Raised-forward controller fixture retains actual consumer contact, three shots and two shells; mocked native/packs, no IK coverage claim");
+ return 0;
+}
+int main(){if(UnreachablePoseKeepsRealThreePumpTwoShellConsumers()||ThreePumpsTwoShellsAcrossPersistentConsumers()||PumpAgainAfterOtherWeapon()||SupportWithoutMagazineEnrollment()||MagazineOnlyRequiresSupport()||MagazineRefillThenFire()||EmptyMagazineOrdinaryInput()||MagazineOnlySubset()||MagazineReplacementKeepsActualRemovedResource()||EmptyTubeAcrossPersistentConsumers()||CombinedRequiresRifleSupportBeforeReload()||QueuedPumpInterruptionPreservesTrackingOverride()||FinalAutomaticRifleShots()||FinalRifleCannotCompleteFromRegressedSnapshot()||FinalRifleRejectsForeignAmmunition()||FinalRifleRequiresFreshObservation()||CombinedPartialNativeTransferAfterPriorLeaseExpiry()||QueuedShellSupportUsesCurrentClock()||ExpiryDuringQueuedShellSupport()||AdvancingShellClockAfterAcknowledgedPump()||CombinedManualPump()||CombinedPumpMissingEvidence()||Combined()||MissingEvidence()||Interruptions()||BoundedInputJournal())return 1;std::puts("Persistent real body/resource/shell consumer composition and negative boundaries passed");return 0;}

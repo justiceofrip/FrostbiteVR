@@ -30,6 +30,10 @@ public:
     bool ReadBodyProps(const graphics::PairTicket& t,graphics::BodyPropFrame& p)noexcept override{return channel_.ReadBodyProps(t,p);}
     bool ReadSceneDepth(const graphics::TextureDescriptor& d,const graphics::PairTicket& t,graphics::SceneDepthFrame& p)noexcept override{return channel_.ReadSceneDepth(d,t,p);}
     void UpdateInput(const interaction::InputFrame& input)noexcept override{channel_.PublishInput(input);}
+    runtime::InputPublicationResult UpdateInputObserved(const interaction::InputFrame& input)noexcept override {
+        const auto result=channel_.PublishInput(input);
+        return {true,result==ChannelResult::Ok,std::uint32_t(result)};
+    }
     bool TakeFeedback(interaction::FeedbackEvent& event)noexcept override{return channel_.TakeFeedback(event);}
     void Suspend()noexcept override;
     void PairConsumed(const graphics::PairTicket& t,bool consumed)noexcept override{channel_.Feedback(t,consumed);}

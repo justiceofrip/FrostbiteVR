@@ -127,14 +127,86 @@ bool Bc2BodyHolster::Replacement(const BodyHolsterSample& s)const noexcept {
 bool Bc2BodyHolster::AcceptsProfile(const ReloadStateOwner& owner,std::shared_ptr<const SelectedMeshesSnapshot> selected,std::int64_t now)const noexcept {
     BodyHolsterSample s;s.nativeOwner=owner;s.selected=std::move(selected);s.hand.nowNs=now;return Enabled()&&ProfileAccepted(s);
 }
+bool Bc2BodyHolster::BeginTemporaryTool(const BodyHolsterSample& s,const BodyInventoryDisplay& display,
+    BodyItemKey tool,std::uint64_t operation,const BodyFreeRightEvidence& free,
+    const HandClaimToken& claim,const HandInteraction& hands)noexcept {
+    if(!operation||operation<=lastTemporaryOperation_||temporaryTool_||phase_!=BodyHolsterPhase::Empty||!emptyIntent_||pending_||!Fresh(s)||s.cancel||s.reloadBusy||s.interactionSuspended||!s.triggerNeutral||
+       !ProfileAccepted(s)||!s.carried||s.carried!=emptyCarried_||display.selectedOwner!=s.nativeOwner||
+       display.physicalOwner!=s.hand.owner||display.revision!=revision_||display.sequence!=s.hand.sequence||
+       display.observedNs!=s.hand.observedNs||display.physicalSelected!=s.body.inventory.selected||
+       free.visibility.request!=render_||free.visibility.nativeOwner!=s.nativeOwner||free.input.owner!=s.hand.owner||
+       free.input.sequence!=s.hand.sequence||free.input.observedNs!=s.hand.observedNs||free.input.deadlineNs!=s.hand.deadlineNs||
+       !BodyFreeRightEvidenceCurrent(free,s.hand.nowNs)||hands.Current(InteractionHand::Left))return false;
+    const WeaponVisibilityRequest visible{true,true,render_,s.nativeOwner,s.hand,s.selected,diagnosticDeadline_};
+    const HolsterSuppressionRequest suppressed{s.nativeOwner,s.hand,render_,s.nativeTick,s.cache};
+    if(!Receipt(free.receipt,visible,s.hand.nowNs)||!HolsterSuppressionCurrent(free.suppression,suppressed))return false;
+    const auto current=hands.Current(InteractionHand::Right);
+    if(!current||current->token!=claim||claim.kind!=HandClaimKind::BodyInventory||claim.hand!=InteractionHand::Right||
+       claim.owner!=s.hand.owner||claim.item.id!=tool.id||claim.item.generation!=tool.generation||
+       current->inputSequence!=s.hand.sequence||current->deadlineNs<=s.hand.nowNs)return false;
+    Bc2TemporaryToolCustody next;if(!next.Begin(display,tool,operation,s.hand.nowNs))return false;
+    temporaryTool_=std::move(next);lastTemporaryOperation_=operation;temporaryRehiding_=false;temporaryReturnWanted_=false;phase_=BodyHolsterPhase::TemporaryTool;
+    ordinaryRecovery_.reset();inputGapOwner_.reset();return true;
+}
 std::optional<HolsterSuppressionRequest> Bc2BodyHolster::Demand(const BodyHolsterSample& s)const noexcept {
     if(!Enabled()||!DiagnosticFresh(s.hand.nowNs)||phase_==BodyHolsterPhase::Held||!render_||!s.nativeTick||s.cache<0x10000)return {};
+    if(temporaryTool_){const auto& original=temporaryTool_->Original().selectedOwner;
+        if(s.nativeOwner.player!=original.player||s.nativeOwner.soldier!=original.soldier||s.nativeOwner.weak!=original.weak||
+           s.nativeOwner.actorGeneration!=original.actorGeneration||
+           (s.nativeOwner.weapon!=original.weapon&&s.nativeOwner.weapon!=temporaryTool_->Tool().id))return {};}
     return HolsterSuppressionRequest{s.nativeOwner,s.hand,render_,s.nativeTick,s.cache};
 }
 BodyHolsterResult Bc2BodyHolster::Tick(BodyInventory& policy,const BodyHolsterSample& s,HandInteraction& hands,std::uint64_t& intent)noexcept {
     BodyHolsterResult out;
     if(!Enabled()){out.inventoryEvaluation=BodyInventoryEvaluation::Disabled;return out;} // Normal shoulder/chest path remains untouched.
     if(!DiagnosticFresh(s.hand.nowNs)){out.inventoryEvaluation=BodyInventoryEvaluation::DiagnosticExpired;Invalidate();out.phase=phase_;out.blockWeaponActions=BlocksActions();out.allowAutomaticGunHold=!BlocksActions();return out;}
+    if(temporaryTool_){
+        auto observed=temporaryTool_->Observe(s.temporaryDisplay,s.hand.nowNs);
+        if(s.temporaryNativeObserved&&s.carried){
+            const auto& original=temporaryTool_->Original();const auto& actor=original.selectedOwner;
+            if(s.nativeOwner.player!=actor.player||s.nativeOwner.soldier!=actor.soldier||s.nativeOwner.weak!=actor.weak||
+               s.nativeOwner.actorGeneration!=actor.actorGeneration)observed=TemporaryToolObservation::ActorReplaced;
+            else if(*s.carried!=original.carried)observed=TemporaryToolObservation::InventoryChanged;
+            else if(s.nativeOwner.weapon!=actor.weapon&&s.nativeOwner.weapon!=temporaryTool_->Tool().id)
+                observed=TemporaryToolObservation::ForeignSelection;
+        }
+        if(observed==TemporaryToolObservation::ActorReplaced||observed==TemporaryToolObservation::ForeignSelection||
+           observed==TemporaryToolObservation::InventoryChanged||observed==TemporaryToolObservation::AssignmentsChanged){
+            // Known mutation retires this special tool interval. It does not
+            // make a foreign item inherit old hidden intent or quarantine the
+            // ordinary recovery path. Native adapter retires independently.
+            temporaryTool_.reset();temporaryRehiding_=false;temporaryReturnWanted_=false;Invalidate(false);
+        }else {
+            const auto wait=[&](){out.phase=BodyHolsterPhase::TemporaryTool;out.blockWeaponActions=true;
+                // Before the first native selection, a reserved knife hand
+                // must not expose the still-selected holstered firearm. Keep
+                // only a fresh exact-original hide; this grants no free hand or
+                // return receipt. An explicit return still calls Begin below
+                // and requires a NEW request + paired hide.
+                if(observed==TemporaryToolObservation::Original&&Fresh(s)&&!s.cancel&&!s.reloadBusy&&
+                   !s.interactionSuspended&&ProfileAccepted(s)){
+                    const auto demand=Demand(s);
+                    if(demand&&s.suppression&&HolsterSuppressionCurrent(*s.suppression,*demand))
+                        out.visibility={true,true,render_,s.nativeOwner,s.hand,s.selected,diagnosticDeadline_};
+                }
+                out.allowAutomaticGunHold=false;Record(s,out,hands);return out;};
+            if(!temporaryReturnWanted_||observed!=TemporaryToolObservation::Original||!Fresh(s)||s.cancel||s.reloadBusy||s.interactionSuspended||!s.triggerNeutral||
+               !ProfileAccepted(s)||hands.Current(InteractionHand::Left)||hands.Current(InteractionHand::Right)){
+                // No receipt or policy adoption while selected tool/tracking
+                // is absent. The committed empty intent and slots stay intact.
+                if(temporaryRehiding_){phase_=BodyHolsterPhase::TemporaryTool;temporaryRehiding_=false;}
+                return wait();
+            }
+            if(!temporaryRehiding_){
+                if(!Begin(s,true))return wait();
+                rebindEmpty_=true;temporaryRehiding_=true;
+                // NEW suppression and paired hide must follow this NEW render
+                // request; a pre-tool free-hand receipt cannot complete return.
+                out.phase=phase_;out.blockWeaponActions=true;out.allowAutomaticGunHold=false;
+                Record(s,out,hands);return out;
+            }
+        }
+    }
     // An unsupported ordinary gun stays on the existing shoulder/cycling path.
     // Once hiding started, unsupported replacement must instead retire through
     // recovery; it cannot inherit an accepted profile or an old show receipt.
@@ -287,6 +359,9 @@ BodyHolsterResult Bc2BodyHolster::Tick(BodyInventory& policy,const BodyHolsterSa
     }
     if(phase_==BodyHolsterPhase::Empty&&suppressed&&visible&&!hands.Current(InteractionHand::Right))
         out.freeRight=BodyFreeRightEvidence{out.visibility,*s.visibility,*s.suppression,s.hand,diagnosticDeadline_};
+    if(temporaryTool_&&temporaryRehiding_&&phase_==BodyHolsterPhase::Empty&&out.freeRight){
+        lastTemporaryReturn_=temporaryTool_->Serial();temporaryTool_.reset();temporaryRehiding_=false;temporaryReturnWanted_=false;
+    }
     if(phase_==BodyHolsterPhase::Held)out.visibility={};
     return finish();
 }

@@ -1,0 +1,47 @@
+{
+  "checkpoint": 412,
+  "source_sha256": "5d0542ffed1acdd2688df8b05534f9b465b4780fb233f52fb45aa07c31a1370d",
+  "full_build_suites": {
+    "x86": 283,
+    "x64": 283
+  },
+  "binaries": {
+    "probe": {
+      "file": "BC2NativeProbe.dll",
+      "sha256": "f8ed8cd0d363825e0fb8a6135391fb54437d8ed922325e674bd0bfd880daa48f"
+    },
+    "trace": {
+      "file": "BC2NativeTrace.exe",
+      "sha256": "1302cd1f40a0fc02e68f16f309dddcd29027dcbea60ff9be3e403eb1d07fb199"
+    },
+    "host": {
+      "file": "BC2XrHost.exe",
+      "sha256": "c5ee7b53b0fe7232ed08c07f2523bdd8930f2b0998996906bd29747cbc68e8aa"
+    },
+    "receiver": {
+      "file": "BC2NativeIpcProbe.exe",
+      "sha256": "657321135708e22334a3eb41cdcac51c3f99177662569e29c212f2b09a1e7b58"
+    }
+  },
+  "native_config_bytes": 1220,
+  "input_version": 3,
+  "frame_channel_version": 7,
+  "additional_checks": {
+    "ammo_hud_warp": "passed",
+    "actual_body_cache_parts": 46,
+    "magazine_geometry_clearance_profiles": 6,
+    "storage_checks": 34,
+    "launch_handoff_checks": 19,
+    "desktop_launcher_checks": 38,
+    "source_package_tests": 35,
+    "personal_launch_dependency_validation": "passed",
+    "installed_launcher_validation": "passed"
+  },
+  "launcher_version": "0.1.2",
+  "native_game_tested_this_candidate": false,
+  "headset_tested": false,
+  "full_campaign_accepted": false,
+  "spent_shell_ejection_implemented": false,
+  "pump_timing_changed": false,
+  "rollback_source_commit": "57e04e90e8d9f1d8f9448556db549725c888fa9a"
+}

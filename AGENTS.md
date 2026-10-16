@@ -21,7 +21,26 @@ before modifying this workspace.
 - Every enabled native feature needs specific evidence; unsupported features
   remain disabled with an explicit status.
 - Do not modify the working BF2142 project or its cloud/launch configuration.
+- User storage policy: C: is the small OS drive. Keep BC2 VR installs, updates,
+  generated files, logs and temporary/compiler scratch on G:. Set process-local
+  TEMP/TMP/TMPDIR before work; children must inherit them. Never require free
+  space on C: for work that writes only to G:, and never change Windows-wide
+  environment settings or move other applications' files to accomplish this.
+  Existing Windows/runtime files may be read; do not duplicate runtimes onto C:.
 - Do not include game binaries/assets or private credentials in source.
 - Run relevant deterministic regressions, then Build.ps1 for x86 and x64.
   Headset/runtime claims require actual game and headset checks.
 - Update the transfer ledger and handoff with implementation and validation gaps.
+- Storage is bounded: call tools/StorageBudget.ps1 before builds, captures or
+  sessions, including private recovery wrappers. Do not bypass a failed budget.
+  Use the existing x86/x64 build trees; archive source patches and small result
+  summaries instead of copying whole build directories for every checkpoint.
+- Keep raw captures opt-in and restricted to the event being investigated.
+  Budget their actual frame count, dimensions and bytes before launching. The
+  default limit is 512 MiB per capture run and 40 GiB of generated disk usage;
+  preserve at least 15 GiB free on output and temporary-file volumes. See
+  docs/STORAGE-BUDGET.md. Review retention before increasing these limits.
+- Preserve current runtime symbols, source, useful checkpoint receipts and user
+  recordings. Rebuildable intermediate/test-symbol files need not be archived.
+  Inspect contents and current references before pruning: old directory names
+  can still contain current build output.

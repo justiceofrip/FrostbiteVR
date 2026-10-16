@@ -1,4 +1,6 @@
 #include "Bc2ReloadAbort.h"
+#include "Bc2ReloadOwnerLoss.h"
+#include <string_view>
 #include "Test.h"
 #include <cstdio>
 using namespace fvr::bc2;
@@ -113,6 +115,111 @@ int HistoryWrapIsBoundedAndOrdered(){ReloadAbortCleanup p;
     for(std::uint64_t n=0;n<p.HistoryCount();++n){const auto& r=p.History(n);
         CHECK(r.cycle==n+4&&r.failure==ReloadAbortFailure::Input&&r.claims==1&&r.terminalNs==Start+1000000&&!r.active);}
     return 0;}
+
+void ClearPresentation(ReloadAbortCleanup& p,std::int64_t now){
+#ifdef FVR_TEST_LEGACY_CLEAR
+    // Exact frozen397 ClearOwner cleanup operation; no helper or count mock.
+    p.Abandon(ReloadAbortFailure::Owner,now);
+#else
+    p.OwnerCleared(ReloadOwnerLoss::PresentationUnavailable,now);
+#endif
 }
-int main(){if(ThreeIndependentBranches()||NonrenewableDeadline()||UnsupportedArmingPendingEmptyOrFull()||NewCycleAndOwnerChanges()||FinalOwnerOrCycleCheck()||UnsafeInputAndState()||ExactHelperContract()||HelperAndOriginalPostconditions()||NoFutureCallbackRequiredForRetirement()||AlreadyExitedNoNativeCall()||FirePulseThenNeutral()||HeldFireCannotRenewOrClaim()||MixedOrMalformedFireStillRejected()||DeferredFireCannotMaskNativeChange()||DeferredFireCannotMaskOwnerOrCycle()||HistorySurvivesReplacementCycle()||HistoryWrapIsBoundedAndOrdered())return 1;
+int PreArmObservationWaitsForNewOwnUpdate(){
+    ReloadAbortCleanup p;CHECK(p.Arm(Lease(),7,Start+400000,true));const auto deadline=p.Deadline();
+    auto in=Input();in.nowNs=Start+100000;
+    CHECK(!p.Claim(in,7,1,true,10,true,Start+700000).call);
+    CHECK(p.Active()&&!p.Claimed()&&p.Deadline()==deadline&&p.Failure()==ReloadAbortFailure::None);
+#ifndef FVR_TEST_LEGACY_CLEAR
+    CHECK(p.History(0).beforeArmDeferred==1&&p.History(0).first.sourceObservedNs==Start+100000);
+    CHECK(p.History(0).first.sourceDeadlineNs==in.leaseDeadlineNs&&p.History(0).first.sourceRevision==7);
+#endif
+    for(unsigned b=0;b<3;++b){in=Input(b);const auto d=Claim(p,in);CHECK(d.call);
+        CHECK(p.Allows(d,7,1,true,in.nowNs)&&p.Finish(d,Exited(d),true,true,in.nowNs+100));}
+    CHECK(p.Completed()==7&&!p.Active()&&p.Deadline()==deadline);
+    for(unsigned fault=0;fault<5;++fault){ReloadAbortCleanup bad;CHECK(bad.Arm(Lease(),7,Start+400000,true));in=Input();in.nowNs=Start+100000;
+        if(fault==0)++in.identity.serverItem;
+        if(fault==2)in.verified=false;
+        if(fault==3)in.leaseDeadlineNs=Start+700000;
+        const auto at=fault==4?bad.Deadline():Start+700000;
+        CHECK(!bad.Claim(in,fault==1?8:7,1,true,20,true,at).call&&!bad.Active());}
+    ReloadAbortCleanup late;CHECK(late.Arm(Lease(),7,Start+400000,true));in=Input();in.nowNs=Start+100000;
+    CHECK(!late.Claim(in,7,1,true,30,true,Start+700000).call&&late.Active());
+    CHECK(!late.Claim(in,7,1,true,31,true,late.Deadline()).call&&!late.Active());return 0;
+}
+int PresentationClearRetainsOnlyOriginalCleanup(){
+    ReloadAbortCleanup p;const auto l=Lease();
+    const ReloadStopIntent stop{l.identity,l.cycle,l.sequence,l.observedNs,l.deadlineNs,l.loaded,l.reserve,l.capacity};
+    CHECK(p.ArmShellStop(stop,7,Start));const auto deadline=p.Deadline();
+    for(unsigned n=0;n<3;++n)ClearPresentation(p,Start+n*1000);
+    CHECK(p.Active()&&p.Revision()==7&&p.Deadline()==deadline);
+    CHECK(!p.OriginalLease().allThreeHeld&&!p.OriginalLease().nativeBindingVerified);
+    auto renewed=stop;++renewed.sequence;renewed.deadlineNs+=1000000;
+    CHECK(!p.ArmShellStop(renewed,7,Start+1000)&&p.Deadline()==deadline);
+    for(unsigned b=0;b<3;++b){auto in=Input(b);const auto d=Claim(p,in);CHECK(d.call);
+        CHECK(p.Finish(d,Exited(d),true,true,in.nowNs+100));}
+    CHECK(p.Completed()==7&&!p.Active());
+#ifndef FVR_TEST_LEGACY_CLEAR
+    ReloadAbortCleanup replaced;CHECK(replaced.ArmShellStop(stop,7,Start));
+    replaced.OwnerCleared(ReloadOwnerLoss::LifetimeEnded,Start+1000);
+    CHECK(!replaced.Active()&&!Claim(replaced).call);
+#endif
+    auto recentered=l.identity.owner;++recentered.space;CHECK(SameReloadCleanupLifetime(l.identity.owner,recentered));
+    ++recentered.equipGeneration;CHECK(!SameReloadCleanupLifetime(l.identity.owner,recentered));
+    CHECK(ReloadCleanupObservationCurrent(3,3,l.observedNs,deadline,Start));
+    CHECK(!ReloadCleanupObservationCurrent(3,4,l.observedNs,deadline,Start));
+    CHECK(!ReloadCleanupObservationCurrent(3,3,l.observedNs,deadline,deadline));return 0;
+}
+}
+
+bool FinishWithoutHelper(ReloadAbortCleanup& p,const ReloadAbortDecision& d,
+    const ReloadFiringObservation& after,bool retained,bool called,std::int64_t now){
+#ifdef FVR_TEST_OLD_UNCALLED
+    (void)called;return p.Finish(d,after,retained,false,now);
+#else
+    return p.DeferUncalled(d,after,retained,called,now);
+#endif
+}
+int UncalledHelperNeedsExactCompletedOriginal(){
+    auto lease=Lease();lease.loaded=7;lease.reserve=22;
+    ReloadAbortCleanup p;CHECK(p.Arm(lease,7,Start,true));const auto deadline=p.Deadline();
+    auto in=Input();for(auto& b:in.branches){b.loaded=7;b.reserve=22;b.phaseTimer=.718759f;}
+    const auto skipped=Claim(p,in);CHECK(skipped.call&&p.Claimed()==1);
+    // Use the unchanged native count/state shape from397 invocation28344;
+    // this fixture separately injects a declined pre-helper recheck, which
+    // that retained live callback did not establish.
+    auto after=skipped.before;after.phaseTimer=.712703f;unsigned helperCalls=0,originalCalls=1;
+    CHECK(FinishWithoutHelper(p,skipped,after,true,false,Start+2000000));
+    CHECK(p.Active()&&!p.Claimed()&&!p.Completed()&&p.Deadline()==deadline);
+    CHECK(!p.Allows(skipped,7,1,true,Start+2000100));
+    CHECK(!p.Finish(skipped,Exited(skipped),true,true,Start+2000100));
+    in.nowNs=Start+3000000;
+    CHECK(!p.Claim(in,7,1,true,skipped.invocation,true,in.nowNs).call&&p.Active());
+    for(unsigned branch=0;branch<3;++branch){in.branch=branch;in.nowNs=Start+3000000+branch*1000;
+        const auto d=p.Claim(in,7,1,true,100+branch,true,in.nowNs);CHECK(d.call);
+        ++helperCalls;++originalCalls;CHECK(p.Finish(d,Exited(d),true,true,in.nowNs+100));}
+    CHECK(helperCalls==3&&originalCalls==4&&p.Completed()==7&&!p.Active()&&p.Deadline()==deadline);
+    for(unsigned fault=0;fault<10;++fault){ReloadAbortCleanup bad;CHECK(bad.Arm(Lease(),7,Start,true));
+        const auto d=Claim(bad);auto changed=d.before;changed.phaseTimer=.204944f;
+        if(fault==0)++changed.loaded;
+        if(fault==1)--changed.reserve;
+        if(fault==2)++changed.address;
+        if(fault==3)changed.wrapperOffset=0x40;
+        if(fault==6)changed.currentState=6;
+        if(fault==7)changed.phaseTimer=1.1f;
+        if(fault==8)changed.flagsA8=8;
+        CHECK(!FinishWithoutHelper(bad,d,changed,fault!=4,fault==5,
+            fault==9?bad.Deadline():Start+2000000));
+        CHECK(!bad.Active()&&!Claim(bad).call);}
+    ReloadAbortCleanup replaced;CHECK(replaced.Arm(Lease(),7,Start,true));const auto old=Claim(replaced);
+    replaced.Abandon(ReloadAbortFailure::NewCycle,Start+1000100);
+    CHECK(!FinishWithoutHelper(replaced,old,old.before,true,false,Start+2000000));
+    CHECK(!replaced.Active()&&replaced.Failure()==ReloadAbortFailure::NewCycle);
+    return 0;
+}
+int main(int argc,char** argv){
+    if(argc>1&&std::string_view(argv[1])=="--uncalled-helper")return UncalledHelperNeedsExactCompletedOriginal();
+    if(UncalledHelperNeedsExactCompletedOriginal())return 1;
+    if(argc>1&&std::string_view(argv[1])=="--cleanup-lifecycle")return PreArmObservationWaitsForNewOwnUpdate()||PresentationClearRetainsOnlyOriginalCleanup();
+    if(argc>1&&std::string_view(argv[1])=="--presentation-clear")return PresentationClearRetainsOnlyOriginalCleanup();
+    if(PreArmObservationWaitsForNewOwnUpdate()||PresentationClearRetainsOnlyOriginalCleanup())return 1;if(ThreeIndependentBranches()||NonrenewableDeadline()||UnsupportedArmingPendingEmptyOrFull()||NewCycleAndOwnerChanges()||FinalOwnerOrCycleCheck()||UnsafeInputAndState()||ExactHelperContract()||HelperAndOriginalPostconditions()||NoFutureCallbackRequiredForRetirement()||AlreadyExitedNoNativeCall()||FirePulseThenNeutral()||HeldFireCannotRenewOrClaim()||MixedOrMalformedFireStillRejected()||DeferredFireCannotMaskNativeChange()||DeferredFireCannotMaskOwnerOrCycle()||HistorySurvivesReplacementCycle()||HistoryWrapIsBoundedAndOrdered())return 1;
     std::puts("Seventeen bounded native-abort cleanup groups passed; Fire-only deferral is not combined native Fire/abort verification.");return 0;}

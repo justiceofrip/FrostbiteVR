@@ -1,4 +1,5 @@
 #include "Bc2AmmoCounterHost.h"
+#include "fvr/graphics/AmmoCounterPlacement.h"
 #include "Bc2ReloadFlowRuntime.h"
 #include "Test.h"
 #include <iostream>
@@ -100,6 +101,30 @@ int PairAndFreshness(){const auto a=Sample();CHECK(AmmoCounterPair(a,a,30,Now));
     CHECK(p.Receive(a,a,30,Now));CHECK(!p.Receive({},{},30,Now));CHECK(!p.Select(30,Now));
     return 0;
 }
+int WeaponSidePlacement(){
+    math::Pose head,grip,aim;head.position={0,1.7f,0};grip.position=aim.position={.2f,1.4f,-.45f};
+    const auto initial=AmmoCounterBesideGun(head,grip,aim);CHECK(initial);
+    CHECK(Near(initial->position.x,.05f)&&Near(initial->position.y,1.435f)&&Near(initial->position.z,-.57f));
+    // Moving the gun changes label position; looking down does not drag it to a fixed visor location.
+    grip.position.x+=.12f;const auto moved=AmmoCounterBesideGun(head,grip,aim);CHECK(moved);
+    CHECK(Near(moved->position.x-initial->position.x,.12f));
+    head.orientation={std::sin(.15f),0,0,std::cos(.15f)};
+    const auto looked=AmmoCounterBesideGun(head,grip,aim);CHECK(looked);
+    CHECK(Near(looked->position.x,moved->position.x)&&Near(looked->position.y,moved->position.y)&&Near(looked->position.z,moved->position.z));
+    CHECK(Near(looked->orientation.x,head.orientation.x));
+    head.orientation={};aim.orientation={0,std::sin(.785398163f),0,std::cos(.785398163f)};
+    const auto turned=AmmoCounterBesideGun(head,grip,aim);CHECK(turned);
+    CHECK(Near(turned->position.x-grip.position.x,-.12f)&&Near(turned->position.z-grip.position.z,.15f));
+    // A common reference-space translation preserves the physical relation.
+    const auto old=*turned;for(auto* p:{&head,&grip,&aim}){p->position.x+=12;p->position.y-=3;p->position.z+=8;}
+    const auto rebased=AmmoCounterBesideGun(head,grip,aim);CHECK(rebased);
+    CHECK(Near(rebased->position.x-old.position.x,12)&&Near(rebased->position.y-old.position.y,-3)&&Near(rebased->position.z-old.position.z,8));
+    head={};grip={};aim={};CHECK(!AmmoCounterBesideGun(head,grip,aim)); // inside near-head exclusion
+    grip.position.z=1;CHECK(!AmmoCounterBesideGun(head,grip,aim)); // behind the user
+    grip.position.z=-3;CHECK(!AmmoCounterBesideGun(head,grip,aim));
+    grip.position.z=-.5f;aim.orientation={0,0,0,0};CHECK(!AmmoCounterBesideGun(head,grip,aim));
+    return 0;
+}
 int BitmapContents(){
     CHECK(std::string_view(FormatAmmoCounter(30,180).data.data())=="30 / 180");
     CHECK(std::string_view(FormatAmmoCounter(0,0).data.data())=="0 / 0");
@@ -118,6 +143,6 @@ int BitmapContents(){
     return 0;
 }
 }
-int main(){if(NativeReadOnlyAdmission()||NativeReadClockOrdering()||PublishedReserveIsPassiveAndBounded()||PairAndFreshness()||BitmapContents())return 1;
+int main(){if(NativeReadOnlyAdmission()||NativeReadClockOrdering()||PublishedReserveIsPassiveAndBounded()||PairAndFreshness()||WeaponSidePlacement()||BitmapContents())return 1;
     std::cout<<"AmmoCounter: native identity/freshness, paired telemetry and bitmap checks passed; no native acceptance\n";
 }

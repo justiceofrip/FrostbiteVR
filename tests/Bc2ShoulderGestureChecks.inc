@@ -1,5 +1,49 @@
 // Included by the existing BC2 inventory fixture: actual InputFrame conversion,
 // native reader, hand arbiter, coordinator and paired hide/show acknowledgements.
+int ShoulderDrawReleaseStaysHeld(){
+ using namespace interaction;
+ for(unsigned mirrored=0;mirrored<2;++mirrored){
+  HolsterRun h;BodyAnchorConfig anchors;
+  for(auto& controller:h.r.s.input.hands)controller.active|=Trigger;
+  if(mirrored)for(auto& shoulder:anchors.shoulders)shoulder.center.x=-shoulder.center.x;
+  h.r.adapter=bc2::Bc2BodyInventory(true,anchors);
+  const auto own=anchors.shoulders[0].center;
+  const auto point=[&](math::Vec3 p){h.r.s.input.hands[1].grip.position={p.x,1.7f+p.y,-p.z};};
+  point(own);h.Step();CHECK(h.Empty());h.Step();
+  h.Step(1);h.Step(1);h.Step(1);
+  CHECK(h.holster.Phase()==bc2::BodyHolsterPhase::Held&&h.r.hands.Current(InteractionHand::Right));
+  const auto gun=h.r.hands.Current(InteractionHand::Right)->token;
+  for(unsigned n=0;n<12;++n)h.Step(1);
+  // Recorded390: draw11844/11845, then release11856 before leaving the slot.
+  h.Step();CHECK(h.holster.Phase()==bc2::BodyHolsterPhase::Held&&!h.out.inventory.request);
+  CHECK(h.r.hands.Current(InteractionHand::Right)->token==gun&&!h.out.blockWeaponActions);
+  // A new deliberate carry and return still supports release-to-stow.
+  point({0,-.4f,.4f});for(unsigned n=0;n<65;++n)h.Step(1);
+  point(own);h.Step(.55f);h.Step();
+  CHECK(h.holster.Phase()==bc2::BodyHolsterPhase::HidePending&&h.out.inventory.request);
+  h.Step();h.Step();CHECK(h.out.freeRight);
+ }
+ // Missing tracking is not proof of leaving the acquisition contact.
+ BodyGripRelease release;HandInteractionSample in{{1,2,3,4},10,1000000000,1100000000,1000000000,true,{true,true}};
+ const HandInteractionKey weapon{5,3};const BodySlotAssignment slot{1,{5,9}};
+ const auto step=[&](){++in.sequence;in.observedNs+=10000000;in.nowNs=in.observedNs;in.deadlineNs=in.nowNs+100000000;};
+ release.DrawnAt(in.owner,weapon,1,slot);
+ CHECK(!release.Update(in,weapon,1,7,true,false,true,slot));step();
+ in.tracked[1]=false;CHECK(!release.Update(in,weapon,1,7,true,false,true,{}));step();in.tracked[1]=true;
+ CHECK(!release.Update(in,weapon,1,7,true,false,true,slot));step();
+ CHECK(!release.Update(in,weapon,1,7,false,true,true,slot));step();
+ CHECK(!release.Update(in,weapon,1,7,true,false,true,{}));step();
+ CHECK(!release.Update(in,weapon,1,7,true,false,true,slot));step();
+ CHECK(release.Update(in,weapon,1,7,false,true,true,slot));
+ for(bool poseMissing:{false,true}){
+  BodyGripRelease carry;carry.DrawnAt(in.owner,weapon,1,slot);step();
+  // Support ownership is not a release and cannot hide a measured exit.
+  CHECK(!carry.Update(in,weapon,1,7,true,false,false,{},!poseMissing));step();
+  CHECK(!carry.Update(in,weapon,1,7,true,false,true,slot));step();
+  CHECK(bool(carry.Update(in,weapon,1,7,false,true,true,slot))==!poseMissing);step();
+ }
+ std::puts("Post-draw shoulder release: both shoulders retain the drawn gun; fresh exit/re-entry restores deliberate stow; missing tracking cannot clear inhibition");return 0;
+}
 int ShoulderEarlyGrabAndReleaseStow(){
  using namespace interaction;
  for(unsigned mirrored=0;mirrored<2;++mirrored){

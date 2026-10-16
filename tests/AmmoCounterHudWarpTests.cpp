@@ -38,30 +38,41 @@ int PixelsMatch(int loaded,int reserve){D3D11_TEXTURE2D_DESC d{};texture->GetDes
     context->Unmap(readback.Get(),0);CHECK(same);return 0;
 }
 int Run(){
+    interaction::InputFrame input;input.generation=1;input.spaceGeneration=30;input.predictedNs=now;
+    input.focused=input.headValid=true;input.head.position={0,1.7f,0};input.referenceHead=input.head;
+    input.hands[1].gripTracked=input.hands[1].aimTracked=true;
+    input.hands[1].grip.position=input.hands[1].aim.position={.25f,1.4f,-.45f};
     CHECK(SUCCEEDED(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_WARP,nullptr,0,nullptr,0,D3D11_SDK_VERSION,&device,nullptr,&context)));
     graphics::PairTicket ticket;ticket.frameId=1;ticket.spaceGeneration=30;ticket.trackingGeneration=40;
     graphics::BodyPropFrame frame;frame.frameId=ticket.frameId;frame.spaceGeneration=ticket.spaceGeneration;frame.trackingGeneration=ticket.trackingGeneration;
     for(auto& e:frame.eyes)e.ammo={1,now,now+100000000,10,20,30,30,180,30};
     {
         xr::OpenXrAmmoHud hud;CHECK(hud.Initialize(Handle<XrInstance>(1),Handle<XrSession>(2),Get,device.Get(),DXGI_FORMAT_R8G8B8A8_UNORM_SRGB));
-        hud.Receive(&frame,ticket,now);const auto* layer=hud.Layer(Handle<XrSpace>(4),30,Clock,true);CHECK(layer);
+        hud.Receive(&frame,ticket,now);const auto* layer=hud.Layer(Handle<XrSpace>(4),input,Clock,true);CHECK(layer);
         CHECK(layer->space==Handle<XrSpace>(4)&&layer->eyeVisibility==XR_EYE_VISIBILITY_BOTH);
-        CHECK(layer->pose.position.y<0&&layer->pose.position.z<0&&Near(layer->size.width,.42f));CHECK(PixelsMatch(30,180)==0);
-        CHECK(hud.Uploads()==1&&acquired==released);CHECK(hud.Layer(Handle<XrSpace>(4),30,Clock,true));CHECK(hud.Uploads()==1);
-        now+=100000000;CHECK(!hud.Layer(Handle<XrSpace>(4),30,Clock,true)); // Retained world cannot retain stale digits.
+        CHECK(Near(layer->pose.position.x,.10f)&&Near(layer->pose.position.y,1.435f)&&Near(layer->pose.position.z,-.57f)&&Near(layer->size.width,.20f));CHECK(PixelsMatch(30,180)==0);
+        CHECK(hud.Uploads()==1&&acquired==released);CHECK(hud.Layer(Handle<XrSpace>(4),input,Clock,true));CHECK(hud.Uploads()==1);
+        now+=100000000;CHECK(!hud.Layer(Handle<XrSpace>(4),input,Clock,true)); // Retained world cannot retain stale digits.
         for(auto& e:frame.eyes){++e.ammo.sequence;e.ammo.observedNs=now;e.ammo.deadlineNs=now+100000000;e.ammo.loaded=0;e.ammo.reserve=0;}
-        hud.Receive(&frame,ticket,now);CHECK(hud.Layer(Handle<XrSpace>(4),30,Clock,true));CHECK(PixelsMatch(0,0)==0);
-        CHECK(!hud.Layer(Handle<XrSpace>(4),30,Clock,false));CHECK(!hud.Layer(Handle<XrSpace>(4),30,Clock,true));
-        hud.Receive(&frame,ticket,now);CHECK(hud.Layer(Handle<XrSpace>(4),30,Clock,true));
-        ++frame.eyes[1].ammo.equipmentGeneration;hud.Receive(&frame,ticket,now);CHECK(!hud.Layer(Handle<XrSpace>(4),30,Clock,true));
+        hud.Receive(&frame,ticket,now);CHECK(hud.Layer(Handle<XrSpace>(4),input,Clock,true));CHECK(PixelsMatch(0,0)==0);
+        CHECK(!hud.Layer(Handle<XrSpace>(4),input,Clock,false));CHECK(!hud.Layer(Handle<XrSpace>(4),input,Clock,true));
+        hud.Receive(&frame,ticket,now);CHECK(hud.Layer(Handle<XrSpace>(4),input,Clock,true));
+        ++frame.eyes[1].ammo.equipmentGeneration;hud.Receive(&frame,ticket,now);CHECK(!hud.Layer(Handle<XrSpace>(4),input,Clock,true));
         --frame.eyes[1].ammo.equipmentGeneration;
         for(auto& e:frame.eyes){++e.ammo.sequence;e.ammo.loaded=1;}
         hud.Receive(&frame,ticket,now);waitResult=XR_TIMEOUT_EXPIRED;
-        CHECK(!hud.Layer(Handle<XrSpace>(4),30,Clock,true));CHECK(acquired==released+1);
-        CHECK(!hud.Layer(Handle<XrSpace>(4),30,Clock,true));CHECK(acquired==released+1); // No double acquire.
-        waitResult=XR_SUCCESS;CHECK(hud.Layer(Handle<XrSpace>(4),30,Clock,true));CHECK(acquired==released);CHECK(PixelsMatch(1,0)==0);
-        hud.Receive(nullptr,ticket,now);CHECK(!hud.Layer(Handle<XrSpace>(4),30,Clock,true));CHECK(hud.Errors()==0);
-        CHECK(hud.ValidSamples()==4&&hud.InvalidSamples()==2);
+        CHECK(!hud.Layer(Handle<XrSpace>(4),input,Clock,true));CHECK(acquired==released+1);
+        CHECK(!hud.Layer(Handle<XrSpace>(4),input,Clock,true));CHECK(acquired==released+1); // No double acquire.
+        waitResult=XR_SUCCESS;CHECK(hud.Layer(Handle<XrSpace>(4),input,Clock,true));CHECK(acquired==released);CHECK(PixelsMatch(1,0)==0);
+        // Live gun movement relocates the quad without reuploading its unchanged digits.
+        const auto uploads=hud.Uploads();input.hands[1].grip.position.x+=.2f;
+        layer=hud.Layer(Handle<XrSpace>(4),input,Clock,true);CHECK(layer&&Near(layer->pose.position.x,.30f)&&hud.Uploads()==uploads);
+        input.hands[1].gripTracked=false;CHECK(!hud.Layer(Handle<XrSpace>(4),input,Clock,true));
+        input.hands[1].gripTracked=true;CHECK(!hud.Layer(Handle<XrSpace>(4),input,Clock,true)); // Tracking alone cannot resurrect old counts.
+        hud.Receive(&frame,ticket,now);CHECK(hud.Layer(Handle<XrSpace>(4),input,Clock,true));
+        ++input.spaceGeneration;CHECK(!hud.Layer(Handle<XrSpace>(4),input,Clock,true));--input.spaceGeneration;
+        hud.Receive(nullptr,ticket,now);CHECK(!hud.Layer(Handle<XrSpace>(4),input,Clock,true));CHECK(hud.Errors()==0);
+        CHECK(hud.ValidSamples()==5&&hud.InvalidSamples()==2);
     }
     CHECK(destroyed==1);return 0;
 }

@@ -55,4 +55,15 @@ std::optional<ReloadFiringObservation> ReadReloadServerBoundary(const ReloadStat
 bool ReadReloadServerOwner(const ReloadStateMemory&,const ReloadServerBinding&,
     const ReloadStateBinding&,std::uint32_t base,const ReloadServerSnapshot&,
     std::int64_t deadlineNs,std::int64_t nowNs,ReloadServerBoundaryDiagnostic* diagnostic=nullptr)noexcept;
+
+struct ReloadServerInventoryItem {
+    ReloadInventoryItem client{};ReloadFiringObservation server{};
+    std::uint32_t serverItem=0,effects=0,callback=0;
+};
+// Separate unselected-target observation under a freshly verified CURRENT
+// selected client/server pair. No selected owner is substituted with target.
+std::optional<ReloadServerInventoryItem> ReadReloadServerInventoryItem(const ReloadStateMemory&,
+    const ReloadServerBinding&,const ReloadStateBinding&,std::uint32_t base,
+    const ReloadServerSnapshot& selected,std::uint32_t target)noexcept;
+
 }

@@ -1,4 +1,6 @@
 #include "Bc2BodyAmmoGeometryCache.h"
+#include "Bc2BodyEquipment.h"
+#include "Bc2MagazineEquipmentProfile.h"
 #include "Test.h"
 #include <cstring>
 #include <iostream>
@@ -30,9 +32,31 @@ int RejectMalformedBeforeAnyUpload(){Fixture f;const auto valid=f.Pack();
 int AtomicCatalogRejectsDuplicateOrInverse(){Fixture f;const auto first=f.Pack();auto twice=first;twice[8]=std::byte{2};twice.insert(twice.end(),first.begin()+12,first.end());
     CHECK(f.Parse(twice).status==BodyAmmoCacheStatus::Identity);f.profile.inverseBind.values[0][0]=0;CHECK(f.Parse(first).status==BodyAmmoCacheStatus::Geometry);
     const auto missing=LoadBodyAmmoGeometryCache("Z:/no-such-body-ammo-cache.fvrprop");CHECK(missing.status==BodyAmmoCacheStatus::Missing&&!missing.catalog);return 0;}
+int ActualChestClearance(const BodyAmmoGeometryCatalog& catalog){
+    interaction::InputFrame input;input.generation=input.spaceGeneration=input.predictedNs=1;
+    input.focused=input.headValid=true;input.head.position=input.referenceHead.position={0,1.7f,0};
+    const auto identity=interaction::reload_insertion_detail::Identity();unsigned measured=0;
+    for(const auto& part:catalog){const auto* equipment=FindMagazineEquipment(part->asset);
+        if(!equipment||!equipment->Ready())continue;const auto& g=*equipment->geometry;
+        if(part->mesh!=g.mesh||part->part!=g.bones.magazine||part->rigFingerprint!=g.rigFingerprint)continue;
+        const auto grasp=interaction::InverseRigid(g.interaction.insertion.itemFromHand);CHECK(grasp);
+        const auto world=BodyEquipmentPose(input,identity,interaction::BodyAnchorConfig{}.chest,*grasp);CHECK(world);
+        float top=-10.f,bottom=10.f;
+        for(const auto& section:part->sections)for(const auto& vertex:section.mesh.vertices){
+            const float y=vertex.x*world->values[0][1]+vertex.y*world->values[1][1]+vertex.z*world->values[2][1]+world->values[3][1];
+            top=(std::max)(top,y);bottom=(std::min)(bottom,y);
+        }
+        std::cout<<"Chest magazine "<<part->asset<<" below-head y=["<<bottom<<","<<top<<"] metres\n";
+        // Test real extracted vertices, not only the nominal contact origin:
+        // the grasp/mesh transform must not put a magazine up beside the eyes.
+        CHECK(top<=-.20f&&bottom>=-.85f);++measured;
+    }
+    CHECK(measured);std::cout<<"Chest-clearance cached magazine profiles: "<<measured<<"\n";return 0;
+}
 int ActualInstalledCache(const char* path,unsigned expected=5){const auto loaded=LoadBodyAmmoGeometryCache(path);CHECK(loaded.status==BodyAmmoCacheStatus::Loaded&&loaded.catalog&&loaded.catalog->size()==expected);
     unsigned triangles=0;for(const auto& part:*loaded.catalog)for(const auto& section:part->sections)triangles+=unsigned(section.mesh.vertices.size()/3);
     if(expected==5)CHECK(triangles==15616);
+    CHECK(!ActualChestClearance(*loaded.catalog));
     Bc2BodyAmmoRenderer renderer;CHECK(renderer.QueueGeometryCatalog(loaded.catalog));renderer.RequestStop();CHECK(renderer.PumpStop());
     std::cout<<"Installed cache:"<<expected<<" ammo/equipment parts/"<<triangles<<" triangles reconstructed and queued; CPU only\n";return 0;}
 }

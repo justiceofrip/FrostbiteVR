@@ -6,6 +6,11 @@
 #include <cstring>
 namespace fvr::bc2 {
 namespace {
+// Bit 0 chooses the client inventory. Native 0x890c90 independently assigns
+// bit 0x08; client prediction assigns 0x10. Native234 records 3->11/27 with
+// identical links, and headset390 records 11->19 during a pending shell.
+// These are publication differences only: two current Scope reads stay exact.
+constexpr std::uint8_t PublishedMutableSoldierFlags=0x18;
 constexpr std::array<unsigned,11> sizes{157,57,113,90,33,16,40,31,103,7,3216};
 constexpr std::array<std::uint64_t,11> hashes{0xa40d7b5abaf0cc9full,0x4d7009269d3d2debull,0x75970d8adf3ee4a9ull,
     0xec36384e07ae97daull,0x1d92659102bde8aeull,0x76bf142fd220e373ull,0xf7f08757d94c2ebcull,
@@ -158,10 +163,10 @@ bool ReadReloadServerOwner(const ReloadStateMemory& m,const ReloadServerBinding&
     if(diagnostic){diagnostic->observedSoldierFlags=before.clientSoldierFlags;
         auto same=before;same.clientSoldierFlags=snapshot.links.clientSoldierFlags;
         diagnostic->differsOnlySoldierFlags=before!=snapshot.links&&same==snapshot.links;}
-    // Same published phase-only allowance as the full boundary reader. Both
+    // Same published mutable-state allowance as the full boundary reader. Both
     // scope reads remain exact, including all flags and bounded item arrays.
     auto leased=before;
-    leased.clientSoldierFlags^=std::uint8_t((before.clientSoldierFlags^snapshot.links.clientSoldierFlags)&0x10);
+    leased.clientSoldierFlags^=std::uint8_t((before.clientSoldierFlags^snapshot.links.clientSoldierFlags)&PublishedMutableSoldierFlags);
     if(leased!=snapshot.links){RecordLinkDifference(snapshot.links,leased,diagnostic);return fail(ReloadServerBoundaryFailure::PublishedLinks);}
     const auto identity=[&]{return r.Eq(before.firing,base+state.firingVtableRva)&&
         r.Eq(std::uint64_t(before.firing)+8,snapshot.client.config.firingData)&&
@@ -185,12 +190,11 @@ std::optional<ReloadFiringObservation> ReadReloadServerBoundary(const ReloadStat
     if(diagnostic){diagnostic->observedSoldierFlags=before.clientSoldierFlags;
         auto same=before;same.clientSoldierFlags=snapshot.links.clientSoldierFlags;
         diagnostic->differsOnlySoldierFlags=before!=snapshot.links&&same==snapshot.links;}
-    // The +40 client update temporarily sets soldier flag 0x10 (11 -> 27 in
-    // native175727). It does not select an inventory; bit 0 does. Permit only
-    // that phase difference against the published lease, never a pointer,
+    // Mutable native state does not select an inventory; bit 0 does. Permit
+    // only the proven state bits against the published lease, never a pointer,
     // inventory, other flag, or within-read race. Both Scope reads stay exact.
     auto leased=before;
-    leased.clientSoldierFlags^=std::uint8_t((before.clientSoldierFlags^snapshot.links.clientSoldierFlags)&0x10);
+    leased.clientSoldierFlags^=std::uint8_t((before.clientSoldierFlags^snapshot.links.clientSoldierFlags)&PublishedMutableSoldierFlags);
     if(leased!=snapshot.links){RecordLinkDifference(snapshot.links,leased,diagnostic);return fail(ReloadServerBoundaryFailure::PublishedLinks);}
     const auto sampled=State(r,state,base,snapshot,diagnostic);
     if(!sampled)return fail(ReloadServerBoundaryFailure::State);
@@ -199,4 +203,39 @@ std::optional<ReloadFiringObservation> ReadReloadServerBoundary(const ReloadStat
         diagnostic->changedOnlySoldierFlags=before!=after&&same==before;}
     if(after!=before){RecordLinkDifference(before,after,diagnostic);return fail(ReloadServerBoundaryFailure::ChangedLinks);}return sampled;
 }
+
+std::optional<ReloadServerInventoryItem> ReadReloadServerInventoryItem(const ReloadStateMemory& m,
+    const ReloadServerBinding& b,const ReloadStateBinding& state,unsigned base,
+    const ReloadServerSnapshot& selected,unsigned target)noexcept {
+    if(!Valid(b,base,selected.client)||state.preferredBase!=base)return {};
+    Reader r{m};ReloadServerLinks before{},after{};
+    if(!Scope(r,b,base,selected.client,before)||before!=selected.links)return {};
+    const auto client=ReadReloadInventoryItem(m,state,base,selected.client.owner,target);
+    if(!client||client->inventory!=before.clientInventory||client->slot>=(before.end-before.begin)/4||
+       before.clientItems[client->slot]!=target)return {};
+    struct TargetLinks {unsigned item=0,effects=0,table=0,callback=0,firing=0;bool operator==(const TargetLinks&)const=default;};
+    const auto links=[&](TargetLinks& v){v.item=before.items[client->slot];return v.item>=0x10000&&
+        std::count(before.items.begin(),before.items.end(),v.item)==1&&r.Eq(std::uint64_t(v.item)+4,client->config.weaponData)&&
+        r.Get(std::uint64_t(v.item)+0xc,v.effects)&&r.Type(v.effects,"ServerWeaponFiringEffects")&&
+        r.Get(v.effects,v.table)&&r.Eq(std::uint64_t(v.effects)+0x10,client->config.firingData)&&
+        r.Eq(std::uint64_t(v.effects)+0x128,before.player)&&r.Get(std::uint64_t(v.effects)+0xd4,v.callback)&&
+        r.Eq(std::uint64_t(v.callback)+4,client->config.firingData)&&r.Get(std::uint64_t(v.item)+0x10,v.firing)&&
+        v.firing>=0x10000&&v.firing!=client->branches[0].address&&v.firing!=client->branches[1].address;};
+    TargetLinks first{},last{};if(!links(first))return {};
+    // State() consumes only config/firing. Scope() is NEVER called with this
+    // target view; the real selected pair remains the ownership proof above.
+    ReloadServerSnapshot view;view.client.config=client->config;view.links.firing=first.firing;
+    const auto sampled=State(r,state,base,view);
+    const auto again=ReadReloadInventoryItem(m,state,base,selected.client.owner,target);
+    if(!sampled||!again||again->slot!=client->slot||again->inventory!=client->inventory||again->config!=client->config||
+       again->branches[0].address!=client->branches[0].address||again->branches[1].address!=client->branches[1].address||
+       !links(last)||first!=last||!Scope(r,b,base,selected.client,after)||before!=after)return {};
+    // Current repeated counts/state must agree too; config-only repetition
+    // must never admit a changing unselected firing object.
+    for(unsigned n=0;n<2;++n){const auto& x=client->branches[n];const auto& y=again->branches[n];
+        if(x.currentState!=y.currentState||x.previousState!=y.previousState||x.nextState!=y.nextState||
+           x.loaded!=y.loaded||x.reserve!=y.reserve||x.flagsA8!=y.flagsA8||x.phaseTimer!=y.phaseTimer)return {};}
+    return ReloadServerInventoryItem{*client,*sampled,first.item,first.effects,first.callback};
+}
+
 }

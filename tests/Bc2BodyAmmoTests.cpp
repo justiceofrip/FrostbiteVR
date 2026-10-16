@@ -7,7 +7,8 @@ BodyAmmoTracking Source(Fixture& f){
     const auto owners=BindMagazineOwners(f.s.input.owner,f.s.weapon,f.reserve,0,f.now,f.s.family);
     t.visual.enabled=true;t.visual.source=*MagazineSupply(*owners,f.reserve,f.s.trackingEpoch,f.now);
     t.visual.input=f.s.input;t.visual.gun=*f.gun;
-    t.visual.contact=*ChestAmmoSupply().alternateContact;t.visual.frame=SupplyAnchorFrame::RecenteredBody;
+    const auto supply=ChestAmmoSupply();
+    t.visual.contact={supply.pouchCenterMeters,supply.pouchRadiusMeters};t.visual.frame=SupplyAnchorFrame::RecenteredBody;
     return t;
 }
 InputFrame Input(const Fixture& f){InputFrame i;i.generation=f.s.input.sequence;i.spaceGeneration=f.s.input.owner.space;
@@ -18,8 +19,9 @@ InputFrame Input(const Fixture& f){InputFrame i;i.generation=f.s.input.sequence;
 }
 int SharedProfileBodyPose(){
     unsigned profiles=0;
-    for(const auto asset:{std::string_view("XM8_sp_s"),std::string_view("AEK971_sp")}){
-        const auto* p=FindMagazineEquipment(asset);if(!p||!p->Ready())continue;++profiles;
+    for(const auto& registered:RegisteredMagazineNativeProfiles()){
+        const auto* p=FindMagazineEquipment(registered.id);if(!p||!p->Ready())continue;++profiles;
+        const auto asset=p->geometry->asset;
         for(float units:{1.f,100.f}){
             Fixture f(true,*p);auto source=Source(f);auto input=Input(f);input.worldUnitsPerMeter=units;
             input.referenceHead.orientation={0,std::sin(.3f),0,std::cos(.3f)};
@@ -39,9 +41,29 @@ int SharedProfileBodyPose(){
     }
     CHECK(profiles>=1);
 #ifdef FVR_EXPECT_GENERATED_MAGAZINE
-    CHECK(profiles==2);
+    CHECK(profiles>=2);
 #endif
     std::cout<<"body supply profiles checked: "<<profiles<<" (native calls mocked)\n";return 0;
+}
+int LowerChestRemainsThePickupContact(){
+    Fixture f;const auto source=Source(f);auto input=Input(f);
+    const auto contact=source.visual.contact;CHECK(contact.centerMeters[1]<=-.40f);
+    // Human-sized direct target: hand at lower chest, then a look down and a
+    // seated/standing translation. Display and acquisition use the same point.
+    for(float headHeight:{1.7f,1.2f})for(float pitch:{0.f,.9f}){
+        input.head.position.y=headHeight;input.head.orientation={std::sin(pitch/2),0,0,std::cos(pitch/2)};
+        input.hands[0].grip.position={contact.centerMeters[0],headHeight+contact.centerMeters[1],-contact.centerMeters[2]};
+        const auto hand=BodyAnchorHandPose(input,InteractionHand::Left);CHECK(hand);
+        CHECK(BodyAnchorContains(BodyAnchorConfig{}.chest,*hand));
+        const auto anchor=AmmoSupplyAnchorWorld(input,Pose(),source.visual);CHECK(anchor);
+        CHECK(Near(anchor->values[3][1],headHeight-input.referenceHead.position.y-.45f));
+        const auto body=BuildBodyAmmoPose(source,input,Pose(),f.now);CHECK(body);
+        const auto grasp=Multiply(f.profile->geometry->interaction.insertion.itemFromHand,body->partWorld);
+        for(unsigned n=0;n<3;++n)CHECK(Near(grasp.values[3][n],anchor->values[3][n]));
+    }
+    // A hand beside the visor no longer counts as reaching the ammunition.
+    auto face=Pose(contact.centerMeters[0],-.10f,contact.centerMeters[2]);
+    CHECK(!BodyAnchorContains(BodyAnchorConfig{}.chest,face));return 0;
 }
 int ExactSourceAndOriginalExpiry(){
     Fixture f;const auto source=Source(f);CHECK(BodyAmmoFresh(source,f.now));CHECK(BodyAmmoRetained(source,source,f.now));
@@ -77,5 +99,5 @@ int NoWrongSpaceOrHeldReplacement(){
     CHECK(!BodyAmmoFresh(source,f.now));return 0;
 }
 }
-int main(){if(SharedProfileBodyPose()||ExactSourceAndOriginalExpiry()||NoWrongSpaceOrHeldReplacement())return 1;
-    std::cout<<"BodyAmmo: 3 CPU groups passed; no independent native draw or headset acceptance\n";}
+int main(){if(SharedProfileBodyPose()||LowerChestRemainsThePickupContact()||ExactSourceAndOriginalExpiry()||NoWrongSpaceOrHeldReplacement())return 1;
+    std::cout<<"BodyAmmo: 4 CPU groups passed; no independent native draw or headset acceptance\n";}

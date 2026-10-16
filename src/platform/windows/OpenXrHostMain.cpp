@@ -97,7 +97,7 @@ int wmain(int argc,wchar_t** argv){
             <<",\"both_held_without_hand_pose\":"<<report.recenterInput.bothHeldWithoutHandPose<<",\"starts\":"<<report.recenterInput.starts
             <<",\"completed\":"<<report.recenterInput.completed<<",\"interruptions\":"<<report.recenterInput.interruptions<<",\"max_hold_ns\":"<<report.recenterInput.maxHoldNs<<'}'
             <<",\n  \"roomscale_reference\":"<<options.roomscale<<",\n  \"floor_relative\":"<<report.floorRelative<<",\n  \"world_units_per_meter\":"<<options.worldUnitsPerMeter
-            <<",\n  \"last_session_state\":"<<report.lastSessionState<<",\n  \"diagnostic_scene\":"<<testScene<<",\n  \"diagnostic_error\":"<<Json(diagnostic.Error())<<",\n  \"ipc_mode\":"<<ipcMode<<",\n  \"ipc_pairs_received\":"<<(ipcMode&&report.submittedPairs>0)<<",\n  \"headset_visuals_verified\":false\n}\n";
+            <<",\n  \"last_session_state\":"<<report.lastSessionState<<",\n  \"diagnostic_scene\":"<<testScene<<",\n  \"diagnostic_error\":"<<Json(diagnostic.Error())<<",\n  \"ipc_mode\":"<<ipcMode<<",\n  \"ipc_pairs_received\":"<<(ipcMode&&report.submittedPairs>0)<<",\n  \"headset_visuals_verified\":false,\n  \"frame_diagnostics\":";report.frameDiagnostics.Write(std::cout);std::cout<<"\n}\n";
         return report.okay?0:2;
     }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}
 }

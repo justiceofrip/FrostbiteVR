@@ -6,6 +6,11 @@
 #include <iostream>
 namespace fvr::xr {
 namespace {
+std::int64_t MonotonicNanos(std::int64_t ticks,std::int64_t frequency)noexcept {
+    if(ticks<=0||frequency<=0||frequency>1000000000||ticks/frequency>INT64_MAX/1000000000)return 0;
+    const auto whole=ticks/frequency*1000000000,part=(ticks%frequency)*1000000000/frequency;
+    return part<=INT64_MAX-whole?whole+part:0;
+}
 XrPosef Pose(const math::Pose& p){return {{p.orientation.x,p.orientation.y,p.orientation.z,p.orientation.w},{p.position.x,p.position.y,p.position.z}};}
 std::optional<math::Pose> Beam(math::Vec3 a,math::Vec3 b,math::Vec3 eye,float& length){
     const auto cross=[](math::Vec3 x,math::Vec3 y){return math::Vec3{x.y*y.z-x.z*y.y,x.z*y.x-x.x*y.z,x.x*y.y-x.y*y.x};};
@@ -27,6 +32,7 @@ OpenXrMenu::~OpenXrMenu(){Drop(panel_);Drop(white_);}
 void OpenXrMenu::Drop(Chain& c){if(c.handle&&DestroySwapchain)DestroySwapchain(c.handle);c={};}
 void OpenXrMenu::Initialize(XrInstance instance,XrSession session,PFN_xrGetInstanceProcAddr get,ID3D11Device* device,ipc::MenuChannel* channel){
     session_=session;channel_=channel;device_=device;device_->GetImmediateContext(&context_);
+    LARGE_INTEGER frequency{};if(QueryPerformanceFrequency(&frequency))frequency_=frequency.QuadPart;
 #define LOAD(n) {PFN_xrVoidFunction raw=nullptr;if(XR_FAILED(get(instance,"xr" #n,&raw))||!raw)throw std::runtime_error("Missing menu XR function");n=reinterpret_cast<PFN_xr##n>(raw);}
     LOAD(CreateSwapchain) LOAD(DestroySwapchain) LOAD(EnumerateSwapchainImages) LOAD(EnumerateSwapchainFormats)
     LOAD(AcquireSwapchainImage) LOAD(WaitSwapchainImage) LOAD(ReleaseSwapchainImage)
@@ -141,6 +147,9 @@ bool OpenXrMenu::Frame(const interaction::InputFrame& input){
     if(hasImage_&&(state.logicalWidth!=1280||state.logicalHeight!=720||
        std::uint64_t(panel_.width)*720!=std::uint64_t(panel_.height)*1280))pointerInput.hands[1].aimTracked=false;
     current_=pointer_.Update(pointerInput,known?&state:nullptr,hasImage_?panel_.width:0,hasImage_?panel_.height:0);
+    LARGE_INTEGER sampled{};const auto sampledNs=QueryPerformanceCounter(&sampled)?MonotonicNanos(sampled.QuadPart,frequency_):0;
+    currentOwnership_=ownership_.Update(input,current_,known?&state:nullptr,
+        known?MonotonicNanos(state.deadlineQpc,frequency_):0,sampledNs);
     if(current_.control.toggle!=lastToggle_){
         std::cerr<<"menu_toggle sequence="<<current_.control.toggle<<" left_face_chord="<<current_.suppressLeftFaceButtons<<'\n';lastToggle_=current_.control.toggle;
     }

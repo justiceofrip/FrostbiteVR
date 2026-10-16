@@ -3,6 +3,7 @@
 #include "Bc2MagazineResourceProbe.h"
 #include "Bc2PhysicalReloadProbe.h"
 #include "Bc2PumpControllerProbe.h"
+#include "Bc2ShellFocusLossProbe.h"
 namespace fvr::bc2 {
 // Finite input-only composition. This object has no consumer/native APIs.
 struct ResourceInventoryObservation {
@@ -23,7 +24,7 @@ public:
     }
     enum class Phase:unsigned {Setup,InitialDraw,FirstMagazine,OtherDraw,Fire,WaitShot,Shell,ShellSettle,OriginalDraw,FullReturn,Dwell,Done,Failed,
         Pump,ShellSupport,RifleFire,WaitRifleShot,RifleSupport,RifleSupportRelease,OriginObservation,EmptyFire,EmptyWait,EmptyDwell,
-        RevisitDraw,RevisitPump,RevisitSettle,RevisitRifle};
+        RevisitDraw,RevisitPump,RevisitSettle,RevisitRifle,ShellFocusLoss};
     bool RequireRifleSupport()noexcept{if(first_||magazineOnly_||supportOnly_)return false;rifleSupportRequired_=true;return true;}
     // Input-only contact check: no magazine/cycle publication is required or granted.
     bool EnableSupportOnly()noexcept {
@@ -40,6 +41,16 @@ public:
         return true;
     }
     bool EnablePump(const Bc2PumpCalibration&,Bc2PumpControllerProbe::Scenario=Bc2PumpControllerProbe::Scenario::None,unsigned cycles=1)noexcept;
+    // Private three-shot/two-shell input episode; real consumers are unchanged.
+    bool EnableTwoShells()noexcept;
+    bool EnableShellFocusLoss()noexcept;
+    std::optional<ShellFocusWitness> ShellFocusReady(std::int64_t now)const noexcept {
+        return shellFocus_?shellFocus_->Ready(now):std::nullopt;
+    }
+    void ObserveShellFocusLoss(const interaction::InputFrame&,const ReloadStateOwner&,
+        std::int64_t observed,std::int64_t deadline,std::int64_t now)noexcept;
+    // Private controller-only pose, restricted to the existing three-pump/two-shell episode.
+    bool EnableUnreachablePumpPose()noexcept;
     // Private input fixture: hold the SPAS across the view for assembly inspection.
     // Ordinary player tracking, measured contacts and native authority are unchanged.
     bool UsePumpInspectionPose()noexcept;
@@ -48,6 +59,15 @@ public:
     bool EnableActorReplacement(bool magazine=false)noexcept;
     bool ActorReplacementWitnessed()const noexcept{return replacementWitness_.has_value()||replacementMagazineWitness_.has_value();}
     bool ActorReplacementResumed()const noexcept{return replacementResumed_;}
+    std::optional<PumpReceiverGapWitness> ReceiverGapReady(std::int64_t now)const noexcept {
+        return pump_?pump_->ReceiverGapReady(now):std::nullopt;
+    }
+    void ObserveMissingReceiver(const std::optional<Bc2NativeCycleView>& native,bool handsEmpty,std::int64_t now)noexcept {
+        if(!pump_||!pump_->AwaitingReceiver())return;
+        if(!pump_->ObserveMissingReceiver(now)){Fail(36,now);return;}
+        pump_->ObserveMissingReceiverNative(native,handsEmpty,now);
+        if(pump_->Failed())Fail(19,now);
+    }
     bool PumpEnabled()const noexcept{return pump_.has_value();}
     void Prepare(interaction::InputFrame&,const ReloadStateOwner&,std::string_view,
         const ResourceInventoryObservation&,std::int64_t observed,std::int64_t deadline,std::int64_t now)noexcept;
@@ -85,16 +105,17 @@ private:
     Bc2MagazineResourceProbe firstMagazine_{true,false,true,true},fullReturn_{true,true,false,true};
     Bc2PhysicalReloadProbe shell_{true,1};
     std::optional<Bc2PumpControllerProbe> pump_;
+    std::optional<ShellFocusEpisode> shellFocus_;
     std::optional<Bc2PumpControllerProbe> revisitPump_;
     bool revisitEnabled_=false,revisitCompleted_=false;
     ReloadStateOwner revisitOwner_{};
     int revisitLoaded_=-1,revisitReserve_=-1;
     std::uint64_t revisitShotSequence_=0;
     Bc2PumpCalibration calibration_{};
-    unsigned pumpCycles_=1;
+    unsigned pumpCycles_=1,shellRounds_=1;
     Bc2PumpControllerProbe::Scenario pumpScenario_=Bc2PumpControllerProbe::Scenario::None;
     bool replacementEnabled_=false,replacementResumed_=false,replacementMagazine_=false;
-    bool pumpInspectionPose_=false,supportOnly_=false;
+    bool pumpInspectionPose_=false,pumpUnreachablePose_=false,supportOnly_=false;
     std::optional<interaction::BodySlotAssignment> replacementShoulderTarget_;
     bool replacementShoulderBound_=false;
     std::optional<Bc2NativeCycleView> replacementWitness_;

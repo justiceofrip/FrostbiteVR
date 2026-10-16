@@ -1,30 +1,31 @@
 # FrostbiteVR
 
-**Checkpoint 390 — unreleased developer source.** This repository contains a
+**Checkpoint 412 — unreleased developer source.** This repository contains a
 modular Frostbite VR framework with a Bad Company 2 adapter. The latest source
-includes the work since the previous GitHub checkpoint 245.
+includes the work since the previous GitHub checkpoint 390.
 
-Start with the [fork handoff](handoff/checkpoint390/README.md),
+Start with the [fork handoff](handoff/checkpoint412/README.md),
 [build instructions](BUILDING.md), and
 [current weapon coverage](docs/WEAPON-COVERAGE-CURRENT.md).
 
 ## Current evidence and limits
 
-Both checkpoint390 architecture builds passed 246 C++ suites. Actual-game
-emulation passed repeated rifle/shotgun shoulder swaps and manual reloads,
-a second shotgun draw and pump, a VR-menu checkpoint restart during an unfinished
-pump followed by fresh reloads, and five M95 bolt cycles. The latest shared fix
-preserves completed reload retirement when returning to a weapon family, so the
-native mechanism can be selected again. See the
-[390 evidence and remaining checks](docs/NATIVE-HANDOFF-390.md).
+The latest normal410 headset feedback reports substantially better pumping and
+reliable manual shotgun loading, with remaining shell-animation and placement
+issues. Checkpoint412 lowers shared chest ammunition, moves the read-only ammo
+counter beside the gun hand, retains stock loading-shell suppression after a
+reload finishes, and removes repeated launch storage scans. See the
+[current changes and validation limits](docs/CHECKPOINT-412.md).
 
-**Headset acceptance is pending.** The last human test, checkpoint375 on
-October 12, failed. These automated results do not establish a playable whole
-campaign, complete weapon coverage, or a fix for every intermittent crash.
-Controller alignment, visual artifacts and sustained stability still need testing.
-The M95 magazine refill in the bolt check uses stock fallback. Wider mechanism
-coverage, belt-fed reloads, physical zoomed scopes, full-body IK and multiplayer
-remain unfinished.
+Prior actual-game checks cover selected rifle/shotgun reloads and holsters,
+five M95 bolt cycles, campaign checkpoint recovery, mounted firing, knife
+session-close recovery and paired-eye damage/death presentation. These are
+bounded observations, not a complete campaign playthrough or weapon acceptance.
+The new412 visual changes have no headset acceptance; the user requested a
+checkpoint without another headset test. Spent-shell ejection remains open;
+immediate pump timing is unchanged. M95 magazine refill still uses stock fallback.
+Wider mechanism coverage, belt-fed reloads, physical zoomed scopes, full-body IK
+and multiplayer remain unfinished.
 
 Earlier headset tests demonstrated native stereo, tracked weapons and support
 hands, roomscale/recentering, controller menu interaction, chest ammunition,

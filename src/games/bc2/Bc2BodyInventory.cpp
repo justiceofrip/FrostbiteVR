@@ -335,14 +335,72 @@ BodyDrawResult Bc2BodyInventory::TickDraw(const WeaponModeMemory& memory,const B
     }
     const auto result=policy_.Update(sample);slots_=result.slots;
     if(result.cancelledRequest){out.cancelled=result.cancelledRequest;EventRow(3,s,result.cancelledRequest);pending_.reset();++cancels_;}
-    if(result.committedRequest){out.committed=result.committedRequest;EventRow(2,s,result.committedRequest,unsigned(selected->key.id));pending_.reset();++commits_;}
+    if(result.committedRequest){
+        out.committed=result.committedRequest;EventRow(2,s,result.committedRequest,unsigned(selected->key.id));pending_.reset();++commits_;
+        // Direct shoulder swaps acknowledge through the ordinary selector,
+        // without the hide/show phase transition used by an empty-hand draw.
+        if(const auto drawn=AssignedSlot(physicalSelected))heldRelease_.DrawnAt(s.hand.owner,s.gun,revision_,*drawn);
+    }
     if(result.request&&proposed){pending_=result.request;out.command=proposed;EventRow(1,s,result.request->id,proposed->targetWeapon,proposed->action);++requests_;}
     out.pending=bool(pending_);out.blockFire=out.pending;
     if(!out.pending)PublishDisplay(native,s,selected->key);else display_.reset();return out;
 }
+bool Bc2BodyInventory::BeginTemporaryTool(const WeaponModeMemory& memory,const BodyDrawSample& s,BodyHolsterSample sample,
+    Bc2BodyHolster& holster,BodyItemKey tool,std::uint64_t operation,const BodyFreeRightEvidence& empty,
+    const HandClaimToken& claim,const HandInteraction& hands)noexcept {
+    if(!enabled_||pending_||!display_||lastHolsterInput_!=s.input.generation||!BodyInventoryDisplayFresh(*display_,s.hand.nowNs)||
+       display_->selectedOwner!=s.owner||display_->physicalOwner!=s.hand.owner||display_->sequence!=s.hand.sequence||
+       display_->observedNs!=s.hand.observedNs||display_->deadlineNs!=s.hand.deadlineNs||
+       s.interaction!=BodyInteractionState::Available||s.cancel||s.reloadBusy||!ValidInput(s.input)||
+       s.input.generation!=s.hand.sequence||s.input.spaceGeneration!=s.hand.owner.space||sequence_==UINT64_MAX)return false;
+    const auto current=ReadBodyInventory(memory,s.owner,true);
+    if(!current.snapshot)return false;const auto& native=*current.snapshot;
+    if(BodyCarriedIdentity{native.inventory,native.switching,native.count,native.items}!=display_->carried||
+       native.owner!=s.owner||native.selected>=native.count||native.items[native.selected].weapon!=s.owner.weapon)return false;
+    const auto selected=ItemKey(s.owner.weapon);if(!selected||*selected!=display_->physicalSelected||ItemKey(unsigned(tool.id))!=tool)return false;
+    sample.nativeOwner=s.owner;sample.hand=s.hand;sample.gun=s.gun;sample.ordinary=s.visible;
+    sample.carried=display_->carried;sample.body.inventory={owner_,revision_,sequence_,s.hand.nowNs,items_,*selected};
+    sample.body.nowNs=s.hand.nowNs;sample.body.focused=s.hand.focused;sample.body.handTracked=s.hand.tracked[1];
+    sample.body.intent={};sample.cancel|=s.cancel;sample.reloadBusy|=s.reloadBusy;
+    sample.interactionSuspended=false;sample.triggerNeutral=(s.input.hands[0].active&Trigger)&&(s.input.hands[1].active&Trigger)&&
+        s.input.hands[0].trigger<=.1f&&s.input.hands[1].trigger<=.1f;
+    return holster.BeginTemporaryTool(sample,*display_,tool,operation,empty,claim,hands);
+}
 BodyHolsterResult Bc2BodyInventory::TickHolster(const WeaponModeMemory& memory,const BodyDrawSample& source,BodyHolsterSample sample,
-    Bc2BodyHolster& holster,HandInteraction& hands,std::uint64_t& intent)noexcept {
+    Bc2BodyHolster& holster,HandInteraction& hands,std::uint64_t& intent,
+    std::optional<BodyHolsterSample>* evaluatedSample)noexcept {
+    if(evaluatedSample)evaluatedSample->reset();
+    const auto evaluate=[&](){
+        if(evaluatedSample)*evaluatedSample=sample;
+        return holster.Tick(policy_,sample,hands,intent);
+    };
     auto s=source;
+    if(enabled_&&holster.TemporaryToolActive()){
+        // Explicit tool custody precedes ordinary unsupported-profile recovery.
+        // Read the ACTUAL selected owner and current inventory; never substitute
+        // the original firearm to renew its expired pose/hide/input authority.
+        BodyHolsterResult waiting;waiting.phase=holster.Phase();waiting.blockWeaponActions=true;waiting.allowAutomaticGunHold=false;
+        if(s.hand.nowNs<=0||s.hand.nowNs<lastNow_){display_.reset();return waiting;}
+        const auto read=ReadBodyInventory(memory,s.owner,true);++readStatuses_[unsigned(read.status)];
+        if(!read.snapshot||!Observe(*read.snapshot,s)||sequence_==UINT64_MAX){display_.reset();return waiting;}
+        const auto selected=std::find_if(life_.begin(),life_.end(),[&](const auto& item){return item.native.weapon==s.owner.weapon;});
+        if(selected==life_.end()){display_.reset();return waiting;}
+        const auto& native=*read.snapshot;
+        sample.nativeOwner=s.owner;sample.hand=s.hand;sample.gun=s.gun;sample.ordinary=s.visible;
+        sample.carried=BodyCarriedIdentity{native.inventory,native.switching,native.count,native.items};
+        sample.temporaryNativeObserved=true;sample.interactionSuspended=s.interaction==BodyInteractionState::Suspended;
+        sample.body.inventory={owner_,revision_,++sequence_,s.hand.nowNs,items_,selected->key};
+        sample.body.nowNs=s.hand.nowNs;sample.body.focused=s.hand.focused;sample.body.handTracked=s.hand.tracked[1];
+        sample.body.intent={};sample.cancel|=s.cancel;sample.reloadBusy|=s.reloadBusy;
+        sample.triggerNeutral=ValidInput(s.input)&&s.input.generation==s.hand.sequence&&
+            (s.input.hands[0].active&Trigger)&&(s.input.hands[1].active&Trigger)&&
+            s.input.hands[0].trigger<=.1f&&s.input.hands[1].trigger<=.1f;
+        PublishDisplay(native,s,selected->key);sample.temporaryDisplay=display_?&*display_:nullptr;
+        auto out=evaluate();
+        if(out.inventoryEvaluation==BodyInventoryEvaluation::Evaluated)slots_=out.inventory.slots;
+        lastNow_=s.hand.nowNs;lastHolsterInput_=s.input.generation;
+        return out;
+    }
     if(enabled_&&(source.interaction==BodyInteractionState::Suspended||source.cancel||source.reloadBusy||
         !ValidInput(source.input)||!source.hand.focused||!source.hand.tracked[1]||!source.input.focused||!source.input.headValid||
         source.hand.deadlineNs<=source.hand.nowNs)){
@@ -371,7 +429,7 @@ BodyHolsterResult Bc2BodyInventory::TickHolster(const WeaponModeMemory& memory,c
         sample.cancel=source.cancel||sample.cancel;
         sample.interactionSuspended=true;sample.reloadBusy=source.reloadBusy;
         sample.hand=source.hand;sample.nativeOwner=source.owner;sample.gun=source.gun;
-        if(holster.Phase()!=BodyHolsterPhase::Held)out=holster.Tick(policy_,sample,hands,intent);
+        if(holster.Phase()!=BodyHolsterPhase::Held)out=evaluate();
         out.ordinaryDraw=metadata;out.phase=holster.Phase();
         out.blockWeaponActions=pendingOperation||holster.BlocksActions()||!existingHold||!samePhysicalItem;out.allowAutomaticGunHold=false;
         return out;
@@ -397,9 +455,9 @@ BodyHolsterResult Bc2BodyInventory::TickHolster(const WeaponModeMemory& memory,c
     const bool fresh=ValidBodyAnchors(config_)&&ValidInput(s.input)&&s.input.generation==s.hand.sequence&&
         s.input.spaceGeneration==s.owner.space&&s.hand.nowNs>=lastNow_;
     const auto read=ReadBodyInventory(memory,s.owner,fresh);++readStatuses_[unsigned(read.status)];
-    if(!read.snapshot||!Observe(*read.snapshot,s)||sequence_==UINT64_MAX){display_.reset();heldApproach_.Reset();heldRelease_.Reset();deferredDraw_.reset();sample.cancel=true;return holster.Tick(policy_,sample,hands,intent);}
+    if(!read.snapshot||!Observe(*read.snapshot,s)||sequence_==UINT64_MAX){display_.reset();heldApproach_.Reset();heldRelease_.Reset();deferredDraw_.reset();sample.cancel=true;return evaluate();}
     const auto selected=std::find_if(life_.begin(),life_.end(),[&](const auto& item){return item.native.weapon==s.owner.weapon;});
-    if(selected==life_.end()){display_.reset();heldApproach_.Reset();heldRelease_.Reset();deferredDraw_.reset();sample.cancel=true;return holster.Tick(policy_,sample,hands,intent);}
+    if(selected==life_.end()){display_.reset();heldApproach_.Reset();heldRelease_.Reset();deferredDraw_.reset();sample.cancel=true;return evaluate();}
     ObserveAutomaticSelection(selected->native);
     const auto& native=*read.snapshot;
     sample.carried=BodyCarriedIdentity{native.inventory,native.switching,native.count,native.items};
@@ -434,7 +492,7 @@ BodyHolsterResult Bc2BodyInventory::TickHolster(const WeaponModeMemory& memory,c
     const auto release=heldRelease_.Update(s.hand,s.gun,revision_,currentRight?currentRight->token.id:0,
         available&&s.input.hands[1].squeeze>=.75f,available&&s.input.hands[1].squeeze<=.35f,
         available&&approachEligible&&sample.triggerNeutral,
-        observedContact&&observedContact->item==selected->key?observedContact:std::nullopt);
+        observedContact&&observedContact->item==selected->key?observedContact:std::nullopt,point.has_value());
     bool deferredContact=false;
     const bool heldEmptyContact=!sample.cancel&&!s.reloadBusy&&sample.triggerNeutral&&point&&observedContact&&
         available&&s.input.hands[1].squeeze>.35f&&!currentRight&&!hands.Current(InteractionHand::Left)&&
@@ -491,7 +549,11 @@ BodyHolsterResult Bc2BodyInventory::TickHolster(const WeaponModeMemory& memory,c
         if(assigned&&assigned->item==selected->key&&intent<UINT64_MAX){
             sample.body.intent={++intent,BodyInventoryOperation::Holster,assigned->slot,assigned->item};automaticIntent=true;}
     }
-    auto out=holster.Tick(policy_,sample,hands,intent);
+    auto out=evaluate();
+    if(phase==BodyHolsterPhase::ShowPending&&holster.Phase()==BodyHolsterPhase::Held&&out.inventory.committedRequest){
+        const auto drawn=AssignedSlot(s.owner.weapon);
+        if(drawn)heldRelease_.DrawnAt(s.hand.owner,s.gun,revision_,*drawn);
+    }
     if(sample.body.intent.operation==BodyInventoryOperation::Draw&&!out.inventory.request&&
        phase==BodyHolsterPhase::Empty&&holster.EmptyRehidePending()&&heldEmptyContact){
         if(!deferredDraw_)deferredDraw_=DeferredDrawContact{s.owner,s.hand.owner,s.gun,*observedContact,

@@ -79,4 +79,16 @@ struct ReloadStateResult {ReloadStateStatus status=ReloadStateStatus::InvalidArg
 // The caller owns semantic generation advancement and freshness deadlines.
 ReloadStateResult ReadReloadState(const ReloadStateMemory&,const ReloadStateBinding&,std::uint32_t imageBase,
     const ReloadStateOwner&,std::uint64_t sequence,std::int64_t observedNs) noexcept;
+
+// Private ordinary-action observation: selectedOwner remains the ACTUAL selected
+// item. target may be unselected, but must be a unique member of that inventory.
+// No firing/selection authority and no fabricated ReloadStateOwner is returned.
+struct ReloadInventoryItem {
+    ReloadStateOwner selectedOwner{};std::uint32_t target=0,inventory=0,slot=0;
+    ReloadObservedConfig config{};std::array<ReloadFiringObservation,2> branches{};
+};
+std::optional<ReloadInventoryItem> ReadReloadInventoryItem(const ReloadStateMemory&,
+    const ReloadStateBinding&,std::uint32_t base,const ReloadStateOwner& selectedOwner,
+    std::uint32_t target)noexcept;
+
 }

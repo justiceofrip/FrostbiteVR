@@ -98,7 +98,7 @@ struct Fixture {
         if(raw.valid)++packs.contacts;
     }
 };
-int FiniteClosedLoopUsesConsumer(){for(unsigned count:{1u,2u,8u}){Fixture f(count);const auto original=f.rig.nativeEvaluated;
+int FiniteClosedLoopUsesConsumer(){for(unsigned count:{1u,2u,3u,8u}){Fixture f(count);const auto original=f.rig.nativeEvaluated;
     for(unsigned i=0;i<5600&&!f.driver.Completed()&&!f.driver.Failed();++i)f.Tick();
     if(f.driver.Failed()){f.driver.Report(std::cerr);std::cerr<<'\n';}
     CHECK(f.driver.Completed());CHECK(f.native.fired==count&&f.native.released==count&&f.native.acked==count&&f.supportReturns==count);
@@ -129,7 +129,7 @@ int CapabilityAndReceiverAreExplicit(){constexpr unsigned flags=9u|0x197800u;
         probe::PhysicalPumpInput(in,ms,true);CHECK(probe::PhysicalPumpReceiverActions(in,ms,true));
         CHECK(in.hands[1].trigger==0&&in.hands[0].squeeze==0);in.hands[1].trigger=1;CHECK(!probe::PhysicalPumpReceiverActions(in,ms,true));}
     return 0;}
-int InvalidRequestedCountCannotFire(){for(unsigned n:{0u,3u,7u,9u,UINT32_MAX}){Fixture f(n);for(unsigned i=0;i<10;++i)f.Tick();
+int InvalidRequestedCountCannotFire(){for(unsigned n:{0u,4u,7u,9u,UINT32_MAX}){Fixture f(n);for(unsigned i=0;i<10;++i)f.Tick();
     CHECK(f.driver.Failed()&&f.native.fired==0&&f.native.released==0);}return 0;}
 int MappingBeforePreparationCannotBeRepairedByDuplicateUpdate(){Fixture f;f.mapBeforePrepare=true;
     for(unsigned i=0;i<1600&&!f.driver.Failed();++i)f.Tick();

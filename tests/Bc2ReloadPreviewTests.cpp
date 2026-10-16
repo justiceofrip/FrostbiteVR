@@ -188,8 +188,53 @@ int PackReleaseRestoresExactHiddenBase(){Fixture f;f.Publish();const auto previe
     CHECK(SelectReloadPackedPalette(preview,&f.tracking,Now,Now+100000000,posed,hidden,false).fallback);
     const auto malformed=SelectReloadPackedPalette(preview,nullptr,Now,Now+100000000,posed,{},false);CHECK(malformed.fallback&&malformed.bytes.empty());
     return 0;}
+void Presentation(Fixture& f){
+    f.tracking.preview.reset();f.tracking.shellControl.reset();
+    f.tracking.manualShell=std::make_shared<const ReloadShellPresentation>(ReloadShellPresentation{f.preview.weaponClaim,f.meshes});
 }
-int main(){if(CycleControlDoesNotInventAnAmmoClaim()||CycleHidePreservesAllOtherBytes()||CycleCancelBetweenPackCallbacks()||CyclePackRejectsExpiryOwnerMeshAndPreview()||CycleRefreshDoesNotExtendOriginalLease()||CarriedHasRealZeroCycle()||CarriedPreservesAnatomicalWristAcrossPickup()||NativePhysicalEquipAreDistinct()||GuidedKeepsOriginalGeometry()||OwnerMismatchFails()||MeshLeaseRejects()||
+int ManualShellSurvivesCycleRetirementWithoutAmmoAuthority(){
+    Fixture f;Control(f);Presentation(f);const auto p=HidePlan(f);
+    CHECK(ReloadShellPresentationFresh(f.tracking,Now));
+    CHECK(!ReloadShellControlFresh(f.tracking,Now));
+    CHECK(!f.tracking.preview&&!f.tracking.shellControl&&!f.tracking.belt);
+    CHECK(!SelectReloadShellPackedPalette(p,&f.tracking,Now,true).fallback);
+    // Full/empty ammunition cannot reveal the leftover stock animation. The
+    // visual lease has no reserve member and cannot grant an AmmoObject claim.
+    f.preview.reserve.loaded=8;f.preview.reserve.reserve=0;
+    CHECK(!SelectReloadShellPackedPalette(p,&f.tracking,Now,true).fallback);
+    f.Publish();CHECK(SelectReloadShellPackedPalette(p,&f.tracking,Now,true).fallback);
+    return 0;
+}
+int ManualShellLifetimeIsExactAndBounded(){
+    for(unsigned bad=0;bad<12;++bad){Fixture f;Presentation(f);const auto p=HidePlan(f);
+        auto changed=*f.tracking.manualShell;bool coherent=true;auto now=Now;
+        if(bad==0)f.tracking.enabled=false;
+        if(bad==1)f.tracking.inputEvidence.focused=false;
+        if(bad==2)++f.tracking.owner.equipGeneration;
+        if(bad==3)++changed.weaponClaim.token.id;
+        if(bad==4)f.tracking.inputEvidence.released[1]=true;
+        if(bad==5)now=Now+100000000;
+        if(bad==6){auto mesh=std::make_shared<SelectedMeshesSnapshot>(*f.meshes);++mesh->states[0].meshes[0].address;changed.selectedMeshes=mesh;}
+        if(bad==7)coherent=false;
+        if(bad==8)f.tracking.inputEvidence.tracked[0]=false;
+        if(bad==9)changed.selectedMeshes.reset();
+        if(bad==10)++f.tracking.inputEvidence.observedNs;
+        if(bad==11)changed.weaponClaim.token.kind=HandClaimKind::Mechanism;
+        f.tracking.manualShell=std::make_shared<const ReloadShellPresentation>(changed);
+        const auto result=SelectReloadShellPackedPalette(p,&f.tracking,now,coherent);
+        CHECK(result.fallback&&result.bytes.data()==p.ordinary.data());
+    }
+    Fixture f;Presentation(f);const auto p=HidePlan(f);
+    ++f.tracking.inputEvidence.sequence;f.tracking.inputEvidence.observedNs+=20000000;f.tracking.inputEvidence.deadlineNs+=20000000;
+    auto refreshed=*f.tracking.manualShell;++refreshed.weaponClaim.inputSequence;refreshed.weaponClaim.deadlineNs+=20000000;
+    f.tracking.manualShell=std::make_shared<const ReloadShellPresentation>(refreshed);
+    CHECK(!SelectReloadShellPackedPalette(p,&f.tracking,Now+20000000,true).fallback);
+    CHECK(SelectReloadShellPackedPalette(p,&f.tracking,Now+100000000,true).fallback);
+    f.tracking.manualShell.reset();CHECK(SelectReloadShellPackedPalette(p,&f.tracking,Now+20000000,true).fallback);
+    return 0;
+}
+}
+int main(){if(ManualShellSurvivesCycleRetirementWithoutAmmoAuthority()||ManualShellLifetimeIsExactAndBounded()||CycleControlDoesNotInventAnAmmoClaim()||CycleHidePreservesAllOtherBytes()||CycleCancelBetweenPackCallbacks()||CyclePackRejectsExpiryOwnerMeshAndPreview()||CycleRefreshDoesNotExtendOriginalLease()||CarriedHasRealZeroCycle()||CarriedPreservesAnatomicalWristAcrossPickup()||NativePhysicalEquipAreDistinct()||GuidedKeepsOriginalGeometry()||OwnerMismatchFails()||MeshLeaseRejects()||
     ClaimsRejectLoss()||NativeLeaseAndCyclesReject()||CarriedNeverInventsHeldCycle()||ImmutablePreviewRetainsOriginalLease()||
     PendingDoesNotFabricateHold()||RawContactIdentityAndTime()||DefaultAndProductionRigGate()||PackReleaseRestoresExactHiddenBase())return 1;
-    std::cout<<"Bc2ReloadPreview: 19 cases passed\n";}
+    std::cout<<"Bc2ReloadPreview: 21 cases passed\n";}

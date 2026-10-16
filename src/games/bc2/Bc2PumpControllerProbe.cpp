@@ -72,12 +72,47 @@ bool Bc2PumpControllerProbe::FollowTrackingRebase(const InputFrame& input,const 
     if(r.previous!=owner_||r.current!=owner||r.previousHand!=held_->owner||r.item!=held_->item||r.mechanism!=held_->mechanism||
        r.cycle!=held_->cycle||r.shot!=held_->shot||r.observedNs>now||native.native!=expected||
        native.cycle!=held_->cycle||native.shot!=held_->shot)return false;
+    if(ReceiverGap()&&(!receiverReturnNeutral_||receiverReturnNeutral_->space!=owner.space||
+       receiverReturnNeutral_->sequence>input.generation||receiverReturnNeutral_->accepted>now))return false;
     followedRebase_=r;owner_=owner;cycles_[completed_].native=native.native;
     // Keep the original held lease as historical evidence only. Fresh authority
     // and the new gun claim must be observed from the actual physical consumer.
     physical_={};recovery_.reset();history_={};last_.reset();lastRaw_=0;
-    command_=input.hands[0].grip;lostEnded_=now;neutralSequence_=input.generation;neutralAt_=now;
+    command_=input.hands[0].grip;lostEnded_=now;
+    neutralSequence_=ReceiverGap()?receiverReturnNeutral_->sequence:input.generation;
+    neutralAt_=ReceiverGap()?receiverReturnNeutral_->accepted:now;
     Move(Phase::RecoveryNeutral,now);return true;
+}
+bool Bc2PumpControllerProbe::ObserveReceiverReturnNeutral(const InputFrame& input,const ReloadStateOwner& owner,
+    std::int64_t observed,std::int64_t deadline,std::int64_t now)noexcept {
+    if(receiverReturnNeutral_)return true; // Keep the first original source facts.
+    auto expected=owner_;if(expected.space==UINT64_MAX)return false;++expected.space;
+    if(!AwaitingReceiver()||!interruptionObserved_||!lostStarted_||!last_||!held_||owner!=expected||
+       input.spaceGeneration!=owner.space||input.generation<=last_->generation||
+       !ValidInput(input)||!input.focused||!input.headValid||now<lastNow_||observed<=lostStarted_||
+       !weapon_cycle_detail::Window(observed,deadline,now)||deadline-observed>100000000)return false;
+    for(const auto& hand:input.hands)if(!hand.gripTracked||!hand.aimTracked||hand.squeeze>.35f||
+        hand.trigger||hand.held||hand.stickX||hand.stickY)return false;
+    receiverReturnNeutral_=ReturnNeutral{input.generation,input.spaceGeneration,observed,deadline,now};return true;
+}
+bool Bc2PumpControllerProbe::ObserveMissingReceiver(std::int64_t now)noexcept {
+    if(!AwaitingReceiver()||!held_||!receiverGapWitness_||now<lastNow_)return false;
+    if(!lostStarted_){lostStarted_=now;lostFirst_=last_?last_->generation:0;}
+    ++receiverMissingSamples_;return true; // No input, clock or lease is synthesized.
+}
+std::optional<PumpReceiverGapWitness> Bc2PumpControllerProbe::ReceiverGapReady(std::int64_t now)const noexcept {
+    if(!AwaitingReceiver()||lostStarted_||!receiverGapWitness_||!ValidPumpReceiverGapWitness(*receiverGapWitness_,now))return {};
+    return receiverGapWitness_;
+}
+void Bc2PumpControllerProbe::ObserveMissingReceiverNative(const std::optional<Bc2NativeCycleView>& native,bool handsEmpty,std::int64_t now)noexcept {
+    if(!AwaitingReceiver()||!lostStarted_||!receiverMissingSamples_||!held_||!native)return;
+    if(native->failure!=Bc2NativeCycleFailure::None||native->phase==Bc2NativeCyclePhase::Cancelled||
+       native->native!=cycles_[completed_].native||native->cycle!=held_->cycle||native->shot!=held_->shot||
+       native->loaded!=loaded_||native->reserve!=reserve_||native->capacity!=capacity_||!native->blocksFire){Fail(12,now);return;}
+    if(native->phase==Bc2NativeCyclePhase::Converging&&handsEmpty){
+        interruptionObserved_=true;++receiverConvergingSamples_;
+        if(!receiverConvergingFirst_)receiverConvergingFirst_=now;receiverConvergingLast_=now;
+    }
 }
 void Bc2PumpControllerProbe::Prepare(InputFrame& in,const ReloadStateOwner& owner,std::string_view asset,
     const Bc2PumpRawContact& raw,const std::optional<Bc2NativeCycleView>& native,
@@ -87,9 +122,9 @@ void Bc2PumpControllerProbe::Prepare(InputFrame& in,const ReloadStateOwner& owne
     lastAssetMatch_=asset==calibration_.asset;lastRig_=raw.rigFingerprint;lastRawSeen_=raw.input.sequence;
     lastNativePhase_=native?unsigned(native->phase):UINT32_MAX;
     if(!first_){first_=phaseAt_=now;command_=in.hands[0].grip;}
-    if((requested_!=1&&requested_!=2&&requested_!=8)||
-       (unsigned(scenario_)>unsigned(Scenario::HeldSupportNatural))||
-       (scenario_!=Scenario::None&&scenario_!=Scenario::HeldSupportNatural&&requested_!=1))Fail(10,now);
+    if((requested_!=1&&requested_!=2&&requested_!=3&&requested_!=8)||
+       (unsigned(scenario_)>unsigned(Scenario::HeldSupportNaturalReceiverGap))||
+       (scenario_!=Scenario::None&&scenario_!=Scenario::HeldSupportNatural&&!ReceiverGap()&&requested_!=1))Fail(10,now);
     if(now<lastNow_||now-first_>=(requested_==8?58000000000ll:28000000000ll))Fail(1,now);lastNow_=now;
     if(!PumpCalibrationValid(calibration_)||!ValidInput(in)||!StaticReference(in)||!in.focused||!in.headValid||
        !in.hands[0].gripTracked||!in.hands[1].gripTracked||!in.hands[1].aimTracked||
@@ -143,16 +178,17 @@ void Bc2PumpControllerProbe::Prepare(InputFrame& in,const ReloadStateOwner& owne
         if(phase_==Phase::Grip&&physical_.ownsHand&&physical_.tracking.target&&held_&&
            weapon_cycle_detail::Same(physical_.tracking.target->lease,*held_)){
             if(HeldSupportStart()){
+                const auto& expectedGun=ReceiverGap()&&receiverReturnedGun_.id?receiverReturnedGun_:initialGun_;
                 if(!initialSupport_.id||!physical_.tracking.mechanism||!physical_.tracking.gun||
                    physical_.tracking.mechanism->token.kind!=HandClaimKind::Mechanism||
-                   physical_.tracking.mechanism->token.id==initialSupport_.id||physical_.tracking.gun->token!=initialGun_||
-                   physical_.tracking.mechanism->token.prerequisiteClaim!=initialGun_.id){Fail(15,now);}
+                   physical_.tracking.mechanism->token.id==initialSupport_.id||physical_.tracking.gun->token!=expectedGun||
+                   physical_.tracking.mechanism->token.prerequisiteClaim!=expectedGun.id){Fail(15,now);}
                 else supportAdopted_=true;
             }
             if(!Failed())Move(Phase::Rear,now);
         }
         if(phase_==Phase::RearDwell&&(NaturalStroke()||now-phaseAt_>=180000000)&&rearPair_)Move(Phase::Forward,now);
-        if(phase_==Phase::InterruptLeft){
+        if(phase_==Phase::InterruptLeft&&!ReceiverGap()){
             if(!lostStarted_){lostStarted_=now;lostFirst_=in.generation;}
             if(now-lostStarted_>=500000000){
                 if(!interruptionObserved_){Fail(12,now);}
@@ -204,20 +240,35 @@ void Bc2PumpControllerProbe::Prepare(InputFrame& in,const ReloadStateOwner& owne
                    source->frame.hands[0].squeeze<=.35f&&source->frame.generation>=neutralSequence_&&
                    physical_.tracking.recovery&&native&&held_){
                     const auto& authority=*physical_.tracking.recovery;const auto& debt=authority.grant.debt;
-                    if(!weapon_cycle_detail::Lease(authority,now)||native->phase!=Bc2NativeCyclePhase::Converging||
-                       !native->blocksFire||native->native!=cycles_[completed_].native||native->loaded!=loaded_||native->reserve!=reserve_||
-                       authority.owner!=(followedRebase_?followedRebase_->currentHand:held_->owner)||authority.item!=held_->item||authority.mechanism!=held_->mechanism||
-                       authority.cycle!=held_->cycle||authority.shot!=held_->shot||debt.loaded!=loaded_||debt.reserve!=reserve_||debt.capacity!=capacity_||
-                       authority.grant.neutral.sequence<neutralSequence_||!physical_.tracking.gun||
-                       physical_.tracking.gun->token.owner!=authority.owner||physical_.tracking.gun->token.item!=authority.item||
-                       (!resumedPause_&&(followedRebase_?physical_.tracking.gun->token.id==partialGun_:physical_.tracking.gun->token.id!=partialGun_))){Fail(13,now);}
+                    unsigned failed=0;
+                    if(!weapon_cycle_detail::Lease(authority,now))failed|=1;
+                    if(native->phase!=Bc2NativeCyclePhase::Converging||!native->blocksFire||
+                       native->native!=cycles_[completed_].native||native->loaded!=loaded_||native->reserve!=reserve_)failed|=2;
+                    if(authority.owner!=(followedRebase_?followedRebase_->currentHand:held_->owner)||
+                       authority.item!=held_->item||authority.mechanism!=held_->mechanism)failed|=4;
+                    if(authority.cycle!=held_->cycle||authority.shot!=held_->shot||
+                       debt.loaded!=loaded_||debt.reserve!=reserve_||debt.capacity!=capacity_)failed|=8;
+                    if(authority.grant.neutral.sequence<neutralSequence_||
+                       (ReceiverGap()&&(!receiverReturnNeutral_||authority.grant.neutral.owner.space!=receiverReturnNeutral_->space||
+                        authority.grant.neutral.observedNs<receiverReturnNeutral_->observed)))failed|=16;
+                    if(!physical_.tracking.gun)failed|=32;
+                    else {
+                        if(physical_.tracking.gun->token.owner!=authority.owner||physical_.tracking.gun->token.item!=authority.item)failed|=64;
+                        if(!resumedPause_&&(followedRebase_?physical_.tracking.gun->token.id==partialGun_:
+                           physical_.tracking.gun->token.id!=partialGun_))failed|=128;
+                    }
+                    if(failed){
+                        recoveryAuthorityFailure_={failed,authority.grant.nonce,authority.grant.neutral.sequence,
+                            physical_.tracking.gun?physical_.tracking.gun->token.id:0,authority.grant.neutral.observedNs,
+                            authority.grant.neutral.deadlineNs,authority.observedNs,authority.deadlineNs,now};Fail(13,now);
+                    }
                     else {recovery_=authority;recoveryGun_=physical_.tracking.gun->token.id;rearPair_=false;baselinePairs_=packs_.pairs;Move(Phase::RecoveryGrip,now);}
                 }
             }
         }
-        if(now-phaseAt_>5000000000ll)Fail(8,now);
+        if(now-phaseAt_>(AwaitingReceiver()?10000000000ll:5000000000ll))Fail(8,now);
     }
-    const bool grip=!Failed()&&!Completed()&&((HeldSupportStart()&&(phase_==Phase::SupportBeforeFire||phase_==Phase::Fire||phase_==Phase::WaitHeld))||phase_==Phase::Grip||phase_==Phase::Rear||phase_==Phase::RearDwell||phase_==Phase::Forward||phase_==Phase::WaitReady||phase_==Phase::Settle||phase_==Phase::RecoveryGrip||
+    const bool grip=!Failed()&&!Completed()&&(AwaitingReceiver()||(HeldSupportStart()&&(phase_==Phase::SupportBeforeFire||phase_==Phase::Fire||phase_==Phase::WaitHeld))||phase_==Phase::Grip||phase_==Phase::Rear||phase_==Phase::RearDwell||phase_==Phase::Forward||phase_==Phase::WaitReady||phase_==Phase::Settle||phase_==Phase::RecoveryGrip||
         phase_==Phase::RecoveryRear||phase_==Phase::RecoveryRearDwell||phase_==Phase::RecoveryForward||phase_==Phase::RecoveryWait);
     in.hands[0].grip=command_;in.hands[0].aim=command_;in.hands[0].squeeze=grip?1.f:0.f;
     if(NaturalStroke()&&naturalSupportAt_&&!Failed()&&!Completed()){
@@ -230,7 +281,7 @@ void Bc2PumpControllerProbe::Prepare(InputFrame& in,const ReloadStateOwner& owne
             pose->orientation={cs*q.x+sn*q.z,cs*q.y+sn*q.w,cs*q.z-sn*q.x,cs*q.w-sn*q.y};}
     }
     in.hands[1].trigger=!Failed()&&phase_==Phase::Fire?1.f:0.f;
-    if(!Failed()&&phase_==Phase::InterruptLeft)in.hands[0].gripTracked=in.hands[0].aimTracked=false;
+    if(!Failed()&&phase_==Phase::InterruptLeft&&!ReceiverGap())in.hands[0].gripTracked=in.hands[0].aimTracked=false;
     last_=in;history_[next_]=Source{in,owner,observed,deadline};next_=(next_+1)%history_.size();
 }
 void Bc2PumpControllerProbe::Observe(const Bc2PhysicalPumpResult& physical,const std::optional<Bc2NativeCycleView>& native,
@@ -263,6 +314,19 @@ void Bc2PumpControllerProbe::Observe(const Bc2PhysicalPumpResult& physical,const
         partialAt_=now;partialGun_=physical.tracking.gun->token.id;interruptedPairs_=packs.pairs-baselinePairs_;
         Move(Phase::InterruptLeft,now);
     }
+    if(AwaitingReceiver()&&!lostStarted_&&held_&&native&&native->phase==Bc2NativeCyclePhase::Held&&
+       native->held&&physical.tracking.target&&physical.ownsHand&&PumpTargetFresh(physical.tracking,now)&&
+       weapon_cycle_detail::Same(physical.tracking.target->lease,*held_)&&native->cycle==held_->cycle&&native->shot==held_->shot&&
+       native->loaded==loaded_&&native->reserve==reserve_){
+        const auto& source=physical.tracking.input;
+        PumpReceiverGapWitness witness{owner_.space,held_->cycle,held_->shot,source.sequence,source.observedNs,source.deadlineNs,
+            loaded_,reserve_,capacity_,physical.tracking.target->travel};
+        if(ValidPumpReceiverGapWitness(witness,now))receiverGapWitness_=witness;
+    }
+    if(AwaitingReceiver()&&lostStarted_&&receiverMissingSamples_&&native&&held_&&
+       native->phase==Bc2NativeCyclePhase::Converging&&native->failure==Bc2NativeCycleFailure::None&&native->blocksFire&&
+       native->native==cycles_[completed_].native&&native->cycle==held_->cycle&&native->shot==held_->shot&&
+       native->loaded==loaded_&&native->reserve==reserve_&&!physical.ownsHand&&physical.blocksFire)interruptionObserved_=true;
     if(phase_==Phase::InterruptLeft&&lostStarted_&&last_&&!last_->hands[0].gripTracked&&!last_->hands[0].aimTracked&&
        last_->hands[0].squeeze==0&&native&&native->phase==Bc2NativeCyclePhase::Converging&&native->blocksFire&&
        native->native==cycles_[completed_].native&&native->loaded==loaded_&&native->reserve==reserve_&&!physical.ownsHand&&physical.blocksFire)
@@ -343,6 +407,9 @@ void Bc2PumpControllerProbe::ObserveSupport(const Bc2PumpTracking& tracking,cons
        (!cycle.recovered||capture.gun.id==recoveryGun_);};
     if(!(cycle.recovered?valid(*cycle.recovered):valid(cycle.ready))){Fail(11,now);return;}
 
+    // A subsequent shot uses the genuinely returned support/gun claims.
+    // Preserve the original support/fire evidence for the report.
+    if(ReceiverGap()&&cycle.recovered)receiverReturnedGun_=capture.gun;
     cycle.supportReturned=true;cycle.supportToken=supported.token;cycle.supportClaim=capture.support.id;
     cycle.supportSource=tracking.mechanism->inputSequence;cycle.supportObserved=now;cycle.supportDeadline=tracking.mechanism->deadlineNs;
 }
@@ -364,6 +431,21 @@ void Bc2PumpControllerProbe::Report(std::ostream& out)const {
        <<",\"stroke_schedule_revision\":3,\"stationary_native_waits\":true,\"commanded_rear_m\":"<<(NaturalStroke()?.22f:calibration_.geometry.stroke)
        <<",\"commanded_lateral_m\":"<<(NaturalStroke()?.08f:0.f)
        <<",\"pre_shot_regrips\":"<<preShotRegrips_<<",\"pre_shot_loss_sequence\":"<<preShotLossSequence_<<",\"pre_shot_loss_ns\":"<<preShotLossNs_
+       <<",\"receiver_gap_scenario\":"<<(ReceiverGap()?"true":"false")<<",\"receiver_missing_samples\":"<<receiverMissingSamples_
+       <<",\"receiver_converging_samples\":"<<receiverConvergingSamples_<<",\"receiver_converging_first_ns\":"<<receiverConvergingFirst_
+       <<",\"receiver_converging_last_ns\":"<<receiverConvergingLast_
+       <<",\"receiver_return_neutral\":{\"sequence\":"<<(receiverReturnNeutral_?receiverReturnNeutral_->sequence:0)
+       <<",\"space\":"<<(receiverReturnNeutral_?receiverReturnNeutral_->space:0)
+       <<",\"observed_ns\":"<<(receiverReturnNeutral_?receiverReturnNeutral_->observed:0)
+       <<",\"deadline_ns\":"<<(receiverReturnNeutral_?receiverReturnNeutral_->deadline:0)
+       <<",\"accepted_ns\":"<<(receiverReturnNeutral_?receiverReturnNeutral_->accepted:0)<<'}'
+       <<",\"recovery_authority_failure\":{\"predicates\":"<<recoveryAuthorityFailure_.predicates
+       <<",\"grant\":"<<recoveryAuthorityFailure_.grant<<",\"neutral_sequence\":"<<recoveryAuthorityFailure_.neutral
+       <<",\"neutral_observed_ns\":"<<recoveryAuthorityFailure_.neutralObserved
+       <<",\"neutral_deadline_ns\":"<<recoveryAuthorityFailure_.neutralDeadline
+       <<",\"lease_observed_ns\":"<<recoveryAuthorityFailure_.leaseObserved
+       <<",\"lease_deadline_ns\":"<<recoveryAuthorityFailure_.leaseDeadline
+       <<",\"gun_claim\":"<<recoveryAuthorityFailure_.gun<<",\"now_ns\":"<<recoveryAuthorityFailure_.now<<'}'
        <<",\"native_pause_regrips\":"<<pauseRegrips_
        <<",\"partial_travel_m\":"<<partialTravel_<<",\"partial_source_sequence\":"<<partialSource_
        <<",\"partial_observed_ns\":"<<partialAt_<<",\"partial_gun_claim\":"<<partialGun_<<",\"partial_pairs\":"<<interruptedPairs_
@@ -384,7 +466,9 @@ void Bc2PumpControllerProbe::Report(std::ostream& out)const {
            <<c.native.firing[0]<<','<<c.native.firing[1]<<','<<c.native.firing[2]<<"]";};
         if(c.recovered){emit(*c.recovered);const auto& a=c.recovered->release.cycle;
             out<<",\"recovery\":true,\"recovery_grant\":"<<a.grant.nonce<<",\"guard_epoch\":"<<a.grant.debt.guardEpoch
-               <<",\"grant_neutral_sequence\":"<<a.grant.neutral.sequence;}
+               <<",\"grant_neutral_sequence\":"<<a.grant.neutral.sequence
+               <<",\"grant_neutral_observed_ns\":"<<a.grant.neutral.observedNs
+               <<",\"grant_neutral_deadline_ns\":"<<a.grant.neutral.deadlineNs;}
         else {emit(c.ready);out<<",\"recovery\":false";}out<<'}';
     }
     out<<"],\"transitions\":[";for(unsigned n=0;n<rowCount_;++n){if(n)out<<',';const auto& r=rows_[n];

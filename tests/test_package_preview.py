@@ -24,6 +24,19 @@ def image(machine=0x14c,dependency=None):
     return bytes(data)
 
 class Packaging(unittest.TestCase):
+    def test_desktop_launcher_exports_source_without_personal_profile(self):
+        private = self.root / 'launcher/data/settings.json'
+        private.parent.mkdir(parents=True, exist_ok=True)
+        private.write_text('private installed paths')
+        source = p.collect_source(self.root)
+        for name in ('launcher/Launcher.ps1', 'launcher/Launcher.Core.ps1',
+                     'launcher/Worker.ps1', 'launcher/Install.cmd',
+                     'launcher/Start-Launcher.ps1', 'launcher/Install-Package.ps1',
+                     'launcher/Install-BC2VRLauncher.ps1', 'tools/Build-DesktopLauncher.ps1',
+                     'tests/Test-DesktopLauncher.ps1', 'docs/DESKTOP-LAUNCHER.md'):
+            self.assertIn(name, source)
+        self.assertNotIn('launcher/data/settings.json', source)
+
     def test_runtime_body_helper_closure_and_private_exclusion(self):
         files=p.collect_source(self.root)
         runtime={n:files[n] for n in p.RUNTIME}

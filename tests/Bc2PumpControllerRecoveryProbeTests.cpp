@@ -31,8 +31,8 @@ struct RecoveryMachine {
     void Input(const ActionOutput& out,std::int64_t now){
         f.clock=now;const bool fire=out.active&&(out.held&Fire);
         if(fire&&!wasFire&&!f.service.View(now).blocksFire){++fired;
-            for(auto& b:f.input.branches){b.loaded=7;b.currentState=7;b.previousState=6;b.nextState=8;b.phaseTimer=.2f;}
-            for(unsigned b=0;b<3;++b)f.Shot(b,8);}
+            for(auto& b:f.input.branches){b.loaded=8-int(fired);b.currentState=7;b.previousState=6;b.nextState=8;b.phaseTimer=.2f;}
+            for(unsigned b=0;b<3;++b)f.Shot(b,9-int(fired));}
         wasFire=fire;
         if(f.service.Recovering()){for(auto& b:f.input.branches){b.currentState=b.nextState=2;b.previousState=1;b.phaseTimer=0;}
             for(unsigned b=0;b<3;++b)f.Idle(b);}
@@ -48,6 +48,7 @@ struct RecoveryDriverFixture {
     std::uint64_t intent=0;std::int64_t now=1000000000;bool publishPairs=true,forgeRaw=false,mapBeforePrepare=false;
     unsigned lostPackets=0;std::int64_t firstLost=0,lastLost=0;
     unsigned corruption=0;bool hideRecovery=false,hideRecovered=false,duplicate=false,delayedNative=false;
+    bool receiverNeutralDwell=false;
     ActionOutput mapped{};unsigned releasedDuringInitialSupport=0;bool supportStarted=false,normalMechanism=false;
     std::uint64_t gunAtLoss=0;bool retainedGun=true;
     static Bc2PumpCalibration Calibration(){Bc2PumpCalibration c;c.revision=1;c.asset=SpasReloadAsset;c.profileId=0x5350415350554d50ull;c.geometry=SpasPumpGeometry;c.closedPart=Matrix(0,0,-.84f);
@@ -72,7 +73,8 @@ struct RecoveryDriverFixture {
         auto observed=raw;if(forgeRaw)++observed.input.observedNs;
         const InputOwner owner{sample.nativeOwner.soldier,sample.nativeOwner.equipGeneration,true,true};
         if(mapBeforePrepare)actions.Update(input,owner,now);
-        driver.Prepare(input,sample.nativeOwner,sample.asset,observed,native.view,observedAt,observedAt+100000000,now);
+        if(receiverNeutralDwell){input.hands[0].squeeze=input.hands[1].squeeze=0;}
+        else driver.Prepare(input,sample.nativeOwner,sample.asset,observed,native.view,observedAt,observedAt+100000000,now);
         if(duplicate){auto repeated=input;repeated.hands[0].gripTracked=repeated.hands[0].aimTracked=true;
             repeated.hands[0].squeeze=0;driver.Prepare(repeated,sample.nativeOwner,sample.asset,observed,native.view,
                 observedAt,observedAt+100000000,now);
@@ -140,6 +142,107 @@ struct RecoveryDriverFixture {
         if(raw.valid)++packs.contacts;
     }
 };
+
+int WholeReceiverGapKeepsDebtAndRequiresFreshStroke(bool corruptNeutral=false){
+    RecoveryDriverFixture f(3,Bc2PumpControllerProbe::Scenario::HeldSupportNaturalReceiverGap);
+    for(unsigned n=0;n<1800&&!f.driver.ReceiverGapReady(f.now)&&!f.driver.Failed();++n)f.Tick();
+    const auto witness=f.driver.ReceiverGapReady(f.now);CHECK(witness&&f.native.fired==1&&!f.lostPackets);
+    const auto old=f.native.f.control;const auto oldView=f.native.view;
+    PumpReceiverGapProbe receiver;CHECK(receiver.Begin(*witness,f.now));
+    bool expired=false;unsigned nativeSamples=0;
+    while(receiver.Withhold(f.now)){
+        f.now=std::max(f.now,f.native.f.clock)+10000000;
+        f.native.Input({},f.now);f.now=f.native.f.clock;++nativeSamples;
+        if(f.now>=old.input.deadlineNs){
+            // Real physical cancellation invokes the same existing guarded
+            // native adapter as gameplay loss; the diagnostic never owns it.
+            f.sample.input.nowNs=f.now;f.hands.Reset();f.support.Reset();f.raw={};f.mapped={};
+            if(!expired){const auto out=f.pump.Tick(f.sample,f.hands,f.intent);CHECK(out.blocksFire&&!out.ownsHand);expired=true;}
+            CHECK(f.driver.ObserveMissingReceiver(f.now));
+            f.driver.ObserveMissingReceiverNative(f.native.f.service.View(f.now),true,f.now);
+            CHECK(f.native.f.service.Recovering());
+        }
+        const auto current=f.native.f.service.View(f.now);
+        CHECK(current.cycle==oldView.cycle&&current.shot==oldView.shot&&current.loaded==7&&current.reserve==24&&current.blocksFire);
+        CHECK(f.native.f.control.input.sequence==old.input.sequence&&f.native.f.control.input.observedNs==old.input.observedNs&&
+              f.native.f.control.input.deadlineNs==old.input.deadlineNs&&f.native.f.control.input.released==old.input.released);
+        CHECK(!f.native.released&&!f.native.acked&&!f.native.normalReleased&&f.native.fired==1&&!f.driver.Failed());
+    }
+    CHECK(expired);CHECK(nativeSamples>300);CHECK(f.now-old.input.deadlineNs>=5000000000ll);
+    CHECK(!f.native.f.service.RecoveryView(f.now)->authority);
+    auto c=RecenterInput(f.native.f);c.input.sequence=++f.input.generation;
+    f.now=f.native.f.clock;f.input.spaceGeneration=c.nativeOwner.space;
+    f.input.hands[0].squeeze=f.input.hands[1].squeeze=0;
+    const auto returnedInput=f.input.generation;
+    const auto returnedObserved=c.input.observedNs,returnedDeadline=c.input.deadlineNs;
+#ifndef FVR_TEST_ORIGINAL_DRIVER
+    // First new-space input is historical evidence, not a replacement lease.
+    for(unsigned fault=0;fault<7;++fault){auto in=f.input;auto owner=c.nativeOwner;
+        auto observed=c.input.observedNs,deadline=c.input.deadlineNs;
+        if(fault==0){--owner.space;--in.spaceGeneration;}
+        if(fault==1)in.generation=witness->input;
+        if(fault==2){observed=old.input.observedNs;deadline=old.input.deadlineNs;}
+        if(fault==3)observed=f.now+1;
+        if(fault==4)deadline=f.now;
+        if(fault==5)in.hands[0].squeeze=1;
+        if(fault==6)in.hands[1].squeeze=1;
+        CHECK(!f.driver.ObserveReceiverReturnNeutral(in,owner,observed,deadline,f.now));
+    }
+    CHECK(f.driver.ObserveReceiverReturnNeutral(f.input,c.nativeOwner,c.input.observedNs,c.input.deadlineNs,f.now));
+#endif
+    CHECK(f.native.f.service.RebaseTracking(c,DrainedAt(f.native.f)));
+    f.native.f.control=c;f.native.f.input.identity.owner=c.nativeOwner;
+    f.sample.nativeOwner=c.nativeOwner;f.sample.input.owner=c.input.owner;
+    // Reproduce actual396: native own Updates and ordinary physical consumers
+    // run during the outer driver's200ms neutral dwell BEFORE its handoff.
+    f.receiverNeutralDwell=true;
+    for(unsigned n=0;n<22;++n){f.Tick();CHECK(f.native.fired==1&&!f.native.released&&!f.native.acked);
+#ifndef FVR_TEST_ORIGINAL_DRIVER
+        CHECK(f.driver.ObserveReceiverReturnNeutral(f.input,c.nativeOwner,f.sample.input.observedNs,f.sample.input.deadlineNs,f.now));
+#endif
+    }
+    const auto grantBefore=f.native.f.service.RecoveryView(f.now);
+    CHECK(grantBefore&&grantBefore->authority);
+    CHECK(grantBefore->authority->grant.neutral.sequence>=returnedInput&&
+          grantBefore->authority->grant.neutral.sequence<f.input.generation);
+    const auto originalNeutral=grantBefore->authority->grant.neutral;
+    CHECK(originalNeutral.deadlineNs<f.now); // Source expires; guarded native lease remains current.
+    CHECK(weapon_cycle_detail::Lease(*grantBefore->authority,f.now));
+    f.receiverNeutralDwell=false;f.input.hands[1].squeeze=1;
+    f.native.view=f.native.f.service.View(f.now);
+    CHECK(f.driver.FollowTrackingRebase(f.input,c.nativeOwner,f.native.view,f.now));
+#ifndef FVR_TEST_ORIGINAL_DRIVER
+    std::ostringstream boundary;f.driver.Report(boundary);
+    CHECK(boundary.str().find("\"neutral_sequence\":"+std::to_string(returnedInput))!=std::string::npos);
+    CHECK(boundary.str().find("\"observed_ns\":"+std::to_string(returnedObserved))!=std::string::npos);
+    CHECK(boundary.str().find("\"deadline_ns\":"+std::to_string(returnedDeadline))!=std::string::npos);
+    const auto retainedNeutral=f.native.f.service.RecoveryView(f.now)->authority->grant.neutral;
+    CHECK(retainedNeutral.owner==originalNeutral.owner&&retainedNeutral.sequence==originalNeutral.sequence&&
+          retainedNeutral.observedNs==originalNeutral.observedNs&&retainedNeutral.deadlineNs==originalNeutral.deadlineNs&&
+          retainedNeutral.nowNs==originalNeutral.nowNs&&retainedNeutral.released==originalNeutral.released);
+#endif
+    CHECK(f.native.view.blocksFire&&f.native.fired==1&&!f.native.released);
+    if(corruptNeutral)f.corruption=3; // A forged pre-return grant remains rejected.
+    for(unsigned n=0;n<2200&&!f.driver.Completed()&&!f.driver.Failed();++n){
+        if(!f.native.acked)CHECK(f.native.fired==1);
+        f.Tick();
+    }
+    if(corruptNeutral){
+        CHECK(f.driver.Failed()&&f.native.fired==1&&!f.native.released&&!f.native.acked&&f.native.view.blocksFire);
+        std::ostringstream report;f.driver.Report(report);
+        CHECK(report.str().find("\"failure_name\":\"recovery_authority\"")!=std::string::npos);
+#ifndef FVR_TEST_ORIGINAL_DRIVER
+        const auto key=report.str().find("\"predicates\":");CHECK(key!=std::string::npos);
+        CHECK((std::stoul(report.str().substr(key+13))&16)!=0);
+#endif
+        return 0;
+    }
+    if(f.driver.Failed()){f.driver.Report(std::cerr);f.pump.Report(std::cerr);}
+    CHECK(f.driver.Completed()&&f.native.fired==3&&f.native.released==1&&f.native.acked==1);
+    CHECK(f.native.normalReleased==2&&f.native.normalAcked==2&&f.supportReturns==3);
+    CHECK(f.native.view.loaded==5&&f.native.view.reserve==24&&!f.native.view.blocksFire);
+    return 0;
+}
 
 int OriginReceiptResumesInputOnlyFullStroke(){
     RecoveryDriverFixture f(1,Bc2PumpControllerProbe::Scenario::HeldSupportNaturalTrackingLoss);
@@ -288,10 +391,16 @@ int PreShotRegripIsBoundedAndCannotEraseDebt(){
     return 0;
 }
 }
-int main(){CHECK(!NativePauseNeedsRealRegripAndNewStroke());CHECK(!OriginReceiptResumesInputOnlyFullStroke());CHECK(!InputOnlyRecoveryCompletesAndReturnsSupport());CHECK(!FreshTypedRecoveryProofRequired());
+int main(int argc,char** argv){
+    if(argc==2&&std::string(argv[1])=="--receiver-return-neutral"){
+        CHECK(!WholeReceiverGapKeepsDebtAndRequiresFreshStroke());
+        CHECK(!WholeReceiverGapKeepsDebtAndRequiresFreshStroke(true));
+        std::puts("Receiver return neutral PASS: original fresh source retained across200ms observer delay; complete fresh stroke,3shots, no debt or lease restamping.");return 0;
+    }
+    CHECK(!WholeReceiverGapKeepsDebtAndRequiresFreshStroke());CHECK(!WholeReceiverGapKeepsDebtAndRequiresFreshStroke(true));CHECK(!NativePauseNeedsRealRegripAndNewStroke());CHECK(!OriginReceiptResumesInputOnlyFullStroke());CHECK(!InputOnlyRecoveryCompletesAndReturnsSupport());CHECK(!FreshTypedRecoveryProofRequired());
     CHECK(!RecoveryStillRequiresObservedSupport());CHECK(!RecoveryScenarioIsExplicitAndBounded());
     CHECK(!HeldSupportShotAdoptsWithoutNeutral());CHECK(!DelayedNativeIdleMustNotStarveOriginalNeutral());
     CHECK(!NaturalRecoveryStrokeUsesContinuousCrossings());
     CHECK(!PreShotInputGapNeedsFreshNeutralAndRegrip());
     CHECK(!PreShotRegripIsBoundedAndCannotEraseDebt());
-    std::puts("11 recovery input-driver groups PASS; actual ControllerActions, HandInteraction, native service, physical consumer and support; synthetic original callbacks and paired palette counts.");return 0;}
+    std::puts("12 recovery input-driver groups PASS; actual ControllerActions, HandInteraction, native service, physical consumer and support; synthetic original callbacks and paired palette counts.");return 0;}

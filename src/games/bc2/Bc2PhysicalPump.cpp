@@ -22,12 +22,12 @@ WeaponCycleProfile Profile(const Bc2PumpCalibration& c,math::Vec3 point)noexcept
     p.slidingRail=true;p.railOvertravelMeters=.10f;p.maximumSpeedMetersPerSecond=6.f;
     // Match the held support grip's 28cm retention envelope. A virtual pump
     // has no physical stop to prevent overshoot; keep the part on its rail.
-    p.railRetentionRadius=.28f;return p;
+    p.railRetentionRadius=SupportGripRetentionRadiusMeters;return p;
 }
 }
 bool PumpCalibrationValid(const Bc2PumpCalibration& c)noexcept {
     return c.measured&&c.revision&&c.rigFingerprint&&c.profileId&&!c.asset.empty()&&c.asset.size()<64&&PumpGeometryValid(c.geometry)&&(c.rearDirection==1||c.rearDirection==-1)&&
-        weapon_cycle_detail::Profile(Profile(c,{}))&&reload_insertion_detail::Rigid(c.closedPart)&&reload_insertion_detail::Rigid(c.closedWrist);
+        weapon_cycle_detail::Profile(Profile(c,{}))&&PumpCompanionsValid(c.geometry,c.companions,c.fixedParts)&&reload_insertion_detail::Rigid(c.closedPart)&&reload_insertion_detail::Rigid(c.closedWrist);
 }
 bool PumpTrackingFresh(const Bc2PumpTracking& t,std::int64_t now)noexcept {
     return t.enabled&&t.calibration&&PumpCalibrationValid(*t.calibration)&&Mapped(t.nativeOwner,t.input)&&t.input.sequence&&
@@ -97,7 +97,9 @@ Bc2PumpPresentation BuildPumpPresentation(const Bc2PumpTracking& t,const RigSnap
         for(unsigned n=0;n<3;++n)part.values[3][n]*=units;
         // Own the resting fore-end and fixed assembly before manual acquisition.
         // Fixed stock parts share the placed receiver, never a transient child.
-        return {{},BoneWrite{binding->part,Multiply(part,placed)},fixed};
+        const auto companions=BuildPumpCompanions(rig,placed,units,t.calibration->geometry,t.calibration->companions,0,false);
+        if(!companions)return {};
+        return {{},BoneWrite{binding->part,Multiply(part,placed)},fixed,*companions};
     }
     if(!PumpTargetFresh(t,now))return {};
     const auto build=[&]<class Authority>(const PhysicalWeaponCycleTargetT<Authority>& target,const Authority& authority)->Bc2PumpPresentation {
@@ -112,7 +114,9 @@ Bc2PumpPresentation BuildPumpPresentation(const Bc2PumpTracking& t,const RigSnap
         auto wrist=Contact(target.contact,t.pointWrist,-1);for(unsigned n=0;n<3;++n)wrist.values[3][n]*=units;
         auto part=t.calibration->closedPart;for(unsigned n=0;n<3;++n)part.values[3][n]+=t.calibration->geometry.axis[n]*t.calibration->rearDirection*target.travel;
         for(unsigned n=0;n<3;++n)part.values[3][n]*=units;
-        return {Multiply(wrist,placed),BoneWrite{binding->part,Multiply(part,placed)},fixed};
+        const auto companions=BuildPumpCompanions(rig,placed,units,t.calibration->geometry,t.calibration->companions,target.travel,t.companionReturning,t.profile.rearTolerance);
+        if(!companions)return {};
+        return {Multiply(wrist,placed),BoneWrite{binding->part,Multiply(part,placed)},fixed,*companions};
     };
     return t.target?build(*t.target,*t.held):build(*t.recoveryTarget,*t.recovery);
 }
@@ -268,11 +272,14 @@ Bc2PhysicalPumpResult Bc2PhysicalPump::Tick(const Bc2PhysicalPumpSample& s,HandI
     const auto result=physical_.Update(sample,hands);out.ownsHand=result.ownsMechanism;
     Record(s,0,result.cycle);
     out.tracking.profile=profile_;out.tracking.held=view->held;out.tracking.pointWrist=pointWrist_;out.tracking.target=result.target;
+    out.tracking.companionReturning=result.cycle.phase==WeaponCyclePhase::Forward||result.cycle.phase==WeaponCyclePhase::Lock;
     if(result.target)++targets_;
     out.tracking.mechanism=hands.Current(InteractionHand::Left);out.tracking.gun=hands.Current(InteractionHand::Right);
     if(result.release){++releases_;pending_=result.release;control.release=result.release;
         supportCapture_.reset();
-        if(!s.input.released[0])supportReturn_=SupportReturn{*result.release,gun->token,s.nativeOwner,s.input,s.input.nowNs,s.input.sequence};
+        if(!s.input.released[0]&&left&&left->token.kind==HandClaimKind::Mechanism)
+            supportReturn_=SupportReturn{*result.release,gun->token,s.nativeOwner,s.input,s.input.nowNs,s.input.sequence,
+                {left->token,gun->token,s.input}};
         // An unavailable runtime gate is ambiguous; retain the exact submitted
         // transaction. Never synthesize RejectNative from a boolean failure.
         if(!api_.control(api_.context,control))++controlRejected_;out.tracking.target.reset();out.ownsHand=false;
@@ -309,16 +316,20 @@ Bc2PhysicalPumpResult Bc2PhysicalPump::TickRecovery(const Bc2PhysicalPumpSample&
     sample.rawContact=raw.contact;sample.grip=s.grip;sample.gun=gun->token;
     sample.contact={sample.lease.mechanism,raw.input.sequence,raw.input.deadlineNs,true};
     if(intent==UINT64_MAX)return out;sample.acquireIntent=++intent;
-    if(const auto left=hands.Current(InteractionHand::Left);left&&left->token.kind==HandClaimKind::WeaponSupport)sample.support=left->token;
+    const auto left=hands.Current(InteractionHand::Left);
+    if(left&&left->token.kind==HandClaimKind::WeaponSupport)sample.support=left->token;
     const auto previous=recoveryPhysical_.Phase();
     const auto result=recoveryPhysical_.Update(sample,hands);out.ownsHand=result.ownsMechanism;
     Record(s,0,{result.cycle.phase,result.cycle.failure,result.cycle.blocksFire,result.cycle.travel,result.cycle.rotation},true);
     if(result.cycle.phase==WeaponCyclePhase::Cancelled&&previous!=WeaponCyclePhase::Cancelled)api_.cancel(api_.context);
     out.tracking.profile=profile_;out.tracking.recovery=view.authority;out.tracking.pointWrist=pointWrist_;out.tracking.recoveryTarget=result.target;
+    out.tracking.companionReturning=result.cycle.phase==WeaponCyclePhase::Forward||result.cycle.phase==WeaponCyclePhase::Lock;
     out.tracking.mechanism=hands.Current(InteractionHand::Left);out.tracking.gun=gun;
     if(result.target)++targets_;
     if(result.release){++releases_;recoveryPending_=result.release;supportCapture_.reset();
-        if(!s.input.released[0])supportReturn_=SupportReturn{*result.release,gun->token,s.nativeOwner,s.input,s.input.nowNs,s.input.sequence};
+        if(!s.input.released[0]&&left&&left->token.kind==HandClaimKind::Mechanism)
+            supportReturn_=SupportReturn{*result.release,gun->token,s.nativeOwner,s.input,s.input.nowNs,s.input.sequence,
+                {left->token,gun->token,s.input}};
         if(!api_.recovery.submit(api_.context,*result.release,s.input))++controlRejected_;
         out.tracking.recoveryTarget.reset();out.ownsHand=false;
     }
@@ -352,10 +363,16 @@ std::optional<SupportGripResult> Bc2PhysicalPump::ContinueSupport(const SupportG
        raw.input.deadlineNs!=original.deadlineNs||raw.input.focused!=original.focused||raw.input.tracked!=original.tracked||
        raw.input.released!=original.released||original.observedNs<grant.submittedNs||original.sequence<=grant.releasedAtSequence||
        !weapon_cycle_detail::Window(original.observedNs,original.deadlineNs,current.nowNs))return {};
+    // Retaining an off-axis grasp does not accept an old/open axial contact.
+    // Use the authored rail axis and the existing closed-contact tolerance;
+    // the independent total-distance check below retains the held28cm envelope.
+    const auto displacement=weapon_cycle_detail::Sub(weapon_cycle_detail::Position(raw.contact),
+        weapon_cycle_detail::Position(profile_.closedContact));
+    if(std::abs(weapon_cycle_detail::Dot(displacement,profile_.axis))>profile_.contactRadius)return {};
     const auto gun=hands.Current(InteractionHand::Right);
     if(!gun||gun->token!=grant.gun||hands.Current(InteractionHand::Left)||input.generation!=current.sequence||
-       !contact.valid||!std::isfinite(contact.distanceMeters)||contact.distanceMeters<0||contact.distanceMeters>.16f||
-       weapon_cycle_detail::Distance(raw.contact,profile_.closedContact)>profile_.contactRadius)return {};
+       !contact.valid||!std::isfinite(contact.distanceMeters)||contact.distanceMeters<0||contact.distanceMeters>SupportGripRetentionRadiusMeters||
+       weapon_cycle_detail::Distance(raw.contact,profile_.closedContact)>profile_.railRetentionRadius)return {};
     // An eligible attempt consumes the continuation even if exact arbiter
     // history rejects it. New geometry cannot retry a rejected held gesture.
     supportReturn_.reset();
@@ -364,7 +381,7 @@ std::optional<SupportGripResult> Bc2PhysicalPump::ContinueSupport(const SupportG
         {contactKey,original.sequence,original.deadlineNs,true},++intent,gun->token.id};
     const auto acquired=hands.AcquireFrom(current,original,request);
     if(!acquired.claim){++supportReturnLost_;return {};}
-    auto trial=support;const auto result=trial.AdoptHeld(owner,input,contact,current,original,*acquired.claim,*gun);
+    auto trial=support;const auto result=trial.AdoptReturnedMechanism(owner,input,contact,current,original,*acquired.claim,*gun,grant.custody);
     if(!result.holding||!result.engaged){hands.Release(current,acquired.claim->token);++supportReturnLost_;return {};}
     support=trial;supportCapture_=Bc2PumpSupportCapture{result.token,acquired.claim->token,gun->token};++supportReturns_;return result;
 }
