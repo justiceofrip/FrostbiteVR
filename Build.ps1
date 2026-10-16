@@ -30,7 +30,7 @@ function Step([string]$Name,[string]$Exe,[string[]]$Arguments){
 }
 Step 'configure' $cmake @('-S',$PSScriptRoot,'-B',$build,'-G','Ninja','-DCMAKE_BUILD_TYPE=RelWithDebInfo','-DBUILD_TESTING=ON',"-DCMAKE_PDB_OUTPUT_DIRECTORY=$symbols","-DCMAKE_PDB_OUTPUT_DIRECTORY_RELWITHDEBINFO=$symbols")
 Step 'build' $cmake @('--build',$build,'--parallel',"$Jobs")
-Step 'tests' $ctest @('--test-dir',$build,'--output-on-failure')
+Step 'tests' $ctest @('--test-dir',$build,'--output-on-failure','--parallel',"$Jobs")
 [ordered]@{architecture=$Architecture;build_directory=$build;completed_utc=[DateTime]::UtcNow.ToString('o');built=$true;tests_passed=$true;native_bc2_verified=$false;headset_tested=$false} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $logs "$Architecture-build.json")
 } finally {
     $env:TEMP=$previousTemp

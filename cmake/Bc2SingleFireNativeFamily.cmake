@@ -7,8 +7,5 @@ if(BUILD_TESTING)
   target_link_libraries(Bc2SingleFireNativeFamilyTests PRIVATE FvrCore)
   target_compile_definitions(Bc2SingleFireNativeFamilyTests PRIVATE
     FVR_BC2_REVIEWED_MAGAZINE_REGISTRY_HEADER="${CMAKE_CURRENT_SOURCE_DIR}/tests/singlefire243/ReviewedFixture.h")
-  if(MSVC)
-    set_property(TARGET Bc2SingleFireNativeFamilyTests PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
-  endif()
   add_test(NAME Bc2SingleFireNativeFamily COMMAND Bc2SingleFireNativeFamilyTests)
 endif()
