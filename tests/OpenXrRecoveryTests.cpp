@@ -8,16 +8,21 @@ using namespace fvr;
 struct Observe final:runtime::IFrameProvider {
  interaction::InputFrame latest{};unsigned invalid=0,released=0,focused=0,spaces=0,afterRecovery=0;
  std::uint64_t space=0;
+ std::uint32_t basis=0;unsigned basisChanges=0,referenceOnlyChanges=0;bool recoveryOffsets=true;
  bool TryGetPair(const runtime::PresentationRequirements&,const runtime::TrackingFrame& f,graphics::TextureDescriptor&,graphics::PairTicket&)noexcept override {
   if(f.spaceGeneration!=latest.spaceGeneration||f.referenceHead.position.x!=latest.referenceHead.position.x||f.referenceHead.orientation.y!=latest.referenceHead.orientation.y)++invalid;
   return false;
  }
  void PairConsumed(const graphics::PairTicket&,bool)noexcept override{}
  void UpdateInput(const interaction::InputFrame& f)noexcept override {
-  latest=f;if(!interaction::ValidInput(f)){++invalid;return;}
+  latest=f;if(!interaction::ValidInput(f)||!f.trackingBasisGeneration){++invalid;return;}
   if(!f.focused){++released;for(const auto& h:f.hands)if(h.active||h.held||h.gripTracked||h.aimTracked)++invalid;return;}
   if(!f.headValid)return;
-  ++focused;if(space!=f.spaceGeneration){if(space)++spaces;space=f.spaceGeneration;}
+  ++focused;if(space!=f.spaceGeneration){if(space){++spaces;
+    if(basis==f.trackingBasisGeneration)++referenceOnlyChanges;else ++basisChanges;}
+    space=f.spaceGeneration;basis=f.trackingBasisGeneration;
+  }else if(basis!=f.trackingBasisGeneration)++invalid;
+  if(!recoveryOffsets)return;
   const auto head=math::MakeRelativePose(f.referenceHead,f.head);
   if(!head||std::hypot(head->position.x,head->position.y,head->position.z)>.0001f)++invalid;
   for(unsigned side=0;side<2;++side)if(f.hands[side].gripTracked){
@@ -32,16 +37,20 @@ int wmain(int argc,wchar_t** argv){
  const auto dll=LoadLibraryExW(path.c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_SYSTEM32);CHECK(dll);
  const auto set=reinterpret_cast<void(*)(unsigned)>(GetProcAddress(dll,"FakeXrRecoveryScenario"));
  const auto errors=reinterpret_cast<unsigned(*)()>(GetProcAddress(dll,"FakeXrErrors"));CHECK(set&&errors);
- for(unsigned scenario=1;scenario<=6;++scenario){
+ for(unsigned scenario=0;scenario<=6;++scenario){
   if(scenario==5)continue;
-  set(scenario);Observe input;xr::HostOptions opt;opt.loaderPath=path;opt.probeOnly=false;opt.controllers=opt.roomscale=true;opt.seconds=8;opt.provider=&input;
+  set(scenario);Observe input;input.recoveryOffsets=scenario!=0;xr::HostOptions opt;opt.loaderPath=path;opt.probeOnly=false;opt.controllers=opt.roomscale=true;opt.seconds=8;opt.provider=&input;
   const auto r=xr::RunOpenXrHost(opt);
   std::cout<<"scenario="<<scenario<<" frames="<<r.endedFrames<<" automatic="<<r.automaticRecenters<<" total="<<r.recenters<<" spaces="<<input.spaces<<" invalid="<<input.invalid<<" released="<<input.released<<'\n';
-  CHECK(r.okay&&r.endedFrames==260&&errors()==0&&input.invalid==0);
-  CHECK(r.automaticRecenters==(scenario==3?0u:1u));
-  CHECK(r.recenters==(scenario==3?1u:2u));CHECK(input.spaces==r.recenters);
-  CHECK(input.focused>100&&input.released>0);
-  if(scenario!=3)CHECK(input.afterRecovery>100);
+  CHECK(r.okay&&r.endedFrames==(scenario?260u:100u)&&errors()==0&&input.invalid==0);
+  CHECK(r.automaticRecenters==((scenario==0||scenario==3)?0u:1u));
+  CHECK(r.recenters==(scenario==0?0u:scenario==3?1u:2u));CHECK(input.spaces==r.recenters+(scenario==0?1u:0u));
+  // Exercise the real host's runtime event, automatic recovery, and manual
+  // gesture paths: only the last one keeps poses in the same known basis.
+  CHECK(input.basisChanges==r.automaticRecenters+(scenario==0?1u:0u));
+  CHECK(input.referenceOnlyChanges==r.recenters-r.automaticRecenters);
+  CHECK(input.focused>(scenario?100u:50u)&&input.released>0);
+  if(scenario&&scenario!=3)CHECK(input.afterRecovery>100);
   CHECK(r.userPresenceSupported==(scenario==6));if(scenario==6)CHECK(r.userPresenceEvents==3&&input.released>80);
  }
  set(0);FreeLibrary(dll);return 0;

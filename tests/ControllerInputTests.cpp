@@ -60,18 +60,27 @@ int main(){
     f.hands[1].trigger=0;step();f.hands[1].trigger=1;CHECK(step().pressed==interaction::Fire);
     f.hands[0].gripTracked=false;f.hands[1].aimTracked=false;out=step();CHECK(!out.active&&!out.held&&!out.forward);
     f.hands={};
-    // One vertical flick per return to center, including duplicate packets,
-    // held-stick equip transitions, diagonal turns, and right tracking recovery.
+    // Holsters own selection. Vertical sticks never select, including duplicate
+    // packets, held-stick equip/recenter transitions and tracking recovery.
     f.hands={};for(auto& h:f.hands){h.gripTracked=h.aimTracked=true;h.active=interaction::Components;}
-    step();step();step();f.hands[1].stickY=1;out=step();CHECK(out.pressed==interaction::NextWeapon&&!out.turnDegrees);
-    CHECK(!actions.Update(f,owner,f.predictedNs).pressed);CHECK(!step().pressed);
-    f.hands[1].stickY=.6f;CHECK(step().held==interaction::NextWeapon);
-    ++owner.generation;step();step();CHECK(!step().pressed);
-    f.hands[1].stickY=0;step();step();f.hands[1].stickY=-1;CHECK(step().pressed==interaction::PreviousWeapon);
-    f.hands[1].aimTracked=false;CHECK(step().released==interaction::PreviousWeapon);
-    f.hands[1].aimTracked=true;step();step();CHECK(!step().pressed);
-    f.hands[1].stickY=0;step();step();f.hands[1].stickX=f.hands[1].stickY=1;out=step();CHECK(!(out.held&(interaction::NextWeapon|interaction::PreviousWeapon))&&out.turnDegrees);
-    f.hands[1].stickX=f.hands[1].stickY=0;step();f.hands[1].stickY=1;CHECK(step().pressed==interaction::NextWeapon);
+    const auto noSelection=[](const interaction::ActionOutput& value){
+        return !((value.held|value.pressed|value.released)&(interaction::NextWeapon|interaction::PreviousWeapon));
+    };
+    step();step();step();
+    for(const float vertical:{1.f,.6f,0.f,-1.f,0.f,1.f}){
+        f.hands[1].stickY=vertical;out=step();CHECK(noSelection(out));CHECK(!out.turnDegrees);
+        CHECK(noSelection(actions.Update(f,owner,f.predictedNs)));
+    }
+    ++owner.generation;for(int i=0;i<4;++i)CHECK(noSelection(step()));
+    ++f.spaceGeneration;for(int i=0;i<4;++i)CHECK(noSelection(step()));
+    f.hands[1].aimTracked=false;CHECK(noSelection(step()));
+    f.hands[1].aimTracked=true;for(int i=0;i<4;++i)CHECK(noSelection(step()));
+    // Vertical movement neither blocks firing nor consumes horizontal snap turn.
+    f.hands[1].trigger=1;out=step();CHECK(noSelection(out));CHECK(out.pressed==interaction::Fire);
+    f.hands[1].trigger=0;step();
+    f.hands[1].stickX=1;out=step();CHECK(noSelection(out));CHECK(out.turnDegrees);
+    out=step();CHECK(noSelection(out));CHECK(!out.turnDegrees);
+    f.hands[1].stickX=0;step();f.hands[1].stickX=-1;out=step();CHECK(noSelection(out));CHECK(out.turnDegrees<0);
     // Reference yaw, pitch-independent gravity, native eye scale is separate.
     math::Pose p{};p.position={.2f,0,-.5f};p.orientation={std::sin(.2f),0,0,std::cos(.2f)};
     const auto ref=interaction::UprightReference(p);CHECK(ref&&ref->position.y==0&&ref->orientation.x==0&&ref->orientation.w==1);

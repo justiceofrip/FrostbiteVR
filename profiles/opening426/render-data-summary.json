@@ -1,0 +1,24 @@
+{
+  "native_calls": false,
+  "native_runtime_tested": false,
+  "headset_tested": false,
+  "visibility_rows": 1,
+  "magazine_record_bytes": 33789,
+  "body_record_bytes": 119680,
+  "addition_bytes": 153469,
+  "previous_rows": 46,
+  "combined_rows": 48,
+  "maximum_bytes": 16777216,
+  "complete_catalog_rebuilt": true,
+  "bytes": 16626509,
+  "sha256": "b0825b563c4965dc70fd3922251150ebaaef6a709e18c906c7027465e0039dc4",
+  "remaining_bytes": 150707,
+  "preserved_baseline_bytes": 16473040,
+  "preserved_baseline_sha256": "bb8663974198249eb38780493c1b505242203350c173375cbbb51b42880148e5",
+  "identity_survey": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight426\\game02\\all-inventory.json",
+    "sha256": "cca543cc7d2fa13b3f08200cdd82c6567efc528193bb1f654b2011f06279f787",
+    "atomic_snapshot": false,
+    "operation_authority": false
+  }
+}

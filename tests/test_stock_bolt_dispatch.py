@@ -28,6 +28,29 @@ class StockBolt(unittest.TestCase):
   out=p.apply(jobs(),p.EXPECTED_PROOF);row=out['descriptors'][0]
   review=dict(key=row['key'],descriptor_digest=row['descriptor_digest'],family_proof=h.FAMILY,evidence_sha256='e'*64)
   with self.assertRaisesRegex(ValueError,'cannot be enabled'):h.build(out,[review])
+ def test_separate_stock_bolt_review_reuses_shared_automatic_cycle(self):
+  out=p.apply(jobs(),p.EXPECTED_PROOF);row=out['descriptors'][0]
+  review=dict(key=row['key'],descriptor_digest=row['descriptor_digest'],family_proof=h.AUTOMATIC_STOCK_BOLT_FAMILY,
+              instruction_proof_digest=p.PROOF_DIGEST,evidence_sha256='e'*64)
+  header,summary=h.build(out,[review]);self.assertEqual(summary['enabled'],1)
+  self.assertIn('MagazineCycleAdmission::ReviewedReload11Transfer12',header)
+  self.assertIn('ReloadDescriptorAdmission::ReviewedNative',header)
+  self.assertIn('std::bit_cast<float>(0x3f800000u),true,false',header)
+  for field,value in [('instruction_proof_digest','f'*64),('descriptor_digest','f'*64),('evidence_sha256','missing')]:
+   bad=dict(review,**{field:value})
+   with self.assertRaises(ValueError):h.build(out,[bad])
+ def test_stock_bolt_review_cannot_enable_other_dispatch(self):
+  original=p.apply(jobs(),p.EXPECTED_PROOF)
+  for change in ('no_marker','wrong_marker','single_fire','zero_bolt'):
+   out=copy.deepcopy(original);row=out['descriptors'][0];v=row['configuration']['values']
+   if change=='no_marker':row.pop('automatic_stock_bolt_proof_digest')
+   elif change=='wrong_marker':row['automatic_stock_bolt_proof_digest']='f'*64
+   elif change=='single_fire':v['fireLogicType']=0
+   else:v.update(boltDelay=0.,boltTime=0.,holdBoltUntilFireRelease=False,holdBoltUntilZoomRelease=False)
+   row['descriptor_digest']=d.digest(row['configuration'])
+   review=dict(key=row['key'],descriptor_digest=row['descriptor_digest'],family_proof=h.AUTOMATIC_STOCK_BOLT_FAMILY,
+               instruction_proof_digest=p.PROOF_DIGEST,evidence_sha256='e'*64)
+   with self.assertRaises(ValueError):h.build(out,[review])
  def test_unknown_dispatch_and_bounds_remain_blocked(self):
   for key,value in [('fireLogicType',1),('reloadType',0),('boltTime',11),('holdBoltUntilFireRelease',1)]:
    out=jobs();row=out['descriptors'][0];row['configuration']['values'][key]=value;row['descriptor_digest']=d.digest(row['configuration'])

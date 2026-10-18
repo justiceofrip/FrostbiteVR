@@ -11,10 +11,12 @@
 #include "Bc2Gameplay.h"
 #ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
 #include "Bc2ChestKnifeCoordinator.h"
+#include "Bc2SelectedKnifeNative.h"
 #endif
 #include "Bc2M95StockShotProbe.h"
 #include "Bc2NativeCycleRuntime.h"
 #include "Bc2MechanismAudio.h"
+#include "Bc2ShellReloadAudio.h"
 #include "Bc2PumpControllerProbe.h"
 #include "Bc2BoltCustodyBridge.h"
 #include "Bc2BoltPlayerCustody.h"
@@ -33,6 +35,7 @@
 #include "Bc2BoatProfile.h"
 #include "Bc2CampaignVehicleProfile.h"
 #include "Bc2VehicleShotObserver.h"
+#include "Bc2BoatReticle.h"
 #ifdef FVR_BC2_VEHICLE_MOUNTED_PROBE
 #include "Bc2VehicleMountedObserver.h"
 #endif
@@ -82,6 +85,7 @@ static_assert(FVR_BC2_PHYSICAL_RELOAD_LIFECYCLE_SCENARIO>=1&&FVR_BC2_PHYSICAL_RE
 #include "fvr/interaction/SupportOwnershipRecovery.h"
 #include "fvr/interaction/ArmIk.h"
 #include "fvr/interaction/AimFrame.h"
+#include "fvr/interaction/TrackedBodyAnchor.h"
 #include "fvr/interaction/RoomscaleFollow.h"
 #include "fvr/interaction/ComfortCamera.h"
 #include <algorithm>
@@ -92,13 +96,20 @@ static_assert(FVR_BC2_PHYSICAL_RELOAD_LIFECYCLE_SCENARIO>=1&&FVR_BC2_PHYSICAL_RE
 #include <vector>
 #include <mutex>
 #include "fvr/interaction/FiringPoseHistory.h"
+#include "Bc2ProjectileLaunch.h"
 namespace fvr::bc2::gameplay {
 namespace {
 using UpdateFn=void(__thiscall*)(void*,float);using GatherFn=void(__thiscall*)(void*,void*);
 UpdateFn updateOriginal=nullptr;GatherFn gatherOriginal=nullptr;
 using FireOriginFn=std::uintptr_t(__thiscall*)(void*,void*);
 FireOriginFn fireOriginOriginal=nullptr;FireOriginCandidates fireProfile{};
-struct FireRecord {unsigned caller=0,effects=0,player=0,serverSoldier=0,clientSoldier=0,weapon=0,data=0,thread=0;ULONGLONG ms=0;std::array<float,16> matrix{},clientEffects{},serverEffects{};unsigned playerId=0,weaponKind=0,shotToken=0;bool tokenValid=false;bool clientPath=false,originWritten=false;unsigned phase=0;std::array<float,16> after{};std::optional<rigPublication::WeaponShotFrame> shot;std::optional<math::Matrix4> mappedShot;std::optional<interaction::FiringPoseSample> eventPose;};
+struct FireRecord {unsigned caller=0,effects=0,player=0,serverSoldier=0,clientSoldier=0,weapon=0,data=0,thread=0;ULONGLONG ms=0;std::array<float,16> matrix{},clientEffects{},serverEffects{};unsigned playerId=0,weaponKind=0,shotToken=0;bool tokenValid=false;bool clientPath=false,originWritten=false;unsigned phase=0;std::array<float,16> after{};std::optional<rigPublication::WeaponShotFrame> shot;std::optional<math::Matrix4> mappedShot;std::optional<interaction::FiringPoseSample> eventPose;
+    WeaponEquipmentIdentity equipment{};bool nativeMuzzleSupported=false,observedCandidateUnexpired=false;
+    std::int64_t observedQpc=0,observedCurrentDeadline=0;std::uint64_t observedCurrentGeneration=0;
+    std::optional<math::Matrix4> observedMuzzleCandidate;
+    std::optional<NativeMuzzleConfig> nativeConfig;bool nativeConfigUnchanged=false;
+    std::uint64_t nativeInvocation=0;
+};
 std::array<FireRecord,32> fireRecords{};unsigned fireRecordCount=0;
 std::atomic_flag fireRecordGate=ATOMIC_FLAG_INIT;
 std::atomic<unsigned> fireOriginCalls=0,fireOriginMatches=0,fireOriginRejected=0;
@@ -107,10 +118,14 @@ using MatrixCopyFn=std::uintptr_t(__thiscall*)(void*,const void*);
 ClientShootFn clientShootOriginal=nullptr,serverShootOriginal=nullptr;MatrixCopyFn matrixCopyOriginal=nullptr;
 using ComposeFn=std::uintptr_t(__thiscall*)(void*,void*,const void*);ComposeFn composeOriginal=nullptr;
 std::mutex shotPoseMutex;interaction::FiringPoseHistory shotHistory;
+std::optional<MuzzleEventSource> muzzleHistorySource;
 std::atomic<unsigned> clientOriginWrites=0,serverOriginWrites=0,originWriteFailures=0,shotSourceChanges=0,originFallbacks=0,originWritesAfterLogFull=0;
 std::atomic<unsigned> clientShotCalls=0,clientShotCopies=0,clientShotRejected=0;
 AimCandidates aimingProfile{};InputBindingCandidates profile{};std::uintptr_t image=0;unsigned imageSize=0;
-InputReader readInput=nullptr;std::array<void*,13> hooks{};
+InputReader readInput=nullptr;std::array<void*,14> hooks{};
+using ProjectileContextFn=std::uintptr_t(__thiscall*)(void*,void*);
+ProjectileContextFn projectileContextOriginal=nullptr;ProjectileLaunchBinding projectileLaunchBinding{};
+std::atomic<std::uint64_t> shotInvocationSerial=0;
 FeedbackWriter writeFeedback=nullptr;unsigned feedbackSent=0,feedbackDropped=0;
 std::atomic<bool> enabled=false;std::atomic<unsigned> active=0,inputThread=0;
 std::atomic<unsigned> updates=0,localUpdates=0,gathers=0,onFoot=0,vehicle=0,stale=0,applied=0,committed=0,nativeInactive=0,mismatches=0,turnUnavailable=0,turns=0,moving=0,buttons=0;
@@ -161,6 +176,23 @@ void PublishTwoGrenadeDeathReadiness(const std::optional<private_grenade::Native
 SelectedMeshesObservation selectedMeshes;
 std::atomic<std::shared_ptr<const AmmoCounterOwner>> ammoCounterOwner;
 std::uint64_t mechanismAudioActor=0,mechanismAudioGeneration=0;
+std::uint64_t shellAudioActor=0,shellAudioGeneration=0;
+void PublishShellReloadAudio(const ReloadStateOwner& native,const interaction::HandInteractionSample& input,
+    interaction::HandInteractionKey item,const PhysicalReloadProbeState& state,
+    const std::optional<interaction::ShellReloadAudioEvent>& event,bool manual) {
+    if(shellAudioActor&&(shellAudioActor!=input.owner.actor||shellAudioGeneration!=input.owner.actorGeneration))
+        shellReloadAudio::RetireActor(shellAudioActor,shellAudioGeneration);
+    shellAudioActor=input.owner.actor;shellAudioGeneration=input.owner.actorGeneration;
+    shellReloadAudio::Source source;
+    source.soldier=native.soldier;source.weak=native.weak;source.weapon=native.weapon;
+    source.identity={input.owner.actor,input.owner.actorGeneration,item.id,item.generation,
+        state.identity.owner==native?state.cycle:0};
+    if(event)source.identity=event->identity;
+    source.observedNs=input.observedNs;source.deadlineNs=input.deadlineNs;
+    source.manual=manual;source.spas=manual;source.focused=input.focused;source.tracked=input.tracked[0]&&input.tracked[1];
+    shellReloadAudio::Publish(source);
+    if(event)shellReloadAudio::Emit(*event);
+}
 void PublishMechanismAudio(const ReloadStateOwner& native,const interaction::HandInteractionSample& input,
     interaction::HandInteractionKey item,mechanismAudio::Cue cue,
     const std::optional<interaction::MechanismAudioEvent>& event,bool manual) {
@@ -188,6 +220,11 @@ std::optional<Bc2ArmingEmptyProbe> armingEmptyFixture;
 void ClearReloadOwner(ReloadOwnerLoss loss=ReloadOwnerLoss::LifetimeEnded)noexcept {
     ammoCounterOwner.store({},std::memory_order_release);
     mechanismAudio::Publish({});
+    shellReloadAudio::Publish({});
+    if(loss==ReloadOwnerLoss::LifetimeEnded&&shellAudioActor){
+        shellReloadAudio::RetireActor(shellAudioActor,shellAudioGeneration);
+        shellAudioActor=shellAudioGeneration=0;
+    }
     if(loss==ReloadOwnerLoss::LifetimeEnded&&mechanismAudioActor){
         mechanismAudio::RetireActor(mechanismAudioActor,mechanismAudioGeneration);
         mechanismAudioActor=mechanismAudioGeneration=0;
@@ -448,7 +485,7 @@ std::atomic_flag poseRecordGate=ATOMIC_FLAG_INIT;std::array<ULONGLONG,2> poseRec
 std::atomic<unsigned> poseCalls=0,poseRejected=0;
 
 struct Anchor {std::atomic<unsigned> sequence=0,soldier=0,weak=0;std::atomic<std::uint64_t> space=0;std::atomic<float> yaw=0,consumedX=0,consumedZ=0,units=1;};Anchor anchor;
-unsigned anchorSoldier=0,anchorWeak=0;std::uint64_t anchorSpace=0;float baseYaw=0,lastHandYaw=0,lastHeadYaw=0;
+interaction::TrackedBodyAnchor bodyAnchor;float baseYaw=0,lastHandYaw=0,lastHeadYaw=0;
 std::atomic<unsigned> aimSamples=0,baseViews=0;
 struct BaseRecord {float nativeYaw=0,nativePitch=0,sourceYaw=0,viewYaw=0,bodyYaw=0;bool sharedEye=false;math::Vec3 sourcePosition{},eyePosition{};unsigned weapon=0;ULONGLONG ms=0;std::uint64_t space=0;};
 std::array<BaseRecord,192> baseRecords{};std::atomic<unsigned> baseRecordCount=0;ULONGLONG baseRecordTime=0;
@@ -503,6 +540,7 @@ void PublishVehicleView(const VehicleViewState& next)noexcept {
 std::optional<VehicleSeatProfile> cachedVehicleProfile;
 CampaignVehicleBinding campaignVehicleBinding{};
 VehicleShotBinding vehicleShotBinding{};VehicleShotObserver vehicleShotObserver;
+VehicleReticleSourceBinding boatReticleBinding{};BoatReticleRuntime boatReticle;
 #ifdef FVR_BC2_VEHICLE_MOUNTED_PROBE
 VehicleMountedObserver vehicleMountedObserver;
 bool vehicleMountedRegistered=false; // Install/Stop lane only.
@@ -715,6 +753,9 @@ void InvalidateBodyHolster(bool trackingGap=false,BodyHolsterLifecycleReason rea
     }
 }
 void ResetHandOwnership(const char* reason)noexcept {
+#ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
+    (void)selectedKnife::Missing();
+#endif
     CancelPhysicalReload();
     if(bodyInventory&&std::strcmp(reason,"identity")){
         const auto cause=!std::strcmp(reason,"input_unavailable")?BodyHolsterLifecycleReason::InputUnavailable:
@@ -799,15 +840,11 @@ bool ReserveAcknowledgedSight()noexcept {
     return accepted;
 }
 void PrepareTrackedBodyAnchor(const Owner& owner,const interaction::InputFrame& input,interaction::ActionOutput& out,float nativeYaw)noexcept {
-    constexpr float tau=6.283185307179586f,rad=.017453292519943295f;
-    const auto wrap=[](float value){float out=std::fmod(value,tau);return out<0?out+tau:out;};
-        if(anchorSoldier!=owner.soldier||anchorWeak!=owner.weak){
-            anchorSoldier=owner.soldier;anchorWeak=owner.weak;anchorSpace=input.spaceGeneration;baseYaw=nativeYaw;lastHandYaw=lastHeadYaw=0;
-        }else if(anchorSpace!=input.spaceGeneration){
-            // Explicit XR recenter makes the old HMD direction the new forward.
-            baseYaw=wrap(baseYaw+lastHeadYaw);anchorSpace=input.spaceGeneration;lastHandYaw=lastHeadYaw=0;
-        }
-        if(out.turnDegrees){baseYaw=wrap(baseYaw+out.turnDegrees*rad);++turns;}
+        const auto prepared=bodyAnchor.Update((std::uint64_t(owner.weak)<<32)|owner.soldier,
+            input,nativeYaw,lastHeadYaw,out.turnDegrees);
+        if(!prepared)return;
+        baseYaw=prepared->yaw;if(prepared->referenceChanged)lastHandYaw=lastHeadYaw=0;
+        if(out.turnDegrees)++turns;
         if(bodyFollow&&out.active){
             math::Vec3 body{};const auto localHead=math::MakeRelativePose(input.referenceHead,input.head);
             if(localHead&&BodyPosition(owner,body)){
@@ -937,6 +974,7 @@ void ObserveHandOwnership(const Owner& owner,const interaction::InputFrame& inpu
     }
 #ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
     if(chestKnife)chestKnifeNative::SourceAdvanced(handSample);
+    selectedKnife::SourceAdvanced(handSample,inputEpoch);
 #endif
     PrepareOrdinaryBoltBeforeHands(owner,input,cancelling);
     handPreviousLeft=handOwnership.Current(interaction::InteractionHand::Left);
@@ -1105,7 +1143,7 @@ std::uintptr_t __fastcall FireOriginHook(void* self,void*,void* matrix){
     FireRecord row{caller,effects,player,soldier,owner.soldier,owner.weapon,data,GetCurrentThreadId(),GetTickCount64()};
     if(result!=reinterpret_cast<unsigned>(matrix)||!Read(result,row.matrix.data(),64)||!Read(client+0x30,row.clientEffects.data(),64)||!Read(effects+0x30,row.serverEffects.data(),64)){++fireOriginRejected;return result;}
     for(unsigned r=0;r<4;++r)for(unsigned c=0;c<3;++c)if(!std::isfinite(row.matrix[r*4+c])||!std::isfinite(row.clientEffects[r*4+c])||!std::isfinite(row.serverEffects[r*4+c])){++fireOriginRejected;return result;}
-    row.playerId=*id;row.shot=rigPublication::ReadWeaponShotFrame(owner.soldier,owner.weak,owner.weapon);
+    row.playerId=*id;row.equipment=owner.equipment;row.shot=rigPublication::ReadWeaponShotFrame(owner.soldier,owner.weak,owner.weapon);
     if(row.shot){const auto canonical=[](const std::array<float,16>& values){math::Matrix4 m{};std::memcpy(&m,values.data(),64);
         for(unsigned r=0;r<4;++r)m.values[r][3]=r==3?1.f:0.f;
         for(unsigned n=0;n<4;++n){m.values[2][n]=-m.values[2][n];m.values[n][2]=-m.values[n][2];}return m;};
@@ -1113,8 +1151,35 @@ std::uintptr_t __fastcall FireOriginHook(void* self,void*,void* matrix){
     }
     row.after=row.matrix;fireRecords[fireRecordCount++]=row;return result;
 }
-struct ShotScope {Owner owner;unsigned effects=0,serverPlayer=0,serverSoldier=0;bool supported=false;std::optional<rigPublication::WeaponShotFrame> shot;unsigned shotToken=0;bool tokenValid=false;};
+struct ShotScope {Owner owner;unsigned effects=0,serverPlayer=0,serverSoldier=0;bool supported=false;std::optional<rigPublication::WeaponShotFrame> shot;unsigned shotToken=0;bool tokenValid=false;
+    unsigned configuration=0;std::optional<NativeMuzzleConfig> nativeConfig;
+    std::uint64_t invocation=0;unsigned launchOrdinal=0;
+    std::optional<std::array<float,16>> composedOutput;bool compositionWritten=false;
+    std::optional<interaction::FiringPoseSample> eventPose;
+};
 thread_local ShotScope* clientShotScope=nullptr;thread_local ShotScope* serverShotScope=nullptr;
+struct ProjectileLaunchRecord {
+    std::uint64_t invocation=0,candidateGeneration=0,ownerGeneration=0,space=0;
+    unsigned ordinal=0,effects=0,configuration=0,player=0,soldier=0,thread=0,caller=0,token=0;
+    WeaponEquipmentIdentity equipment{};
+    std::int64_t beforeQpc=0,afterQpc=0;
+    bool helperResultMatches=false,ownerAndConfigCurrent=false,accepted=false,serverShootReturned=false;
+    bool compositionWritten=false;std::optional<std::array<float,16>> composedOutput;
+    std::optional<interaction::FiringPoseSample> eventPose;
+    std::optional<ProjectileLaunchArguments> before,after;
+};
+std::array<ProjectileLaunchRecord,64> projectileLaunchRecords{};
+std::atomic<unsigned> projectileLaunchCount=0,projectileLaunchCalls=0,projectileLaunchRejected=0,
+    projectileLaunchDropped=0,projectileLaunchBusy=0,projectileLaunchReturnUnrecorded=0;
+std::atomic_flag projectileLaunchGate=ATOMIC_FLAG_INIT;
+bool projectileLaunchHookRemoved=false;
+void MarkServerShootReturned(std::uint64_t invocation)noexcept {
+    if(!invocation)return;
+    if(projectileLaunchGate.test_and_set(std::memory_order_acquire)){++projectileLaunchReturnUnrecorded;return;}
+    for(unsigned n=0;n<projectileLaunchCount.load();++n)if(projectileLaunchRecords[n].invocation==invocation)
+        projectileLaunchRecords[n].serverShootReturned=true;
+    projectileLaunchGate.clear(std::memory_order_release);
+}
 std::string_view ReadWeaponAsset(unsigned weapon,std::array<char,64>& name)noexcept {
     if(!weapon||!Read(U32(U32(weapon+4)+0xc),name.data(),name.size())){name={};return {};}
     const auto end=static_cast<const char*>(std::memchr(name.data(),0,name.size()));
@@ -1128,11 +1193,52 @@ const Bc2WeaponProfile* CurrentWeaponProfile(unsigned weapon)noexcept {
 unsigned MuzzleWeaponKind(unsigned weapon)noexcept {
     const auto item=CurrentWeaponProfile(weapon);return item?item->telemetryKind:0;
 }
-bool SupportedMuzzleShot(const Owner& owner,unsigned effects,unsigned config)noexcept {
-    unsigned char special=1;const auto data=U32(effects+0x10),function=U32(data+0x40);
+bool SupportedMuzzleShot(const Owner& owner,unsigned effects,unsigned config,
+    const std::optional<rigPublication::WeaponShotFrame>& shot,std::optional<NativeMuzzleConfig>& observed)noexcept {
+    observed=ReadNativeMuzzleConfig({nullptr,[](void*,unsigned at,void* out,std::size_t size){return Read(at,out,size);}},effects,config);
+    if(!observed||!Type(observed->firingData,"WeaponFiringData")||!OrdinaryMuzzleConfig(*observed))return false;
     const auto item=CurrentWeaponProfile(owner.weapon);
-    return interaction::WeaponFeatureEnabled(item?&item->core:nullptr,interaction::WeaponFeature::TranslatedMuzzle)&&
-        function>=0x10000&&function<UINT32_MAX-0xf0&&config==function+0xa0&&Read(config+0x4a,&special,1)&&!special&&!U32(config+0x40);
+    if(interaction::WeaponFeatureEnabled(item?&item->core:nullptr,interaction::WeaponFeature::TranslatedMuzzle))return true;
+    return shot&&shot->muzzleBinding&&shot->muzzleBinding->authored.equipment==owner.equipment&&
+        Type(observed->projectileData,"BulletEntityData")&&MatchesMuzzleEnrollment(*observed,*shot->muzzleBinding);
+}
+std::uintptr_t __fastcall ProjectileContextHook(void* self,void*,void* output){
+    Callback callback;const auto original=[&]{return projectileContextOriginal(self,output);};
+    const auto caller=reinterpret_cast<unsigned>(_ReturnAddress());auto* current=serverShotScope;
+    if(!enabled.load(std::memory_order_acquire)||!projectileLaunchBinding.verified||!current||
+       caller!=projectileLaunchBinding.helperReturn||reinterpret_cast<unsigned>(self)!=current->effects)return original();
+    ++projectileLaunchCalls;
+    if(projectileLaunchCount.load(std::memory_order_relaxed)>=projectileLaunchRecords.size()||current->launchOrdinal==UINT32_MAX){++projectileLaunchDropped;return original();}
+    const auto returnSlot=reinterpret_cast<unsigned>(_AddressOfReturnAddress());
+    const auto* tib=reinterpret_cast<const NT_TIB*>(NtCurrentTeb());
+    const auto low=reinterpret_cast<unsigned>(tib->StackLimit),high=reinterpret_cast<unsigned>(tib->StackBase);
+    const MuzzleReadMemory memory{nullptr,[](void*,unsigned at,void* out,std::size_t size){return Read(at,out,size);}};
+    ProjectileLaunchRecord row;row.invocation=current->invocation;row.ordinal=++current->launchOrdinal;
+    row.effects=current->effects;row.configuration=current->configuration;row.player=current->serverPlayer;
+    row.soldier=current->serverSoldier;row.equipment=current->owner.equipment;row.thread=GetCurrentThreadId();row.caller=caller;row.token=current->shotToken;
+    row.composedOutput=current->composedOutput;row.compositionWritten=current->compositionWritten;row.eventPose=current->eventPose;
+    if(current->shot){row.candidateGeneration=current->shot->generation;row.ownerGeneration=current->shot->ownerGeneration;row.space=current->shot->space;}
+    return ObserveProjectileContextHelper(original,[&]()noexcept{
+        LARGE_INTEGER q{};QueryPerformanceCounter(&q);row.beforeQpc=q.QuadPart;
+        row.before=ReadProjectileLaunchArguments(memory,projectileLaunchBinding,returnSlot,low,high);
+    },[&](std::uintptr_t result)noexcept{
+        // Copy the arguments immediately after the real helper, before other
+        // observation reads. No ownership-bearing helper output is copied.
+        row.after=ReadProjectileLaunchArguments(memory,projectileLaunchBinding,returnSlot,low,high);
+        LARGE_INTEGER q{};QueryPerformanceCounter(&q);row.afterQpc=q.QuadPart;
+        row.helperResultMatches=result==reinterpret_cast<unsigned>(output)&&row.after&&row.after->contextOutput==result;
+        Owner now{};const auto config=ReadNativeMuzzleConfig(memory,current->effects,current->configuration);
+        row.ownerAndConfigCurrent=serverShotScope==current&&Resolve(now)&&now==current->owner&&
+            current->nativeConfig&&config&&*current->nativeConfig==*config;
+        row.accepted=row.before&&row.after&&row.helperResultMatches&&row.ownerAndConfigCurrent&&current->tokenValid&&
+            row.before->token==current->shotToken&&row.after->token==current->shotToken;
+        if(!row.accepted)++projectileLaunchRejected;
+        if(projectileLaunchGate.test_and_set(std::memory_order_acquire)){++projectileLaunchBusy;return;}
+        const auto index=projectileLaunchCount.load(std::memory_order_relaxed);
+        if(index<projectileLaunchRecords.size()){projectileLaunchRecords[index]=row;projectileLaunchCount.store(index+1,std::memory_order_release);}
+        else ++projectileLaunchDropped;
+        projectileLaunchGate.clear(std::memory_order_release);
+    });
 }
 std::uintptr_t __fastcall ServerShootHook(void* self,void*,void* config,float dt,unsigned primary,void* context){
     Callback callback;Owner owner{};const auto effects=reinterpret_cast<unsigned>(self);
@@ -1146,10 +1252,13 @@ std::uintptr_t __fastcall ServerShootHook(void* self,void*,void* config,float dt
     if(!Type(soldier,"ServerSoldierEntity")||U32(soldier+0xc)!=U32(owner.soldier+0xc)||U32(callbackObject+4)!=data||U32(player+0xc6c)!=soldier)return passthrough();
     const PlayerPairMemory memory{nullptr,[](void*,unsigned at,void* out,std::size_t n){return Read(at,out,n);}};
     if(!MatchServerPlayer(memory,unsigned(image)+fireProfile.serverContext,unsigned(image)+fireProfile.serverManagerVtable,owner.player,player))return passthrough();
-    ShotScope local{owner,effects,player,soldier,SupportedMuzzleShot(owner,effects,reinterpret_cast<unsigned>(config)),rigPublication::ReadWeaponShotFrame(owner.soldier,owner.weak,owner.weapon)};
+    ShotScope local{owner,effects,player,soldier};local.configuration=reinterpret_cast<unsigned>(config);
+    local.invocation=shotInvocationSerial.fetch_add(1,std::memory_order_relaxed)+1;
+    local.shot=rigPublication::ReadWeaponShotFrame(owner.soldier,owner.weak,owner.weapon);
+    local.supported=SupportedMuzzleShot(owner,effects,local.configuration,local.shot,local.nativeConfig);
     local.tokenValid=Read(reinterpret_cast<unsigned>(context)+0x1c,&local.shotToken,4);
     auto* previous=serverShotScope;serverShotScope=&local;struct Restore {ShotScope* previous;~Restore(){serverShotScope=previous;}} restore{previous};
-    return passthrough();
+    const auto result=passthrough();MarkServerShootReturned(local.invocation);return result;
 }
 std::uintptr_t __fastcall ClientShootHook(void* self,void*,void* config,float dt,unsigned primary,void* context){
     Callback callback;Owner owner{};const auto effects=reinterpret_cast<unsigned>(self);
@@ -1157,6 +1266,19 @@ std::uintptr_t __fastcall ClientShootHook(void* self,void*,void* config,float dt
     if(resolved)ObserveAttached(owner,AttachedPhase::ClientFire,effects,reinterpret_cast<unsigned>(config),reinterpret_cast<unsigned>(_ReturnAddress()));
     // Observe matched mounted-gun callbacks without entering the infantry
     // transform/shot-authority path. The original is called exactly once.
+    if(resolved&&!owner.foot&&boatReticleBinding.verified){
+        const VehicleRouteMemory memory{nullptr,[](void*,unsigned at,void* dst,std::size_t n){return Read(at,dst,n);},[](void*,unsigned at,const char* name){return Type(at,name);}};
+        const auto caller=reinterpret_cast<unsigned>(_ReturnAddress());
+        const auto sample=[&]{LARGE_INTEGER stamp{};QueryPerformanceCounter(&stamp);
+            Owner current{};if(!Resolve(current)||current!=owner||current.foot)return std::optional<BoatReticleShotWitness>{};
+            return boatReticle.BeginShot(memory,boatReticleBinding,boatAimBinding,(std::uint64_t(owner.weak)<<32)|owner.soldier,owner.controlled,owner.entry,
+                effects,reinterpret_cast<unsigned>(config),caller,HandNanos(stamp.QuadPart));};
+        if(const auto before=sample()){
+            const auto result=clientShootOriginal(self,config,dt,primary,context);
+            if(const auto after=sample())boatReticle.EndShot(*before,*after);
+            return result;
+        }
+    }
     if(resolved&&!owner.foot&&vehicleShotBinding.verified){
         const auto source=vehicleShotObserver.Source();
         if(source){
@@ -1192,7 +1314,11 @@ std::uintptr_t __fastcall ClientShootHook(void* self,void*,void* config,float dt
     const auto player=paired.value_or(0),soldier=player?U32(player+0xc3c):0,vt=player?U32(player):0;
     const bool campaign=player&&InImage(vt,0x34)&&U32(vt+0x30)==image+fireProfile.serverControlledGetter&&
         Type(soldier,"ServerSoldierEntity")&&U32(soldier+0xc)==U32(owner.soldier+0xc)&&U32(player+0xc6c)==soldier;
-    ++clientShotCalls;ShotScope local{owner,effects,player,soldier,campaign&&SupportedMuzzleShot(owner,effects,reinterpret_cast<unsigned>(config)),rigPublication::ReadWeaponShotFrame(owner.soldier,owner.weak,owner.weapon)};local.tokenValid=Read(reinterpret_cast<unsigned>(context)+0x1c,&local.shotToken,4);auto* previous=clientShotScope;clientShotScope=&local;
+    ++clientShotCalls;ShotScope local{owner,effects,player,soldier};local.configuration=reinterpret_cast<unsigned>(config);
+    local.invocation=shotInvocationSerial.fetch_add(1,std::memory_order_relaxed)+1;
+    local.shot=rigPublication::ReadWeaponShotFrame(owner.soldier,owner.weak,owner.weapon);
+    local.supported=campaign&&SupportedMuzzleShot(owner,effects,local.configuration,local.shot,local.nativeConfig);
+    local.tokenValid=Read(reinterpret_cast<unsigned>(context)+0x1c,&local.shotToken,4);auto* previous=clientShotScope;clientShotScope=&local;
     struct Restore {ShotScope* previous;~Restore(){clientShotScope=previous;}} restore{previous};
     return clientShootOriginal(self,config,dt,primary,context);
 }
@@ -1207,7 +1333,7 @@ std::uintptr_t __fastcall MatrixCopyHook(void* self,void*,const void* source){
     FireRecord row{};row.phase=1;row.clientPath=true;row.caller=caller;row.effects=shotScope.effects;row.clientSoldier=now.soldier;row.weapon=now.weapon;row.playerId=U32(now.player+0x154);row.data=U32(shotScope.effects+0x10);row.thread=GetCurrentThreadId();row.ms=GetTickCount64();
     if(result!=reinterpret_cast<unsigned>(self)||!Read(result,row.matrix.data(),64)||!Read(shotScope.effects+0x30,row.clientEffects.data(),64)){++clientShotRejected;return result;}
     for(unsigned r=0;r<4;++r)for(unsigned c=0;c<3;++c)if(!std::isfinite(row.matrix[r*4+c])||!std::isfinite(row.clientEffects[r*4+c])){++clientShotRejected;return result;}
-    row.shot=rigPublication::ReadWeaponShotFrame(now.soldier,now.weak,now.weapon);
+    row.equipment=now.equipment;row.shot=rigPublication::ReadWeaponShotFrame(now.soldier,now.weak,now.weapon);
     if(row.shot){const auto canonical=[](const std::array<float,16>& values){math::Matrix4 m{};std::memcpy(&m,values.data(),64);
         for(unsigned r=0;r<4;++r)m.values[r][3]=r==3?1.f:0.f;
         for(unsigned n=0;n<4;++n){m.values[2][n]=-m.values[2][n];m.values[n][2]=-m.values[n][2];}return m;};
@@ -1228,15 +1354,34 @@ std::uintptr_t __fastcall ComposeHook(void* self,void*,void* output,const void* 
     const auto at=reinterpret_cast<unsigned>(output);if(result!=at||!Read(at,row.matrix.data(),64)){++originWriteFailures;return result;}
     const auto canonical=[](const std::array<float,16>& values){math::Matrix4 m{};std::memcpy(&m,values.data(),64);for(unsigned r=0;r<4;++r)m.values[r][3]=r==3?1.f:0.f;
         for(unsigned n=0;n<4;++n){m.values[2][n]=-m.values[2][n];m.values[n][2]=-m.values[n][2];}return m;};
-    row.after=row.matrix;
+    row.after=row.matrix;row.equipment=owner.equipment;row.nativeMuzzleSupported=current->supported;row.nativeInvocation=current->invocation;
     LARGE_INTEGER q{};QueryPerformanceCounter(&q);
     const auto live=rigPublication::ReadWeaponShotFrame(owner.soldier,owner.weak,owner.weapon);
-    if(current->supported&&row.tokenValid&&row.shot&&live&&live->space==row.shot->space&&live->ownerGeneration==row.shot->ownerGeneration){
+    row.observedQpc=q.QuadPart;
+    if(live){row.observedCurrentGeneration=live->generation;row.observedCurrentDeadline=live->deadline;}
+    row.observedCandidateUnexpired=row.shot&&live&&live->space==row.shot->space&&
+        live->ownerGeneration==row.shot->ownerGeneration&&live->generation>=row.shot->generation&&q.QuadPart<row.shot->deadline;
+    // Observation is separate from mappedShot, which participates in the
+    // unchanged native-write gate below. Unsupported guns remain passthrough.
+    if(row.observedCandidateUnexpired)row.observedMuzzleCandidate=interaction::PlaceFireAtMuzzle(
+        canonical(row.matrix),row.shot->trackedFlash,2*row.shot->unitsPerMetre);
+    const bool admittedNow=SupportedMuzzleShot(owner,current->effects,current->configuration,live,row.nativeConfig);
+    row.nativeConfigUnchanged=current->nativeConfig&&row.nativeConfig&&*current->nativeConfig==*row.nativeConfig;
+    const bool sameEnrollment=row.shot&&live&&bool(row.shot->muzzleBinding)==bool(live->muzzleBinding)&&
+        (!row.shot->muzzleBinding||MuzzleBindingContinues(*row.shot->muzzleBinding,*live->muzzleBinding,HandNanos(q.QuadPart)));
+    row.nativeMuzzleSupported=current->supported&&admittedNow&&row.nativeConfigUnchanged&&sameEnrollment;
+    if(row.nativeMuzzleSupported&&row.tokenValid&&row.shot&&live&&live->space==row.shot->space&&live->ownerGeneration==row.shot->ownerGeneration){
         std::lock_guard lock(shotPoseMutex);
-        row.eventPose=shotHistory.Resolve({(std::uint64_t(owner.weak)<<32)|owner.soldier,row.shot->ownerGeneration,owner.weapon,row.shot->space,row.shotToken},
-            {row.shot->trackedFlash,row.shot->generation,row.shot->deadline},q.QuadPart);
+        const auto& binding=row.shot->muzzleBinding;
+        const MuzzleEventSource source{owner.equipment,binding?binding->profile:nullptr,row.nativeConfig->firingData,
+            row.nativeConfig->config,binding?binding->authored.owner.equipmentGeneration:0};
+        const auto eventDeadline=binding?std::min(row.shot->deadline,HandTicks(MuzzleBindingDeadlineNs(*binding))):row.shot->deadline;
+        row.eventPose=ResolveMuzzleEvent(shotHistory,muzzleHistorySource,source,
+            {(std::uint64_t(owner.weak)<<32)|owner.soldier,row.shot->ownerGeneration,owner.weapon,row.shot->space,row.shotToken},
+            {row.shot->trackedFlash,row.shot->generation,eventDeadline},q.QuadPart);
         if(row.eventPose)row.mappedShot=interaction::PlaceFireAtMuzzle(canonical(row.matrix),row.eventPose->muzzle,2*row.shot->unitsPerMetre);
     }
+    QueryPerformanceCounter(&q);
     if(muzzleFire&&row.mappedShot&&q.QuadPart<row.eventPose->deadline){
         const auto left=reinterpret_cast<unsigned>(self),right=reinterpret_cast<unsigned>(rhs);
         const auto separate=[&](unsigned p){return std::uint64_t(at)+64<=p||std::uint64_t(p)+64<=at;};
@@ -1254,6 +1399,7 @@ std::uintptr_t __fastcall ComposeHook(void* self,void*,void* output,const void* 
     }
     if(muzzleFire&&current->supported&&!row.originWritten)++originFallbacks;
     if(row.originWritten&&recording&&fireRecordCount>=fireRecords.size())++originWritesAfterLogFull;
+    current->composedOutput=row.after;current->compositionWritten=row.originWritten;current->eventPose=row.eventPose;
     if(recording&&fireRecordCount<fireRecords.size())fireRecords[fireRecordCount++]=row;return result;
 }
 void __fastcall GatherHook(void* self,void*,void* cache){
@@ -1261,6 +1407,15 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     if(!enabled.load(std::memory_order_acquire)||!scope||scope->used)return;
     if(reinterpret_cast<unsigned>(self)!=scope->owner.router||reinterpret_cast<unsigned>(cache)!=scope->owner.cache){++mismatches;return;}
     scope->used=true;++gathers;if((bodyHolster||magazineDetached)&&holsterNativeTick<UINT64_MAX)scope->nativeTick=++holsterNativeTick;
+#ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
+    struct SelectedKnifeGatherOutcome {
+        selectedKnife::Request request{};bool observed=false,published=false;
+        ~SelectedKnifeGatherOutcome(){
+            if(request.fire&&!published)selectedKnife::Published(request,false);
+            if(!observed)selectedKnife::Missing();
+        }
+    } selectedKnifeOutcome;
+#endif
 #if defined(FVR_BC2_ORDINARY_GRENADE_PROBE) || defined(FVR_BC2_PLAYER_GRENADE)
     struct GrenadeGatherOutcome {bool observed=false;~GrenadeGatherOutcome(){if((ordinaryGrenade||playerGrenade)&&!observed){LARGE_INTEGER q{};QueryPerformanceCounter(&q);if(playerGrenade)playerGrenade->Missing(HandNanos(q.QuadPart));else ordinaryGrenade->Missing(HandNanos(q.QuadPart));}}} grenadeOutcome;
 #endif
@@ -1274,9 +1429,12 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     const bool fresh=clock.QuadPart>0&&clock.QuadPart<inputDeadline;
     input=fresh?cachedInput:interaction::InputFrame{};if(!fresh)++stale;
     // Retire old observation labels even when journal publication is busy.
-    if(!fresh||!input.focused||vehicleShotSpace!=input.spaceGeneration)vehicleShotObserver.Invalidate();
+    if(!fresh||!input.focused||vehicleShotSpace!=input.spaceGeneration){vehicleShotObserver.Invalidate();boatReticle.Invalidate();}
     vehicleShotSpace=input.spaceGeneration;
     const auto& owner=scope->owner;
+#ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
+    selectedKnife::ObserveOwner({owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,input.spaceGeneration});
+#endif
     ObserveAttached(owner,AttachedPhase::Gather,reinterpret_cast<unsigned>(self),reinterpret_cast<unsigned>(cache));
     ContextInteractRecord interact;interact.input=input.generation;interact.space=input.spaceGeneration;
     interact.actorGeneration=rigEpoch;interact.equipGeneration=epoch;interact.observedNs=HandNanos(inputDeadline-handFrequency/10);
@@ -1425,10 +1583,18 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         if(vehicleShotBinding.verified&&cachedCampaignVehicle&&record.verified&&record.flagsVerified)
             vehicleShotObserver.Publish({*cachedCampaignVehicle,{owner.manager,owner.player,owner.soldier,owner.weak,rigEpoch,epoch},
                 input.generation,input.spaceGeneration,HandNanos(inputDeadline-handFrequency/10),HandNanos(inputDeadline),record.observed[4]});
+        if(boatReticleBinding.verified&&nativeBoatAim&&record.verified&&record.flagsVerified){
+            VehicleReticleProducerContext reticleContext;
+            reticleContext.input={seatOwner,input.spaceGeneration,true,viewValid,HandNanos(inputDeadline-handFrequency/10),HandNanos(inputDeadline)};
+            reticleContext.inputSequence=input.generation;reticleContext.scene=rigEpoch;reticleContext.weaponGeneration=epoch;
+            reticleContext.focused=input.focused;reticleContext.playing=nativePlaying;
+            LARGE_INTEGER stamp{};QueryPerformanceCounter(&stamp);
+            boatReticle.Publish(memory,boatReticleBinding,*nativeBoatAim,seat,reticleContext,HandNanos(stamp.QuadPart));
+        }else boatReticle.Invalidate();
         previousVehicleGather=record;havePreviousVehicleGather=true;
         return;
     }
-    vehicleActions.Reset();PublishVehicleView({});
+    vehicleActions.Reset();PublishVehicleView({});boatReticle.Invalidate();
     {std::lock_guard lock(vehicleViewMutex);boatAimReady=false;boatHeadPolicy.Reset();}
     auto actionInput=input;if(reloadRequestMode)actionInput.hands[0].trigger=0;
     if(inventoryReloadFixture)inventoryReloadFixture->ActionInput(actionInput);
@@ -1798,6 +1964,15 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         if(armingEmptyFixture&&armingEmptyFixture->CancelConsumer()){sample.cancel=true;sample.cancelFlags|=ReloadCancelFixture;}
 #endif
         physicalResult=physicalReload->Tick(sample,handOwnership,handIntent);
+        // The receipt event is presentation-only. Keep the exact selected
+        // manual cycle as audio owner through its stock finish tail; no native
+        // reload/pump clock, hand claim or ammunition authority is changed.
+        const auto audioGun=handOwnership.Current(interaction::InteractionHand::Right);
+        const bool audioOwnsGun=audioGun&&audioGun->token.kind==interaction::HandClaimKind::GunHold&&
+            audioGun->token.owner==sample.input.owner&&audioGun->token.item==sample.weapon&&
+            audioGun->inputSequence==sample.input.sequence&&audioGun->deadlineNs>sample.input.nowNs;
+        PublishShellReloadAudio(sample.nativeOwner,sample.input,sample.weapon,physicalReload->ProbeState(sample.input.nowNs),
+            physicalResult.audio,asset==SpasReloadAsset&&audioOwnsGun&&aimValid&&out.active);
 #ifdef FVR_BC2_ARMING_EMPTY_PROBE
         if(armingEmptyFixture){const auto policy=reloadFlowRuntime::ReadRequestProbeSnapshot();LARGE_INTEGER stamp{};QueryPerformanceCounter(&stamp);
             const auto now=HandNanos(stamp.QuadPart);physicalResult.reloadHeld=armingEmptyFixture->After(physicalReload->ProbeState(now),
@@ -2368,7 +2543,77 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         }
     }
 #endif
-    if(scope->patch.Apply({reinterpret_cast<std::byte*>(owner.cache),InputBytes},out,grenade,cycle,weaponMode,contextUseVehicleAlias)){++applied;if(out.pressed&interaction::NextWeapon)++nextWeaponCommands;if(out.pressed&interaction::PreviousWeapon)++previousWeaponCommands;if(out.forward||out.strafe)++moving;if(out.held)++buttons;
+    // Opening SP_01 equips a distinct KNV-1 whose authored attack is melee37.
+    // The shared display name only selects this bounded read; it never grants
+    // the route. Preserve stock firearm/ordinary-knife Fire8 and all action gates.
+    auto verifiedFireAction=EntryAction::Fire;
+    if(asset=="KNV-1"){
+        std::optional<EntryAction> route;
+        const ReloadStateOwner expected{owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,input.spaceGeneration};
+        LARGE_INTEGER beforeFire{},afterFire{};
+        if(out.active&&reloadStateBinding&&QueryPerformanceCounter(&beforeFire)){
+            const ReloadStateMemory memory{nullptr,[](void*,unsigned at,void* dst,std::size_t n){return Read(at,dst,n);},
+                [](void*,unsigned at,const char* name){return Type(at,name);}};
+            const auto selected=ReadReloadState(memory,*reloadStateBinding,unsigned(image),expected,input.generation,HandNanos(beforeFire.QuadPart));
+            Owner current{};
+            if(selected.snapshot&&QueryPerformanceCounter(&afterFire)&&afterFire.QuadPart<inputDeadline&&
+               Resolve(current)&&current==owner){
+                route=VerifiedSelectedFireAction(*selected.snapshot,expected,input.generation,HandNanos(afterFire.QuadPart));
+#ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
+                // The opening campaign knife is already selected. Publish its
+                // measured display source without inventing a chest draw. The
+                // selected melee adapter has its own acquisition/attack proof.
+                const auto held=handOwnership.Current(interaction::InteractionHand::Right);
+                if(route==EntryAction::MeleeAttack&&holsterTracking&&held&&
+                   held->token.kind==interaction::HandClaimKind::GunHold&&held->token.owner==handSample.owner&&
+                   held->token.item==handItem&&held->inputSequence==handSample.sequence&&
+                   held->deadlineNs>HandNanos(afterFire.QuadPart)){
+                    SelectedKnifeRenderSource source{*selected.snapshot,owner.equipment,handSample,
+                        interaction::GameplayOwnsInput(input.menu,HandNanos(afterFire.QuadPart))};
+                    if(selected_knife_detail::Source(source,HandNanos(afterFire.QuadPart))){
+                        holsterTracking->selectedKnife=source;
+                        const auto rendered=rigPublication::ReadWeaponShotFrame(owner.soldier,owner.weak,owner.weapon);
+                        const auto meshes=selectedMeshes.Read(expected,HandNanos(afterFire.QuadPart));
+                        const bool settled=out.active&&aimValid&&nativePlaying&&!weaponVisibilityProbe&&!deathProbe&&!equipProbe&&
+                            !sightOwnsHand&&sightPhase==interaction::SightFlipPhase::Idle&&!sightGrasp&&!physicalMode&&!pendingMode&&
+                            !bodyDraw.pending&&!bodyDraw.blockFire&&!bodyDraw.command&&!holsterQueuedDraw&&!holsterEquipment&&
+                            !weaponMode&&!cycle.value_or(false)&&!grenade.value_or(false)&&
+                            (!bodyInventory||(!bodyInventory->Pending()&&!bodyInventory->AutomaticStowPending()))&&
+                            (!bodyHolster||(!bodyHolster->BlocksActions()&&!bodyHolster->TemporaryToolActive()))&&
+                            !pumpDebt&&!pumpResult.blocksFire&&!pumpResult.ownsHand&&(!physicalPump||!physicalPump->BlocksFire())&&
+                            !boltResult.blocksFire&&(!physicalBolt||!physicalBolt->BlocksFire())&&
+                            (!physicalReload||!physicalReload->BlocksEquipment())&&!physicalResult.ammoOwnsHand&&
+                            (!magazinePhysical||!magazinePhysical->BlocksEquipment())&&!magazineResult.blocksWeaponActions&&
+                            (!magazineDetached||!magazineDetached->BlocksActions())&&
+                            !((out.held|out.pressed)&(interaction::Use|interaction::Reload|interaction::NextWeapon|interaction::PreviousWeapon))&&
+                            // A held raw trigger whose existing semantic gate
+                            // rejected Fire cannot acquire a second route here.
+                            (input.hands[1].trigger<.75f||(out.held&interaction::Fire));
+                        selectedKnifeOutcome.observed=true;
+                        selectedKnifeOutcome.request=selectedKnife::Prepare(source,input,handOwnership,meshes.get(),
+                            rendered?rendered->selectedKnife:std::nullopt,rigPublication::BuildCurrentEyeBase(*holsterTracking),settled,inputEpoch);
+                    }
+                }
+#endif
+            }
+        }
+#ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
+        if(route==EntryAction::MeleeAttack){
+            // The installed adapter owns every selected-melee trigger/jab,
+            // including missing hand/render-source observations. Otherwise an
+            // ordinary Fire edge could bypass its one outstanding intent.
+            if(!selectedKnifeOutcome.observed){selectedKnifeOutcome.request=selectedKnife::Missing();selectedKnifeOutcome.observed=true;}
+            if(selectedKnifeOutcome.request.handled){
+                out.held&=~interaction::Fire;out.pressed&=~interaction::Fire;
+                if(selectedKnifeOutcome.request.fire){out.held|=interaction::Fire;out.pressed|=interaction::Fire;}
+            }
+        }
+#endif
+        if(route)verifiedFireAction=*route;
+        else{out.held&=~interaction::Fire;out.pressed&=~interaction::Fire;}
+    }
+    if(resourceInventoryFixture)resourceInventoryFixture->FilterCancelledFire(out);
+    if(scope->patch.Apply({reinterpret_cast<std::byte*>(owner.cache),InputBytes},out,grenade,cycle,weaponMode,contextUseVehicleAlias,verifiedFireAction)){++applied;if(out.pressed&interaction::NextWeapon)++nextWeaponCommands;if(out.pressed&interaction::PreviousWeapon)++previousWeaponCommands;if(out.forward||out.strafe)++moving;if(out.held)++buttons;
         // Do not restore at the end of player update: BC2 also consumes this
         // buffer afterward. The next original gather replaces every action.
         std::optional<HolsterSuppressionReceipt> holsterReceipt;
@@ -2404,6 +2649,11 @@ void __fastcall GatherHook(void* self,void*,void* cache){
             LARGE_INTEGER stamp{};QueryPerformanceCounter(&stamp);detachedCommittedNs=HandNanos(stamp.QuadPart);
         }}
         scope->patch.Commit();++committed;interact.committed=true;
+#ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
+        // Input publication alone never settles this intent. The exact native
+        // acquisition and matching original attack callback own its outcome.
+        selectedKnife::Published(selectedKnifeOutcome.request,true);selectedKnifeOutcome.published=true;
+#endif
 #if defined(FVR_BC2_ORDINARY_GRENADE_PROBE) || defined(FVR_BC2_PLAYER_GRENADE)
         if(ordinaryGrenadeRequest){
             const auto checked=GrenadeFacts(owner,input,out,ordinaryGrenadeFacts.visible);
@@ -3085,6 +3335,10 @@ bool EnableBodyInventory(interaction::BodyAnchorConfig config)noexcept {
         magazinePhysical.emplace(true,magazinePhysicalApi,pouch);magazinePhysical->EnableBodyAmmo(true,interaction::SupplyAnchorFrame::RecenteredBody);}
     return true;
 }
+std::optional<graphics::VehicleReticleSample> ReadVehicleReticle(std::int64_t nowNs)noexcept {
+    if(!enabled.load(std::memory_order_acquire))return {};
+    return boatReticle.Read(nowNs);
+}
 graphics::AmmoCounterSample ReadAmmoCounter()noexcept {
     if(!enabled.load(std::memory_order_acquire))return {};
     for(unsigned attempt=0;attempt<3;++attempt){
@@ -3119,6 +3373,7 @@ bool Install(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uin
     const VehicleRouteMemory vehicleMemory{nullptr,[](void*,unsigned at,void* dst,std::size_t n){return Read(at,dst,n);},[](void*,unsigned at,const char* name){return Type(at,name);}};
     campaignVehicleBinding=VerifyCampaignVehicleCode(vehicleMemory,unsigned(image));
     vehicleShotBinding=VerifyVehicleShotCode(vehicleMemory,unsigned(image));
+    boatReticleBinding=VerifyVehicleReticleSourceCode(vehicleMemory,unsigned(image));
 #ifdef FVR_BC2_VEHICLE_MOUNTED_PROBE
     // All original code fingerprints must be read before the shared Update
     // detour is installed. No fallback to an unverified or occupied observer.
@@ -3184,6 +3439,11 @@ bool Install(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uin
         reloadStateBinding=DiscoverReloadState(bytes,pe);
         const ReloadStateMemory memory{nullptr,[](void*,unsigned at,void* dst,std::size_t n){return Read(at,dst,n);},[](void*,unsigned at,const char* name){return Type(at,name);}};
         if(reloadStateBinding&&!ValidateReloadStateLive(memory,*reloadStateBinding,unsigned(base)))reloadStateBinding.reset();
+#ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
+        // Melee installs independent verified listeners, with no shared firing
+        // observer or Step/Update hook. Rejection keeps the existing37 fallback.
+        if(handPoses&&motionAim&&twoHandGrip&&reloadStateBinding)(void)selectedKnife::Install(bytes,pe,base,memory);
+#endif
 #if defined(FVR_BC2_ORDINARY_GRENADE_PROBE) || defined(FVR_BC2_PLAYER_GRENADE)
         ordinaryGrenadeServer=DiscoverReloadServer(bytes,pe);
         ordinaryGrenadeBindings=reloadStateBinding&&ordinaryGrenadeServer&&
@@ -3267,6 +3527,13 @@ bool Install(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uin
         for(const auto [rva,n]:{std::pair{fireProfile.builder,0x158u},std::pair{fireProfile.serverShoot,0xc90u},std::pair{fireProfile.serverControlledGetter,0x21u},std::pair{fireProfile.serverContextGetter,0x9du},std::pair{fireProfile.serverManagerConstructor,0x39u},std::pair{fireProfile.serverPlayerCreate,0x71u},std::pair{fireProfile.serverPlayerConstructor,0x1fu},std::pair{fireProfile.playerConstructor,0x5au},std::pair{fireProfile.clientShoot,0xb9eu},std::pair{fireProfile.matrixCopy,0x57u},std::pair{fireProfile.compose,0xb0u},std::pair{fireProfile.spreadSeed,8u},std::pair{fireProfile.randomSeed,0x15u}}){
             const auto offset=Offset(pe,rva,n);std::vector<std::byte> live(n);if(!offset||!Read(base+rva,live.data(),n)||std::memcmp(live.data(),bytes.data()+*offset,n))return false;
         }
+#ifdef FVR_BC2_MUZZLE_ENROLLMENT_HEADER
+        projectileLaunchBinding=VerifyProjectileLaunchCode({nullptr,[](void*,unsigned at,void* dst,std::size_t size){return Read(at,dst,size);}},unsigned(base),fireProfile.serverShoot);
+        if(!projectileLaunchBinding.verified)return false;
+        const auto launchHelper=reinterpret_cast<void*>(projectileLaunchBinding.helper);
+        if(MH_CreateHook(launchHelper,ProjectileContextHook,reinterpret_cast<void**>(&projectileContextOriginal))!=MH_OK)return false;
+        hooks[13]=launchHelper;
+#endif
         const auto address=reinterpret_cast<void*>(base+fireProfile.builder);
         if(MH_CreateHook(address,FireOriginHook,reinterpret_cast<void**>(&fireOriginOriginal))!=MH_OK)return false;hooks[8]=address;
         const auto client=reinterpret_cast<void*>(base+fireProfile.clientShoot),copy=reinterpret_cast<void*>(base+fireProfile.matrixCopy);
@@ -3415,6 +3682,7 @@ bool SetFeedbackWriter(FeedbackWriter writer)noexcept {
 void Start()noexcept {
 #ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
     if(chestKnife)chestKnifeNative::Start();
+    selectedKnife::Start();
 #endif
     reloadFlowRuntime::Start();rigPublication::Start();enabled.store(true,std::memory_order_release);
 }
@@ -3439,6 +3707,7 @@ bool PrepareSessionStop()noexcept {
 bool Stop()noexcept {
     if(!PrepareSessionStop())return false;
     enabled.store(false,std::memory_order_release);
+    boatReticle.Invalidate();
     rigPublication::PublishWeaponVisibility({});weaponVisibilitySample.store({},std::memory_order_release);
     bodyHolsterSample.store({},std::memory_order_release);
     bool okay=rigPublication::Stop();
@@ -3457,6 +3726,17 @@ bool Stop()noexcept {
 #endif
     for(auto entry:hooks)if(entry){const auto r=MH_DisableHook(entry);okay&=r==MH_OK||r==MH_ERROR_DISABLED;}
     const auto until=GetTickCount64()+2000;while(active.load()&&GetTickCount64()<until)Sleep(1);
+    // This candidate observer owns no game state. Remove its trampoline only
+    // after every gameplay callback has left; a failed drain preserves it.
+    if(okay&&!active.load()&&hooks[13]){
+        const auto removed=MH_RemoveHook(hooks[13]);okay&=removed==MH_OK;
+        if(removed==MH_OK){hooks[13]=nullptr;projectileLaunchHookRemoved=true;}
+    }
+#ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
+    // Gather may still publish/reject its same input transaction during drain.
+    // Keep the selected-melee adapter alive until all those callers have left.
+    if(!active.load())okay=selectedKnife::Stop()&&okay;
+#endif
     if(!active.load()&&magazineReloadFixture){LARGE_INTEGER now{};QueryPerformanceCounter(&now);magazineReloadFixture->Stop(HandNanos(now.QuadPart));}
     if(!active.load()&&reloadRequestFixture){LARGE_INTEGER now{};QueryPerformanceCounter(&now);reloadRequestFixture->Stop(HandNanos(now.QuadPart));}
     if(!active.load()&&twoHandGrip){
@@ -3497,6 +3777,10 @@ void Report(std::ostream& out){out<<"{\"installed\":"<<(hooks[0]&&hooks[1]?"true
     }
     out<<']';ReportVehicleCameraEvidence(out);ReportBoatAimEvidence(out);
     out<<",\"vehicle_shot_observation\":";vehicleShotObserver.Report(out,vehicleShotBinding.verified);
+    {const auto reticle=boatReticle.Statistics();out<<",\"boat_reticle\":{\"source_binding\":"<<boatReticleBinding.verified
+        <<",\"observations\":"<<reticle.observations<<",\"shot_witnesses\":"<<reticle.witnesses<<",\"rejected_sources\":"<<reticle.rejected<<",\"witness_retained\":"<<reticle.ready
+        <<",\"source_stage\":"<<reticle.source.stage<<",\"additional_transform\":"<<reticle.source.additionalTransform<<",\"adjustment_flag\":"<<reticle.source.adjustment
+        <<",\"camera_owner\":"<<reticle.source.cameraOwner<<",\"camera_flags\":"<<reticle.source.cameraFlags<<",\"projectile_count\":"<<reticle.source.count<<",\"inherit_speed\":"<<reticle.source.inheritSpeed<<'}';}
 #ifdef FVR_BC2_VEHICLE_MOUNTED_PROBE
     out<<",\"vehicle_mounted_update_observation\":";vehicleMountedObserver.Report(out);
 #endif
@@ -3605,6 +3889,7 @@ void Report(std::ostream& out){out<<"{\"installed\":"<<(hooks[0]&&hooks[1]?"true
 #ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
     if(chestKnife){out<<",\"chest_knife_draw_return\":";chestKnife->Report(out);
         out<<",\"chest_knife_native\":";chestKnifeNative::Report(out);}
+    out<<",\"selected_knife_native\":";selectedKnife::Report(out);
 #endif
     if(bodyInventory)bodyInventory->Report(out);
     if(bodyHolster){out<<",\"body_holster_transitions\":";bodyHolster->Report(out);out<<",\"body_holster_lifecycle\":";bodyHolsterLifecycle.Report(out);}
@@ -3689,15 +3974,95 @@ void Report(std::ostream& out){out<<"{\"installed\":"<<(hooks[0]&&hooks[1]?"true
     for(unsigned n=0;n<phaseRecordCount;++n){const auto& r=phaseRecords[n];if(n)out<<',';
         out<<"{\"sequence\":"<<r.sequence<<",\"phase\":"<<r.phase<<",\"thread\":"<<r.thread<<",\"animation\":"<<r.animation<<",\"world\":"<<r.world<<",\"skin\":"<<r.skin<<",\"override\":"<<r.overrideSkin<<",\"override_active\":"<<(r.overrideActive?"true":"false")<<",\"world_hash\":"<<r.worldHash<<",\"skin_hash\":"<<r.skinHash<<",\"override_hash\":"<<r.overrideHash<<'}';
     }out<<"],\"fire_origin_observation\":{\"requested\":"<<((equipProbe||muzzleFire)?"true":"false")<<",\"calls\":"<<fireOriginCalls.load()<<",\"matching_candidates\":"<<fireOriginMatches.load()<<",\"rejected_outputs\":"<<fireOriginRejected.load()<<",\"client_calls\":"<<clientShotCalls.load()<<",\"client_copies\":"<<clientShotCopies.load()<<",\"client_rejected\":"<<clientShotRejected.load()<<",\"fire_writes_enabled\":"<<(muzzleFire?"true":"false")<<",\"client_origin_writes\":"<<clientOriginWrites.load()<<",\"server_origin_writes\":"<<serverOriginWrites.load()<<",\"origin_write_failures\":"<<originWriteFailures.load()<<",\"shot_source_changes\":"<<shotSourceChanges.load()<<",\"origin_fallbacks\":"<<originFallbacks.load()<<",\"origin_writes_after_log_full\":"<<originWritesAfterLogFull.load()<<",\"records\":[";
+    const auto firePrecision=out.precision();out.precision(9);
+    const auto fireText=[&](std::string_view text){out<<'"';for(unsigned char c:text){
+        if(c=='"'||c=='\\')out<<'\\'<<char(c);
+        else if(c<32){constexpr char hex[]="0123456789abcdef";out<<"\\u00"<<hex[c>>4]<<hex[c&15];}
+        else out<<char(c);}out<<'"';};
     for(unsigned i=0;i<fireRecordCount;++i){const auto& r=fireRecords[i];const auto item=FindWeaponProfileByTelemetryKind(r.weaponKind);if(i)out<<',';
-        out<<"{\"shot_token\":"<<r.shotToken<<",\"token_valid\":"<<(r.tokenValid?"true":"false")<<",\"weapon_name\":\""<<(item?item->assetName:std::string_view{"unclassified"})<<"\",\"phase\":"<<r.phase<<",\"origin_written\":"<<(r.originWritten?"true":"false")<<",\"client_path\":"<<(r.clientPath?"true":"false")<<",\"caller\":"<<r.caller<<",\"effects\":"<<r.effects<<",\"server_player\":"<<r.player<<",\"server_soldier\":"<<r.serverSoldier<<",\"client_soldier\":"<<r.clientSoldier<<",\"weapon\":"<<r.weapon<<",\"firing_data\":"<<r.data<<",\"thread\":"<<r.thread<<",\"ms\":"<<r.ms<<",\"native_shot_matrix\":[";
+        out<<"{\"shot_token\":"<<r.shotToken<<",\"token_valid\":"<<(r.tokenValid?"true":"false")<<",\"weapon_name\":";
+        fireText(!r.equipment.Asset().empty()?r.equipment.Asset():item?item->assetName:std::string_view{"unclassified"});
+        out<<",\"weapon_data\":"<<r.equipment.data<<",\"persistence\":"<<r.equipment.persistence
+           <<",\"native_invocation\":"<<r.nativeInvocation
+           <<",\"native_muzzle_supported\":"<<r.nativeMuzzleSupported<<",\"observed_candidate_unexpired\":"<<r.observedCandidateUnexpired
+           <<",\"observed_qpc\":"<<r.observedQpc<<",\"observed_current_generation\":"<<r.observedCurrentGeneration
+           <<",\"observed_current_deadline_qpc\":"<<r.observedCurrentDeadline
+           <<",\"native_config_unchanged\":"<<r.nativeConfigUnchanged<<",\"muzzle_enrollment\":\""
+           <<(r.shot&&r.shot->muzzleBinding?(r.shot->muzzleBinding->profile->admission==MuzzleAdmission::Candidate?"candidate":"native_verified"):"none")<<'"'
+           <<",\"matrix_stage\":\""<<(r.phase==2?"native_pre_spread_composition":"native_callback_transform")<<'"'
+           <<",\"phase\":"<<r.phase<<",\"origin_written\":"<<(r.originWritten?"true":"false")<<",\"client_path\":"<<(r.clientPath?"true":"false")<<",\"caller\":"<<r.caller<<",\"effects\":"<<r.effects<<",\"server_player\":"<<r.player<<",\"server_soldier\":"<<r.serverSoldier<<",\"client_soldier\":"<<r.clientSoldier<<",\"weapon\":"<<r.weapon<<",\"firing_data\":"<<r.data<<",\"thread\":"<<r.thread<<",\"ms\":"<<r.ms<<",\"native_shot_matrix\":[";
         for(unsigned j=0;j<16;++j){if(j)out<<',';out<<(j%4==3?0:r.matrix[j]);}out<<"],\"client_effects_matrix\":[";
         for(unsigned j=0;j<16;++j){if(j)out<<',';out<<(j%4==3?0:r.clientEffects[j]);}out<<"],\"player_index\":"<<r.playerId<<",\"tracked_shot_candidate\":";
-        if(!r.shot)out<<"null";else {out<<"{\"generation\":"<<r.shot->generation<<",\"flash_bone\":"<<r.shot->flashBone;
+        if(!r.shot)out<<"null";else {out<<"{\"generation\":"<<r.shot->generation<<",\"space\":"<<r.shot->space
+            <<",\"owner_generation\":"<<r.shot->ownerGeneration<<",\"deadline_qpc\":"<<r.shot->deadline
+            <<",\"units_per_metre\":"<<r.shot->unitsPerMetre<<",\"flash_bone\":"<<r.shot->flashBone;
             const auto matrix=[&](const char* name,const math::Matrix4& m){out<<",\""<<name<<"\":[";for(unsigned n=0;n<16;++n){if(n)out<<',';out<<m.values[n/4][n%4];}out<<']';};
             matrix("native_weapon",r.shot->nativeWeapon);matrix("tracked_weapon",r.shot->trackedWeapon);matrix("native_flash",r.shot->nativeFlash);matrix("tracked_flash",r.shot->trackedFlash);
             if(r.eventPose){matrix("event_muzzle",r.eventPose->muzzle);out<<",\"event_generation\":"<<r.eventPose->generation;}
-            if(r.mappedShot)matrix("mapped_shot",*r.mappedShot);out<<'}';
-        }out<<",\"output_matrix\":[";for(unsigned j=0;j<16;++j){if(j)out<<',';out<<(j%4==3?0:r.after[j]);}out<<"]}";
-    }out<<"]},\"rig_publication\":";rigPublication::Report(out);ReportAttached(out);out<<'}';}
+            if(r.mappedShot)matrix("mapped_shot",*r.mappedShot);
+            if(r.observedMuzzleCandidate)matrix("read_only_muzzle_candidate",*r.observedMuzzleCandidate);
+            out<<",\"aim_evidence\":";
+            if(!r.shot->aimEvidence)out<<"null";else {const auto& a=*r.shot->aimEvidence;
+                const auto point=[&](const math::Vec3& p){out<<'['<<p.x<<','<<p.y<<','<<p.z<<']';};
+                const auto pose=[&](const math::Pose& p){out<<'['<<p.position.x<<','<<p.position.y<<','<<p.position.z<<','
+                    <<p.orientation.x<<','<<p.orientation.y<<','<<p.orientation.z<<','<<p.orientation.w<<']';};
+                out<<"{\"weapon\":"<<a.equipment.weapon<<",\"weapon_data\":"<<a.equipment.data<<",\"persistence\":"<<a.equipment.persistence
+                   <<",\"asset\":";fireText(a.equipment.Asset());
+                out<<",\"configuration_path_verified\":"<<a.configurationPathVerified<<",\"configuration_path\":";
+                const auto end=std::find(a.configurationPath.begin(),a.configurationPath.end(),'\0');
+                fireText(end==a.configurationPath.end()?std::string_view{}:std::string_view(a.configurationPath.data(),std::size_t(end-a.configurationPath.begin())));
+                out<<",\"configuration_sequence\":"<<a.configurationSequence<<",\"configuration_deadline_ns\":"<<a.configurationDeadlineNs
+                   <<",\"authored_binding\":"<<a.authoredBinding<<",\"authored_axes\":"<<a.authoredAxes
+                   <<",\"mesh\":";fireText(a.meshPath);out<<",\"binding_digest\":";fireText(a.bindingDigest);
+                out<<",\"axis_evidence\":";fireText(a.axisEvidence);out<<",\"rig_fingerprint\":"<<a.rigFingerprint
+                   <<",\"model_forward\":";point(a.modelForward);out<<",\"model_up\":";point(a.modelUp);
+                out<<",\"body_yaw\":"<<a.bodyYaw<<",\"reference_pose\":";pose(a.reference);
+                out<<",\"effective_grip\":";pose(a.effectiveGrip);out<<",\"effective_aim\":";pose(a.effectiveAim);matrix("body",a.body);
+                out<<",\"pre_support_input_available\":"<<a.preSupportInputAvailable
+                   <<",\"pre_support_generation\":"<<a.preSupportGeneration<<",\"pre_support_space\":"<<a.preSupportSpace;
+                out<<",\"pre_support_reference_pose\":";if(a.preSupportInputAvailable)pose(a.preSupportReference);else out<<"null";
+                out<<",\"pre_support_grip\":";if(a.preSupportInputAvailable)pose(a.preSupportGrip);else out<<"null";
+                out<<",\"pre_support_aim\":";if(a.preSupportInputAvailable)pose(a.preSupportAim);else out<<"null";
+                out<<'}';}out<<'}';
+        }out<<",\"native_config\":";
+        if(!r.nativeConfig)out<<"null";else {const auto& c=*r.nativeConfig;
+            out<<"{\"effects\":"<<c.effects<<",\"firing_data\":"<<c.firingData<<",\"function\":"<<c.function<<",\"configuration\":"<<c.config
+               <<",\"muzzle_explosion\":"<<c.muzzleExplosion<<",\"projectile_data\":"<<c.projectileData
+               <<",\"active_force_spawn_to_camera\":"<<unsigned(c.cameraFlags[0])<<",\"force_spawn_to_camera\":"<<unsigned(c.cameraFlags[1])
+               <<",\"relative_target_aiming\":"<<unsigned(c.cameraFlags[2])<<",\"bullets_per_shell\":"<<c.bulletsPerShell<<",\"bullets_per_shot\":"<<c.bulletsPerShot
+               <<",\"inherited_speed\":"<<c.inheritedSpeed
+               <<",\"initial_speed\":["<<c.speed[0]<<','<<c.speed[1]<<','<<c.speed[2]<<']'
+               <<",\"initial_direction\":["<<c.direction[0]<<','<<c.direction[1]<<','<<c.direction[2]<<']'
+               <<",\"initial_position\":["<<c.position[0]<<','<<c.position[1]<<','<<c.position[2]<<"]}";}
+        out<<",\"output_matrix\":[";for(unsigned j=0;j<16;++j){if(j)out<<',';out<<(j%4==3?0:r.after[j]);}out<<"]}";
+    }out<<"]},\"projectile_launch_observation\":{\"read_only\":true,\"binding_verified\":"<<(projectileLaunchBinding.verified?"true":"false")
+        <<",\"hook_removed\":"<<(projectileLaunchHookRemoved?"true":"false")
+        <<",\"helper\":"<<projectileLaunchBinding.helper<<",\"helper_return\":"<<projectileLaunchBinding.helperReturn
+        <<",\"virtual_call\":"<<projectileLaunchBinding.virtualCall<<",\"virtual_return\":"<<projectileLaunchBinding.virtualReturn
+        <<",\"qpc_frequency\":"<<handFrequency<<",\"calls\":"<<projectileLaunchCalls.load()<<",\"rejected\":"<<projectileLaunchRejected.load()
+        <<",\"dropped\":"<<projectileLaunchDropped.load()<<",\"busy\":"<<projectileLaunchBusy.load()<<",\"server_return_unrecorded\":"<<projectileLaunchReturnUnrecorded.load()
+        <<",\"capacity\":"<<projectileLaunchRecords.size()<<",\"dispatch_instruction_verified\":"<<(projectileLaunchBinding.verified?"true":"false")
+        <<",\"launch_return_observed\":false,\"receiver_stored_velocity_verified\":false,\"records\":[";
+    const auto launchMatrix=[&](const std::array<float,16>& m){out<<'[';for(unsigned n=0;n<16;++n){if(n)out<<',';out<<(n%4==3?0.f:m[n]);}out<<']';};
+    const auto launchArguments=[&](const std::optional<ProjectileLaunchArguments>& value){
+        if(!value){out<<"null";return;}const auto& a=*value;
+        out<<"{\"context_output\":"<<a.contextOutput<<",\"composed_address\":"<<a.composedAddress<<",\"secondary_address\":"<<a.secondaryAddress
+           <<",\"velocity_address\":"<<a.velocityAddress<<",\"token\":"<<a.token<<",\"primary\":"<<a.primary<<",\"projectiles_per_shell\":"<<a.projectilesPerShell
+           <<",\"context\":"<<a.context<<",\"derived_context\":"<<a.derivedContext<<",\"effects_scalar\":"<<a.effectsScalar<<",\"multiplier\":"<<a.multiplier
+           <<",\"native_composed\":";launchMatrix(a.composed);out<<",\"native_secondary\":";launchMatrix(a.secondary);
+        out<<",\"native_velocity\":["<<a.velocity[0]<<','<<a.velocity[1]<<','<<a.velocity[2]<<"]}";
+    };
+    for(unsigned n=0;n<projectileLaunchCount.load();++n){if(n)out<<',';const auto& r=projectileLaunchRecords[n];
+        out<<"{\"native_invocation\":"<<r.invocation<<",\"ordinal\":"<<r.ordinal<<",\"effects\":"<<r.effects<<",\"configuration\":"<<r.configuration
+           <<",\"server_player\":"<<r.player<<",\"server_soldier\":"<<r.soldier<<",\"weapon\":"<<r.equipment.weapon<<",\"weapon_data\":"<<r.equipment.data
+           <<",\"persistence\":"<<r.equipment.persistence<<",\"asset\":";fireText(r.equipment.Asset());
+        out<<",\"thread\":"<<r.thread<<",\"caller\":"<<r.caller<<",\"token\":"<<r.token<<",\"before_qpc\":"<<r.beforeQpc<<",\"after_qpc\":"<<r.afterQpc
+           <<",\"candidate_generation\":"<<r.candidateGeneration<<",\"owner_generation\":"<<r.ownerGeneration<<",\"space\":"<<r.space
+           <<",\"helper_result_matches\":"<<r.helperResultMatches<<",\"owner_config_current\":"<<r.ownerAndConfigCurrent
+           <<",\"accepted\":"<<r.accepted<<",\"server_shoot_returned\":"<<r.serverShootReturned<<",\"composition_origin_written\":"<<r.compositionWritten
+           <<",\"composition_output\":";if(r.composedOutput)launchMatrix(*r.composedOutput);else out<<"null";
+        out<<",\"event_generation\":"<<(r.eventPose?r.eventPose->generation:0)<<",\"event_deadline_qpc\":"<<(r.eventPose?r.eventPose->deadline:0)
+           <<",\"before_helper\":";launchArguments(r.before);out<<",\"after_helper\":";launchArguments(r.after);out<<'}';
+    }
+    out<<"]},\"rig_publication\":";out.precision(firePrecision);rigPublication::Report(out);ReportAttached(out);out<<'}';}
 }

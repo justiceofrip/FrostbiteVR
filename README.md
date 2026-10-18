@@ -1,35 +1,30 @@
 # FrostbiteVR
 
-**Checkpoint 415 integration — unreleased developer source.** A modular
-Frostbite VR framework with a Bad Company 2 adapter. This source combines the
-checkpoint 414 lower-chest ammunition placement and checkpoint 413 pump/bolt
-recovery/audio work with main's build optimizations and documentation cleanup.
+**Checkpoint 426 — work-in-progress singleplayer VR framework.** This repository
+contains the framework and Bad Company 2 adapter source. The separate
+[BC2VR 0.1.5 release](https://github.com/justiceofrip/BC2VR/releases/tag/v0.1.5)
+provides the published pre-alpha installer, updates and feedback tracker.
 
 Start with [current state and known limits](docs/CURRENT.md), the
-[415 integration handoff](handoff/checkpoint415/README.md),
-[build instructions](BUILDING.md), and [weapon coverage](docs/WEAPON-COVERAGE-CURRENT.md).
+[426 handoff](handoff/checkpoint426/README.md), [build instructions](BUILDING.md),
+and [weapon coverage](docs/WEAPON-COVERAGE-CURRENT.md).
 
 ## Evidence and limits
 
-Both integrated builds passed 284/284 suites, and all four runtime binaries are
-byte-for-byte identical to frozen checkpoint 414. The desktop launcher stays on
-that verified runtime; no new game/headset test is needed for this merge.
-Python and launcher validation also passed. The changes improve build/test organization
-and documentation; they do not add weapon support or headset performance claims.
+The frozen normal-r4 source passed **291/291 C++ suites on x86 and x64**.
+The published package passed 25 installation/package checks and 49 launcher checks.
+Its latest native knife run retired the automatic-stow blocker and prepared one
+client attack. Server acquisition, damage and repeat-jab recovery remain unverified.
+Checkpoint 425's opening cloud correction was accepted by the user in a headset.
+426 adds exact opening Nambu100 grip/support and magazine metadata, selected-knife
+motion integration, a recenter correction and bounded shot-origin diagnostics.
+An actual-game Nambu check verified manual magazine operations and firing afterward.
 
-Checkpoint 414 passed 284 suites on each architecture and a 6,048-pose sweep
-across 18 magazine configurations. Bounded actual BC2 checks confirmed lower-chest
-magazine and shell placement. Checkpoint 413 has actual-game emulation evidence
-for pump recovery, reload/holster sequences and movement-driven SPAS audio.
-See [414](handoff/checkpoint414/README.md) and [413](handoff/checkpoint413/README.md)
-for their exact scope and retained failures.
-
-**The latest human headset run was checkpoint 412 and exposed a SPAS lockout.**
-Later automated passes are not headset acceptance. No complete campaign
-playthrough, all-weapons acceptance or public player release is claimed.
-Spent-shell ejection, wider reload/mechanism coverage, scopes, full-body IK and
-multiplayer remain unfinished. [CURRENT.md](docs/CURRENT.md) tracks the current
-implementation and validation gaps; historical notes describe their own checkpoint.
+These are bounded results. Selected-knife enemy damage, downstream Nambu launch
+alignment and 426 headset placement remain unverified. The reported crash after deaths/reloads remains unresolved; the
+scene-owner guard is not a proven crash fix. No complete campaign, all-weapons,
+reconnect or extended-session acceptance is claimed. See the handoff for exact
+source hashes, native results and retained failures.
 
 ## Build without a game or headset
 

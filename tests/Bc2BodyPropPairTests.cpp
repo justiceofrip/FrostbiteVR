@@ -81,6 +81,19 @@ int BeforeLeaseAndInvalidView(){PairFixture f;auto middle=f.b;middle.ammo->autho
     CHECK(!BuildBodyPropPairEye(original,middle,f.b,Eye(),selected->deadlineNs).count);
     CHECK(!BuildBodyPropPairEye(original,f.a,f.b,{},f.Now()).count);return 0;
 }
+int VehicleRayFrozenAndRevoked(){
+    BodyPropSources source;VehicleReticleSample s;s.owner={1,2,3,4,5,6,7,8,9};s.presentationEpoch=1;s.inputSequence=10;
+    s.sightWorld=interaction::reload_insertion_detail::Identity();s.observedNs=1000000000;s.deadlineNs=1100000000;
+    s.proof=VehicleReticleProof::NativeSightLine;s.armedSeat=s.focused=s.playing=true;source.vehicleReticle=s;
+    BodyCarriedPairKey key{1,2,3,4,5,10,9};BodyPropPair pair;const auto first=pair.Begin(key,0,source);CHECK(first);
+    CHECK(!pair.End(first,key,0,source,source,Eye(),1000000001));
+    auto newer=source;newer.vehicleReticle->sightWorld.values[3][0]=.5f;++newer.vehicleReticle->inputSequence;
+    const auto both=pair.End(first,key,1,newer,newer,Eye(1),1000000002);CHECK(both);
+    CHECK((*both)[0].count==1&&(*both)[1].count==1&&(*both)[0].instances[0].geometry==VehicleReticleGeometry);
+    CHECK((*both)[0].instances[0].world.values==(*both)[1].instances[0].world.values&&Near((*both)[0].instances[0].world.values[3][0],0));
+    newer.vehicleReticle.reset();const auto missing=pair.End(first,key,1,newer,newer,Eye(1),1000000003);
+    CHECK(missing&&!(*missing)[0].count&&!(*missing)[1].count);return 0;
 }
-int main(){for(auto test:{TypedAmmoPoseAndHud,MissingAndRevokedSources,DenseSlotIntersection,ExpiryAndWorldMismatch,KeyResetAndFirstEyeRequired,BeforeLeaseAndInvalidView})if(test())return 1;
-    std::cout<<"BodyPropPair: 6 typed-source/stereo-slot/lifetime groups passed; no native/GPU run\n";}
+}
+int main(){for(auto test:{TypedAmmoPoseAndHud,MissingAndRevokedSources,DenseSlotIntersection,ExpiryAndWorldMismatch,KeyResetAndFirstEyeRequired,BeforeLeaseAndInvalidView,VehicleRayFrozenAndRevoked})if(test())return 1;
+    std::cout<<"BodyPropPair: 7 typed-source/stereo-slot/lifetime groups passed; no native/GPU run\n";}

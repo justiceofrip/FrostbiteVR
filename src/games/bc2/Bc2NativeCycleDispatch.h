@@ -14,6 +14,22 @@ inline NativeCycleStepRoute SelectNativeCycleStepRoute(bool frame,bool normalDec
         !normalDecision?NativeCycleStepRoute::GuardedRecovery:
         issuedHold?NativeCycleStepRoute::IssuedHold:NativeCycleStepRoute::OrdinaryEmptyControl;
 }
+// Copied native ownership only. This does not admit a Step or grant a hold;
+// the service must separately retain the exact pre-replay ordinary invocation.
+struct NativeCycleOrdinaryStepOwner {
+    std::uint32_t firing=0,context=0,caller=0,expectedCaller=0;
+    std::uint32_t frameFiring=0,frameContext=0,currentFiring=0;
+    std::uint64_t frameInvocation=0,currentInvocation=0,decisionInvocation=0;
+    unsigned currentDepth=0;
+    bool currentIsUpdate=false,codeVerified=false;
+};
+inline bool NativeCycleOrdinaryStepOwned(const NativeCycleOrdinaryStepOwner& e)noexcept {
+    return e.firing&&e.context&&e.expectedCaller>=0x10000&&e.codeVerified&&
+        e.caller==e.expectedCaller&&e.frameFiring==e.firing&&e.currentFiring==e.firing&&
+        e.frameContext==e.context&&e.currentDepth==1&&e.currentIsUpdate&&
+        e.frameInvocation&&e.frameInvocation==e.currentInvocation&&
+        e.frameInvocation==e.decisionInvocation;
+}
 // Read exits once and selection enters once; any intervening callback retires it.
 inline bool NativeCycleSelectionReadCurrent(std::uint64_t observed,std::uint64_t current)noexcept {
     return observed&&observed<=UINT64_MAX-2&&current==observed+2;

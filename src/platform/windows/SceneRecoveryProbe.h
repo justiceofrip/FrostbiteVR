@@ -17,6 +17,17 @@ constexpr bool NeutralSceneArguments(bool scene,bool staticPose,bool async,
     unsigned pairs,bool optionsOnly)noexcept {
     return scene&&staticPose&&async&&pairs==240&&optionsOnly;
 }
+// This receiver owns its menu observation lane. Ordinary scene-neutral runs
+// may instead have a menu sidecar and must never create a competing host.
+constexpr bool SelectedKnifeNeutralOption(std::wstring_view option)noexcept {
+    return option==L"--selected-knife-neutral"||option==L"--pairs"||
+        option==L"--request-lifetime"||option==L"--static-pose"||
+        option==L"--async"||option==L"--capture-poses";
+}
+constexpr bool SelectedKnifeNeutralArguments(bool selected,bool staticPose,bool async,
+    unsigned pairs,bool optionsOnly)noexcept {
+    return selected&&staticPose&&async&&pairs==240&&optionsOnly;
+}
 inline interaction::InputFrame NeutralSceneInput(const runtime::TrackingFrame& t,
     std::uint64_t sequence)noexcept {
     interaction::InputFrame result{};
@@ -44,8 +55,12 @@ inline void WriteNeutralSceneInput(std::ostream& out,const interaction::InputFra
     const auto pose=[&](const math::Pose& p){out<<'['<<p.position.x<<','<<p.position.y<<','<<p.position.z<<','
         <<p.orientation.x<<','<<p.orientation.y<<','<<p.orientation.z<<','<<p.orientation.w<<']';};
     out<<"{\"tick_ms\":"<<tickMs<<",\"generation\":"<<input.generation<<",\"space\":"<<input.spaceGeneration
+       <<",\"tracking_basis\":"<<input.trackingBasisGeneration
        <<",\"predicted_ns\":"<<input.predictedNs<<",\"focused\":"<<(input.focused?"true":"false")
-       <<",\"head_valid\":"<<(input.headValid?"true":"false")<<",\"reference_head\":";pose(input.referenceHead);
+       <<",\"head_valid\":"<<(input.headValid?"true":"false")
+       <<",\"menu\":{\"owner\":"<<unsigned(input.menu.owner)<<",\"sequence\":"<<input.menu.sequence
+       <<",\"epoch\":"<<input.menu.epoch<<",\"deadline_ns\":"<<input.menu.deadlineNs<<'}'
+       <<",\"reference_head\":";pose(input.referenceHead);
     out<<",\"head\":";pose(input.head);out<<",\"hands\":[";
     for(unsigned n=0;n<2;++n){const auto& h=input.hands[n];if(n)out<<',';
         out<<"{\"active\":"<<h.active<<",\"held\":"<<h.held<<",\"touch_active\":"<<h.touchActive<<",\"touched\":"<<h.touched

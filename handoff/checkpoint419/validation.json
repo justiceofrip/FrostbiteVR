@@ -1,0 +1,418 @@
+{
+  "schema": "fvr.bc2.checkpoint419.validation.v1",
+  "checkpoint": 419,
+  "created_utc": "2026-10-17T16:04:12.145698+00:00",
+  "status": "candidate_not_promoted_release_blocked",
+  "source_sha256": "3258fd8de01377cd03f2eab8ae0ff09ce13ee9840c7a976113f0c1b33a476378",
+  "source_files_reverified": 1341,
+  "normal_build_receipt": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight419\\normal-build\\build-receipt.json",
+    "sha256": "0c71f4745f72750f73e4504d3a5f92b9d7ee926c5fd23dab58dc0ec700cc2dd8"
+  },
+  "binaries_reverified": {
+    "probe": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight419\\normal-build\\BC2NativeProbe.dll",
+      "sha256": "2827fa84ce30665aa74a5779939ca60760f9d5d2aad1436dc89bb0bced15dbef"
+    },
+    "trace": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight419\\normal-build\\BC2NativeTrace.exe",
+      "sha256": "ebd819ac1c15b9a70998d7579e53de68d9be306bfcc13c1f11c8d39f52a14f2b"
+    },
+    "receiver": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight419\\normal-build\\BC2NativeIpcProbe.exe",
+      "sha256": "e66104ee47f453e7f7619aa06ea2c7c56012445f0a2a9d8bf15e5f79e218aec3"
+    },
+    "host": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight419\\normal-build\\BC2XrHost.exe",
+      "sha256": "06792083d44942ccb3d7cc20cf753c3c357b86c1e35d15e067c9ea235796cf26"
+    }
+  },
+  "parent_receipt": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight418\\normal-build\\build-receipt.json",
+    "sha256": "d145f3395acac3b945badeefdf46c80e251ae2a8017f78e49d36d7428b4be607"
+  },
+  "parent_validation": {
+    "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\handoff\\checkpoint418\\validation.json",
+    "sha256": "4e689efa69e5661b23f6b54e10c512867aff0e7ec0b1ebb437987a35b746a1fd"
+  },
+  "source_application": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight419\\application.json",
+    "sha256": "44ccbbdf5dd7e68b387f4d29e22d1378dfb2682a0dec79af1f6bc47b99253082"
+  },
+  "receiver_application": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight419\\receiver-application.json",
+    "sha256": "fb4bdbdcb337c94569a89c2908ccdc28e8d050bf0764bcb638c3410ddbb52e77"
+  },
+  "receiver_source_pins": {
+    "src/platform/windows/NativeIpcProbe.cpp": "ba301a1ca0877b229e5b6332f4e758fcbb634fa106f335efe4029b42eb3dbfcc",
+    "src/platform/windows/TriggerInputSmoke.h": "be4766e2f29ec908914cb65b210cfa0fc2d4c542669f8461f9a1553d406e47ac",
+    "tests/SceneRecoveryProbeTests.cpp": "20da76050ad260d1f6361b3d9429f7248014ef669c3b90ae0ac1392bf8f2439f"
+  },
+  "focused_results": {
+    "graphics": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight419\\focused\\validation.json",
+      "sha256": "fd84a7a1d8305513f04d38350c84798f2c855469ecfe8fdd6b1bdbb1709eed04",
+      "tests_passed": 3,
+      "files": [
+        {
+          "path": "src/games/bc2/Bc2RigPublication.cpp",
+          "base_sha256": "22186539eb6f7cb6924a747901a7e2a50a0fa75b094f60834d87040ac584c33b",
+          "proposed_sha256": "f765ba7d149f5e5566513c45c347a98133605fd6be5bbd8daee4386e4a2afa1d"
+        },
+        {
+          "path": "src/games/bc2/Bc2RigPaletteCopy.h",
+          "base_sha256": null,
+          "proposed_sha256": "9bff8ebe1f87b24455d34bbd8a7397e0090e4b01b758991a7cfe6e8c2328d4b5"
+        },
+        {
+          "path": "tests/Bc2RigTests.cpp",
+          "base_sha256": "68fa83c13dcacde2493bc6e2299abb8704e0054747ab1650269382d25b9b1d14",
+          "proposed_sha256": "88a8c34ea29d3937d869c1bbb148f6b6f68d04d3e3d5f68215b21fdb1b0cc946"
+        }
+      ]
+    },
+    "trigger": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight419\\trigger-focused\\validation.json",
+      "sha256": "936e709dac35055f60499fd962d39758219da0b7e4ca02cb865081f9a2e0efaa",
+      "tests_passed": 1,
+      "files": [
+        {
+          "path": "src/platform/windows/NativeIpcProbe.cpp",
+          "base_sha256": "6eb38723a4874938e52455a7a93a552250fba6c0dc9e46500155ce974c4ada8a",
+          "proposed_sha256": "ba301a1ca0877b229e5b6332f4e758fcbb634fa106f335efe4029b42eb3dbfcc"
+        },
+        {
+          "path": "src/platform/windows/TriggerInputSmoke.h",
+          "base_sha256": null,
+          "proposed_sha256": "be4766e2f29ec908914cb65b210cfa0fc2d4c542669f8461f9a1553d406e47ac"
+        },
+        {
+          "path": "tests/SceneRecoveryProbeTests.cpp",
+          "base_sha256": "f76ade9282a5509c299c9bbfed8bb46696ff5d9d7f7dbdcf2a0fc7d58d28e118",
+          "proposed_sha256": "20da76050ad260d1f6361b3d9429f7248014ef669c3b90ae0ac1392bf8f2439f"
+        }
+      ]
+    }
+  },
+  "full_builds": {
+    "x86": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight419\\normal-x86\\validation.json",
+      "sha256": "9f5f4d661500841449024f9a01c4b1cce1650404260f8f200399908f8ed558d2",
+      "cpp_suites_passed": 286,
+      "completed_utc": "2026-10-17T15:44:19.1606839Z"
+    },
+    "x64": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight419\\normal-x64\\validation.json",
+      "sha256": "9229deb96157d7135a64d9229c93db3289944855c14d7786fc9667d417e67b02",
+      "cpp_suites_passed": 286,
+      "completed_utc": "2026-10-17T15:47:00.3970542Z"
+    }
+  },
+  "frozen_build_pretest_runtime_flags": {
+    "actual_game_verified": false,
+    "native_bc2_verified": false,
+    "headset_verified": false,
+    "full_campaign_accepted": false,
+    "receipt_unchanged": true
+  },
+  "acceptance": {
+    "bounded_selected_knife_trigger_and_clean_stop_419": true,
+    "headset_419": false,
+    "full_campaign": false,
+    "enemy_damage": false,
+    "physical_stabbing": false,
+    "spas_fixture": false,
+    "death_restart": false,
+    "rig_source_lifetime_transition": false,
+    "reported_death_distortion_reproduced": false,
+    "main_camera_replacement_fixed": false,
+    "desktop_promoted": false,
+    "public_release": false
+  },
+  "bounded_native_419": {
+    "audit": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight419\\knife-smoke01\\knife-smoke-audit.json",
+      "sha256": "8762d0ca2cb50e1de62d1c5f5356589bc3c2682c97c30434ce500f294fee8dbc"
+    },
+    "review": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight419\\knife-smoke01-review\\review.json",
+      "sha256": "870b7bbced16021ae0f8fbf4f90141616f2d653a979f635f69213f3f700e5160"
+    },
+    "audit_result": {
+      "schema": "fvr.knife-smoke419.audit.v1",
+      "passed": true,
+      "status": "observed_selected_knife_trigger_route_and_clean_stop",
+      "publication": {
+        "passed": true,
+        "errors": [],
+        "controls_started_ms": 119525046,
+        "press_tick_ms": 119525453,
+        "release_tick_ms": 119525531,
+        "press_before_ns": 119525813486600,
+        "release_after_ns": 119525890589600,
+        "receiver_publication_only": true,
+        "native_consumption_claimed": false
+      },
+      "native_witness": {
+        "passed": true,
+        "status": "observed_selected_knife_trigger_route",
+        "melee37_observed": true,
+        "route_and_release": true,
+        "selection_stable": true,
+        "ordinary_slot7_unchanged": true,
+        "coherent_samples_assessed": 472,
+        "assessment_interval_ms": [
+          119525046,
+          119527546
+        ],
+        "sample_resolution_accepted": true,
+        "pulse_window_max_gap_ms": 5.687,
+        "branches": [
+          {
+            "branch": 0,
+            "state5_samples": 38,
+            "state6_samples": 180,
+            "settled_samples": 175,
+            "passed": true
+          },
+          {
+            "branch": 1,
+            "state5_samples": 39,
+            "state6_samples": 180,
+            "settled_samples": 172,
+            "passed": true
+          }
+        ],
+        "gather_atomic_verified": false,
+        "damage_verified": false
+      },
+      "native_cleanup_verified": true,
+      "process_completion_verified": true,
+      "source_and_loaded_module_provenance": true,
+      "capture_and_total_budget_passed": true,
+      "raw_capture_bytes": 199065600,
+      "raw_budget_bytes": 398131200,
+      "all_session_bytes_before_audit": 203131617,
+      "planned_budget_bytes": 431685632,
+      "issues": [],
+      "captures_retained": true,
+      "no_automatic_retry": true,
+      "headset_verified": false,
+      "physical_stabbing_verified": false,
+      "damage_verified": false
+    },
+    "retained_evidence": [
+      {
+        "path": "completion.json",
+        "bytes": 935,
+        "sha256": "58d0920f429f62cf4f8d2ef40a371b249774f6cb3deb13be61b2c39fe98feed6"
+      },
+      {
+        "path": "build-receipt.json",
+        "bytes": 169675,
+        "sha256": "0c71f4745f72750f73e4504d3a5f92b9d7ee926c5fd23dab58dc0ec700cc2dd8"
+      },
+      {
+        "path": "load-receipt.json",
+        "bytes": 1229,
+        "sha256": "4ba5192ff4c170616a85d07464063ae3f790fcb6ad3c5cdade4250378ab12ea9"
+      },
+      {
+        "path": "preparation.json",
+        "bytes": 4733,
+        "sha256": "10f378fb3e76a5daf1ac51b77b31ab10e37c2063592fd89b3575a2bfd17be80f"
+      },
+      {
+        "path": "native-trace.json",
+        "bytes": 2075559,
+        "sha256": "8ee02fd97089113b0f23a2fe94c0fa9058657cf1a08a63e19a4dfb5c64f35e97"
+      },
+      {
+        "path": "trace-stdout.txt",
+        "bytes": 98,
+        "sha256": "c42457b0b29cbf8b7c3af220bdf52b400b917ae9c75dab97f352d0fb18770335"
+      },
+      {
+        "path": "receiver/trigger-input.jsonl",
+        "bytes": 5769,
+        "sha256": "df917838a7f1badb58d6d06849a4c7a196f574847aa39d2206a94cbf34e183fb"
+      },
+      {
+        "path": "receiver/result.json",
+        "bytes": 2004,
+        "sha256": "51d165d9abb8f4aa82b8421f179feacf347600817fbbbed171fb6e11d3c11439"
+      },
+      {
+        "path": "watcher/watcher.json",
+        "bytes": 711,
+        "sha256": "af8032add45959c08e879bd1ddb3079a629fa28aa862c24c8a294de00d5504bf"
+      },
+      {
+        "path": "watcher/samples.jsonl",
+        "bytes": 1673234,
+        "sha256": "1d5998d8196cb7fcf706120063c6403df28d69eea193a6f34f15cdfeefbf935a"
+      }
+    ],
+    "visual_and_rig_review": {
+      "schema": "fvr.bc2.checkpoint419.native-review.v1",
+      "created_utc": "2026-10-17T16:01:03.491707+00:00",
+      "audit": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight419\\knife-smoke01\\knife-smoke-audit.json",
+        "sha256": "8762d0ca2cb50e1de62d1c5f5356589bc3c2682c97c30434ce500f294fee8dbc"
+      },
+      "native": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight419\\knife-smoke01\\native-trace.json",
+        "sha256": "8ee02fd97089113b0f23a2fe94c0fa9058657cf1a08a63e19a4dfb5c64f35e97"
+      },
+      "load_receipt": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight419\\knife-smoke01\\load-receipt.json",
+        "sha256": "4ba5192ff4c170616a85d07464063ae3f790fcb6ad3c5cdade4250378ab12ea9"
+      },
+      "normal_receipt": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight419\\normal-build\\build-receipt.json",
+        "sha256": "0c71f4745f72750f73e4504d3a5f92b9d7ee926c5fd23dab58dc0ec700cc2dd8"
+      },
+      "actual_game_test": "bounded_selected_knife_trigger_and_neutral_pose",
+      "passed_trigger_and_clean_stop": true,
+      "eyes_reviewed": 16,
+      "pairs_reviewed": 8,
+      "pair_elapsed_ms": [
+        47,
+        110,
+        157,
+        219,
+        266,
+        313,
+        360,
+        422
+      ],
+      "visual_review": {
+        "reviewer": "root",
+        "world_visible_both_eyes": true,
+        "initial_arm_pose_differs_from_later_pairs": true,
+        "normal_headset_hand_placement_accepted": false,
+        "knife_animation_visual_acceptance": false,
+        "note": "All eight pairs retain visible nighttime scenery in both eyes. Initial extended arm differs from subsequent near-hand pose. Fixed synthetic controller geometry is not headset hand calibration or jab acceptance; visual captures cover their recorded times only."
+      },
+      "rig": {
+        "copy_boundary_rejected": 0,
+        "paired_copies": 991,
+        "source_changes": 0,
+        "packing_failures": 0
+      },
+      "capture_raw_bytes": 199065600,
+      "source_lifetime_transition_observed": false,
+      "spas_verified": false,
+      "physical_stabbing_verified": false,
+      "enemy_damage_verified": false,
+      "death_restart_verified": false,
+      "headset_verified": false,
+      "full_campaign_verified": false,
+      "desktop_promoted": false,
+      "review_images": [
+        {
+          "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight419\\knife-smoke01-review\\paired-review-0.png",
+          "sha256": "6a8c3956caacc0ec7458cfbf2081f134237ccfb1318d31290f094e5daa478dd9"
+        },
+        {
+          "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight419\\knife-smoke01-review\\paired-review-4.png",
+          "sha256": "736c0e684c04064e097ba60f955530d9e23f7051cd4b2c48507a492f52f89a4c"
+        }
+      ]
+    },
+    "limit": "One same-process selected-knife trigger/neutral-pose smoke. No SPAS, damage, physical jab, headset, death/restart, source-lifetime transition or full-campaign acceptance."
+  },
+  "parent418_native_observations": {
+    "scheduled_smoke": "inconclusive",
+    "audit": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight418\\knife-smoke02\\knife-smoke-audit.json",
+      "sha256": "e74b3b4c7ec8ffe0b041d65dee20eb152eee3d5249d74adfdbb2fdd266605212"
+    },
+    "supplemental": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight418\\knife-smoke02\\observed-evidence.json",
+      "sha256": "dc12936e22453b3143ff20cd673d0f9bf93ebfdd30f2970b988c1eb67d4c3004"
+    },
+    "native": {
+      "probe_exit": 0,
+      "hooks_disabled": true,
+      "lists_restored": true,
+      "callbacks_restored": true,
+      "refs_before": 8,
+      "refs_after": 8,
+      "published_pairs": 216,
+      "consumed_pairs": 216,
+      "discarded_pairs": 0,
+      "camera_restore_failures": 0,
+      "gpu_failure_stage": 0
+    },
+    "external_watcher": {
+      "coherent_samples": 2454,
+      "rejected_transient_samples": 31,
+      "errors": 0,
+      "gap_max_ms": 10.9877,
+      "melee37_high_samples": 10,
+      "high_first_tick_ms": 117182000,
+      "high_last_tick_ms": 117182062,
+      "fire8_nonzero_samples": 0,
+      "selected_slots": [
+        0
+      ],
+      "both_selected_copies_observed_phases": [
+        2,
+        5,
+        6,
+        2
+      ],
+      "both_normal_slot7_copies_constant_phase": [
+        0,
+        0,
+        0
+      ],
+      "atomic_native_gather_observed": false
+    },
+    "receiver": {
+      "pairs_received": 216,
+      "target_pairs": 240,
+      "last_pair": 215,
+      "last_pair_elapsed_ms": 8016,
+      "controls_start_receipt": false,
+      "result_json_written": false,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "terminated_by_wrapper_after_wait": true
+    },
+    "visual_limit": "Receiver supplied both grips at [0,0,0]; retained visual evidence is confounded and does not establish headset hand or knife placement",
+    "limit": "Prior418 observations only; its scheduled smoke remains inconclusive and is not replaced by the separate419 result"
+  },
+  "original_416_failure": {
+    "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\native-trace-20261017-133551-422\\native-cycle-first-failure.json",
+    "sha256": "62f03d7c73421acba3dae55cb6d7a521d774355e82f54b7f76a6032dcb4b8af6",
+    "invocation": 8748,
+    "transition": "Complete -> Cancelled",
+    "failure": "Restore",
+    "cycle": 3,
+    "shot": 3,
+    "loaded": 5,
+    "reserve": 24,
+    "full_callback_available": false,
+    "root_cause_established": false
+  },
+  "inherited_417_regressions": {
+    "receipt": {
+      "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\handoff\\checkpoint418\\validation.json",
+      "sha256": "4e689efa69e5661b23f6b54e10c512867aff0e7ec0b1ebb437987a35b746a1fd"
+    },
+    "synthetic_not_original_8748_reconstruction": true,
+    "actual_spas_fixture_accepted": false
+  },
+  "rollback": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight414\\headset-launch414-private\\local-profile414.json",
+    "sha256": "4d35bff2ca391433e7389e1eb55330e19e78fa9770d913bc36f3bba4f0df59d3",
+    "runtime": 414,
+    "reported_installed_launcher_version": "0.1.2",
+    "profile_pins_reverified": 8,
+    "frozen_binaries_reverified": 3,
+    "changed_by_checkpoint": false,
+    "pump_audio_changed": false
+  }
+}

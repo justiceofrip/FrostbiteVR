@@ -66,7 +66,7 @@ void Bc2InventoryReloadProbe::Prepare(InputFrame& in,const ReloadStateOwner& own
       (original_->slot!=anchors_.shoulders[0].slot&&original_->slot!=anchors_.shoulders[1].slot))Fail(14,now);
    else std::swap(original_,other_);
   }
-  if(!CancelConsumer()&&other_&&Current(*body,now)){
+  if(!CancelConsumer()&&(other_||initialItemOnly_)&&Current(*body,now)){
    if(Held(*body,*original_,now)){baselineClaim_=body->right->token.id;To(inventoryOnly_?Phase::InitialHeld:Phase::ReachStow,now);}
    else if(Empty(*body,now))To(Phase::ReachInitial,now);
    else if(initialTarget_&&Held(*body,*other_,now))To(Phase::ReachOtherStow,now);
@@ -75,7 +75,7 @@ void Bc2InventoryReloadProbe::Prepare(InputFrame& in,const ReloadStateOwner& own
  const bool fresh=body&&Current(*body,now);
  if(phase_!=Phase::Warmup&&(phase_<Phase::Reload||phase_==Phase::Recovery||phase_==Phase::InitialHeld||phase_==Phase::OtherHeld)&&display&&BodyInventoryDisplayFresh(*display,now)){
   bool a=false,b=false;for(unsigned n=0;n<display->count;++n){a|=display->slots[n].assignment==original_;b|=display->slots[n].assignment==other_;}
-  if(!a||!b)Fail(5,now);
+  if(!a||(!b&&!initialItemOnly_))Fail(5,now);
  }
  math::Vec3 target=Neutral;squeeze_=0;
  const auto shoulder=[&](bool other){const auto slot=other?other_:original_;if(!slot){Fail(6,now);return Neutral;}
@@ -149,6 +149,7 @@ void Bc2InventoryReloadProbe::Observe(const MagazinePhysicalProbeState& s,const 
 }
 void Bc2InventoryReloadProbe::Report(std::ostream& o)const{
  o<<"{\"synthetic_input\":true,\"headset_verified\":false,\"persistent_consumers\":true,\"inventory_only\":"<<(inventoryOnly_?"true":"false")<<",\"phase\":"<<unsigned(phase_)<<",\"failure\":"<<failure_
+ <<",\"initial_item_only\":"<<(initialItemOnly_?"true":"false")
  <<",\"initial_other_shoulder\":"<<(initialTarget_?"true":"false")<<",\"initial_target_weapon\":"<<(initialTarget_?initialTarget_->item.id:0)
  <<",\"completed\":"<<(Completed()?"true":"false")<<",\"original_weapon\":"<<(original_?original_->item.id:0)<<",\"other_weapon\":"<<(other_?other_->item.id:0)
  <<",\"baseline_claim\":"<<baselineClaim_<<",\"other_claim\":"<<otherClaim_<<",\"restored_claim\":"<<restoredClaim_<<",\"rows\":[";

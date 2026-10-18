@@ -1,0 +1,179 @@
+{
+  "schema": "fvr.checkpoint425-motion-supplement.v1",
+  "checkpoint": 425,
+  "utc": "2026-10-18T12:51:08.557063+00:00",
+  "base_validation": {
+    "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\handoff\\checkpoint425\\validation.json",
+    "sha256": "075810e169f7c069fd3ff10aefa31bec169885e21b935b5f4faf5969fd718ab7"
+  },
+  "source_sha256": "645bf3e64ffd8098298c7210784c3d847ca7243a4a94baf0e92a819d2e300a18",
+  "unchanged_native_source_and_binaries_reverified": true,
+  "build_receipt": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\normal-build\\build-receipt.json",
+    "sha256": "c18b3c68fee54e0007a6f6cdcfd31106b043f700dc54a505afda024ddcb4366d"
+  },
+  "runtime": {
+    "frames_started": 8,
+    "frames_completed": 8,
+    "frames_skipped": 0,
+    "scope_attempts": 16,
+    "scopes_applied": 16,
+    "scopes_restored": 16,
+    "restore_failures": 0,
+    "rejected_publishes": 0,
+    "native_write_calls": 64,
+    "overhead_frequency": 10000000,
+    "overhead_total_ticks": 45098,
+    "overhead_max_ticks": 2433
+  },
+  "cleanup": {
+    "hooks_restored": true,
+    "lists_restored": true,
+    "callbacks_restored": true,
+    "cached_views_restored": true,
+    "baseline_request_refs": 8,
+    "after_request_refs": 8,
+    "baseline_view_count": 7,
+    "expected_view_count": 7,
+    "after_view_count": 7,
+    "exact_expected_order_restored": true,
+    "owned_pending_references_before_release": 0,
+    "historical_view_set_equal": true,
+    "historical_views_retired_before_release": [],
+    "current_survivors_replacing_historical_views": [],
+    "current_owned_snapshot_is_authority": true,
+    "pending_field_is_before_release_not_leak": true
+  },
+  "delivered_pairs": 8,
+  "delivered_camera_motion": {
+    "yaw_delta_radians": -0.175000009,
+    "camera_center_displacement_m": 0.245032,
+    "basis": "Independent analysis of actual delivered presentation view matrices; raw requested pose schedule remains source-derived."
+  },
+  "scene": "Nighttime shore/searchlights",
+  "static_boat_cloud_evidence_unchanged": true,
+  "old_fixed_cloud_ROIs_used_for_acceptance": false,
+  "controller_actions_sent": false,
+  "headset_tested": false,
+  "full_campaign_accepted": false,
+  "intermittent_loading_crash_resolved": false,
+  "all_owned_diagnostic_games_closed": true,
+  "desktop_promoted": false,
+  "github_updated": false,
+  "final_generated_allocated_bytes": 40019273340,
+  "raw_images": 23,
+  "raw_logical_bytes": 190771200,
+  "raw_lossless_savings_bytes": 43962368,
+  "files": {
+    "normal-build/build-receipt.json": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\normal-build\\build-receipt.json",
+      "sha256": "c18b3c68fee54e0007a6f6cdcfd31106b043f700dc54a505afda024ddcb4366d"
+    },
+    "motion-proposal/driver-pins.json": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\motion-proposal\\driver-pins.json",
+      "sha256": "e97e60ca08266b6a129ce7a71dbcbae057bdf76928c3ef99ad26781715c2d628"
+    },
+    "motion-proposal/admission-revision01.json": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\motion-proposal\\admission-revision01.json",
+      "sha256": "7e32ba7fa8a3fa031a6e1d2db53d50f2d6b459f221eb8a83127e68a73f2be515"
+    },
+    "motion-harness-independent-review425.json": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\motion-harness-independent-review425.json",
+      "sha256": "0d776948c283665cf1e088daf8476cbd3c8b9ce06046eb520785d36f09ac9621"
+    },
+    "motion-admission-independent-revision425.json": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\motion-admission-independent-revision425.json",
+      "sha256": "7658050a48cf7d398c2318ba708828a88215ea3ef578429950cdac828cb167df"
+    },
+    "motion01-config-rejection.json": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\motion01-config-rejection.json",
+      "sha256": "2e5312affe59393faface43d7e45956e090f48f019e3771d463c0321b9ab6a92"
+    },
+    "motion02-independent-audit.json": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\motion02-independent-audit.json",
+      "sha256": "e220685fd5c2f5446ac38e013f2f3195160c0eeaa2f9bf6c111c20febfdfce6f"
+    },
+    "motion-root-visual-review425.json": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\motion-root-visual-review425.json",
+      "sha256": "eb6b78e460cb04cbe059b1154acf4875cc71ab406e756161558870f8bc810e7c"
+    },
+    "motion02/runner-result.json": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\motion02\\runner-result.json",
+      "sha256": "96d503bf9ea091063dcb591746e8b8cb428fa49ca4ee03dbf39bbf41f9747610"
+    },
+    "motion02/native-trace.json": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\motion02\\native-trace.json",
+      "sha256": "94f130e11d96df7f5c60d6ec61091041d3659b65782cb9497a758219edaf6334"
+    },
+    "motion02/weather-translation-runtime.json": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\motion02\\weather-translation-runtime.json",
+      "sha256": "dbe2e8a72d186b2e07dd21a255e2ce0aee93e6a1efa195933d97ec2cbefaecd3"
+    },
+    "motion02/receiver/result.json": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\motion02\\receiver\\result.json",
+      "sha256": "8b1ba03e6c739845e41322bae513df17cbc834da4673ed9767a37d9a23202922"
+    },
+    "motion02/receiver/pairs.jsonl": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\motion02\\receiver\\pairs.jsonl",
+      "sha256": "ae4c11b94c2d19dc351fb7b30244934ab93c8f9e61d7d2c4affe6ea9fd013533"
+    },
+    "motion02/receiver/presentation.jsonl": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\motion02\\receiver\\presentation.jsonl",
+      "sha256": "c1cd6fb405676f7d3f612494ddcc99ad81ec1a1fc45ec2f704aa536e7668b85f"
+    },
+    "motion02/pixel-review425.json": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\motion02\\pixel-review425.json",
+      "sha256": "c11e0b5bd03589bc20492fa5a3112544712b81e1484f1958e84f657622fd96c8"
+    },
+    "motion02/motion-pairs425.png": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\motion02\\motion-pairs425.png",
+      "sha256": "255c98e18fbfb3cd497b5b00747e51288856c3f6602f43709d3144974e4f251c"
+    },
+    "motion02/lossless-compression.json": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\motion02\\lossless-compression.json",
+      "sha256": "1e19574e70bef416072e6f01f25231d83baa645a327ab9fb0041783489da083b"
+    },
+    "motion02-watch-summary.json": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\motion02-watch-summary.json",
+      "sha256": "c837d677b51fce302a52e4013103a42fa28c3adf62bdbca0286a123c480bd60f"
+    },
+    "game05/process.json": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\game05\\process.json",
+      "sha256": "5550eae5f4992cc790b30a899427d13d868a75906ee2870cfdedf77de3abe965"
+    },
+    "game05/boot-watch-summary.json": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\game05\\boot-watch-summary.json",
+      "sha256": "eae9638c82070920dca48caf05d9ce193250cd509053fcddd39667ebddc94b23"
+    },
+    "game05/normal-close.json": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\game05\\normal-close.json",
+      "sha256": "bb034d5075d919fbb23e78236640de791ae5cf0b0e056f6a6624bd19064f2de8"
+    },
+    "post-motion-storage.json": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\post-motion-storage.json",
+      "sha256": "90199d63222c8d3f6ac06864f418ac37dd6e371d660f4e7a4c9af89b7725b50c"
+    },
+    "CompareMotion425.py": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\CompareMotion425.py",
+      "sha256": "28c7f0b58d9817c24de8080e8b3ebc1699f517f91cd06c14f0166285fff5f8b2"
+    },
+    "CompressMotion425.py": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\CompressMotion425.py",
+      "sha256": "db96a651904596ccdea37382c0cf61b44848eac6973b873340e136d8af348a9e"
+    }
+  },
+  "documentation": {
+    "handoff\\checkpoint425\\README.md": {
+      "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\handoff\\checkpoint425\\README.md",
+      "sha256": "6b7be9c8553278ee6c5cc9bc1081b7acedf2fa667e4f8147f4dba61b81325458"
+    },
+    "docs\\CURRENT.md": {
+      "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\docs\\CURRENT.md",
+      "sha256": "c7298eadd95f5e68d17d5a51608d9f4e58ba325837839f03b57715f45acfc726"
+    },
+    "docs\\history\\2026-10-18-checkpoint425.md": {
+      "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\docs\\history\\2026-10-18-checkpoint425.md",
+      "sha256": "6fabe72fbe9f73c3dbc465a6a7d8ad2581d5625e868566271a01f24c6b106cc7"
+    }
+  }
+}

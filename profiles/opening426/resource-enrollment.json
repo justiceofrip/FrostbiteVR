@@ -1,0 +1,126 @@
+{
+  "schema": "fvr.bc2.exact-resource-visibility-body-enrollment.v1",
+  "family": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+  "families": [
+    "bc2.automatic-magazine-inactive-stock-bolt.v1"
+  ],
+  "activation": "explicit compiled reviewed registry + geometry; ordinary resource backend switch",
+  "runtime_requirements": [
+    "exact coherent native config and selected-carried identity",
+    "current native operation binding and source-bound review",
+    "all required installed whole-weapon/attachment geometry",
+    "ordinary body custody and hand arbitration",
+    "independent native ammunition receipts"
+  ],
+  "native_constructor_permission": false,
+  "profiles": [
+    {
+      "key": "bc2:magazine-descriptor:73f1d6c0d08fd05047cb12e939ba6ee52c396211b57c304ccc9b8062f409f4d8",
+      "native_id": "cc2291caf02e41d3",
+      "descriptor_digest": "cc2291caf02e41d3a08d26c1a4142f43a21ab10773c989d6edd872ab56a0b3e6",
+      "identity": {
+        "assetName": "Nambu100",
+        "assetPath": "Objects/Weapons/Handheld/Beach/Nambu100/Nambu100",
+        "weapon": {
+          "resource": "Objects/Weapons/Handheld/Beach/Nambu100/Nambu100.dbx",
+          "sha256": "24ca715ffcaf75cedc25712d8c43e80a5bc7a51b72eb750593d5cb7725cc0120",
+          "guid": "ac8010d7-94e2-4b04-ae1f-1e20af940c0f"
+        },
+        "firing": {
+          "resource": "Objects/Weapons/Handheld/Beach/Nambu100/Nambu100_Firing.dbx",
+          "sha256": "5e9779f47e5f567f20315f1b2afb448321adc16822256a2f69a0d472a9677b0a",
+          "guid": "dd907c49-cb18-41a0-87f3-321cd618a8d2"
+        },
+        "function": {
+          "resource": "Objects/Weapons/Handheld/Beach/Nambu100/Nambu100_Firing.dbx",
+          "sha256": "5e9779f47e5f567f20315f1b2afb448321adc16822256a2f69a0d472a9677b0a",
+          "guid": "2656c8e2-f28e-4118-b634-2d077cea6433"
+        }
+      },
+      "configuration": {
+        "assetName": "Nambu100",
+        "assetPath": "Objects/Weapons/Handheld/Beach/Nambu100/Nambu100",
+        "values": {
+          "fireLogicType": 2,
+          "reloadType": 1,
+          "fireInputAction": 8,
+          "reloadInputAction": 29,
+          "baseCapacity": 30,
+          "numberOfMagazines": 9999,
+          "reloadDelay": 0.0,
+          "reloadTime": 3.700000047683716,
+          "reloadThreshold": 0.800000011920929,
+          "postReloadTime": 0.0,
+          "boltDelay": 0.5,
+          "boltTime": 1.0,
+          "holdBoltUntilFireRelease": true,
+          "holdBoltUntilZoomRelease": false
+        },
+        "timing": [
+          {
+            "offset": 16,
+            "expected": 1061997773,
+            "expected_bits": "3f4ccccd",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 20,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 24,
+            "expected": 1080872141,
+            "expected_bits": "406ccccd",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 32,
+            "expected": 1,
+            "expected_bits": "00000001",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 36,
+            "expected": 2,
+            "expected_bits": "00000002",
+            "comparison": "Bits"
+          },
+          {
+            "offset": 44,
+            "expected": 0,
+            "expected_bits": "00000000",
+            "comparison": "Bits"
+          }
+        ],
+        "admission": "Candidate"
+      },
+      "source_class": "wcSmg",
+      "family": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+      "configured_meshes": [
+        "Objects/Weapons/Handheld/Beach/Nambu100/Nambu100_Mesh"
+      ],
+      "weighted_names": [
+        "jntWpn_12",
+        "jntWpn_3",
+        "jntWpn_2",
+        "jntWpn_1",
+        "jntWpn_4"
+      ],
+      "rig_fingerprint": "a7f219a1426216ab",
+      "magazine_part": "jntWpn_12",
+      "body_part": "body_holstered_b39952d7067af68c",
+      "body_anchor_evaluation": {
+        "RightHand": "static_authored_pose",
+        "jntWpn_Flash": "static_authored_pose"
+      },
+      "required_archives": [
+        "Dist/win32/async/weapon/nambu100-00.fbrb",
+        "Dist/win32/levels/sp_01/level-00.fbrb"
+      ],
+      "native_per_variant_tested": false,
+      "headset_tested": false
+    }
+  ]
+}

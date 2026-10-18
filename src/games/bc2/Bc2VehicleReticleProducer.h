@@ -56,12 +56,12 @@ class VehicleReticleNativeProducer {
 public:
     std::optional<VehicleReticleObservation> Observe(const VehicleRouteMemory& memory,
         const VehicleReticleSourceBinding& binding,const BoatAimSnapshot& aim,
-        const VehicleRouteSnapshot& route,const VehicleReticleProducerContext& context,std::int64_t now)noexcept {
+        const VehicleRouteSnapshot& route,const VehicleReticleProducerContext& context,std::int64_t now,VehicleReticleSourceDiagnostic* diagnostic=nullptr)noexcept {
         using namespace vehicle_reticle_producer_detail;
         if(!Input(context,aim,route,now)||context.input.observedNs>INT64_MAX-100000000||
            (latest_&&latest_->seat==aim.owner&&(context.inputSequence<latest_->visual.inputSequence||
              context.input.observedNs<latest_->visual.observedNs))){latest_.reset();return {};}
-        const auto ray=ReadPblDriverGunRayObservation(memory,binding,aim);if(!ray){latest_.reset();return {};}
+        const auto ray=ReadPblDriverGunRayObservation(memory,binding,aim,diagnostic);if(!ray){latest_.reset();return {};}
         const auto sight=Sight(*ray);if(!sight){latest_.reset();return {};}
         graphics::VehicleReticleOwner owner{aim.owner.actor,aim.owner.actorGeneration,aim.owner.controlled,aim.owner.entry,
             aim.owner.seatGeneration,aim.nativeWeapon,context.weaponGeneration,context.scene,context.input.space};

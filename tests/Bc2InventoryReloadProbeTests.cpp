@@ -10,7 +10,8 @@ namespace {
 struct Driver {
  Fixture f{true};Bc2InventoryReloadProbe probe;InputFrame input{};BodyInventoryDisplay display{};
  std::shared_ptr<BodyHolsterProbeSample> body;
- Driver(){input.focused=input.headValid=true;input.spaceGeneration=f.s.nativeOwner.space;
+ bool singleShoulder=false;
+ Driver(bool inventoryOnly=false):probe(false,inventoryOnly){input.focused=input.headValid=true;input.spaceGeneration=f.s.nativeOwner.space;
   for(auto& h:input.hands){h.active=Components;h.gripTracked=h.aimTracked=true;}
   input.hands[0].grip.position={-.2f,-.25f,-.45f};input.hands[1].grip.position={.15f,-.10f,-.20f};}
  void Publish(){body=std::make_shared<BodyHolsterProbeSample>();body->nativeOwner=f.s.nativeOwner;body->sampledNs=f.s.hand.nowNs;
@@ -20,7 +21,8 @@ struct Driver {
   display.selectedOwner=f.s.nativeOwner;display.physicalOwner=f.s.hand.owner;display.physicalSelected=f.items[0].key;
   display.revision=display.cohort=1;display.sequence=f.s.hand.sequence;display.observedNs=f.s.hand.observedNs;display.deadlineNs=f.s.hand.deadlineNs;
   display.count=2;display.carried.inventory=0x120000;display.carried.switching=0x130000;display.carried.count=2;
-  for(unsigned n=0;n<2;++n){display.slots[n].assignment={n+1,f.items[n].key};display.slots[n].native={unsigned(f.items[n].key.id),0x80000u+n*0x1000,1,0,n};display.carried.items[n]=display.slots[n].native;}}
+  for(unsigned n=0;n<2;++n){display.slots[n].assignment={n+1,f.items[n].key};display.slots[n].native={unsigned(f.items[n].key.id),0x80000u+n*0x1000,1,0,n};display.carried.items[n]=display.slots[n].native;}
+  if(singleShoulder)display.count=display.carried.count=1;}
  void Tick(unsigned mutation=0){f.Advance();f.Tick();Publish();input.generation=f.s.hand.sequence;input.predictedNs=f.s.hand.nowNs;
   if(mutation==1)body->right.reset();if(mutation==2)display.slots[1].assignment.item.generation++;
   if(mutation==3)body->hand.deadlineNs=f.s.hand.nowNs;
@@ -64,6 +66,26 @@ int MissingOrStaleClaim(){for(unsigned mode:{1u,3u}){Driver d;for(unsigned n=0;n
  CHECK(d.probe.CancelConsumer()&&!d.probe.Completed());}return 0;}
 int ChangedInventory(){Driver d;d.Start();CHECK(d.probe.State()==Bc2InventoryReloadProbe::Phase::ReachStow);d.Tick(2);
  CHECK(d.probe.CancelConsumer());return 0;}
+int SingleSelectedItemDiagnostic(){
+ Driver single(true);single.singleShoulder=true;CHECK(single.probe.InitialItemOnly());
+ CHECK(!single.probe.InitialItemOnly());single.Start();
+ CHECK(single.probe.State()==Bc2InventoryReloadProbe::Phase::InitialHeld);
+ CHECK(!single.probe.ResumeInitial(single.f.s.hand.nowNs));
+ for(unsigned n=0;n<30;++n)single.Tick();CHECK(!single.probe.CancelConsumer());
+ // A zero-count display is unavailable evidence, not an authoritative removal.
+ // Publish a fresh, coherent replacement at the same address; its changed
+ // physical generation must invalidate the selected-item diagnostic.
+ single.f.Advance();single.f.Tick();single.Publish();single.input.generation=single.f.s.hand.sequence;
+ ++single.display.slots[0].assignment.item.generation;
+ single.display.physicalSelected=single.display.slots[0].assignment.item;
+ CHECK(BodyInventoryDisplayFresh(single.display,single.f.s.hand.nowNs));
+ single.probe.Prepare(single.input,single.f.s.nativeOwner,Xm8MagazineAsset,single.body,single.display,{},{},
+     single.f.s.hand.observedNs,single.f.s.hand.deadlineNs,single.f.s.hand.nowNs);
+ CHECK(single.probe.CancelConsumer());
+ Driver ordinary;ordinary.singleShoulder=true;CHECK(!ordinary.probe.InitialItemOnly());ordinary.Start();
+ CHECK(ordinary.probe.State()==Bc2InventoryReloadProbe::Phase::Warmup);
+ Driver paired(true);paired.Start();CHECK(!paired.probe.InitialItemOnly());return 0;
+}
 int StartupAndEmptyContinuity(){Driver d;d.Tick();CHECK(d.probe.State()==Bc2InventoryReloadProbe::Phase::Warmup);
  // The first Held observation is transient during ordinary startup stow.
  CHECK(d.f.Empty());
@@ -87,5 +109,5 @@ int DuplicateAndActor(){for(unsigned bad=0;bad<3;++bad){Driver d;d.Tick();const 
  d.probe.Prepare(d.input,owner,Xm8MagazineAsset,d.body,d.display,{},{},observed,deadline,d.f.s.hand.nowNs);
  CHECK(d.probe.CancelConsumer()&&d.input.hands[1].squeeze==0);}return 0;}
 }
-int main(){if(StartupAndEmptyContinuity()||RecordWindow()||Config()||MissingNativeAcknowledgement()||MissingOrStaleClaim()||ChangedInventory()||DuplicateAndActor())return 1;
+int main(){if(SingleSelectedItemDiagnostic()||StartupAndEmptyContinuity()||RecordWindow()||Config()||MissingNativeAcknowledgement()||MissingOrStaleClaim()||ChangedInventory()||DuplicateAndActor())return 1;
  std::puts("Combined inventory/reload driver: config, real-policy baseline, missing receipts, identity and freshness checks passed; live sequence unverified");}

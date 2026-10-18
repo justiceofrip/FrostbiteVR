@@ -97,7 +97,10 @@ inline AuthoredGripResult BindAuthoredGrip(std::span<const AuthoredGripProfile> 
     if(!snapshot)return {AuthoredGripStatus::MissingSnapshot,{}};
     if(!p)return {AuthoredGripStatus::AmbiguousConfiguration,{}};
     const auto& s=*snapshot;const auto& o=s.owner;
-    if(!equipment.weapon||!equipment.data||!equipment.persistence||!owner.soldier||!owner.weak||
+    // Persistence is optional authored metadata (opening campaign weapons use
+    // null). Its exact value remains part of the repeated equipment identity;
+    // current object/data, selected mesh, rig and owner proof establish binding.
+    if(!equipment.weapon||!equipment.data||!owner.soldier||!owner.weak||
        !owner.actorGeneration||!owner.equipmentGeneration||!owner.space||!owner.inputSequence||
        !o.player||!o.equipGeneration||o.soldier!=owner.soldier||o.weak!=owner.weak||o.weapon!=equipment.weapon||
        o.actorGeneration!=owner.actorGeneration||o.space!=owner.space||s.weaponData!=equipment.data||

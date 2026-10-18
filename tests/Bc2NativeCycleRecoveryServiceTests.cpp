@@ -692,5 +692,289 @@ int RecoveryReleaseDenialCannotBeBorrowedOrHideAcceptedWork(){
 }
 
 }
-int main(){CHECK(!RecoveryConversionDefinitivelyRejectsOnlyTheUndeliveredHeldRelease());CHECK(!RecoveryReleaseDenialCannotBeBorrowedOrHideAcceptedWork());CHECK(!InputRejectionCapturesExactCauseOnceAndSurvivesActorRetirement());CHECK(!FreshControllerLossRetainsDebtWithoutAdmittingThePacket());CHECK(!ControllerLossCannotHideInvalidOwnerOrForgedRelease());CHECK(!ControllerExpiryAtAdmissionRetainsNativeDebt());CHECK(!ConcurrentBoltRequiresFullGestureDespiteNativeIdle());CHECK(!ConcurrentReleaseWaitsForEveryFreshNativeBranch());CHECK(!ConcurrentAuthorityCannotBeForgedOrRefreshedByIdleTime());CHECK(!ConcurrentInterruptionReturnsToNeutralRecoveryWithoutForgivingDebt());CHECK(!ConcurrentGuardFailureNeverPermitsFire());CHECK(!RecenterFromUnsuspendedHoldCreatesFreshObservation());CHECK(!RecenterPreservesShotAndInvalidatesOldAuthority());CHECK(!RecenterRejectsOtherOwnersOpenCallbacksAndPendingOutcomes());CHECK(!PumpRecenterNeedsNewNeutralAndFullStroke());CHECK(!QueuedNeutralAfterSameTickNativeUpdatesArmsWithoutRestamping());CHECK(!EmptyShotRecoveryRetainsZeroAndStillRequiresGesture());CHECK(!GuardedCommitsRequireOwnOpenParentAndConservedProjection());CHECK(!RestoreNeverVotesAndBusyRewindsRevokeOnlyUnsubmittedAuthority());CHECK(!ExactGuardedIdleRecordMutations());CHECK(!RealPumpAdapterTrackingLossRegrabThroughNativeService());CHECK(!NativeIdleRequiresActualGesture());CHECK(!LongTrackingLossRetainsDebt());CHECK(!MissingGuardAndConservationNeverRecover());
+namespace {
+void SetPaidFixtureIdle(Fixture& f){
+    for(auto& b:f.input.branches){b.currentState=b.nextState=2;b.previousState=1;b.phaseTimer=0;}
+}
+std::optional<WeaponCycleIdleDebtReady> PayRecovery(RecoveryFixture& f){
+    if(!f.Held()||!f.service.BeginRecovery(f.clock)||!f.Grant()||!f.Advance())return {};
+    const auto view=f.service.RecoveryView(f.clock);if(!view||!view->authority)return {};
+    const WeaponCycleIdleDebtRelease release{*view->authority,1,f.control.input.sequence,
+        f.control.input.observedNs,std::min(f.control.input.deadlineNs,view->authority->deadlineNs)};
+    if(!f.service.SubmitRecovery(release,f.control.input))return {};
+    f.Rounds();const auto ready=f.service.RecoveryView(f.clock)->ready;
+    if(!ready||!f.service.AcknowledgeRecovery(*ready,f.clock))return {};
+    SetPaidFixtureIdle(f);return ready;
+}
+ReloadFlowRecord PaidRecoveryTail(RecoveryFixture& f,unsigned branch){
+    auto r=f.Restore(branch);auto& z=*r.exit.boundary;
+    const bool m95=f.service.Mode()==Bc2NativeCycleMode::M95;
+    z.current=m95?8:7;z.previous=2;z.next=m95?1:8;z.timer=.0241789f;
+    Put(r.entry.copiedSnapshot,0,z.current);Put(r.entry.copiedSnapshot,4,z.next);Put(r.entry.copiedSnapshot,8,z.timer);
+    r.exit.copiedSnapshot=r.entry.copiedSnapshot;return r;
+}
+int PaidRecoveryReplayReblocksUntilTwoFreshRounds(){
+    for(bool m95:{false,true}){RecoveryFixture f(m95);const auto receipt=PayRecovery(f);CHECK(receipt);
+        const auto paid=f.service.View(f.clock);CHECK(paid.phase==Bc2NativeCyclePhase::Complete&&!paid.blocksFire);
+        const auto r=PaidRecoveryTail(f,m95?1u:0u);
+        CHECK(CycleConvergenceRestore(r,f.input.identity,r.entry.boundary.branch,m95,false));
+        f.service.ObserveRestore(r);
+        const auto pending=f.service.View(f.clock);
+        CHECK(pending.phase==Bc2NativeCyclePhase::Converging&&pending.blocksFire&&!pending.held&&!pending.ready);
+        CHECK(!f.service.RecoveryView(f.clock)->authority&&!f.service.RecoveryView(f.clock)->ready);
+        CHECK(!f.service.AcknowledgeRecovery(*receipt,f.clock)&&!f.service.YieldForReload());
+        for(unsigned b=0;b<3;++b)f.Idle(b);
+        CHECK(f.service.View(f.clock).blocksFire); // One round cannot borrow the old paid votes.
+        for(unsigned b=0;b<3;++b)f.Idle(b);
+        const auto settled=f.service.View(f.clock);
+        CHECK(settled.phase==Bc2NativeCyclePhase::Complete&&!settled.blocksFire&&!settled.ready&&!settled.held);
+        CHECK(settled.cycle==paid.cycle&&settled.shot==paid.shot&&settled.loaded==paid.loaded&&settled.reserve==paid.reserve);
+        CHECK(!f.service.RecoveryView(f.clock)->authority&&!f.service.RecoveryView(f.clock)->ready);
+        CHECK(!f.service.AcknowledgeRecovery(*receipt,f.clock));
+        // An actual next own-Update shot creates new debt; the paid stroke is not reused.
+        CHECK(f.Advance());
+        for(unsigned b=0;b<3;++b){auto& state=f.input.branches[b];
+            state.loaded=paid.loaded-1;state.currentState=m95?8:7;state.previousState=m95?7:6;
+            state.nextState=m95?1:8;state.phaseTimer=m95?2.2f:.2f;f.Shot(b,paid.loaded);}
+        for(unsigned p=0;p<2;++p){CHECK(f.Advance());for(unsigned b=0;b<3;++b){f.Begin(b);f.Finish();}}
+        const auto next=f.service.View(f.clock);
+        CHECK(next.phase==Bc2NativeCyclePhase::Held&&next.blocksFire&&next.held&&!next.ready);
+        CHECK(next.cycle==paid.cycle+1&&next.shot==paid.shot+1&&next.loaded==paid.loaded-1&&next.reserve==paid.reserve);
+    }return 0;
+}
+int PaidConcurrentBoltReplayDoesNotPublishSecondReady(){
+    ConcurrentBoltFixture f;CHECK(f.Start()&&f.Release());f.Rounds();const auto receipt=f.service.View(f.clock).ready;
+    CHECK(receipt&&f.service.AcknowledgeReady(*receipt,f.clock));SetPaidFixtureIdle(f);
+    const auto paid=f.service.View(f.clock);const auto r=PaidRecoveryTail(f,1);f.service.ObserveRestore(r);
+    CHECK(f.service.View(f.clock).blocksFire&&!f.service.View(f.clock).ready&&!f.service.View(f.clock).held);
+    CHECK(f.service.View(f.clock).phase==Bc2NativeCyclePhase::Converging);
+    for(unsigned b=0;b<3;++b)f.Idle(b);CHECK(f.service.View(f.clock).blocksFire);
+    for(unsigned b=0;b<3;++b)f.Idle(b);
+    const auto settled=f.service.View(f.clock);
+    CHECK(settled.phase==Bc2NativeCyclePhase::Complete&&!settled.blocksFire&&!settled.ready&&!settled.held);
+    CHECK(settled.cycle==paid.cycle&&settled.shot==paid.shot&&settled.loaded==paid.loaded&&settled.reserve==paid.reserve);
+    CHECK(!f.service.AcknowledgeReady(*receipt,f.clock)&&f.service.YieldForReload());return 0;
+}
+int PaidRecoveryRejectsStaleOrChangedReplay(){
+    for(unsigned mutation=0;mutation<5;++mutation){RecoveryFixture f;const auto receipt=PayRecovery(f);CHECK(receipt);
+        const auto acknowledged=f.clock;auto r=PaidRecoveryTail(f,0);
+        if(mutation==0)r.entry.nowNs=acknowledged-1; // Created before ACK, even if delivered later.
+        if(mutation==1){++r.entry.boundary.owner.weapon;++r.exit.boundary->owner.weapon;}
+        if(mutation==2){--r.entry.boundary.loaded;--r.exit.boundary->loaded;
+            Put(r.entry.copiedSnapshot,0x18,r.exit.boundary->loaded);r.exit.copiedSnapshot=r.entry.copiedSnapshot;
+            CHECK(ReloadRestoreMatched(r));} // Structurally valid snapshot, wrong paid ammunition.
+        if(mutation==3)r.exit.copiedSnapshot[63]^=std::byte{1};
+        if(mutation==4){r.id=1;r.entry.nativeInvocation=1;} // Previously consumed native invocation.
+        f.service.ObserveRestore(r);const auto rejected=f.service.View(f.clock);
+        CHECK(rejected.phase==Bc2NativeCyclePhase::Cancelled&&rejected.blocksFire&&!rejected.ready&&!rejected.held);
+        CHECK(!f.service.RecoveryView(f.clock)->ready&&!f.service.RecoveryView(f.clock)->authority);
+    }
+    // Long idle itself does not invent a second stroke or expire a settled weapon.
+    RecoveryFixture idle;CHECK(PayRecovery(idle));idle.clock+=4000000000ll;
+    idle.service.ObserveRestore(idle.Restore(0));
+    CHECK(idle.service.View(idle.clock).phase==Bc2NativeCyclePhase::Complete&&!idle.service.View(idle.clock).blocksFire);
+    return 0;
+}
+int PaidRecoveryPauseRequiresFreshNativeEvidenceNotAnotherGesture(){
+    RecoveryFixture f;const auto receipt=PayRecovery(f);CHECK(receipt);
+    const auto paid=f.service.View(f.clock);f.service.ObserveRestore(PaidRecoveryTail(f,0));
+    CHECK(f.service.View(f.clock).blocksFire&&f.service.Recovering());
+    // A menu pause does not renew a controller lease or discard a paid stroke.
+    // Only new guarded native callbacks can re-establish current idle.
+    f.clock+=61000000000ll;
+    CHECK(f.service.View(f.clock).blocksFire&&!f.service.View(f.clock).held);
+    CHECK(!f.service.RecoveryView(f.clock)->authority&&!f.service.RecoveryView(f.clock)->ready);
+    for(unsigned b=0;b<3;++b)f.Idle(b);CHECK(f.service.View(f.clock).blocksFire);
+    for(unsigned b=0;b<3;++b)f.Idle(b);
+    const auto after=f.service.View(f.clock);
+    CHECK(after.phase==Bc2NativeCyclePhase::Complete&&!after.blocksFire&&!after.ready&&!after.held);
+    CHECK(after.cycle==paid.cycle&&after.shot==paid.shot&&after.loaded==paid.loaded&&after.reserve==paid.reserve);
+    CHECK(!f.service.AcknowledgeRecovery(*receipt,f.clock)&&f.service.YieldForReload());return 0;
+}
+int PaidRecoveryDrainsOriginalIdleOverlapWithoutBorrowingVotes(){
+    RecoveryFixture f;CHECK(PayRecovery(f));CHECK(f.Advance());
+    const auto paid=f.service.View(f.clock);const auto original=f.Begin(1);
+    CHECK(original.tracked&&!original.hold);
+    CHECK(!f.service.DrainingPaidOrdinaryInvocation(original,f.input.identity.firing[1],f.clock));
+    f.service.ObserveRestore(PaidRecoveryTail(f,0));
+    CHECK(f.service.Phase()==Bc2NativeCyclePhase::Converging&&f.service.View(f.clock).blocksFire);
+    const auto firing=f.input.identity.firing[1];const auto& entry=f.update.entry;
+    const NativeCycleOrdinaryStepOwner step{firing,entry.context,0x6e9168,0x6e9168,
+        firing,entry.context,entry.boundary.firing,original.invocation,entry.nativeInvocation,
+        original.invocation,entry.depth,entry.kind==ReloadFlowEvent::Update,true};
+    const auto allowed=[&](const NativeCycleOrdinaryStepOwner& owner,const Bc2NativeCycleDecision& decision,std::int64_t now){
+        return NativeCycleOrdinaryStepOwned(owner)&&f.service.DrainingPaidOrdinaryInvocation(decision,owner.firing,now);
+    };
+    CHECK(allowed(step,original,f.clock));
+    for(unsigned mutation=0;mutation<8;++mutation){auto changed=step;
+        if(mutation==0)++changed.caller;
+        if(mutation==1)++changed.context;
+        if(mutation==2)++changed.currentInvocation;
+        if(mutation==3)++changed.frameInvocation;
+        if(mutation==4)changed.currentDepth=2;
+        if(mutation==5)changed.currentIsUpdate=false;
+        if(mutation==6)changed.codeVerified=false;
+        if(mutation==7)++changed.currentFiring;
+        CHECK(!allowed(changed,original,f.clock));
+    }
+    auto forged=original;++forged.invocation;CHECK(!allowed(step,forged,f.clock));
+    forged=original;forged.hold=true;CHECK(!allowed(step,forged,f.clock));
+    CHECK(!allowed(step,original,original.deadlineNs));
+    CHECK(!f.service.DrainingPaidOrdinaryInvocation(original,firing+4,f.clock));
+    f.update.exit.nowNs=++f.clock;f.Finish();
+    CHECK(!allowed(step,original,f.clock));
+    CHECK(f.service.Phase()==Bc2NativeCyclePhase::Converging&&f.service.View(f.clock).blocksFire);
+    CHECK(!f.service.View(f.clock).ready&&!f.service.View(f.clock).held);
+    for(unsigned b=0;b<3;++b)f.Idle(b);
+    CHECK(f.service.View(f.clock).blocksFire); // The unguarded overlap supplied no vote.
+    for(unsigned b=0;b<3;++b)f.Idle(b);
+    const auto settled=f.service.View(f.clock);
+    CHECK(settled.phase==Bc2NativeCyclePhase::Complete&&!settled.blocksFire&&!settled.ready&&!settled.held);
+    CHECK(settled.cycle==paid.cycle&&settled.shot==paid.shot&&settled.loaded==paid.loaded&&settled.reserve==paid.reserve);
+    CHECK(f.service.YieldForReload());return 0;
+}
+int PaidRecoverySiblingIdleCompletesBeforeRestoreDelivery(){
+    // The same exact unchanged-idle overlap as the417 drain fixture, with the
+    // two callback exits delivered in reverse order. This scheduling is an
+    // emulated regression, not a reconstruction of the lost416 invocation8748.
+    for(bool m95:{false,true})for(unsigned client:{0u,1u})for(unsigned sibling:{1-client,2u}){
+        RecoveryFixture f(m95);const auto receipt=PayRecovery(f);CHECK(receipt);CHECK(f.Advance());
+        const auto paid=f.service.View(f.clock);const auto releases=f.service.RecoveryReleases();
+        const auto original=f.Begin(sibling);auto pending=f.update;
+        --pending.entry.nowNs; // Runtime captures entry before Evaluate's native read.
+        CHECK(original.tracked&&!original.hold);
+        auto replay=PaidRecoveryTail(f,client);
+        CHECK(pending.entry.nowNs<replay.entry.nowNs);
+        pending.exit.nowNs=++f.clock;
+        f.service.Finish(original,pending);
+        CHECK(f.service.Phase()==Bc2NativeCyclePhase::Complete&&!f.service.View(f.clock).blocksFire);
+        replay.exit.nowNs=++f.clock;
+        CHECK(replay.entry.nowNs<pending.exit.nowNs&&pending.exit.nowNs<replay.exit.nowNs);
+        CHECK(CycleConvergenceRestore(replay,f.input.identity,client,m95,false));
+        f.service.ObserveRestore(replay);
+        CHECK(f.service.Phase()==Bc2NativeCyclePhase::Converging&&f.service.View(f.clock).blocksFire);
+        CHECK(!f.service.RecoveryView(f.clock)->authority&&!f.service.RecoveryView(f.clock)->ready);
+        CHECK(!f.service.AcknowledgeRecovery(*receipt,f.clock)&&!f.service.YieldForReload());
+        for(unsigned b=0;b<3;++b)f.Idle(b);
+        CHECK(f.service.View(f.clock).blocksFire); // The ordinary sibling is never an idle vote.
+        for(unsigned b=0;b<3;++b)f.Idle(b);
+        const auto settled=f.service.View(f.clock);
+        CHECK(settled.phase==Bc2NativeCyclePhase::Complete&&!settled.blocksFire&&!settled.ready&&!settled.held);
+        CHECK(settled.cycle==paid.cycle&&settled.shot==paid.shot&&settled.loaded==paid.loaded&&settled.reserve==paid.reserve);
+        CHECK(f.service.RecoveryReleases()==releases&&!f.service.AcknowledgeRecovery(*receipt,f.clock));
+        CHECK(f.service.YieldForReload());
+    }
+    return 0;
+}
+int PaidRecoverySiblingReceiptCannotHideChangedOrNewerWork(){
+    for(bool m95:{false,true})for(unsigned mutation=0;mutation<13;++mutation){
+        RecoveryFixture f(m95);const auto receipt=PayRecovery(f);CHECK(receipt);CHECK(f.Advance());
+        const auto paid=f.service.View(f.clock);
+        auto original=f.Begin(1);auto pending=f.update;
+        auto replay=PaidRecoveryTail(f,0);
+        pending.exit.nowNs=++f.clock;
+        // Valid identity/context alone is not proof of an unchanged idle Update.
+        if(mutation==0)++pending.exit.boundary->reserve;
+        if(mutation==1)++pending.exit.boundary->previous;
+        if(mutation==2)pending.exit.boundary->flagsA8=1;
+        if(mutation==3){pending.exit.boundary->current=m95?8:7;pending.exit.boundary->next=m95?1:8;pending.exit.boundary->timer=.02f;}
+        if(mutation==4){pending.exit.holdRequested=true;pending.exit.hold.applied=true;}
+        if(mutation==5)pending.exit.cycleGuardEpoch=1;
+        if(mutation==6)pending.exit.nowNs=f.clock=original.deadlineNs;
+        if(mutation==7)++original.deadlineNs;
+        if(mutation==8)pending.entry.nowNs=f.service.Diagnostic().acknowledgedAtNs-1;
+        CHECK(ValidateCycleUpdate(pending,f.input.identity,1));
+        f.service.Finish(original,pending);
+        CHECK(f.service.Phase()==Bc2NativeCyclePhase::Complete);
+        if(mutation==9){
+            // A missing newer sibling must not borrow the earlier idle receipt.
+            const auto newer=f.Begin(1);CHECK(newer.tracked);
+            f.service.Missing(f.input.identity.firing[1],newer.invocation);
+        }
+        if(mutation==10){
+            // A newer complete Update starts after this old Restore's entry.
+            CHECK(f.Begin(1).tracked);f.Finish();
+        }
+        if(mutation==11){
+            // Accepted unrelated idle Restore invalidates its sibling receipt.
+            f.service.ObserveRestore(f.Restore(1));
+            CHECK(f.service.Phase()==Bc2NativeCyclePhase::Complete);
+        }
+        // An already-ended Restore cannot borrow a later sibling completion.
+        if(mutation!=12)replay.exit.nowNs=++f.clock;
+        CHECK(CycleConvergenceRestore(replay,f.input.identity,0,m95,false));
+        f.service.ObserveRestore(replay);
+        const auto rejected=f.service.View(f.clock);
+        CHECK(rejected.phase==Bc2NativeCyclePhase::Cancelled&&rejected.failure==Bc2NativeCycleFailure::Restore&&rejected.blocksFire);
+        CHECK(!rejected.ready&&!rejected.held&&!f.service.YieldForReload());
+        CHECK(rejected.cycle==paid.cycle&&rejected.shot==paid.shot&&rejected.loaded==paid.loaded&&rejected.reserve==paid.reserve);
+        CHECK(!f.service.AcknowledgeRecovery(*receipt,f.clock));
+    }
+    // Every later-finishing sibling needs its own proof. A good server receipt
+    // must not hide a changed client receipt or lend it an idle vote.
+    RecoveryFixture f;CHECK(PayRecovery(f));CHECK(f.Advance());
+    const auto client=f.Begin(1);auto clientUpdate=f.update;
+    const auto server=f.Begin(2);auto serverUpdate=f.update;
+    auto replay=PaidRecoveryTail(f,0);
+    ++clientUpdate.exit.boundary->reserve;clientUpdate.exit.nowNs=++f.clock;
+    f.service.Finish(client,clientUpdate);
+    serverUpdate.exit.nowNs=++f.clock;f.service.Finish(server,serverUpdate);
+    replay.exit.nowNs=++f.clock;f.service.ObserveRestore(replay);
+    CHECK(f.service.Phase()==Bc2NativeCyclePhase::Cancelled&&f.service.View(f.clock).blocksFire);
+    return 0;
+}
+int PaidRecoveryRejectsContradictoryOverlapOrStaleNormalEvidence(){
+    for(unsigned mutation=0;mutation<4;++mutation){
+        RecoveryFixture f;CHECK(PayRecovery(f));CHECK(f.Advance());
+        const auto original=f.Begin(1);CHECK(original.tracked&&!original.hold);
+        f.service.ObserveRestore(PaidRecoveryTail(f,0));
+        CHECK(f.service.Phase()==Bc2NativeCyclePhase::Converging);
+        if(mutation==0)--f.update.exit.boundary->loaded;
+        if(mutation==1)++f.update.exit.boundary->owner.weapon;
+        if(mutation==2){f.update.exit.holdRequested=true;f.update.exit.hold.applied=true;}
+        if(mutation==3){f.update.exit.boundary->current=7;f.update.exit.boundary->next=8;f.update.exit.boundary->timer=.2f;}
+        f.update.exit.nowNs=++f.clock;f.Finish();
+        const auto rejected=f.service.View(f.clock);
+        CHECK(rejected.phase==Bc2NativeCyclePhase::Cancelled&&rejected.blocksFire&&!rejected.ready&&!rejected.held);
+    }
+    RecoveryFixture stale;CHECK(PayRecovery(stale));CHECK(stale.Advance());
+    const auto replay=PaidRecoveryTail(stale,0);
+    CHECK(stale.Begin(0).tracked);stale.Finish();
+    CHECK(stale.service.Phase()==Bc2NativeCyclePhase::Complete);
+    stale.service.ObserveRestore(replay);
+    CHECK(stale.service.Phase()==Bc2NativeCyclePhase::Cancelled&&stale.service.View(stale.clock).blocksFire);
+    return 0;
+}
+int PaidRecoveryPumpDoesNotRepeatPhysicalWork(){
+    PumpBridge p;MechanismAudioLedger<> audio;unsigned audible=0;
+    const auto hear=[&]{if(p.result.audio&&audio.Accept(*p.result.audio,p.sample.input.nowNs)==MechanismAudioAdmission::Accepted)++audible;};
+    const auto tick=[&](float travel,bool grip=true){p.Tick(travel,grip);hear();};
+    CHECK(p.native.Held());tick(0,false);tick(0,false);tick(0);tick(0);tick(.02f);
+    p.tracking=false;tick(.03f,false);CHECK(p.native.service.Recovering());
+    p.tracking=true;for(unsigned n=0;n<6;++n)tick(0,false);tick(0);tick(0);
+    for(float t:{.02f,.04f,.06f,.08f,SpasObservedForeEndStroke,SpasObservedForeEndStroke,SpasObservedForeEndStroke,SpasObservedForeEndStroke,
+                 .075f,.055f,.035f,.015f,0.f,0.f,0.f,0.f,0.f,0.f})tick(t);
+    for(unsigned n=0;n<6;++n)tick(0);
+    CHECK(p.acknowledged==1&&!p.result.blocksFire&&p.native.service.RecoveryReleases()==1&&audible==2);
+    SetPaidFixtureIdle(p.native);const auto paid=p.native.service.View(p.native.clock);
+    for(unsigned client=0;client<2;++client){
+        const auto ordinary=p.native.Begin(1-client);auto idle=p.native.update;
+        auto replay=PaidRecoveryTail(p.native,client);
+        idle.exit.nowNs=++p.native.clock;p.native.service.Finish(ordinary,idle);
+        replay.exit.nowNs=++p.native.clock;p.native.service.ObserveRestore(replay);
+        // Reuse the original held-squeeze packet before native convergence;
+        // only processing time moves. There is no neutral edge or new stroke.
+        p.sample.input.nowNs=++p.native.clock;p.result=p.pump.Tick(p.sample,p.native.hands,p.native.intent);hear();
+        CHECK(p.result.blocksFire&&!p.result.audio&&!p.result.recovered&&!p.result.settled);
+        CHECK(!p.result.tracking.held&&!p.result.tracking.target&&!p.result.tracking.recoveryTarget);
+        tick(0);
+        CHECK(!p.result.blocksFire&&!p.pump.BlocksFire()&&!p.result.audio&&!p.result.recovered&&!p.result.settled);
+        CHECK(p.acknowledged==1&&p.native.service.RecoveryReleases()==1&&audible==2);
+        const auto current=p.native.service.View(p.native.clock);
+        CHECK(current.cycle==paid.cycle&&current.shot==paid.shot&&current.loaded==paid.loaded&&current.reserve==paid.reserve);
+    }
+    CHECK(p.native.service.YieldForReload());return 0;
+}
+}
+int main(){CHECK(!PaidRecoverySiblingIdleCompletesBeforeRestoreDelivery());CHECK(!PaidRecoverySiblingReceiptCannotHideChangedOrNewerWork());CHECK(!PaidRecoveryReplayReblocksUntilTwoFreshRounds());CHECK(!PaidConcurrentBoltReplayDoesNotPublishSecondReady());CHECK(!PaidRecoveryRejectsStaleOrChangedReplay());CHECK(!PaidRecoveryPauseRequiresFreshNativeEvidenceNotAnotherGesture());CHECK(!PaidRecoveryDrainsOriginalIdleOverlapWithoutBorrowingVotes());CHECK(!PaidRecoveryRejectsContradictoryOverlapOrStaleNormalEvidence());CHECK(!PaidRecoveryPumpDoesNotRepeatPhysicalWork());CHECK(!RecoveryConversionDefinitivelyRejectsOnlyTheUndeliveredHeldRelease());CHECK(!RecoveryReleaseDenialCannotBeBorrowedOrHideAcceptedWork());CHECK(!InputRejectionCapturesExactCauseOnceAndSurvivesActorRetirement());CHECK(!FreshControllerLossRetainsDebtWithoutAdmittingThePacket());CHECK(!ControllerLossCannotHideInvalidOwnerOrForgedRelease());CHECK(!ControllerExpiryAtAdmissionRetainsNativeDebt());CHECK(!ConcurrentBoltRequiresFullGestureDespiteNativeIdle());CHECK(!ConcurrentReleaseWaitsForEveryFreshNativeBranch());CHECK(!ConcurrentAuthorityCannotBeForgedOrRefreshedByIdleTime());CHECK(!ConcurrentInterruptionReturnsToNeutralRecoveryWithoutForgivingDebt());CHECK(!ConcurrentGuardFailureNeverPermitsFire());CHECK(!RecenterFromUnsuspendedHoldCreatesFreshObservation());CHECK(!RecenterPreservesShotAndInvalidatesOldAuthority());CHECK(!RecenterRejectsOtherOwnersOpenCallbacksAndPendingOutcomes());CHECK(!PumpRecenterNeedsNewNeutralAndFullStroke());CHECK(!QueuedNeutralAfterSameTickNativeUpdatesArmsWithoutRestamping());CHECK(!EmptyShotRecoveryRetainsZeroAndStillRequiresGesture());CHECK(!GuardedCommitsRequireOwnOpenParentAndConservedProjection());CHECK(!RestoreNeverVotesAndBusyRewindsRevokeOnlyUnsubmittedAuthority());CHECK(!ExactGuardedIdleRecordMutations());CHECK(!RealPumpAdapterTrackingLossRegrabThroughNativeService());CHECK(!NativeIdleRequiresActualGesture());CHECK(!LongTrackingLossRetainsDebt());CHECK(!MissingGuardAndConservationNeverRecover());
     CHECK(!NativeBusyRevokesGrantButNotSubmittedReceipt());CHECK(!ExistingHoldDrainsBeforeConvergence());CHECK(!NoConversionOfNormalPendingOrStaleHold());return 0;}

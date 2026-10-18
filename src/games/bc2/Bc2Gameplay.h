@@ -14,6 +14,7 @@
 #include "Bc2BodyHolsterObservation.h"
 #include "Bc2BodyHolsterProbe.h"
 #include "fvr/interaction/BodyAnchors.h"
+#include "fvr/graphics/VehicleReticle.h"
 #include <memory>
 #include "fvr/runtime/FrameCoordinator.h"
 #include "fvr/ipc/FrameChannel.h"
@@ -28,6 +29,7 @@ bool SetFeedbackWriter(FeedbackWriter)noexcept;
 // Explicit driver-only native head-aim/camera opt-in, after Install before Start.
 // Fire can remain disabled for the bounded signed-axis response diagnostic.
 bool EnableBoatHeadAim(bool enableFire=false)noexcept;
+std::optional<graphics::VehicleReticleSample> ReadVehicleReticle(std::int64_t nowNs)noexcept;
 // Explicit pre-Start opt-in. Requires measured calibration and a native-cycle
 // build; ordinary hands and finite fixtures have separate activation gates.
 bool EnablePhysicalPumpCandidate(const Bc2PumpCalibration&)noexcept;

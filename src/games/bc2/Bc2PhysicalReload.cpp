@@ -347,6 +347,12 @@ PhysicalReloadResult Bc2PhysicalReload::Tick(const PhysicalReloadSample& supplie
                 supportReturn_.Observe(s.input,gun,cancelInput,hands.Current(InteractionHand::Left).has_value(),s.cancelFlags);
                 supportReturn_.Complete(receipt->reservation.request,receipt->observedNs);
                 Feedback(out,interaction::FeedbackKind::ReloadApplied,s.input);
+                const auto& owner=receipt->reservation.identity.owner;
+                const auto& item=receipt->reservation.identity.weapon;
+                out.audio=ShellReloadAudioEvent{{owner.actor,owner.actorGeneration,item.id,item.generation,
+                    receipt->reservation.cycle},receipt->reservation.request,s.input.sequence,receipt->nativeEvent,
+                    receipt->observedNs,std::min(receipt->deadlineNs,s.input.deadlineNs),receipt->reservation.units,
+                    true,s.input.focused,s.input.tracked[0]&&s.input.tracked[1]};
                 // Receipt retains the ORIGINAL reservation after Resolve clears it.
                 bool recorded=false;
                 for(unsigned n=0;n<transactionCount_;++n){auto& t=transactions_[n];

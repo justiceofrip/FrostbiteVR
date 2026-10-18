@@ -1,0 +1,26 @@
+[
+  {
+    "asset": "Nambu100",
+    "meshes": [
+      {
+        "archive": "Dist/win32/async/weapon/nambu100-00.fbrb",
+        "mesh": "Objects/Weapons/Handheld/Beach/Nambu100/Nambu100_Mesh",
+        "expected_index_sha256": "65a555ac47ca347684359e3db5c260abae35f181c97e451d03b3de63d814d3bb",
+        "expected_metadata_sha256": "705b8303f0765fb2af7a38d0c54c7f18ac4280216d55bdfc1383fbf1e3510402"
+      }
+    ],
+    "authored_configuration": {
+      "resource": "Objects/Weapons/Handheld/Beach/Nambu100/Nambu100.dbx",
+      "sha256": "24ca715ffcaf75cedc25712d8c43e80a5bc7a51b72eb750593d5cb7725cc0120",
+      "instance_guid": "AC8010D7-94E2-4B04-AE1F-1E20AF940C0F",
+      "mesh_references": [
+        {
+          "reference": "objects/weapons/handheld/beach/nambu100/nambu100_mesh/a627a85b-15ce-4e7f-ba05-0ec5f3bde93c",
+          "resource": "Objects/Weapons/Handheld/Beach/Nambu100/Nambu100_Mesh.dbx",
+          "sha256": "3ee760c5db4478cdd13798960a57bf1f8b9bc76352f264815bc46585a0e7a878",
+          "instance_guid": "a627a85b-15ce-4e7f-ba05-0ec5f3bde93c"
+        }
+      ]
+    }
+  }
+]

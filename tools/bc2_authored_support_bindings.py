@@ -127,12 +127,13 @@ def main(argv=None):
     for name in ('game','archive','configurations','mesh-bindings','hand-poses','output','header'):
         p.add_argument('--'+name,type=Path,required=True)
     p.add_argument('--asset',action='append',required=True)
+    p.add_argument('--reference-archive',action='append',type=Path,default=[],help='Explicit shared authored dependency archive')
     p.add_argument('--enable-support-contact',action='store_true',help='Enroll selected static firearm support contacts, preserving the gun hand')
     p.add_argument('--primary-hand-aim-asset',action='append',default=[],help='Explicit contact asset using primary-hand aim with close support hands')
     a=p.parse_args(argv)
     sources=[a.configurations,a.mesh_bindings,a.hand_poses]
     blobs=[x.read_bytes() for x in sources]
-    bound=load(a.game,a.archive,*[json.loads(x.decode('utf-8-sig')) for x in blobs],reload_references_only=True)
+    bound=load(a.game,a.archive,*[json.loads(x.decode('utf-8-sig')) for x in blobs],reload_references_only=True,reference_archives=a.reference_archive)
     result=derive(bound,set(a.asset),enable_contact=a.enable_support_contact,primary_hand_assets=set(a.primary_hand_aim_asset))
     result['input_sha256']={p.name:hashlib.sha256(b).hexdigest() for p,b in zip(sources,blobs)}
     result['archive_index_sha256']=bound['archive_index_sha256']

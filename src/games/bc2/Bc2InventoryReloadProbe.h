@@ -20,14 +20,20 @@ public:
  bool CancelConsumer()const noexcept{return phase_==Phase::Failed;}
  bool Completed()const noexcept{return phase_==Phase::Done;}
  Phase State()const noexcept{return phase_;}
+ // Explicit magazine-only diagnostic: draw the selected item without requiring
+ // another shoulder. The ordinary two-item round trip keeps its original gate.
+ bool InitialItemOnly()noexcept {
+  if(!inventoryOnly_||first_||initialTarget_||initialItemOnly_)return false;
+  initialItemOnly_=true;return true;
+ }
  // Diagnostic input only: start by drawing one exact other-shoulder item.
  // Its ordinary empty-hands/visibility evidence must still authorize a draw.
  bool PreferOtherInitialShoulder(const interaction::BodySlotAssignment& target)noexcept {
-  if(!inventoryOnly_||first_||initialTarget_||!target.slot||target.item.id<0x10000||!target.item.generation)return false;
+  if(!inventoryOnly_||initialItemOnly_||first_||initialTarget_||!target.slot||target.item.id<0x10000||!target.item.generation)return false;
   initialTarget_=target;return true;
  }
  // Script progression only. No native command, receipt or consumer reset.
- bool ResumeInitial(std::int64_t now)noexcept {if(!inventoryOnly_||phase_!=Phase::InitialHeld)return false;To(Phase::ReachStow,now);return true;}
+ bool ResumeInitial(std::int64_t now)noexcept {if(!inventoryOnly_||initialItemOnly_||phase_!=Phase::InitialHeld)return false;To(Phase::ReachStow,now);return true;}
  bool ResumeOther(std::int64_t now)noexcept {if(!inventoryOnly_||phase_!=Phase::OtherHeld)return false;To(Phase::ReachOtherStow,now);return true;}
  // One additional shoulder round trip; persistent consumers and the original
  // session/input clocks survive. Fresh real claims must prove each new draw.
@@ -58,7 +64,7 @@ private:
  interaction::BodyAnchorConfig anchors_{};math::Pose command_{};float squeeze_=0;
  Bc2MagazinePhysicalProbe reload_{true,false,true,true,true};
  bool interrupt_=false,recoveryBegun_=false;Bc2ReloadInterruptionProbe recovery_;
- bool inventoryOnly_=false;
+ bool inventoryOnly_=false,initialItemOnly_=false;
  MagazinePackCounters packs_{};MagazineRawContact recoveryRaw_{};std::string interruptedReport_;
  struct Row {unsigned phase=0,reason=0,weapon=0,bodyPhase=0,slot=0;
   std::int64_t now=0;std::uint64_t input=0,request=0,claim=0,committed=0;};

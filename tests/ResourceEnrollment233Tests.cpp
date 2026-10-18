@@ -16,7 +16,7 @@ void Configure(Fixture& f,const BodyEquipmentProfile& p){
  f.s.selected=s;
 }
 void ExactCycle(Fixture& f,const BodyEquipmentProfile& p){auto request=f.out.visibility;f.Advance();Configure(f,p);f.Render(request);f.Suppress();f.Tick();}
-int ExactBodyAndVisibility(){unsigned count=0;
+int ExactBodyAndVisibility(){unsigned count=0,nambu=0;
  for(const auto& p:BodyEquipmentProfiles){if(!p.configurationPath)continue;++count;
   Fixture f;f.adapter=Bc2BodyHolster{BodyInventoryHolsterAcceptance};Configure(f,p);f.Tick();
   CHECK(f.adapter.AcceptsProfile(f.s.nativeOwner,f.s.selected,f.s.hand.nowNs));
@@ -29,6 +29,13 @@ int ExactBodyAndVisibility(){unsigned count=0;
    ++resources;CHECK(row.enabled&&equipment->Ready()&&equipment->geometry->asset==p.asset&&equipment->geometry->mesh==p.mesh);
    CHECK(equipment->geometry->rigFingerprint==p.rig);}
   CHECK(resources==1&&body_equipment_detail::ProfileMatchesSelected(p,snapshot));
+  if(std::string_view(p.asset)=="Nambu100"){
+   ++nambu;CHECK(std::string_view(p.configurationPath)=="Objects/Weapons/Handheld/Beach/Nambu100/Nambu100");
+   const auto* equipment=FindMagazineEquipment("Nambu100");CHECK(equipment&&equipment->Ready());
+   CHECK(equipment->native->identityRoute==MagazineIdentityRoute::SelectedCarriedItem&&
+    equipment->native->configuration.values.boltDelay==.5f&&equipment->native->configuration.values.boltTime==1.f&&
+    equipment->native->configuration.values.holdBoltUntilFireRelease);
+  }
   for(unsigned fault=0;fault<12;++fault){auto s=std::make_shared<SelectedMeshesSnapshot>(snapshot);
    if(fault==0)s->configurationPathVerified=false;if(fault==1)s->configurationPath[0]='x';
    if(fault==2)--s->states[0].count;if(fault==3)++s->states[0].count;
@@ -49,22 +56,34 @@ int ExactBodyAndVisibility(){unsigned count=0;
   CHECK(f.out.phase==BodyHolsterPhase::Empty&&f.out.freeRight&&!f.hands.Current(InteractionHand::Right));
   const auto source=Source(f);CHECK(source&&BodyHolsteredHostInstance(*source,*source,f.s.hand.nowNs));
   CHECK(source->prop.geometry==MakeBodyAmmoGeometryKey(p.asset,p.mesh,p.part,p.rig));
+  if(std::string_view(p.asset)=="Nambu100"){
+   auto equipment=source->equipment;equipment.persistence=0;
+   const auto nullable=BuildBodyHolsteredSource(source->freeRight,source->slot,equipment,BodyInput(f),IdentityBody(),{},f.s.hand.nowNs);
+   CHECK(nullable&&BodyHolsteredHostInstance(*nullable,*nullable,f.s.hand.nowNs));
+   auto replacement=*nullable;replacement.equipment.persistence=1;
+   CHECK(!BodyHolsteredHostInstance(*nullable,replacement,f.s.hand.nowNs));
+  }
   ExactCycle(f,p); // A neutral input after committed holster rearms the ordinary policy.
   f.Advance();Configure(f,p);f.Suppress();f.Render(f.out.visibility);f.s.body.intent={++f.intent,BodyInventoryOperation::Draw,1,f.items[0].key};f.Tick();
   CHECK(!Source(f));ExactCycle(f,p);ExactCycle(f,p);
   CHECK(f.out.phase==BodyHolsterPhase::Held&&f.hands.Current(InteractionHand::Right)&&!f.out.blockWeaponActions);
  }
- CHECK(count==16);return 0;
+ CHECK(count==17&&nambu==1);return 0;
 }
 int InstalledCatalog(const char* path){auto result=LoadBodyAmmoGeometryCache(path);
- CHECK(result.status==BodyAmmoCacheStatus::Loaded&&result.catalog&&result.catalog->size()==46);
+ CHECK(result.status==BodyAmmoCacheStatus::Loaded&&result.catalog&&result.catalog->size()==48);
+ // Check every compiled cache identity, including the detached Nambu magazine.
+ for(const auto& p:BodyAmmoAssetProfiles){unsigned matches=0;
+  for(const auto& g:*result.catalog)if(g->asset==p.asset&&g->mesh==p.mesh&&g->part==p.part&&g->rigFingerprint==p.rig)++matches;
+  CHECK(matches==1);}
  for(const auto& p:BodyEquipmentProfiles){if(!p.configurationPath)continue;unsigned matches=0;
   for(const auto& g:*result.catalog)if(g->asset==p.asset&&g->mesh==p.mesh&&g->part==p.part&&g->rigFingerprint==p.rig)++matches;
   CHECK(matches==1);}
- CHECK(BodyAmmoAssetProfiles.size()==46);return 0;
+ CHECK(BodyAmmoAssetProfiles.size()==48);return 0;
 }
 }
 int main(int argc,char** argv){CHECK(argc<=2&&NativeOperationCapabilities.size()==1);
  if(ExactBodyAndVisibility()||ActualHiddenSelectedProfiles()||SourceIdentityAndReceiptFailures()||OriginalDeadlinesAndDrawCancellation()||
     PoseUsesBodyShoulderAndScale()||RecenterRequiresNewTypedSource()||(argc==2&&InstalledCatalog(argv[1])))return 1;
- std::cout<<"16 exact resource/visibility/body joins; 272 malformed bindings; actual hide/draw consumers; 46 installed cache profiles passed. Native/GPU receipts are CPU fixtures.\n";}
+ std::cout<<"17 exact resource/visibility/body joins including null-persistence Nambu; 289 malformed bindings; actual hide/draw consumers passed. Native/GPU receipts are CPU fixtures.\n";
+ if(argc==2)std::cout<<"All 48 installed cache profiles matched their exact compiled identities.\n";}

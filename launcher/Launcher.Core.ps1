@@ -1,7 +1,24 @@
 #requires -Version 7.5
 # Shared installer/updater policy. No game or desktop input is sent here.
 Set-StrictMode -Version 3
-$script:FvrRepository = 'justiceofrip/FrostbiteVR'
+$script:FvrRepository = 'justiceofrip/BC2VR'
+$script:FvrFeedbackRepository = 'justiceofrip/BC2VR'
+
+function Assert-FvrRepository([string]$Repository) {
+    if ($Repository -notmatch '^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$' -or $Repository.Contains('..')) {
+        throw 'Invalid GitHub repository in the launcher package.'
+    }
+    return $Repository
+}
+function Set-FvrPackageRepositories($Package) {
+    # Package metadata selects this product's release and feedback destinations.
+    # Legacy packages without these fields use the BC2 VR product repository.
+    $release='justiceofrip/BC2VR'; $feedback=$release
+    if ($Package.ContainsKey('release_repository')) { $release=Assert-FvrRepository $Package.release_repository }
+    if ($Package.ContainsKey('feedback_repository')) { $feedback=Assert-FvrRepository $Package.feedback_repository }
+    else { $feedback=$release }
+    $script:FvrRepository=$release; $script:FvrFeedbackRepository=$feedback
+}
 
 function Set-FvrLauncherStorage([string]$Root) {
     $full = [IO.Path]::GetFullPath($Root)
@@ -20,6 +37,27 @@ function Set-FvrLauncherStorage([string]$Root) {
 
 function Read-FvrJson([string]$Path) {
     Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json -AsHashtable -DateKind String
+}
+function Get-FvrLocalLaunchRoute($Backend, [ValidateSet('MainMenu','Campaign')][string]$StartAt='MainMenu', [switch]$ActivateGameWindow) {
+    if (-not $Backend -or -not $Backend.launch) { throw 'The local VR launch profile is missing.' }
+    $arguments=@{}
+    if ($ActivateGameWindow) {
+        if (-not $Backend.ContainsKey('launch_activation') -or $Backend.launch_activation -ne 'user_click_once') {
+            throw 'This runtime profile does not support launching the game window from the desktop button. Install the updated local profile.'
+        }
+        $arguments.ActivateGameWindow=$true
+    }
+    if ($StartAt -eq 'MainMenu' -and $Backend.ContainsKey('main_menu_launch') -and $Backend.main_menu_launch) {
+        return @{entry=$Backend.main_menu_launch;arguments=$arguments;start_at=$StartAt}
+    }
+    if ($Backend.ContainsKey('launch_modes') -and $StartAt -in $Backend.launch_modes) {
+        $arguments.StartAt=$StartAt
+        return @{entry=$Backend.launch;arguments=$arguments;start_at=$StartAt}
+    }
+    # Legacy quick-launch profiles are retained for explicit development runs.
+    # An ordinary Launch must never silently force Continue Campaign.
+    if ($StartAt -eq 'Campaign') { return @{entry=$Backend.launch;arguments=$arguments;start_at=$StartAt} }
+    throw 'This runtime profile only supports the old campaign test launch. Install the main-menu VR profile before using Launch BC2 in VR.'
 }
 function Write-FvrJson([string]$Path, $Value) {
     $temp = $Path + '.' + [guid]::NewGuid().ToString('N') + '.tmp'

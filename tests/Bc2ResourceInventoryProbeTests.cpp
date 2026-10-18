@@ -61,6 +61,7 @@ struct Loop {
  bool manualPump=false,allowPumpPairs=true,allowPumpSupport=true,allowShellSupport=true,allowRifleShot=true;
  // Automatic native fire is deliberately independent of diagnostic phases.
  bool singleFireMagazine=false;
+ bool loseSupportOnMappedFire=false;unsigned lateCancelledMappedFire=0;
  bool automaticRifle=false;std::int64_t rifleInterval=70*Ms,lastRifleFire=0,secondPublicationDelay=0,publicationUntil=0;
  std::optional<AmmunitionCounts> delayedRifleCounts;std::function<void(Loop&)> beforeDriver;
  unsigned pumpSupports=0,shellSupports=0,rifleShots=0;bool pumpFirePose=false,pumpRightJump=false;std::optional<math::Pose> previousPumpRight;SupportGrip support;
@@ -244,6 +245,9 @@ struct Loop {
     else pumpAim.Reset();
    }else pumpAim.Reset();
    renderedInput=!Rifle()&&guidePumpRendering?supported.input:input;
+   if(loseSupportOnMappedFire&&calls>=4&&((action.held|action.pressed)&Fire)){
+    const auto left=hands.Current(InteractionHand::Left);if(left)hands.Release(hand,left->token);
+   }
    if((driver.State()!=Bc2ResourceInventoryProbe::Phase::Pump||allowPumpSupport)&&
       (driver.State()!=Bc2ResourceInventoryProbe::Phase::ShellSupport||allowShellSupport))
     driver.ObserveSupport(pumpResult.tracking,supported,hand,source,hands.Current(InteractionHand::Left),hands.Current(InteractionHand::Right),shellReturned.has_value(),now);
@@ -253,6 +257,8 @@ struct Loop {
   d.reloadBusy=pumpDebt||magazine->BlocksEquipment()||shell->BlocksEquipment();d.interaction=((action.held|action.pressed)&Fire)?BodyInteractionState::Suspended:BodyInteractionState::Available;
   auto bs=BodySample();bodyResult=inventory.TickHolster(memory.Memory(),d,bs,holster,hands,intent);PublishBody(bs);
   if(allowSelect&&bodyResult.select){const auto read=ReadBodyInventory(memory.Memory(),native.owner,true);if(read.snapshot&&ResolveBodyDraw(*read.snapshot,unsigned(bodyResult.select->id))){selectedNext=bodyResult.select->id==NativeInventory::b?1:0;++selectionCalls;}}
+  if(driver.CancelConsumer()&&((action.held|action.pressed)&Fire))++lateCancelledMappedFire;
+  driver.FilterCancelledFire(action); // Same final boundary as native Gather.
   if(allowShot&&!Rifle()&&(action.pressed&Fire)&&!bodyResult.blockWeaponActions){--shellLoaded;++shots;shotAt=now;if(manualPump){pumpNative.firedAt=now;const auto p=input.hands[1].grip.position;
    pumpFirePose=std::hypot(p.x,p.y+.40f,p.z)<.001f;}}
   if((manualPump||singleFireMagazine)&&allowRifleShot&&Rifle()&&!bodyResult.blockWeaponActions&&
@@ -875,6 +881,7 @@ int EmptyMagazineOrdinaryInput(){
 int MagazineOnlyRequiresSupport(){
  for(bool missing:{false,true}){
   auto f=std::make_unique<Loop>();f->singleFireMagazine=true;
+  f->memory.Word(NativeInventory::array+4,0);
   CHECK(f->driver.EnableMagazineOnly(false,true,true));
   f->beforeDriver=[&](Loop& loop){
    loop.observed.supportVerified=!missing&&loop.Rifle()&&loop.magRaw.valid;
@@ -889,7 +896,8 @@ int MagazineOnlyRequiresSupport(){
    f->Tick();
   }
   CHECK(f->driver.Completed()==!missing);
-  if(!missing){CHECK(f->calls==2&&f->rifleShots==1);CHECK(f->Report().find("\"rifle_support_released\":true")!=std::string::npos);}
+  if(!missing){CHECK(f->calls==4&&f->rifleShots==1);CHECK(f->Report().find("\"rifle_support_released\":true")!=std::string::npos);
+   CHECK(f->Report().find("\"support_reacquired\":true")!=std::string::npos);}
   if(!missing)CHECK(heldTicks>=75);
   else CHECK(f->calls==0&&!f->rifleShots);
  }
@@ -912,6 +920,67 @@ int MagazineOnlyRequiresSupport(){
   CHECK(!f->Run(false)&&interrupted&&f->driver.CancelConsumer()&&!f->calls&&!f->rifleShots);
   CHECK(f->Report().find("\"failure\":23")!=std::string::npos);
  }
+ return 0;
+}
+int SingleCampaignMagazineWithAutomaticFire(){
+ for(bool full:{false,true}){
+  auto f=std::make_unique<Loop>();f->singleFireMagazine=f->automaticRifle=true;
+  f->rifleInterval=50*Ms; // Faster than Nambu's100ms native period.
+  f->memory.Word(NativeInventory::array+4,0);
+  if(full)f->rifle.loaded=30;
+  CHECK(f->driver.EnableMagazineOnly(false,true,true));
+  const auto owner=f->native.owner;
+  f->beforeDriver=[](Loop& loop){loop.observed.supportVerified=loop.Rifle()&&loop.magRaw.valid;
+   loop.observed.supportRaw=loop.magRaw;loop.observed.supportTarget=Multiply(Pose(-.2f,-.25f,.45f),Pose(5,2,3));};
+  CHECK(f->Run()&&f->calls==4&&f->magReceipts.size()==4);
+  CHECK(f->rifleShots==(full?2u:1u)&&f->native.owner==owner);
+  CHECK(f->rifle==AmmunitionCounts(29,161,30)&&!f->shots&&!f->shellSubmits&&!f->selectionCalls);
+  const int partial=full?29:22;
+  CHECK(f->magReceipts[0].before==AmmunitionCounts(partial,191,30));
+  CHECK(f->magReceipts[1].after==AmmunitionCounts(partial,191,30));
+  CHECK(f->magReceipts[2].before==AmmunitionCounts(partial,191,30));
+  CHECK(f->magReceipts[3].after==AmmunitionCounts(30,161,30));
+  CHECK(f->Report().find("\"support_reacquired\":true")!=std::string::npos);
+  CHECK(f->now<31000*Ms);
+ }
+ for(unsigned fault=0;fault<3;++fault){
+  auto f=std::make_unique<Loop>();f->singleFireMagazine=f->automaticRifle=true;
+  f->memory.Word(NativeInventory::array+4,0);CHECK(f->driver.EnableMagazineOnly(false,true,true));
+  bool applied=false;
+  f->beforeDriver=[&](Loop& loop){
+   loop.observed.supportVerified=loop.Rifle()&&loop.magRaw.valid;
+   loop.observed.supportRaw=loop.magRaw;loop.observed.supportTarget=Multiply(Pose(-.2f,-.25f,.45f),Pose(5,2,3));
+   if(loop.calls<4)return;
+   if(fault==0){loop.observed.supportVerified=false;applied=true;}
+   if(fault==1){loop.allowRifleShot=false;applied=true;}
+   if(fault==2&&loop.driver.State()==Bc2ResourceInventoryProbe::Phase::WaitRifleShot){
+    ++loop.observed.magazine.resource->identity.firing[1];applied=true;}
+  };
+  CHECK(!f->Run(false)&&applied&&f->calls==4&&f->driver.CancelConsumer());
+  CHECK(f->rifleShots==(fault==2?1u:0u));
+ }
+ auto late=std::make_unique<Loop>();late->singleFireMagazine=late->automaticRifle=late->loseSupportOnMappedFire=true;
+ late->memory.Word(NativeInventory::array+4,0);CHECK(late->driver.EnableMagazineOnly(false,true,true));
+ late->beforeDriver=[](Loop& loop){loop.observed.supportVerified=loop.Rifle()&&loop.magRaw.valid;
+  loop.observed.supportRaw=loop.magRaw;loop.observed.supportTarget=Multiply(Pose(-.2f,-.25f,.45f),Pose(5,2,3));};
+ CHECK(!late->Run(false)&&late->calls==4&&late->lateCancelledMappedFire==1&&!late->rifleShots);
+ CHECK(late->driver.CancelConsumer()&&late->Report().find("\"failure\":39")!=std::string::npos);
+ ActionOutput unrelated;unrelated.active=true;unrelated.owner=123;unrelated.forward=.25f;
+ unrelated.held=Fire|Use;unrelated.pressed=Fire|NextWeapon;unrelated.released=Reload;
+ late->driver.FilterCancelledFire(unrelated);
+ CHECK(unrelated.active&&unrelated.owner==123&&unrelated.forward==.25f&&unrelated.held==Use&&
+       unrelated.pressed==NextWeapon&&unrelated.released==Reload);
+ auto stalled=std::make_unique<Loop>();stalled->singleFireMagazine=true;
+ stalled->memory.Word(NativeInventory::array+4,0);CHECK(stalled->driver.EnableMagazineOnly(false,true,true));
+ stalled->beforeDriver=[](Loop& loop){loop.observed.supportVerified=loop.Rifle()&&loop.magRaw.valid;
+  loop.observed.supportRaw=loop.magRaw;loop.observed.supportTarget=Multiply(Pose(-.2f,-.25f,.45f),Pose(5,2,3));};
+ for(unsigned n=0;n<3000&&!stalled->input.hands[1].trigger&&!stalled->driver.CancelConsumer();++n)stalled->Tick();
+ CHECK(stalled->input.hands[1].trigger==1&&!stalled->driver.CancelConsumer());
+ const auto generation=stalled->input.generation;
+ stalled->driver.Prepare(stalled->input,stalled->native.owner,stalled->Asset(),stalled->observed,
+   stalled->now,stalled->now+100*Ms,stalled->now+30*Ms);
+ CHECK(stalled->driver.CancelConsumer()&&stalled->input.hands[1].trigger==0&&stalled->input.generation==generation);
+ CHECK(stalled->Report().find("\"failure\":40")!=std::string::npos);
  return 0;
 }
 int MagazineOnlySubset(){
@@ -956,4 +1025,4 @@ int UnreachablePoseKeepsRealThreePumpTwoShellConsumers(){
  std::puts("Raised-forward controller fixture retains actual consumer contact, three shots and two shells; mocked native/packs, no IK coverage claim");
  return 0;
 }
-int main(){if(UnreachablePoseKeepsRealThreePumpTwoShellConsumers()||ThreePumpsTwoShellsAcrossPersistentConsumers()||PumpAgainAfterOtherWeapon()||SupportWithoutMagazineEnrollment()||MagazineOnlyRequiresSupport()||MagazineRefillThenFire()||EmptyMagazineOrdinaryInput()||MagazineOnlySubset()||MagazineReplacementKeepsActualRemovedResource()||EmptyTubeAcrossPersistentConsumers()||CombinedRequiresRifleSupportBeforeReload()||QueuedPumpInterruptionPreservesTrackingOverride()||FinalAutomaticRifleShots()||FinalRifleCannotCompleteFromRegressedSnapshot()||FinalRifleRejectsForeignAmmunition()||FinalRifleRequiresFreshObservation()||CombinedPartialNativeTransferAfterPriorLeaseExpiry()||QueuedShellSupportUsesCurrentClock()||ExpiryDuringQueuedShellSupport()||AdvancingShellClockAfterAcknowledgedPump()||CombinedManualPump()||CombinedPumpMissingEvidence()||Combined()||MissingEvidence()||Interruptions()||BoundedInputJournal())return 1;std::puts("Persistent real body/resource/shell consumer composition and negative boundaries passed");return 0;}
+int main(){if(SingleCampaignMagazineWithAutomaticFire()||UnreachablePoseKeepsRealThreePumpTwoShellConsumers()||ThreePumpsTwoShellsAcrossPersistentConsumers()||PumpAgainAfterOtherWeapon()||SupportWithoutMagazineEnrollment()||MagazineOnlyRequiresSupport()||MagazineRefillThenFire()||EmptyMagazineOrdinaryInput()||MagazineOnlySubset()||MagazineReplacementKeepsActualRemovedResource()||EmptyTubeAcrossPersistentConsumers()||CombinedRequiresRifleSupportBeforeReload()||QueuedPumpInterruptionPreservesTrackingOverride()||FinalAutomaticRifleShots()||FinalRifleCannotCompleteFromRegressedSnapshot()||FinalRifleRejectsForeignAmmunition()||FinalRifleRequiresFreshObservation()||CombinedPartialNativeTransferAfterPriorLeaseExpiry()||QueuedShellSupportUsesCurrentClock()||ExpiryDuringQueuedShellSupport()||AdvancingShellClockAfterAcknowledgedPump()||CombinedManualPump()||CombinedPumpMissingEvidence()||Combined()||MissingEvidence()||Interruptions()||BoundedInputJournal())return 1;std::puts("Persistent real body/resource/shell consumer composition and negative boundaries passed");return 0;}

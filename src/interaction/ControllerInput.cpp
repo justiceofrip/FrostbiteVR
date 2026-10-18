@@ -27,7 +27,7 @@ ActionOutput ControllerActions::Update(const InputFrame& f,const InputOwner& own
     const auto& l=f.hands[0];const auto& r=f.hands[1];
     const bool fresh=now>0&&f.predictedNs>0&&f.predictedNs<=now+50000000&&f.predictedNs>=now-100000000;
     const bool transition=ownerGeneration_!=owner.generation||spaceGeneration_!=f.spaceGeneration;
-    if(transition){heading_=0;weaponDirection_=0;}
+    if(transition)heading_=0;
     ownerGeneration_=owner.generation;spaceGeneration_=f.spaceGeneration;
     left.focused=f.focused&&fresh&&ValidInput(f)&&owner.generation&&!transition;
     auto right=left;left.tracked=f.headValid&&l.gripTracked;right.tracked=f.headValid&&r.aimTracked;
@@ -48,15 +48,10 @@ ActionOutput ControllerActions::Update(const InputFrame& f,const InputOwner& own
         if((l.held&StickClick)&&!(r.held&StickClick))left.held|=Sprint;
         if(l.held&MenuClick)left.held|=Menu;
     }
-    if(!right.focused||!right.tracked)weaponDirection_=0;
     if(right.focused&&right.tracked){
-        // Vertical flick selects once, then needs the stick centered again.
-        // Keep the semantic hold through equip/space transitions so neutral
-        // arming cannot reissue a held flick. Diagonal snap turns do not select.
-        if(std::abs(r.stickY)<.35f)weaponDirection_=0;
-        else if(!weaponDirection_&&std::abs(r.stickY)>=.75f&&std::abs(r.stickY)>std::abs(r.stickX)+.15f)weaponDirection_=r.stickY>0?1:-1;
-        if(weaponDirection_)right.held|=weaponDirection_>0?NextWeapon:PreviousWeapon;
-        right.turn=weaponDirection_?0:r.stickX;
+        // Weapon selection belongs to physical holsters and pickup actions.
+        // The right stick only turns; vertical/diagonal input cannot equip a gun.
+        right.turn=r.stickX;
         if(r.trigger>=.75f)right.held|=Fire;
         if(r.held&Primary)right.held|=Jump;
         if(r.held&Secondary)right.held|=Reload;

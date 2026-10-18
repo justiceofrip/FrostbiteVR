@@ -192,27 +192,34 @@ int BodyPouchDisplayUsesPrimaryAndRetainsAlternatePickup(){
     CHECK(!face.Begin()&&face.starts==0&&!face.result.ammoOwnsHand);return 0;
 }
 int FeedbackDistinguishesLatchFromVerifiedReload(){
-    Fixture f;CHECK(f.Begin());CHECK(f.result.feedbackCount==0);f.held=true;f.Send(true,-.05f);
+    Fixture f;CHECK(f.Begin());CHECK(f.result.feedbackCount==0&&!f.result.audio);f.held=true;f.Send(true,-.05f);
     CHECK(f.result.feedbackCount==1&&f.result.feedback[0].kind==FeedbackKind::ReloadCapture);
     const auto capture=f.result.feedback[0];CHECK(capture.inputSequence==f.s.raw.inputEvidence.sequence);
     CHECK(capture.observedNs==f.s.raw.inputEvidence.observedNs&&capture.deadlineNs<=f.s.raw.inputEvidence.deadlineNs);
     CHECK(ValidFeedback(capture,f.now)&&f.submits==0);f.Sync();CHECK(f.result.feedbackCount==0);
     for(float z:{-.02f,0.f,.025f,.05f,.05f,.05f,.05f,.05f,.05f,.05f,.05f}){
         f.Send(true,z);for(unsigned n=0;n<f.result.feedbackCount;++n)CHECK(f.result.feedback[n].kind!=FeedbackKind::ReloadApplied);}
-    CHECK(f.submits==1&&f.reserve.loaded==2); // Seating/submission is not success feedback.
+    CHECK(f.submits==1&&f.reserve.loaded==2&&!f.result.audio); // Seating/submission is not success feedback or insertion audio.
     f.Ack();f.Send(true,.05f);
     CHECK(f.result.feedbackCount==1&&f.result.feedback[0].kind==FeedbackKind::ReloadApplied&&f.result.feedback[0].id>capture.id);
     CHECK(f.result.feedback[0].inputSequence==f.s.input.sequence&&ValidFeedback(f.result.feedback[0],f.now));
     CHECK(f.policy->ProbeState(f.now).completed==1&&f.reserve.loaded==3&&f.reserve.reserve==7);
-    f.Send(true,.05f);CHECK(f.result.feedbackCount==0);
+    CHECK(f.result.audio&&f.result.audio->applied&&f.result.audio->units==1);
+    CHECK(f.result.audio->identity.item==f.s.weapon.id&&f.result.audio->identity.itemGeneration==f.s.weapon.generation);
+    CHECK(f.result.audio->request==f.submitted->reservation.request&&f.result.audio->identity.cycle==f.submitted->reservation.cycle);
+    ShellReloadAudioLedger<> audio;CHECK(audio.Accept(*f.result.audio,f.now)==ShellReloadAudioAdmission::Accepted);
+    CHECK(audio.Accept(*f.result.audio,f.now)==ShellReloadAudioAdmission::Duplicate);
+    f.Send(true,.05f);CHECK(f.result.feedbackCount==0&&!f.result.audio);
     const auto report=f.Report();CHECK(report.find("\"kind\":\"capture\"")!=std::string::npos&&report.find("\"kind\":\"native_receipt\"")!=std::string::npos);
     return 0;
 }
 int FeedbackKeepsFinalReceiptButNotCancellation(){
     {Fixture f;f.reserve.loaded=7;CHECK(f.Insert());f.Ack();f.Send(true,.05f);
         CHECK(f.result.feedbackCount==1&&f.result.feedback[0].kind==FeedbackKind::ReloadApplied);
+        CHECK(f.result.audio&&f.result.audio->units==1);
         CHECK(!f.policy->ProbeState(f.now).active&&f.reserve.loaded==8);}
     {Fixture f;CHECK(f.Insert());f.s.cancel=true;f.Send(true,.05f);CHECK(f.result.feedbackCount==0);
+        CHECK(!f.result.audio);
         CHECK(f.Report().find("\"kind\":\"native_receipt\"")==std::string::npos);}
     return 0;
 }

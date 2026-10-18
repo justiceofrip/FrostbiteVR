@@ -1,0 +1,34 @@
+{
+  "schema": "fvr.bc2.authored_model_axes",
+  "schema_version": 1,
+  "profiles": [
+    {
+      "native_asset_name": "Nambu100",
+      "configured_mesh_path": "Objects/Weapons/Handheld/Beach/Nambu100/Nambu100_Mesh",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "binding_digest": "ee265e653724b868925794f6e9c0425f8bf665b6c584021e4b1a98b503a247ce",
+      "animation_sha256": "3c825f064283d3c1c1c94e22d6681d35f32e5da33529b377456b88a7241227d0",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "mesh_sha256": "705b8303f0765fb2af7a38d0c54c7f18ac4280216d55bdfc1383fbf1e3510402",
+      "model_forward": [
+        0,
+        0,
+        -1
+      ],
+      "model_up": [
+        0,
+        1,
+        0
+      ],
+      "review": {
+        "status": "authored_geometry_reviewed",
+        "native_verified": false,
+        "geometry_image_sha256": "2cee561dc5b2ce28aa364261f28d6f4f377c5b44788ad59c0581683eb9dc30a2",
+        "firing_fields_sha256": "83af9575ae1bc392d1ace23ec748359c20c2d386636d02204f2d2e3dd964d538",
+        "static_flash_sha256": "ce5127edfba8b40d5db5a09d085616f0f272acdee113aac9e049d7f7c9796437",
+        "geometry_report_sha256": "d68c62bccae603492d6b27a0d4396bd76f55ebdf12de34063878e6766ae36108",
+        "description": "Reviewed exact SP_01 Nambu100 assembled HandsIkPose mesh: barrel and muzzle extend along canonical -Z, sights sit above the receiver along +Y; the lateral magazine extends +X and is not a barrel-axis estimator. Source mesh, LOD, static hands, flash, skeleton and typed configuration are hash-bound. Static flash basis is identity; typed Shot InitialDirection is raw +Z, InitialSpeed [0,0,600], InitialPosition zero. Existing authored model/aim conversion only; no native projectile, muzzle-origin or ammunition capability."
+      }
+    }
+  ]
+}

@@ -1,10 +1,12 @@
 #requires -Version 7.5
 [CmdletBinding()]
 param([Parameter(Mandatory)][string]$InstallRoot,
-      [ValidateSet('Launch','Validate','Stop','Check','Update','Rollback')][string]$Action,
-      [switch]$Fresh, [switch]$UseLocal, [switch]$Prerelease)
+      [ValidateSet('Launch','Validate','Stop','Check','Update','Rollback','Feedback')][string]$Action,
+      [switch]$Fresh, [switch]$UseLocal, [switch]$Prerelease, [switch]$ActivateGameWindow,
+      [ValidateSet('MainMenu','Campaign')][string]$StartAt='MainMenu')
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'Launcher.Core.ps1')
+. (Join-Path $PSScriptRoot 'Launcher.Feedback.ps1')
 $null = Set-FvrLauncherStorage $InstallRoot
 $data = Join-Path $InstallRoot 'data'
 $null = New-Item -ItemType Directory -Path $data -Force
@@ -27,6 +29,14 @@ try {
     $active = Read-FvrJson (Join-Path $InstallRoot 'active.json')
     $versionFolder = Get-FvrChild $InstallRoot ('versions/'+$active.current)
     $package = Test-FvrPackage $versionFolder $active.current
+    Set-FvrPackageRepositories $package
+    if ($Action -eq 'Feedback') {
+        Status 'Preparing a small, sanitized diagnostics bundle…'
+        $bundle=New-FvrFeedbackBundle $InstallRoot $package $settings
+        Status 'Diagnostics saved. Review Report.txt, then attach BC2VR-diagnostics.zip to your feedback yourself. Nothing was uploaded.' 'feedback_ready'
+        Write-Output ($bundle | ConvertTo-Json)
+        exit 0
+    }
     if ($Action -in @('Check','Update')) {
         Status 'Checking GitHub for compatible hotfixes…'
         $update = Find-FvrUpdate $InstallRoot -IncludePrerelease:$Prerelease
@@ -48,6 +58,10 @@ try {
         Switch-FvrPrevious $InstallRoot
         Status 'Previous version selected. Close and reopen the launcher.' 'restart_required'; exit 0
     }
+    $localRoute=$null
+    if ($Action -in @('Launch','Validate') -and (-not $package.runtime_entry -or $UseLocal)) {
+        $localRoute=Get-FvrLocalLaunchRoute $settings.local_backend $StartAt -ActivateGameWindow:($Action -eq 'Launch' -and $ActivateGameWindow)
+    }
     if ($Action -eq 'Launch') {
         # Fail before starting SteamVR when the existing native session's disk
         # reserve cannot be met. Its complete storage scan still runs normally.
@@ -66,9 +80,9 @@ try {
         }
     }
     if ($package.runtime_entry -and -not $UseLocal) {
-        Status $(if($Action -eq 'Launch'){'Starting the installed VR campaign…'}else{'Checking the installed runtime…'})
+        Status $(if($Action -eq 'Launch'){'Opening BC2 in VR…'}else{'Checking the installed runtime…'})
         $entry = Get-FvrChild $versionFolder $package.runtime_entry
-        & $entry -Action $Action -SettingsPath (Join-Path $data 'settings.json') -StateRoot (Join-Path $data 'runtime') -Fresh:$Fresh
+        & $entry -Action $Action -SettingsPath (Join-Path $data 'settings.json') -StateRoot (Join-Path $data 'runtime') -Fresh:$Fresh -StartAt $StartAt -ActivateGameWindow:($Action -eq 'Launch' -and $ActivateGameWindow)
     } else {
         if (-not $settings.local_backend) { throw 'This is the launcher only. Install a release containing the VR runtime before playing.' }
         foreach ($pin in $settings.local_backend.pins) {
@@ -81,14 +95,16 @@ try {
             & $settings.local_backend.stop -ReportFolder $session.run
         } elseif ($Action -eq 'Validate') {
             Status 'Checking the installed build and launch dependencies…'
-            & $settings.local_backend.launch -ValidateOnly
+            $routeArguments=$localRoute.arguments
+            & $localRoute.entry @routeArguments -ValidateOnly
         } elseif ($Action -eq 'Launch') {
-            if ($Fresh -and (Read-LocalSession $settings)) { throw 'VR is already running. Use Stop VR before requesting a fresh campaign launch.' }
-            Status 'Checking storage, continuing campaign and attaching VR. No build or test suite runs here…'
-            & $settings.local_backend.launch -Fresh:$Fresh 6>&1 | ForEach-Object {
+            if ($Fresh -and (Read-LocalSession $settings)) { throw 'VR is already running. Use Stop VR before requesting a fresh launch.' }
+            Status $(if($StartAt -eq 'MainMenu'){'Opening the BC2 menu in VR. Aim with the right controller and select with its trigger…'}else{'Continuing campaign for the explicit development run…'})
+            $routeArguments=$localRoute.arguments
+            & $localRoute.entry @routeArguments -Fresh:$Fresh 6>&1 | ForEach-Object {
                 if($_ -is [Management.Automation.InformationRecord]) {
                     $step=$_.MessageData.ToString()
-                    if($step -match '^(Verify normal\d+ candidate|Check launch storage|Close previous game|Start BC2|Continue campaign|Wait for campaign|Attach VR)\.\.\.$'){Status $step}
+                    if($step -match '^(Verify normal\d+ candidate|Check launch storage|Close previous game|Start BC2|Continue campaign|Wait for campaign|Wait for main menu|Open BC2 window|Attach VR)\.\.\.$'){Status $step}
                 } else { Write-Output $_ }
             }
         }
@@ -98,7 +114,7 @@ try {
     else {
         Assert-FvrFreeSpace $InstallRoot 640MB
         Assert-FvrFreeSpace ([IO.Path]::GetTempPath()) 640MB
-        Status 'Build and launch dependencies verified. Connect your headset and press Launch campaign in VR.' 'done'
+        Status 'Build and launch dependencies verified. Connect your headset and press Launch BC2 in VR.' 'done'
     }
 } catch {
     # A second instance must not overwrite the live operation's progress.

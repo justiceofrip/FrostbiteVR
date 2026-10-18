@@ -16,7 +16,7 @@ struct Fixture {
     std::array<std::uint32_t,4> arguments{};
     unsigned calls=0,rootReads=0,inputCalls=0,failInputAt=0;std::vector<std::uint32_t> functions,actions;
     bool replaceOnPress=false,leaveOnPress=false,suppressPress=false;bool unstable=false,callSucceeds=true;
-    Fixture(){words={{base+binding.managerGlobal,manager},{manager+0x82b20,owner},
+    Fixture(){words={{base+binding.managerGlobal,manager},{manager+0x82b20,owner},{manager+0x82b24,0},
         {owner,base+binding.ownerVtable},{owner+0x2c,base+binding.eventVtable},{owner+0x30,base+binding.controllerVtable},{owner+0x94,base+binding.inputVtable},
         {owner+0xac,0},{manager+0xc3f2a,0},
         {base+pointer.inputEnabled,1},{base+pointer.inputBlocked,0},
@@ -67,6 +67,42 @@ int Reader(){
         CHECK(!bc2::ReadMenuState(g.Memory(),g.binding,g.base));
     }
     CHECK(!bc2::ReadMenuState(f.Memory(),f.binding,UINT32_MAX));return 0;
+}
+int FrontEnd(){
+    Fixture f;constexpr auto main=0x7000000u;
+    f.words[f.manager+0x82b24]=main;
+    f.words[main]=f.base+0x102b4e8;f.words[main+0x2c]=f.base+0x102b4d4;f.words[main+0x90]=f.base+0x102b4c8;
+    const auto state=bc2::ReadMenuState(f.Memory(),f.binding,f.base);
+    CHECK(state&&state->frontEnd&&state->entered&&!state->pauseRequested&&state->owner==main&&state->inputController==main+0x2c);
+    CHECK(bc2::IsMenuPumpBoundary(f.Memory(),f.pointer,f.base,f.base+f.pointer.mousePumpReturn,main+0x2c,0x7200000,state->inputController)==false);
+    f.words[f.base+f.pointer.inputNodeGlobal]=0x7200000;
+    CHECK(bc2::IsMenuPumpBoundary(f.Memory(),f.pointer,f.base,f.base+f.pointer.mousePumpReturn,main+0x2c,0x7200000,state->inputController));
+    CHECK(!bc2::IsMenuPumpBoundary(f.Memory(),f.pointer,f.base,f.base+f.pointer.mousePumpReturn,f.owner+0x30,0x7200000,state->inputController));
+    bc2::MenuVisibilityCommand command{7,4,2'000'000'000,false,bc2::MenuCloseAction::Back};
+    bc2::MenuVisibilityGuard guard{4,1'000'000'000,true,true,true,true};bc2::MenuOwnedCancel owned;
+    auto calls=f.Calls();calls.input=[](void* ctx,unsigned function,unsigned self,unsigned action){
+        auto& f=*static_cast<Fixture*>(ctx);++f.inputCalls;f.functions.push_back(function);f.actions.push_back(action);
+        return self==main+0x2c&&action==9&&(function==f.base+0x337290||function==f.base+0x337340);
+    };
+    command.action=bc2::MenuCloseAction::MenuToggle;
+    CHECK(bc2::BeginMenuCancel(f.Memory(),f.binding,f.pointer,f.base,*state,command,guard,calls,owned)==bc2::MenuVisibilityResult::AlreadyInState);
+    CHECK(!owned.Active()&&!f.inputCalls); // No attempt to close the main menu into absent gameplay.
+    command.action=bc2::MenuCloseAction::Back;
+    CHECK(bc2::BeginMenuCancel(f.Memory(),f.binding,f.pointer,f.base,*state,command,guard,calls,owned)==bc2::MenuVisibilityResult::Invoked);
+    guard.nowNs=owned.ReleaseAtNs();
+    CHECK(bc2::ReleaseMenuCancel(f.Memory(),f.binding,f.pointer,f.base,guard,calls,owned)==bc2::MenuVisibilityResult::Invoked);
+    CHECK(f.functions.size()==2&&f.functions[0]==f.base+0x337290&&f.functions[1]==f.base+0x337340);
+    for(unsigned offset:{0u,0x2cu,0x90u}){const auto old=f.words[main+offset];f.words[main+offset]++;
+        CHECK(!bc2::ReadMenuState(f.Memory(),f.binding,f.base));f.words[main+offset]=old;}
+    // Loading destroys the old MainMenu owner; its outstanding Back is retired,
+    // never delivered to the new campaign controller.
+    guard.nowNs+=1;command.deadlineNs=guard.nowNs+1'000'000'000;
+    CHECK(bc2::BeginMenuCancel(f.Memory(),f.binding,f.pointer,f.base,*state,command,guard,calls,owned)==bc2::MenuVisibilityResult::Invoked);
+    f.words[f.manager+0x82b24]=0;guard.nowNs=owned.ReleaseAtNs();const auto callCount=f.inputCalls;
+    CHECK(bc2::ReleaseMenuCancel(f.Memory(),f.binding,f.pointer,f.base,guard,calls,owned)==bc2::MenuVisibilityResult::Retired);
+    CHECK(!owned.Active()&&f.inputCalls==callCount);
+    const auto campaign=bc2::ReadMenuState(f.Memory(),f.binding,f.base);CHECK(campaign&&!campaign->frontEnd&&!campaign->entered);
+    return 0;
 }
 int Dispatch(){
     Fixture f;auto original=bc2::ReadMenuState(f.Memory(),f.binding,f.base);CHECK(original);
@@ -242,7 +278,9 @@ int StaticEvidence(const char* path){
     // meaning, constructor owner publication and each reflected vtable linkage.
     for(const std::uint32_t va:{0x7875ca,0x788b7b,0x788bf6,0x788bb0,0x7877be,0x788812,
         0x143cdac,0x776bbd,0x73fa3c,0x783df1,0x8fec4a,0x142b798,0x142b7d0,
-        0x9490d7,0x73ef8f,0x73efd0,0x73eff8,0x731f50,0x8fe3b0,0x8fe34d,0x142b780,0xf822b4,0xf822d3,0x8fe3ac,0x8fe345,0x731f39}){
+        0x9490d7,0x73ef8f,0x73efd0,0x73eff8,0x731f50,0x8fe3b0,0x8fe34d,0x142b780,0xf822b4,0xf822d3,0x8fe3ac,0x8fe345,0x731f39,
+        0x78356d,0x783571,0x78358a,0x783590,0x142b4d4,0x142b4d8,0x951d91,0x909735,0x90974e,
+        0x737316,0x73732a,0x737334,0x737359,0x73736c,0x737374}){
         bool touched=false;for(const auto& s:pe.image.sections)if(va>=Fixture::base+s.rva&&va-Fixture::base-s.rva<s.rawSize){
             const auto at=s.rawOffset+va-Fixture::base-s.rva;const auto old=bytes[at];bytes[at]^=std::byte{1};
             CHECK(!bc2::DiscoverMenuState(bytes,pe.image));bytes[at]=old;touched=true;break;}CHECK(touched);
@@ -250,4 +288,4 @@ int StaticEvidence(const char* path){
     return 0;
 }
 }
-int main(int argc,char** argv){CHECK(Reader()==0);CHECK(Dispatch()==0);CHECK(HeldCancel()==0);CHECK(CancelFailures()==0);CHECK(CancelLifetime()==0);CHECK(MenuToggle()==0);if(argc>1)CHECK(StaticEvidence(argv[1])==0);return 0;}
+int main(int argc,char** argv){CHECK(Reader()==0);CHECK(FrontEnd()==0);CHECK(Dispatch()==0);CHECK(HeldCancel()==0);CHECK(CancelFailures()==0);CHECK(CancelLifetime()==0);CHECK(MenuToggle()==0);if(argc>1)CHECK(StaticEvidence(argv[1])==0);return 0;}

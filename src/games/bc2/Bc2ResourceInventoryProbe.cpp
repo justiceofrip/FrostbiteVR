@@ -221,8 +221,8 @@ void Bc2ResourceInventoryProbe::Prepare(InputFrame& in,const ReloadStateOwner& o
     }
     if(ObserveOriginInput(in,owner,o,observed,deadline,now))return;
     if(!first_)first_=phaseAt_=now;
-    if(now<=0||now<lastNow_||now-first_>=(pump_?58000000000ll:55000000000ll)||
-       (began_&&now-began_>=(pump_?50000000000ll:35000000000ll)))Fail(1,now);lastNow_=now;
+    if(now<=0||now<lastNow_||now-first_>=(campaignMagazine_?30000000000ll:pump_?58000000000ll:55000000000ll)||
+       (began_&&now-began_>=(campaignMagazine_?25000000000ll:pump_?50000000000ll:35000000000ll)))Fail(1,now);lastNow_=now;
     if(!ValidInput(in)||!in.focused||!in.headValid||!in.hands[0].gripTracked||!in.hands[1].gripTracked||
         observed<=0||observed>now||deadline<=now||deadline-observed>100000000)Fail(2,now);
     if(replacementEnabled_&&lastInput_&&observed<observed_)Fail(4,now);
@@ -253,7 +253,14 @@ void Bc2ResourceInventoryProbe::Prepare(InputFrame& in,const ReloadStateOwner& o
         for(unsigned n=0;n<2;++n){in.hands[n].grip=lastInput_->hands[n].grip;in.hands[n].aim=lastInput_->hands[n].aim;
             in.hands[n].squeeze=neutral?0:lastInput_->hands[n].squeeze;
             in.hands[n].gripTracked=lastInput_->hands[n].gripTracked;in.hands[n].aimTracked=lastInput_->hands[n].aimTracked;}
-        in.hands[1].trigger=neutral?0:lastInput_->hands[1].trigger;if(neutral)in.hands[0].trigger=0;return;
+        in.hands[1].trigger=neutral?0:lastInput_->hands[1].trigger;
+        // The action policy intentionally caches a repeated source packet.
+        // If its trigger edge stalls, fail the diagnostic so its existing
+        // CancelConsumer gate releases actions; never invent a new generation.
+        if(campaignMagazine_&&riflePulseInput_==in.generation&&riflePulseAt_&&now-riflePulseAt_>=25000000){
+            Fail(40,now);for(auto& h:in.hands){h.trigger=0;h.squeeze=0;}
+        }
+        if(neutral)in.hands[0].trigger=0;return;
     }
     observed_=observed;deadline_=deadline;
     if(supportOnly_){PrepareSupportOnly(in,owner,asset,o,observed,deadline,now);RecordInput(in,owner,observed,deadline,now);return;}
@@ -328,6 +335,17 @@ void Bc2ResourceInventoryProbe::Prepare(InputFrame& in,const ReloadStateOwner& o
     if(phase_==Phase::RifleSupportRelease){in.hands[0].grip=in.hands[0].aim=supportCommand_;in.hands[0].squeeze=0;}
     if((phase_==Phase::RifleSupport||phase_==Phase::RifleSupportRelease)&&now-phaseAt_>5000000000ll)Fail(23,now);
     PrepareEmptyMagazine(in,owner,o,now);
+    if(campaignMagazine_&&phase_==Phase::FirstMagazine&&!partialMagazineReady_){
+        if(o.magazine.resource&&AmmoResourceViewFresh(*o.magazine.resource,now)){
+            const auto& v=*o.magazine.resource;const auto& counts=v.snapshot.counts;
+            if(v.identity.owner!=initial_||v.binding.context.resource!=original_||v.phase!=AmmunitionLedgerPhase::Ready||v.wellEmpty||
+               counts.loaded<=0||counts.reserve<counts.capacity){Fail(38,now);}
+            else if(counts.loaded<counts.capacity){partialMagazineCounts_=counts;partialMagazineReady_=true;}
+            else {afterFirst_=counts;rifleShotBinding_=v.binding;rifleShotIdentity_=v.identity;rifleShotRequest_=v.request;
+                rifleShotBaseline_=v.snapshot.sequence;rifleShotCount_=0;rifleShotSequence_=0;rifleShotObserved_=0;
+                riflePulseInput_=0;riflePulseAt_=0;rifleFireAt_=now;preparingPartialMagazine_=true;Move(Phase::RifleFire,now);}
+        }
+    }
     if(phase_==Phase::FirstMagazine){
         if(owner.weapon!=initial_.weapon||(o.magazine.resource&&o.magazine.resource->binding.context.resource!=original_))Fail(6,now);
         else firstMagazine_.Prepare(in,owner,asset,o.magazineRaw,o.magazine,observed,deadline,now);
@@ -392,7 +410,18 @@ void Bc2ResourceInventoryProbe::Prepare(InputFrame& in,const ReloadStateOwner& o
     }
     if(phase_==Phase::FullReturn){if(owner.weapon!=initial_.weapon||(o.magazine.resource&&o.magazine.resource->binding.context.resource!=original_))Fail(6,now);
         else fullReturn_.Prepare(in,owner,asset,o.magazineRaw,o.magazine,observed,deadline,now);}
-    if(phase_==Phase::RifleFire){in.hands[0].squeeze=0;if(now-phaseAt_<100000000)in.hands[1].trigger=1;else Move(Phase::WaitRifleShot,now);}
+    if(campaignMagazine_&&postMagazineSupport_&&(phase_==Phase::RifleFire||phase_==Phase::WaitRifleShot||phase_==Phase::Dwell)){
+        in.hands[0].grip=in.hands[0].aim=supportCommand_;in.hands[0].squeeze=1;
+    }
+    if(phase_==Phase::RifleFire){
+        if(!campaignMagazine_||!postMagazineSupport_)in.hands[0].squeeze=0;
+        if(campaignMagazine_){
+            // Exactly one fresh input edge. Its next source packet is neutral;
+            // real coherent native counts must prove one shot before progress.
+            if(!riflePulseInput_){riflePulseInput_=in.generation;riflePulseAt_=rifleFireAt_=now;in.hands[1].trigger=1;}
+            else {in.hands[1].trigger=0;Move(Phase::WaitRifleShot,now);}
+        }else if(now-phaseAt_<100000000)in.hands[1].trigger=1;else Move(Phase::WaitRifleShot,now);
+    }
     if((pump_||magazinePostFire_)&&(phase_==Phase::RifleFire||phase_==Phase::WaitRifleShot||phase_==Phase::Dwell)){
         // A bounded automatic-fire pulse can discharge twice (actual F2000 245).
         // Keep exact ownership/ammunition boundaries; a count drop alone is not
@@ -405,7 +434,7 @@ void Bc2ResourceInventoryProbe::Prepare(InputFrame& in,const ReloadStateOwner& o
                b.data!=rifleShotBinding_.data||b.persistence!=rifleShotBinding_.persistence)Fail(21,now);
             else if(AmmoResourceViewFresh(v,now)){
                 if(v.phase!=AmmunitionLedgerPhase::Ready||v.wellEmpty||v.request!=rifleShotRequest_||
-                   v.requestState!=AmmoResourceRequestState::Completed)Fail(21,now);
+                   (!preparingPartialMagazine_&&v.requestState!=AmmoResourceRequestState::Completed))Fail(21,now);
                 else if(shot.sequence>std::max(rifleShotBaseline_,rifleShotSequence_)&&
                         shot.observedNs>rifleFireAt_&&shot.observedNs>=rifleShotObserved_){
                     const auto count=afterFirst_.loaded-shot.counts.loaded;
@@ -428,7 +457,12 @@ void Bc2ResourceInventoryProbe::Prepare(InputFrame& in,const ReloadStateOwner& o
         !o.magazine.result.blocksWeaponActions&&!o.shellBlocks&&o.magazine.resource->snapshot.counts==finalCounts&&
         (!(pump_||magazinePostFire_)||(rifleShotCount_&&o.magazine.resource->snapshot.sequence>=rifleShotSequence_&&
                   o.magazine.resource->snapshot.observedNs>=rifleShotObserved_))){
-        if(!revisitEnabled_)Move(Phase::Done,now);
+        if(campaignMagazine_&&preparingPartialMagazine_){
+            if(rifleShotCount_!=1||finalCounts.loaded<=0||finalCounts.loaded>=finalCounts.capacity)Fail(38,now);
+            else {partialMagazineCounts_=finalCounts;partialMagazineReady_=true;preparingPartialMagazine_=false;
+                prepareShotSequence_=rifleShotSequence_;prepareShotObserved_=rifleShotObserved_;
+                riflePulseInput_=0;riflePulseAt_=0;rifleShotCount_=0;Move(Phase::FirstMagazine,now);}
+        }else if(!revisitEnabled_)Move(Phase::Done,now);
         else if(inventory_.RevisitOther(now))Move(Phase::RevisitDraw,now);
         else Fail(32,now);
     }
@@ -550,7 +584,14 @@ void Bc2ResourceInventoryProbe::Observe(const ResourceInventoryObservation& o,co
                     const auto& v=*o.magazine.resource;
                     if(!AmmoResourceViewFresh(v,now)||v.phase!=AmmunitionLedgerPhase::Ready||v.wellEmpty||v.snapshot.counts.loaded<=0)Fail(21,now);
                     else {rifleShotBinding_=v.binding;rifleShotIdentity_=v.identity;rifleShotRequest_=v.request;
-                        rifleShotBaseline_=v.snapshot.sequence;rifleFireAt_=now;Move(Phase::RifleFire,now);}
+                        rifleShotBaseline_=v.snapshot.sequence;rifleFireAt_=now;riflePulseInput_=0;riflePulseAt_=0;
+                        rifleShotCount_=0;rifleShotSequence_=0;rifleShotObserved_=0;
+                        if(campaignMagazine_){
+                            initialSupportClaim_=rifleSupportClaim_;initialSupportSource_=rifleSupportSequence_;
+                            rifleSupportClaim_=rifleSupportSequence_=0;rifleSupportBegan_=rifleSupportLast_=rifleSupportMaxGap_=0;
+                            rifleSupportSamples_=0;supportAlignedAt_=0;lastSupportRaw_=0;postMagazineSupport_=true;
+                            if(lastInput_)supportCommand_=lastInput_->hands[0].grip;Move(Phase::RifleSupport,now);
+                        }else Move(Phase::RifleFire,now);}
                 }
                 else if(magazineOnly_)Move(Phase::Dwell,now);
                 else if(inventory_.ResumeInitial(now))Move(Phase::OtherDraw,now);else Fail(11,now);}}
@@ -664,6 +705,16 @@ void Bc2ResourceInventoryProbe::ObserveSupport(const Bc2PumpTracking& tracking,c
     const HandInteractionSample& current,const HandInteractionSample& original,const std::optional<HandClaim>& left,
     const std::optional<HandClaim>& gun,bool shellReturned,std::int64_t now)noexcept {
     if(replacementEnabled_&&!replacementResumed_&&replacementWitness_)return;
+    const bool postShotSupport=campaignMagazine_&&supportReacquired_&&
+        (phase_==Phase::RifleFire||phase_==Phase::WaitRifleShot||phase_==Phase::Dwell);
+    if(postShotSupport&&(!supported.holding||!left||!gun||left->token.id!=rifleSupportClaim_||
+       left->token.kind!=HandClaimKind::WeaponSupport||gun->token.kind!=HandClaimKind::GunHold||
+       left->token.prerequisiteClaim!=gun->token.id||left->token.item!=gun->token.item||
+       left->token.owner!=current.owner||gun->token.owner!=current.owner||
+       left->deadlineNs<=now||gun->deadlineNs<=now||left->inputSequence!=original.sequence||
+       gun->inputSequence!=current.sequence||current.owner!=original.owner||current.released[0]||
+       !current.focused||!current.tracked[0]||!current.tracked[1]||
+       !weapon_cycle_detail::Window(original.observedNs,original.deadlineNs,now))){Fail(39,now);return;}
     if(phase_==Phase::RifleSupport&&supported.holding&&supported.token&&left&&gun&&
        left->token.kind==HandClaimKind::WeaponSupport&&left->token.owner==current.owner&&gun->token.owner==current.owner&&
        gun->token.kind==HandClaimKind::GunHold&&left->token.item==gun->token.item&&
@@ -673,12 +724,17 @@ void Bc2ResourceInventoryProbe::ObserveSupport(const Bc2PumpTracking& tracking,c
        current.focused&&current.tracked[0]&&current.tracked[1]&&!current.released[0]&&!original.released[0]){
         if(rifleSupportClaim_&&(left->token.id!=rifleSupportClaim_||original.sequence<rifleSupportSequence_||
            now<rifleSupportLast_||now-rifleSupportLast_>150000000)) {Fail(23,now);return;}
-        if(!rifleSupportClaim_){rifleSupportClaim_=left->token.id;rifleSupportBegan_=now;}
+        if(!rifleSupportClaim_){
+            if(postMagazineSupport_&&left->token.id<=initialSupportClaim_){Fail(39,now);return;}
+            rifleSupportClaim_=left->token.id;rifleSupportBegan_=now;}
         // Repeated callbacks for one controller packet are not a longer hold.
         if(original.sequence>rifleSupportSequence_){
             if(rifleSupportLast_)rifleSupportMaxGap_=std::max(rifleSupportMaxGap_,now-rifleSupportLast_);
             rifleSupportSequence_=original.sequence;rifleSupportLast_=now;++rifleSupportSamples_;
-            if(now-rifleSupportBegan_>=750000000&&rifleSupportSamples_>=3)Move(Phase::RifleSupportRelease,now);
+            if(now-rifleSupportBegan_>=750000000&&rifleSupportSamples_>=3){
+                if(postMagazineSupport_){supportReacquired_=true;Move(Phase::RifleFire,now);}
+                else Move(Phase::RifleSupportRelease,now);
+            }
         }
     }else if(phase_==Phase::RifleSupport&&rifleSupportClaim_){
         // Never accept reacquisition after a dropped claim as a continuous hold.
@@ -711,11 +767,18 @@ void Bc2ResourceInventoryProbe::Report(std::ostream& out)const {
        <<",\"pump_unreachable_hand_probe\":"<<(pumpUnreachablePose_?"true":"false")
        <<",\"support_only\":"<<(supportOnly_?"true":"false")
        <<",\"magazine_only\":"<<(magazineOnly_?"true":"false")
+       <<",\"campaign_magazine\":"<<(campaignMagazine_?"true":"false")
+       <<",\"partial_magazine_ready\":"<<(partialMagazineReady_?"true":"false")
+       <<",\"partial_loaded\":"<<partialMagazineCounts_.loaded<<",\"partial_reserve\":"<<partialMagazineCounts_.reserve
+       <<",\"prepare_shot_sequence\":"<<prepareShotSequence_<<",\"prepare_shot_observed_ns\":"<<prepareShotObserved_
+       <<",\"support_reacquired\":"<<(supportReacquired_?"true":"false")
+       <<",\"initial_support_claim\":"<<initialSupportClaim_<<",\"initial_support_source\":"<<initialSupportSource_
+       <<",\"rifle_pulse_input\":"<<riflePulseInput_<<",\"rifle_pulse_ns\":"<<riflePulseAt_
        <<",\"rifle_support_required\":"<<(rifleSupportRequired_?"true":"false")<<",\"rifle_support_claim\":"<<rifleSupportClaim_
        <<",\"rifle_support_source\":"<<rifleSupportSequence_<<",\"rifle_support_released\":"<<(rifleSupportReleased_?"true":"false")
        <<",\"rifle_support_began_ns\":"<<rifleSupportBegan_<<",\"rifle_support_last_ns\":"<<rifleSupportLast_
        <<",\"rifle_support_samples\":"<<rifleSupportSamples_<<",\"rifle_support_max_gap_ns\":"<<rifleSupportMaxGap_
-       <<",\"manual_pump\":"<<(pump_?"true":"false")<<",\"requested_shells\":"<<shellRounds_<<",\"active_budget_ns\":"<<(pump_?50000000000ll:35000000000ll)
+       <<",\"manual_pump\":"<<(pump_?"true":"false")<<",\"requested_shells\":"<<shellRounds_<<",\"active_budget_ns\":"<<(campaignMagazine_?25000000000ll:pump_?50000000000ll:35000000000ll)
        <<",\"completed\":"<<(Completed()?"true":"false")<<",\"began_ns\":"<<began_<<",\"shot_sequence\":"<<shotObserved_<<",\"shell_loaded_before\":"<<shellLoaded_<<",\"shell_reserve_before\":"<<shellReserve_
        <<",\"shell_support\":{\"returned\":"<<(shellSupportToken_?"true":"false")<<",\"token\":"<<shellSupportToken_
        <<",\"claim\":"<<shellSupportClaim_<<",\"source_sequence\":"<<shellSupportSource_<<",\"observed_ns\":"<<shellSupportObserved_

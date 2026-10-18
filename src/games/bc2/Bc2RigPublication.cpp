@@ -25,7 +25,11 @@
 #ifdef FVR_BC2_AUTHORED_GRIP_HEADER
 #include FVR_BC2_AUTHORED_GRIP_HEADER
 #endif
+#ifdef FVR_BC2_MUZZLE_ENROLLMENT_HEADER
+#include FVR_BC2_MUZZLE_ENROLLMENT_HEADER
+#endif
 #include "Bc2Rig.h"
+#include "Bc2RigPaletteCopy.h"
 #include "Bc2HandPose.h"
 #include "fvr/interaction/GripAttachment.h"
 #include "fvr/interaction/HandTouch.h"
@@ -204,6 +208,7 @@ std::array<std::atomic<unsigned>,unsigned(AuthoredGripStatus::Count)> authoredGr
 std::atomic<unsigned> authoredGripExpired=0,authoredGripCopies=0;
 #ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
 std::atomic<std::shared_ptr<const ChestKnifeRenderSource>> chestKnifeGuard;
+std::atomic<std::shared_ptr<const SelectedKnifeRenderSource>> selectedKnifeGuard;
 #endif
 
 std::span<const AuthoredGripProfile> AuthoredGripProfiles()noexcept {
@@ -232,13 +237,26 @@ bool AuthoredCurrent(const std::optional<AuthoredGripBinding>& binding)noexcept 
     const auto current=shotGuard.load(std::memory_order_acquire);const auto ns=ReloadNanos();
     if(!current||!current->valid||!Fresh(current->deadline))return false;
 #ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
+    std::shared_ptr<const SelectedKnifeRenderSource> selectedKnife;
     if(binding->profile==&ChestKnifeGripProfiles()[0]){
         const auto knife=chestKnifeGuard.load(std::memory_order_acquire);
         if(!knife||knife->input.sequence!=current->generation||knife->owner!=binding->selected->owner||
            !ChestKnifeRenderCurrent(*knife,knife->owner,knife->input,ns))return false;
     }
+    if(binding->profile==&SelectedKnifeGripProfiles()[0]){
+        selectedKnife=selectedKnifeGuard.load(std::memory_order_acquire);
+        const auto& knife=selectedKnife;
+        if(!knife||!binding->selected||knife->input.sequence!=current->generation||
+           knife->input.owner.equipGeneration!=current->equipmentGeneration||
+           knife->equipment!=current->equipment||
+           !selected_knife_detail::Source(*knife,ns)||
+           !selected_knife_detail::Mesh(*binding->selected,*knife))return false;
+    }
 #endif
     const auto selected=gameplay::ReadSelectedMeshes(binding->selected->owner,ns);
+#ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
+    if(selectedKnife&&(!selected||!selected_knife_detail::Mesh(*selected,*selectedKnife)))return false;
+#endif
     return AuthoredGripCurrent(*binding,selected.get(),current->equipment,
         {current->soldier,current->weak,current->owner,current->equipmentGeneration,current->space,
          current->generation,ReloadNanos(current->deadline)},ns);
@@ -259,7 +277,8 @@ bool FreeRightCurrent(const BodyFreeRightEvidence& source)noexcept {
 }
 std::atomic<unsigned> owners=0,copies=0,changedCopies=0,rejected=0,sourceChanges=0,packingFailures=0,pairedCopies=0;
 std::atomic<std::uint64_t> drawPackSerial=0;
-struct Scope {std::optional<AuthoredGripBinding> authoredGrip;std::optional<AuthoredSupportBinding> authoredSupport;std::optional<OrdinaryEquipmentRequest> ordinaryRecovery;RigIdentity ordinaryRig{};unsigned ordinaryMask=0;std::int64_t ordinaryDeadlineNs=0;std::shared_ptr<const BeltAmmoPalette> belt;unsigned beltMask=0;bool beltVisible=false;ReloadPackedSource drawSource{};std::uint64_t drawSerial=0;unsigned soldier=0,weak=0,sourceA=0,sourceB=0,count=0;int reloadPack=-1;unsigned visibilityMask=0,freeRightMask=0,shellHideMask=0,magazineMask=0,pumpMask=0,boltMask=0;std::shared_ptr<const MagazineTracking> magazine;std::vector<std::array<std::byte,64>> magazineBase;bool shellHidden=false;std::shared_ptr<const ReloadShellHidePlan> shellHide;std::shared_ptr<const WeaponVisibilityPlan> visibility;std::shared_ptr<const BodyFreeRightEvidence> freeRight;std::shared_ptr<const Bc2PumpTracking> pump;std::vector<std::array<std::byte,64>> pumpBase;bool pumpUnreachableHand=false,pumpExtendedHand=false;float pumpExtendedErrorM=0,pumpExtendedScale=1;std::shared_ptr<const Bc2BoltTracking> bolt;std::vector<std::array<std::byte,64>> boltBase;bool changed=false;std::uint64_t equipmentGeneration=0;WeaponEquipmentIdentity equipment{};std::vector<std::array<std::byte,64>> before,posed;
+std::atomic<unsigned> copyBoundaryRejected=0;
+struct Scope {RigPaletteCopyState paletteCopy{};std::vector<RigPaletteBone> copyScratch;std::optional<AuthoredGripBinding> authoredGrip;std::optional<AuthoredSupportBinding> authoredSupport;std::optional<OrdinaryEquipmentRequest> ordinaryRecovery;RigIdentity ordinaryRig{};unsigned ordinaryMask=0;std::int64_t ordinaryDeadlineNs=0;std::shared_ptr<const BeltAmmoPalette> belt;unsigned beltMask=0;bool beltVisible=false;ReloadPackedSource drawSource{};std::uint64_t drawSerial=0;unsigned soldier=0,weak=0,sourceA=0,sourceB=0,count=0;int reloadPack=-1;unsigned visibilityMask=0,freeRightMask=0,shellHideMask=0,magazineMask=0,pumpMask=0,boltMask=0;std::shared_ptr<const MagazineTracking> magazine;std::vector<std::array<std::byte,64>> magazineBase;bool shellHidden=false;std::shared_ptr<const ReloadShellHidePlan> shellHide;std::shared_ptr<const WeaponVisibilityPlan> visibility;std::shared_ptr<const BodyFreeRightEvidence> freeRight;std::shared_ptr<const Bc2PumpTracking> pump;std::vector<std::array<std::byte,64>> pumpBase;bool pumpUnreachableHand=false,pumpExtendedHand=false;float pumpExtendedErrorM=0,pumpExtendedScale=1;std::shared_ptr<const Bc2BoltTracking> bolt;std::vector<std::array<std::byte,64>> boltBase;bool changed=false;std::uint64_t equipmentGeneration=0;WeaponEquipmentIdentity equipment{};std::vector<std::array<std::byte,64>> before,posed;
 #ifdef FVR_BC2_ORDINARY_RESOURCE_INSPECTION_PROBE
 std::shared_ptr<const PumpVisualSource> pumpVisual;bool pumpVisualAdmitted=false;
 #endif
@@ -346,6 +365,8 @@ std::uintptr_t __cdecl PackHook(const void* source,void* destination,unsigned co
 #ifdef FVR_BC2_ORDINARY_RESOURCE_INSPECTION_PROBE
                 scope.pumpVisualAdmitted=bool(scope.pumpVisual);
 #endif
+                scope.paletteCopy={{pose->identity.soldier,pose->identity.weak,pose->weapon,
+                    pose->ownerGeneration,pose->equipmentGeneration,pose->space},pose->generation,pose->deadline,true};
                 scope.before=pose->before;scope.authoredGrip=pose->authoredGrip;scope.authoredSupport=pose->authoredSupport;scope.drawSource=pose->drawSource;scope.freeRight=pose->freeRight;scope.equipment=currentGuard->equipment;scope.equipmentGeneration=currentGuard->equipmentGeneration;
                 const bool fallback=pose->previewToken&&!previewAllowed&&pose->previewBase.size()==count;
                 const auto reload=reloadGuard.load(std::memory_order_acquire);
@@ -541,6 +562,23 @@ std::uintptr_t __cdecl PackHook(const void* source,void* destination,unsigned co
        !EquipmentStillCurrent(scope.ordinaryRecovery->equipment)||ReloadNanos()>=scope.ordinaryDeadlineNs)){
         scope.ordinaryRecovery.reset();scope.ordinaryMask=0;
     }
+    if(scope.changed&&hands){
+        const auto observe=[](){
+            RigPaletteCopyObservation observation{};
+            const auto guard=shotGuard.load(std::memory_order_acquire);
+            if(guard)observation.state={{guard->soldier,guard->weak,guard->weapon,guard->owner,
+                guard->equipmentGeneration,guard->space},guard->generation,guard->deadline,guard->valid};
+            LARGE_INTEGER now{};if(QueryPerformanceCounter(&now))observation.now=now.QuadPart;
+            return observation;
+        };
+        if(!RigPaletteCurrentAtCopy(scope.paletteCopy,scope.sourceA,
+            reinterpret_cast<std::uintptr_t>(source),count,scope.before,scope.posed,scope.copyScratch,
+            [](std::uintptr_t at,void* out,std::size_t n){return at<=UINT32_MAX&&Read(unsigned(at),out,n);},observe)){
+            scope.changed=false;++copyBoundaryRejected;
+        }
+    }
+    // A rejection forwards this invocation's current native source unchanged;
+    // never substitute scope.before (a snapshot from the previous lifetime).
     const bool changed=scope.changed&&scope.count==count&&scope.sourceA==scope.sourceB;
     const auto* input=changed?scope.posed.data():source;
     // The verified packer only reads source, copies twelve scalars per bone to
@@ -883,6 +921,18 @@ void PublishTracking(const Tracking& source)noexcept {
     try{chestKnifeGuard.store(next.chestKnife?std::make_shared<const ChestKnifeRenderSource>(*next.chestKnife):
         std::shared_ptr<const ChestKnifeRenderSource>{},std::memory_order_release);}
     catch(...){next.chestKnife.reset();chestKnifeGuard.store({},std::memory_order_release);}
+    if(next.selectedKnife&&(!interaction::ValidInput(next.input)||next.weaponActionsBlocked||next.chestKnife||
+       !interaction::GameplayOwnsInput(next.input.menu,knifeNow)||
+       next.selectedKnife->native.owner!=next.controllerOwner||
+       next.selectedKnife->input.owner!=next.controllerEvidence.owner||
+       next.selectedKnife->input.sequence!=next.input.generation||
+       next.selectedKnife->input.deadlineNs>ReloadNanos(next.deadline)||
+       next.selectedKnife->input.owner.equipGeneration!=next.equipmentGeneration||
+       next.selectedKnife->equipment!=next.nativeEquipment||
+       !selected_knife_detail::Source(*next.selectedKnife,knifeNow)))next.selectedKnife.reset();
+    try{selectedKnifeGuard.store(next.selectedKnife?std::make_shared<const SelectedKnifeRenderSource>(*next.selectedKnife):
+        std::shared_ptr<const SelectedKnifeRenderSource>{},std::memory_order_release);}
+    catch(...){next.selectedKnife.reset();selectedKnifeGuard.store({},std::memory_order_release);}
 #endif
 
     if(next.freeRight){const auto& p=*next.freeRight;const auto& o=p.visibility.nativeOwner;
@@ -959,7 +1009,16 @@ std::optional<WeaponShotFrame> ReadWeaponFrame(unsigned soldier,unsigned weak,un
             return {};}
         if(shotGuard.load(std::memory_order_acquire)!=guard){++shotFrameRaces;continue;}
         if(use==WeaponFrameUse::Support&&guard->weaponActionsBlocked)++supportFramesWhileFireBlocked;
-        return pose->frame;
+        auto result=pose->frame;
+        if(result.muzzleBinding){
+            const auto& binding=*result.muzzleBinding;const auto ns=ReloadNanos();
+            const auto selected=binding.authored.selected?gameplay::ReadSelectedMeshes(binding.authored.selected->owner,ns):nullptr;
+            if(!MuzzleBindingCurrent(binding,selected.get(),guard->equipment,
+                {guard->soldier,guard->weak,guard->owner,guard->equipmentGeneration,guard->space,
+                 guard->generation,ReloadNanos(guard->deadline)},ns))result.muzzleBinding.reset();
+            if(shotGuard.load(std::memory_order_acquire)!=guard){++shotFrameRaces;continue;}
+        }
+        return result;
     }
     return {};
 }
@@ -1234,6 +1293,9 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
         false;
 #endif
     const auto authoredNow=ReloadNanos();
+#ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
+    std::optional<SelectedKnifeRenderBinding> selectedKnifeBinding;
+#endif
     auto authored=BindAuthoredGrip(AuthoredGripProfiles(),gameplay::ReadCurrentSelectedMeshes(authoredNow),
         input.nativeEquipment,{input.soldier,input.weak,input.ownerGeneration,input.equipmentGeneration,
         input.input.spaceGeneration,input.input.generation,ReloadNanos(input.deadline)},rigFingerprint,
@@ -1246,6 +1308,12 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
         authored=BindAuthoredGrip(ChestKnifeGripProfiles(),gameplay::ReadCurrentSelectedMeshes(authoredNow),
             input.nativeEquipment,{input.soldier,input.weak,input.ownerGeneration,input.equipmentGeneration,
             input.input.spaceGeneration,input.input.generation,ReloadNanos(input.deadline)},rigFingerprint,authoredNow,false);
+    }
+    else if(input.selectedKnife){
+        selectedKnifeBinding=BindSelectedKnifeGrip(*input.selectedKnife,gameplay::ReadCurrentSelectedMeshes(authoredNow),
+            rig->identity,rigFingerprint,authoredNow);
+        if(!selectedKnifeBinding){published.reset();shotPublication.store({},std::memory_order_release);return;}
+        authored={AuthoredGripStatus::Bound,selectedKnifeBinding->grip};
     }
 #endif
     ++authoredGripStatus[unsigned(authored.status)];
@@ -1756,9 +1824,39 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
        ChestKnifeRenderCurrent(*input.chestKnife,input.controllerOwner,input.controllerEvidence,ReloadNanos()))
         if(const auto calibration=private_knife::KnifeWristCalibration(input.input,*body,targets->right))
             pose->shot->chestKnife=ChestKnifeRenderReceipt{*input.chestKnife,rigFingerprint,*calibration};
+    if(pose->shot&&selectedKnifeBinding&&targets->tracked[1])
+        if(const auto calibration=private_knife::KnifeWristCalibration(input.input,*body,targets->right))
+            pose->shot->selectedKnife=MakeSelectedKnifeRenderReceipt(*selectedKnifeBinding,*calibration);
 #endif
-    if(pose->shot)pose->shot->authoredSupportReference=
-        (authored.binding&&AuthoredRifleSupport(*authored.binding))||AuthoredSupportContact(measuredSupport);
+    if(pose->shot){
+        pose->shot->authoredSupportReference=
+            (authored.binding&&AuthoredRifleSupport(*authored.binding))||AuthoredSupportContact(measuredSupport);
+        // Copy existing frame/binding evidence only; no new native reads or
+        // capability decisions on this render boundary.
+        ShotAimEvidence evidence;evidence.equipment=input.nativeEquipment;
+        evidence.reference=input.input.referenceHead;evidence.effectiveGrip=input.input.hands[1].grip;
+        evidence.effectiveAim=input.input.hands[1].aim;evidence.body=*body;evidence.bodyYaw=input.bodyYaw;
+        const auto& preSupport=input.boltRawInput;
+        if(interaction::ValidInput(preSupport)&&preSupport.focused&&preSupport.headValid&&
+           preSupport.generation==input.input.generation&&preSupport.spaceGeneration==input.input.spaceGeneration&&
+           preSupport.predictedNs==input.input.predictedNs&&preSupport.hands[1].gripTracked&&preSupport.hands[1].aimTracked){
+            evidence.preSupportInputAvailable=true;evidence.preSupportGeneration=preSupport.generation;
+            evidence.preSupportSpace=preSupport.spaceGeneration;evidence.preSupportReference=preSupport.referenceHead;
+            evidence.preSupportGrip=preSupport.hands[1].grip;evidence.preSupportAim=preSupport.hands[1].aim;}
+        const auto selected=authored.binding?authored.binding->selected:pose->drawSource.opticSelected;
+        if(selected){evidence.configurationPath=selected->configurationPath;
+            evidence.configurationPathVerified=selected->configurationPathVerified;
+            evidence.configurationSequence=selected->sequence;evidence.configurationDeadlineNs=selected->deadlineNs;}
+        if(authored.binding){const auto& p=*authored.binding->profile;
+            evidence.authoredBinding=true;evidence.authoredAxes=!p.authoredAxisEvidence.empty();
+            evidence.meshPath=p.meshPath;evidence.bindingDigest=p.bindingDigest;evidence.axisEvidence=p.authoredAxisEvidence;
+            evidence.rigFingerprint=p.rigFingerprint;evidence.modelForward=p.modelForward;evidence.modelUp=p.modelUp;}
+        pose->shot->aimEvidence=evidence;
+#ifdef FVR_BC2_MUZZLE_ENROLLMENT_HEADER
+        if(authored.binding)pose->shot->muzzleBinding=BindAuthoredMuzzle(generated_muzzle::MuzzleEnrollments,
+            *authored.binding,pose->shot->trackedWeapon,pose->shot->trackedFlash,input.input.worldUnitsPerMeter,authoredNow);
+#endif
+    }
     // The native support wrist is authored relative to this evaluated weapon
     // root. Contact always uses the independent tracked target, including while
     // the visible hand is attached. No guessed attachment offset.
@@ -2034,7 +2132,7 @@ BodyHolsterPackCounters ReadBodyHolsterPackCounters()noexcept {
 }
 bool Stop()noexcept {enabled.store(false,std::memory_order_release);pumpGuard.store({},std::memory_order_release);PublishOrdinaryEquipment({});freeRightGuard.store({},std::memory_order_release);visibilityGuard.store({},std::memory_order_release);visibilityReceipt.store({},std::memory_order_release);bool okay=true;for(auto entry:hooks)if(entry){auto r=MH_DisableHook(entry);okay&=r==MH_OK||r==MH_ERROR_DISABLED;}const auto until=GetTickCount64()+2000;while(inFlight.load()&&GetTickCount64()<until)Sleep(1);return okay&&!inFlight.load();}
 void PublishM95ShotCapturePhase(unsigned phase)noexcept {if(phase<=5)m95ShotCapturePhase.store(phase,std::memory_order_release);}
-void Report(std::ostream& out){out<<std::setprecision(9);out<<'{';weaponCapture.Report(out);out<<',';pumpPartCapture.Report(out);out<<',';m95ShotPartCapture.Report(out);out<<",\"free_right_poses\":"<<freeRightPoses<<",\"free_right_fallbacks\":"<<freeRightFallbacks<<",\"free_right_packed_copies\":"<<freeRightPackedCopies<<",\"free_right_paired_copies\":"<<freeRightPairedCopies;
+void Report(std::ostream& out){out<<std::setprecision(9);out<<'{';out<<"\"copy_boundary_rejected\":"<<copyBoundaryRejected.load()<<',';weaponCapture.Report(out);out<<',';pumpPartCapture.Report(out);out<<',';m95ShotPartCapture.Report(out);out<<",\"free_right_poses\":"<<freeRightPoses<<",\"free_right_fallbacks\":"<<freeRightFallbacks<<",\"free_right_packed_copies\":"<<freeRightPackedCopies<<",\"free_right_paired_copies\":"<<freeRightPairedCopies;
     out<<",\"bolt_presentation\":{\"contacts\":"<<boltContacts.load()<<",\"poses\":"<<boltPoses.load()
        <<",\"custody_reach_rejects\":"<<boltCustodyReachRejects.load()
        <<",\"custody_reach_first_input\":"<<boltCustodyReachFirstInput.load()

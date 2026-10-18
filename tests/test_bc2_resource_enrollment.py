@@ -18,6 +18,38 @@ def inputs():
     return result
 
 class ExactEnrollment(unittest.TestCase):
+    def opening_inputs(self):
+        paths=dict(jobs='native-jobs.json',reviews='native-reviews.json',geometry='magazine-geometry.json',
+                   visibility='visibility.json',catalog='body-ammo-assets.json')
+        return {name:json.loads((ROOT/'profiles/opening426'/path).read_text()) for name,path in paths.items()}
+
+    def test_opening_stock_bolt_review_keeps_exact_family_and_complete_assembly(self):
+        x=self.opening_inputs();doc,header=enrollment.join(**x)
+        family=enrollment.registry.AUTOMATIC_STOCK_BOLT_FAMILY
+        self.assertEqual(doc['family'],family)
+        self.assertEqual(doc['families'],[family])
+        self.assertEqual(doc['profiles'][0]['family'],family)
+        self.assertEqual(header,(ROOT/'profiles/opening426/NambuRegistry.generated.h').read_text())
+        self.assertEqual(doc['profiles'][0]['magazine_part'],'jntWpn_12')
+        for fault in ('digest','subtree','body'):
+            bad=copy.deepcopy(x)
+            if fault=='digest':bad['catalog']['profiles'][0]['assembly_digest']='0'*64
+            if fault=='subtree':bad['geometry']['profiles'][0]['assembly']['members'].pop()
+            if fault=='body':bad['catalog']['profiles'][1]['configured_meshes'].clear()
+            with self.subTest(fault=fault),self.assertRaises(ValueError):enrollment.join(**bad)
+
+    def test_mixed_reviews_report_each_exact_family(self):
+        x=inputs();opening=self.opening_inputs()
+        x['catalog']['profiles']=[r for r in x['catalog']['profiles'] if r['asset']!='Nambu100']
+        for name,key in (('jobs','descriptors'),('geometry','profiles'),('visibility','rows'),('catalog','profiles')):
+            x[name][key].extend(opening[name][key])
+        x['reviews'].extend(opening['reviews'])
+        doc,_=enrollment.join(**x)
+        self.assertIsNone(doc['family'])
+        self.assertEqual(set(doc['families']),{enrollment.registry.FAMILY,enrollment.registry.AUTOMATIC_STOCK_BOLT_FAMILY})
+        for row in doc['profiles']:
+            self.assertEqual(row['family'],enrollment.registry.AUTOMATIC_STOCK_BOLT_FAMILY if row['identity']['assetName']=='Nambu100' else enrollment.registry.FAMILY)
+
     def test_reviewed_twelve_join_reproduces_registry(self):
         doc,header=enrollment.join(**inputs());self.assertEqual(len(doc['profiles']),12)
         self.assertEqual(header,(ROOT/'profiles/resource-enrollment233/ReviewedResourceRegistry.h').read_text())

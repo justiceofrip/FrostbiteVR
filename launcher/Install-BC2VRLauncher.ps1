@@ -27,12 +27,12 @@ try{
         if(Test-Path -LiteralPath $target){throw 'This version is already installed.'}
         $null=New-Item -ItemType Directory -Path (Join-Path $target 'app') -Force
         try{
-            $entries=@(foreach($name in @('Launcher.ps1','Worker.ps1','Launcher.Core.ps1')){
+            $entries=@(foreach($name in @('Launcher.ps1','Worker.ps1','Launcher.Core.ps1','Launcher.Feedback.ps1')){
                 $dest=Join-Path $target ('app/'+$name)
                 Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $dest
                 @{path=('app/'+$name);sha256=(Get-FileHash -LiteralPath $dest).Hash.ToLowerInvariant()}
             })
-            Write-FvrJson (Join-Path $target 'package.json') @{schema='fvr.desktop.package.v1';version=$Version;runtime_entry=$null;files=$entries}
+            Write-FvrJson (Join-Path $target 'package.json') @{schema='fvr.desktop.package.v1';version=$Version;runtime_entry=$null;files=$entries;release_repository='justiceofrip/BC2VR';feedback_repository='justiceofrip/BC2VR'}
             $null=Test-FvrPackage $target $Version
             $previous=if(Test-Path -LiteralPath (Join-Path $InstallRoot 'active.json')){(Read-FvrJson (Join-Path $InstallRoot 'active.json')).current}else{$null}
             Write-FvrJson (Join-Path $InstallRoot 'active.json') @{current=$Version;previous=$previous}
@@ -57,7 +57,7 @@ try{
         $shell=New-Object -ComObject WScript.Shell
         $shortcut=$shell.CreateShortcut((Join-Path $desktop 'BC2 VR.lnk'))
         $shortcut.TargetPath=Join-Path $PSHOME 'pwsh.exe'
-        $shortcut.Arguments='-NoProfile -NonInteractive -STA -WindowStyle Hidden -File "'+(Join-Path $InstallRoot 'Start-Launcher.ps1')+'"'
+        $shortcut.Arguments='-NoProfile -NonInteractive -ExecutionPolicy Bypass -STA -WindowStyle Hidden -File "'+(Join-Path $InstallRoot 'Start-Launcher.ps1')+'"'
         $shortcut.WorkingDirectory=$InstallRoot
         $shortcut.Description='Launch Battlefield Bad Company 2 in VR, manage hotfixes and stop VR.'
         $shortcut.WindowStyle=7

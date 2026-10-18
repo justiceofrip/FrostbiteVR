@@ -23,6 +23,7 @@
 #include "OpenXrAmmoHud.h"
 #include "fvr/graphics/D3D11StereoComfort.h"
 #include "fvr/interaction/RecenterPolicy.h"
+#include "fvr/interaction/TrackingReference.h"
 
 namespace fvr::xr {
 using Microsoft::WRL::ComPtr;
@@ -94,6 +95,11 @@ struct Host {
     std::vector<XrTime> spaceChanges;
     math::Pose referenceHead{};
     std::uint64_t trackingGeneration=0,spaceGeneration=1;
+    std::uint32_t trackingBasisGeneration=1;
+    void AdvanceReference(interaction::TrackingReferenceChange change){
+        if(!interaction::AdvanceTrackingReference(spaceGeneration,trackingBasisGeneration,change))
+            throw std::runtime_error("Tracking reference epoch exhausted");
+    }
     explicit Host(HostReport& r):report(r){}
     ~Host(){
         AbortFrame();
@@ -278,7 +284,7 @@ struct Host {
             sessionState=change.state;report.lastSessionState=std::int32_t(sessionState);Log("session_state");
             if(sessionState!=XR_SESSION_STATE_FOCUSED){retained.Reset();if(controls)controls->StopFeedback();}
             if(sessionState==XR_SESSION_STATE_READY&&!running){XrSessionBeginInfo begin{XR_TYPE_SESSION_BEGIN_INFO};begin.primaryViewConfigurationType=XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
-                Check(api.BeginSession(session,&begin),"Begin OpenXR session");running=true;referenceValid=false;++spaceGeneration;}
+                Check(api.BeginSession(session,&begin),"Begin OpenXR session");running=true;referenceValid=false;AdvanceReference(interaction::TrackingReferenceChange::SessionRestart);}
             if(sessionState==XR_SESSION_STATE_STOPPING&&running){Check(api.EndSession(session),"End OpenXR session");running=false;}
             if(sessionState==XR_SESSION_STATE_EXITING||sessionState==XR_SESSION_STATE_LOSS_PENDING)exit=true;
         }
@@ -312,7 +318,7 @@ struct Host {
         Check(timed(HostStage::WaitFrame,[&]{return api.WaitFrame(session,&wait,&frame);}),"Wait frame");++report.waitedFrames;frameTime=frame.predictedDisplayTime;
         diagnostic.predictedNs=frameTime;diagnostic.shouldRender=frame.shouldRender==XR_TRUE;
         XrFrameBeginInfo begin{XR_TYPE_FRAME_BEGIN_INFO};Check(timed(HostStage::BeginFrame,[&]{return api.BeginFrame(session,&begin);}),"Begin frame");frameOpen=true;
-        for(auto at=spaceChanges.begin();at!=spaceChanges.end();)if(*at<=frameTime){++spaceGeneration;referenceValid=false;retained.Reset();at=spaceChanges.erase(at);}else ++at;
+        for(auto at=spaceChanges.begin();at!=spaceChanges.end();)if(*at<=frameTime){AdvanceReference(interaction::TrackingReferenceChange::RuntimeSpaceReplacement);referenceValid=false;retained.Reset();at=spaceChanges.erase(at);}else ++at;
         const auto wall=GetTickCount64();
         diagnostic.focused=sessionState==XR_SESSION_STATE_FOCUSED&&userPresent&&(!presenceReturnAt||wall-presenceReturnAt>=250);
         // Some wireless runtimes stop delivering frames instead of reporting a
@@ -338,7 +344,7 @@ struct Host {
                 tracking.focused=sessionState==XR_SESSION_STATE_FOCUSED&&userPresent&&(!presenceReturnAt||wall-presenceReturnAt>=250);tracking.headValid=true;tracking.head=Pose(head.pose);
                 if(roomscale&&trackingRecovery.Update(tracking.focused,wall))recoveryPending=true;
                 if(roomscale&&tracking.focused&&recoveryPending&&interaction::UprightReference(tracking.head)){
-                    referenceValid=false;++spaceGeneration;tracking.spaceGeneration=spaceGeneration;
+                    referenceValid=false;AdvanceReference(interaction::TrackingReferenceChange::AutomaticRecovery);tracking.spaceGeneration=spaceGeneration;
                     retained.Reset();if(provider)provider->Suspend();
                     recoveryPending=false;++report.recenters;++report.automaticRecenters;
                 }
@@ -353,11 +359,12 @@ struct Host {
                     valid&=bool(math::MakeRelativePose(tracking.referenceHead,tracking.eyes[eye]))&&bool(math::MakeLhProjectionFromFovTangents(tracking.fov[eye],.05f,100.f));}
                 tracking.headValid=valid;if(valid)++report.validTrackingFrames;
                 interaction::InputFrame input{};input.generation=++inputGeneration;input.spaceGeneration=spaceGeneration;input.predictedNs=frameTime;
+                input.trackingBasisGeneration=trackingBasisGeneration;
                 input.focused=tracking.focused;input.headValid=tracking.headValid;input.floorRelative=report.floorRelative;input.worldUnitsPerMeter=worldUnitsPerMeter;
                 input.referenceHead=referenceHead;input.head=tracking.head;
                 if(controls)timed(HostStage::Controls,[&]{controls->Sample(local,frameTime,input);});
                 if(roomscale&&recenter.Update(input))if(const auto reference=interaction::ExplicitRecenterReference(tracking.head,referenceHead)){
-                    referenceHead=*reference;++spaceGeneration;retained.Reset();if(provider)provider->Suspend();++report.recenters;
+                    referenceHead=*reference;AdvanceReference(interaction::TrackingReferenceChange::ManualRecenter);retained.Reset();if(provider)provider->Suspend();++report.recenters;
                     tracking.referenceHead=input.referenceHead=referenceHead;tracking.spaceGeneration=input.spaceGeneration=spaceGeneration;Log("manual_recenter");
                 }
                 if(menu){menuActive=timed(HostStage::Menu,[&]{return menu->Frame(input);});menu->FilterGameplayInput(input);if(menuActive){input.focused=false;input.hands={};retained.Reset();}}
@@ -405,7 +412,8 @@ struct Host {
                                 const bool propsRead=provider->ReadBodyProps(ticket,props);
                                 if(ammoHud)ammoHud->Receive(propsRead?&props:nullptr,ticket,BodyPropClockNs());
                                 if(bodyProps){
-                                    if(propsRead&&(!sceneDepthSeen||depthCopied))bodyProps->Compose(props,ticket,{scratch[0].Get(),scratch[1].Get()},BodyPropClockNs,depthCopied?&depthViews:nullptr);
+                                    if(propsRead)bodyProps->Compose(props,ticket,{scratch[0].Get(),scratch[1].Get()},BodyPropClockNs,depthCopied?&depthViews:nullptr,
+                                        sceneDepthSeen?graphics::BodyPropMissingDepthPolicy::VehicleReticleOnly:graphics::BodyPropMissingDepthPolicy::AllowBodyProps);
                                     report.bodyProps=bodyProps->Statistics();
                                 }
                                 }
@@ -431,6 +439,7 @@ struct Host {
         if(!inputSent){
             if(roomscale)trackingRecovery.Update(false,wall);
             interaction::InputFrame inactive{};inactive.generation=++inputGeneration;inactive.spaceGeneration=spaceGeneration;inactive.predictedNs=frameTime;
+            inactive.trackingBasisGeneration=trackingBasisGeneration;
             inactive.worldUnitsPerMeter=worldUnitsPerMeter;inactive.floorRelative=report.floorRelative;
             recenter.Update(inactive);if(menu)menuActive=timed(HostStage::Menu,[&]{return menu->Frame(inactive);});publishInput(inactive);timed(HostStage::Feedback,[&]{DispatchFeedback(provider,inactive);});++report.inputFrames;
         }
@@ -488,7 +497,7 @@ struct Host {
 HostReport RunOpenXrHost(const HostOptions& options)noexcept {
     HostReport report;
     try {Require(options.probeOnly||options.seconds||bool(options.stopRequested),"Continuous session requires a stop source");Host host(report);
-        struct ReleaseInput {Host& host;IFrameProvider* provider;~ReleaseInput(){if(provider){interaction::InputFrame f{};f.generation=++host.inputGeneration;f.spaceGeneration=host.spaceGeneration;f.predictedNs=host.frameTime>0?host.frameTime:1;provider->UpdateInput(f);provider->Suspend();}}} release{host,options.provider};
+        struct ReleaseInput {Host& host;IFrameProvider* provider;~ReleaseInput(){if(provider){interaction::InputFrame f{};f.generation=++host.inputGeneration;f.spaceGeneration=host.spaceGeneration;f.trackingBasisGeneration=host.trackingBasisGeneration;f.predictedNs=host.frameTime>0?host.frameTime:1;provider->UpdateInput(f);provider->Suspend();}}} release{host,options.provider};
         host.Initialize(options);if(!options.probeOnly)host.Run(options);report.okay=true;}
     catch(const std::exception& error){report.error=error.what();}
     catch(...){report.error="Unknown OpenXR host failure";}

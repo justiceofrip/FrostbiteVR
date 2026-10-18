@@ -1,0 +1,129 @@
+{
+  "checkpoint": 425,
+  "utc": "2026-10-18T12:28:17.385700+00:00",
+  "source_sha256": "645bf3e64ffd8098298c7210784c3d847ca7243a4a94baf0e92a819d2e300a18",
+  "build_receipt_sha256": "c18b3c68fee54e0007a6f6cdcfd31106b043f700dc54a505afda024ddcb4366d",
+  "focused_tests_passed": 4,
+  "full_cpp_suites_passed": {
+    "x86": 288,
+    "x64": 288
+  },
+  "active_run": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\opening02",
+    "captured_pairs": 240,
+    "corrected_pairs": 64,
+    "skipped_pairs_missing_weather": 176,
+    "scopes_applied_and_restored": 128,
+    "native_writes": 512,
+    "restore_failures": 0,
+    "exceptions": 0,
+    "cloud_region_disparity_pixels": [
+      0,
+      1
+    ],
+    "native_entire_mission_restart_passed": true
+  },
+  "control_run": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\opening-control01",
+    "captured_pairs": 240,
+    "weather_writes": 0,
+    "exceptions": 0,
+    "cloud_region_disparity_pixels": [
+      265,
+      287
+    ]
+  },
+  "earlier_active_loading_crash_preserved": true,
+  "intermittent_loading_crash_resolved": false,
+  "headset_tested": false,
+  "head_motion_tested": false,
+  "actual_death_tested": false,
+  "full_campaign_accepted": false,
+  "default_correction_enabled": false,
+  "desktop_promoted": false,
+  "installed_runtime_checkpoint": 414,
+  "installed_launcher_version": "0.1.2",
+  "github_updated": false,
+  "files": {
+    "normal-build/build-receipt.json": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\normal-build\\build-receipt.json",
+      "sha256": "c18b3c68fee54e0007a6f6cdcfd31106b043f700dc54a505afda024ddcb4366d"
+    },
+    "focused/validation.json": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\focused\\validation.json",
+      "sha256": "fe24275a8da742848167cb7e0a74b2b11e504105d1add55ace293ec1082496dd"
+    },
+    "normal-x86/validation.json": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\normal-x86\\validation.json",
+      "sha256": "91d22a583b2c68d8a4917a598bad1dee2531b007e7ed00b14d84b3af19fb6bd6"
+    },
+    "normal-x64/validation.json": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\normal-x64\\validation.json",
+      "sha256": "4c596312033478e53fd7b782a2baa6ba0df5c8b17a71cb274b7fa3fd94250ab0"
+    },
+    "independent-review425.json": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\independent-review425.json",
+      "sha256": "878e2279881c58026c48cc81720217a393df7a38a96aaf229e2e0f0ebcac638a"
+    },
+    "independent-focused425.json": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\independent-focused425.json",
+      "sha256": "6803773c1fec21e67cb63c2a88f929ee9ec0f9600d6876f613ccfcbba3f7c813"
+    },
+    "opening01-failure-independent.json": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\opening01-failure-independent.json",
+      "sha256": "3c3f6f598f558cea0bfe42fdf0750ddd1f517f2ffd40005e5839aad45ccd2695"
+    },
+    "opening-control01-independent-audit.json": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\opening-control01-independent-audit.json",
+      "sha256": "5e0a54c6d7fa1cc8bf6489e9c835d01c98ea479ee3694f55038d8795d2ba8292"
+    },
+    "opening02-independent-audit.json": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\opening02-independent-audit.json",
+      "sha256": "2a96366378fbd911fa0fa5da9b144b689c7e2a2a6a8c1eed302c002079036f6e"
+    },
+    "root-visual-review425.json": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\root-visual-review425.json",
+      "sha256": "118d1b557230682e88ae7064530dbc36017fac5601d3133c836b4f11d4ac4aba"
+    },
+    "opening02/weather-translation-runtime.json": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\opening02\\weather-translation-runtime.json",
+      "sha256": "1f377ff8108fa5d25ff7bf2b8d8d3d2b5bd50c238f9982f155825705ac3faa1d"
+    },
+    "opening02/runner-result.json": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\opening02\\runner-result.json",
+      "sha256": "1128790efbe76c11f4d74cf5f30a159a8cfd4ff85153a5d7785845fdebce3d28"
+    },
+    "opening02-watch-summary.json": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\opening02-watch-summary.json",
+      "sha256": "523bd0ebc93749f3c4036d3b82ecff6e23adb0009ac227d6e237db74bef93ddb"
+    },
+    "opening-control01/runner-result.json": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\opening-control01\\runner-result.json",
+      "sha256": "e3238c5bdde1956abdea456a160df64d1c4d46394bbaca08df4809f3c73e9ba0"
+    },
+    "opening-control01-watch-summary.json": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\opening-control01-watch-summary.json",
+      "sha256": "4e4b2cbd12957319054f2096290d6db176e522b82f0a150828668c424b57054f"
+    },
+    "control-proposal/observer-revision01/revision.json": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\control-proposal\\observer-revision01\\revision.json",
+      "sha256": "941344b45bd90bd968864bfb38d19e6fd291e2223b1297c3e772c0d593844825"
+    },
+    "control-proposal/observer-revision01/focused-checks.json": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\control-proposal\\observer-revision01\\focused-checks.json",
+      "sha256": "a46a7bd9bc83bf86f7ac879a5530aaffc8406ba54cf4a0d018c860685ad95c17"
+    },
+    "captures-lossless-compression425.json": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\captures-lossless-compression425.json",
+      "sha256": "7755a890e9b76efa4e0f40c498d9dc8a45f89d955c2aa7956cceeb88820a5721"
+    },
+    "game02/normal-close.json": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\game02\\normal-close.json",
+      "sha256": "1331f59caab1a7ecbd3da71c7ed804630e440e9061fd7e02aafb2527d54b7b78"
+    },
+    "game03/normal-close.json": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight425\\game03\\normal-close.json",
+      "sha256": "b4bcaeaa38b177015db5d7fec7bc0ff8b14709584ed93d5310da61d25283aadd"
+    }
+  }
+}

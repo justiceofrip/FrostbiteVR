@@ -1,0 +1,73 @@
+{
+  "schema": "fvr.bc2.authored_support_bindings",
+  "schema_version": 1,
+  "profiles": [
+    {
+      "native_asset_name": "Nambu100",
+      "configured_mesh_path": "Objects/Weapons/Handheld/Beach/Nambu100/Nambu100_Mesh",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "animation_sha256": "3c825f064283d3c1c1c94e22d6681d35f32e5da33529b377456b88a7241227d0",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "left_hand_in_weapon": [
+        0.7005432878640437,
+        0.5439513151425153,
+        -0.4619048263261214,
+        0.0,
+        0.12830165201867072,
+        -0.732739052608346,
+        -0.6683054442931805,
+        0.0,
+        -0.701981330177603,
+        0.4089137409495464,
+        -0.5831052774111483,
+        -0.0,
+        0.013309346011841307,
+        0.018919921455835282,
+        -0.4752565856911359,
+        1.0
+      ],
+      "left_hand_status": "static_authored_pose",
+      "right_hand_retargeted": false,
+      "native_admission": false,
+      "source_bindings": [
+        "146716bed656e2cc7b00b3ae2315de546593df0ce42f5a5e9410ed2f0f414978"
+      ],
+      "source_weapons": [
+        {
+          "resource": "Objects/Weapons/Handheld/Beach/Nambu100/Nambu100.dbx",
+          "sha256": "24ca715ffcaf75cedc25712d8c43e80a5bc7a51b72eb750593d5cb7725cc0120",
+          "instance_guid": "ac8010d7-94e2-4b04-ae1f-1e20af940c0f",
+          "type": "GameSharedResources.SoldierWeaponData"
+        }
+      ],
+      "animation_chain": {
+        "tree": {
+          "resource": "Objects/Weapons/Handheld/Beach/Nambu100/Nambu100_AnimTree1P.dbx",
+          "sha256": "8ca16605f30af76257362fa52bff67093bd480f6c1352c882facc160a6940e9a",
+          "instance_guid": "9bea6a57-7481-4472-8c44-a9fab7ab6248",
+          "type": "Animation.SpecificAnimTreeData"
+        },
+        "animation_asset": {
+          "resource": "Animations/Weapons/Handheld/Nambu100/1P/HandsIkPose.dbx",
+          "sha256": "77ca783fe1dcfebd0ecb5aa85e6d509c9c7fdd81316b9394131299875773acb4",
+          "instance_guid": "fa3b9807-05e8-4160-ba94-db28f80e7de1",
+          "type": "Animation.AnimationAsset"
+        },
+        "animation_resource": "Animations/Weapons/Handheld/Nambu100/1P/HandsIkPose.res",
+        "skeleton_asset": {
+          "resource": "Characters/Skeletons/ske01.dbx",
+          "sha256": "ebad79fb62ab383dcc4ea5179652ded99944b7f9905c6095baa8f0b7183520ba",
+          "instance_guid": "20a6d9b2-2cd5-4895-a59c-f144e6d3f061",
+          "type": "Animation.SkeletonAsset"
+        },
+        "skeleton_resource": "Characters/Skeletons/ske01.res"
+      },
+      "right_hand_status_not_admitted": "static_authored_pose",
+      "weapon_class": "wcSmg",
+      "support_contact_reference": true,
+      "binding_digest": "0120c8978b1a7df517abcecac7791c4c839dbf4287edaafc1d2e6d023945ac3a"
+    }
+  ],
+  "runtime_admission": false,
+  "scope": "Static weapon-local support contact only; no gun-hand pose, native feature admission or grip claim"
+}

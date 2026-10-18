@@ -3,20 +3,38 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <string_view>
 namespace fvr::bc2 {
 namespace {
 std::uint32_t Get(std::span<std::byte> b,std::size_t at)noexcept {std::uint32_t out=0;std::memcpy(&out,b.data()+at,4);return out;}
 void Put(std::span<std::byte> b,std::size_t at,std::uint32_t value)noexcept {std::memcpy(b.data()+at,&value,4);}
 }
-bool InputOverride::Apply(std::span<std::byte> cache,const interaction::ActionOutput& action,std::optional<bool> diagnosticGrenade,std::optional<bool> diagnosticCycle,std::optional<EntryAction> verifiedWeaponMode,bool verifiedContextUseVehicleAlias) noexcept {
+std::optional<EntryAction> VerifiedSelectedFireAction(const ReloadStateSnapshot& s,
+    const ReloadStateOwner& owner,std::uint64_t sequence,std::int64_t now) noexcept {
+    if(!owner.player||!owner.soldier||!owner.weak||!owner.weapon||!owner.actorGeneration||
+       !owner.equipGeneration||!owner.space||s.owner!=owner||!sequence||s.sequence!=sequence||
+       s.observedNs<=0||now<s.observedNs||now-s.observedNs>100000000||!s.inventory||
+       !s.config.weaponData||!s.config.firingData||!s.config.primaryFire)return {};
+    if(s.config.fireInputAction==8)return EntryAction::Fire;
+    const auto exact=[](const auto& bytes,std::string_view text)noexcept {
+        return text.size()<bytes.size()&&std::equal(text.begin(),text.end(),bytes.begin())&&bytes[text.size()]=='\0';
+    };
+    const auto& c=s.config;
+    if(s.selectedSlot==0&&c.fireInputAction==37&&c.fireLogicType==0&&
+       c.baseCapacity==-1&&c.numberOfMagazines==-1&&exact(c.assetName,"KNV-1")&&
+       exact(c.assetPath,"Objects/Weapons/Handheld/Knife_Equipable/Knife_Equipable"))return EntryAction::MeleeAttack;
+    return {};
+}
+bool InputOverride::Apply(std::span<std::byte> cache,const interaction::ActionOutput& action,std::optional<bool> diagnosticGrenade,std::optional<bool> diagnosticCycle,std::optional<EntryAction> verifiedWeaponMode,bool verifiedContextUseVehicleAlias,EntryAction verifiedFireAction) noexcept {
     if(active_||cache.size()<InputBytes||!action.active||!action.owner||
        !std::isfinite(action.forward)||!std::isfinite(action.strafe)||
        std::abs(action.forward)>1||std::abs(action.strafe)>1)return false;
+    if(verifiedFireAction!=EntryAction::Fire&&verifiedFireAction!=EntryAction::MeleeAttack)return false;
     // Mode commands are adapter-resolved native map actions. Do not accept
     // arbitrary entry bits through this narrow path.
     if(verifiedWeaponMode&&*verifiedWeaponMode!=EntryAction::GrenadeLauncher&&*verifiedWeaponMode!=EntryAction::DynamicGadget2)return false;
     // Axis signedness verified by native float setter mask 0x6f3.
-    const float values[]={action.forward,action.strafe,(action.held&interaction::Fire)?1.f:0.f};
+    const float values[]={action.forward,action.strafe,(verifiedFireAction==EntryAction::Fire&&(action.held&interaction::Fire))?1.f:0.f};
     const EntryAction axes[]={EntryAction::Throttle,EntryAction::Strafe,EntryAction::Fire};
     for(unsigned i=0;i<3;++i){auto& e=edits_[i];e.offset=8+4*unsigned(axes[i]);e.before=Get(cache,e.offset);
         if(!std::isfinite(std::bit_cast<float>(e.before)))return false;e.written=std::bit_cast<std::uint32_t>(values[i]);}
@@ -34,6 +52,10 @@ bool InputOverride::Apply(std::span<std::byte> cache,const interaction::ActionOu
         std::pair{interaction::Crouch,EntryAction::ChangePose}}){
         const auto bit=unsigned(pair.second),word=bit/32,mask=1u<<(bit%32);masks_[word]|=mask;
         if(action.held&pair.first)written_[word]|=mask;
+    }
+    if(verifiedFireAction==EntryAction::MeleeAttack){
+        constexpr auto mask=1u<<(unsigned(EntryAction::MeleeAttack)-32);masks_[1]|=mask;
+        if(action.held&interaction::Fire)written_[1]|=mask;
     }
     // Native Gather writes both boolean EntryActions for this shared concept.
     // Mirror the same already-filtered Use level; this is not another edge or

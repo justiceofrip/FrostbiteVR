@@ -4,7 +4,8 @@ param([ValidateSet('x86','x64')][string]$Architecture='x86',
       [switch]$OrdinaryManualCycles, [switch]$OrdinaryBoltInputProbe,
       [switch]$OrdinaryResourceInputProbe, [switch]$NativeCycleRecovery,
       [switch]$OrdinaryResourceInterruptionProbe, [switch]$OrdinaryResourceSceneProbe,
-      [switch]$BodySceneDepth, [switch]$PlayerGrenades, [switch]$PlayerKnife, [switch]$ContextualTools)
+      [switch]$BodySceneDepth, [switch]$PlayerGrenades, [switch]$PlayerKnife, [switch]$ContextualTools,
+      [ValidatePattern('^[a-zA-Z0-9][a-zA-Z0-9_-]*$')][string]$OperationProfile='checkpoint426')
 $ErrorActionPreference='Stop'
 $PSNativeCommandUseErrorActionPreference=$false
 $build=if($BuildDirectory){[IO.Path]::GetFullPath($BuildDirectory,$PSScriptRoot)}else{Join-Path $PSScriptRoot "build/$Architecture"}
@@ -19,7 +20,7 @@ New-Item -ItemType Directory -Path $scratch -Force | Out-Null
 $env:TEMP=$scratch
 $env:TMP=$scratch
 $profiles=Join-Path $PSScriptRoot 'profiles/checkpoint202'
-$operation=Join-Path $PSScriptRoot 'profiles/checkpoint414'
+$operation=Join-Path $PSScriptRoot "profiles/$OperationProfile"
 $receipt=Join-Path $operation 'source-with-header.json'
 $proof=Get-Content -LiteralPath $receipt -Raw | ConvertFrom-Json
 $vswhere=Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
@@ -70,10 +71,11 @@ $contextualToolsOption=if($ContextualTools){'ON'}else{'OFF'}
     '-DBC2_ORDINARY_RESOURCE_PAUSE_PROBE=OFF' `
     '-DBC2_ARMING_EMPTY_PROBE=OFF' '-DBC2_AMMO_MOVE_PROBE=OFF' '-DBC2_AMMO_REFILL_PROBE=OFF' '-DBC2_AMMO_RESOURCE_HANDS=OFF' '-DBC2_RESOURCE_MAGAZINES=ON' '-DBC2_MANUAL_BOLT_PROBE=OFF' '-DBC2_MANUAL_PUMP_HANDS=OFF' '-DBC2_MANUAL_PUMP_PROBE=OFF' '-DBC2_M95_STOCK_SHOT_PROBE=OFF' '-DBC2_RESOURCE_INVENTORY_PROBE=OFF' '-DBC2_RESOURCE_PUMP_PROBE=OFF' '-DBC2_PHYSICAL_RELOAD_LIFECYCLE_SCENARIO=0' `
     '-DBC2_PREHOLD_CLEANUP=ON' '-DBC2_AUTHORED_GRIP_ACCEPTED_BASELINES=OFF' `
-    '-DBC2_MANUAL_EMPTY_COVERAGE_FIXTURE_DIR=' "-DBC2_REVIEWED_MAGAZINE_REGISTRY_HEADER=$PSScriptRoot/profiles/resource-enrollment295-pistol/CombinedRegistry.h" '-DBC2_DRAW_CATALOG_HEADER=' `
-    "-DBC2_AUTHORED_GRIP_HEADER=$PSScriptRoot/profiles/aim339/CombinedGrips.h" `
-    "-DBC2_AUTHORED_SUPPORT_HEADER=$PSScriptRoot/profiles/support373/CombinedSupport.h" `
-    "-DBC2_EXPERIMENTAL_MAGAZINE_HEADER=$PSScriptRoot/profiles/resource-enrollment295-pistol/CombinedGeometry.h" `
+    '-DBC2_MANUAL_EMPTY_COVERAGE_FIXTURE_DIR=' "-DBC2_REVIEWED_MAGAZINE_REGISTRY_HEADER=$PSScriptRoot/profiles/opening426/CombinedRegistry.h" '-DBC2_DRAW_CATALOG_HEADER=' `
+    "-DBC2_AUTHORED_GRIP_HEADER=$PSScriptRoot/profiles/opening426/CombinedGrips.h" `
+    "-DBC2_MUZZLE_ENROLLMENT_HEADER=$PSScriptRoot/profiles/opening426/NambuMuzzle.generated.h" `
+    "-DBC2_AUTHORED_SUPPORT_HEADER=$PSScriptRoot/profiles/opening426/CombinedSupport.h" `
+    "-DBC2_EXPERIMENTAL_MAGAZINE_HEADER=$PSScriptRoot/profiles/opening426/CombinedGeometry.h" `
     "-DBC2_NATIVE_OPERATION_CAPABILITIES_HEADER=$operation/Bc2NativeOperationCapabilities.generated.h" `
     "-DBC2_NATIVE_OPERATION_SOURCE_RECEIPT=$receipt" `
     "-DBC2_NATIVE_OPERATION_SOURCE_SHA256=$($proof.source_sha256)"

@@ -2,12 +2,14 @@
 #include "Bc2BodyAmmoHost.h"
 #include "Bc2BodyCarriedPair.h"
 #include "Bc2StowedAmmo.h"
+#include "fvr/graphics/VehicleReticle.h"
 namespace fvr::bc2 {
 struct BodyPropSources {
     std::optional<BodyAmmoRenderSource> ammo;
     std::optional<BodyHolsteredRenderSource> holstered;
     std::optional<BodyCarriedRenderBatch> carried;
     std::optional<StowedAmmoRenderSource> stowedAmmo;
+    std::optional<graphics::VehicleReticleSample> vehicleReticle;
 };
 struct BodyPropPairSource {BodyCarriedPairKey key{};BodyPropSources original;};
 
@@ -36,6 +38,11 @@ inline graphics::BodyPropEye BuildBodyPropPairEye(const BodyPropPairSource& pair
            AppendBodyCarriedHostInstances(*original.carried,*after.carried,now,pair.key.space,b)&&a.count==b.count&&
            a.count<=graphics::MaxBodyProps-eye.count)
             for(unsigned n=0;n<a.count;++n)append(a.instances[n],b.instances[n]);
+    }
+    if(original.vehicleReticle&&before.vehicleReticle&&after.vehicleReticle){
+        auto a=graphics::VehicleReticleHostInstance(*original.vehicleReticle,*before.vehicleReticle,now);
+        auto b=graphics::VehicleReticleHostInstance(*original.vehicleReticle,*after.vehicleReticle,now);
+        if(a&&graphics::VehicleReticleInsideEye(a->world,eye))append(a,b);
     }
     return eye;
 }

@@ -30,6 +30,9 @@ struct RigSnapshot {
 // ownership and validates the native getter/pose producer before using this as
 // a binding. No write capability is granted; animation synchronization is separate.
 std::optional<RigSnapshot> ReadFirstPersonRig(const RigMemory&,std::uint32_t soldier,std::uint32_t weak);
+// Bounded identity-only reread of the same verified relationships. No palette,
+// skeleton names or matrices are copied, and no pose authority is granted.
+std::optional<RigIdentity> ReadFirstPersonRigIdentity(const RigMemory&,std::uint32_t soldier,std::uint32_t weak)noexcept;
 struct RigBoneEdit {
     std::uint32_t index=0,address=0;
     std::array<std::byte,64> before{},after{};

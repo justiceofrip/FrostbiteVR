@@ -2,7 +2,8 @@
 [CmdletBinding()]
 param([string]$Version='0.1.0', [string]$OutputPath,
       [string]$RuntimeRoot, [string]$RuntimeEntry='Entry.ps1',
-      [string]$RuntimeFiles)
+      [string]$RuntimeFiles, [string]$Repository='justiceofrip/BC2VR',
+      [string]$BootstrapManifest, [switch]$InstallerBundle)
 $ErrorActionPreference='Stop'
 $repo=Split-Path $PSScriptRoot -Parent
 . (Join-Path $repo 'launcher/Launcher.Core.ps1')
@@ -12,7 +13,7 @@ if(-not $OutputPath){$OutputPath=Join-Path $repo 'dist/desktop-launcher'}
 $OutputPath=[IO.Path]::GetFullPath($OutputPath)
 Assert-FvrNoLinks $OutputPath
 $sources=[Collections.Generic.List[object]]::new()
-foreach($name in @('Launcher.ps1','Worker.ps1','Launcher.Core.ps1')){$sources.Add(@{source=(Join-Path $repo "launcher/$name");path="app/$name"})}
+foreach($name in @('Launcher.ps1','Worker.ps1','Launcher.Core.ps1','Launcher.Feedback.ps1')){$sources.Add(@{source=(Join-Path $repo "launcher/$name");path="app/$name"})}
 $sources.Add(@{source=(Join-Path $repo 'LICENSE');path='LICENSE'})
 $runtimePath=$null
 if($RuntimeRoot){
@@ -46,14 +47,28 @@ try{
         Copy-Item -LiteralPath $source.source -Destination $dest
         @{path=$source.path;sha256=(Get-FileHash -LiteralPath $dest -Algorithm SHA256).Hash.ToLowerInvariant()}
     })
-    Write-FvrJson (Join-Path $stage 'package.json') @{schema='fvr.desktop.package.v1';version=$Version;runtime_entry=$runtimePath;files=$entries}
+    $runtimeInfo=if($RuntimeRoot -and (Test-Path -LiteralPath (Join-Path $RuntimeRoot 'runtime.json'))){Read-FvrJson (Join-Path $RuntimeRoot 'runtime.json')}else{$null}
+    Write-FvrJson (Join-Path $stage 'package.json') @{schema='fvr.desktop.package.v1';version=$Version;runtime_entry=$runtimePath;files=$entries;
+        release_repository=$Repository;feedback_repository=$Repository;runtime_version=$Version;
+        runtime_build=$(if($runtimeInfo){$runtimeInfo.source_sha256}else{$null});source_revision=$(if($runtimeInfo){$runtimeInfo.source_sha256}else{$null})}
     $null=Test-FvrPackage $stage $Version
     $expanded=[long](Get-ChildItem -LiteralPath $stage -Recurse -File|Measure-Object Length -Sum).Sum
     [IO.Compression.ZipFile]::CreateFromDirectory($stage,$zip,[IO.Compression.CompressionLevel]::Optimal,$false)
     $manifest=@{schema='fvr.desktop.release.v1';version=$Version;asset=$asset;bytes=(Get-Item -LiteralPath $zip).Length;unpacked_bytes=$expanded;sha256=(Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()}
     Assert-FvrManifest $manifest
     Write-FvrJson (Join-Path $OutputPath 'bc2vr-update.json') $manifest
-    foreach($file in @('Install.cmd','Install-Package.ps1','Install-BC2VRLauncher.ps1','Start-Launcher.ps1','Launcher.Core.ps1')){Copy-Item -LiteralPath (Join-Path $repo "launcher/$file") -Destination (Join-Path $OutputPath $file)}
+    $installerFiles=@('Install.cmd','Bootstrap.ps1','Install-Package.ps1','Install-BC2VRLauncher.ps1','Start-Launcher.ps1','Launcher.Core.ps1')
+    foreach($file in $installerFiles){Copy-Item -LiteralPath (Join-Path $repo "launcher/$file") -Destination (Join-Path $OutputPath $file)}
+    if($BootstrapManifest){Copy-Item -LiteralPath $BootstrapManifest -Destination (Join-Path $OutputPath 'bootstrap.json')}
+    if($InstallerBundle){
+        if(-not $BootstrapManifest){throw 'InstallerBundle requires a reviewed portable PowerShell bootstrap manifest.'}
+        $setup=Join-Path $OutputPath "BC2VR-Setup-$Version.zip"
+        if(Test-Path -LiteralPath $setup){throw 'Installer bundle already exists.'}
+        $archive=[IO.Compression.ZipFile]::Open($setup,[IO.Compression.ZipArchiveMode]::Create)
+        try {foreach($file in @($installerFiles)+@('bootstrap.json','bc2vr-update.json',$asset)){
+            $null=[IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive,(Join-Path $OutputPath $file),$file,[IO.Compression.CompressionLevel]::Optimal)
+        }}finally{$archive.Dispose()}
+    }
     $admission|ConvertTo-Json -Depth 10|Set-Content -LiteralPath (Join-Path $OutputPath 'storage-admission.json')
     $manifest|ConvertTo-Json
 }finally{Remove-FvrOwnedTree $OutputPath (Split-Path $stage -Leaf)}

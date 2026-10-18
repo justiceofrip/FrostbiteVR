@@ -64,6 +64,15 @@ inline bool VehicleReticleInsideEye(const math::Matrix4& world,const BodyPropEye
     const auto& p=clip->values[3];if(!std::isfinite(p[3])||p[3]<=.0001f)return false;
     return p[0]>=-p[3]&&p[0]<=p[3]&&p[1]>=-p[3]&&p[1]<=p[3]&&p[2]>=0&&p[2]<=p[3];
 }
+inline std::optional<BodyPropInstance> VehicleReticleHostInstance(const VehicleReticleSample& original,
+    const VehicleReticleSample& current,std::int64_t now)noexcept {
+    if(!VehicleReticleRetained(original,current,now))return {};
+    const auto world=VehicleReticleWorld(original,{});if(!world)return {};
+    BodyPropInstance instance{VehicleReticleGeometry,*world,std::max(original.observedNs,current.observedNs),
+        std::min(original.deadlineNs,current.deadlineNs),original.owner.actorGeneration,
+        BodyPropWireEpoch(BodyPropSourceKind::VehicleReticle,original.presentationEpoch),original.owner.space};
+    return BodyPropFresh(instance,now)?std::optional(instance):std::nullopt;
+}
 // Transactional append to an already owned pair. Call after both native eyes
 // have their exact matrices; rejection leaves all preexisting props untouched.
 // Current BC2 capture does not yet grant NativeSightLine, so no native caller

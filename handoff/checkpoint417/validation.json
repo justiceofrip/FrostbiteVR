@@ -1,0 +1,184 @@
+{
+  "schema": "fvr.bc2.checkpoint417.validation.v1",
+  "checkpoint": 417,
+  "created_utc": "2026-10-17T14:45:10.008899+00:00",
+  "status": "candidate_not_promoted_release_blocked",
+  "source_sha256": "41489d7d8bb268ab7dae50f1a856716c0622000a6ec3a44cb449d31f80edf2db",
+  "source_files_reverified": 1335,
+  "normal_build_receipt": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight417\\normal-build\\build-receipt.json",
+    "sha256": "d9c4c6c5891f5957639ac5d4515763299f5181bb856ad3df9856a1cd09e68005"
+  },
+  "binaries_reverified": {
+    "probe": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight417\\normal-build\\BC2NativeProbe.dll",
+      "sha256": "10af105b4d3551a39a04a5c1dfbbe511300e976fe406b1ddd9c084cc680d00b3"
+    },
+    "trace": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight417\\normal-build\\BC2NativeTrace.exe",
+      "sha256": "ebd819ac1c15b9a70998d7579e53de68d9be306bfcc13c1f11c8d39f52a14f2b"
+    },
+    "receiver": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight417\\normal-build\\BC2NativeIpcProbe.exe",
+      "sha256": "d05a24ac5833e101f8eb1bd9920a0dbc1e27811212069343ffb4a188f2cc82cf"
+    },
+    "host": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight417\\normal-build\\BC2XrHost.exe",
+      "sha256": "a9a1fd726a6b28ea75938246d6a9d8e891c4806d0d427bb46d972ee4ab54129b"
+    }
+  },
+  "regression_results": {
+    "ordinary_red": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight417\\cycle-regression-red-pinned\\validation.json",
+      "sha256": "6e6b5367281243423de74bacaeaa799906da5c7378e98803fbb8f939f710fe07",
+      "stage": "red",
+      "service_exit": 1,
+      "journal_exit": 0,
+      "source_pins_retained_in_raw_receipt": true
+    },
+    "recovery_red": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight417\\cycle-regression-recovery-red-pinned-r2\\validation.json",
+      "sha256": "c89d9f4b7b9e9c1d76b64813f5e4c1d74d52128fe260dec69125309bfa01e995",
+      "stage": "recovery-red",
+      "service_exit": 0,
+      "journal_exit": 0,
+      "recovery_exit": 1,
+      "source_pins_retained_in_raw_receipt": true
+    },
+    "green": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight417\\cycle-regression-green-pinned\\validation.json",
+      "sha256": "d866ad78f805a7a09ab5220ce4806e3ec7e328f9016e80c5537d2488c266c132",
+      "stage": "green",
+      "service_exit": 0,
+      "journal_exit": 0,
+      "recovery_exit": 0,
+      "source_pins_retained_in_raw_receipt": true
+    }
+  },
+  "green_file_pins": [
+    {
+      "path": "src/games/bc2/Bc2NativeCycleService.cpp",
+      "sha256": "e0c598d47b9193c5e6b32014dda11454e8a0d93cba1d2bc72cb998448b2459ac"
+    },
+    {
+      "path": "src/games/bc2/Bc2NativeCycleService.h",
+      "sha256": "867e54caeff0468d7a3fe6c9cd4b77fa688d80191584d6c5372f6fcf6ff72c54"
+    },
+    {
+      "path": "src/games/bc2/Bc2NativeCycleFailureJournal.h",
+      "sha256": "e880222cc49c456d3ad10d83ce4ec02e14c50eb00c5cdc517e939e1ae2f5a91a"
+    },
+    {
+      "path": "src/games/bc2/Bc2ReloadFlowRuntime.cpp",
+      "sha256": "476e47cc2b8bcbc07bfced2cf3008f6f550d02328e44fa4c38032852582ae5f7"
+    },
+    {
+      "path": "src/games/bc2/Bc2NativeCycleRecoveryState.h",
+      "sha256": "82355595d3211524bb83a33efa54845ef4ffb4080189daa4cba10845d2af362b"
+    },
+    {
+      "path": "include/fvr/interaction/WeaponCycleConvergence.h",
+      "sha256": "4939b01a2ee666524514e937f240efec55ef913830d27eb595339887c1a2ce4b"
+    },
+    {
+      "path": "tests/Bc2NativeCycleServiceTests.cpp",
+      "sha256": "cf769fcbe478661a286f40d8814b8fc265547334c132944a065d621a9be9189b"
+    },
+    {
+      "path": "tests/Bc2NativeCycleFailureJournalTests.cpp",
+      "sha256": "51d0ca8b92eb65dd4cf07b5f3be86907acaf7c7df8df0e149ff97bbd7da04732"
+    },
+    {
+      "path": "tests/Bc2NativeCycleRecoveryServiceTests.cpp",
+      "sha256": "33b349166daa34a3b4c86ca21a9bc80944521d3ca0ac0c8927a0edfbec729619"
+    },
+    {
+      "path": "src/games/bc2/Bc2NativeCycleDispatch.h",
+      "sha256": "1b5bcfe63edfa9f22e4f7121a5aa4a08c56026c1f1e20b27041f87f0ace211f0"
+    }
+  ],
+  "full_builds": {
+    "x86": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight417\\normal-x86\\validation.json",
+      "sha256": "e46f3e2f26bf12be38909576b3b550a150fa5ace1d4cad374b59bd9b545de0cd",
+      "cpp_suites_passed": 286,
+      "completed_utc": "2026-10-17T14:34:00.1989979Z"
+    },
+    "x64": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight417\\normal-x64\\validation.json",
+      "sha256": "f9032f64e06386398603c3fb318064705b96f092730ca705a40cc462e6c1a6d9",
+      "cpp_suites_passed": 286,
+      "completed_utc": "2026-10-17T14:38:59.3624142Z"
+    }
+  },
+  "invalid_attempts_not_claimed": [
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight417\\cycle-regression-red",
+      "reason": "Source guard rejected before tests; not a red result"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight417\\cycle-regression-recovery-red-pinned",
+      "reason": "Source changed during attempt; not accepted as pinned red evidence"
+    }
+  ],
+  "evidence_boundary": {
+    "measured_reference": "checkpoint413 invocation17625 ready-to-tail unchanged-ammunition shape, plus existing M95 native fixtures",
+    "synthetic_regression": "Post-ACK scheduling, parallel ordinary drain and long recovery pause are emulated; not reconstruction of invocation8748",
+    "actual_game_417_accepted": false,
+    "headset_417_accepted": false,
+    "full_campaign_accepted": false,
+    "new_weapon_support_claimed": false
+  },
+  "native_check": {
+    "status": "blocked_by_missing_rifle_spas_inventory",
+    "reported_campaign": "SP_01",
+    "campaign_label_source": "Root status; Continue preserves the existing save",
+    "continue_setup": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight417\\continue-only01\\setup-result.json",
+      "sha256": "9fe731b7fed744b2f76d50eb3ac9afe19d398762a9e0b823e65fe75d7765cfc7"
+    },
+    "inventory_read": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight417\\continue-only01\\inventory-names.json",
+      "sha256": "489089b0dfdcba315fe2291b7f6d72f98a1ea389d15748b7c8bd17bcb242e087"
+    },
+    "items": [
+      {
+        "slot": 0,
+        "name": "KNV-1",
+        "selected": true
+      },
+      {
+        "slot": 7,
+        "name": "KNV-1",
+        "selected": false
+      }
+    ],
+    "candidate_vr_probe_injected": false,
+    "reload_fixture_executed": false,
+    "save_replaced": false,
+    "ammo_written": false
+  },
+  "original_failure": {
+    "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\native-trace-20261017-133551-422\\native-cycle-first-failure.json",
+    "sha256": "62f03d7c73421acba3dae55cb6d7a521d774355e82f54b7f76a6032dcb4b8af6",
+    "invocation": 8748,
+    "transition": "Complete -> Cancelled",
+    "failure": "Restore",
+    "cycle": 3,
+    "shot": 3,
+    "loaded": 5,
+    "reserve": 24,
+    "full_callback_available": false,
+    "root_cause_established": false
+  },
+  "rollback": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight414\\headset-launch414-private\\local-profile414.json",
+    "sha256": "4d35bff2ca391433e7389e1eb55330e19e78fa9770d913bc36f3bba4f0df59d3",
+    "runtime": 414,
+    "reported_installed_launcher_version": "0.1.2",
+    "profile_pins_reverified": 8,
+    "frozen_binaries_reverified": 3,
+    "changed_by_checkpoint": false,
+    "pump_audio_changed": false
+  }
+}

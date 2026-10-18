@@ -2,6 +2,9 @@
 #include "Bc2SightContact.h"
 #include "Bc2MagazineAssembly.h"
 #include "Bc2WeaponVisibility.h"
+#define generated opening426_test
+#include "../profiles/opening426/NambuGeometry.generated.h"
+#undef generated
 #include <algorithm>
 #include <bit>
 using namespace magazine_consumer_fixture;
@@ -97,6 +100,21 @@ int HeldAssemblyUsesExactCarryFrameAndKeepsAuthoredFingers(){AssemblyFixture f;C
  for(unsigned n=0;n<3;++n)CHECK(Same(plan.writes[n+1].transform,Multiply(AssemblyGeometry().assembly[n].itemFromBone,plan.writes[0].transform)));
  return 0;
 }
+int OpeningAuthoredAssemblyUsesSharedPresentation(){
+ auto profile=opening426_test::ExperimentalMagazineGeometry.front();
+ CHECK(profile.asset=="Nambu100"&&profile.bones.magazine=="jntWpn_12"&&profile.assemblyCount==3);
+ CHECK(MagazineAssemblyShape(profile)&&interaction::DetachableMagazine(profile.interaction).ValidConfig());
+ // Exercise the measured subtree through the production selector with a
+ // synthetic rig. This supplies no native registration or ammunition receipt.
+ auto rig=AssemblyRig(profile);profile.rigFingerprint=SightRigFingerprint(rig.names,rig.parents,rig.inverseBind);
+ const auto bound=magazine_presentation_detail::Derive(rig,profile);CHECK(bound&&bound->assemblyCount==3);
+ const auto hidden=HideMagazinePackedPalette(rig,*bound,rig.nativeEvaluated);CHECK(hidden);
+ for(unsigned n=0;n<rig.names.size();++n){const bool member=n==4||n>=20;CHECK(((*hidden)[n]!=rig.nativeEvaluated[n])==member);}
+ auto incomplete=profile;--incomplete.assemblyCount;
+ CHECK(!magazine_presentation_detail::Derive(rig,incomplete));
+ auto changed=rig;changed.parents[21]=1;CHECK(!magazine_presentation_detail::Derive(changed,profile));
+ return 0;
 }
-int main(){if(StructuralClosureAndMalformedData()||CompletePoseAndHidePreserveUnrelatedBytes()||NativeChildMotionAndVisibilityCannotBeOverwritten()||HeldAssemblyUsesExactCarryFrameAndKeepsAuthoredFingers())return 1;
- std::puts("4 rigid magazine assembly groups using real consumer fixture passed; no registry admission");}
+}
+int main(){if(StructuralClosureAndMalformedData()||CompletePoseAndHidePreserveUnrelatedBytes()||NativeChildMotionAndVisibilityCannotBeOverwritten()||HeldAssemblyUsesExactCarryFrameAndKeepsAuthoredFingers()||OpeningAuthoredAssemblyUsesSharedPresentation())return 1;
+ std::puts("5 rigid magazine assembly groups using real consumer fixture passed; no registry admission");}

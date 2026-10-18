@@ -13,10 +13,10 @@ struct MenuStateCandidates {
 // constructor ownership and vtables. Every range must additionally match the
 // loaded executable before invoking a function. No hash-only authorization.
 std::optional<MenuStateCandidates> DiscoverMenuState(std::span<const std::byte>,const engine::PeImage&);
-std::array<MenuStateCodeSpan,13> MenuStateCodeSpans() noexcept;
+std::array<MenuStateCodeSpan,18> MenuStateCodeSpans() noexcept;
 struct MenuStateSnapshot {
     std::uint32_t manager=0,owner=0,eventListener=0,inputController=0;
-    bool entered=false,pauseRequested=false;
+    bool entered=false,pauseRequested=false,frontEnd=false;
     bool operator==(const MenuStateSnapshot&)const=default;
 };
 // entered is the authoritative native enterMenu callback state, not proof that

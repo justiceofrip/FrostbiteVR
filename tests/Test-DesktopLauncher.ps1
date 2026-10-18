@@ -27,6 +27,24 @@ function Fixture([string]$Version,[hashtable]$Extra=@{},[switch]$BadHash){
     return @{zip=$zip;manifest=@{schema='fvr.desktop.release.v1';version=$Version;asset="BC2VR-$Version-win64.zip";bytes=(Get-Item -LiteralPath $zip).Length;unpacked_bytes=$expanded;sha256=(Get-FileHash -LiteralPath $zip).Hash.ToLowerInvariant()}}
 }
 try{
+    $legacy=@{launch='test-campaign.ps1'}
+    Reject {Get-FvrLocalLaunchRoute $legacy} 'ordinary launch refuses legacy forced campaign route'
+    $debug=Get-FvrLocalLaunchRoute $legacy Campaign
+    Check ($debug.entry -eq 'test-campaign.ps1' -and $debug.arguments.Count -eq 0) 'explicit campaign debug route retained'
+    $modern=@{launch='launch.ps1';launch_modes=@('MainMenu','Campaign')}
+    $main=Get-FvrLocalLaunchRoute $modern
+    Check ($main.entry -eq 'launch.ps1' -and $main.arguments.StartAt -eq 'MainMenu') 'ordinary launch selects main menu'
+    Check (-not $main.arguments.ContainsKey('ActivateGameWindow')) 'command-line route does not request activation by default'
+    Reject {Get-FvrLocalLaunchRoute $modern -ActivateGameWindow} 'activation requires an advertised user-click route'
+    $modern.launch_activation='user_click_once'
+    $clicked=Get-FvrLocalLaunchRoute $modern -ActivateGameWindow
+    Check ($clicked.arguments.ActivateGameWindow -and $clicked.arguments.StartAt -eq 'MainMenu') 'explicit Launch click forwards one-shot activation'
+    Check (-not (Get-FvrLocalLaunchRoute $modern).arguments.ContainsKey('ActivateGameWindow')) 'advertised activation remains opt-in'
+    $debug=Get-FvrLocalLaunchRoute $modern Campaign
+    Check ($debug.arguments.StartAt -eq 'Campaign') 'debug campaign selection is explicit'
+    $separate=@{launch='old.ps1';main_menu_launch='main-menu.ps1'}
+    $main=Get-FvrLocalLaunchRoute $separate
+    Check ($main.entry -eq 'main-menu.ps1' -and $main.arguments.Count -eq 0) 'separate pinned main-menu entry supported'
     $userTemp=[Environment]::GetEnvironmentVariable('TEMP','User')
     $scratch=Set-FvrLauncherStorage $testRoot
     Check ($env:TEMP -eq $scratch -and $env:TMP -eq $scratch -and $env:TMPDIR -eq $scratch) 'launcher scratch uses install drive'

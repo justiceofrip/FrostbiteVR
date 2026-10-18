@@ -4,6 +4,7 @@
 #include <cstdint>
 #include "../include/fvr/graphics/D3D11PresentationPacing.h"
 #include "../src/games/bc2/NativeViewAbi.h"
+#include "../src/games/bc2/Bc2ProjectileLaunch.h"
 using ContextCamera=void(__thiscall*)(void*,void*,void*);
 ContextCamera originalContextCamera;
 using ProjectionContext=void*(__thiscall*)(void*,const void*);ProjectionContext originalProjectionContext;
@@ -69,6 +70,18 @@ using Compose=std::uintptr_t(__thiscall*)(void*,void*,const void*);Compose origi
 unsigned composeCalls=0;
 __declspec(noinline) std::uintptr_t __fastcall FakeCompose(void* self,void*,void* output,const void* rhs){++composeCalls;const auto* a=static_cast<const float*>(self);const auto* b=static_cast<const float*>(rhs);auto* out=static_cast<float*>(output);for(unsigned r=0;r<4;++r)for(unsigned c=0;c<3;++c)out[r*4+c]=a[r*4+c]+b[r*4+c];return reinterpret_cast<std::uintptr_t>(output);}
 std::uintptr_t __fastcall HookCompose(void* self,void*,void* output,const void* rhs){return originalCompose(self,output,rhs);}
+using ProjectileContext=std::uintptr_t(__thiscall*)(void*,void*);ProjectileContext originalProjectileContext;
+struct ProjectileContextData {unsigned calls=0,beforeCalls=0,afterCalls=0;void* observedSelf=nullptr;std::uintptr_t observedResult=0;unsigned beforeValue=0,afterValue=0;};
+__declspec(noinline) std::uintptr_t __fastcall FakeProjectileContext(void* self,void*,void* output){
+    auto& d=*static_cast<ProjectileContextData*>(self);++d.calls;d.observedSelf=self;*static_cast<unsigned*>(output)=d.calls+0x1234;
+    return reinterpret_cast<std::uintptr_t>(output);
+}
+std::uintptr_t __fastcall HookProjectileContext(void* self,void*,void* output){
+    auto& d=*static_cast<ProjectileContextData*>(self);
+    return fvr::bc2::ObserveProjectileContextHelper([&]{return originalProjectileContext(self,output);},
+        [&]()noexcept{++d.beforeCalls;d.beforeValue=*static_cast<unsigned*>(output);},
+        [&](std::uintptr_t result)noexcept{++d.afterCalls;d.observedResult=result;d.afterValue=*static_cast<unsigned*>(output);});
+}
 int main(){
     volatile LONG borrowed=12;CHECK(fvr::bc2::RestoreBorrowedViewPointer(&borrowed,12,7)&&borrowed==7);
     borrowed=13;CHECK(!fvr::bc2::RestoreBorrowedViewPointer(&borrowed,12,7)&&borrowed==13);
@@ -95,7 +108,15 @@ int main(){
     CHECK(MH_CreateHook(FakePalettePack,HookPalettePack,reinterpret_cast<void**>(&originalPalettePack))==MH_OK);
     CHECK(MH_CreateHook(FakeClientShoot,HookClientShoot,reinterpret_cast<void**>(&originalClientShoot))==MH_OK);
     CHECK(MH_CreateHook(FakeCompose,HookCompose,reinterpret_cast<void**>(&originalCompose))==MH_OK);
+    CHECK(MH_CreateHook(FakeProjectileContext,HookProjectileContext,reinterpret_cast<void**>(&originalProjectileContext))==MH_OK);
     CHECK(MH_EnableHook(MH_ALL_HOOKS)==MH_OK);
+    ProjectileContext volatile projectileContext=reinterpret_cast<ProjectileContext>(FakeProjectileContext);ProjectileContextData projectileData{};
+    for(unsigned i=0;i<1024;++i){unsigned output=0xdeadbeef;
+        CHECK(projectileContext(&projectileData,&output)==reinterpret_cast<std::uintptr_t>(&output));
+        CHECK(projectileData.calls==i+1&&projectileData.beforeCalls==i+1&&projectileData.afterCalls==i+1&&projectileData.observedSelf==&projectileData);
+        CHECK(projectileData.beforeValue==0xdeadbeef&&projectileData.afterValue==i+1+0x1234&&output==projectileData.afterValue);
+        CHECK(projectileData.observedResult==reinterpret_cast<std::uintptr_t>(&output));
+    }
     Compose volatile compose=reinterpret_cast<Compose>(FakeCompose);float ca[16],cb[16],co[16];for(unsigned i=0;i<16;++i){ca[i]=float(i);cb[i]=float(i)*2;co[i]=-77;}
     for(unsigned i=0;i<1024;++i){CHECK(compose(ca,co,cb)==reinterpret_cast<std::uintptr_t>(co));CHECK(composeCalls==i+1);for(unsigned n=0;n<16;++n){CHECK(ca[n]==float(n)&&cb[n]==float(n)*2);CHECK(co[n]==(n%4==3?-77.f:float(n)*3));}}
 

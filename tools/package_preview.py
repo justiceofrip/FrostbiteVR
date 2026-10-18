@@ -49,7 +49,7 @@ EXACT = (
     "tools/bc2_authored_mechanism_geometry.py", "tests/test_bc2_authored_mechanism_geometry.py",
     "release/LMG-AUTHORED-MECHANISMS.md", "release/LMG-MECHANISM-COVERAGE.json",
     "tests/test_bc2_drum_grasp.py", "release/DRUM-CONTACT-FOLLOWUP.md",
-    "tools/bc2_authored_grip_bindings.py", "tests/test_bc2_authored_grip_bindings.py", "release/AUTHORED-GRIP-BINDINGS.md",
+    "tools/bc2_authored_grip_bindings.py", "tools/bc2_authored_archive_set.py", "tests/test_bc2_authored_grip_bindings.py", "release/AUTHORED-GRIP-BINDINGS.md",
     "tools/bc2_authored_hand_pose_batch.py", "tests/test_bc2_authored_hand_pose_batch.py",
     "tools/bc2_authored_magazine_geometry.py", "tests/test_bc2_authored_magazine_geometry.py", "release/AUTHORED-MAGAZINE-GEOMETRY.md",
     "tools/bc2_sampled_magazine_path.py", "tests/test_bc2_sampled_magazine_path.py",
@@ -88,6 +88,7 @@ EXACT = (
 )
 RUNTIME = (
     'tools/bc2_authored_grip_bindings.py',
+    'tools/bc2_authored_archive_set.py',
     'tools/bc2_authored_magazine_geometry.py',
     'tools/bc2_sampled_magazine_path.py',
     'tools/bc2_reviewed_magazine_contact.py',

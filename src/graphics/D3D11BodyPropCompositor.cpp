@@ -1,6 +1,8 @@
 #include "fvr/graphics/D3D11BodyPropCompositor.h"
 #include "fvr/graphics/D3D11SceneDepthCompositor.h"
 #include "fvr/graphics/D3D11SceneDepthPair.h"
+#include "fvr/graphics/VehicleReticleAsset.h"
+#include "fvr/graphics/VehicleReticle.h"
 #include <Windows.h>
 #include <d3d11.h>
 #include <wrl/client.h>
@@ -21,6 +23,7 @@ struct D3D11BodyPropCompositor::Impl {
     std::array<std::unique_ptr<D3D11RigidPropRenderer>,MaxBodyProps> renderers;
     std::array<RigidPropGeometryKey,MaxBodyProps> uploaded{};
     std::shared_ptr<const BodyPropCatalog> catalog;
+    BodyPropAsset reticle=MakeVehicleReticleAsset();
     BodyPropComposeStats stats{};
 };
 D3D11BodyPropCompositor::D3D11BodyPropCompositor():impl_(std::make_unique<Impl>()){}
@@ -49,7 +52,8 @@ bool D3D11BodyPropCompositor::Initialize(ID3D11DeviceContext* context,unsigned w
     return true;
 }
 bool D3D11BodyPropCompositor::Compose(const BodyPropFrame& frame,const PairTicket& ticket,
-    const std::array<ID3D11Texture2D*,2>& originals,std::int64_t (*clockNs)()noexcept,const SceneDepthViews* sceneDepth)noexcept {
+    const std::array<ID3D11Texture2D*,2>& originals,std::int64_t (*clockNs)()noexcept,const SceneDepthViews* sceneDepth,
+    BodyPropMissingDepthPolicy missingDepth)noexcept {
     auto& p=*impl_;++p.stats.frames;
     if(p.thread!=GetCurrentThreadId()||!p.catalog||!p.context||!clockNs||!BodyPropFrameMatches(frame,ticket)){++p.stats.invalid;return false;}
     try {
@@ -79,7 +83,20 @@ bool D3D11BodyPropCompositor::Compose(const BodyPropFrame& frame,const PairTicke
             const auto& a=frame.eyes[0].instances[slot];const auto& b=frame.eyes[1].instances[slot];
             if(!SameBodyPropSource(a,b)){++p.stats.invalid;continue;}
             if(!BodyPropFresh(a,now)||!BodyPropFresh(b,now)){++p.stats.expired;continue;}
-            const BodyPropAsset* asset=nullptr;for(const auto& candidate:*p.catalog)if(candidate.key==a.geometry){asset=&candidate;break;}
+            const bool reticle=a.geometry==VehicleReticleGeometry;
+            if(reticle){
+                // Only the namespaced, shared native-ray sample may bypass
+                // world depth. A mismatched/one-eye glyph never gains display.
+                constexpr auto epochMask=(std::uint64_t(1)<<60)-1;
+                if((a.equipmentGeneration>>60)!=unsigned(BodyPropSourceKind::VehicleReticle)||
+                   !(a.equipmentGeneration&epochMask)||(a.equipmentGeneration&7)||
+                   a.world.values!=b.world.values||!VehicleReticleInsideEye(a.world,frame.eyes[0])||
+                   !VehicleReticleInsideEye(b.world,frame.eyes[1])){++p.stats.invalid;continue;}
+            }else if(!sceneDepth&&missingDepth==BodyPropMissingDepthPolicy::VehicleReticleOnly){
+                ++p.stats.depthOmittedInstances;continue;
+            }
+            const BodyPropAsset* asset=reticle?&p.reticle:nullptr;
+            if(!asset)for(const auto& candidate:*p.catalog)if(candidate.key==a.geometry){asset=&candidate;break;}
             if(!asset){++p.stats.missing;continue;}
             if(p.uploaded[slot]!=asset->key){if(!p.renderers[slot]->Upload(asset->key,asset->sections)){++p.stats.failures;return false;}p.uploaded[slot]=asset->key;}
             admitted[slot]=true;++count;
@@ -93,7 +110,7 @@ bool D3D11BodyPropCompositor::Compose(const BodyPropFrame& frame,const PairTicke
             if(sceneDepth){if(sceneDepth->reversed!=reversed){++p.stats.sceneDepthFailures;return false;}
                 p.context->CopyResource(p.nativeColor[eye].Get(),originals[eye]);}
             p.context->ClearDepthStencilView(p.depths[eye].Get(),D3D11_CLEAR_DEPTH,reversed?0.f:1.f,0);
-            for(unsigned slot=0;slot<MaxBodyProps;++slot)if(admitted[slot]){
+            for(unsigned slot=0;slot<MaxBodyProps;++slot)if(admitted[slot]&&e.instances[slot].geometry!=VehicleReticleGeometry){
                 const auto& instance=e.instances[slot];now=clockNs();if(!BodyPropFresh(instance,now)){++p.stats.expired;return false;}
                 // Host-local frame gate IDs, not dereferenceable native objects.
                 const RigidPropEye lease{1,frame.trackingGeneration,std::uint64_t(eye)+1,frame.frameId,
@@ -105,11 +122,25 @@ bool D3D11BodyPropCompositor::Compose(const BodyPropFrame& frame,const PairTicke
             if(sceneDepth&&!p.scene.Compose({p.nativeViews[eye].Get(),p.colorViews[eye].Get(),p.depthViews[eye].Get(),
                 sceneDepth->eyes[eye][0],sceneDepth->eyes[eye][1],p.composedTargets[eye].Get(),reversed})){
                 ++p.stats.sceneDepthFailures;return false;}
+            // A sight-line reticle is an aiming overlay, not a 50m world prop:
+            // draw after native-depth composition so nearby terrain cannot hide
+            // it. Both eyes still project the same native ray independently.
+            for(unsigned slot=0;slot<MaxBodyProps;++slot)if(admitted[slot]&&e.instances[slot].geometry==VehicleReticleGeometry){
+                const auto& instance=e.instances[slot];now=clockNs();if(!BodyPropFresh(instance,now)){++p.stats.expired;return false;}
+                p.context->ClearDepthStencilView(p.depths[eye].Get(),D3D11_CLEAR_DEPTH,reversed?0.f:1.f,0);
+                const RigidPropEye lease{1,frame.trackingGeneration,std::uint64_t(eye)+1,frame.frameId,
+                    std::uint64_t(slot)+1,instance.actorGeneration,instance.geometry.asset,instance.equipmentGeneration,
+                    frame.spaceGeneration,frame.trackingGeneration,eye,instance.observedNs,instance.deadlineNs};
+                if(!p.renderers[slot]->Draw(instance.geometry,lease,lease,now,instance.world,e.view,e.projection,
+                    {sceneDepth?p.composedTargets[eye].Get():p.targets[eye].Get(),p.depths[eye].Get(),p.width,p.height,reversed,true})){
+                    ++p.stats.failures;return false;}
+            }
         }
         now=clockNs();for(unsigned eye=0;eye<2;++eye)for(unsigned slot=0;slot<MaxBodyProps;++slot)
             if(admitted[slot]&&!BodyPropFresh(frame.eyes[eye].instances[slot],now)){++p.stats.expired;return false;}
         for(unsigned eye=0;eye<2;++eye)p.context->CopyResource(originals[eye],sceneDepth?p.composed[eye].Get():p.color[eye].Get());
         if(sceneDepth)++p.stats.sceneDepthPairs;
+        else if(missingDepth==BodyPropMissingDepthPolicy::VehicleReticleOnly)++p.stats.overlayOnlyPairs;
         ++p.stats.pairs;p.stats.instances+=count*2;return true;
     }catch(...){++p.stats.failures;return false;}
 }

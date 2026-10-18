@@ -2,6 +2,7 @@
 #include "fvr/graphics/D3D11SharedPair.h"
 #include "fvr/graphics/D3D11LegacyRelay.h"
 #include "fvr/graphics/D3D11SceneDepthPair.h"
+#include "fvr/graphics/D3D11DesktopMirror.h"
 #include "fvr/ipc/StagedFrameProducer.h"
 #include <wrl/client.h>
 #include <atomic>
@@ -27,6 +28,10 @@ public:
         return channel_.SetBodyPropPair(lease,props);
     }
     bool PublishRestored(const ipc::FrameLease&)noexcept;
+    bool PresentDesktop(IDXGISwapChain* chain,bool active,bool menuKnown,bool menuVisible,bool test)noexcept {
+        return desktopMirror_.Present(chain,active,menuKnown,menuVisible,test);
+    }
+    const D3D11DesktopMirror& DesktopMirror()const noexcept{return desktopMirror_;}
     void Cancel(const ipc::FrameLease&)noexcept;
     void PumpGraphics()noexcept;
     void CloseGraphics()noexcept;
@@ -49,6 +54,7 @@ private:
     D3D11LegacyRelay relay_;bool forceLegacy_=false,forceLegacyIpc_=false,waitingGameCopies_=false,waitingLegacyExport_=false;
     std::atomic<unsigned> sharingMode_=0;
     ipc::StagedFrameProducer channel_;D3D11PairProducer producer_;
+    D3D11DesktopMirror desktopMirror_;
     D3D11SceneDepthProducer depthProducer_;bool depthInitialized_=false,depthActive_=false,depthReversed_=false;
     ipc::FrameLease depthLease_{};SceneDepthFrame pendingDepth_{};
     Microsoft::WRL::ComPtr<ID3D11Device> device_;Microsoft::WRL::ComPtr<ID3D11DeviceContext> context_;

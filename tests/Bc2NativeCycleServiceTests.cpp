@@ -17,6 +17,7 @@
 #include "M95Empty281Fixture.h"
 #include "M95EmptyReplay292Fixture.h"
 #include "Bc2PhysicalPump.h"
+#include "fvr/interaction/MechanismAudio.h"
 #include <thread>
 #include <barrier>
 #include "Bc2ReloadConfigDescriptor.h"
@@ -529,13 +530,14 @@ int SubmittedReleaseCannotBeRewoundByOlderHeldUpdate(){
 // native callbacks are synthetic; the native leases are produced by the service.
 struct InterruptedAdapter {
     Fixture f;RigSnapshot rig;std::shared_ptr<Bc2PumpCalibration> calibration=std::make_shared<Bc2PumpCalibration>();
-    Bc2PhysicalPump pump;Bc2PumpRawContact prior;Bc2PhysicalPumpResult result;unsigned cancellations=0,submissions=0,acknowledgements=0;bool delayedGatherClock=false;
+    Bc2PhysicalPump pump;Bc2PumpRawContact prior;Bc2PhysicalPumpResult result;unsigned cancellations=0,submissions=0,acknowledgements=0,audioEvents=0;bool delayedGatherClock=false;
+    MechanismAudioLedger<> audioLedger;
     Bc2PhysicalPumpApi Api(){return {this,
         [](void* p,const Bc2NativeCycleControl& c)noexcept {auto& a=*static_cast<InterruptedAdapter*>(p);
             if(c.release)++a.submissions;return a.f.service.Control(c);},
         [](void* p,std::int64_t now)noexcept->std::optional<Bc2NativeCycleView>{return static_cast<InterruptedAdapter*>(p)->f.service.View(now);},
         [](void* p,const WeaponCycleReady& r)noexcept{auto& a=*static_cast<InterruptedAdapter*>(p);
-            if(!a.f.service.AcknowledgeReady(r))return false;++a.acknowledgements;return true;},
+            if(!a.f.service.AcknowledgeReady(r,a.f.clock))return false;++a.acknowledgements;return true;},
         [](void* p)noexcept {auto& a=*static_cast<InterruptedAdapter*>(p);++a.cancellations;
             if(!a.f.service.SuspendCompletion()&&!a.f.service.SuspendHeld(a.f.clock))a.f.service.Cancel(Bc2NativeCycleFailure::Control);}};}
     InterruptedAdapter():pump(calibration,Api()){
@@ -558,6 +560,7 @@ struct InterruptedAdapter {
         Bc2PhysicalPumpSample sample;sample.nativeOwner=f.control.nativeOwner;sample.item=f.control.item;
         sample.asset=SpasReloadAsset;sample.input=s;sample.grip=grip;sample.raw=prior;
         result=pump.Tick(sample,f.hands,f.intent);
+        if(result.audio&&audioLedger.Accept(*result.audio,s.nowNs)==MechanismAudioAdmission::Accepted)++audioEvents;
         auto wrist=Pose();wrist.values[3][2]=travel;
         prior=BuildPumpRawContact(result.tracking,rig,wrist,Pose(),{.02f,0,0},1,f.clock);
     }
@@ -1378,6 +1381,121 @@ void ApplyTailReplay(Fixture& f,const ReloadFlowRecord& r){
     const auto& z=*r.exit.boundary;auto& b=f.input.branches[z.branch];
     b.currentState=z.current;b.previousState=z.previous;b.nextState=z.next;b.phaseTimer=z.timer;
 }
+int AcknowledgedClientTailReplayRetainsPaidStroke(){
+    // Actual413 invocation17625 restores ready2/1/2 to tail7/2/8 with the
+    // same2/24 ammunition. Exercise that observed transition after all three
+    // branches and the physical consumer have already acknowledged readiness.
+    // This ordering is emulated; the actual416 invocation8748 payload was lost.
+    for(unsigned family=0;family<3;++family)for(unsigned client=0;client<2;++client){
+        const bool m95=family==1,empty=family==2;Fixture f(m95);
+        CHECK(m95?M95Hold(f):empty?EmptyHold(f):f.Hold());CHECK(f.Release());
+        const auto submitted=*f.control.release;
+        const auto resume=[&](unsigned b){if(empty)EmptyResume(f,b);else f.Resume(b,m95);};
+        for(unsigned b=0;b<3;++b)resume(b);
+        const auto ready=f.service.View(f.clock).ready;CHECK(ready);
+        CHECK(f.service.AcknowledgeReady(*ready,++f.clock));
+        const auto paid=f.service.View(f.clock);CHECK(!paid.blocksFire&&!paid.ready);
+        for(unsigned replay=0;replay<2;++replay){
+            f.service.ObserveRestore(f.Restore(client)); // Ordinary idle publication retains payment.
+            // Construct AFTER global completion/ACK, unlike the deliberately
+            // out-of-order records in ReleasedClientTailReplayRejectsUnprovenHistory.
+            const auto r=TailReplay(f,client,empty);
+            f.service.ObserveRestore(r);ApplyTailReplay(f,r);
+            const auto pending=f.service.View(f.clock);
+            CHECK(pending.phase==Bc2NativeCyclePhase::Releasing&&pending.blocksFire);
+            CHECK(!pending.ready&&!pending.held&&pending.cycle==paid.cycle&&pending.shot==paid.shot);
+            CHECK(!f.service.YieldForReload());
+            resume(client);
+            const auto settled=f.service.View(f.clock);
+            CHECK(settled.phase==Bc2NativeCyclePhase::Complete&&!settled.blocksFire);
+            CHECK(!settled.ready&&!settled.held&&settled.failure==Bc2NativeCycleFailure::None);
+            CHECK(settled.loaded==paid.loaded&&settled.reserve==paid.reserve&&settled.capacity==paid.capacity);
+            CHECK(settled.cycle==paid.cycle&&settled.shot==paid.shot);
+            CHECK(!f.service.AcknowledgeReady(*ready,f.clock)); // No duplicate receipt.
+            CHECK(f.control.release&&*f.control.release==submitted); // No new gesture.
+        }
+        CHECK(f.service.YieldForReload());
+    }
+    return 0;
+}
+int ActualPumpAdapterPaidReplayDoesNotRepeatGestureOrAudio(){
+    auto a=std::make_unique<InterruptedAdapter>();CHECK(a->Grip());a->Stroke();
+    CHECK(a->submissions==1&&a->audioEvents==2);
+    for(unsigned b=0;b<3;++b)a->f.Resume(b);
+    a->Tick(0);CHECK(a->acknowledgements==1&&!a->result.blocksFire);
+    const auto paid=a->f.service.View(a->f.clock);
+    for(unsigned client=0;client<2;++client){
+        const auto r=TailReplay(a->f,client);a->f.service.ObserveRestore(r);ApplyTailReplay(a->f,r);
+        a->Tick(0); // Squeeze remains held; neither neutral nor another stroke.
+        CHECK(a->result.blocksFire&&!a->result.tracking.held&&!a->result.tracking.target);
+        CHECK(!a->result.settled&&!a->result.audio&&!a->f.service.YieldForReload());
+        a->f.Resume(client);a->Tick(0);
+        CHECK(!a->result.blocksFire&&!a->pump.BlocksFire()&&!a->result.settled&&!a->result.audio);
+        CHECK(a->acknowledgements==1&&a->submissions==1&&a->audioEvents==2);
+        const auto state=a->f.service.View(a->f.clock);
+        CHECK(state.loaded==paid.loaded&&state.reserve==paid.reserve&&state.cycle==paid.cycle&&state.shot==paid.shot);
+    }
+    CHECK(a->f.service.YieldForReload()); // The actual shell/resource handoff is free again.
+    return 0;
+}
+int PaidTailReplayStillRejectsUnprovenOrIncompleteNativeWork(){
+    for(bool m95:{false,true})for(unsigned mutation=0;mutation<15;++mutation){
+        Fixture f(m95);CHECK(m95?M95Hold(f):f.Hold());CHECK(f.Release());
+        for(unsigned b=0;b<3;++b)f.Resume(b,m95);
+        const auto ready=*f.service.View(f.clock).ready;
+        std::optional<ReloadFlowRecord> beforeAck;
+        if(mutation==1)beforeAck=TailReplay(f,1);
+        if(mutation!=0)CHECK(f.service.AcknowledgeReady(ready,++f.clock));
+        auto r=beforeAck?*beforeAck:TailReplay(f,1);
+        if(mutation==2)++r.exit.boundary->loaded;
+        if(mutation==3)++r.exit.boundary->reserve;
+        if(mutation==4)++r.exit.boundary->owner.weapon;
+        if(mutation==5)r.exit.copiedSnapshot[63]^=std::byte{1};
+        if(mutation==6)--r.entry.nativeInvocation;
+        if(mutation==7)r.entry.nowNs=ready.observedNs-1;
+        if(mutation==8)r.exit.holdRequested=true;
+        if(mutation==9){r.entry.nowNs+=4000000000ll;r.exit.nowNs=r.entry.nowNs+1;}
+        if(mutation==10)f.Begin(1);
+        if(mutation==11){++f.control.input.owner.equipGeneration;f.control.item.generation=f.control.input.owner.equipGeneration;
+            f.control.mechanism.generation=f.control.input.owner.equipGeneration;CHECK(f.Advance());}
+        f.service.ObserveRestore(r);
+        if(mutation>=12){
+            CHECK(f.service.View(f.clock).phase==Bc2NativeCyclePhase::Releasing);ApplyTailReplay(f,r);
+            if(mutation==12){ // Original tail cannot skip its first proven Commit.
+                f.Begin(1);f.Commit(1,1,2);f.Finish();
+            }else if(mutation==13){
+                f.Begin(1);--f.update.exit.boundary->loaded;f.Finish();
+            }else{
+                f.clock=ready.release.observedNs+4000000000ll;f.Begin(1);
+            }
+        }
+        const auto rejected=f.service.View(f.clock);
+        CHECK(rejected.phase==Bc2NativeCyclePhase::Cancelled&&rejected.blocksFire&&!rejected.held&&!rejected.ready);
+    }
+    {Fixture f;CHECK(f.Hold());CHECK(f.Release());for(unsigned b=0;b<3;++b)f.Resume(b);
+        const auto old=TailReplay(f,1);CHECK(f.service.AcknowledgeReady(*f.service.View(f.clock).ready,++f.clock));
+        const auto fresh=TailReplay(f,0);f.service.ObserveRestore(fresh);ApplyTailReplay(f,fresh);
+        CHECK(f.service.View(f.clock).phase==Bc2NativeCyclePhase::Releasing);
+        // Reopening client0 cannot legitimize a different client's queued
+        // pre-ACK record merely because the phase now reads Releasing.
+        f.service.ObserveRestore(old);
+        CHECK(f.service.View(f.clock).phase==Bc2NativeCyclePhase::Cancelled&&f.service.View(f.clock).blocksFire);
+    }
+    return 0;
+}
+int PaidReplayCannotForgiveTheNextRealShot(){
+    Fixture f;CHECK(f.Hold());CHECK(f.Release());for(unsigned b=0;b<3;++b)f.Resume(b);
+    CHECK(f.service.AcknowledgeReady(*f.service.View(f.clock).ready,++f.clock));
+    const auto r=TailReplay(f,0);f.service.ObserveRestore(r);ApplyTailReplay(f,r);f.Resume(0);
+    CHECK(!f.service.View(f.clock).blocksFire);
+    for(auto& b:f.input.branches)b.loaded=6;
+    for(unsigned b=0;b<3;++b)f.Shot(b,7);
+    for(unsigned pass=0;pass<2;++pass){f.Advance();for(unsigned b=0;b<3;++b){f.Begin(b);f.Finish();}}
+    const auto next=f.service.View(f.clock);CHECK(next.phase==Bc2NativeCyclePhase::Held&&next.blocksFire&&next.held);
+    CHECK(next.cycle==2&&next.shot==2&&next.loaded==6&&next.reserve==24&&!next.ready);
+    CHECK(f.service.Diagnostic().acknowledgedAtNs==0);
+    CHECK(!f.service.YieldForReload());return 0;
+}
 int ReleasedClientTailReplayRetainsOnePhysicalTransaction(){
     const auto actual=m95_tail255::Record();
     CHECK(CycleConvergenceRestore(actual,m95_tail255::Identity(),1,true,false));
@@ -1632,7 +1750,7 @@ int CompletedCyclePreservesIssuedReadAcrossOtherBranchFinish(){
     return 0;
 }
 
-int main(){if(ServerForwardCompletionStillRequiresClientIdle()||CompletedCyclePreservesIssuedReadAcrossOtherBranchFinish()||CompletedCycleDrainsExactMissingObservation()||MissingCompletedObservationCannotHideContradictions()||ReplacementActorRequiresExactFreshDrainedProof()||ReplacementActorArchivesPendingAndCompletedOutcomes()||ConfirmedReplacementActorDoesNotInheritOldPhysicalPumpDebt()||SelectionReadGapRetainsIdentityOnly()||ReleasedClientTailReplayRetainsOnePhysicalTransaction()||ReleasedClientTailReplayRejectsUnprovenHistory()||PredictedShotReplayPreservesOneDebt()||SpasSnapshotProgressionUsesSharedCyclePolicy()||Actual241SnapshotProgressionEvidence()||SnapshotProgressionRetainsMeasuredPreviousUntilOwnHold()||SnapshotProgressionCannotEraseStartedInterception()||SelectedModePrereadRequiresOriginalQuietRevision()||SelectedModeRequiresExactOriginalIdleProof()||SelectedModeCannotErasePendingDebt()||SelectedModeRoundTripPreservesCycleAuthority()||Actual239ForwardCallbackEvidence()||M95ForwardRestoreRequiresOwnClientAndServerCompletion()||M95ForwardRestoreDoesNotBorrowOrForgeReadiness()||QueuedReleaseDoesNotReclassifyAnAlreadyHeldUpdate()||OriginalSpasRegression()||ExactM95ThreeBranchHoldAndTail()||M95CannotBorrowSpasBoundaryOrWrongConfig()||
+int main(){if(AcknowledgedClientTailReplayRetainsPaidStroke()||ActualPumpAdapterPaidReplayDoesNotRepeatGestureOrAudio()||PaidTailReplayStillRejectsUnprovenOrIncompleteNativeWork()||PaidReplayCannotForgiveTheNextRealShot()||ServerForwardCompletionStillRequiresClientIdle()||CompletedCyclePreservesIssuedReadAcrossOtherBranchFinish()||CompletedCycleDrainsExactMissingObservation()||MissingCompletedObservationCannotHideContradictions()||ReplacementActorRequiresExactFreshDrainedProof()||ReplacementActorArchivesPendingAndCompletedOutcomes()||ConfirmedReplacementActorDoesNotInheritOldPhysicalPumpDebt()||SelectionReadGapRetainsIdentityOnly()||ReleasedClientTailReplayRetainsOnePhysicalTransaction()||ReleasedClientTailReplayRejectsUnprovenHistory()||PredictedShotReplayPreservesOneDebt()||SpasSnapshotProgressionUsesSharedCyclePolicy()||Actual241SnapshotProgressionEvidence()||SnapshotProgressionRetainsMeasuredPreviousUntilOwnHold()||SnapshotProgressionCannotEraseStartedInterception()||SelectedModePrereadRequiresOriginalQuietRevision()||SelectedModeRequiresExactOriginalIdleProof()||SelectedModeCannotErasePendingDebt()||SelectedModeRoundTripPreservesCycleAuthority()||Actual239ForwardCallbackEvidence()||M95ForwardRestoreRequiresOwnClientAndServerCompletion()||M95ForwardRestoreDoesNotBorrowOrForgeReadiness()||QueuedReleaseDoesNotReclassifyAnAlreadyHeldUpdate()||OriginalSpasRegression()||ExactM95ThreeBranchHoldAndTail()||M95CannotBorrowSpasBoundaryOrWrongConfig()||
     M95LastRoundRequiresSameEmptyDebtAndTail()||M95CompletionCoversOriginalBoltTimer()||ExactOriginalPredictionRewindOnlyBeforeHold()||
     PredictionRewindRequiresExactOriginalSnapshot()||M95TwoChildTailRejectsSpasExtraCommit()||M95SuspensionRequiresRightMechanismNeutral()||PhysicalBoltDiagnosticWireBounds())return 1;
     std::puts("15 M95 operating-class +1 shared queued-release groups passed; exact8/7/1 hold,2-child tail, pre-hold original rewind, right-mechanism neutral and bounded30s wire mode.");return 0;}

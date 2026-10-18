@@ -44,6 +44,24 @@ class ActionGraph(unittest.TestCase):
     def test_missing_role_is_explicitly_absent(self):
         self.assertEqual(self.resolve(('1p_reload',)),{})
 
+    def test_level_action_graph_can_use_exact_shared_skeleton_dependency(self):
+        self.profile['configuration_source']={'archive':'Dist/level.fbrb','archive_index_sha256':'8'*64}
+        self.profile['reference_sources']=[self.profile['skeleton_source']]
+        skeleton_path=self.profile['animation_chain']['skeleton_asset']['resource'].lower()
+        def archive(index,keys):
+            return SimpleNamespace(index_sha256=index,entries=[SimpleNamespace(name=self.docs[k].resource,flags=65536,kind='<non-resource>') for k in keys],
+                read_selected=lambda names:{name:name.lower().encode() for name in names})
+        level=archive('8'*64,[k for k in self.docs if k!=skeleton_path]);common=archive('9'*64,[skeleton_path])
+        with patch.object(mag,'parse',side_effect=lambda path,data:self.docs[data.decode()]):
+            row=mag.bound_action_assets(self.profile,level,('1p_boltaction',),[common])['1p_boltaction']
+            self.assertEqual(row['asset_archive'],'Dist/level.fbrb')
+            self.assertEqual(row['asset_archive_index_sha256'],'8'*64)
+            with self.assertRaisesRegex(ValueError,'receipts'):
+                mag.bound_action_assets(self.profile,level,('1p_boltaction',))
+            common.index_sha256='0'*64
+            with self.assertRaisesRegex(ValueError,'index changed'):
+                mag.bound_action_assets(self.profile,level,('1p_boltaction',),[common])
+
     def test_duplicate_role_and_delta_asset_reject(self):
         self.add('Other/1P_BoltAction',O[:-1]+'7')
         with self.assertRaisesRegex(ValueError,'Ambiguous'):self.resolve()

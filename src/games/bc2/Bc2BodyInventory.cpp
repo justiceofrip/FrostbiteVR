@@ -103,6 +103,22 @@ struct Reader {
     }
 };
 BodyInventoryOwner Owner(const ReloadStateOwner& o)noexcept{return {(std::uint64_t(o.weak)<<32)|o.soldier,o.actorGeneration,o.space};}
+bool ScriptedKnifeConfiguration(const SelectedMeshesSnapshot& mesh)noexcept {
+    const auto exact=[](const auto& value,std::string_view text){
+        return text.size()<value.size()&&std::equal(text.begin(),text.end(),value.begin())&&value[text.size()]=='\0';
+    };
+    // This selected mission item has no body slot/hide operation. A missing
+    // visibility profile alone is not evidence that an item is unsupported.
+    // Use the existing repeated typed configuration observation, not its label
+    // or a guessed native WeaponClass value, to retire the entry preference.
+    if(mesh.selectedSlot!=0||!mesh.configurationPathVerified||mesh.configurationPathPointer<0x10000||
+       !exact(mesh.configurationPath,"Objects/Weapons/Handheld/Knife_Equipable/Knife_Equipable")||
+       !exact(mesh.weaponName,"KNV-1")||mesh.stateCount!=1||mesh.soleConfiguredArray<0x10000||
+       mesh.states[0].array!=mesh.soleConfiguredArray||mesh.states[0].count!=1)return false;
+    const auto& asset=mesh.states[0].meshes[0];
+    return asset.address>=0x10000&&asset.typeInfo>=0x10000&&asset.namePointer>=0x10000&&
+        exact(asset.assetPath,"Objects/Weapons/Handheld/Knife/Knife_Mesh");
+}
 }
 BodyInventoryRead ReadBodyInventory(const WeaponModeMemory& memory,const ReloadStateOwner& owner,bool enabled)noexcept {
     BodyInventoryRead out;if(!enabled)return out;Reader r{memory};BodyNativeInventory first,second;
@@ -262,7 +278,8 @@ BodyDrawResult Bc2BodyInventory::Tick(const WeaponModeMemory& memory,const BodyD
     return TickDraw(memory,s,hands,sharedIntent,std::nullopt);
 }
 BodyDrawResult Bc2BodyInventory::TickDraw(const WeaponModeMemory& memory,const BodyDrawSample& s,HandInteraction& hands,
-    std::uint64_t& sharedIntent,const std::optional<DrawApproach>& approach)noexcept {
+    std::uint64_t& sharedIntent,const std::optional<DrawApproach>& approach,bool* observedInteractiveItem)noexcept {
+    if(observedInteractiveItem)*observedInteractiveItem=false;
     BodyDrawResult out;if(!enabled_)return out;
     const bool fresh=ValidBodyAnchors(config_)&&ValidInput(s.input)&&s.hand.owner.actor==Owner(s.owner).actor&&
         s.hand.owner.actorGeneration==s.owner.actorGeneration&&s.hand.owner.space==s.owner.space&&s.input.spaceGeneration==s.owner.space&&
@@ -285,6 +302,7 @@ BodyDrawResult Bc2BodyInventory::TickDraw(const WeaponModeMemory& memory,const B
     const auto selected=std::find_if(life_.begin(),life_.end(),[&](const Life& l){return l.native.weapon==physicalSelected;});
     if(selected==life_.end()){Cancel();return out;}
     ObserveAutomaticSelection(selected->native);
+    if(observedInteractiveItem)*observedInteractiveItem=true;
     const bool visible=Visible(s);BodyInventorySample sample;
     sample.inventory={owner_,revision_,++sequence_,s.hand.nowNs,items_,selected->key,visible?BodyPresentation::WeaponVisible:BodyPresentation::Unknown,false};
     sample.nowNs=s.hand.nowNs;sample.focused=true;sample.handTracked=true;
@@ -435,14 +453,23 @@ BodyHolsterResult Bc2BodyInventory::TickHolster(const WeaponModeMemory& memory,c
         return out;
     }
     if(s.cancel||s.reloadBusy)display_.reset();
-    const auto ordinary=[&](std::optional<DrawApproach> approach=std::nullopt){heldApproach_.Reset();heldRelease_.Reset();deferredDraw_.reset();BodyHolsterResult out;out.ordinaryDraw=TickDraw(memory,s,hands,intent,approach);out.blockWeaponActions=out.ordinaryDraw.blockFire;
-        // An observed but unaccepted scoped XM8 stays on ordinary input. Do not
-        // surprise-stow a later supported weapon because the entry was pending.
+    const auto ordinary=[&](std::optional<DrawApproach> approach=std::nullopt){heldApproach_.Reset();heldRelease_.Reset();deferredDraw_.reset();BodyHolsterResult out;
+        bool observedInteractiveItem=false;out.ordinaryDraw=TickDraw(memory,s,hands,intent,approach,&observedInteractiveItem);out.blockWeaponActions=out.ordinaryDraw.blockFire;
+        // A positively identified unsupported item retires only the unissued
+        // entry preference. It must not block its ordinary attack forever or
+        // surprise-stow a later supported weapon. Missing metadata never counts.
+        const bool scriptedKnife=observedInteractiveItem&&sample.selected&&ScriptedKnifeConfiguration(*sample.selected)&&
+            holster.Phase()==BodyHolsterPhase::Held&&!pending_&&!out.ordinaryDraw.command&&
+            automaticFoot_&&s.owner.player==automaticActor_.player&&s.owner.soldier==automaticActor_.soldier&&
+            s.owner.weak==automaticActor_.weak&&nativeOwner_==s.owner&&nativeProofNs_==s.hand.nowNs&&
+            automaticItem_&&automaticItem_->weapon==s.owner.weapon&&automaticItem_->data==sample.selected->weaponData&&
+            automaticItem_->slot==sample.selected->selectedSlot&&inventory_==sample.selected->inventory;
         if(automaticPending_&&!s.cancel&&!s.reloadBusy&&sample.selected&&sample.selected->owner==s.owner&&
             sample.selected->sequence&&sample.selected->observedNs>0&&sample.selected->observedNs<=s.hand.nowNs&&
-            sample.selected->deadlineNs>s.hand.nowNs&&!holster.AcceptsProfile(s.owner,sample.selected,s.hand.nowNs)&&
-            FindSelectedMesh(*sample.selected,s.owner,SelectedMeshKind::Xm8,s.hand.nowNs)&&
-            FindSelectedMesh(*sample.selected,s.owner,SelectedMeshKind::Acog4x,s.hand.nowNs)){
+            sample.selected->deadlineNs>s.hand.nowNs&&sample.selected->deadlineNs-sample.selected->observedNs<=200000000&&
+            !holster.AcceptsProfile(s.owner,sample.selected,s.hand.nowNs)&&
+            (scriptedKnife||(FindSelectedMesh(*sample.selected,s.owner,SelectedMeshKind::Xm8,s.hand.nowNs)&&
+            FindSelectedMesh(*sample.selected,s.owner,SelectedMeshKind::Acog4x,s.hand.nowNs)))){
             automaticPending_=false;++automaticUnsupported_;}
         return out;};
     if(!enabled_||(holster.Phase()==BodyHolsterPhase::Held&&

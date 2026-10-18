@@ -32,13 +32,15 @@ bool Candidates(const MenuStateCandidates& c){
         c.controllerVtable==0x102b780&&c.cancelPressed==0x33ef70&&c.cancelReleased==0x331f30;
 }
 }
-std::array<MenuStateCodeSpan,13> MenuStateCodeSpans() noexcept {
+std::array<MenuStateCodeSpan,18> MenuStateCodeSpans() noexcept {
     // Includes dispatch maps and all instructions on the selected notification
     // branch. The final two spans include vtables, not mutable runtime data.
     return {{{0x3875b0,0x1680},{0x3764f0,0xf00},{0x33f9c0,0x17a},
              {0x383db0,0x75},{0x4fec10,0x78},{0x102ba2c,15},
              {0x102b764,0x74},{0x103cda8,8},{0x33ef70,0xb5},{0x331f30,0x44},
-             {0x4fe2d0,0x140},{0x5490cb,0x16},{0xb822b0,0x29}}};
+             {0x4fe2d0,0x140},{0x5490cb,0x16},{0xb822b0,0x29},
+             {0x383560,0x3f},{0x551d60,0x3a},{0x102b4c8,0x58},
+             {0x337290,0xe6},{0x509710,0x63}}};
 }
 std::optional<MenuStateCandidates> DiscoverMenuState(std::span<const std::byte> b,const engine::PeImage& pe){
     if(pe.machine!=0x14c||b.size()<0x40)return {};const auto nt=Word(b,0x3c);
@@ -85,15 +87,40 @@ std::optional<MenuStateCandidates> DiscoverMenuState(std::span<const std::byte> 
        !EqualsWord(b,pe,0x8fe3b0,0x8fe34c)||!Match(b,pe,0x8fe34c,"B8 2C 01 00 00 C2 04 00")||
        !EqualsWord(b,pe,0x8fe3ac,0x8fe344)||!Match(b,pe,0x8fe344,"B8 2D 01 00 00 C2 04 00"))return {};
     if(!Match(b,pe,0xf822b0,"8B C1 8B 88 34 24 08 00 85 C9 74 07 8B 01 8B 50 14 FF E2 8B 80 38 24 08 00 85 C0 74 09 8B 10 8B C8 8B 42 14 FF E0 B0 01 C3"))return {};
+    // Front-end MainMenu owns a different input-controller subobject. Its
+    // constructor calls the same UI controller base; the original mouse pump
+    // consequently provides the same verified thread/return-address boundary.
+    if(!Match(b,pe,0x783560,"53 55 56 57 8B F1 E8 ?? ?? ?? ?? 8D 7E 2C 8B CF E8 ?? ?? ?? ?? 8D 9E 90 00 00 00 8B CB E8 ?? ?? ?? ?? 8D 8E 94 00 00 00 C7 06 E8 B4 42 01 C7 07 D4 B4 42 01 C7 03 C8 B4 42 01 E8")||
+       !Call(b,pe,0x783570,0x949020)||
+       !EqualsWord(b,pe,0x142b4d4,0x737290)||!EqualsWord(b,pe,0x142b4d8,0x737340)||
+       !Match(b,pe,0x951d8d,"6A 01 89 B7 24 2B 08 00 E8")||
+       !Match(b,pe,0x909731,"8B 8E 24 2B 08 00 85 C9 74 08 8B 01 8B 10 6A 01 FF D2")||
+       !Match(b,pe,0x90974b,"C7 86 24 2B 08 00 00 00 00 00")||
+       !Match(b,pe,0x7372f7,"8B 0D A8 4C 9A 01 E8 ?? ?? ?? ?? 56 8B CF C7 44 24 10 00 00 00 00 C7 44 24 14 02 00 00 00 E8")||
+       !Call(b,pe,0x737315,0x8fe2d0)||!Call(b,pe,0x737329,0xf82020)||
+       !Match(b,pe,0x73732e,"5F 5E 83 C4 0C C2 04 00")||
+       !Match(b,pe,0x737340,"83 EC 0C 8B 44 24 10 50 C7 44 24 08 01 00 00 00 C7 44 24 0C 02 00 00 00 E8")||
+       !Call(b,pe,0x737358,0x8fe2d0)||!Call(b,pe,0x73736b,0xf82020)||
+       !Match(b,pe,0x737370,"83 C4 0C C2 04 00"))return {};
     return MenuStateCandidates{0x15a4ca8,0x102b7a0,0x102b794,0x102b764,0x3875b0,0x33f9c0,0x3764f0,
         0x102b780,0x33ef70,0x331f30};
 }
 std::optional<MenuStateSnapshot> ReadMenuState(const MenuMemory& m,const MenuStateCandidates& c,std::uint32_t base){
     if(!Candidates(c)||base<0x10000||std::uint64_t(base)+c.managerGlobal+4>UINT32_MAX)return {};
     const auto one=[&]()->std::optional<MenuStateSnapshot>{
-        MenuStateSnapshot s;std::uint32_t primary=0,event=0,input=0,controller=0;unsigned char entered=0,pause=0;
+        MenuStateSnapshot s;std::uint32_t primary=0,event=0,input=0,controller=0,front=0;unsigned char entered=0,pause=0;
         if(!Read(m,std::uint64_t(base)+c.managerGlobal,&s.manager,4)||
-           !Read(m,std::uint64_t(s.manager)+0x82b20,&s.owner,4)||s.owner<0x10000||
+           !Read(m,std::uint64_t(s.manager)+0x82b24,&front,4))return {};
+        if(front){
+            // The native UI manager publishes this pointer on creation and
+            // clears it on destruction. Do not mistake a retained pause-menu
+            // owner or arbitrary APT movie for the main menu.
+            if(front<0x10000||!Read(m,front,&primary,4)||primary!=std::uint64_t(base)+0x102b4e8||
+               !Read(m,std::uint64_t(front)+0x2c,&controller,4)||controller!=std::uint64_t(base)+0x102b4d4||
+               !Read(m,std::uint64_t(front)+0x90,&event,4)||event!=std::uint64_t(base)+0x102b4c8)return {};
+            s.owner=front;s.inputController=front+0x2c;s.entered=true;s.frontEnd=true;return s;
+        }
+        if(!Read(m,std::uint64_t(s.manager)+0x82b20,&s.owner,4)||s.owner<0x10000||
            !Read(m,s.owner,&primary,4)||primary!=std::uint64_t(base)+c.ownerVtable||
            !Read(m,std::uint64_t(s.owner)+0x2c,&event,4)||event!=std::uint64_t(base)+c.eventVtable||
            !Read(m,std::uint64_t(s.owner)+0x30,&controller,4)||controller!=std::uint64_t(base)+c.controllerVtable||
@@ -111,7 +138,7 @@ bool ValidCommand(const MenuVisibilityCommand& c,const MenuVisibilityGuard& g){
         (c.action==MenuCloseAction::Back||c.action==MenuCloseAction::MenuToggle)&&c.generation&&g.nowNs>0&&c.deadlineNs>g.nowNs&&c.deadlineNs-g.nowNs<=2'000'000'000;
 }
 bool SameOwner(const MenuStateSnapshot& a,const MenuStateSnapshot& b){
-    return a.manager==b.manager&&a.owner==b.owner&&a.eventListener==b.eventListener&&a.inputController==b.inputController;
+    return a.manager==b.manager&&a.owner==b.owner&&a.eventListener==b.eventListener&&a.inputController==b.inputController&&a.frontEnd==b.frontEnd;
 }
 bool SameTarget(const MenuTargetSnapshot& a,const MenuTargetSnapshot& b){
     return a.manager==b.manager&&a.ui==b.ui&&a.target==b.target&&a.queue==b.queue&&a.buffer==b.buffer&&a.capacity==b.capacity;
@@ -165,6 +192,7 @@ MenuVisibilityResult BeginMenuCancel(const MenuMemory& memory,const MenuStateCan
        guard.nowNs>std::numeric_limits<std::int64_t>::max()-MenuOwnedCancel::HoldNs)return MenuVisibilityResult::Rejected;
     const auto current=ReadMenuState(memory,c,base);if(!current||*current!=expected)return MenuVisibilityResult::OwnerChanged;
     if(!current->entered)return MenuVisibilityResult::AlreadyInState;
+    if(current->frontEnd&&command.action==MenuCloseAction::MenuToggle)return MenuVisibilityResult::AlreadyInState;
     const auto target=ReadMenuTarget(memory,b,base);if(!target||target->manager!=current->manager)return MenuVisibilityResult::OwnerChanged;
     if(diagnostic)diagnostic->before=ObserveCancel(memory,b,base,current->manager);
     if(target->count>=target->capacity)return MenuVisibilityResult::QueueFull;
@@ -172,7 +200,8 @@ MenuVisibilityResult BeginMenuCancel(const MenuMemory& memory,const MenuStateCan
     const auto before=ReadMenuState(memory,c,base);const auto queue=ReadMenuTarget(memory,b,base);
     if(!before||*before!=*current||!queue||!SameTarget(*target,*queue))return MenuVisibilityResult::OwnerChanged;
     if(queue->count>=queue->capacity)return MenuVisibilityResult::QueueFull;
-    if(!calls.input(calls.context,base+c.cancelPressed,current->inputController,command.action==MenuCloseAction::MenuToggle?8u:9u))return MenuVisibilityResult::CallFailed;
+    const auto pressed=current->frontEnd?0x337290u:c.cancelPressed;
+    if(std::uint64_t(base)+pressed>UINT32_MAX||!calls.input(calls.context,base+pressed,current->inputController,command.action==MenuCloseAction::MenuToggle?8u:9u))return MenuVisibilityResult::CallFailed;
     // Mint before any post-call read: an owner replacement/read failure cannot
     // erase the obligation to pair a native press that was actually invoked.
     owned.state_=*current;owned.target_=*queue;owned.stateBinding_=c;owned.pointerBinding_=b;owned.base_=base;
@@ -205,7 +234,8 @@ MenuVisibilityResult ReleaseMenuCancel(const MenuMemory& memory,const MenuStateC
     if(!before||!SameOwner(*before,owned.state_)||!queue||!SameMenuTargetOwner(*queue,owned.target_)||
        !SameTarget(*queue,*target))return MenuVisibilityResult::OwnerChanged;
     if(queue->count>=queue->capacity)return MenuVisibilityResult::QueueFull;
-    if(!calls.input(calls.context,base+c.cancelReleased,current->inputController,owned.UiAction()))return MenuVisibilityResult::CallFailed;
+    const auto released=current->frontEnd?0x337340u:c.cancelReleased;
+    if(std::uint64_t(base)+released>UINT32_MAX||!calls.input(calls.context,base+released,current->inputController,owned.UiAction()))return MenuVisibilityResult::CallFailed;
     owned.Forget();
     if(diagnostic){diagnostic->invoked=true;diagnostic->after=ObserveCancel(memory,b,base,current->manager);}
     return MenuVisibilityResult::Invoked;

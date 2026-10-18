@@ -146,7 +146,7 @@ private:
         std::uint64_t revision=0,input=0;std::int64_t observed=0,deadline=0;
     };
     BodyDrawResult TickDraw(const WeaponModeMemory&,const BodyDrawSample&,interaction::HandInteraction&,
-        std::uint64_t& intent,const std::optional<DrawApproach>&)noexcept;
+        std::uint64_t& intent,const std::optional<DrawApproach>&,bool* observedInteractiveItem=nullptr)noexcept;
     void PublishDisplay(const BodyNativeInventory&,const BodyDrawSample&,interaction::BodyItemKey)noexcept;
     std::optional<BodyInventoryDisplay> display_;std::uint64_t displayCohort_=0;
     struct Life {BodyNativeItem native{};interaction::BodyItemKey key{};};

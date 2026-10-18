@@ -2,8 +2,9 @@
 
 No row is enabled without a separate exact-key/digest review list. The only
 supported reviews are independent AutomaticFire and SingleFire magazine
-families. SingleFire additionally requires its exact reflected instruction
-proof. Unknown dispatch remains data, never guessed C++ enum values.
+families. SingleFire and AutomaticFire with authored but inactive bolt fields
+additionally require their exact reflected instruction proofs. Unknown dispatch
+remains data, never guessed C++ enum values.
 This tool performs no process, game, geometry, ammo or native operations.
 """
 from __future__ import annotations
@@ -14,6 +15,7 @@ import bc2_magazine_descriptor_manifest as descriptor
 
 FAMILY = 'bc2.automatic-magazine-zero-bolt.v1'
 SINGLE_FIRE_FAMILY = 'bc2.singlefire-magazine-zero-bolt.v1'
+AUTOMATIC_STOCK_BOLT_FAMILY = 'bc2.automatic-magazine-inactive-stock-bolt.v1'
 ORDER = ('fireLogicType','reloadType','fireInputAction','reloadInputAction','baseCapacity','numberOfMagazines',
          'reloadDelay','reloadTime','reloadThreshold','postReloadTime','boltDelay','boltTime',
          'holdBoltUntilFireRelease','holdBoltUntilZoomRelease')
@@ -50,11 +52,14 @@ def build(jobs,reviews=None):
     if not isinstance(rows,list) or len(rows)>256 or not isinstance(reviews,list) or len(reviews)>256:raise ValueError('Registry row bound')
     approved={}
     for review in reviews:
-        if not isinstance(review,dict) or review.get('family_proof') not in (FAMILY,SINGLE_FIRE_FAMILY):raise ValueError('Unreviewed dispatch family')
+        if not isinstance(review,dict) or review.get('family_proof') not in (FAMILY,SINGLE_FIRE_FAMILY,AUTOMATIC_STOCK_BOLT_FAMILY):raise ValueError('Unreviewed dispatch family')
         family=review['family_proof']
         if family==SINGLE_FIRE_FAMILY:
             from bc2_singlefire_magazine_proof import PROOF_DIGEST
             if review.get('instruction_proof_digest')!=PROOF_DIGEST:raise ValueError('SingleFire instruction proof differs')
+        if family==AUTOMATIC_STOCK_BOLT_FAMILY:
+            from bc2_automatic_stock_bolt_proof import PROOF_DIGEST
+            if review.get('instruction_proof_digest')!=PROOF_DIGEST:raise ValueError('AutomaticFire stock-bolt instruction proof differs')
         key=descriptor.text(review.get('key'),256)
         if key in approved:raise ValueError('Duplicate review')
         approved[key]=(descriptor.sha(review.get('descriptor_digest')),descriptor.sha(review.get('evidence_sha256')),family)
@@ -79,8 +84,12 @@ def build(jobs,reviews=None):
             if approved[key][2]==SINGLE_FIRE_FAMILY:
                 from bc2_singlefire_magazine_proof import candidate_dispatch
                 if not single or not candidate_dispatch(row):raise ValueError('SingleFire review does not match the exact dispatch proof')
-            if row.get('automatic_stock_bolt_proof_digest'):
+            stock=bool(row.get('automatic_stock_bolt_proof_digest'))
+            if stock and approved[key][2]!=AUTOMATIC_STOCK_BOLT_FAMILY:
                 raise ValueError('Stock-bolt candidates cannot be enabled by a zero-bolt family review')
+            if approved[key][2]==AUTOMATIC_STOCK_BOLT_FAMILY:
+                from bc2_automatic_stock_bolt_proof import candidate_dispatch
+                if not stock or single or not candidate_dispatch(row):raise ValueError('Stock-bolt review does not match the exact automatic dispatch proof')
             if approved[key][0]!=digest or not eligible(row):raise ValueError('Review does not match eligible exact descriptor')
             if row.get('existing_baseline_reference'):raise ValueError('Existing compatibility registration must not be overridden')
             matched.add(key)

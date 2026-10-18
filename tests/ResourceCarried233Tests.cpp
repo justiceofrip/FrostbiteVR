@@ -8,9 +8,20 @@ auto ExactCarried(const BodyInventoryDisplay& d,const BodyEquipmentProfile& p){a
   for(unsigned i=0;i<s.states[0].count;++i){auto& m=s.states[0].meshes[i];m.address=0x90000+0x100*i;m.namePointer=0xb0000+0x100*i;m.typeInfo=s.meshTypeInfo;
    std::copy(p.configuredMeshes[i].begin(),p.configuredMeshes[i].end(),m.assetPath.begin());}config=c;
  }return configs;}
-int TwelveCarried(){unsigned count=0;
+int ExactCarriedCatalog(){unsigned count=0,nambu=0;
  for(const auto& p:BodyEquipmentProfiles){if(!p.configurationPath)continue;++count;FixturePair f;
-  auto d=f.b.inventory;auto configs=ExactCarried(*d,p);auto b=BuildBodyCarriedBatch(d,configs,f.r.s.input,Identity(),{},f.Now());
+  auto d=f.b.inventory;
+  if(std::string_view(p.asset)=="Nambu100"){
+   ++nambu;CHECK(std::string_view(p.configurationPath)=="Objects/Weapons/Handheld/Beach/Nambu100/Nambu100");
+   // This campaign item has valid null persistence. Preserve every other
+   // native item/container field while the ordinary carried consumer reads it.
+   auto nullable=std::make_shared<BodyInventoryDisplay>(*d);
+   for(unsigned i=0;i<nullable->count;++i){auto& slot=nullable->slots[i];
+    if(slot.native.weapon==nullable->selectedOwner.weapon)continue;
+    slot.native.persistence=0;nullable->carried.items[slot.native.slot]=slot.native;}
+   CHECK(BodyInventoryDisplayFresh(*nullable,f.Now()));d=nullable;
+  }
+  auto configs=ExactCarried(*d,p);auto b=BuildBodyCarriedBatch(d,configs,f.r.s.input,Identity(),{},f.Now());
   CHECK(b&&b->count==1&&BodyCarriedBatchFresh(*b,f.Now()));BodyCarriedPair pair;auto key=CarriedPairKey(f.lease);
   const auto first=pair.Read(key,0,*b,f.Now());CHECK(first&&pair.Read(key,1,*b,f.Now()));
   graphics::BodyPropEye eye;CHECK(AppendBodyCarriedPair(*first,key,*b,f.Now(),eye)&&eye.count==1);
@@ -22,8 +33,8 @@ int TwelveCarried(){unsigned count=0;
     CHECK(!body_carried_detail::SameConfig(*ptr,*c)||fault==2||fault==3||fault==4);ptr=c;}
    CHECK(!BuildBodyCarriedBatch(d,changed,f.r.s.input,Identity(),{},f.Now()));}
  }
- CHECK(count==16);return 0;
+ CHECK(count==17&&nambu==1);return 0;
 }
 }
-int main(){if(TwelveCarried()||ActualPairAndDistinctCounters()||FrameAndOwnerChanges()||OriginalExpiryAndNoNewLease()||ResetAndConcurrentSeed()||ActualInventoryReplacementAndRecenter())return 1;
- std::cout<<"16 exact carried body configurations and 96 invalid sources passed through actual paired-body consumer; CPU only\n";}
+int main(){if(ExactCarriedCatalog()||ActualPairAndDistinctCounters()||FrameAndOwnerChanges()||OriginalExpiryAndNoNewLease()||ResetAndConcurrentSeed()||ActualInventoryReplacementAndRecenter())return 1;
+ std::cout<<"17 exact carried body configurations including null-persistence Nambu and 102 invalid sources passed through actual paired-body consumer; CPU only\n";}

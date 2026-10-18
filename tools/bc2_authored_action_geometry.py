@@ -48,7 +48,18 @@ def context(game,profile,meshes,pool):
     receipt={'mesh_sha256':variant['mesh_sha256'],'lod_sha256':lod['data_sha256'],
              'mesh_source':{'archive':source['archive'],'archive_index_sha256':source['index_sha256']},
              'skin_sections':geometry(data,parsed,{bone_hash(n):n for n in sk.names})}
-    return dict(skeleton=sk,reference=reference,parts=parts,receipt=receipt,sources=((cs,ca),(ss,sa)),graph_archive=sa)
+    graph_source=profile.get('configuration_source',ss)
+    path_key(graph_source['archive']);checked_hash(graph_source['archive_index_sha256'])
+    graph_archive=pool(game/graph_source['archive'])
+    if graph_archive.index_sha256!=graph_source['archive_index_sha256']:raise ValueError('Action graph archive index differs')
+    dependencies=[]
+    for dependency in profile.get('reference_sources',[]):
+        path_key(dependency['archive']);checked_hash(dependency['archive_index_sha256'])
+        archive=pool(game/dependency['archive'])
+        if archive.index_sha256!=dependency['archive_index_sha256']:raise ValueError('Action dependency archive index differs')
+        dependencies.append(archive)
+    return dict(skeleton=sk,reference=reference,parts=parts,receipt=receipt,sources=((cs,ca),(ss,sa)),
+                graph_archive=graph_archive,graph_dependencies=dependencies)
 
 
 def inspect_action(profile,ctx,action,raw,source,cache):
@@ -101,7 +112,7 @@ def run(game,bindings,meshes,roles,assets=None,progress=None):
         identity={'asset':p['native_asset_name'],'weapon':p['weapon'],'state_index':p['state_index'],'binding_digest':p['binding_digest']}
         try:
             ctx=context(game,p,meshes,pool)
-            actions=mag.bound_action_assets(p,ctx['graph_archive'],roles)
+            actions=mag.bound_action_assets(p,ctx['graph_archive'],roles,ctx.get('graph_dependencies',()))
         except (ValueError,KeyError,TypeError) as error:
             gaps.append({**identity,'stage':'context','reason':str(error)})
             continue

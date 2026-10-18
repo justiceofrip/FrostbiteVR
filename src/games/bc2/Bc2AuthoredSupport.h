@@ -18,7 +18,9 @@ struct AuthoredSupportBinding {
 inline const AuthoredSupportProfile* BindAuthoredSupport(std::span<const AuthoredSupportProfile> profiles,
  const SelectedMeshesSnapshot& snapshot,const WeaponEquipmentIdentity& equipment,
  const AuthoredGripOwner& owner,std::uint64_t rigFingerprint,std::int64_t now)noexcept {
- if(!equipment.weapon||!equipment.data||!equipment.persistence||!owner.soldier||!owner.weak||
+ // A stable null Persistence is valid metadata, as in ReadWeaponEquipmentIdentity.
+ // Equality below/output validation still rejects any metadata replacement.
+ if(!equipment.weapon||!equipment.data||!owner.soldier||!owner.weak||
     !owner.actorGeneration||!owner.equipmentGeneration||!owner.space||!owner.inputSequence||
     !snapshot.owner.player||!snapshot.owner.equipGeneration||
     !authored_grip_detail::Fresh(snapshot,now)||owner.inputDeadlineNs<=now||snapshot.deadlineNs<owner.inputDeadlineNs||snapshot.sequence>owner.inputSequence||

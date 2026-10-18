@@ -1,7 +1,9 @@
 from pathlib import Path
 import copy,math,sys,unittest
+from types import SimpleNamespace
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
 import bc2_authored_grip_bindings as p
+from bc2_authored_archive_set import AuthoredArchiveSet
 from bc2_weapon_config_pipeline import Document,Node,Value
 
 W='00000000-0000-0000-0000-000000000001';T=W[:-1]+'2';C=W[:-1]+'3';S=W[:-1]+'4';M=W[:-1]+'5';O=W[:-1]+'6'
@@ -197,5 +199,42 @@ class ModelAxisTests(unittest.TestCase):
         out,axes=self.fixture();axes['schema_version']=2
         with self.assertRaises(ValueError):p.cpp_header(out,{'Rifle_sp'},axes)
         out,axes=self.fixture();self.assertEqual(p.axis_descriptors(p.header_profiles(out,{'Rifle_sp'}),None),{})
+
+class DependencyArchives(unittest.TestCase):
+    def archive(self, entries):
+        self.reads=[]
+        def read(names):
+            self.reads.append(list(names));return {name:entries[name][1] for name in names}
+        return SimpleNamespace(index_sha256='a'*64,read_selected=read,
+            entries=[SimpleNamespace(name=name,kind=kind,flags=65536) for name,(kind,raw) in entries.items()])
+
+    def test_opening_graph_uses_explicit_shared_skeleton_without_reading_unrelated_assets(self):
+        level=self.archive({'Weapons/Opening.dbx':('<non-resource>',b'gun'),'Unrelated.res':('Texture',b'unrelated')})
+        common=self.archive({'Characters/skeleton.dbx':('<non-resource>',b'skeleton definition'),
+                             'Characters/skeleton.res':('GrannyModel',b'skeleton')})
+        sources=AuthoredArchiveSet([('Dist/sp_01.fbrb',level),('Dist/sp_common.fbrb',common)])
+        output=sources.read(['Weapons/Opening.dbx','characters/SKELETON.res'])
+        self.assertEqual(set(output),{'weapons/opening.dbx','characters/skeleton.res'})
+        self.assertEqual(output['characters/skeleton.res'][1]['archive'],'Dist/sp_common.fbrb')
+        self.assertEqual(self.reads,[['Weapons/Opening.dbx'],['Characters/skeleton.res']])
+
+    def test_conflicting_content_or_type_cannot_be_resolved_by_archive_order(self):
+        a=self.archive({'same.res':('GrannyModel',b'one')})
+        for kind,data in [('GrannyModel',b'two'),('GrannyAnimation',b'one')]:
+            b=self.archive({'same.res':(kind,data)})
+            for sources in [[('A.fbrb',a),('B.fbrb',b)],[('B.fbrb',b),('A.fbrb',a)]]:
+                with self.assertRaisesRegex(ValueError,'Conflicting'):
+                    AuthoredArchiveSet(sources).read(['same.res'])
+
+    def test_identical_shared_content_preserves_exact_primary_source(self):
+        a=self.archive({'Same.res':('GrannyModel',b'one')});b=self.archive({'same.res':('GrannyModel',b'one')})
+        output=AuthoredArchiveSet([('A.fbrb',a),('B.fbrb',b)]).read(['same.res'])
+        self.assertEqual(output['same.res'][1]['archive'],'A.fbrb')
+        self.assertEqual(AuthoredArchiveSet([('A.fbrb',a)]).read(['missing.res']),{})
+
+    def test_unsafe_or_excessive_dependency_paths_are_rejected(self):
+        a=self.archive({})
+        for sources in [[],[('A.fbrb',a)]*33,[('A.fbrb',a),('a.fbrb',a)],[('../escape.fbrb',a)]]:
+            with self.assertRaises(ValueError):AuthoredArchiveSet(sources)
 
 if __name__=='__main__':unittest.main()

@@ -1,0 +1,151 @@
+{
+  "schema": "fvr.checkpoint426.handoff-validation.v1",
+  "checkpoint": 426,
+  "status": "published_prealpha_checkpoint_with_explicit_native_gaps",
+  "source_sha256": "9196965b6f424cbfa33e98650fc230de273fc444de24c720218dbfa5f703b05b",
+  "native_source_receipt_sha256": "9759be4b456b163f76a07bd4e94d62b929ffdf11c5506da384e9ff0c617ef21b",
+  "native_header_sha256": "96cf617fbb88e6458b44c6261654ebdf270cf6b1b55d89cbf10a45967004a08b",
+  "full_cpp_suites_passed": {
+    "x86": 291,
+    "x64": 291
+  },
+  "focused_r4_x86_suites_passed": 2,
+  "previous_r3": {
+    "source_sha256": "edcfe09ac67440edc70141992aeb36f635a9ffd87a7d481ba1e0bb655e65e5d9",
+    "full_cpp_suites_passed": {
+      "x86": 291,
+      "x64": 291
+    },
+    "release_blocked": true,
+    "reason": "selected knife automatic-stow preference prevented preparation; motion02/fallback01 prepared0"
+  },
+  "portable_runtime_checks_passed": 40,
+  "input_protocol": 4,
+  "headset_verified_426": false,
+  "death_reload_crash_resolved": false,
+  "selected_knife_enemy_damage_verified": false,
+  "nambu_downstream_native_acceptance": "unverified; current melee provision observer made zero assignments",
+  "native_receipt_preserved_verbatim": true,
+  "public_build_source_files": 1692,
+  "ignored_generated_files_excluded": 184,
+  "publication_completed": true,
+  "cold_asset_preparation": {
+    "passed": true,
+    "original_package_source_sha256": "edcfe09ac67440edc70141992aeb36f635a9ffd87a7d481ba1e0bb655e65e5d9",
+    "original_validation_sha256": "3c34482c6e79382a486ae0a5c241bc91fc0487d2fe196cdda413516c4dc7379e",
+    "asset_recipe_sha256": "ccb680a73082c04a4f067d2617ca75073e737664353db67e51e480cfc2969532",
+    "packaged_python": true,
+    "decoder_upstream_verified": true,
+    "parts": 48,
+    "configurations": 17,
+    "generated_bytes": 16730338,
+    "body_cache_sha256": "b0825b563c4965dc70fd3922251150ebaaef6a709e18c906c7027465e0039dc4",
+    "runtime_cache_integrity_passed": true,
+    "game_started": false,
+    "game_assets_published": false,
+    "scope": "Actual staged-r3 cold preparation reused for r4 only after all73 non-native files,61 recipe inputs and generated cache/audio hashes matched. No generated assets published.",
+    "r4_reuse_validation_sha256": "98a77c06c8a2679b63addc85f61b8f9f6578371a8aad5ebd37430550f15a3c66",
+    "unchanged_non_native_runtime_files": 73,
+    "unchanged_recipe_inputs": 61,
+    "existing_cache_bytes_revalidated": true
+  },
+  "original_frozen_build_receipt_sha256": "db760c84aec268550dc0ff22285fec213e53eb482eace0bdcd82554d5d32c2fa",
+  "binaries": {
+    "probe": {
+      "name": "BC2NativeProbe.dll",
+      "sha256": "7516b7007af18b84af99bc3accb31222f2b41a7715fb7554384a3cdfe0957187"
+    },
+    "trace": {
+      "name": "BC2NativeTrace.exe",
+      "sha256": "94968069b2d32eef26b919a378034603f9069e14f75f443a9a56426f3b8a37a3"
+    },
+    "receiver": {
+      "name": "BC2NativeIpcProbe.exe",
+      "sha256": "a1728d49c8b6da21ad7142f4f13e1999b7678329e6b7c8a505ad93703134903f"
+    },
+    "host": {
+      "name": "BC2XrHost.exe",
+      "sha256": "a3204425e6a9b413a9f32d82e3d6791e94b5c96e1c0eee996735ee4b291d2ab2"
+    }
+  },
+  "native_motion03": {
+    "evidence_audit_sha256": "5c71e4595ea5630cf41b2599cd60a67b92c9cdbfa2b00cd9b87a4ebb2c82f8fb",
+    "requested_evidence_passed": false,
+    "automatic_stow_pending": false,
+    "automatic_stow_unsupported": 1,
+    "prepared": 1,
+    "client_firing_states_returned_idle": true,
+    "client_state_path": [
+      "5/6",
+      "6/1",
+      "idle"
+    ],
+    "client_return_seconds_approx": 1.2,
+    "admitted_server_acquisition_observed": false,
+    "admitted_server_attack_observed": false,
+    "unknown": 1,
+    "pending": 3,
+    "failure": 10,
+    "failure_timestamp_available": false,
+    "enemy_damage_verified": false,
+    "repeat_jabs_verified": false,
+    "first_mission_progress_verified": false,
+    "hooks_stopped": true,
+    "request_refs_before": 8,
+    "request_refs_after": 8,
+    "survivor_order_restored": true,
+    "camera_clock_list_restored": true,
+    "game_closed_normally": true
+  },
+  "nambu_native_reload": {
+    "accepted": true,
+    "scope": "Original native reload run: remove, return partial, replace from reserve and fire; three native firing copies converge. No headset/impact claim.",
+    "ammo_before": [
+      30,
+      114
+    ],
+    "ammo_after": [
+      29,
+      84
+    ]
+  },
+  "staged_package": {
+    "version": "0.1.5",
+    "local_package_receipt_sha256": "e7a4e543ffb37cac7dc6a8cda349cafca8102b6c0fdc0074e9035acbd32d5c63",
+    "derived_build_receipt_sha256": "6f283bbd01614ec93e92c440670954b4f26a252e7fadacfaef54c216515d9247",
+    "runtime_asset": "BC2VR-0.1.5-win64.zip",
+    "runtime_bytes": 16461037,
+    "runtime_sha256": "e7bbe7f900f06ed2ff35f6a64a21ce03a04a93b54fa5e6a2f79d2a4447c1aab3",
+    "installer_asset": "BC2VR-Setup-0.1.5.zip",
+    "installer_bytes": 16443377,
+    "installer_sha256": "72e2437294ae3da478183f6297b4a8429f9f1a72dceef780b0e2820f56fe41b8",
+    "runtime_startup_tested": false,
+    "published": true
+  },
+  "package_validation": {
+    "passed": true,
+    "receipt_sha256": "f32b6fa57ad55032141b5568de5c036057a17b9447c6abe5f363f273b485c9ff",
+    "package_checks_passed": 25,
+    "launcher_checks_passed": 49,
+    "scope": "Fresh installation, update, rollback, local feedback and corrupt-package rejection. No game startup or headset acceptance."
+  },
+  "publication": {
+    "url": "https://github.com/justiceofrip/BC2VR/releases/tag/v0.1.5",
+    "version": "0.1.5",
+    "prerelease": true,
+    "published_utc": "2026-10-18T15:52:22Z",
+    "uploaded_assets": 3,
+    "server_asset_digests_match_exact_local_package": true
+  },
+  "installed_launcher_validation": {
+    "version": "0.1.5",
+    "previous_version_retained": "0.1.2",
+    "settings_preserved": true,
+    "source_sha256": "9196965b6f424cbfa33e98650fc230de273fc444de24c720218dbfa5f703b05b",
+    "runtime_validation_passed": true,
+    "assets_ready": true,
+    "verified_local_assets_only": true,
+    "game_started": false,
+    "headset_acceptance": false
+  }
+}

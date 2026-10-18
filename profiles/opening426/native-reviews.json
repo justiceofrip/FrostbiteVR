@@ -1,0 +1,9 @@
+[
+  {
+    "key": "bc2:magazine-descriptor:73f1d6c0d08fd05047cb12e939ba6ee52c396211b57c304ccc9b8062f409f4d8",
+    "descriptor_digest": "cc2291caf02e41d3a08d26c1a4142f43a21ab10773c989d6edd872ab56a0b3e6",
+    "family_proof": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+    "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f",
+    "evidence_sha256": "b263690b6747379062f3c88382b86f2e48c71d3a795880929337a7480ba6d44f"
+  }
+]

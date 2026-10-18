@@ -577,7 +577,7 @@ struct OwnerCopyGate {
 bool RequestTarget(unsigned firing)noexcept{return firing&&std::any_of(requestTargets.begin(),requestTargets.end(),[&](const auto& id){return id.load(std::memory_order_acquire)==firing;});}
 bool NativeCycleTarget(unsigned firing)noexcept{return nativePumpCandidate&&firing&&
     std::any_of(nativeCycleTargets.begin(),nativeCycleTargets.end(),[&](const auto& id){return id.load(std::memory_order_acquire)==firing;});}
-template<class F>bool WithNativeCycle(NativeCycleAccess access,F&& fn)noexcept {
+template<class F>bool WithNativeCycle(NativeCycleAccess access,F&& fn,const ReloadFlowRecord* triggeringEvent=nullptr)noexcept {
     // The controller and native callback threads share only a short pure policy
     // operation. Match the request policy's bounded overlap recovery; never
     // retain this gate across a native read or OriginalUpdate.
@@ -598,14 +598,20 @@ template<class F>bool WithNativeCycle(NativeCycleAccess access,F&& fn)noexcept {
         return false;
     }
     const auto previousPhase=nativeCycle.Phase();
+    // Snapshot pure policy values before cancellation or this callback can
+    // revoke a completed outcome. Stop sampling once the one journal is full.
+    const auto policyBefore=!nativeCycleFirstFailure.Published()?
+        std::optional{nativeCycle.Diagnostic()}:std::nullopt;
     const auto epoch=nativeCycleCancelEpoch.load(std::memory_order_acquire);
     if(epoch!=nativeCycleAppliedCancel){nativeCycle.Cancel(Bc2NativeCycleFailure::Control);nativeCycleAppliedCancel=epoch;}
     fn();
-    if(nativeCycle.Phase()==Bc2NativeCyclePhase::Cancelled&&!nativeCycleFirstFailure.Read()){
+    if(nativeCycle.Phase()==Bc2NativeCyclePhase::Cancelled&&!nativeCycleFirstFailure.Published()){
         const auto now=Now();
+        const auto policyAfter=nativeCycle.Diagnostic();
         nativeCycleFirstFailure.Capture({nativeCycle.View(now),previousPhase,nativeCycle.Mode(),
             nativeCycle.LastControlInput(),now,nativeCycleCancelEpoch.load(std::memory_order_acquire),
-            nativeCycleContention.load(std::memory_order_relaxed),GetCurrentThreadId()});
+            nativeCycleContention.load(std::memory_order_relaxed),GetCurrentThreadId(),unsigned(access)},triggeringEvent,
+            policyBefore?&*policyBefore:nullptr,&policyAfter);
     }
     const auto previous=nativeCycleCompletionId.load(std::memory_order_acquire);
     nativeCycleCompletionId.store(nativeCycle.ObservationAuthority(previous,Now()),std::memory_order_release);return true;
@@ -1439,7 +1445,23 @@ void __fastcall Step(void* self,void*,void* context,float delta){
         if(exact)++observed.cycleGuardSteps;else ++observed.cycleGuardRejected;
         originalStep(self,context,delta);return;
     }
-    if(nativeCycleRecoveryEnabled&&NativeCycleTarget(firing))WithNativeCycle(NativeCycleAccess::NativeStep,[&]{if(nativeCycle.Recovering())nativeCycle.Missing(firing,0);});
+    if(nativeCycleRecoveryEnabled&&NativeCycleTarget(firing)){
+        const auto* frame=nativeGuardFrame;const auto* parent=currentFrame;
+        NativeCycleOrdinaryStepOwner owner;
+        if(frame&&frame->held&&parent){
+            owner={firing,unsigned(context),caller,base+binding.code[0].rva+0x168,
+                frame->firing,frame->context,parent->firing,frame->invocation,
+                parent->invocation.Record().id,frame->held->invocation,parent->depth,
+                parent->invocation.Record().entry.kind==ReloadFlowEvent::Update,holdCodeVerified};
+        }
+        WithNativeCycle(NativeCycleAccess::NativeStep,[&]{
+            if(nativeCycle.Recovering()&&!(NativeCycleOrdinaryStepOwned(owner)&&
+               nativeCycle.DrainingPaidOrdinaryInvocation(*frame->held,firing,Now())))
+                nativeCycle.Missing(firing,parent?parent->invocation.Record().id:0);
+        },parent?&parent->invocation.Record():nullptr);
+        // A retained ordinary callback still runs the original Step and normal
+        // empty control. Its exact Finish drains it without a guarded idle vote.
+    }
     MagazineEmptyStep sample;MagazineEmptyByteOverride patch;bool requested=false,magazineControl=false;
     MagazineEmptyDiagnosticRecord diagnostic;diagnostic.sample.before.address=firing;diagnostic.sample.branch=3;diagnostic.stepDeltaBits=std::bit_cast<unsigned>(delta);
     const bool cycleTarget=NativeCycleTarget(firing);
@@ -1622,7 +1644,7 @@ void __fastcall Update(void* self,void*,void* context,unsigned extra){
             if(!cycleCallback.Isolated()){nativeCycle.Missing(firing,cycleInvocation);return;}
             route=EvaluateNativeCycleUpdateRoute(nativeCycle,{ready?&input:nullptr,
                 recoveryScope?&*recoveryScope:nullptr,&observation.entry,firing,cycleInvocation,recoveryCapacity,recoveryDeadline});
-        });
+        },&observation.frame.invocation.Record());
         if(route.recovering){
             const auto& decision=route.recovery;
             bool guarded=decision&&cycleCallback.Isolated()&&observation.lease&&IsCurrent(*observation.lease,Now())&&
@@ -1643,7 +1665,7 @@ void __fastcall Update(void* self,void*,void* context,unsigned extra){
                 if(!completed||!cycleCallback.Isolated()){nativeCycle.Missing(firing,cycleInvocation);return;}
                 ++nativeCycleUpdates;nativeCycle.FinishRecovery(decision,*completed,observation.cycleGuard,
                     observation.cycleGuardSteps,observation.cycleGuardRejected);
-            });return;
+            },completed?&*completed:&observation.frame.invocation.Record());return;
         }
         const auto& decision=route.normal;
         observation.holdRequested=decision.hold&&observation.lease&&IsCurrent(*observation.lease,Now())&&
@@ -1663,7 +1685,7 @@ void __fastcall Update(void* self,void*,void* context,unsigned extra){
             if(!completed||!cycleCallback.Isolated()){nativeCycle.Missing(firing,cycleInvocation);return;}
             ++nativeCycleUpdates;if(observation.holdRequested&&decision.branch<3)++nativeCycleHeld[decision.branch];
             nativeCycle.Finish(decision,*completed);
-        });
+        },completed?&*completed:&observation.frame.invocation.Record());
         return;
     }
 #ifdef FVR_BC2_NATIVE_AMMO_BACKEND
@@ -1827,7 +1849,7 @@ void __fastcall Commit(void* self,void*,void* context){
     if(requestMode){const auto completed=observation.Finish();
         if(NativeCycleTarget(unsigned(self)))WithNativeCycle(NativeCycleAccess::NativeCommit,[&]{
             if(completed&&cycleCallback.Isolated()){++nativeCycleCommits;nativeCycle.Commit(*completed);}else nativeCycle.Missing(unsigned(self),cycleInvocation);
-        });
+        },completed?&*completed:&observation.frame.invocation.Record());
         if(!completed)RequestMissing(unsigned(self),7,unsigned(ReloadFlowEvent::Commit),&observation.evidence);
     }
 }
@@ -1849,7 +1871,7 @@ void __fastcall Restore(void* self,void*,void* snapshot){
     originalRestore(self,snapshot);
     if(observation.frame.cleanupOnly)return;
     if(NativeCycleTarget(unsigned(self))){const auto complete=observation.Finish();
-        WithNativeCycle(NativeCycleAccess::NativeRestore,[&]{if(complete&&cycleCallback.Isolated())nativeCycle.ObserveRestore(*complete);else nativeCycle.Missing(unsigned(self),cycleInvocation);});return;}
+        WithNativeCycle(NativeCycleAccess::NativeRestore,[&]{if(complete&&cycleCallback.Isolated())nativeCycle.ObserveRestore(*complete);else nativeCycle.Missing(unsigned(self),cycleInvocation);},complete?&*complete:&observation.frame.invocation.Record());return;}
     if(pumpDiagnostic){const auto complete=observation.Finish();
         if(complete&&observation.lease&&IsDiagnosticSpasConfig(observation.lease->snapshot.config)){
             const auto identity=RoundIdentity(*observation.lease);const auto branch=complete->entry.boundary.branch;

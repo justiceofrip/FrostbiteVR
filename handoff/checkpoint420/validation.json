@@ -1,0 +1,59 @@
+{
+  "checkpoint": 420,
+  "created_utc": "2026-10-17T16:42:48.161963+00:00",
+  "source_sha256": "adfda81efdd0dacfe5c8f293a8036ed0634d3cb7b876ca41864e2a8b3c59cc17",
+  "normal_build": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight420\\normal-build\\build-receipt.json",
+    "sha256": "fe55bcc36e022f43cd5dd407c8f14737bab4de1304065d329b5c7379e57fa707"
+  },
+  "red_regression": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight420\\red-validation.json",
+    "sha256": "b937c9bb18acf0991fe9cfca9241dc9e7907f5695736b0de4ed10dd2e6b86704"
+  },
+  "focused": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight420\\focused\\validation.json",
+    "sha256": "88eaea5fa1476f8b402ca05a8b156e695abda2d26babbc00580994bb0c9cd9d6"
+  },
+  "full_builds": {
+    "x86": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight420\\normal-x86\\validation.json",
+      "sha256": "58ded07cec6c129794538b60570962d8937f8d361575bb34cc89abe52852ab11"
+    },
+    "x64": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight420\\normal-x64\\validation.json",
+      "sha256": "ea084e07d8d82ce7d92ba1da6b14fb143fc9433432b16f1e7c77c2f28c7a9fac"
+    }
+  },
+  "cpp_suites_per_arch": {
+    "x86": 288,
+    "x64": 288
+  },
+  "changed_source": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight420\\normal-build\\changed-text\\manifest.json",
+    "sha256": "d16308f3e4bef5529cea193d72f126566af865b789e99625d8284749c5d8d5cf"
+  },
+  "process_observation": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight420\\process-status.json",
+    "sha256": "d2d1a37c35d7523d9f84b6931de8a10fd5ec41c25bc884f65243ec7686f80a2f"
+  },
+  "storage": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight420\\final-storage.json",
+    "sha256": "dd08905cc79f1a996cd8c017d04c3e522279804ec2ecaa3be189e5902621d65e"
+  },
+  "lossless_compression_saved_bytes": 834022638,
+  "deleted_files": 0,
+  "actual_game_tested": false,
+  "headset_tested": false,
+  "physical_stabbing_verified": false,
+  "original416_failure_reconstructed": false,
+  "death_restart_visual_fix_verified": false,
+  "desktop_promoted": false,
+  "github_published": false,
+  "release_ready": false,
+  "notes": [
+    "New paid-cycle ordering regression failed before correction and passed afterward.",
+    "Selected knife rendering/calibration is integrated; portable motion policy is not wired to gameplay.",
+    "419 actual-game trigger/ownership observations remain prior evidence only.",
+    "No game-close, SteamVR-close, focus or OS input action was performed for420."
+  ]
+}

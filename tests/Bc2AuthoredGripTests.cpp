@@ -4,7 +4,9 @@
 #include "fvr/interaction/SupportGrip.h"
 #include "fvr/interaction/HandInteraction.h"
 #include "fvr/interaction/GripAttachment.h"
-#include "../profiles/aim339/CombinedGrips.h"
+#include "../profiles/opening426/CombinedGrips.h"
+#include "fvr/interaction/AimFrame.h"
+#include "fvr/interaction/ComfortCamera.h"
 #include <limits>
 #include <iostream>
 using namespace fvr;using namespace fvr::bc2;using namespace fvr::interaction;
@@ -37,6 +39,17 @@ int ExactIdentityAndOriginalLease(){
  f.owner=b.owner;f.snapshot->sequence=original->sequence-1;CHECK(!f.Current(b));
  f.snapshot=original;f.equipment.data++;CHECK(!f.Current(b));f.equipment=b.equipment;f.equipment.persistence++;CHECK(!f.Current(b));
  f.equipment=b.equipment;f.owner.equipmentGeneration++;CHECK(!f.Current(b));f.owner=b.owner;f.owner.space++;CHECK(!f.Current(b));
+ return 0;
+}
+int NullPersistenceRetainsExactEquipmentProof(){
+ Fixture f;f.equipment.persistence=0;const auto result=f.Bind();CHECK(result.binding);
+ const auto binding=*result.binding;CHECK(f.Current(binding));
+ f.equipment.persistence=17;CHECK(!f.Current(binding));f.equipment=binding.equipment;
+ ++f.equipment.data;++f.snapshot->weaponData;CHECK(!f.Current(binding));
+ f.equipment=binding.equipment;f.snapshot->weaponData=f.equipment.data;
+ Text(f.equipment.asset,"Replacement");Text(f.snapshot->weaponName,"Replacement");CHECK(!f.Current(binding));
+ f.equipment=binding.equipment;Text(f.snapshot->weaponName,f.profile.assetName);
+ CHECK(f.Current(binding));f.equipment.data=0;CHECK(!f.Bind().binding);
  return 0;
 }
 int BaselineAndAmbiguity(){
@@ -251,5 +264,55 @@ int EnrolledControllerAlignmentIsIndependentOfInitialGrip(){
  return 0;
 }
 
+int OpeningNambuAlignmentAcrossReferenceChange(){
+ const auto& profile=generated::Nambu426Grips.front();
+ CHECK(profile.assetName=="Nambu100"&&profile.authoredRifleSupport&&!profile.authoredAxisEvidence.empty());
+ CHECK(!AuthoredGripBinding::aimCapability&&!AuthoredGripBinding::muzzleCapability);
+ CHECK(!FindWeaponProfile(profile.assetName)); // Authored visual axes do not grant a native muzzle capability.
+ CHECK(Near(profile.rightInWeapon.values[3][0],-.0497238903f));
+ CHECK(Near(profile.rightInWeapon.values[3][2],-.228854671f));
+ constexpr float bodyDegrees=37.f,rad=.017453292519943295f;
+ std::optional<TrackedRigPose> reference;
+ for(float initial:{0.f,.4f,-.7f})for(float units:{1.f,2.f}){
+  Fixture f;f.profile=profile;f.equipment.persistence=0;
+  Text(f.equipment.asset,profile.assetName);Text(f.snapshot->weaponName,profile.assetName);
+  Text(f.snapshot->states[0].meshes[0].assetPath,profile.meshPath);
+  auto binding=f.Bind();CHECK(binding.binding);
+  RigFixture rig;rig.input.worldUnitsPerMeter=units;
+  rig.body=*MakeComfortCamera(At(3,1.5f,8),bodyDegrees);
+  rig.input.hands[1].grip.orientation={std::sin(initial),0,0,std::cos(initial)};
+  const auto step=[&]{const auto aim=TrackedAimFrame(rig.input,rig.body);
+   return rig.rig.Update(rig.owner,rig.input,rig.body,rig.left,rig.right,rig.gun,rig.arms,{}, {},
+    aim?AuthoredWeaponAimFrame(*binding.binding,*aim):std::nullopt,AuthoredGripAttachment{profile.rightInWeapon});};
+  CHECK(step());++rig.input.generation;rig.input.predictedNs+=20000000;
+  rig.input.head.orientation={0,-std::sin(.3f),0,std::cos(.3f)};
+  rig.input.hands[1].grip.orientation={0,.258819045f,0,.965925826f};
+  rig.input.hands[1].aim.orientation={.2f,.3f,.1f,.9f};
+  const auto before=step();CHECK(before&&before->weaponAttachmentAuthored&&!before->weaponAttachmentPending);
+  const auto wanted=ControllerAim(rig.input.referenceHead,rig.input.hands[1].aim);CHECK(wanted);
+  const float yaw=bodyDegrees*rad+wanted->yaw;
+  const math::Vec3 direction{std::sin(yaw)*std::cos(wanted->pitch),std::sin(wanted->pitch),std::cos(yaw)*std::cos(wanted->pitch)};
+  CHECK(AxisClose(AxisDirection(profile.modelForward,before->weapon),direction));
+  CHECK(Close(Multiply(AuthoredGripWorldUnits(profile.rightInWeapon,units),before->weapon),before->right));
+  if(units==1.f){if(reference)CHECK(Close(before->weapon,reference->weapon));reference=before;}
+  const auto old=*binding.binding;
+  const auto head=ControllerAim(rig.input.referenceHead,rig.input.head);CHECK(head);
+  const auto recentered=ExplicitRecenterReference(rig.input.head,rig.input.referenceHead);CHECK(recentered);
+  rig.input.referenceHead=*recentered;++rig.input.spaceGeneration;
+  rig.body=*MakeComfortCamera(At(3,1.5f,8),bodyDegrees+head->yaw/rad);
+  ++f.owner.space;++f.snapshot->owner.space;CHECK(!f.Current(old));
+  binding=f.Bind();CHECK(binding.binding);++rig.input.generation;rig.input.predictedNs+=20000000;
+  const auto after=step();CHECK(after);
+  const auto newAim=ControllerAim(rig.input.referenceHead,rig.input.hands[1].aim);CHECK(newAim);
+  const float newYaw=bodyDegrees*rad+head->yaw+newAim->yaw;
+  const math::Vec3 newDirection{std::sin(newYaw)*std::cos(newAim->pitch),std::sin(newAim->pitch),std::cos(newYaw)*std::cos(newAim->pitch)};
+  CHECK(AxisClose(direction,newDirection));
+  CHECK(AxisClose(AxisDirection(profile.modelForward,after->weapon),newDirection));
+  CHECK(Close(Multiply(AuthoredGripWorldUnits(profile.rightInWeapon,units),after->weapon),after->right));
+  Text(f.snapshot->states[0].meshes[0].assetPath,"Objects/Weapons/OtherMesh");CHECK(!f.Bind().binding);
+ }
+ return 0;
 }
-int main(){if(EnrolledControllerAlignmentIsIndependentOfInitialGrip()||AuthoredModelAxesActualConsumer()||AuthoredAxesRejectMalformedAndExpired()||ExactIdentityAndOriginalLease()||BaselineAndAmbiguity()||MalformedAndCapabilities()||ActualConsumerIgnoresTransientGun()||SourceLossRecenterAndReplacement()||WorldUnitsAndNativeBaseline()||PackBoundaryLeaseComposition()||AuthoredSupportComposesExistingPolicy()||SupportCannotStealAmmoClaim()||SupportRequiresFreshOriginalBinding())return 1;std::cout<<"13 authored grip/support/aim consumer groups passed\n";}
+
+}
+int main(){if(OpeningNambuAlignmentAcrossReferenceChange()||NullPersistenceRetainsExactEquipmentProof()||EnrolledControllerAlignmentIsIndependentOfInitialGrip()||AuthoredModelAxesActualConsumer()||AuthoredAxesRejectMalformedAndExpired()||ExactIdentityAndOriginalLease()||BaselineAndAmbiguity()||MalformedAndCapabilities()||ActualConsumerIgnoresTransientGun()||SourceLossRecenterAndReplacement()||WorldUnitsAndNativeBaseline()||PackBoundaryLeaseComposition()||AuthoredSupportComposesExistingPolicy()||SupportCannotStealAmmoClaim()||SupportRequiresFreshOriginalBinding())return 1;std::cout<<"15 authored grip/support/aim consumer groups passed\n";}

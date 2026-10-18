@@ -1,110 +1,130 @@
-# Current state: checkpoint 415 integration
+# Current state: checkpoint426 published pre-alpha
 
-This is the current-state entry point. Replace its contents when the state
-changes; retained checkpoint evidence lives in [history/](history/README.md)
-and the [415 handoff](../handoff/checkpoint415/README.md).
+[BC2VR 0.1.5](https://github.com/justiceofrip/BC2VR/releases/tag/v0.1.5) was published
+as a pre-release on 2026-10-18 at 15:52:22 UTC, with an installer, launcher/updater
+and manual feedback reporting. All three server asset digests match the exact
+local package. This framework checkout is the source handoff; publication does
+not remove the native gameplay and stability limits below.
 
-## What is combined
+## Frozen source and validation
 
-Checkpoint 415 combines checkpoint 414 (`b1d593e`) with the build and documentation
-work on `main` (`c345db7`). Gameplay source and calibration remain checkpoint 414.
+Normal-r4 native source is
+`9196965b6f424cbfa33e98650fc230de273fc444de24c720218dbfa5f703b05b`.
+Both r4 full architectures passed 291/291 C++ suites. Earlier r3 remains retained
+as a blocked candidate; its native knife runs prepared no attack. The exact r4 native capability
+header and 544-file dependency receipt are preserved under
+`profiles/checkpoint426`; no new native verification is inferred from the hash.
+The paired host/adapter use input protocol 4. Source build instructions and the
+normal feature composition are in [BUILDING.md](../BUILDING.md).
 
-- **414:** magazines and shells share a lower-chest display/pickup contact at
-  (-0.16, -0.55, +0.06) m. Alternate belt pickup remains available. No per-weapon
-  grasp calibration, ammunition operation or mechanism timing changed.
-- **413:** shared pump/bolt dispatch and interruption recovery preserve owed
-  cycles and hand custody; SPAS movement/closure audio follows physical stages.
-- **Build integration:** ten tests share the standard reload-flow runtime object
-  library, CTest uses the requested job count, and the static CRT default is set
-  before targets. CI/YAML and Python discovery fixes are retained. These reduce
-  development overhead; they do not claim improved headset frame rate or startup.
-- **Documentation integration:** this file is the current-state front door;
-  historical status, handoff and transfer logs remain in `docs/history/`.
+The preceding 425 opening cloud correction was accepted by the user in a
+headset. Its bounded native control/active comparison and exact restore evidence
+remain in [the 425 handoff](../handoff/checkpoint425/README.md). The public launcher
+enables this correction and clears observer/experiment/delay variables only in
+the fresh game's environment. Portable-runtime regression passed 40 checks.
 
-Both integration builds passed 284/284 suites and the native source receipt
-verified. All four rebuilt runtime binaries are byte-for-byte identical to
-frozen 414. The desktop launcher therefore remains on that exact **414** profile;
-no new game/headset run or runtime promotion is needed for this merge.
-Python and launcher validation also passed. Player knife, grenade and
-contextual-tool code is compiled in the normal composition but runtime opt-ins
-remain OFF. Synthetic player controllers are OFF. Native config is 1220 bytes;
-input version 3 and frame channel version 7 are unchanged.
+## Opening weapons, aim and recenter
 
-## Evidence and acceptance
+Exact installed/live Nambu100 identity includes an absent optional persistence
+record. The shared grip/support pipeline handles that case while retaining
+weapon/data/configuration/mesh/rig and lifetime checks. Authored support and
+magazine geometry are measured. An actual-game run verified magazine removal,
+returning the original partial magazine, replacing from reserve and firing;
+the three native firing copies converged and counts changed 30/114 to 29/84.
+This does not establish detached-magazine pixels or headset placement.
+See [opening coverage](OPENING-WEAPONS-426.md).
 
-Sources: [414 handoff](../handoff/checkpoint414/README.md),
-[413 handoff](../handoff/checkpoint413/README.md),
-[412 failure](HEADSET-FAILURE-412.md), [415 integration](../handoff/checkpoint415/README.md).
+The original Nambu pre-spread composition axis matched the authored barrel
+within 0.000024 degrees, but its stock origin was about 86.2 cm from the displayed
+muzzle, including 10.5 cm perpendicular separation. Exact candidate muzzle
+enrollment and a read-only downstream argument observer are implemented.
+The observer distinguishes supplied launch arguments from native server return,
+virtual receiver acceptance and impacts. The descriptor remains Candidate.
+Final native downstream acceptance is pending; do not report impact accuracy.
+A private provision observer could not qualify the currently selected melee
+subtype, so it made zero assignments and left no hook installed. The reader was
+not broadened to manufacture a firearm test. Earlier Nambu reload evidence remains
+accepted for its original source and operation scope.
+The camera-flag guard accepts the exact authored XM8/SPAS configurations; AEK
+and SCAR passing those flags does not grant a translated-muzzle capability.
+See [aim evidence](NAMBU-AIM-426.md).
 
-| Scope | Result |
-| --- | --- |
-| 415 C++ builds | Normal composition passed 284/284 suites on each architecture; native source verification passed |
-| 415 runtime parity | Probe, trace tool, receiver and XR host match frozen 414 byte-for-byte; desktop runtime intentionally unchanged |
-| 415 Python/launcher checks | Discovery: 986 tests, 985 passed and one skipped; renamed tool suite: 9/9; launcher parse/UTC/culture/routes/setup checks passed without game or XR launch |
-| 414 deterministic | 284 suites per architecture; 6,048 physical poses across 18 magazine configurations; installed mesh bounds checked |
-| 414 actual BC2 | Lower-chest magazine in 239 paired views and shell in 188; contact error below 0.061 mm; hooks drained and game responsive |
-| 413 actual BC2 | Interrupted-pump recovery and a separate eight-shot pump/manual-shell/holster/rifle sequence passed; hardened final source passed another bounded cycle/reload/holster/rifle run |
-| 413 audio | Physical-stage cues verified at the PC endpoint; final route/driver ownership checks passed. Steam Link timing was not measured |
-| Latest human headset run | **412 failed:** firing, pumping and holstering locked out while grip remained usable. Later automated results do not establish headset reliability |
+Selected Knife_Equipable routes semantic fire to its exact action 37 and has a
+bounded motion/acquisition adapter with exactly-once admission and native-owned
+damage/search behavior. The first motion run rejected the old zero-direction
+gate; exact installed and repeated live data show InitialDirection=(0,0,1),
+InitialPosition=(0,0,0). Native acquisition constructs a forward basis from that
+vector. The corrected gate and malformed-value regressions are in normal-r3.
+The corrected motion02 run has zero ShotOffsets failures but still prepares no attack.
+The r3 motion02 and fallback01 runs were blocked by an unissued automatic-stow
+preference (one entry, zero requests). R4 retires only that preference after a
+fresh coherent native inventory read joins the exact selected knife configuration
+and typed mesh. It requires Held with no pending selection/new command; issued
+work and native attack gates remain intact. Focused regressions passed after
+a test-only timestamp correction. The r4 motion03 run now retires the preference
+(pending=false, unsupported=1) and prepares one attack. Both client firing copies
+progress through 5/6, 6/1 and idle in about 1.2 seconds. There is no admitted server
+Acquire/Attack observation; unknown=1, pending=3 and failure10 has no timestamp.
+Those counters cannot establish damage, completion, repeat-jab recovery or first
+mission progression. The evidence audit remains failed for its requested level.
+All hooks stopped cleanly, references returned 8 to 8, and survivor order, camera,
+clock and list state were restored. The game then closed normally.
+See [selected-knife evidence](SELECTED-KNIFE-NATIVE-426.md).
 
-A deterministic test has no game or headset. An actual-game check uses real BC2
-with bounded native evidence. Headset acceptance requires a human headset run.
-A profile, capability row, mock receipt or final ammunition count is not a
-working-weapon claim. No full campaign playthrough is accepted.
+Manual recenter remains both thumbstick clicks held for one second. The 425 run
+recorded three shorter attempts and two automatic recenters, which does not
+prove a broken binding. A separate vertical-look recenter defect was found and
+corrected: gameplay must not add old head yaw when the host retains reference
+yaw. Protocol 4 distinguishes reference changes from a replaced tracking basis.
+Combined support/recenter regressions pass; headset acceptance remains open.
 
-The [415 validation record](../handoff/checkpoint415/validation.json) records the
-integration results. Public source locations are `main` and tag `checkpoint-415`,
-with a fast-forward containing both source histories. The local integration
-branch is `checkpoint/415-integrated-build`.
-No remote CI result for the combined merge is claimed.
+## Crash and lifetime limits
 
-## Open work
+The user reported an access violation after two deaths/reloads. The 425 host
+closed gracefully after the game exited. The new scene guard blocks only a
+twice-verified different current world/request; same-request root changes remain
+diagnostic-only until recovery exists. This is not a proven fix for the crash.
+A fresh no-VR Continue run also faulted in an invalid AMD queued callback; that
+evidence does not identify the headset crash's cause or exonerate the mod.
 
-- Headset verification of pump recovery, audio alignment, lower-chest comfort
-  and holster reliability remains open. No new headset test is required merely
-  to combine build tooling when runtime outputs are unchanged.
-- Spent-shell ejection is not implemented. Immediate post-shot pump timing is
-  unchanged and was deferred by the user. M95 magazine refill uses stock fallback.
-- Broader weapon geometry, belt-fed reloads, physical zoomed scopes, full-body IK,
-  full campaign/vehicle coverage, multiplayer and sustained Steam Link stability
-  remain unverified or unfinished. See [weapon coverage](WEAPON-COVERAGE-CURRENT.md).
-- Earlier pre-attachment load crashes lack enough fault-time evidence to identify
-  their cause. Bounded paired-eye damage/death recovery checks are not whole-
-  campaign or restart acceptance.
-- The inherited build notes identify warning-option coverage for early targets
-  and some tool-directory Python discovery gaps. See the integration handoff for
-  the exact validation scope; this merge alone is not a fix for every build issue.
+One earlier 426 normal candidate completed an Entire Mission restart with exact
+current-view cleanup and request references 8→8. This is not a death/reload-crash
+acceptance. Earlier neutral fixture failures and the failed first knife motion
+run remain retained. No whole-campaign, reconnect or long-session stability
+claim follows from bounded native checks.
 
-## Build and source pins
+## Distribution and remaining work
 
-See [BUILDING.md](../BUILDING.md) for prerequisites and default builds. Reuse the
-existing architecture trees and run the two builds sequentially:
+The exact release passed 25 package checks and 49 launcher checks, covering fresh
+installation, updates, rollback, local feedback and corrupt-package rejection.
+The user's launcher was updated to 0.1.5 with settings and previous version 0.1.2
+preserved. Installed-runtime validation passed for the exact r4 source and warm
+local asset cache, without starting the game. Private generated assets were
+verified and retained locally; none were published. These checks do not establish
+headset or campaign acceptance.
 
-```powershell
-.\Build-Checkpoint.ps1 -Architecture x86 -Jobs 2 -OrdinaryManualCycles -NativeCycleRecovery -BodySceneDepth -PlayerGrenades -PlayerKnife -ContextualTools
-.\Build-Checkpoint.ps1 -Architecture x64 -Jobs 2 -OrdinaryManualCycles -NativeCycleRecovery -BodySceneDepth -PlayerGrenades -PlayerKnife -ContextualTools
-python -B -m unittest discover -s tests -p 'test_*.py'
-```
+The portable launcher starts through the VR main menu, supports manifest-checked
+updates/rollback and prepares manual GitHub feedback with bounded sanitized
+text diagnostics. Nothing uploads automatically. Python is bundled; first asset
+preparation fetches a pinned about 77 MB FFmpeg decoder directly from upstream and
+caches it on the chosen data drive. Validation and warm asset caches do not
+download it. No game executable, assets, saves, raw traces or private credentials
+belong in either public repository/package.
 
-The operation receipt remains `profiles/checkpoint414/source-with-header.json`,
-with native dependency-closure SHA-256
-`3d976c48307f0f6559269f8e197b384563033cf5c3401b96a8bcf3e43efdd7a0`.
-Covered source is byte-sensitive: do not update a receipt merely to silence a
-verification failure. Tests and build scheduling do not change that native proof.
-Retained calibration profiles are `aim339`, `support373` and
-`resource-enrollment295-pistol`. Capability counts are prerequisites, not accepted
-guns. A default `Build.ps1` run uses a different feature composition from the
-checkpoint commands above. CI tests the default composition.
+Actual cold asset preparation from the staged r3 package passed using bundled
+Python and the verified upstream decoder: 48 body parts for 17 configurations,
+plus audio, totaling 16,730,338 generated bytes. Runtime cache integrity passed;
+the body cache hash starts b0825b56. These assets remain private and are rebuilt
+from each user's own installation. This is retained r3 packaging evidence, not
+an invented r4 rerun. The final r4 stage revalidated all 73 non-native runtime
+files, all 61 recipe inputs and the existing generated cache/audio bytes as
+identical, so the preparation result is reused only for that unchanged scope.
 
-## Storage and rollback
-
-Generated files, temporary files, builds and logs stay on G: with process-local
-TEMP/TMP/TMPDIR. Read existing runtimes on C: without writing there. Call
-`tools/StorageBudget.ps1` before builds/captures/sessions; keep the 40 GiB generated,
-15 GiB free-space and 512 MiB raw-capture limits. Reuse build trees and preserve
-current source, symbols, receipts and user recordings. See [storage policy](STORAGE-BUDGET.md).
-
-The frozen desktop profile and source tag `checkpoint-414` remain the runtime
-rollback for this integration. The exact 413 profile/audio/cache and source tag
-`checkpoint-413` remain preserved, as does branch `checkpoint/410-headset-rollback`.
-Launcher app rollback and choosing a local game profile are separate operations.
+Manual LMG reloads, wider weapon/vehicle coverage, spent-shell ejection, some
+magnified scopes, full-body IK and multiplayer remain unfinished or unverified.
+The latest 426 candidate has no human headset acceptance. Preserve 425 source,
+symbols and crash evidence and 414's earlier accepted handling/audio reference.
+Historical 416–425 investigations are retained in their handoff records and
+[history](history/2026-10-18-checkpoint425.md); their results describe their own
+source generations. Generated data and temporary work stay on G: under the
+existing storage budget.

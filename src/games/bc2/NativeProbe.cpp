@@ -1,13 +1,17 @@
 #include "Bc2TrackedViews.h"
+#include "Bc2WeatherObservation.h"
+#include "Bc2WeatherTranslation.h"
 #include "Bc2StereoColorScale.h"
 #include "Bc2NativeFadeDiagnostic.h"
 #include "Bc2SceneMilestoneWriter.h"
 #include "Bc2GraphicsThreadObservation.h"
 #include "Bc2StereoProgressEvidence.h"
+#include "Bc2StereoFrameAdmission.h"
 #include "Bc2StereoRecovery.h"
 #include "fvr/runtime/RenderOwnerRecovery.h"
 #include "Bc2Gameplay.h"
 #include "Bc2MechanismAudio.h"
+#include "Bc2ShellReloadAudio.h"
 #include "Bc2PumpCalibration225.h"
 #include "Bc2ReloadFlowRuntime.h"
 #include "Bc2NativeCycleRuntime.h"
@@ -18,6 +22,7 @@
 #include "Bc2WeaponVisibilityProbe.h"
 #include "Bc2BodyHolsterProbe.h"
 #include "Bc2MenuRuntime.h"
+#include "Bc2MenuState.h"
 #include "Bc2ReloadDrawCapture.h"
 #include "Bc2ReloadProducerBinding.h"
 #include "Bc2RigWorkerRuntime.h"
@@ -27,6 +32,7 @@
 #include "Bc2BodyPropPair.h"
 #include "fvr/math/ProjectionOverride.h"
 #include "fvr/runtime/ExactWriteBatch.h"
+#include "fvr/runtime/FrameObservationFailures.h"
 #include "fvr/graphics/D3D11FrameBridge.h"
 #include "fvr/graphics/D3D11PresentationPacing.h"
 #include "fvr/graphics/DesktopImageEvidence.h"
@@ -72,6 +78,7 @@ UpdateFn updateOriginal=nullptr;std::atomic<unsigned> updateCalls=0;
 VisibilityFn visibilityOriginal=nullptr;
 WorldFn worldOriginal=nullptr;PrepareFn prepareOriginal=nullptr;DrawFn drawOriginal=nullptr;
 std::atomic<bool> sampling=false;
+bool startedFromMainMenu=false;
 std::atomic<unsigned> allocated=0,worldCalls=0,prepareCalls=0,drawCalls=0;
 std::atomic<unsigned> visibilityAllocated=0,visibilityCalls=0;
 LONG started=0;unsigned cameraPulseMode=0;bool lifecycleMode=false,stereoMode=false;
@@ -81,10 +88,11 @@ using CacheFn=void(__thiscall*)(void*);
 CacheFn updateView=nullptr,updateProjection=nullptr,updateFrustum=nullptr;
 struct CameraVariant {fvr::math::Matrix4 projection{};std::uint64_t frustumHash=0;};
 struct MappedCameraResult {bool complete=false;float viewError=-1,projectionError=-1,viewProjectionRelativeError=-1;};
-struct CullCameraResult {bool passed=false;float maxDistance=-1,normalError=-1;};
+struct CullCameraResult {bool passed=false;double maxDistance=-1,maxRoundoffAllowance=0,maxExcess=0;float normalError=-1;};
 struct CameraExperiment {
     std::atomic<bool> claimed=false,complete=false;
     bool liveUnchanged=false;float baselineViewError=-1,baselineProjectionError=-1;
+    bool sourcePositionValid=false;std::array<float,3> sourcePosition{};
     std::array<CameraVariant,6> variants{};
     std::array<MappedCameraResult,8> mapped{};
     std::array<CullCameraResult,8> culling{};
@@ -99,6 +107,7 @@ struct ColorCapture {
     std::atomic<bool> complete=false;
 };
 std::array<ColorCapture,3> colorCaptures;
+std::array<ColorCapture,2> weatherColorCaptures;
 #ifdef FVR_BC2_SCENE_DEPTH_CAPTURE
 std::array<ColorCapture,2> sceneDepthCaptures,sceneDepthColors;
 std::array<fvr::graphics::BodyPropEye,2> sceneDepthProps{};
@@ -133,7 +142,7 @@ struct BodyHolsterEyeRow {
     std::int64_t nowNs=0,receiptDeadlineNs=0;bool hidden=false,paired=false,free=false,suppressed=false;
 };
 std::array<BodyHolsterEyeRow,512> bodyHolsterEyes{};unsigned bodyHolsterEyeCount=0;
-std::array<void*,14> hookEntries{};std::atomic<bool> deferredCleanup=false;
+std::array<void*,16> hookEntries{};std::atomic<bool> deferredCleanup=false;
 struct WorkPoolExperiment {
     std::atomic<unsigned> stage=0; // 0 idle, 1 leased, 2 restored, 3 rejected
     unsigned owner=0,vtable=0,global=0,reset=0,thread=0,frame=0,peak=0;
@@ -273,6 +282,8 @@ void SampleCameraCopies(std::uintptr_t address)noexcept {
     fvr::engine::FrostbiteCameraInput input{};std::memcpy(&input.transform,original.bytes.data()+0x50,64);
     std::memcpy(&input.nearPlane,original.bytes.data()+0x1c,4);std::memcpy(&input.farPlane,original.bytes.data()+0x20,4);input.worldUnitsPerMeter=1;
     const auto camera=fvr::engine::CanonicalCamera(input);
+    if(camera){cameraExperiment.sourcePositionValid=true;
+        for(unsigned axis=0;axis<3;++axis)cameraExperiment.sourcePosition[axis]=camera->camera.values[3][axis];}
     if(camera)for(unsigned i=0;i<cameraExperiment.mapped.size();++i){
         fvr::math::Pose reference{},pose{};pose.position={i%2?-.032f:.032f,.15f,-.2f};
         const float angle=float(i)*.07f;pose.orientation={0,std::sin(angle),0,std::cos(angle)};
@@ -307,11 +318,18 @@ void SampleCameraCopies(std::uintptr_t address)noexcept {
         for(unsigned eye=0;eye<2;++eye){const auto& fov=eye?right:left;const auto& world=eye?*eye1:*eye0;
             for(float z:{nearPlane,(nearPlane+farPlane)*.5f,farPlane})for(float x:{fov.left,(fov.left+fov.right)*.5f,fov.right})for(float y:{fov.down,(fov.down+fov.up)*.5f,fov.up}){
                 const auto point=fvr::math::TransformRowVector({x*z,y*z,z,1},world);
-                for(const auto& plane:planes){const float distance=plane.x*point.x+plane.y*point.y-plane.z*point.z+plane.w;
-                    if(!std::isfinite(distance))result.normalError=1;else result.maxDistance=(std::max)(result.maxDistance,distance);}
+                for(const auto& plane:planes){
+                    // Native planes are RH; only this copied-camera diagnostic
+                    // converts their z coefficient for the canonical LH point.
+                    const auto evidence=fvr::math::MeasureFloatPlaneContainment({plane.x,plane.y,-plane.z,plane.w},point);
+                    if(!evidence.valid)result.normalError=1;
+                    else {result.maxDistance=(std::max)(result.maxDistance,evidence.distance);
+                        result.maxRoundoffAllowance=(std::max)(result.maxRoundoffAllowance,evidence.roundoffAllowance);
+                        result.maxExcess=(std::max)(result.maxExcess,evidence.excess);}
+                }
             }
         }
-        result.passed=result.normalError<.0001f&&result.maxDistance<=.001f;
+        result.passed=result.normalError<.0001f&&result.maxExcess==0;
     }
     cameraExperiment.liveUnchanged=before&&before==Hash(address,original.bytes.size());cameraExperiment.complete.store(true,std::memory_order_release);
 }
@@ -366,13 +384,14 @@ struct ListSnapshot {
     bool Capture(std::uintptr_t at)noexcept{address=at;const auto begin=U32(at),end=U32(at+4),capacity=U32(at+8);if(end<begin||capacity<end||(end-begin)%4||end-begin>values.size()*4)return false;count=(end-begin)/4;return !count||Read(begin,values.data(),count*4);}
     bool Matches()const noexcept {ListSnapshot now{};return now.Capture(address)&&now.count==count&&now.values==values;}
 };
+fvr::bc2::ViewInitializationCandidates initialization{};
 struct CallbackSnapshot {unsigned object=0,vtable=0,borrowed=0;bool remember=false,list=false;ListSnapshot registered{};};
 bool SnapshotCallbacks(std::uintptr_t world,std::uintptr_t mainView,ListSnapshot& list,std::array<CallbackSnapshot,16>& callbacks)noexcept {
     if(!list.Capture(world+0x9c)||!list.count||list.count>callbacks.size())return false;
     for(unsigned i=0;i<list.count;++i){auto& cb=callbacks[i];cb.object=list.values[i];cb.vtable=U32(cb.object);const auto create=U32(cb.vtable+28),destroy=U32(cb.vtable+32);
         const auto noop=[](unsigned fn){std::array<unsigned char,3> code{};return fn>=imageBase&&fn<imageBase+profile.imageSize&&Read(fn,code.data(),3)&&code==std::array<unsigned char,3>{0xc2,4,0};};
         if(create==imageBase+viewCallbacks.rememberMain&&noop(destroy)){cb.remember=true;cb.borrowed=U32(cb.object+0xbc);if(cb.borrowed!=mainView)return false;}
-        else if(create==imageBase+viewCallbacks.registerView&&destroy==imageBase+viewCallbacks.unregisterView){cb.list=true;if(!cb.registered.Capture(cb.object+0x20))return false;}
+        else if(create==imageBase+viewCallbacks.registerView&&destroy==imageBase+viewCallbacks.unregisterView){cb.list=true;if((stereoMode&&U32(cb.vtable+24)!=imageBase+initialization.refreshRegistered)||!cb.registered.Capture(cb.object+0x20))return false;}
         else if(!noop(create)||!noop(destroy))return false;
     }return true;
 }
@@ -384,7 +403,6 @@ bool RestoreBorrowed(const ListSnapshot& callbacks,const std::array<CallbackSnap
         }else if(now!=cb.borrowed)okay=false;}
     }return okay;
 }
-fvr::bc2::ViewInitializationCandidates initialization{};
 std::atomic<unsigned> inputSamples=0,inputTrackedSamples=0;std::uint64_t lastInputGeneration=0;
 bool opticEvidenceEnabled=false;bool passEvidenceEnabled=false,uncapMirror=false;bool streamMode=false;std::wstring streamToken;fvr::graphics::D3D11FrameBridge frameBridge;
 fvr::bc2::Bc2BodyAmmoRenderer bodyAmmoRenderer;bool bodyAmmoObservationEnabled=false;
@@ -422,7 +440,7 @@ struct StereoShutdownEvidence {
 fvr::bc2::StereoProgressEvidence stereoProgressEvidence;
 struct StereoRecoveryNative {
     struct Code {unsigned address=0,size=0;std::uint64_t hash=0;};
-    std::array<Code,21> code{};
+    std::array<Code,26> code{};
     unsigned worldType=0,subsystemType=0,requestAddRef=0,requestRelease=0,retiredCacheResize=0;
     fvr::runtime::RenderOwnerRecovery policy;
     std::atomic<unsigned> callbacks=0,attempts=0,completed=0,rejected=0,failure=0,retirementStep=0;
@@ -431,6 +449,32 @@ struct StereoRecoveryNative {
     std::atomic<bool> completedOnStop=false;
     std::atomic<std::uint64_t> cancelUnwrittenRequest=0;
 } stereoRecovery;
+struct LiveCacheEvidence {
+    std::atomic<unsigned> calls=0,refreshed=0,disabled=0,rejected=0;
+    std::atomic<unsigned> callback=0,beforeCount=0,registeredCount=0,afterCount=0;
+} liveCacheEvidence;
+struct StereoFrameAdmissionEvidence {
+    std::array<std::atomic<std::uint64_t>,unsigned(fvr::bc2::StereoFrameAdmission::Count)> counts{};
+    std::atomic<std::uint64_t> blocked=0,lastBlockedTick=0,lastReplacement=0;
+    void Record(fvr::bc2::StereoFrameAdmission result,const fvr::bc2::StereoFrameAdmissionSnapshot& snapshot)noexcept {
+        counts[unsigned(result)].fetch_add(1,std::memory_order_relaxed);
+        if(fvr::bc2::BlocksStereoFrameAdmission(result)){
+            blocked.fetch_add(1,std::memory_order_relaxed);
+            lastReplacement.store((std::uint64_t(snapshot.currentWorld)<<32)|snapshot.currentRequest,std::memory_order_relaxed);
+            lastBlockedTick.store(GetTickCount64(),std::memory_order_relaxed);
+        }
+    }
+    // Fixed-size aggregate only. Reporting never rereads native objects and
+    // hooks do not allocate or write files. Independently sampled counters are
+    // diagnostics, not a new ownership or transaction authority.
+    void Write(std::ostream& out)const {
+        out<<"{\"blocked\":"<<blocked.load()<<",\"last_blocked_tick_ms\":"<<lastBlockedTick.load()
+           <<",\"last_replacement_key\":"<<lastReplacement.load()<<",\"reasons\":{";
+        for(unsigned i=0;i<counts.size();++i){if(i)out<<',';
+            out<<'\"'<<fvr::bc2::StereoFrameAdmissionNames[i]<<"\":"<<counts[i].load();}
+        out<<"}}";
+    }
+} stereoFrameAdmissionEvidence;
 struct RenderCallbackScope {
     RenderCallbackScope()noexcept{stereoRecovery.callbacks.fetch_add(1,std::memory_order_acq_rel);}
     ~RenderCallbackScope(){stereoRecovery.callbacks.fetch_sub(1,std::memory_order_release);}
@@ -458,7 +502,7 @@ bool ExpandWorkPool(unsigned frame)noexcept {
 }
 void StereoCheckpoint(const char* label)noexcept {
     if(stereoProgress==INVALID_HANDLE_VALUE)return;const auto& e=stereoExperiment;char line[1024]{};
-    const int length=snprintf(line,sizeof(line),"{\"step\":\"%s\",\"frame\":%u,\"main\":%u,\"eye\":%u,\"initialized\":%u,\"children\":%u,\"cached_restored\":%u,\"world\":%u,\"request\":%u,\"old_world\":%u,\"old_request\":%u,\"new_world\":%u,\"new_request\":%u,\"recovery_attempts\":%u,\"recovery_completed\":%u,\"recovery_failure\":%u,\"retirement_step\":%u,\"tick_ms\":%llu,\"published\":%llu,\"consumed\":%llu}\n",label,e.frame.load(),e.main,e.eye,unsigned(e.initialized),e.childrenAfter,unsigned(e.cachedViewsRestored),e.world,e.request,stereoRecovery.oldWorld.load(),stereoRecovery.oldRequest.load(),stereoRecovery.newWorld.load(),stereoRecovery.newRequest.load(),stereoRecovery.attempts.load(),stereoRecovery.completed.load(),stereoRecovery.failure.load(),stereoRecovery.retirementStep.load(),GetTickCount64(),frameBridge.Published(),frameBridge.Consumed());
+    const int length=snprintf(line,sizeof(line),"{\"step\":\"%s\",\"frame\":%u,\"main\":%u,\"eye\":%u,\"initialized\":%u,\"children\":%u,\"cached_restored\":%u,\"world\":%u,\"request\":%u,\"old_world\":%u,\"old_request\":%u,\"new_world\":%u,\"new_request\":%u,\"recovery_attempts\":%u,\"recovery_completed\":%u,\"recovery_failure\":%u,\"retirement_step\":%u,\"tick_ms\":%llu,\"published\":%llu,\"consumed\":%llu,\"live_cache_calls\":%u,\"live_cache_before\":%u,\"live_cache_registered\":%u,\"live_cache_after\":%u}\n",label,e.frame.load(),e.main,e.eye,unsigned(e.initialized),e.childrenAfter,unsigned(e.cachedViewsRestored),e.world,e.request,stereoRecovery.oldWorld.load(),stereoRecovery.oldRequest.load(),stereoRecovery.newWorld.load(),stereoRecovery.newRequest.load(),stereoRecovery.attempts.load(),stereoRecovery.completed.load(),stereoRecovery.failure.load(),stereoRecovery.retirementStep.load(),GetTickCount64(),frameBridge.Published(),frameBridge.Consumed(),liveCacheEvidence.calls.load(),liveCacheEvidence.beforeCount.load(),liveCacheEvidence.registeredCount.load(),liveCacheEvidence.afterCount.load());
     if(length>0&&unsigned(length)<sizeof(line)){DWORD written=0;WriteFile(stereoProgress,line,DWORD(length),&written,nullptr);FlushFileBuffers(stereoProgress);}
 }
 bool RefreshRegisteredCallbacks()noexcept {
@@ -503,6 +547,356 @@ struct TrackedCameraEvidence {
     std::atomic<unsigned> frame=0,mask=0;
     std::array<std::array<std::array<fvr::bc2::RenderViewCopy,4>,3>,2> cameras{};
 } trackedCameraEvidence;
+namespace weatherObservation=fvr::bc2::weatherObservation;
+weatherObservation::Gate weatherGate;
+fvr::graphics::DiagnosticImageLifetime weatherCallbackLifetime;
+bool weatherHooksDisabled=false;
+bool weatherObservationEnabled=false;unsigned weatherObservationDelayMs=50000;
+namespace weatherTranslation=fvr::bc2::weatherTranslation;
+bool weatherTranslationEnabled=false;
+bool weatherTranslationRuntime=false;
+std::atomic<bool> weatherRuntimeStopping=false;
+weatherTranslation::FrameCache weatherFrameCache;
+std::atomic<unsigned> weatherRuntimeFrames=0,weatherRuntimeCompleted=0,weatherRuntimeSkipped=0;
+std::atomic<unsigned> weatherRuntimeScopes=0,weatherRuntimeApplied=0,weatherRuntimeRestored=0,weatherRuntimeRestoreFailures=0,weatherRuntimeRejectedPublish=0;
+std::array<std::atomic<unsigned>,unsigned(weatherTranslation::FrameCache::Skip::Count)> weatherRuntimeClaimSkips{};
+constexpr std::array<const char*,10> weatherRuntimeReasonNames{"overlapping_scope","camera_read","producer_camera_changed","packet_lifetime","packet_matrix_or_arena","missing_or_overlapping_packets","apply_or_inside_validation","restore_conflict","producer_overlap","release_conflict"};
+std::array<std::atomic<unsigned>,weatherRuntimeReasonNames.size()> weatherRuntimeReasons{};
+std::atomic<std::uint64_t> weatherRuntimeOverheadTotal=0,weatherRuntimeOverheadMax=0;
+struct WeatherRuntimeTimer {
+    std::int64_t started=weatherTranslationRuntime?Qpc():0;
+    ~WeatherRuntimeTimer(){if(started){const auto elapsed=std::uint64_t(Qpc()-started);weatherRuntimeOverheadTotal.fetch_add(elapsed);
+        auto max=weatherRuntimeOverheadMax.load();while(elapsed>max&&!weatherRuntimeOverheadMax.compare_exchange_weak(max,elapsed)){} }}
+};
+std::atomic<bool> weatherTranslationBusy=false,weatherTranslationFailed=false;
+std::atomic<unsigned> weatherTranslationAttempts=0,weatherTranslationOverflow=0,weatherTranslationWrites=0;
+struct WeatherPayload {
+    unsigned kind=0,thread=0,phase=0,eye=0,rootEye=UINT32_MAX,invocation=0,callsite=0;
+    std::array<unsigned,6> args{};
+    std::array<std::array<unsigned,16>,2> cameraTransforms{};
+    unsigned context=0,input=0,validMask=0;
+    std::array<unsigned,16> inputWorld{};
+    std::array<unsigned,4> addresses{};
+    std::array<std::array<unsigned,16>,4> values{};
+    bool activeAfter=false;
+    weatherTranslation::Packet packet{};bool packetValid=false;
+};
+struct WeatherRow {WeatherPayload value{};std::atomic<bool> ready=false;};
+std::array<std::array<WeatherRow,weatherObservation::Gate::CapacityPerEye>,2> weatherRows;
+std::atomic<unsigned> weatherUnattributed=0,weatherIdentityMismatches=0,weatherImageInvalidMask=0;
+thread_local WeatherRow* weatherInvocation=nullptr;
+thread_local int weatherBoundaryEye=-1;
+thread_local unsigned weatherBoundaryPhase=0;
+weatherObservation::Key CurrentWeatherKey()noexcept {
+    const auto& e=stereoExperiment;return {e.world,e.request,e.main,e.eye,e.frame.load(std::memory_order_acquire)};
+}
+bool WeatherOwnerCurrent(weatherObservation::Key key)noexcept {
+    return weatherGate.Active(key)&&key==CurrentWeatherKey()&&tracked.state.load(std::memory_order_acquire)==1&&
+        U32(key.world+0x88)==key.frame&&U32(key.request+8)==key.world&&
+        U32(key.main)==imageBase+layout.vtable&&U32(key.eye)==imageBase+layout.vtable&&
+        U32(key.main+0x70)==key.request&&U32(key.eye+0x70)==key.request;
+}
+bool WeatherDrawCurrent(weatherObservation::Key key,unsigned world,unsigned request,unsigned view)noexcept {
+    return world==key.world&&request==key.request&&(view==key.main||view==key.eye)&&WeatherOwnerCurrent(key);
+}
+bool WeatherRestoreOwnerCurrent(weatherObservation::Key key)noexcept {
+    // Shutdown may close observation admission while an admitted scope unwinds.
+    // Restoration still requires the exact live render identity, not admission.
+    return key.Valid()&&key==CurrentWeatherKey()&&tracked.state.load(std::memory_order_acquire)==1&&
+        U32(key.world+0x88)==key.frame&&U32(key.request+8)==key.world&&
+        U32(key.main)==imageBase+layout.vtable&&U32(key.eye)==imageBase+layout.vtable&&
+        U32(key.main+0x70)==key.request&&U32(key.eye+0x70)==key.request;
+}
+std::optional<weatherTranslation::Packet> ReadWeatherPacket(unsigned address,unsigned owner)noexcept {
+    weatherTranslation::Packet p{};p.address=address;p.owner=owner;
+    if(address<0x10000||address>UINT32_MAX-128||owner<0x10000||owner>UINT32_MAX-0x40)return {};
+    p.packetOwner=U32(address);p.world=U32(address+0x18);p.flags=U32(address+8);p.arena=U32(owner+8);
+    if(p.arena<0x10000||p.arena>UINT32_MAX-12)return {};
+    p.capacity=U32(p.arena);p.base=U32(p.arena+4);p.used=U32(p.arena+8);
+    if(!weatherTranslation::Bounds(p)||!Read(p.world,p.matrix.data(),64)||
+       U32(address)!=owner||U32(address+0x18)!=p.world||U32(owner+8)!=p.arena||
+       U32(p.arena)!=p.capacity||U32(p.arena+4)!=p.base)return {};
+    return p;
+}
+struct WeatherBoundaryScope {
+    int savedEye=weatherBoundaryEye;unsigned savedPhase=weatherBoundaryPhase;
+    WeatherBoundaryScope(unsigned world,unsigned request,unsigned view,unsigned phase)noexcept {
+        weatherBoundaryEye=-1;weatherBoundaryPhase=0;
+        if(!weatherObservationEnabled)return;
+        const auto key=weatherGate.Selected();
+        if(WeatherDrawCurrent(key,world,request,view)){
+            weatherBoundaryEye=view==key.main?0:1;weatherBoundaryPhase=phase;
+        }
+    }
+    ~WeatherBoundaryScope(){weatherBoundaryEye=savedEye;weatherBoundaryPhase=savedPhase;}
+};
+// Native795745 environment: thiscall(renderer,contextOwner,kind,currentCamera,
+// rootCamera,viewport,weather). Copies evidence only; calls original exactly once.
+using EnvironmentFn=void*(__thiscall*)(void*,void*,unsigned,void*,void*,void*,void*);
+using WorldMatrixFn=void*(__thiscall*)(void*,const void*);
+EnvironmentFn environmentOriginal=nullptr;WorldMatrixFn weatherWorldOriginal=nullptr;
+struct WeatherFrameProducer {
+    weatherTranslation::FrameToken token{};unsigned owner=0,slot=0,root=0;bool captured=false,duplicate=false,cameraValid=false;
+    weatherTranslation::Packet packet{};weatherTranslation::Words camera{};
+};
+thread_local WeatherFrameProducer* weatherFrameProducer=nullptr;
+void FinishWeatherProducer(WeatherFrameProducer& p,bool returned)noexcept {
+    if(!p.token)return;WeatherRuntimeTimer timer;
+    weatherTranslation::Words camera{};
+    const bool valid=returned&&p.cameraValid&&p.captured&&!p.duplicate&&!weatherRuntimeStopping.load()&&weatherFrameCache.Current(p.token)&&WeatherRestoreOwnerCurrent(p.token.key)&&
+       Read(p.root+0x50,camera.data(),64)&&camera==p.camera;
+    if(!weatherFrameCache.CompleteProducer(p.token,p.slot,valid?&p.packet:nullptr,valid?&p.camera:nullptr))weatherRuntimeRejectedPublish.fetch_add(1);
+}
+void* OriginalEnvironmentWithWeather(void* self,void* owner,unsigned kind,void* camera,void* rootCamera,void* viewport,void* weather,
+    WeatherFrameProducer* producer,WeatherFrameProducer* priorProducer,WeatherRow* priorInvocation,
+    std::optional<fvr::graphics::DiagnosticImageLifetime::Scope>* lifetime,std::optional<RenderCallbackScope>* callback){
+    struct Call {void* self;void* owner;unsigned kind;void* camera;void* rootCamera;void* viewport;void* weather;
+        WeatherFrameProducer* producer;WeatherFrameProducer* priorProducer;WeatherRow* priorInvocation;
+        std::optional<fvr::graphics::DiagnosticImageLifetime::Scope>* lifetime;std::optional<RenderCallbackScope>* callback;
+    } call{self,owner,kind,camera,rootCamera,viewport,weather,producer,priorProducer,priorInvocation,lifetime,callback};
+    return weatherTranslation::InvokeWithFinally([](void* raw)->void* {const auto& c=*static_cast<Call*>(raw);
+        return environmentOriginal(c.self,c.owner,c.kind,c.camera,c.rootCamera,c.viewport,c.weather);
+    },&call,[](void* raw,bool returned)noexcept {const auto& c=*static_cast<Call*>(raw);
+        weatherFrameProducer=c.priorProducer;
+        if(c.producer)FinishWeatherProducer(*c.producer,returned);
+        if(!returned){weatherInvocation=c.priorInvocation;c.callback->reset();c.lifetime->reset();}
+    });
+}
+void* __fastcall EnvironmentObserveHook(void* self,void*,void* owner,unsigned kind,void* camera,void* rootCamera,void* viewport,void* weather){
+    std::optional<fvr::graphics::DiagnosticImageLifetime::Scope> weatherScope;weatherScope.emplace(weatherCallbackLifetime);
+    if(!weatherScope->Active()||(!weatherTranslationRuntime&&weatherGate.Closed())){weatherScope.reset();return environmentOriginal(self,owner,kind,camera,rootCamera,viewport,weather);}
+    std::optional<RenderCallbackScope> callback;callback.emplace();auto* previous=weatherInvocation;weatherInvocation=nullptr;
+    WeatherFrameProducer producer;auto* priorProducer=weatherFrameProducer;weatherFrameProducer=nullptr;
+    if(weatherTranslationRuntime&&!weatherRuntimeStopping.load()&&(kind==1||kind==8)){
+        WeatherRuntimeTimer timer;const auto current=CurrentWeatherKey();
+        if(reinterpret_cast<unsigned>(rootCamera)==current.eye+layout.primaryOffset&&WeatherRestoreOwnerCurrent(current)){
+            producer.owner=reinterpret_cast<unsigned>(owner);producer.slot=kind==1?0:1;producer.root=reinterpret_cast<unsigned>(rootCamera);
+            producer.token=weatherFrameCache.EnterProducer(current,producer.slot);
+            if(producer.token){producer.cameraValid=Read(producer.root+0x50,producer.camera.data(),64);weatherFrameProducer=&producer;}
+        }
+    }
+    const auto key=weatherGate.Selected();
+    if(WeatherOwnerCurrent(key)){
+        const auto root=reinterpret_cast<unsigned>(rootCamera);
+        const auto rootEye=root==key.main+layout.primaryOffset?0u:(root==key.eye+layout.primaryOffset?1u:UINT32_MAX);
+        const unsigned eye=weatherBoundaryEye>=0?unsigned(weatherBoundaryEye):rootEye;
+        const auto index=weatherGate.Reserve(key,eye);
+        if(index!=weatherObservation::Gate::NoSlot){
+            auto& row=weatherRows[eye][index];auto& p=row.value;weatherInvocation=&row;
+            p.kind=0;p.thread=GetCurrentThreadId();p.phase=weatherBoundaryPhase;p.eye=eye;p.rootEye=rootEye;p.invocation=index;
+            p.callsite=reinterpret_cast<unsigned>(_ReturnAddress());
+            p.args={reinterpret_cast<unsigned>(owner),kind,reinterpret_cast<unsigned>(camera),root,reinterpret_cast<unsigned>(viewport),reinterpret_cast<unsigned>(weather)};
+            if(Read(p.args[2]+0x50,p.cameraTransforms[0].data(),64))p.validMask|=1;
+            if(Read(p.args[3]+0x50,p.cameraTransforms[1].data(),64))p.validMask|=2;
+        }else if(eye>1)weatherUnattributed.fetch_add(1,std::memory_order_relaxed);
+    }
+    auto* result=OriginalEnvironmentWithWeather(self,owner,kind,camera,rootCamera,viewport,weather,
+        &producer,priorProducer,previous,&weatherScope,&callback);
+    if(weatherInvocation){weatherInvocation->value.activeAfter=WeatherOwnerCurrent(key);
+        if(!weatherInvocation->value.activeAfter)weatherIdentityMismatches.fetch_add(1,std::memory_order_relaxed);
+        weatherInvocation->ready.store(true,std::memory_order_release);}
+    weatherInvocation=previous;
+    return result; // Preserve native EAX, including callers outside weather.
+}
+void* OriginalWorldWithWeather(void* self,const void* matrix,
+    std::optional<fvr::graphics::DiagnosticImageLifetime::Scope>* lifetime,std::optional<RenderCallbackScope>* callback){
+    struct Call {void* self;const void* matrix;std::optional<fvr::graphics::DiagnosticImageLifetime::Scope>* lifetime;
+        std::optional<RenderCallbackScope>* callback;} call{self,matrix,lifetime,callback};
+    return weatherTranslation::InvokeWithFinally([](void* raw)->void* {const auto& c=*static_cast<Call*>(raw);return weatherWorldOriginal(c.self,c.matrix);
+    },&call,[](void* raw,bool returned)noexcept {const auto& c=*static_cast<Call*>(raw);if(!returned){c.callback->reset();c.lifetime->reset();}});
+}
+void* __fastcall WeatherWorldObserveHook(void* self,void*,const void* matrix){
+    if(!weatherInvocation&&!weatherFrameProducer)return weatherWorldOriginal(self,matrix);
+    std::optional<fvr::graphics::DiagnosticImageLifetime::Scope> weatherScope;weatherScope.emplace(weatherCallbackLifetime);
+    if(!weatherScope->Active()||(!weatherTranslationRuntime&&weatherGate.Closed())){weatherScope.reset();return weatherWorldOriginal(self,matrix);}
+    std::optional<RenderCallbackScope> callback;callback.emplace();WeatherRow* row=nullptr;
+    const auto site=reinterpret_cast<unsigned>(_ReturnAddress());const auto key=weatherGate.Selected();
+    if(weatherInvocation&&site>=imageBase&&weatherObservation::WorldSite(site-unsigned(imageBase))&&WeatherOwnerCurrent(key)){
+        const unsigned eye=weatherInvocation->value.eye,index=weatherGate.Reserve(key,eye);
+        if(index!=weatherObservation::Gate::NoSlot){row=&weatherRows[eye][index];row->value=weatherInvocation->value;
+            auto& p=row->value;p.kind=1;p.thread=GetCurrentThreadId();p.callsite=site;p.context=reinterpret_cast<unsigned>(self);p.input=reinterpret_cast<unsigned>(matrix);
+            if(Read(p.input,p.inputWorld.data(),64))p.validMask|=4;
+        }
+    }
+    auto* result=OriginalWorldWithWeather(self,matrix,&weatherScope,&callback);
+    if(weatherFrameProducer&&weatherFrameProducer->token&&site==imageBase+(weatherFrameProducer->slot?0x7df13e:0x7de3cc)){
+        WeatherRuntimeTimer timer;auto& p=*weatherFrameProducer;
+        if(p.captured)p.duplicate=true;
+        else if(weatherFrameCache.Current(p.token)&&WeatherRestoreOwnerCurrent(p.token.key))if(const auto packet=ReadWeatherPacket(reinterpret_cast<unsigned>(self),p.owner)){p.packet=*packet;p.captured=true;}
+    }
+    if(row){auto& p=row->value;
+        for(unsigned part=0;part<4;++part){p.addresses[part]=U32(p.context+0x18+part*4);
+            if(Read(p.addresses[part],p.values[part].data(),part==3?16:64))p.validMask|=8u<<part;}
+        p.activeAfter=WeatherOwnerCurrent(key);if(!p.activeAfter)weatherIdentityMismatches.fetch_add(1,std::memory_order_relaxed);
+        if(weatherTranslationEnabled||weatherTranslationRuntime)if(const auto packet=ReadWeatherPacket(p.context,p.args[0])){p.packet=*packet;p.packetValid=true;}
+        row->ready.store(true,std::memory_order_release);
+    }
+    return result;
+}
+struct WeatherTranslationAttempt {
+    weatherObservation::Key beforeKey{},insideKey{},afterKey{};
+    unsigned phase=0,eye=0,thread=0,beforeMask=0,insideMask=0,afterMask=0,writtenMask=0,unresolvedMask=0;
+    const char* reason="not_started";bool applied=false,restored=false,validated=false;
+    std::array<weatherTranslation::Packet,2> before{},inside{},after{};
+    std::atomic<bool> ready=false;
+};
+std::array<WeatherTranslationAttempt,2> weatherTranslationEvidence;
+std::mutex weatherRuntimeEvidenceMutex;
+struct WeatherRuntimePair {weatherTranslation::FrameToken token{};unsigned mask=0;std::array<WeatherTranslationAttempt,2> scopes{};};
+WeatherRuntimePair weatherRuntimePending,weatherRuntimeFirst,weatherRuntimeSelected,weatherRuntimeLatest;
+void CopyWeatherAttempt(WeatherTranslationAttempt& to,const WeatherTranslationAttempt& from)noexcept {
+    to.beforeKey=from.beforeKey;to.insideKey=from.insideKey;to.afterKey=from.afterKey;
+    to.phase=from.phase;to.eye=from.eye;to.thread=from.thread;to.beforeMask=from.beforeMask;to.insideMask=from.insideMask;to.afterMask=from.afterMask;
+    to.writtenMask=from.writtenMask;to.unresolvedMask=from.unresolvedMask;to.reason=from.reason;to.applied=from.applied;to.restored=from.restored;to.validated=from.validated;
+    to.before=from.before;to.inside=from.inside;to.after=from.after;to.ready.store(from.ready.load(std::memory_order_acquire),std::memory_order_release);
+}
+void CopyWeatherRuntimePair(WeatherRuntimePair& to,const WeatherRuntimePair& from)noexcept {
+    to.token=from.token;to.mask=from.mask;for(unsigned i=0;i<2;++i)CopyWeatherAttempt(to.scopes[i],from.scopes[i]);
+}
+void BeginWeatherRuntime()noexcept {
+    if(!weatherTranslationRuntime||weatherRuntimeStopping.load())return;WeatherRuntimeTimer timer;
+    const auto key=CurrentWeatherKey();if(!weatherFrameCache.Begin(key))return;
+    std::lock_guard lock(weatherRuntimeEvidenceMutex);weatherRuntimePending.token=weatherFrameCache.Capture(key);weatherRuntimePending.mask=0;
+    weatherRuntimeFrames.fetch_add(1);
+}
+void RecordWeatherRuntime(weatherTranslation::FrameToken token,const WeatherTranslationAttempt& scope)noexcept {
+    weatherRuntimeScopes.fetch_add(1);weatherRuntimeApplied.fetch_add(scope.applied);weatherRuntimeRestored.fetch_add(scope.restored);
+    std::lock_guard lock(weatherRuntimeEvidenceMutex);
+    if(token!=weatherRuntimePending.token||scope.phase<1||scope.phase>2)return;
+    CopyWeatherAttempt(weatherRuntimePending.scopes[scope.phase-1],scope);weatherRuntimePending.mask|=1u<<(scope.phase-1);
+}
+void EndWeatherRuntime()noexcept {
+    if(!weatherTranslationRuntime)return;WeatherRuntimeTimer timer;
+    const auto token=weatherFrameCache.Capture(CurrentWeatherKey());if(!token)return;
+    {std::lock_guard lock(weatherRuntimeEvidenceMutex);
+        const auto& p=weatherRuntimePending;
+        const bool complete=p.token==token&&p.mask==3&&p.scopes[0].restored&&p.scopes[1].restored&&p.scopes[0].validated&&p.scopes[1].validated;
+        if(complete){weatherRuntimeCompleted.fetch_add(1);if(!weatherRuntimeFirst.mask)CopyWeatherRuntimePair(weatherRuntimeFirst,p);
+            if(weatherObservationEnabled&&token.key==weatherGate.Selected())CopyWeatherRuntimePair(weatherRuntimeSelected,p);
+            CopyWeatherRuntimePair(weatherRuntimeLatest,p);
+        }else weatherRuntimeSkipped.fetch_add(1);
+    }
+    if(!weatherFrameCache.Retire(token)){weatherRuntimeRestoreFailures.fetch_add(1);tracked.restoreFailures.fetch_add(1);tracked.capturesOkay=false;}
+}
+// This leaf cannot run a C++ destructor during a structured exception. All reads
+// and the twelve-byte write are protected; no protection change or stale restore.
+weatherTranslation::Replaced CompareWeatherTranslation(unsigned address,const weatherTranslation::Words& expected,
+    const weatherTranslation::Words& replacement)noexcept {
+    MEMORY_BASIC_INFORMATION region{};
+    if(!VirtualQuery(reinterpret_cast<void*>(address),&region,sizeof(region))||region.State!=MEM_COMMIT||
+       (region.Protect&(PAGE_GUARD|PAGE_NOACCESS))||(region.Protect&0xff)!=PAGE_READWRITE||
+       address-reinterpret_cast<std::uintptr_t>(region.BaseAddress)>region.RegionSize||
+       64>region.RegionSize-(address-reinterpret_cast<std::uintptr_t>(region.BaseAddress)))return weatherTranslation::Replaced::Rejected;
+    bool writing=false;
+    __try {
+        if(std::memcmp(reinterpret_cast<void*>(address),expected.data(),64))return weatherTranslation::Replaced::Rejected;
+        writing=true;std::memcpy(reinterpret_cast<void*>(address+48),replacement.data()+12,12);
+        weatherTranslationWrites.fetch_add(1,std::memory_order_relaxed);
+        return weatherTranslation::Replaced::Applied;
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        return writing?weatherTranslation::Replaced::Indeterminate:weatherTranslation::Replaced::Rejected;
+    }
+}
+struct WeatherTranslationScope {
+    weatherObservation::Key key{};WeatherTranslationAttempt* evidence=nullptr;
+    WeatherTranslationAttempt localEvidence{};weatherTranslation::FrameToken runtimeToken{};bool runtimeClaimed=false;
+    std::array<weatherTranslation::Plan,2> plans{};weatherTranslation::Transaction transaction;
+    std::optional<fvr::graphics::DiagnosticImageLifetime::Scope> callback;
+    bool owns=false,finished=false;
+    WeatherTranslationScope(unsigned world,unsigned request,unsigned view,unsigned phase)noexcept {
+        if(!weatherTranslationEnabled&&!weatherTranslationRuntime)return;WeatherRuntimeTimer timer;
+        key=weatherTranslationRuntime?CurrentWeatherKey():weatherGate.Selected();
+        if(view!=key.main||world!=key.world||request!=key.request||
+           !(weatherTranslationRuntime?(!weatherRuntimeStopping.load()&&WeatherRestoreOwnerCurrent(key)):WeatherDrawCurrent(key,world,request,view)))return;
+        callback.emplace(weatherCallbackLifetime);if(!callback->Active())return;
+        std::optional<weatherTranslation::FramePackets> runtimePackets;
+        if(weatherTranslationRuntime){runtimeToken=weatherFrameCache.Capture(key);weatherTranslation::FrameCache::Skip skip{};
+            runtimePackets=weatherFrameCache.Claim(runtimeToken,phase,&skip);
+            if(!runtimePackets){weatherRuntimeClaimSkips[unsigned(skip)].fetch_add(1);return;}runtimeClaimed=true;evidence=&localEvidence;
+        }else {const auto index=weatherTranslationAttempts.fetch_add(1,std::memory_order_relaxed);
+            if(index>=weatherTranslationEvidence.size()){weatherTranslationOverflow.fetch_add(1);weatherTranslationFailed=true;return;}
+            evidence=&weatherTranslationEvidence[index];evidence->beforeKey=key;evidence->phase=phase;evidence->thread=GetCurrentThreadId();
+            if(weatherTranslationFailed.load()||phase!=index+1){Reject("prior_failure_or_phase_order");return;}}
+        evidence->beforeKey=key;evidence->phase=phase;evidence->thread=GetCurrentThreadId();
+        bool free=false;
+        if(!weatherTranslationBusy.compare_exchange_strong(free,true,std::memory_order_acq_rel)){Reject("overlapping_scope");return;}owns=true;
+        weatherTranslation::Words left{},right{};
+        if(!Read(key.main+layout.primaryOffset+0x50,left.data(),64)||!Read(key.eye+layout.primaryOffset+0x50,right.data(),64)){Reject("camera_read");return;}
+        unsigned mask=0;
+        if(runtimePackets){
+            for(unsigned slot=0;slot<2;++slot){const auto& captured=runtimePackets->packets[slot];
+                if(runtimePackets->cameras[slot]!=right){Reject("producer_camera_changed");return;}
+                const auto current=ReadWeatherPacket(captured.address,captured.owner);
+                if(!current){Reject("packet_lifetime");return;}const auto plan=weatherTranslation::MakePlan(captured,*current,left,right);
+                if(!plan){Reject("packet_matrix_or_arena");return;}plans[slot]=*plan;evidence->before[slot]=*current;mask|=1u<<slot;
+            }
+        }else for(unsigned eye=0;eye<2;++eye)for(unsigned i=0;i<weatherGate.Count(eye);++i){
+            const auto& row=weatherRows[eye][i];if(!row.ready.load(std::memory_order_acquire)){Reject("builder_incomplete");return;}
+            const auto& p=row.value;if(p.kind!=1)continue;
+            const int slot=p.args[1]==1&&p.callsite==imageBase+0x7de3cc?0:(p.args[1]==8&&p.callsite==imageBase+0x7df13e?1:-1);
+            if(slot<0)continue;
+            if((mask&(1u<<slot))||!p.activeAfter||!p.packetValid||p.rootEye!=1||p.cameraTransforms[1]!=right||
+               p.invocation>=weatherGate.Count(eye)||!weatherRows[eye][p.invocation].ready.load(std::memory_order_acquire)||
+               weatherRows[eye][p.invocation].value.kind!=0||!weatherRows[eye][p.invocation].value.activeAfter){Reject("packet_identity");return;}
+            const auto current=ReadWeatherPacket(p.context,p.args[0]);
+            if(!current){Reject("packet_lifetime");return;}
+            const auto plan=weatherTranslation::MakePlan(p.packet,*current,left,right);
+            if(!plan){Reject("packet_matrix_or_arena");return;}
+            plans[slot]=*plan;evidence->before[slot]=*current;mask|=1u<<slot;
+        }
+        evidence->beforeMask=mask;
+        if(mask!=3||!WeatherRestoreOwnerCurrent(key)||!transaction.Stage(plans)){Reject("missing_or_overlapping_packets");return;}
+        evidence->applied=transaction.Apply([&](unsigned i,const auto& a,const auto& b){return Replace(i,a,b);});
+        evidence->writtenMask=transaction.WrittenMask();evidence->insideKey=CurrentWeatherKey();
+        evidence->insideMask=Snapshot(evidence->inside);
+        bool insideExact=evidence->insideMask==3&&WeatherRestoreOwnerCurrent(key);
+        if(insideExact)for(unsigned i=0;i<2;++i)insideExact&=weatherTranslation::SameStorage(plans[i].packet,evidence->inside[i])&&evidence->inside[i].matrix==plans[i].after;
+        if(!evidence->applied||!insideExact){Reject("apply_or_inside_validation");Finish();return;}
+        evidence->validated=true;
+        evidence->reason="applied";
+    }
+    void Reject(const char* reason)noexcept {if(evidence){evidence->reason=reason;evidence->validated=false;}
+        if(!weatherTranslationRuntime)weatherTranslationFailed.store(true,std::memory_order_release);
+        else for(unsigned i=0;i<weatherRuntimeReasonNames.size();++i)if(!std::strcmp(reason,weatherRuntimeReasonNames[i])){weatherRuntimeReasons[i].fetch_add(1);break;}}
+    unsigned Snapshot(std::array<weatherTranslation::Packet,2>& result)noexcept {
+        if(!WeatherRestoreOwnerCurrent(key))return 0;unsigned mask=0;
+        for(unsigned i=0;i<2;++i)if(const auto p=ReadWeatherPacket(plans[i].packet.address,plans[i].packet.owner)){result[i]=*p;mask|=1u<<i;}
+        return WeatherRestoreOwnerCurrent(key)?mask:0;
+    }
+    weatherTranslation::Replaced Replace(unsigned i,const weatherTranslation::Words& expected,const weatherTranslation::Words& replacement)noexcept {
+        if(!owns||(runtimeClaimed&&!weatherFrameCache.Current(runtimeToken))||!WeatherRestoreOwnerCurrent(key)||GetCurrentThreadId()!=evidence->thread)return weatherTranslation::Replaced::Rejected;
+        if(runtimeClaimed&&replacement==plans[i].after&&!weatherFrameCache.ConsumerIntact(runtimeToken,evidence->phase))return weatherTranslation::Replaced::Rejected;
+        const auto current=ReadWeatherPacket(plans[i].packet.address,plans[i].packet.owner);
+        if(!current||!weatherTranslation::SameStorage(plans[i].packet,*current)||current->matrix!=expected||!WeatherRestoreOwnerCurrent(key))return weatherTranslation::Replaced::Rejected;
+        return CompareWeatherTranslation(current->world,expected,replacement);
+    }
+    void Finish()noexcept {
+        if(finished)return;finished=true;WeatherRuntimeTimer timer;
+        if(evidence){
+            const bool restored=transaction.Restore([&](unsigned i,const auto& a,const auto& b){return Replace(i,a,b);});
+            evidence->restored=restored&&evidence->applied;evidence->unresolvedMask=transaction.UnresolvedMask();
+            evidence->afterKey=CurrentWeatherKey();evidence->afterMask=Snapshot(evidence->after);
+            bool exact=WeatherRestoreOwnerCurrent(key)&&evidence->afterMask==3;
+            if(exact)for(unsigned i=0;i<2;++i)exact&=weatherTranslation::SameStorage(plans[i].packet,evidence->after[i])&&evidence->after[i].matrix==plans[i].packet.matrix;
+            if(!restored||(evidence->writtenMask&&!exact)){
+                Reject("restore_conflict");tracked.restoreFailures.fetch_add(1,std::memory_order_release);tracked.capturesOkay=false;
+                if(weatherTranslationRuntime)weatherRuntimeRestoreFailures.fetch_add(1);
+            }else if(evidence->applied)evidence->reason="restored";
+            evidence->ready.store(true,std::memory_order_release);
+        }
+        if(runtimeClaimed){
+            if(!weatherFrameCache.ConsumerIntact(runtimeToken,evidence->phase)&&evidence->writtenMask){Reject("producer_overlap");weatherRuntimeRestoreFailures.fetch_add(1);tracked.restoreFailures.fetch_add(1);tracked.capturesOkay=false;evidence->restored=false;}
+            if(!weatherFrameCache.Release(runtimeToken,evidence->phase)){Reject("release_conflict");weatherRuntimeRestoreFailures.fetch_add(1);tracked.restoreFailures.fetch_add(1);tracked.capturesOkay=false;evidence->restored=false;}
+            RecordWeatherRuntime(runtimeToken,*evidence);runtimeClaimed=false;}
+        if(owns){weatherTranslationBusy.store(false,std::memory_order_release);owns=false;}
+        callback.reset();
+    }
+    ~WeatherTranslationScope(){Finish();}
+};
+void* OriginalPrepareWithWeatherScope(void* self,void* request,void* view,WeatherTranslationScope* weather){
+    __try {return prepareOriginal(self,request,view);}
+    __finally {if(weather)weather->Finish();}
+}
 std::atomic<unsigned> vehicleCameraEvidenceFrame=0;
 // Observe native camera bindings; correction scopes below restore exact writes.
 using ContextCameraFn=void(__thiscall*)(void*,void*,void*);
@@ -516,11 +910,13 @@ std::array<DerivedProjection,256> derivedProjections;std::atomic<unsigned> deriv
 std::atomic<bool> derivedFrameFailed=false;
 thread_local bool drawingNativeView=false;
 struct WeaponContext {unsigned view=0,projection=0,position=0;std::array<float,36> right{},left{};std::atomic<unsigned> frame=0;};
-std::array<WeaponContext,32> weaponContexts;std::atomic<unsigned> weaponContextCount=0,weaponProjectionCopies=0,weaponContextFailures=0;
+std::array<WeaponContext,32> weaponContexts;std::atomic<unsigned> weaponContextCount=0,weaponProjectionCopies=0;
+fvr::runtime::FrameObservationFailures weaponContextFailures;
 struct ProjectionBinding {unsigned context=0,address=0,callsite=0,thread=0,frame=0;int gather=-1;std::array<float,16> values{};};
 std::array<ProjectionBinding,512> projectionEvidence;std::atomic<unsigned> projectionCount=0;
 void* __fastcall ProjectionContextHook(void* self,void*,const void* matrix){
     RenderCallbackScope callback;
+    const auto observationToken=weaponContextFailures.Capture();
     const auto returnSite=reinterpret_cast<unsigned>(_ReturnAddress());
     std::array<float,16> weaponProjection{};bool weapon=false;
     if(viewAnchorMode&&streamMode&&tracked.state.load(std::memory_order_acquire)==1&&returnSite==imageBase+viewAnchor.projectionCaller){
@@ -529,22 +925,23 @@ void* __fastcall ProjectionContextHook(void* self,void*,const void* matrix){
             std::memcpy(right.data(),tracked.right[0].bytes.data()+0x2e0,64);
             if(const auto adjusted=fvr::math::RetargetFirstPersonProjection(source,right)){weaponProjection=*adjusted;matrix=weaponProjection.data();weapon=true;++weaponProjectionCopies;}
         }
-        if(!weapon)++weaponContextFailures;
+        if(!weapon)weaponContextFailures.Reject(observationToken);
     }
     void* const result=projectionContextOriginal(self,matrix);
     if(!streamMode||tracked.state.load(std::memory_order_acquire)!=1)return result;
+    if(!weaponContextFailures.Current(observationToken))return result;
     if(weapon){
         const auto index=weaponContextCount.fetch_add(1);
-        if(index>=weaponContexts.size()){++weaponContextFailures;return result;}
+        if(index>=weaponContexts.size()){weaponContextFailures.Reject(observationToken);return result;}
         auto& w=weaponContexts[index];const auto at=reinterpret_cast<unsigned>(self);
         w.view=U32(at+0x1c);w.projection=U32(at+0x20);w.position=U32(at+0x24);
-        if(!Read(w.view,w.right.data(),64)||!Read(w.projection,w.right.data()+16,64)||!Read(w.position,w.right.data()+32,16)){++weaponContextFailures;return result;}
+        if(!Read(w.view,w.right.data(),64)||!Read(w.projection,w.right.data()+16,64)||!Read(w.position,w.right.data()+32,16)){weaponContextFailures.Reject(observationToken);return result;}
         // The authored first-person transform now follows the tracked right eye.
         std::array<float,16> expectedView{};std::memcpy(expectedView.data(),tracked.right[0].bytes.data()+0x220,64);
-        for(unsigned i=0;i<16;++i)if(std::abs(w.right[i]-expectedView[i])>.001f){++weaponContextFailures;return result;}
+        for(unsigned i=0;i<16;++i)if(std::abs(w.right[i]-expectedView[i])>.001f){weaponContextFailures.Reject(observationToken);return result;}
         w.left=w.right;std::memcpy(w.left.data(),tracked.written[0].bytes.data()+0x220,64);
         std::array<float,16> leftProjection{};std::memcpy(leftProjection.data(),tracked.written[0].bytes.data()+0x2e0,64);
-        const auto adjusted=fvr::math::RetargetFirstPersonProjection(weaponProjection,leftProjection);if(!adjusted){++weaponContextFailures;return result;}
+        const auto adjusted=fvr::math::RetargetFirstPersonProjection(weaponProjection,leftProjection);if(!adjusted){weaponContextFailures.Reject(observationToken);return result;}
         std::memcpy(w.left.data()+16,adjusted->data(),64);std::memcpy(w.left.data()+32,tracked.written[0].bytes.data()+0x80,16);
         w.frame.store(stereoExperiment.frame,std::memory_order_release);
     }
@@ -635,7 +1032,7 @@ struct ScopedContextEye {
                 {reinterpret_cast<const std::byte*>(binding.before.data()),64},{reinterpret_cast<const std::byte*>(binding.written.data()),64}))return false;
         }
         const auto weapons=weaponContextCount.load(std::memory_order_acquire);
-        if(weapons>weaponContexts.size()||weaponContextFailures.load())return false;
+        if(weapons>weaponContexts.size()||!weaponContextFailures.CanApply(contextRestoreFailures.load()!=0))return false;
         for(unsigned i=0;i<weapons;++i){const auto& w=weaponContexts[i];if(w.frame.load(std::memory_order_acquire)!=stereoExperiment.frame)return false;
             const unsigned addresses[]={w.view,w.projection,w.position},offsets[]={0,64,128},sizes[]={64,64,16};
             for(unsigned part=0;part<3;++part)if(!writes.Stage({reinterpret_cast<std::byte*>(addresses[part]),sizes[part]},
@@ -688,7 +1085,8 @@ fvr::bc2::BodyPropSources ReadBodySources()noexcept {
     return {ReadBodySource(fvr::bc2::rigPublication::ReadBodyAmmoRenderSource,0),
         ReadBodySource(fvr::bc2::rigPublication::ReadHolsteredBodyRenderSource,1),
         ReadBodySource(fvr::bc2::rigPublication::ReadCarriedBodyRenderSource,2),
-        ReadBodySource(fvr::bc2::rigPublication::ReadStowedAmmoRenderSource,3)};
+        ReadBodySource(fvr::bc2::rigPublication::ReadStowedAmmoRenderSource,3),
+        fvr::bc2::gameplay::ReadVehicleReticle(ReloadDrawNowNs())};
 }
 struct BufferEvidence {ComPtr<ID3D11Buffer> staging;std::vector<unsigned char> bytes;unsigned source=0;bool done=false;};
 struct EyeBufferEvidence {bool queued=false;std::atomic<bool> complete=false;std::array<BufferEvidence,14> buffers;ComPtr<ID3D11DeviceContext> context;unsigned indices=0;};
@@ -925,11 +1323,24 @@ void BeginTrackedFrame(unsigned incomingFrame)noexcept {
     const auto prior=tracked.state.load(std::memory_order_acquire);
     if(prior==1||prior==3){if(prior==3)stereoRecovery.cancelUnwrittenRequest.store(tracked.lease.requestId,std::memory_order_release);
         RecordStereoProgress(fvr::bc2::StereoProgressReason::BeginActiveTransaction,incomingFrame);return;}
+    const fvr::bc2::StereoFrameAdmissionBinding binding{unsigned(imageBase+profile.gameRendererGlobal),
+        stereoRecovery.subsystemType,stereoRecovery.worldType,unsigned(imageBase+lifecycle.requestVtable),unsigned(imageBase+layout.vtable)};
+    fvr::bc2::StereoFrameAdmissionSnapshot admission{};
+    const auto reason=fvr::bc2::InspectStereoFrameAdmission(binding,{e.world,e.request,e.main,e.eye},
+        [](unsigned at,void* dst,std::size_t bytes)noexcept{return Read(at,dst,bytes);},admission);
+    stereoFrameAdmissionEvidence.Record(reason,admission);
+    // A retained old-owner callback must not activate an eye after the native
+    // subsystem has published a verified replacement. Leave existing written
+    // transactions and native calls alone; the new owner's ordinary Update
+    // still reaches the existing detached recovery before this function.
+    // Same-request main/registry changes remain diagnostic-only until their
+    // separate native rebind is proved. No actor-loss or timer gate is added.
+    if(fvr::bc2::BlocksStereoFrameAdmission(reason))return;
     reinterpret_cast<fvr::bc2::SetViewActiveFn>(imageBase+lifecycle.setActive)(reinterpret_cast<void*>(e.eye),false);
     e.drawMask.store(0,std::memory_order_release);e.visibilityMask.store(0,std::memory_order_release);e.frame.store(incomingFrame,std::memory_order_release);
     if(tracked.restoreFailures.load()||contextRestoreFailures.load()||(stereoColorScalePair.counts.restoreFailures||stereoEffectPair.counts.restoreFailures||stereoPostProcessPair.RestoreFailed())){RecordStereoProgress(fvr::bc2::StereoProgressReason::BeginRestoreFailure,incomingFrame);return;}
     fvr::ipc::FrameLease lease{};if(!frameBridge.TryBegin({(std::uint64_t(e.world)<<32)|e.request,incomingFrame,1},lease)){RecordStereoProgress(fvr::bc2::StereoProgressReason::BridgeNoLease,incomingFrame);return;}
-    weaponContextCount.store(0);derivedCount.store(0);derivedFrameFailed.store(false);for(auto& binding:derivedProjections)binding.frame.store(0);
+    weaponContextCount.store(0);weaponContextFailures.BeginFrame();derivedCount.store(0);derivedFrameFailed.store(false);for(auto& binding:derivedProjections)binding.frame.store(0);
     tracked.lease=lease;tracked.bodyPropPair.Reset();stereoColorScalePair.Reset();stereoEffectPair.Reset();stereoPostProcessPair.Reset();tracked.capturesOkay=true;tracked.state.store(3,std::memory_order_release);
     std::array<unsigned,4> viewport{};if(!Read(e.main+layout.viewportOffset,viewport.data(),16)){stereoRecovery.cancelUnwrittenRequest.store(lease.requestId,std::memory_order_release);RecordStereoProgress(fvr::bc2::StereoProgressReason::ViewportUnreadable,incomingFrame);return;}
     if(viewport[2]!=lease.requirements.width||viewport[3]!=lease.requirements.height){stereoRecovery.cancelUnwrittenRequest.store(lease.requestId,std::memory_order_release);RecordStereoProgress(fvr::bc2::StereoProgressReason::ViewportSizeChanged,incomingFrame);return;}
@@ -950,7 +1361,9 @@ void ApplyTrackedView(unsigned world,unsigned request,unsigned view)noexcept {
         auto plan=fvr::bc2::BuildTrackedViews(source,tracked.lease.tracking,tracked.lease.tracking.worldUnitsPerMeter);if(!plan){cancel();return;}
         for(auto& eye:plan->camera)for(auto& camera:eye){updateView(camera.bytes.data());updateProjection(camera.bytes.data());updateFrustum(camera.bytes.data());}
         vehicleCameraEvidenceFrame.store(fvr::bc2::gameplay::ObserveVehicleCameraPlan(e.frame,tracked.lease.tracking,tracked.saved[0],source[0],{plan->camera[0][0],plan->camera[1][0]})?e.frame.load():0,std::memory_order_release);
-        if(!trackedCameraEvidence.frame.load(std::memory_order_acquire))trackedCameraEvidence.frame.store(e.frame,std::memory_order_release);
+        if(weatherObservationEnabled)weatherGate.Begin(GetTickCount64(),CurrentWeatherKey());
+        if(!trackedCameraEvidence.frame.load(std::memory_order_acquire)&&
+           (!weatherObservationEnabled||weatherGate.Active(CurrentWeatherKey())))trackedCameraEvidence.frame.store(e.frame,std::memory_order_release);
         tracked.anchorWritten=false;
         if(viewAnchorMode){
             if(!Read(e.main+0x30,tracked.savedAnchor.data(),64)){cancel();return;}
@@ -965,6 +1378,7 @@ void ApplyTrackedView(unsigned world,unsigned request,unsigned view)noexcept {
         if(vehicleCameraEvidenceFrame.load(std::memory_order_acquire)==e.frame.load()){fvr::bc2::RenderViewCopy actualLeft{};if(Read(e.main+layout.primaryOffset,actualLeft.bytes.data(),0x460))fvr::bc2::gameplay::ObserveVehicleCameraApplied(e.frame,0,actualLeft);}
         SaveTrackedCameraEvidence(e.main,0,0);
         tracked.state.store(1,std::memory_order_release);
+        BeginWeatherRuntime();
     }else if(view==e.eye&&tracked.state.load(std::memory_order_acquire)==1){
         // Apply the right camera at the same post-clamp boundary. This also
         // preserves the conservative culling extent from the owned stereo plan.
@@ -975,6 +1389,7 @@ void ApplyTrackedView(unsigned world,unsigned request,unsigned view)noexcept {
 
 void FinishTrackedFrame(bool completePair)noexcept {
     const auto state=tracked.state.load(std::memory_order_acquire);if(state!=1&&state!=3)return;auto& e=stereoExperiment;bool restored=state==3;
+    EndWeatherRuntime();
     const auto milestone=sceneTrace::Native(SceneMilestoneKind::FinishTrackedFrame,SceneMilestoneKind::FinishTrackedFrame,e.world,e.request);
     fvr::runtime::SceneMilestoneContext milestoneResult{};milestoneResult.outcome=(state<<8)|(completePair?1u:0u);
     if(state==1){restored=U32(e.main)==imageBase+layout.vtable&&U32(e.main+0x70)==e.request&&U32(e.world+0x88)==tracked.lease.native.frameId;
@@ -992,6 +1407,7 @@ void FinishTrackedFrame(bool completePair)noexcept {
     }
     const bool published=completePair&&restored&&tracked.capturesOkay&&stereoColorScalePair.Ready(CurrentColorScaleKey(e.world,e.request))&&stereoEffectPair.Ready(CurrentColorScaleKey(e.world,e.request))&&stereoPostProcessPair.Ready(CurrentColorScaleKey(e.world,e.request))&&e.visibilityMask.load(std::memory_order_acquire)==3&&frameBridge.PublishRestored(tracked.lease);
     if(!published)frameBridge.Cancel(tracked.lease);
+    if(weatherObservationEnabled)weatherGate.Finish(CurrentWeatherKey(),published);
     milestoneResult.outcome|=(restored?2u:0u)|(tracked.capturesOkay?4u:0u)|(published?8u:0u);
     tracked.bodyPropPair.Reset();
     tracked.state.store(2,std::memory_order_release);
@@ -1000,6 +1416,8 @@ void FinishTrackedFrame(bool completePair)noexcept {
 void PumpFrameBridge()noexcept {
     bodyAmmoRenderer.PumpStop();
     if(!streamMode)return;PollEyeGpuEvidence();PollGeometryBuffers();PollPassBuffers();
+    if(weatherObservationEnabled)for(auto& capture:weatherColorCaptures)
+        if(capture.step==ColorCapture::Step::Pending)CaptureWorldColor(capture,capture.frame);
     const auto cancelRequest=stereoRecovery.cancelUnwrittenRequest.exchange(0,std::memory_order_acq_rel);
     if(fvr::runtime::ShouldCancelUnwritten(cancelRequest,tracked.lease.requestId,
        tracked.state.load(std::memory_order_acquire)==3))FinishTrackedFrame(false);
@@ -1145,11 +1563,16 @@ HRESULT STDMETHODCALLTYPE DesktopPresentHook(IDXGISwapChain* chain,UINT interval
     if(matching){++desktopPresentCalls;if(interval==1)++desktopSyncOne;
         if(flags&DXGI_PRESENT_TEST)++desktopPresentTests;
         if(active&&!(flags&DXGI_PRESENT_TEST)&&interval>0&&interval<=4)++desktopSyncBypassed;
-        // The swapchain buffer is later than DrawView/eye capture and includes
-        // native desktop/UI composition. Read it; never replace its contents.
+        // Capture native menu pixels before replacing the unstable desktop
+        // world composition with one completed eye. XR sources stay untouched.
         ObserveDesktopMode(chain,flags);
-        scheduled=ObserveDesktopBuffer(chain,flags);
         if(!(flags&DXGI_PRESENT_TEST))fvr::bc2::menu::Present(chain);
+        const auto display=fvr::bc2::menu::CurrentDisplayState();
+        frameBridge.PresentDesktop(chain,streamMode&&sampling.load(std::memory_order_acquire)&&
+            frameBridge.Connected()&&!frameBridge.Fatal(),
+            display!=fvr::bc2::menu::MenuDisplayState::Unknown,
+            display==fvr::bc2::menu::MenuDisplayState::Menu,(flags&DXGI_PRESENT_TEST)!=0);
+        scheduled=ObserveDesktopBuffer(chain,flags);
     }
     const auto result=fvr::graphics::PresentDesktopForVr(desktopPresentOriginal,chain,interval,flags,active);
     if(matching){
@@ -1196,9 +1619,10 @@ fvr::bc2::stereoColorScale::Key CurrentColorScaleKey(unsigned world,unsigned req
 // A native structured exception does not unwind C++ RAII under /EHsc. This
 // leaf owns no C++ destructors: __finally restores all scalar scopes on that path.
 void OriginalDrawWithColorScope(void* self,void* request,void* view,void* data,
-    fvr::bc2::stereoColorScale::Pair::Scope* color,fvr::bc2::stereoColorScale::EffectPair::Scope* effect,fvr::bc2::stereoColorScale::PostProcessPair::Scope* postProcess,bool wasDrawing){
+    fvr::bc2::stereoColorScale::Pair::Scope* color,fvr::bc2::stereoColorScale::EffectPair::Scope* effect,fvr::bc2::stereoColorScale::PostProcessPair::Scope* postProcess,bool wasDrawing,WeatherTranslationScope* weather){
     __try {drawOriginal(self,request,view,data);}
     __finally {
+        if(weather)weather->Finish();
         drawingNativeView=wasDrawing;
         if(AbnormalTermination()){postProcess->Abort();effect->Abort();color->Abort();tracked.capturesOkay=false;}
     }
@@ -1268,6 +1692,97 @@ bool CurrentScene(unsigned world,unsigned request)noexcept {
     return U32(subsystem)==stereoRecovery.subsystemType&&U32(subsystem+0x2c)==world&&
         U32(subsystem+0x30)==request&&U32(world)==stereoRecovery.worldType&&
         U32(request)==imageBase+lifecycle.requestVtable&&U32(request+8)==world&&U32(request+0xc4)==3;
+}
+struct LiveCacheCalls {
+    unsigned world=0,request=0;const CallbackSnapshot& callback;
+    bool Boundary()const noexcept {
+        const auto& e=stereoExperiment;const auto stage=e.stage.load(std::memory_order_acquire);
+        const auto pool=workPool.stage.load(std::memory_order_acquire);
+        return (stage==StereoExperiment::Armed||stage==StereoExperiment::Retiring)&&
+            world==e.world&&request==e.request&&CurrentScene(world,request)&&
+            !stereoRecovery.callbacks.load(std::memory_order_acquire)&&
+            pool!=1&&pool!=3&&tracked.state.load(std::memory_order_acquire)!=1&&
+            fvr::bc2::rigWorkerRuntime::Quiescent();
+    }
+    bool Capture(fvr::bc2::LiveViewCache& out)const noexcept {
+        const auto& e=stereoExperiment;
+        if(!Boundary()||!e.callbacks.Matches()||!callback.list||U32(callback.object)!=callback.vtable||
+           U32(callback.vtable+8)!=imageBase+0x569d50||
+           U32(callback.vtable+24)!=imageBase+initialization.refreshRegistered||
+           U32(callback.vtable+28)!=imageBase+viewCallbacks.registerView||
+           U32(callback.vtable+32)!=imageBase+viewCallbacks.unregisterView)return false;
+        fvr::bc2::LiveViewCache c{};c.world=world;c.request=request;c.callback=callback.object;c.type=callback.vtable;
+        c.context=U32(world+0x94);c.scene=U32(callback.object+0xc);c.references=U32(callback.object+4);
+        if(!Read(callback.object+0x30,&c.dirty,1))return false;
+        ListSnapshot registered{},all{},roots{};
+        if(!registered.Capture(callback.object+0x20)||!all.Capture(request+0x14)||
+           !roots.Capture(request+0x24)||roots.count!=2||!ListContains(roots,e.main)||!ListContains(roots,e.eye)||
+           registered.count!=all.count||!registered.count)return false;
+        c.registeredBegin=U32(callback.object+0x20);c.registeredEnd=U32(callback.object+0x24);
+        c.registeredCapacity=U32(callback.object+0x28);c.registeredCount=registered.count;
+        if(!c.registeredBegin||!fvr::bc2::ValidLiveViewVector(c.registeredBegin,c.registeredEnd,
+            c.registeredCapacity,4,c.registeredCount))return false;
+        for(unsigned i=0;i<registered.count;++i){
+            const auto view=registered.values[i],type=U32(view);
+            if(!view||!ListContains(all,view)||U32(view+0x70)!=request||!U32(view+0x20))return false;
+            if(view==e.main||view==e.eye){if(type!=imageBase+layout.vtable)return false;}
+            else if(U32(type+12)!=imageBase+initialization.parentGetter||
+                (U32(view+0x1670)!=e.main&&U32(view+0x1670)!=e.eye))return false;
+            c.registered[i]=view;
+        }
+        c.cacheBegin=U32(callback.object+0x10);c.cacheEnd=U32(callback.object+0x14);c.cacheCapacity=U32(callback.object+0x18);
+        if(!c.cacheBegin){if(c.cacheEnd||c.cacheCapacity)return false;}
+        else {
+            if((c.cacheBegin&3u)||c.cacheEnd<c.cacheBegin||c.cacheCapacity<c.cacheEnd||
+               (c.cacheEnd-c.cacheBegin)%20u||c.cacheEnd-c.cacheBegin>c.cached.size()*20u)return false;
+            c.cacheCount=(c.cacheEnd-c.cacheBegin)/20u;
+            if(!fvr::bc2::ValidLiveViewVector(c.cacheBegin,c.cacheEnd,c.cacheCapacity,20,c.cacheCount))return false;
+            for(unsigned i=0;i<c.cacheCount;++i)
+                if(!Read(c.cacheBegin+i*20,&c.cached[i],4))return false; // Never dereference a cached view.
+        }
+        c.ownerVerified=c.registeredViewsVerified=true;c.boundaryVerified=Boundary();
+        if(!registered.Matches()||!all.Matches()||!roots.Matches()||!e.callbacks.Matches())return false;
+        out=c;return true;
+    }
+    bool Refresh(const fvr::bc2::LiveViewCache& before)const noexcept {
+        // The existing native refresh releases only its owned terrain records;
+        // registered RenderViews keep their native holders and queued refs.
+        for(const auto& code:stereoRecovery.code)
+            if(!code.address||Hash(code.address,code.size)!=code.hash)return false;
+        fvr::bc2::LiveViewCache again{};if(!Capture(again)||again!=before)return false;
+        liveCacheEvidence.callback=callback.object;liveCacheEvidence.beforeCount=before.cacheCount;
+        liveCacheEvidence.registeredCount=before.registeredCount;++liveCacheEvidence.calls;
+        StereoCheckpoint("live_cache_before_refresh");
+        using RefreshFn=void(__thiscall*)(void*,void*);
+        reinterpret_cast<RefreshFn>(imageBase+initialization.refreshRegistered)(
+            reinterpret_cast<void*>(callback.object),reinterpret_cast<void*>(before.context));
+        return true;
+    }
+};
+void RefreshDirtyLiveCaches(unsigned world,unsigned request)noexcept {
+    const auto& e=stereoExperiment;
+    if(!streamMode||!stereoMode||world!=e.world||request!=e.request)return;
+    for(unsigned i=0;i<e.callbacks.count;++i){const auto& cb=e.callbackValues[i];if(!cb.list)continue;
+        LiveCacheCalls calls{world,request,cb};
+        // Native root Draw drains the old child queue after rebuilding caches.
+        // The next phase-3 Update is before any terrain cache consumer and has
+        // no in-flight visibility/draw callbacks. Refresh only a dirty mismatch.
+        if(!calls.Boundary())return;
+        unsigned char dirty=0;
+        if(U32(cb.object)==cb.vtable&&Read(cb.object+0x30,&dirty,1)&&dirty==0)continue;
+        const auto result=fvr::bc2::RefreshLiveViewCache(calls);
+        if(result==fvr::bc2::LiveViewCacheResult::Unchanged)continue;
+        if(result==fvr::bc2::LiveViewCacheResult::Refreshed)++liveCacheEvidence.refreshed;
+        else if(result==fvr::bc2::LiveViewCacheResult::Disabled)++liveCacheEvidence.disabled;
+        else ++liveCacheEvidence.rejected;
+        fvr::bc2::LiveViewCache after{};
+        if(calls.Capture(after))liveCacheEvidence.afterCount=after.cacheCount;
+        // One bounded receipt per attempted repair; no per-frame log growth for
+        // a deliberately disabled terrain consumer or rejected stable owner.
+        if(result==fvr::bc2::LiveViewCacheResult::Refreshed)StereoCheckpoint("live_cache_refreshed");
+        else if(result==fvr::bc2::LiveViewCacheResult::Rejected&&liveCacheEvidence.rejected.load()==1)
+            StereoCheckpoint("live_cache_rejected");
+    }
 }
 template<class Graph> bool CapturePendingStereoChildren(Graph& g,unsigned children,ListSnapshot& pending,ListSnapshot& holders)noexcept {
     if(!pending.Capture(g.eye+0x1670)||pending.count>g.pendingEye.size())return false;
@@ -1665,6 +2180,7 @@ void ProbeViewLifecycle(std::uintptr_t world,std::uintptr_t request)noexcept {
 void __fastcall UpdateHook(void* self,void*,void* request,unsigned frame,float dt,void* extra,void* out1,void* out2){
     if(sampling.load(std::memory_order_acquire)){updateCalls.fetch_add(1,std::memory_order_relaxed);ProbeViewLifecycle(reinterpret_cast<std::uintptr_t>(self),reinterpret_cast<std::uintptr_t>(request));}
     AdvanceStereo(reinterpret_cast<std::uintptr_t>(self),reinterpret_cast<std::uintptr_t>(request),frame);
+    RefreshDirtyLiveCaches(reinterpret_cast<unsigned>(self),reinterpret_cast<unsigned>(request));
     const auto milestone=sceneTrace::Native(SceneMilestoneKind::WorldUpdate,SceneMilestoneKind::WorldUpdate,
         reinterpret_cast<std::uintptr_t>(self),reinterpret_cast<std::uintptr_t>(request));
     sceneTrace::Mark(milestone,SceneMilestoneStage::CallingOriginal);
@@ -1807,7 +2323,11 @@ void* __fastcall PrepareHook(void* self,void*,void* request,void* view){
         if(fvr::bc2::ReloadProducerBinding().Enabled())producerScope.emplace(fvr::bc2::ReloadProducerBinding(),
             producerKey.value_or(fvr::bc2::ReloadProducerView{}),bool(producerKey),ReloadDrawNowNs());
         ObserveNativeFade(fvr::bc2::fadeDiagnostic::Phase::PrepareBefore,reinterpret_cast<std::uintptr_t>(self),reinterpret_cast<std::uintptr_t>(request),reinterpret_cast<std::uintptr_t>(view));
-        data=prepareOriginal(self,request,view);
+        std::optional<WeatherBoundaryScope> weatherBoundary;
+        if(weatherObservationEnabled)weatherBoundary.emplace(reinterpret_cast<unsigned>(self),reinterpret_cast<unsigned>(request),reinterpret_cast<unsigned>(view),1);
+        std::optional<WeatherTranslationScope> weatherTranslation;
+        if(weatherTranslationEnabled||weatherTranslationRuntime)weatherTranslation.emplace(reinterpret_cast<unsigned>(self),reinterpret_cast<unsigned>(request),reinterpret_cast<unsigned>(view),1);
+        data=weatherTranslation?OriginalPrepareWithWeatherScope(self,request,view,&*weatherTranslation):prepareOriginal(self,request,view);
         ObserveNativeFade(fvr::bc2::fadeDiagnostic::Phase::PrepareAfter,reinterpret_cast<std::uintptr_t>(self),reinterpret_cast<std::uintptr_t>(request),reinterpret_cast<std::uintptr_t>(view));
         if(producerScope)producerScope->Complete(producerKey&&ReloadProducerViewKey(reinterpret_cast<std::uintptr_t>(self),reinterpret_cast<std::uintptr_t>(request),reinterpret_cast<std::uintptr_t>(view))==producerKey,ReloadDrawNowNs());
     }
@@ -1834,6 +2354,10 @@ void __fastcall DrawHook(void* self,void*,void* request,void* view,void* data){
     const bool trackedEvidence=streamMode&&tracked.state.load(std::memory_order_acquire)==1&&
         (address==stereoExperiment.main||address==stereoExperiment.eye);
     const unsigned evidenceEye=address==stereoExperiment.eye?1u:0u;
+    const auto weatherKey=weatherObservationEnabled?weatherGate.Selected():weatherObservation::Key{};
+    const bool weatherDrawOwned=weatherObservationEnabled&&WeatherDrawCurrent(weatherKey,reinterpret_cast<unsigned>(self),reinterpret_cast<unsigned>(request),unsigned(address));
+    if(weatherObservationEnabled&&weatherGate.Active(weatherKey)&&(address==weatherKey.main||address==weatherKey.eye)&&!weatherDrawOwned)
+        weatherIdentityMismatches.fetch_add(1,std::memory_order_relaxed);
     fvr::bc2::stereoColorScale::Pair::Scope colorScope(stereoColorScalePair);
     fvr::bc2::stereoColorScale::EffectPair::Scope effectScope(stereoEffectPair);
     fvr::bc2::stereoColorScale::PostProcessPair::Scope postProcessScope(stereoPostProcessPair);
@@ -1892,7 +2416,11 @@ void __fastcall DrawHook(void* self,void*,void* request,void* view,void* data){
         if(trackedEvidence&&!postProcessScope.Begin(CurrentColorScaleKey(reinterpret_cast<unsigned>(self),reinterpret_cast<unsigned>(request)),evidenceEye))tracked.capturesOkay=false;
         const auto wasDrawing=drawingNativeView;drawingNativeView=true;sceneTrace::Mark(milestone,SceneMilestoneStage::CallingOriginal);
     ObserveNativeFade(fvr::bc2::fadeDiagnostic::Phase::DrawBefore,reinterpret_cast<std::uintptr_t>(self),reinterpret_cast<std::uintptr_t>(request),reinterpret_cast<std::uintptr_t>(view));
-    OriginalDrawWithColorScope(self,request,view,data,&colorScope,&effectScope,&postProcessScope,wasDrawing);
+    std::optional<WeatherBoundaryScope> weatherBoundary;
+    if(weatherObservationEnabled)weatherBoundary.emplace(reinterpret_cast<unsigned>(self),reinterpret_cast<unsigned>(request),unsigned(address),2);
+    std::optional<WeatherTranslationScope> weatherTranslation;
+    if(weatherTranslationEnabled||weatherTranslationRuntime)weatherTranslation.emplace(reinterpret_cast<unsigned>(self),reinterpret_cast<unsigned>(request),unsigned(address),2);
+    OriginalDrawWithColorScope(self,request,view,data,&colorScope,&effectScope,&postProcessScope,wasDrawing,weatherTranslation?&*weatherTranslation:nullptr);
     if(trackedEvidence&&!colorScope.DrawReturned(CurrentColorScaleKey(reinterpret_cast<unsigned>(self),reinterpret_cast<unsigned>(request))))tracked.capturesOkay=false;
     if(trackedEvidence&&!effectScope.DrawReturned(CurrentColorScaleKey(reinterpret_cast<unsigned>(self),reinterpret_cast<unsigned>(request))))tracked.capturesOkay=false;
     if(trackedEvidence&&!postProcessScope.DrawReturned(CurrentColorScaleKey(reinterpret_cast<unsigned>(self),reinterpret_cast<unsigned>(request))))tracked.capturesOkay=false;
@@ -1932,6 +2460,15 @@ void __fastcall DrawHook(void* self,void*,void* request,void* view,void* data){
         }
     }
     if(trackedEvidence){EndEyeGpuEvidence(evidenceEye);SaveTrackedCameraEvidence(unsigned(address),evidenceEye,2);}
+    if(weatherDrawOwned){
+        const unsigned eye=address==weatherKey.eye?1u:0u;
+        if(WeatherDrawCurrent(weatherKey,reinterpret_cast<unsigned>(self),reinterpret_cast<unsigned>(request),unsigned(address))){
+            auto& capture=weatherColorCaptures[eye];CaptureWorldColor(capture,weatherKey.frame);
+            if(WeatherDrawCurrent(weatherKey,reinterpret_cast<unsigned>(self),reinterpret_cast<unsigned>(request),unsigned(address))&&
+               capture.frame==weatherKey.frame&&(capture.step==ColorCapture::Step::Pending||capture.step==ColorCapture::Step::Finished))weatherGate.Image(weatherKey,eye);
+            else weatherImageInvalidMask.fetch_or(1u<<eye,std::memory_order_relaxed);
+        }else weatherImageInvalidMask.fetch_or(1u<<eye,std::memory_order_relaxed);
+    }
     if(bodyAmmoEyeOwned&&tracked.state.load(std::memory_order_acquire)==1&&
         U32(stereoExperiment.world+0x88)==stereoExperiment.frame&&U32(address)==imageBase+layout.vtable&&
         U32(address+0x70)==stereoExperiment.request&&U32(stereoExperiment.request+8)==stereoExperiment.world){
@@ -2027,6 +2564,8 @@ void __fastcall DrawHook(void* self,void*,void* request,void* view,void* data){
     sceneTrace::Mark(milestone,SceneMilestoneStage::Exit);
 }
 bool DisableProbeHooks()noexcept {
+    if(weatherTranslationRuntime)weatherRuntimeStopping.store(true,std::memory_order_release);
+    if(weatherObservationEnabled)weatherGate.Close();
     // A normal owned knife must return before its native observer/guards stop.
     // Failure preserves the dependencies and reports hooks_disabled=false.
     if(!fvr::bc2::gameplay::PrepareSessionStop())return false;
@@ -2035,16 +2574,21 @@ bool DisableProbeHooks()noexcept {
     fvr::bc2::opticFilterRuntime::Disable();
     fvr::bc2::rigWorkerRuntime::Disable();
     workerViewLease.store({},std::memory_order_release);
+    fvr::bc2::shellReloadAudio::Stop();
     const bool audioDisabled=fvr::bc2::mechanismAudio::Stop();
     const bool gameplayDisabled=fvr::bc2::gameplay::Stop();
     const bool menuDisabled=fvr::bc2::menu::Stop();
     deferredCleanup.store(true,std::memory_order_release);bool allDisabled=true;
+    weatherHooksDisabled=true;
     for(unsigned index=0;index<hookEntries.size();++index){if(!hookEntries[index])continue;
         // Keep the owning graphics boundary until its private resources drain.
         if(index==2&&!bodyAmmoRenderer.Quiescent()){allDisabled=false;continue;}
         const auto stage=stereoExperiment.stage.load(std::memory_order_acquire);
         if((((streamMode&&index<3)||index==4)&&(stage==StereoExperiment::Armed||stage==StereoExperiment::Retiring))||(index==5&&workPool.stage.load(std::memory_order_acquire)==1)){allDisabled=false;continue;}
-        const auto result=MH_DisableHook(hookEntries[index]);if(result!=MH_OK&&result!=MH_ERROR_DISABLED)allDisabled=false;
+        const auto result=MH_DisableHook(hookEntries[index]);if(result!=MH_OK&&result!=MH_ERROR_DISABLED){allDisabled=false;if(index>=14)weatherHooksDisabled=false;}
+    }
+    if(weatherObservationEnabled||weatherTranslationRuntime)for(unsigned attempt=0;attempt<200;++attempt){
+        if(weatherCallbackLifetime.TryQuiesce(weatherHooksDisabled))break;Sleep(1);
     }
     bool drawCaptureDrained=false;
     fvr::bc2::ReloadProducerBinding().Enable(false);
@@ -2054,11 +2598,103 @@ bool DisableProbeHooks()noexcept {
     bool opticDrained=false;
     for(unsigned attempt=0;attempt<200;++attempt){if(fvr::bc2::opticFilterRuntime::Quiescent()){opticDrained=true;break;}Sleep(1);}
     const bool audioDrained=fvr::bc2::mechanismAudio::DrainAndRemove();
-    return allDisabled&&gameplayDisabled&&menuDisabled&&audioDisabled&&audioDrained&&drawCaptureDrained&&workerDrained&&opticDrained&&bodyAmmoRenderer.Quiescent();
+    const bool shellAudioDrained=fvr::bc2::shellReloadAudio::Drain();
+    return allDisabled&&(!(weatherObservationEnabled||weatherTranslationRuntime)||weatherCallbackLifetime.Quiescent())&&gameplayDisabled&&menuDisabled&&audioDisabled&&audioDrained&&shellAudioDrained&&drawCaptureDrained&&workerDrained&&opticDrained&&bodyAmmoRenderer.Quiescent();
 }
 void Require(bool okay,const char* message){if(!okay)throw std::runtime_error(message);}
 std::size_t Offset(const fvr::engine::PeImage& pe,unsigned rva,std::size_t count){for(const auto& s:pe.sections)if(rva>=s.rva&&rva-s.rva<=s.rawSize&&count<=s.rawSize-(rva-s.rva))return std::size_t(s.rawOffset)+rva-s.rva;throw std::runtime_error("Unbacked profile address");}
 void WriteTarget(std::ostream& out,const Target& t){out<<"{\"width\":"<<t.width<<",\"height\":"<<t.height<<",\"format\":"<<t.format<<",\"samples\":"<<t.samples<<'}';}
+void WriteWeatherKey(std::ostream& out,const weatherObservation::Key& key){
+    out<<"{\"world\":"<<key.world<<",\"request\":"<<key.request<<",\"main\":"<<key.main<<",\"eye_view\":"<<key.eye<<",\"native_frame\":"<<key.frame<<'}';
+}
+void WriteWeatherPacket(std::ostream& out,const weatherTranslation::Packet& p){
+    out<<"{\"packet\":"<<p.address<<",\"owner\":"<<p.owner<<",\"packet_owner\":"<<p.packetOwner<<",\"world\":"<<p.world<<",\"flags\":"<<p.flags
+       <<",\"arena\":"<<p.arena<<",\"base\":"<<p.base<<",\"capacity\":"<<p.capacity<<",\"used\":"<<p.used<<",\"matrix\":[";
+    for(unsigned i=0;i<16;++i){if(i)out<<',';out<<p.matrix[i];}out<<"]}";
+}
+void WriteWeatherTranslation(const std::filesystem::path& output){
+    if(!weatherTranslationEnabled)return;
+    std::ofstream out(output.parent_path()/"weather-translation-experiment.json");
+    const auto count=(std::min)(weatherTranslationAttempts.load(),unsigned(weatherTranslationEvidence.size()));
+    unsigned incomplete=0,applied=0,restored=0;
+    for(unsigned i=0;i<count;++i){const auto& e=weatherTranslationEvidence[i];if(!e.ready.load(std::memory_order_acquire)){++incomplete;continue;}
+        applied+=e.applied;restored+=e.restored;}
+    out<<"{\"schema\":\"fvr.bc2.weather-translation423.v1\",\"enabled\":true,\"selected\":";WriteWeatherKey(out,weatherGate.Selected());
+    out<<",\"attempt_count\":"<<weatherTranslationAttempts.load()<<",\"overflow\":"<<weatherTranslationOverflow.load()<<",\"failed\":"<<weatherTranslationFailed.load()
+       <<",\"callbacks_drained\":"<<weatherCallbackLifetime.Quiescent()<<",\"incomplete_attempts\":"<<incomplete<<",\"applied_scopes\":"<<applied
+       <<",\"restored_scopes\":"<<restored<<",\"native_write_calls\":"<<weatherTranslationWrites.load()<<",\"translation_bytes_per_packet\":12,\"attempts\":[";
+    bool first=true;
+    for(unsigned i=0;i<count;++i){const auto& e=weatherTranslationEvidence[i];if(!e.ready.load(std::memory_order_acquire))continue;
+        if(!first)out<<',';first=false;
+        out<<"{\"phase\":"<<e.phase<<",\"eye\":"<<e.eye<<",\"thread\":"<<e.thread<<",\"reason\":\""<<e.reason<<"\",\"applied\":"<<e.applied<<",\"restored\":"<<e.restored
+           <<",\"written_mask\":"<<e.writtenMask<<",\"unresolved_mask\":"<<e.unresolvedMask<<",\"before_valid_mask\":"<<e.beforeMask<<",\"inside_valid_mask\":"<<e.insideMask<<",\"after_valid_mask\":"<<e.afterMask
+           <<",\"key_before\":";WriteWeatherKey(out,e.beforeKey);out<<",\"key_inside\":";WriteWeatherKey(out,e.insideKey);out<<",\"key_after\":";WriteWeatherKey(out,e.afterKey);
+        for(unsigned step=0;step<3;++step){out<<(step==0?",\"packets_before\":[":(step==1?",\"packets_inside\":[":",\"packets_after\":["));
+            const auto& packets=step==0?e.before:(step==1?e.inside:e.after);for(unsigned p=0;p<2;++p){if(p)out<<',';WriteWeatherPacket(out,packets[p]);}out<<']';}
+        out<<'}';
+    }out<<"]}\n";out.close();Require(bool(out),"Write weather translation experiment");
+}
+void WriteWeatherRuntimePair(std::ostream& out,const WeatherRuntimePair& pair){
+    out<<"{\"epoch\":"<<pair.token.epoch<<",\"mask\":"<<pair.mask<<",\"selected\":";WriteWeatherKey(out,pair.token.key);out<<",\"attempts\":[";
+    if(pair.mask==3)for(unsigned i=0;i<2;++i){if(i)out<<',';const auto& e=pair.scopes[i];
+        out<<"{\"phase\":"<<e.phase<<",\"eye\":"<<e.eye<<",\"thread\":"<<e.thread<<",\"reason\":\""<<e.reason<<"\",\"applied\":"<<e.applied<<",\"restored\":"<<e.restored<<",\"validated\":"<<e.validated
+           <<",\"written_mask\":"<<e.writtenMask<<",\"unresolved_mask\":"<<e.unresolvedMask<<",\"before_valid_mask\":"<<e.beforeMask<<",\"inside_valid_mask\":"<<e.insideMask<<",\"after_valid_mask\":"<<e.afterMask
+           <<",\"key_before\":";WriteWeatherKey(out,e.beforeKey);out<<",\"key_inside\":";WriteWeatherKey(out,e.insideKey);out<<",\"key_after\":";WriteWeatherKey(out,e.afterKey);
+        for(unsigned step=0;step<3;++step){out<<(step==0?",\"packets_before\":[":(step==1?",\"packets_inside\":[":",\"packets_after\":["));
+            const auto& packets=step==0?e.before:(step==1?e.inside:e.after);for(unsigned p=0;p<2;++p){if(p)out<<',';WriteWeatherPacket(out,packets[p]);}out<<']';}out<<'}';
+    }out<<"]}";
+}
+void WriteWeatherRuntime(const std::filesystem::path& output){
+    if(!weatherTranslationRuntime)return;
+    std::ofstream out(output.parent_path()/"weather-translation-runtime.json");LARGE_INTEGER frequency{};QueryPerformanceFrequency(&frequency);
+    out<<"{\"schema\":\"fvr.bc2.weather-translation424.v1\",\"enabled\":true,\"stopping\":"<<weatherRuntimeStopping.load()<<",\"callbacks_drained\":"<<weatherCallbackLifetime.Quiescent()
+       <<",\"frames_started\":"<<weatherRuntimeFrames.load()<<",\"frames_completed\":"<<weatherRuntimeCompleted.load()<<",\"frames_skipped\":"<<weatherRuntimeSkipped.load()
+       <<",\"scope_attempts\":"<<weatherRuntimeScopes.load()<<",\"scopes_applied\":"<<weatherRuntimeApplied.load()<<",\"scopes_restored\":"<<weatherRuntimeRestored.load()
+       <<",\"restore_failures\":"<<weatherRuntimeRestoreFailures.load()<<",\"rejected_publishes\":"<<weatherRuntimeRejectedPublish.load()<<",\"native_write_calls\":"<<weatherTranslationWrites.load()
+       <<",\"translation_bytes_per_packet\":12,\"overhead_frequency\":"<<frequency.QuadPart<<",\"overhead_total_ticks\":"<<weatherRuntimeOverheadTotal.load()<<",\"overhead_max_ticks\":"<<weatherRuntimeOverheadMax.load()
+       <<",\"overhead_excludes_native_calls\":true,\"claim_skips\":{";
+    constexpr std::array<const char*,7> skips{"none","contended","stale","invalid","busy","missing","phase"};
+    for(unsigned i=0;i<skips.size();++i){if(i)out<<',';out<<'"'<<skips[i]<<"\":"<<weatherRuntimeClaimSkips[i].load();}out<<"},\"scope_rejections\":{";
+    for(unsigned i=0;i<weatherRuntimeReasonNames.size();++i){if(i)out<<',';out<<'"'<<weatherRuntimeReasonNames[i]<<"\":"<<weatherRuntimeReasons[i].load();}
+    out<<"},\"first\":";WriteWeatherRuntimePair(out,weatherRuntimeFirst);out<<",\"selected\":";WriteWeatherRuntimePair(out,weatherRuntimeSelected);
+    out<<",\"latest\":";WriteWeatherRuntimePair(out,weatherRuntimeLatest);out<<"}\n";out.close();Require(bool(out),"Write weather runtime correction");
+}
+void WriteWeatherObservation(const std::filesystem::path& output){
+    if(!weatherObservationEnabled)return;
+    std::ofstream out(output.parent_path()/"weather-observation.json");
+    const auto key=weatherGate.Selected();
+    const std::array<unsigned,2> reserved{weatherGate.Count(0),weatherGate.Count(1)};
+    std::array<unsigned,2> ready{};
+    for(unsigned eye=0;eye<2;++eye)for(unsigned i=0;i<reserved[eye];++i)if(weatherRows[eye][i].ready.load(std::memory_order_acquire))++ready[eye];
+    out<<"{\"schema\":\"fvr.bc2.weather-observer422.v1\",\"observer_only\":"<<((weatherTranslationEnabled||weatherTranslationRuntime)?"false":"true")<<",\"native_writes\":"<<weatherTranslationWrites.load()<<",\"translation_experiment\":"<<(weatherTranslationEnabled?"true":"false")<<",\"translation_runtime\":"<<(weatherTranslationRuntime?"true":"false")<<",\"delay_ms\":"<<weatherObservationDelayMs
+        <<",\"state\":"<<weatherGate.State()<<",\"world\":"<<key.world<<",\"request\":"<<key.request<<",\"main\":"<<key.main<<",\"eye_view\":"<<key.eye<<",\"native_frame\":"<<key.frame
+        <<",\"pair_published\":"<<weatherGate.Published()<<",\"image_scheduled_mask\":"<<weatherGate.Images()<<",\"overflow\":"<<weatherGate.Overflow()<<",\"unattributed\":"<<weatherUnattributed.load()
+        <<",\"admission_closed\":"<<weatherGate.Closed()<<",\"observer_hooks_disabled\":"<<weatherHooksDisabled<<",\"callbacks_drained\":"<<weatherCallbackLifetime.Quiescent()
+        <<",\"reserved_rows\":["<<reserved[0]<<','<<reserved[1]<<"],\"ready_rows\":["<<ready[0]<<','<<ready[1]<<"],\"incomplete_rows\":"<<(reserved[0]+reserved[1]-ready[0]-ready[1])
+        <<",\"identity_mismatches\":"<<weatherIdentityMismatches.load()<<",\"image_invalid_mask\":"<<weatherImageInvalidMask.load()
+        <<",\"matrix_encoding\":\"uint32 little-endian IEEE754 bits; position uses first4 values; cameraTransforms position indices12..14\",\"phases\":{\"0\":\"eye inferred from root camera; no enclosing render boundary proven\",\"1\":\"Prepare\",\"2\":\"Draw\"},\"matrix_snapshot_atomic\":false,\"rows\":[";
+    const auto values=[&](const auto& array){out<<'[';for(unsigned i=0;i<array.size();++i){if(i)out<<',';out<<array[i];}out<<']';};
+    bool first=true;
+    for(unsigned eye=0;eye<2;++eye)for(unsigned i=0;i<reserved[eye];++i){const auto& row=weatherRows[eye][i];if(!row.ready.load(std::memory_order_acquire))continue;
+        if(!first)out<<',';first=false;const auto& p=row.value;
+        out<<"{\"eye\":"<<eye<<",\"index\":"<<i<<",\"kind\":"<<p.kind<<",\"thread\":"<<p.thread<<",\"phase\":"<<p.phase<<",\"root_eye\":"<<p.rootEye<<",\"invocation\":"<<p.invocation
+            <<",\"callsite\":"<<p.callsite<<",\"valid_mask\":"<<p.validMask<<",\"active_after\":"<<p.activeAfter<<",\"args\":";values(p.args);
+        out<<",\"camera_transforms\":[";values(p.cameraTransforms[0]);out<<',';values(p.cameraTransforms[1]);out<<"],\"context\":"<<p.context<<",\"input\":"<<p.input<<",\"input_world\":";values(p.inputWorld);
+        out<<",\"addresses_world_view_projection_position\":";values(p.addresses);out<<",\"values_world_view_projection_position\":[";
+        for(unsigned part=0;part<4;++part){if(part)out<<',';values(p.values[part]);}out<<"]}";
+    }
+    out<<"],\"images\":[";
+    for(unsigned eye=0;eye<2;++eye){if(eye)out<<',';auto& capture=weatherColorCaptures[eye];
+        const bool complete=capture.complete.load(std::memory_order_acquire),captured=complete&&capture.step==ColorCapture::Step::Finished;
+        out<<"{\"eye\":"<<eye<<",\"captured\":"<<captured<<",\"pending\":"<<!complete
+            <<",\"world\":"<<key.world<<",\"request\":"<<key.request<<",\"view\":"<<(eye?key.eye:key.main)
+            <<",\"identity_valid\":"<<((weatherGate.Images()&(1u<<eye))&&!(weatherImageInvalidMask.load()&(1u<<eye)));
+        if(complete){out<<",\"native_frame\":"<<capture.frame<<",\"hresult\":"<<capture.error<<",\"target\":";WriteTarget(out,capture.target);}
+        if(captured){const auto name="weather-eye-"+std::to_string(eye)+".rgba";out<<",\"file\":\""<<name<<"\"";
+            std::ofstream pixels(output.parent_path()/name,std::ios::binary);pixels.write(reinterpret_cast<const char*>(capture.rgba.data()),std::streamsize(capture.rgba.size()));pixels.close();Require(bool(pixels),"Write weather eye pixels");capture.serialized=true;}
+        out<<'}';
+    }out<<"]}\n";out.close();Require(bool(out),"Write weather observation");
+}
 }
 extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
     fvr::bc2::NativeProbeConfig config{};
@@ -2153,6 +2789,25 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
     bool hooksEnabled=false,disabled=true,workerObservation=false;std::ofstream report;fvr::platform::ProcessLifetime hostLifetime;
     try {
         const auto output=std::filesystem::path(config.reportPath);Require(output.is_absolute()&&!std::filesystem::exists(output),"Report must be a new absolute path");report.open(output);Require(bool(report),"Cannot create report");
+        wchar_t weatherFlag[4]{},weatherDelay[16]{},weatherExperiment[4]{},weatherRuntime[4]{};
+        const auto weatherFlagLength=GetEnvironmentVariableW(L"BC2_WEATHER_OBSERVER",weatherFlag,4);
+        Require(!weatherFlagLength||(weatherFlagLength==1&&weatherFlag[0]==L'1'),"Weather observer flag must be1 or absent");
+        weatherObservationEnabled=weatherFlagLength==1;
+        const auto weatherExperimentLength=GetEnvironmentVariableW(L"BC2_WEATHER_TRANSLATION_EXPERIMENT",weatherExperiment,4);
+        Require(!weatherExperimentLength||(weatherExperimentLength==1&&weatherExperiment[0]==L'1'),"Weather translation flag must be1 or absent");
+        weatherTranslationEnabled=weatherExperimentLength==1;
+        Require(!weatherTranslationEnabled||weatherObservationEnabled,"Weather translation requires bounded observer");
+        const auto weatherRuntimeLength=GetEnvironmentVariableW(L"BC2_WEATHER_TRANSLATION",weatherRuntime,4);
+        Require(!weatherRuntimeLength||(weatherRuntimeLength==1&&weatherRuntime[0]==L'1'),"Weather translation runtime flag must be1 or absent");
+        weatherTranslationRuntime=weatherRuntimeLength==1;
+        Require(!weatherTranslationRuntime||(streamMode&&!weatherTranslationEnabled),"Weather runtime requires tracked stereo and excludes one-frame experiment");
+        if(weatherObservationEnabled){
+            Require(streamMode,"Weather observer requires tracked stereo");
+            const auto length=GetEnvironmentVariableW(L"BC2_WEATHER_OBSERVER_DELAY_MS",weatherDelay,16);
+            Require(length<16,"Weather observer delay too long");
+            if(length){weatherObservationDelayMs=0;for(unsigned i=0;i<length;++i){Require(weatherDelay[i]>=L'0'&&weatherDelay[i]<=L'9'&&weatherObservationDelayMs<=90000,"Invalid weather observer delay");weatherObservationDelayMs=weatherObservationDelayMs*10+unsigned(weatherDelay[i]-L'0');}}
+            Require(weatherGate.Arm(GetTickCount64(),weatherObservationDelayMs),"Weather observer delay must be1000..90000ms");
+        }
         Require(!continuous||hostLifetime.Open(config.hostPid,L"BC2XrHost.exe"),"Continuous stream host is not alive or does not match");
         Require(mode!=3,"Unsafe old lifecycle mode is permanently disabled; use ownership-v2");Require(!streamMode||!streamToken.empty(),"Native stream requires frame channel");
         wchar_t name[32768]{};Require(GetModuleFileNameW(nullptr,name,32768)>0,"No game image");const auto path=std::filesystem::path(name);Require(!_wcsicmp(path.filename().c_str(),L"BFBC2Game.exe"),"Unexpected process image");
@@ -2163,6 +2818,18 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
         const auto init=fvr::bc2::DiscoverViewInitialization(bytes,pe.image);Require(!stereoMode||init.has_value(),"View initialization not verified");if(init)initialization=*init;
         profile=*discovered;layout=*view;imageBase=reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
         const auto same=[&](unsigned rva,std::size_t n){std::vector<std::byte> live(n);return Read(imageBase+rva,live.data(),n)&&std::memcmp(live.data(),bytes.data()+Offset(pe.image,rva,n),n)==0;};
+        if(weatherObservationEnabled||weatherTranslationRuntime){
+            Require(imageBase==0x400000&&profile.preferredBase==0x400000,"Weather observer image base changed");
+            for(const auto& pin:weatherObservation::CodePins){const auto at=Offset(pe.image,pin.rva,pin.bytes);std::uint64_t hash=14695981039346656037ULL;
+                for(unsigned i=0;i<pin.bytes;++i){hash^=std::to_integer<unsigned char>(bytes[at+i]);hash*=1099511628211ULL;}
+                Require(hash==pin.hash&&same(pin.rva,pin.bytes),"Weather observer native signature changed");
+            }
+        }
+        if(weatherTranslationEnabled||weatherTranslationRuntime)for(const auto& pin:weatherTranslation::CodePins){
+            const auto at=Offset(pe.image,pin.rva,pin.bytes);std::uint64_t hash=14695981039346656037ULL;
+            for(unsigned i=0;i<pin.bytes;++i){hash^=std::to_integer<unsigned char>(bytes[at+i]);hash*=1099511628211ULL;}
+            Require(hash==pin.hash&&same(pin.rva,pin.bytes),"Weather translation ownership signature changed");
+        }
         Require(same(render->worldRender,streamMode?0x199:40)&&same(render->prepareView,41)&&same(render->drawView,16),"Native code already modified");
         if(streamMode){
             const fvr::bc2::stereoColorScale::Memory colorMemory{nullptr,ReadColorScale,ReplaceColorScale<3>};
@@ -2253,6 +2920,29 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
                 {holderRelease,0x74},{pendingRelease,0x37}}};
             for(unsigned i=0;i<spans.size();++i){const auto [rva,n]=spans[i];Require(same(rva,n),"Retirement code modified");
                 stereoRecovery.code[i]={unsigned(imageBase+rva),n,Hash(imageBase+rva,n)};}
+            // Root Draw releases its pending child queue before WorldRender
+            // closes phase3. The next Update's terrain callback is a no-op,
+            // followed by visibility consuming the borrowed cache. Pin this
+            // exact ordering before enabling the conditional live-cache repair.
+            struct CacheBoundarySpan {unsigned rva,size;std::uint64_t hash;};
+            constexpr std::array<CacheBoundarySpan,6> boundaries{{
+                {0x7b3b80,0x62,0x01d74859dccddd55ULL},
+                {0x7b4ea0,0x5f,0x0cdae3876391e11bULL},
+                {0x7b4980,0x23,0x942939b1d3847c3bULL},
+                {0x7b4aa7,0x2f,0x78ce7b259c4e066dULL},
+                {0x569d50,3,0x69c9e01c23e9b9f1ULL},
+                {0x7b4cec,0x1c,0x818bd3a56cb39563ULL}}};
+            Require(visibility->worldUpdate==boundaries[2].rva&&render->drawView+0x1dd0==boundaries[0].rva&&
+                render->worldRender+0x120==boundaries[1].rva,"Live cache boundary functions changed");
+            unsigned codeIndex=unsigned(spans.size());
+            for(unsigned i=0;i<boundaries.size();++i){const auto& span=boundaries[i];
+                Require(same(span.rva,span.size)&&Hash(imageBase+span.rva,span.size)==span.hash,
+                    "Live cache native retirement/update boundary unverified");
+                // The Update entry is verified here, then intentionally patched
+                // by our existing detour. Retain only untouched spans for later
+                // native-call admission; never compare the detour with stock.
+                if(i!=2)stereoRecovery.code[codeIndex++]={unsigned(imageBase+span.rva),span.size,span.hash};
+            }
         }
         if(stereoMode){const auto vt=Offset(pe.image,layout.vtable+15*4,4);unsigned setter=0;std::memcpy(&setter,bytes.data()+vt,4);Require(setter>=profile.preferredBase&&same(setter-profile.preferredBase,48),"Viewport setter changed");}
         updateView=reinterpret_cast<CacheFn>(imageBase+caches->updateView);updateProjection=reinterpret_cast<CacheFn>(imageBase+caches->updateProjection);updateFrustum=reinterpret_cast<CacheFn>(imageBase+caches->updateFrustum);
@@ -2260,9 +2950,32 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
         for(auto pair:{std::pair{render->worldRender+0x196,4u},std::pair{render->prepareView+0xf02,8u},std::pair{render->drawView+0x1e2f,12u}}){
             const auto offset=Offset(pe.image,pair.first,3);Require(bytes[offset]==std::byte{0xc2}&&bytes[offset+1]==std::byte(pair.second)&&bytes[offset+2]==std::byte{0}&&same(pair.first,3),"Native callback ABI changed");}
         const auto game=U32(imageBase+profile.gameRendererGlobal),renderer=U32(imageBase+profile.rendererGlobal);Require(U32(renderer)==imageBase+profile.rendererVtable,"Renderer ownership mismatch");
-        const auto subsystem=U32(std::uintptr_t(game)+0x108c);Require(U32(subsystem)==imageBase+render->subsystemVtable,"Subsystem ownership mismatch");const auto world=U32(std::uintptr_t(subsystem)+0x2c),request=U32(std::uintptr_t(subsystem)+0x30);
-        Require(U32(world)==imageBase+render->worldRendererVtable&&U32(std::uintptr_t(request)+8)==world,"World request mismatch");
-        if(stereoMode){for(unsigned index=0;index<16;++index){const auto begin=U32(world+0x9c),end=U32(world+0xa0);if(begin+index*4>=end)break;const auto cb=U32(begin+index*4),vt=U32(cb);if(U32(vt+28)==imageBase+viewCallbacks.registerView)Require(U32(vt+24)==imageBase+initialization.refreshRegistered,"Registered-view refresh mismatch");}
+        unsigned subsystem=0;
+        Require(game>=0x10000&&Read(std::uintptr_t(game)+0x108c,&subsystem,sizeof(subsystem)),"Game renderer unavailable");
+        const auto world=subsystem?U32(std::uintptr_t(subsystem)+0x2c):0u;
+        const auto request=subsystem?U32(std::uintptr_t(subsystem)+0x30):0u;
+        if(subsystem){
+            Require(U32(subsystem)==imageBase+render->subsystemVtable,"Subsystem ownership mismatch");
+            Require(U32(world)==imageBase+render->worldRendererVtable&&U32(std::uintptr_t(request)+8)==world,"World request mismatch");
+        }else{
+            // The front end has a renderer/swapchain but no campaign world.
+            // Admit only that exact native owner, never an arbitrary missing or
+            // partially constructed scene. Later Draw/Update callbacks retain
+            // their normal world/request/view and callback ownership checks.
+            Require(streamMode,"Missing world requires a main-menu VR stream");
+            const auto menuBinding=fvr::bc2::DiscoverMenuState(bytes,pe.image);
+            Require(bool(menuBinding),"Main-menu startup binding unavailable");
+            for(const auto span:fvr::bc2::MenuStateCodeSpans())Require(same(span.rva,span.size),"Main-menu startup code changed");
+            const fvr::bc2::MenuMemory menuMemory{nullptr,[](void*,unsigned at,void* dst,std::size_t n){return Read(at,dst,n);}};
+            const auto menu=fvr::bc2::ReadMenuState(menuMemory,*menuBinding,unsigned(imageBase));
+            unsigned repeatedSubsystem=1;
+            Require(menu&&menu->frontEnd&&menu->entered&&
+                U32(imageBase+profile.gameRendererGlobal)==game&&
+                Read(std::uintptr_t(game)+0x108c,&repeatedSubsystem,sizeof(repeatedSubsystem))&&!repeatedSubsystem,
+                "Missing world is not a stable native main menu");
+            startedFromMainMenu=true;
+        }
+        if(stereoMode){if(world)for(unsigned index=0;index<16;++index){const auto begin=U32(world+0x9c),end=U32(world+0xa0);if(begin+index*4>=end)break;const auto cb=U32(begin+index*4),vt=U32(cb);if(U32(vt+28)==imageBase+viewCallbacks.registerView)Require(U32(vt+24)==imageBase+initialization.refreshRegistered,"Registered-view refresh mismatch");}
             stereoProgress=CreateFileW((output.parent_path()/L"stereo-progress.jsonl").c_str(),GENERIC_WRITE,FILE_SHARE_READ,nullptr,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,nullptr);Require(stereoProgress!=INVALID_HANDLE_VALUE,"Create stereo progress evidence");}
         if(stereoMode||poolOnly){
             const auto call=Offset(pe.image,render->prepareView+0xeb0,21);
@@ -2297,6 +3010,16 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
             }
             const bool audioInstalled=fvr::bc2::mechanismAudio::Install(imageBase,audioConfig);
             if(audioConfig.replaceSpas)Require(audioInstalled,"Mechanism audio callback binding or private cache unverified");
+            fvr::bc2::shellReloadAudio::Config shellConfig{};
+            wchar_t shellReplace[4]{},shellCache[1024]{};
+            if(GetEnvironmentVariableW(L"BC2_SHELL_RELOAD_AUDIO_REPLACE",shellReplace,4)==1&&shellReplace[0]==L'1'){
+                const auto size=GetEnvironmentVariableW(L"BC2_SHELL_RELOAD_AUDIO_CACHE",shellCache,1024);
+                Require(size>0&&size<1024&&std::filesystem::path(shellCache).is_absolute(),"Shell insertion audio requires its absolute private cue cache");
+                Require(audioInstalled,"Shell insertion audio requires the verified native audio callback");
+                shellConfig.replace=true;shellConfig.insertionWave=std::filesystem::path(shellCache)/L"spas-shell-insert.wav";
+            }
+            const bool shellAudioInstalled=fvr::bc2::shellReloadAudio::Install(shellConfig);
+            if(shellConfig.replace)Require(shellAudioInstalled,"Shell insertion audio private cache unverified");
         }
         if(config.boatHeadAim!=fvr::bc2::BoatHeadAimMode::Disabled)
             Require(fvr::bc2::gameplay::EnableBoatHeadAim(config.boatHeadAim==fvr::bc2::BoatHeadAimMode::AimAndFire),
@@ -2448,7 +3171,14 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
             auto* projectionEntry=reinterpret_cast<void*>(imageBase+overrides->setter);
             Require(MH_CreateHook(projectionEntry,ProjectionContextHook,reinterpret_cast<void**>(&projectionContextOriginal))==MH_OK,"Create projection override observer");hookEntries[9]=projectionEntry;
         }
+        if(weatherObservationEnabled||weatherTranslationRuntime){
+            auto* environmentEntry=reinterpret_cast<void*>(imageBase+weatherObservation::EnvironmentRva);
+            auto* worldEntry=reinterpret_cast<void*>(imageBase+weatherObservation::WorldSetterRva);
+            Require(MH_CreateHook(environmentEntry,EnvironmentObserveHook,reinterpret_cast<void**>(&environmentOriginal))==MH_OK,"Create weather environment observer");hookEntries[14]=environmentEntry;
+            Require(MH_CreateHook(worldEntry,WeatherWorldObserveHook,reinterpret_cast<void**>(&weatherWorldOriginal))==MH_OK,"Create weather matrix observer");hookEntries[15]=worldEntry;
+        }
         if(streamMode){const bool menuInstalled=fvr::bc2::menu::Install(bytes,pe.image,imageBase,streamToken);
+            Require(!startedFromMainMenu||menuInstalled,"Main-menu startup requires native menu capture and input");
             Require(((config.ordinaryGrenadeInput!=3&&config.ordinaryGrenadeInput!=4)&&!config.normalPlayerGrenades&&!config.chestKnifeProbe&&!config.normalPlayerKnife&&!config.normalContextualTools)||menuInstalled,"Player grenade requires the real native menu source");
             // Ordinary setup and actual menu binding must succeed first. This
             // enables the unchanged player policy, never the finite stock probe.
@@ -2643,7 +3373,9 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
                     telemetry<<"{\"elapsed_ms\":"<<(now-sessionStarted)<<",\"utc_filetime_100ns\":"<<utc<<",\"world_calls\":"<<worldCalls.load()
                         <<",\"published\":"<<frameBridge.Published()<<",\"consumed\":"<<frameBridge.Consumed()<<",\"discarded\":"<<frameBridge.Discarded()
                         <<",\"input_samples\":"<<inputSamples.load()<<",\"tracked_input_samples\":"<<inputTrackedSamples.load()<<",\"gpu_failure_stage\":"<<frameBridge.FailureStage()<<",\"camera_restore_failures\":"<<tracked.restoreFailures.load()
-                        <<",\"magazine_empty_gate\":{\"requested\":["<<emptyGate.requested[0]<<','<<emptyGate.requested[1]<<','<<emptyGate.requested[2]
+                        <<",\"stereo_frame_admission\":";
+                    stereoFrameAdmissionEvidence.Write(telemetry);
+                    telemetry<<",\"magazine_empty_gate\":{\"requested\":["<<emptyGate.requested[0]<<','<<emptyGate.requested[1]<<','<<emptyGate.requested[2]
                         <<"],\"applied\":["<<emptyGate.applied[0]<<','<<emptyGate.applied[1]<<','<<emptyGate.applied[2]
                         <<"],\"restored\":["<<emptyGate.restored[0]<<','<<emptyGate.restored[1]<<','<<emptyGate.restored[2]
                         <<"],\"patch_failures\":"<<emptyGate.patchFailures<<",\"restore_failures\":"<<emptyGate.restoreFailures
@@ -2695,10 +3427,10 @@ Sleep(DWORD(std::min<std::uint64_t>((toolFixture||config.ordinaryGrenadeInput==4
         bool first=true;for(const auto& r:records)if(r.complete.load(std::memory_order_acquire)){
             if(!first)report<<',';first=false;report<<"{\"thread\":"<<r.thread<<",\"frame\":"<<r.frame<<",\"world_frame\":"<<r.worldFrame<<",\"world\":"<<r.world<<",\"request\":"<<r.request<<",\"view\":"<<r.view<<",\"begin_qpc\":"<<r.beginQpc<<",\"end_qpc\":"<<r.endQpc<<",\"request_before\":"<<r.requestBefore<<",\"request_after\":"<<r.requestAfter<<",\"views\":"<<r.viewCount<<",\"prepare_calls\":"<<r.prepared<<",\"draw_calls\":"<<r.drawn<<",\"arena_before\":"<<r.arenaBefore<<",\"arena_after\":"<<r.arenaAfter<<",\"view_items_before\":"<<r.viewItemsBefore<<",\"view_items_after\":"<<r.viewItemsAfter<<",\"camera_hash_before\":"<<r.cameraBefore<<",\"camera_hash_after\":"<<r.cameraAfter<<",\"prepared_hash_before\":"<<r.dataBefore<<",\"prepared_hash_after\":"<<r.dataAfter<<",\"target_before\":";WriteTarget(report,r.targetBefore);report<<",\"target_after\":";WriteTarget(report,r.targetAfter);report<<",\"children\":[";for(unsigned i=0;i<r.childrenCount;++i){if(i)report<<',';const auto& child=r.children[i];report<<"{\"entry\":"<<child.entry<<",\"view\":"<<child.view<<",\"vtable\":"<<child.vtable<<",\"owner\":"<<child.owner<<",\"active\":"<<child.active<<",\"shadow\":"<<child.shadow<<",\"primary_hash\":"<<child.primary<<",\"secondary_hash\":"<<child.secondary<<'}';}report<<"]}";}
         const bool cameraComplete=cameraExperiment.complete.load(std::memory_order_acquire);
-        report<<"],\"weapon_projection_copies\":"<<weaponProjectionCopies.load()<<",\"weapon_context_failures\":"<<weaponContextFailures.load()<<",\"view_anchor_copies\":"<<anchorCopies.load()<<",\"camera_copy_test\":";
-        if(cameraComplete){report<<"{\"complete\":true"<<",\"live_camera_unchanged\":"<<(cameraExperiment.liveUnchanged?"true":"false")<<",\"baseline_view_error\":"<<cameraExperiment.baselineViewError<<",\"baseline_projection_error\":"<<cameraExperiment.baselineProjectionError<<",\"variants\":[";
+        report<<"],\"weapon_projection_copies\":"<<weaponProjectionCopies.load()<<",\"weapon_context_failures\":"<<weaponContextFailures.Total()<<",\"view_anchor_copies\":"<<anchorCopies.load()<<",\"camera_copy_test\":";
+        if(cameraComplete){report<<"{\"complete\":true"<<",\"live_camera_unchanged\":"<<(cameraExperiment.liveUnchanged?"true":"false")<<",\"baseline_view_error\":"<<cameraExperiment.baselineViewError<<",\"baseline_projection_error\":"<<cameraExperiment.baselineProjectionError<<",\"source_position_valid\":"<<cameraExperiment.sourcePositionValid<<",\"source_position\":["<<cameraExperiment.sourcePosition[0]<<','<<cameraExperiment.sourcePosition[1]<<','<<cameraExperiment.sourcePosition[2]<<"],\"variants\":[";
         unsigned variantIndex=0;for(const auto& variant:cameraExperiment.variants){if(variantIndex++)report<<',';report<<"{\"projection\":[";bool firstElement=true;for(const auto& row:variant.projection.values)for(float value:row){if(!firstElement)report<<',';firstElement=false;if(std::isfinite(value))report<<value;else report<<"null";}report<<"],\"frustum_hash\":"<<variant.frustumHash<<'}';}
-        report<<"],\"mapped_cameras\":[";unsigned mappedIndex=0;for(const auto& result:cameraExperiment.mapped){if(mappedIndex++)report<<',';report<<"{\"passed\":"<<(result.complete?"true":"false")<<",\"view_error\":"<<result.viewError<<",\"projection_error\":"<<result.projectionError<<",\"view_projection_relative_error\":"<<result.viewProjectionRelativeError<<'}';}report<<"],\"culling_cameras\":[";unsigned cullIndex=0;for(const auto& result:cameraExperiment.culling){if(cullIndex++)report<<',';report<<"{\"passed\":"<<(result.passed?"true":"false")<<",\"max_distance\":"<<result.maxDistance<<",\"normal_error\":"<<result.normalError<<'}';}report<<"]}";
+        report<<"],\"mapped_cameras\":[";unsigned mappedIndex=0;for(const auto& result:cameraExperiment.mapped){if(mappedIndex++)report<<',';report<<"{\"passed\":"<<(result.complete?"true":"false")<<",\"view_error\":"<<result.viewError<<",\"projection_error\":"<<result.projectionError<<",\"view_projection_relative_error\":"<<result.viewProjectionRelativeError<<'}';}report<<"],\"culling_cameras\":[";unsigned cullIndex=0;for(const auto& result:cameraExperiment.culling){if(cullIndex++)report<<',';report<<"{\"passed\":"<<(result.passed?"true":"false")<<",\"max_distance\":"<<result.maxDistance<<",\"max_roundoff_allowance\":"<<result.maxRoundoffAllowance<<",\"max_excess\":"<<result.maxExcess<<",\"absolute_tolerance\":0.001,\"normal_error\":"<<result.normalError<<'}';}report<<"]}";
         }else report<<"{\"complete\":false}";
         report<<",\"scene_milestones\":";sceneWriter.Status(report);
         report<<",\"visibility_calls\":"<<visibilityCalls.load()<<",\"visibility_records\":[";bool firstVisibility=true;
@@ -2735,9 +3467,22 @@ Sleep(DWORD(std::min<std::uint64_t>((toolFixture||config.ordinaryGrenadeInput==4
             <<",\"owned_pending_references\":"<<stereoRecovery.retiredPendingReferences.load()
             <<",\"cache_clear_calls\":"<<stereoRecovery.cacheClearCalls.load()<<",\"cache_clear_receipts\":"<<stereoRecovery.cacheClearReceipts.load()
             <<",\"completed_on_stop\":"<<(stereoRecovery.completedOnStop.load()?"true":"false")<<'}';
+        report<<",\"live_view_cache\":{\"calls\":"<<liveCacheEvidence.calls.load()
+            <<",\"refreshed\":"<<liveCacheEvidence.refreshed.load()<<",\"disabled\":"<<liveCacheEvidence.disabled.load()
+            <<",\"rejected\":"<<liveCacheEvidence.rejected.load()<<",\"callback\":"<<liveCacheEvidence.callback.load()
+            <<",\"before_count\":"<<liveCacheEvidence.beforeCount.load()<<",\"registered_count\":"<<liveCacheEvidence.registeredCount.load()
+            <<",\"after_count\":"<<liveCacheEvidence.afterCount.load()<<'}';
         report<<",\"stereo_progress\":";
         fvr::bc2::StereoProgressEvidence::WriteJson(report,stereoProgressEvidence.Read());
+        report<<",\"stereo_frame_admission\":";stereoFrameAdmissionEvidence.Write(report);
         const auto poolStage=workPool.stage.load(std::memory_order_acquire);
+        // A front-end-only session never owns a world, expanded pool or stereo
+        // views. Admit its own completion only after the menu and graphics
+        // callbacks have drained; any world observation keeps the strict world
+        // retirement and stereo checks below.
+        const bool mainMenuOnly=startedFromMainMenu&&streamMode&&!worldCalls.load()&&!prepareCalls.load()&&!drawCalls.load()&&
+            !complete&&stereoState==StereoExperiment::Idle&&poolStage==0&&!frameBridge.Connected()&&!frameBridge.Published();
+        const bool mainMenuPassed=mainMenuOnly&&disabled&&diagnosticImageLifetime.Quiescent()&&fvr::bc2::menu::CompletedMenuPresentation();
         report<<",\"work_pool\":{\"stage\":"<<poolStage;
         if(poolStage==2)report<<",\"frame\":"<<workPool.frame<<",\"peak_entries\":"<<workPool.peak<<",\"native_capacity\":32,\"expanded_capacity\":128";
         report<<'}';
@@ -2745,6 +3490,9 @@ Sleep(DWORD(std::min<std::uint64_t>((toolFixture||config.ordinaryGrenadeInput==4
             for(auto item:{std::pair{"saved",&tracked.saved[i]},std::pair{"written",&tracked.written[i]},std::pair{"observed",&tracked.observed[i]}}){std::ofstream bytesOut(output.parent_path()/("tracked-"+std::string(item.first)+"-"+std::to_string(i)+".bin"),std::ios::binary);bytesOut.write(reinterpret_cast<const char*>(item.second->bytes.data()),0x460);}
         }
         report<<",\"desktop_pacing\":{\"requested\":"<<(uncapMirror?"true":"false")<<",\"calls\":"<<desktopPresentCalls.load()<<",\"native_sync_one\":"<<desktopSyncOne.load()<<",\"bypassed_waits\":"<<desktopSyncBypassed.load()<<"}";
+        report<<",\"desktop_mirror\":{\"completed_left_commits\":"<<frameBridge.DesktopMirror().Committed()
+            <<",\"copies\":"<<frameBridge.DesktopMirror().Copied()<<",\"neutral\":"<<frameBridge.DesktopMirror().Neutral()
+            <<",\"failures\":"<<frameBridge.DesktopMirror().Failed()<<"}";
         report<<",\"desktop_presentation\":{\"diagnostic_only\":true,\"successful\":"<<desktopPresentOkay.load()
             <<",\"occluded\":"<<desktopPresentOccluded.load()<<",\"other_status\":"<<desktopPresentStatus.load()
             <<",\"failed\":"<<desktopPresentFailed.load()<<",\"test_calls\":"<<desktopPresentTests.load()
@@ -2804,6 +3552,7 @@ Sleep(DWORD(std::min<std::uint64_t>((toolFixture||config.ordinaryGrenadeInput==4
             <<",\"normal_contextual_tools\":"<<(config.normalContextualTools?"true":"false");
         report<<",\"gameplay\":";fvr::bc2::gameplay::Report(report);
         report<<",\"mechanism_audio\":";fvr::bc2::mechanismAudio::Report(report);
+        report<<",\"shell_reload_audio\":";fvr::bc2::shellReloadAudio::Report(report);
         report<<",\"weapon_visibility_clock_frequency\":"<<(weaponVisibilityProbeMode?reloadDrawFrequency:0);
         report<<",\"weapon_visibility_eyes\":[";
         for(unsigned n=0;n<weaponVisibilityEyeCount;++n){if(n)report<<',';const auto& r=weaponVisibilityEyes[n];
@@ -2831,6 +3580,10 @@ Sleep(DWORD(std::min<std::uint64_t>((toolFixture||config.ordinaryGrenadeInput==4
 #ifdef FVR_BC2_BODY_SCENE_DEPTH
         report<<",\"body_scene_depth\":{\"begun_eyes\":"<<bodyDepthBegins.load()<<",\"completed_eyes\":"<<bodyDepthEnds.load()<<",\"rejected_eyes\":"<<bodyDepthRejected.load()<<",\"extra_native_draws\":0}";
         report<<R"(,"graphics_bootstrap":{"worker_thread":)"<<graphicsBootstrapWorkerThread
+            <<R"(,"started_from_main_menu":)"<<(startedFromMainMenu?"true":"false")
+            <<R"(,"main_menu_only":)"<<(mainMenuOnly?"true":"false")
+            <<R"(,"main_menu_completed":)"<<(mainMenuPassed?"true":"false")
+            <<R"(,"world_stereo_tested":)"<<(mainMenuOnly?"false":"true")
             <<R"(,"present_thread":)"<<graphicsBootstrapEvidence.thread<<R"(,"device_flags":)"<<graphicsBootstrapEvidence.deviceFlags
             <<R"(,"device":)"<<graphicsBootstrapEvidence.device<<R"(,"context":)"<<graphicsBootstrapEvidence.context
             <<R"(,"worker_com_calls":0,"temporary_refs_released_before_publication":true})";
@@ -2870,6 +3623,9 @@ Sleep(DWORD(std::min<std::uint64_t>((toolFixture||config.ordinaryGrenadeInput==4
         }
         report<<']';
         report<<"}\n";report.flush();
+        WriteWeatherObservation(output);
+        WriteWeatherTranslation(output);
+        WriteWeatherRuntime(output);
 #ifdef FVR_BC2_SCENE_DEPTH_CAPTURE
         {
             std::ofstream evidence(output.parent_path()/"scene-depth-evidence.json");
@@ -2965,6 +3721,7 @@ Sleep(DWORD(std::min<std::uint64_t>((toolFixture||config.ordinaryGrenadeInput==4
         };
         if(disabled&&diagnosticImageLifetime.Quiescent()){
             for(auto& capture:colorCaptures)releaseImage(capture);
+            for(auto& capture:weatherColorCaptures)releaseImage(capture);
             for(auto& capture:desktopCaptures)releaseImage(capture.color);
 #ifdef FVR_BC2_SCENE_DEPTH_CAPTURE
             for(auto& capture:sceneDepthCaptures)releaseImage(capture);
@@ -2985,6 +3742,7 @@ Sleep(DWORD(std::min<std::uint64_t>((toolFixture||config.ordinaryGrenadeInput==4
             for(unsigned i=1;!initializationOnly&&i<3;++i)stereoPassed&=colorCaptures[i].complete.load(std::memory_order_acquire)&&colorCaptures[i].step==ColorCapture::Step::Finished&&colorCaptures[i].frame==e.initialColorFrame;
         }
         if(disabled&&stereoProgress!=INVALID_HANDLE_VALUE){CloseHandle(stereoProgress);stereoProgress=INVALID_HANDLE_VALUE;}
+        if(mainMenuOnly)return reportSaved&&mainMenuPassed?0:12;
         return report&&disabled&&complete&&cameraPassed&&lifecyclePassed&&stereoPassed&&(!(poolOnly||(stereoMode&&!initializationOnly))||poolStage==2)&&(!cameraPulseMode||(pulseComplete&&cameraPulse.applied&&cameraPulse.restored&&(cameraPulseMode==2||cameraPulse.drawLeftCopiesUnchanged)))?0:12;
     }catch(const std::exception& e){sampling.store(false,std::memory_order_release);if(hooksEnabled)disabled=DisableProbeHooks();else {
             if(!fvr::bc2::gameplay::PrepareSessionStop())disabled=false;
@@ -2992,7 +3750,8 @@ Sleep(DWORD(std::min<std::uint64_t>((toolFixture||config.ordinaryGrenadeInput==4
                 fvr::bc2::opticFilterRuntime::Disable();fvr::bc2::rigWorkerRuntime::Disable();
                 const bool gameplayStopped=fvr::bc2::gameplay::Stop(),menuStopped=fvr::bc2::menu::Stop();
                 const bool audioStopped=fvr::bc2::mechanismAudio::DrainAndRemove();
-                disabled=gameplayStopped&&menuStopped&&audioStopped&&fvr::bc2::rigWorkerRuntime::Quiescent()&&fvr::bc2::opticFilterRuntime::Quiescent();
+                const bool shellAudioStopped=fvr::bc2::shellReloadAudio::Drain();
+                disabled=gameplayStopped&&menuStopped&&audioStopped&&shellAudioStopped&&fvr::bc2::rigWorkerRuntime::Quiescent()&&fvr::bc2::opticFilterRuntime::Quiescent();
             }
         }
         if(report)report<<"{\"state\":\"failed\",\"error\":\""<<e.what()<<"\",\"hooks_disabled\":"<<(disabled?"true":"false")<<"}\n";return 20;}

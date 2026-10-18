@@ -12,6 +12,7 @@ from bc2_weapon_config_pipeline import Resolver,guid,named,parse,scalar
 from bc2_weapon_mesh_bindings import reference_resource
 from bc2_weapon_animation_pipeline import Clip,Skeleton,inverse_rigid
 from inspect_bc2_mesh_asset import Archive,sha
+from bc2_authored_archive_set import AuthoredArchiveSet
 
 SCHEMA='fvr.bc2.authored_grip_bindings'
 HASH=re.compile(r'[0-9a-f]{64}')
@@ -198,7 +199,7 @@ def build(configurations,documents,mesh_bindings,pose_batch,resources,*,reload_r
             'scope':'Exact authored reference and content binding; current native equipment/mesh/rig guards remain required',
             'summary':{'weapon_definitions':len(configurations['resolved_weapons']),'bound_profiles':len(output),'gaps':len(gaps)}}
 
-def load(game,archive_relative,configurations,mesh_bindings,pose_batch,*,reload_references_only=False):
+def load(game,archive_relative,configurations,mesh_bindings,pose_batch,*,reload_references_only=False,reference_archives=()):
     """Resolve a bounded authored reference closure in five bulk archive reads."""
     if len(configurations.get('resolved_weapons',[]))>1024 or len(mesh_bindings.get('weapons',[]))>1024 or len(pose_batch.get('clips',[]))>1024:
         raise ValueError('Join count bound before archive reads')
@@ -207,22 +208,14 @@ def load(game,archive_relative,configurations,mesh_bindings,pose_batch,*,reload_
             raise ValueError('Mesh state count bound')
     game=game.resolve();path=(game/archive_relative).resolve()
     if not path.is_relative_to(game):raise ValueError('Archive escapes game root')
-    archive=Archive(path);entries={}
-    for entry in archive.entries:
-        if entry.flags!=65536:continue
-        key=path_key(entry.name)
-        if key in entries:raise ValueError('Ambiguous case-insensitive archive resource')
-        entries[key]=entry
+    sources=AuthoredArchiveSet.open(game,[archive_relative,*reference_archives],archive_type=Archive)
+    archive=sources.sources[0][1]
     docs={};errors=[]
     def read_documents(names):
-        selected=[]
-        for name in sorted(set(names)):
-            key=path_key(name)
-            if key not in docs and key in entries:selected.append(entries[key].name)
-        if len(selected)>4096:raise ValueError('Document closure bound')
-        if not selected:return
-        for name,data in archive.read_selected(selected).items():
-            try:docs[path_key(name)]=parse(name,data)
+        selected=[name for name in sorted(set(names)) if path_key(name) not in docs]
+        for key,(data,source) in sources.read(selected).items():
+            name=source['resource']
+            try:docs[key]=parse(name,data)
             except ValueError as exc:errors.append({'resource':name,'sha256':sha(data),'reason':str(exc)})
     def referenced(origin,reference):
         return reference_resource(reference) if '/' in reference else origin
@@ -262,10 +255,10 @@ def load(game,archive_relative,configurations,mesh_bindings,pose_batch,*,reload_
                 except (ValueError,KeyError):pass
         except (ValueError,KeyError):pass
     wanted={path_key(c[k]) for c in chains for k in ('animation_resource','skeleton_resource')}
-    raw=archive.read_selected([entries[k].name for k in sorted(wanted) if k in entries]) if wanted else {}
-    blobs={path_key(k):v for k,v in raw.items()};resources={};skeleton_cache={}
-    source_info={k:{'selection':'exact_configuration_archive_resource','archive':archive_relative.as_posix(),
-                   'archive_index_sha256':archive.index_sha256,'kind':entries[k].kind} for k in blobs}
+    raw=sources.read(wanted)
+    blobs={key:value[0] for key,value in raw.items()};resources={};skeleton_cache={}
+    source_info={key:{'selection':'exact_configuration_archive_resource',
+                     **{k:source[k] for k in ('archive','archive_index_sha256','kind')}} for key,(_,source) in raw.items()}
     # If the configuration archive omits the payload, a single content variant
     # across the explicit batch is usable. Multiple variants require an exact
     # source and remain unresolved; no weapon-directory heuristic is involved.
@@ -316,6 +309,13 @@ def load(game,archive_relative,configurations,mesh_bindings,pose_batch,*,reload_
             resources[ck]=item
         except (ValueError,KeyError) as exc:errors.append({'resource':chain['animation_resource'],'reason':str(exc)})
     result=build(configurations,list(docs.values()),mesh_bindings,pose_batch,resources,reload_references_only=reload_references_only)
+    if reference_archives:
+        # Bind the action graph to its configuration archive independently from
+        # the shared skeleton payload. Existing one-archive receipts stay exact.
+        for profile in result['profiles']:
+            profile['configuration_source']={'archive':archive_relative.as_posix(),'archive_index_sha256':archive.index_sha256}
+            profile['reference_sources']=[{'archive':name,'archive_index_sha256':owner.index_sha256} for name,owner in sources.sources[1:]]
+            profile['binding_digest']=digest({k:v for k,v in profile.items() if k!='binding_digest'})
     result.update(archive=archive_relative.as_posix(),archive_index_sha256=archive.index_sha256,parse_or_evaluation_errors=errors)
     return result
 
@@ -415,13 +415,16 @@ def main(argv=None):
     p.add_argument('--game',required=True,type=Path);p.add_argument('--archive',required=True,type=Path)
     p.add_argument('--configurations',required=True,type=Path);p.add_argument('--mesh-bindings',required=True,type=Path)
     p.add_argument('--hand-poses',required=True,type=Path);p.add_argument('--output',required=True,type=Path)
+    p.add_argument('--reference-archive',action='append',type=Path,default=[],help='Explicit shared authored dependency; conflicting same-name content rejects')
+    p.add_argument('--reload-references-only',action='store_true',help='Preserve decoded non-static hands for separate support/reload derivation without gun-hand admission')
     p.add_argument('--header',type=Path,help='Optional private generated C++ registry; requires --asset')
     p.add_argument('--model-axes',type=Path,help='Optional exact-key reviewed model-axis descriptor; requires --header')
     p.add_argument('--asset',action='append',default=[],help='Exact asset permitted in generated header; repeat as needed')
     args=p.parse_args(argv);config,ch=read_json(args.configurations);meshes,mh=read_json(args.mesh_bindings);poses,ph=read_json(args.hand_poses)
     if args.model_axes and not args.header:p.error('--model-axes requires --header')
+    if args.reload_references_only and args.header:p.error('Reload references cannot generate a gun-hand header')
     axes=read_json(args.model_axes)[0] if args.model_axes else None
-    result=load(args.game,args.archive,config,meshes,poses)
+    result=load(args.game,args.archive,config,meshes,poses,reference_archives=args.reference_archive,reload_references_only=args.reload_references_only)
     result['input_sha256']={'configurations':ch,'mesh_bindings':mh,'hand_poses':ph}
     args.output.parent.mkdir(parents=True,exist_ok=True);args.output.write_text(json.dumps(result,indent=2,allow_nan=False)+'\n',encoding='utf-8')
     if args.header:

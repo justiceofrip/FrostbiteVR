@@ -2,7 +2,7 @@
 #include "Bc2AuthoredSupport.h"
 #include "fvr/interaction/SupportGrip.h"
 #include "fvr/interaction/GripAttachment.h"
-#include "../profiles/support373/CombinedSupport.h"
+#include "../profiles/opening426/CombinedSupport.h"
 #include <cstring>
 #include <iostream>
 using namespace fvr;using namespace fvr::bc2;
@@ -21,11 +21,11 @@ struct SupportFixture {
 };
 int EnrolledSupportComposesExistingGrip(){
  using namespace interaction;
- bool scar=false,pistol=false;unsigned enrolled=0,primary=0;
+ bool scar=false,pistol=false,nambu=false;unsigned enrolled=0,primary=0;
  for(const auto& p:generated::AuthoredSupports){
   if(!p.contactReference)continue;
-  ++enrolled;scar|=p.assetName=="SCAR_sp";pistol|=p.assetName=="MP443_sp";
-  SupportFixture f(p);
+  ++enrolled;scar|=p.assetName=="SCAR_sp";pistol|=p.assetName=="MP443_sp";nambu|=p.assetName=="Nambu100";
+  SupportFixture f(p);if(p.assetName=="Nambu100")f.equipment.persistence=0;
   const auto bound=BindAuthoredSupportReference(generated::AuthoredSupports,f.snapshot,f.equipment,f.owner,p.rigFingerprint,f.now);
   CHECK(bound&&AuthoredSupportContact(bound));
   CHECK(AuthoredSupportCurrent(*bound,f.snapshot.get(),f.equipment,f.owner,f.now));
@@ -51,7 +51,7 @@ int EnrolledSupportComposesExistingGrip(){
   CHECK(!AuthoredSupportCurrent(*bound,&refreshed,f.equipment,f.owner,f.now+100000000));
   ++input.generation;input.predictedNs+=10000000;CHECK(policy.Update(owner,input,{}).released);
  }
- CHECK(scar&&pistol&&enrolled==69&&primary==6);
+ CHECK(scar&&pistol&&nambu&&enrolled==70&&primary==6);
  CHECK(generated::AuthoredSupports[0].assetName=="SPAS12_sp");
  CHECK(generated::AuthoredSupports[0].leftInWeapon.values==generated::PreservedSupport202[0].leftInWeapon.values);
  return 0;
@@ -77,8 +77,20 @@ int OriginalSupportConfigurationAndInputLifetime(){
  CHECK(!BindAuthoredSupportReference(generated::AuthoredSupports,f.snapshot,f.equipment,bound->owner,p.rigFingerprint+1,f.now));
  return 0;
 }
+int NullPersistenceDoesNotHideEquipmentReplacement(){
+ const auto& p=generated::Opening426Supports.front();SupportFixture f(p);f.equipment.persistence=0;
+ const auto bound=BindAuthoredSupportReference(generated::AuthoredSupports,f.snapshot,f.equipment,f.owner,p.rigFingerprint,f.now);CHECK(bound);
+ const auto current=[&]{return AuthoredSupportCurrent(*bound,f.snapshot.get(),f.equipment,f.owner,f.now);};CHECK(current());
+ f.equipment.persistence=17;CHECK(!current());f.equipment=bound->equipment;
+ ++f.equipment.data;++f.snapshot->weaponData;CHECK(!current());
+ f.equipment=bound->equipment;f.snapshot->weaponData=f.equipment.data;
+ Text(f.equipment.asset,"Replacement");Text(f.snapshot->weaponName,"Replacement");CHECK(!current());
+ f.equipment=bound->equipment;Text(f.snapshot->weaponName,p.assetName);CHECK(current());
+ f.equipment.data=0;CHECK(!BindAuthoredSupportReference(generated::AuthoredSupports,f.snapshot,f.equipment,f.owner,p.rigFingerprint,f.now));
+ return 0;
+}
 int main(){
- if(EnrolledSupportComposesExistingGrip()||OriginalSupportConfigurationAndInputLifetime())return 1;
+ if(EnrolledSupportComposesExistingGrip()||OriginalSupportConfigurationAndInputLifetime()||NullPersistenceDoesNotHideEquipmentReplacement())return 1;
  math::Matrix4 left{};for(unsigned n=0;n<4;++n)left.values[n][n]=1;left.values[3]={0,-.1f,-.6f,1};
  constexpr std::string_view digest="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
  const std::array<AuthoredSupportProfile,1> profiles{{{"SyntheticSupport","Objects/Weapons/SyntheticMesh",digest,digest,digest,91,left}}};

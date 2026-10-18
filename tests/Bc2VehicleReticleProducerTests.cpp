@@ -1,4 +1,5 @@
 #include "Bc2VehicleReticleProducer.h"
+#include "Bc2BoatReticle.h"
 #include "Test.h"
 #include <unordered_map>
 #include <cstring>
@@ -7,6 +8,9 @@
 #include <fstream>
 #include "fvr/engine/PeImage.h"
 using namespace fvr;
+namespace fvr::bc2 {struct BoatReticleRuntimeTestAccess {
+ static BoatReticleShotWitness AcceptedBoundary(VehicleReticleObservation s,unsigned caller,unsigned config){return {s,caller,config};}
+};}
 math::Matrix4 Pose(float x=0,float y=0,float z=0){math::Matrix4 m{};for(unsigned n=0;n<4;++n)m.values[n][n]=1;m.values[3]={x,y,z,1};return m;}
 struct Memory {
  std::unordered_map<unsigned,std::byte> bytes;std::unordered_map<unsigned,std::string> types;unsigned mutationAt=0,mutationValue=0,readCalls=0,mutateCall=0;
@@ -29,7 +33,8 @@ struct Fixture {
    ticket.resourceEpoch=11;ticket.sequence=12;ticket.frameId=13;ticket.spaceGeneration=4;ticket.trackingGeneration=8;ticket.predictedNs=1000000001;ticket.session[0]=1;
    m.Word(component+0xd0,weapon);m.Word(weapon,table);m.Word(table+8,image+0x3d4c10);m.Word(table+12,image+0x3bf840);m.Word(table+16,image+0x3bf860);
    m.Word(weapon+0xb0,0);m.Word(weapon+0x134,effects);m.Word(weapon+12,firing);m.Word(effects+16,firing);m.Word(firing+64,primary);
-   m.Word(effects+0x174,0);m.Byte(firing+0x46,0);
+   m.Word(effects+0x174,0);m.Word(effects+0x128,0);m.Byte(firing+0x46,0);
+   for(unsigned n=0;n<3;++n)m.Float(effects+0x20+n*4,0);
    m.types[firing]="WeaponFiringData";m.types[primary]="FiringFunctionData"; // no speculative effects RTTI
    auto base=Pose(1,2,3),local=Pose(4,5,6);m.Put(effects+0x30,&base,64);m.Put(effects+0x70,&local,64);
    std::array<std::byte,80> s{};m.Put(shot,s.data(),s.size());m.Float(shot+8,600);m.Word(shot+0x34,1);
@@ -63,12 +68,37 @@ int NativeVelocityAndCanonicalDirection(){Fixture f;const auto bytes=f.m.bytes;a
  f.m.Word(Fixture::shot+0x40,0x81000);CHECK(f.Ray());return 0;
 }
 int UnsupportedShotBranches(){for(unsigned i=0;i<13;++i){Fixture f;
- if(i<3)f.m.Byte(Fixture::shot+0x48+i,1);if(i==3)f.m.Float(Fixture::shot+0x3c,.5f);
+ if(i<3)f.m.Byte(Fixture::shot+0x48+i,1);if(i==1)f.m.Word(Fixture::effects+0x128,0x83000);if(i==3)f.m.Float(Fixture::shot+0x3c,.5f);
  if(i==4)f.m.Float(Fixture::shot+0x10,.1f);if(i==5)f.m.Float(Fixture::shot+0x18,-1);if(i==6)f.m.Float(Fixture::shot+8,0);
  if(i==7)f.m.Float(Fixture::shot+0x18,std::numeric_limits<float>::quiet_NaN());if(i==8)f.m.Word(Fixture::shot+0x34,0);
  if(i==9)f.m.Word(Fixture::effects+0x174,0x82000);if(i==10)f.m.Byte(Fixture::firing+0x46,1);if(i==11)f.m.bytes.erase(Fixture::effects+0x174);
  if(i==12)f.m.Float(Fixture::shot+0x18,std::numeric_limits<float>::max());
  CHECK(!f.Ray());}return 0;}
+int InheritedVelocityAndInactiveCameraSpawn(){Fixture f;
+ // Measured PBLB profile: camera-spawn authored, no camera owner, full native
+ // inherited velocity. The sight line must follow configured native values.
+ f.m.Byte(Fixture::shot+0x49,1);f.m.Float(Fixture::shot+0x3c,1);
+ auto r=f.Ray();CHECK(r&&Near(r->direction.x,0)&&Near(r->direction.z,-1));
+ f.m.Float(Fixture::effects+0x20,600);r=f.Ray();CHECK(r);
+ CHECK(Near(r->direction.x,std::sqrt(.5f))&&Near(r->direction.y,0)&&Near(r->direction.z,-std::sqrt(.5f)));
+ CHECK(Near(r->origin.x,5.2f)&&Near(r->origin.y,7.3f)&&Near(r->origin.z,-9.4f));
+ f.m.Float(Fixture::shot+0x3c,0);r=f.Ray();CHECK(r&&Near(r->direction.x,0)&&Near(r->direction.z,-1));
+ f.m.Word(Fixture::effects+0x128,0x83000);CHECK(!f.Ray());
+ f.m.Word(Fixture::effects+0x128,0);f.m.Byte(Fixture::shot+0x49,2);CHECK(!f.Ray());
+ for(float value:{-.1f,.5f,1.1f,std::numeric_limits<float>::infinity(),std::numeric_limits<float>::quiet_NaN()}){
+   Fixture bad;bad.m.Float(Fixture::shot+0x3c,value);CHECK(!bad.Ray());}
+ for(float value:{std::numeric_limits<float>::infinity(),std::numeric_limits<float>::quiet_NaN()}){
+   Fixture bad;bad.m.Float(Fixture::shot+0x3c,1);bad.m.Float(Fixture::effects+0x24,value);CHECK(!bad.Ray());}
+ return 0;
+}
+int InheritedSourceCoherentAcrossBracket(){
+ for(unsigned n=0;n<3;++n){Fixture f;f.m.Byte(Fixture::shot+0x49,1);f.m.Float(Fixture::shot+0x3c,1);
+   CHECK(f.Ray());const auto calls=f.m.readCalls;f.m.readCalls=0;f.m.mutateCall=calls/2+1;
+   f.m.mutationAt=n==0?Fixture::effects+0x20:n==1?Fixture::effects+0x128:Fixture::shot+0x3c;
+   f.m.mutationValue=n==1?0x83000:0x3f000000;CHECK(!f.Ray());}
+ Fixture missing;missing.m.bytes.erase(Fixture::effects+0x128);CHECK(!missing.Ray());
+ Fixture velocity;velocity.m.bytes.erase(Fixture::effects+0x20);CHECK(!velocity.Ray());return 0;
+}
 int ChangedSourceOrMissingField(){for(unsigned i=0;i<6;++i){Fixture f;
  if(i==0)f.m.bytes.erase(Fixture::weapon+0xb0);if(i==1)f.m.Word(Fixture::weapon+0xb0,Fixture::weapon+0xf4);
  if(i==2)f.m.Word(Fixture::effects+16,Fixture::firing+4);if(i==3)f.m.types[Fixture::firing]="Wrong";
@@ -105,6 +135,21 @@ int ActualSourceRereadBeforeSecondEyeAndCompletion(){for(unsigned i=0;i<2;++i){F
  f.m.Word(Fixture::weapon+0x134,0x900000); // same seat/nativeWeapon, replaced or lost firing source
  if(i==0)CHECK(!f.producer.Eye(f.m.Api(),f.binding,1,f.aim,f.route,f.input,f.ticket,1000000004));
  CHECK(!f.producer.Complete(f.m.Api(),f.binding,f.aim,f.route,f.input,f.ticket,1000000005));}return 0;}
-int main(int argc,char** argv){if(FullCodeProof(argc>1?argv[1]:nullptr)||NativeVelocityAndCanonicalDirection()||UnsupportedShotBranches()||ChangedSourceOrMissingField()||ProducerUsesMeasuredRayAndStaysDisabled()||PairFrozenAcrossFreshObservation()||PairCancelsOnIdentityOrTrackingLoss()||OriginalDeadlineCannotRenew()||DuplicatedEyeOrTicketCannotComplete()||RegressionAndResetAdvanceEpoch()||WrongSeatOrContextRejectsObservation()||ClockOverflowAndInvalidTicket()||ActualSourceRereadBeforeSecondEyeAndCompletion())return 1;
- std::cout<<(argc>1?"13":"12")<<" native-source/producer CPU groups passed; synthetic object memory, production disabled.\n";}
+int RuntimeWitnessAndInvalidation(){Fixture f;bc2::BoatReticleRuntime runtime;
+ const auto publish=[&]{runtime.Publish(f.m.Api(),f.binding,f.aim,f.route,f.input,1000000000);};publish();
+ CHECK(!runtime.Read(1000000001));auto observation=f.Observe();CHECK(observation);
+ // Synthetic accepted callback boundary tests retention only, not live native
+ // ownership. The opaque witness is otherwise constructible only by BeginShot.
+ auto proof=bc2::BoatReticleRuntimeTestAccess::AcceptedBoundary(*observation,Fixture::image+0x408258,Fixture::shot);
+ auto wrong=*observation;++wrong.effects;
+ CHECK(!runtime.EndShot(proof,bc2::BoatReticleRuntimeTestAccess::AcceptedBoundary(wrong,Fixture::image+0x408258,Fixture::shot)));
+ CHECK(runtime.EndShot(proof,proof));CHECK(runtime.Read(1000000001));
+ CHECK(!runtime.Read(1100000000));publish();CHECK(runtime.Read(1000000001));
+ runtime.Invalidate();CHECK(!runtime.Read(1000000001));publish();CHECK(!runtime.Read(1000000001));
+ CHECK(!runtime.EndShot(proof,proof)); // Revocation advances the producer epoch.
+ CHECK(!runtime.BeginShot(f.m.Api(),f.binding,{Fixture::image,true},f.aim.owner.actor,f.aim.owner.controlled,f.aim.owner.entry,
+     Fixture::effects,Fixture::shot,Fixture::image+0x408258,1000000001)); // Missing live local-seat graph cannot be treated as accepted callback.
+ CHECK(runtime.Statistics().witnesses==1);return 0;}
+int main(int argc,char** argv){if(FullCodeProof(argc>1?argv[1]:nullptr)||NativeVelocityAndCanonicalDirection()||InheritedVelocityAndInactiveCameraSpawn()||InheritedSourceCoherentAcrossBracket()||UnsupportedShotBranches()||ChangedSourceOrMissingField()||ProducerUsesMeasuredRayAndStaysDisabled()||PairFrozenAcrossFreshObservation()||PairCancelsOnIdentityOrTrackingLoss()||OriginalDeadlineCannotRenew()||DuplicatedEyeOrTicketCannotComplete()||RegressionAndResetAdvanceEpoch()||WrongSeatOrContextRejectsObservation()||ClockOverflowAndInvalidTicket()||ActualSourceRereadBeforeSecondEyeAndCompletion()||RuntimeWitnessAndInvalidation())return 1;
+ std::cout<<(argc>1?"16":"15")<<" native-source/producer CPU groups passed; dynamic shot witness still needs native validation.\n";}
 

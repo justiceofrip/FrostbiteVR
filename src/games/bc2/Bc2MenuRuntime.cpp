@@ -2,6 +2,7 @@
 #include "Bc2MenuBinding.h"
 #include "Bc2MenuState.h"
 #include "Bc2MenuControl.h"
+#include "Bc2MenuStartupRuntime.h"
 #include "fvr/graphics/D3D11MenuProducer.h"
 #include <Windows.h>
 #include <MinHook.h>
@@ -15,6 +16,8 @@ using PumpFn=void(__thiscall*)(void*,void*);PumpFn original=nullptr;void* hook=n
 ipc::MenuChannel channel;graphics::D3D11MenuProducer raster;
 MenuBindingCandidates binding{};MenuStateCandidates states{};unsigned base=0;
 std::atomic<bool> enabled=false,stopping=false;std::atomic<unsigned> callbacks=0,uiThread=0;
+std::atomic<MenuDisplayState> displayState=MenuDisplayState::Unknown;
+std::atomic<ULONGLONG> displayObservedAt=0;
 std::atomic<unsigned> pumps=0,stateReads=0,stateMisses=0,visibilityRequests=0,visibilityAcks=0,visibilityTimeouts=0,moves=0,downs=0,ups=0,rejected=0,releaseFailures=0;
 std::atomic_flag pumping=ATOMIC_FLAG_INIT;
 std::atomic<unsigned> foreignBoundary=0,concurrentBoundary=0,threadChanges=0;
@@ -84,12 +87,14 @@ void __fastcall Pump(void* self,void*,void* input){
     original(self,input);
     if(!enabled.load(std::memory_order_acquire)&&!stopping.load(std::memory_order_acquire))return;
     const auto state=ReadMenuState(memory,states,base);
-    if(!state){++stateMisses;return;}
+    if(!state){displayState.store(MenuDisplayState::Unknown,std::memory_order_release);++stateMisses;return;}
     if(!IsMenuPumpBoundary(memory,binding,base,caller,reinterpret_cast<unsigned>(self),reinterpret_cast<unsigned>(input),state->inputController)){++foreignBoundary;return;}
     if(pumping.test_and_set(std::memory_order_acquire)){++concurrentBoundary;return;}
     struct Boundary {Boundary(){nativeBoundary=true;}~Boundary(){nativeBoundary=false;pumping.clear(std::memory_order_release);}} boundary;
     const auto thread=GetCurrentThreadId();const auto prior=uiThread.exchange(thread);if(prior&&prior!=thread)++threadChanges;
     ++pumps;
+    displayState.store(state->entered?MenuDisplayState::Menu:MenuDisplayState::Gameplay,std::memory_order_release);
+    displayObservedAt.store(GetTickCount64(),std::memory_order_release);
     if(stopping.load(std::memory_order_acquire)){ReleaseOwned();ReleaseCancel(true);return;}
     ReleaseCancel();
     // The APT routing target can change without entered/owner changing. Check
@@ -151,7 +156,7 @@ void __fastcall Pump(void* self,void*,void* input){
         if(result==MenuVisibilityResult::Invoked){++visibilityRequests;
             // Native Back may leave entered=true while returning to a parent.
             // Only Menu/open requests promise an entered-state transition.
-            if(command.visible||command.action==MenuCloseAction::MenuToggle){pendingVisible=command.visible;pendingUntil=GetTickCount64()+1500;}
+            if(!state->frontEnd&&(command.visible||command.action==MenuCloseAction::MenuToggle)){pendingVisible=command.visible;pendingUntil=GetTickCount64()+1500;}
         }else if(result!=MenuVisibilityResult::AlreadyInState)++rejected;
         return;
     }
@@ -184,6 +189,11 @@ bool Same(std::span<const std::byte> bytes,const engine::PeImage& pe,unsigned rv
     }return false;
 }
 }
+MenuDisplayState CurrentDisplayState()noexcept {
+    if(!enabled.load(std::memory_order_acquire))return MenuDisplayState::Unknown;
+    const auto observed=displayObservedAt.load(std::memory_order_acquire),now=GetTickCount64();
+    return observed&&now>=observed&&now-observed<=250?displayState.load(std::memory_order_acquire):MenuDisplayState::Unknown;
+}
 bool Install(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uintptr_t image,const std::wstring& token){
     if(hook||image>UINT32_MAX||!channel.ConnectProducer(token))return false;
     base=unsigned(image);LARGE_INTEGER f{};if(!QueryPerformanceFrequency(&f)||f.QuadPart<=0){channel.Close();return false;}frequency=f.QuadPart;
@@ -192,21 +202,28 @@ bool Install(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uin
     for(const auto& span:MenuStateCodeSpans())if(!Same(bytes,pe,span.rva,span.size)){channel.Close();return false;}
     const auto spans=MenuBindingCodeSpans(bytes,pe,binding);if(!spans){channel.Close();return false;}
     for(const auto& span:*spans)if(!Same(bytes,pe,span.rva,span.size)){channel.Close();return false;}
+    if(!startup::Prepare(bytes,pe,image)){channel.Close();return false;}
     auto* at=reinterpret_cast<void*>(image+binding.mousePump);
     if(MH_CreateHook(at,Pump,reinterpret_cast<void**>(&original))!=MH_OK){channel.Close();return false;}
     hook=at;return true;
 }
-void Start()noexcept {if(hook)enabled.store(true,std::memory_order_release);}
+void Start()noexcept {if(hook){enabled.store(true,std::memory_order_release);startup::Start();}}
 bool Stop()noexcept {
+    displayState.store(MenuDisplayState::Unknown,std::memory_order_release);displayObservedAt.store(0,std::memory_order_release);
     enabled.store(false,std::memory_order_release);stopping.store(true,std::memory_order_release);
+    const bool startupStopped=startup::Stop();
     // Only a verified native UI callback may emit the final button-up. Never substitute
     // a shutdown-worker call or a global OS input event.
     for(unsigned n=0;n<100&&(pressActive.load(std::memory_order_acquire)||cancelActive.load(std::memory_order_acquire));++n)Sleep(5);
     const bool okay=!hook||MH_DisableHook(hook)==MH_OK;
     for(unsigned n=0;n<100&&callbacks.load();++n)Sleep(1);
-    stopping.store(false,std::memory_order_release);return okay&&!pressActive.load()&&!cancelActive.load()&&!callbacks.load();
+    stopping.store(false,std::memory_order_release);return startupStopped&&okay&&!pressActive.load()&&!cancelActive.load()&&!callbacks.load();
 }
 void Present(IDXGISwapChain* chain)noexcept {if(enabled.load(std::memory_order_acquire))raster.Pump(chain,channel);}
+bool CompletedMenuPresentation()noexcept {
+    return stateReads.load()>=3&&raster.Captured()>=3&&raster.Published()>=3&&!raster.Failed()&&
+        !pressActive.load()&&!cancelActive.load()&&!callbacks.load()&&!releaseFailures.load()&&!cancelReleaseFailures.load();
+}
 void Report(std::ostream& out){
     out<<"{\"installed\":"<<(hook?"true":"false")<<",\"ui_thread\":"<<uiThread.load()<<",\"pumps\":"<<pumps.load()<<",\"state_reads\":"<<stateReads.load()<<",\"state_misses\":"<<stateMisses.load()
        <<",\"visibility_requests\":"<<visibilityRequests.load()<<",\"visibility_acknowledgements\":"<<visibilityAcks.load()<<",\"visibility_timeouts\":"<<visibilityTimeouts.load()
@@ -225,6 +242,6 @@ void Report(std::ostream& out){
         out<<"{\"sequence\":"<<e.sequence<<",\"space\":"<<e.space<<",\"toggle\":"<<e.toggle<<",\"cancel\":"<<e.cancel
            <<",\"read\":"<<unsigned(e.read)<<",\"toggle_edge\":"<<e.toggleEdge<<",\"cancel_edge\":"<<e.cancelEdge
            <<",\"entered\":"<<e.entered<<",\"pending\":"<<e.pending<<'}';}
-    out<<"],\"headset_verified\":false}";
+    out<<"],\"startup\":";startup::Report(out);out<<",\"headset_verified\":false}";
 }
 }

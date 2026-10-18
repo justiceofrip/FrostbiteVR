@@ -30,8 +30,9 @@ Use a virtual environment if you keep other projects' Python dependencies separa
 
 <a id="checkpoint413-player-composition"></a>
 <a id="checkpoint414-player-composition"></a>
+<a id="checkpoint426-player-composition"></a>
 
-## Checkpoint415 player composition
+## Checkpoint426 player composition
 
 Use the existing build directories and run the architectures sequentially:
 
@@ -40,27 +41,31 @@ Use the existing build directories and run the architectures sequentially:
 .\Build-Checkpoint.ps1 -Architecture x64 -Jobs 2 -OrdinaryManualCycles -NativeCycleRecovery -BodySceneDepth -PlayerGrenades -PlayerKnife -ContextualTools
 ```
 
-Checkpoint 415 retains the normal414 runtime composition. Player knife, grenade and
-contextual-tool code is compiled, but those runtime opt-ins remain disabled in
-the current personal launch profile. Synthetic controller drivers remain OFF.
-Omitting these switches builds a different feature composition. The script selects
-`profiles/checkpoint414` for the operation header and exact source receipt,
-`profiles/aim339` for gun-hand calibration, `profiles/support373` for support
-contacts, and `profiles/resource-enrollment295-pistol` for magazine registration
-and geometry. Older profile numbers identify retained data, not the current build.
+The script selects the exact source-bound operation header and receipt in
+`profiles/checkpoint426`. Opening426 supplies the authored grip, support,
+magazine geometry/registration and exact candidate Nambu muzzle enrollment,
+while preserving the prior profile entries. Finite synthetic input drivers
+remain OFF. The switches above match the normal player feature composition;
+omitting them builds a different configuration. Runtime feature opt-ins are
+selected by the portable launcher; compiling a capability is not gameplay or
+headset acceptance.
 
-The build integration combines checkpoint414 with main's build/test optimizations.
-Both architectures passed 284/284 suites and native source verification; all
-four rebuilt runtime binaries match frozen414 byte-for-byte. Python/launcher
-checks also passed. See the [415 handoff](handoff/checkpoint415/README.md) and its
-[validation record](handoff/checkpoint415/validation.json). These are local
-integration results; no remote CI pass for the combined merge is claimed.
-The [414 handoff](handoff/checkpoint414/README.md) retains the earlier full build
-results and actual-game placement evidence. The desktop launcher remains on
-the exact frozen414 profile; no new game/headset run is needed for this merge.
-Headset acceptance and whole-campaign stability remain pending. Tags
-`checkpoint-414` and `checkpoint-413` retain their prior source/instructions,
-and `checkpoint/410-headset-rollback` remains available.
+The frozen normal build uses native source
+`9196965b6f424cbfa33e98650fc230de273fc444de24c720218dbfa5f703b05b`
+and passed 291/291 C++ suites on each architecture. The latest native knife check
+prepared one client attack but did not establish server acquisition/damage or
+repeat-jab completion. Its 544-file native
+dependency receipt is preserved byte for byte. The handoff's separate build
+source manifest omits ignored generated test outputs and contains only
+repository-relative paths. See the [426 handoff](handoff/checkpoint426/README.md)
+for exact results and limitations. A new build on another compiler may differ
+in binary bytes; it must pass source verification and relevant tests.
+
+The Nambu muzzle descriptor remains Candidate. A passing build does not promote
+it to NativeVerified, prove projectile impacts, or settle the death/reload crash.
+Older checkpoint profiles retain historical evidence; their receipts are not
+substitutes for the current source. Do not change a receipt hash to bypass the
+source guard.
 
 The script saves compiled capability output under
 `reports/<architecture>-compiled-capabilities.json`. Its count describes exact

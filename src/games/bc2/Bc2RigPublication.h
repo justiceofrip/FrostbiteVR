@@ -6,6 +6,7 @@
 #include "Bc2PhysicalPump.h"
 #include "Bc2BoltRuntimeGeometry.h"
 #include "Bc2EquipmentIdentity.h"
+#include "Bc2MuzzleAdmission.h"
 #include "Bc2ReloadProducerBinding.h"
 #include "Bc2WeaponProfiles.h"
 #include "Bc2SightContact.h"
@@ -26,6 +27,7 @@
 #include <ostream>
 #ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
 #include "Bc2ChestKnifeRendering.h"
+#include "Bc2SelectedKnifeRendering.h"
 #endif
 namespace fvr::bc2::rigPublication {
 using WeaponSightContact=bc2::WeaponSightContact;
@@ -81,6 +83,7 @@ struct Tracking {
     interaction::HandInteractionSample controllerEvidence{};
 #ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
     std::optional<ChestKnifeRenderSource> chestKnife;
+    std::optional<SelectedKnifeRenderSource> selectedKnife;
 #endif
 
 };
@@ -91,6 +94,23 @@ struct NativeSightState {
  bool valid=false;
  math::Matrix4 rear{},front{}; // Raw native weapon-local metres; NEVER contact proof.
  math::Matrix4 rawHand{};bool rawHandValid=false;unsigned physicalItem=0; // Pre-IK, in placed weapon space.
+};
+// Bounded observation of the exact immutable rendered frame. String views refer
+// only to the compiled registry. These fields grant no native firing authority.
+struct ShotAimEvidence {
+ WeaponEquipmentIdentity equipment{};
+ math::Pose reference{},effectiveGrip{},effectiveAim{};
+ // Prepared input before support guidance; diagnostics may synthesize it.
+ // Presence proves the same source packet, not physical headset ownership.
+ math::Pose preSupportReference{},preSupportGrip{},preSupportAim{};
+ std::uint64_t preSupportGeneration=0,preSupportSpace=0;
+ math::Matrix4 body{};float bodyYaw=0;
+ std::array<char,512> configurationPath{};bool configurationPathVerified=false;
+ std::uint64_t configurationSequence=0;std::int64_t configurationDeadlineNs=0;
+ std::string_view meshPath{},bindingDigest{},axisEvidence{};
+ std::uint64_t rigFingerprint=0;
+ math::Vec3 modelForward{},modelUp{};
+ bool authoredBinding=false,authoredAxes=false,preSupportInputAvailable=false;
 };
 // Current-input body base using the original bounded native eye/stance source.
 // Does not reuse or restamp the previous published tracked body frame.
@@ -115,7 +135,11 @@ struct WeaponShotFrame {
  math::Matrix4 targetWristWorldMeters{};
 #ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
  std::optional<ChestKnifeRenderReceipt> chestKnife;
+ std::optional<SelectedKnifeRenderReceipt> selectedKnife;
 #endif
+ std::optional<ShotAimEvidence> aimEvidence;
+ // Separate explicit write enrollment; observation metadata grants no authority.
+ std::optional<MuzzleBinding> muzzleBinding;
 };
 std::optional<WeaponShotFrame> ReadWeaponShotFrame(unsigned soldier,unsigned weak,unsigned weapon)noexcept;
 // Contact-only capability: pending native ammo transfer can block firing while

@@ -46,6 +46,7 @@ bool D3D11FrameBridge::CaptureEye(unsigned eye,ID3D11Texture2D* source,const ipc
     Microsoft::WRL::ComPtr<ID3D11Device> sourceDevice;source->GetDevice(&sourceDevice);
     if(sourceDevice.Get()!=device_.Get()||description.Width!=req.width||description.Height!=req.height||description.MipLevels!=1||description.ArraySize!=1||description.SampleDesc.Count!=1||!CopyCompatibleFormats(description.Format,req.format))return Fail(2,E_INVALIDARG);
     if(eye==0){
+        desktopMirror_.ObserveOwner(lease.native.owner,lease.native.deviceEpoch,lease.tracking.spaceGeneration);
         capturedRequest_=lease.requestId;mask_=0;
         if(!sharingMode_.load()||std::memcmp(&allocated_,&req,sizeof(req))||
            allocatedNative_.owner!=lease.native.owner||allocatedNative_.deviceEpoch!=lease.native.deviceEpoch){
@@ -85,6 +86,9 @@ bool D3D11FrameBridge::CaptureEye(unsigned eye,ID3D11Texture2D* source,const ipc
 }
 bool D3D11FrameBridge::PublishRestored(const ipc::FrameLease& lease)noexcept {
     if(mask_!=3||capturedRequest_!=lease.requestId||submitting_||canceling_||waitingGameCopies_||waitingLegacyExport_)return Fail(7,E_UNEXPECTED);
+    // Capture the already completed left image only after exact native restore.
+    // Mirror failure is display-only: it cannot fail/cancel an XR publication.
+    desktopMirror_.CommitLeft(sharingMode_.load()==2?relay_.GameEye(0):eyes_[0].Get());
     pending_=lease;mask_=0;pendingDepth_={};
     if(sharingMode_.load()==3){waitingLegacyExport_=true;PumpGraphics();return true;}
     if(sharingMode_.load()==2){relay_.SealGameCopies();waitingGameCopies_=true;PumpGraphics();return true;}
@@ -140,6 +144,7 @@ void D3D11FrameBridge::PairConsumed(const PairTicket& ticket,bool consumed)noexc
     if(consumed){producer_.Acknowledge(ticket,true);++consumed_;}else{++discarded_;producer_.Reset();}
 }
 void D3D11FrameBridge::CloseGraphics()noexcept {
+    desktopMirror_.Reset();
     connected_.store(false,std::memory_order_release);channel_.CloseGraphics();producer_.Reset();relay_.Reset();depthProducer_.Close();depthInitialized_=depthActive_=false;depthLease_={};pendingDepth_={};waitingGameCopies_=waitingLegacyExport_=false;
     for(auto& eye:eyes_)eye.Reset();context_.Reset();device_.Reset();submitting_=canceling_=false;mask_=0;
 }

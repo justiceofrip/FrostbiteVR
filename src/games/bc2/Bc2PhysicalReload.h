@@ -11,6 +11,7 @@
 #include "fvr/interaction/ControllerInput.h"
 #include "fvr/interaction/Feedback.h"
 #include "fvr/interaction/HeldActionSupportReturn.h"
+#include "fvr/interaction/ShellReloadAudio.h"
 #include <ostream>
 
 namespace fvr::bc2 {
@@ -62,6 +63,7 @@ struct PhysicalReloadSample {
 };
 struct PhysicalReloadResult {
     ReloadTracking tracking{};
+    std::optional<interaction::ShellReloadAudioEvent> audio;
     bool reloadHeld=false,ammoOwnsHand=false;
     std::array<interaction::FeedbackEvent,2> feedback{};
     unsigned feedbackCount=0;

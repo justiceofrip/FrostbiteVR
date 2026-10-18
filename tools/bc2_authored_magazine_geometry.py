@@ -429,7 +429,7 @@ def checked_action_roles(roles):
     if len(set(roles))!=len(roles):raise ValueError('Duplicate action roles')
     return tuple(roles)
 
-def bound_action_assets(profile,archive,roles):
+def bound_action_assets(profile,archive,roles,reference_archives=()):
     """Resolve selected absolute actions through their exact authored tree.
 
     Role names identify authored replacements, not live animation states or
@@ -437,20 +437,26 @@ def bound_action_assets(profile,archive,roles):
     roles, stale graph receipts and differently bound skeletons are errors.
     """
     roles=checked_action_roles(roles)
-    chain=profile['animation_chain'];source=profile['skeleton_source'];path_key(source['archive'])
+    from bc2_authored_archive_set import AuthoredArchiveSet
+    chain=profile['animation_chain'];source=profile.get('configuration_source',profile['skeleton_source']);path_key(source['archive'])
     if archive.index_sha256!=checked_hash(source['archive_index_sha256']):raise ValueError('Action graph source index changed')
-    docs={}
+    receipts=profile.get('reference_sources',[])
+    if len(receipts)!=len(reference_archives):raise ValueError('Action graph dependency receipts missing')
+    for receipt,dependency in zip(receipts,reference_archives):
+        if dependency.index_sha256!=checked_hash(receipt['archive_index_sha256']):raise ValueError('Action dependency source index changed')
+    sources=AuthoredArchiveSet([(source['archive'],archive)]+[(r['archive'],a) for r,a in zip(receipts,reference_archives)])
+    docs={};document_sources={}
     def prime(paths):
         names={}
         for path in paths:
             key=path_key(path)
             if key in docs or key in names:continue
-            entries=[e for e in archive.entries if e.flags==65536 and path_key(e.name)==key]
-            if len(entries)!=1 or entries[0].kind!='<non-resource>':raise ValueError('Exact action document absent or ambiguous: '+path)
-            names[key]=entries[0].name
+            names[key]=path
         if names:
-            blobs=archive.read_selected(list(names.values()))
-            for key,name in names.items():docs[key]=parse(name,blobs[name])
+            blobs=sources.read(names.values())
+            for key,path in names.items():
+                if key not in blobs or blobs[key][1]['kind']!='<non-resource>':raise ValueError('Exact action document absent or ambiguous: '+path)
+                raw,receipt=blobs[key];docs[key]=parse(receipt['resource'],raw);document_sources[key]=receipt
     def document(path,expected=None):
         key=path_key(path)
         if expected is not None:checked_hash(expected)
@@ -484,6 +490,9 @@ def bound_action_assets(profile,archive,roles):
         skeleton_ref=named(asset,'Skeleton').attributes['ref'];bound_reference(skeleton_ref,bound)
         result[role]={'role':role,'resource':name+'.res','asset_document':doc.resource,'asset_document_sha256':doc.sha256,
                       'asset_guid':identifier,'skeleton_reference':skeleton_ref}
+        if profile.get('configuration_source'):
+            origin=document_sources[path_key(doc.resource)]
+            result[role].update(asset_archive=origin['archive'],asset_archive_index_sha256=origin['archive_index_sha256'])
     return result
 def mesh_weapon_matches(weapon,profile):
     return (weapon['native_name']==profile['native_asset_name'] and guid(weapon['instance_guid'])==guid(profile['weapon']['instance_guid']) and
@@ -539,7 +548,10 @@ def derive(game,bindings,mesh_bindings,assets,evidence_sink=None,paired_grasp_as
             static=Clip(exact_resource(clip_archive,profile['animation_chain']['animation_resource'],'GrannyAnimation',profile['animation_sha256']))
             names=[n for n in skeleton.names if n in static.tracks and n.startswith(('jntWpn','LeftHand'))]
             closed=static.evaluate(skeleton,0.,names)
-            actions=bound_action_assets(profile,sk_archive,('1p_reload',))
+            configuration_source=profile.get('configuration_source')
+            action_archive=exact_archive(game,configuration_source['archive']) if configuration_source else sk_archive
+            action_dependencies=[exact_archive(game,s['archive']) for s in profile.get('reference_sources',[])]
+            actions=bound_action_assets(profile,action_archive,('1p_reload',),action_dependencies)
             if '1p_reload' not in actions:raise ValueError('Exact authored reload role missing/ambiguous')
             action=actions['1p_reload'];reload_name=action['resource'];reload_doc_hash=action['asset_document_sha256']
             reload_guid=action['asset_guid'];reload_document=action['asset_document'];reload_skeleton_ref=action['skeleton_reference']
@@ -614,7 +626,8 @@ def derive(game,bindings,mesh_bindings,assets,evidence_sink=None,paired_grasp_as
                  'skeleton_sha256':skeleton.sha256,'rig_fingerprint':skeleton.fingerprint,'static_clip_sha256':static.sha256,
                  'reload_clip':{'resource':reload_name,'sha256':reload_clip.sha256,'archive':reload_source['archive'],'archive_index_sha256':reload_source['archive_index_sha256'],
                     'asset_document':reload_document,'asset_document_sha256':reload_doc_hash,'asset_guid':reload_guid,
-                    'asset_archive':sk_source['archive'],'asset_archive_index_sha256':sk_archive.index_sha256,'skeleton_reference':reload_skeleton_ref},
+                    'asset_archive':action.get('asset_archive',sk_source['archive']),
+                    'asset_archive_index_sha256':action.get('asset_archive_index_sha256',sk_archive.index_sha256),'skeleton_reference':reload_skeleton_ref},
                  'role_evidence':role,'rejected_parts':rejected,'bones':{'weapon':'jntWpn_1','magazine':bone,'wrist':'LeftHand','fingers':FINGERS},
                  'geometry':proposal,'runtime_admitted':False,'status':'experimental_geometry_ready_for_review'}
             if bone in assemblies:row['assembly']=assemblies[bone]

@@ -54,7 +54,7 @@ int FocusCannotAcknowledge(){Fixture x;x.Step();CHECK(x.Step(interaction::MenuCl
     ++x.state.epoch;x.state.mode=ipc::MenuMode::Menu;CHECK(x.Step().owner==interaction::InputMenuOwner::Menu);
     ++x.state.epoch;x.state.mode=ipc::MenuMode::Gameplay;CHECK(x.Step().owner==interaction::InputMenuOwner::Gameplay);return 0;}
 int Protocol(){Fixture x;x.input.menu=x.Step();ipc::InputPacket packet{};interaction::InputFrame decoded;
-    CHECK(ipc::EncodeInput(x.input,987654321,packet));CHECK(packet.version==3&&packet.bytes==320);
+    CHECK(ipc::EncodeInput(x.input,987654321,packet));CHECK(packet.version==4&&packet.bytes==320);
     CHECK(ipc::DecodeInput(packet,decoded));CHECK(decoded.menu==x.input.menu);
     const auto before=packet;auto bad=packet;bad.menuReserved=1;CHECK(!ipc::DecodeInput(bad,decoded));
     bad=packet;bad.menuOwner=4;CHECK(!ipc::DecodeInput(bad,decoded));

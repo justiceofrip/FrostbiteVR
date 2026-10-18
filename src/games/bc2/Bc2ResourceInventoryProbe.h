@@ -4,6 +4,7 @@
 #include "Bc2PhysicalReloadProbe.h"
 #include "Bc2PumpControllerProbe.h"
 #include "Bc2ShellFocusLossProbe.h"
+#include "fvr/interaction/ActionPolicy.h"
 namespace fvr::bc2 {
 // Finite input-only composition. This object has no consumer/native APIs.
 struct ResourceInventoryObservation {
@@ -35,9 +36,11 @@ public:
     // No native/consumer mutation and no unsupported second mechanism required.
     bool EnableMagazineOnly(bool fireToEmpty=false,bool fireAfter=false,bool requireSupport=false)noexcept {
         if(first_||supportOnly_||magazineOnly_||pump_||replacementEnabled_||rifleSupportRequired_||(fireToEmpty&&(fireAfter||requireSupport)))return false;
+        if(!inventory_.InitialItemOnly())return false;
         magazineOnly_=true;emptyMagazineFire_=fireToEmpty;magazinePostFire_=fireAfter;
         rifleSupportRequired_=requireSupport;
-        if(fireToEmpty||fireAfter){firstMagazine_=Bc2MagazineResourceProbe{true,false,false,true};firstMagazine_.UseCombinedWarmup();}
+        campaignMagazine_=fireAfter&&requireSupport;
+        if(fireToEmpty||(fireAfter&&!campaignMagazine_)){firstMagazine_=Bc2MagazineResourceProbe{true,false,false,true};firstMagazine_.UseCombinedWarmup();}
         return true;
     }
     bool EnablePump(const Bc2PumpCalibration&,Bc2PumpControllerProbe::Scenario=Bc2PumpControllerProbe::Scenario::None,unsigned cycles=1)noexcept;
@@ -77,6 +80,11 @@ public:
         const interaction::HandInteractionSample& current,const interaction::HandInteractionSample& original,
         const std::optional<interaction::HandClaim>& left,const std::optional<interaction::HandClaim>& gun,bool shellReturned,std::int64_t now)noexcept;
     bool CancelConsumer()const noexcept{return phase_==Phase::Failed;}
+    // Observe/ObserveSupport run after action mapping. Recheck the finite
+    // diagnostic at the cache commit boundary without changing other inputs.
+    void FilterCancelledFire(interaction::ActionOutput& action)const noexcept {
+        if(CancelConsumer()){action.held&=~interaction::Fire;action.pressed&=~interaction::Fire;}
+    }
     bool CancelShell()const noexcept{return CancelConsumer()||phase_==Phase::ShellSettle;}
     bool Completed()const noexcept{return phase_==Phase::Done;}
     bool Recording()const noexcept{return began_!=0;}
@@ -135,6 +143,10 @@ private:
     unsigned rifleShotCount_=0;
     std::int64_t rifleFireAt_=0,rifleShotObserved_=0;
     bool emptyMagazineFire_=false,magazinePostFire_=false;
+    bool campaignMagazine_=false,partialMagazineReady_=false,preparingPartialMagazine_=false,postMagazineSupport_=false,supportReacquired_=false;
+    interaction::AmmunitionCounts partialMagazineCounts_{};
+    std::uint64_t riflePulseInput_=0,initialSupportClaim_=0,initialSupportSource_=0,prepareShotSequence_=0;
+    std::int64_t riflePulseAt_=0,prepareShotObserved_=0;
     AmmoResourceBinding emptyBinding_{};ReloadHoldIdentity emptyIdentity_{};
     interaction::AmmunitionCounts emptyBefore_{};
     unsigned emptyPulses_=0,emptyShots_=0;

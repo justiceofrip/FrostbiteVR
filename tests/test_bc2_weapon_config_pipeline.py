@@ -1,5 +1,6 @@
 from pathlib import Path
 import math,struct,sys,unittest
+import contextlib,os,shutil,uuid
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
 import bc2_weapon_config_pipeline as p
 GUID='12345678-1234-1234-1234-123456789abc'
@@ -154,5 +155,41 @@ class ConfigTests(unittest.TestCase):
  def test_nesting_bound(self):
   raw=(b'\x01\xa0\0'*131)+b'\0'*131
   with self.assertRaises(ValueError):p.Reader(raw,['','complex'],0).node()
+
+class CampaignDiscovery(unittest.TestCase):
+ @contextlib.contextmanager
+ def directory(self):
+  root=Path(os.environ.get('TMPDIR',Path(__file__).resolve().parents[1]/'test-temp')).resolve()
+  root.mkdir(parents=True,exist_ok=True);path=root/('campaign-'+uuid.uuid4().hex);path.mkdir()
+  try:yield path
+  finally:
+   if path.resolve().is_relative_to(root):shutil.rmtree(path)
+ def test_opening_only_configs_are_discovered_and_same_name_variants_retained(self):
+  with self.directory() as temporary:
+   game=Path(temporary)
+   for name in ('sp_01','sp_002','sp_common','mp_001','sp_backup'):
+    path=game/'Dist/win32/levels'/name/'level-00.fbrb';path.parent.mkdir(parents=True);path.write_bytes(b'')
+   calls=[]
+   def inspect(game,relative):
+    calls.append(relative.parent.name)
+    weapon=dict(native_name='SameDisplayName',resource='Objects/Opening.dbx',instance_guid=GUID,
+                resource_sha256=('b' if relative.parent.name=='sp_002' else 'a')*64)
+    return dict(archive=relative.as_posix(),index_sha256='c'*64,resolved_weapons=[weapon])
+   result=p.inspect_campaign(game,inspector=inspect)
+   self.assertEqual(calls,['sp_002','sp_01','sp_common'])
+   self.assertEqual(len(result['weapons']),2)
+   self.assertEqual([len(w['configuration_sources']) for w in result['weapons']],[2,1])
+   self.assertFalse(result['runtime_admitted'])
+ def test_failed_level_remains_visible_without_dropping_other_levels(self):
+  with self.directory() as temporary:
+   game=Path(temporary)
+   for name in ('sp_01','sp_common'):
+    path=game/'Dist/win32/levels'/name/'level-00.fbrb';path.parent.mkdir(parents=True);path.write_bytes(b'')
+   def inspect(game,relative):
+    if relative.parent.name=='sp_01':raise ValueError('Unresolved opening reference')
+    return dict(archive=relative.as_posix(),index_sha256='c'*64,resolved_weapons=[])
+   result=p.inspect_campaign(game,inspector=inspect)
+   self.assertEqual(len(result['archives']),1);self.assertEqual(len(result['errors']),1)
+   self.assertIn('sp_01',result['errors'][0]['archive'])
 
 if __name__=='__main__':unittest.main()

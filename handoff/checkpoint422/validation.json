@@ -1,0 +1,80 @@
+{
+  "checkpoint": 422,
+  "state": "paused_at_user_request_to_game",
+  "saved_utc": "2026-10-18T04:47:38.003621+00:00",
+  "source_sha256": "6b3096bb3c6b6cae1dfe30b6aba13e6d19d75e6bf448b286afdefdea41150a82",
+  "source_pins": {
+    "src/games/bc2/NativeProbe.cpp": "52eb102bf7c3de44585c86340fa329b9c967c09ee46bfa0153ad89c9bdfade5b",
+    "src/games/bc2/Bc2WeatherObservation.h": "e2266fcb17ecb7ef2030f9583d9d3a83a5070b9535a9595a8ad12ced6bd78e65",
+    "tests/ProjectionOverrideTests.cpp": "4f1af9965df718d76cd8d1da84518fbdc54688286d26f881429a729fcaeff615"
+  },
+  "evidence": [
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight422\\normal-build\\build-receipt.json",
+      "sha256": "dbf94d51358e32f572c15285e2b30e7f5e0ffcdf133c22cf49f37c300b2a78b6",
+      "bytes": 170061
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight422\\opening02-qualified-audit.json",
+      "sha256": "b8705217d23ae33295ae5a8fd18e6dfc2dcb3388a74a71f75f7a23b535bf9866",
+      "bytes": 9346
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight422\\opening02-driver-qualified422.json",
+      "sha256": "41b7072a2ac20224385d37e823cff16a8cc54a99c1f1ea69ff35c73de0c4106f",
+      "bytes": 3409
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight422\\opening02-weather-matrix-review.json",
+      "sha256": "6f9f0b3f21b0b032404fe01dcce2f4980e1c1a65769fc8ebe287212d58a7687c",
+      "bytes": 11510
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight422\\opening02\\weather-observation.json",
+      "sha256": "b719872e5768b3c6e854a255b19643ee1eb3ffe1c69e9d6a0fbd03290beee771",
+      "bytes": 4804
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight422\\opening02\\weather-matrix-summary.json",
+      "sha256": "d172ad6aff2909e6562e3d227aca4aeba9783a3847fe4147ddf697c1a23ca04c",
+      "bytes": 8397
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight422\\exception-watch02\\completion.json",
+      "sha256": "112375c8bc3cc1cc98f6abd7d5184c515c6cc3f1dd577c1310291493f347c5b1",
+      "bytes": 103
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight422\\game02\\normal-close.json",
+      "sha256": "99dc33283f889a40dade5d3220b7f19c1567983c72d52d444facc8e4bbb93dc2",
+      "bytes": 228
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight423\\PAUSED-WEATHER-TRANSLATION-PROPOSAL.json",
+      "sha256": "3d8e2e27aa1981ab4ca814731b3bae09e088df21aa3e11e34a68bcac463476ca",
+      "bytes": 1786
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight423\\independent-review-paused423.json",
+      "sha256": "cf9d43b32c5b9924ac40597d7c5c302cdb4425788190aa2554000eb2b4587441",
+      "bytes": 2797
+    }
+  ],
+  "focused_suites": 4,
+  "cpp_suites_per_architecture": 288,
+  "actual_opening_pairs": 240,
+  "observer_capture_frame": 83258,
+  "opening_restart_completed": true,
+  "cleanup_qualified": true,
+  "original_runner_failure_preserved": true,
+  "weather_consumer_comparison_complete": false,
+  "cloud_fix_implemented": false,
+  "headset_tested": false,
+  "death_restart_accepted": false,
+  "full_campaign_accepted": false,
+  "installed_runtime_checkpoint": 414,
+  "desktop_promoted": false,
+  "github_published": false,
+  "diagnostic_game_closed_normally": true,
+  "remaining_423": "Design and build wrappers only; no source edits/build/run. Resolve stale-owner restoration design before implementing."
+}

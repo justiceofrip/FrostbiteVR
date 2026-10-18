@@ -29,6 +29,11 @@ public:
     }
 };
 }
+std::optional<RigIdentity> ReadFirstPersonRigIdentity(const RigMemory& memory,std::uint32_t soldier,std::uint32_t weak)noexcept {
+    Reader read(memory);RigIdentity before{},after{};
+    if(!read.Identity(soldier,weak,before)||!read.Identity(soldier,weak,after)||before!=after)return {};
+    return before;
+}
 std::optional<RigSnapshot> ReadFirstPersonRig(const RigMemory& memory,std::uint32_t soldier,std::uint32_t weak){
     Reader read(memory);RigSnapshot result{};auto& id=result.identity;if(!read.Identity(soldier,weak,id))return {};
     const auto names=read.U32(id.skeleton+0x18),namesEnd=read.U32(id.skeleton+0x1c),definition=read.U32(id.skeleton+0xc);

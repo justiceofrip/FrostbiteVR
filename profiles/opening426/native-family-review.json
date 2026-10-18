@@ -1,0 +1,56 @@
+{
+  "schema": "fvr.bc2.automatic-inactive-stock-bolt-review.v1",
+  "family": "bc2.automatic-magazine-inactive-stock-bolt.v1",
+  "instruction_proof_digest": "081492a67a2e3746592b2ffa0b49997a648fcdd4244f0091ecd640655e128a2f",
+  "executable_sha256": "3911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258",
+  "verified_whole_functions": [
+    {
+      "name": "Update",
+      "rva": 3051520,
+      "bytes": 397,
+      "fnv": "4a6ecc3d95700d53",
+      "sha256": "0babdb25cdcc8f494a544d27cdf628c67f495215872b1ff5fa90f62fd5ca426e"
+    },
+    {
+      "name": "Step",
+      "rva": 3039952,
+      "bytes": 1732,
+      "fnv": "71118b4d657473d3",
+      "sha256": "122c98fefa4503c8c98688477f9cf5a1bfbbccb47e84ce6b303898c199ad908d"
+    },
+    {
+      "name": "Timed",
+      "rva": 3041760,
+      "bytes": 772,
+      "fnv": "7344b32b39a9bd85",
+      "sha256": "03169d95d2323a352f44f0f4868a848e0979fe420766573b629d3ae9b97664e3"
+    },
+    {
+      "name": "Order",
+      "rva": 3004064,
+      "bytes": 163,
+      "fnv": "3cae7f07de53d0f7",
+      "sha256": "266c10e8f1165deb4be7a07757f6a5f3cf2186ae66bf05eb74177642faceded8"
+    },
+    {
+      "name": "Transfer",
+      "rva": 2977600,
+      "bytes": 254,
+      "fnv": "d83485215d90a16a",
+      "sha256": "1fa3fc0036f39fcdf7a6db01e916d079810fd3ae0b5ac79fdd054b8c84b3966a"
+    }
+  ],
+  "native_config_capture": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight426\\game02\\all-inventory.json",
+    "sha256": "cca543cc7d2fa13b3f08200cdd82c6567efc528193bb1f654b2011f06279f787",
+    "all_14_fields_match": true,
+    "persistence": 0
+  },
+  "exact_asset_path": "Objects/Weapons/Handheld/Beach/Nambu100/Nambu100",
+  "descriptor_digest": "cc2291caf02e41d3a08d26c1a4142f43a21ab10773c989d6edd872ab56a0b3e6",
+  "shared_native_cycle": "ReviewedReload11Transfer12",
+  "physical_charging_handle_granted": false,
+  "native_manual_reload_tested": false,
+  "headset_verified": false,
+  "scope": "AutomaticFire2 bypasses authored bolt states. Exact config remains unchanged; shared native code/owner/current configuration/independent client and server operation receipts are still required. No ammo or state mutation is granted by this metadata review."
+}

@@ -1,0 +1,107 @@
+{
+  "checkpoint": 423,
+  "created_utc": "2026-10-18T11:23:42.323623+00:00",
+  "source_sha256": "94be29d45ecc007a800e45ddd4f88b03fc2de6fb949127a3a8ddc5cc4c84e905",
+  "focused_suites_passed": 4,
+  "cpp_suites_passed": {
+    "x86": 288,
+    "x64": 288
+  },
+  "actual_game": {
+    "entire_mission_restart": true,
+    "matched_native_frame": 64146,
+    "restored_scopes": 2,
+    "native_write_calls": 8,
+    "native_cleanup_passed": true,
+    "exceptions_recorded": 0,
+    "os_input": false,
+    "game_normally_closed_after_test": true
+  },
+  "visual_result": {
+    "cloud_region_disparity_before_px": [
+      -283,
+      -273,
+      -271
+    ],
+    "cloud_region_disparity_after_px": [
+      0,
+      0,
+      0
+    ],
+    "nearby_person_after_px": [
+      -63,
+      -1
+    ],
+    "distant_hill_after_px": [
+      0,
+      0
+    ],
+    "root_viewed_exact_pair": true,
+    "pixel_correlation_is_not_headset_acceptance": true
+  },
+  "default_enabled": false,
+  "one_frame_only": true,
+  "headset_verified": false,
+  "death_verified": false,
+  "campaign_complete": false,
+  "promoted": false,
+  "next": "Extend verified scoped correction to bounded current-frame ownership and test across frames.",
+  "evidence": [
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight423\\normal-build\\build-receipt.json",
+      "sha256": "ad4fe93c9db6fcce6a2738cfc9b618d465ac4bcd3b93f9fd80227d523fda37bd"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight423\\focused\\validation.json",
+      "sha256": "02cf7f79bf0bed1cdbf0b24778e691bd0bc36edfc379fe3310a505fd31b42f46"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight423\\normal-x86\\validation.json",
+      "sha256": "dd8078dd4eea49cd1d33ff566b4d2f557e76cfcba96001ab34d859638a837157"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight423\\normal-x64\\validation.json",
+      "sha256": "7e53ba90d4817a8d911b91230784c01118245c1a87a4ad960c56a6a9771113b0"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight423\\independent-review423.json",
+      "sha256": "32fb9c030e90bd2102eb067635c6a19dea826e11e9a0cc2471496cba135d14c9"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight423\\opening01\\runner-result.json",
+      "sha256": "187099459fe8dc0ef62e7e3cd2bafec1eef5f9778c713457f6796f1361569649"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight423\\opening01\\weather-translation-experiment.json",
+      "sha256": "21c2d6cafd7d52bafee31f2c4d24409f9c033f753ff7a496c82f84cb1d324f7f"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight423\\opening01\\weather-observation.json",
+      "sha256": "a05448f53af794d1d9d92598e980e02553e8161744038f8b3e40ce189da0a024"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight423\\opening01\\weather-pair-review.png",
+      "sha256": "f9d5867167c6bffffa61d4996cbf809db748f41012dc365204743095790af244"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight423\\opening01-cloud-pixels.json",
+      "sha256": "22b1aea61c32df122707572dd2fefd5bb517f5402210d95eebcfaa86d6e0e40c"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight423\\baseline-cloud-pixels.json",
+      "sha256": "82f0992cc5d3fd690a1cc146c555ae7fc46e2b9ca9a3a50498ba12677a3c1c11"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight423\\exception-watch01\\completion.json",
+      "sha256": "112375c8bc3cc1cc98f6abd7d5184c515c6cc3f1dd577c1310291493f347c5b1"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight423\\game02\\normal-close.json",
+      "sha256": "9bc73c1314e4d8b6c4ce807a3f8c7d021c110026675530271259bc5a7b314e45"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight423\\game01\\startup-failure-summary.json",
+      "sha256": "7521906663e7d4691477d5b386202513136a356148d7d09095cad179143514bc"
+    }
+  ]
+}

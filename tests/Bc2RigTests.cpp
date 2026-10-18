@@ -1,8 +1,94 @@
 #include "Test.h"
 #include "Bc2Rig.h"
+#include "Bc2RigPaletteCopy.h"
+#include <stdexcept>
+#include <functional>
+#include <iostream>
+
 #include <cstring>
 #include <limits>
 using namespace fvr;
+namespace palette_copy_regression {
+using namespace fvr::bc2;
+void Check(bool good){if(!good)throw std::runtime_error("palette copy lifecycle regression");}
+struct Pair {
+    std::vector<RigPaletteBone> native{8},before{8},posed{8},scratch;
+    RigPaletteCopyState captured{{0x10000,0x11000,0x12000,4,7,2},19,1000,true};
+    RigPaletteCopyState current=captured;
+    std::array<std::vector<std::byte>,2> output;
+    unsigned originals=0,privateMask=0,reads=0;bool readable=true;
+    std::int64_t observedNow=100;std::function<void()> duringRead;
+    Pair(){
+        for(unsigned b=0;b<native.size();++b)for(unsigned p=0;p<64;++p)
+            native[b][p]=std::byte((b*17+p)&255);
+        before=native;posed=before;posed[3][48]=std::byte{0x7f};
+    }
+    std::vector<std::byte> Pack(const std::vector<RigPaletteBone>& src){
+        // Verified packer layout: twelve source scalars per bone, transposed.
+        std::vector<std::byte> result(src.size()*48);
+        for(unsigned b=0;b<src.size();++b)for(unsigned col=0;col<3;++col)
+            for(unsigned row=0;row<4;++row)
+                std::memcpy(result.data()+b*48+col*16+row*4,src[b].data()+row*16+col*4,4);
+        return result;
+    }
+    void Copy(unsigned copyIndex,std::int64_t now=100){
+        const auto originalNative=native;observedNow=now;
+        const bool use=RigPaletteCurrentAtCopy(captured,0x20000,0x20000,
+            unsigned(native.size()),before,posed,scratch,[&](std::uintptr_t at,void* out,std::size_t n){
+                ++reads;Check(at==0x20000&&n==native.size()*64);
+                if(!readable)return false;std::memcpy(out,native.data(),n);
+                if(duringRead)duringRead();return true;},
+            [&]{return RigPaletteCopyObservation{current,observedNow};});
+        ++originals;output[copyIndex]=Pack(use?posed:native);
+        if(use)privateMask|=1u<<copyIndex;
+        Check(native==originalNative); // No restoration/writeback to native animation.
+    }
+};
+void SuccessfulPair(){Pair p;p.Copy(0);++p.current.input;p.Copy(1,110);
+    Check(p.originals==2&&p.privateMask==3&&p.output[0]==p.Pack(p.posed)&&p.output[1]==p.output[0]);}
+void ProducerMutationBetweenCopies(){Pair p;p.Copy(0);p.native[3][48]=std::byte{0x55};p.Copy(1);
+    Check(p.originals==2&&p.privateMask==1&&p.output[1]==p.Pack(p.native)&&p.output[1]!=p.output[0]);}
+void LifetimeTransitionBetweenCopies(){
+    for(unsigned n=0;n<10;++n){Pair p;p.Copy(0);
+        if(n==0)++p.current.owner.actorGeneration;else if(n==1)++p.current.owner.space;
+        else if(n==2)++p.current.owner.equipmentGeneration;else if(n==3)++p.current.owner.soldier;
+        else if(n==4)++p.current.owner.weak;else if(n==5)++p.current.owner.weapon;
+        else if(n==6)p.current.valid=false;else if(n==7)--p.current.input;
+        else if(n==8)p.current.deadline=100;else p.captured.deadline=100;
+        p.Copy(1);Check(p.originals==2&&p.privateMask==1&&p.output[1]==p.Pack(p.native));
+    }
+}
+void AdmissionChangesBeforeFirstCopy(){
+    Pair p;p.native[3][48]=std::byte{0x55};p.Copy(0);p.Copy(1);
+    Check(p.originals==2&&p.privateMask==0&&p.output[0]==p.Pack(p.native)&&p.output[1]==p.output[0]);
+    Pair failed;failed.readable=false;failed.Copy(0);failed.Copy(1);
+    Check(failed.originals==2&&failed.privateMask==0&&failed.reads==2);
+}
+void GuardChangesDuringRead(){
+    for(unsigned fault=0;fault<5;++fault){Pair p;p.Copy(0);
+        p.duringRead=[&]{if(fault==0)++p.current.owner.actorGeneration;
+            else if(fault==1)++p.current.owner.space;
+            else if(fault==2)p.current.valid=false;
+            else if(fault==3)p.observedNow=p.captured.deadline;
+            else --p.current.input;};
+        p.Copy(1);Check(p.originals==2&&p.privateMask==1&&p.output[1]==p.Pack(p.native));
+    }
+    Pair newer;newer.Copy(0);newer.duringRead=[&]{++newer.current.input;++newer.observedNow;};
+    newer.Copy(1);Check(newer.privateMask==3&&newer.originals==2);
+}
+void SourceIdentityAndBounds(){Pair p;unsigned reads=0;
+    const auto read=[&](std::uintptr_t,void*,std::size_t){++reads;return true;};
+    auto observe=[&]{return RigPaletteCopyObservation{p.current,p.observedNow};};
+    Check(!RigPaletteCurrentAtCopy(p.captured,0x20000,0x30000,8,p.before,p.posed,p.scratch,read,observe));
+    Check(!RigPaletteCurrentAtCopy(p.captured,0x20000,0x20000,9,p.before,p.posed,p.scratch,read,observe));
+    p.observedNow=0;
+    Check(!RigPaletteCurrentAtCopy(p.captured,0x20000,0x20000,8,p.before,p.posed,p.scratch,read,observe));
+    Check(reads==0);
+}
+void Run(){SuccessfulPair();ProducerMutationBetweenCopies();LifetimeTransitionBetweenCopies();
+    AdmissionChangesBeforeFirstCopy();GuardChangesDuringRead();SourceIdentityAndBounds();}
+
+}
 struct Memory {
  std::array<std::byte,0x10000> data{};
  static bool Read(void* p,std::uint32_t at,void* out,std::size_t n){auto& m=*static_cast<Memory*>(p);if(at<0x10000||at-0x10000>m.data.size()||n>m.data.size()-(at-0x10000))return false;std::memcpy(out,m.data.data()+at-0x10000,n);return true;}
@@ -20,7 +106,7 @@ struct Memory {
   }
  }
 };
-int main(){Memory memory;memory.Init();bc2::RigMemory reader{&memory,Memory::Read};const auto original=memory.data;
+int main(){palette_copy_regression::Run();Memory memory;memory.Init();bc2::RigMemory reader{&memory,Memory::Read};const auto original=memory.data;
  auto rig=bc2::ReadFirstPersonRig(reader,0x10000,0x11000);CHECK(rig&&rig->left.wrist==3&&rig->right.wrist==6&&rig->weaponBone==7);CHECK(rig->world[3].values[3][2]==-2);CHECK(memory.data==original);
  // Owner, both count sources, backlink, bone-name correspondence, parent cycles,
  // duplicate names, missing role and malformed affine poses must be rejected.

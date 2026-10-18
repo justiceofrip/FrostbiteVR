@@ -1,4 +1,5 @@
 #include "PlayerGrenadeReceiver.h"
+#include "TriggerInputSmoke.h"
 #include "Test.h"
 #include <sstream>
 using namespace fvr;
@@ -35,6 +36,57 @@ int PublicationAndArguments(){probe::PlayerGrenadeReceiver p;auto i=Input(5000);
     p.Published(i,true,false,1,Start+5000000000);CHECK(!p.OneGesture());std::ostringstream out;p.Report(out);CHECK(out.str().find("\"publication_failures\":1")!=std::string::npos);
     CHECK(probe::PlayerGrenadeOption(L"--player-grenade-probe"));CHECK(!probe::PlayerGrenadeOption(L"--ordinary-grenade-probe"));CHECK(!probe::PlayerGrenadeOption(L"--controls-death-probe"));return 0;
 }
+// Selected-knife fixtures reuse the same real-menu decorator with recipe time0.
+// A packet carries the original native lease; no synthetic "playing" boolean
+// or newer controller generation can renew it or acknowledge pending ownership.
+int SelectedKnifeOwnership(){
+    const auto input=[](unsigned ms){runtime::TrackingFrame t{};t.spaceGeneration=9;t.predictedNs=Start+std::int64_t(ms)*1000000;
+        t.focused=t.headValid=true;auto i=probe::NeutralSceneInput(t,ms+1);i.trackingBasisGeneration=1;return i;};
+    for(unsigned failure=0;failure<5;++failure){probe::PlayerGrenadeReceiver menu;auto i=input(0);i.hands[1].trigger=1;
+        auto s=State(0);auto read=ipc::ChannelResult::Ok;
+        if(failure==0)read=ipc::ChannelResult::Closed;
+        if(failure==1)read=ipc::ChannelResult::Busy;
+        if(failure==2)s.mode=ipc::MenuMode::Unknown;
+        if(failure==3)s.mode=ipc::MenuMode::Menu;
+        if(failure==4)++s.deadlineQpc;
+        menu.Decorate(i,0,read,s,Start,Frequency);
+        CHECK(!interaction::GameplayOwnsInput(i.menu,Start)&&i.hands[1].trigger==0);
+        CHECK(i.hands[1].gripTracked&&i.hands[1].grip.position.z==-.20f&&i.trackingBasisGeneration==1);
+    }
+    probe::PlayerGrenadeReceiver menu;auto i=input(0);const auto s=State(0);
+    menu.Decorate(i,0,ipc::ChannelResult::Ok,s,Start,Frequency);
+    CHECK(interaction::GameplayOwnsInput(i.menu,Start)&&i.menu.sequence==s.sequence&&i.menu.epoch==s.epoch&&i.menu.deadlineNs==s.deadlineQpc);
+    i=input(50);i.hands[1].trigger=1;menu.Decorate(i,0,ipc::ChannelResult::Busy,{},Start+50000000,Frequency);
+    CHECK(i.hands[1].trigger==1&&i.menu.sequence==s.sequence&&i.menu.deadlineNs==s.deadlineQpc);
+    i=input(100);i.hands[1].trigger=1;menu.Decorate(i,0,ipc::ChannelResult::Busy,{},Start+100000000,Frequency);
+    CHECK(!interaction::GameplayOwnsInput(i.menu,Start+100000000)&&i.hands[1].trigger==0);
+    i=input(110);menu.Decorate(i,0,ipc::ChannelResult::Ok,State(110),Start+110000000,Frequency);
+    i=input(120);i.hands[0].held=interaction::MenuClick;i.hands[1].trigger=1;
+    menu.Decorate(i,0,ipc::ChannelResult::Ok,State(120),Start+120000000,Frequency);
+    CHECK(i.menu.owner==interaction::InputMenuOwner::Pending&&i.hands[1].trigger==0);
+    i=input(130);i.hands[1].trigger=1;menu.Decorate(i,0,ipc::ChannelResult::Ok,State(130),Start+130000000,Frequency);
+    CHECK(i.menu.owner==interaction::InputMenuOwner::Pending&&i.hands[1].trigger==0);
+    auto changed=State(140);changed.epoch=2;i=input(140);
+    menu.Decorate(i,0,ipc::ChannelResult::Ok,changed,Start+140000000,Frequency);
+    CHECK(interaction::GameplayOwnsInput(i.menu,Start+140000000)&&i.menu.epoch==2);
+    return 0;
 }
-int main(){if(OriginalExpiry()||ClosedAndBadClock()||ExactlyOne()||MenuInterruptionNeverRetries()||PublicationAndArguments())return 1;
-    std::printf("Player receiver PASS: five focused source/recipe groups; size=%zu. No graphics/native actions.\n",sizeof(probe::PlayerGrenadeReceiver));return 0;}
+int SelectedKnifeSuppressedPulseCannotPass(){
+    runtime::TrackingFrame t{};t.spaceGeneration=1;t.predictedNs=Start;t.focused=t.headValid=true;
+    probe::TriggerInputSmoke smoke;probe::PlayerGrenadeReceiver menu;auto i=smoke.Input(t,1,0);
+    menu.Decorate(i,0,ipc::ChannelResult::Ok,State(0),Start,Frequency);
+    smoke.Published(i,0,Start,Start+1000,true,false);
+    t.predictedNs=Start+400000000;i=smoke.Input(t,2,400);CHECK(i.hands[1].trigger==1);
+    auto s=State(400);s.mode=ipc::MenuMode::Menu;
+    menu.Decorate(i,0,ipc::ChannelResult::Ok,s,t.predictedNs,Frequency);
+    CHECK(i.hands[1].trigger==0&&!interaction::GameplayOwnsInput(i.menu,t.predictedNs));
+    smoke.Published(i,400,t.predictedNs,t.predictedNs+1000,true,false);
+    CHECK(!smoke.Failed()&&!smoke.Complete(5000,true));
+    std::ostringstream report;smoke.Report(report,5000,true);
+    CHECK(report.str().find("\"press_input\":0")!=std::string::npos);
+    return 0;
+}
+}
+int main(){if(OriginalExpiry()||ClosedAndBadClock()||ExactlyOne()||MenuInterruptionNeverRetries()||PublicationAndArguments()||
+    SelectedKnifeOwnership()||SelectedKnifeSuppressedPulseCannotPass())return 1;
+    std::printf("Player receiver PASS: seven focused source/recipe groups; size=%zu. No graphics/native actions.\n",sizeof(probe::PlayerGrenadeReceiver));return 0;}

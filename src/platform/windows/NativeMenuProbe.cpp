@@ -11,8 +11,9 @@
 #include <cstring>
 using Microsoft::WRL::ComPtr;
 int wmain(int argc,wchar_t** argv){try{
-    if(argc<3||std::wstring(argv[1])!=L"--output")throw std::runtime_error("Usage: BC2NativeMenuProbe --output NEW_FOLDER [--resume-existing] [--click-close]");
-    bool resumeExisting=false,clickClose=false;for(int i=3;i<argc;++i){if(std::wstring(argv[i])==L"--resume-existing")resumeExisting=true;else if(std::wstring(argv[i])==L"--click-close")clickClose=true;else throw std::runtime_error("Unknown menu fixture option");}
+    if(argc<3||std::wstring(argv[1])!=L"--output")throw std::runtime_error("Usage: BC2NativeMenuProbe --output NEW_FOLDER [--resume-existing] [--click-close] [--front-end-observe]");
+    bool resumeExisting=false,clickClose=false,frontEndObserve=false;for(int i=3;i<argc;++i){if(std::wstring(argv[i])==L"--resume-existing")resumeExisting=true;else if(std::wstring(argv[i])==L"--click-close")clickClose=true;else if(std::wstring(argv[i])==L"--front-end-observe")frontEndObserve=true;else throw std::runtime_error("Unknown menu fixture option");}
+    if(frontEndObserve&&(resumeExisting||clickClose))throw std::runtime_error("Front-end observation does not click or toggle menus");
     const auto folder=std::filesystem::absolute(argv[2]);if(std::filesystem::exists(folder))throw std::runtime_error("New report folder required");std::filesystem::create_directories(folder);
     fvr::ipc::RemoteFrameProvider frames;fvr::ipc::MenuChannel menu;
     if(!frames.Create()||!menu.CreateHost(frames.Token()))throw std::runtime_error("Create menu channels");
@@ -31,7 +32,10 @@ int wmain(int argc,wchar_t** argv){try{
     fvr::graphics::D3D11PairConsumer consumer;fvr::graphics::TextureDescriptor opened{};
     std::array<ComPtr<ID3D11Texture2D>,2> scratch;std::ofstream events(folder/L"events.jsonl");
     const auto start=GetTickCount64();std::uint64_t connectedAt=0,sequence=0,openAt=0,closeAt=0;unsigned images=0,errors=0;
-    bool openedMenu=false,closedMenu=false,saved=false,invalidInitial=false;fvr::ipc::MenuMode previous=fvr::ipc::MenuMode::Unknown;
+    bool openedMenu=false,closedMenu=false,saved=false,invalidInitial=false;unsigned frontEndReadySamples=0;
+    std::uint64_t savedAtMs=0;
+    constexpr std::uint64_t FrontEndCaptureDelayMs=6000;
+    fvr::ipc::MenuMode previous=fvr::ipc::MenuMode::Unknown;
     fvr::ipc::MenuControl control;control.space=1;control.flags=fvr::ipc::MenuFocused;
     fvr::graphics::PairTicket pending{};bool feedback=false,consumed=false;
     while(GetTickCount64()-start<20000){
@@ -50,16 +54,24 @@ int wmain(int argc,wchar_t** argv){try{
             hand.grip.position={h?.2f:-.2f,-.25f,-.45f};hand.aim=hand.grip;}
         frames.UpdateInput(input);
         if(menu.ReadState(state)==fvr::ipc::ChannelResult::Ok){
-            if(!connectedAt){connectedAt=now;invalidInitial=resumeExisting?state.mode!=fvr::ipc::MenuMode::Menu:state.mode!=fvr::ipc::MenuMode::Gameplay;}
+            if(!connectedAt){connectedAt=now;invalidInitial=(resumeExisting||frontEndObserve)?state.mode!=fvr::ipc::MenuMode::Menu:state.mode!=fvr::ipc::MenuMode::Gameplay;}
             if(state.mode!=previous){events<<"{\"ms\":"<<now-connectedAt<<",\"mode\":"<<unsigned(state.mode)<<",\"epoch\":"<<state.epoch<<",\"input_ready\":"<<state.inputReady<<"}\n";events.flush();previous=state.mode;}
             if(invalidInitial)break;
-            if(!resumeDone){
+            if(frontEndObserve){
+                if(state.mode!=fvr::ipc::MenuMode::Menu){invalidInitial=true;break;}
+                if(state.inputReady)++frontEndReadySamples;
+                // Exercise only the native laser-hover route. No button/toggle,
+                // level selection, keyboard or desktop cursor input is sent.
+                control.u=.5f;control.v=.5f;control.flags=fvr::ipc::MenuFocused|fvr::ipc::MenuPoint;
+                frames.Suspend();
+            }
+            if(!frontEndObserve&&!resumeDone){
                 if(state.mode==fvr::ipc::MenuMode::Gameplay){resumeDone=true;gameplayAt=now;control.flags=fvr::ipc::MenuFocused;}
                 else {control.u=.791f;control.v=.124f;control.flags=fvr::ipc::MenuFocused|fvr::ipc::MenuPoint;
                     if(!resumeClickAt&&now-connectedAt>=750)resumeClickAt=now;
                     if(resumeClickAt&&now-resumeClickAt<150)control.flags|=fvr::ipc::MenuDown;}
             }
-            if(resumeDone&&state.mode==fvr::ipc::MenuMode::Gameplay){
+            if(!frontEndObserve&&resumeDone&&state.mode==fvr::ipc::MenuMode::Gameplay){
                 if(!gameplayAt)gameplayAt=now;
                 if(!openAt||closeAt){
                     fvr::runtime::TrackingFrame rendered{};fvr::graphics::TextureDescriptor d{};fvr::graphics::PairTicket t{};
@@ -92,20 +104,25 @@ int wmain(int argc,wchar_t** argv){try{
                 if(consumer.Open(device.Get(),d)==fvr::graphics::TransferResult::Ok){D3D11_TEXTURE2D_DESC td{};td.Width=d.width;td.Height=d.height;td.Format=DXGI_FORMAT(d.format);td.MipLevels=td.ArraySize=td.SampleDesc.Count=1;bool okay=true;for(auto& t:scratch){t.Reset();okay&=SUCCEEDED(device->CreateTexture2D(&td,nullptr,&t));}if(okay)opened=d;}
             }
             if(fvr::graphics::Valid(opened))consumed=consumer.Copy(surface.ticket,{{{scratch[0].Get(),0},{scratch[1].Get(),0}}})==fvr::graphics::TransferResult::Ok;
-            if(consumed){++images;if(!saved){D3D11_TEXTURE2D_DESC td{};scratch[0]->GetDesc(&td);td.Usage=D3D11_USAGE_STAGING;td.CPUAccessFlags=D3D11_CPU_ACCESS_READ;ComPtr<ID3D11Texture2D> stage;
+            // Capture once after the startup timeline has had time to advance.
+            // The first received surface can be the intro's black frame or title
+            // artwork; successful transport is not proof of visible menu buttons.
+            if(consumed){++images;if(!saved&&(!frontEndObserve||(connectedAt&&now-connectedAt>=FrontEndCaptureDelayMs))){D3D11_TEXTURE2D_DESC td{};scratch[0]->GetDesc(&td);td.Usage=D3D11_USAGE_STAGING;td.CPUAccessFlags=D3D11_CPU_ACCESS_READ;ComPtr<ID3D11Texture2D> stage;
                 if(SUCCEEDED(device->CreateTexture2D(&td,nullptr,&stage))){context->CopyResource(stage.Get(),scratch[0].Get());D3D11_MAPPED_SUBRESOURCE map{};
-                    if(SUCCEEDED(context->Map(stage.Get(),0,D3D11_MAP_READ,0,&map))){std::ofstream raw(folder/L"menu.rgba",std::ios::binary);for(unsigned y=0;y<d.height;++y)raw.write(static_cast<const char*>(map.pData)+y*map.RowPitch,d.width*4);context->Unmap(stage.Get(),0);saved=bool(raw);std::ofstream(folder/L"image.json")<<"{\"width\":"<<d.width<<",\"height\":"<<d.height<<",\"format\":"<<d.format<<"}";}
+                    if(SUCCEEDED(context->Map(stage.Get(),0,D3D11_MAP_READ,0,&map))){std::ofstream raw(folder/L"menu.rgba",std::ios::binary);for(unsigned y=0;y<d.height;++y)raw.write(static_cast<const char*>(map.pData)+y*map.RowPitch,d.width*4);context->Unmap(stage.Get(),0);saved=bool(raw);if(saved)savedAtMs=now-connectedAt;std::ofstream(folder/L"image.json")<<"{\"width\":"<<d.width<<",\"height\":"<<d.height<<",\"format\":"<<d.format<<",\"elapsed_ms\":"<<savedAtMs<<",\"surface_index\":"<<images<<",\"visual_acceptance\":false}";}
                 }
             }}else ++errors;
             const auto r=menu.SurfaceConsumed(pending,consumed);if(r!=fvr::ipc::ChannelResult::Busy)feedback=false;
         }
+        if(frontEndObserve&&images>=60&&frontEndReadySamples>=60&&saved&&connectedAt&&now-connectedAt>=FrontEndCaptureDelayMs)break;
         if(closedMenu&&resumedPairs>=8&&now-closeAt>=500)break;
         // Bound open failure and close the menu through the same original path.
         if(connectedAt&&now-connectedAt>13000){if(openedMenu&&!closeAt){control.toggle=2;closeAt=now;}if(!openedMenu||now-connectedAt>15000)break;}
         Sleep(10);
     }
     control.sequence=++sequence;control.flags=0;menu.PublishControl(control);
-    const bool okay=resumeDone&&worldPairs>=8&&resumedPairs>=8&&openedMenu&&closedMenu&&images&&saved&&!errors&&!invalidInitial;
-    std::ofstream(folder/L"result.json")<<"{\"opened\":"<<(openedMenu?"true":"false")<<",\"closed\":"<<(closedMenu?"true":"false")<<",\"images\":"<<images<<",\"errors\":"<<errors<<",\"saved\":"<<(saved?"true":"false")<<",\"invalid_initial\":"<<(invalidInitial?"true":"false")<<",\"passed\":"<<(okay?"true":"false")<<",\"world_pairs\":"<<worldPairs<<",\"resumed_pairs\":"<<resumedPairs<<",\"neutral_input_samples\":"<<worldGeneration<<",\"resume_existing\":"<<resumeExisting<<",\"click_close\":"<<clickClose<<",\"headset_tested\":false}";
+    const bool sequenceOkay=frontEndObserve?(images>=60&&frontEndReadySamples>=60):(resumeDone&&worldPairs>=8&&resumedPairs>=8&&openedMenu&&closedMenu);
+    const bool okay=sequenceOkay&&images&&saved&&!errors&&!invalidInitial;
+    std::ofstream(folder/L"result.json")<<"{\"opened\":"<<(openedMenu?"true":"false")<<",\"closed\":"<<(closedMenu?"true":"false")<<",\"images\":"<<images<<",\"errors\":"<<errors<<",\"saved\":"<<(saved?"true":"false")<<",\"invalid_initial\":"<<(invalidInitial?"true":"false")<<",\"passed\":"<<(okay?"true":"false")<<",\"world_pairs\":"<<worldPairs<<",\"resumed_pairs\":"<<resumedPairs<<",\"neutral_input_samples\":"<<worldGeneration<<",\"resume_existing\":"<<resumeExisting<<",\"click_close\":"<<clickClose<<",\"front_end_observe\":"<<frontEndObserve<<",\"front_end_ready_samples\":"<<frontEndReadySamples<<",\"headset_tested\":false}";
     return okay?0:2;
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

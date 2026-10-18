@@ -23,6 +23,8 @@ def unique(rows,key):
 def join(jobs,reviews,geometry,visibility,catalog):
     header,summary=registry.build(jobs,reviews)
     require(summary['rows']==summary['enabled']==len(jobs['descriptors'])>0,'All requested keys require exact family review')
+    reviewed_families={r['key']:r['family_proof'] for r in reviews}
+    families=sorted(set(reviewed_families.values()))
     require(visibility.get('native_admission_granted') is False and not visibility.get('excluded'),'Visibility extraction is not native admission')
     geo=unique(geometry['profiles'],lambda x:x['weapon']['resource'])
     vis=unique(visibility['rows'],lambda x:x['authored_configuration']['resource'])
@@ -65,12 +67,12 @@ def join(jobs,reviews,geometry,visibility,catalog):
         else:
             require(not magazine.get('rigid_assembly') and not magazine.get('assembly_digest'),'Leaf geometry cannot borrow an assembly cache')
         joined.append(dict(key=job['key'],native_id=f"{registry.stable_id(job['descriptor_digest']):016x}",descriptor_digest=job['descriptor_digest'],
-          identity=identity,configuration=job['configuration'],source_class=job['source_class'],family=registry.FAMILY,
+          identity=identity,configuration=job['configuration'],source_class=job['source_class'],family=reviewed_families[job['key']],
           configured_meshes=v['meshes'],weighted_names=v['weighted_names'],rig_fingerprint=v['rig_fingerprint'],
           magazine_part=mags[0]['part'],body_part=b['part'],body_anchor_evaluation=b['display_anchor_evaluation'],
           required_archives=sorted({b['configuration_archive'],b['closed_archive'],*(s['archive'] for s in b['sources'])}),
           native_per_variant_tested=False,headset_tested=False))
-    return dict(schema='fvr.bc2.exact-resource-visibility-body-enrollment.v1',family=registry.FAMILY,
+    return dict(schema='fvr.bc2.exact-resource-visibility-body-enrollment.v1',family=families[0] if len(families)==1 else None,families=families,
         activation='explicit compiled reviewed registry + geometry; ordinary resource backend switch',
         runtime_requirements=['exact coherent native config and selected-carried identity','current native operation binding and source-bound review',
           'all required installed whole-weapon/attachment geometry','ordinary body custody and hand arbitration','independent native ammunition receipts'],

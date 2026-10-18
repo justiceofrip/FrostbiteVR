@@ -152,13 +152,24 @@ public:
         idleFirstBeginNs_=firstRoundBeginNs_;
         idle_=WeaponCycleConvergedIdle{debt_,*firstRound_,invocations,last,deadline};
         firstRound_=invocations;firstRoundBeginNs_=first;firstDeadline_=deadline;floor_=last;round_={};
-        if(release_){outcome_=WeaponCycleConvergenceOutcome{*release_,*idle_};phase_=WeaponCycleConvergencePhase::Ready;}
+        if(release_){
+            // A paid stroke retains its immutable original outcome. New idle
+            // votes settle native prediction only; they never create a second
+            // physical completion or renew the original receipt.
+            if(!acknowledged_)outcome_=WeaponCycleConvergenceOutcome{*release_,*idle_};
+            phase_=WeaponCycleConvergencePhase::Ready;
+        }
         return true;
     }
     // A native busy observation is never idle. Invalidate outstanding voting
     // rounds and unsubmitted authority, but retain an exact submitted outcome.
     void NativeBusy(const Scope& scope,std::int64_t now)noexcept {
         if(!Bound(scope))return;
+        // The adapter must prove an exact same-operation native replay. Keep
+        // payment, but withdraw native readiness until two NEW guarded rounds.
+        // An unacknowledged outcome retains its existing delivery semantics.
+        if(phase_==WeaponCycleConvergencePhase::Ready&&acknowledged_)
+            phase_=WeaponCycleConvergencePhase::Released;
         if(phase_==WeaponCycleConvergencePhase::Debt){grant_.reset();issued_={};}
         if(phase_==WeaponCycleConvergencePhase::Debt||phase_==WeaponCycleConvergencePhase::Released)ClearEvidence(now);
     }
@@ -177,9 +188,11 @@ public:
     const std::optional<WeaponCycleConvergenceOutcome>& Outcome()const noexcept{return outcome_;}
     const std::optional<WeaponCycleConvergenceRelease>& Pending()const noexcept{return release_;}
     WeaponCycleConvergencePhase Phase()const noexcept{return phase_;}
-    bool BlocksFire()const noexcept{return phase_!=WeaponCycleConvergencePhase::Empty&&(!outcome_||!acknowledged_);}
+    bool Acknowledged()const noexcept{return acknowledged_;}
+    bool BlocksFire()const noexcept{return phase_!=WeaponCycleConvergencePhase::Empty&&
+        (phase_!=WeaponCycleConvergencePhase::Ready||!outcome_||!acknowledged_);}
     bool Acknowledge(const WeaponCycleConvergenceOutcome& outcome)noexcept {
-        if(!outcome_||outcome.release!=outcome_->release||outcome.native.debt!=outcome_->native.debt||
+        if(acknowledged_||phase_!=WeaponCycleConvergencePhase::Ready||!outcome_||outcome.release!=outcome_->release||outcome.native.debt!=outcome_->native.debt||
            outcome.native.first!=outcome_->native.first||outcome.native.second!=outcome_->native.second||
            outcome.native.observedNs!=outcome_->native.observedNs||outcome.native.deadlineNs!=outcome_->native.deadlineNs)return false;
         acknowledged_=true;return true;

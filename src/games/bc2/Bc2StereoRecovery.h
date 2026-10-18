@@ -118,6 +118,67 @@ struct RetiredViewCache {
     std::uint32_t callback=0,type=0,references=0,scene=0,begin=0,end=0,capacity=0;
     bool operator==(const RetiredViewCache&)const=default;
 };
+// A live terrain cache borrows its first pointer from the registered-view list.
+// Native root Draw can release an older queued child generation after Rebuild
+// populated that cache. Compare pointer values only: stale cached views must
+// never be dereferenced to decide whether they need replacing.
+struct LiveViewCache {
+    std::uint32_t world=0,request=0,callback=0,type=0,context=0,scene=0,references=0;
+    std::uint32_t registeredBegin=0,registeredEnd=0,registeredCapacity=0;
+    std::uint32_t cacheBegin=0,cacheEnd=0,cacheCapacity=0;
+    std::uint32_t registeredCount=0,cacheCount=0;
+    std::uint8_t dirty=0;
+    bool ownerVerified=false,boundaryVerified=false,registeredViewsVerified=false;
+    std::array<std::uint32_t,64> registered{},cached{};
+    bool operator==(const LiveViewCache&)const=default;
+};
+enum class LiveViewCacheResult {Unchanged,Refreshed,Disabled,Rejected};
+inline bool ValidLiveViewVector(std::uint32_t begin,std::uint32_t end,std::uint32_t capacity,
+    std::uint32_t stride,std::uint32_t count)noexcept {
+    if(stride!=4&&stride!=20)return false;
+    if(!begin)return !end&&!capacity&&!count;
+    return !(begin&3u)&&!(end&3u)&&!(capacity&3u)&&begin<=end&&end<=capacity&&
+        count<=64&&end-begin==count*stride&&(capacity-begin)%stride==0&&capacity-begin<=4096u*stride;
+}
+inline bool ValidLiveViewCache(const LiveViewCache& c)noexcept {
+    if(!c.world||!c.request||!c.callback||!c.type||!c.context||!c.references||
+       !c.ownerVerified||!c.boundaryVerified||!c.registeredViewsVerified||c.dirty>1||
+       !c.registeredCount||c.registeredCount>c.registered.size()||c.cacheCount>c.cached.size()||
+       !ValidLiveViewVector(c.registeredBegin,c.registeredEnd,c.registeredCapacity,4,c.registeredCount)||
+       !ValidLiveViewVector(c.cacheBegin,c.cacheEnd,c.cacheCapacity,20,c.cacheCount))return false;
+    for(unsigned i=0;i<c.registeredCount;++i){
+        if(!c.registered[i])return false;
+        for(unsigned j=0;j<i;++j)if(c.registered[i]==c.registered[j])return false;
+    }
+    return true;
+}
+inline bool LiveViewCacheMatches(const LiveViewCache& c)noexcept {
+    if(c.cacheCount!=c.registeredCount)return false;
+    for(unsigned i=0;i<c.registeredCount;++i)if(c.cached[i]!=c.registered[i])return false;
+    return true;
+}
+inline bool SameLiveViewCacheOwner(const LiveViewCache& a,const LiveViewCache& b)noexcept {
+    return a.world==b.world&&a.request==b.request&&a.callback==b.callback&&a.type==b.type&&
+        a.context==b.context&&a.references==b.references&&a.registeredBegin==b.registeredBegin&&
+        a.registeredEnd==b.registeredEnd&&a.registeredCapacity==b.registeredCapacity&&
+        a.registeredCount==b.registeredCount&&a.registered==b.registered;
+}
+// Exactly one native refresh, only for a dirty, mismatched, verified live owner.
+// No ownership/refcount correction, retries, or refresh merely because a frame
+// elapsed. A missing terrain entity disables its consumer but does NOT prove
+// that the old cache was rebuilt or cleared.
+template<class Calls> LiveViewCacheResult RefreshLiveViewCache(Calls& calls)noexcept {
+    LiveViewCache before{},again{},after{};
+    if(!calls.Capture(before)||!ValidLiveViewCache(before))return LiveViewCacheResult::Rejected;
+    if(LiveViewCacheMatches(before))return LiveViewCacheResult::Unchanged;
+    if(!before.dirty)return !before.scene?LiveViewCacheResult::Disabled:LiveViewCacheResult::Rejected;
+    if(!calls.Capture(again)||again!=before||!calls.Refresh(before)||
+       !calls.Capture(after)||!ValidLiveViewCache(after)||!SameLiveViewCacheOwner(before,after)||after.dirty)
+        return LiveViewCacheResult::Rejected;
+    if(!after.scene)return LiveViewCacheResult::Disabled;
+    if(!LiveViewCacheMatches(after))return LiveViewCacheResult::Rejected;
+    return LiveViewCacheResult::Refreshed;
+}
 inline bool ValidRetiredViewCache(const RetiredViewCache& c)noexcept {
     if(!c.callback||!c.type||!c.references)return false;
     if(!c.begin)return !c.end&&!c.capacity;

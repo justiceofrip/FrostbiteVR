@@ -1,4 +1,20 @@
-# Current412: shared presentation changes, unchanged weapon admissions
+# Current 416: unchanged weapon coverage; latest human run is 414/source 415
+
+The latest headset feedback is the 2026-10-17 run of runtime 414 / source 415:
+holsters were reliable, the SPAS pump felt great, and pump audio was described as
+"PERFECT". That feedback does not accept every weapon or the full campaign.
+Checkpoint 416 adds no native weapon-operation or configuration rows. Its audio,
+menu, mirror and boat-reticle work must not be counted as expanded weapon support.
+
+Manual LMG reloads remain unfinished. Broader weapon-family coverage and full
+campaign reliability remain unaccepted; registrations and measured geometry are
+prerequisites, not a count of finished guns. See [current state](CURRENT.md) and
+the [416 handoff](../handoff/checkpoint416/README.md) for current validation limits.
+
+All entries below are retained historical records. Their original uses of
+"current" or "latest" refer to their dated checkpoint, not the present state.
+
+# Historical412: shared presentation changes, unchanged weapon admissions
 
 The latest normal410 headset feedback reports much better pumping and reliable
 manual SPAS shell insertion. It does not accept every weapon or campaign level.

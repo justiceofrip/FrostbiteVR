@@ -16,7 +16,7 @@ int main(int argc,char** argv){
    for(const auto& section:row.sections)triangles+=section.geometry.expectedPartTriangles;CHECK(triangles==294);}}
  for(const auto& row:BodyEquipmentProfiles)if(row.configurationPath&&row.asset==g.asset){++body;CHECK(row.configurationPath==g.configurationPath&&row.rig==g.rigFingerprint);}
  CHECK(detached==1&&body==1);
- CHECK(argc<=2);if(argc==2){const auto loaded=LoadBodyAmmoGeometryCache(argv[1]);CHECK(loaded.status==BodyAmmoCacheStatus::Loaded&&loaded.catalog->size()==46);
+ CHECK(argc<=2);if(argc==2){const auto loaded=LoadBodyAmmoGeometryCache(argv[1]);CHECK(loaded.status==BodyAmmoCacheStatus::Loaded&&loaded.catalog->size()==48);
   unsigned found=0;for(const auto& row:*loaded.catalog)if(row->asset==g.asset&&row->mesh==g.mesh&&row->part==g.bones.magazine){++found;
    unsigned triangles=0;for(const auto& section:row->sections)triangles+=unsigned(section.mesh.vertices.size()/3);CHECK(triangles==294);}
   CHECK(found==1);}

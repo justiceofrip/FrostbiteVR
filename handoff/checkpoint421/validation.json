@@ -1,0 +1,310 @@
+{
+  "checkpoint": 421,
+  "created_utc": "2026-10-18T03:46:38.246067+00:00",
+  "scope": "Frozen421 offline validation, bounded actual checkpoint restart04, and opening02 entire-mission restart with qualified detach and measured cloud disparity; opening visuals, actual-death, headset and full-campaign acceptance remain blocked.",
+  "source_sha256": "2caa8ab3ef2fedfd6255b46d6849f823a87ed6aa408efedb64caf6f16b0a9c15",
+  "source_receipt": {
+    "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\profiles\\checkpoint421\\source-with-header.json",
+    "sha256": "c88ebe03090e5079271b67f077fe3aa1c77fa7e30f72ff388153995fcfa609ff"
+  },
+  "normal_build": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight421\\normal-build\\build-receipt.json",
+    "sha256": "81c573d1f670ce51c3e0de6c2c8af484ef57b6c0ff3df5ca2fb44100b6711072"
+  },
+  "binaries": {
+    "probe": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight421\\normal-build\\BC2NativeProbe.dll",
+      "sha256": "8c1bf1ece73c2c8c13f1b3eb855086ee8b3792d1acbe69504c681999ffd029e5"
+    },
+    "trace": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight421\\normal-build\\BC2NativeTrace.exe",
+      "sha256": "ebd819ac1c15b9a70998d7579e53de68d9be306bfcc13c1f11c8d39f52a14f2b"
+    },
+    "receiver": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight421\\normal-build\\BC2NativeIpcProbe.exe",
+      "sha256": "e2a98594ac4ec22ee118a503e68527ff93e36d6789c77edb2e744e34d52dd338"
+    },
+    "host": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight421\\normal-build\\BC2XrHost.exe",
+      "sha256": "840407f54deaa467d3cb734ba7bbc5f61391b1d92c7325fbaffaa8905cfdcafe"
+    }
+  },
+  "parent_receipt": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight420\\normal-build\\build-receipt.json",
+    "sha256": "fe55bcc36e022f43cd5dd407c8f14737bab4de1304065d329b5c7379e57fa707",
+    "checkpoint": 420,
+    "retained_immutable": true
+  },
+  "focused": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight421\\focused\\validation.json",
+    "sha256": "70e39ce65e2d8d1576e6c568dddcfcd1c2cd437fb3e66e16f0bc200f8aa93ce6",
+    "result": "passed",
+    "tests": 4,
+    "names": [
+      "ProjectionOverride",
+      "ExactWriteBatch",
+      "Bc2StereoRecovery",
+      "RenderOwnerRecovery"
+    ]
+  },
+  "full_builds": {
+    "x86": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight421\\normal-x86\\validation.json",
+      "sha256": "f5aa17cbbe810dee4c2fbdd06aa814197c1d9696ca19fa329fddf7ba28ba1f58"
+    },
+    "x64": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight421\\normal-x64\\validation.json",
+      "sha256": "700b8cf603e7ea1e239549ea55524c72bb3043aea4292c4504c23232c03314d1"
+    }
+  },
+  "cpp_suites_per_arch": {
+    "x86": 288,
+    "x64": 288
+  },
+  "full_builds_passed": {
+    "x86": true,
+    "x64": true
+  },
+  "changed_source": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight421\\normal-build\\changed-text\\manifest.json",
+    "sha256": "e6bf415e56174de74898e046c1c0a7b4b097948bffe7479bad45d4529bd394f3"
+  },
+  "review": {
+    "reviewer": "/root/first_mission_evidence",
+    "method": "Independent agent source review, retained in coordination messages; no separate review artifact.",
+    "bounded_epoch_accounting_approved": true,
+    "outstanding_findings_in_reviewed_scope": 0,
+    "native_context_cache_lifetime_proven": false,
+    "scope": "Atomic epoch/rejection attribution, stale callback admission, portable regressions and sticky exact-restore failure."
+  },
+  "regression_coverage": [
+    "Rejected observation prevents correction in that frame even after another valid observation.",
+    "A fresh valid next frame can apply and exactly restore its own native values.",
+    "A delayed old-token rejection cannot reject a newer frame or erase its current rejection.",
+    "A conflicting native write survives failed exact restoration; subsequent frames remain blocked."
+  ],
+  "live_acceptance": {
+    "actual_checkpoint_restart": "restart04_bounded_protocol_passed_and_sampled_pixels_reviewed",
+    "opening_scene_visuals": "opening02_late_native_cloud_disparity_measured_long_black_interval_unresolved",
+    "death_restart_visuals": "unverified_actual_death_not_exercised",
+    "headset_tested": false,
+    "full_campaign_accepted": false,
+    "restart02_context": "Frozen421 ordinary/menu observation; confirmation was not clicked, so no checkpoint restart occurred.",
+    "restart02_build_binding": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight421\\restart02\\build-binding.json",
+      "sha256": "b747d08e1172d1564b2bec444731669d28c0166ee4e92944f05f4c3f44b127e8"
+    },
+    "restart02_independent_audit": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight421\\graphics-proposal\\restart02-independent-audit.json",
+      "sha256": "9f7e7a3951a56f126b1299d63c739030a2aedf714152df00aaf20a2161516152"
+    },
+    "restart04": {
+      "runner_result": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight421\\restart04\\runner-result.json",
+        "sha256": "519fb1a51e0bca3c6280ef5bc5e6ff783855537435a783813454af7d5fbd9fda"
+      },
+      "independent_audit": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight421\\graphics-proposal\\restart04-transition-audit.json",
+        "sha256": "22eeb64697b7c295f253f90ad8b0bfaba541984a7b3a816cbe698caa65f6fc67"
+      },
+      "native_trace": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight421\\restart04\\native-trace.json",
+        "sha256": "805c7ab49bb187c8f1c48e5c7138e3e0d662a5bdb1c69016c7c260e206f03ac6"
+      },
+      "build_binding": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight421\\restart04\\build-binding.json",
+        "sha256": "b747d08e1172d1564b2bec444731669d28c0166ee4e92944f05f4c3f44b127e8"
+      },
+      "protocol_passed": true,
+      "native_recoveries_completed": 1,
+      "actual_confirm_to_rebuild_ms": 2563,
+      "rebuild_to_replacement_actor_ms": 140,
+      "pairs_published": 241,
+      "pairs_consumed": 240,
+      "pairs_discarded": 1,
+      "received_pairs_after_rebuild": 194,
+      "native_eyes_captured": 482,
+      "context_scopes": 482,
+      "camera_restore_failures": 0,
+      "context_patch_failures": 0,
+      "context_restore_failures": 0,
+      "gpu_failure_stage": 0,
+      "rig_paired_copies": 9575,
+      "rig_packing_failures": 0,
+      "rig_copy_boundary_rejected": 0,
+      "weapon_context_failures": 0,
+      "new_observation_rejection_recovery_exercised": false,
+      "process_exits": {
+        "trace": 0,
+        "receiver": 0,
+        "menu": 0
+      },
+      "hooks_disabled": true,
+      "native_lists_restored": true,
+      "native_callbacks_restored": true,
+      "ordered_survivors_restored": true,
+      "request_references_before_after": [
+        8,
+        8
+      ],
+      "visual_review": {
+        "reviewer": "/root",
+        "method": "Direct image review reported in coordination message.",
+        "pairs": [
+          0,
+          48,
+          72,
+          96,
+          192
+        ],
+        "contact_sheet": {
+          "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight421\\restart04\\review-pairs.png",
+          "sha256": "1e922e8363ba9e69cb0ba0e46864eb8c3d1c0822e616255863d3a81f8bc643b5"
+        },
+        "replacement_pause": {
+          "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight421\\restart04\\menu-12-pause.png",
+          "sha256": "cec67ad5d933ed79c8cb8890ec604d2ec63120cb493e57861ac295b6e6f9b2d7"
+        },
+        "observation": "Pair48 black in both eyes during transition; backgrounds visible in both eyes at72/96/192, no gross world stretching in sampled images; replacement pause menu legible.",
+        "pair48_source_input_after_rebuild_ms": 93,
+        "pair72_source_input_after_rebuild_ms": 4890,
+        "static_pose": true,
+        "symmetric_fov": true,
+        "headset_tested": false,
+        "hands_accepted": false,
+        "knife_appearance_accepted": false,
+        "knife_damage_tested": false,
+        "actual_death_tested": false,
+        "opening_cloud_accepted": false
+      },
+      "limits": [
+        "Single bounded checkpoint restart with synthetic static poses and symmetric FOVs.",
+        "Original input publication times classify pairs; they are not exact GPU presentation timestamps.",
+        "No actual death, headset, full campaign, or opening-cloud acceptance.",
+        "No weapon-context rejection occurred; the421 correction was not exercised.",
+        "The cause of416 death/restart visual failure remains unproven."
+      ]
+    },
+    "opening02": {
+      "runner_result": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight421\\opening02\\runner-result.json",
+        "sha256": "7f88c8529d357bc555d4f9ee351dd8d923cd644c6a882349121f4e8a585ce3a3"
+      },
+      "independent_audit": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight421\\graphics-proposal\\opening02-transition-audit.json",
+        "sha256": "4d6c53b5338104a82d1e270215ef084e1802b441a646f4e4494084b95a60fa90"
+      },
+      "qualified_detach_audit": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight421\\graphics-proposal\\opening02-detach-review.json",
+        "sha256": "7b7150f891b2eda80edfe1a7dabb53a0141c12ebe380afbfc4adfd5d618f0f56"
+      },
+      "cloud_correlation_report": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight421\\graphics-proposal\\opening02-cloud-stereo421.json",
+        "sha256": "aff5fd780f89e74448ef8deee7ae6d878470473411b74bfdeb0f88c214efbb61"
+      },
+      "native_trace": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight421\\opening02\\native-trace.json",
+        "sha256": "1e49abf47572a82b166f014c5658aee32b92140d0def19be73808e963f5a0bd1"
+      },
+      "original_protocol_passed": false,
+      "original_runner_error": "Audit: Native shutdown ownership incomplete",
+      "original_result_modified": false,
+      "entire_mission_restarted": true,
+      "native_recoveries_completed": 1,
+      "pairs_published": 240,
+      "pairs_consumed": 240,
+      "pairs_discarded": 0,
+      "native_eyes_captured": 480,
+      "camera_restore_failures": 0,
+      "context_patch_failures": 0,
+      "context_restore_failures": 0,
+      "gpu_failure_stage": 0,
+      "weapon_context_failures": 0,
+      "new_observation_rejection_recovery_exercised": false,
+      "process_exits": {
+        "trace": 0,
+        "receiver": 0,
+        "menu": 0
+      },
+      "qualified_detach": {
+        "result": "passed_existing_native_ownership_contract",
+        "pending_owned_children_before_release": 6,
+        "pending_counter_semantics": "Verified pre-release queue count, not post-release residue.",
+        "request_references_immediately_before_release": 15,
+        "request_references_after_release": 8,
+        "baseline_request_references": 8,
+        "registered_views_before": 14,
+        "registered_views_after": 7,
+        "hooks_disabled": true,
+        "native_lists_restored": true,
+        "native_callbacks_restored": true,
+        "ordered_survivors_restored": true,
+        "post_destruction_dereference_attempted": false
+      },
+      "visual_evidence": {
+        "reviewed_both_black_pairs": [
+          24,
+          48,
+          72,
+          96,
+          144,
+          168
+        ],
+        "late_scene_pairs": [
+          216,
+          239
+        ],
+        "first_late_scene_sample_source_input_after_rebuild_ms": 43219,
+        "cloud_disparity_absolute_pixels_approx": [
+          245,
+          280
+        ],
+        "cloud_match_correlation_range_approx": [
+          0.95,
+          0.997
+        ],
+        "boat_occupants_disparity_absolute_pixels_approx": [
+          27,
+          80
+        ],
+        "distant_hill_disparity_absolute_pixels_approx": [
+          0,
+          8
+        ],
+        "measurement": "Template correlation of retained raw native eye images; not depth or shader proof.",
+        "prolonged_black_interval_explained": false,
+        "cloud_consumer_identified": false,
+        "authored_finite_distance_cloud_geometry_excluded": false,
+        "static_pose": true,
+        "symmetric_fov": true,
+        "headset_tested": false
+      },
+      "limits": [
+        "Original private runner protocol stays failed; independent qualification accepts only native detach.",
+        "No same-world/request main-view replacement was observed; old owner changed through null subsystem to a new world/request/main.",
+        "Only late pairs216/239 quantify cloud disparity. Initial forest camera diagnostics do not identify their camera consumer.",
+        "Long black interval is unresolved; normal fade versus rendering fault is not established.",
+        "No actual death, headset, hands/knife or full campaign acceptance.",
+        "The421 observation rejection recovery was not exercised; cause of416 visual failure remains unproven."
+      ]
+    }
+  },
+  "render_observation_recovery_integrated": true,
+  "original416_failure_reconstructed": false,
+  "main_camera_replacement_fixed": false,
+  "opening_cloud_consumer_identified": false,
+  "death_restart_visual_fix_verified": false,
+  "desktop_promoted": false,
+  "github_published": false,
+  "release_ready": false,
+  "notes": [
+    "The frozen build receipt records pre-live validation and stays immutable; later observations do not rewrite it.",
+    "Restart02 camera evidence is from the forest after the intro and uses symmetric FOVs; it is not opening-cloud acceptance.",
+    "First-frame-only and deduplicated/full-resolution pass diagnostics cannot identify every cloud/fog/temporal consumer.",
+    "The handoff includes source/documentation and small receipts only; no whole build trees or game assets were copied.",
+    "Current source review does not establish every native camera/context lifetime or the cause of the checkpoint416 report.",
+    "Restart04 audit on-disk hash22eeb646 supersedes its initial console-only LF hashf82a7721; Windows newline encoding changed byte hashing, not evidence content.",
+    "Opening02 original failed shutdown assertion is retained. Separate audit establishes its pending-owned-child count was pre-release and exact ownership restoration passed; visual faults remain unresolved."
+  ],
+  "updated_utc": "2026-10-18T04:13:27.685674+00:00"
+}

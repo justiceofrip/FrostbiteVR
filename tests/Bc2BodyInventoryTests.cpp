@@ -451,6 +451,77 @@ int DefaultStowTests(){
     std::printf("Automatic stow: %u groups passed\n",groups);return 0;
 }
 
+int ScriptedKnifeRetiresUnsupportedEntryStow(){
+    const auto configure=[](bc2::BodyHolsterSample& s){
+        auto m=std::make_shared<bc2::SelectedMeshesSnapshot>(*s.selected);
+        const auto text=[](auto& target,const char* value){target.fill('\0');std::memcpy(target.data(),value,std::strlen(value)+1);};
+        m->inventory=Fixture::inventory;m->selectedSlot=0;m->configurationPathVerified=true;m->configurationPathPointer=0x48500;
+        text(m->configurationPath,"Objects/Weapons/Handheld/Knife_Equipable/Knife_Equipable");text(m->weaponName,"KNV-1");
+        m->states[0].meshes[0].kind=bc2::SelectedMeshKind::Unknown;
+        text(m->states[0].meshes[0].assetPath,"Objects/Weapons/Handheld/Knife/Knife_Mesh");
+        s.selected=m;return m;
+    };
+    for(unsigned fault=0;fault<24;++fault){HolsterRun h;
+        h.r.adapter.EnableAutomaticStow();
+        h.r.adapter.ObserveNativeActor(0x50000,Fixture::player,Fixture::soldier,Fixture::weak,true);
+        // A prior valid observation may retain this exact item. A later gap
+        // must still not retire the request merely by renewing metadata.
+        h.Step();CHECK(h.r.adapter.AutomaticStowPending()&&h.out.phase==bc2::BodyHolsterPhase::Held);
+        h.r.Advance();auto sample=h.Sample();auto m=configure(sample);
+        const auto original=h.r.hands.Current(interaction::InteractionHand::Right);CHECK(original);
+        const auto nativeBefore=h.r.f.bytes;
+        if(fault==1)sample.selected.reset();
+        if(fault==2)m->deadlineNs=h.r.s.hand.nowNs;
+        if(fault==3)m->observedNs=h.r.s.hand.nowNs+1;
+        if(fault==4)++m->owner.equipGeneration;
+        if(fault==5)++m->weaponData;
+        if(fault==6)++m->inventory;
+        if(fault==7)m->selectedSlot=7;
+        if(fault==8)m->sequence=0;
+        if(fault==9)m->configurationPathVerified=false;
+        if(fault==10)m->configurationPathPointer=0;
+        if(fault==11)m->configurationPath[0]='?';
+        if(fault==12)m->weaponName[0]='?';
+        if(fault==13)m->states[0].meshes[0].assetPath[0]='?';
+        if(fault==14)m->states[0].count=0;
+        if(fault==15)m->stateCount=2;
+        if(fault==16)++m->states[0].array;
+        if(fault==17)h.r.f.denyMap=true;
+        if(fault==18)h.r.s.hand.focused=false;
+        if(fault==19)h.r.s.cancel=true;
+        if(fault==20)h.r.s.reloadBusy=true;
+        if(fault==21)h.r.s.interaction=bc2::BodyInteractionState::Suspended;
+        if(fault==22)m->deadlineNs=m->observedNs+200000001;
+        if(fault==23)++h.r.s.hand.sequence;
+        const auto result=h.r.adapter.TickHolster(h.r.f.Memory(),h.r.s,sample,h.holster,h.r.hands,h.r.intent);
+        CHECK(!result.inventory.request&&!result.ordinaryDraw.command&&!result.visibility.enabled&&!result.freeRight);
+        CHECK(h.holster.Phase()==bc2::BodyHolsterPhase::Held&&h.r.f.bytes==nativeBefore);
+        CHECK(h.r.adapter.AutomaticStowPending()==bool(fault));
+        CHECK(h.r.hands.Current(interaction::InteractionHand::Right)->token==original->token);
+        if(fault)continue;
+        CHECK(!result.blockWeaponActions&&!h.r.adapter.Pending());
+        // A repeat packet cannot queue another stow or count another retirement.
+        h.r.adapter.ObserveNativeActor(0x50000,Fixture::player,Fixture::soldier,Fixture::weak,true);
+        h.r.adapter.TickHolster(h.r.f.Memory(),h.r.s,sample,h.holster,h.r.hands,h.r.intent);
+        std::ostringstream report;h.r.adapter.Report(report);
+        CHECK(report.str().find("\"entries\":1,\"requests\":0,\"unsupported\":1,\"superseded\":0")!=std::string::npos);
+        // Selecting an ordinary supported gun later does not inherit the
+        // unsupported mission item's automatic entry request.
+        h.r.f.Select(1);h.r.s.owner=h.r.f.owner;++h.r.s.hand.owner.equipGeneration;
+        h.r.s.gun={Fixture::b,h.r.s.hand.owner.equipGeneration};h.r.Advance();h.r.Gun();
+        const auto selectedHold=h.r.hands.Current(interaction::InteractionHand::Right);
+        CHECK(selectedHold&&selectedHold->token.item==h.r.s.gun&&selectedHold->token.owner==h.r.s.hand.owner);
+        for(unsigned n=0;n<4;++n){h.Step();CHECK(!h.r.adapter.AutomaticStowPending());
+            CHECK(h.out.phase==bc2::BodyHolsterPhase::Held&&!h.out.inventory.request&&!h.out.blockWeaponActions);}
+        // A real later seat exit remains a new automatic-stow event.
+        h.r.adapter.ObserveNativeActor(0x50000,Fixture::player,Fixture::soldier,Fixture::weak,false);
+        h.r.adapter.ObserveNativeActor(0x50000,Fixture::player,Fixture::soldier,Fixture::weak,true);
+        CHECK(h.r.adapter.AutomaticStowPending());h.Step();h.Step();
+        CHECK(h.out.phase==bc2::BodyHolsterPhase::HidePending&&h.out.inventory.request);
+    }
+    std::puts("Scripted knife startup: unsupported retirement and 23 evidence/interruption failures passed");return 0;
+}
+
 int ScopedXm8OrdinaryAutoStowDraw(){
     HolsterRun h(bc2::BodyInventoryHolsterAcceptance,true);
     CHECK(h.r.s.gun.id!=h.r.s.owner.weapon);
@@ -858,7 +929,7 @@ int main(){if(HipCarryChecks())return 1;if(OrdinaryBoltStartupPreservesOriginalR
     if(ShoulderDrawReleaseStaysHeld())return 1;
     std::puts("Ordinary scoped XM8: automatic stow/draw/fire continuity, six admission negatives, cross-draw slots passed");
     if(GameplayInputRearmComposition()||GameplayInputRearmRejectsUnregisteredOrActiveFailure()||GameplayInvalidationJournalIsBounded())return 1;std::puts("Gameplay pause rearm: 3 groups passed (actual policy/input/consumer)");if(UnevaluatedHolsterRetiresChangedLifetimes()||UnevaluatedHolsterDoesNotEraseCurrentSlots()||HeldFireMissingPresentationKeepsOnlyMetadata()||HeldFireSlotContinuity())return 1;std::puts("Held firing slot continuity: positive and five negative variants passed");
-    if(DefaultStowTests())return 1;
+    if(DefaultStowTests()||ScriptedKnifeRetiresUnsupportedEntryStow())return 1;
     unsigned groups=0;
     {Fixture f;const auto raw=f.bytes;auto r=bc2::ReadBodyInventory(f.Memory(),f.owner,true);CHECK(r.snapshot&&r.snapshot->items[1].category==1&&r.reads<16384&&raw==f.bytes);
         CHECK(!bc2::ReadBodyInventory(f.Memory(),f.owner).snapshot);auto route=bc2::ResolveBodyDraw(*r.snapshot,Fixture::b);CHECK(route&&route->action==7&&route->targetSlot==1);++groups;}

@@ -1,0 +1,828 @@
+{
+  "schema": "fvr.checkpoint-validation.v1",
+  "checkpoint": 416,
+  "evidence_date": "2026-10-17",
+  "status": "headset416_spas_holster_vehicle_regression_release_blocked",
+  "current_source": {
+    "receipt": "profiles/checkpoint416/source-with-header.json",
+    "sha256": "8a294b7881e995663ab1398a6d6680811778d2935057c0ac0957a9b8ef8896b2",
+    "reviewed_header_sha256": "477efb148e709ec4b54ef987d63131444bc995ca196097ddd71eb48d9071c225",
+    "files": 529,
+    "previous_source_sha256": "4dfea3cd48e6970e4374a87bb0949a06e29132fe8e20104c1fdefbad9530bb5a",
+    "changed_existing_runtime_dependencies": [
+      "include/fvr/math/StereoCulling.h",
+      "src/games/bc2/NativeProbe.cpp",
+      "src/math/StereoCulling.cpp"
+    ],
+    "added_runtime_dependencies": [],
+    "capability_rows_unchanged": true,
+    "audio_weapon_hand_policy_code_unchanged": true,
+    "graphics_geometry_code_unchanged": true,
+    "this_delta_is_diagnostic_only": true,
+    "live_culling_construction_changed": false,
+    "contains_preceding_render_cache_lifetime_fix": true
+  },
+  "normal_builds": {
+    "source_sha256": "8a294b7881e995663ab1398a6d6680811778d2935057c0ac0957a9b8ef8896b2",
+    "receipt": "overnight416/normal-menu-visible-build/build-receipt.json",
+    "receipt_sha256": "b0a2e1bc2de935b227d9cc3eee208cdf5dd61a3c55dac9dabedaf5aed040bbf0",
+    "probe_sha256": "6ab46b2aa3428990fa04d927f3119ee65d9e35cd34e7cd3eb5185e131630a444",
+    "x86": {
+      "built": true,
+      "cpp_passed": 286,
+      "cpp_failed": 0
+    },
+    "x64": {
+      "built": true,
+      "cpp_passed": 286,
+      "cpp_failed": 0
+    },
+    "is_current_source": true,
+    "bounded_campaign_transition_accepted": true,
+    "headset_acceptance": false,
+    "full_campaign_accepted": false
+  },
+  "prior_tested_source": {
+    "receipt": "overnight416/normal-build/build-receipt.json",
+    "sha256": "6abac213efc4070e3e07fb6181074bde123eaf1556320a7fc096203a80923993",
+    "reviewed_header_sha256": "1511a789f0a019c01bbdf916a3e30f3b397b8dc0f43e845c552ddfbbc7a12fd7",
+    "files": 525,
+    "normal_probe_sha256": "0979d3195940f72d8fc27732e56551816237ccf61eaff50050ccd4d660ee2b91"
+  },
+  "retained_normal_builds": {
+    "x86": {
+      "built": true,
+      "cpp_passed": 285,
+      "cpp_failed": 0
+    },
+    "x64": {
+      "built": true,
+      "cpp_passed": 285,
+      "cpp_failed": 0
+    },
+    "native_receipt_verified": true,
+    "headset_acceptance": false,
+    "source_sha256": "6abac213efc4070e3e07fb6181074bde123eaf1556320a7fc096203a80923993"
+  },
+  "warp": {
+    "desktop_mirror_passed": true,
+    "body_prop_compositor_passed": true,
+    "source_sha256": "6abac213efc4070e3e07fb6181074bde123eaf1556320a7fc096203a80923993"
+  },
+  "native_audio_diagnostics": {
+    "artifacts": [
+      "overnight416/shell-audio-observe01",
+      "overnight416/shell-audio-replace01"
+    ],
+    "diagnostic_changes_input_generation_only": true,
+    "observe_all_checks_passed": true,
+    "replace_all_checks_passed": true,
+    "replace_committed_shells": 1,
+    "replace_completed_cues": 1,
+    "replace_exact_native_starts_suppressed": 2,
+    "pump_cues_completed_each_run": 2,
+    "combined_sequence_passed": [
+      "magazine",
+      "physical_pump",
+      "shell_insertion",
+      "shoulder_holster",
+      "rifle_fire"
+    ],
+    "hooks_drained": true,
+    "normal_player_acceptance": false,
+    "acoustic_match_verified": false,
+    "headset_verified": false,
+    "source_sha256": "6abac213efc4070e3e07fb6181074bde123eaf1556320a7fc096203a80923993",
+    "same_source_as_retained_normal": true,
+    "rerun_after_reticle_correction": false
+  },
+  "desktop_mirror_native_diagnostic": {
+    "artifact": "overnight416/shell-audio-replace01",
+    "completed_left_commits": 240,
+    "copies": 3593,
+    "neutral_presentations": 2,
+    "failures": 0,
+    "visual_flicker_accepted": false,
+    "performance_accepted": false,
+    "source_sha256": "6abac213efc4070e3e07fb6181074bde123eaf1556320a7fc096203a80923993",
+    "independent_source_review": "no_actionable_defect_found_no_new_visual_acceptance"
+  },
+  "main_menu": {
+    "startup_cleanup_integrated": true,
+    "source_sha256": "8a294b7881e995663ab1398a6d6680811778d2935057c0ac0957a9b8ef8896b2",
+    "normal_receipt_sha256": "b0a2e1bc2de935b227d9cc3eee208cdf5dd61a3c55dac9dabedaf5aed040bbf0",
+    "probe_sha256": "6ab46b2aa3428990fa04d927f3119ee65d9e35cd34e7cd3eb5185e131630a444",
+    "normal_runtime": true,
+    "normal_visible_menu_confirmed_runs": 1,
+    "visual_menu_buttons_passed": true,
+    "headset_menu_accepted": false,
+    "campaign_transition_accepted": true,
+    "promotion_blocked": false,
+    "initial_transport_evidence": {
+      "source_sha256": "6abac213efc4070e3e07fb6181074bde123eaf1556320a7fc096203a80923993",
+      "surfaces": 60,
+      "input_ready_samples": 321,
+      "pointer_moves": 298,
+      "hooks_clean_in_that_run": true,
+      "visible_image_accepted": false
+    },
+    "retained_black_attempts": [
+      "overnight416/campaign-transition-late-pixels01",
+      "overnight416/campaign-transition-reticle02"
+    ],
+    "private_startup_cleanup_history": {
+      "initial_artifact": "overnight416/startup-movie-native01",
+      "initial_visible_result": "title_art_only",
+      "latest_artifact": "overnight416/startup-movie-native02",
+      "native_cleanup_calls": 2,
+      "disabled_movies": [
+        "EA",
+        "Dolby"
+      ],
+      "verified_native_cleanup": true,
+      "restored": true,
+      "drained": true,
+      "positive_time_ui_updates": 211,
+      "one_initial_activation": true,
+      "key_mouse_input_sent": false,
+      "continue_called": false,
+      "movie_files_changed": false,
+      "game_closed_normally": true,
+      "desktop_menu_buttons_visually_reviewed": true,
+      "visible_buttons": [
+        "MAIN",
+        "SINGLEPLAYER",
+        "OPTIONS",
+        "RESUME GAME"
+      ],
+      "production_integrated": false,
+      "normal_runtime_vr_menu_accepted": false,
+      "campaign_transition_accepted": false,
+      "headset_tested": false
+    },
+    "failed_combined_runs": [
+      {
+        "artifact": "overnight416/campaign-transition-v3-02",
+        "overall_passed": false,
+        "normal_menu_buttons_visually_reviewed": true,
+        "image_sha256": "d98f115dabe1339ec945dc4e65d4b4d633ddd6c7f02b4878d34c823006a41380",
+        "accepted_surface": 81,
+        "one_native_pointer_down_up_pair": true,
+        "gameplay_state_after_resume": true,
+        "delivered_world_pairs": 0,
+        "native_continue_dll_used": false,
+        "os_key_mouse_input_sent": false,
+        "receiver_exit": 2,
+        "trace_exit": 2,
+        "final_native_report_empty": true,
+        "native_hook_cleanup_verified": false,
+        "game_exited": true
+      },
+      {
+        "artifact": "overnight416/campaign-transition-v3-crash01",
+        "overall_passed": false,
+        "normal_menu_buttons_visually_reviewed": true,
+        "image_sha256": "055ce9c109fce70d4c3a75471a99faab3b07fc19dcf2765890e0e15917df250a",
+        "accepted_surface": 257,
+        "one_native_pointer_down_up_pair": true,
+        "gameplay_state_after_resume": true,
+        "delivered_world_pairs": 0,
+        "native_continue_dll_used": false,
+        "os_key_mouse_input_sent": false,
+        "receiver_exit": 2,
+        "trace_exit": 2,
+        "final_native_report_empty": true,
+        "native_hook_cleanup_verified": false,
+        "game_exited": true
+      },
+      {
+        "artifact": "overnight416/campaign-transition-v3-crash02",
+        "overall_passed": false,
+        "normal_menu_buttons_visually_reviewed": true,
+        "image_sha256": "ad5234a1f30bddb9211c250f3adc8a6b46f13f7799256066018fe072085c715f",
+        "accepted_surface": 353,
+        "one_native_pointer_down_up_pair": true,
+        "gameplay_state_after_resume": true,
+        "delivered_world_pairs": 0,
+        "native_continue_dll_used": false,
+        "os_key_mouse_input_sent": false,
+        "receiver_exit": 2,
+        "trace_exit": 2,
+        "final_native_report_empty": true,
+        "native_hook_cleanup_verified": false,
+        "game_exited": true
+      }
+    ],
+    "exception_evidence": {
+      "artifact": "overnight416/campaign-transition-v3-crash01/exception-watch",
+      "json_only": true,
+      "minidump_written": false,
+      "exception_code": "0x80000003",
+      "failure_path": "terrain_purecall_0x00A1C212_to_0x00401090",
+      "root_cause_proven": false,
+      "mod_caller_proven": false,
+      "native_rebuild_and_eye_visibility_draw_milestones_seen": true,
+      "complete_world_pair_delivered": false,
+      "clean_hook_shutdown_claimed": false
+    },
+    "earlier_fixture_abort": {
+      "artifact": "overnight416/campaign-transition-v3-01",
+      "before_native_injection": true,
+      "reason": "90_second_request_exceeded_native_trace_60_second_limit"
+    },
+    "next_diagnostic_run_pending": false,
+    "transition_fix_claimed": true,
+    "latest_retired_view_evidence": {
+      "artifact": "overnight416/campaign-transition-v3-crash02/exception-watch/exception-0.json",
+      "json_only": true,
+      "minidump_written": false,
+      "render_view_type": "abstract_destructor_vtable",
+      "vtable": "0x01476BE0",
+      "reference_count": 0,
+      "terrain_cached_entries": 20,
+      "terrain_registered_views": 14,
+      "terrain_dirty_byte": 1,
+      "failing_cache_index": 2,
+      "native_draw": "0x00A1C1A0",
+      "borrowed_virtual_slot": "0x18",
+      "native_draw_checks_dirty_before_virtual_call": false,
+      "inference": "retired_borrowed_view_retained_in_terrain_cache",
+      "complete_lifetime_cause_proven": false,
+      "fix_accepted": false
+    },
+    "graphics_identity_observation": {
+      "artifact": "overnight416/campaign-transition-v3-crash02/graphics-identities.json",
+      "read_only": true,
+      "valid_samples": 100,
+      "observed_identity_count": 1,
+      "elapsed_seconds": 26.297,
+      "renderer_device_swapchain_and_cached_state_match_all_samples": true,
+      "device_recreation_observed_in_interval": false,
+      "all_possible_graphics_lifetime_issues_excluded": false
+    },
+    "latest_cache_transition": {
+      "artifact": "overnight416/campaign-menu-cache01/validation.json",
+      "source_sha256": "4dfea3cd48e6970e4374a87bb0949a06e29132fe8e20104c1fdefbad9530bb5a",
+      "normal_receipt_sha256": "0719eb3602ad663d0526f435e3be04650e0413781971f99027dce998bf51845a",
+      "probe_sha256": "1679cf9a7f96c7f64f2fc92366b7e0b35b23aaaf957004b98b19df0635f82d5d",
+      "overall_passed": false,
+      "receiver_passed": true,
+      "receiver_exit": 0,
+      "trace_exit": 2,
+      "native_probe_exit": 12,
+      "world_pairs": 37,
+      "resumed_pairs": 14,
+      "receiver_errors": 0,
+      "native_hooks_disabled": true,
+      "startup_slot_restored": true,
+      "startup_callbacks_drained": true,
+      "startup_protection_debt": 0,
+      "visibility_requests": 2,
+      "visibility_acknowledgements": 2,
+      "watched_exceptions": 0,
+      "watcher_instrumented": true,
+      "minidump_written": false,
+      "native_continue_dll_used": false,
+      "os_key_mouse_input_sent": false,
+      "camera_copy_culling_failed_indexes": [
+        4,
+        6
+      ],
+      "camera_copy_max_distance": 0.00195312,
+      "remaining_failure_under_investigation": true,
+      "headset_tested": false,
+      "campaign_transition_accepted": false,
+      "receiver_success_scope": "transport_and_state_predicates_only",
+      "initial_world_image_review": {
+        "artifact": "overnight416/campaign-menu-cache01/world-left-review.png",
+        "frame": 6126,
+        "entirely_black": true,
+        "visible_campaign_verified": false,
+        "later_resumed_pair_reviewed": false,
+        "early_loading_or_sentinel_state": "hypothesis_not_proven"
+      }
+    },
+    "earlier_startup_normal_visible_menu_confirmed_runs": 3,
+    "transition_acceptance_scope": "bounded_visible_campaign_pause_resume_not_full_campaign",
+    "latest_visible_transition": {
+      "artifact": "overnight416/campaign-menu-visible01/validation.json",
+      "validation_sha256": "28debafe06f07b087aef72805d1b17b6eb0cb1d998aec5f2214ab44a69820e0e",
+      "source_sha256": "8a294b7881e995663ab1398a6d6680811778d2935057c0ac0957a9b8ef8896b2",
+      "normal_receipt_sha256": "b0a2e1bc2de935b227d9cc3eee208cdf5dd61a3c55dac9dabedaf5aed040bbf0",
+      "probe_sha256": "6ab46b2aa3428990fa04d927f3119ee65d9e35cd34e7cd3eb5185e131630a444",
+      "receiver_sha256": "e380c7a762d962acb06b1812c23b430eaf60a96f5dfc204a456e3553fa6823f0",
+      "overall_passed": true,
+      "trace_exit": 0,
+      "receiver_exit": 0,
+      "world_pairs": 37,
+      "resumed_pairs": 13,
+      "receiver_errors": 0,
+      "native_hooks_disabled": true,
+      "game_closed_normally": true,
+      "initial_and_resumed_world_reviewed_in_both_eyes": true,
+      "nonblack_alone_used_as_semantic_acceptance": false,
+      "root_menu_review": "overnight416/campaign-menu-visible01/root-menu-visual-review.json",
+      "root_menu_review_sha256": "667a8fdf6eea6b2d1fd98085093ea0a965d7adfa092f52918f2d15e6fd9a951d",
+      "root_world_review": "overnight416/campaign-menu-visible01/root-world-visual-review.json",
+      "root_world_review_sha256": "ae7cd9d66269c20e59820319ec3a26d5a39b9a387ef1f280c4b8086541c8a6e3",
+      "menu_surface": 311,
+      "menu_elapsed_ms": 6000,
+      "world_raw_bytes": 33177600,
+      "native_continue_dll_used": false,
+      "os_key_mouse_input_sent": false,
+      "headset_tested": false,
+      "full_campaign_accepted": false,
+      "phases": {
+        "initial": {
+          "frame_id": 6236,
+          "tracking_generation": 2132,
+          "transport_pairs_before_capture": 24,
+          "capture_attempt": 2,
+          "metadata_sha256": "2136ff7428adb0d2b011ff200d31e2e2744fc884beffedc22349b38908601f04",
+          "both_eyes_nonblack": true,
+          "root_scene_visible": true,
+          "root_not_loading_or_menu": true,
+          "scene": "boat_gunner_river_dock_cliffs",
+          "lighting": "campaign_fade_in",
+          "reviewed_png_sha256": {
+            "left": "1e7adf9557d210df37fbd91807c4b26bc5ca112f1472237f4991d3298be97e2a",
+            "right": "cd611ea98345831e8f86e7d02c536a21c26f9c3ffdd1afd8cd7e4334359d9b0b"
+          }
+        },
+        "resumed": {
+          "frame_id": 6896,
+          "tracking_generation": 2344,
+          "transport_pairs_before_capture": 8,
+          "capture_attempt": 1,
+          "metadata_sha256": "41d181373ec0888ef8100b1360584a66d5af26ee26afb68fabc9c19db46df08f",
+          "both_eyes_nonblack": true,
+          "root_scene_visible": true,
+          "root_not_loading_or_menu": true,
+          "scene": "boat_gunner_river_dock_cliffs",
+          "lighting": "fully_lit",
+          "reviewed_png_sha256": {
+            "left": "06f17131e71dd1e172efa0dd63b0c5d22841a15d87a5fa6e04fd2dff7d76d457",
+            "right": "fbfb45919c24b1e476102d4a64cdaa013c9bc9a161f1314c0efea801c72e73eb"
+          }
+        }
+      }
+    },
+    "automated_menu_pass_does_not_accept_weapon_regression": true
+  },
+  "launcher": {
+    "private_candidate_version": "0.1.3",
+    "focused_checks_passed": true,
+    "initial_activation_only_on_user_gui_launch": true,
+    "private_shell_audio_replacement_enabled": true,
+    "installed_version": "0.1.2",
+    "installed_profile_checkpoint": 414,
+    "installed_launcher_changed": false,
+    "promoted": false,
+    "published": false,
+    "private_overlay_stage": "overnight416/headset-launch416-overlay-private",
+    "overlay_validateonly_passed": true,
+    "overlay_pinned_files_checked": 62,
+    "overlay_stage_bytes": 134668,
+    "promotion_requires_latest_probe_visible_menu_and_campaign_transition": true,
+    "private_overlay_profile_sha256": "0b8dc436450ca71b513f03fc52c5b18e7423f804718402e90f6b245804db9efa",
+    "private_overlay_pins_sha256": "36d23e10be836b5f0ca8fb319eab0f2dfef25562565b489c00d616d3df85dc84",
+    "private_visible_stage": "overnight416/headset-launch416-visible-private",
+    "visible_validateonly_passed": true,
+    "visible_pinned_files_checked": 63,
+    "visible_stage_bytes": 138100,
+    "private_visible_profile_sha256": "194b95787f603849c4b8c94786cb57587303a766c3d07e0cce236e1861f68460",
+    "private_visible_pins_sha256": "36d495fa8049d476ba2bc35b529607de3f24d7cae9d17f5b6e309937907ff58c",
+    "private_menu_stage": "overnight416/headset-launch416-menu-private",
+    "menu_validateonly_passed": true,
+    "menu_pinned_files_checked": 81,
+    "menu_stage_bytes": 172358,
+    "private_menu_profile_sha256": "bf7182290640d828c70a34c259593da1e71868c42fa5a77ac1d62886197a9414",
+    "private_menu_pins_sha256": "717ffabd0ba511f6d84d1075417257e4467b9ce651b4be014dfb4a35b4de7839",
+    "activation_helper": "ActivateBc2Once416.py",
+    "activation_helper_pinned_in_profile_and_readiness": true,
+    "activation_exact_pid_creation_hwnd": true,
+    "activation_opt_in_one_burst_no_retry": true,
+    "existing_session_and_validation_do_not_activate": true,
+    "default_cli_does_not_activate": true,
+    "private_menu_stage_source_sha256": "d2d398ecf570b77991ec1d0a0327312cddf61cbc710168c9e5c95e59969d2497",
+    "current_source_stage_prepared": true,
+    "private_menu_cache_stage": "overnight416/headset-launch416-menu-cache-private",
+    "menu_cache_validateonly_passed": true,
+    "menu_cache_pinned_files_checked": 92,
+    "menu_cache_stage_bytes": 199478,
+    "private_menu_cache_profile_sha256": "a95e3205ea1a5e36c233a5902983b1fed8c7d0bc2990d17eac6edde4994ff9a7",
+    "private_menu_cache_pins_sha256": "f2e2dc6139816f63982476230eb9082865ae706224a1de9a24363d34b129dc4c",
+    "private_menu_cache_source_sha256": "4dfea3cd48e6970e4374a87bb0949a06e29132fe8e20104c1fdefbad9530bb5a",
+    "private_menu_cache_promotion_gate": "overnight416/PromoteMenuCacheLauncher416.ps1",
+    "menu_cache_promotion_gate_executed": false,
+    "private_menu_visible_stage": "overnight416/headset-launch416-menu-visible-private",
+    "menu_visible_validateonly_passed": true,
+    "menu_visible_pinned_files_checked": 104,
+    "menu_visible_stage_bytes": 226715,
+    "private_menu_visible_profile_sha256": "c5155090f95b096f375e16191161e0c2f61150d2e7c34a9a8e2528d845628a63",
+    "private_menu_visible_pins_sha256": "6aaa8a263888d4c8b141ea4104e5dfee59e2ebcf1d6a7abc44e54c62055f801d",
+    "private_menu_visible_source_sha256": "8a294b7881e995663ab1398a6d6680811778d2935057c0ac0957a9b8ef8896b2",
+    "private_menu_visible_promotion_gate": "overnight416/PromoteMenuVisibleLauncher416.ps1",
+    "visible_world_review_gate_required": true,
+    "promotion_recorded": false,
+    "promotion_blocked_by_headset_regression": true
+  },
+  "latest_human": {
+    "runtime_checkpoint": 416,
+    "source_sha256": "8a294b7881e995663ab1398a6d6680811778d2935057c0ac0957a9b8ef8896b2",
+    "result": "failed",
+    "report": "SPAS initially worked, then holstering and vehicle entry stopped working.",
+    "cause_established": false,
+    "trigger_reproduced": false,
+    "session_end_permission_pending": true,
+    "complete_failure_logs_collected": false,
+    "headset_accepted": false,
+    "public_release_blocked": true,
+    "local_promotion_blocked": true,
+    "earlier_414_positive_result_retained": true
+  },
+  "boat_reticle": {
+    "candidate_present": true,
+    "initial_failed_attempt": {
+      "artifact": "overnight416/boat-reticle01",
+      "source_binding_verified": true,
+      "rejection_stage": 4,
+      "inherit_speed": 1,
+      "admitted_observations": 0,
+      "pairs_received": 116,
+      "pairs_requested": 240,
+      "receiver_drained": false,
+      "native_hooks_drained": true,
+      "native_trace_exit": 0,
+      "initial_failed_source_sha256": "6abac213efc4070e3e07fb6181074bde123eaf1556320a7fc096203a80923993",
+      "authored_camera_flags": [
+        0,
+        1,
+        0
+      ]
+    },
+    "correction": {
+      "source_sha256": "f5bc3f788d4c21b39dca9f14c28b0901d9e6c2a2a4bb05ac829885e64d8ffa88",
+      "native_proof_spans_reverified": 15,
+      "read_only_bracket_verified": true,
+      "camera_owner_null": true,
+      "inherited_velocity": [
+        0,
+        0,
+        0
+      ],
+      "optional_transform_null": true,
+      "supported_inherit_coefficients": [
+        0,
+        1
+      ],
+      "configured_initial_launch_sight_line_only": true,
+      "fixture_requested_pairs": 64,
+      "fixture_native_deadline_seconds": 10,
+      "native_source_path_verified": true,
+      "overall_rerun_passed": true
+    },
+    "fixture_abort": {
+      "artifact": "overnight416/boat-reticle02",
+      "before_native_injection": true,
+      "reason": "64_pair_fixture_conflicted_with_exact_240_pair_receiver_guard",
+      "native_failure_claimed": false
+    },
+    "raster_analysis": {
+      "artifact": "overnight416/boat-reticle03-raster-coverage.json",
+      "retained_pairs": 44,
+      "eye_observations": 88,
+      "method": "numeric_float32_double_and_subpixel_raster_analysis",
+      "native_render_test": false,
+      "thickness_correction_under_investigation": false,
+      "thickness_fix_claimed": true,
+      "covered_pixel_centers_original_geometry": 0,
+      "original_failed_geometry_retained": true
+    },
+    "glyph_pixel_accepted": true,
+    "headset_accepted": false,
+    "follow_up": "headset_appearance_and_wider_seat_lifetime_coverage_pending",
+    "previous_failed_run": {
+      "artifact": "overnight416/boat-reticle03",
+      "source_sha256": "f5bc3f788d4c21b39dca9f14c28b0901d9e6c2a2a4bb05ac829885e64d8ffa88",
+      "normal_receipt_sha256": "2eef72e0f3df1d2b58a85394edc60493c293ef9ad4ed0eb6ff72227a01806b06",
+      "overall_passed": false,
+      "source_binding_verified": true,
+      "native_ray_observations": 389,
+      "shot_witnesses": 1,
+      "source_rejections": 0,
+      "source_stage": 7,
+      "consumed_pairs": 64,
+      "native_exit": 0,
+      "receiver_exit": 0,
+      "fresh_matching_both_eye_glyph_packet_pairs": 44,
+      "old_receiver_composed_pairs": 0,
+      "missing_scene_depth_suppressed_composition": true,
+      "postflight_passed": false,
+      "postflight_failure": "historical_guard_compares_mutable_component_fields",
+      "failed_artifact_preserved": true
+    },
+    "latest_actual_run": {
+      "artifact": "overnight416/boat-reticle04",
+      "source_sha256": "f5bc3f788d4c21b39dca9f14c28b0901d9e6c2a2a4bb05ac829885e64d8ffa88",
+      "normal_receipt_sha256": "2712fb12ffa29d38394626cb50c90c8ed36336e9ca29b40d58ddafcafc9df06e",
+      "probe_sha256": "24565f4dd078ef47e15948da1366dc5d05de4eb3bb89d7a3a313ce0a009bdca3",
+      "overall_passed": true,
+      "normal_native_binary": true,
+      "private_receiver": true,
+      "source_binding_verified": true,
+      "native_ray_observations": 389,
+      "shot_witnesses": 1,
+      "source_rejections": 0,
+      "source_stage": 7,
+      "consumed_pairs": 64,
+      "native_exit": 0,
+      "receiver_exit": 0,
+      "postflight_exit": 0,
+      "overlay_only_composed_pairs": 44,
+      "fresh_matching_both_eye_glyph_pairs": 44,
+      "retained_paired_pixel_captures": 6,
+      "changed_white_pixels_per_eye_range": [
+        8,
+        10
+      ],
+      "pixel_deltas_match_exact_projected_bars": true,
+      "white_changes_outside_bars": 0,
+      "compose_failures": 0,
+      "missing_geometry": 0,
+      "expired_props": 0,
+      "invalid_props": 0,
+      "stable_owner_preflight_and_postflight_passed": true,
+      "hooks_drained": true,
+      "receiver_drained": true,
+      "subsequent_game_close_normal": true,
+      "human_visual_acceptance": false,
+      "headset_tested": false,
+      "impact_ballistics_verified": false,
+      "first_verified_shot_required": true
+    }
+  },
+  "culling": {
+    "read_only_audit_completed": true,
+    "concrete_mismatch_proven": false,
+    "boulder_fix_claimed": false
+  },
+  "publication": {
+    "player_release": false,
+    "remote_ci_result_claimed": false,
+    "wip_label_required_until_menu_integration_gate_passes": true,
+    "headset_regression_blocks_release": true
+  },
+  "privacy": {
+    "game_assets_included": false,
+    "private_logs_included": false,
+    "machine_local_profiles_included": false
+  },
+  "storage": {
+    "compressed_json_records": 71,
+    "saved_allocated_bytes": 2396461610,
+    "all_sha256_unchanged": true,
+    "paths_preserved": true,
+    "deleted_files": 0,
+    "budgets_changed": false,
+    "additional_compiler_and_raw_compression": true
+  },
+  "reticle_reader_builds": {
+    "receipt": "overnight416/normal-reticle-build/build-receipt.json",
+    "receipt_sha256": "2eef72e0f3df1d2b58a85394edc60493c293ef9ad4ed0eb6ff72227a01806b06",
+    "source_sha256": "f5bc3f788d4c21b39dca9f14c28b0901d9e6c2a2a4bb05ac829885e64d8ffa88",
+    "cpp_passed_each_arch": 285,
+    "cpp_failed_each_arch": 0,
+    "native_result": "source_and_pair_packets_verified_overall_artifact_failed"
+  },
+  "overlay_correction": {
+    "changed_source_files": [
+      "include/fvr/graphics/D3D11BodyPropCompositor.h",
+      "src/graphics/D3D11BodyPropCompositor.cpp",
+      "src/platform/windows/NativeIpcProbe.cpp",
+      "src/xr/OpenXrHost.cpp",
+      "tests/BodyPropCompositorWarpTests.cpp",
+      "include/fvr/graphics/VehicleReticleAsset.h"
+    ],
+    "native_closure_unchanged": true,
+    "policy": "reticle_only_missing_depth_overlay_preserving_world_body_depth_guards",
+    "x86_and_x64_285_suites_passed": true,
+    "focused_x64_warp_passed": true,
+    "warp_artifact": "overnight416/body-prop-reticle-visible-warp.json",
+    "native_pixel_acceptance": true,
+    "later_thickness_correction_accepted": true,
+    "final_normal_receipt_sha256": "2712fb12ffa29d38394626cb50c90c8ed36336e9ca29b40d58ddafcafc9df06e",
+    "half_stroke_before": 0.1,
+    "half_stroke_after": 0.25,
+    "warp_prior_pairs_replayed": 44,
+    "warp_prior_eyes_replayed": 88,
+    "full_resolution_fractional_pixel_positions_checked": true,
+    "headset_appearance_accepted": false
+  },
+  "reticle_tested_source": {
+    "receipt": "profiles/checkpoint416/source-with-header.json",
+    "sha256": "f5bc3f788d4c21b39dca9f14c28b0901d9e6c2a2a4bb05ac829885e64d8ffa88",
+    "reviewed_header_sha256": "4bef135b14f105763a04f47108b864b5aea94e162b9d1cc376a20080e29346f5",
+    "files": 525,
+    "changed_runtime_dependencies": [
+      "src/games/bc2/Bc2VehicleReticleSource.cpp",
+      "src/games/bc2/Bc2VehicleReticleSource.h",
+      "src/games/bc2/Bc2Gameplay.cpp"
+    ],
+    "gameplay_change": "camera_owner_diagnostic_serialization",
+    "capability_rows_unchanged": true,
+    "pump_reload_hand_audio_policy_unchanged": true,
+    "native_closure_only": true
+  },
+  "reticle_graphics_builds": {
+    "source_sha256": "f5bc3f788d4c21b39dca9f14c28b0901d9e6c2a2a4bb05ac829885e64d8ffa88",
+    "receipt": "overnight416/normal-reticle-visible-build/build-receipt.json",
+    "receipt_sha256": "2712fb12ffa29d38394626cb50c90c8ed36336e9ca29b40d58ddafcafc9df06e",
+    "probe_sha256": "24565f4dd078ef47e15948da1366dc5d05de4eb3bb89d7a3a313ce0a009bdca3",
+    "x86": {
+      "built": true,
+      "cpp_passed": 285,
+      "cpp_failed": 0
+    },
+    "x64": {
+      "built": true,
+      "cpp_passed": 285,
+      "cpp_failed": 0
+    },
+    "native_overlay_pixel_acceptance": true,
+    "headset_acceptance": false
+  },
+  "startup_compatibility": {
+    "source_review_sha256": "0865294d36037793fc9698fb94b29e81de24c2d9edc89384ac7bc1fb54c1d324",
+    "build_review_sha256": "1cd4046091ea6471d57b0737d725e5922f5f26abb97f2af7f31eca92537cdf0f",
+    "exact_native_additions_and_change_verified": true,
+    "capability_rows_unchanged": true,
+    "earlier_audio_and_boat_runs_relabelled": false,
+    "diagnostic_outside_native_closure": true,
+    "prior_evidence_is_not_current_build_live_acceptance": true
+  },
+  "startup_tested_source": {
+    "receipt": "profiles/checkpoint416/source-with-header.json",
+    "sha256": "d2d398ecf570b77991ec1d0a0327312cddf61cbc710168c9e5c95e59969d2497",
+    "reviewed_header_sha256": "8fb3cd18a42da5d035980c7d78df29e6336d6a156dcd8d5041aaf4f3c96127da",
+    "files": 529,
+    "previous_source_sha256": "f5bc3f788d4c21b39dca9f14c28b0901d9e6c2a2a4bb05ac829885e64d8ffa88",
+    "changed_existing_runtime_dependencies": [
+      "src/games/bc2/Bc2MenuRuntime.cpp"
+    ],
+    "added_runtime_dependencies": [
+      "src/games/bc2/Bc2MenuStartup.cpp",
+      "src/games/bc2/Bc2MenuStartup.h",
+      "src/games/bc2/Bc2MenuStartupRuntime.cpp",
+      "src/games/bc2/Bc2MenuStartupRuntime.h"
+    ],
+    "capability_rows_unchanged": true,
+    "pump_reload_hand_audio_policy_unchanged": true,
+    "native_closure_only": true,
+    "separate_diagnostic_change": "src/platform/windows/NativeMenuProbe.cpp delayed_single_capture_after_six_seconds"
+  },
+  "current_source_builds": {
+    "source_sha256": "8a294b7881e995663ab1398a6d6680811778d2935057c0ac0957a9b8ef8896b2",
+    "full_builds_pending": false,
+    "full_builds_passed": {
+      "x86": 286,
+      "x64": 286
+    },
+    "actual_transition_pending": false,
+    "actual_transition_passed": true,
+    "receiver_passed": true,
+    "visible_campaign_verified": true,
+    "remaining_native_diagnostic_investigation": false,
+    "headset_acceptance": false,
+    "full_campaign_accepted": false
+  },
+  "menu_cache_correction": {
+    "implemented": true,
+    "source_sha256": "4dfea3cd48e6970e4374a87bb0949a06e29132fe8e20104c1fdefbad9530bb5a",
+    "focused_artifact": "overnight416/live-cache-focused-final/validation.json",
+    "focused_groups_passed": 26,
+    "focused_actual_game_run": false,
+    "compatibility_artifact": "overnight416/menu-cache-compatibility-audit416.json",
+    "exact_native_dependency_delta_verified": true,
+    "unrelated_reload_change_rejected": true,
+    "render_lifetime_changed": true,
+    "audio_weapon_hand_geometry_code_unchanged": true,
+    "earlier_audio_boat_results_relabelled": false,
+    "full_builds_pending": false,
+    "live_transition_pending": false,
+    "fix_accepted": false,
+    "full_builds_passed": {
+      "x86": 286,
+      "x64": 286
+    },
+    "actual_artifact": "overnight416/campaign-menu-cache01/validation.json",
+    "actual_overall_passed": false,
+    "receiver_transport_predicates_passed": true,
+    "visible_campaign_verified": false,
+    "cached_entries_before": 20,
+    "cached_entries_after": 14,
+    "registered_views": 14,
+    "later_source_validation": "overnight416/campaign-menu-visible01/validation.json",
+    "earlier_failed_run_remains_failed": true
+  },
+  "startup_normal_builds": {
+    "source_sha256": "d2d398ecf570b77991ec1d0a0327312cddf61cbc710168c9e5c95e59969d2497",
+    "receipt": "overnight416/normal-menu-build/build-receipt.json",
+    "receipt_sha256": "325f0081d090b95510164d06039be0ab3c30a6623e07ff125b5c8e8cb237425a",
+    "probe_sha256": "af123ee20bddd0689897de67cbded68d585b5e5b9b840831427ce3a773d4d538",
+    "x86": {
+      "built": true,
+      "cpp_passed": 286,
+      "cpp_failed": 0
+    },
+    "x64": {
+      "built": true,
+      "cpp_passed": 286,
+      "cpp_failed": 0
+    },
+    "normal_menu_buttons_visually_confirmed": true,
+    "native_overlay_pixel_rerun_on_this_build": false,
+    "campaign_transition_accepted": false,
+    "headset_acceptance": false,
+    "is_current_source": false
+  },
+  "cache_tested_source": {
+    "receipt": "profiles/checkpoint416/source-with-header.json",
+    "sha256": "4dfea3cd48e6970e4374a87bb0949a06e29132fe8e20104c1fdefbad9530bb5a",
+    "reviewed_header_sha256": "7b143d00fddfe6c84518bae9c653f16bb79fb3be6357a8ebaaae22e7bdfbc1c7",
+    "files": 529,
+    "previous_source_sha256": "d2d398ecf570b77991ec1d0a0327312cddf61cbc710168c9e5c95e59969d2497",
+    "changed_existing_runtime_dependencies": [
+      "src/games/bc2/Bc2StereoRecovery.h",
+      "src/games/bc2/NativeProbe.cpp"
+    ],
+    "added_runtime_dependencies": [],
+    "capability_rows_unchanged": true,
+    "audio_weapon_hand_policy_code_unchanged": true,
+    "graphics_geometry_code_unchanged": true,
+    "render_lifetime_changed": true,
+    "runtime_equivalence_claimed": false,
+    "native_closure_only": true
+  },
+  "cache_normal_builds": {
+    "source_sha256": "4dfea3cd48e6970e4374a87bb0949a06e29132fe8e20104c1fdefbad9530bb5a",
+    "receipt": "overnight416/normal-menu-cache-build/build-receipt.json",
+    "receipt_sha256": "0719eb3602ad663d0526f435e3be04650e0413781971f99027dce998bf51845a",
+    "probe_sha256": "1679cf9a7f96c7f64f2fc92366b7e0b35b23aaaf957004b98b19df0635f82d5d",
+    "x86": {
+      "built": true,
+      "cpp_passed": 286,
+      "cpp_failed": 0
+    },
+    "x64": {
+      "built": true,
+      "cpp_passed": 286,
+      "cpp_failed": 0
+    },
+    "is_current_source": true,
+    "campaign_transition_accepted": false,
+    "headset_acceptance": false
+  },
+  "culling_diagnostic_correction": {
+    "source_sha256": "8a294b7881e995663ab1398a6d6680811778d2935057c0ac0957a9b8ef8896b2",
+    "source_review_artifact": "overnight416/culling-source-review416.json",
+    "source_review_sha256": "809d063c1c6baf24c005cd51aa17d00a262ddeec6a2e11401a794ae119dd8924",
+    "focused_float_plane_evidence_groups_passed": 6,
+    "comparison_uses_double_residual_and_float_rounding_allowance": true,
+    "live_enclose_stereo_frusta_changed": false,
+    "native_weapon_policy_changed": false,
+    "actual_final_run_passed": true,
+    "disappearing_scenery_fix_claimed": false
+  },
+  "distribution": {
+    "repository": "https://github.com/justiceofrip/BC2VR",
+    "repository_created": true,
+    "installer_asset_planned": "BC2VR-Setup-0.1.4.zip",
+    "runtime_asset_planned": "BC2VR-0.1.4-win64.zip",
+    "dependency_setup": "automatic_on_selected_data_drive",
+    "game_assets_distributed": false,
+    "publication_acceptance_pending": true,
+    "publication_blocked": true,
+    "blocker": "latest_headset_spas_holster_vehicle_regression"
+  },
+  "previous_human_positive": {
+    "date": "2026-10-17",
+    "runtime_checkpoint": 414,
+    "source_checkpoint": 415,
+    "positive": [
+      "reliable_holsters",
+      "spas_pump_feel",
+      "pump_audio"
+    ],
+    "open_reports": [
+      "full_loop_shell_audio",
+      "desktop_flicker",
+      "menu_opening",
+      "missing_boat_reticle",
+      "missing_lmg_manual_reload",
+      "disappearing_boulder"
+    ],
+    "checkpoint416_tested": false,
+    "full_campaign_accepted": false
+  }
+}

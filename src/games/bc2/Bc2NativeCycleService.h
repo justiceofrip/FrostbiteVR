@@ -28,6 +28,16 @@ struct Bc2NativeCycleInputRejection {
     std::int64_t contextObservedNs=0,processingNs=0,leaseDeadlineNs=0;
     bool contextSafe=false,contextFresh=false;
 };
+// Bounded copied service state for the first rejected native callback. This
+// grants no control authority and performs no native reads or IO.
+struct Bc2NativeCycleDiagnostic {
+    bool recoveryActive=false,concurrentCycle=false,releasePresent=false,readyPresent=false;
+    unsigned firedMask=0,heldMask=0,readyMask=0;
+    std::array<unsigned,3> tail{},cycleState{};
+    std::array<std::uint64_t,3> lastInvocation{},openUpdate{};
+    std::array<std::int64_t,3> finishedAt{};
+    std::int64_t beganNs=0,deadlineNs=0,releaseSubmittedNs=0,releaseObservedNs=0,acknowledgedAtNs=0;
+};
 // Selection uses original coherent native reads, not a completion substitute.
 struct Bc2NativeCycleSelection {
     Bc2NativeCycleMode mode{};Bc2AmmoReserveLease reserve{};ReloadObservedConfig config{};
@@ -119,6 +129,7 @@ public:
     // Exact pre-conversion held Update may finish its zero-delta Step after
     // recovery starts. This does not authorize a new native update or gesture.
     bool DrainingHeldInvocation(const Bc2NativeCycleDecision&,std::uint32_t firing,std::int64_t now)const noexcept;
+    bool DrainingPaidOrdinaryInvocation(const Bc2NativeCycleDecision&,std::uint32_t firing,std::int64_t now)const noexcept;
     bool Recovering()const noexcept{return phase_==Bc2NativeCyclePhase::Converging||phase_==Bc2NativeCyclePhase::Advancing;}
     NativeCycleRecoveryDecision EvaluateRecovery(const NativeCycleRecoveryScope&,const ReloadFlowEventInput&,int capacity,std::int64_t deadline)noexcept;
     void FinishRecovery(const NativeCycleRecoveryDecision&,const ReloadFlowRecord&,const NativeCycleInputGuard&,unsigned steps,unsigned rejected)noexcept;
@@ -146,6 +157,12 @@ public:
     Bc2NativeCycleMode Mode()const noexcept{return mode_;}
     Bc2NativeCyclePhase Phase()const noexcept{return phase_;}
     const auto& FirstInputRejection()const noexcept{return firstInputRejection_;}
+    Bc2NativeCycleDiagnostic Diagnostic()const noexcept {
+        return {recovery_.Active(),concurrentCycle_,release_.has_value(),ready_.has_value(),
+            firedMask_,heldMask_,readyMask_,tail_,cycleState_,lastInvocation_,openUpdate_,finishedAt_,
+            began_,deadline_,releaseSubmittedNs_,release_?release_->observedNs:0,
+            std::max(acknowledgedAt_,recovery_.AcknowledgedAt())};
+    }
     const interaction::HandInteractionSample& LastControlInput()const noexcept{return control_.input;}
     bool Control(const Bc2NativeCycleControl&)noexcept;
     bool RebaseTracking(const Bc2NativeCycleControl&,const Bc2NativeCycleActorDrain&)noexcept;
@@ -183,6 +200,8 @@ private:
     bool Release(const interaction::WeaponCycleRelease&,std::int64_t now)noexcept;
     void PublishHeld(std::int64_t observed,std::int64_t deadline)noexcept;
     void ContradictoryRestore()noexcept;
+    bool PaidRecoveryRestoreOrdered(const ReloadFlowRecord&)const noexcept;
+    void ClearAcknowledgedReady()noexcept{acknowledgedReady_.reset();acknowledgedAt_=0;paidRecoveryDrain_={};paidReplayBegan_=0;paidOrdinaryIdle_={};}
     unsigned TailLength()const noexcept{return emptyCycle_||mode_==Bc2NativeCycleMode::M95?2u:3u;}
     std::int64_t CompletionNs()const noexcept{return mode_==Bc2NativeCycleMode::M95?3000000000ll:MaximumCompletionNs;}
     Bc2NativeCycleMode mode_=Bc2NativeCycleMode::Spas;
@@ -230,5 +249,19 @@ private:
     std::int64_t releaseSubmittedNs_=0;
     std::optional<interaction::WeaponCycleRelease> release_;
     std::optional<interaction::WeaponCycleReady> ready_;
+    // A paid physical stroke may outlive another exact native client tail
+    // replay. Retain its original receipt; never publish or consume it twice.
+    std::optional<interaction::WeaponCycleReady> acknowledgedReady_;
+    std::int64_t acknowledgedAt_=0;
+    std::array<std::uint64_t,3> paidRecoveryDrain_{};
+    std::int64_t paidReplayBegan_=0;
+    // Copied proof of a paid ordinary sibling's unchanged idle Update. Its
+    // original entry/exit may straddle another client's Restore entry even
+    // when this Finish reaches the service first. Never an idle vote or lease.
+    struct PaidOrdinaryIdleReceipt {
+        std::uint64_t invocation=0,cycle=0,shot=0;
+        std::int64_t beginNs=0,endNs=0;
+    };
+    std::array<PaidOrdinaryIdleReceipt,3> paidOrdinaryIdle_{};
 };
 }

@@ -209,6 +209,84 @@ void QueuedGenerationsUseRegistryBound(){
     Check(!CaptureLiveStereoSurvivors(overflow,survivors));
     retired.pendingEyeCount=65;Check(!CanRetireStereoGraph(retired));
 }
+struct LiveCacheFixture {
+    LiveViewCache value{};unsigned calls=0,captures=0;
+    bool changedBefore=false,changedAfter=false,noTerrain=false,wrongCache=false,dirtyAfter=false,refuseCall=false;
+    LiveCacheFixture(){
+        // Actual416 terrain failure: 20 borrowed cache entries, 14 registered
+        // live views after six queued children retired; stale pointer at index2.
+        value.world=0x411efb70;value.request=0x071794b0;value.callback=0x42f45ca0;value.type=0x144f90c;
+        value.context=0x600000;value.scene=0x1a02eb20;value.references=2;
+        value.registeredBegin=0x06fe7880;value.registeredEnd=0x06fe78b8;value.registeredCapacity=0x06fe7900;
+        value.cacheBegin=0x43a36cd0;value.cacheEnd=0x43a36e60;value.cacheCapacity=0x43a36f00;
+        value.registeredCount=14;value.cacheCount=20;value.dirty=1;
+        value.ownerVerified=value.boundaryVerified=value.registeredViewsVerified=true;
+        for(unsigned i=0;i<14;++i)value.registered[i]=0x42000000+i*0x10000;
+        for(unsigned i=0;i<20;++i)value.cached[i]=0x43000000+i*0x10000;
+        value.cached[2]=0x43abd590;
+    }
+    bool Capture(LiveViewCache& out)noexcept {
+        out=value;++captures;
+        if(changedBefore&&captures==2)++out.registered[0];
+        if(changedAfter&&calls)++out.request;
+        return true;
+    }
+    bool Refresh(const LiveViewCache& before)noexcept {
+        Check(before==value);if(refuseCall)return false;++calls;value.dirty=dirtyAfter?1:0;
+        if(noTerrain){value.scene=0;return true;}
+        value.cached=value.registered;value.cacheCount=value.registeredCount;
+        value.cacheEnd=value.cacheBegin+value.cacheCount*20;
+        if(wrongCache)value.cached[2]=0x43abd590;
+        return true;
+    }
+};
+void LiveTerrainCacheFollowsRetiredGeneration(){
+    LiveCacheFixture c;const auto before=c.value;
+    Check(RefreshLiveViewCache(c)==LiveViewCacheResult::Refreshed&&c.calls==1);
+    Check(c.value.cacheCount==14&&LiveViewCacheMatches(c.value)&&!c.value.dirty);
+    Check(SameLiveViewCacheOwner(before,c.value)&&c.value.references==2);
+    Check(RefreshLiveViewCache(c)==LiveViewCacheResult::Unchanged&&c.calls==1);
+    c.value.dirty=1;Check(RefreshLiveViewCache(c)==LiveViewCacheResult::Unchanged&&c.calls==1);
+    // Replaced child identities can keep the same number of registrations.
+    c.value.registered[4]+=0x100;Check(RefreshLiveViewCache(c)==LiveViewCacheResult::Refreshed&&c.calls==2);
+}
+void LiveTerrainCacheRejectsForeignOrRacingOwners(){
+    for(unsigned fault=0;fault<19;++fault){LiveCacheFixture c;
+        if(fault==0)c.value.ownerVerified=false;
+        if(fault==1)c.value.boundaryVerified=false;
+        if(fault==2)c.value.registeredViewsVerified=false;
+        if(fault==3)c.value.context=0;
+        if(fault==4)c.value.references=0;
+        if(fault==5)c.value.dirty=0;
+        if(fault==6)c.value.registered[3]=c.value.registered[2];
+        if(fault==7)c.value.registeredCount=65;
+        if(fault==8)c.value.cacheCount=65;
+        if(fault==9)c.changedBefore=true;
+        if(fault==10)c.refuseCall=true;
+        if(fault==11)c.value.cacheCapacity+=1;
+        if(fault==12)c.value.cacheCapacity+=4;
+        if(fault==13)c.value.cacheCapacity=c.value.cacheEnd-20;
+        if(fault==14)c.value.cacheCapacity=c.value.cacheBegin+4097*20;
+        if(fault==15)c.value.registeredCapacity+=1;
+        if(fault==16)c.value.registeredCapacity=c.value.registeredEnd-4;
+        if(fault==17)c.value.registeredCapacity=c.value.registeredBegin+4097*4;
+        if(fault==18)c.value.registeredEnd+=4;
+        const auto before=c.value;
+        Check(RefreshLiveViewCache(c)==LiveViewCacheResult::Rejected&&c.calls==0&&c.value==before);
+    }
+    for(unsigned fault=0;fault<3;++fault){LiveCacheFixture c;
+        if(fault==0)c.changedAfter=true;
+        if(fault==1)c.wrongCache=true;
+        if(fault==2)c.dirtyAfter=true;
+        Check(RefreshLiveViewCache(c)==LiveViewCacheResult::Rejected&&c.calls==1);
+    }
+}
+void AbsentTerrainDoesNotClaimOrRepeatCacheRepair(){
+    LiveCacheFixture c;c.noTerrain=true;const auto cached=c.value.cached;
+    Check(RefreshLiveViewCache(c)==LiveViewCacheResult::Disabled&&c.calls==1);
+    Check(c.value.scene==0&&c.value.cacheCount==20&&c.value.cached==cached);
+    Check(RefreshLiveViewCache(c)==LiveViewCacheResult::Disabled&&c.calls==1);
+}
 int main(){
     Check(CanRetireStereoGraph(Graph()));
     for(unsigned i=0;i<7;++i){auto g=Graph();g.views[i].request=g.currentRequest;Check(!CanRetireStereoGraph(g));
@@ -231,5 +309,7 @@ int main(){
     SceneRetirementOwnsUnconsumedChildQueue();
     QueueOwnsPreviousChildGeneration();
     QueuedGenerationsUseRegistryBound();
-    std::cout<<"23 retired stereo graph/cache and current shutdown generation groups passed\n";
+    LiveTerrainCacheFollowsRetiredGeneration();LiveTerrainCacheRejectsForeignOrRacingOwners();
+    AbsentTerrainDoesNotClaimOrRepeatCacheRepair();
+    std::cout<<"26 stereo graph/cache and current shutdown generation groups passed\n";
 }

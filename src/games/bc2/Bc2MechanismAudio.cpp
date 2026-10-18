@@ -1,4 +1,5 @@
 #include "Bc2MechanismAudio.h"
+#include "Bc2ShellReloadAudio.h"
 #include <Windows.h>
 #include <mmsystem.h>
 #include <mmddk.h>
@@ -86,6 +87,7 @@ void Dispatch(bool start,void* self,const void* guid,unsigned unused) noexcept {
     Row row;row.ns=Now();row.thread=GetCurrentThreadId();row.self=unsigned(reinterpret_cast<std::uintptr_t>(self));
     row.guidAddress=unsigned(reinterpret_cast<std::uintptr_t>(guid));row.unused=unused;row.start=start;
     if(!Read(row.guidAddress,row.guid.data(),row.guid.size())){original(self,guid,unused);return;}
+    if(shellReloadAudio::Dispatch(start,row.self,row.guid))return;
     const auto cue=Match(row.guid);row.cue=unsigned(cue);
     // All unrelated animation sounds pass through without owner/source reads.
     if(cue==Cue::None){original(self,guid,unused);return;}

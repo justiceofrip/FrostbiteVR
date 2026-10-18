@@ -8,6 +8,7 @@ import argparse
 from dataclasses import dataclass
 import json
 import math
+import re
 from pathlib import Path
 import struct
 import uuid
@@ -217,12 +218,54 @@ def inspect(root,relative):
                 'Typed interpretation is restricted to the explicit field schema; other binary values stay opaque.',
                 'Live campaign modifiers and current WeaponFiringData identity require native corroboration.'])
 
+def campaign_archives(game):
+    """Discover level configuration owners, including opening-only equipment.
+
+    The shared level is not a complete campaign catalog. Only canonical SP
+    level-00 archives are considered; async payloads and multiplayer levels do
+    not become configuration owners through a weapon-directory guess.
+    """
+    directory=game/'Dist/win32/levels'
+    if not directory.is_dir():raise ValueError('Installed campaign levels directory absent')
+    result=[]
+    for path in sorted(directory.glob('sp_*/level-00.fbrb')):
+        if not (path.parent.name=='sp_common' or re.fullmatch(r'sp_[0-9]{2,3}',path.parent.name)):continue
+        if not path.resolve().is_relative_to(game.resolve()):raise ValueError('Campaign archive escapes game root')
+        result.append(path.relative_to(game))
+    if not 0<len(result)<=32:raise ValueError('Campaign archive count bound')
+    return result
+
+
+def inspect_campaign(game,*,inspector=inspect):
+    archives=[];errors=[];weapons={}
+    for relative in campaign_archives(game):
+        try:result=inspector(game,relative)
+        except (OSError,ValueError) as exc:
+            errors.append({'archive':relative.as_posix(),'reason':str(exc)});continue
+        archives.append(result)
+        for weapon in result['resolved_weapons']:
+            # Same name alone is never an identity. Keep content variants as
+            # separate jobs, and retain every exact source of identical data.
+            key=(weapon['resource'].casefold(),guid(weapon['instance_guid']),weapon['resource_sha256'])
+            row=weapons.setdefault(key,{'native_name':weapon['native_name'],'resource':weapon['resource'],
+                'instance_guid':guid(weapon['instance_guid']),'resource_sha256':weapon['resource_sha256'],
+                'configuration_sources':[],'runtime_admitted':False})
+            row['configuration_sources'].append({'archive':result['archive'],'archive_index_sha256':result['index_sha256']})
+    return {'schema':'fvr.bc2.campaign_weapon_configurations','schema_version':1,
+            'archives':archives,'weapons':[weapons[k] for k in sorted(weapons)],'errors':errors,
+            'runtime_admitted':False,'scope':'Exact campaign authored configuration discovery; no live equipment or native operation admission'}
+
+
 def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--game',type=Path,required=True)
-    parser.add_argument('--archive',type=Path,default=Path('Dist/win32/levels/sp_common/level-00.fbrb'))
+    selection=parser.add_mutually_exclusive_group()
+    selection.add_argument('--archive',type=Path)
+    selection.add_argument('--campaign',action='store_true',help='Discover all bounded SP level configuration archives, including opening-only equipment')
     parser.add_argument('--output',type=Path,required=True);args=parser.parse_args(argv)
-    result=inspect(args.game,args.archive);args.output.parent.mkdir(parents=True,exist_ok=True)
+    result=inspect_campaign(args.game) if args.campaign else inspect(args.game,args.archive or Path('Dist/win32/levels/sp_common/level-00.fbrb'))
+    args.output.parent.mkdir(parents=True,exist_ok=True)
     args.output.write_text(json.dumps(result,indent=2,allow_nan=False)+'\n',encoding='utf-8')
-    print(json.dumps(dict(documents=result['parsed_documents'],errors=len(result['parse_errors']),resolved=len(result['resolved_weapons']),unresolved=len(result['unresolved_weapons']))))
+    if args.campaign:print(json.dumps(dict(archives=len(result['archives']),configurations=len(result['weapons']),errors=len(result['errors']))))
+    else:print(json.dumps(dict(documents=result['parsed_documents'],errors=len(result['parse_errors']),resolved=len(result['resolved_weapons']),unresolved=len(result['unresolved_weapons']))))
     return 0
 if __name__=='__main__':raise SystemExit(main())

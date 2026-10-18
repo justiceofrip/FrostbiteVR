@@ -26,6 +26,9 @@ struct InputFrame {
     math::Pose referenceHead{},head{};
     std::array<ControllerState,2> hands{}; // Left, right. No native pointers.
     InputMenuOwnership menu{}; // Unknown unless the real host menu policy supplied it.
+    // Runtime pose-coordinate lifetime, distinct from reference recentering.
+    // Zero means unknown; never compare reference poses across unknown bases.
+    std::uint32_t trackingBasisGeneration=0;
 };
 bool ValidInput(const InputFrame&) noexcept;
 struct InputOwner {
@@ -39,7 +42,7 @@ public:
 private:
     std::array<ActionPolicy,2> policies_;
     std::uint64_t ownerGeneration_=0,spaceGeneration_=0;
-    float heading_=0;int weaponDirection_=0;
+    float heading_=0;
 };
 struct RecenterEvidence {
     std::uint64_t samples=0,buttonsActive=0,leftHeld=0,rightHeld=0,bothHeld=0;

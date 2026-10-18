@@ -12,9 +12,11 @@ if(BUILD_TESTING AND TARGET BC2BodyAmmoRenderer)
       src/games/bc2/Bc2MagazineNativeRegistry.cpp src/games/bc2/Bc2MagazineGeometryProfile.cpp)
     target_include_directories(Bc2ResourceEnrollmentTests PRIVATE tests src/platform/windows)
     target_link_libraries(Bc2ResourceEnrollmentTests PRIVATE BC2BodyAmmoRenderer)
+    # Match the committed complete body/visibility catalog, including SP_01.
+    # Isolated older-family regressions below keep their own reviewed headers.
     target_compile_definitions(Bc2ResourceEnrollmentTests PRIVATE
-      FVR_BC2_REVIEWED_MAGAZINE_REGISTRY_HEADER="${CMAKE_CURRENT_SOURCE_DIR}/profiles/resource-enrollment295-pistol/CombinedRegistry.h"
-      FVR_BC2_EXPERIMENTAL_MAGAZINE_HEADER="${CMAKE_CURRENT_SOURCE_DIR}/profiles/resource-enrollment295-pistol/CombinedGeometry.h")
+      FVR_BC2_REVIEWED_MAGAZINE_REGISTRY_HEADER="${CMAKE_CURRENT_SOURCE_DIR}/profiles/opening426/CombinedRegistry.h"
+      FVR_BC2_EXPERIMENTAL_MAGAZINE_HEADER="${CMAKE_CURRENT_SOURCE_DIR}/profiles/opening426/CombinedGeometry.h")
     add_test(NAME Bc2ResourceEnrollment COMMAND Bc2ResourceEnrollmentTests)
   endif()
 endif()

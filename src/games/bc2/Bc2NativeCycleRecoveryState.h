@@ -39,6 +39,7 @@ public:
         if(!active_||Uncertain()||scope!=scope_||branch>=3||open_[branch]||!entry.nativeInvocation||
            entry.nativeInvocation<=last_[branch]||entry.kind!=ReloadFlowEvent::Update||entry.depth!=1||
            entry.nativeParent||entry.nativeUpdate!=entry.nativeInvocation||entry.nowNs<began_||
+           (policy_.Acknowledged()&&entry.nowNs<std::max(acknowledgedAt_,paidNativeFloor_))||
            !entry.contextCopied||!decoded||!ValidManualReloadDelta(decoded->deltaSeconds)||
            decoded->reloadTimeMultiplier<=0||decoded->reloadTimeMultiplier>4||decoded->flags24Through28[2]||
            entry.boundary.firing!=scope_.identity.firing[branch]||entry.boundary.owner!=scope_.identity.owner||
@@ -66,7 +67,7 @@ public:
             // The policy rejects it as a vote without treating it as guard loss.
             policy_.ObserveIdle(scope_,{d.branch,d.invocation,debt_.guardEpoch,record.entry.nowNs,
                 record.exit.nowNs,d.deadlineNs,debt_.loaded,debt_.reserve,debt_.capacity},record.exit.nowNs);
-            if(!ready_&&policy_.Outcome()){
+            if(!policy_.Acknowledged()&&!ready_&&policy_.Outcome()){
                 const auto& result=*policy_.Outcome();
                 if(const auto* release=std::get_if<interaction::WeaponCycleIdleDebtRelease>(&result.release))
                     ready_=interaction::WeaponCycleIdleDebtReady{*release,*std::max_element(result.native.second.begin(),result.native.second.end()),
@@ -75,6 +76,7 @@ public:
                     nativeReady_=interaction::WeaponCycleReady{*normalRelease,*std::max_element(result.native.second.begin(),result.native.second.end()),
                         result.native.observedNs,result.native.deadlineNs,true,true};
             }
+            if(PaidConverged(record.exit.nowNs))paidNativeFloor_=record.exit.nowNs;
         }else {currentIdle_={};policy_.NativeBusy(scope_,record.exit.nowNs);grant_.reset();}
         return true;
     }
@@ -88,14 +90,36 @@ public:
     bool Restore(const ReloadFlowRecord& record)noexcept {
         const auto b=record.entry.boundary.branch;
         if(!active_||Uncertain()||b>=2||open_[b]||record.id<=last_[b]||record.entry.nowNs<began_||
+           (policy_.Acknowledged()&&record.entry.nowNs<std::max(acknowledgedAt_,paidNativeFloor_))||
            !CycleConvergenceRestore(record,scope_.identity,b,m95_,empty_)||
            record.exit.boundary->loaded!=debt_.loaded||record.exit.boundary->reserve!=debt_.reserve){LoseGuard();return false;}
+        const auto& before=record.entry.boundary;const auto& after=*record.exit.boundary;
+        const auto idle=[](const ReloadFlowBoundary& v){return v.current==2&&v.next==2&&v.timer==0;};
+        const bool busy=!idle(before)||!idle(after);
+        if(policy_.Acknowledged()&&policy_.Phase()==interaction::WeaponCycleConvergencePhase::Ready&&busy){
+            // The already observed client ready->tail snapshot is the only
+            // admission to paid reconciliation. Unseen shots, reload phases,
+            // changed ammunition and arbitrary busy states are not payment.
+            const unsigned tail=empty_?6u:m95_?8u:7u,next=empty_||m95_?1u:8u;
+            const float maximum=empty_?1.f:m95_?2.3f:.5f;
+            if(!idle(before)||after.current!=tail||after.previous!=2||after.next!=next||
+               after.timer<=0||after.timer>maximum){LoseGuard();return false;}
+        }
         last_[b]=record.id;
         progress_[b]={}; // A snapshot cannot stand in for a guarded own Update.
-        const auto& before=record.entry.boundary;const auto& after=*record.exit.boundary;
-        if(before.current!=2||before.next!=2||before.timer!=0||after.current!=2||after.next!=2||after.timer!=0){
+        if(busy){
             currentIdle_={};policy_.NativeBusy(scope_,record.exit.nowNs);grant_.reset();}
         return true; // A Restore itself never supplies an idle vote.
+    }
+    // A plain own Update admitted while Complete may finish after an independent
+    // client replay starts. The service validates its exact unchanged idle
+    // record. Draining it supplies NO guarded vote and discards all earlier
+    // votes: two new guarded rounds must follow the final overlapping drain.
+    bool DrainPaidOrdinary(unsigned branch,std::uint64_t invocation,std::int64_t now)noexcept {
+        if(!Acknowledged()||Uncertain()||branch>=3||!invocation||open_[branch]||now<acknowledgedAt_)return false;
+        last_[branch]=std::max(last_[branch],invocation);
+        paidNativeFloor_=std::max(paidNativeFloor_,now);
+        currentIdle_={};progress_={};grant_.reset();policy_.NativeBusy(scope_,now);return true;
     }
     bool Control(const interaction::HandInteractionSample& input)noexcept {
         if(!active_||Uncertain()||input.owner!=debt_.owner)return false;
@@ -157,7 +181,10 @@ public:
            nativeReady_->deadlineNs!=ready.deadlineNs||!ready.nativeReady||!ready.unchangedAmmunition||
            !policy_.Outcome()||!Drained())return false;
         for(const auto& idle:currentIdle_)if(!idle.first||now<idle.first||now>=idle.second)return false;
-        if(!policy_.Acknowledge(*policy_.Outcome()))return false;nativeReady_.reset();return true;
+        if(!policy_.Acknowledge(*policy_.Outcome()))return false;
+        acknowledgedAt_=now;paidNativeFloor_=0;
+        for(const auto& idle:currentIdle_)paidNativeFloor_=std::max(paidNativeFloor_,idle.first);
+        nativeReady_.reset();return true;
     }
     bool Acknowledge(const interaction::WeaponCycleIdleDebtReady& ready,std::int64_t now)noexcept {
         if(!active_||Uncertain()||!ready_||ready_->release!=ready.release||ready_->sequence!=ready.sequence||
@@ -165,10 +192,20 @@ public:
            ready_->nativeReady!=ready.nativeReady||ready_->unchangedAmmunition!=ready.unchangedAmmunition||!policy_.Outcome()||
            std::any_of(open_.begin(),open_.end(),[](auto id){return id!=0;}))return false;
         for(const auto& idle:currentIdle_)if(!idle.first||now<idle.first||now>=idle.second)return false;
-        if(!policy_.Acknowledge(*policy_.Outcome()))return false;ready_.reset();return true;
+        if(!policy_.Acknowledge(*policy_.Outcome()))return false;
+        acknowledgedAt_=now;paidNativeFloor_=0;
+        for(const auto& idle:currentIdle_)paidNativeFloor_=std::max(paidNativeFloor_,idle.first);
+        ready_.reset();return true;
     }
     void LoseGuard()noexcept {if(active_)policy_.LoseGuard(scope_);currentIdle_={};progress_={};grant_.reset();ready_.reset();nativeReady_.reset();}
     bool Active()const noexcept{return active_;}
+    bool Acknowledged()const noexcept{return active_&&policy_.Acknowledged();}
+    std::int64_t AcknowledgedAt()const noexcept{return acknowledgedAt_;}
+    bool PaidConverged(std::int64_t now)const noexcept {
+        if(!Acknowledged()||Uncertain()||policy_.Phase()!=interaction::WeaponCycleConvergencePhase::Ready||!Drained())return false;
+        for(const auto& idle:currentIdle_)if(!idle.first||now<idle.first||now>=idle.second)return false;
+        return true;
+    }
     bool Uncertain()const noexcept{return policy_.Phase()==interaction::WeaponCycleConvergencePhase::Uncertain;}
     bool BlocksFire()const noexcept{return active_&&policy_.BlocksFire();}
     bool Drained()const noexcept{return std::none_of(open_.begin(),open_.end(),[](auto id){return id!=0;});}
@@ -180,6 +217,7 @@ public:
 private:
     NativeCycleRecoveryScope scope_{};interaction::WeaponCycleDebt debt_{};Policy policy_{};
     bool active_=false,m95_=false,empty_=false;std::int64_t began_=0;
+    std::int64_t acknowledgedAt_=0,paidNativeFloor_=0;
     std::array<std::uint64_t,3> open_{},last_{};
     std::array<std::pair<std::int64_t,std::int64_t>,3> currentIdle_{};
     struct Progress {std::uint64_t invocation=0;std::int64_t observed=0,deadline=0;};
