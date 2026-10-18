@@ -3,12 +3,13 @@ param([Parameter(Mandatory)][string]$OptionsPath)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot '../app/Launcher.Core.ps1')
 . (Join-Path $PSScriptRoot 'Runtime.Core.ps1')
+. (Join-Path $PSScriptRoot 'Startup.ps1')
 $options=Read-FvrJson $OptionsPath
 $folder=Get-FvrChild $options.state_root $options.relative_folder
 Assert-FvrNoLinks $folder
 if([IO.Path]::GetFullPath($OptionsPath) -ne (Join-Path $folder 'options.json')){throw 'Session options escaped the owned folder.'}
 $null=Set-FvrLauncherStorage (Split-Path (Split-Path $options.state_root -Parent) -Parent)
-$state=@{schema='bc2vr.session.v1';state='starting';version=$options.version;source_sha256=$options.source_sha256;started_utc=[DateTime]::UtcNow.ToString('o');game=$null;host=$null;trace=$null;error=$null;supervisor=(Get-Bc2ProcessIdentity (Get-Process -Id $PID))}
+$state=@{schema='bc2vr.session.v1';state='starting';phase='Starting BC2 and waiting for its main menu…';version=$options.version;source_sha256=$options.source_sha256;started_utc=[DateTime]::UtcNow.ToString('o');game=$null;host=$null;trace=$null;error=$null;supervisor=(Get-Bc2ProcessIdentity (Get-Process -Id $PID))}
 $stateFile=Join-Path $folder 'session.json';$stopFile=Join-Path $folder 'stop.request'
 $hostProcess=$null;$game=$null;$trace=$null
 function Save-State {Write-FvrJson $stateFile $state}
@@ -33,7 +34,15 @@ try {
     $state.game=Get-Bc2ProcessIdentity $game;$state.audio_environment_inherited=$true;Save-State
     $creation=$game.StartTime.ToUniversalTime().ToFileTimeUtc().ToString()
     & $options.python -B (Join-Path $PSScriptRoot 'tools/wait_main_menu.py') --pid $game.Id --creation-filetime $creation --exe $exe --expected-sha256 $options.game_sha256 --output (Join-Path $folder 'menu-ready.json') *> (Join-Path $folder 'menu-ready.log')
-    if($LASTEXITCODE){throw 'BC2 main menu did not become ready. See menu-ready.log; the game remains open.'}
+    if($LASTEXITCODE){
+        $menuError='BC2 main menu or Direct3D 11 renderer did not become ready. The game remains open.'
+        $menuRecord=Join-Path $folder 'menu-ready.json'
+        if(Test-Path -LiteralPath $menuRecord){try{$observed=Read-FvrJson $menuRecord;if($observed.error){$menuError+=' '+$observed.error}}catch{}}
+        throw (Get-Bc2StartupFailure $folder 'menu-ready' $menuError)
+    }
+    $menuReady=Read-FvrJson (Join-Path $folder 'menu-ready.json')
+    if(-not $menuReady.passed -or $menuReady.width -le 0 -or $menuReady.height -le 0 -or $menuReady.width -gt 16384 -or $menuReady.height -gt 16384 -or [long]$menuReady.width*$menuReady.height -gt 32000000){throw 'The live game resolution could not be verified. No VR adapter was attached.'}
+    $state.width=$menuReady.width;$state.height=$menuReady.height
     if(Test-Path -LiteralPath $stopFile){$state.state='stopped';return}
     if($options.activate_window){
         $game.Refresh()
@@ -48,8 +57,9 @@ try {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'bin/BC2NativeProbe.dll') -Destination (Join-Path $folder 'BC2NativeProbe.dll')
     Copy-Item -LiteralPath (Join-Path $options.cache 'body-ammo-assets.fvrprop') -Destination (Join-Path $folder 'body-ammo-assets.fvrprop')
     $channel=Join-Path $folder 'channel.txt';$ready=Join-Path $folder 'ready.json'
-    $hostArgs=@('--ipc','--until-game-exit',[string]$game.Id,'--request-lifetime','150','--eye-width','1920','--eye-height','1080','--channel-file',$channel,'--ready-file',$ready,'--stop-file',$stopFile,'--loader',(Join-Path $PSScriptRoot 'bin/openxr_loader.dll'),'--body-props-cache',(Join-Path $options.cache 'body-ammo-assets.fvrprop'),'--controllers','--roomscale','--world-units-per-meter','1')
-    $hostProcess=Start-Bc2Child (Join-Path $PSScriptRoot 'bin/BC2XrHost.exe') $hostArgs $folder 'host'
+    $state.phase='Connecting the headset through '+$options.xr_label+'…';Save-State
+    $hostArgs=@('--ipc','--until-game-exit',[string]$game.Id,'--request-lifetime','150','--eye-width',[string]$menuReady.width,'--eye-height',[string]$menuReady.height,'--channel-file',$channel,'--ready-file',$ready,'--stop-file',$stopFile,'--loader',(Join-Path $PSScriptRoot 'bin/openxr_loader.dll'),'--body-props-cache',(Join-Path $options.cache 'body-ammo-assets.fvrprop'),'--controllers','--roomscale','--world-units-per-meter','1')
+    $hostProcess=Start-Bc2Child (Join-Path $PSScriptRoot 'bin/BC2XrHost.exe') $hostArgs $folder 'host' @{XR_RUNTIME_JSON=$options.xr_manifest}
     $state.host=Get-Bc2ProcessIdentity $hostProcess;Save-State
     $deadline=[DateTime]::UtcNow.AddSeconds(30);$requirements=$null
     while([DateTime]::UtcNow -lt $deadline -and -not $hostProcess.HasExited){
@@ -57,12 +67,23 @@ try {
         if(Test-Path -LiteralPath $stopFile){$state.state='stopped';return}
         Start-Sleep -Milliseconds 100
     }
-    if(-not $requirements -or -not $requirements.session_created -or $requirements.width -ne 1920 -or $requirements.height -ne 1080){throw 'OpenXR did not become ready. Connect the headset to SteamVR and try again.'}
+    if(-not $requirements -or -not $requirements.session_created -or $requirements.width -ne $menuReady.width -or $requirements.height -ne $menuReady.height){throw (Get-Bc2StartupFailure $folder 'host' ('OpenXR session did not become ready using '+$options.xr_label+'. Check the headset connection and game resolution.'))}
     if($game.HasExited -or -not(Find-Bc2OwnedProcess $state.game)){throw 'Original BC2 game exited before attach.'}
     $token=(Get-Content -LiteralPath $channel -Raw).Trim();if(-not $token){throw 'Missing VR channel.'}
     $nativeArguments=@('--game',$options.game_path,'--dll',(Join-Path $folder 'BC2NativeProbe.dll'),'--report',(Join-Path $folder 'native-trace.json'),'--stream',$token,'--controllers','--motion-aim','--body-follow','--pose-observe','--hand-poses','--muzzle-fire','--two-hand-grip','--sight-flip','--physical-reload','--magazine-reload','--body-inventory','--boat-head-aim','--boat-head-fire','--uncap-mirror','--until-host-exit',[string]$hostProcess.Id)
     $trace=Start-Bc2Child (Join-Path $PSScriptRoot 'bin/BC2NativeTrace.exe') $nativeArguments $folder 'native'
-    $state.trace=Get-Bc2ProcessIdentity $trace;$state.state='running';Save-State
+    $state.trace=Get-Bc2ProcessIdentity $trace;$state.phase='Attaching VR and waiting for the native connection. Keep the headset connected…';Save-State
+    $attachDeadline=[DateTime]::UtcNow.AddSeconds(35);$attached=$false
+    while([DateTime]::UtcNow -lt $attachDeadline){
+        if($trace.HasExited){throw (Get-Bc2StartupFailure $folder 'native' 'The native VR adapter exited during startup.')}
+        if($hostProcess.HasExited){throw (Get-Bc2StartupFailure $folder 'host' 'The headset runtime exited during startup.')}
+        if($game.HasExited){throw 'BC2 exited during VR startup.'}
+        if(Test-Path -LiteralPath $stopFile){$state.state='stopped';return}
+        if(Get-Bc2NativeStartupSample (Join-Path $folder 'session-telemetry.jsonl')){$attached=$true;break}
+        Start-Sleep -Milliseconds 200
+    }
+    if(-not $attached){throw 'The native VR input connection did not become ready. Keep the headset awake and connected, then retry. Use Report feedback to save the native and headset logs.'}
+    $state.state='running';$state.phase='VR connected; native VR input received.';Save-State
     $nextSpace=[DateTime]::UtcNow.AddSeconds(10)
     while(-not $trace.WaitForExit(250)){
         if([DateTime]::UtcNow -ge $nextSpace){

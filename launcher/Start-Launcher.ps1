@@ -7,6 +7,8 @@ try {
     $active=Get-Content -LiteralPath (Join-Path $InstallRoot 'active.json') -Raw|ConvertFrom-Json
     if($active.current -notmatch '^\d{1,5}\.\d{1,5}\.\d{1,5}$'){throw 'Invalid installed version.'}
     $entry=Join-Path $InstallRoot ('versions/'+$active.current+'/app/Launcher.ps1')
+    $storage=Join-Path (Split-Path $entry) 'Launcher.Storage.ps1'
+    if(Test-Path -LiteralPath $storage){. $storage;$null=Set-FvrProcessStorage $InstallRoot}
     $options=@{InstallRoot=$InstallRoot;SmokeTest=$SmokeTest;PreviewPath=$PreviewPath}
     if($SmokeAction){$options.SmokeAction=$SmokeAction}
     & $entry @options

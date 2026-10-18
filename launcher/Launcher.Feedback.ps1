@@ -83,6 +83,9 @@ function New-FvrFeedbackBundle([string]$InstallRoot, $Package, $Settings) {
     # Public runtime reports must remain below this installation's state root.
     # Never enumerate a user's disk, developer captures, assets or memory dumps.
     $runtime=Get-FvrChild $data 'runtime'
+    foreach($name in @('launch-check.json','xr-selection.json','xr-preflight.stdout.log','xr-preflight.stderr.log')) {
+        $sources.Add(@{name=$name;path=(Get-FvrChild $runtime $name)})
+    }
     $record=Get-FvrChild $runtime 'active-session.json'
     if(Test-Path -LiteralPath $record -PathType Leaf) {
         try {
@@ -94,7 +97,7 @@ function New-FvrFeedbackBundle([string]$InstallRoot, $Package, $Settings) {
                 if(-not $relative.StartsWith('sessions/',[StringComparison]::Ordinal)){throw 'Session log path is outside launcher runtime sessions.'}
                 $run=Get-FvrChild $runtime $relative
                 Assert-FvrNoLinks $run
-                foreach($name in @('supervisor.stdout.log','supervisor.stderr.log','host.stdout.log','host.stderr.log','native.stdout.log','native.stderr.log')) {
+                foreach($name in @('session.json','menu-ready.json','menu-ready.log','supervisor.stdout.log','supervisor.stderr.log','host.stdout.log','host.stderr.log','native.stdout.log','native.stderr.log','session-telemetry.jsonl')) {
                     $sources.Add(@{name=$name;path=(Get-FvrChild $run $name)})
                 }
             }

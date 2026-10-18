@@ -1,10 +1,44 @@
-# Current state: checkpoint426 published pre-alpha
+# Current state: checkpoint426 with published launcher 0.1.6 hotfix
 
 [BC2VR 0.1.5](https://github.com/justiceofrip/BC2VR/releases/tag/v0.1.5) was published
 as a pre-release on 2026-10-18 at 15:52:22 UTC, with an installer, launcher/updater
 and manual feedback reporting. All three server asset digests match the exact
 local package. This framework checkout is the source handoff; publication does
 not remove the native gameplay and stability limits below.
+
+## Launcher 0.1.6 hotfix
+
+[BC2VR 0.1.6](https://github.com/justiceofrip/BC2VR/releases/tag/v0.1.6) was published
+as a pre-release on 2026-10-18 at 21:57:49 UTC. All three uploaded asset digests
+match the tested package. The local G: launcher is updated to 0.1.6 with every
+settings value preserved and 0.1.5 retained for rollback. Installed validation
+passed with the newly verified warm cache; no game or headset session was started.
+
+The 0.1.6 launcher package keeps the exact normal-r4 native binaries below.
+It adds a visible game-folder picker and recovery for malformed launcher settings,
+allows installation on a chosen local fixed drive with space checks based on the
+operation, and uses the selected OpenXR runtime instead of forcing SteamVR.
+An unverified executable is reported with its SHA-256 before any VR hook attaches;
+this does not establish compatibility or incompatibility for every EA/store build.
+
+Startup now checks the active Direct3D 11 renderer and uses its stable dimensions
+instead of assuming 1920×1080. It allows up to 90 seconds for the main menu while
+exiting immediately once stable, and waits for native VR input telemetry before
+reporting the session as running. Failures include bounded local diagnostics.
+No game settings are changed automatically. The exact package passed 28 package
+checks and 51 launcher checks. Focused checks passed: startup 20, session 8,
+feedback 44, portable runtime 42, settings/UI 68, storage 18, installer settings
+10, Python cache 5, dependencies 34 and menu reader 8. The packaged Worker also
+rejected an unverified executable early with its fingerprint, without changing
+BC2, XR-host or vrserver processes. Cold preparation using packaged Python and
+the rehashed local decoder regenerated 48 parts plus audio (16,730,338 bytes);
+runtime cache integrity passed. No game or headset session was started by these
+checks. See [exact hotfix evidence](LAUNCHER-HOTFIX016.md).
+
+For an existing 0.1.5 installation blocked by its old free-space check, download
+the new Setup, run Install.cmd and choose the existing launcher folder; settings
+are preserved. Real-headset startup acceptance for 0.1.6 remains open. None of
+these changes resolves the knife, Nambu impact-alignment or death/reload limits.
 
 ## Frozen source and validation
 
@@ -95,7 +129,7 @@ claim follows from bounded native checks.
 
 ## Distribution and remaining work
 
-The exact release passed 25 package checks and 49 launcher checks, covering fresh
+The original 0.1.5 release passed 25 package checks and 49 launcher checks, covering fresh
 installation, updates, rollback, local feedback and corrupt-package rejection.
 The user's launcher was updated to 0.1.5 with settings and previous version 0.1.2
 preserved. Installed-runtime validation passed for the exact r4 source and warm
@@ -107,7 +141,7 @@ The portable launcher starts through the VR main menu, supports manifest-checked
 updates/rollback and prepares manual GitHub feedback with bounded sanitized
 text diagnostics. Nothing uploads automatically. Python is bundled; first asset
 preparation fetches a pinned about 77 MB FFmpeg decoder directly from upstream and
-caches it on the chosen data drive. Validation and warm asset caches do not
+caches it on the chosen installation drive. Validation and warm asset caches do not
 download it. No game executable, assets, saves, raw traces or private credentials
 belong in either public repository/package.
 
@@ -119,6 +153,8 @@ from each user's own installation. This is retained r3 packaging evidence, not
 an invented r4 rerun. The final r4 stage revalidated all 73 non-native runtime
 files, all 61 recipe inputs and the existing generated cache/audio bytes as
 identical, so the preparation result is reused only for that unchanged scope.
+The changed 0.1.6 recipe received a separate actual cold preparation and cache
+integrity check; its exact receipt and hashes are in the hotfix evidence above.
 
 Manual LMG reloads, wider weapon/vehicle coverage, spent-shell ejection, some
 magnified scopes, full-body IK and multiplayer remain unfinished or unverified.

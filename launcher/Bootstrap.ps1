@@ -2,16 +2,13 @@
 # First-run installer. Downloads only a hash-pinned official portable PowerShell
 # when no compatible copy exists. All scratch and tools stay on the chosen drive.
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'Launcher.Storage.ps1')
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-$picker=New-Object Windows.Forms.FolderBrowserDialog
-$picker.Description='Choose a folder on your data drive for BC2 VR. Portable tools, settings and updates stay there.'
-try {if($picker.ShowDialog() -ne [Windows.Forms.DialogResult]::OK){return};$root=Join-Path $picker.SelectedPath 'BC2VR-Launcher'}finally{$picker.Dispose()}
-$root=[IO.Path]::GetFullPath($root)
-if([IO.Path]::GetPathRoot($root).TrimEnd('\') -eq $env:SystemDrive){throw 'Choose a data drive, not the Windows drive.'}
-for($check=$root;$check;$check=Split-Path $check -Parent){if((Test-Path -LiteralPath $check) -and ((Get-Item -LiteralPath $check -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)){throw 'Choose a folder without junctions or symbolic links.'}}
-$scratch=Join-Path $root 'data/temp';$null=New-Item -ItemType Directory -Path $scratch -Force
-$env:TEMP=$scratch;$env:TMP=$scratch;$env:TMPDIR=$scratch
+$root=Select-FvrInstallFolder
+if(-not $root){return}
+Assert-FvrFreeSpace $root 1MB
+$scratch=Set-FvrProcessStorage $root
 $pwsh=$null
 foreach($candidate in @(Get-Command pwsh.exe -CommandType Application -ErrorAction SilentlyContinue)){
     $v=& $candidate.Source -NoProfile -NonInteractive -Command '$PSVersionTable.PSVersion.ToString()'
@@ -27,8 +24,8 @@ if(-not $pwsh){
     $receipt=Join-Path $dest '.bc2vr-archive-sha256'
     if(-not(Test-Path -LiteralPath $pwsh) -or -not(Test-Path -LiteralPath $receipt) -or (Get-Content -LiteralPath $receipt -Raw).Trim() -ne $tool.sha256){
         if(Test-Path -LiteralPath $dest){throw 'Portable PowerShell folder is incomplete or changed. Choose a fresh install folder.'}
-        $drive=New-Object IO.DriveInfo ([IO.Path]::GetPathRoot($root))
-        if($drive.AvailableFreeSpace -lt 16GB){throw 'Keep at least 16 GiB free on the chosen data drive.'}
+        # Bounded archive plus its verified 512 MiB maximum expansion coexist.
+        Assert-FvrFreeSpace $root ([long]$tool.bytes+512MB)
         $zip=Join-Path $scratch ('powershell-'+[guid]::NewGuid().ToString('N')+'.zip')
         [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
         try {
@@ -50,4 +47,4 @@ if(-not $pwsh){
 }
 & $pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass -STA -File (Join-Path $PSScriptRoot 'Install-Package.ps1') -InstallRoot $root
 if($LASTEXITCODE){throw 'BC2 VR installation failed.'}
-[Windows.Forms.MessageBox]::Show('BC2 VR is installed. Open BC2 VR from your desktop, choose the game folder, connect your headset to SteamVR, then launch.','BC2 VR')|Out-Null
+[Windows.Forms.MessageBox]::Show('BC2 VR is installed. Open BC2 VR from your desktop, choose the game folder, connect your headset through its PC runtime, then launch.','BC2 VR')|Out-Null

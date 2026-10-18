@@ -10,11 +10,60 @@ import sys
 import time
 
 sys.dont_write_bytecode = True
-from read_bc2 import Process
-from runtime_process import creation_filetime
+
+# Exact supported image only. Derived using Bc2Profile::DiscoverProfile's
+# Present/vtable/getter relationships; ObserveBc2 reads these same dimensions.
+# This is read-only startup evidence, never native hook admission.
+SUPPORTED_GAME_SHA = '3911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258'
+RENDERER_VTABLE = 0x14497a0
+RENDERER_PRESENT = 0x9eea30
+WIDTH_GETTER = 0x9d8180
+HEIGHT_GETTER = 0x9d8190
+STARTUP_TIMEOUT_SECONDS = 90
+
+
+def sample_menu_renderer(process, renderer_global, game_global):
+    delta = process.base - 0x400000
+    manager = process.u32(0x19a4ca8 + delta)
+    owner = process.u32(manager + 0x82b24)
+    expected_menu = (0x142b4e8 + delta, 0x142b4d4 + delta, 0x142b4c8 + delta)
+    actual_menu = tuple(process.u32(owner + offset) for offset in (0, 0x2c, 0x90))
+    if actual_menu != expected_menu:
+        raise ValueError('Native main-menu owner is not ready')
+    renderer = process.u32(renderer_global + delta)
+    game = process.u32(game_global + delta)
+    if min(renderer, game) < 0x10000:
+        raise ValueError('Native renderer is not ready')
+    table = RENDERER_VTABLE + delta
+    if process.u32(renderer) != table:
+        raise ValueError('The active renderer is not the supported Direct3D 11 renderer. '
+                         'Close BC2, set DxVersion=11 in Documents/BFBC2/settings.ini, then retry.')
+    slots = tuple(process.u32(table + offset) for offset in (20, 40, 44))
+    expected_slots = (RENDERER_PRESENT + delta, WIDTH_GETTER + delta, HEIGHT_GETTER + delta)
+    if slots != expected_slots or process.read(WIDTH_GETTER + delta, 4) != b'\x8b\x41\x18\xc3' or process.read(HEIGHT_GETTER + delta, 4) != b'\x8b\x41\x1c\xc3':
+        raise ValueError('Direct3D 11 renderer code differs from the supported build; no VR module was attached.')
+    dimensions = process.read(renderer + 0x18, 8)
+    width, height = struct.unpack('<II', dimensions)
+    if not (0 < width <= 16384 and 0 < height <= 16384 and width * height <= 32_000_000):
+        raise ValueError('BC2 render size is invalid or exceeds the 32-million-pixel startup limit. '
+                         'Choose a lower game resolution and retry.')
+    # Re-read all ownership and layout values inside this sample. A resize or
+    # renderer/menu replacement must restart the consecutive-sample witness.
+    if (process.u32(0x19a4ca8 + delta) != manager or process.u32(manager + 0x82b24) != owner
+            or tuple(process.u32(owner + offset) for offset in (0, 0x2c, 0x90)) != actual_menu
+            or process.u32(renderer_global + delta) != renderer
+            or process.u32(game_global + delta) != game or process.u32(renderer) != table
+            or tuple(process.u32(table + offset) for offset in (20, 40, 44)) != slots
+            or process.read(renderer + 0x18, 8) != dimensions):
+        raise ValueError('Main-menu renderer or dimensions changed during observation')
+    return dict(manager=manager, owner=owner, renderer=renderer, game_renderer=game,
+                graphics_api='D3D11', width=width, height=height)
 
 
 def main():
+    from read_bc2 import Process
+    from runtime_process import creation_filetime
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--pid', type=int, required=True)
     parser.add_argument('--creation-filetime', type=int, required=True)
@@ -26,6 +75,8 @@ def main():
         raise ValueError('Preserve existing menu readiness evidence')
     exe = args.exe.resolve()
     raw = exe.read_bytes()
+    if args.expected_sha256 != SUPPORTED_GAME_SHA:
+        raise ValueError('This read-only menu profile has not been verified for the supplied executable hash.')
     if hashlib.sha256(raw).hexdigest() != args.expected_sha256:
         raise ValueError('Installed BC2 build changed')
 
@@ -41,32 +92,18 @@ def main():
     previous = None
     stable = 0
     started = time.monotonic()
-    while time.monotonic() - started < 30:
+    while time.monotonic() - started < STARTUP_TIMEOUT_SECONDS:
         process = None
         row = {'seconds': round(time.monotonic() - started, 3)}
         try:
             process = Process(args.pid, expected_path=exe)
             if creation_filetime(process) != args.creation_filetime:
                 raise RuntimeError('BC2 process creation identity changed')
-            delta = process.base - 0x400000
-            manager = process.u32(0x19a4ca8 + delta)
-            owner = process.u32(manager + 0x82b24)
-            expected = (0x142b4e8 + delta, 0x142b4d4 + delta, 0x142b4c8 + delta)
-            actual = tuple(process.u32(owner + offset) for offset in (0, 0x2c, 0x90))
-            if actual != expected:
-                raise ValueError('Native main-menu owner is not ready')
-            renderer = process.u32(renderer_global + delta)
-            game = process.u32(game_global + delta)
-            if min(renderer, game) < 0x10000:
-                raise ValueError('Native renderer is not ready')
-            # Double-read the owner within the sample; NativeProbe separately
-            # verifies the full live code/profile before its hooks are armed.
-            if process.u32(0x19a4ca8 + delta) != manager or process.u32(manager + 0x82b24) != owner:
-                raise ValueError('Main-menu owner changed during observation')
-            identity = (manager, owner, renderer, game)
+            sample = sample_menu_renderer(process, renderer_global, game_global)
+            identity = tuple(sample.values())
             stable = stable + 1 if identity == previous else 1
             previous = identity
-            row.update(manager=manager, owner=owner, renderer=renderer, game_renderer=game, stable=stable)
+            row.update(sample, stable=stable)
         except (ValueError, OSError) as error:
             stable = 0
             previous = None
@@ -83,7 +120,11 @@ def main():
               'creation_filetime': str(args.creation_filetime), 'read_only': True,
               'sent_input': False, 'injected_module': False, 'stable_samples': stable,
               'elapsed_seconds': round(time.monotonic() - started, 3),
-              'last_observations': list(observations)}
+              'last_observations': list(observations),
+              'graphics_api': row.get('graphics_api') if passed else None,
+              'width': row.get('width') if passed else None,
+              'height': row.get('height') if passed else None,
+              'error': None if passed else row.get('waiting', 'Main menu did not become stable')}
     args.output.write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')
     print(json.dumps({'passed': passed, 'output': str(args.output)}))
     return 0 if passed else 1

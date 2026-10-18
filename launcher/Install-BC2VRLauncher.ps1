@@ -7,7 +7,9 @@ param([Parameter(Mandatory)][string]$InstallRoot,
       [switch]$NoShortcut)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'Launcher.Core.ps1')
-$InstallRoot=[IO.Path]::GetFullPath($InstallRoot)
+. (Join-Path $PSScriptRoot 'Launcher.Settings.ps1')
+$InstallRoot=Get-FvrInstallDestination $InstallRoot
+Assert-FvrFreeSpace $InstallRoot 1MB
 $null=Set-FvrLauncherStorage $InstallRoot
 $lock=Enter-FvrLock $InstallRoot
 try{
@@ -27,7 +29,7 @@ try{
         if(Test-Path -LiteralPath $target){throw 'This version is already installed.'}
         $null=New-Item -ItemType Directory -Path (Join-Path $target 'app') -Force
         try{
-            $entries=@(foreach($name in @('Launcher.ps1','Worker.ps1','Launcher.Core.ps1','Launcher.Feedback.ps1')){
+            $entries=@(foreach($name in @('Launcher.ps1','Worker.ps1','Launcher.Core.ps1','Launcher.Feedback.ps1','Launcher.Storage.ps1','Launcher.Settings.ps1')){
                 $dest=Join-Path $target ('app/'+$name)
                 Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $dest
                 @{path=('app/'+$name);sha256=(Get-FileHash -LiteralPath $dest).Hash.ToLowerInvariant()}
@@ -45,12 +47,13 @@ try{
     }
     $data=Join-Path $InstallRoot 'data';$null=New-Item -ItemType Directory -Path $data -Force
     $settingsPath=Join-Path $data 'settings.json'
-    $settings=if(Test-Path -LiteralPath $settingsPath){Read-FvrJson $settingsPath}else{@{schema='fvr.desktop.settings.v1';game_path='';local_backend=$null}}
-    if($GamePath){$settings.game_path=[IO.Path]::GetFullPath($GamePath)}
-    if($LocalProfile){
-        $settings.local_backend=$profile
+    $loadedSettings=Read-FvrLauncherSettings -InstallRoot $InstallRoot -LockHeld
+    $settings=$loadedSettings.settings
+    if(-not $loadedSettings.needs_reset -and -not $loadedSettings.read_only){
+        if($GamePath){$settings.game_path=[IO.Path]::GetFullPath($GamePath)}
+        if($LocalProfile){$settings.local_backend=$profile}
+        Write-FvrLauncherSettings $settingsPath $settings
     }
-    Write-FvrJson $settingsPath $settings
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Start-Launcher.ps1') -Destination (Join-Path $InstallRoot 'Start-Launcher.ps1') -Force
     if(-not $NoShortcut){
         $desktop=[Environment]::GetFolderPath('Desktop')
@@ -65,5 +68,5 @@ try{
         if($gameExe -and (Test-Path -LiteralPath $gameExe)){$shortcut.IconLocation=$gameExe+',0'}
         $shortcut.Save()
     }
-    [pscustomobject]@{installed=$true;version=$manifest.version;root=$InstallRoot;desktop_shortcut=(-not $NoShortcut);runtime='existing local profile or packaged runtime';game_started=$false}|ConvertTo-Json
+    [pscustomobject]@{installed=$true;version=$manifest.version;root=$InstallRoot;desktop_shortcut=(-not $NoShortcut);runtime='existing local profile or packaged runtime';game_started=$false;settings_notice=$loadedSettings.notice;settings_preserved=($loadedSettings.needs_reset -or $loadedSettings.read_only)}|ConvertTo-Json
 }finally{$lock.Dispose()}

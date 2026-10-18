@@ -93,8 +93,7 @@ function Get-Bc2PreparationFfmpeg([string]$StateRoot,[string]$RecipePath,[bool]$
     $recipe=Get-Bc2FfmpegRecipe $RecipePath
     # Validation and a warm asset cache never acquire or execute a decoder.
     if($Action -eq 'Validate' -or $AssetsReady){return ''}
-    if(-not [IO.Path]::IsPathFullyQualified($StateRoot) -or $StateRoot -notmatch '^[A-Za-z]:[\\/]' -or
-       [IO.Path]::GetPathRoot($StateRoot).TrimEnd('\','/') -eq $env:SystemDrive){throw 'FFmpeg cache must use the chosen data drive.'}
+    $null=Get-FvrInstallDrive $StateRoot
     Assert-FvrNoLinks $StateRoot;Assert-Bc2RuntimeSpace $StateRoot
     $base=Get-FvrChild $StateRoot 'tools/ffmpeg';$lock=Enter-FvrLock $base
     $workName='download-'+[guid]::NewGuid().ToString('N');$work=Get-FvrChild $base $workName

@@ -12,7 +12,7 @@ function Reject([scriptblock]$Work,[string]$Name){$rejected=$false;try{& $Work|O
 function Fixture([string]$Version,[hashtable]$Extra=@{},[switch]$BadHash){
     $folder=Join-Path $testRoot ('fixture-'+$Version+'-'+[guid]::NewGuid().ToString('N'))
     $null=New-Item -ItemType Directory -Path (Join-Path $folder 'app') -Force
-    $files=@(foreach($name in @('Launcher.ps1','Worker.ps1','Launcher.Core.ps1')){
+    $files=@(foreach($name in @('Launcher.ps1','Worker.ps1','Launcher.Core.ps1','Launcher.Storage.ps1','Launcher.Settings.ps1')){
         $path=Join-Path $folder "app/$name";[IO.File]::WriteAllText($path,"# fixture $Version")
         @{path="app/$name";sha256=$(if($BadHash){'0'*64}else{(Get-FileHash -LiteralPath $path).Hash.ToLowerInvariant()})}
     })
@@ -51,7 +51,7 @@ try{
     $childTemp=& (Join-Path $PSHOME 'pwsh.exe') -NoProfile -NonInteractive -Command '[IO.Path]::GetTempFileName()'
     Check ($LASTEXITCODE -eq 0 -and $childTemp.StartsWith($scratch+[IO.Path]::DirectorySeparatorChar) -and (Test-Path -LiteralPath $childTemp)) 'real child inherits scratch and creates its temporary file there'
     Check ([Environment]::GetEnvironmentVariable('TEMP','User') -eq $userTemp) 'Windows user TEMP remains unchanged'
-    Reject {Set-FvrLauncherStorage ($env:SystemDrive+'\BC2VR-MustNotCreate')} 'Windows-drive installation refused before writing'
+    Reject {Set-FvrLauncherStorage '\\server\share\BC2VR-MustNotCreate'} 'network installation refused before writing'
     # Parse every shipped script, without executing launcher/native side effects.
     foreach($script in @(Get-ChildItem (Join-Path $repo 'launcher') -Filter '*.ps1')+@(Get-Item (Join-Path $repo 'tools/Build-DesktopLauncher.ps1'))){
         $errors=$null;$tokens=$null;$null=[Management.Automation.Language.Parser]::ParseFile($script.FullName,[ref]$tokens,[ref]$errors)

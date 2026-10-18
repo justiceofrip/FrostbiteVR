@@ -1,21 +1,30 @@
 """Build private runtime assets from the selected legally installed game.
 
-Only derived output goes into the explicitly chosen data-drive cache. This
+Only derived output goes into the explicitly chosen local-drive cache. This
 module performs no process access, downloads, archive writes or game launch.
 """
 import argparse
+import ctypes
 import hashlib
 import json
-import os
 from pathlib import Path
 from bc2_body_ammo_assets import main as body_main
 from bc2_mechanism_audio_cache import prepare as pump_prepare
 from bc2_shell_reload_audio_cache import prepare as shell_prepare
 
 
+def drive_type(root):
+    get_drive_type = ctypes.windll.kernel32.GetDriveTypeW
+    get_drive_type.argtypes = [ctypes.c_wchar_p]
+    get_drive_type.restype = ctypes.c_uint
+    return get_drive_type(str(root))
+
+
 def validate_cache_path(output, package):
-    if not output.is_absolute() or len(output.drive) != 2 or output.drive.upper() == os.environ.get('SystemDrive', 'C:').upper():
-        raise ValueError('Choose a local data-drive cache outside the Windows drive')
+    if not output.is_absolute() or len(output.drive) != 2:
+        raise ValueError('Choose an absolute cache folder on a local drive')
+    if drive_type(output.anchor) != 3:  # DRIVE_FIXED; C: is allowed like any other fixed drive.
+        raise ValueError('Choose a cache folder on a ready local fixed drive')
     if output == package or package in output.parents:
         raise ValueError('Cache must be outside the versioned application package')
     for parent in (output, *output.parents):
@@ -30,7 +39,11 @@ def main():
     parser.add_argument('--recipe', required=True)
     parser.add_argument('--game-sha256', required=True)
     args = parser.parse_args()
-    output=args.output.resolve(); runtime=Path(__file__).resolve().parents[1]
+    runtime=Path(__file__).resolve().parents[1]
+    validate_cache_path(args.output, runtime.parent)
+    output=args.output.resolve()
+    # Check containment again after collapsing '..', without hiding a linked
+    # ancestor from the first check above.
     validate_cache_path(output, runtime.parent)
     game=args.game.resolve()
     if output == game or game in output.parents:

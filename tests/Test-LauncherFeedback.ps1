@@ -77,7 +77,7 @@ frames=245 errors=0
     # Exercise the actual worker against a tiny isolated install. Feedback must
     # finish before SteamVR, native runtime validation or local-backend routing.
     $versionRoot=Join-Path $root 'versions/0.1.4';$null=New-Item -ItemType Directory -Path (Join-Path $versionRoot 'app') -Force
-    $package.files=@(foreach($name in @('Launcher.ps1','Worker.ps1','Launcher.Core.ps1','Launcher.Feedback.ps1')) {
+    $package.files=@(foreach($name in @('Launcher.ps1','Worker.ps1','Launcher.Core.ps1','Launcher.Feedback.ps1','Launcher.Storage.ps1','Launcher.Settings.ps1')) {
         $dest=Join-Path $versionRoot ('app/'+$name)
         Copy-Item -LiteralPath (Join-Path $repo ('launcher/'+$name)) -Destination $dest
         @{path=('app/'+$name);sha256=(Get-FileHash -LiteralPath $dest).Hash.ToLowerInvariant()}
@@ -89,6 +89,15 @@ frames=245 errors=0
     $workerResult=& (Join-Path $PSHOME 'pwsh.exe') -NoProfile -NonInteractive -File (Join-Path $versionRoot 'app/Worker.ps1') -InstallRoot $root -Action Feedback
     Check ($LASTEXITCODE -eq 0 -and (Read-FvrJson (Join-Path $data 'operation.json')).state -eq 'feedback_ready') 'real feedback worker completes without a runtime or local profile'
     Check (($workerResult|ConvertFrom-Json -AsHashtable).uploaded -eq $false) 'worker reports local bundle and no upload'
+    $broken='{"game_path": "D:\bad\path", "local_backend": ???}'
+    [IO.File]::WriteAllText((Join-Path $data 'settings.json'),$broken)
+    Write-FvrJson (Join-Path $runtime 'launch-check.json') @{game_supported=$false;game_sha256=('e'*64)}
+    Write-FvrJson (Join-Path $runtime 'xr-selection.json') @{label='Virtual Desktop fixture';manifest='C:\Users\Private Person\runtime.json'}
+    $workerResult=& (Join-Path $PSHOME 'pwsh.exe') -NoProfile -NonInteractive -File (Join-Path $versionRoot 'app/Worker.ps1') -InstallRoot $root -Action Feedback
+    Check ($LASTEXITCODE -eq 0 -and (Read-FvrJson (Join-Path $data 'operation.json')).state -eq 'feedback_ready') 'malformed settings do not block actual feedback worker'
+    Check ([IO.File]::ReadAllText((Join-Path $data 'settings.json')) -ceq $broken) 'feedback leaves unrecoverable settings untouched'
+    $report=Get-Content -LiteralPath (Join-Path $data 'feedback/Report.txt') -Raw
+    Check ($report.Contains('e'*64) -and $report.Contains('Virtual Desktop fixture') -and -not $report.Contains('Private Person')) 'startup build fingerprint and runtime diagnostics survive path redaction'
     Add-Type -AssemblyName PresentationFramework,PresentationCore,WindowsBase
     $uiSource=[IO.File]::ReadAllText((Join-Path $repo 'launcher/Launcher.ps1'))
     $markupBlocks=[regex]::Matches($uiSource,'(?s)\[xml\]\$(?:markup|feedbackMarkup)=@''\r?\n(.*?)\r?\n''@')
@@ -99,7 +108,7 @@ frames=245 errors=0
         Check ($null -ne $window) 'launcher/feedback XAML instantiates without showing a window'
         $window.Close()
     }
-    foreach($path in @('launcher/Launcher.ps1','launcher/Worker.ps1','launcher/Launcher.Core.ps1','launcher/Launcher.Feedback.ps1')) {
+    foreach($path in @('launcher/Launcher.ps1','launcher/Worker.ps1','launcher/Launcher.Core.ps1','launcher/Launcher.Feedback.ps1','launcher/Launcher.Storage.ps1','launcher/Launcher.Settings.ps1')) {
         $errors=$null;$tokens=$null;$null=[Management.Automation.Language.Parser]::ParseFile((Join-Path $repo $path),[ref]$tokens,[ref]$errors)
         Check ($errors.Count -eq 0) ('parse '+$path)
     }

@@ -6,13 +6,15 @@ param([Parameter(Mandatory)][string]$InstallRoot,
       [ValidateSet('MainMenu','Campaign')][string]$StartAt='MainMenu')
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'Launcher.Core.ps1')
+. (Join-Path $PSScriptRoot 'Launcher.Settings.ps1')
 . (Join-Path $PSScriptRoot 'Launcher.Feedback.ps1')
 $null = Set-FvrLauncherStorage $InstallRoot
 $data = Join-Path $InstallRoot 'data'
 $null = New-Item -ItemType Directory -Path $data -Force
 $lock = $null
+$operationStarted=[DateTime]::UtcNow.ToString('o')
 function Status([string]$Message, [string]$State='working') {
-    Write-FvrJson (Join-Path $data 'operation.json') @{action=$Action;state=$State;message=$Message;utc=[DateTime]::UtcNow.ToString('o')}
+    Write-FvrJson (Join-Path $data 'operation.json') @{action=$Action;state=$State;message=$Message;utc=[DateTime]::UtcNow.ToString('o');started_utc=$operationStarted}
 }
 function Read-LocalSession($Settings) {
     $record = $Settings.local_backend.session_record
@@ -25,7 +27,9 @@ function Read-LocalSession($Settings) {
 try {
     $lock = Enter-FvrLock $InstallRoot
     Status 'Preparing…'
-    $settings = Read-FvrJson (Join-Path $data 'settings.json')
+    $settingsState = Read-FvrLauncherSettings -InstallRoot $InstallRoot -LockHeld
+    $settings = $settingsState.settings
+    if($Action -in @('Launch','Validate') -and ($settingsState.needs_reset -or $settingsState.read_only)){throw 'Settings need attention. Use Reset and choose game folder in the launcher; your original settings are backed up.'}
     $active = Read-FvrJson (Join-Path $InstallRoot 'active.json')
     $versionFolder = Get-FvrChild $InstallRoot ('versions/'+$active.current)
     $package = Test-FvrPackage $versionFolder $active.current
@@ -62,7 +66,7 @@ try {
     if ($Action -in @('Launch','Validate') -and (-not $package.runtime_entry -or $UseLocal)) {
         $localRoute=Get-FvrLocalLaunchRoute $settings.local_backend $StartAt -ActivateGameWindow:($Action -eq 'Launch' -and $ActivateGameWindow)
     }
-    if ($Action -eq 'Launch') {
+    if ($Action -eq 'Launch' -and (-not $package.runtime_entry -or $UseLocal)) {
         # Fail before starting SteamVR when the existing native session's disk
         # reserve cannot be met. Its complete storage scan still runs normally.
         Assert-FvrFreeSpace $InstallRoot 640MB
@@ -82,7 +86,9 @@ try {
     if ($package.runtime_entry -and -not $UseLocal) {
         Status $(if($Action -eq 'Launch'){'Opening BC2 in VR…'}else{'Checking the installed runtime…'})
         $entry = Get-FvrChild $versionFolder $package.runtime_entry
-        & $entry -Action $Action -SettingsPath (Join-Path $data 'settings.json') -StateRoot (Join-Path $data 'runtime') -Fresh:$Fresh -StartAt $StartAt -ActivateGameWindow:($Action -eq 'Launch' -and $ActivateGameWindow)
+        & $entry -Action $Action -SettingsPath (Join-Path $data 'settings.json') -StateRoot (Join-Path $data 'runtime') -Fresh:$Fresh -StartAt $StartAt -ActivateGameWindow:($Action -eq 'Launch' -and $ActivateGameWindow) 6>&1 | ForEach-Object {
+            if($_ -is [Management.Automation.InformationRecord] -and $_.MessageData.ToString().StartsWith('BC2VR: ')){Status $_.MessageData.ToString().Substring(7)}else{Write-Output $_}
+        }
     } else {
         if (-not $settings.local_backend) { throw 'This is the launcher only. Install a release containing the VR runtime before playing.' }
         foreach ($pin in $settings.local_backend.pins) {

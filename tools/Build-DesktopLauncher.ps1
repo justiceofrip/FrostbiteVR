@@ -13,7 +13,7 @@ if(-not $OutputPath){$OutputPath=Join-Path $repo 'dist/desktop-launcher'}
 $OutputPath=[IO.Path]::GetFullPath($OutputPath)
 Assert-FvrNoLinks $OutputPath
 $sources=[Collections.Generic.List[object]]::new()
-foreach($name in @('Launcher.ps1','Worker.ps1','Launcher.Core.ps1','Launcher.Feedback.ps1')){$sources.Add(@{source=(Join-Path $repo "launcher/$name");path="app/$name"})}
+foreach($name in @('Launcher.ps1','Worker.ps1','Launcher.Core.ps1','Launcher.Feedback.ps1','Launcher.Settings.ps1','Launcher.Storage.ps1')){$sources.Add(@{source=(Join-Path $repo "launcher/$name");path="app/$name"})}
 $sources.Add(@{source=(Join-Path $repo 'LICENSE');path='LICENSE'})
 $runtimePath=$null
 if($RuntimeRoot){
@@ -57,7 +57,7 @@ try{
     $manifest=@{schema='fvr.desktop.release.v1';version=$Version;asset=$asset;bytes=(Get-Item -LiteralPath $zip).Length;unpacked_bytes=$expanded;sha256=(Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()}
     Assert-FvrManifest $manifest
     Write-FvrJson (Join-Path $OutputPath 'bc2vr-update.json') $manifest
-    $installerFiles=@('Install.cmd','Bootstrap.ps1','Install-Package.ps1','Install-BC2VRLauncher.ps1','Start-Launcher.ps1','Launcher.Core.ps1')
+    $installerFiles=@('Install.cmd','Bootstrap.ps1','Install-Package.ps1','Install-BC2VRLauncher.ps1','Start-Launcher.ps1','Launcher.Core.ps1','Launcher.Settings.ps1','Launcher.Storage.ps1')
     foreach($file in $installerFiles){Copy-Item -LiteralPath (Join-Path $repo "launcher/$file") -Destination (Join-Path $OutputPath $file)}
     if($BootstrapManifest){Copy-Item -LiteralPath $BootstrapManifest -Destination (Join-Path $OutputPath 'bootstrap.json')}
     if($InstallerBundle){

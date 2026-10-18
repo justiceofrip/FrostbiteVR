@@ -49,7 +49,7 @@ try {
         switch($change){size{$bad.bytes=81MB} path{$bad.files[0].path='../ffmpeg.exe'} hash{$bad.sha256='bad'} duplicate{$bad.files[1]=Copy-Recipe $bad.files[0]}}
         $p=Save-FixtureRecipe $bad;Reject {Get-Bc2FfmpegRecipe $p} ('invalid recipe '+$change+' rejected')
     }
-    Reject {Get-Bc2PreparationFfmpeg ($env:SystemDrive+'/decoder-test') $recipePath $false Launch} 'Windows volume rejected before download'
+    Reject {Get-Bc2PreparationFfmpeg '\\server\share\decoder-test' $recipePath $false Launch} 'network volume rejected before download'
     $tool=Get-Bc2PreparationFfmpeg $state $recipePath $false Launch
     Check ($script:downloads -eq 1 -and (Test-Path -LiteralPath $tool)) 'first preparation downloads bounded exact archive and commits complete cache'
     $folder=Split-Path $tool -Parent

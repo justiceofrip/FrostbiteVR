@@ -1,6 +1,7 @@
 #requires -Version 7.5
 # Shared installer/updater policy. No game or desktop input is sent here.
 Set-StrictMode -Version 3
+. (Join-Path $PSScriptRoot 'Launcher.Storage.ps1')
 $script:FvrRepository = 'justiceofrip/BC2VR'
 $script:FvrFeedbackRepository = 'justiceofrip/BC2VR'
 
@@ -21,18 +22,7 @@ function Set-FvrPackageRepositories($Package) {
 }
 
 function Set-FvrLauncherStorage([string]$Root) {
-    $full = [IO.Path]::GetFullPath($Root)
-    if ([IO.Path]::GetPathRoot($full).TrimEnd('\') -eq $env:SystemDrive) {
-        throw 'Choose a data drive for BC2 VR; installation and scratch files must not use the Windows drive.'
-    }
-    $scratch = Get-FvrChild $full 'data/temp'
-    Assert-FvrNoLinks $scratch
-    $null = [IO.Directory]::CreateDirectory($scratch)
-    # Process environment only. Children (Python, game, host, helpers) inherit
-    # this location; Windows/user environment settings are never modified.
-    $env:TEMP=$scratch; $env:TMP=$scratch; $env:TMPDIR=$scratch
-    $env:PYTHONDONTWRITEBYTECODE='1'
-    return $scratch
+    return (Set-FvrProcessStorage $Root)
 }
 
 function Read-FvrJson([string]$Path) {
@@ -107,16 +97,6 @@ function Enter-FvrLock([string]$Root) {
     $null = New-Item -ItemType Directory -Path $Root -Force
     try { return [IO.File]::Open((Join-Path $Root 'operation.lock'), 'OpenOrCreate', 'ReadWrite', 'None') }
     catch { throw 'Another launcher operation is running. Let it finish first.' }
-}
-function Assert-FvrFreeSpace([string]$Root, [long]$Bytes) {
-    # Downloads and extraction are both inside Root; the updater never uses
-    # system TEMP. The native session retains its separate TEMP-volume guard.
-    foreach ($path in @($Root)) {
-        $drive = [IO.DriveInfo]::new([IO.Path]::GetPathRoot([IO.Path]::GetFullPath($path)))
-        if ($drive.AvailableFreeSpace -lt (15GB + $Bytes)) {
-            throw ('{0} has {1:N1} GiB free. Free about {2:N1} GiB before continuing; BC2 VR preserves 15 GiB plus working space.' -f $drive.Name,($drive.AvailableFreeSpace/1GB),((15GB+$Bytes-$drive.AvailableFreeSpace)/1GB))
-        }
-    }
 }
 function Receive-FvrFile([string]$Url, [string]$Destination, [long]$MaxBytes) {
     # Restrict the original URL AND every redirect. GitHub release blobs use

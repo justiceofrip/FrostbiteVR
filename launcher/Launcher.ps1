@@ -5,10 +5,12 @@ param([Parameter(Mandatory)][string]$InstallRoot, [string]$PreviewPath, [switch]
 $ErrorActionPreference='Stop'
 Add-Type -AssemblyName PresentationFramework,PresentationCore,WindowsBase
 . (Join-Path $PSScriptRoot 'Launcher.Core.ps1')
+. (Join-Path $PSScriptRoot 'Launcher.Settings.ps1')
 . (Join-Path $PSScriptRoot 'Launcher.Feedback.ps1')
 $null=Set-FvrLauncherStorage $InstallRoot
 $data=Join-Path $InstallRoot 'data'
-$settings=Read-FvrJson (Join-Path $data 'settings.json')
+$script:settingsState=Read-FvrLauncherSettings -InstallRoot $InstallRoot
+$script:settings=$script:settingsState.settings
 $active=Read-FvrJson (Join-Path $InstallRoot 'active.json')
 $package=Read-FvrJson (Join-Path (Split-Path $PSScriptRoot -Parent) 'package.json')
 $mutex=[Threading.Mutex]::new($false,'Local\FrostbiteVR.DesktopLauncher')
@@ -19,60 +21,85 @@ if(-not $SmokeTest){
 }
 [xml]$markup=@'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
- Title="Battlefield Bad Company 2 — VR" Width="800" Height="640" MinWidth="740" MinHeight="600" WindowStartupLocation="CenterScreen"
+ Title="Battlefield Bad Company 2 — VR" Width="800" Height="780" MinWidth="540" MinHeight="520" WindowStartupLocation="CenterScreen"
  Background="#15191C" Foreground="#EDF0EC" FontFamily="Segoe UI" FontSize="14">
  <Window.Resources>
   <Style TargetType="Button"><Setter Property="Background" Value="#30383D"/><Setter Property="Foreground" Value="#F2F1EC"/><Setter Property="Padding" Value="16,10"/><Setter Property="Margin" Value="0,0,10,0"/><Setter Property="BorderThickness" Value="0"/><Setter Property="Cursor" Value="Hand"/>
    <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="bg" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}" CornerRadius="3"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="bg" Property="Opacity" Value="0.8"/></Trigger><Trigger Property="IsEnabled" Value="False"><Setter TargetName="bg" Property="Opacity" Value="0.4"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>
   <Style TargetType="CheckBox"><Setter Property="Foreground" Value="#C5CDC8"/><Setter Property="Margin" Value="0,0,20,10"/><Setter Property="VerticalContentAlignment" Value="Center"/></Style>
  </Window.Resources>
- <Grid Margin="30,26">
-  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+ <ScrollViewer x:Name="PageScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="24,20">
+ <Grid>
+  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
   <StackPanel Grid.Row="0">
    <TextBlock Text="BC2 VR  /  SINGLEPLAYER PRE-ALPHA" Foreground="#E6A04A" FontSize="12" FontWeight="SemiBold"/>
-   <TextBlock Text="BATTLEFIELD" FontSize="39" FontWeight="Black" Margin="0,8,0,0"/>
-   <TextBlock Text="BAD COMPANY 2" FontSize="25" FontWeight="Light" Foreground="#D5DBD7"/>
-   <TextBlock x:Name="BuildLabel" Margin="0,12,0,18" Foreground="#99AAA1"/>
+   <TextBlock Text="BATTLEFIELD" FontSize="34" FontWeight="Black" Margin="0,6,0,0"/>
+   <TextBlock Text="BAD COMPANY 2" FontSize="23" FontWeight="Light" Foreground="#D5DBD7"/>
+   <TextBlock x:Name="BuildLabel" Margin="0,10,0,14" Foreground="#99AAA1" TextWrapping="Wrap"/>
   </StackPanel>
-  <StackPanel Grid.Row="1">
+  <StackPanel Grid.Row="1" Margin="0,0,0,16">
+   <TextBlock Text="GAME FOLDER" Foreground="#E6A04A" FontSize="11" FontWeight="Bold" Margin="0,0,0,6"/>
+   <TextBox x:Name="GameFolder" IsReadOnly="True" Background="#20272B" Foreground="#EDF0EC" BorderThickness="0" Padding="10" TextWrapping="Wrap" MinHeight="38" MaxHeight="84" VerticalScrollBarVisibility="Auto" AutomationProperties.Name="Selected game folder"/>
+   <Button x:Name="ChooseGame" Content="Choose game folder…" HorizontalAlignment="Left" Margin="0,8,0,0" AutomationProperties.Name="Choose game folder"/>
+   <TextBlock x:Name="SettingsNotice" Foreground="#E6BD83" TextWrapping="Wrap" FontSize="12" Margin="0,8,0,0"/>
+  </StackPanel>
+  <StackPanel Grid.Row="2">
    <Button x:Name="Launch" Content="LAUNCH BC2 IN VR" FontWeight="Bold" FontSize="17" Background="#E6A04A" Foreground="#161B1E" Padding="20,17" Margin="0,0,0,15" HorizontalAlignment="Stretch"/>
    <WrapPanel><CheckBox x:Name="Fresh" Content="Restart BC2 before launch"/><CheckBox x:Name="Local" Content="Use local checkpoint"/></WrapPanel>
    <TextBlock Text="Choose Campaign from the menu in VR. Point with your right controller and select with its trigger. Hold X + Y on the left controller to open the pause menu; B goes back." FontSize="12" Foreground="#99AAA1" TextWrapping="Wrap" Margin="0,0,0,18"/>
   </StackPanel>
-  <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,18">
-   <Button x:Name="Stop" Content="Stop VR"/><Button x:Name="Validate" Content="Check setup"/><Button x:Name="Logs" Content="Open logs"/><Button x:Name="Feedback" Content="Report feedback"/>
-  </StackPanel>
-  <Border Grid.Row="3" Background="#20272B" Padding="17" CornerRadius="4" Margin="0,0,0,18">
+  <WrapPanel Grid.Row="3" Margin="0,0,0,10">
+   <Button x:Name="Stop" Content="Stop VR" Margin="0,0,10,8"/><Button x:Name="Validate" Content="Check setup" Margin="0,0,10,8"/><Button x:Name="Logs" Content="Open logs" Margin="0,0,10,8"/><Button x:Name="Feedback" Content="Report feedback" Margin="0,0,10,8"/>
+  </WrapPanel>
+  <Border Grid.Row="4" Background="#20272B" Padding="17" CornerRadius="4" Margin="0,0,0,18" MinHeight="110">
    <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
     <TextBlock Text="STATUS" Foreground="#E6A04A" FontSize="11" FontWeight="Bold"/>
     <TextBlock x:Name="Status" Grid.Row="1" Text="Ready when you are." TextWrapping="Wrap" Margin="0,9,0,10"/>
     <ProgressBar x:Name="Progress" Grid.Row="2" Height="3" Foreground="#E6A04A" Background="#30383D" IsIndeterminate="False" BorderThickness="0"/>
    </Grid>
   </Border>
-  <StackPanel Grid.Row="4">
-   <WrapPanel Margin="0,0,0,8"><Button x:Name="Check" Content="Check for updates"/><Button x:Name="Update" Content="Install update"/><Button x:Name="Rollback" Content="Roll back"/></WrapPanel>
+  <StackPanel Grid.Row="5">
+   <WrapPanel><Button x:Name="Check" Content="Check for updates" Margin="0,0,10,8"/><Button x:Name="Update" Content="Install update" Margin="0,0,10,8"/><Button x:Name="Rollback" Content="Roll back" Margin="0,0,10,8"/></WrapPanel>
    <CheckBox x:Name="Prerelease" Content="Include pre-alpha hotfixes" IsChecked="True" FontSize="12"/>
    <TextBlock Text="Updates keep your settings and one previous version. Close BC2 before installing." Foreground="#99AAA1" FontSize="11" TextWrapping="Wrap"/>
   </StackPanel>
  </Grid>
+ </ScrollViewer>
 </Window>
 '@
 $window=[Windows.Markup.XamlReader]::Load([Xml.XmlNodeReader]::new($markup))
 $controls=@{}
-foreach($name in @('BuildLabel','Launch','Fresh','Local','Stop','Validate','Logs','Feedback','Status','Progress','Check','Update','Rollback','Prerelease')){$controls[$name]=$window.FindName($name)}
-$runtimeLabel=if($package.runtime_entry){'Installed VR runtime'}elseif($settings.local_backend){$settings.local_backend.label}else{'Launcher installed • VR runtime not installed yet'}
-$controls.BuildLabel.Text="$runtimeLabel  •  Launcher $($active.current)"
-$controls.Local.IsChecked=[bool](-not $package.runtime_entry -and $settings.local_backend)
-$controls.Local.IsEnabled=[bool]($package.runtime_entry -and $settings.local_backend)
+foreach($name in @('BuildLabel','GameFolder','ChooseGame','SettingsNotice','Launch','Fresh','Local','Stop','Validate','Logs','Feedback','Status','Progress','Check','Update','Rollback','Prerelease')){$controls[$name]=$window.FindName($name)}
 $script:job=$null;$script:reopenRequired=$false;$script:jobStarted=$null
 $actions=@('Launch','Stop','Validate','Check','Update','Rollback','Feedback')
+function Show-Settings {
+    $script:settings=$script:settingsState.settings
+    $backend=$settings.local_backend
+    $script:hasLocalBackend=$backend -is [Collections.IDictionary] -and $backend.Contains('label')
+    $runtimeLabel=if($package.runtime_entry){'Installed VR runtime'}elseif($script:hasLocalBackend){[string]$backend.label}else{'Launcher installed • VR runtime not installed yet'}
+    $controls.BuildLabel.Text="$runtimeLabel  •  Launcher $($active.current)"
+    $controls.Local.IsChecked=[bool](-not $package.runtime_entry -and $script:hasLocalBackend)
+    $controls.ChooseGame.Content=if($script:settingsState.needs_reset){'Reset and choose game folder…'}else{'Choose game folder…'}
+    $controls.GameFolder.Text=if($settings.game_path -is [string] -and $settings.game_path){$settings.game_path}else{'No game folder selected'}
+    $controls.SettingsNotice.Text=$script:settingsState.notice
+    $script:gameFolderReady=$false
+    if(-not $script:settingsState.needs_reset -and -not $script:settingsState.read_only){
+        try{$null=Resolve-FvrGameFolder $settings.game_path;$script:gameFolderReady=$true}catch{
+            if(-not $controls.SettingsNotice.Text){$controls.SettingsNotice.Text='Choose BFBC2Game.exe in your game folder to get started.'}
+        }
+    }
+}
 function Set-Busy([bool]$Busy){
     foreach($name in $actions){$controls[$name].IsEnabled=-not $Busy -and -not $script:reopenRequired}
+    foreach($name in @('Launch','Validate')){$controls[$name].IsEnabled=$controls[$name].IsEnabled -and $script:gameFolderReady}
+    $controls.ChooseGame.IsEnabled=-not $Busy -and -not $script:reopenRequired -and -not $script:settingsState.read_only
+    $controls.Local.IsEnabled=-not $Busy -and [bool]($package.runtime_entry -and $script:hasLocalBackend)
     $controls.Fresh.IsEnabled=-not $Busy
     $controls.Progress.IsIndeterminate=$Busy
 }
 function Begin-Action([string]$Action){
     try{
+        if($Action -in @('Launch','Validate') -and -not $script:gameFolderReady){throw 'Choose your game folder before continuing.'}
         # ProcessStartInfo.ArgumentList handles spaces and quotes without a shell.
         $start=[Diagnostics.ProcessStartInfo]::new((Join-Path $PSHOME 'pwsh.exe'))
         $start.UseShellExecute=$false;$start.CreateNoWindow=$true
@@ -91,6 +118,25 @@ function Begin-Action([string]$Action){
         $controls.Status.Text='Starting…';Set-Busy $true
     }catch{$controls.Status.Text=$_.Exception.Message;Set-Busy $false}
 }
+Show-Settings;Set-Busy $false
+$controls.ChooseGame.Add_Click({
+    try{
+        $reset=[bool]$script:settingsState.needs_reset
+        if($reset){
+            $answer=[Windows.MessageBox]::Show($window,"Reset unreadable settings and choose the game folder? Any local-checkpoint profile remains in the original backup:`n$($script:settingsState.backup)",'Recover launcher settings',[Windows.MessageBoxButton]::YesNo,[Windows.MessageBoxImage]::Warning)
+            if($answer -ne [Windows.MessageBoxResult]::Yes){return}
+        }
+        $picker=[Microsoft.Win32.OpenFileDialog]::new()
+        $picker.Title='Choose BFBC2Game.exe in your game folder'
+        $picker.Filter='Battlefield Bad Company 2 (BFBC2Game.exe)|BFBC2Game.exe'
+        $picker.CheckFileExists=$true;$picker.Multiselect=$false
+        if($script:gameFolderReady){$picker.InitialDirectory=Resolve-FvrGameFolder $settings.game_path}
+        if($picker.ShowDialog($window) -eq $true){
+            $script:settingsState=Save-FvrGameFolder -InstallRoot $InstallRoot -Selection $picker.FileName -ResetInvalidSettings:$reset
+            Show-Settings;Set-Busy $false
+        }
+    }catch{$controls.SettingsNotice.Text=$_.Exception.Message}
+})
 $controls.Launch.Add_Click({Begin-Action 'Launch'})
 $controls.Stop.Add_Click({Begin-Action 'Stop'})
 $controls.Validate.Add_Click({Begin-Action 'Validate'})
@@ -127,6 +173,10 @@ $timer.Add_Tick({
                 $state=Read-FvrJson $statusPath
                 if(-not $script:jobStarted -or [DateTimeOffset]::Parse($state.utc).UtcDateTime -ge $script:jobStarted){
                     $controls.Status.Text=$state.message
+                    if(-not $script:job -and $package.runtime_entry){
+                        $sessionNotice=Get-FvrRuntimeSessionNotice -InstallRoot $InstallRoot -Version $package.version -Operation $state
+                        if($sessionNotice){$controls.Status.Text=$sessionNotice.message}
+                    }
                     if($state.state -eq 'restart_required'){$script:reopenRequired=$true}
                 }
             }catch{} # Atomic rename may briefly contend with antivirus/readers.

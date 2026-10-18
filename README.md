@@ -2,8 +2,13 @@
 
 **Checkpoint 426 — work-in-progress singleplayer VR framework.** This repository
 contains the framework and Bad Company 2 adapter source. The separate
-[BC2VR 0.1.5 release](https://github.com/justiceofrip/BC2VR/releases/tag/v0.1.5)
-provides the published pre-alpha installer, updates and feedback tracker.
+[BC2VR releases](https://github.com/justiceofrip/BC2VR/releases)
+provide the pre-alpha installer, updates and feedback tracker.
+
+The 0.1.6 launcher hotfix adds visible game-folder selection, settings recovery,
+installation space checks and startup checks for the selected OpenXR runtime.
+It retains checkpoint426's native binaries and gameplay limitations; see
+[hotfix validation](docs/LAUNCHER-HOTFIX016.md) and [current state](docs/CURRENT.md).
 
 Start with [current state and known limits](docs/CURRENT.md), the
 [426 handoff](handoff/checkpoint426/README.md), [build instructions](BUILDING.md),
@@ -12,7 +17,9 @@ and [weapon coverage](docs/WEAPON-COVERAGE-CURRENT.md).
 ## Evidence and limits
 
 The frozen normal-r4 source passed **291/291 C++ suites on x86 and x64**.
-The published package passed 25 installation/package checks and 49 launcher checks.
+The 0.1.6 package passed 28 installation/package checks and 51 launcher checks.
+Cold asset preparation and runtime cache validation passed using packaged Python
+and a verified local decoder. These checks did not start BC2 or a headset session.
 Its latest native knife run retired the automatic-stow blocker and prepared one
 client attack. Server acquisition, damage and repeat-jab recovery remain unverified.
 Checkpoint 425's opening cloud correction was accepted by the user in a headset.

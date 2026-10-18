@@ -75,7 +75,7 @@ def stage(repo, receipt_path, expected_receipt_sha, output, version, dependencie
     loader=repo/'build/x64/runtime/openxr/win64/openxr_loader.dll'
     if sha(loader)!=LOADER_SHA: raise ValueError('OpenXR loader changed')
     copy(loader,'bin/openxr_loader.dll')
-    for name in ('Entry.ps1','Runtime.Core.ps1','Dependencies.ps1','Session.ps1'):
+    for name in ('Entry.ps1','Runtime.Core.ps1','Dependencies.ps1','Session.ps1','Startup.ps1'):
         copy(repo/'launcher/runtime'/name,name)
     for name in ('prepare_runtime_assets.py','wait_main_menu.py','activate_game_once.py','runtime_process.py'):
         copy(repo/'launcher/runtime'/name,'tools/'+name)
