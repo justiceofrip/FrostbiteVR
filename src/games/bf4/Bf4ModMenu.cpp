@@ -40,6 +40,8 @@ ui::ModMenuModel BuildModMenu(const game::CapabilityRegistry& caps, bool develop
               state.headTracking ? 1 : 0, true, ""});
     menu.Add({"controller_aim", "Aim with", MenuItemKind::Choice, {"Right stick", "Right controller"},
               state.controllerAim ? 1 : 0, true, "Head-tracked view only. Right stick turns your body."});
+    menu.Add({"vignette", "Comfort vignette", MenuItemKind::Choice, {"Off", "On"}, state.vignette ? 1 : 0, true,
+              "Darkens the edges of your view while you walk with the stick or turn smoothly."});
     menu.Add({"aim_dot", "Aim dot", MenuItemKind::Choice, {"Off", "On"}, state.aimDot ? 1 : 0, true,
               "A green ring where the gun aims. The game's own crosshair stays at the centre of your view."});
     if (developer)
@@ -94,6 +96,7 @@ ModMenuCommand InterpretChange(const MenuItem& item) {
     if (item.id == "controller_aim") return {ModMenuAction::SetControllerAim, item.value};
     if (item.id == "holsters") return {ModMenuAction::SetHolsters, item.value};
     if (item.id == "aim_dot") return {ModMenuAction::SetAimDot, item.value};
+    if (item.id == "vignette") return {ModMenuAction::SetVignette, item.value};
     return {};
 }
 

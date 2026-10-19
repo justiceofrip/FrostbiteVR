@@ -125,6 +125,10 @@ void AdapterCore::ApplyMenuCommand(const ModMenuCommand& command) {
         menuState_.headTracking = command.value != 0;
         platform_.Log(menuState_.headTracking ? "campaign view: head-tracked" : "campaign view: screen");
         break;
+    case ModMenuAction::SetVignette:
+        menuState_.vignette = command.value != 0;
+        platform_.Log(menuState_.vignette ? "comfort vignette: on" : "comfort vignette: off");
+        break;
     case ModMenuAction::SetAimDot:
         menuState_.aimDot = command.value != 0;
         platform_.Log(menuState_.aimDot ? "aim dot: on" : "aim dot: off");
@@ -527,6 +531,15 @@ void AdapterCore::OnFrame(const PlatformFrame& f, const ControllerSnapshot& in) 
         meta.worldSettle = static_cast<std::uint32_t>(menuState_.worldSettle);
         meta.worldStereo = session_.developerFeatures && menuState_.worldStereo;
         meta.reticle = menuState_.aimDot && aim_.engaged;
+        {
+            // Comfort vignette: stick walking and smooth turning (snap turns are instant).
+            const float walk = std::hypot(pad_.thumbLX / 32767.0f, pad_.thumbLY / 32767.0f);
+            const auto& r = in.controls.hands[1];
+            const bool smoothTurn = aim_.engaged && !menuState_.snapTurn && std::fabs(r.stickX) > 0.2f;
+            const float dt = lastVignetteMs_ && f.tickMs > lastVignetteMs_ ? (f.tickMs - lastVignetteMs_) / 1000.0f : 0.0f;
+            lastVignetteMs_ = f.tickMs;
+            meta.vignette = vignette_.Update(menuState_.vignette && !menuOpen_, std::max(walk, smoothTurn ? 1.0f : 0.0f), dt);
+        }
         const auto marks = gestures_.Markers();
         for (std::size_t i = 0; i < marks.size() && i < 2; ++i)
             meta.markers[i] = {marks[i].show, marks[i].position, marks[i].kind};

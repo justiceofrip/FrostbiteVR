@@ -20,6 +20,8 @@ cbuffer Crop : register(b0) {
     float4 marker0; // eye image u v, show, kind
     float4 marker1;
     float4 span;    // eye image uv -> tangent units: x y
+    float4 eyeFov;  // left right up down (tangents)
+    float4 comfort; // vignette strength, -, -, -
 };
 float3 Marker(float3 c, float2 uv, float4 m) {
     if (m.z < 0.5) return c;
@@ -52,6 +54,10 @@ float4 ps(V v) : SV_Target {
     }
     c = Marker(c, v.uv, marker0);
     c = Marker(c, v.uv, marker1);
+    if (comfort.x > 0.001) { // comfort vignette: clear to ~35 deg off centre, dark by ~50 deg
+        const float2 t = float2(lerp(eyeFov.x, eyeFov.y, v.uv.x), lerp(eyeFov.z, eyeFov.w, v.uv.y));
+        c *= 1 - comfort.x * 0.9 * smoothstep(0.70, 1.19, length(t));
+    }
     return float4(c, 1);
 }
 )";
@@ -95,6 +101,8 @@ struct alignas(16) CropConstants {
     float scale[4];
     float marker[2][4];
     float span[4];
+    float eyeFov[4];
+    float comfort[4];
 };
 } // namespace
 
@@ -229,6 +237,12 @@ bool EyeResampler::Render(ID3D11DeviceContext* context, ID3D11Texture2D* source,
             }
             c.span[0] = overlays[i].spanX;
             c.span[1] = overlays[i].spanY;
+            const auto& fov = overlays[i].fov;
+            c.eyeFov[0] = fov.left;
+            c.eyeFov[1] = fov.right;
+            c.eyeFov[2] = fov.up;
+            c.eyeFov[3] = fov.down;
+            c.comfort[0] = overlays[i].vignette;
         }
         context_->UpdateSubresource(constants_[i].Get(), 0, nullptr, &c, 0, 0);
     }

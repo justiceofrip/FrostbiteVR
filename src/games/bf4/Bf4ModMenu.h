@@ -18,11 +18,12 @@ struct ModMenuState {
     bool controllerAim = true; // campaign: the gun follows the right controller
     bool holsters = true;      // campaign: body holster gestures (Bf4BodyGestures.h)
     bool aimDot = true;        // head-tracked view + controller aim: reticle where the gun aims
+    bool vignette = true;      // head-tracked view: darken the edges while moving by stick
 };
 
 enum class ModMenuAction : std::uint8_t {
     None, SetReloadMode, SetSnapTurn, SetTheaterDistance, Recenter, MarkFeedback, GameMenu, SetHeadTracking, SetWorldSettle,
-    SetWorldStereo, SetControllerAim, SetHolsters, SetAimDot
+    SetWorldStereo, SetControllerAim, SetHolsters, SetAimDot, SetVignette
 };
 
 struct ModMenuCommand {

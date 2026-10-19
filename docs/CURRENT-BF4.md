@@ -141,6 +141,10 @@ screen. Pieces (all on the analysed build only):
   produce no turn (pause menu, cutscene) it goes quiet for 60 frames.
 - The virtual pad's right stick is released while it aims (no stick look), and the left
   stick is turned back by the aim's offset so walking stays relative to the body.
+- Comfort vignette (mod menu, default on): while the left stick moves the player, or the
+  body turns smoothly, the eye resampler darkens each eye beyond ~35 deg from its centre
+  (dark by ~50 deg), in proportion to the stick and fading in fast / out slower
+  (`ComfortVignette`). Unit-tested; the WARP check draws it.
 - Snap turning (mod menu, default on): the right stick turns the body heading in 30 degree
   steps (one per push past 0.7, re-armed under 0.3); off: smooth ~150 deg/s. The game's aim
   follows through the mouse within a frame or two; the head view jumps with the heading.
@@ -326,11 +330,11 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
 
 ## Tests (2026-10-19)
 
-- Build.ps1 after gesture markers: x64 284/284, x86 283/283. Bf4CoreTests 66 cases;
+- Build.ps1 after the comfort vignette: x64 284/284, x86 283/283. Bf4CoreTests 67 cases;
   Bf4Emulated pass (theater, world lane, stereo probe, census, lockdown, gestures, eye
   resampler reticle on WARP); launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
   `-World -FrameChannels 2` 5/5 (227 pairs); `-World` with one channel 4/4 (47 pairs).
-- Installed locally: runtime/bf4 0.4.22-local (rollback 0.4.21-local). Developer
+- Installed locally: runtime/bf4 0.4.23-local (rollback 0.4.22-local). Developer
   sessions still run the read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the
   framework's `StereoMath.h` (`Quat` = `Quaternion`; Pose is `{position, orientation}`).

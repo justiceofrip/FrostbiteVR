@@ -13,6 +13,7 @@
 #include "Bf4SessionInfo.h"
 #include "Bf4MotionAim.h"
 #include "Bf4BodyGestures.h"
+#include "Bf4WorldView.h"
 #include "stereo/SideBySide.h"
 #include "stereo/StereoProbe.h"
 #include "../../engines/frostbite/Fb3CameraMath.h"
@@ -226,6 +227,8 @@ private:
     void UpdateMotionAim(const ControllerSnapshot& input, const PlatformFrame& frame);
     MotionAim motionAim_;
     MotionAimOutput aim_{};
+    ComfortVignette vignette_;
+    std::uint64_t lastVignetteMs_ = 0;
     std::uint64_t lastAimTickMs_ = 0;
 
     bool EngineStereoAllowed() const;

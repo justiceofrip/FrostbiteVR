@@ -982,3 +982,20 @@ TEST_CASE(GestureMarkersSitAtTheirDepthInEachEye) {
     g.Step();
     CHECK(!g.gestures.Markers()[0].show); // seated
 }
+
+TEST_CASE(ComfortVignetteFollowsArtificialMotion) {
+    using namespace fvr::bf4;
+    ComfortVignette v;
+    CHECK(v.Update(true, 0, 1.0f / 90) == 0);
+    float level = 0;
+    for (int i = 0; i < 9; ++i) level = v.Update(true, 1.0f, 1.0f / 90); // 0.1 s of walking
+    CHECK(level > 0.55f && level < 0.75f);                                // fades in quickly
+    for (int i = 0; i < 30; ++i) level = v.Update(true, 1.0f, 1.0f / 90);
+    CHECK(Near(level, 1.0f));
+    for (int i = 0; i < 9; ++i) level = v.Update(true, 0, 1.0f / 90); // stopped: fades out slower
+    CHECK(level > 0.7f && level < 0.8f);
+    for (int i = 0; i < 90; ++i) level = v.Update(true, 0.4f, 1.0f / 90);
+    CHECK(Near(level, 0.4f)); // partial stick: partial vignette
+    for (int i = 0; i < 90; ++i) level = v.Update(false, 1.0f, 1.0f / 90); // option off
+    CHECK(level == 0);
+}

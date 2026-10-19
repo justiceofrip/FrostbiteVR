@@ -54,6 +54,7 @@ struct FrameMeta {
         std::uint32_t kind = 0; // 0 amber: take from here; 1 green: put it here
     };
     Marker markers[2];
+    float vignette = 0; // comfort vignette strength (0..1)
 };
 
 class IFrameSink {

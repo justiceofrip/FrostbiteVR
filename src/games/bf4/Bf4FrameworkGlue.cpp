@@ -344,6 +344,8 @@ private:
         for (int e = 0; e < 2; ++e) {
             overlays[e].spanX = t.fov[e].right - t.fov[e].left;
             overlays[e].spanY = t.fov[e].up - t.fov[e].down;
+            overlays[e].fov = t.fov[e];
+            overlays[e].vignette = untracked_ ? 0.0f : meta.vignette;
             for (int m = 0; m < 2; ++m) {
                 if (!meta.markers[m].show) continue;
                 overlays[e].markers[m] = MarkerInEye(t.eyes[e], t.fov[e], meta.markers[m].position, meta.markers[m].kind);

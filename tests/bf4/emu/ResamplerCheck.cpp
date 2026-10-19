@@ -99,5 +99,16 @@ bool CheckEyeResamplerReticle(ID3D11Device* device, const char*& why) {
     if (!Amber(eye[32 * width + 16 + 10]) && !Amber(eye[32 * width + 16 + 9])) return why = "marker ring", false;
     if (!Grey(eye[32 * width + 16]) || !Grey(eye[32 * width + 48]) || Green(eye[32 * width + 32]))
         return why = "marker only at its place, no reticle", false;
+    // Comfort vignette at full strength over a +-1.6 tangent eye: centre clear, corners dark.
+    for (auto& o : overlays) {
+        o.markers[0].show = false;
+        o.fov = {-1.6f, 1.6f, 1.6f, -1.6f};
+        o.vignette = 1;
+    }
+    if (!resampler.Render(context.Get(), frame.Get(), crops, kSize, kSize, DXGI_FORMAT_R8G8B8A8_UNORM, {}, overlays))
+        return why = "vignette resample", false;
+    if (!ReadPixels(device, context.Get(), resampler.Eye(0), eye, width)) return why = "read back the vignette eye", false;
+    if (!Grey(eye[32 * width + 32])) return why = "vignette leaves the centre clear", false;
+    if ((eye[1 * width + 1] & 0xFF) > 30) return why = "vignette darkens the corners", false;
     return true;
 }

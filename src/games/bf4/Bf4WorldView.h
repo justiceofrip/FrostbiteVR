@@ -110,10 +110,32 @@ inline EyeMarker MarkerInEye(const math::Pose& eye, const math::FovTangents& fov
     m.show = m.u > -0.05f && m.u < 1.05f && m.v > -0.05f && m.v < 1.05f;
     return m;
 }
-// Per eye: up to two markers and the eye image's extent in tangent units (marker size).
+// Per eye: up to two markers, the eye image's extent in tangent units (marker size), and
+// the comfort vignette (its FOV tangents place the centre of the view).
 struct EyeOverlay {
     EyeMarker markers[2];
     float spanX = 1, spanY = 1;
+    math::FovTangents fov{-1, 1, 1, -1};
+    float vignette = 0; // 0 none .. 1 full
+};
+
+// Comfort vignette: darkens the edge of view while the player moves by stick or turns
+// smoothly (artificial motion the inner ear does not feel). Fast in, slower out.
+class ComfortVignette {
+public:
+    static constexpr float kRise = 6.0f, kFall = 2.5f; // per second
+    // motion: 0..1 (stick deflection past the dead zone, or smooth turning).
+    float Update(bool enabled, float motion, float dt) {
+        const float target = enabled ? std::clamp(motion, 0.0f, 1.0f) : 0.0f;
+        const float rate = target > level_ ? kRise : kFall;
+        const float step = rate * std::clamp(dt, 0.0f, 0.1f);
+        level_ = target > level_ ? std::min(target, level_ + step) : std::max(target, level_ - step);
+        return level_;
+    }
+    float Level() const { return level_; }
+
+private:
+    float level_ = 0;
 };
 
 inline constexpr std::uint64_t kWorldLeaseMaxMs = 140; // host requests live 150 ms
