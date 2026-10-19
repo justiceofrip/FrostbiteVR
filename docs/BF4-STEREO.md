@@ -130,3 +130,37 @@ after 3D engages. Static checks of what the override changes (same research imag
   produced one (per-entry render resources or a wait sized for one). The watchdog's thread
   stacks (developer sessions, 4 s without a Present) should show which function the render
   thread waits in; 3D stays off by default until then.
+
+## Split stereo is unsupported on PC: the crash, found live (2026-10-19)
+
+Reproduced without a headset (real game, real XR host, simulated headset; developer item
+on after 10 s of head tracking): engine stereo engaged at 18:35:09.24 (`eye_loop calls=1
+widened=1`) and the next frame faulted. The fault log (armed while 3D is on) recorded
+`0xc0000005` reading a non-canonical address (reported as -1) at `+0xbcf05d`, stack
+`+0xbcf05d <- +0xbcc397 <- +0xcde57a <- +0x8be76b` (slot 2 of the eye-loop object, right
+after it hands the per-eye entries to `[this+0x30]->vtable[+0x10]`) `<- adapter eye-loop
+wrapper <- +0x83f49c`. BF4's own crash handler then spun on that thread
+(`+0x6cc185 ... +0x7639`, the unhandled-exception filter), which is the "freeze" seen in
+the headset sessions; the watchdog's stacks showed it.
+
+Static (same research image):
+- The receiver `+0xcde440` is slot 2 of the world renderer's vtable `+0x1df4b60`. For
+  each of the `[args+0x14]` views it takes a per-view renderer from `[this + i*8 + 0x88]`
+  and, on a size change, re-creates its render targets (`+0xbcc360`, which first releases
+  the old ones in `+0xbcf030`: `[obj+0x488]`, `[obj+0x490]`) at the size in the view's
+  state block `[this + i*0x34000 + 0x34230/0x34234]`.
+- The constructor `+0xcd32b0` builds that array with the vector-constructor helper
+  `+0x1183bd4`, count **1**, element size 8, and stores an unrelated object at `+0x90`
+  (`+0xcd34d0`). The only allocation (`+0xce2161`) is **0x34400** bytes: one 0x34000-byte
+  view block from `+0x200`.
+- With two views, view 1 uses the object at `+0x90` as a view renderer (garbage at its
+  `+0x488`: the fault) and a state block that starts 0x34200 bytes in, beyond the
+  object. The layout is fixed when BF4 is compiled; no exact-write override can give it a
+  second view.
+
+Decision: BF4's split two-view route is retired (developer item shown disabled, status
+"Unsupported: BF4 renders one view"; the core keeps it off). Stereo comes from 3D from
+depth (CURRENT-BF4.md). The NVAPI (3D Vision) route is a different path: in the emulator
+BF4-like code renders the eyes as sequential one-view passes, which this limit would not
+touch, but the real game taking that path is unverified and needs BF4 started with stereo
+enabled (a Steam launch option the player sets).

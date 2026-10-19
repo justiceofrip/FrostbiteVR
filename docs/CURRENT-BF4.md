@@ -18,7 +18,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   three sessions (09:16-10:19; rotation was inverted and the gun oversized, both fixed in
   0.4.16); everything built since 0.4.17 is unseen in a headset.
 
-## At a glance (installed: 0.4.46-local)
+## At a glance (installed: 0.4.48-local)
 
 | Feature | State | Evidence |
 | --- | --- | --- |
@@ -32,7 +32,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
 | HUD corners (ammo, minimap insets) | on | live sim (eye snapshots) |
 | Physical crouch | off | unit-tested; live sim suggestive |
 | 3D from depth (depth buffer) | off | live sim: depth found, parallax direction right |
-| BF4 split stereo ("3D depth", developer) | off | freezes live; watchdog armed |
+| BF4 split stereo (developer) | unsupported (retired) | live sim: crashes BF4's one-view world renderer |
 | Hands / IK, gun at the hand | not built | needs live RE |
 
 ## Works on the real game (actual-game checks)
@@ -104,6 +104,8 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
     and standing restored it; the dark spot made this suggestive only. Crouch state and
     toggles are now in the periodic gestures log line.
   - 3D from depth: see that section (depth found, parallax direction right).
+  - BF4's split 3D (third session, 0.4.47-local): reproduced the headset "freeze" in
+    0.1 s and caught it as a crash in the one-view world renderer (Stereo, below).
 
 ## Head tracking: the world lane (2026-10-19, built; seen in a headset)
 
@@ -336,7 +338,7 @@ the theater screen. Pieces (all on the analysed build only):
 
 ## 3D from depth (2026-10-19, built; emulated only; opt-in)
 
-Native split stereo still freezes (below), so a second route gives depth without a second
+Native split stereo is unsupported on PC (below), so this route gives depth without a second
 render: both eyes are cut from the one mono frame and each is shifted by its own parallax
 using the frame's depth buffer (depth-image-based rendering; no simulation or render replay).
 
@@ -385,7 +387,15 @@ using the frame's depth buffer (depth-image-based rendering; no simulation or re
   Not yet seen: how it feels in a headset (comfort, the doubled edges, the gun at the
   0.4 m clamp).
 
-## Stereo: BF4's own two-eye render in the world lane (2026-10-19)
+## Stereo: BF4's own two-eye render in the world lane (2026-10-19, retired)
+
+- **Retired (live, simulated headset, 2026-10-19)**: the "freeze" is a crash. Two views
+  overrun BF4's world renderer, which is built for one (a one-element view-renderer array
+  at `+0x88`, a 0x34400-byte object with one 0x34000-byte view block); view 1 takes an
+  unrelated member as its renderer and faults, and BF4's crash handler spins. Details and
+  addresses: BF4-STEREO.md, "Split stereo is unsupported on PC". The developer item is now
+  shown disabled ("Unsupported: BF4 renders one view") and the core keeps it off; the code
+  below stays for reference. History of the attempt:
 
 - **First headset session (0.4.13-local, 09:16)**: head tracking worked (world lane,
   ~22 pairs/s at ~97 game fps, FOV written 1.947 rad). 3D engaged as designed
@@ -560,15 +570,16 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
   test: every item on the panel, none overlapping; a GDI render of the developer menu was
   checked by eye.
 - Build.ps1 after the guard fix and the simulated headset: x64 284/284, x86 283/283.
-  Bf4CoreTests 81 cases (new: research commands, target teleports at a learned gain);
+  Bf4CoreTests 82 cases (new: research commands, target teleports at a learned gain,
+  split 3D stays off);
   Bf4Emulated pass (theater, world lane, stereo probe, census, lockdown, gestures; WARP:
   eye resampler reticle/markers/vignette/depth stereo/HUD corners, depth capture detour
   incl. the MSAA snapshot);
   launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
   `-World -FrameChannels 2` 5/5 (76-237 pairs, machine-dependent); `-World` with one
   channel 4/4 (47 pairs).
-- Installed locally: runtime/bf4 0.4.46-local (rollback 0.4.45-local, the build of the
-  second live session; 0.4.46 adds the crouch fields to the log); launcher settings
+- Installed locally: runtime/bf4 0.4.48-local (split 3D retired; rollback 0.4.47-local,
+  the build of the split-3D session); launcher settings
   restored to the player's after the developer sessions. Developer sessions still run the
   read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the
@@ -591,14 +602,15 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
 
 ## Open / blocked
 
-- Headset check of 0.4.46 (BF4-FIRST-SESSION.md). The simulated headset settled the game
+- Headset check of 0.4.48 (BF4-FIRST-SESSION.md). The simulated headset settled the game
   side (direction, labels, rate, aim, gestures, depth target); what only a headset can
   answer: comfort at ~45 pairs/s (and whether frame sync 1, ~52/s, still holds there),
   gun size and the head-locked gun, the HUD corners' readability, 3D from depth's feel,
   holster positions on a real body, the laser on "Resume".
 - In VR the game's crosshair marks the head, not the gun (the aim dot is the true aim);
   hiding it needs the UI pass (native RE).
-- 3D: the stall after the split render engages; the watchdog's stacks show where.
+- 3D: BF4's split route is unsupported (above); 3D from depth is the stereo route. The
+  NVAPI route (sequential eye passes, emulated) needs a Steam launch option to test live.
 - Laser click on the campaign screen's "Resume" (main menu) did not register while other
   menu clicks did. Cause assumed: no click lock, so hand jitter while the trigger was held
   went out as a drag (that screen scrolls on drags), and the trigger also reached the

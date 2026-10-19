@@ -51,9 +51,11 @@ ui::ModMenuModel BuildModMenu(const game::CapabilityRegistry& caps, bool develop
               "Darkens the edges while walking."});
     menu.Add({"aim_dot", "Aim dot", MenuItemKind::Choice, {"Off", "On"}, state.aimDot ? 1 : 0, true,
               "Green ring where the gun aims."});
+    // BF4's own split-screen two-view render: unsupported on PC (its world renderer is built
+    // for one view; BF4-STEREO.md). Shown disabled so the status is visible.
     if (developer)
-        menu.Add({"world_stereo", "3D depth (experimental)", MenuItemKind::Choice, {"Off", "On"},
-                  state.worldStereo ? 1 : 0, true, "Freezes the game so far."});
+        menu.Add({"world_stereo", "BF4 split 3D", MenuItemKind::Choice, {"Off", "On"}, 0, false,
+                  "Unsupported: BF4 renders one view."});
     if (developer)
         menu.Add({"world_settle", "Frame sync (developer)", MenuItemKind::Choice,
                   {"1 frame", "2 frames", "3 frames", "4 frames"}, std::clamp(state.worldSettle, 1, 4) - 1, true,

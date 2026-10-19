@@ -537,6 +537,20 @@ TEST_CASE(EmuControllerAimRecoversWhenTheGameIsMoreSensitiveThanLearned) {
     }
 }
 
+TEST_CASE(EmuBf4SplitStereoStaysOffAsUnsupported) {
+    // Live 2026-10-19: two views overrun BF4's one-view world renderer (BF4-STEREO.md), so
+    // the developer item is shown disabled and nothing switches the route on.
+    FakeImage image({names::kGameRenderer, names::kRenderViewUpdate, names::kClientGameContext, names::kLevelName});
+    FakePlatform platform;
+    AdapterCore core(Session(true), X64(), image.Resolve(), platform);
+    core.OnSwapchainAdopted(true);
+    CHECK(!core.SetMenuSetting("world_stereo", 1)); // disabled item: refused
+    core.SetWorldStereo(true);
+    CHECK(!core.MenuSettings().worldStereo);
+    CHECK(core.SetMenuSetting("depth_stereo", 1)); // the depth route is the stereo option
+    CHECK(core.MenuSettings().depthStereo);
+}
+
 TEST_CASE(EmuWalkTowardTheGunLeavesTheStickAlone) {
     // Vehicles: the left stick is throttle and steering, so "Walk toward: Gun" must hand it
     // to the game unturned while the gun aims off the body heading.

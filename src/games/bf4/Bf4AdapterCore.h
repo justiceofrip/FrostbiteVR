@@ -154,7 +154,7 @@ public:
     // A mod menu item set to `value` as if chosen in the headset (developer research);
     // false for an unknown or disabled item or a value out of range.
     bool SetMenuSetting(const std::string& id, int value);
-    // Session default for "3D depth" (off after a session that ended with 3D on).
+    // BF4's split two-view 3D: unsupported (its world renderer holds one view), always off.
     void SetWorldStereo(bool on);
 
     // FrostbiteVR's own in-headset menu (menu button toggles it; the laser drives it).

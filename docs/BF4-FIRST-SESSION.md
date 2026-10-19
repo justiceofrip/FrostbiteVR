@@ -1,10 +1,9 @@
-# BF4 headset session: checklist (0.4.46-local)
+# BF4 headset session: checklist (0.4.48-local)
 
 What to try in the next headset session, and what each check tells us. About 15 minutes.
 The game side of everything below already ran live without a headset (simulated headset,
 CURRENT-BF4.md): this session is about how it looks and feels.
-Everything is input-only or an exactly restored camera/FOV write, apart from the optional
-3D test at the end.
+Everything is input-only or an exactly restored camera/FOV write.
 
 ## Before launching
 
@@ -64,13 +63,9 @@ Some doubled outlines at depth edges are expected (seen live); if it looks wrong
 (the gun at a strange depth, no depth at all, discomfort), switch it off and mark the moment; `vr-snapshot-depth.bmp` and the `depth_capture` log line show what
 it found.
 
-## Optional: 3D depth (developer)
-
-Menu > 3D depth > On, in a mission. So far the game stops presenting about 2 s later. If
-it freezes, wait at least 5 s before closing it: the watchdog writes every thread's stack
-to `bf4-adapter.log` (after "diagnostics: no frame presented for"), which shows where the render thread waits
-(BF4-STEREO.md, "The freeze after split stereo engages"). The next session starts with 3D
-off automatically.
+BF4's own split 3D (the old developer "3D depth") is retired: it crashed BF4's one-view
+world renderer (found live without a headset; BF4-STEREO.md). Its menu item is shown
+disabled.
 
 ## After
 
@@ -84,7 +79,7 @@ The launcher's feedback button bundles the logs. The lines that answer the open 
 | `gestures gun=... draws= throws= ejects= seats=` and `key_sends= haptics_sent=` | holsters, keys and pulses |
 | `reticle_pairs= marked_pairs= depth_pairs=` | aim dot, gesture markers, 3D from depth drawn |
 | `depth_capture ...` | the depth buffer 3D from depth found |
-| `diagnostics: no frame presented ...` and the stacks after it | where a 3D freeze waits |
+| `diagnostics: no frame presented ...` and the stacks after it | where a freeze waits |
 | `laser click down/up at x,y` | menu clicks (Resume) |
 
 `python tools/bf4probe/summarize_session.py runtime/bf4/logs/bf4-adapter.log` still gives

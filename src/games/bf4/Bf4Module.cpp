@@ -1928,8 +1928,8 @@ extern "C" __declspec(dllexport) int __cdecl FvrBf4_Start(const char* sessionTex
         if (GetFileAttributesA(marker.c_str()) != INVALID_FILE_ATTRIBUTES) {
             a->platform.stereoCrashGuard = true;
             std::remove(marker.c_str());
-            a->core->SetWorldStereo(false); // the mod menu can still switch it on
-            a->log.Write("the last session ended with 3D on (crash or freeze?): 3D starts off; the mod menu can switch it on");
+            a->core->SetWorldStereo(false);
+            a->log.Write("the last session ended with BF4 split 3D on (an older build): it stays off (unsupported)");
         }
     }
     if (MH_Initialize() != MH_OK) {

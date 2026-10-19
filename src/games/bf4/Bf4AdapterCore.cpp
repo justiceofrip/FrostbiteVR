@@ -167,8 +167,9 @@ void AdapterCore::ApplyMenuCommand(const ModMenuCommand& command) {
         platform_.Log(menuState_.controllerAim ? "aim: right controller" : "aim: right stick");
         break;
     case ModMenuAction::SetWorldStereo:
-        menuState_.worldStereo = command.value != 0;
-        platform_.Log(menuState_.worldStereo ? "3D depth: on" : "3D depth: off");
+        // Unsupported (BF4-STEREO.md): two views overrun BF4's one-view world renderer.
+        menuState_.worldStereo = false;
+        platform_.Log("BF4 split 3D: unsupported (the world renderer holds one view)");
         break;
     case ModMenuAction::SetWorldSettle:
         menuState_.worldSettle = std::clamp(command.value, 1, 4);
@@ -339,9 +340,10 @@ void AdapterCore::UpdateStereoDriverCapability() {
         caps_.Set(Feature::StereoDriver, game::FeatureState::Candidate, "engine renders L/R pairs; headset check pending");
 }
 
-void AdapterCore::SetWorldStereo(bool on) {
-    menuState_.worldStereo = on;
-    if (ui::MenuItem* item = modMenu_.Find("world_stereo")) item->value = on ? 1 : 0;
+void AdapterCore::SetWorldStereo(bool /*on*/) {
+    // BF4's split two-view render is unsupported (see SetWorldStereo in ApplyMenuCommand).
+    menuState_.worldStereo = false;
+    if (ui::MenuItem* item = modMenu_.Find("world_stereo")) item->value = 0;
 }
 
 void AdapterCore::OnStereoEye(stereo::Eye eye) {

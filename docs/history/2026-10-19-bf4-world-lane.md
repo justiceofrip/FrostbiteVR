@@ -53,3 +53,7 @@ Decisions worth keeping:
 - BF4 draws the first-person gun into its main (4x MSAA) depth buffer with one clear a
   frame, so 3D from depth reads the buffer at Present; the pre-clear copy is kept only for
   games that clear twice.
+- BF4's split-screen two-view stereo is retired as unsupported: reproduced live on the
+  simulated headset, it is a crash (not a stall) because the PC world renderer is built
+  for one view (one-element view-renderer array, one 0x34000-byte view block in a
+  0x34400-byte object). Stereo now means 3D from depth.
