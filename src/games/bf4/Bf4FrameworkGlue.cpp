@@ -185,6 +185,11 @@ public:
         snapshotDir_ = dir;
     }
 
+    bool PublishFeedback(const interaction::FeedbackEvent& event) {
+        std::lock_guard lock(mutex_);
+        return BridgeUsable(0) && bridges_[0]->PublishFeedback(event);
+    }
+
     void Release() {
         std::lock_guard lock(mutex_);
         producer_.Reset(); // swapchain buffers are about to change
@@ -503,6 +508,7 @@ public:
     std::string Describe() const override { return link_.Describe(); }
     bool WorldLane() const override { return link_.WorldLane(); }
     void RequestSnapshot(const std::string& dir) override { link_.RequestSnapshot(dir); }
+    bool Haptic(const interaction::FeedbackEvent& event) override { return link_.PublishFeedback(event); }
 
 private:
     TheaterLink& link_;

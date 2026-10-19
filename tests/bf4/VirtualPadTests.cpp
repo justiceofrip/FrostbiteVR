@@ -66,7 +66,10 @@ TEST_CASE(EmuVirtualPadFollowsReloadModeAndMenu) {
     CHECK(platform.padActive && (platform.pad.buttons & pad::X) && platform.pad.thumbLY > 32000);
     CHECK(core.Status().find("pad=active") != std::string::npos);
 
-    core.SetReloadMode(interaction::ReloadMode::Manual); // effective stays ButtonPress until M5
+    core.SetReloadMode(interaction::ReloadMode::Manual); // magazine gesture: B drops the magazine
+    core.OnFrame(clock.Next(), in);
+    CHECK(!(platform.pad.buttons & pad::X));
+    core.SetReloadMode(interaction::ReloadMode::ButtonPress);
     core.OnFrame(clock.Next(), in);
     CHECK(platform.pad.buttons & pad::X);
 

@@ -1,0 +1,119 @@
+#pragma once
+// Holsters and magazine reload for BF4 as VR gestures, input-only: they press the game's
+// own controls (weapon keys, the pad's reload) and write no game memory. The game keeps
+// its inventory, ammunition and animations; the gestures decide when to ask for them.
+//
+// Holsters (body-relative, fvr::interaction::HolsterSystem; body heading follows the head
+// with a dead zone):
+//   over the right shoulder  -> primary weapon     (key 1)
+//   right hip                -> sidearm            (key 2)
+//   left hip                 -> grenade: grab it, let go away from the hip to throw (G)
+//   chest                    -> knife              (F, BF4's melee)
+//   belt, front left         -> a magazine (manual reload)
+// A grip press that starts inside a holster belongs to the gesture, not to the pad.
+//
+// Manual reload (magazine gesture): right B drops the magazine of the gun in hand; fire is
+// held off until a magazine is seated; take one from the belt with the left hand and bring
+// it to the gun's magazine well (just below and in front of the right hand); seating it
+// presses the game's reload and BF4 plays its own reload. Holding B 0.6 s reloads at once.
+//
+// Persistent state (AGENTS.md): a dropped magazine stays out of that gun (primary and
+// sidearm separately) and a magazine stays in the left hand until it is seated, dropped
+// or a lifetime transition (level load) happens. Repeated packets, menus and tracking loss
+// never reset them; while the input is not usable the state simply waits.
+#include "fvr/interaction/ControllerInput.h"
+#include "fvr/interaction/Holsters.h"
+
+#include <array>
+#include <cstdint>
+#include <string>
+#include <vector>
+
+namespace fvr::bf4 {
+
+// Set-1 scan codes of BF4's default PC bindings the gestures press.
+namespace gamekey {
+inline constexpr std::uint16_t Primary = 0x02;   // 1
+inline constexpr std::uint16_t Secondary = 0x03; // 2
+inline constexpr std::uint16_t Grenade = 0x22;   // G (throw grenade)
+inline constexpr std::uint16_t Melee = 0x21;     // F (knife)
+} // namespace gamekey
+
+std::vector<interaction::HolsterSlot> Bf4HolsterLayout();
+
+enum class Bf4Gun : std::uint8_t { Primary = 0, Secondary = 1 };
+
+struct BodyGestureInput {
+    bool engage = false;       // campaign play, menu closed, feature on
+    bool holsters = true;      // holster gestures on
+    bool manualReload = false; // magazine gestures (else right B is the plain reload button)
+    double timeSeconds = 0;
+    interaction::InputFrame controls; // this packet (tracking space)
+    bool reloadButton = false; // right B (the layout's reload control)
+    bool switchButton = false; // left Y (pad Y: BF4 toggles primary/sidearm)
+};
+
+struct HapticCue {
+    bool valid = false;
+    bool strong = false; // seated / thrown (else: grabbed)
+};
+
+struct BodyGestureOutput {
+    std::uint16_t padButtons = 0;      // pulses to add to the pad (reload)
+    bool blockFire = false;            // the gun in hand has no magazine
+    std::array<bool, 2> gripOwned{};   // this grip press is a gesture: not the pad's
+    std::array<std::uint16_t, 2> keys{}; // keys held this frame (0: none); the platform diffs
+    std::array<HapticCue, 2> haptic{};   // per hand
+};
+
+class BodyGestures {
+public:
+    static constexpr double kKeyHoldSeconds = 0.08;   // a key is held this long per press
+    static constexpr double kReloadPulseSeconds = 0.12;
+    static constexpr double kQuickReloadSeconds = 0.6; // hold B: reload without the gesture
+    static constexpr float kMagwellRadius = 0.12f;     // metres around the magazine well
+    static constexpr float kThrowDistance = 0.25f;     // grenade released this far from the hip
+    static constexpr float kGripPress = 0.70f, kGripRelease = 0.40f;
+
+    BodyGestures();
+    BodyGestureOutput Update(const BodyGestureInput& in);
+    // Level load / new session: magazines seated, holsters restocked, hands empty.
+    void OnLifetimeTransition();
+
+    Bf4Gun Current() const { return current_; }
+    bool MagazineOut(Bf4Gun gun) const { return magazineOut_[static_cast<int>(gun)]; }
+    bool MagazineInHand() const { return magazineInHand_; }
+    std::string Describe() const;
+    // Where the magazine well is for a right-hand grip pose (tracking space).
+    static math::Vec3 Magwell(const math::Pose& rightGrip);
+    // A holster's position in the latest body frame (tracking space; zero before one).
+    math::Vec3 SlotPosition(std::string_view id) const;
+
+    struct Counters {
+        std::uint64_t draws = 0, throws = 0, knives = 0, ejects = 0, grabs = 0, seats = 0, drops = 0,
+                      quickReloads = 0, keyPresses = 0;
+    };
+    const Counters& Stats() const { return stats_; }
+
+private:
+    void PressKey(std::uint16_t key, double now);
+    void PulseReload(double now);
+    void Select(Bf4Gun gun, double now);
+
+    enum class Held : std::uint8_t { None, Grenade };
+    interaction::BodyFrameEstimator body_;
+    interaction::BodyFrame lastBody_{};
+    interaction::HolsterSystem holsters_;
+    Bf4Gun current_ = Bf4Gun::Primary;
+    std::array<bool, 2> magazineOut_{};
+    bool magazineInHand_ = false;
+    std::array<bool, 2> grip_{}, gripOwned_{};
+    std::array<Held, 2> held_{};
+    bool reloadWas_ = false, switchWas_ = false, quickDone_ = false;
+    double reloadDownAt_ = 0;
+    std::uint16_t key_ = 0;
+    double keyUntil_ = 0, reloadUntil_ = 0;
+    Counters stats_;
+};
+
+} // namespace fvr::bf4

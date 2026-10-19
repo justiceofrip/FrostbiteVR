@@ -51,7 +51,7 @@ TEST_CASE(EmuModMenuOpensAndChangesReloadMode) {
     }
     CHECK(core.MenuSettings().reloadMode == interaction::ReloadMode::Manual);
     CHECK(core.ReloadMode().requested == interaction::ReloadMode::Manual &&
-          core.ReloadMode().effective == interaction::ReloadMode::ButtonPress); // falls back until M5
+          core.ReloadMode().effective == interaction::ReloadMode::Manual); // the magazine gesture (virtual pad)
     CHECK(platform.pointerLog.size() == gameEvents); // the game never saw those clicks
     CHECK(core.ModMenuPanel().Find(1)->text.find(L"Manual") != std::wstring::npos);
     CHECK(core.Status().find("mod_menu=open") != std::string::npos);

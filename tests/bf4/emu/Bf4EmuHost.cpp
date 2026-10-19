@@ -186,7 +186,8 @@ int wmain() {
     auto hostFrame = [&](int frame) {
         if (externalHost) return; // the real host consumes the panel and owns the pointer
         // Controller sample, as the real host publishes every XR frame (theater input mode):
-        // right B (reload) held and the left stick pushed forward.
+        // right A (jump) held and the left stick pushed forward (this session reloads by
+        // magazine gesture, so right B is not a pad button).
         fvr::interaction::InputFrame input{};
         input.generation = ++inputGeneration;
         input.spaceGeneration = 1;
@@ -194,7 +195,7 @@ int wmain() {
         input.focused = true;
         for (auto& h : input.hands) h.active = fvr::interaction::Components;
         if (frame >= 90) {
-            input.hands[1].held = fvr::interaction::Secondary;
+            input.hands[1].held = fvr::interaction::Primary;
             input.hands[0].stickY = 1.0f;
         }
         xrFrames.UpdateInput(input);
@@ -273,7 +274,7 @@ int wmain() {
     Check(s.find("frames=") != std::string::npos && s.find("frames=0\n") == std::string::npos, "Present hook sees frames");
     Check(s.find("TheaterView: candidate") != std::string::npos, "theater view became a candidate");
     Check(s.find("ManualReload: disabled") != std::string::npos, "manual reload stays disabled (roadmap)");
-    Check(s.find("reload_mode=button") != std::string::npos, "manual request falls back to button press");
+    Check(s.find("reload_mode=manual") != std::string::npos, "manual request is the magazine gesture (virtual pad)");
     Check(s.find("HeadTrackedCamera: disabled (needs") != std::string::npos, "camera gated on unenrolled bindings");
     if (!externalHost) {
         Check(panelImages > 20 && panelWidth == kWidth && panelHeight == kHeight,
@@ -291,8 +292,8 @@ int wmain() {
         if (GetModuleHandleW(L"xinput9_1_0.dll") == nullptr) {
             std::printf("SKIP virtual gamepad: xinput9_1_0.dll is not available on this machine\n");
         } else {
-            Check(padResult == ERROR_SUCCESS && (pad.Gamepad.wButtons & XINPUT_GAMEPAD_X) && pad.Gamepad.sThumbLY > 32000,
-                  "game's XInputGetState sees the VR controllers (right B = reload X, left stick forward)");
+            Check(padResult == ERROR_SUCCESS && (pad.Gamepad.wButtons & XINPUT_GAMEPAD_A) && pad.Gamepad.sThumbLY > 32000,
+                  "game's XInputGetState sees the VR controllers (right A = jump, left stick forward)");
         }
     }
 

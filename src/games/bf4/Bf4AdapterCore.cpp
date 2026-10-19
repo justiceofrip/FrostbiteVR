@@ -23,7 +23,7 @@ std::string_view StereoModeName(StereoMode mode) noexcept {
 
 AdapterCore::AdapterCore(SessionInfo session, BuildIdentity build, BindingTable bindings, IAdapterPlatform& platform)
     : session_(std::move(session)), build_(std::move(build)), bindings_(std::move(bindings)), platform_(platform) {
-    reloadMode_ = interaction::ResolveReloadMode(session_.reloadMode, caps_, session_.developerFeatures);
+    ResolveReload();
     if (build_.verdict == BuildVerdict::WrongArch || build_.verdict == BuildVerdict::NotPe) {
         caps_.DisableAll("unsupported executable: " + build_.label);
         detached_ = true;
@@ -76,6 +76,17 @@ void AdapterCore::UpdatePad(const ControllerSnapshot& in) {
     }
     pad_ = interaction::MapToPad(controls, padLayout_, options);
     if (!controls.focused && options.extraButtons) pad_.buttons |= options.extraButtons; // pulse without hands
+    if (!menuOpen_) {
+        // Body gestures: a grip press that grabbed from a holster is not the pad's button; with
+        // holsters on, the gun hand's grip is never the pad's (it rests on the gun). A dropped
+        // magazine holds fire until one is seated; seating presses the game's reload.
+        for (const auto& b : padLayout_.buttons)
+            if (b.control == interaction::VrControl::Squeeze && b.hand < 2 &&
+                (gesture_.gripOwned[b.hand] || (b.hand == 1 && menuState_.holsters)))
+                pad_.buttons &= static_cast<std::uint16_t>(~b.padButton);
+        pad_.buttons |= gesture_.padButtons;
+        if (gesture_.blockFire) pad_.rightTrigger = 0;
+    }
     if (aim_.engaged) {
         // The game aims by mouse now and turns with the body heading: no pad look, and
         // walking stays relative to the body although the game moves relative to its aim.
@@ -111,6 +122,10 @@ void AdapterCore::ApplyMenuCommand(const ModMenuCommand& command) {
         menuState_.headTracking = command.value != 0;
         platform_.Log(menuState_.headTracking ? "campaign view: head-tracked" : "campaign view: screen");
         break;
+    case ModMenuAction::SetHolsters:
+        menuState_.holsters = command.value != 0;
+        platform_.Log(menuState_.holsters ? "body holsters: on" : "body holsters: off");
+        break;
     case ModMenuAction::SetControllerAim:
         menuState_.controllerAim = command.value != 0;
         platform_.Log(menuState_.controllerAim ? "aim: right controller" : "aim: right stick");
@@ -138,21 +153,26 @@ void AdapterCore::OnSwapchainAdopted(bool ok) {
     if (detached_) return;
     adopted_ = ok;
     ApplyBindingsToCapabilities(bindings_, caps_, ok);
-    reloadMode_ = interaction::ResolveReloadMode(session_.reloadMode, caps_, session_.developerFeatures);
+    ResolveReload();
     RefreshModMenu(modMenu_, caps_, session_.developerFeatures); // availability follows the new capabilities
     platform_.Log(ok ? "swapchain adopted; capabilities evaluated" : "no usable swapchain");
 }
 
 void AdapterCore::SetReloadMode(interaction::ReloadMode requested) {
     session_.reloadMode = requested;
-    reloadMode_ = interaction::ResolveReloadMode(requested, caps_, session_.developerFeatures);
+    ResolveReload();
     reload_.Reset();
     platform_.Log("reload mode -> " + std::string(interaction::ReloadModeName(reloadMode_.effective)) +
                   (reloadMode_.note.empty() ? "" : " (" + reloadMode_.note + ")"));
 }
 
+void AdapterCore::ResolveReload() {
+    reloadMode_ = ResolveBf4ReloadMode(session_.reloadMode, caps_, session_.developerFeatures);
+}
+
 void AdapterCore::Detach(std::string_view why) {
     if (detached_) return;
+    platform_.SetGameKeys({}); // never leave a game key held
     platform_.SetStereoSuppressed(true); // the engine returns to a single pass
     events_.clear();
     pointer_.ForceRelease(events_); // never leave the game with a held button
@@ -334,6 +354,47 @@ void AdapterCore::UpdateMotionAim(const ControllerSnapshot& in, const PlatformFr
     if (aim_.engaged && (aim_.mouseX || aim_.mouseY)) platform_.SendMouse(aim_.mouseX, aim_.mouseY);
 }
 
+namespace {
+bool ControlDown(const interaction::InputFrame& c, const interaction::PadBinding& b) {
+    if (!c.focused || b.hand > 1) return false;
+    const auto& h = c.hands[b.hand];
+    switch (b.control) {
+    case interaction::VrControl::Primary: return (h.held & interaction::Primary) != 0;
+    case interaction::VrControl::Secondary: return (h.held & interaction::Secondary) != 0;
+    case interaction::VrControl::StickClick: return (h.held & interaction::StickClick) != 0;
+    case interaction::VrControl::Squeeze: return (h.active & interaction::Squeeze) && h.squeeze >= 0.7f;
+    }
+    return false;
+}
+} // namespace
+
+void AdapterCore::UpdateGestures(const ControllerSnapshot& in, const PlatformFrame& f) {
+    const bool dev = session_.developerFeatures;
+    const bool gameplay = guard_.GameplayAllowed();
+    if (gameplay && !gameplayWas_) gestures_.OnLifetimeTransition(); // a level starts: full loadout
+    gameplayWas_ = gameplay;
+    BodyGestureInput g;
+    g.engage = gameplay && !menuOpen_ && caps_.IsUsable(Feature::VirtualGamepad, dev) && guard_.PresentationAllowed();
+    g.holsters = menuState_.holsters;
+    g.manualReload = reloadMode_.effective == interaction::ReloadMode::Manual;
+    g.timeSeconds = static_cast<double>(f.tickMs) / 1000.0;
+    g.controls = in.controls;
+    g.reloadButton = ControlDown(in.controls, padLayout_.reload);
+    for (const auto& b : padLayout_.buttons)
+        if (b.padButton == interaction::pad::Y) g.switchButton = ControlDown(in.controls, b);
+    gesture_ = gestures_.Update(g);
+    platform_.SetGameKeys(gesture_.keys);
+    for (unsigned h = 0; h < 2; ++h)
+        if (gesture_.haptic[h].valid)
+            platform_.Haptic(h, gesture_.haptic[h].strong, in.controls.generation, in.controls.spaceGeneration);
+    // Gestures happen at human pace: log each change of their state.
+    std::string d = gestures_.Describe();
+    if (d != lastGestures_) {
+        platform_.Log(d);
+        lastGestures_ = std::move(d);
+    }
+}
+
 void AdapterCore::UpdateCamera(const ControllerSnapshot& in, const PlatformFrame& f) {
     camera_.clear();
     // Mono (world lane): the camera follows the head only for a pose the XR host asked to
@@ -403,6 +464,7 @@ void AdapterCore::OnFrame(const PlatformFrame& f, const ControllerSnapshot& in) 
     //    drives BF4's menus through the Win32 cursor path.
     UpdateModMenu(in);
     UpdateMotionAim(in, f);
+    UpdateGestures(in, f);
     UpdatePad(in);
     if (!menuOpen_ && caps_.IsUsable(Feature::GameMenuPointer, dev) && guard_.PresentationAllowed()) {
         pointer_.Update(in.pointer, f.clientWidth, f.clientHeight, events_);
@@ -505,6 +567,7 @@ std::string AdapterCore::Status() const {
                   aim_.engaged ? "engaged" : "off", aim_.bodyYaw, motionAim_.GainX(), motionAim_.GainY(),
                   static_cast<unsigned long long>(motionAim_.Mutes()));
     s += aimLine;
+    s += gestures_.Describe() + " holsters=" + (menuState_.holsters ? "on" : "off") + "\n";
     s += "reload_requests=" + std::to_string(stats_.reloadRequests) + "\n";
     s += "stereo=" + std::string(StereoModeName(stereo_)) + "\n";
     s += "stereo_pairs=" + std::to_string(tracker_.Pairs()) + " stereo_pattern=" +

@@ -92,6 +92,35 @@ screen. Pieces (all on the analysed build only):
   118), 0 rejected, vs 47 with one channel in the same emulated run (untracked capture,
   so this measures the transport, not the settle frames). Not yet seen in the real game.
 
+## Holsters and magazine reload as gestures (2026-10-19, built; emulated only)
+
+- `Bf4BodyGestures.h`: input-only (no game memory). Body-relative holsters (the
+  framework's `BodyFrameEstimator` + BF4 layout): over the right shoulder = primary (key
+  1), right hip = sidearm (key 2), left hip = grenade (grab, let go away from the hip to
+  throw: G), chest with the left hand = knife (F), belt front left = magazine. Keys are BF4's
+  default PC bindings, sent as scan codes only into the focused game window, held 80 ms,
+  and released on every outcome (key change, focus loss, detach). A grip press that starts
+  in a holster is the gesture's, not the pad's; with holsters on, the right (gun) grip is
+  never the pad's grenade button. Short controller pulses go to the XR host as feedback
+  events on frame channel 1 (its haptic policy checks packet, space and deadline).
+- Manual reload (Reloading: Manual) is now the magazine gesture when the virtual pad is
+  usable: right B drops the magazine of the gun in hand (primary and sidearm tracked
+  separately), fire (pad RT) is held off until one is seated, the left hand takes one from
+  the belt and seats it at the magazine well (7 cm below, 6 cm ahead of the right grip,
+  12 cm radius), which presses the pad's reload (X) so BF4 plays its own reload. Letting go
+  before the well drops it. Holding B 0.6 s reloads at once. Custody persists across
+  packets, menus and tracking loss; a level start is the lifetime transition. BF4's own
+  ammunition and auto-reload are untouched (nothing native is acknowledged or written).
+- Mod menu: "Body holsters: Off / On" (default on). Status/log: `gestures gun=...
+  magazine_out=... draws= throws= knives= ejects= grabs= seats= drops= quick_reloads=`
+  (logged at each change), plus `key_sends` / `haptics_sent` every 600 frames.
+- Evidence: unit tests (each holster, put-back vs throw, knife hand, grip held at engage,
+  holsters off; eject/hold fire/persistence/drop/seat/per-gun/quick reload/level start)
+  and an emulated campaign through the whole core (keys reach the platform and go up,
+  pulses, RB/LB not pressed by gesture grips, RT held off, X on seating). Not yet seen in
+  the real game: the default key bindings, whether BF4 mixes keyboard selection with the
+  pad, holster positions for the player's body.
+
 ## Controller aiming (2026-10-19, built; emulated only)
 
 - `Bf4MotionAim.h`: in the head-tracked view the gun follows the right controller through
@@ -224,6 +253,8 @@ screen. Pieces (all on the analysed build only):
   own reload, and phases P0-P8.
 - Built: `Bf4ReloadClassifier` (gun data -> WeaponMechanismDescriptor; unknowns stay on
   button reload), unit-tested. Not wired to anything.
+- Superseded for play by the magazine gesture above (no native observation needed);
+  the driver below stays for when the firing object is found.
 - Built: input-only reload driver (`Bf4ReloadDriver`): holds fire while a VR magazine is
   out / breech open / reload running / stroke owed, presses the game's own reload, and
   acknowledges only observed ammunition. Tested against an emulated firing state
@@ -277,17 +308,19 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
 
 ## Tests (2026-10-19)
 
-- Build.ps1 after the two frame channels: x64 284/284, x86 283/283. Bf4CoreTests 60
-  cases; Bf4Emulated pass (theater, world lane, stereo probe, census, lockdown); launcher
-  19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1 -World -FrameChannels 2` 5/5 (237
-  pairs) and `-World` 4/4 (47 pairs).
-- Installed locally: runtime/bf4 0.4.18-local (rollback 0.4.17-local). Developer
+- Build.ps1 after holsters and the magazine gesture: x64 284/284, x86 283/283.
+  Bf4CoreTests 62 cases; Bf4Emulated pass (theater, world lane, stereo probe, census,
+  lockdown, gestures); launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
+  `-World -FrameChannels 2` 5/5 (227 pairs); `-World` with one channel 4/4 (47 pairs).
+- Installed locally: runtime/bf4 0.4.19-local (rollback 0.4.18-local). Developer
   sessions still run the read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the
   framework's `StereoMath.h` (`Quat` = `Quaternion`; Pose is `{position, orientation}`).
 
 ## Holsters and arm IK research (2026-10-19, static only)
 
+- Holster gestures that select weapons through BF4's own keys are built (above); what
+  follows is the native route (hide the gun model, hand IK) for later.
 - BF4 can hide the first-person gun itself (`Animated1pOnlyWeaponBinding.HideWeapon1p`)
   and its character IK scene op has hand IK inputs (`InEnableLeft/RightHandIK`,
   `InLeft/RightHandIKReach`, `InHideWeapon`). Plan and unknowns: BF4-HOLSTER-IK-RE.md.
@@ -315,8 +348,8 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
   went out as a drag (that screen scrolls on drags), and the trigger also reached the
   virtual pad. Now the cursor holds its press position unless the laser moves more than
   2 % of the screen, and the pad's triggers are released while the laser points at the
-  screen outside campaign play (unit-tested; live check pending; clicks are logged). Controller aim (R8) not started;
-  button reload (R6) is covered by the virtual pad.
+  screen outside campaign play (unit-tested; live check pending; clicks are logged).
+- Holsters and the magazine gesture: first live check (keys, positions, pulses).
 - The census holder chain matched nothing live (27 firing objects, 0 holders): redo the
   walk from the live firing vtable `+0x1D53F18`.
 - Mod menu in VR: opens with the menu button, drawn by the adapter (VrPanel + GDI) on the

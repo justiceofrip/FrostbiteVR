@@ -10,7 +10,7 @@ from pathlib import Path
 DEFAULTS: dict = {
     "game": "bf4",
     "game_dir": None,            # None -> profile default
-    "reload_mode": "button",     # "button" | "manual" (manual falls back until roadmap M5)
+    "reload_mode": "button",     # "button" | "manual" (BF4: magazine gesture through the virtual pad)
     "apply_engine_cfg": True,    # session-scoped user.cfg block, removed after the session
     "channel": "prerelease",     # "stable" | "prerelease"
     "developer": True,           # pre-release: allow Candidate features (theater view, pad); off for stable

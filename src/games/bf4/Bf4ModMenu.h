@@ -16,17 +16,23 @@ struct ModMenuState {
     int worldSettle = 2;      // developer: submits before a frame counts as head-tracked
     bool worldStereo = false; // developer: BF4's own two-eye render (freezes the game so far)
     bool controllerAim = true; // campaign: the gun follows the right controller
+    bool holsters = true;      // campaign: body holster gestures (Bf4BodyGestures.h)
 };
 
 enum class ModMenuAction : std::uint8_t {
     None, SetReloadMode, SetSnapTurn, SetTheaterDistance, Recenter, MarkFeedback, GameMenu, SetHeadTracking, SetWorldSettle,
-    SetWorldStereo, SetControllerAim
+    SetWorldStereo, SetControllerAim, SetHolsters
 };
 
 struct ModMenuCommand {
     ModMenuAction action = ModMenuAction::None;
     int value = 0;
 };
+
+// BF4's reload modes: Manual is the magazine gesture (Bf4BodyGestures.h), input-only, so it
+// needs the virtual pad rather than a native manual-reload binding.
+interaction::ReloadModeResolution ResolveBf4ReloadMode(interaction::ReloadMode requested,
+                                                       const game::CapabilityRegistry& caps, bool developer);
 
 ui::ModMenuModel BuildModMenu(const game::CapabilityRegistry& caps, bool developer, const ModMenuState& state);
 

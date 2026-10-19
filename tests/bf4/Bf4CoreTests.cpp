@@ -674,3 +674,194 @@ TEST_CASE(ControllerAimGoesQuietWhenTheGameIgnoresTheMouse) {
     CHECK(aim.Mutes() >= 1 && quietFrames >= MotionAim::kMuteFrames);
     CHECK(sent < 200 * MotionAim::kMaxCounts); // it did not keep pushing every frame
 }
+
+namespace {
+// A standing player looking down -Z (OpenXR), hands at given points, both grips tracked.
+struct GestureRig {
+    fvr::bf4::BodyGestures gestures;
+    fvr::bf4::BodyGestureInput in;
+    double t = 1.0;
+    GestureRig() {
+        in.engage = true;
+        in.manualReload = true;
+        auto& c = in.controls;
+        c.generation = 1;
+        c.spaceGeneration = 1;
+        c.predictedNs = 1;
+        c.focused = c.headValid = true;
+        c.head.position = {0, 1.70f, 0};
+        c.head.orientation = {0, 0, 0, 1};
+        for (auto& h : c.hands) {
+            h.gripTracked = h.aimTracked = true;
+            h.active = fvr::interaction::Components;
+            h.grip.orientation = {0, 0, 0, 1};
+        }
+        c.hands[0].grip.position = {-0.25f, 1.20f, -0.30f}; // relaxed, in front
+        c.hands[1].grip.position = {0.20f, 1.30f, -0.40f};  // holding the gun forward
+        Step();
+    }
+    fvr::bf4::BodyGestureOutput Step(double dt = 1.0 / 60) {
+        t += dt;
+        in.timeSeconds = t;
+        ++in.controls.generation;
+        return gestures.Update(in);
+    }
+    void Grip(int hand, bool down) { in.controls.hands[hand].squeeze = down ? 1.0f : 0.0f; }
+    void Move(int hand, fvr::math::Vec3 p) { in.controls.hands[hand].grip.position = p; }
+    fvr::math::Vec3 Slot(const char* id) const { return gestures.SlotPosition(id); }
+};
+} // namespace
+
+TEST_CASE(HolstersPressTheGamesOwnWeaponKeys) {
+    using namespace fvr;
+    using namespace fvr::bf4;
+    GestureRig r;
+    // Right hand to the right hip, grip: the sidearm key, held briefly, a light pulse,
+    // and the grip press is not the pad's.
+    r.Move(1, r.Slot("hip_right"));
+    r.Step();
+    r.Grip(1, true);
+    auto out = r.Step();
+    CHECK(out.keys[0] == gamekey::Secondary && r.gestures.Current() == Bf4Gun::Secondary);
+    CHECK(out.gripOwned[1] && out.haptic[1].valid && !out.haptic[1].strong);
+    out = r.Step(BodyGestures::kKeyHoldSeconds + 0.01);
+    CHECK(out.keys[0] == 0 && out.gripOwned[1]); // key released; the grip stays the gesture's
+    r.Grip(1, false);
+    CHECK(!r.Step().gripOwned[1]);
+    // Over the right shoulder: primary.
+    r.Move(1, r.Slot("back_right"));
+    r.Step();
+    r.Grip(1, true);
+    CHECK(r.Step().keys[0] == gamekey::Primary && r.gestures.Current() == Bf4Gun::Primary);
+    r.Grip(1, false);
+    r.Step(0.1); // the key is up again
+    // A grip away from every holster is the pad's (no key, not owned).
+    r.Move(0, {-0.3f, 1.4f, -0.5f});
+    r.Step();
+    r.Grip(0, true);
+    out = r.Step();
+    CHECK(out.keys[0] == 0 && !out.gripOwned[0]);
+    r.Grip(0, false);
+    r.Step();
+    // Grenade: grab at the left hip, let go there = put back; let go away = thrown (G).
+    r.Move(0, r.Slot("hip_left"));
+    r.Step();
+    r.Grip(0, true);
+    out = r.Step();
+    CHECK(out.keys[0] == 0 && out.gripOwned[0]);
+    r.Grip(0, false);
+    CHECK(r.Step().keys[0] == 0 && r.gestures.Stats().throws == 0);
+    r.Grip(0, true);
+    r.Step();
+    r.Move(0, {-0.2f, 1.6f, -0.6f});
+    r.Step();
+    r.Grip(0, false);
+    out = r.Step();
+    CHECK(out.keys[0] == gamekey::Grenade && out.haptic[0].strong && r.gestures.Stats().throws == 1);
+    // Knife at the chest: left hand only (the gun hand rests there when aiming).
+    r.Step(0.2);
+    r.Move(1, r.Slot("chest"));
+    r.Step();
+    r.Grip(1, true);
+    CHECK(r.Step().keys[0] == 0);
+    r.Grip(1, false);
+    r.Move(1, {0.20f, 1.30f, -0.40f});
+    r.Move(0, r.Slot("chest"));
+    r.Step();
+    r.Grip(0, true);
+    CHECK(r.Step().keys[0] == gamekey::Melee);
+    r.Grip(0, false);
+    r.Step();
+    // A grip already held when the gestures engage is not a grab.
+    r.in.engage = false;
+    r.Move(1, r.Slot("hip_right"));
+    r.Grip(1, true);
+    out = r.Step();
+    CHECK(out.keys[0] == 0);
+    r.in.engage = true;
+    CHECK(r.Step().keys[0] == 0 && r.gestures.Current() == Bf4Gun::Primary);
+    // Holsters off: nothing.
+    r.Grip(1, false);
+    r.Step();
+    r.in.holsters = false;
+    r.Grip(1, true);
+    CHECK(r.Step().keys[0] == 0);
+}
+
+TEST_CASE(MagazineReloadIsAGestureThatPressesTheGamesReload) {
+    using namespace fvr;
+    using namespace fvr::bf4;
+    GestureRig r;
+    // B drops the magazine: fire is held off until one is seated.
+    r.in.reloadButton = true;
+    auto out = r.Step();
+    CHECK(r.gestures.MagazineOut(Bf4Gun::Primary) && out.blockFire && !(out.padButtons & interaction::pad::X));
+    r.in.reloadButton = false;
+    r.Step();
+    // Persistent: repeated packets, a lost focus and the menu never put it back.
+    r.in.controls.focused = false;
+    CHECK(!r.Step().blockFire); // not engaged: no pad output at all
+    r.in.controls.focused = true;
+    r.in.engage = false;
+    r.Step();
+    r.in.engage = true;
+    for (int i = 0; i < 30; ++i) CHECK(r.Step().blockFire);
+    // Take one from the belt with the left hand.
+    r.Move(0, r.Slot("belt_front_left"));
+    r.Step();
+    r.Grip(0, true);
+    out = r.Step();
+    CHECK(r.gestures.MagazineInHand() && out.gripOwned[0] && out.haptic[0].valid);
+    // Let go before the gun: dropped; the gun is still empty.
+    r.Move(0, {-0.1f, 1.3f, -0.3f});
+    r.Step();
+    r.Grip(0, false);
+    out = r.Step();
+    CHECK(!r.gestures.MagazineInHand() && r.gestures.Stats().drops == 1 && out.blockFire);
+    // Another one, into the magazine well: seated, the game's reload pressed, fire free.
+    r.Move(0, r.Slot("belt_front_left"));
+    r.Step();
+    r.Grip(0, true);
+    r.Step();
+    r.Move(0, BodyGestures::Magwell(r.in.controls.hands[1].grip) + math::Vec3{0.03f, 0.02f, 0.0f});
+    out = r.Step();
+    CHECK((out.padButtons & interaction::pad::X) && !out.blockFire && out.haptic[0].strong && out.haptic[1].strong);
+    CHECK(!r.gestures.MagazineOut(Bf4Gun::Primary) && r.gestures.Stats().seats == 1);
+    out = r.Step(BodyGestures::kReloadPulseSeconds + 0.01);
+    CHECK(!(out.padButtons & interaction::pad::X) && out.gripOwned[0]); // pulse over; grip still the gesture's
+    r.Grip(0, false);
+    r.Step();
+    // Each gun keeps its own magazine: drop the primary's, draw the sidearm (loaded).
+    r.in.reloadButton = true;
+    r.Step();
+    r.in.reloadButton = false;
+    r.Move(1, r.Slot("hip_right"));
+    r.Step();
+    r.Grip(1, true);
+    CHECK(!r.Step().blockFire && r.gestures.Current() == Bf4Gun::Secondary);
+    r.Grip(1, false);
+    r.Step();
+    r.in.switchButton = true; // pad Y: back to the primary, still empty
+    CHECK(r.Step().blockFire && r.gestures.Current() == Bf4Gun::Primary);
+    r.in.switchButton = false;
+    // Hold B: reload at once (the gesture skipped).
+    r.in.reloadButton = true;
+    r.Step();
+    out = r.Step(BodyGestures::kQuickReloadSeconds + 0.05);
+    CHECK((out.padButtons & interaction::pad::X) && !out.blockFire && r.gestures.Stats().quickReloads == 1);
+    r.in.reloadButton = false;
+    r.Step();
+    // A level load seats everything and empties the hands.
+    r.in.reloadButton = true;
+    r.Step();
+    r.in.reloadButton = false;
+    r.Step();
+    CHECK(r.gestures.MagazineOut(Bf4Gun::Primary));
+    r.gestures.OnLifetimeTransition();
+    CHECK(!r.gestures.MagazineOut(Bf4Gun::Primary) && !r.Step().blockFire);
+    // Button mode: B is not a gesture.
+    r.in.manualReload = false;
+    r.in.reloadButton = true;
+    r.Step();
+    CHECK(!r.gestures.MagazineOut(Bf4Gun::Primary));
+}

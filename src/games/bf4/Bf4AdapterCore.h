@@ -12,6 +12,7 @@
 #include "Bf4SessionGuard.h"
 #include "Bf4SessionInfo.h"
 #include "Bf4MotionAim.h"
+#include "Bf4BodyGestures.h"
 #include "stereo/SideBySide.h"
 #include "stereo/StereoProbe.h"
 #include "../../engines/frostbite/Fb3CameraMath.h"
@@ -99,6 +100,13 @@ public:
     // carried it (sample increments per submit), and relative mouse look to steer it.
     virtual bool GameAim(AimAngle& /*aim*/, std::uint64_t& /*sample*/) { return false; }
     virtual void SendMouse(int /*dx*/, int /*dy*/) {}
+
+    // Holster gestures (Bf4BodyGestures.h): the BF4 keys to hold this frame (set-1 scan
+    // codes, 0 = none). The platform presses new ones and releases the rest.
+    virtual void SetGameKeys(const std::array<std::uint16_t, 2>& /*held*/) {}
+    // A short controller pulse on the XR host (hand 0 left, 1 right) answering the input
+    // packet `inputGeneration` of reference space `space`.
+    virtual void Haptic(unsigned /*hand*/, bool /*strong*/, std::uint64_t /*inputGeneration*/, std::uint64_t /*space*/) {}
 };
 
 struct PlatformFrame {
@@ -145,6 +153,7 @@ public:
     const ui::VrPanel& ModMenuPanel() const { return menuPanel_; }
     const ModMenuState& MenuSettings() const { return menuState_; }
     const interaction::PadState& Pad() const { return pad_; }
+    const BodyGestures& Gestures() const { return gestures_; }
 
     // Engine stereo: SetActiveEye seen by the shim (render thread).
     void OnStereoEye(stereo::Eye eye);
@@ -208,6 +217,12 @@ private:
     std::uint16_t padPulse_ = 0;
     int padPulseFrames_ = 0;
     void UpdatePad(const ControllerSnapshot& input);
+    void UpdateGestures(const ControllerSnapshot& input, const PlatformFrame& frame);
+    void ResolveReload();
+    BodyGestures gestures_;
+    BodyGestureOutput gesture_{};
+    bool gameplayWas_ = false;
+    std::string lastGestures_;
     void UpdateMotionAim(const ControllerSnapshot& input, const PlatformFrame& frame);
     MotionAim motionAim_;
     MotionAimOutput aim_{};

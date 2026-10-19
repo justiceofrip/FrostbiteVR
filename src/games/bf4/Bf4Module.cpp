@@ -652,6 +652,55 @@ public:
     }
     std::uint64_t mouseSends = 0;
 
+    // Holster gestures: BF4's own keys (scan codes), pressed only into the focused game
+    // window; every key this sent down goes up again on the next change or at detach.
+    void SetGameKeys(const std::array<std::uint16_t, 2>& held) override {
+        const bool focused = window && GetForegroundWindow() == window;
+        for (auto& k : keysDown) {
+            if (!k || (focused && (k == held[0] || k == held[1]))) continue;
+            SendKey(k, false);
+            k = 0;
+        }
+        if (!focused) return;
+        for (const auto want : held) {
+            if (!want || keysDown[0] == want || keysDown[1] == want) continue;
+            auto& slot = keysDown[0] ? keysDown[1] : keysDown[0];
+            if (slot) continue;
+            SendKey(want, true);
+            slot = want;
+            ++keySends;
+        }
+    }
+    static void SendKey(std::uint16_t scan, bool down) {
+        INPUT input{};
+        input.type = INPUT_KEYBOARD;
+        input.ki.wScan = scan;
+        input.ki.dwFlags = KEYEVENTF_SCANCODE | (down ? 0 : KEYEVENTF_KEYUP);
+        SendInput(1, &input, sizeof(input));
+    }
+    std::array<std::uint16_t, 2> keysDown{};
+    std::uint64_t keySends = 0;
+
+    // Controller pulses through the XR host's haptic policy (it checks the packet, the
+    // reference space and the 100 ms window itself).
+    void Haptic(unsigned hand, bool strong, std::uint64_t inputGeneration, std::uint64_t space) override {
+        if (!frames || !inputGeneration || !space || hand > 1) return;
+        LARGE_INTEGER q{}, frequency{};
+        if (!QueryPerformanceCounter(&q) || !QueryPerformanceFrequency(&frequency) || frequency.QuadPart <= 0) return;
+        const std::int64_t now = q.QuadPart / frequency.QuadPart * 1000000000LL +
+                                 (q.QuadPart % frequency.QuadPart) * 1000000000LL / frequency.QuadPart;
+        interaction::FeedbackEvent e;
+        e.id = ++hapticId;
+        e.inputSequence = inputGeneration;
+        e.space = space;
+        e.observedNs = now;
+        e.deadlineNs = now + 80000000LL;
+        e.kind = strong ? interaction::FeedbackKind::ReloadApplied : interaction::FeedbackKind::ReloadCapture;
+        e.hand = hand;
+        if (frames->Haptic(e)) ++hapticsSent;
+    }
+    std::uint64_t hapticId = 0, hapticsSent = 0;
+
     bool PublishFrame(const FrameMeta& meta) override {
         if (!swapchain || !frames) return false;
         if (meta.eye == 0 || meta.eye == 1) { // engine stereo pair: publish the captured eye
@@ -780,6 +829,8 @@ public:
     void RequestNativeReload() override {}
 
     void DetachAll(std::string_view reason) override {
+        for (auto& k : keysDown)
+            if (k) { SendKey(k, false); k = 0; }
         pointer.Uninstall();
         padSink.Deactivate();
         engineStereo.Disable();
@@ -964,6 +1015,8 @@ void OnPresent(Adapter& a, IDXGISwapChain* sc) {
         if (at != std::string::npos)
             a.log.Write("%s mouse_sends=%llu", status.substr(at, status.find('\n', at) - at).c_str(),
                         static_cast<unsigned long long>(a.platform.mouseSends));
+        a.log.Write("%s key_sends=%llu haptics_sent=%llu", a.core->Gestures().Describe().c_str(),
+                    static_cast<unsigned long long>(a.platform.keySends), static_cast<unsigned long long>(a.platform.hapticsSent));
     }
 }
 

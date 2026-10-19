@@ -67,7 +67,8 @@ class LauncherWindow:
                         command=self.save_options).grid(row=1, column=0, sticky="w")
         ttk.Radiobutton(opts, text="Manual (magazine by hand)", value="manual", variable=self.reload,
                         command=self.save_options).grid(row=2, column=0, sticky="w")
-        ttk.Label(opts, text="Manual reloading is in development. Until it's ready, sessions use button press.",
+        ttk.Label(opts, text="Manual: B drops the magazine; take one from your belt (front left) and push it "
+                             "into the gun. Holding B reloads at once. Change it in the headset menu too.",
                   style="Muted.TLabel", wraplength=440).grid(row=3, column=0, sticky="w", pady=(2, 8))
         self.cfg = tk.BooleanVar(value=bool(self.settings["apply_engine_cfg"]))
         ttk.Checkbutton(opts, text="Turn off motion blur and frame queuing during VR sessions", variable=self.cfg,

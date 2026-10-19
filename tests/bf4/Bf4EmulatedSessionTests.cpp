@@ -90,15 +90,16 @@ TEST_CASE(EmuCampaignNativeStereoRecenterReload) {
     }
     CHECK(platform.reloads == 1);
 
-    // Manual chosen from the in-headset menu: still button press, with the note.
+    // Manual chosen from the in-headset menu: the magazine gesture (virtual pad), with its
+    // instructions as the note; the native reload binding is no longer pressed by B.
     core.SetReloadMode(interaction::ReloadMode::Manual);
-    CHECK(core.ReloadMode().effective == interaction::ReloadMode::ButtonPress && !core.ReloadMode().note.empty());
+    CHECK(core.ReloadMode().effective == interaction::ReloadMode::Manual && !core.ReloadMode().note.empty());
     for (int i = 0; i < 6; ++i) {
         auto in = turned(2.0 + i / 90.0);
         in.reloadButton = i >= 2;
         core.OnFrame(clock.Next(), in);
     }
-    CHECK(platform.reloads == 2);
+    CHECK(platform.reloads == 1);
 
     // Recenter request edge counts once.
     for (int i = 0; i < 5; ++i) {
@@ -315,4 +316,79 @@ TEST_CASE(EmuControllerAimInTheHeadTrackedView) {
     const int calls = platform.mouseCalls;
     for (int i = 0; i < 5; ++i) frame(5.0 + i / 90.0, 1.0f, 0, 0);
     CHECK(platform.mouseCalls == calls);
+}
+
+TEST_CASE(EmuHolstersAndMagazineReloadInACampaign) {
+    FakeImage image({names::kGameRenderer, names::kRenderViewUpdate, names::kClientGameContext, names::kLevelName});
+    FakePlatform platform;
+    AdapterCore core(Session(true, interaction::ReloadMode::Manual), X64(), image.Resolve(), platform);
+    core.OnSwapchainAdopted(true);
+    platform.Campaign();
+    CHECK(core.ReloadMode().effective == interaction::ReloadMode::Manual); // magazine gesture via the pad
+    Clock clock;
+    std::uint64_t generation = 1;
+    math::Vec3 left{-0.25f, 1.20f, -0.30f}, right{0.20f, 1.30f, -0.40f};
+    float leftGrip = 0, rightGrip = 0, rightTrigger = 0;
+    bool b = false;
+    auto frame = [&] {
+        auto in = Input(0);
+        in.controls.focused = in.controls.headValid = true;
+        in.controls.generation = ++generation;
+        in.controls.spaceGeneration = 1;
+        in.controls.predictedNs = static_cast<std::int64_t>(generation) * 11000000;
+        in.controls.head = in.head;
+        in.controls.head.orientation = {0, 0, 0, 1};
+        for (auto& h : in.controls.hands) {
+            h.active = interaction::Components;
+            h.gripTracked = h.aimTracked = true;
+            h.grip.orientation = h.aim.orientation = {0, 0, 0, 1};
+        }
+        in.controls.hands[0].grip.position = left;
+        in.controls.hands[1].grip.position = right;
+        in.controls.hands[0].squeeze = leftGrip;
+        in.controls.hands[1].squeeze = rightGrip;
+        in.controls.hands[1].trigger = rightTrigger;
+        if (b) in.controls.hands[1].held |= interaction::Secondary;
+        core.OnFrame(clock.Next(), in);
+    };
+    for (int i = 0; i < 3; ++i) frame();
+    // Holding the gun with the right grip is not BF4's grenade button any more.
+    rightGrip = 1;
+    rightTrigger = 1;
+    frame();
+    CHECK(!(core.Pad().buttons & interaction::pad::RightShoulder) && core.Pad().rightTrigger > 200);
+    rightGrip = 0;
+    frame();
+    // Right hip: the sidearm key reaches the game, with a pulse on the right controller.
+    right = core.Gestures().SlotPosition("hip_right");
+    frame();
+    rightGrip = 1;
+    frame();
+    CHECK(!platform.keyPresses.empty() && platform.keyPresses.back() == gamekey::Secondary);
+    CHECK(!platform.haptics.empty() && platform.haptics.back().first == 1);
+    for (int i = 0; i < 12; ++i) frame(); // ~130 ms: the key goes up again
+    CHECK(platform.keys[0] == 0 && platform.keys[1] == 0);
+    rightGrip = 0;
+    right = {0.20f, 1.30f, -0.40f};
+    frame();
+    // B drops the magazine: the trigger no longer reaches the game.
+    b = true;
+    frame();
+    b = false;
+    frame();
+    CHECK(core.Pad().rightTrigger == 0 && core.Gestures().MagazineOut(Bf4Gun::Secondary));
+    // Left hand: belt, then the magazine well -> the pad's reload (X), fire back.
+    left = core.Gestures().SlotPosition("belt_front_left");
+    frame();
+    leftGrip = 1;
+    frame();
+    CHECK(!(core.Pad().buttons & interaction::pad::LeftShoulder)); // the grab is not BF4's spot button
+    left = BodyGestures::Magwell({right, {0, 0, 0, 1}});
+    frame();
+    CHECK((core.Pad().buttons & interaction::pad::X) && core.Pad().rightTrigger > 200);
+    CHECK(core.Gestures().Stats().seats == 1);
+    // The mod menu takes the input: no keys, the pad goes neutral, the state waits.
+    leftGrip = 0;
+    frame();
+    CHECK(core.Status().find("gestures gun=sidearm") != std::string::npos);
 }

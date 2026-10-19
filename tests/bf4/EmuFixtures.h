@@ -113,6 +113,17 @@ struct FakePlatform final : IAdapterPlatform {
         sentY += dy;
         ++mouseCalls;
     }
+    void SetGameKeys(const std::array<std::uint16_t, 2>& held) override {
+        for (const auto k : held)
+            if (k && keys[0] != k && keys[1] != k) keyPresses.push_back(k);
+        keys = held;
+    }
+    void Haptic(unsigned hand, bool strong, std::uint64_t generation, std::uint64_t space) override {
+        if (generation && space) haptics.push_back({hand, strong});
+    }
+    std::array<std::uint16_t, 2> keys{};
+    std::vector<std::uint16_t> keyPresses;
+    std::vector<std::pair<unsigned, bool>> haptics;
 
     // ---- engine stereo (fake shim + fake backbuffer) ----
     stereo::NvapiStereoEmu* shim = nullptr;   // set when the "game" loaded nvapi64.dll

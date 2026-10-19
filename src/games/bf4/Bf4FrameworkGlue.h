@@ -7,6 +7,7 @@
 // and sends the adapter only game-screen pointer events.
 #include "../../engines/frostbite/Fb3CameraMath.h"
 #include "fvr/interaction/ControllerInput.h"
+#include "fvr/interaction/Feedback.h"
 #include "fvr/math/Vec.h"
 
 #include <cstdint>
@@ -55,6 +56,8 @@ public:
     virtual bool WorldLane() const { return false; }    // the headset shows the world lane now
     // Developer evidence: the next published eye pair and its source frame as BMPs in `dir`.
     virtual void RequestSnapshot(const std::string& /*dir*/) {}
+    // A haptic cue for the XR host (sent on the frame lane the host reads input from).
+    virtual bool Haptic(const interaction::FeedbackEvent& /*event*/) { return false; }
 };
 
 struct GamePointer {
