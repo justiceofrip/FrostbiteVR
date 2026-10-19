@@ -108,3 +108,25 @@ Launcher 3D off/probe/on; route `split` (default) or `nvapi`. Probe writes
   float (xmm3), float (stack), view count, views, a pointer, two values passed on.
 - In split mode the view setup takes the view aspect from the output's `+0x60/+0x64`
   size; that it is an eye half's in split mode is inferred from the zoom seen in the headset (the probe now logs it).
+
+## The freeze after split stereo engages: static narrowing (2026-10-19)
+
+Live: with the eye-loop override the game no longer crashes but stops presenting ~2 s
+after 3D engages. Static checks of what the override changes (same research image):
+
+- The per-call reset at `+0x8CB0B6` is only `end = begin` (no destructors), and entries are
+  copy-constructed by `+0x8B79A0` on append (`+0x8CB697` per eye, `+0x8CB6DA` for an output
+  without stereo). Starting each call from an empty widened array therefore matches the
+  stock lifetime; nothing is leaked by hiding earlier entries.
+- Everything that reads the array runs inside slot 2, which the override wraps: after the
+  loop, slot 2 (`+0x8BE71E`) passes `{count, begin}` to `[this+0x30]->vtable[+0x10]`. Our
+  buffer persists between calls, as the inline storage does, so a pointer kept by that
+  receiver stays as valid as before.
+- The view array at `+0x2AF0/+0x2AF8/+0x2B00` (inline `+0x2B10`, capacity 0x9C0 = two 0x4E0
+  views) is filled per input view (one copy, plus a second when the view's `+0x4E0` byte and
+  a global flag are set). It does not depend on the eye count, so stereo does not overflow it.
+- So the eye loop itself now behaves; the likeliest place for the stall is downstream of
+  `[this+0x30]->vtable[+0x10]` receiving two entries per output where the PC build only ever
+  produced one (per-entry render resources or a wait sized for one). The watchdog's thread
+  stacks (developer sessions, 4 s without a Present) should show which function the render
+  thread waits in; 3D stays off by default until then.
