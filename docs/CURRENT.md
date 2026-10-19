@@ -1,4 +1,13 @@
-# Current state: checkpoint428 physical knife hit / public launcher 0.1.8
+# Current state: checkpoint428 physical knife hit / public launcher 0.1.9
+
+## Knife hotfix published — October 19, 16:57 UTC
+
+[BC2VR 0.1.9](https://github.com/justiceofrip/BC2VR/releases/tag/v0.1.9)
+publishes the tested r14 runtime, installer and updater manifest. All three
+uploaded assets match their tested sizes and SHA-256 digests. Source and the
+bounded native-hit checkpoint are at `72166d082e8114f05bf60132544aec73233deac4`.
+The release retains the death/reload-crash, full-campaign and human-headset
+acceptance limits. This is a narrow knife hotfix, not campaign acceptance.
 
 ## Verified opening interaction — October 19
 
@@ -29,12 +38,14 @@ remain pinned; raw game evidence is not distributed with source/packages.
 
 This was a bounded game test with emulated controller input, not a human headset
 test. Whole-campaign playability, actual headset handling, death/reload recovery
-and long-session stability remain unverified. Public 0.1.8 is unchanged. The local
+and long-session stability remain unverified. The older 0.1.8 is unchanged. The local
 0.1.9 candidate is installed and its installed-runtime Validate passed with assets
 ready. Settings remained byte-for-byte unchanged, and 0.1.7 is retained for
-rollback. Installation/validation started no game or headset session. The 0.1.9
-installer bundle is being prepared; publication and broader gameplay acceptance
-are not yet claimed.
+rollback. Installation/validation started no game or headset session. The exact
+installer bundle passed 20 smoke checks covering all 87 payload files. The
+root-owned game06 was closed normally with exit zero after testing. The optional
+old local-checkpoint profile remains in settings; leave **Use local checkpoint**
+unchecked to run packaged 0.1.9. No further session was launched.
 
 ## Built and frozen main candidate
 
