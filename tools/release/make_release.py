@@ -30,6 +30,26 @@ RUNTIME = {  # build output name -> package path
 FORBIDDEN = ("bf4.exe", "bf4_x86.exe", ".sb", ".toc", ".cas", ".cat")
 
 
+# Windowless Python for the launcher UI: a bundled one, then the python.org launchers
+# (per-user, then all-users), then pythonw on PATH. Python is often installed without being
+# on PATH, so a bare "pythonw" is not enough. Nothing found: say what is needed.
+LAUNCH_CMD = "\r\n".join([
+    "@echo off",
+    "setlocal",
+    'cd /d "%~dp0"',
+    'set "ROOT=%~dp0..\\.."',
+    'set "ARGS=-m fvrlaunch ui --root "%ROOT%""',
+    'if exist "python\\pythonw.exe" (start "" "python\\pythonw.exe" %ARGS% & exit /b 0)',
+    'if exist "%LOCALAPPDATA%\\Programs\\Python\\Launcher\\pyw.exe" '
+    '(start "" "%LOCALAPPDATA%\\Programs\\Python\\Launcher\\pyw.exe" -3 %ARGS% & exit /b 0)',
+    'if exist "%WINDIR%\\pyw.exe" (start "" "%WINDIR%\\pyw.exe" -3 %ARGS% & exit /b 0)',
+    'for %%P in (pythonw.exe) do if not "%%~$PATH:P"=="" (start "" "%%~$PATH:P" %ARGS% & exit /b 0)',
+    "echo FrostbiteVR needs Python 3.11 or newer from python.org. Install it, then run this again.",
+    "pause",
+    "",
+])
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--build", type=Path, required=True)
@@ -60,9 +80,7 @@ def main() -> int:
     shutil.copytree(ROOT / "launcher" / "fvrlaunch", stage / "launcher" / "fvrlaunch",
                     ignore=shutil.ignore_patterns("__pycache__"))
     shutil.copytree(ROOT / "launcher" / "profiles", stage / "launcher" / "profiles")
-    (stage / "Launch FrostbiteVR.cmd").write_text(
-        '@echo off\r\ncd /d "%~dp0"\r\nif exist python\\pythonw.exe (start "" python\\pythonw.exe -m fvrlaunch ui --root "%~dp0..\\..")'
-        ' else (start "" pythonw -m fvrlaunch ui --root "%~dp0..\\..")\r\n', encoding="ascii")
+    (stage / "Launch FrostbiteVR.cmd").write_text(LAUNCH_CMD, encoding="ascii", newline="")
 
     for p in stage.rglob("*"):
         if p.name.lower().endswith(FORBIDDEN):

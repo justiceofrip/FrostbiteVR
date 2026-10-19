@@ -78,6 +78,9 @@ class ReleaseContractTests(unittest.TestCase):
         self.assertFalse({"bf4.exe", "Bf4CoreTests.exe"} & names)
         self.assertTrue({"THIRD_PARTY_NOTICES.md", "OpenXR-Apache-2.0.txt", "MinHook-BSD.txt"} <= names)  # notices ship
         self.assertFalse(list(installed.rglob("__pycache__")))
+        cmd = next(installed.rglob("Launch FrostbiteVR.cmd")).read_text(encoding="ascii")
+        self.assertIn("\\Programs\\Python\\Launcher\\pyw.exe", cmd)  # finds Python that is not on PATH
+        self.assertIn("pause", cmd)  # and says so when there is none
 
     def test_published_release_requires_the_xr_host(self):
         build = self.tmp / "build"
