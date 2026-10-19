@@ -97,6 +97,38 @@ bool CheckDepthCapture(ID3D11Device* device, const char*& why) {
             why = "uses the live buffer with one clear a frame", ok = false;
         capture.Remove();
     }
+    if (ok) {
+        // A multisampled main depth (BF4 with deferred MSAA) is copied as it is.
+        UINT quality = 0;
+        if (SUCCEEDED(device->CheckMultisampleQualityLevels(DXGI_FORMAT_D24_UNORM_S8_UINT, 4, &quality)) && quality > 0) {
+            D3D11_TEXTURE2D_DESC d{};
+            d.Width = 64;
+            d.Height = 36;
+            d.MipLevels = d.ArraySize = 1;
+            d.Format = DXGI_FORMAT_R24G8_TYPELESS;
+            d.SampleDesc.Count = 4;
+            d.Usage = D3D11_USAGE_DEFAULT;
+            d.BindFlags = D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_SHADER_RESOURCE;
+            ComPtr<ID3D11Texture2D> ms;
+            ComPtr<ID3D11DepthStencilView> msView;
+            D3D11_DEPTH_STENCIL_VIEW_DESC v{};
+            v.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+            v.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2DMS;
+            if (FAILED(device->CreateTexture2D(&d, nullptr, &ms)) || FAILED(device->CreateDepthStencilView(ms.Get(), &v, &msView)))
+                return why = "create the MSAA depth target", false;
+            fvr::bf4::DepthCapture capture;
+            if (!capture.Install(context.Get())) return why = "install for MSAA", false;
+            fvr::bf4::DepthCapture::Frame frame;
+            for (int i = 0; i < 12; ++i) {
+                context->ClearDepthStencilView(msView.Get(), D3D11_CLEAR_DEPTH, 0.5f, 0);
+                capture.TakeFrame(context.Get(), 16.0f / 9.0f, frame);
+            }
+            D3D11_TEXTURE2D_DESC got{};
+            if (frame.texture) frame.texture->GetDesc(&got);
+            if (!frame.texture || got.SampleDesc.Count != 4) why = "hands back a multisampled copy as it is", ok = false;
+            capture.Remove();
+        }
+    }
     // The detour is gone: clears reach d3d11 directly again.
     context->ClearDepthStencilView(mainView.Get(), D3D11_CLEAR_DEPTH, 1.0f, 0);
     return ok;

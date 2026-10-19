@@ -170,10 +170,7 @@ void DepthCapture::OnClear(ID3D11DeviceContext* context, ID3D11DepthStencilView*
     ++clearsThisFrame_;
     lastMainClear_ = stats_.presents;
     stats_.clearValue = value;
-    if (d.SampleDesc.Count != 1) {
-        ++stats_.msaaRefused; // MSAA depth would need a per-sample read: not supported
-        return;
-    }
+    if (d.SampleDesc.Count != 1) ++stats_.msaaRefused; // counted only: copied as it is, read per sample
     ComPtr<ID3D11Device> device;
     context->GetDevice(&device);
     if (!EnsureCopy(device.Get())) return;
@@ -200,7 +197,7 @@ bool DepthCapture::TakeFrame(ID3D11DeviceContext* immediate, float aspect, Frame
     unsigned total = 0;
     for (const unsigned c : clearHistory_) total += c;
     stats_.split = historyIndex_ >= clearHistory_.size() && total >= 3 * clearHistory_.size() / 2;
-    if (!main_ || mainDesc_.SampleDesc.Count != 1 || !immediate) return false;
+    if (!main_ || !immediate) return false;
     ComPtr<ID3D11Device> device;
     immediate->GetDevice(&device);
     if (!EnsureCopy(device.Get())) return false;
@@ -224,7 +221,7 @@ std::string DepthCapture::Describe() const {
     char line[256];
     std::snprintf(line, sizeof(line),
                   "depth_capture installed=%d main=%ux%u format=%u clear=%.1f split=%d clears=%llu main_clears=%llu "
-                  "copies=%llu picks=%llu msaa_refused=%llu hooked=%zu",
+                  "copies=%llu picks=%llu msaa_clears=%llu hooked=%zu",
                   installed_ ? 1 : 0, s.width, s.height, s.format, s.clearValue, s.split ? 1 : 0,
                   static_cast<unsigned long long>(s.clears), static_cast<unsigned long long>(s.mainClears),
                   static_cast<unsigned long long>(s.copies), static_cast<unsigned long long>(s.picks),
@@ -237,6 +234,7 @@ bool DepthCapture::WriteBmp(ID3D11DeviceContext* immediate, const std::string& p
     if (!copy_ || !immediate) return false;
     D3D11_TEXTURE2D_DESC d{};
     copy_->GetDesc(&d);
+    if (d.SampleDesc.Count != 1) return false; // no CPU copy of a multisampled buffer: no snapshot
     d.Usage = D3D11_USAGE_STAGING;
     d.BindFlags = 0;
     d.CPUAccessFlags = D3D11_CPU_ACCESS_READ;

@@ -1,4 +1,4 @@
-# BF4 headset session: checklist (0.4.39-local)
+# BF4 headset session: checklist (0.4.40-local)
 
 What to try in the next headset session, and what each check tells us. About 15 minutes.
 Everything is input-only or an exactly restored camera/FOV write, apart from the optional
@@ -54,8 +54,8 @@ raise BF4's Video > Resolution Scale (150-200 %) before judging blur.
 ## Try: 3D from depth
 
 Menu > 3D from depth > On, in a mission. Each eye is shifted by the game's depth buffer, so
-near things should stand out. It needs BF4's Video > Antialiasing Deferred set to Off (a
-multisampled depth buffer is refused; the post-process antialiasing is fine). Look at something close (a wall, a crate) and something far.
+near things should stand out (with BF4's deferred antialiasing on too: the depth is then
+read from its first sample). Look at something close (a wall, a crate) and something far.
 If it looks wrong (doubled edges, the gun at a strange depth, no depth at all), switch it
 off and mark the moment; `vr-snapshot-depth.bmp` and the `depth_capture` log line show what
 it found.

@@ -179,5 +179,47 @@ bool CheckEyeResamplerReticle(ID3D11Device* device, const char*& why) {
             if (blue(eye[32 * width + 32]) || blue(eye[52 * width + 14])) return why = "HUD corners only in their insets", false;
         }
     }
+    // Depth stereo from a 4x multisampled depth buffer (BF4 with deferred MSAA): sample 0.
+    {
+        UINT quality = 0;
+        if (SUCCEEDED(device->CheckMultisampleQualityLevels(DXGI_FORMAT_D32_FLOAT, 4, &quality)) && quality > 0) {
+            std::vector<std::uint32_t> stripes(kSize * kSize);
+            for (UINT y = 0; y < kSize; ++y)
+                for (UINT x = 0; x < kSize; ++x) stripes[y * kSize + x] = 0xFF808000u | (x * 4);
+            const D3D11_SUBRESOURCE_DATA stripeData{stripes.data(), kSize * 4, 0};
+            ComPtr<ID3D11Texture2D> striped;
+            if (FAILED(device->CreateTexture2D(&d, &stripeData, &striped))) return why = "create the striped frame (MSAA)", false;
+            D3D11_TEXTURE2D_DESC md = d;
+            md.Format = DXGI_FORMAT_R32_TYPELESS;
+            md.SampleDesc.Count = 4;
+            md.BindFlags = D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_SHADER_RESOURCE;
+            ComPtr<ID3D11Texture2D> msDepth;
+            ComPtr<ID3D11DepthStencilView> msView;
+            D3D11_DEPTH_STENCIL_VIEW_DESC dv{};
+            dv.Format = DXGI_FORMAT_D32_FLOAT;
+            dv.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2DMS;
+            if (FAILED(device->CreateTexture2D(&md, nullptr, &msDepth)) ||
+                FAILED(device->CreateDepthStencilView(msDepth.Get(), &dv, &msView)))
+                return why = "create the MSAA depth", false;
+            const float n = 0.1f, f = 1000.0f;
+            context->ClearDepthStencilView(msView.Get(), D3D11_CLEAR_DEPTH, f * (1 - n / 1.0f) / (f - n), 0); // all at 1 m
+            fvr::bf4::DepthStereoInput depth;
+            depth.texture = msDepth.Get();
+            depth.format = DXGI_FORMAT_R32_TYPELESS;
+            depth.params.enabled = true;
+            depth.params.shift[0] = -0.05f;
+            depth.params.shift[1] = 0.05f;
+            depth.params.nearZ = n;
+            depth.params.farZ = f;
+            if (!resampler.Render(context.Get(), striped.Get(), crops, kSize, kSize, DXGI_FORMAT_R8G8B8A8_UNORM, {}, nullptr, &depth))
+                return why = "MSAA depth stereo resample", false;
+            std::vector<std::uint32_t> left, right;
+            if (!ReadPixels(device, context.Get(), resampler.Eye(0), left, width) ||
+                !ReadPixels(device, context.Get(), resampler.Eye(1), right, width))
+                return why = "read back the MSAA depth stereo eyes", false;
+            const int l = left[32 * width + 32] & 0xFF, r = right[32 * width + 32] & 0xFF;
+            if (!(l < 130 - 8 && r > 130 + 8)) return why = "MSAA depth stereo shifts each eye its way", false;
+        }
+    }
     return true;
 }

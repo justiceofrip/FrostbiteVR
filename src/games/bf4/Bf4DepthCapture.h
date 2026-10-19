@@ -23,7 +23,8 @@ namespace fvr::bf4 {
 class DepthCapture {
 public:
     struct Stats {
-        std::uint64_t clears = 0, mainClears = 0, copies = 0, presents = 0, picks = 0, msaaRefused = 0;
+        std::uint64_t clears = 0, mainClears = 0, copies = 0, presents = 0, picks = 0;
+        std::uint64_t msaaRefused = 0; // clears of a multisampled main depth (read via sample 0)
         std::uint32_t width = 0, height = 0, format = 0;
         float clearValue = 1;
         bool split = false; // two or more clears a frame: the pre-clear copy holds the world

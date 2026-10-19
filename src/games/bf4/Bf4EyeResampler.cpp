@@ -12,6 +12,7 @@ namespace {
 constexpr char kShader[] = R"(
 Texture2D<float4> source : register(t0);
 Texture2D<float> sceneDepth : register(t1);
+Texture2DMS<float> sceneDepthMS : register(t2);
 SamplerState linearClamp : register(s0);
 SamplerState pointClamp : register(s1);
 cbuffer Crop : register(b0) {
@@ -36,6 +37,16 @@ float3 Inset(float3 c, float2 t, float4 src, float4 dst) {
     const float2 edge = min(f, 1 - f) * float2(dst.z - dst.x, dst.y - dst.w);
     if (min(edge.x, edge.y) < 0.006) return float3(0.08, 0.09, 0.11);
     return source.SampleLevel(linearClamp, lerp(src.xy, src.zw, f), 0).rgb;
+}
+// The scene depth at frame uv: point-sampled, or sample 0 of a multisampled buffer.
+float DepthAt(float2 uv) {
+    if (stereo2.z > 0.5) {
+        uint w, h, n;
+        sceneDepthMS.GetDimensions(w, h, n);
+        const int2 texel = int2(saturate(uv) * float2(w - 1, h - 1) + 0.5);
+        return sceneDepthMS.Load(texel, 0);
+    }
+    return sceneDepth.SampleLevel(pointClamp, uv, 0);
 }
 float LinearZ(float d) {
     const float n = stereo.y, f = stereo.z;
@@ -64,7 +75,7 @@ float4 ps(V v) : SV_Target {
     float2 s = s0;
     if (stereo.w > 0.5) { // depth stereo: this eye's parallax, by fixed-point search on depth
         [unroll] for (int i = 0; i < 4; ++i) {
-            const float z = max(LinearZ(sceneDepth.SampleLevel(pointClamp, s, 0)), stereo2.x);
+            const float z = max(LinearZ(DepthAt(s)), stereo2.x);
             s.x = s0.x + stereo.x / z;
         }
     }
@@ -171,7 +182,7 @@ bool EyeResampler::Initialize(ID3D11DeviceContext* context) {
         return Fail(3, hr);
     code.Reset();
     errors.Reset();
-    hr = D3DCompile(kShader, sizeof(kShader) - 1, nullptr, nullptr, nullptr, "ps", "ps_4_0", D3DCOMPILE_ENABLE_STRICTNESS,
+    hr = D3DCompile(kShader, sizeof(kShader) - 1, nullptr, nullptr, nullptr, "ps", "ps_4_1", D3DCOMPILE_ENABLE_STRICTNESS,
                     0, &code, &errors);
     if (FAILED(hr) || FAILED(hr = device_->CreatePixelShader(code->GetBufferPointer(), code->GetBufferSize(), nullptr, &ps_)))
         return Fail(4, hr);
@@ -281,10 +292,14 @@ bool EyeResampler::Render(ID3D11DeviceContext* context, ID3D11Texture2D* source,
             const DXGI_FORMAT view = DepthViewFormat(dd.Format);
             D3D11_SHADER_RESOURCE_VIEW_DESC v{};
             v.Format = view;
-            v.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-            v.Texture2D.MipLevels = 1;
-            if (view != DXGI_FORMAT_UNKNOWN && dd.SampleDesc.Count == 1 &&
-                SUCCEEDED(device_->CreateShaderResourceView(depth->texture, &v, &depthView_))) {
+            depthMultisampled_ = dd.SampleDesc.Count > 1;
+            if (depthMultisampled_) {
+                v.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DMS;
+            } else {
+                v.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+                v.Texture2D.MipLevels = 1;
+            }
+            if (view != DXGI_FORMAT_UNKNOWN && SUCCEEDED(device_->CreateShaderResourceView(depth->texture, &v, &depthView_))) {
                 depthSource_ = depth->texture;
                 depthHeld_ = depth->texture;
             }
@@ -330,6 +345,7 @@ bool EyeResampler::Render(ID3D11DeviceContext* context, ID3D11Texture2D* source,
             c.stereo[2] = depth->params.farZ;
             c.stereo[3] = depth->params.reversed ? 2.0f : 1.0f;
             c.stereo2[0] = depth->params.minDepth;
+            c.stereo2[2] = depthMultisampled_ ? 1.0f : 0.0f;
         }
         context_->UpdateSubresource(constants_[i].Get(), 0, nullptr, &c, 0, 0);
     }
@@ -345,8 +361,9 @@ bool EyeResampler::Render(ID3D11DeviceContext* context, ID3D11Texture2D* source,
         context_->PSSetSamplers(1, 1, points);
         ID3D11ShaderResourceView* views[] = {sourceView_.Get()};
         context_->PSSetShaderResources(0, 1, views);
-        ID3D11ShaderResourceView* depthViews[] = {stereo ? depthView_.Get() : nullptr};
-        context_->PSSetShaderResources(1, 1, depthViews);
+        ID3D11ShaderResourceView* depthViews[] = {stereo && !depthMultisampled_ ? depthView_.Get() : nullptr,
+                                                  stereo && depthMultisampled_ ? depthView_.Get() : nullptr};
+        context_->PSSetShaderResources(1, 2, depthViews);
         const D3D11_VIEWPORT viewport{0, 0, float(width), float(height), 0, 1};
         context_->RSSetViewports(1, &viewport);
         for (int i = 0; i < 2; ++i) {

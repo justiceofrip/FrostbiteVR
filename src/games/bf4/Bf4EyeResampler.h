@@ -53,6 +53,7 @@ private:
     Microsoft::WRL::ComPtr<ID3D11PixelShader> ps_;
     Microsoft::WRL::ComPtr<ID3D11SamplerState> sampler_, pointSampler_;
     Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> depthView_;
+    bool depthMultisampled_ = false; // depthView_ is a Texture2DMS view (read at sample 0)
     ID3D11Texture2D* depthSource_ = nullptr; // what depthView_ views (held by the caller)
     Microsoft::WRL::ComPtr<ID3D11Texture2D> depthHeld_; // keeps it alive while viewed
     Microsoft::WRL::ComPtr<ID3D11RasterizerState> raster_;

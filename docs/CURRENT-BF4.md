@@ -14,7 +14,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   three sessions (09:16-10:19; rotation was inverted and the gun oversized, both fixed in
   0.4.16); everything built since 0.4.17 is unseen in a headset.
 
-## At a glance (installed: 0.4.39-local)
+## At a glance (installed: 0.4.40-local)
 
 | Feature | State | Evidence |
 | --- | --- | --- |
@@ -277,7 +277,7 @@ using the frame's depth buffer (depth-image-based rendering; no simulation or re
   is held; nearer would mean a very strong per-eye shift). The aim dot stays
   at infinity; gesture markers keep their own per-eye placement.
 - Mod menu "3D from depth: Off / On" (default off). Log: `depth_capture installed= main=WxH
-  format= clear= split= ... hooked=` every 600 frames, `depth_pairs=`; developer sessions
+  format= clear= split= ... msaa_clears= hooked=` every 600 frames, `depth_pairs=`; developer sessions
   write `vr-snapshot-depth.bmp` (near bright, far dark) the first time it works and with
   the other snapshots.
 - Evidence: linearisation and per-eye shift signs unit-tested; WARP checks in Bf4Emulated:
@@ -285,8 +285,12 @@ using the frame's depth buffer (depth-image-based rendering; no simulation or re
   detour picks a 16:9 depth over a larger square shadow map, detects two clears a frame,
   keeps the depth from before the second clear, and uses the live buffer with one clear
   (that check found the lazily resolved vtable entry and the shadow-map pick before the
-  game did). Not yet seen in the game: which target BF4 clears, its format (MSAA depth is
-  refused), whether the weapon pass clears depth, how the parallax looks.
+  game did). Multisampled depth (BF4's deferred MSAA) is copied as it is and read at
+  sample 0 through a Texture2DMS view (pixel shader now ps_4_1: SM 4.0 cannot declare a
+  Texture2DMS without a fixed sample count; the WARP check caught that compile failure,
+  which would have disabled the world lane); WARP checks for a 4x MSAA depth in the
+  shader and in the capture. Not yet seen in the game: which target BF4 clears, its
+  format, whether the weapon pass clears depth, how the parallax looks.
 
 ## Stereo: BF4's own two-eye render in the world lane (2026-10-19)
 
@@ -468,7 +472,7 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
   launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
   `-World -FrameChannels 2` 5/5 (76-237 pairs, machine-dependent); `-World` with one
   channel 4/4 (47 pairs).
-- Installed locally: runtime/bf4 0.4.39-local (rollback 0.4.38-local). Developer
+- Installed locally: runtime/bf4 0.4.40-local (rollback 0.4.39-local). Developer
   sessions still run the read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the
   framework's `StereoMath.h` (`Quat` = `Quaternion`; Pose is `{position, orientation}`).
@@ -490,7 +494,7 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
 
 ## Open / blocked
 
-- Headset check of 0.4.39 (BF4-FIRST-SESSION.md): head rotation direction, gun size,
+- Headset check of 0.4.40 (BF4-FIRST-SESSION.md): head rotation direction, gun size,
   comfort, the pair rate (was ~17-25 Hz; expected about game fps / 2 at frame sync 2),
   controller aim (mouse look reaching the game, its learned gain), gestures, HUD corners,
   3D from depth (which depth target it finds; `vr-snapshot-depth.bmp`).
