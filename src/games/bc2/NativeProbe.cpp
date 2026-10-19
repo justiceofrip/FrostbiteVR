@@ -10,6 +10,7 @@
 #include "Bc2StereoRecovery.h"
 #include "fvr/runtime/RenderOwnerRecovery.h"
 #include "Bc2Gameplay.h"
+#include "Bc2ProbeFailure.h"
 #include "Bc2MechanismAudio.h"
 #include "Bc2ShellReloadAudio.h"
 #include "Bc2PumpCalibration225.h"
@@ -3004,7 +3005,7 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
             wchar_t replace[4]{},cache[1024]{};
             if(GetEnvironmentVariableW(L"BC2_MECHANISM_AUDIO_REPLACE_SPAS",replace,4)==1&&replace[0]==L'1'){
                 const auto size=GetEnvironmentVariableW(L"BC2_MECHANISM_AUDIO_CACHE",cache,1024);
-                Require(size>0&&size<1024,"Mechanism audio requires its private G-drive cue cache");
+                Require(size>0&&size<1024,"Mechanism audio requires its validated local cue cache");
                 audioConfig.replaceSpas=true;audioConfig.rearWave=std::filesystem::path(cache)/L"spas-rear.wav";
                 audioConfig.closureWave=std::filesystem::path(cache)/L"spas-closure.wav";
             }
@@ -3754,5 +3755,5 @@ Sleep(DWORD(std::min<std::uint64_t>((toolFixture||config.ordinaryGrenadeInput==4
                 disabled=gameplayStopped&&menuStopped&&audioStopped&&shellAudioStopped&&fvr::bc2::rigWorkerRuntime::Quiescent()&&fvr::bc2::opticFilterRuntime::Quiescent();
             }
         }
-        if(report)report<<"{\"state\":\"failed\",\"error\":\""<<e.what()<<"\",\"hooks_disabled\":"<<(disabled?"true":"false")<<"}\n";return 20;}
+        if(report)fvr::bc2::WriteProbeFailureJson(report,e.what(),disabled);return 20;}
 }

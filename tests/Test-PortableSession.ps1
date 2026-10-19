@@ -53,7 +53,19 @@ function Start-Bc2Child($File,$Arguments,$Folder,$LogName,$Environment=@{}){
         return (New-FakeProcess 300 'fake-native' $true)
     }
     [IO.File]::WriteAllText((Join-Path $Folder 'session-telemetry.jsonl'),"{`"input_samples`":10,`"gpu_failure_stage`":0,`"camera_restore_failures`":0}`n")
-    return (New-FakeProcess 300 'fake-native')
+    $native=New-FakeProcess 300 'fake-native'
+    $native|Add-Member NoteProperty FixtureScenario $cfg.scenario
+    $native|Add-Member ScriptMethod WaitForExit {
+        param($Timeout)
+        $this.HasExited=$true
+        if($this.FixtureScenario -in @('normal_game_close','native_exception_game_gone')){$script:fakeGame.HasExited=$true}
+        if($this.FixtureScenario -in @('native_exception_game_gone','native_exception_game_live')){
+            $this.ExitCode=2
+            [IO.File]::WriteAllText((Join-Path $folder 'native.stdout.log'),'{"pid":100,"probe_exit":3221225477,"module_retained_until_game_exit":true,"game_files_modified":false}')
+        }
+        return $true
+    } -Force
+    return $native
 }
 function Write-FvrJson($Path,$Value){
     $text=$Value|ConvertTo-Json -Depth 30
@@ -64,7 +76,7 @@ function Write-FvrJson($Path,$Value){
 }
 '@
     [IO.File]::WriteAllText((Join-Path $runtime 'Runtime.Core.ps1'),$fake)
-    foreach($scenario in @('success','native_failure','bad_host_size','wrong_renderer')){
+    foreach($scenario in @('success','native_failure','bad_host_size','wrong_renderer','normal_game_close','native_exception_game_gone','native_exception_game_live')){
         $install=Join-Path $root $scenario;$stateRoot=Join-Path $install 'data/runtime';$run=Join-Path $stateRoot 'sessions/current'
         $game=Join-Path $install 'game';$cache=Join-Path $stateRoot 'cache'
         foreach($p in @($run,$game,$cache)){[IO.Directory]::CreateDirectory($p)|Out-Null}
@@ -83,6 +95,11 @@ function Write-FvrJson($Path,$Value){
             $w=[Array]::IndexOf($hostCall.arguments,'--eye-width');$h=[Array]::IndexOf($hostCall.arguments,'--eye-height')
             Check ($hostCall.arguments[$w+1] -eq '2560' -and $hostCall.arguments[$h+1] -eq '1440') 'non-1080p live dimensions reach actual host invocation'
             Check ($hostCall.environment.XR_RUNTIME_JSON -eq 'fixture-openxr.json') 'session uses same selected OpenXR runtime as preflight'
+        }elseif($scenario -eq 'normal_game_close'){
+            Check ($code -eq 0 -and $state.state -eq 'ended' -and $state.native_exit_code -eq 0 -and -not $state.error -and 'running' -in $history) 'normal game close after readiness remains a clean session end'
+        }elseif($scenario -like 'native_exception_*'){
+            Check ($code -ne 0 -and $state.state -eq 'failed' -and $state.native_exit_code -eq 2 -and 'running' -in $history) ($scenario+' reports failure after readiness')
+            Check ($state.error.Contains('3221225477') -and $state.error.Contains('Report feedback')) ($scenario+' retains the actual probe exception and feedback guidance')
         }else{
             Check ($code -ne 0 -and $state.state -eq 'failed' -and 'running' -notin $history) ($scenario+' never reports running')
             if($scenario -eq 'native_failure'){Check ($state.error.Contains('Fixture native profile mismatch')) 'actual native attach error survives into launcher state'}

@@ -5,10 +5,16 @@ contains the framework and Bad Company 2 adapter source. The separate
 [BC2VR releases](https://github.com/justiceofrip/BC2VR/releases)
 provide the pre-alpha installer, updates and feedback tracker.
 
-The 0.1.6 launcher hotfix adds visible game-folder selection, settings recovery,
-installation space checks and startup checks for the selected OpenXR runtime.
-It retains checkpoint426's native binaries and gameplay limitations; see
-[hotfix validation](docs/LAUNCHER-HOTFIX016.md) and [current state](docs/CURRENT.md).
+**Campaign blocked:** the published opening-mission knife does not reliably
+damage enemies, and death/reload crashes remain unresolved. This is not a
+playable-campaign release.
+
+The isolated 0.1.8 hotfix corrects native audio-cache rejection on
+player-selected local drives and reports the underlying startup failure.
+It retains the published 0.1.7 gameplay implementation. The separate knife
+candidate is excluded; see [hotfix scope](docs/LAUNCHER-HOTFIX018.md) and
+[current state](docs/CURRENT.md). Both architectures passed 293/293 suites; the
+exact installer/update packages passed 44 checks plus 51 launcher checks.
 
 Start with [current state and known limits](docs/CURRENT.md), the
 [426 handoff](handoff/checkpoint426/README.md), [build instructions](BUILDING.md),

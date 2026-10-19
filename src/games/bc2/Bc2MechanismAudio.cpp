@@ -1,4 +1,5 @@
 #include "Bc2MechanismAudio.h"
+#include "Bc2AudioCachePath.h"
 #include "Bc2ShellReloadAudio.h"
 #include <Windows.h>
 #include <mmsystem.h>
@@ -167,7 +168,7 @@ bool CacheManifest(const std::filesystem::path& directory){
     return HashMatches(data,"9505a703347eb5b7a2e64f54f1972a7a5d727b45dbe1a6756e7b43e4de7ecded");
 }
 bool LoadWave(const std::filesystem::path& path,std::size_t frames,std::string_view expected,CueWave& result){
-    if(!path.is_absolute()||path.root_name()!=L"G:")return false;
+    if(!LocalAudioCacheFile(path))return false;
     std::ifstream stream(path,std::ios::binary|std::ios::ate);if(!stream)return false;
     const auto size=stream.tellg();if(size!=std::streamoff(44+frames*2))return false;
     std::vector<char> data(std::size_t(size),char{});stream.seekg(0);if(!stream.read(data.data(),size))return false;
