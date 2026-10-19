@@ -12,10 +12,12 @@
 //   belt, front left         -> a magazine (manual reload)
 // A grip press that starts inside a holster belongs to the gesture, not to the pad.
 //
-// Manual reload (magazine gesture): right B drops the magazine of the gun in hand; fire is
-// held off until a magazine is seated; take one from the belt with the left hand and bring
-// it to the gun's magazine well (just below and in front of the right hand); seating it
-// presses the game's reload and BF4 plays its own reload. Holding B 0.6 s reloads at once.
+// Manual reload (magazine gesture): a tap on right B drops the magazine of the gun in hand
+// (on release); fire is held off until a magazine is seated; take one from the belt with
+// the left hand and bring it to the gun's magazine well (just below and in front of the
+// right hand); seating it presses the game's reload and BF4 plays its own reload. Holding
+// B holds the pad's X for as long as B is held: BF4's reload, or its interact/pick-up when
+// something is in reach (the same button on the pad), so nothing is lost to the gesture.
 // A magazine pushed into a gun that still has one is a tactical reload (same press).
 //
 // Persistent state (AGENTS.md): a dropped magazine stays out of that gun (primary and
@@ -71,7 +73,7 @@ class BodyGestures {
 public:
     static constexpr double kKeyHoldSeconds = 0.08;   // a key is held this long per press
     static constexpr double kReloadPulseSeconds = 0.12;
-    static constexpr double kQuickReloadSeconds = 0.6; // hold B: reload without the gesture
+    static constexpr double kHoldSeconds = 0.4; // B held this long: the pad's X (reload / interact)
     static constexpr float kMagwellRadius = 0.12f;     // metres around the magazine well
     static constexpr float kThrowDistance = 0.25f;     // grenade released this far from the hip
     static constexpr float kGripPress = 0.70f, kGripRelease = 0.40f;
@@ -122,7 +124,7 @@ private:
     std::array<bool, 2> grip_{}, gripOwned_{};
     std::array<Held, 2> held_{};
     std::array<int, 2> hover_{-1, -1}; // usable holster each hand is in (pulse on entry)
-    bool reloadWas_ = false, switchWas_ = false, quickDone_ = false;
+    bool reloadWas_ = false, switchWas_ = false, holdActive_ = false;
     double reloadDownAt_ = 0;
     std::uint16_t key_ = 0;
     double keyUntil_ = 0, reloadUntil_ = 0;

@@ -21,7 +21,7 @@ interaction::ReloadModeResolution ResolveBf4ReloadMode(interaction::ReloadMode r
     if (requested == interaction::ReloadMode::Manual && r.effective != interaction::ReloadMode::Manual &&
         caps.IsUsable(Feature::VirtualGamepad, developer)) {
         r.effective = interaction::ReloadMode::Manual;
-        r.note = "B drops it; refill from belt. Hold B: instant.";
+        r.note = "Tap B: drop. Belt refills. Hold B: reload/use.";
     }
     return r;
 }

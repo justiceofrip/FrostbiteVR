@@ -104,11 +104,13 @@ screen. Pieces (all on the analysed build only):
   never the pad's grenade button. Short controller pulses go to the XR host as feedback
   events on frame channel 1 (its haptic policy checks packet, space and deadline).
 - Manual reload (Reloading: Manual) is now the magazine gesture when the virtual pad is
-  usable: right B drops the magazine of the gun in hand (primary and sidearm tracked
-  separately), fire (pad RT) is held off until one is seated, the left hand takes one from
+  usable: a tap on right B drops the magazine of the gun in hand on release (primary and
+  sidearm tracked separately), fire (pad RT) is held off until one is seated, the left hand takes one from
   the belt and seats it at the magazine well (7 cm below, 6 cm ahead of the right grip,
   12 cm radius), which presses the pad's reload (X) so BF4 plays its own reload. Letting go
-  before the well drops it. Holding B 0.6 s reloads at once. A magazine pushed into a gun
+  before the well drops it. Holding B (0.4 s or more) holds the pad's X for as long as B
+  is held: BF4's reload, or its interact / pick-up when something is in reach (the same
+  pad button), so manual mode loses no game function; nothing is dropped by a hold. A magazine pushed into a gun
   that still has one is a tactical reload (same press; log `tactical=`). Custody persists across
   packets, menus and tracking loss; a level start is the lifetime transition. BF4's own
   ammunition and auto-reload are untouched (nothing native is acknowledged or written).
@@ -366,12 +368,12 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
   and notes were shortened to fit half width (GDI text now ends with an ellipsis when it
   does not fit). Unit test: every item on the panel, none overlapping; a GDI render of the
   developer menu was checked by eye.
-- Build.ps1 after the walk direction option: x64 284/284, x86 283/283. Bf4CoreTests
-  74 cases;
+- Build.ps1 after B tap/hold (interact kept in manual mode): x64 284/284, x86 283/283.
+  Bf4CoreTests 74 cases;
   Bf4Emulated pass (theater, world lane, stereo probe, census, lockdown, gestures, eye
   resampler reticle on WARP); launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
   `-World -FrameChannels 2` 5/5 (227 pairs); `-World` with one channel 4/4 (47 pairs).
-- Installed locally: runtime/bf4 0.4.30-local (rollback 0.4.29-local). Developer
+- Installed locally: runtime/bf4 0.4.31-local (rollback 0.4.30-local). Developer
   sessions still run the read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the
   framework's `StereoMath.h` (`Quat` = `Quaternion`; Pose is `{position, orientation}`).

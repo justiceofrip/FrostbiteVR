@@ -792,12 +792,13 @@ TEST_CASE(MagazineReloadIsAGestureThatPressesTheGamesReload) {
     using namespace fvr;
     using namespace fvr::bf4;
     GestureRig r;
-    // B drops the magazine: fire is held off until one is seated.
+    // A tap on B drops the magazine (on release): fire is held off until one is seated.
     r.in.reloadButton = true;
     auto out = r.Step();
-    CHECK(r.gestures.MagazineOut(Bf4Gun::Primary) && out.blockFire && !(out.padButtons & interaction::pad::X));
+    CHECK(!r.gestures.MagazineOut(Bf4Gun::Primary) && !out.blockFire); // still pressed: tap or hold?
     r.in.reloadButton = false;
-    r.Step();
+    out = r.Step();
+    CHECK(r.gestures.MagazineOut(Bf4Gun::Primary) && out.blockFire && !(out.padButtons & interaction::pad::X));
     // Persistent: repeated packets, a lost focus and the menu never put it back.
     r.in.controls.focused = false;
     CHECK(!r.Step().blockFire); // not engaged: no pad output at all
@@ -844,13 +845,16 @@ TEST_CASE(MagazineReloadIsAGestureThatPressesTheGamesReload) {
     r.in.switchButton = true; // pad Y: back to the primary, still empty
     CHECK(r.Step().blockFire && r.gestures.Current() == Bf4Gun::Primary);
     r.in.switchButton = false;
-    // Hold B: reload at once (the gesture skipped).
+    // Hold B: the pad's X is held for as long as B is (BF4's reload, or its interact /
+    // pick-up when something is in reach); the gun counts as reloaded, nothing is dropped.
     r.in.reloadButton = true;
     r.Step();
-    out = r.Step(BodyGestures::kQuickReloadSeconds + 0.05);
+    out = r.Step(BodyGestures::kHoldSeconds + 0.05);
     CHECK((out.padButtons & interaction::pad::X) && !out.blockFire && r.gestures.Stats().quickReloads == 1);
+    for (int i = 0; i < 60; ++i) CHECK(r.Step().padButtons & interaction::pad::X); // a one-second hold
     r.in.reloadButton = false;
-    r.Step();
+    out = r.Step();
+    CHECK(!(out.padButtons & interaction::pad::X) && !r.gestures.MagazineOut(Bf4Gun::Primary)); // no drop
     // A level load seats everything and empties the hands.
     r.in.reloadButton = true;
     r.Step();

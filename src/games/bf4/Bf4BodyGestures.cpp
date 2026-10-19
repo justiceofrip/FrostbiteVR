@@ -79,6 +79,7 @@ BodyGestureOutput BodyGestures::Update(const BodyGestureInput& in) {
     }
     const bool reloadDown = c.focused && in.reloadButton, switchDown = c.focused && in.switchButton;
     const bool reloadRising = reloadDown && !reloadWas_, switchRising = switchDown && !switchWas_;
+    const bool reloadFalling = !reloadDown && reloadWas_;
     reloadWas_ = reloadDown;
     switchWas_ = switchDown;
 
@@ -185,20 +186,21 @@ BodyGestureOutput BodyGestures::Update(const BodyGestureInput& in) {
         auto& gunOut = magazineOut_[static_cast<int>(current_)];
         if (reloadRising) {
             reloadDownAt_ = now;
-            quickDone_ = false;
-            if (!gunOut) {
-                gunOut = true;
-                ++stats_.ejects;
-                out.haptic[1] = {true, false};
-            }
+            holdActive_ = false;
         }
-        if (reloadDown && !quickDone_ && now - reloadDownAt_ >= kQuickReloadSeconds) {
-            quickDone_ = true;
-            gunOut = false;
-            PulseReload(now);
+        if (reloadDown && !holdActive_ && now - reloadDownAt_ >= kHoldSeconds) {
+            holdActive_ = true; // the pad's X from now until B is let go
+            if (gunOut) out.haptic[1] = {true, true};
+            gunOut = false; // BF4 reloads (or interacts; either way the gun is not left empty)
             ++stats_.quickReloads;
-            out.haptic[1] = {true, true};
         }
+        if (reloadFalling && !holdActive_ && !gunOut) { // a tap: drop the magazine
+            gunOut = true;
+            ++stats_.ejects;
+            out.haptic[1] = {true, false};
+        }
+        if (!reloadDown) holdActive_ = false;
+        if (holdActive_) out.padButtons |= interaction::pad::X;
         // Seating: into an empty gun, or a tactical reload (the fresh magazine pushes the
         // old one out); either way BF4 performs its own reload.
         if (magazineInHand_ && c.hands[0].gripTracked && c.hands[1].gripTracked &&
