@@ -1,4 +1,31 @@
-# Current state: campaign blocked; checkpoint426 / launcher 0.1.7
+# Current state: campaign blocked; checkpoint427 investigation / launcher 0.1.8
+
+## Startup hotfix published — October 19, 15:18 UTC
+
+[BC2VR 0.1.8](https://github.com/justiceofrip/BC2VR/releases/tag/v0.1.8)
+is the public installer/runtime hotfix. It was built separately on
+`hotfix/0.1.8-startup`, implementation commit
+`475dc87f13a94546c0c6f639efedc51ad393a86c`, over published 0.1.7 gameplay.
+It removes the G:-only native audio-cache check that rejected the EA tester's
+valid X: cache, preserves content validation, and improves bounded native error
+reporting. It does not include this branch's knife/navigation investigation.
+
+Both full architecture builds passed 293/293 suites. Focused launcher/setup
+checks passed 135; exact installer/update validation passed 44 checks plus 51
+existing launcher checks. The unchanged asset recipe/cache passed validation
+with the newly staged runtime. All three uploaded release assets match their
+tested SHA-256 digests and sizes. Actual EA/VDXR headset rendering remains
+unverified. The knife, opening progression and death/reload crashes remain
+unresolved; no playable-campaign claim is made.
+
+The separate source branch is published for fork review. The main development
+branch retains the unbuilt r14 diagnostic described below. Both shared build
+trees currently point at the isolated hotfix worktree; restore their main-source
+configuration and obtain new paired receipts before using them for r14. Frozen
+r13 and published r4/0.1.8 binaries remain separate. Game05 was closed normally
+before installer validation; its old actor, weapon and navigation identities
+must not be reused. The user's installed launcher was not changed; 0.1.8 is
+available through its updater. All new output and scratch stayed on G:.
 
 ## Release blocker — October 19
 
