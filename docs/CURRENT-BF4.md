@@ -93,6 +93,16 @@ screen. Pieces (all on the analysed build only):
   unchanged) and the adapter's `TheaterLink` serves two bridges as a FIFO, so the next
   request is already queued when a pair is captured. Each pair is still labelled with its
   own request's pose (oldest request first; its pose goes to the camera).
+- Next pose in the capturing frame: the camera's pose used to be set at the start of each
+  Present's frame work, before that Present captured, so after a capture the next queued
+  pose waited one more frame and one submit carried a pose already captured. The core now
+  asks the link for its current request right after publishing and, if the front changed,
+  sends that pose to the camera in the same frame (`earlyPoses`): 2 Presents per pair at
+  settle 2 instead of 3. The labelling rule is unchanged (a capture still needs `settle`
+  submits of the pose). Emulated test.
+- Emulator note: with two channels the queued request (usually channel 2) can outlive its
+  200 ms in Bf4EmuHost, where each capture is a WARP software render (25 of 139 timed out
+  in one run; pairs per run vary 76-237 with the machine's load). Not expected on a GPU.
 - Staggering: one channel begins per XR frame and only once the other request is 0.7 of a
   typical completion old, so the queued pose is not much older than a fresh one. If both
   complete in one XR frame the older is shown and the newer held one frame (never
@@ -428,11 +438,11 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
   and notes were shortened to fit half width (GDI text now ends with an ellipsis when it
   does not fit). Unit test: every item on the panel, none overlapping; a GDI render of the
   developer menu was checked by eye.
-- Build.ps1 after HUD corners: x64 284/284, x86 283/283. Bf4CoreTests 77 cases;
+- Build.ps1 after the early next pose: x64 284/284, x86 283/283. Bf4CoreTests 78 cases;
   Bf4Emulated pass (theater, world lane, stereo probe, census, lockdown, gestures, eye
   resampler reticle on WARP); launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
   `-World -FrameChannels 2` 5/5 (227 pairs); `-World` with one channel 4/4 (47 pairs).
-- Installed locally: runtime/bf4 0.4.37-local (rollback 0.4.36-local). Developer
+- Installed locally: runtime/bf4 0.4.38-local (rollback 0.4.37-local). Developer
   sessions still run the read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the
   framework's `StereoMath.h` (`Quat` = `Quaternion`; Pose is `{position, orientation}`).

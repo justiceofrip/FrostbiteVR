@@ -109,6 +109,9 @@ public:
     // A short controller pulse on the XR host (hand 0 left, 1 right) answering the input
     // packet `inputGeneration` of reference space `space`.
     virtual void Haptic(unsigned /*hand*/, bool /*strong*/, std::uint64_t /*inputGeneration*/, std::uint64_t /*space*/) {}
+    // The world lane's current eye-pair request (the oldest queued lease) as it stands now,
+    // e.g. after this Present captured the previous one; false when none is held.
+    virtual bool CurrentWorld(WorldRequest& /*out*/) { return false; }
 };
 
 struct PlatformFrame {
@@ -130,6 +133,7 @@ struct StereoStats {
 struct CoreStats {
     std::uint64_t frames = 0;
     std::uint64_t framesPublished = 0;
+    std::uint64_t earlyPoses = 0; // next lease's pose applied in the Present that captured the last
     std::uint64_t reloadRequests = 0;
     std::uint64_t cameraFrames = 0;
     std::uint64_t recenters = 0;

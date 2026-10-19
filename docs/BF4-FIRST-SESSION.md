@@ -1,4 +1,4 @@
-# BF4 headset session: checklist (0.4.37-local)
+# BF4 headset session: checklist (0.4.38-local)
 
 What to try in the next headset session, and what each check tells us. About 15 minutes.
 Everything is input-only or an exactly restored camera/FOV write, apart from the optional
@@ -27,7 +27,8 @@ raise BF4's Video > Resolution Scale (150-200 %) before judging blur.
 ## In a mission (head-tracked view)
 
 1. Look around: the world should turn the same way as your head. Note how smooth it is:
-   two frame channels should update the view more often than before (~17-25 Hz).
+   two frame channels and the earlier next pose should update the view much more often
+   than before (~17-25 Hz; expected about game fps / 2 at frame sync 2).
 2. Aim with the right controller: the gun follows it, and a **green ring** shows where it
    aims (BF4's own crosshair stays at the centre of your view). Grip with the left hand in
    front of the gun to aim with both hands. The right stick turns in **30 degree steps**

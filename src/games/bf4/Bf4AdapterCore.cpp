@@ -611,6 +611,17 @@ void AdapterCore::OnFrame(const PlatformFrame& f, const ControllerSnapshot& in) 
             meta.eye = stereo_ == StereoMode::AlternateEye && !camera_.empty() ? camera_.front().eye : -1;
             if (platform_.PublishFrame(meta)) ++stats_.framesPublished;
         }
+        // World lane: when this Present captured the pose it was carrying, the next queued
+        // request's pose goes to the camera now rather than at the next Present, so the very
+        // next submit already carries it (one frame less per pair; the labelling rule is
+        // unchanged: a capture still needs `settle` submits of the new pose).
+        WorldRequest next;
+        if (meta.world && in.world.valid && platform_.CurrentWorld(next) && next.valid && next.poseId != in.world.poseId) {
+            ControllerSnapshot early = in;
+            early.world = next;
+            UpdateCamera(early, f);
+            ++stats_.earlyPoses;
+        }
     }
 
     // 8. Probe artefacts: one snapshot once pairs are flowing; report every ~5 s (overwritten).

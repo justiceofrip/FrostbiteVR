@@ -187,6 +187,13 @@ public:
         snapshotDir_ = dir;
     }
 
+    bool CurrentWorld(WorldRequest& out) {
+        std::lock_guard lock(mutex_);
+        out = {};
+        FillWorld(out);
+        return out.valid;
+    }
+
     bool PublishFeedback(const interaction::FeedbackEvent& event) {
         std::lock_guard lock(mutex_);
         return BridgeUsable(0) && bridges_[0]->PublishFeedback(event);
@@ -217,18 +224,7 @@ public:
         // frame channels the next request is already queued while the current one renders;
         // the oldest one's pose goes to the camera (requests are served in host order).
         if (world_) TakeLeases();
-        if (!queue_.empty()) {
-            const Lease& front = queue_.front();
-            out.world.valid = true;
-            out.world.poseId = front.poseId;
-            out.world.head = front.lease.tracking.head;
-            out.world.fov[0] = front.lease.tracking.fov[0];
-            out.world.fov[1] = front.lease.tracking.fov[1];
-            const auto& e = front.lease.tracking.eyes;
-            const float dx = e[1].position.x - e[0].position.x, dy = e[1].position.y - e[0].position.y,
-                        dz = e[1].position.z - e[0].position.z;
-            out.world.halfEyeDistance = 0.5f * std::sqrt(dx * dx + dy * dy + dz * dz) * front.lease.tracking.worldUnitsPerMeter;
-        }
+        FillWorld(out.world);
         ipc::MenuControl c{};
         const auto r = channel_.ReadControl(c);
         if (r == ipc::ChannelResult::Closed) closed_ = true;
@@ -262,6 +258,21 @@ private:
         untrackedCheckedMs_ = now;
         char v[4] = {};
         untracked_ = GetEnvironmentVariableA("FVR_BF4_WORLD_UNTRACKED", v, sizeof(v)) == 1 && v[0] == '1';
+    }
+
+    // The oldest queued lease as the camera's request.
+    void FillWorld(WorldRequest& w) const {
+        if (queue_.empty()) return;
+        const Lease& front = queue_.front();
+        w.valid = true;
+        w.poseId = front.poseId;
+        w.head = front.lease.tracking.head;
+        w.fov[0] = front.lease.tracking.fov[0];
+        w.fov[1] = front.lease.tracking.fov[1];
+        const auto& e = front.lease.tracking.eyes;
+        const float dx = e[1].position.x - e[0].position.x, dy = e[1].position.y - e[0].position.y,
+                    dz = e[1].position.z - e[0].position.z;
+        w.halfEyeDistance = 0.5f * std::sqrt(dx * dx + dy * dy + dz * dz) * front.lease.tracking.worldUnitsPerMeter;
     }
 
     bool BridgeUsable(unsigned i) const { return bridges_[i] && bridges_[i]->Connected() && !bridges_[i]->Fatal(); }
@@ -542,6 +553,7 @@ public:
     bool WorldLane() const override { return link_.WorldLane(); }
     void RequestSnapshot(const std::string& dir) override { link_.RequestSnapshot(dir); }
     bool Haptic(const interaction::FeedbackEvent& event) override { return link_.PublishFeedback(event); }
+    bool CurrentWorld(WorldRequest& out) override { return link_.CurrentWorld(out); }
 
 private:
     TheaterLink& link_;

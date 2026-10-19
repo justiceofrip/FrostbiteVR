@@ -706,6 +706,8 @@ public:
     }
     std::uint64_t hapticId = 0, hapticsSent = 0;
 
+    bool CurrentWorld(WorldRequest& out) override { return frames && frames->CurrentWorld(out); }
+
     bool PublishFrame(const FrameMeta& meta) override {
         if (!swapchain || !frames) return false;
         if (meta.eye == 0 || meta.eye == 1) { // engine stereo pair: publish the captured eye

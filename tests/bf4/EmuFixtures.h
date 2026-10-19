@@ -126,6 +126,11 @@ struct FakePlatform final : IAdapterPlatform {
     void Haptic(unsigned hand, bool strong, std::uint64_t generation, std::uint64_t space) override {
         if (generation && space) haptics.push_back({hand, strong});
     }
+    bool CurrentWorld(WorldRequest& out) override {
+        out = nextWorld;
+        return out.valid;
+    }
+    WorldRequest nextWorld; // what the world link holds after this Present's capture
     std::array<std::uint16_t, 2> keys{};
     std::vector<std::uint16_t> keyPresses;
     std::vector<std::pair<unsigned, bool>> haptics;

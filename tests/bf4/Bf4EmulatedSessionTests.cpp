@@ -588,3 +588,33 @@ TEST_CASE(EmuWalkTowardTheGunLeavesTheStickAlone) {
     for (int i = 0; i < 30; ++i) frame(input());
     CHECK(!core.ModMenuOpen() && core.Pad().thumbLX == 0 && core.Pad().thumbLY > 32000);
 }
+
+TEST_CASE(EmuNextLeasePoseReachesTheCameraInTheCapturingFrame) {
+    // After a Present captures the pose it carried, the next queued request's pose goes to
+    // the camera in that same frame, so the very next submit carries it.
+    FakeImage image({names::kGameRenderer, names::kRenderViewUpdate, names::kClientGameContext, names::kLevelName});
+    FakePlatform platform;
+    AdapterCore core(Session(true), X64(), image.Resolve(), platform);
+    core.OnSwapchainAdopted(true);
+    platform.Campaign();
+    Clock clock;
+    auto in = Input(0);
+    in.world.valid = true;
+    in.world.poseId = 7;
+    in.world.head = in.head;
+    in.world.fov[0] = {-1.0f, 0.9f, 1.0f, -1.1f};
+    in.world.fov[1] = {-0.9f, 1.0f, 1.0f, -1.1f};
+    for (int i = 0; i < 3; ++i) core.OnFrame(clock.Next(), in);
+    CHECK(core.Stereo() == StereoMode::Mono && core.Stats().earlyPoses == 0); // same lease: once per frame
+    const std::size_t before = platform.cameraLog.size();
+    platform.nextWorld = in.world; // this Present captured pose 7; pose 8 waits in the queue
+    platform.nextWorld.poseId = 8;
+    platform.nextWorld.head.position.x += 0.05f;
+    core.OnFrame(clock.Next(), in);
+    CHECK(platform.cameraLog.size() == before + 2);
+    CHECK(platform.cameraLog[before][0].poseId == 7 && platform.cameraLog[before + 1][0].poseId == 8);
+    CHECK(core.Stats().earlyPoses == 1);
+    platform.nextWorld = {}; // nothing queued: no second camera write
+    core.OnFrame(clock.Next(), in);
+    CHECK(platform.cameraLog.size() == before + 3);
+}

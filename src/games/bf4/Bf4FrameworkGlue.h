@@ -21,6 +21,7 @@ struct ID3D11Texture2D;
 namespace fvr::bf4 {
 
 struct SessionInfo;
+struct WorldRequest;
 
 struct FrameMeta {
     std::uint64_t frameIndex = 0;
@@ -78,6 +79,8 @@ public:
     virtual void RequestSnapshot(const std::string& /*dir*/) {}
     // A haptic cue for the XR host (sent on the frame lane the host reads input from).
     virtual bool Haptic(const interaction::FeedbackEvent& /*event*/) { return false; }
+    // The world lane's current request (oldest queued lease), false when none.
+    virtual bool CurrentWorld(WorldRequest& /*out*/) { return false; }
 };
 
 struct GamePointer {
