@@ -1,0 +1,54 @@
+#pragma once
+// Developer research channel (developer sessions with a research directory only; never in
+// player sessions). A text file of numbered commands that the adapter executes once each on
+// the render thread, so an offline tester can look at the game (snapshots) and drive its
+// menus through the SAME pointer path the VR laser uses (PointerEvent -> Win32PointerSink).
+//
+//   <id> snap <name>        full backbuffer -> <research>/<name>.bmp (half size)
+//   <id> click <u> <v>      move, press, release at normalised client coords (0..1)
+//   <id> move <u> <v>       hover only
+//   <id> key <name>         key press (enter, esc, space, up, down, left, right, tab, ...)
+//   <id> dumpimage          read-only copy of the decrypted bf4.exe image (offline RE)
+//   <id> scanq <rva>        find objects whose first qword is exe base + rva (a vtable);
+//                           background thread, read-only, at most 16 addresses
+//   <id> peek <addr> <len>  hex dump of <= 256 readable bytes at an absolute address
+//   <id> census             read-only census of weapon-firing objects (background thread)
+// The channel never writes game memory.
+//   <id> type <text>        characters to the game window (e.g. its console); '_' = space
+
+#include "Bf4PointerInjector.h"
+
+#include <cstdint>
+#include <string>
+#include <string_view>
+#include <vector>
+
+namespace fvr::bf4 {
+
+struct ResearchCommand {
+    enum class Kind : std::uint8_t { Snap, Click, Move, Key, DumpImage, ScanQ, Peek, Type, Census, Unknown };
+    std::uint64_t id = 0;
+    Kind kind = Kind::Unknown;
+    std::string arg;    // snap name, key name, or the unparsed verb for Unknown
+    float u = 0, v = 0; // click/move
+    std::uint64_t value = 0; // scanq rva, peek address
+    std::uint32_t length = 0; // peek length
+};
+
+// Lines "<id> <verb> [args]"; '#' comments and blank lines skipped. Returns the commands
+// with id > afterId in file order. Malformed lines become Unknown (reported, not run).
+std::vector<ResearchCommand> ParseResearchCommands(std::string_view text, std::uint64_t afterId);
+
+// Windows virtual-key code for a key name; 0 if unknown. Names: enter, esc, space, tab,
+// backspace, up, down, left, right, grave (console), f1..f12, a..z, 0..9.
+unsigned ResearchKeyCode(std::string_view name);
+
+// Pointer events for a hover/click at (u, v), spread over frames so a UI sees hover, then
+// press, then release, then the laser lets go of the cursor.
+struct TimedPointerEvent {
+    std::uint32_t frameDelay = 0; // frames after the previous event
+    PointerEvent event;
+};
+std::vector<TimedPointerEvent> PointerSequence(float u, float v, int clientWidth, int clientHeight, bool click);
+
+} // namespace fvr::bf4

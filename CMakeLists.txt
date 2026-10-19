@@ -800,6 +800,8 @@ endif()
 
 include(cmake/Bc2SingleFireCandidate.cmake)
 include(cmake/Bc2SingleFireNativeFamily.cmake)
+# Battlefield 4 adapter (x64 only beyond its platform-neutral core).
+include(cmake/Bf4Adapter.cmake)
 if(BUILD_TESTING)
   target_compile_definitions(Bc2BoltControllerProbeTests PRIVATE FVR_BC2_MANUAL_BOLT_PROBE)
 endif()
