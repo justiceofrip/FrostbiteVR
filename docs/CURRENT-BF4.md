@@ -239,7 +239,12 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
 - Zoom/motion sickness in the head-tracked view: compare the snapshots with the eye
   FOVs; then raise the pair rate (one request in flight is the limit).
 - 3D: the stall after the split render engages; the watchdog's stacks show where.
-- Laser click on "Resume" reported not to work (which screen is not known yet). Controller aim (R8) not started;
+- Laser click on the campaign screen's "Resume" (main menu) did not register while other
+  menu clicks did. Cause assumed: no click lock, so hand jitter while the trigger was held
+  went out as a drag (that screen scrolls on drags), and the trigger also reached the
+  virtual pad. Now the cursor holds its press position unless the laser moves more than
+  2 % of the screen, and the pad's triggers are released while the laser points at the
+  screen outside campaign play (unit-tested; live check pending; clicks are logged). Controller aim (R8) not started;
   button reload (R6) is covered by the virtual pad.
 - The census holder chain matched nothing live (27 firing objects, 0 holders): redo the
   walk from the live firing vtable `+0x1D53F18`.

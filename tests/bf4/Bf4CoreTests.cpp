@@ -13,6 +13,7 @@
 #include "../../src/games/bf4/Bf4CameraProbe.h"
 #include "../../src/games/bf4/Bf4WorldView.h"
 #include "../../src/games/bf4/Bf4EngineStereo.h"
+#include "../../src/games/bf4/Bf4PointerInjector.h"
 
 #include <map>
 #include "../../src/games/bf4/Bf4SessionGuard.h"
@@ -503,4 +504,39 @@ TEST_CASE(EngineStereoDrivesSplitRenderAndRestoresExactly) {
     CHECK(DecideWorldStep(in) == WorldStep::Wait);
     in.stableFrames = 4;
     CHECK(DecideWorldStep(in) == WorldStep::Capture);
+}
+
+TEST_CASE(LaserClickHoldsItsPositionUnlessItIsADrag) {
+    using namespace fvr::bf4;
+    using T = PointerEvent::Type;
+    PointerInjector p;
+    std::vector<PointerEvent> out;
+    GamePointer g;
+    g.active = true;
+    g.u = 0.50f;
+    g.v = 0.50f;
+    p.Update(g, 1920, 1080, out);
+    CHECK(out.size() == 1 && out[0].type == T::Move && out[0].x == 960 && out[0].y == 540);
+    g.down = true;
+    p.Update(g, 1920, 1080, out);
+    CHECK(out.size() == 1 && out[0].type == T::ButtonDown && out[0].x == 960);
+    g.u = 0.51f; // hand jitter while the trigger is held: the cursor stays put
+    p.Update(g, 1920, 1080, out);
+    CHECK(out.empty());
+    g.down = false;
+    p.Update(g, 1920, 1080, out);
+    CHECK(out.size() == 1 && out[0].type == T::ButtonUp && out[0].x == 960 && out[0].y == 540);
+    // After the release the laser is followed again.
+    p.Update(g, 1920, 1080, out);
+    CHECK(out.size() == 1 && out[0].type == T::Move && out[0].x == 979);
+    // A deliberate drag (more than 2 % of the screen) follows the laser.
+    g.down = true;
+    p.Update(g, 1920, 1080, out);
+    g.u = 0.60f;
+    p.Update(g, 1920, 1080, out);
+    CHECK(out.size() == 1 && out[0].type == T::Move && out[0].x == 1152);
+    g.down = false;
+    p.Update(g, 1920, 1080, out);
+    CHECK(out.size() == 1 && out[0].type == T::ButtonUp && out[0].x == 1152);
+    CHECK(p.Clicks() == 2);
 }

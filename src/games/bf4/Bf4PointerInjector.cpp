@@ -1,6 +1,7 @@
 #include "Bf4PointerInjector.h"
 
 #include <algorithm>
+#include <cstdlib>
 
 namespace fvr::bf4 {
 
@@ -34,7 +35,12 @@ void PointerInjector::Update(const GamePointer& p, int w, int h, std::vector<Poi
         ForceRelease(out);
         return;
     }
-    const auto px = UvToPixel(p.u, p.v, w, h);
+    auto px = UvToPixel(p.u, p.v, w, h);
+    if (down_ && !dragging_) {
+        const int slop = std::max(2, static_cast<int>(kDragFraction * static_cast<float>(std::max(w, h))));
+        if (std::abs(px.x - downX_) > slop || std::abs(px.y - downY_) > slop) dragging_ = true; // a real drag
+        else px = {downX_, downY_};                                                          // click lock
+    }
     if (!active_ || px.x != x_ || px.y != y_) out.push_back({Type::Move, px.x, px.y});
     active_ = true;
     x_ = px.x;
@@ -42,9 +48,13 @@ void PointerInjector::Update(const GamePointer& p, int w, int h, std::vector<Poi
     if (p.down && !down_) {
         out.push_back({Type::ButtonDown, x_, y_});
         down_ = true;
+        dragging_ = false;
+        downX_ = x_;
+        downY_ = y_;
     } else if (!p.down && down_) {
         out.push_back({Type::ButtonUp, x_, y_});
         down_ = false;
+        dragging_ = false;
         ++clicks_;
     }
 }

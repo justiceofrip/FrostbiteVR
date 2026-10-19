@@ -4,6 +4,10 @@
 //   * a Move precedes any button event at a new position
 //   * ButtonUp is always emitted before the pointer deactivates (no stuck button)
 //   * nothing is emitted while idle
+//   * click lock: while the button is held the cursor stays where it went down, unless
+//     the laser moves more than kDragFraction of the screen (then it is a real drag), so
+//     the hand's jitter while pulling the trigger never turns a click into a drag (BF4's
+//     campaign screen scrolls on drags and then ignores the click)
 // The Windows sink only translates events to hooks + window messages.
 #include "Bf4FrameworkGlue.h"
 
@@ -29,9 +33,13 @@ public:
     bool ButtonDown() const { return down_; }
     std::uint64_t Clicks() const { return clicks_; }
 
+    static constexpr float kDragFraction = 0.02f;
+
 private:
     bool active_ = false;
     bool down_ = false;
+    bool dragging_ = false;
+    int downX_ = 0, downY_ = 0;
     int x_ = -1, y_ = -1;
     std::uint64_t clicks_ = 0;
 };

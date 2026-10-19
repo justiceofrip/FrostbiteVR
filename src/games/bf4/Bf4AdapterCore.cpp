@@ -76,6 +76,9 @@ void AdapterCore::UpdatePad(const ControllerSnapshot& in) {
     }
     pad_ = interaction::MapToPad(controls, padLayout_, options);
     if (!controls.focused && options.extraButtons) pad_.buttons |= options.extraButtons; // pulse without hands
+    // Outside campaign play the trigger pointed at the screen is a mouse click, not the
+    // pad's trigger as well (the front end reacts to both).
+    if (in.pointer.active && !guard_.GameplayAllowed()) pad_.leftTrigger = pad_.rightTrigger = 0;
     platform_.ApplyPad(pad_, true);
     padActive_ = true;
     ++stats_.padFrames;
