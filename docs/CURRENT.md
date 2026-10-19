@@ -1,4 +1,168 @@
-# Current state: checkpoint426 with published launcher 0.1.7 hotfix
+# Current state: campaign blocked; checkpoint426 / launcher 0.1.7
+
+## Release blocker — October 19
+
+The opening mission knife still fails to damage enemies and blocks campaign
+progress. The user reproduced that failure and a game crash on the published
+0.1.7 package. Versions 0.1.5–0.1.7 contain the same normal-r4 native gameplay
+build; the later launcher fixes did not fix the knife. Publishing an unverified
+mandatory opening interaction was a release decision error. The public README
+and 0.1.7 release notice now prominently mark the campaign blocked.
+
+No new gameplay release or playable-campaign claim is warranted until actual
+native knife damage, opening progression and death/reload behavior are verified.
+The existing repeated-jab rendering test supplies simulated native outcomes;
+neither it nor observed client attack animations prove server damage callbacks.
+
+The failed session `20261019-114521-913-2e4b9243` has an empty final native report
+and an access-violation probe result. Its preserved game crash XML records an
+invalid instruction target `0xC`; stack addresses match the earlier AMD command
+dispatcher, but the current producer/corruption cause and mod involvement remain
+unknown. Actor loss precedes the crash by about six seconds without a recorded
+scene replacement. Do not equate this correlation with a proven lifetime bug.
+
+The private actual-game `fallback42701` run found the server receiving the stab
+and invoking acquisition, while the adapter rejected its caller and subsequently
+rejected attack as not acquired. The old filter expected a different native
+notifier. Installed-executable inspection proves ordinary FireLogic0 Step calls
+the acquisition listener through return address `0x6E1FCA`. The unpublished r8
+candidate corrects that exact filter and fingerprints both the helper and Step
+call site. Raw caller/self diagnostics now include rejected callbacks. Actual
+acquisition, physical jab, enemy damage and opening progression are separate
+acceptance requirements; static proof and unit checks do not establish them.
+
+The paired r8 build passed 291 tests on each architecture. In actual game05,
+`fallback42702` confirmed raw caller `0x6E1FCA`, admitted acquisition/attack and
+one completed targetless attack (pending zero), with clean trace/receiver exits.
+However `motion42701` caught another blocker without a headset: the first
+physical jab reached the server but acquisition failed its owner predicate;
+attack was then not acquired and the second jab remained blocked (pending
+unknown). No target damage was observed. Do not call r8 a working knife fix or
+publish it. Sparse first-failure owner diagnostics are the next investigation;
+no native outcomes have been fabricated.
+
+The paired r9 diagnostic build passed 292 tests on each architecture. Actual
+`motion42702` admitted acquisition and copied both blade-search arguments, then
+rejected attack solely because the bracketed client soldier flags changed from
+3 to 19 (bit 0x10). Player, inventory and effects identities were unchanged; the
+existing normalized owner comparison also matched. The next candidate applies
+the existing 0x18 context-bit normalization consistently to callback brackets;
+initial publication, inventory selector bit 0 and all other identities remain
+exact. The paired r10 candidate passed 293 tests on each architecture. In the
+actual game, `fallback42703` completed one targetless native attack without
+ownership failures. `motion42703` then completed two separate physical jabs,
+each with both copied blade-search arguments and returned acquisition/attack,
+zero failures, zero unknown outcomes and no pending action. This verifies the
+previously failing miss/rearm flow; target damage and opening progression are
+still unverified, so the candidate is not a released knife fix.
+
+The r11 paired build also passed 293 tests per architecture. Its actual
+`forward42701` run moved the emulated player 3.67 m while crouched and completed
+two physical jabs. Independent same-run input/render measurements put the blade
+within 0.201 degrees of body forward and confirm the native search uses that
+direction. Neither movement nor the slow wrist preparation generated an attack.
+Both jabs missed; `forward42702` also completed two targetless attacks cleanly.
+These runs verify movement, geometry and rearming, not enemy damage. The short
+sessions inherit the previous native aiming direction on reattach; a bounded
+ordinary snap-turn prefix is being added to navigate toward the opening guard
+without desktop input or repeated swings from an unchanged empty location.
+
+The r12 paired build passed 293 tests per architecture. Ordinary snap turns
+and movement worked in the real game, but both navigation runs cancelled
+before a jab when consecutive native menu publications were separated by
+466 ms and 199 ms. Stereo delivery paused concurrently; the latter failure
+preceded capture and wrist movement. Neither run supplies knife-damage evidence.
+Both native adapters retired cleanly, with receiver failures preserved separately.
+The ten retained probe workers had exited; no stale-worker cause was observed.
+The production 100 ms input-authority deadline remains unchanged. The r13 paired
+build passed 293 tests per architecture and adds an opt-in, receiver-only
+movement pause. Actual `navigation42703` verified one 640 ms pause, including
+28 fresh neutral publications spanning 513 ms, before ordinary movement resumed.
+A second timeout correctly cancelled the recipe before any wrist rotation or
+jab. Its initial camera heading was already 73.69 degrees different from the
+prior run before scripted movement began; the cause between sessions is unknown.
+Further navigation needs a fresh typed heading/position read, rather than assuming
+the prior session's camera direction. No enemy damage or opening progression is
+claimed. Cleanup is now recorded independently of receiver success, using the
+full native reference/view-restoration checks; failed tests remain failed.
+
+Actual `navigation42705` recovered the hand claim after its single menu pause,
+but lost the player actor at 7.125 seconds, before either scheduled jab. Both
+eyes show the guard immediately above the player and blood at movement release;
+the subsequent desktop capture shows a sideways collapse. A new scene and actor
+returned at 15.687 seconds, followed by the opening checkpoint/objective. This
+strongly supports one gameplay death and automatic checkpoint return, although
+no health-zero or explicit death event was recorded. No jab reached the old
+actor after its retirement. The receiver ended before the replacement, so this
+does not verify post-death stereo or controller recovery. Cleanup passed.
+
+`navigation42706` then completed a safe 13.7 m crouched transit using the
+replacement actor, one targetless native attack, and clean native/receiver exits.
+Its measured knife direction was re-derived for the new weapon lifetime. Neither
+the earlier owner loss nor successful transit proves opening-guard damage.
+
+The r14 receiver-only prepared-approach diagnostic is implemented but **unbuilt
+and untested**. It prepares the measured wrist orientation before movement,
+holds it through the approach, then schedules the first physical jab after
+500 ms of released movement instead of the previous 2.5-second wait. The opt-in
+requires motion and measured rotation, rejects turn/resume combinations, and
+retains the existing tracking, menu and publication gates. Changes are limited
+to `TriggerInputSmoke.h`, `NativeIpcProbe.cpp` and `SceneRecoveryProbeTests.cpp`;
+the added C++ cases have not been compiled or run. This is diagnostic scheduling,
+not a production gameplay change or evidence of knife damage.
+
+The latest built main native closure remains r13, source
+`17f0b0647fa09f063d7becb2acff27ea0bc69b50b0f511a9c4dc3fe0edd3ddf7`,
+with the existing 293 passing tests on each architecture. Game testing is paused
+while the isolated public 0.1.8 package is validated. No r14 runtime, headset,
+enemy-damage or campaign-progression acceptance is claimed.
+
+The confirmed install-drive/startup-reporting hotfix is being isolated from this
+unfinished gameplay work for release 0.1.8. The campaign warning stays in place;
+the setup fix must not be presented as verified knife or campaign completion.
+
+The r9 `checkpoint42701` diagnostic performed exactly one Last Checkpoint reload.
+The wrapper stopped its actor polling on a transient null-player read and is
+preserved as incomplete. Supplemental recorded evidence independently shows
+one native scene recovery, a replacement player, subsequent native Update,
+eight retained stereo pairs after replacement, both-eye world rendering and
+exact cleanup. Its fresh 60-second exception watcher captured no exceptions and
+detached with the game alive. The private polling bug is corrected; no duplicate
+game run was used to overwrite the failed wrapper result. Actual death and
+longer-session stability remain unverified.
+
+The r7 diagnostic finished its native cleanup/report but its outer helper timed
+out before receiving the thread-exit receipt. Its evidence is preserved and that
+root-owned game was closed normally with exit zero before a fresh game05. Finite
+diagnostics now allow 30 seconds beyond the requested input interval for startup,
+retirement and report writes; input duration and public host lifetime are unchanged.
+The private receiver can perform a bounded ordinary-stick approach before the
+existing trigger/two-jab recipe, cancelling on tracking/menu/lifetime changes and
+recording every requested input and publication result. It never edits position
+or health, and publication alone does not prove movement or damage.
+
+The launcher also no longer labels a nonzero native exit as clean merely
+because the game has already exited. Its focused regression reproduced the old
+classification and passed 13 checks, including normal game closure.
+
+New EA tester feedback confirms 0.1.7 local asset preparation succeeds and VR
+starts briefly before native `probe_exit:20`. This is the generic caught native
+exception path, distinct from the earlier access violation; its exact cause
+was found in the tester's newly supplied `runtime.zip`: both attempts report
+`Mechanism audio callback binding or private cache unverified`. Their executable
+is the same supported SHA-256, and the audio files match the exact required hashes
+and formats. Both native audio readers incorrectly required G:, rejecting the
+tester's X: cache. The unpublished shared path helper admits absolute local paths
+on the user's chosen drive while retaining all content and callback checks.
+VirtualDesktopXR instance/system initialization succeeded in these logs; no
+rendered gameplay acceptance follows. Published 0.1.7 fails to show or bundle
+the native error object. Unpublished startup/feedback changes now surface a
+bounded error and sanitized failure summary, retaining log fallback for absent,
+partial or oversized reports. They passed 25 new diagnostic, 26 startup and 45
+feedback checks. The actual packaged installer/update/rollback compatibility
+matrix also passed 26 checks with mocked process/XR boundaries; its portable test
+is now in `tests/Test-LauncherUserSetups.ps1`. Other users' hardware compatibility
+and actual headset gameplay remain unverified.
 
 ## Launcher 0.1.7 published hotfix
 

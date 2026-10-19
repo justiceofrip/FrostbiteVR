@@ -64,7 +64,30 @@ function Get-Bc2NativeStartupSample([string]$Path) {
     } finally {$file.Dispose()}
     return $null
 }
+function Read-Bc2NativeFailureError([string]$Path) {
+    $file=$null
+    try {
+        Assert-FvrNoLinks $Path
+        if(-not(Test-Path -LiteralPath $Path -PathType Leaf)){return $null}
+        $file=[IO.File]::Open($Path,'Open','Read',([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete))
+        # Normal completed traces can be large. Read only a complete small
+        # failure object; a partial write or unrelated trace uses log fallback.
+        $count=$file.Length;if($count -le 0 -or $count -gt 65536){return $null}
+        $bytes=[byte[]]::new([int]$count);$read=0
+        while($read -lt $count){$n=$file.Read($bytes,$read,[int]$count-$read);if($n -eq 0){return $null};$read+=$n}
+        if($file.Length -ne $count){return $null}
+        $row=[Text.UTF8Encoding]::new($false,$true).GetString($bytes) | ConvertFrom-Json -AsHashtable -Depth 8 -ErrorAction Stop
+        if($row -isnot [hashtable] -or $row.state -cne 'failed' -or $row.error -isnot [string] -or -not $row.error.Trim()){return $null}
+        $detail=($row.error -replace '[\x00-\x1F\x7F]',' ').Trim()
+        return $detail.Substring(0,[Math]::Min(1600,$detail.Length))
+    } catch {return $null}
+    finally {if($file){$file.Dispose()}}
+}
 function Get-Bc2StartupFailure([string]$Folder,[string]$Component,[string]$Fallback) {
+    if($Component -eq 'native'){
+        $detail=Read-Bc2NativeFailureError (Join-Path $Folder 'native-trace.json')
+        if($detail){return ($Fallback+' '+$detail+' Use Report feedback to save diagnostics.')}
+    }
     foreach($name in @(($Component+'.stderr.log'),($Component+'.stdout.log'),($Component+'.log'))){
         $path=Join-Path $Folder $name
         if(Test-Path -LiteralPath $path -PathType Leaf){

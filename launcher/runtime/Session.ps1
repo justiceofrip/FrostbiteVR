@@ -93,7 +93,9 @@ try {
         }
     }
     $state.native_exit_code=$trace.ExitCode
-    if($trace.ExitCode -ne 0 -and -not $game.HasExited){throw "Native VR session exited with code $($trace.ExitCode). See native.stderr.log."}
+    # A crashing game can terminate the remote probe too. Its nonzero result
+    # remains a failure even when BC2 has already exited; normal close returns0.
+    if($trace.ExitCode -ne 0){throw (Get-Bc2StartupFailure $folder 'native' "Native VR session exited with code $($trace.ExitCode).")}
     $state.state='ended'
 } catch {$state.state='failed';$state.error=$_.Exception.Message;Write-Error -Message $_.Exception.Message -ErrorAction Continue}
 finally {

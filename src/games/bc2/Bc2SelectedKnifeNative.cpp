@@ -1,5 +1,6 @@
 #include "Bc2SelectedKnifeNative.h"
 #include "Bc2SelectedKnifeCode.h"
+#include "Bc2ReloadFlow.h"
 #include <atomic>
 #include <mutex>
 #if defined(_WIN32) && defined(_M_IX86) && defined(FVR_BC2_CHEST_KNIFE_DRAW_RETURN)
@@ -13,8 +14,8 @@ namespace fvr::bc2::selectedKnife {namespace {
 using namespace interaction;
 struct Row {
     std::uint64_t serial=0,input=0;unsigned cause=0,effects=0,attacker=0,handle=0,target=0;
-    std::int64_t observedNs=0,deadlineNs=0,stagedNs=0,acquiredNs=0,attackedNs=0;
-    unsigned searches=0,copies=0,damageCalls=0,failure=0;
+    std::int64_t observedNs=0,deadlineNs=0,stagedNs=0,publishedNs=0,revokedNs=0,acquiredNs=0,attackedNs=0;
+    unsigned searches=0,copies=0,damageCalls=0,failure=0,acquisitionFailure=0,acquisitionPriorFailure=0;
     bool acquisitionReturned=false,attackReturned=false,healthKnown=false;
     float healthBefore=0,healthAfter=0;
     math::Matrix4 nativeBefore{},blade{};
@@ -33,6 +34,20 @@ struct Service {
     std::optional<Action> action;
     std::array<Row,32> rows{};unsigned count=0,dropped=0,prepared=0,rejected=0,readGaps=0,geometryGaps=0,unknown=0;
     std::array<unsigned,8> geometryFailures{};
+    struct HookCounts {
+        std::atomic<std::uint64_t> entries=0;
+        std::atomic<std::uint64_t> rawLastBoundary=0;
+        std::array<std::atomic<std::uint64_t>,unsigned(HookOutcome::Count)> outcomes{};
+    } acquire,attack;
+    std::int64_t nativeObservedNs=0,lastHookNs=0;
+    std::array<unsigned,3> nativeCurrent{},nativeNext{};
+    unsigned lastHook=0,lastOutcome=0,lastSelf=0,lastCaller=0;std::uint64_t lastSerial=0;
+    unsigned completed=0;Row lastCompleted{};
+    bool updateVerified=false;unsigned updateCaller=0;
+    std::atomic<std::uint64_t> updateEntries=0,updateContention=0;
+    std::optional<Native> observedNative;std::array<UpdateTelemetry,3> updates{};
+    std::array<std::uint64_t,unsigned(OwnerBoundary::Count)> ownerFailures{};
+    std::array<OwnerFailure,4> ownerFailureRecords{};unsigned ownerFailureCount=0,ownerFailureDropped=0;
 } service;
 using AcquireFn=std::uintptr_t(__thiscall*)(void*);
 using SearchFn=unsigned(__thiscall*)(void*,unsigned,const void*,unsigned,float);
@@ -46,8 +61,32 @@ std::int64_t Now()noexcept {LARGE_INTEGER q{};if(!service.frequency||!QueryPerfo
     return q.QuadPart/service.frequency*1000000000ll+(q.QuadPart%service.frequency)*1000000000ll/service.frequency;}
 bool Current(const Action& a)noexcept {return OwnerCurrent(service.memory,service.server,service.state,service.base,a.native);}
 bool Retained(const Action& a)noexcept {return AcceptedOwnerRetained(service.memory,service.server,service.state,service.base,a.native);}
+bool ObservedOwner(const Action& a,bool selected,OwnerBoundary boundary,bool gateHeld)noexcept {
+    OwnerDiagnostic proof;
+    const bool okay=selected?OwnerCurrent(service.memory,service.server,service.state,service.base,a.native,&proof):
+        AcceptedOwnerRetained(service.memory,service.server,service.state,service.base,a.native,&proof);
+    if(okay)return true;
+    const OwnerFailure failure{boundary,a.intent.serial,Now(),proof};
+    const auto record=[&]{++service.ownerFailures[unsigned(boundary)];
+        if(service.ownerFailureCount<service.ownerFailureRecords.size())service.ownerFailureRecords[service.ownerFailureCount++]=failure;
+        else ++service.ownerFailureDropped;};
+    if(gateHeld)record();else {std::lock_guard lock(service.gate);record();}
+    return false;
+}
 bool Same(const Action& a)noexcept {return service.action&&service.action->intent.serial==a.intent.serial&&
     service.action->intent.identity==a.intent.identity;}
+void Count(Service::HookCounts& counts,HookOutcome outcome)noexcept {
+    counts.outcomes[unsigned(outcome)].fetch_add(1,std::memory_order_relaxed);
+}
+void RawEntry(Service::HookCounts& counts,unsigned self,unsigned caller)noexcept {
+    counts.rawLastBoundary.store((std::uint64_t(caller)<<32)|self,std::memory_order_relaxed);
+    counts.entries.fetch_add(1,std::memory_order_relaxed);
+}
+// Called only while holding gate. Raw counters above do not need that lock.
+void LastHook(unsigned hook,HookOutcome outcome,unsigned self,unsigned caller)noexcept {
+    service.lastHook=hook;service.lastOutcome=unsigned(outcome);service.lastSelf=self;service.lastCaller=caller;
+    service.lastSerial=service.action?service.action->intent.serial:0;service.lastHookNs=Now();
+}
 void Save(const Row& row)noexcept {if(service.count<service.rows.size())service.rows[service.count++]=row;else ++service.dropped;}
 void Unknown(unsigned reason)noexcept {
     if(!service.action)return;auto& a=*service.action;
@@ -57,6 +96,7 @@ void Unknown(unsigned reason)noexcept {
 void RevokeAdmission()noexcept {
     if(service.action&&service.action->admissionEpoch==service.admissionEpoch.load(std::memory_order_acquire)){
         service.admissionEpoch.fetch_add(1,std::memory_order_acq_rel);
+        service.action->row.revokedNs=Now();
         if(service.action->published&&!service.action->acquired)Unknown(10);
     }
 }
@@ -81,7 +121,7 @@ unsigned Search(SearchFn original,void* self,unsigned soldier,const void* transf
         a.row.failure=10;return passthrough();}
     if(reinterpret_cast<unsigned>(self)!=v.effects+0x130||
        soldier!=v.soldier||input!=v.effects+0x30||shot!=a.native.client.config.primaryFire+0xa0||
-       !Current(a)||!ShotOffsets(shot)){a.row.failure=4;return passthrough();}
+       !ObservedOwner(a,true,OwnerBoundary::SearchCurrent,false)||!ShotOffsets(shot)){a.row.failure=4;return passthrough();}
     alignas(16) std::array<std::byte,64> before{};detail::Reader r{service.memory};
     if(!r.Read(input,before.data(),64)){a.row.failure=5;return passthrough();}
     const auto mapped=AcquisitionCopy(before,a.geometry->nativeAcquisition,a.units);
@@ -105,26 +145,36 @@ unsigned __fastcall RetryHook(void* self,void*,unsigned soldier,const void* tran
 }
 std::uintptr_t __fastcall AcquireHook(void* self,void*) {
     Active active;Scope local;bool admitted=false;const auto caller=reinterpret_cast<unsigned>(_ReturnAddress());
-    if(service.enabled.load(std::memory_order_acquire)&&caller==0x6dd770){
+    RawEntry(service.acquire,reinterpret_cast<unsigned>(self),caller);
+    HookOutcome outcome=HookOutcome::Disabled;
+    if(service.enabled.load(std::memory_order_acquire)&&IsAcquireCaller(caller)){
         std::lock_guard lock(service.gate);
+        outcome=HookOutcome::NoAction;
         if(service.action){auto& a=*service.action;const auto now=Now();
-            if(a.published&&!a.acquired&&reinterpret_cast<unsigned>(self)==a.native.links.effects+0xd0&&
-               (service.policy.PendingState()==SelectedMeleePending::Staged||service.policy.PendingState()==SelectedMeleePending::Unknown)&&
-               now>=a.intent.observedNs&&Retained(a)){
+            if(!a.published)outcome=HookOutcome::NotPublished;
+            else if(a.acquired)outcome=HookOutcome::AlreadyAcquired;
+            else if(reinterpret_cast<unsigned>(self)!=a.native.links.effects+0xd0)outcome=HookOutcome::Self;
+            else if(service.policy.PendingState()!=SelectedMeleePending::Staged&&service.policy.PendingState()!=SelectedMeleePending::Unknown)outcome=HookOutcome::Pending;
+            else if(now<a.intent.observedNs)outcome=HookOutcome::BeforeSource;
+            else if(!ObservedOwner(a,false,OwnerBoundary::AcquireRetained,true))outcome=HookOutcome::Owner;
+            else {
                 a.acquired=true;a.row.acquiredNs=now;
                 admitted=service.policy.PendingState()==SelectedMeleePending::Unknown||
                     service.policy.Resolve(a.intent.serial,a.intent.identity,SelectedMeleeOutcome::Submitted);
+                outcome=admitted?HookOutcome::Admitted:HookOutcome::Policy;
                 if(admitted){local.action=a;
                     // The input commit is the original admission. Exact native
                     // outcome observation survives interruption, but it cannot
                     // grant another blade mapping after its source was revoked.
-                    if(a.admissionEpoch!=service.admissionEpoch.load(std::memory_order_acquire)||!Current(a)){
+                    if(a.admissionEpoch!=service.admissionEpoch.load(std::memory_order_acquire)||!ObservedOwner(a,true,OwnerBoundary::AcquireCurrent,true)){
                         local.action.geometry.reset();local.action.row.failure=10;
                     }
                 }
             }
         }
-    }
+        LastHook(1,outcome,reinterpret_cast<unsigned>(self),caller);
+    }else if(service.enabled.load(std::memory_order_acquire))outcome=HookOutcome::Caller;
+    Count(service.acquire,outcome);
     if(!admitted)return originalAcquire(self);
     local.previous=acquiring;acquiring=&local;ScopeRestore restore{acquiring,local.previous};
     const auto result=originalAcquire(self);
@@ -133,7 +183,14 @@ std::uintptr_t __fastcall AcquireHook(void* self,void*) {
     std::lock_guard lock(service.gate);
     if(Same(local.action)){
         service.action->row=local.action.row;service.action->target=local.action.target;
-        if(!local.action.target||!Retained(local.action)||(local.action.geometry&&!local.action.row.copies)||local.action.row.failure)Unknown(8);
+        // Preserve the first failing branch before Unknown(8) records the
+        // aggregate outcome; never collapse an empty valid target into a gap.
+        const unsigned failure=!local.action.target?1:
+            !ObservedOwner(local.action,false,OwnerBoundary::AcquireReturned,true)?2:
+            (local.action.geometry&&!local.action.row.copies)?3:local.action.row.failure?4:0;
+        service.action->row.acquisitionFailure=failure;
+        service.action->row.acquisitionPriorFailure=local.action.row.failure;
+        if(failure)Unknown(8);
     }
     return result;
 }
@@ -159,16 +216,26 @@ std::uintptr_t __fastcall DamageHook(void* self,void*,void* damage,void* player)
 }
 std::uintptr_t __fastcall AttackHook(void* self,void*,float dt,unsigned primary,void* context) {
     Active active;Scope local;bool admitted=false;const auto caller=reinterpret_cast<unsigned>(_ReturnAddress());
+    RawEntry(service.attack,reinterpret_cast<unsigned>(self),caller);
+    HookOutcome outcome=HookOutcome::Disabled;
     if(service.enabled.load(std::memory_order_acquire)&&caller==0x6dd9e5){
         std::lock_guard lock(service.gate);
+        outcome=HookOutcome::NoAction;
         if(service.action){auto& a=*service.action;
-            if(a.acquired&&a.row.acquisitionReturned&&reinterpret_cast<unsigned>(self)==a.native.links.effects+0xd0&&
-               Retained(a)&&a.target&&ReadTarget(service.memory,a.native.links.effects)==a.target){
-                if(a.attackInFlight){a.ambiguousAttack=true;Unknown(11);}
-                else {a.attackInFlight=true;local.action=a;admitted=true;}
+            if(!a.acquired)outcome=HookOutcome::NotAcquired;
+            else if(!a.row.acquisitionReturned)outcome=HookOutcome::AcquireNotReturned;
+            else if(reinterpret_cast<unsigned>(self)!=a.native.links.effects+0xd0)outcome=HookOutcome::Self;
+            else if(!ObservedOwner(a,false,OwnerBoundary::AttackRetained,true))outcome=HookOutcome::Owner;
+            else if(!a.target)outcome=HookOutcome::TargetUnreadable;
+            else if(ReadTarget(service.memory,a.native.links.effects)!=a.target)outcome=HookOutcome::TargetChanged;
+            else {
+                if(a.attackInFlight){outcome=HookOutcome::Overlap;a.ambiguousAttack=true;Unknown(11);}
+                else {a.attackInFlight=true;local.action=a;admitted=true;outcome=HookOutcome::Admitted;}
             }
         }
-    }
+        LastHook(2,outcome,reinterpret_cast<unsigned>(self),caller);
+    }else if(service.enabled.load(std::memory_order_acquire))outcome=HookOutcome::Caller;
+    Count(service.attack,outcome);
     if(!admitted)return originalAttack(self,dt,primary,context);
     local.action.row.attackedNs=Now();local.previous=attacking;attacking=&local;ScopeRestore restore{attacking,local.previous};
     const auto result=originalAttack(self,dt,primary,context);local.action.row.attackReturned=true;
@@ -179,7 +246,7 @@ std::uintptr_t __fastcall AttackHook(void* self,void*,float dt,unsigned primary,
         // Completion is this exact native callback's return, not idle state,
         // timer expiry, input publication, sound, or a claimed hit.
         if(service.policy.Resolve(local.action.intent.serial,local.action.intent.identity,SelectedMeleeOutcome::Completed)){
-            Save(local.action.row);service.action.reset();
+            Save(local.action.row);++service.completed;service.lastCompleted=local.action.row;service.action.reset();
         }else Unknown(9);
     }
     return result;
@@ -205,6 +272,11 @@ bool Install(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uin
     if(!state||!server||!ValidateReloadStateLive(memory,*state,unsigned(base))||
        !ValidateReloadServerLive(memory,*server,unsigned(base))||!QueryPerformanceFrequency(&frequency)||frequency.QuadPart<=0)return false;
     service.memory=memory;service.state=*state;service.server=*server;service.base=unsigned(base);service.frequency=frequency.QuadPart;
+    // Independent read-only observation capability. Its absence does not alter
+    // the existing selected-knife installation or attack admission.
+    if(const auto flow=DiscoverReloadFlow(bytes,pe);flow&&ValidateReloadFlowLive(memory,*flow,unsigned(base))){
+        service.updateVerified=true;service.updateCaller=unsigned(base)+flow->code[1].rva+0x2f;
+    }
     const std::array<unsigned,5> addresses{0x578500,0x577790,0x577d40,0x57abd0,0x6c4c00};
     const std::array<void*,5> replacements{reinterpret_cast<void*>(&AcquireHook),reinterpret_cast<void*>(&SearchHook),
         reinterpret_cast<void*>(&RetryHook),reinterpret_cast<void*>(&AttackHook),reinterpret_cast<void*>(&DamageHook)};
@@ -229,6 +301,10 @@ Request Prepare(const SelectedKnifeRenderSource& source,const InputFrame& input,
     const auto native=ReadNative(service.memory,service.server,service.state,service.base,source.native);
     const auto hold=hands.Current(InteractionHand::Right);
     if(!native||!hold){++service.readGaps;RevokeAdmission();service.policy.InvalidateMotion();return result;}
+    service.observedNative=*native;
+    service.nativeObservedNs=now;
+    for(unsigned n=0;n<2;++n){service.nativeCurrent[n]=native->client.branches[n].currentState;service.nativeNext[n]=native->client.branches[n].nextState;}
+    service.nativeCurrent[2]=native->server.currentState;service.nativeNext[2]=native->server.nextState;
     if(service.action&&(!PublishedSourceContinues(service.action->intent,source.input,inputEpoch)||
        hold->token!=service.action->intent.hold||!available))RevokeAdmission();
     SelectedMeleeSample sample;sample.identity={source.input.owner,hold->token.item,
@@ -267,7 +343,7 @@ Request Prepare(const SelectedKnifeRenderSource& source,const InputFrame& input,
 void Published(const Request& request,bool applied)noexcept {
     if(!request.fire||!request.serial)return;std::lock_guard lock(service.gate);
     if(!service.action||service.action->intent.serial!=request.serial)return;
-    if(applied){service.action->published=true;
+    if(applied){service.action->published=true;service.action->row.publishedNs=Now();
         if(Now()>=service.action->intent.deadlineNs||!Current(*service.action))RevokeAdmission();}
     else{auto& a=*service.action;service.policy.Resolve(a.intent.serial,a.intent.identity,SelectedMeleeOutcome::RejectedNoEffect);
         service.action.reset();++service.rejected;}
@@ -287,7 +363,94 @@ void ObserveOwner(const ReloadStateOwner& owner)noexcept {
             auto& a=*service.action;service.policy.Resolve(a.intent.serial,a.intent.identity,SelectedMeleeOutcome::OwnerRetired);
             a.row.failure=2;Save(a.row);service.action.reset();service.policy.InvalidateMotion();}}
 }
+void ObserveUpdate(const OriginalFiringUpdate& call)noexcept {
+    service.updateEntries.fetch_add(1,std::memory_order_relaxed);
+    if(!service.enabled.load(std::memory_order_acquire))return;
+    std::unique_lock lock(service.gate,std::try_to_lock);
+    if(!lock.owns_lock()){service.updateContention.fetch_add(1,std::memory_order_relaxed);return;}
+    if(!service.updateVerified||!service.observedNative)return;
+    const auto& native=service.action?service.action->native:*service.observedNative;
+    unsigned branch=3;
+    for(unsigned n=0;n<2;++n)if(call.firing==native.client.branches[n].address)branch=n;
+    if(call.firing==native.links.firing)branch=2;
+    if(branch==3)return;
+    auto& t=service.updates[branch];++t.calls;t.firing=call.firing;t.caller=call.caller;t.lastNs=Now();
+    t.serial=service.action?service.action->intent.serial:0;t.listenerKnown=false;
+    if(!AcceptedOwnerRetained(service.memory,service.server,service.state,service.base,native)){++t.ownerRejected;return;}
+    ULONG_PTR low=0,high=0;GetCurrentThreadStackLimits(&low,&high);
+    std::array<std::byte,0x30> context{};detail::Reader r{service.memory};
+    if(call.caller!=service.updateCaller||call.context<low||(call.context&3)||
+       std::uint64_t(call.context)+context.size()>high||!r.Read(call.context,context.data(),context.size())){++t.contextRejected;return;}
+    const auto decoded=DecodeReloadUpdateContext(context);if(!decoded){++t.contextRejected;return;}
+    std::array<std::byte,0xb0> state{};
+    if(!r.Read(call.firing,state.data(),state.size())||
+       !r.Eq(call.firing,service.base+service.state.firingVtableRva)||
+       !r.Eq(std::uint64_t(call.firing)+8,native.client.config.firingData)||
+       !r.Eq(std::uint64_t(call.firing)+12,native.client.config.ammoAddress)){++t.stateRejected;return;}
+    std::memcpy(&t.current,state.data()+0x3c,4);std::memcpy(&t.next,state.data()+0x44,4);
+    if(t.current>15||t.next>15){++t.stateRejected;return;}
+    t.inputFlags=decoded->inputFlags;t.contextFlags=0;
+    for(unsigned n=0;n<5;++n)if(decoded->flags24Through28[n])t.contextFlags|=1u<<n;
+    if(decoded->fireRequested){++t.fireOne;if(!t.firstFireNs)t.firstFireNs=t.lastNs;t.lastFireNs=t.lastNs;
+        t.lastFireSerial=t.serial;t.lastFireContextFlags=t.contextFlags;t.lastFireCurrent=t.current;t.lastFireNext=t.next;
+        t.lastFireListenerKnown=false;t.lastFireListenerCount=t.lastFireExpectedListenerMatches=0;
+        if(service.action&&service.action->published)++t.fireForPublishedIntent;
+    }else ++t.fireZero;
+    if(decoded->flags24Through28[0])++t.notificationsOne;else ++t.notificationsZero;
+    unsigned begin=0,end=0;std::memcpy(&begin,state.data()+0x18,4);std::memcpy(&end,state.data()+0x1c,4);
+    std::array<unsigned,64> listeners{};t.listenerCount=0;t.expectedListenerMatches=0;
+    if(end<begin||(end-begin)%4||end-begin>sizeof(listeners)||(end!=begin&&begin<0x10000))return;
+    t.listenerCount=(end-begin)/4;
+    if(end!=begin&&!r.Read(begin,listeners.data(),end-begin))return;
+    if(!r.Eq(std::uint64_t(call.firing)+0x18,begin)||!r.Eq(std::uint64_t(call.firing)+0x1c,end))return;
+    if(branch==2)for(unsigned n=0;n<t.listenerCount;++n)if(listeners[n]==native.links.effects+0xd0)++t.expectedListenerMatches;
+    t.listenerKnown=true;
+    if(decoded->fireRequested){t.lastFireListenerKnown=true;t.lastFireListenerCount=t.listenerCount;
+        t.lastFireExpectedListenerMatches=t.expectedListenerMatches;
+        if(branch==2&&t.expectedListenerMatches==1)++t.fireWithExpectedListener;
+    }
+}
+Telemetry ReadTelemetry()noexcept {
+    Telemetry out;out.available=true;out.installed=service.installed.load(std::memory_order_acquire);
+    out.enabled=service.enabled.load(std::memory_order_acquire);
+    const auto counters=[](const Service::HookCounts& from,HookTelemetry& to){
+        to.entries=from.entries.load(std::memory_order_relaxed);
+        const auto boundary=from.rawLastBoundary.load(std::memory_order_relaxed);
+        to.rawLastCaller=unsigned(boundary>>32);to.rawLastSelf=unsigned(boundary);
+        for(unsigned n=0;n<to.outcomes.size();++n)to.outcomes[n]=from.outcomes[n].load(std::memory_order_relaxed);
+    };
+    counters(service.acquire,out.acquire);counters(service.attack,out.attack);
+    out.updateEntries=service.updateEntries.load(std::memory_order_relaxed);out.updateContention=service.updateContention.load(std::memory_order_relaxed);
+    std::unique_lock lock(service.gate,std::try_to_lock);if(!lock.owns_lock())return out;
+    out.stateKnown=true;out.sampleNs=Now();out.prepared=service.prepared;out.rejected=service.rejected;
+    out.readGaps=service.readGaps;out.geometryGaps=service.geometryGaps;out.unknown=service.unknown;
+    out.pending=unsigned(service.policy.PendingState());out.currentEpoch=service.admissionEpoch.load(std::memory_order_acquire);
+    out.nativeObservedNs=service.nativeObservedNs;out.nativeCurrent=service.nativeCurrent;out.nativeNext=service.nativeNext;
+    out.lastHook=service.lastHook;out.lastOutcome=service.lastOutcome;out.lastSelf=service.lastSelf;out.lastCaller=service.lastCaller;
+    out.lastSerial=service.lastSerial;out.lastHookNs=service.lastHookNs;
+    out.completed=service.completed;out.lastCompletedSerial=service.lastCompleted.serial;
+    out.lastCompletedTarget=service.lastCompleted.target;out.lastCompletedDamageCalls=service.lastCompleted.damageCalls;
+    out.lastCompletedHealthKnown=service.lastCompleted.healthKnown;
+    out.lastCompletedHealthBefore=service.lastCompleted.healthBefore;out.lastCompletedHealthAfter=service.lastCompleted.healthAfter;
+    out.lastAcquisitionFailure=service.lastCompleted.acquisitionFailure;
+    out.lastAcquisitionPriorFailure=service.lastCompleted.acquisitionPriorFailure;
+    out.updateVerified=service.updateVerified;out.updates=service.updates;
+    out.ownerFailures=service.ownerFailures;out.ownerFailureRecords=service.ownerFailureRecords;
+    out.ownerFailureCount=service.ownerFailureCount;out.ownerFailureDropped=service.ownerFailureDropped;
+    if(service.action){const auto& a=*service.action;const auto& r=a.row;
+        out.serial=a.intent.serial;out.input=a.intent.sourceSequence;out.admissionEpoch=a.admissionEpoch;
+        out.published=a.published;out.acquired=a.acquired;out.geometry=bool(a.geometry);
+        out.effects=a.native.links.effects;out.serverFiring=a.native.links.firing;out.attacker=a.native.links.soldier;
+        out.target=r.target;out.searches=r.searches;out.copies=r.copies;out.damageCalls=r.damageCalls;out.failure=r.failure;
+        out.acquisitionFailure=r.acquisitionFailure;out.acquisitionPriorFailure=r.acquisitionPriorFailure;
+        out.observedNs=r.observedNs;out.deadlineNs=r.deadlineNs;out.publishedNs=r.publishedNs;out.revokedNs=r.revokedNs;
+        out.acquiredNs=r.acquiredNs;out.attackedNs=r.attackedNs;
+        out.acquisitionReturned=r.acquisitionReturned;out.attackReturned=r.attackReturned;
+    }
+    return out;
+}
 void Report(std::ostream& out) {
+    const auto telemetry=ReadTelemetry();
     std::lock_guard lock(service.gate);const auto precision=out.precision();out.precision(9);
     out<<"{\"installed\":"<<service.installed.load(std::memory_order_acquire)<<",\"verified\":"<<service.verified
        <<",\"install_failure\":"<<service.installFailure<<",\"cleanup_failed\":"<<service.cleanupFailed
@@ -300,13 +463,15 @@ void Report(std::ostream& out) {
         out<<"{\"serial\":"<<r.serial<<",\"input\":"<<r.input<<",\"cause\":"<<r.cause<<",\"effects\":"<<r.effects
            <<",\"attacker\":"<<r.attacker<<",\"weak_handle\":"<<r.handle<<",\"target\":"<<r.target
            <<",\"observed_ns\":"<<r.observedNs<<",\"deadline_ns\":"<<r.deadlineNs
-           <<",\"staged_ns\":"<<r.stagedNs<<",\"acquired_ns\":"<<r.acquiredNs<<",\"attacked_ns\":"<<r.attackedNs
+           <<",\"staged_ns\":"<<r.stagedNs<<",\"published_ns\":"<<r.publishedNs<<",\"revoked_ns\":"<<r.revokedNs
+           <<",\"acquired_ns\":"<<r.acquiredNs<<",\"attacked_ns\":"<<r.attackedNs
            <<",\"searches\":"<<r.searches<<",\"copies\":"<<r.copies<<",\"failure\":"<<r.failure
+           <<",\"acquisition_failure\":"<<r.acquisitionFailure<<",\"acquisition_prior_failure\":"<<r.acquisitionPriorFailure
            <<",\"acquisition_returned\":"<<r.acquisitionReturned<<",\"attack_returned\":"<<r.attackReturned
            <<",\"damage_calls\":"<<r.damageCalls<<",\"health_known\":"<<r.healthKnown
            <<",\"health_before\":"<<r.healthBefore<<",\"health_after\":"<<r.healthAfter<<",\"native_before\":";
         matrix(r.nativeBefore);out<<",\"blade\":";matrix(r.blade);out<<'}';}
-    out<<"]}";out.precision(precision);
+    out<<"],\"telemetry\":";WriteTelemetry(out,telemetry);out<<'}';out.precision(precision);
 }
 }
 #else
@@ -317,6 +482,77 @@ Request Prepare(const SelectedKnifeRenderSource&,const interaction::InputFrame&,
     const SelectedMeshesSnapshot*,const std::optional<SelectedKnifeRenderReceipt>&,const std::optional<math::Matrix4>&,bool,std::uint64_t)noexcept{return {};}
 void Published(const Request&,bool)noexcept{}void SourceAdvanced(const interaction::HandInteractionSample&,std::uint64_t)noexcept{}
 Request Missing()noexcept{return {};}void ObserveOwner(const ReloadStateOwner&)noexcept{}
+Telemetry ReadTelemetry()noexcept{return {};}
+void ObserveUpdate(const OriginalFiringUpdate&)noexcept{}
 void Report(std::ostream& out){out<<"{\"available\":false}";}
 }
 #endif
+
+namespace fvr::bc2::selectedKnife {
+void WriteTelemetry(std::ostream& out,const Telemetry& t) {
+    out<<"{\"available\":"<<t.available<<",\"installed\":"<<t.installed<<",\"enabled\":"<<t.enabled<<",\"state_known\":"<<t.stateKnown;
+    const auto hook=[&](const char* name,const HookTelemetry& h){out<<",\""<<name<<"\":{\"entries\":"<<h.entries
+        <<",\"raw_last_caller\":"<<h.rawLastCaller<<",\"raw_last_self\":"<<h.rawLastSelf;
+        for(unsigned n=0;n<h.outcomes.size();++n)out<<",\""<<HookOutcomeNames[n]<<"\":"<<h.outcomes[n];out<<'}';};
+    hook("acquire",t.acquire);hook("attack",t.attack);
+    out<<",\"update_entries\":"<<t.updateEntries<<",\"update_contention\":"<<t.updateContention;
+    if(t.stateKnown){
+        const auto differences=[&](const ReloadServerLinkDifference& d){
+            out<<"{\"count\":"<<d.count<<",\"first\":[";
+            for(unsigned n=0;n<d.count&&n<d.first.size();++n){if(n)out<<',';const auto& c=d.first[n];
+                out<<"{\"field\":\""<<c.field<<"\",\"index\":"<<c.index<<",\"expected\":"<<c.expected<<",\"observed\":"<<c.observed<<'}';}
+            out<<"]}";};
+        out<<",\"owner_failures\":{";
+        for(unsigned n=0;n<t.ownerFailures.size();++n){if(n)out<<',';out<<'\"'<<OwnerBoundaryNames[n]<<"\":"<<t.ownerFailures[n];}
+        out<<"},\"owner_failure_dropped\":"<<t.ownerFailureDropped<<",\"owner_failure_records\":[";
+        for(unsigned n=0;n<t.ownerFailureCount&&n<t.ownerFailureRecords.size();++n){if(n)out<<',';
+            const auto& f=t.ownerFailureRecords[n];const auto& d=f.proof;const auto& s=d.scope;
+            out<<"{\"boundary\":\""<<OwnerBoundaryNames[unsigned(f.boundary)]<<"\",\"serial\":"<<f.serial<<",\"observed_ns\":"<<f.observedNs
+               <<",\"phase\":"<<unsigned(d.phase)<<",\"stage\":\""<<s.stage<<"\",\"address\":"<<s.address<<",\"bytes\":"<<s.bytes
+               <<",\"expected\":"<<s.expected<<",\"observed\":"<<s.observed<<",\"read_failed\":"<<s.readFailed<<",\"type_failed\":"<<s.typeFailed
+               <<",\"before_known\":"<<d.beforeKnown<<",\"after_known\":"<<d.afterKnown
+               <<",\"effects_source_before_after\":["<<d.sourceEffects<<','<<d.beforeEffects<<','<<d.afterEffects<<']'
+               <<",\"player_flags_source_before_after\":["<<d.sourcePlayerFlags<<','<<d.beforePlayerFlags<<','<<d.afterPlayerFlags<<']'
+               <<",\"soldier_flags_source_before_after\":["<<d.sourceSoldierFlags<<','<<d.beforeSoldierFlags<<','<<d.afterSoldierFlags<<']'
+               <<",\"inventory_source_before_after\":["<<d.sourceInventory<<','<<d.beforeInventory<<','<<d.afterInventory<<']'
+               <<",\"later_inventory248\":"<<d.inventory248<<",\"later_inventory24c\":"<<d.inventory24c<<",\"later_inventory_read_mask\":"<<d.inventoryReadMask
+               <<",\"bracket_difference\":";differences(d.bracketDifference);
+            out<<",\"source_difference\":";differences(d.sourceDifference);
+            out<<",\"normalized_difference\":";differences(d.normalizedDifference);out<<'}';
+        }out<<']';
+        out<<",\"sample_ns\":"<<t.sampleNs<<",\"prepared\":"<<t.prepared<<",\"rejected\":"<<t.rejected
+           <<",\"read_gaps\":"<<t.readGaps<<",\"geometry_gaps\":"<<t.geometryGaps<<",\"unknown\":"<<t.unknown<<",\"pending\":"<<t.pending
+           <<",\"native_observed_ns\":"<<t.nativeObservedNs<<",\"native_current\":["<<t.nativeCurrent[0]<<','<<t.nativeCurrent[1]<<','<<t.nativeCurrent[2]
+           <<"],\"native_next\":["<<t.nativeNext[0]<<','<<t.nativeNext[1]<<','<<t.nativeNext[2]<<']'
+           <<",\"serial\":"<<t.serial<<",\"input\":"<<t.input<<",\"published\":"<<t.published<<",\"acquired\":"<<t.acquired<<",\"geometry\":"<<t.geometry
+           <<",\"admission_epoch\":"<<t.admissionEpoch<<",\"current_epoch\":"<<t.currentEpoch
+           <<",\"effects\":"<<t.effects<<",\"server_firing\":"<<t.serverFiring<<",\"attacker\":"<<t.attacker<<",\"target\":"<<t.target
+           <<",\"searches\":"<<t.searches<<",\"copies\":"<<t.copies<<",\"damage_calls\":"<<t.damageCalls<<",\"failure\":"<<t.failure
+           <<",\"acquisition_failure\":"<<t.acquisitionFailure<<",\"acquisition_prior_failure\":"<<t.acquisitionPriorFailure
+           <<",\"observed_ns\":"<<t.observedNs<<",\"deadline_ns\":"<<t.deadlineNs<<",\"published_ns\":"<<t.publishedNs<<",\"revoked_ns\":"<<t.revokedNs
+           <<",\"acquired_ns\":"<<t.acquiredNs<<",\"attacked_ns\":"<<t.attackedNs
+           <<",\"acquisition_returned\":"<<t.acquisitionReturned<<",\"attack_returned\":"<<t.attackReturned
+           <<",\"last_hook\":"<<t.lastHook<<",\"last_outcome\":"<<t.lastOutcome<<",\"last_self\":"<<t.lastSelf<<",\"last_caller\":"<<t.lastCaller
+           <<",\"last_serial\":"<<t.lastSerial<<",\"last_hook_ns\":"<<t.lastHookNs
+           <<",\"completed\":"<<t.completed<<",\"last_completed_serial\":"<<t.lastCompletedSerial
+           <<",\"last_completed_target\":"<<t.lastCompletedTarget<<",\"last_completed_damage_calls\":"<<t.lastCompletedDamageCalls
+           <<",\"last_acquisition_failure\":"<<t.lastAcquisitionFailure<<",\"last_acquisition_prior_failure\":"<<t.lastAcquisitionPriorFailure
+           <<",\"last_completed_health_known\":"<<t.lastCompletedHealthKnown
+           <<",\"last_completed_health_before\":"<<t.lastCompletedHealthBefore<<",\"last_completed_health_after\":"<<t.lastCompletedHealthAfter;
+        out<<",\"update_verified\":"<<t.updateVerified<<",\"updates\":[";
+        for(unsigned n=0;n<t.updates.size();++n){if(n)out<<',';const auto& u=t.updates[n];
+            out<<"{\"calls\":"<<u.calls<<",\"owner_rejected\":"<<u.ownerRejected<<",\"context_rejected\":"<<u.contextRejected<<",\"state_rejected\":"<<u.stateRejected
+               <<",\"fire_zero\":"<<u.fireZero<<",\"fire_one\":"<<u.fireOne<<",\"notifications_zero\":"<<u.notificationsZero<<",\"notifications_one\":"<<u.notificationsOne
+               <<",\"serial\":"<<u.serial<<",\"last_ns\":"<<u.lastNs<<",\"first_fire_ns\":"<<u.firstFireNs<<",\"last_fire_ns\":"<<u.lastFireNs
+               <<",\"last_fire_serial\":"<<u.lastFireSerial<<",\"fire_for_published_intent\":"<<u.fireForPublishedIntent
+               <<",\"last_fire_context_flags\":"<<u.lastFireContextFlags<<",\"last_fire_current\":"<<u.lastFireCurrent<<",\"last_fire_next\":"<<u.lastFireNext
+               <<",\"last_fire_listener_known\":"<<u.lastFireListenerKnown<<",\"last_fire_listener_count\":"<<u.lastFireListenerCount
+               <<",\"last_fire_expected_listener_matches\":"<<u.lastFireExpectedListenerMatches<<",\"fire_with_expected_listener\":"<<u.fireWithExpectedListener
+               <<",\"firing\":"<<u.firing<<",\"caller\":"<<u.caller<<",\"input_flags\":"<<u.inputFlags<<",\"context_flags\":"<<u.contextFlags
+               <<",\"current\":"<<u.current<<",\"next\":"<<u.next<<",\"listener_known\":"<<u.listenerKnown
+               <<",\"listener_count\":"<<u.listenerCount<<",\"expected_listener_matches\":"<<u.expectedListenerMatches<<'}';
+        }out<<']';
+    }
+    out<<'}';
+}
+}

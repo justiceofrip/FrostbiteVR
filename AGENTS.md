@@ -28,6 +28,10 @@ are append-only history, not required reading; search them by checkpoint number.
   space on C: for work that writes only to G:, and never change Windows-wide
   environment settings or move other applications' files to accomplish this.
   Existing Windows/runtime files may be read; do not duplicate runtimes onto C:.
+- The G: storage rule is local development policy, not a product compatibility
+  rule. Shipped installers and runtime caches must follow the player's selected
+  local installation/data paths, including C: or any other valid drive. Validate
+  paths and file contents without hardcoding this workstation's drive letter.
 - Do not include game binaries/assets or private credentials in source.
 - Run relevant deterministic regressions, then Build.ps1 for x86 and x64.
   Headset/runtime claims require actual game and headset checks.

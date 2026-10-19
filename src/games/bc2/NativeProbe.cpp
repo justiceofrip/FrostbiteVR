@@ -10,6 +10,8 @@
 #include "Bc2StereoRecovery.h"
 #include "fvr/runtime/RenderOwnerRecovery.h"
 #include "Bc2Gameplay.h"
+#include "Bc2SelectedKnifeNative.h"
+#include "Bc2ProbeFailure.h"
 #include "Bc2MechanismAudio.h"
 #include "Bc2ShellReloadAudio.h"
 #include "Bc2PumpCalibration225.h"
@@ -3004,7 +3006,7 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
             wchar_t replace[4]{},cache[1024]{};
             if(GetEnvironmentVariableW(L"BC2_MECHANISM_AUDIO_REPLACE_SPAS",replace,4)==1&&replace[0]==L'1'){
                 const auto size=GetEnvironmentVariableW(L"BC2_MECHANISM_AUDIO_CACHE",cache,1024);
-                Require(size>0&&size<1024,"Mechanism audio requires its private G-drive cue cache");
+                Require(size>0&&size<1024,"Mechanism audio requires its validated local cue cache");
                 audioConfig.replaceSpas=true;audioConfig.rearWave=std::filesystem::path(cache)/L"spas-rear.wav";
                 audioConfig.closureWave=std::filesystem::path(cache)/L"spas-closure.wav";
             }
@@ -3354,15 +3356,11 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
 #else
         const auto persistToolWitness=[](){};
 #endif
-        if(continuous){
-            std::ofstream telemetry(output.parent_path()/L"session-telemetry.jsonl");
-            const auto sessionStarted=GetTickCount64();auto nextSample=sessionStarted;
-            while(!hostLifetime.Ended()){
-                persistCycleFailure();sceneWriter.Flush();
-#if defined(FVR_BC2_ORDINARY_RESOURCE_SCENE_PROBE)
-                fvr::bc2::graphicsThreadObservation::Flush(output.parent_path()/L"graphics-threads.jsonl");
-#endif
-
+        // Finite emulated runs need the same crash-surviving evidence as live
+        // sessions. Snapshot readers never wait for a gameplay transaction.
+        std::ofstream telemetry(output.parent_path()/L"session-telemetry.jsonl");
+        const auto sessionStarted=GetTickCount64();auto nextSample=sessionStarted;
+        const auto persistSessionTelemetry=[&]{
                 const auto now=GetTickCount64();if(now>=nextSample){
                     FILETIME ft{};GetSystemTimeAsFileTime(&ft);const auto utc=(std::uint64_t(ft.dwHighDateTime)<<32)|ft.dwLowDateTime;
                     const auto emptyGate=fvr::bc2::reloadFlowRuntime::ReadMagazineEmptyControlCounters();
@@ -3370,6 +3368,7 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
                     // cannot run the final detailed interaction report.
                     const auto pump=fvr::bc2::rigPublication::ReadPumpPackCounters();
                     const auto magazine=fvr::bc2::rigPublication::ReadMagazinePackCounters();
+                    const auto knife=fvr::bc2::selectedKnife::ReadTelemetry();
                     telemetry<<"{\"elapsed_ms\":"<<(now-sessionStarted)<<",\"utc_filetime_100ns\":"<<utc<<",\"world_calls\":"<<worldCalls.load()
                         <<",\"published\":"<<frameBridge.Published()<<",\"consumed\":"<<frameBridge.Consumed()<<",\"discarded\":"<<frameBridge.Discarded()
                         <<",\"input_samples\":"<<inputSamples.load()<<",\"tracked_input_samples\":"<<inputTrackedSamples.load()<<",\"gpu_failure_stage\":"<<frameBridge.FailureStage()<<",\"camera_restore_failures\":"<<tracked.restoreFailures.load()
@@ -3383,14 +3382,24 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
                         <<",\"pump_presentation\":{\"poses\":"<<pump.poses<<",\"pairs\":"<<pump.pairs<<",\"fallbacks\":"<<pump.fallbacks
                         <<",\"rest_poses\":"<<pump.restPoses<<",\"rest_pairs\":"<<pump.restPairs<<'}'
                         <<",\"magazine_presentation\":{\"pairs\":"<<magazine.pairs<<",\"fallbacks\":"<<magazine.fallbacks
-                        <<",\"role_pairs\":["<<magazine.rolePairs[0]<<','<<magazine.rolePairs[1]<<','<<magazine.rolePairs[2]<<','<<magazine.rolePairs[3]<<"]}}\n";
+                        <<",\"role_pairs\":["<<magazine.rolePairs[0]<<','<<magazine.rolePairs[1]<<','<<magazine.rolePairs[2]<<','<<magazine.rolePairs[3]<<"]},\"selected_knife\":";
+                    fvr::bc2::selectedKnife::WriteTelemetry(telemetry,knife);
+                    telemetry<<"}\n";
                     telemetry.flush();nextSample=now+1000;
-                }Sleep(100);
+                }
+        };
+        if(continuous){
+            while(!hostLifetime.Ended()){
+                persistCycleFailure();sceneWriter.Flush();persistSessionTelemetry();
+#if defined(FVR_BC2_ORDINARY_RESOURCE_SCENE_PROBE)
+                fvr::bc2::graphicsThreadObservation::Flush(output.parent_path()/L"graphics-threads.jsonl");
+#endif
+                Sleep(100);
             }
         }else {
             const auto until=GetTickCount64()+config.durationMs;
             for(auto now=GetTickCount64();now<until;now=GetTickCount64()){
-                persistCycleFailure();persistDeathReadiness();persistKnifeWitness();persistToolWitness();sceneWriter.Flush();
+                persistCycleFailure();persistDeathReadiness();persistKnifeWitness();persistToolWitness();sceneWriter.Flush();persistSessionTelemetry();
 #if defined(FVR_BC2_ORDINARY_RESOURCE_SCENE_PROBE)
                 fvr::bc2::graphicsThreadObservation::Flush(output.parent_path()/L"graphics-threads.jsonl");
 #endif
@@ -3754,5 +3763,5 @@ Sleep(DWORD(std::min<std::uint64_t>((toolFixture||config.ordinaryGrenadeInput==4
                 disabled=gameplayStopped&&menuStopped&&audioStopped&&shellAudioStopped&&fvr::bc2::rigWorkerRuntime::Quiescent()&&fvr::bc2::opticFilterRuntime::Quiescent();
             }
         }
-        if(report)report<<"{\"state\":\"failed\",\"error\":\""<<e.what()<<"\",\"hooks_disabled\":"<<(disabled?"true":"false")<<"}\n";return 20;}
+        if(report)fvr::bc2::WriteProbeFailureJson(report,e.what(),disabled);return 20;}
 }

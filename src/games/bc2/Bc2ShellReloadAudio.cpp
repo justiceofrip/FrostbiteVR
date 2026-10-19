@@ -1,4 +1,5 @@
 #include "Bc2ShellReloadAudio.h"
+#include "Bc2AudioCachePath.h"
 #include "Bc2ShellReloadAudioProfile.h"
 #include "fvr/interaction/MechanismAudio.h"
 #include <Windows.h>
@@ -82,7 +83,7 @@ SuppressionStatus Suppressed(const ShellReloadAudioIdentity& id)noexcept {
 }
 void Disable()noexcept {ready=false;routeVerifiedNs=0;}
 bool LoadWave(const std::filesystem::path& path){
-    if(!path.is_absolute()||path.root_name()!=L"G:")return false;
+    if(!LocalAudioCacheFile(path))return false;
     std::ifstream f(path,std::ios::binary|std::ios::ate);if(!f||f.tellg()!=std::streamoff(44+WaveFrames*2))return false;
     std::vector<char> bytes(44+WaveFrames*2);f.seekg(0);if(!f.read(bytes.data(),bytes.size()))return false;
     std::array<unsigned char,32> digest{};

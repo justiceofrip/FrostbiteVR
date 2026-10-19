@@ -1,16 +1,22 @@
 #pragma once
 #include "Bc2ReloadState.h"
 namespace fvr::bc2::selectedKnife {
-//418 reviewed executable3911fcc8..., plus426's checked retry/receiver epilogue.
+//418 reviewed executable3911fcc8..., plus426's checked retry/receiver epilogue
+// and427's ordinary FireLogic0 Step -> acquisition notification path.
 // No whole-image hash substitutes for the ABI/caller/owner checks at use.
-inline constexpr std::array<ReloadCodeProof,12> Code{{
+inline constexpr unsigned AcquireCaller=0x6e1fca;
+inline constexpr bool IsAcquireCaller(unsigned caller)noexcept {return caller==AcquireCaller;}
+inline constexpr std::array<ReloadCodeProof,13> Code{{
     {0x150d90,115,0x0cbf1f727ab5075full},
     {0x17abd0,999,0xc56443adb82fd943ull},
     {0x178500,287,0xd73f53048332aa13ull},
     {0x177790,1445,0x5f653a5787a78517ull},
     {0x177d40,318,0xace2da8fac53a4f8ull},
     {0x2dd9d2,19,0x943ee7f6e8c88d10ull},
-    {0x2dd768,8,0x64e34cd680f4c2a6ull},
+    // Step state2 passes context+24 and this firing object to6e1fa0.
+    // Its listener slot0 call at6e1fc8 returns to AcquireCaller above.
+    {0x2e64a6,12,0xbabaafa460ccf960ull},
+    {0x2e1fa0,168,0x5a79cdc6166428ffull},
     {0x2c4c00,2021,0x285025669572311aull},
     {0x2c40ab,20,0x4fc7c4343416a17dull},
     {0x17aef0,37,0xcd3ca4dcd2ba56e0ull},

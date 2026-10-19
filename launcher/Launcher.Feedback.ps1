@@ -69,6 +69,28 @@ function Read-FvrFeedbackTail([string]$Path) {
         return Protect-FvrFeedbackText ([Text.Encoding]::UTF8.GetString($bytes,0,$read))
     } finally {$file.Dispose()}
 }
+function Read-FvrNativeFailureFeedback([string]$Path) {
+    $file=$null
+    try {
+        Assert-FvrNoLinks $Path
+        if(-not(Test-Path -LiteralPath $Path -PathType Leaf)){return $null}
+        $file=[IO.File]::Open($Path,'Open','Read',([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete))
+        $count=$file.Length
+        if($count -le 0 -or $count -gt 65536){return '[native failure report empty or larger than 64 KiB; omitted]'}
+        $bytes=[byte[]]::new([int]$count);$read=0
+        while($read -lt $count){$n=$file.Read($bytes,$read,[int]$count-$read);if($n -eq 0){return '[native failure report incomplete; omitted]'};$read+=$n}
+        if($file.Length -ne $count){return '[native failure report changed while reading; omitted]'}
+        $row=[Text.UTF8Encoding]::new($false,$true).GetString($bytes) | ConvertFrom-Json -AsHashtable -Depth 8 -ErrorAction Stop
+        if($row -isnot [hashtable] -or $row.state -cne 'failed' -or $row.error -isnot [string] -or -not $row.error.Trim()){return '[native report is not a failure object; omitted]'}
+        # Redact before truncating so a cut credential/path cannot evade the
+        # existing privacy rules. No native addresses, arrays or extra keys flow.
+        $detail=(Protect-FvrFeedbackText $row.error) -replace '[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]',' '
+        $summary=[ordered]@{state='failed';error=$detail.Substring(0,[Math]::Min(1600,$detail.Length))}
+        if($row.hooks_disabled -is [bool]){$summary.hooks_disabled=$row.hooks_disabled}
+        return ($summary | ConvertTo-Json -Compress -Depth 3)
+    } catch {return '[native failure report unavailable or incomplete JSON; omitted]'}
+    finally {if($file){$file.Dispose()}}
+}
 function New-FvrFeedbackBundle([string]$InstallRoot, $Package, $Settings) {
     $null=Set-FvrLauncherStorage $InstallRoot
     Assert-FvrFreeSpace $InstallRoot 2MB
@@ -102,6 +124,8 @@ function New-FvrFeedbackBundle([string]$InstallRoot, $Package, $Settings) {
                 foreach($name in @('session.json','menu-ready.json','menu-ready.log','supervisor.stdout.log','supervisor.stderr.log','host.stdout.log','host.stderr.log','native.stdout.log','native.stderr.log','session-telemetry.jsonl')) {
                     $sources.Add(@{name=$name;path=(Get-FvrChild $run $name)})
                 }
+                $nativeFailure=Read-FvrNativeFailureFeedback (Get-FvrChild $run 'native-trace.json')
+                if($null -ne $nativeFailure){$parts.Add("--- native-trace.json (bounded failure summary, sanitized) ---`n"+$nativeFailure)}
             }
         } catch {$parts.Add('Session logs unavailable or outside the permitted diagnostics folder; omitted.')}
     }

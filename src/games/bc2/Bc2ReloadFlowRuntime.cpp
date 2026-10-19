@@ -2,6 +2,9 @@
 #include "Bc2PreholdOrder.h"
 #include "Bc2PreholdOperationJournal.h"
 #include "Bc2ReloadFlowRuntime.h"
+#ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
+#include "Bc2SelectedKnifeNative.h"
+#endif
 #include "Bc2OriginalFiringObserver.h"
 #include "Bc2NativeCycleRuntime.h"
 #include "Bc2NativeCycleRecovery.h"
@@ -1588,6 +1591,11 @@ void __fastcall Step(void* self,void*,void* context,float delta){
 }
 void __fastcall Update(void* self,void*,void* context,unsigned extra){
     Active activeScope;const auto firing=unsigned(self),caller=unsigned(_ReturnAddress());
+#ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
+    // Read-only selected-melee diagnostics share this original dispatcher;
+    // they never claim its optional observer/input-copy slot or invoke native code.
+    selectedKnife::ObserveUpdate({firing,unsigned(context),caller,extra});
+#endif
     OriginalFiringScope independentObservation(independentFiringObserver,{firing,unsigned(context),caller,extra});
     // Explicit independent tool input at this original boundary. The supplied
     // context is a stack copy; native dt/argument and original context stay intact.

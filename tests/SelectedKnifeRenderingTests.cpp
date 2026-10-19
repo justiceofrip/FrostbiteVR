@@ -3,6 +3,7 @@
 #include "Bc2ChestKnifeRendering.h"
 #include "Bc2SelectedKnifeNativeReader.h"
 #include "Bc2SelectedKnifeMotion.h"
+#include "Bc2SelectedKnifeCode.h"
 #include "fvr/interaction/TrackedRig.h"
 #include <iostream>
 #include <limits>
@@ -231,12 +232,139 @@ int SelectedNativeRejectsLookalikesAndChangedOwners(){
     NativeFixture race;race.raceAt=race.base+0x108;race.raceTarget=race.sa+4;race.raceValue=race.sw;CHECK(!race.Read());
     return 0;
 }
+int SelectedOwnerDiagnosticsPreserveAdmission(){
+    using selectedKnife::OwnerDiagnostic;using selectedKnife::OwnerPhase;
+    for(const bool retained:{false,true}){
+        const auto check=[&](NativeFixture& f,const selectedKnife::Native& n,OwnerDiagnostic* d=nullptr){
+            return retained?selectedKnife::AcceptedOwnerRetained(f.Memory(),f.binding,f.state,f.base,n,d):
+                selectedKnife::OwnerCurrent(f.Memory(),f.binding,f.state,f.base,n,d);
+        };
+        // Stable permitted source-flag changes remain permitted, with no stale
+        // diagnostic or post-rejection inventory samples on a successful read.
+        {NativeFixture f;const auto n=f.Read();CHECK(n);f.Put<std::uint8_t>(f.cs+0x114,0x19);
+            OwnerDiagnostic d;d.phase=OwnerPhase::SourceLinks;d.inventoryReadMask=3;
+            CHECK(check(f,*n)&&check(f,*n,&d));CHECK(d.phase==OwnerPhase::None&&d.inventoryReadMask==0);}
+        for(unsigned fault=0;fault<4;++fault){
+            NativeFixture f;const auto n=f.Read();CHECK(n);OwnerDiagnostic d;
+            if(fault==0)f.Put(f.effects+0x128,f.sp+4); // A different native player backlink.
+            if(fault==1)f.failRead=f.cs+0x24c;
+            if(fault==2)f.failType=f.ss;
+            if(fault==3){f.Put(f.cs+0x248,f.ci+0x80);f.Put<std::uint8_t>(f.cs+0x114,0);}
+            const auto bytes=f.bytes;
+            CHECK(!check(f,*n)&&!check(f,*n,&d)&&f.bytes==bytes);
+            CHECK(d.phase==OwnerPhase::ScopeBefore&&!d.beforeKnown&&!d.afterKnown);
+            CHECK(d.sourceSoldierFlags==1&&d.sourceInventory==f.ci&&d.sourceDifference.count==0);
+            if(fault==0){CHECK(!std::strcmp(d.scope.stage,"server_effects_player"));
+                CHECK(d.scope.address==f.effects+0x128&&d.scope.bytes==4&&d.scope.expected==f.sp&&d.scope.observed==f.sp+4);
+                CHECK(!d.scope.readFailed&&!d.scope.typeFailed);}
+            if(fault==1){CHECK(!std::strcmp(d.scope.stage,"client_inventory_read"));
+                CHECK(d.scope.address==f.cs+0x24c&&d.scope.bytes==4&&d.scope.readFailed&&!d.scope.typeFailed);
+                CHECK(d.inventoryReadMask==1);}
+            if(fault==2){CHECK(!std::strcmp(d.scope.stage,"server_soldier_type"));
+                CHECK(d.scope.address==f.ss&&d.scope.typeFailed&&!d.scope.readFailed);}
+            if(fault==3){CHECK(!std::strcmp(d.scope.stage,"client_inventory"));
+                CHECK(d.scope.expected==f.ci&&d.scope.observed==f.ci+0x80&&d.beforeSoldierFlags==0&&d.beforeInventory==f.ci+0x80);
+                CHECK(d.inventoryReadMask==3&&d.inventory248==f.ci+0x80&&d.inventory24c==f.ci);
+                // Later samples of both slots do not retry the rejected branch.
+                CHECK(!check(f,*n));}
+        }
+        // Raw and normalized source deltas are distinct: only0x18 is tolerated.
+        {NativeFixture f;const auto n=f.Read();CHECK(n);f.Put<std::uint8_t>(f.cs+0x114,0x39);OwnerDiagnostic d;
+            CHECK(!check(f,*n)&&!check(f,*n,&d));CHECK(d.phase==OwnerPhase::SourceLinks&&d.beforeKnown&&d.afterKnown);
+            CHECK(d.sourceSoldierFlags==1&&d.beforeSoldierFlags==0x39&&d.afterSoldierFlags==0x39);
+            CHECK(d.bracketDifference.count==0&&d.sourceDifference.count==1&&d.normalizedDifference.count==1);
+            CHECK(!std::strcmp(d.sourceDifference.first[0].field,"clientSoldierFlags"));
+            CHECK(d.sourceDifference.first[0].expected==1&&d.sourceDifference.first[0].observed==0x39);
+            CHECK(d.normalizedDifference.first[0].expected==1&&d.normalizedDifference.first[0].observed==0x21);}
+        // Flags outside the measured context mask and inventory replacement
+        // remain rejected between reads, with and without diagnostic output.
+        for(const bool diagnose:{false,true})for(unsigned fault=0;fault<2;++fault){
+            NativeFixture f;const auto n=f.Read();CHECK(n);OwnerDiagnostic d;
+            f.Put(f.cs+0x248,f.ci+0x80);f.raceAt=f.cp+0xccd;f.raceTarget=f.cs+0x114;f.raceValue=fault?0:0x21;
+            CHECK(!check(f,*n,diagnose?&d:nullptr));
+            if(!diagnose)continue;
+            CHECK(d.beforeKnown&&d.beforeSoldierFlags==1);
+            if(!fault){CHECK(d.phase==OwnerPhase::BracketLinks&&d.afterKnown&&d.afterSoldierFlags==0x21);
+                CHECK(d.bracketDifference.count==1&&!std::strcmp(d.bracketDifference.first[0].field,"clientSoldierFlags"));
+                CHECK(d.bracketDifference.first[0].expected==1&&d.bracketDifference.first[0].observed==0x21&&d.normalizedDifference.count==0);
+            }else{CHECK(d.phase==OwnerPhase::ScopeAfter&&!d.afterKnown&&!std::strcmp(d.scope.stage,"client_inventory"));
+                CHECK(d.afterSoldierFlags==0&&d.afterInventory==f.ci+0x80&&d.inventory248==f.ci+0x80&&d.inventory24c==f.ci);}
+        }
+        {NativeFixture f;const auto n=f.Read();CHECK(n);auto replaced=*n;replaced.clientEffects+=4;OwnerDiagnostic d;
+            CHECK(!check(f,replaced)&&!check(f,replaced,&d));CHECK(d.phase==OwnerPhase::SourceEffects&&d.beforeKnown&&d.afterKnown);
+            CHECK(d.sourceEffects==f.clientEffects+4&&d.beforeEffects==f.clientEffects&&d.afterEffects==f.clientEffects);}
+    }
+    // The retained-native path still tolerates selection changes only; the
+    // ordinary acquisition path retains its stricter currently-selected gate.
+    NativeFixture f;const auto n=f.Read();CHECK(n);f.Put(f.ci+0x14c,1u);f.Put(f.si+0x14c,1u);
+    OwnerDiagnostic current,retained;
+    CHECK(!selectedKnife::OwnerCurrent(f.Memory(),f.binding,f.state,f.base,*n,&current));
+    CHECK(current.phase==OwnerPhase::ScopeBefore&&!std::strcmp(current.scope.stage,"client_selected"));
+    CHECK(selectedKnife::AcceptedOwnerRetained(f.Memory(),f.binding,f.state,f.base,*n,&retained)&&retained.phase==OwnerPhase::None);
+    return 0;
+}
+int SelectedOwnerContextBracket(){
+    using selectedKnife::OwnerDiagnostic;using selectedKnife::OwnerPhase;
+    for(const bool retained:{false,true})for(const bool diagnose:{false,true}){
+        const auto check=[&](NativeFixture& f,const selectedKnife::Native& n,OwnerDiagnostic& d){
+            return retained?selectedKnife::AcceptedOwnerRetained(f.Memory(),f.binding,f.state,f.base,n,diagnose?&d:nullptr):
+                selectedKnife::OwnerCurrent(f.Memory(),f.binding,f.state,f.base,n,diagnose?&d:nullptr);
+        };
+        // Reproduce motion42702's3->19 and both directions of every measured
+        // context-bit combination. Exact actor, item, inventory and effects
+        // remain the same through the production callback-time reader.
+        for(unsigned before:{0u,8u,16u,24u})for(unsigned after:{0u,8u,16u,24u}){
+            NativeFixture f;f.Put<std::uint8_t>(f.cs+0x114,3);f.client.soldierFlags=3;
+            const auto n=f.Read();CHECK(n);f.Put<std::uint8_t>(f.cs+0x114,std::uint8_t(3|before));
+            f.raceAt=f.cp+0xccd;f.raceTarget=f.cs+0x114;f.raceValue=3|after;OwnerDiagnostic d;
+            CHECK(check(f,*n,d));CHECK(f.raceCount==2&&d.phase==OwnerPhase::None&&d.inventoryReadMask==0);
+        }
+        // Every other flag stays exact, including bit0 even if both inventory
+        // pointers happen to be equal. Context normalization cannot hide it.
+        for(unsigned changed:{1u,2u,4u,32u,64u,128u}){
+            NativeFixture f;f.Put<std::uint8_t>(f.cs+0x114,3);f.client.soldierFlags=3;
+            const auto n=f.Read();CHECK(n);f.Put(f.cs+0x248,f.ci);
+            f.raceAt=f.cp+0xccd;f.raceTarget=f.cs+0x114;f.raceValue=3^changed^0x18u;OwnerDiagnostic d;
+            CHECK(!check(f,*n,d));if(diagnose){CHECK(d.phase==OwnerPhase::BracketLinks);
+                CHECK(d.bracketDifference.count==1&&!std::strcmp(d.bracketDifference.first[0].field,"clientSoldierFlags"));}
+        }
+        // Actual ownership changes still reject at the exact first check or
+        // full bracket comparison; selection-completion does not excuse them.
+        for(auto [at,value]:std::initializer_list<std::pair<unsigned,unsigned>>{
+            {NativeFixture::weak,NativeFixture::cs+8},{NativeFixture::cs+0x24c,NativeFixture::ci+0x80},
+            {NativeFixture::effects+0x128,NativeFixture::sp+4},{NativeFixture::ca,NativeFixture::cw+4},
+            {NativeFixture::sa+4,NativeFixture::sw},{NativeFixture::effects+0x10,NativeFixture::fd+4},
+            {NativeFixture::cw+0x40,NativeFixture::cf0},{NativeFixture::clientEffects+0x10,NativeFixture::fd+4},
+            {NativeFixture::manager+4,63u},{NativeFixture::sa+4,NativeFixture::sw+0x100}}){
+            NativeFixture f;const auto n=f.Read();CHECK(n);f.raceAt=f.cp+0xccd;f.raceTarget=at;f.raceValue=value;OwnerDiagnostic d;
+            CHECK(!check(f,*n,d));if(diagnose)CHECK(d.phase==OwnerPhase::ScopeAfter||d.phase==OwnerPhase::BracketLinks);
+        }
+    }
+    // New publication still requires its original exact snapshot bracket.
+    NativeFixture publication;publication.raceAt=publication.cp+0xccd;
+    publication.raceTarget=publication.cs+0x114;publication.raceValue=0x11;CHECK(!publication.Read());
+    return 0;
+}
 int SelectedTargetRetainsExactWeakIdentity(){
     NativeFixture f;const auto absent=selectedKnife::ReadTarget(f.Memory(),f.effects);CHECK(absent&&!absent->handle&&!absent->soldier);
     f.Put(f.effects+0x130,f.targetWeak);const auto target=selectedKnife::ReadTarget(f.Memory(),f.effects);
     CHECK(target&&target->handle==f.targetWeak&&target->soldier==f.target);
     f.Put(f.targetWeak,0u);const auto retired=selectedKnife::ReadTarget(f.Memory(),f.effects);CHECK(retired&&retired->handle==f.targetWeak&&!retired->soldier);
     f.Put(f.targetWeak,f.target+4);f.raceAt=f.targetWeak;f.raceTarget=f.targetWeak;f.raceValue=0;CHECK(!selectedKnife::ReadTarget(f.Memory(),f.effects));
+    return 0;
+}
+int OrdinarySelectedAcquisitionBoundary(){
+    // Exact ordinary Step ->6e1fa0 listener slot0 return. The old generic
+    // notifier and FireLogic4's inline loop are different native paths.
+    CHECK(selectedKnife::IsAcquireCaller(0x6e1fc8u+2));
+    for(const auto caller:{0u,0x6dd770u,0x6e1d0au,0x6e1fc8u,0x6e1fc9u,0x6e1fcbu,0x6dd9e5u})
+        CHECK(!selectedKnife::IsAcquireCaller(caller));
+    bool stepLink=false,notificationBody=false;
+    for(const auto& code:selectedKnife::Code){
+        if(code.rva==0x2e64a6)stepLink=code.size==12&&code.fingerprint==0xbabaafa460ccf960ull;
+        if(code.rva==0x2e1fa0)notificationBody=code.size==168&&code.fingerprint==0x5a79cdc6166428ffull;
+    }
+    CHECK(stepLink&&notificationBody);
     return 0;
 }
 int PublishedContinuityDelayedMissAndNextJab(){
@@ -290,5 +418,5 @@ int PublishedContinuityDelayedMissAndNextJab(){
 }
 int main(){if(ExactSelectedGeometry()||RejectLookalikesAndMissingEvidence()||LifetimeCannotRenewOldCalibration()||CalibratedBladeUsesOriginalGrip()||
     BladeWorldAndNativeForward()||AcquisitionCopyKeepsSourcesPaddingAndRange()||SelectedNativeOwnsMeleeWithoutFirearmAnchor()||
-    SelectedNativeRejectsLookalikesAndChangedOwners()||SelectedTargetRetainsExactWeakIdentity()||PublishedContinuityDelayedMissAndNextJab())return 1;
-    std::cout<<"Ten selected-knife geometry, ownership and native-argument groups passed; mocked native memory, no game hit claim\n";}
+    SelectedNativeRejectsLookalikesAndChangedOwners()||SelectedOwnerDiagnosticsPreserveAdmission()||SelectedOwnerContextBracket()||SelectedTargetRetainsExactWeakIdentity()||OrdinarySelectedAcquisitionBoundary()||PublishedContinuityDelayedMissAndNextJab())return 1;
+    std::cout<<"Thirteen selected-knife geometry, ownership and native-argument groups passed; mocked native memory, no game hit claim\n";}
