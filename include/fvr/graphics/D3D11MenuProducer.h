@@ -9,6 +9,8 @@ namespace fvr::graphics {
 class D3D11MenuProducer {
 public:
     void Pump(IDXGISwapChain*,ipc::MenuChannel&)noexcept;
+    // Same lane for an adapter-owned raster (e.g. a mod menu) on the same device.
+    void Pump(ID3D11Texture2D*,ipc::MenuChannel&)noexcept;
     void Reset()noexcept;
     std::uint64_t Captured()const noexcept{return captured_;}
     std::uint64_t Published()const noexcept{return published_;}
@@ -19,7 +21,9 @@ private:
     Microsoft::WRL::ComPtr<ID3D11Device> device_;
     Microsoft::WRL::ComPtr<ID3D11DeviceContext> context_;
     std::array<Microsoft::WRL::ComPtr<ID3D11Texture2D>,2> scratch_;
-    ipc::MenuSurface pending_{};
+    ipc::MenuSurface pending_{};ipc::MenuState state_{};
+    bool Advance(ipc::MenuChannel&)noexcept;
+    void Capture(ID3D11Texture2D*)noexcept;
     std::uint64_t epoch_=0,frame_=0,captured_=0,published_=0,failed_=0,discarded_=0;
     unsigned width_=0,height_=0,format_=0;
     bool exporting_=false,publishing_=false,awaiting_=false;

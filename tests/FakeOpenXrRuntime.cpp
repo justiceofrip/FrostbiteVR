@@ -18,7 +18,15 @@ using Microsoft::WRL::ComPtr;
 namespace {
 struct Chain {std::array<ComPtr<ID3D11Texture2D>,2> texture;int acquired=-1,released=-1;bool waited=false;unsigned next=0;};
 ComPtr<ID3D11Device> device;ComPtr<ID3D11DeviceContext> context;
-std::array<Chain,2> chains;
+std::array<Chain,4> chains;
+// BF4 theater fixture (with the campaign fixture's pacing): the host also allocates a
+// menu panel and a pointer swapchain and submits quad layers instead of one eye pair.
+#ifdef FVR_THEATER_FIXTURE
+constexpr bool theaterFixture=true;
+#else
+constexpr bool theaterFixture=false;
+#endif
+unsigned quadLayers=0,panelSamples=0;unsigned char panelCentre[4]={};
 #ifdef FVR_NATIVE_CAMPAIGN_FIXTURE
 constexpr bool nativeCampaign=true;
 #else
@@ -61,7 +69,7 @@ XrFovf Fov(unsigned frame,unsigned eye){if(nativeCampaign)return {-.785398163f,.
 bool Near(float a,float b){return std::abs(a-b)<.00001f;}
 XrResult XRAPI_CALL EnumerateInstanceExtensionProperties(const char*,uint32_t capacity,uint32_t* count,XrExtensionProperties* out){*count=(recoveryScenario==6||nativeRecovery)?2:1;if(capacity>=*count){strcpy_s(out[0].extensionName,XR_KHR_D3D11_ENABLE_EXTENSION_NAME);out[0].extensionVersion=1;if(*count==2){strcpy_s(out[1].extensionName,XR_EXT_USER_PRESENCE_EXTENSION_NAME);out[1].extensionVersion=1;}}return XR_SUCCESS;}
 XrResult XRAPI_CALL CreateInstance(const XrInstanceCreateInfo* info,XrInstance* out){presenceInitial=presenceRemoved=presenceReturned=presenceEnabled=false;for(unsigned n=0;n<info->enabledExtensionCount;++n)presenceEnabled|=std::strcmp(info->enabledExtensionNames[n],XR_EXT_USER_PRESENCE_EXTENSION_NAME)==0;nativeStarted=GetTickCount64();frames=errors=layers=reuses=lastSource=chainCount=eventStep=0;visibleSent=focusSent=spaceSent=exitSent=false;paths.clear();actionNames.clear();actionSpaces.clear();actionCount=suggested=syncs=0;attached=false;referenceType=XR_REFERENCE_SPACE_TYPE_LOCAL;*out=Instance();return XR_SUCCESS;}
-XrResult XRAPI_CALL DestroyInstance(XrInstance){if(nativeCampaign)std::fprintf(stderr,"NativeCampaignTest frames=%u layers=%u errors=%u\n",frames,layers,errors);return XR_SUCCESS;}
+XrResult XRAPI_CALL DestroyInstance(XrInstance){if(theaterFixture)std::fprintf(stderr,"TheaterTest frames=%u quad_layers=%u panel_samples=%u panel_centre=%02x%02x%02x errors=%u\n",frames,quadLayers,panelSamples,panelCentre[0],panelCentre[1],panelCentre[2],errors);else if(nativeCampaign)std::fprintf(stderr,"NativeCampaignTest frames=%u layers=%u errors=%u\n",frames,layers,errors);return XR_SUCCESS;}
 XrResult XRAPI_CALL GetInstanceProperties(XrInstance,XrInstanceProperties* p){strcpy_s(p->runtimeName,nativeCampaign?"FVR NATIVE CAMPAIGN TEST - no headset":"FVR TEST ONLY - no headset");p->runtimeVersion=1;return XR_SUCCESS;}
 XrResult XRAPI_CALL GetSystem(XrInstance,const XrSystemGetInfo*,XrSystemId* out){*out=1;return XR_SUCCESS;}
 XrResult XRAPI_CALL GetSystemProperties(XrInstance,XrSystemId,XrSystemProperties* p){strcpy_s(p->systemName,"Deterministic stereo validation");if(presenceEnabled&&p->next){auto* presence=static_cast<XrSystemUserPresencePropertiesEXT*>(p->next);Verify(presence->type==XR_TYPE_SYSTEM_USER_PRESENCE_PROPERTIES_EXT,"presence property type");presence->supportsUserPresence=XR_TRUE;}return XR_SUCCESS;}
@@ -162,7 +170,7 @@ XrResult XRAPI_CALL GetActionStateBoolean(XrSession,const XrActionStateGetInfo* 
 
 XrResult XRAPI_CALL LocateViews(XrSession,const XrViewLocateInfo*,XrViewState* state,uint32_t,uint32_t* count,XrView* out){*count=2;state->viewStateFlags=XR_VIEW_STATE_POSITION_VALID_BIT|XR_VIEW_STATE_ORIENTATION_VALID_BIT;for(unsigned eye=0;eye<2;++eye){out[eye].pose=Eye(frames,eye);out[eye].fov=Fov(frames,eye);}return XR_SUCCESS;}
 XrResult XRAPI_CALL EnumerateSwapchainFormats(XrSession,uint32_t capacity,uint32_t* count,int64_t* out){*count=1;if(capacity)out[0]=DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;return XR_SUCCESS;}
-XrResult XRAPI_CALL CreateSwapchain(XrSession,const XrSwapchainCreateInfo* info,XrSwapchain* out){if(chainCount>=2)return XR_ERROR_LIMIT_REACHED;auto& chain=chains[chainCount];chain={};
+XrResult XRAPI_CALL CreateSwapchain(XrSession,const XrSwapchainCreateInfo* info,XrSwapchain* out){if(chainCount>=(theaterFixture?4u:2u))return XR_ERROR_LIMIT_REACHED;auto& chain=chains[chainCount];chain={};
     D3D11_TEXTURE2D_DESC d{};d.Width=info->width;d.Height=info->height;d.Format=DXGI_FORMAT(info->format);d.MipLevels=d.ArraySize=d.SampleDesc.Count=1;d.BindFlags=D3D11_BIND_RENDER_TARGET;
     for(auto& texture:chain.texture)if(FAILED(device->CreateTexture2D(&d,nullptr,&texture)))return XR_ERROR_RUNTIME_FAILURE;
     *out=reinterpret_cast<XrSwapchain>(std::uintptr_t(10+chainCount++));return XR_SUCCESS;}
@@ -176,6 +184,21 @@ XrResult XRAPI_CALL BeginFrame(XrSession,const XrFrameBeginInfo*){return XR_SUCC
 XrResult XRAPI_CALL EndFrame(XrSession,const XrFrameEndInfo* end){
     Verify(end->displayTime==baseTime+period*frames,"end time must be current display time");
     if(!end->layerCount)return XR_SUCCESS;++layers;
+    if(theaterFixture){
+        // Quad layers: count them and, every 60th, read back the panel's centre pixel.
+        for(unsigned i=0;i<end->layerCount;++i){
+            if(end->layers[i]->type!=XR_TYPE_COMPOSITION_LAYER_QUAD)continue;
+            const auto* quad=reinterpret_cast<const XrCompositionLayerQuad*>(end->layers[i]);const auto index=Index(quad->subImage.swapchain);
+            Verify(index<chainCount,"quad swapchain identity");if(index>=chainCount)continue;
+            const auto& c=chains[index];if(quad->subImage.imageRect.extent.width<64||c.released<0)continue; // pointer/beam quads
+            if(quadLayers++%60)continue;
+            D3D11_TEXTURE2D_DESC d{};c.texture[c.released]->GetDesc(&d);d.Usage=D3D11_USAGE_STAGING;d.BindFlags=0;d.CPUAccessFlags=D3D11_CPU_ACCESS_READ;ComPtr<ID3D11Texture2D> staging;
+            if(FAILED(device->CreateTexture2D(&d,nullptr,&staging)))continue;context->CopyResource(staging.Get(),c.texture[c.released].Get());
+            D3D11_MAPPED_SUBRESOURCE m{};if(FAILED(context->Map(staging.Get(),0,D3D11_MAP_READ,0,&m)))continue;
+            std::memcpy(panelCentre,static_cast<const unsigned char*>(m.pData)+std::size_t(d.Height/2)*m.RowPitch+std::size_t(d.Width/2)*4,4);context->Unmap(staging.Get(),0);++panelSamples;
+        }
+        return errors?XR_ERROR_VALIDATION_FAILURE:XR_SUCCESS;
+    }
     if(nativeCampaign){
         Verify(end->layerCount==1,"native layer count");if(end->layerCount!=1)return XR_ERROR_VALIDATION_FAILURE;
         const auto* layer=reinterpret_cast<const XrCompositionLayerProjection*>(end->layers[0]);Verify(layer->viewCount==2,"native stereo eye count");

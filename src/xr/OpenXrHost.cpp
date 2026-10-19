@@ -71,7 +71,7 @@ struct Host {
     ULONGLONG lastFrameWall=0,presenceReturnAt=0;bool recoveryPending=false,userPresent=true,presenceKnown=false;
     std::ofstream eventLog;
     void Log(const char* kind){if(eventLog){eventLog<<"{\"event\":\""<<kind<<"\",\"wall_ms\":"<<GetTickCount64()<<",\"state\":"<<int(sessionState)<<",\"space\":"<<spaceGeneration<<",\"present\":"<<(userPresent?"true":"false")<<",\"reference\":["<<referenceHead.position.x<<','<<referenceHead.position.y<<','<<referenceHead.position.z<<"],\"recenters\":"<<report.recenters<<",\"automatic_recenters\":"<<report.automaticRecenters<<"}\n";eventLog.flush();}}
-    bool roomscale=false;float worldUnitsPerMeter=1;
+    bool roomscale=false,theaterInput=false;float worldUnitsPerMeter=1;
     XrReferenceSpaceType referenceType=XR_REFERENCE_SPACE_TYPE_LOCAL;
     std::uint64_t inputGeneration=0;
     XrSessionState sessionState=XR_SESSION_STATE_UNKNOWN;
@@ -125,7 +125,7 @@ struct Host {
     }
     void Initialize(const HostOptions& options){
         Require(std::isfinite(options.worldUnitsPerMeter)&&options.worldUnitsPerMeter>=.01f&&options.worldUnitsPerMeter<=1000.f,"World scale must be .01..1000 native units per metre");
-        roomscale=options.roomscale;worldUnitsPerMeter=options.worldUnitsPerMeter;
+        roomscale=options.roomscale;worldUnitsPerMeter=options.worldUnitsPerMeter;theaterInput=options.theaterInput;
         if(!options.readyPath.empty()){eventLog.open(options.readyPath.parent_path()/L"xr-events.jsonl");Require(bool(eventLog),"Open XR event log");}
         Require(options.loaderPath.is_absolute(),"OpenXR loader requires an absolute path");
         loader=LoadLibraryExW(options.loaderPath.c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_SYSTEM32);
@@ -360,7 +360,7 @@ struct Host {
                     referenceHead=*reference;++spaceGeneration;retained.Reset();if(provider)provider->Suspend();++report.recenters;
                     tracking.referenceHead=input.referenceHead=referenceHead;tracking.spaceGeneration=input.spaceGeneration=spaceGeneration;Log("manual_recenter");
                 }
-                if(menu){menuActive=timed(HostStage::Menu,[&]{return menu->Frame(input);});menu->FilterGameplayInput(input);if(menuActive){input.focused=false;input.hands={};retained.Reset();}}
+                if(menu){menuActive=timed(HostStage::Menu,[&]{return menu->Frame(input);});menu->FilterGameplayInput(input);if(menuActive){if(!theaterInput){input.focused=false;input.hands={};}retained.Reset();}}
                 hudInput=input;
                 publishInput(input);timed(HostStage::Feedback,[&]{DispatchFeedback(provider,input);});inputSent=true;++report.inputFrames;
                 if(input.hands[0].gripTracked&&input.hands[1].aimTracked)++report.trackedHandFrames;

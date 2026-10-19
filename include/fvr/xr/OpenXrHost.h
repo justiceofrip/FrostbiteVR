@@ -13,6 +13,9 @@ struct HostOptions {
     std::filesystem::path loaderPath;
     bool probeOnly=true;
     bool controllers=false,roomscale=false;
+    // Theater games (BF4): the menu lane carries the game screen during play, so gameplay
+    // input keeps flowing while that panel is active. Default off: BC2 menus own input.
+    bool theaterInput=false;
     float worldUnitsPerMeter=1;
     unsigned seconds=15; // Zero requires a stopRequested lifetime source.
     std::function<bool()> stopRequested;

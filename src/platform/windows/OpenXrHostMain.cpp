@@ -17,11 +17,12 @@ std::string Json(const std::string& input){std::string out="\"";const char* hex=
 int wmain(int argc,wchar_t** argv){
     try {
         wchar_t module[32768]{};const auto length=GetModuleFileNameW(nullptr,module,32768);if(!length||length>=32768)throw std::runtime_error("Cannot locate host executable");
-        fvr::platform::ProcessLifetime gameLifetime;unsigned gamePid=0;
+        fvr::platform::ProcessLifetime gameLifetime;unsigned gamePid=0;std::wstring gameExe=L"BFBC2Game.exe";
         fvr::xr::DiagnosticScene diagnostic;fvr::ipc::RemoteFrameProvider remote;fvr::ipc::MenuChannel menu;bool testScene=false,ipcMode=false;std::filesystem::path channelFile,stopFile,bodyPropsCache,bodyPropsMaterials;fvr::xr::HostOptions options;options.loaderPath=std::filesystem::path(module).parent_path()/L"runtime/openxr/win64/openxr_loader.dll";
         for(int i=1;i<argc;++i){const std::wstring arg=argv[i];if(arg==L"--probe")options.probeOnly=true;else if(arg==L"--session")options.probeOnly=false;else if(arg==L"--test-scene"){options.probeOnly=false;testScene=true;options.provider=&diagnostic;}
             else if(arg==L"--ipc"){options.probeOnly=false;ipcMode=true;options.provider=&remote;}
             else if(arg==L"--controllers")options.controllers=true;
+            else if(arg==L"--theater-input")options.theaterInput=true; // BF4: gameplay input continues under the theater panel
             else if(arg==L"--roomscale")options.roomscale=true;
             else if(arg==L"--world-units-per-meter"&&i+1<argc)options.worldUnitsPerMeter=std::stof(argv[++i]);
             else if(arg==L"--frame-budget"&&i+1<argc){if(!remote.SetBudget(std::stoul(argv[++i])))throw std::runtime_error("Frame budget must be 1..50 ms");}
@@ -34,10 +35,11 @@ int wmain(int argc,wchar_t** argv){
             else if(arg==L"--ready-file"&&i+1<argc)options.readyPath=std::filesystem::absolute(argv[++i]);
             else if(arg==L"--stop-file"&&i+1<argc)stopFile=std::filesystem::absolute(argv[++i]);
             else if(arg==L"--until-game-exit"&&i+1<argc){gamePid=std::stoul(argv[++i]);if(!gamePid)throw std::runtime_error("A game PID is required");}
+            else if(arg==L"--game-exe"&&i+1<argc)gameExe=argv[++i]; // process image name checked with --until-game-exit
             else if(arg==L"--seconds"&&i+1<argc){options.seconds=std::stoul(argv[++i]);if(!options.seconds||options.seconds>300)throw std::runtime_error("Seconds must be 1..300");}
             else if(arg==L"--loader"&&i+1<argc)options.loaderPath=std::filesystem::absolute(argv[++i]);
-            else throw std::runtime_error("Usage: BC2XrHost [--probe | --session | --test-scene | --ipc] [--controllers --roomscale --world-units-per-meter 1] [--seconds 15 | --until-game-exit PID] [--loader path] [--frame-budget 8 --request-lifetime 150] [--eye-width N --eye-height N] [--channel-file path --ready-file path --stop-file path]");}
-        if(gamePid){if(!ipcMode||!gameLifetime.Open(gamePid,L"BFBC2Game.exe"))throw std::runtime_error("Cannot watch the BC2 game lifetime");options.seconds=0;options.stopRequested=[&]{return gameLifetime.Ended();};}
+            else throw std::runtime_error("Usage: BC2XrHost [--probe | --session | --test-scene | --ipc] [--controllers --roomscale --theater-input --world-units-per-meter 1] [--seconds 15 | --until-game-exit PID [--game-exe BFBC2Game.exe]] [--loader path] [--frame-budget 8 --request-lifetime 150] [--eye-width N --eye-height N] [--channel-file path --ready-file path --stop-file path]");}
+        if(gamePid){if(!ipcMode||!gameLifetime.Open(gamePid,gameExe.c_str()))throw std::runtime_error("Cannot watch the game lifetime");options.seconds=0;options.stopRequested=[&]{return gameLifetime.Ended();};}
         if(!stopFile.empty()){
             if(!gamePid||std::filesystem::exists(stopFile))throw std::runtime_error("Stop file requires a continuous game session and a new path");
             options.stopRequested=[&]{std::error_code error;return gameLifetime.Ended()||std::filesystem::is_regular_file(stopFile,error);};
