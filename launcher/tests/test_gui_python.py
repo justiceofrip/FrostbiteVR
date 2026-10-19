@@ -7,7 +7,7 @@ import shutil
 import sys
 import tempfile
 import unittest
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -34,7 +34,9 @@ class GuiPythonTests(unittest.TestCase):
 
     def test_parses_py_launcher_listing(self):
         paths = parse_py_list_paths(LIST_PATHS)
-        self.assertEqual([p.name for p in paths], ["python.exe", "python.exe"])
+        # Windows paths (the py launcher is Windows-only): name them by Windows rules, so the
+        # portable test tier on Linux reads them the same way.
+        self.assertEqual([PureWindowsPath(str(p)).name for p in paths], ["python.exe", "python.exe"])
         self.assertIn("python-3.13.15", str(paths[0]))
         self.assertIn("Python312", str(paths[1]))
 
