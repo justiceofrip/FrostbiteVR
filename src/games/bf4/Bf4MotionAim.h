@@ -45,6 +45,7 @@ struct MotionAimInput {
     std::uint64_t gameSample = 0; // increments with each new game reading (a view submit)
     float turn = 0;         // right stick X, -1..1 (body turning)
     float dt = 0;           // seconds since the last update
+    bool snapTurn = false;  // turn in fixed steps (comfort) instead of smoothly
 };
 
 struct MotionAimOutput {
@@ -59,6 +60,10 @@ public:
     static constexpr float kTurnRate = 2.6f;      // rad/s at full stick (~150 deg/s)
     static constexpr int kMaxCounts = 600;        // per frame and axis
     static constexpr float kInitialGain = 0.0006f; // rad per count until learned
+    // Snap turning: one step per push past kSnapPush; the stick must come back under
+    // kSnapRearm before the next one.
+    static constexpr float kSnapAngle = 0.5235988f; // 30 degrees
+    static constexpr float kSnapPush = 0.7f, kSnapRearm = 0.3f;
 
     MotionAimOutput Update(const MotionAimInput& in) {
         MotionAimOutput out;
@@ -71,7 +76,18 @@ public:
             bodyYaw_ = in.game.yaw;
             Reset();
         }
-        bodyYaw_ = WrapPi(bodyYaw_ + in.turn * kTurnRate * in.dt);
+        if (in.snapTurn) {
+            if (snapArmed_ && std::fabs(in.turn) >= kSnapPush) {
+                bodyYaw_ = WrapPi(bodyYaw_ + (in.turn > 0 ? kSnapAngle : -kSnapAngle));
+                snapArmed_ = false;
+                ++snaps_;
+            } else if (std::fabs(in.turn) < kSnapRearm) {
+                snapArmed_ = true;
+            }
+        } else {
+            bodyYaw_ = WrapPi(bodyYaw_ + in.turn * kTurnRate * in.dt);
+            snapArmed_ = std::fabs(in.turn) < kSnapRearm;
+        }
         out.engaged = true;
         out.bodyYaw = bodyYaw_;
         out.moveRotation = WrapPi(in.game.yaw - bodyYaw_);
@@ -95,6 +111,7 @@ public:
     float GainY() const { return gainY_; }
     bool Engaged() const { return engaged_; }
     std::uint64_t Mutes() const { return mutes_; }
+    std::uint64_t Snaps() const { return snaps_; }
     static constexpr int kMuteFrames = 60;
     AimAngle Desired() const { return desired_; }
 
@@ -165,6 +182,8 @@ private:
     int windowFrames_ = 0;
     int muted_ = 0;
     std::uint64_t mutes_ = 0;
+    bool snapArmed_ = false; // a stick already pushed when aiming engages is not a turn
+    std::uint64_t snaps_ = 0;
 };
 
 } // namespace fvr::bf4

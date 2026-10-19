@@ -887,3 +887,38 @@ TEST_CASE(AimReticleSitsWhereTheGameAims) {
     CHECK(Near((r.u - 0.5f) * r.scaleX, std::tan(yaw), 1e-5f)); // scale gives tangent units back
     CHECK(!ReticleAt(10.0f, 0, tanX, tanY).show); // outside the frame
 }
+
+TEST_CASE(SnapTurningStepsTheBodyHeading) {
+    using namespace fvr;
+    using namespace fvr::bf4;
+    MotionAim aim;
+    MotionAimInput in;
+    in.engage = in.aimTracked = in.gameValid = true;
+    in.reference.orientation = in.aim.orientation = {0, 0, 0, 1};
+    in.dt = 1.0f / 60;
+    in.snapTurn = true;
+    in.turn = 1.0f; // already pushed when aiming engages: not a turn
+    auto out = aim.Update(in);
+    CHECK(out.engaged && Near(out.bodyYaw, 0.0f, 1e-5f));
+    in.turn = 0;
+    aim.Update(in);
+    for (int i = 0; i < 30; ++i) { // one push held for half a second: one 30 degree step
+        in.turn = 0.9f;
+        out = aim.Update(in);
+    }
+    CHECK(Near(out.bodyYaw, MotionAim::kSnapAngle, 1e-5f) && aim.Snaps() == 1);
+    in.turn = 0.5f; // eased off but not back under the re-arm point: still no step
+    out = aim.Update(in);
+    in.turn = 0.9f;
+    out = aim.Update(in);
+    CHECK(aim.Snaps() == 1);
+    in.turn = 0.1f;
+    aim.Update(in);
+    in.turn = -1.0f; // left
+    out = aim.Update(in);
+    CHECK(Near(out.bodyYaw, 0.0f, 1e-5f) && aim.Snaps() == 2);
+    // Smooth turning with the option off.
+    in.snapTurn = false;
+    for (int i = 0; i < 60; ++i) out = aim.Update(in);
+    CHECK(Near(out.bodyYaw, -MotionAim::kTurnRate, 0.02f));
+}

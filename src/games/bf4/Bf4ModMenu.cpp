@@ -32,7 +32,8 @@ ui::ModMenuModel BuildModMenu(const game::CapabilityRegistry& caps, bool develop
     menu.Add({"reload_mode", "Reloading", MenuItemKind::Choice, {"Button press", "Manual (magazine by hand)"},
               static_cast<int>(state.reloadMode), true, ""});
     // Shown but disabled until the XR host consumes them (never offer a dead switch).
-    menu.Add({"snap_turn", "Snap turning", MenuItemKind::Toggle, {}, state.snapTurn ? 1 : 0, false, "Coming in a later update."});
+    menu.Add({"snap_turn", "Snap turning", MenuItemKind::Toggle, {}, state.snapTurn ? 1 : 0, true,
+              "30 degree steps with the right stick (aiming with the right controller). Off: smooth."});
     menu.Add({"theater_distance", "Screen distance", MenuItemKind::Choice, {"Near", "Medium", "Far"},
               state.theaterDistance, false, "Coming in a later update."});
     menu.Add({"view_mode", "In campaign levels", MenuItemKind::Choice, {"Screen", "Head-tracked view"},

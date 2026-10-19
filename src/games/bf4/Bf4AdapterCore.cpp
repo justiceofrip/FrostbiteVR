@@ -111,7 +111,10 @@ void AdapterCore::ApplyMenuCommand(const ModMenuCommand& command) {
         menuState_.reloadMode = command.value == 1 ? interaction::ReloadMode::Manual : interaction::ReloadMode::ButtonPress;
         SetReloadMode(menuState_.reloadMode);
         break;
-    case ModMenuAction::SetSnapTurn: menuState_.snapTurn = command.value != 0; break;
+    case ModMenuAction::SetSnapTurn:
+        menuState_.snapTurn = command.value != 0;
+        platform_.Log(menuState_.snapTurn ? "turning: snap (30 degrees)" : "turning: smooth");
+        break;
     case ModMenuAction::SetTheaterDistance: menuState_.theaterDistance = command.value; break;
     case ModMenuAction::Recenter:
         haveReference_ = false; // the next valid head pose becomes the reference
@@ -350,6 +353,7 @@ void AdapterCore::UpdateMotionAim(const ControllerSnapshot& in, const PlatformFr
     m.aim = hand.aim;
     m.gameValid = platform_.GameAim(m.game, m.gameSample);
     m.turn = std::fabs(hand.stickX) > 0.2f ? hand.stickX : 0.0f;
+    m.snapTurn = menuState_.snapTurn;
     m.dt = lastAimTickMs_ && f.tickMs > lastAimTickMs_ ? std::min(0.1f, (f.tickMs - lastAimTickMs_) / 1000.0f) : 0.0f;
     lastAimTickMs_ = f.tickMs;
     const bool was = aim_.engaged;
@@ -568,9 +572,9 @@ std::string AdapterCore::Status() const {
     s += padLine;
     s += "clicks_posted=" + std::to_string(pointer_.Clicks()) + "\n";
     char aimLine[200];
-    std::snprintf(aimLine, sizeof(aimLine), "controller_aim=%s body_yaw=%.3f gain=%.6f,%.6f mutes=%llu\n",
+    std::snprintf(aimLine, sizeof(aimLine), "controller_aim=%s body_yaw=%.3f gain=%.6f,%.6f mutes=%llu snaps=%llu\n",
                   aim_.engaged ? "engaged" : "off", aim_.bodyYaw, motionAim_.GainX(), motionAim_.GainY(),
-                  static_cast<unsigned long long>(motionAim_.Mutes()));
+                  static_cast<unsigned long long>(motionAim_.Mutes()), static_cast<unsigned long long>(motionAim_.Snaps()));
     s += aimLine;
     s += gestures_.Describe() + " holsters=" + (menuState_.holsters ? "on" : "off") + "\n";
     s += "reload_requests=" + std::to_string(stats_.reloadRequests) + "\n";
