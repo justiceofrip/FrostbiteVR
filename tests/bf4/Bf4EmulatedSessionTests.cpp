@@ -437,3 +437,47 @@ TEST_CASE(EmuControllerAimHoldsAcrossLeaseGaps) {
     CHECK(Near(WrapPi(platform.gameAim.yaw - body.front()), 0.5235988f, 0.02f));
     CHECK(core.Status().find("controller_aim=engaged") != std::string::npos);
 }
+
+TEST_CASE(EmuControllerAimSettlesWithLongerInputDelays) {
+    // The game reads mouse input one to three frames late depending on its threading and
+    // frame rate: aiming must settle on the controller without swinging past it.
+    for (const int delay : {1, 2, 3}) {
+        FakeImage image({names::kGameRenderer, names::kRenderViewUpdate, names::kClientGameContext, names::kLevelName});
+        FakePlatform platform;
+        platform.aimDelay = delay;
+        AdapterCore core(Session(true), X64(), image.Resolve(), platform);
+        core.OnSwapchainAdopted(true);
+        platform.Campaign();
+        platform.aimKnown = true;
+        Clock clock;
+        int n = 0;
+        auto frame = [&](float handYaw) {
+            auto in = Input(n / 90.0);
+            in.world.valid = true;
+            in.world.poseId = 100 + static_cast<std::uint64_t>(n);
+            in.world.head = in.head;
+            in.world.fov[0] = {-1.0f, 0.9f, 1.0f, -1.1f};
+            in.world.fov[1] = {-0.9f, 1.0f, 1.0f, -1.1f};
+            in.controls.focused = true;
+            in.controls.generation = 1 + static_cast<std::uint64_t>(n);
+            in.controls.spaceGeneration = 1;
+            in.controls.predictedNs = 1000000 + static_cast<std::int64_t>(n) * 11000000;
+            for (auto& h : in.controls.hands) h.active = interaction::Components;
+            auto& right = in.controls.hands[1];
+            right.aimTracked = right.gripTracked = true;
+            right.aim.orientation = math::FromAxisAngle({0, 1, 0}, -handYaw);
+            platform.GameFrame();
+            core.OnFrame(clock.Next(), in);
+            ++n;
+        };
+        for (int i = 0; i < 3; ++i) frame(0);
+        const float body = 0.5f; // the game's starting yaw becomes the body heading
+        float worstAfter = 0;
+        for (int i = 0; i < 240; ++i) {
+            frame(0.5235988f);
+            const float error = std::fabs(WrapPi(platform.gameAim.yaw - body - 0.5235988f));
+            if (i >= 120) worstAfter = std::max(worstAfter, error); // after two seconds
+        }
+        CHECK(worstAfter < 0.02f); // settled, and stays there
+    }
+}

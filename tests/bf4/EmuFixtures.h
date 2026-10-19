@@ -87,19 +87,24 @@ struct FakePlatform final : IAdapterPlatform {
     void DetachAll(std::string_view) override { ++detaches; }
     void Log(std::string_view line) override { log.emplace_back(line); }
 
-    // ---- controller aiming: a game whose aim turns by gain per mouse count, one frame late ----
+    // ---- controller aiming: a game whose aim turns by gain per mouse count, `aimDelay`
+    // frames late (counts sent in frame n first show in the aim read in frame n+1+aimDelay) ----
     bool aimKnown = false;
     AimAngle gameAim{0.5f, 0.0f};
     float mouseGainX = 0.00028f, mouseGainY = -0.00025f;
-    int sentX = 0, sentY = 0, appliedX = 0, appliedY = 0;
+    int sentX = 0, sentY = 0;
+    int aimDelay = 1;
+    std::vector<std::pair<int, int>> queued; // counts waiting for the game to read them
     std::uint64_t aimSample = 0;
     int mouseCalls = 0;
-    void GameFrame() { // the game reads last frame's mouse input and submits its view
-        gameAim.yaw = WrapPi(gameAim.yaw + mouseGainX * appliedX);
-        gameAim.pitch += mouseGainY * appliedY;
-        appliedX = sentX;
-        appliedY = sentY;
+    void GameFrame() { // the game reads delayed mouse input and submits its view
+        queued.emplace_back(sentX, sentY);
         sentX = sentY = 0;
+        if (static_cast<int>(queued.size()) > aimDelay) {
+            gameAim.yaw = WrapPi(gameAim.yaw + mouseGainX * queued.front().first);
+            gameAim.pitch += mouseGainY * queued.front().second;
+            queued.erase(queued.begin());
+        }
         ++aimSample;
     }
     bool GameAim(AimAngle& aim, std::uint64_t& sample) override {

@@ -118,8 +118,15 @@ public:
         twoHanded_ = TwoHanded(in, aim);
         out.twoHanded = twoHanded_;
         desired_ = {WrapPi(bodyYaw_ + aim.yaw), aim.pitch};
-        out.mouseX = Counts(WrapPi(desired_.yaw - in.game.yaw), gainX_);
-        out.mouseY = Counts(desired_.pitch - in.game.pitch, gainY_);
+        // Counts sent in the last frames may not show in the game's aim yet (its input is a
+        // frame or two behind): count them as done, or the loop overshoots and, with a
+        // longer delay, oscillates.
+        const float flightX = gainX_ * static_cast<float>(flightX_[0] + flightX_[1]);
+        const float flightY = gainY_ * static_cast<float>(flightY_[0] + flightY_[1]);
+        out.mouseX = Counts(WrapPi(desired_.yaw - in.game.yaw) - flightX, gainX_);
+        out.mouseY = Counts(desired_.pitch - in.game.pitch - flightY, gainY_);
+        flightX_ = {out.mouseX, flightX_[0]};
+        flightY_ = {out.mouseY, flightY_[0]};
         pendingX_ += out.mouseX;
         pendingY_ += out.mouseY;
         return out;
@@ -152,9 +159,12 @@ private:
         aim = line;
         return true;
     }
-    // Proportional step with a 0.7 margin against the one-frame input delay.
+    // Proportional step. With two frames of counts treated as in flight, half the remaining
+    // error per frame settles without overshoot for game input delays of one to three
+    // frames and a gain off by up to 40 % (simulated before it was chosen).
+    static constexpr float kStep = 0.5f;
     static int Counts(float error, float gain) {
-        const float c = 0.7f * error / gain;
+        const float c = kStep * error / gain;
         return static_cast<int>(std::lround(std::fmax(-float(kMaxCounts), std::fmin(float(kMaxCounts), c))));
     }
     void Reset() {
@@ -163,6 +173,7 @@ private:
         haveGame_ = false;
         muted_ = 0;
         pendingX_ = pendingY_ = 0;
+        flightX_ = flightY_ = {};
         windowCountsX_ = windowCountsY_ = 0;
         windowYaw_ = windowPitch_ = 0;
         windowFrames_ = 0;
@@ -214,6 +225,7 @@ private:
     AimAngle lastGame_{}, desired_{};
     std::uint64_t lastSample_ = 0;
     long long pendingX_ = 0, pendingY_ = 0, windowCountsX_ = 0, windowCountsY_ = 0;
+    std::array<int, 2> flightX_{}, flightY_{}; // counts sent in the last two updates
     float windowYaw_ = 0, windowPitch_ = 0;
     int windowFrames_ = 0;
     int muted_ = 0;

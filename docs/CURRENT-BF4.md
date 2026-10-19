@@ -151,6 +151,12 @@ screen. Pieces (all on the analysed build only):
   body turns smoothly, the eye resampler darkens each eye beyond ~35 deg from its centre
   (dark by ~50 deg), in proportion to the stick and fading in fast / out slower
   (`ComfortVignette`). Unit-tested; the WARP check draws it.
+- Mouse steering is now robust to the game's input delay: half the remaining error per
+  frame, with the counts of the last two frames treated as in flight. The old step (0.7,
+  no in-flight term) was stable only for the emulator's two-frame lag; with three frames it
+  diverged (the aim would swing ever wider). Chosen by simulation (delays of 1-3 frames,
+  gain off by +-40 %: settles in 7-24 frames, overshoot <= 22 %) and checked by an emulated
+  test at three delays, which fails with the old step.
 - Aiming stays engaged across short gaps between world-lane leases (500 ms hold). Before,
   each frame without a lease released it, and re-engaging re-anchored the body heading to
   the game's aim (a view jump by the controller's offset) and reset the learned mouse gain;
@@ -347,12 +353,12 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
   and notes were shortened to fit half width (GDI text now ends with an ellipsis when it
   does not fit). Unit test: every item on the panel, none overlapping; a GDI render of the
   developer menu was checked by eye.
-- Build.ps1 after the aim hold across lease gaps: x64 284/284, x86 283/283. Bf4CoreTests
-  71 cases;
+- Build.ps1 after the delay-robust aim steering: x64 284/284, x86 283/283. Bf4CoreTests
+  72 cases;
   Bf4Emulated pass (theater, world lane, stereo probe, census, lockdown, gestures, eye
   resampler reticle on WARP); launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
   `-World -FrameChannels 2` 5/5 (227 pairs); `-World` with one channel 4/4 (47 pairs).
-- Installed locally: runtime/bf4 0.4.27-local (rollback 0.4.26-local). Developer
+- Installed locally: runtime/bf4 0.4.28-local (rollback 0.4.27-local). Developer
   sessions still run the read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the
   framework's `StereoMath.h` (`Quat` = `Quaternion`; Pose is `{position, orientation}`).
