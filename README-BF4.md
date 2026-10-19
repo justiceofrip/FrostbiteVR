@@ -23,7 +23,7 @@ for one-click rollback.
 ## Read next
 `docs/BF4-RESEARCH.md` · `docs/BF4-ARCHITECTURE.md` · `docs/BF4-ROADMAP.md` ·
 `docs/BF4-STEREO.md` · `docs/BF4-CAMERA-RE.md` · `docs/BF4-SESSION-RE.md` · `docs/BF4-MANUAL-RELOAD.md` · `docs/BF4-RE-PLAYBOOK.md` ·
-`docs/BF4-TESTING.md` · `docs/CURRENT-BF4.md`
+`docs/BF4-TESTING.md` · `docs/BF4-FIRST-SESSION.md` · `docs/CURRENT-BF4.md`
 
 No Windows box handy? `tools/emulated/run_all.sh` runs the portable launcher tier on Linux/WSL;
 the C++ suites need Windows (`Build.ps1`, or ctest `-R ^Bf4`).

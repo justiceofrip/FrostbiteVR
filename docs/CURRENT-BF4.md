@@ -153,6 +153,13 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the
   framework's `StereoMath.h` (`Quat` = `Quaternion`; Pose is `{position, orientation}`).
 
+## Next live session
+
+Checklist: [BF4-FIRST-SESSION.md](BF4-FIRST-SESSION.md). Afterwards
+`tools/bf4probe/summarize_session.py` turns the adapter log into verdicts (camera,
+single-player signals, client/server weapon copies, next ownership link); unit-tested in
+`tests/test_bf4_session_summary.py` and checked against the emulator's real log.
+
 ## Open / blocked
 
 - **Steam prompt pending on the player's PC** (since 23:19): "launch BF4 with
