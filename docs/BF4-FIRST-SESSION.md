@@ -1,4 +1,4 @@
-# BF4 headset session: checklist (0.4.28-local)
+# BF4 headset session: checklist (0.4.29-local)
 
 What to try in the next headset session, and what each check tells us. About 15 minutes.
 Everything is input-only or an exactly restored camera/FOV write, apart from the optional
@@ -55,7 +55,7 @@ The launcher's feedback button bundles the logs. The lines that answer the open 
 | --- | --- |
 | `theater_link ... bridges=2 pairs= queued=` | the two-channel pair rate in game |
 | `view_override ... run=` | head tracking frame sync |
-| `controller_aim=... gain= mutes= snaps=` and `mouse_sends=` | mouse aiming reached the game |
+| `controller_aim=... gain= mutes= snaps= guards=` and `mouse_sends=` | mouse aiming reached the game; its learned sensitivity |
 | `gestures gun=... draws= throws= ejects= seats=` and `key_sends= haptics_sent=` | holsters, keys and pulses |
 | `reticle_pairs= marked_pairs=` | aim dot and gesture markers drawn |
 | `diagnostics: no frame presented ...` and the stacks after it | where a 3D freeze waits |

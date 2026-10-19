@@ -69,7 +69,10 @@ class MotionAim {
 public:
     static constexpr float kTurnRate = 2.6f;      // rad/s at full stick (~150 deg/s)
     static constexpr int kMaxCounts = 600;        // per frame and axis
-    static constexpr float kInitialGain = 0.0006f; // rad per count until learned
+    // Rad per count until learned. Deliberately high: a game more sensitive than the
+    // estimate makes every step overshoot, a less sensitive one only makes steering slower
+    // until the gain is learned (simulated: no overshoot for true gains 0.0002-0.003).
+    static constexpr float kInitialGain = 0.003f;
     // Snap turning: one step per push past kSnapPush; the stick must come back under
     // kSnapRearm before the next one.
     static constexpr float kSnapAngle = 0.5235988f; // 30 degrees
@@ -88,7 +91,7 @@ public:
         if (!engaged_) { // the body starts where the game is looking
             engaged_ = true;
             bodyYaw_ = in.game.yaw;
-            Reset();
+            Reset(); // the learned gain stays: the game's mouse sensitivity has not changed
         }
         if (in.snapTurn) {
             if (snapArmed_ && std::fabs(in.turn) >= kSnapPush) {
@@ -123,6 +126,9 @@ public:
         // longer delay, oscillates.
         const float flightX = gainX_ * static_cast<float>(flightX_[0] + flightX_[1]);
         const float flightY = gainY_ * static_cast<float>(flightY_[0] + flightY_[1]);
+        ++updates_;
+        GuardOvershoot(WrapPi(desired_.yaw - in.game.yaw), guardX_, gainX_);
+        GuardOvershoot(desired_.pitch - in.game.pitch, guardY_, gainY_);
         out.mouseX = Counts(WrapPi(desired_.yaw - in.game.yaw) - flightX, gainX_);
         out.mouseY = Counts(desired_.pitch - in.game.pitch - flightY, gainY_);
         flightX_ = {out.mouseX, flightX_[0]};
@@ -136,6 +142,7 @@ public:
     bool Engaged() const { return engaged_; }
     std::uint64_t Mutes() const { return mutes_; }
     std::uint64_t Snaps() const { return snaps_; }
+    std::uint64_t OscillationGuards() const { return guards_; }
     bool TwoHandedNow() const { return twoHanded_; }
     static constexpr int kMuteFrames = 60;
     AimAngle Desired() const { return desired_; }
@@ -159,6 +166,34 @@ private:
         aim = line;
         return true;
     }
+    // Overshoot: the aim error swung past zero by more than kOvershoot of the swing before
+    // it. The game turns more per count than the estimate says (e.g. leaving aim-down-sights
+    // raises its sensitivity), so the estimate grows by the overshoot ratio at once (smaller
+    // steps); the regular learning then settles it on the measured value. Simulated: a
+    // threefold sensitivity jump stays within ~0.1 rad of overshoot for 1-2 frames of delay,
+    // where waiting for repeated swings let it run away at 3 frames.
+    struct Guard {
+        int sign = 0;
+        float peak = 0;      // largest |error| of the current swing
+        float previous = -1; // the swing before it (-1: none to compare with)
+    };
+    static constexpr float kOvershoot = 0.3f;
+    void GuardOvershoot(float error, Guard& g, float& gain) {
+        if (std::fabs(error) < 0.01f) return;
+        const int now = error > 0 ? 1 : -1;
+        if (g.sign && now != g.sign) {
+            if (g.previous > 0 && g.peak > kOvershoot * g.previous) {
+                gain = std::fmax(-0.05f, std::fmin(0.05f, gain * (1 + g.peak / g.previous)));
+                g.previous = -1;
+                ++guards_;
+            } else {
+                g.previous = g.peak;
+            }
+            g.peak = 0;
+        }
+        g.sign = now;
+        g.peak = std::fmax(g.peak, std::fabs(error));
+    }
     // Proportional step. With two frames of counts treated as in flight, half the remaining
     // error per frame settles without overshoot for game input delays of one to three
     // frames and a gain off by up to 40 % (simulated before it was chosen).
@@ -168,12 +203,11 @@ private:
         return static_cast<int>(std::lround(std::fmax(-float(kMaxCounts), std::fmin(float(kMaxCounts), c))));
     }
     void Reset() {
-        gainX_ = kInitialGain;
-        gainY_ = -kInitialGain; // mouse down looks down: negative pitch per positive count
         haveGame_ = false;
         muted_ = 0;
         pendingX_ = pendingY_ = 0;
         flightX_ = flightY_ = {};
+        guardX_ = guardY_ = {};
         windowCountsX_ = windowCountsY_ = 0;
         windowYaw_ = windowPitch_ = 0;
         windowFrames_ = 0;
@@ -212,20 +246,23 @@ private:
         const float measured = angle / static_cast<float>(counts);
         const float magnitude = std::fabs(measured);
         if (magnitude < 1e-6f || magnitude > 0.05f) return;
-        // Trust a window in proportion to how much it moved (2000 counts: fully). Follows
-        // sign flips too (inverted look).
-        const float weight = std::fmin(1.0f, static_cast<float>(std::llabs(counts)) / 2000.0f);
+        // Trust a window in proportion to how far the game turned in it (0.2 rad: fully), not
+        // to the counts sent (those depend on the estimate itself). Follows sign flips too
+        // (inverted look).
+        const float weight = std::fmin(1.0f, std::fabs(angle) / 0.2f);
         gain += weight * (measured - gain);
         if (std::fabs(gain) < 1e-6f) gain = measured;
     }
 
     bool engaged_ = false, haveGame_ = false;
     float bodyYaw_ = 0, lastHandYaw_ = 0;
-    float gainX_ = kInitialGain, gainY_ = -kInitialGain;
+    float gainX_ = kInitialGain, gainY_ = -kInitialGain; // mouse down looks down: negative pitch per count
     AimAngle lastGame_{}, desired_{};
     std::uint64_t lastSample_ = 0;
     long long pendingX_ = 0, pendingY_ = 0, windowCountsX_ = 0, windowCountsY_ = 0;
     std::array<int, 2> flightX_{}, flightY_{}; // counts sent in the last two updates
+    Guard guardX_{}, guardY_{};
+    std::uint64_t updates_ = 0, guards_ = 0;
     float windowYaw_ = 0, windowPitch_ = 0;
     int windowFrames_ = 0;
     int muted_ = 0;

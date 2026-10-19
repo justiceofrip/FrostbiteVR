@@ -606,11 +606,13 @@ std::string AdapterCore::Status() const {
                   pad_.leftTrigger, pad_.rightTrigger, pad_.thumbLX, pad_.thumbLY, pad_.thumbRX, pad_.thumbRY);
     s += padLine;
     s += "clicks_posted=" + std::to_string(pointer_.Clicks()) + "\n";
-    char aimLine[200];
-    std::snprintf(aimLine, sizeof(aimLine), "controller_aim=%s body_yaw=%.3f gain=%.6f,%.6f mutes=%llu snaps=%llu two_handed=%llu\n",
+    char aimLine[256];
+    std::snprintf(aimLine, sizeof(aimLine),
+                  "controller_aim=%s body_yaw=%.3f gain=%.6f,%.6f mutes=%llu snaps=%llu two_handed=%llu guards=%llu\n",
                   aim_.engaged ? "engaged" : "off", aim_.bodyYaw, motionAim_.GainX(), motionAim_.GainY(),
                   static_cast<unsigned long long>(motionAim_.Mutes()), static_cast<unsigned long long>(motionAim_.Snaps()),
-                  static_cast<unsigned long long>(twoHandedEngages_));
+                  static_cast<unsigned long long>(twoHandedEngages_),
+                  static_cast<unsigned long long>(motionAim_.OscillationGuards()));
     s += aimLine;
     s += gestures_.Describe() + " holsters=" + (menuState_.holsters ? "on" : "off") + "\n";
     s += "reload_requests=" + std::to_string(stats_.reloadRequests) + "\n";

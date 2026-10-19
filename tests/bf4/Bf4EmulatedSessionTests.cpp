@@ -481,3 +481,52 @@ TEST_CASE(EmuControllerAimSettlesWithLongerInputDelays) {
         CHECK(worstAfter < 0.02f); // settled, and stays there
     }
 }
+
+TEST_CASE(EmuControllerAimRecoversWhenTheGameIsMoreSensitiveThanLearned) {
+    // Learned while aiming down sights, then the game turns three times more per count
+    // (sights off): the steering must not swing out of control while it re-learns.
+    for (const int delay : {1, 2}) {
+        FakeImage image({names::kGameRenderer, names::kRenderViewUpdate, names::kClientGameContext, names::kLevelName});
+        FakePlatform platform;
+        platform.aimDelay = delay;
+        platform.mouseGainX = 0.0004f;
+        AdapterCore core(Session(true), X64(), image.Resolve(), platform);
+        core.OnSwapchainAdopted(true);
+        platform.Campaign();
+        platform.aimKnown = true;
+        Clock clock;
+        int n = 0;
+        auto frame = [&](float handYaw) {
+            auto in = Input(n / 90.0);
+            in.world.valid = true;
+            in.world.poseId = 100 + static_cast<std::uint64_t>(n);
+            in.world.head = in.head;
+            in.world.fov[0] = {-1.0f, 0.9f, 1.0f, -1.1f};
+            in.world.fov[1] = {-0.9f, 1.0f, 1.0f, -1.1f};
+            in.controls.focused = true;
+            in.controls.generation = 1 + static_cast<std::uint64_t>(n);
+            in.controls.spaceGeneration = 1;
+            in.controls.predictedNs = 1000000 + static_cast<std::int64_t>(n) * 11000000;
+            for (auto& h : in.controls.hands) h.active = interaction::Components;
+            auto& right = in.controls.hands[1];
+            right.aimTracked = right.gripTracked = true;
+            right.aim.orientation = math::FromAxisAngle({0, 1, 0}, -handYaw);
+            platform.GameFrame();
+            core.OnFrame(clock.Next(), in);
+            ++n;
+        };
+        for (int i = 0; i < 3; ++i) frame(0);
+        // Learn: sweep the hand so the game turns and the gain is measured.
+        for (int i = 0; i < 600; ++i) frame(0.5f * std::sin(i / 40.0f));
+        platform.mouseGainX *= 3.0f;
+        float worst = 0, worstLate = 0;
+        for (int i = 0; i < 360; ++i) {
+            frame(-0.35f);
+            const float error = std::fabs(WrapPi(platform.gameAim.yaw - 0.5f + 0.35f));
+            worst = std::max(worst, error);
+            if (i >= 240) worstLate = std::max(worstLate, error);
+        }
+        CHECK(worst < 1.0f);       // never swung far past the controller
+        CHECK(worstLate < 0.02f);  // and settled on it
+    }
+}

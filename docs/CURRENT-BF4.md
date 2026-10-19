@@ -157,6 +157,14 @@ screen. Pieces (all on the analysed build only):
   diverged (the aim would swing ever wider). Chosen by simulation (delays of 1-3 frames,
   gain off by +-40 %: settles in 7-24 frames, overshoot <= 22 %) and checked by an emulated
   test at three delays, which fails with the old step.
+- Mouse gain: the first estimate is deliberately high (0.003 rad/count): a game more
+  sensitive than believed overshoots every step, a less sensitive one only steers slower
+  until learned (simulated: no overshoot for true gains 0.0002-0.003). Learning trusts a
+  window by how far the game turned (0.2 rad: fully) rather than by counts, so one aim
+  step learns the gain; learned gains survive re-engagement. Overshoot guard: when the
+  error swings past zero by more than 30 % of the swing before it, the estimate grows by
+  that ratio at once (a threefold sensitivity jump, e.g. leaving aim-down-sights, settles
+  without running away; emulated test at two delays). Log: `guards=`.
 - Aiming stays engaged across short gaps between world-lane leases (500 ms hold). Before,
   each frame without a lease released it, and re-engaging re-anchored the body heading to
   the game's aim (a view jump by the controller's offset) and reset the learned mouse gain;
@@ -353,12 +361,12 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
   and notes were shortened to fit half width (GDI text now ends with an ellipsis when it
   does not fit). Unit test: every item on the panel, none overlapping; a GDI render of the
   developer menu was checked by eye.
-- Build.ps1 after the delay-robust aim steering: x64 284/284, x86 283/283. Bf4CoreTests
-  72 cases;
+- Build.ps1 after the aim gain and overshoot guard: x64 284/284, x86 283/283. Bf4CoreTests
+  73 cases;
   Bf4Emulated pass (theater, world lane, stereo probe, census, lockdown, gestures, eye
   resampler reticle on WARP); launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
   `-World -FrameChannels 2` 5/5 (227 pairs); `-World` with one channel 4/4 (47 pairs).
-- Installed locally: runtime/bf4 0.4.28-local (rollback 0.4.27-local). Developer
+- Installed locally: runtime/bf4 0.4.29-local (rollback 0.4.28-local). Developer
   sessions still run the read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the
   framework's `StereoMath.h` (`Quat` = `Quaternion`; Pose is `{position, orientation}`).
