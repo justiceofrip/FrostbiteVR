@@ -37,16 +37,26 @@
 
 namespace {
 constexpr int kWidth = 1280, kHeight = 720;
-constexpr RECT kButton{600, 340, 680, 380}; // client pixels
 int g_buttonClicks = 0;
 bool g_downInside = false;
 
+// An 80x40 button at the centre of the client area as it actually is: Windows caps a
+// window to the desktop (CI runners have small desktops), and the laser aims at
+// normalised client coordinates, not at fixed pixels.
+RECT CentreButton(HWND hwnd) {
+    RECT c{};
+    GetClientRect(hwnd, &c);
+    const LONG cx = (c.right - c.left) / 2, cy = (c.bottom - c.top) / 2;
+    return RECT{cx - 40, cy - 20, cx + 40, cy + 20};
+}
+
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     const POINT p{static_cast<short>(LOWORD(lp)), static_cast<short>(HIWORD(lp))};
+    const RECT button = CentreButton(hwnd);
     switch (msg) {
-    case WM_LBUTTONDOWN: g_downInside = PtInRect(&kButton, p) != FALSE; return 0;
+    case WM_LBUTTONDOWN: g_downInside = PtInRect(&button, p) != FALSE; return 0;
     case WM_LBUTTONUP:
-        if (g_downInside && PtInRect(&kButton, p)) ++g_buttonClicks;
+        if (g_downInside && PtInRect(&button, p)) ++g_buttonClicks;
         g_downInside = false;
         return 0;
     case WM_DESTROY: PostQuitMessage(0); return 0;
