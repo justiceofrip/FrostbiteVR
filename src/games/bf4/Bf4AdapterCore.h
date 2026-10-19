@@ -11,6 +11,7 @@
 #include "Bf4Profile.h"
 #include "Bf4SessionGuard.h"
 #include "Bf4SessionInfo.h"
+#include "Bf4MotionAim.h"
 #include "stereo/SideBySide.h"
 #include "stereo/StereoProbe.h"
 #include "../../engines/frostbite/Fb3CameraMath.h"
@@ -19,6 +20,7 @@
 #include "fvr/ui/ModMenuPanel.h"
 
 #include <cstdint>
+#include <limits>
 #include <span>
 #include <string>
 #include <string_view>
@@ -36,6 +38,7 @@ struct CameraRequest {
     frostbite::LinearTransform local;
     frostbite::FovAngles fov;
     std::uint64_t poseId = 0; // world lane lease the pose belongs to (0: none)
+    float parentYaw = std::numeric_limits<float>::quiet_NaN(); // body heading (controller aiming)
     float renderFovY = 0;     // vertical FOV to render (radians) for the full frame's aspect
     math::FovTangents eyeFov[2]; // the request's eye tangents (lane requests only)
 };
@@ -91,6 +94,11 @@ public:
     // Virtual gamepad (XInput user 0) the game polls; active=false hands the pad back
     // to real hardware / disconnected. Called every frame while the feature is usable.
     virtual void ApplyPad(const interaction::PadState& pad, bool active) = 0;
+
+    // Controller aiming (Bf4MotionAim.h): the game's current aim as its last view submit
+    // carried it (sample increments per submit), and relative mouse look to steer it.
+    virtual bool GameAim(AimAngle& /*aim*/, std::uint64_t& /*sample*/) { return false; }
+    virtual void SendMouse(int /*dx*/, int /*dy*/) {}
 };
 
 struct PlatformFrame {
@@ -200,6 +208,10 @@ private:
     std::uint16_t padPulse_ = 0;
     int padPulseFrames_ = 0;
     void UpdatePad(const ControllerSnapshot& input);
+    void UpdateMotionAim(const ControllerSnapshot& input, const PlatformFrame& frame);
+    MotionAim motionAim_;
+    MotionAimOutput aim_{};
+    std::uint64_t lastAimTickMs_ = 0;
 
     bool EngineStereoAllowed() const;
     bool EnginePairsWorking() const; // route-dependent: verified split frames or sequential eyes

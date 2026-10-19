@@ -61,6 +61,15 @@ LinearTransform HeadTrackedView(const LinearTransform& game, const LinearTransfo
     return frostbite::Compose(parent, local);
 }
 
+LinearTransform HeadTrackedViewAtYaw(const LinearTransform& game, const LinearTransform& local, float yaw) {
+    LinearTransform parent = game;
+    const float s = std::sin(yaw), c = std::cos(yaw);
+    parent.forward = {-s, 0, c}; // +Z row: behind a camera looking along (s, 0, -c)
+    parent.up = {0, 1, 0};
+    parent.right = math::Cross(parent.up, parent.forward);
+    return frostbite::Compose(parent, local);
+}
+
 ViewOverride::~ViewOverride() {
     ViewOverride* expected = this;
     g_active.compare_exchange_strong(expected, nullptr, std::memory_order_acq_rel);
@@ -107,11 +116,13 @@ ViewOverride::RemoveResult ViewOverride::Remove(void* currentRenderer) {
     return result;
 }
 
-void ViewOverride::SetLocal(const LinearTransform& local, bool keepGamePitch, std::uint64_t poseId, float fovY) {
+void ViewOverride::SetLocal(const LinearTransform& local, bool keepGamePitch, std::uint64_t poseId, float fovY,
+                            float parentYaw) {
     std::lock_guard<std::mutex> lock(mutex_);
     local_ = local;
     keepGamePitch_ = keepGamePitch;
     poseId_ = poseId;
+    parentYaw_ = parentYaw;
     fovY_ = PlausibleFov(fovY) ? fovY : 0.0f;
     havePose_ = true;
     poseTime_ = std::chrono::steady_clock::now();
@@ -138,7 +149,7 @@ void ViewOverride::Submit(void* renderer, float a, float b, std::uint32_t viewCo
     LinearTransform local;
     bool keepPitch = false, fresh = false;
     std::uint64_t poseId = 0;
-    float fovY = 0;
+    float fovY = 0, parentYaw = std::numeric_limits<float>::quiet_NaN();
     {
         std::lock_guard<std::mutex> lock(self->mutex_);
         ++self->stats_.submits;
@@ -151,11 +162,18 @@ void ViewOverride::Submit(void* renderer, float a, float b, std::uint32_t viewCo
         keepPitch = self->keepGamePitch_;
         poseId = self->poseId_;
         fovY = self->fovY_;
+        parentYaw = self->parentYaw_;
         if (!fresh) self->stats_.poseRun = 0; // this frame shows the stock view
     }
     Matrix4f game;
     std::memcpy(game.m.data(), views, sizeof(game.m));
     const bool rigid = IsRigidTransform(game);
+    if (rigid) { // the game's own aim, read before anything is written
+        const LinearTransform camera = ReadViewTransform(views + kViewCopyOffset);
+        std::lock_guard<std::mutex> lock(self->mutex_);
+        self->stats_.gameBack = camera.forward;
+        ++self->stats_.gameSamples;
+    }
     if (fresh && !rigid) {
         std::lock_guard<std::mutex> lock(self->mutex_);
         ++self->stats_.notRigid;
@@ -170,9 +188,11 @@ void ViewOverride::Submit(void* renderer, float a, float b, std::uint32_t viewCo
     std::uint32_t savedDirty = 0;
     std::memcpy(saved, views, sizeof(saved));
     std::memcpy(&savedDirty, views + kViewDirtyOffset, sizeof(savedDirty));
-    WriteViewTransform(views, HeadTrackedView(ReadViewTransform(views), local, keepPitch));
-    WriteViewTransform(views + kViewCopyOffset,
-                       HeadTrackedView(ReadViewTransform(views + kViewCopyOffset), local, keepPitch));
+    auto compose = [&](const LinearTransform& g) {
+        return std::isfinite(parentYaw) ? HeadTrackedViewAtYaw(g, local, parentYaw) : HeadTrackedView(g, local, keepPitch);
+    };
+    WriteViewTransform(views, compose(ReadViewTransform(views)));
+    WriteViewTransform(views + kViewCopyOffset, compose(ReadViewTransform(views + kViewCopyOffset)));
     const std::uint32_t dirty = savedDirty | kViewDirtyBits; // as the native setter does
     std::memcpy(views + kViewDirtyOffset, &dirty, sizeof(dirty));
     std::uint8_t written[kViewTransformBytes];

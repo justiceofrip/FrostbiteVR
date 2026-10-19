@@ -87,6 +87,33 @@ struct FakePlatform final : IAdapterPlatform {
     void DetachAll(std::string_view) override { ++detaches; }
     void Log(std::string_view line) override { log.emplace_back(line); }
 
+    // ---- controller aiming: a game whose aim turns by gain per mouse count, one frame late ----
+    bool aimKnown = false;
+    AimAngle gameAim{0.5f, 0.0f};
+    float mouseGainX = 0.00028f, mouseGainY = -0.00025f;
+    int sentX = 0, sentY = 0, appliedX = 0, appliedY = 0;
+    std::uint64_t aimSample = 0;
+    int mouseCalls = 0;
+    void GameFrame() { // the game reads last frame's mouse input and submits its view
+        gameAim.yaw = WrapPi(gameAim.yaw + mouseGainX * appliedX);
+        gameAim.pitch += mouseGainY * appliedY;
+        appliedX = sentX;
+        appliedY = sentY;
+        sentX = sentY = 0;
+        ++aimSample;
+    }
+    bool GameAim(AimAngle& aim, std::uint64_t& sample) override {
+        if (!aimKnown) return false;
+        aim = gameAim;
+        sample = aimSample;
+        return true;
+    }
+    void SendMouse(int dx, int dy) override {
+        sentX += dx;
+        sentY += dy;
+        ++mouseCalls;
+    }
+
     // ---- engine stereo (fake shim + fake backbuffer) ----
     stereo::NvapiStereoEmu* shim = nullptr;   // set when the "game" loaded nvapi64.dll
     unsigned vendor = 0x1002;                  // AMD by default, like the dev machine

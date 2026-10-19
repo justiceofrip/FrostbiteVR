@@ -25,6 +25,8 @@ ui::ModMenuModel BuildModMenu(const game::CapabilityRegistry& caps, bool develop
               state.theaterDistance, false, "Coming in a later update."});
     menu.Add({"view_mode", "In campaign levels", MenuItemKind::Choice, {"Screen", "Head-tracked view"},
               state.headTracking ? 1 : 0, true, ""});
+    menu.Add({"controller_aim", "Aim with", MenuItemKind::Choice, {"Right stick", "Right controller"},
+              state.controllerAim ? 1 : 0, true, "Head-tracked view only. Right stick turns your body."});
     if (developer)
         menu.Add({"world_stereo", "3D depth (experimental)", MenuItemKind::Choice, {"Off", "On"},
                   state.worldStereo ? 1 : 0, true, "BF4's own side-by-side render. So far it freezes the game."});
@@ -69,6 +71,7 @@ ModMenuCommand InterpretChange(const MenuItem& item) {
     if (item.id == "view_mode") return {ModMenuAction::SetHeadTracking, item.value};
     if (item.id == "world_settle") return {ModMenuAction::SetWorldSettle, item.value + 1};
     if (item.id == "world_stereo") return {ModMenuAction::SetWorldStereo, item.value};
+    if (item.id == "controller_aim") return {ModMenuAction::SetControllerAim, item.value};
     return {};
 }
 

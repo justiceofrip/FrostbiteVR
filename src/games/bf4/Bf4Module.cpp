@@ -629,6 +629,29 @@ public:
     }
     void ApplyPad(const interaction::PadState& pad, bool active) override { padSink.Apply(pad, active); }
 
+    bool GameAim(AimAngle& aim, std::uint64_t& sample) override {
+        if (!viewOverride.Installed()) return false;
+        const auto st = viewOverride.GetStats();
+        if (!st.gameSamples) return false;
+        aim = CameraAim(st.gameBack);
+        sample = st.gameSamples;
+        return std::isfinite(aim.yaw) && std::isfinite(aim.pitch);
+    }
+
+    // Relative mouse look for controller aiming; only into the focused game window (it
+    // reads the mouse as raw input).
+    void SendMouse(int dx, int dy) override {
+        if (!window || GetForegroundWindow() != window) return;
+        INPUT input{};
+        input.type = INPUT_MOUSE;
+        input.mi.dx = dx;
+        input.mi.dy = dy;
+        input.mi.dwFlags = MOUSEEVENTF_MOVE;
+        SendInput(1, &input, sizeof(input));
+        ++mouseSends;
+    }
+    std::uint64_t mouseSends = 0;
+
     bool PublishFrame(const FrameMeta& meta) override {
         if (!swapchain || !frames) return false;
         if (meta.eye == 0 || meta.eye == 1) { // engine stereo pair: publish the captured eye
@@ -696,7 +719,7 @@ public:
         float fov = requests[0].renderFovY;
         if (lastViewAspect > 0.2f && lastViewAspect < 5.0f) // the aspect the engine used last frame
             fov = RequiredVerticalFov(requests[0].eyeFov[0], requests[0].eyeFov[1], lastViewAspect);
-        viewOverride.SetLocal(requests[0].local, /*keepGamePitch=*/false, requests[0].poseId, fov);
+        viewOverride.SetLocal(requests[0].local, /*keepGamePitch=*/false, requests[0].poseId, fov, requests[0].parentYaw);
         return true;
     }
 
@@ -936,6 +959,11 @@ void OnPresent(Adapter& a, IDXGISwapChain* sc) {
         while (!v.empty() && (v.back() == '\n' || v.back() == '\r')) v.pop_back();
         a.log.Write("%s stereo=%s %s", v.c_str(), std::string(StereoModeName(a.core->Stereo())).c_str(),
                     a.platform.DescribeEngineStereo().c_str());
+        const std::string status = a.core->Status();
+        const auto at = status.find("controller_aim=");
+        if (at != std::string::npos)
+            a.log.Write("%s mouse_sends=%llu", status.substr(at, status.find('\n', at) - at).c_str(),
+                        static_cast<unsigned long long>(a.platform.mouseSends));
     }
 }
 

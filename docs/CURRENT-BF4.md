@@ -66,6 +66,28 @@ screen. Pieces (all on the analysed build only):
   pause menu are drawn into the wide frame (pause menu: use the pad, or switch to Screen);
   first-person weapon not yet re-projected.
 
+## Controller aiming (2026-10-19, built; emulated only)
+
+- `Bf4MotionAim.h`: in the head-tracked view the gun follows the right controller through
+  BF4's own mouse look (input only, nothing written to game memory). The headset view is
+  anchored to a body heading that only the right stick turns (`HeadTrackedViewAtYaw`;
+  ~150 deg/s); each frame the game's aim, read from the camera it submits (view block
+  `+0x40`, read before the override), is steered toward body heading + controller
+  direction by relative `SendInput` mouse counts (only into the focused game window).
+  Counts-per-radian are learned per axis from what the game actually turned (sign
+  included, so inverted look and aim-down-sights sensitivity are handled). If counts
+  produce no turn (pause menu, cutscene) it goes quiet for 60 frames.
+- The virtual pad's right stick is released while it aims (no stick look), and the left
+  stick is turned back by the aim's offset so walking stays relative to the body.
+- Mod menu: "Aim with: Right stick / Right controller" (default right controller).
+  Status/log: `controller_aim=... gain=... mutes=... mouse_sends=...`.
+- Evidence: unit tests (convergence onto controller yaw/pitch, gain learning with signs,
+  body turning, release, stall guard) and an emulated campaign session with a one-frame
+  input delay (core + fake game). Not seen in the real game: whether BF4 mixes mouse
+  look with the virtual pad, vehicles, recoil interplay.
+- The gun is still the game's first-person model at the game camera (it points where the
+  controller points); hands/IK and holsters are separate work.
+
 ## Stereo: BF4's own two-eye render in the world lane (2026-10-19)
 
 - **First headset session (0.4.13-local, 09:16)**: head tracking worked (world lane,
@@ -229,10 +251,10 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
 
 ## Tests (2026-10-19)
 
-- Build.ps1 after the handedness and gun-scale fixes: x64 283/283, x86 282/282.
-  Bf4CoreTests 57 cases / 459 checks; Bf4Emulated pass (theater, world lane, stereo probe, census, lockdown); launcher
+- Build.ps1 after controller aiming: x64 283/283, x86 282/282. Bf4CoreTests 60 cases /
+  480 checks; Bf4Emulated pass (theater, world lane, stereo probe, census, lockdown); launcher
   19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and `-World` 4/4 (157 pairs).
-- Installed locally: runtime/bf4 0.4.16-local (rollback 0.4.15-local). Developer
+- Installed locally: runtime/bf4 0.4.17-local (rollback 0.4.16-local). Developer
   sessions still run the read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the
   framework's `StereoMath.h` (`Quat` = `Quaternion`; Pose is `{position, orientation}`).

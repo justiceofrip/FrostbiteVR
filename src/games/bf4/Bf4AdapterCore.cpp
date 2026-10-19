@@ -76,6 +76,16 @@ void AdapterCore::UpdatePad(const ControllerSnapshot& in) {
     }
     pad_ = interaction::MapToPad(controls, padLayout_, options);
     if (!controls.focused && options.extraButtons) pad_.buttons |= options.extraButtons; // pulse without hands
+    if (aim_.engaged) {
+        // The game aims by mouse now and turns with the body heading: no pad look, and
+        // walking stays relative to the body although the game moves relative to its aim.
+        pad_.thumbRX = pad_.thumbRY = 0;
+        float forward = pad_.thumbLY / 32767.0f, strafe = pad_.thumbLX / 32767.0f;
+        interaction::RotateMovement(-aim_.moveRotation, forward, strafe);
+        auto toPad = [](float v) { return static_cast<std::int16_t>(std::lround(std::clamp(v, -1.0f, 1.0f) * 32767.0f)); };
+        pad_.thumbLY = toPad(forward);
+        pad_.thumbLX = toPad(strafe);
+    }
     // Outside campaign play the trigger pointed at the screen is a mouse click, not the
     // pad's trigger as well (the front end reacts to both).
     if (in.pointer.active && !guard_.GameplayAllowed()) pad_.leftTrigger = pad_.rightTrigger = 0;
@@ -100,6 +110,10 @@ void AdapterCore::ApplyMenuCommand(const ModMenuCommand& command) {
     case ModMenuAction::SetHeadTracking:
         menuState_.headTracking = command.value != 0;
         platform_.Log(menuState_.headTracking ? "campaign view: head-tracked" : "campaign view: screen");
+        break;
+    case ModMenuAction::SetControllerAim:
+        menuState_.controllerAim = command.value != 0;
+        platform_.Log(menuState_.controllerAim ? "aim: right controller" : "aim: right stick");
         break;
     case ModMenuAction::SetWorldStereo:
         menuState_.worldStereo = command.value != 0;
@@ -302,6 +316,24 @@ std::string AdapterCore::StereoReport() {
     return r;
 }
 
+void AdapterCore::UpdateMotionAim(const ControllerSnapshot& in, const PlatformFrame& f) {
+    MotionAimInput m;
+    m.engage = menuState_.controllerAim && !menuOpen_ && stereo_ == StereoMode::Mono && in.world.valid &&
+               haveReference_ && guard_.GameplayAllowed();
+    const auto& hand = in.controls.hands[1];
+    m.aimTracked = in.controls.focused && hand.aimTracked;
+    m.reference = reference_;
+    m.aim = hand.aim;
+    m.gameValid = platform_.GameAim(m.game, m.gameSample);
+    m.turn = std::fabs(hand.stickX) > 0.2f ? hand.stickX : 0.0f;
+    m.dt = lastAimTickMs_ && f.tickMs > lastAimTickMs_ ? std::min(0.1f, (f.tickMs - lastAimTickMs_) / 1000.0f) : 0.0f;
+    lastAimTickMs_ = f.tickMs;
+    const bool was = aim_.engaged;
+    aim_ = motionAim_.Update(m);
+    if (aim_.engaged != was) platform_.Log(aim_.engaged ? "controller aim engaged" : "controller aim released");
+    if (aim_.engaged && (aim_.mouseX || aim_.mouseY)) platform_.SendMouse(aim_.mouseX, aim_.mouseY);
+}
+
 void AdapterCore::UpdateCamera(const ControllerSnapshot& in, const PlatformFrame& f) {
     camera_.clear();
     // Mono (world lane): the camera follows the head only for a pose the XR host asked to
@@ -320,6 +352,7 @@ void AdapterCore::UpdateCamera(const ControllerSnapshot& in, const PlatformFrame
         r.local = XrPoseToBf4Camera(ApplyReference(reference_, p));
         r.fov = eye < 0 ? UnionFov(in.eyes[0].fov, in.eyes[1].fov) : in.eyes[eye].fov;
         if (lane) {
+            if (aim_.engaged) r.parentYaw = aim_.bodyYaw;
             r.poseId = in.world.poseId;
             r.renderFovY = RequiredVerticalFov(in.world.fov[0], in.world.fov[1], aspect);
             r.eyeFov[0] = in.world.fov[0];
@@ -369,6 +402,7 @@ void AdapterCore::OnFrame(const PlatformFrame& f, const ControllerSnapshot& in) 
     // 3. Menus. FrostbiteVR's own menu takes the laser while open; otherwise the laser
     //    drives BF4's menus through the Win32 cursor path.
     UpdateModMenu(in);
+    UpdateMotionAim(in, f);
     UpdatePad(in);
     if (!menuOpen_ && caps_.IsUsable(Feature::GameMenuPointer, dev) && guard_.PresentationAllowed()) {
         pointer_.Update(in.pointer, f.clientWidth, f.clientHeight, events_);
@@ -466,6 +500,11 @@ std::string AdapterCore::Status() const {
                   pad_.leftTrigger, pad_.rightTrigger, pad_.thumbLX, pad_.thumbLY, pad_.thumbRX, pad_.thumbRY);
     s += padLine;
     s += "clicks_posted=" + std::to_string(pointer_.Clicks()) + "\n";
+    char aimLine[200];
+    std::snprintf(aimLine, sizeof(aimLine), "controller_aim=%s body_yaw=%.3f gain=%.6f,%.6f mutes=%llu\n",
+                  aim_.engaged ? "engaged" : "off", aim_.bodyYaw, motionAim_.GainX(), motionAim_.GainY(),
+                  static_cast<unsigned long long>(motionAim_.Mutes()));
+    s += aimLine;
     s += "reload_requests=" + std::to_string(stats_.reloadRequests) + "\n";
     s += "stereo=" + std::string(StereoModeName(stereo_)) + "\n";
     s += "stereo_pairs=" + std::to_string(tracker_.Pairs()) + " stereo_pattern=" +

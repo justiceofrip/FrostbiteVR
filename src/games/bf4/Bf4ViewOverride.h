@@ -16,6 +16,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <mutex>
 
 namespace fvr::bf4 {
@@ -52,6 +53,11 @@ void WriteViewTransform(std::uint8_t* rows /* 64 bytes */, const frostbite::Line
 // the horizon follows the headset (mouse/stick pitch stays with aim, not the view).
 frostbite::LinearTransform HeadTrackedView(const frostbite::LinearTransform& game,
                                            const frostbite::LinearTransform& local, bool keepGamePitch);
+// The same with the parent heading given explicitly (controller aiming: the view follows
+// the body heading, not the game's aim). BF4 camera convention: yaw 0 looks down -Z,
+// positive yaw turns right; the game camera's position is kept.
+frostbite::LinearTransform HeadTrackedViewAtYaw(const frostbite::LinearTransform& game,
+                                                const frostbite::LinearTransform& local, float yaw);
 
 class ViewOverride {
 public:
@@ -68,6 +74,10 @@ public:
         std::uint32_t poseRun = 0;
         float gameFovY = 0;     // the block's own FOV before the override (radians)
         float renderedFovY = 0; // what the latest applied submit rendered with
+        // The game's own camera (+0x40, the transform the renderer inverts into its view)
+        // before any override: its +Z row (behind the camera) gives the game's aim.
+        math::Vec3 gameBack{};
+        std::uint64_t gameSamples = 0;
     };
 
     ViewOverride() = default;
@@ -90,7 +100,7 @@ public:
     // poseId != 0 tags the pose (world lane lease); fovY > 0 also replaces the vertical FOV
     // (radians) for these submits, exactly as the game's FOV setter would.
     void SetLocal(const frostbite::LinearTransform& local, bool keepGamePitch, std::uint64_t poseId = 0,
-                  float fovY = 0);
+                  float fovY = 0, float parentYaw = std::numeric_limits<float>::quiet_NaN());
     void Clear();
     Stats GetStats() const;
 
@@ -108,6 +118,7 @@ private:
     bool keepGamePitch_ = false, havePose_ = false;
     std::uint64_t poseId_ = 0;
     float fovY_ = 0;
+    float parentYaw_ = std::numeric_limits<float>::quiet_NaN();
     std::chrono::steady_clock::time_point poseTime_{};
     Stats stats_{};
 };

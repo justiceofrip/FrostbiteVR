@@ -262,3 +262,57 @@ TEST_CASE(EmuMonoWorldLaneCameraOnlyForHostLeases) {
     core.OnFrame(clock.Next(), in);
     CHECK(core.Stereo() == StereoMode::Off && platform.cameraLog.size() == 1 && !platform.frames.back().world);
 }
+
+TEST_CASE(EmuControllerAimInTheHeadTrackedView) {
+    FakeImage image({names::kGameRenderer, names::kRenderViewUpdate, names::kClientGameContext, names::kLevelName});
+    FakePlatform platform;
+    AdapterCore core(Session(true), X64(), image.Resolve(), platform);
+    core.OnSwapchainAdopted(true);
+    platform.Campaign();
+    platform.aimKnown = true;
+    Clock clock;
+    auto frame = [&](double t, float handYaw, float stickX, float leftY) {
+        auto in = Input(t);
+        in.world.valid = true;
+        in.world.poseId = 100 + static_cast<std::uint64_t>(t * 90);
+        in.world.head = in.head;
+        in.world.fov[0] = {-1.0f, 0.9f, 1.0f, -1.1f};
+        in.world.fov[1] = {-0.9f, 1.0f, 1.0f, -1.1f};
+        in.controls.focused = true;
+        in.controls.generation = 1 + static_cast<std::uint64_t>(t * 90);
+        in.controls.spaceGeneration = 1;
+        in.controls.predictedNs = 1000000 + static_cast<std::int64_t>(t * 1e9);
+        for (auto& h : in.controls.hands) h.active = interaction::Components;
+        auto& right = in.controls.hands[1];
+        right.aimTracked = right.gripTracked = true;
+        right.aim.orientation = math::FromAxisAngle({0, 1, 0}, -handYaw); // positive = right
+        right.stickX = stickX;
+        in.controls.hands[0].gripTracked = true;
+        in.controls.hands[0].stickY = leftY;
+        platform.GameFrame();
+        core.OnFrame(clock.Next(), in);
+    };
+    for (int i = 0; i < 3; ++i) frame(i / 90.0, 0.0f, 0, 0);
+    CHECK(core.Stereo() == StereoMode::Mono);
+    // Point the gun 30 degrees right of the body and walk forward.
+    for (int i = 0; i < 200; ++i) frame(0.1 + i / 90.0, 0.5235988f, 0, 1.0f);
+    CHECK(platform.mouseCalls > 0);
+    CHECK(Near(WrapPi(platform.gameAim.yaw - 0.5f), 0.5235988f, 0.02f)); // game aim = body + controller
+    const auto& r = platform.cameraLog.back();
+    CHECK(r.size() == 1 && Near(r[0].parentYaw, 0.5f, 1e-3f)); // the view keeps the body heading
+    const auto pad = core.Pad();
+    CHECK(pad.thumbRX == 0 && pad.thumbRY == 0); // no stick look while the gun aims by mouse
+    // Forward on the stick is turned back by the 30 degree aim offset: forward + left strafe.
+    CHECK(pad.thumbLY > 25000 && pad.thumbLX < -12000);
+    // The right stick turns the body: the view heading moves and the aim follows.
+    for (int i = 0; i < 45; ++i) frame(2.5 + i / 90.0, 0.5235988f, 1.0f, 0);
+    const float body = platform.cameraLog.back()[0].parentYaw;
+    CHECK(body > 0.9f);
+    for (int i = 0; i < 120; ++i) frame(3.0 + i / 90.0, 0.5235988f, 0, 0);
+    CHECK(Near(WrapPi(platform.gameAim.yaw - body), 0.5235988f, 0.02f));
+    // Opening the front end releases it: no more mouse movement.
+    platform.level = "Levels/FrontEnd/FrontEnd";
+    const int calls = platform.mouseCalls;
+    for (int i = 0; i < 5; ++i) frame(5.0 + i / 90.0, 1.0f, 0, 0);
+    CHECK(platform.mouseCalls == calls);
+}

@@ -568,3 +568,102 @@ TEST_CASE(HeadPoseTurnsTheBf4CameraTheSameWay) {
     const auto cam = HeadTrackedView(game, AdapterCore::XrPoseToBf4Camera(leaned), false);
     CHECK(Near(cam.trans.x, 0.1f) && Near(cam.trans.z, -0.05f)); // forward for a -Z facing camera
 }
+
+namespace {
+// A game whose aim turns by `gain` radians per mouse count, applied one frame later (the
+// game reads input at the start of its next frame).
+struct SimulatedGameAim {
+    fvr::bf4::AimAngle aim{0.3f, 0.0f};
+    float gainX = 0.00031f, gainY = -0.00022f;
+    int pendingX = 0, pendingY = 0;
+    std::uint64_t sample = 0;
+    void Frame() {
+        aim.yaw = fvr::bf4::WrapPi(aim.yaw + gainX * pendingX);
+        aim.pitch += gainY * pendingY;
+        pendingX = pendingY = 0;
+        ++sample;
+    }
+};
+} // namespace
+
+TEST_CASE(ControllerAimSteersTheGameAimThroughMouseLook) {
+    using namespace fvr;
+    using namespace fvr::bf4;
+    MotionAim aim;
+    SimulatedGameAim game;
+    MotionAimInput in;
+    in.engage = true;
+    in.aimTracked = true;
+    in.reference.orientation = {0, 0, 0, 1};
+    // Controller 40 degrees right and 15 degrees up of the reference.
+    in.aim.orientation = math::FromAxisAngle({0, 1, 0}, -0.6981317f) * math::FromAxisAngle({1, 0, 0}, 0.2617994f);
+    in.dt = 1.0f / 60;
+    MotionAimOutput out;
+    for (int i = 0; i < 240; ++i) {
+        game.Frame();
+        in.gameValid = true;
+        in.game = game.aim;
+        in.gameSample = game.sample;
+        out = aim.Update(in);
+        game.pendingX += out.mouseX;
+        game.pendingY += out.mouseY;
+    }
+    // The body heading stayed where the game was looking at the start; the game's aim is
+    // now the body heading plus the controller's direction.
+    CHECK(out.engaged && Near(out.bodyYaw, 0.3f, 1e-4f));
+    CHECK(Near(game.aim.yaw, 0.3f + 0.6981317f, 0.01f));
+    CHECK(Near(game.aim.pitch, 0.2617994f, 0.01f));
+    CHECK(Near(aim.GainX(), 0.00031f, 0.00008f) && aim.GainY() < 0); // learned, including the sign
+    CHECK(Near(out.moveRotation, 0.6981317f, 0.01f)); // walking is turned back to the body
+    // The right stick turns the body heading; the aim follows it.
+    in.turn = 1.0f;
+    for (int i = 0; i < 30; ++i) {
+        game.Frame();
+        in.game = game.aim;
+        in.gameSample = game.sample;
+        out = aim.Update(in);
+        game.pendingX += out.mouseX;
+        game.pendingY += out.mouseY;
+    }
+    CHECK(Near(out.bodyYaw, WrapPi(0.3f + 30 * MotionAim::kTurnRate / 60), 1e-3f));
+    in.turn = 0;
+    for (int i = 0; i < 120; ++i) {
+        game.Frame();
+        in.game = game.aim;
+        in.gameSample = game.sample;
+        out = aim.Update(in);
+        game.pendingX += out.mouseX;
+        game.pendingY += out.mouseY;
+    }
+    CHECK(Near(WrapPi(game.aim.yaw - out.bodyYaw), 0.6981317f, 0.01f));
+    // Released outside campaign play: no mouse movement at all.
+    in.engage = false;
+    out = aim.Update(in);
+    CHECK(!out.engaged && out.mouseX == 0 && out.mouseY == 0);
+    // Body-heading view: yaw 90 degrees right looks down +X with the game camera's position.
+    frostbite::LinearTransform gameCam;
+    gameCam.trans = {5, 1, 2};
+    const auto view = HeadTrackedViewAtYaw(gameCam, frostbite::LinearTransform{}, 1.5707963f);
+    CHECK(Near(-view.forward.x, 1.0f) && Near(view.forward.z, 0.0f) && Near(view.trans.x, 5.0f));
+    CHECK(Near(CameraAim(view.forward).yaw, 1.5707963f));
+}
+
+TEST_CASE(ControllerAimGoesQuietWhenTheGameIgnoresTheMouse) {
+    using namespace fvr;
+    using namespace fvr::bf4;
+    MotionAim aim;
+    MotionAimInput in;
+    in.engage = in.aimTracked = in.gameValid = true;
+    in.reference.orientation = {0, 0, 0, 1};
+    in.aim.orientation = math::FromAxisAngle({0, 1, 0}, -1.0f); // far right: large errors
+    in.dt = 1.0f / 60;
+    int sent = 0, quietFrames = 0;
+    for (int i = 1; i <= 200; ++i) { // a paused game: the aim never moves
+        in.gameSample = static_cast<std::uint64_t>(i);
+        const auto out = aim.Update(in);
+        sent += std::abs(out.mouseX) + std::abs(out.mouseY);
+        if (out.engaged && !out.mouseX && !out.mouseY) ++quietFrames;
+    }
+    CHECK(aim.Mutes() >= 1 && quietFrames >= MotionAim::kMuteFrames);
+    CHECK(sent < 200 * MotionAim::kMaxCounts); // it did not keep pushing every frame
+}

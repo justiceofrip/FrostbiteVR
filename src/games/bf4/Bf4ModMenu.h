@@ -15,11 +15,12 @@ struct ModMenuState {
     bool headTracking = true; // campaign levels: head-tracked view instead of the screen
     int worldSettle = 2;      // developer: submits before a frame counts as head-tracked
     bool worldStereo = false; // developer: BF4's own two-eye render (freezes the game so far)
+    bool controllerAim = true; // campaign: the gun follows the right controller
 };
 
 enum class ModMenuAction : std::uint8_t {
     None, SetReloadMode, SetSnapTurn, SetTheaterDistance, Recenter, MarkFeedback, GameMenu, SetHeadTracking, SetWorldSettle,
-    SetWorldStereo
+    SetWorldStereo, SetControllerAim
 };
 
 struct ModMenuCommand {
