@@ -673,6 +673,18 @@ TEST_CASE(ControllerAimGoesQuietWhenTheGameIgnoresTheMouse) {
     }
     CHECK(aim.Mutes() >= 1 && quietFrames >= MotionAim::kMuteFrames);
     CHECK(sent < 200 * MotionAim::kMaxCounts); // it did not keep pushing every frame
+    // A small offset (few counts per frame at the cautious first gain) is noticed too, and a
+    // game that keeps ignoring the mouse gets longer and longer quiet spells.
+    MotionAim small;
+    in.aim.orientation = math::FromAxisAngle({0, 1, 0}, -0.15f);
+    int frames = 0, active = 0;
+    for (int i = 1; i <= 1200; ++i) {
+        in.gameSample = static_cast<std::uint64_t>(i);
+        const auto out = small.Update(in);
+        ++frames;
+        if (out.mouseX || out.mouseY) ++active;
+    }
+    CHECK(small.Mutes() >= 3 && active < frames / 6); // mostly quiet over 20 s of pause
 }
 
 namespace {

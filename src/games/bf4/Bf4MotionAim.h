@@ -17,6 +17,7 @@
 #include "fvr/interaction/AimFrame.h"
 #include "fvr/math/Vec.h"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -224,12 +225,17 @@ private:
             windowCountsY_ += pendingY_;
             pendingX_ = pendingY_ = 0;
             if (++windowFrames_ >= 20) {
-                // Plenty of counts and no turn at all: the game is not listening to the
-                // mouse right now (menus move a cursor with it instead).
-                if (std::llabs(windowCountsX_) + std::llabs(windowCountsY_) >= 1500 && std::fabs(windowYaw_) < 0.005f &&
-                    std::fabs(windowPitch_) < 0.005f) {
-                    muted_ = kMuteFrames;
+                // Counts sent and no turn at all: the game is not listening to the mouse
+                // right now (its pause menu moves a cursor with it instead). Quiet for a
+                // while, longer each time it happens again, until the game turns again.
+                // 200 counts: the cautious first gain sends few counts per frame.
+                const bool turned = std::fabs(windowYaw_) >= 0.005f || std::fabs(windowPitch_) >= 0.005f;
+                if (std::llabs(windowCountsX_) + std::llabs(windowCountsY_) >= 200 && !turned) {
+                    muted_ = kMuteFrames << std::min(ignoredInARow_, 3);
+                    ++ignoredInARow_;
                     ++mutes_;
+                } else if (turned) {
+                    ignoredInARow_ = 0;
                 }
                 Adapt(windowYaw_, windowCountsX_, gainX_);
                 Adapt(windowPitch_, windowCountsY_, gainY_);
@@ -266,6 +272,7 @@ private:
     float windowYaw_ = 0, windowPitch_ = 0;
     int windowFrames_ = 0;
     int muted_ = 0;
+    int ignoredInARow_ = 0; // windows in a row the game ignored the mouse (mute backoff)
     std::uint64_t mutes_ = 0;
     bool snapArmed_ = false; // a stick already pushed when aiming engages is not a turn
     bool twoHanded_ = false;

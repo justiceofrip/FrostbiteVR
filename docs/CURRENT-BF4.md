@@ -228,6 +228,10 @@ the theater screen. Pieces (all on the analysed build only):
   error swings past zero by more than 30 % of the swing before it, the estimate grows by
   that ratio at once (a threefold sensitivity jump, e.g. leaving aim-down-sights, settles
   without running away; emulated test at two delays). Log: `guards=`.
+- Paused game (BF4's Esc menu moves a cursor with the mouse): when a 20-sample window sent
+  200 counts or more and the game did not turn at all, aiming goes quiet for 1 s, then 2,
+  4, 8 s while it keeps happening; any turn resets that. (The old 1500-count threshold
+  never tripped at the cautious first gain.) Unit-tested.
 - Aiming stays engaged across short gaps between world-lane leases (500 ms hold). Before,
   each frame without a lease released it, and re-engaging re-anchored the body heading to
   the game's aim (a view jump by the controller's offset) and reset the learned mouse gain;
