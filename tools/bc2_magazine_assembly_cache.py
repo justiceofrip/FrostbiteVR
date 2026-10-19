@@ -12,6 +12,7 @@ from bc2_authored_magazine_geometry import rigid_parts,point
 from bc2_authored_grip_bindings import digest
 from bc2_magazine_assembly import derive_assembly,validate_receipt
 from inspect_bc2_mesh_asset import bone_hash,sha
+from bc2_asset_resource_identity import profiles_match
 
 def derive_cache(mesh_raw,lod_data,skeleton,static_clip,reload_clip,profile):
     if (profile.get('profile_digest')!=digest({k:v for k,v in profile.items() if k!='profile_digest'}) or
@@ -69,20 +70,22 @@ def derive_cache(mesh_raw,lod_data,skeleton,static_clip,reload_clip,profile):
     if len(payload)>MAX_CACHE:raise ValueError('Assembly cache size bound')
     return row,payload
 
-def derive_reviewed_cache(game,pool,reviewed):
+def derive_reviewed_cache(game,pool,reviewed,resource_content=False):
     """Rebuild one assembly catalog row from its exact installed source pins."""
     from bc2_weapon_animation_pipeline import Skeleton,Clip
     source=reviewed.get('assembly_source',{})
     if set(source)!={'profile','mesh','lod','skeleton','static','reload'}:raise ValueError('Complete assembly catalog sources required')
+    observed_source=dict(source)
     def load(label):
         ref=source[label]
         if set(ref)!={'archive','archive_index_sha256','resource','sha256'}:raise ValueError('Assembly source pin fields')
         archive=pool(game/ref['archive'])
-        if archive.index_sha256!=ref['archive_index_sha256']:raise ValueError('Assembly source archive changed')
+        if not resource_content and archive.index_sha256!=ref['archive_index_sha256']:raise ValueError('Assembly source archive changed')
         raw=archive.read_selected([ref['resource']])[ref['resource']]
         if sha(raw)!=ref['sha256']:raise ValueError('Assembly source resource changed')
+        observed_source[label]={**ref,'archive_index_sha256':archive.index_sha256}
         return raw
     row,packed=derive_cache(load('mesh'),load('lod'),Skeleton(load('skeleton')),Clip(load('static')),Clip(load('reload')),source['profile'])
-    row['assembly_source']=source
-    if row!=reviewed:raise ValueError('Assembly catalog differs from installed sources')
+    row['assembly_source']=observed_source
+    if not profiles_match([row],[reviewed],resource_content):raise ValueError('Assembly catalog differs from installed sources')
     return row,packed[12:]

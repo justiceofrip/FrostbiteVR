@@ -68,6 +68,22 @@ try {
     Check ($script:lastChild.environment.XR_RUNTIME_JSON -eq $manifest) 'probe explicitly retains selected runtime in child environment'
     $script:probeExit=1;$script:probeResult=@{instance_created=$true;system_available=$false;error='Find HMD system: XR_ERROR_FORM_FACTOR_UNAVAILABLE'}
     Reject {Invoke-Bc2OpenXrPreflight $root $root $selected} 'Find HMD system' 'headset error preserves actual runtime failure before game launch'
+    $cache=Join-Path $root 'cache';$null=[IO.Directory]::CreateDirectory($cache)
+    $diagnostic=Join-Path $cache 'preparation.json'
+    $result=Save-Bc2AssetPreparationResult $cache $root ('a'*64) ('b'*64) 1 $false
+    Check ($result.state -eq 'failed' -and $result.stage -eq 'asset tool startup' -and $result.error -like '*code 1*') 'missing Python diagnostic still identifies process failure'
+    Write-FvrJson $diagnostic @{schema='bc2vr.asset-preparation.v1';recipe_sha256=('a'*64);game_sha256=('b'*64);stage='body equipment';state='failed';error='Required mesh resource differs'}
+    $result=Save-Bc2AssetPreparationResult $cache $root ('a'*64) ('b'*64) 1 $false
+    Check ($result.stage -eq 'body equipment' -and $result.error -eq 'Required mesh resource differs') 'actual asset failure stage and cause reach launcher status and feedback record'
+    $result=Save-Bc2AssetPreparationResult $cache $root ('c'*64) ('b'*64) 1 $false
+    Check ($result.stage -eq 'asset tool startup') 'different preparation attempt cannot supply error cause'
+    Write-FvrJson $diagnostic @{schema='bc2vr.asset-preparation.v1';recipe_sha256=('a'*64);game_sha256=('b'*64);stage='complete';state='complete'}
+    $result=Save-Bc2AssetPreparationResult $cache $root ('a'*64) ('b'*64) 0 $false
+    Check ($result.state -eq 'failed' -and $result.stage -eq 'cache verification') 'claimed completion cannot override failed independent cache verification'
+    $result=Save-Bc2AssetPreparationResult $cache $root ('a'*64) ('b'*64) 2 $true
+    Check ($result.state -eq 'failed') 'valid prior files cannot mask unsuccessful preparation exit'
+    $result=Save-Bc2AssetPreparationResult $cache $root ('a'*64) ('b'*64) 0 $true
+    Check ($result.state -eq 'complete' -and -not $result.error) 'clean exit and independently verified cache admit completion'
     Write-Host "Launcher startup checks passed: $script:checks"
 } finally {
     foreach($key in $saved.Keys){[Environment]::SetEnvironmentVariable($key,$saved[$key],'Process')}

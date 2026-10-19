@@ -1,4 +1,48 @@
-# Current state: checkpoint426 with published launcher 0.1.6 hotfix
+# Current state: checkpoint426 with published launcher 0.1.7 hotfix
+
+## Launcher 0.1.7 published hotfix
+
+[BC2VR 0.1.7](https://github.com/justiceofrip/BC2VR/releases/tag/v0.1.7) was published
+as a pre-release on 2026-10-19 at 11:39:58 UTC after exact-package and cold-preparation
+validation. All three uploaded asset sizes and SHA-256 digests match the tested
+packages. The local G: launcher is updated with every settings value preserved,
+a verified warm asset cache and 0.1.6 retained for rollback; installed validation
+passed without starting the game or headset. Its 122-input packaging manifest is
+`f3b14c96efc45cb334f6ea31b6a48a691b93be67ca8b6181e86c831717c17911`.
+It retains the exact normal-r4 checkpoint426 native VR binaries and executable gate.
+
+Failed package identity or file verification now leaves feedback, update checks,
+repair and verified rollback available, using the official recovery repository.
+Runtime entry remains blocked. Setup/update can repair a damaged existing version
+only after the complete replacement passes verification. A bounded journal
+preserves the original through interrupted replacement; settings and a distinct
+verified previous version are retained. Healthy same-version packages are not
+silently replaced. This does not diagnose which identity field caused the external
+user's failure; the new report records expected and observed values.
+
+Local asset preparation now records its stage and bounded failure details for
+feedback. Public cache preparation verifies exact required mesh, animation,
+configuration and audio resources while allowing unrelated archive-index changes.
+Geometry/catalog checks remain exact, and authoring keeps its default index checks.
+This is asset-content compatibility, not new native executable enrollment. The
+external asset failure's cause remains unknown; no EA/store or VDXR headset
+acceptance follows from these changes.
+
+Focused checks passed: package recovery 37, settings/UI 70, desktop launcher 51,
+startup 26, feedback 45, asset diagnostics/storage 9, package staging 5 and resource
+identity/geometry/audio 66. Exact 0.1.7 package install/update/repair validation and
+rollback passed 44 checks, plus 51 desktop launcher checks. Fresh preparation with
+the exact staged runtime and packaged Python passed cache integrity and completion
+diagnostics: all six outputs, including the 48-part body cache, are byte-identical
+to the verified 0.1.6 outputs (16,730,338 bytes total). The existing decoder was
+rehashed; no download, game launch or headset session occurred. No new native or
+headset test is claimed. See [the 0.1.7 record](LAUNCHER-HOTFIX017.md).
+
+For a damaged installation or a blocked older updater, use the new Setup and
+choose the existing launcher folder containing `active.json`. Settings are
+preserved. All gameplay limitations below remain.
+
+## Published checkpoint426 baseline
 
 [BC2VR 0.1.5](https://github.com/justiceofrip/BC2VR/releases/tag/v0.1.5) was published
 as a pre-release on 2026-10-18 at 15:52:22 UTC, with an installer, launcher/updater

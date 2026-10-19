@@ -57,15 +57,15 @@ def prepare(game, ffmpeg, output):
         ar = archives.Archive(Path(game) / COMMON)
     finally:
         archives.MAX_PAYLOAD = previous
-    if ar.index_sha256 != INDEX:
-        raise ValueError('Common archive index differs')
+    # Unrelated archive entries may differ. Resource, decoded PCM and derived
+    # WAV identities below remain exact; the observed index is retained.
     raw = ar.read_selected([RESOURCE])[RESOURCE]
     if sha(raw) != RESOURCE_SHA:
         raise ValueError('Unreviewed shell wave resource')
     rate, pcm = decode(raw, ffmpeg)
     encoded = encode_checked(rate, pcm)
     profile = {'schema': 'fvr.bc2.shell_reload_audio_cache.v1', 'asset': 'SPAS12_sp',
-               'archive': COMMON, 'index_sha256': INDEX, 'resource': RESOURCE,
+               'archive': COMMON, 'index_sha256': ar.index_sha256, 'resource': RESOURCE,
                'resource_sha256': RESOURCE_SHA, 'pcm_sha256': PCM_SHA,
                'animation_guid': ANIMATION, 'sound_template_guid': SOUND_TEMPLATE,
                'cue': {'file': FILE, 'sha256': WAV_SHA, 'bytes': len(encoded),

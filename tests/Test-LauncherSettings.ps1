@@ -145,7 +145,7 @@ try {
         $window=[Windows.Markup.XamlReader]::Load([Xml.XmlNodeReader]::new($xml))
         try{
             $controls=@{};foreach($name in @('BuildLabel','GameFolder','ChooseGame','SettingsNotice','Launch','Fresh','Local','Stop','Validate','Logs','Feedback','Status','Progress','Check','Update','Rollback','Prerelease')){$controls[$name]=$window.FindName($name)}
-            $package=@{runtime_entry='runtime/Entry.ps1'};$active=@{current='0.1.6'};$script:reopenRequired=$false
+            $package=@{runtime_entry='runtime/Entry.ps1'};$packageState=@{verified=$true;error=$null};$active=@{current='0.1.6'};$script:reopenRequired=$false
             $actions=@('Launch','Stop','Validate','Check','Update','Rollback','Feedback')
             $script:settingsState=$broken
             Show-Settings;Set-Busy $false
@@ -153,6 +153,10 @@ try {
             $script:settingsState=$result
             Show-Settings;Set-Busy $false
             Check ($controls.Launch.IsEnabled -and $controls.Validate.IsEnabled -and $controls.GameFolder.Text -ceq $game) 'actual startup presenter displays valid folder and enables launch'
+            $packageState=@{verified=$false;error='Package identity mismatch. Use Install update to repair.'}
+            Show-Settings;Set-Busy $false
+            Check (-not $controls.Launch.IsEnabled -and -not $controls.Validate.IsEnabled -and $controls.Update.IsEnabled -and $controls.Feedback.IsEnabled -and $controls.SettingsNotice.Text -like '*Install update*') 'damaged package disables launch while recovery remains visible and available'
+            $packageState=@{verified=$true;error=$null};Show-Settings;Set-Busy $false
             Set-Busy $true
             Check (-not $controls.ChooseGame.IsEnabled -and -not $controls.Launch.IsEnabled -and -not $controls.Local.IsEnabled) 'active worker prevents picker and backend changes'
             Set-Busy $false

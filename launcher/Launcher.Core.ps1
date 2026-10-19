@@ -199,11 +199,23 @@ function Expand-FvrPackage([string]$Zip, [string]$Destination, [long]$ExpectedBy
     } finally { $archive.Dispose() }
 }
 function Test-FvrPackage([string]$Folder, [string]$Version) {
-    $package = Read-FvrJson (Join-Path $Folder 'package.json')
-    if ($package.schema -ne 'fvr.desktop.package.v1' -or $package.version -ne $Version) { throw 'Package identity mismatch.' }
+    $null=Assert-FvrVersion $Version
+    Assert-FvrNoLinks $Folder
+    $metadata=Join-Path $Folder 'package.json';Assert-FvrNoLinks $metadata
+    if((Get-Item -LiteralPath $metadata).Length -gt 4MB){throw 'Package metadata exceeds its size limit. Run the latest Setup in this launcher folder.'}
+    $package = Read-FvrJson $metadata
+    $schemaLabel='<missing>';$versionLabel='<missing>'
+    if($package -is [Collections.IDictionary]){
+        if($package.Contains('schema')){$schemaLabel=([string]$package.schema -replace '[\x00-\x1f]','?');$schemaLabel=$schemaLabel.Substring(0,[Math]::Min(96,$schemaLabel.Length))}
+        if($package.Contains('version')){$versionLabel=([string]$package.version -replace '[\x00-\x1f]','?');$versionLabel=$versionLabel.Substring(0,[Math]::Min(96,$versionLabel.Length))}
+    }
+    if($package -isnot [Collections.IDictionary] -or $schemaLabel -cne 'fvr.desktop.package.v1' -or $versionLabel -cne $Version){
+        throw "Package identity mismatch. Expected schema 'fvr.desktop.package.v1' and version '$Version'; found schema '$schemaLabel' and version '$versionLabel'. Use Install update to repair, or run the latest Setup in this launcher folder."
+    }
     $listed = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     foreach ($entry in $package.files) {
         $path = Get-FvrChild $Folder $entry.path
+        Assert-FvrNoLinks $path
         if (-not $listed.Add($entry.path) -or $entry.sha256 -notmatch '^[0-9a-f]{64}$' -or
             (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() -ne $entry.sha256) { throw "Package file verification failed: $($entry.path)" }
     }
@@ -217,38 +229,138 @@ function Test-FvrPackage([string]$Folder, [string]$Version) {
     }
     return $package
 }
+function Get-FvrInstalledPackageState([string]$Folder,[string]$Version) {
+    $null=Assert-FvrVersion $Version
+    try{
+        $package=Test-FvrPackage $Folder $Version
+        Set-FvrPackageRepositories $package
+        return @{verified=$true;package=$package;error=$null}
+    }catch{
+        # Recovery metadata is compiled into this launcher, not taken from a
+        # failed manifest. Runtime entry points remain unavailable.
+        $fallback=@{schema='fvr.desktop.package-recovery.v1';version=$Version;runtime_entry=$null;release_repository='justiceofrip/BC2VR';feedback_repository='justiceofrip/BC2VR';files=@()}
+        Set-FvrPackageRepositories $fallback
+        return @{verified=$false;package=$fallback;error=$_.Exception.Message}
+    }
+}
+function Get-FvrVerifiedPrevious([string]$Root,$Active,[string]$NewVersion) {
+    foreach($candidate in @($Active.current,$Active.previous)){
+        if(-not $candidate -or $candidate -ceq $NewVersion){continue}
+        try{
+            $null=Assert-FvrVersion $candidate
+            $null=Test-FvrPackage (Get-FvrChild $Root ('versions/'+$candidate)) $candidate
+            return $candidate
+        }catch{} # Never advertise an invalid package as the rollback destination.
+    }
+    return $null
+}
+function Restore-FvrPackageRepair([string]$Root) {
+    # Called under the installer/worker operation lock. A crash between the
+    # directory renames leaves this bounded journal for the next trusted setup.
+    $journalPath=Get-FvrChild $Root 'package-repair.json';Assert-FvrNoLinks $journalPath
+    if(-not(Test-Path -LiteralPath $journalPath)){return}
+    Assert-FvrIdle
+    if((Get-Item -LiteralPath $journalPath).Length -gt 32768){throw 'Package repair record is invalid; original package was kept.'}
+    $journal=Read-FvrJson $journalPath
+    if($journal.schema -cne 'fvr.desktop.package-repair.v1' -or $journal.id -cnotmatch '^[a-f0-9]{32}$' -or $journal.phase -notin @('prepared','committed')){throw 'Package repair record is invalid; original package was kept.'}
+    $null=Assert-FvrVersion $journal.version
+    $stageName='staging-'+$journal.id;$backupName='repair-backup-'+$journal.id
+    $stage=Get-FvrChild $Root $stageName;$backup=Get-FvrChild $Root $backupName
+    $target=Get-FvrChild $Root ('versions/'+$journal.version)
+    foreach($path in @($stage,$backup,$target)){Assert-FvrNoLinks $path}
+    $activePath=Get-FvrChild $Root 'active.json';Assert-FvrNoLinks $activePath
+    if($journal.phase -eq 'committed'){
+        $null=Test-FvrPackage $target $journal.version
+        if((Read-FvrJson $activePath).current -cne $journal.version){throw 'Committed repair pointer changed; original backup was kept.'}
+    }else{
+        $bytes=[Convert]::FromBase64String($journal.active_before)
+        if($bytes.Length -gt 16384){throw 'Package repair pointer backup is invalid.'}
+        if($bytes.Length){
+            $old=[Text.Encoding]::UTF8.GetString($bytes).TrimStart([char]0xfeff)|ConvertFrom-Json -AsHashtable
+            $null=Assert-FvrVersion $old.current
+        }
+        if(Test-Path -LiteralPath $backup){
+            if(Test-Path -LiteralPath $target){
+                if(Test-Path -LiteralPath $stage){throw 'Package repair has conflicting directories; original backup was kept.'}
+                [IO.Directory]::Move($target,$stage)
+            }
+            [IO.Directory]::Move($backup,$target)
+        }elseif(-not(Test-Path -LiteralPath $target)){throw 'Package repair original is unavailable; remaining recovery files were kept.'}
+        if($bytes.Length){
+            $temporary=$activePath+'.'+[guid]::NewGuid().ToString('N')+'.tmp'
+            try{[IO.File]::WriteAllBytes($temporary,$bytes);[IO.File]::Move($temporary,$activePath,$true)}
+            finally{if(Test-Path -LiteralPath $temporary){Remove-Item -LiteralPath $temporary -Force}}
+        }elseif(Test-Path -LiteralPath $activePath){Remove-Item -LiteralPath $activePath -Force}
+    }
+    Remove-FvrOwnedTree $Root $stageName
+    Remove-FvrOwnedTree $Root $backupName
+    Remove-Item -LiteralPath $journalPath -Force
+}
 function Install-FvrPackage([string]$Root, [string]$Zip, $Manifest) {
     Assert-FvrIdle; Assert-FvrManifest $Manifest; Assert-FvrNoLinks $Root
     if ((Get-Item -LiteralPath $Zip).Length -ne [long]$Manifest.bytes -or
         (Get-FileHash -LiteralPath $Zip -Algorithm SHA256).Hash.ToLowerInvariant() -ne $Manifest.sha256) { throw 'Update checksum or download size mismatch; current version unchanged.' }
     Assert-FvrFreeSpace $Root ([long]$Manifest.unpacked_bytes + [long]$Manifest.bytes)
+    Restore-FvrPackageRepair $Root
     $version = $Manifest.version
     $target = Get-FvrChild $Root "versions/$version"
-    if (Test-Path -LiteralPath $target) { throw 'That version already exists; use rollback to select it.' }
-    $stageName = 'staging-' + [guid]::NewGuid().ToString('N'); $stage = Get-FvrChild $Root $stageName
+    $repair=Test-Path -LiteralPath $target
+    if($repair){
+        $verified=$false
+        try{$null=Test-FvrPackage $target $version;$verified=$true}catch{}
+        if($verified){throw 'That version is already installed and verified; use rollback to select it.'}
+    }
+    $id=[guid]::NewGuid().ToString('N')
+    $stageName='staging-'+$id;$stage=Get-FvrChild $Root $stageName
+    $journalPath=Get-FvrChild $Root 'package-repair.json'
     try {
         Expand-FvrPackage $Zip $stage ([long]$Manifest.unpacked_bytes)
         $null = Test-FvrPackage $stage $version
         Assert-FvrIdle # A game may have started during the download.
-        $activePath = Join-Path $Root 'active.json'; $previous = $null
-        if (Test-Path -LiteralPath $activePath) { $previous = (Read-FvrJson $activePath).current }
+        $activePath=Get-FvrChild $Root 'active.json';Assert-FvrNoLinks $activePath
+        $active=@{current=$null;previous=$null};$activeBefore=[byte[]]::new(0)
+        if(Test-Path -LiteralPath $activePath){
+            if((Get-Item -LiteralPath $activePath).Length -gt 16384){throw 'Installed version pointer is too large; installation unchanged.'}
+            $activeBefore=[IO.File]::ReadAllBytes($activePath);$active=Read-FvrJson $activePath
+            $null=Assert-FvrVersion $active.current
+            if(-not $active.Contains('previous')){$active.previous=$null}
+        }
+        $previous=Get-FvrVerifiedPrevious $Root $active $version
         $null = New-Item -ItemType Directory -Path (Join-Path $Root 'versions') -Force
         Assert-FvrNoLinks $target
-        [IO.Directory]::Move($stage, $target)
-        try { Write-FvrJson $activePath @{current=$version;previous=$previous} }
-        catch { Remove-FvrOwnedTree $Root "versions/$version"; throw }
+        if($repair){
+            $journal=@{schema='fvr.desktop.package-repair.v1';id=$id;version=$version;phase='prepared';active_before=[Convert]::ToBase64String($activeBefore)}
+            Write-FvrJson $journalPath $journal
+            try{
+                [IO.Directory]::Move($target,(Get-FvrChild $Root ('repair-backup-'+$id)))
+                [IO.Directory]::Move($stage,$target)
+                Write-FvrJson $activePath @{current=$version;previous=$previous}
+                $journal.phase='committed';Write-FvrJson $journalPath $journal
+            }catch{
+                $repairError=$_.Exception.Message
+                try{Restore-FvrPackageRepair $Root}catch{throw "Repair could not finish or restore automatically. Original package is retained; run the latest Setup again in this folder. $repairError"}
+                throw "Repair failed; the original package and installed-version pointer were restored. $repairError"
+            }
+            Restore-FvrPackageRepair $Root
+        }else{
+            [IO.Directory]::Move($stage, $target)
+            try { Write-FvrJson $activePath @{current=$version;previous=$previous} }
+            catch { Remove-FvrOwnedTree $Root "versions/$version"; throw }
+        }
         # Prune only our version directories. User settings, saves, local build,
         # recordings and runtime cache live outside these immutable packages.
         foreach ($dir in Get-ChildItem -LiteralPath (Join-Path $Root 'versions') -Directory) {
             if ($dir.Name -notin @($version,$previous) -and $dir.Name -match '^\d+\.\d+\.\d+$') { Remove-FvrOwnedTree $Root ('versions/'+$dir.Name) }
         }
-    } finally { Remove-FvrOwnedTree $Root $stageName }
+    } finally { if(-not(Test-Path -LiteralPath $journalPath)){Remove-FvrOwnedTree $Root $stageName} }
 }
 function Switch-FvrPrevious([string]$Root) {
     Assert-FvrIdle
+    Restore-FvrPackageRepair $Root
     $active = Read-FvrJson (Join-Path $Root 'active.json')
     if (-not $active.previous) { throw 'There is no previous installed update yet.' }
     $null = Assert-FvrVersion $active.previous
     $null = Test-FvrPackage (Get-FvrChild $Root ('versions/'+$active.previous)) $active.previous
-    Write-FvrJson (Join-Path $Root 'active.json') @{current=$active.previous;previous=$active.current}
+    $previous=Get-FvrVerifiedPrevious $Root $active $active.previous
+    Write-FvrJson (Join-Path $Root 'active.json') @{current=$active.previous;previous=$previous}
 }

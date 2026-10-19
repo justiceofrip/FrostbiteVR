@@ -93,11 +93,14 @@ frames=245 errors=0
     [IO.File]::WriteAllText((Join-Path $data 'settings.json'),$broken)
     Write-FvrJson (Join-Path $runtime 'launch-check.json') @{game_supported=$false;game_sha256=('e'*64)}
     Write-FvrJson (Join-Path $runtime 'xr-selection.json') @{label='Virtual Desktop fixture';manifest='C:\Users\Private Person\runtime.json'}
+    Write-FvrJson (Join-Path $runtime 'asset-preparation.json') @{stage='body equipment';error='Required mesh differs';private_path='D:\Private Person\game'}
+    Write-FvrJson (Join-Path $data 'package-check.json') @{expected_version='0.1.6';verified=$false;error='Package identity mismatch fixture'}
     $workerResult=& (Join-Path $PSHOME 'pwsh.exe') -NoProfile -NonInteractive -File (Join-Path $versionRoot 'app/Worker.ps1') -InstallRoot $root -Action Feedback
     Check ($LASTEXITCODE -eq 0 -and (Read-FvrJson (Join-Path $data 'operation.json')).state -eq 'feedback_ready') 'malformed settings do not block actual feedback worker'
     Check ([IO.File]::ReadAllText((Join-Path $data 'settings.json')) -ceq $broken) 'feedback leaves unrecoverable settings untouched'
     $report=Get-Content -LiteralPath (Join-Path $data 'feedback/Report.txt') -Raw
     Check ($report.Contains('e'*64) -and $report.Contains('Virtual Desktop fixture') -and -not $report.Contains('Private Person')) 'startup build fingerprint and runtime diagnostics survive path redaction'
+    Check ($report.Contains('Required mesh differs') -and $report.Contains('package-check.json') -and $report.Contains('asset-preparation.json')) 'asset failure and package identity evidence included without sharing game files'
     Add-Type -AssemblyName PresentationFramework,PresentationCore,WindowsBase
     $uiSource=[IO.File]::ReadAllText((Join-Path $repo 'launcher/Launcher.ps1'))
     $markupBlocks=[regex]::Matches($uiSource,'(?s)\[xml\]\$(?:markup|feedbackMarkup)=@''\r?\n(.*?)\r?\n''@')

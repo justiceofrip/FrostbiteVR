@@ -60,7 +60,8 @@ function Read-FvrFeedbackTail([string]$Path) {
     if(-not (Test-Path -LiteralPath $Path -PathType Leaf)){return $null}
     $file=[IO.File]::Open($Path,'Open','Read',([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete))
     try {
-        $count=[int][Math]::Min(32768,$file.Length)
+        # Seventeen permitted sources must fit together under the report cap.
+        $count=[int][Math]::Min(24576,$file.Length)
         $null=$file.Seek(-$count,[IO.SeekOrigin]::End)
         $bytes=[byte[]]::new($count);$read=0
         while($read -lt $count){$n=$file.Read($bytes,$read,$count-$read);if($n -eq 0){break};$read+=$n}
@@ -80,10 +81,11 @@ function New-FvrFeedbackBundle([string]$InstallRoot, $Package, $Settings) {
     $parts.Add('Review this text before attaching its ZIP. Redaction is best effort. No upload was performed.')
     $sources=[Collections.Generic.List[object]]::new()
     $sources.Add(@{name='launcher-last.log';path=(Get-FvrChild $data 'launcher-last.log')})
+    $sources.Add(@{name='package-check.json';path=(Get-FvrChild $data 'package-check.json')})
     # Public runtime reports must remain below this installation's state root.
     # Never enumerate a user's disk, developer captures, assets or memory dumps.
     $runtime=Get-FvrChild $data 'runtime'
-    foreach($name in @('launch-check.json','xr-selection.json','xr-preflight.stdout.log','xr-preflight.stderr.log')) {
+    foreach($name in @('launch-check.json','asset-preparation.json','xr-selection.json','xr-preflight.stdout.log','xr-preflight.stderr.log')) {
         $sources.Add(@{name=$name;path=(Get-FvrChild $runtime $name)})
     }
     $record=Get-FvrChild $runtime 'active-session.json'
@@ -104,7 +106,7 @@ function New-FvrFeedbackBundle([string]$InstallRoot, $Package, $Settings) {
         } catch {$parts.Add('Session logs unavailable or outside the permitted diagnostics folder; omitted.')}
     }
     foreach($source in $sources) {
-        try{$tail=Read-FvrFeedbackTail $source.path;if($null -ne $tail){$parts.Add("--- $($source.name) (last 32 KiB, sanitized) ---`n"+$tail)}}
+        try{$tail=Read-FvrFeedbackTail $source.path;if($null -ne $tail){$parts.Add("--- $($source.name) (last 24 KiB, sanitized) ---`n"+$tail)}}
         catch{$parts.Add('--- '+$source.name+' unavailable; omitted ---')}
     }
     $report=$parts -join "`r`n`r`n"

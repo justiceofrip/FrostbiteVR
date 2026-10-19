@@ -22,9 +22,9 @@ def read(path):
 
 class ArchivePool:
     """Bounded, ephemeral read-through cache; no extracted game bytes on disk."""
-    def __init__(self,game,common,common_index,archive_type=archive_reader.Archive):
+    def __init__(self,game,common,common_index,archive_type=archive_reader.Archive,verify_common_index=True):
         self.game=game.resolve();self.common=grip.path_key(common);grip.checked_hash(common_index)
-        self.common_index=common_index;self.archives={};self.bytes=0;self.archive_type=archive_type
+        self.common_index=common_index;self.archives={};self.bytes=0;self.archive_type=archive_type;self.verify_common_index=verify_common_index
     def __call__(self,path):
         path=Path(path).resolve()
         if not path.is_relative_to(self.game):raise ValueError('Archive leaves installation')
@@ -37,7 +37,7 @@ class ArchivePool:
                 archive_reader.MAX_PAYLOAD=640*1024*1024
             source=self.archive_type(path)
         finally:archive_reader.MAX_PAYLOAD=previous
-        if key==self.common and source.index_sha256!=self.common_index:raise ValueError('Common archive index differs')
+        if self.verify_common_index and key==self.common and source.index_sha256!=self.common_index:raise ValueError('Common archive index differs')
         cache={};original=source.read_selected
         def selected(names):
             names=list(names)

@@ -74,3 +74,29 @@ function Get-Bc2StartupFailure([string]$Folder,[string]$Component,[string]$Fallb
     }
     return $Fallback+' Use Report feedback to save diagnostics.'
 }
+
+function Save-Bc2AssetPreparationResult([string]$Cache,[string]$StateRoot,[string]$Recipe,[string]$GameHash,[int]$ExitCode,[bool]$CacheValid) {
+    $report=@{schema='bc2vr.asset-preparation.v1';utc=[DateTime]::UtcNow.ToString('o');recipe_sha256=$Recipe;game_sha256=$GameHash;state='failed';stage='asset tool startup';error=$null;game_started=$false;exit_code=$ExitCode;cache_valid=$CacheValid}
+    $path=Get-FvrChild $Cache 'preparation.json'
+    try {
+        Assert-FvrNoLinks $path
+        if((Test-Path -LiteralPath $path -PathType Leaf) -and (Get-Item -LiteralPath $path).Length -le 8192){
+            $detail=Read-FvrJson $path
+            if($detail.schema -eq $report.schema -and $detail.recipe_sha256 -eq $Recipe -and $detail.game_sha256 -eq $GameHash){
+                foreach($key in @('stage','state','error')){
+                    if($null -ne $detail[$key]){$text=([string]$detail[$key]) -replace '[\r\n]',' ';$report[$key]=$text.Substring(0,[Math]::Min(1200,$text.Length))}
+                }
+            }
+        }
+    } catch {} # Missing/malformed diagnostics never authorize an unverified cache.
+    if($ExitCode -eq 0 -and $CacheValid){$report.state='complete';$report.stage='complete';$report.error=$null}
+    else {
+        $report.state='failed'
+        if(-not $report.error){
+            if($ExitCode -ne 0){$report.error="Preparation process exited with code $ExitCode. Its detailed output is in launcher-last.log."}
+            else{$report.stage='cache verification';$report.error='Generated assets did not pass content verification.'}
+        }
+    }
+    Write-FvrJson (Get-FvrChild $StateRoot 'asset-preparation.json') $report
+    return $report
+}

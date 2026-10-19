@@ -86,14 +86,15 @@ def prepare(game,ffmpeg,output):
         archives.MAX_PAYLOAD=640*1024*1024
         ar=archives.Archive(game/COMMON)
     finally: archives.MAX_PAYLOAD=previous
-    if ar.index_sha256!=INDEX: raise ValueError('Common archive index differs')
+    # Archive layout is provenance, not cue identity. The bounded archive reader
+    # still checks its complete structure; only this exact resource is decoded.
     raw=ar.read_selected([SPAS])[SPAS]
     if sha(raw)!=SPAS_SHA: raise ValueError('Unreviewed SPAS wave resource')
     rate,pcm=decode(raw,ffmpeg)
     if len(pcm)!=28864*2: raise ValueError('SPAS authored sample count differs')
     output.mkdir(parents=True,exist_ok=True)
     profile={'schema':'fvr.bc2.mechanism_audio_cache.v1','asset':'SPAS12_sp','sample_rate':rate,
-        'archive':COMMON,'index_sha256':INDEX,'resource':SPAS,'resource_sha256':sha(raw),'pcm_sha256':sha(pcm),
+        'archive':COMMON,'index_sha256':ar.index_sha256,'resource':SPAS,'resource_sha256':sha(raw),'pcm_sha256':sha(pcm),
         'animation_guid':'2d9cf41b-3aba-4a22-82a8-64051c180432',
         'sound_template_guid':'9515f482-793e-420d-b107-234f1c7ece0d',
         'gain':.30,'range_basis':'10ms RMS envelope: onset145ms; valley355ms; second onset365ms',

@@ -9,6 +9,7 @@ from pathlib import Path
 from inspect_bc2_mesh_asset import Archive,bone_hash,sha
 from bc2_mesh_geometry import metadata,geometry, position_bytes
 from bc2_weapon_animation_pipeline import Skeleton,canonical
+from bc2_asset_resource_identity import profiles_match
 
 MAGIC=b'BC2PROP1'
 MAX_CACHE=16*1024*1024
@@ -102,13 +103,15 @@ def main(argv=None):
     parser.add_argument('--derive-catalog',type=Path,help='Developer-only metadata derivation output')
     parser.add_argument('--header',type=Path,help='Developer-only generated metadata header')
     parser.add_argument('--body-equipment',action='store_true',help='Include reviewed closed weapons for back display')
+    parser.add_argument('--resource-content',action='store_true',help='Verify exact catalog resource bytes while allowing different archive index provenance')
     args=parser.parse_args(argv)
     reviewed=json.loads(args.catalog.read_text())['profiles'] if args.catalog else None
-    if args.body_equipment and reviewed and any(r.get('configuration_path') for r in reviewed):
+    if args.resource_content and (not args.catalog or args.derive_catalog or args.header):raise ValueError('Resource-content preparation requires a reviewed catalog and cannot derive enrollment metadata')
+    if reviewed and (args.resource_content or (args.body_equipment and any(r.get('configuration_path') for r in reviewed))):
         from bc2_configured_body_assets import derive_catalog
-        rows,payload=derive_catalog(args.game,reviewed)
+        rows,payload=derive_catalog(args.game,reviewed,resource_content=args.resource_content)
     else:rows,payload=derive_all(args.game,args.body_equipment)
-    if args.catalog and json.loads(args.catalog.read_text())['profiles']!=rows:raise ValueError('Installed profile data differs from reviewed catalog')
+    if args.catalog and not profiles_match(rows,reviewed,args.resource_content):raise ValueError('Installed profile data differs from reviewed catalog')
     if not args.catalog and not args.derive_catalog:raise ValueError('Require reviewed catalog or explicit developer derivation')
     args.output.parent.mkdir(parents=True,exist_ok=True);args.output.write_bytes(payload)
     if args.derive_catalog:args.derive_catalog.parent.mkdir(parents=True,exist_ok=True);args.derive_catalog.write_text(json.dumps({'schema':'fvr.bc2.body_ammo_assets','version':1,'profiles':rows},indent=2)+'\n')

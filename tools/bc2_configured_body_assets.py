@@ -10,19 +10,21 @@ from bc2_magazine_contact_batch import ArchivePool
 from bc2_weapon_animation_pipeline import Skeleton,Clip,canonical,identity
 from bc2_mesh_geometry import metadata,geometry
 from inspect_bc2_mesh_asset import bone_hash,sha
+from bc2_asset_resource_identity import catalog_resource_pins,VerifiedResources,profiles_match
 
 def require(value,message):
  if not value:raise ValueError(message)
 
-def composite(game,pool,spec,binding,base_geometry,skeleton,known,inverse):
+def composite(game,pool,spec,binding,base_geometry,skeleton,known,inverse,resource_content=False):
  cfg=spec['authored_configuration'];require(cfg['resource']==binding['weapon']['resource'] and cfg['sha256']==binding['weapon']['sha256'],'Configured asset invariant failed')
  path=binding['animation_source']['archive'];archive=pool(game/path)
- require(archive.index_sha256==binding['animation_source']['archive_index_sha256'],'Configured asset invariant failed')
+ if not resource_content:require(archive.index_sha256==binding['animation_source']['archive_index_sha256'],'Configured asset invariant failed')
  name=binding['animation_chain']['animation_resource'];raw=archive.read_selected([name])[name];require(sha(raw)==binding['animation_sha256'],'Configured asset invariant failed');clip=Clip(raw)
  sections=[];required={'RightHand','jntWpn_Flash'};sources=[]
  for source in spec['meshes']:
   a=pool(game/source['archive']);mesh=source['mesh'];names=[mesh+'.res',mesh+'_lod0_data.res'];blobs=a.read_selected(names)
-  if source.get('expected_index_sha256'):require(a.index_sha256==source['expected_index_sha256'],'Configured asset invariant failed')
+  if resource_content:require(source.get('expected_metadata_sha256') and source.get('expected_lod_sha256'),'Exact configured mesh content pins required')
+  elif source.get('expected_index_sha256'):require(a.index_sha256==source['expected_index_sha256'],'Configured asset invariant failed')
   if source.get('expected_metadata_sha256'):require(sha(blobs[names[0]])==source['expected_metadata_sha256'],'Configured asset invariant failed')
   if source.get('expected_lod_sha256'):require(sha(blobs[names[1]])==source['expected_lod_sha256'],'Configured asset invariant failed')
   lod=metadata(blobs[names[0]])[0];data=blobs[names[1]];ss=geometry(data,lod,known)
@@ -84,12 +86,19 @@ def compact_cache_sections(payload,rows):
  require(at==len(payload),'Configured asset invariant failed')
  return bytes(out)
 
-def derive_catalog(game, reviewed):
+def derive_catalog(game, reviewed, resource_content=False):
     if not reviewed or len(reviewed)>64:raise ValueError('Catalog profile bound')
     exact=[r for r in reviewed if r.get('configuration_path')]
     common=exact[0] if exact else None
-    pool=ArchivePool(game,common['configuration_archive'] if common else '',
-                     common['configuration_archive_index_sha256'] if common else '')
+    if common:
+        common_path,common_index=common['configuration_archive'],common['configuration_archive_index_sha256']
+    elif reviewed[0].get('rigid_assembly'):
+        source=reviewed[0]['assembly_source']['skeleton'];common_path,common_index=source['archive'],source['archive_index_sha256']
+    else:
+        common_path,common_index=reviewed[0]['archive'],reviewed[0]['archive_index_sha256']
+    pool=ArchivePool(game,common_path,common_index,verify_common_index=not resource_content)
+    if resource_content:
+        pool=VerifiedResources(game,pool,catalog_resource_pins(reviewed,ammo.SKELETON_ARCHIVE,ammo.SKELETON_RESOURCE,ammo.SKELETON_SHA))
     previous_ammo,previous_equipment=ammo.archive,equipment.archive
     ammo.archive=equipment.archive=lambda game,path:pool(game/path)
     try:
@@ -104,10 +113,10 @@ def derive_catalog(game, reviewed):
             keys.add(key)
             if r.get('rigid_assembly'):
                 from bc2_magazine_assembly_cache import derive_reviewed_cache
-                row,record=derive_reviewed_cache(game,pool,r)
+                row,record=derive_reviewed_cache(game,pool,r,resource_content=resource_content)
             elif r.get('configuration_path'):
                 a=pool(game/r['configuration_archive'])
-                if a.index_sha256!=r['configuration_archive_index_sha256']:raise ValueError('Configuration archive changed')
+                if not resource_content and a.index_sha256!=r['configuration_archive_index_sha256']:raise ValueError('Configuration archive changed')
                 cfg=r['authored_configuration']
                 if cfg['resource']!=r['configuration_path']+'.dbx':raise ValueError('Exact configuration path')
                 for ref in [cfg]+cfg['mesh_references']:
@@ -119,9 +128,11 @@ def derive_catalog(game, reviewed):
                 spec=dict(asset=r['asset'],meshes=sources,authored_configuration=cfg)
                 binding=dict(weapon=cfg,animation_source=dict(archive=r['closed_archive'],archive_index_sha256=r['closed_archive_index_sha256']),
                              animation_chain=dict(animation_resource=r['closed_clip']),animation_sha256=r['closed_clip_sha256'])
-                row,record=composite(game,pool,spec,binding,dict(configured_mesh_path=r['mesh']),skeleton,known,inverse)
+                row,record=composite(game,pool,spec,binding,dict(configured_mesh_path=r['mesh']),skeleton,known,inverse,resource_content=resource_content)
                 for field in ('configuration_archive','configuration_archive_index_sha256','closed_archive','closed_archive_index_sha256'):
                     row[field]=r[field]
+                row['configuration_archive_index_sha256']=a.index_sha256
+                row['closed_archive_index_sha256']=pool(game/r['closed_archive']).index_sha256
             elif r.get('display_only'):
                 derived,record=equipment.derive_equipment(game,[(r['asset'],r['archive'],r['mesh'],r['closed_clip'])])
                 row=derived[0]
@@ -132,7 +143,7 @@ def derive_catalog(game, reviewed):
                 if key not in {(s[0],s[2],s[3],r['rig_fingerprint']) for s in ammo.SPECS}:
                     packed=compact_cache_sections(packed,derived)
                 record=packed[12:]
-            if row!=r:raise ValueError('Installed geometry differs from exact catalog: '+str(key))
+            if not profiles_match([row],[r],resource_content):raise ValueError('Installed geometry differs from exact catalog: '+str(key))
             rows.append(row);records+=record
             if len(records)+12>ammo.MAX_CACHE:raise ValueError('Private cache size limit')
         return rows,ammo.MAGIC+struct.pack('<I',len(rows))+records

@@ -12,7 +12,8 @@ $data=Join-Path $InstallRoot 'data'
 $script:settingsState=Read-FvrLauncherSettings -InstallRoot $InstallRoot
 $script:settings=$script:settingsState.settings
 $active=Read-FvrJson (Join-Path $InstallRoot 'active.json')
-$package=Read-FvrJson (Join-Path (Split-Path $PSScriptRoot -Parent) 'package.json')
+$packageState=Get-FvrInstalledPackageState (Join-Path $InstallRoot ('versions/'+$active.current)) $active.current
+$package=$packageState.package
 $mutex=[Threading.Mutex]::new($false,'Local\FrostbiteVR.DesktopLauncher')
 $ownsMutex=$false
 if(-not $SmokeTest){
@@ -76,12 +77,13 @@ function Show-Settings {
     $script:settings=$script:settingsState.settings
     $backend=$settings.local_backend
     $script:hasLocalBackend=$backend -is [Collections.IDictionary] -and $backend.Contains('label')
-    $runtimeLabel=if($package.runtime_entry){'Installed VR runtime'}elseif($script:hasLocalBackend){[string]$backend.label}else{'Launcher installed • VR runtime not installed yet'}
+    $runtimeLabel=if(-not $packageState.verified){'Installation needs repair'}elseif($package.runtime_entry){'Installed VR runtime'}elseif($script:hasLocalBackend){[string]$backend.label}else{'Launcher installed • VR runtime not installed yet'}
     $controls.BuildLabel.Text="$runtimeLabel  •  Launcher $($active.current)"
     $controls.Local.IsChecked=[bool](-not $package.runtime_entry -and $script:hasLocalBackend)
     $controls.ChooseGame.Content=if($script:settingsState.needs_reset){'Reset and choose game folder…'}else{'Choose game folder…'}
     $controls.GameFolder.Text=if($settings.game_path -is [string] -and $settings.game_path){$settings.game_path}else{'No game folder selected'}
     $controls.SettingsNotice.Text=$script:settingsState.notice
+    if(-not $packageState.verified){$controls.SettingsNotice.Text=($controls.SettingsNotice.Text+"`n"+$packageState.error).Trim()}
     $script:gameFolderReady=$false
     if(-not $script:settingsState.needs_reset -and -not $script:settingsState.read_only){
         try{$null=Resolve-FvrGameFolder $settings.game_path;$script:gameFolderReady=$true}catch{
@@ -91,7 +93,7 @@ function Show-Settings {
 }
 function Set-Busy([bool]$Busy){
     foreach($name in $actions){$controls[$name].IsEnabled=-not $Busy -and -not $script:reopenRequired}
-    foreach($name in @('Launch','Validate')){$controls[$name].IsEnabled=$controls[$name].IsEnabled -and $script:gameFolderReady}
+    foreach($name in @('Launch','Validate')){$controls[$name].IsEnabled=$controls[$name].IsEnabled -and $script:gameFolderReady -and $packageState.verified}
     $controls.ChooseGame.IsEnabled=-not $Busy -and -not $script:reopenRequired -and -not $script:settingsState.read_only
     $controls.Local.IsEnabled=-not $Busy -and [bool]($package.runtime_entry -and $script:hasLocalBackend)
     $controls.Fresh.IsEnabled=-not $Busy

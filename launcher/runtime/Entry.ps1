@@ -54,8 +54,15 @@ if($game){
 }
 if(-not $cached){
     Write-Output 'Preparing body equipment and reload sounds from your installed game (first launch only)…'
+    # Remove only the previous diagnostic, so an import/startup failure cannot
+    # display a different attempt's error as the cause of this launch.
+    $preparationReport=Get-FvrChild $cache 'preparation.json'
+    Assert-FvrNoLinks $preparationReport
+    if(Test-Path -LiteralPath $preparationReport){Remove-Item -LiteralPath $preparationReport -Force}
     & $python -B (Join-Path $PSScriptRoot 'tools/prepare_runtime_assets.py') --game $settings.game_path --output $cache --ffmpeg $ffmpeg --recipe $config.asset_recipe_sha256 --game-sha256 $gameHash
-    if($LASTEXITCODE -or -not(Test-Bc2AssetCache $cache $config.asset_recipe_sha256 $gameHash)){throw 'Local asset preparation failed. No game was started.'}
+    $preparationExit=$LASTEXITCODE
+    $preparation=Save-Bc2AssetPreparationResult $cache $StateRoot $config.asset_recipe_sha256 $gameHash $preparationExit (Test-Bc2AssetCache $cache $config.asset_recipe_sha256 $gameHash)
+    if($preparation.state -ne 'complete'){throw ('Local asset preparation failed at '+$preparation.stage+': '+$preparation.error+' No game was started. Use Report feedback > Save diagnostics to share the details.')}
 }
 $relative='sessions/'+[DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss-fff')+'-'+[guid]::NewGuid().ToString('N').Substring(0,8)
 $folder=Get-FvrChild $StateRoot $relative;$null=New-Item -ItemType Directory -Path $folder

@@ -31,9 +31,12 @@ try {
     $settings = $settingsState.settings
     if($Action -in @('Launch','Validate') -and ($settingsState.needs_reset -or $settingsState.read_only)){throw 'Settings need attention. Use Reset and choose game folder in the launcher; your original settings are backed up.'}
     $active = Read-FvrJson (Join-Path $InstallRoot 'active.json')
+    $null=Assert-FvrVersion $active.current
     $versionFolder = Get-FvrChild $InstallRoot ('versions/'+$active.current)
-    $package = Test-FvrPackage $versionFolder $active.current
-    Set-FvrPackageRepositories $package
+    $packageState=Get-FvrInstalledPackageState $versionFolder $active.current
+    $package=$packageState.package
+    Write-FvrJson (Join-Path $data 'package-check.json') @{schema='fvr.desktop.package-check.v1';expected_version=$active.current;verified=$packageState.verified;error=$packageState.error;utc=[DateTime]::UtcNow.ToString('o')}
+    if(-not $packageState.verified -and $Action -notin @('Feedback','Check','Update','Rollback')){throw $packageState.error}
     if ($Action -eq 'Feedback') {
         Status 'Preparing a small, sanitized diagnostics bundle…'
         $bundle=New-FvrFeedbackBundle $InstallRoot $package $settings
@@ -44,9 +47,19 @@ try {
     if ($Action -in @('Check','Update')) {
         Status 'Checking GitHub for compatible hotfixes…'
         $update = Find-FvrUpdate $InstallRoot -IncludePrerelease:$Prerelease
-        if (-not $update) { Status 'No launcher-compatible hotfix is published yet. Your installed build is ready to use.' 'done'; exit 0 }
-        if ([version]$update.manifest.version -le [version]$active.current) { Status 'You have the latest available update.' 'done'; exit 0 }
-        if ($Action -eq 'Check') { Status ("Update $($update.manifest.version) is available. Select Install update when BC2 is closed.") 'update_available'; exit 0 }
+        if(-not $update){
+            if(-not $packageState.verified){throw 'The installation needs repair, but no compatible package was found. Include pre-alpha hotfixes or download the latest BC2 VR Setup and choose this launcher folder.'}
+            Status 'No launcher-compatible hotfix is published yet. Your installed build is ready to use.' 'done';exit 0
+        }
+        if([version]$update.manifest.version -lt [version]$active.current){
+            if(-not $packageState.verified){throw 'The installed version pointer is newer than the available verified package. Use Report feedback; the launcher will not guess or downgrade the installed version.'}
+            Status 'You have the latest available update.' 'done';exit 0
+        }
+        if([version]$update.manifest.version -eq [version]$active.current -and $packageState.verified){Status 'You have the latest available update.' 'done';exit 0}
+        if($Action -eq 'Check'){
+            $message=if($packageState.verified){"Update $($update.manifest.version) is available. Select Install update when BC2 is closed."}else{"Installation needs repair. Select Install update to install verified version $($update.manifest.version). Your settings will be kept. Close BC2 first."}
+            Status $message 'update_available';exit 0
+        }
         Assert-FvrIdle
         Assert-FvrFreeSpace $InstallRoot ([long]$update.manifest.bytes + [long]$update.manifest.unpacked_bytes)
         Status ("Downloading update $($update.manifest.version)…")
@@ -56,7 +69,7 @@ try {
             Status 'Verifying and installing the update…'
             Install-FvrPackage $InstallRoot $download $update.manifest
         } finally { if (Test-Path -LiteralPath $download) { Remove-Item -LiteralPath $download -Force } }
-        Status 'Update installed. Close and reopen the launcher to use it. One previous version is kept for rollback.' 'restart_required'; exit 0
+        Status 'Verified package installed. Close and reopen the launcher to use it. Your settings and the last verified previous version were kept.' 'restart_required'; exit 0
     }
     if ($Action -eq 'Rollback') {
         Switch-FvrPrevious $InstallRoot
