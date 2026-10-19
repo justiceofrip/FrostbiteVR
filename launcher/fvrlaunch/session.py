@@ -181,7 +181,14 @@ def documents_dir() -> Path:
 
 
 def resolve_profile_settings_file(template: str | None, documents: Path) -> Path | None:
-    return Path(template.replace("%DOCUMENTS%", str(documents))) if template else None
+    """Profiles write paths Windows-style; split on either separator so the same profile
+    resolves to real folders on any OS (a backslash is a plain character on POSIX)."""
+    if not template:
+        return None
+    if "%DOCUMENTS%" not in template:
+        return Path(template)
+    rest = template.split("%DOCUMENTS%", 1)[1].replace("\\", "/")
+    return documents.joinpath(*[part for part in rest.split("/") if part])
 
 
 # ---- proxy -----------------------------------------------------------------------------
