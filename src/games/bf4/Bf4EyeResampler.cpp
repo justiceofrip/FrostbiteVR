@@ -82,7 +82,9 @@ float4 ps(V v) : SV_Target {
     if (s.x < bounds.x || s.x > bounds.z || s.y < 0 || s.y > 1) return float4(0, 0, 0, 1); // not rendered
     float3 c = source.SampleLevel(linearClamp, s, 0).rgb;
     if (reticle.z > 0.5) { // aim reticle: a ring and a dot, sized in tangent units (~0.6 deg)
-        const float d = length((s0 - reticle.xy) * scale.xy); // at infinity: no parallax
+        // Where the source point under the aim is shown in this eye: with depth stereo the dot
+        // sits on the surface it covers (no double image when looking at the target).
+        const float d = length((s - reticle.xy) * scale.xy);
         const float ring = 1 - smoothstep(0.0012, 0.0024, abs(d - 0.011));
         const float centre = 1 - smoothstep(0.0016, 0.0028, d);
         const float shade = 1 - smoothstep(0.0020, 0.0045, abs(d - 0.011)); // dark rim for contrast

@@ -274,8 +274,7 @@ using the frame's depth buffer (depth-image-based rendering; no simulation or re
   distance, z = view distance from the depth with the view's near/far, +0xBC/+0xC0, read
   live as 0.06 / 20000; reversed depth when the buffer clears to 0), by a four-step
   fixed-point search; nearer than 0.4 m counts as 0.4 m (the weapon, about where a VR gun
-  is held; nearer would mean a very strong per-eye shift). The aim dot stays
-  at infinity; gesture markers keep their own per-eye placement.
+  is held; nearer would mean a very strong per-eye shift). The aim dot is drawn where the source point under the aim lands in each eye, so it sits on the surface it covers (no double image on a near target); gesture markers keep their own per-eye placement.
 - Mod menu "3D from depth: Off / On" (default off). Log: `depth_capture installed= main=WxH
   format= clear= split= ... msaa_clears= hooked=` every 600 frames, `depth_pairs=`; developer sessions
   write `vr-snapshot-depth.bmp` (near bright, far dark) the first time it works and with
