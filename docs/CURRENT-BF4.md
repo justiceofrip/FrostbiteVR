@@ -108,7 +108,8 @@ screen. Pieces (all on the analysed build only):
   separately), fire (pad RT) is held off until one is seated, the left hand takes one from
   the belt and seats it at the magazine well (7 cm below, 6 cm ahead of the right grip,
   12 cm radius), which presses the pad's reload (X) so BF4 plays its own reload. Letting go
-  before the well drops it. Holding B 0.6 s reloads at once. Custody persists across
+  before the well drops it. Holding B 0.6 s reloads at once. A magazine pushed into a gun
+  that still has one is a tactical reload (same press; log `tactical=`). Custody persists across
   packets, menus and tracking loss; a level start is the lifetime transition. BF4's own
   ammunition and auto-reload are untouched (nothing native is acknowledged or written).
 - Feedback without visuals of the gear itself: a light pulse when an empty hand reaches a
@@ -341,11 +342,11 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
   and notes were shortened to fit half width (GDI text now ends with an ellipsis when it
   does not fit). Unit test: every item on the panel, none overlapping; a GDI render of the
   developer menu was checked by eye.
-- Build.ps1 after two-handed aim: x64 284/284, x86 283/283. Bf4CoreTests 69 cases;
+- Build.ps1 after tactical reloads: x64 284/284, x86 283/283. Bf4CoreTests 70 cases;
   Bf4Emulated pass (theater, world lane, stereo probe, census, lockdown, gestures, eye
   resampler reticle on WARP); launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
   `-World -FrameChannels 2` 5/5 (227 pairs); `-World` with one channel 4/4 (47 pairs).
-- Installed locally: runtime/bf4 0.4.25-local (rollback 0.4.24-local). Developer
+- Installed locally: runtime/bf4 0.4.26-local (rollback 0.4.25-local). Developer
   sessions still run the read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the
   framework's `StereoMath.h` (`Quat` = `Quaternion`; Pose is `{position, orientation}`).

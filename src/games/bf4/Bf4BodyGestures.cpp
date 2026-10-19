@@ -142,24 +142,24 @@ BodyGestureOutput BodyGestures::Update(const BodyGestureInput& in) {
         }
         const int zone = hand.gripTracked && in.holsters ? zoneAt(hand.grip.position) : -1;
         // Holsters are invisible: a light pulse when an empty hand reaches one it could use now.
-        int usable = -1;
+        int offer = -1;
         if (zone >= 0 && !grip_[h]) {
             switch (slots[static_cast<std::size_t>(zone)].accepts) {
-            case EquipmentCategory::Primary: usable = current_ != Bf4Gun::Primary ? zone : -1; break;
-            case EquipmentCategory::Secondary: usable = current_ != Bf4Gun::Secondary ? zone : -1; break;
-            case EquipmentCategory::Grenade: usable = zone; break;
-            case EquipmentCategory::Knife: usable = h == 0 ? zone : -1; break;
-            case EquipmentCategory::Magazine:
-                usable = in.manualReload && h == 0 && !magazineInHand_ && magazineOut_[static_cast<int>(current_)] ? zone : -1;
+            case EquipmentCategory::Primary: offer = current_ != Bf4Gun::Primary ? zone : -1; break;
+            case EquipmentCategory::Secondary: offer = current_ != Bf4Gun::Secondary ? zone : -1; break;
+            case EquipmentCategory::Grenade: offer = zone; break;
+            case EquipmentCategory::Knife: offer = h == 0 ? zone : -1; break;
+            case EquipmentCategory::Magazine: // the belt buzzes when the gun needs a magazine
+                offer = in.manualReload && h == 0 && !magazineInHand_ && magazineOut_[static_cast<int>(current_)] ? zone : -1;
                 break;
             case EquipmentCategory::Gadget: break;
             }
         }
-        if (usable >= 0 && usable != hover_[h] && !out.haptic[h].valid) {
+        if (offer >= 0 && offer != hover_[h] && !out.haptic[h].valid) {
             out.haptic[h] = {true, false};
             ++stats_.hovers;
         }
-        hover_[h] = usable;
+        hover_[h] = offer;
         if (!rising[h] || zone < 0) continue;
         switch (slots[static_cast<std::size_t>(zone)].accepts) {
         case EquipmentCategory::Primary: Select(Bf4Gun::Primary, now); break;
@@ -199,9 +199,12 @@ BodyGestureOutput BodyGestures::Update(const BodyGestureInput& in) {
             ++stats_.quickReloads;
             out.haptic[1] = {true, true};
         }
-        if (magazineInHand_ && gunOut && c.hands[0].gripTracked && c.hands[1].gripTracked &&
+        // Seating: into an empty gun, or a tactical reload (the fresh magazine pushes the
+        // old one out); either way BF4 performs its own reload.
+        if (magazineInHand_ && c.hands[0].gripTracked && c.hands[1].gripTracked &&
             math::Length(c.hands[0].grip.position - Magwell(c.hands[1].grip)) <= kMagwellRadius) {
             magazineInHand_ = false; // seated; the grip stays owned until it is released
+            if (!gunOut) ++stats_.tacticalReloads;
             gunOut = false;
             PulseReload(now);
             ++stats_.seats;
@@ -232,15 +235,16 @@ void BodyGestures::OnLifetimeTransition() {
 }
 
 std::string BodyGestures::Describe() const {
-    char line[320];
+    char line[384];
     std::snprintf(line, sizeof(line),
                   "gestures gun=%s magazine_out=%d/%d magazine_in_hand=%d draws=%llu throws=%llu knives=%llu ejects=%llu "
-                  "grabs=%llu seats=%llu drops=%llu quick_reloads=%llu key_presses=%llu",
+                  "grabs=%llu seats=%llu tactical=%llu drops=%llu quick_reloads=%llu key_presses=%llu",
                   current_ == Bf4Gun::Primary ? "primary" : "sidearm", magazineOut_[0] ? 1 : 0, magazineOut_[1] ? 1 : 0,
                   magazineInHand_ ? 1 : 0, static_cast<unsigned long long>(stats_.draws),
                   static_cast<unsigned long long>(stats_.throws), static_cast<unsigned long long>(stats_.knives),
                   static_cast<unsigned long long>(stats_.ejects), static_cast<unsigned long long>(stats_.grabs),
-                  static_cast<unsigned long long>(stats_.seats), static_cast<unsigned long long>(stats_.drops),
+                  static_cast<unsigned long long>(stats_.seats), static_cast<unsigned long long>(stats_.tacticalReloads),
+                  static_cast<unsigned long long>(stats_.drops),
                   static_cast<unsigned long long>(stats_.quickReloads), static_cast<unsigned long long>(stats_.keyPresses));
     return line;
 }

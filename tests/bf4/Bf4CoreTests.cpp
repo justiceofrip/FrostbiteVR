@@ -1056,3 +1056,19 @@ TEST_CASE(TwoHandedAimFollowsTheLineBetweenTheHands) {
     in.twoHanded = false;
     CHECK(!aim.Update(in).twoHanded && Near(aim.Desired().yaw, 0.1f, 1e-3f));
 }
+
+TEST_CASE(TacticalReloadPushesAFreshMagazineIntoALoadedGun) {
+    using namespace fvr;
+    using namespace fvr::bf4;
+    GestureRig r;
+    CHECK(!r.gestures.MagazineOut(Bf4Gun::Primary));
+    r.Move(0, r.Slot("belt_front_left"));
+    r.Step();
+    r.Grip(0, true);
+    r.Step();
+    CHECK(r.gestures.MagazineInHand() && r.gestures.Markers()[0].kind == 1); // the well is the target
+    r.Move(0, BodyGestures::Magwell(r.in.controls.hands[1].grip));
+    const auto out = r.Step();
+    CHECK((out.padButtons & interaction::pad::X) && !out.blockFire);
+    CHECK(r.gestures.Stats().seats == 1 && r.gestures.Stats().tacticalReloads == 1 && !r.gestures.MagazineInHand());
+}

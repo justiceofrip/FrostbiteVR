@@ -16,6 +16,7 @@
 // held off until a magazine is seated; take one from the belt with the left hand and bring
 // it to the gun's magazine well (just below and in front of the right hand); seating it
 // presses the game's reload and BF4 plays its own reload. Holding B 0.6 s reloads at once.
+// A magazine pushed into a gun that still has one is a tactical reload (same press).
 //
 // Persistent state (AGENTS.md): a dropped magazine stays out of that gun (primary and
 // sidearm separately) and a magazine stays in the left hand until it is seated, dropped
@@ -100,7 +101,7 @@ public:
 
     struct Counters {
         std::uint64_t draws = 0, throws = 0, knives = 0, ejects = 0, grabs = 0, seats = 0, drops = 0,
-                      quickReloads = 0, keyPresses = 0, hovers = 0;
+                      quickReloads = 0, keyPresses = 0, hovers = 0, tacticalReloads = 0;
     };
     const Counters& Stats() const { return stats_; }
 

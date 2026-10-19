@@ -1,4 +1,4 @@
-# BF4 headset session: checklist (0.4.25-local)
+# BF4 headset session: checklist (0.4.26-local)
 
 What to try in the next headset session, and what each check tells us. About 15 minutes.
 Everything is input-only or an exactly restored camera/FOV write, apart from the optional
@@ -35,7 +35,7 @@ Everything is input-only or an exactly restored camera/FOV write, apart from the
 5. Reload by hand (Reload: Manual): **B drops the magazine** (the trigger stops firing; an
    amber ring marks the belt pouch, front left). Grab there with the left grip and push
    it to the green ring under the gun: BF4 plays its reload. Letting go early drops it.
-   **Hold B** for an instant reload.
+   **Hold B** for an instant reload. A fresh magazine pushed into a loaded gun also reloads.
 6. If something feels wrong, open the menu and click "Mark this moment for feedback".
 7. Quit from the game's own menu, so the launcher restores the game folder.
 
