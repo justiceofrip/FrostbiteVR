@@ -12,6 +12,10 @@ Everything is input-only or an exactly restored camera/FOV write, apart from the
 3. Start the launcher: `runtime\bf4\versions\<current>\Launch FrostbiteVR.cmd`. Leave the
    developer features on: the logs, probes and the freeze watchdog come with them.
 
+Sharpness: each eye is cut from the game's one wide-angle frame (about 110 degrees tall),
+so the game's own resolution sets how sharp the headset looks. If the GPU has headroom,
+raise BF4's Video > Resolution Scale (150-200 %) before judging blur.
+
 ## Menus (theater screen)
 
 - The laser clicks the game's menus, including **Campaign > Resume** (a held trigger keeps
