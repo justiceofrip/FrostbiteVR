@@ -3,12 +3,13 @@
 //
 // Observes ID3D11DeviceContext::ClearDepthStencilView (a MinHook detour on d3d11.dll's own
 // implementation; the call itself always proceeds unchanged) to find the frame's main depth
-// buffer: the largest single-sample depth target with the backbuffer's aspect (shadow maps
-// and other targets have other shapes). Just before each clear of it, a copy of its contents
-// is recorded on the same context, so it lands in order even when the game records on
-// deferred contexts. Frostbite clears depth again before drawing the first-person weapon
-// (BC2 does), so with two or more clears a frame the copy made before the last clear holds
-// the world; with one clear a frame, the live buffer is copied at Present instead.
+// buffer: the largest depth target with the backbuffer's aspect (shadow maps and other
+// targets have other shapes), single- or multisampled. With two or more clears a frame (BC2
+// clears again before the first-person weapon), a copy is recorded on the clearing context
+// just before each clear, so it lands in order even on deferred contexts, and the one made
+// before the last clear holds the world. With one clear a frame, the live buffer is copied
+// at Present instead (and nothing before the clears). BF4 (live, 2026-10-19): one clear a
+// frame of a 4x MSAA R24G8 buffer at the render resolution, cleared to 1 (standard depth).
 // Towards the game this is read-only: its resources are only ever copied from.
 #include <d3d11.h>
 #include <wrl/client.h>
@@ -17,6 +18,7 @@
 #include <cstdint>
 #include <mutex>
 #include <string>
+#include <vector>
 
 namespace fvr::bf4 {
 
@@ -46,13 +48,18 @@ public:
     bool TakeFrame(ID3D11DeviceContext* immediate, float aspect, Frame& out);
     Stats GetStats() const;
     std::string Describe() const;
-    // Developer evidence: the last copy as a greyscale BMP (near bright, far dark).
-    bool WriteBmp(ID3D11DeviceContext* immediate, const std::string& path, float nearZ, float farZ);
+    // Developer evidence: the last copy as a greyscale BMP (log scale: 0.1 m white, 200 m
+    // black; sample 0 of a multisampled one), and in `summary` the metres at the centre, the
+    // nearest and the share of pixels at the far plane.
+    bool WriteBmp(ID3D11DeviceContext* immediate, const std::string& path, float nearZ, float farZ,
+                  std::string* summary = nullptr);
 
     void OnClear(ID3D11DeviceContext* context, ID3D11DepthStencilView* dsv, float value); // from the detour
 
 private:
     bool EnsureCopy(ID3D11Device* device);
+    // The copy's raw depth values (0..1), reading sample 0 of a multisampled copy.
+    bool ReadDepth(ID3D11DeviceContext* immediate, std::vector<float>& values, std::uint32_t& w, std::uint32_t& h);
     bool HookEntry(void* entry);
 
     mutable std::mutex mutex_;

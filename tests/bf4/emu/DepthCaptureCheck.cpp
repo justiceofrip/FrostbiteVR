@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <string>
 
 namespace {
 using Microsoft::WRL::ComPtr;
@@ -126,6 +127,17 @@ bool CheckDepthCapture(ID3D11Device* device, const char*& why) {
             D3D11_TEXTURE2D_DESC got{};
             if (frame.texture) frame.texture->GetDesc(&got);
             if (!frame.texture || got.SampleDesc.Count != 4) why = "hands back a multisampled copy as it is", ok = false;
+            // The developer snapshot reads sample 0 of it: 0.5 with planes 0.06/20000 is 0.12 m.
+            char temp[MAX_PATH]{};
+            GetTempPathA(MAX_PATH, temp);
+            const std::string bmp = std::string(temp) + "fvr-depthcheck.bmp";
+            std::string summary;
+            if (ok && (!capture.WriteBmp(context.Get(), bmp, 0.06f, 20000.0f, &summary) ||
+                       summary.rfind("centre=0.12m", 0) != 0)) {
+                std::printf("summary: %s\n", summary.c_str());
+                why = "snapshots sample 0 of a multisampled copy", ok = false;
+            }
+            DeleteFileA(bmp.c_str());
             capture.Remove();
         }
     }

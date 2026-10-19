@@ -518,15 +518,21 @@ TEST_CASE(EmuControllerAimRecoversWhenTheGameIsMoreSensitiveThanLearned) {
         for (int i = 0; i < 3; ++i) frame(0);
         // Learn: sweep the hand so the game turns and the gain is measured.
         for (int i = 0; i < 600; ++i) frame(0.5f * std::sin(i / 40.0f));
+        // Sights off while the hand holds still, then a quick turn to -0.35 rad (~0.25 s).
+        // (A target teleported in the same frame as the change would overshoot by about
+        // 1 rad at three frames of delay whatever the guard does: the counts go out before
+        // the game shows any of them. Teleports at an unchanged gain: Bf4CoreTests.)
+        const float from = 0.5f * std::sin(599 / 40.0f);
+        for (int i = 0; i < 30; ++i) frame(from);
         platform.mouseGainX *= 3.0f;
-        float worst = 0, worstLate = 0;
+        float worstPast = 0, worstLate = 0;
         for (int i = 0; i < 360; ++i) {
-            frame(-0.35f);
-            const float error = std::fabs(WrapPi(platform.gameAim.yaw - 0.5f + 0.35f));
-            worst = std::max(worst, error);
-            if (i >= 240) worstLate = std::max(worstLate, error);
+            frame(i < 22 ? from + (-0.35f - from) * float(i + 1) / 22.0f : -0.35f);
+            const float past = WrapPi(-0.35f + 0.5f - platform.gameAim.yaw); // > 0: beyond the target
+            worstPast = std::max(worstPast, past);
+            if (i >= 240) worstLate = std::max(worstLate, std::fabs(past));
         }
-        CHECK(worst < 1.0f);       // never swung far past the controller
+        CHECK(worstPast < 0.2f);   // never swung far past the controller
         CHECK(worstLate < 0.02f);  // and settled on it
     }
 }

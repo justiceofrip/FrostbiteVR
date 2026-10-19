@@ -180,6 +180,23 @@ public:
     std::atomic<std::uint64_t> eyeLoopScannedMb{0};
 
     // The renderer's copy of view 0 carries the aspect the view setup applied.
+    // The main view in the renderer's per-frame view buffer ([renderer+0x60] entry 0):
+    // camera-to-world at +0x40 (read-only; works without the view override installed).
+    bool ReadGameView(AimAngle& aim, float& nearZ, float& farZ) {
+        if (!core) return false;
+        const auto* global = core->Bindings().Find(names::kGameRenderer);
+        std::uintptr_t object = 0, views = 0;
+        if (!global || global->status != frostbite::ScanStatus::Ok || !ReadChecked(global->address, &object, 8) || !object ||
+            !ReadChecked(object + 0x60, &views, 8) || !views)
+            return false;
+        std::uint8_t rows[64];
+        if (!ReadChecked(views + kViewCopyOffset, rows, sizeof(rows)) || !ReadChecked(views + kViewNearOffset, &nearZ, 4) ||
+            !ReadChecked(views + kViewFarOffset, &farZ, 4))
+            return false;
+        aim = CameraAim(ReadViewTransform(rows).forward);
+        return std::isfinite(aim.yaw) && std::isfinite(aim.pitch);
+    }
+
     float ReadViewAspect() {
         void* renderer = viewOverride.Object();
         std::uintptr_t views = 0;
@@ -963,6 +980,11 @@ struct Adapter {
     std::deque<TimedPointerEvent> researchPointer;
     std::uint32_t researchWait = 0;
     unsigned researchKeyUp = 0, researchKeyFrames = 0;
+    std::uint32_t depthProbeFrames = 0, mouseProbeFrames = 0, sendKeyFrames = 0;
+    std::uint64_t depthProbeId = 0, mouseProbeId = 0;
+    std::int32_t mouseProbeX = 0, mouseProbeY = 0;
+    AimAngle mouseBefore{};
+    std::uint16_t sendKeyScan = 0;
 };
 
 Adapter* g_adapter = nullptr;
@@ -1053,8 +1075,11 @@ void OnPresent(Adapter& a, IDXGISwapChain* sc) {
         if (at != std::string::npos)
             a.log.Write("%s mouse_sends=%llu", status.substr(at, status.find('\n', at) - at).c_str(),
                         static_cast<unsigned long long>(a.platform.mouseSends));
-        a.log.Write("%s key_sends=%llu haptics_sent=%llu", a.core->Gestures().Describe().c_str(),
-                    static_cast<unsigned long long>(a.platform.keySends), static_cast<unsigned long long>(a.platform.hapticsSent));
+        const auto crouchAt = status.find(" crouch=");
+        const std::string crouch = crouchAt == std::string::npos ? std::string() : status.substr(crouchAt, status.find('\n', crouchAt) - crouchAt);
+        a.log.Write("%s key_sends=%llu haptics_sent=%llu%s", a.core->Gestures().Describe().c_str(),
+                    static_cast<unsigned long long>(a.platform.keySends), static_cast<unsigned long long>(a.platform.hapticsSent),
+                    crouch.c_str());
     }
 }
 
@@ -1619,6 +1644,45 @@ void ResearchAck(Adapter& a, std::uint64_t id, const char* result) {
 void ResearchTick(Adapter& a) {
     if (!a.session.developerFeatures || a.session.researchDumpDir.empty() || !a.platform.window) return;
     HWND hwnd = a.platform.window;
+    // 0. Follow-ups of depthprobe / mouse / sendkey (per frame).
+    if (a.sendKeyFrames && --a.sendKeyFrames == 0) Win32Platform::SendKey(a.sendKeyScan, false);
+    if (a.mouseProbeFrames && --a.mouseProbeFrames == 0) {
+        AimAngle after{};
+        float n = 0, f = 0;
+        char msg[240];
+        if (a.platform.ReadGameView(after, n, f)) {
+            const float dyaw = WrapPi(after.yaw - a.mouseBefore.yaw), dpitch = after.pitch - a.mouseBefore.pitch;
+            std::snprintf(msg, sizeof(msg), "mouse %d %d: yaw %.4f -> %.4f (%.6f rad/count) pitch %.4f -> %.4f (%.6f rad/count)",
+                          a.mouseProbeX, a.mouseProbeY, a.mouseBefore.yaw, after.yaw, a.mouseProbeX ? dyaw / a.mouseProbeX : 0.0f,
+                          a.mouseBefore.pitch, after.pitch, a.mouseProbeY ? dpitch / a.mouseProbeY : 0.0f);
+        } else {
+            std::snprintf(msg, sizeof(msg), "mouse %d %d: camera not readable afterwards", a.mouseProbeX, a.mouseProbeY);
+        }
+        a.log.Write("research %s", msg);
+        ResearchAck(a, a.mouseProbeId, msg);
+    }
+    if (a.depthProbeFrames && --a.depthProbeFrames == 0) {
+        AimAngle unused{};
+        float n = 0, f = 0;
+        a.platform.ReadGameView(unused, n, f);
+        bool written = false;
+        std::string depth;
+        ID3D11Device* device = nullptr;
+        if (a.platform.swapchain && SUCCEEDED(a.platform.swapchain->GetDevice(__uuidof(ID3D11Device), reinterpret_cast<void**>(&device)))) {
+            ID3D11DeviceContext* ctx = nullptr;
+            device->GetImmediateContext(&ctx);
+            if (ctx) {
+                written = a.platform.depthCapture.WriteBmp(ctx, a.session.logDir + "\\vr-snapshot-depth.bmp", n, f, &depth);
+                ctx->Release();
+            }
+            device->Release();
+        }
+        char planes[96];
+        std::snprintf(planes, sizeof(planes), " near=%.3f far=%.1f snapshot=%s", n, f, written ? "vr-snapshot-depth.bmp" : "none");
+        const std::string msg = a.platform.depthCapture.Describe() + planes + (depth.empty() ? "" : " " + depth);
+        a.log.Write("research depthprobe: %s", msg.c_str());
+        ResearchAck(a, a.depthProbeId, msg.c_str());
+    }
     // 1. Pending pointer/key events (one step per frame budget).
     if (a.researchKeyFrames && --a.researchKeyFrames == 0) {
         PostMessageW(hwnd, WM_KEYUP, a.researchKeyUp, 0xC0000001 | (MapVirtualKeyW(a.researchKeyUp, MAPVK_VK_TO_VSC) << 16));
@@ -1752,6 +1816,59 @@ void ResearchTick(Adapter& a) {
     case ResearchCommand::Kind::Type: {
         for (char ch : c.arg) PostMessageW(hwnd, WM_CHAR, static_cast<WPARAM>(ch == '_' ? ' ' : ch), 1);
         ResearchAck(a, c.id, ("type " + c.arg).c_str());
+        break;
+    }
+    case ResearchCommand::Kind::DepthProbe: {
+        bool ok = a.platform.depthCapture.Installed();
+        ID3D11Device* device = nullptr;
+        if (!ok && a.platform.swapchain &&
+            SUCCEEDED(a.platform.swapchain->GetDevice(__uuidof(ID3D11Device), reinterpret_cast<void**>(&device)))) {
+            ID3D11DeviceContext* ctx = nullptr;
+            device->GetImmediateContext(&ctx);
+            if (ctx) {
+                ok = a.platform.depthCapture.Install(ctx);
+                ctx->Release();
+            }
+            device->Release();
+        }
+        if (ok) {
+            a.depthProbeFrames = 120;
+            a.depthProbeId = c.id;
+            a.log.Write("research depthprobe: depth clear observer installed; report in ~120 frames");
+        } else {
+            ResearchAck(a, c.id, "depthprobe: refused (not d3d11.dll's function, or the hook failed)");
+        }
+        break;
+    }
+    case ResearchCommand::Kind::Mouse: {
+        float n = 0, f = 0;
+        if (GetForegroundWindow() != hwnd) { ResearchAck(a, c.id, "mouse: the game window is not focused"); break; }
+        if (!a.platform.ReadGameView(a.mouseBefore, n, f)) { ResearchAck(a, c.id, "mouse: camera not readable"); break; }
+        a.platform.SendMouse(c.x, c.y);
+        a.mouseProbeX = c.x;
+        a.mouseProbeY = c.y;
+        a.mouseProbeId = c.id;
+        a.mouseProbeFrames = 20;
+        break;
+    }
+    case ResearchCommand::Kind::SendKey: {
+        if (GetForegroundWindow() != hwnd) { ResearchAck(a, c.id, "sendkey: the game window is not focused"); break; }
+        if (a.sendKeyFrames) Win32Platform::SendKey(a.sendKeyScan, false);
+        a.sendKeyScan = static_cast<std::uint16_t>(c.value);
+        Win32Platform::SendKey(a.sendKeyScan, true);
+        a.sendKeyFrames = 6;
+        char msg[48];
+        std::snprintf(msg, sizeof(msg), "sendkey 0x%02x", static_cast<unsigned>(c.value));
+        ResearchAck(a, c.id, msg);
+        break;
+    }
+    case ResearchCommand::Kind::Setting: {
+        bool ok = false;
+        {
+            std::lock_guard<std::mutex> lock(a.coreMutex);
+            ok = a.core->SetMenuSetting(c.arg, c.x);
+        }
+        ResearchAck(a, c.id, ((ok ? "setting " : "setting refused: ") + c.arg + " " + std::to_string(c.x)).c_str());
         break;
     }
     case ResearchCommand::Kind::Unknown:

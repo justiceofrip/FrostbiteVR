@@ -9,25 +9,29 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
 - **Actual-game check**: unattended runs on the real bf4.exe (build 179547, sha256
   `9d9d1a3f...c6c2aa`), AMD RX 9070 XT, Steam -> EA app launch, campaign only, no headset.
 - **Emulated**: Bf4EmuHost (WARP or GPU), fake OpenXR runtimes, launcher emulated sessions.
+- **Live, simulated headset** (developer, 2026-10-19): the real bf4.exe in a campaign level
+  with the real FvrXrHost on `FvrSimOpenXr` (below): proves the game and host side end to
+  end (poses reaching the camera, eye crops, labels, keys, mouse, pad, depth), not optics,
+  comfort, a real runtime's timing or real controllers.
 - **Headset acceptance**: theater mode (game screen on a virtual screen, laser on the
   menus) works in the player's headset (2026-10-19, SteamVR). Head tracking was seen in
   three sessions (09:16-10:19; rotation was inverted and the gun oversized, both fixed in
   0.4.16); everything built since 0.4.17 is unseen in a headset.
 
-## At a glance (installed: 0.4.42-local)
+## At a glance (installed: 0.4.46-local)
 
 | Feature | State | Evidence |
 | --- | --- | --- |
 | Theater screen + laser menus | on | headset |
-| Head-tracked campaign view (6DoF head) | on | headset (earlier build); rate work emulated |
-| Two frame channels + next pose in the capturing frame | on | emulated |
-| Controller aim (mouse look), aim dot, two-handed aim, snap turn | on | emulated (delay/gain/gap cases) |
-| Comfort vignette, walk toward body/gun | on / body | emulated |
-| Holsters (keys 1/2/3, G, F) with pulses | on | emulated |
-| Manual reload (magazine gesture; B tap/hold) with markers | on (player setting) | emulated |
-| HUD corners (ammo, minimap insets) | on | real frame rendered offline |
-| Physical crouch | off | unit-tested |
-| 3D from depth (depth buffer) | off | WARP checks |
+| Head-tracked campaign view (6DoF head) | on | headset (earlier build); live sim: direction, labels 100 % |
+| Two frame channels + next pose in the capturing frame | on | live sim: 44.8 pairs/s at 118.6 game fps, 0 failures |
+| Controller aim (mouse look), aim dot, two-handed aim, snap turn | on | live sim: gain learned = measured, 20 deg -> 19.6 deg |
+| Comfort vignette, walk toward body/gun | on / body | live sim (vignette seen while walking) |
+| Holsters (keys 1/2/3, G, F) with pulses | on | live sim: 1 and 3 switch weapons; 2, G, F not seen |
+| Manual reload (magazine gesture; B tap/hold) with markers | on (player setting) | live sim: B, belt, magwell -> BF4 reloads |
+| HUD corners (ammo, minimap insets) | on | live sim (eye snapshots) |
+| Physical crouch | off | unit-tested; live sim suggestive |
+| 3D from depth (depth buffer) | off | live sim: depth found, parallax direction right |
 | BF4 split stereo ("3D depth", developer) | off | freezes live; watchdog armed |
 | Hands / IK, gun at the hand | not built | needs live RE |
 
@@ -44,7 +48,62 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
 - Developer research channel (developer sessions with `research_dump_image` only):
   snapshots, clicks, `dumpimage` (decrypted bf4.exe image for offline RE), background
   vtable scan, read-only `peek`. It never writes game memory (a `poke` command was removed
-  after the policy guard blocked it).
+  after the policy guard blocked it). Added 2026-10-19: `depthprobe` (installs the depth
+  capture, reports it and writes `vr-snapshot-depth.bmp`), `mouse dx dy` (SendInput counts,
+  camera yaw/pitch before and 20 frames after), `sendkey <scan>` (a key as the holsters
+  press it) and `setting <id> <n>` (a mod menu item as if chosen in the headset).
+- Live input facts (2026-10-19, prologue): BF4's mouse look turns 0.00140 rad per count on
+  both axes, linear (200 and 100 counts alike, exact return), +x turns right, +y looks
+  down; the controller aim's first estimate (0.003) is 2.1x that, so it starts at about
+  half speed until it learns (it learned 0.001400 live). SendInput scan codes reach the
+  game: V switched AUTO -> SINGLE and back, 3 drew the underbarrel launcher, 1 the rifle; 2
+  did nothing (no sidearm in that loadout, as far as the HUD shows).
+
+## Simulated headset: live sessions without one (2026-10-19)
+
+- `tools/simxr/SimOpenXrRuntime.cpp` -> `FvrSimOpenXr.dll` (x64, developer only, never
+  packaged or registered): an OpenXR runtime the XR host loads through the developer
+  `xr_loader` setting. Unlike the test fixtures it has no script and no end: 90 Hz on the
+  QPC clock (the clock the input path expects) until the host, a `stop` line or a
+  `simxr-stop` file ends it; Quest-2-like asymmetric eyes, 1440x1584 per eye, 64 mm IPD.
+  `%FVR_SIMXR_DIR%\simxr.txt` sets head and hand poses, triggers, grips, sticks and
+  buttons (re-read when it changes); `snap` writes the submitted eyes side by side (and
+  each quad layer) as BMP; `simxr-ack.txt` reports frames, layers and haptic pulses.
+  `tools/simxr/Sim.ps1` edits the file and turns snapshots into PNGs.
+- Pose-label check: `sig A|B` records a fingerprint of the left eye at two head poses,
+  `flip A B` alternates the head between them every frame, and each new pair is classified
+  by its pixels against the pose it is labelled with. Mislabelled pairs (pixels from
+  another pose) are exactly what makes the world swim in a headset.
+- Live results (0.4.44-local and 0.4.45-local, prologue, two sessions of ~10 and ~6 min):
+  - World lane on by default in the level; 2 bridges; 21,468 pairs in the first session,
+    0 bridge or resampler failures, 1 cancel. Host: 53,159 frames at exactly 90 Hz, all
+    with valid tracking; request-to-pair latency 27.3 ms mean (0.4 % over 50 ms, max
+    122 ms); 52 timeouts in ~21.5k requests; oldest re-shown pair 244 ms (limit 250).
+  - Rate: 44.8 pairs/s at 118.6 game fps with frame sync 2; about 52 pairs/s with 1.
+  - Labels: head flipping 90 degrees every frame, 355/355 pairs at frame sync 2 and
+    396/396 at frame sync 1 showed exactly their labelled pose (0 mismatched, 0
+    ambiguous). Frame sync 1 is therefore safe at this frame rate; the default stays 2
+    until a headset session agrees (it is in the developer menu).
+  - Head turned 30 degrees right: the view turns right; the aim dot stays on the gun's
+    aim (moves left). The game's own crosshair stays at the frame centre (the head), so
+    in VR only the aim dot shows where shots go. The first-person gun follows the head.
+  - Controller aim: a 20 degree hand turn put the aim 19.6 degrees right (measured in the
+    eye's tangent space); +-60 / +-30 degree sweeps learned 0.001400 / -0.001400 (the
+    measured mouse gain); snap turn moved the body exactly 30 degrees; two-handed aim
+    engaged and steered by the line between the hands (front hand 12 cm right: 21.6
+    degrees right, 3.8 down). Found and fixed live: letting go of the two-handed grip made
+    the overshoot guard grow the pitch gain sevenfold (Controller aiming, below); the same
+    sequence twice on the fix: gains unchanged, 0 guards.
+  - Holsters: left hand over the left shoulder + grip drew the underbarrel launcher (HUD
+    1/11 SINGLE), right hand over the right shoulder back to the rifle; hover pulses
+    reached the host's haptics.
+  - Magazine reload: B tap dropped the magazine, left grip at the belt took one, bringing
+    it to the magazine well seated it and BF4 played its own reload (20/105 -> 21/104).
+  - HUD corners and the comfort vignette (while walking) appear in both eyes as designed.
+  - Physical crouch: with the head 0.4 m low the view sat lower with crouch on than off,
+    and standing restored it; the dark spot made this suggestive only. Crouch state and
+    toggles are now in the periodic gestures log line.
+  - 3D from depth: see that section (depth found, parallax direction right).
 
 ## Head tracking: the world lane (2026-10-19, built; seen in a headset)
 
@@ -79,8 +138,9 @@ the theater screen. Pieces (all on the analysed build only):
   runs, lease-only camera); Bf4Emulated world phase (the emulated host receives pairs and
   each eye carries its own crop); `Run-Bf4TheaterXr.ps1 -World`: the real FvrXrHost on the
   fake OpenXR runtime submitted 165 pairs from the emulated game, 0 rejected, 0 runtime
-  errors. Not yet seen in the real game: the settle depth (main thread vs render thread),
-  BF4 accepting the wider FOV, pair rate in game.
+  errors. Live on the simulated headset (above): BF4 renders the wider FOV (1.878 rad for
+  the simulated eyes), every checked pair carries its labelled pose at frame sync 1 and 2,
+  44.8 pairs/s at frame sync 2.
 - Frame shape (worked out, not yet seen): the frame is rendered tall enough for the
   taller eye (+3 %) at the window's 16:9, so it is about 1.7x wider than the two eyes need
   (Quest 3 numbers: frame tangent ~2.35 across vs ~1.38 seen). The outer part of each side
@@ -138,7 +198,8 @@ the theater screen. Pieces (all on the analysed build only):
   frame, older pair first and the newer held, stagger, suspend hands back the held pair,
   input on channel 0); `Run-Bf4TheaterXr.ps1 -World -FrameChannels 2`: 237 pairs (119 +
   118), 0 rejected, vs 47 with one channel in the same emulated run (untracked capture,
-  so this measures the transport, not the settle frames). Not yet seen in the real game.
+  so this measures the transport, not the settle frames). Live on the simulated headset:
+  both channels used, 0.24 % of requests timed out, rates above.
 
 ## Holsters and magazine reload as gestures (2026-10-19, built; emulated only)
 
@@ -174,8 +235,8 @@ the theater screen. Pieces (all on the analysed build only):
   self-calibrated standing height pulses BF4's crouch toggle (pad B), standing back above
   20 cm toggles it off (`Bf4PhysicalCrouch.h`). The stance is believed, not read: it follows
   our pulses, the player's own crouch button (which is never overridden until the body
-  changes posture) and BF4's own stand-ups on sprint and jump. Unit-tested; status
-  `crouch=... crouch_toggles=`.
+  changes posture) and BF4's own stand-ups on sprint and jump. Unit-tested; status and the
+  periodic gestures log line: `crouch=... crouch_toggles=`.
 - Mod menu: "Body holsters: Off / On" (default on). Status/log: `gestures gun=...
   magazine_out=... draws= throws= knives= ejects= grabs= seats= drops= quick_reloads=`
   (logged at each change), plus `key_sends` / `haptics_sent` every 600 frames.
@@ -183,9 +244,10 @@ the theater screen. Pieces (all on the analysed build only):
   holsters off; eject/hold fire/persistence/drop/seat/per-gun/quick reload/level start)
   and an emulated campaign through the whole core (keys reach the platform and go up,
   pulses, RB/LB not pressed by gesture grips, RT held off, X on seating); hover pulses and
-  marker placement/parallax unit-tested; the WARP check draws a marker ring. Not yet seen in
-  the real game: the default key bindings, whether BF4 mixes keyboard selection with the
-  pad, holster positions for the player's body.
+  marker placement/parallax unit-tested; the WARP check draws a marker ring. Live on the
+  simulated headset: keys 1 and 3 by gesture switch weapons, the magazine gesture's pad X
+  reloads after keyboard selection (BF4 takes both), hover pulses arrive. Not seen: key 2
+  (no sidearm in the prologue), G and F, holster positions on a real body.
 
 ## Controller aiming (2026-10-19, built; emulated only)
 
@@ -226,8 +288,23 @@ the theater screen. Pieces (all on the analysed build only):
   window by how far the game turned (0.2 rad: fully) rather than by counts, so one aim
   step learns the gain; learned gains survive re-engagement. Overshoot guard: when the
   error swings past zero by more than 30 % of the swing before it, the estimate grows by
-  that ratio at once (a threefold sensitivity jump, e.g. leaving aim-down-sights, settles
-  without running away; emulated test at two delays). Log: `guards=`.
+  that ratio at once, at most 4x (a threefold sensitivity jump, e.g. leaving
+  aim-down-sights, settles without running away; emulated test at two delays). Log:
+  `guards=`.
+- Guard fix (live, 2026-10-19): a sign change the target makes (it moved more than the
+  game in that update: a flick, snap turn, two-handed grip taken or let go) is not an
+  overshoot and starts a new swing. Before, letting go of the two-handed grip grew the
+  pitch gain sevenfold (-0.0014 -> -0.0098; slow vertical aim until relearned). Chosen with
+  `tools/models/aim_guard_model.py` (delays 2-3 frames, sensitivity 1-5x, steps, ramps,
+  teleports, sweeps):
+  clearing the record on any fast target motion blinded the guard and ran away on moving
+  targets (up to 23 rad); judging by cause keeps the original protection in every modelled
+  case and removes most false alarms (sweeps at the right gain: 5 -> 0). Tests: target
+  teleports at a learned gain change neither gain nor guard count (fails before); the
+  sensitivity test now changes sensitivity while the hand holds and then turns quickly
+  (its old form teleported the target in the same frame, which overshoots ~1 rad at three
+  frames of delay whatever the guard does: the counts leave before the game shows any;
+  it had passed only because the teleport misfired the guard).
 - Paused game (BF4's Esc menu moves a cursor with the mouse): when a 20-sample window sent
   200 counts or more and the game did not turn at all, aiming goes quiet for 1 s, then 2,
   4, 8 s while it keeps happening; any turn resets that. (The old 1500-count threshold
@@ -245,8 +322,8 @@ the theater screen. Pieces (all on the analysed build only):
   Status/log: `controller_aim=... gain=... mutes=... mouse_sends=...`.
 - Evidence: unit tests (convergence onto controller yaw/pitch, gain learning with signs,
   body turning, release, stall guard) and an emulated campaign session with a one-frame
-  input delay (core + fake game). Not seen in the real game: whether BF4 mixes mouse
-  look with the virtual pad, vehicles, recoil interplay.
+  input delay (core + fake game); live on the simulated headset (above). Not seen in the
+  real game: vehicles, recoil interplay, aim-down-sights sensitivity.
 - The gun is still the game's first-person model at the game camera (it points where the
   controller points); hands/IK are separate work.
 - Aim dot (mod menu "Aim dot", default on): BF4 draws its crosshair at the centre of the
@@ -265,15 +342,26 @@ using the frame's depth buffer (depth-image-based rendering; no simulation or re
 
 - `Bf4DepthCapture`: finds the frame's main depth buffer through the game's own
   `ClearDepthStencilView` calls (MinHook detours on d3d11.dll's implementations; the
-  calls always proceed): the largest single-sample depth target with the backbuffer's
-  aspect. The D3D11 runtime resolves a context's vtable entries lazily and immediate and
-  deferred contexts have their own implementations, so the install resolves them first
-  (one clear of a 4x4 target of ours on each) and hooks each implementation it sees,
-  re-checking at every Present. Just before each clear of the main depth a copy is recorded
-  on the same context (in order, even on deferred contexts). Frostbite clears depth again
-  before the first-person weapon (BC2 does), so with two or more clears a frame the copy
-  from before the last clear holds the world; with one, the live buffer is copied at
-  Present. A target picked before the backbuffer's shape was known is dropped once it is.
+  calls always proceed): the largest depth target (single- or multisampled) with the
+  backbuffer's aspect. The D3D11 runtime resolves a context's vtable entries lazily and
+  immediate and deferred contexts have their own implementations, so the install resolves
+  them first (one clear of a 4x4 target of ours on each) and hooks each implementation it
+  sees, re-checking at every Present. With two or more clears of it a frame (BC2 clears
+  again before the first-person weapon) a copy is recorded just before each clear on the
+  same context (in order, even on deferred contexts) and the one from before the last
+  clear holds the world; with one clear a frame the live buffer is copied at Present and
+  nothing before the clears (live, that pre-clear copy was a 65 MB MSAA copy every frame
+  for nothing; now `copies=0`). A target picked before the backbuffer's shape was known is
+  dropped once it is.
+- Live (simulated headset, prologue): BF4's main depth is 2688x1512 (the render
+  resolution: 1920x1080 at 140 %), R24G8_TYPELESS (44), 4x MSAA, cleared to 1.0 (standard
+  depth), once a frame: the first-person gun is drawn into the same buffer (nearest
+  0.12-0.13 m), so the depth at Present has the gun. The front end uses a single-sample one.
+  `depthprobe` snapshot (sample 0 drawn into a float target under our own context state,
+  log scale): gun, holo sight, rubble, girders and wall, aligned with the frame; centre
+  3.3 m. With 3D from depth on, the holo sight shifts right in the left eye and left in the
+  right eye (crossed: in front), about 110 px between the 1440 px eyes, i.e. about 0.5 m;
+  edges at depth jumps show doubled outlines (disocclusion, as expected of the method).
 - Eye resampler: each eye samples the frame at its own tangent + b/z (b = signed half eye
   distance, z = view distance from the depth with the view's near/far, +0xBC/+0xC0, read
   live as 0.06 / 20000; reversed depth when the buffer clears to 0), by a four-step
@@ -281,8 +369,9 @@ using the frame's depth buffer (depth-image-based rendering; no simulation or re
   is held; nearer would mean a very strong per-eye shift). The aim dot is drawn where the source point under the aim lands in each eye, so it sits on the surface it covers (no double image on a near target); gesture markers keep their own per-eye placement.
 - Mod menu "3D from depth: Off / On" (default off). Log: `depth_capture installed= main=WxH
   format= clear= split= ... msaa_clears= hooked=` every 600 frames, `depth_pairs=`; developer sessions
-  write `vr-snapshot-depth.bmp` (near bright, far dark) the first time it works and with
-  the other snapshots.
+  write `vr-snapshot-depth.bmp` (log scale: 0.1 m white, 200 m black; multisampled buffers
+  read at sample 0) the first time it works, with the other snapshots and on `depthprobe`
+  (which also logs `centre= nearest= far_plane=`).
 - Evidence: linearisation and per-eye shift signs unit-tested; WARP checks in Bf4Emulated:
   near content shifts each eye its own way while far content stays (shader), and the real
   detour picks a 16:9 depth over a larger square shadow map, detects two clears a frame,
@@ -292,8 +381,9 @@ using the frame's depth buffer (depth-image-based rendering; no simulation or re
   sample 0 through a Texture2DMS view (pixel shader now ps_4_1: SM 4.0 cannot declare a
   Texture2DMS without a fixed sample count; the WARP check caught that compile failure,
   which would have disabled the world lane); WARP checks for a 4x MSAA depth in the
-  shader and in the capture. Not yet seen in the game: which target BF4 clears, its
-  format, whether the weapon pass clears depth, how the parallax looks.
+  shader, in the capture and in the snapshot (sample 0 of a 4x copy reads back 0.12 m).
+  Not yet seen: how it feels in a headset (comfort, the doubled edges, the gun at the
+  0.4 m clamp).
 
 ## Stereo: BF4's own two-eye render in the world lane (2026-10-19)
 
@@ -469,14 +559,18 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
   dead "Screen distance" entry is gone (the host has no way to receive it yet). Unit
   test: every item on the panel, none overlapping; a GDI render of the developer menu was
   checked by eye.
-- Build.ps1 after the menu fonts: x64 284/284, x86 283/283. Bf4CoreTests 78 cases;
+- Build.ps1 after the guard fix and the simulated headset: x64 284/284, x86 283/283.
+  Bf4CoreTests 81 cases (new: research commands, target teleports at a learned gain);
   Bf4Emulated pass (theater, world lane, stereo probe, census, lockdown, gestures; WARP:
-  eye resampler reticle/markers/vignette/depth stereo/HUD corners, depth capture detour);
+  eye resampler reticle/markers/vignette/depth stereo/HUD corners, depth capture detour
+  incl. the MSAA snapshot);
   launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
   `-World -FrameChannels 2` 5/5 (76-237 pairs, machine-dependent); `-World` with one
   channel 4/4 (47 pairs).
-- Installed locally: runtime/bf4 0.4.42-local (rollback 0.4.41-local). Developer
-  sessions still run the read-only probes and the firing census.
+- Installed locally: runtime/bf4 0.4.46-local (rollback 0.4.45-local, the build of the
+  second live session; 0.4.46 adds the crouch fields to the log); launcher settings
+  restored to the player's after the developer sessions. Developer sessions still run the
+  read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the
   framework's `StereoMath.h` (`Quat` = `Quaternion`; Pose is `{position, orientation}`).
 
@@ -497,10 +591,13 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
 
 ## Open / blocked
 
-- Headset check of 0.4.42 (BF4-FIRST-SESSION.md): head rotation direction, gun size,
-  comfort, the pair rate (was ~17-25 Hz; expected about game fps / 2 at frame sync 2),
-  controller aim (mouse look reaching the game, its learned gain), gestures, HUD corners,
-  3D from depth (which depth target it finds; `vr-snapshot-depth.bmp`).
+- Headset check of 0.4.46 (BF4-FIRST-SESSION.md). The simulated headset settled the game
+  side (direction, labels, rate, aim, gestures, depth target); what only a headset can
+  answer: comfort at ~45 pairs/s (and whether frame sync 1, ~52/s, still holds there),
+  gun size and the head-locked gun, the HUD corners' readability, 3D from depth's feel,
+  holster positions on a real body, the laser on "Resume".
+- In VR the game's crosshair marks the head, not the gun (the aim dot is the true aim);
+  hiding it needs the UI pass (native RE).
 - 3D: the stall after the split render engages; the watchdog's stacks show where.
 - Laser click on the campaign screen's "Resume" (main menu) did not register while other
   menu clicks did. Cause assumed: no click lock, so hand jitter while the trigger was held
@@ -508,7 +605,7 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
   virtual pad. Now the cursor holds its press position unless the laser moves more than
   6 % of the screen, and the pad's triggers are released while the laser points at the
   screen outside campaign play (unit-tested; live check pending; clicks are logged).
-- Holsters and the magazine gesture: first live check (keys, positions, pulses).
+- Holsters: key 2 (sidearm), G (grenade) and F (knife) not yet seen working live.
 - The census holder chain matched nothing live (27 firing objects, 0 holders): redo the
   walk from the live firing vtable `+0x1D53F18`.
 - Mod menu in VR: opens with the menu button, drawn by the adapter (VrPanel + GDI) on the

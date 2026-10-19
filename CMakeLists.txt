@@ -295,6 +295,12 @@ if(WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 8)
     target_include_directories(AmmoCounterHudWarpTests PRIVATE src/xr third_party/openxr-1.1.61/include)
     target_link_libraries(AmmoCounterHudWarpTests PRIVATE FvrOpenXR)
   endif()
+  # Developer-only simulated headset for live sessions without one (the "xr_loader"
+  # developer setting); never packaged or registered as a system runtime.
+  add_library(FvrSimOpenXr SHARED tools/simxr/SimOpenXrRuntime.cpp)
+  target_include_directories(FvrSimOpenXr PRIVATE third_party/openxr-1.1.61/include)
+  target_link_libraries(FvrSimOpenXr PRIVATE d3d11 dxgi)
+  target_compile_definitions(FvrSimOpenXr PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
   add_executable(BC2XrHost src/platform/windows/OpenXrHostMain.cpp)
   target_link_libraries(BC2XrHost PRIVATE FvrOpenXR FvrDiagnosticScene FvrFrameChannel BC2BodyAmmoRenderer)
   add_executable(BC2SceneProbe src/platform/windows/SceneProbe.cpp)

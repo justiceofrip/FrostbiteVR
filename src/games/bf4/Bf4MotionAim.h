@@ -122,14 +122,23 @@ public:
         twoHanded_ = TwoHanded(in, aim);
         out.twoHanded = twoHanded_;
         desired_ = {WrapPi(bodyYaw_ + aim.yaw), aim.pitch};
+        // What moved since the last update: the target (hand, snap turn, the second hand
+        // taking over or letting go) or the game. The guard only judges swings the game made.
+        const float targetX = haveDesired_ ? WrapPi(desired_.yaw - lastDesired_.yaw) : 0.0f;
+        const float targetY = haveDesired_ ? desired_.pitch - lastDesired_.pitch : 0.0f;
+        const float gameX = haveDesired_ ? WrapPi(in.game.yaw - lastGuardGame_.yaw) : 0.0f;
+        const float gameY = haveDesired_ ? in.game.pitch - lastGuardGame_.pitch : 0.0f;
+        lastDesired_ = desired_;
+        lastGuardGame_ = in.game;
+        haveDesired_ = true;
         // Counts sent in the last frames may not show in the game's aim yet (its input is a
         // frame or two behind): count them as done, or the loop overshoots and, with a
         // longer delay, oscillates.
         const float flightX = gainX_ * static_cast<float>(flightX_[0] + flightX_[1]);
         const float flightY = gainY_ * static_cast<float>(flightY_[0] + flightY_[1]);
         ++updates_;
-        GuardOvershoot(WrapPi(desired_.yaw - in.game.yaw), guardX_, gainX_);
-        GuardOvershoot(desired_.pitch - in.game.pitch, guardY_, gainY_);
+        GuardOvershoot(WrapPi(desired_.yaw - in.game.yaw), targetX, gameX, guardX_, gainX_);
+        GuardOvershoot(desired_.pitch - in.game.pitch, targetY, gameY, guardY_, gainY_);
         out.mouseX = Counts(WrapPi(desired_.yaw - in.game.yaw) - flightX, gainX_);
         out.mouseY = Counts(desired_.pitch - in.game.pitch - flightY, gainY_);
         flightX_ = {out.mouseX, flightX_[0]};
@@ -170,7 +179,10 @@ private:
     // Overshoot: the aim error swung past zero by more than kOvershoot of the swing before
     // it. The game turns more per count than the estimate says (e.g. leaving aim-down-sights
     // raises its sensitivity), so the estimate grows by the overshoot ratio at once (smaller
-    // steps); the regular learning then settles it on the measured value. Simulated: a
+    // steps; at most kMaxGuardStep a time); the regular learning then settles it on the
+    // measured value. A sign change the target made (it moved more than the game in that
+    // update) is no overshoot. tools/models/aim_guard_model.py: this keeps the protection of
+    // judging every sign change and removes most false alarms of moving targets. Simulated: a
     // threefold sensitivity jump stays within ~0.1 rad of overshoot for 1-2 frames of delay,
     // where waiting for repeated swings let it run away at 3 frames.
     struct Guard {
@@ -179,12 +191,19 @@ private:
         float previous = -1; // the swing before it (-1: none to compare with)
     };
     static constexpr float kOvershoot = 0.3f;
-    void GuardOvershoot(float error, Guard& g, float& gain) {
+    static constexpr float kMaxGuardStep = 4.0f; // one guard grows the estimate at most this much
+    // `target` and `game`: how far each moved since the last update.
+    void GuardOvershoot(float error, float target, float game, Guard& g, float& gain) {
         if (std::fabs(error) < 0.01f) return;
         const int now = error > 0 ? 1 : -1;
         if (g.sign && now != g.sign) {
-            if (g.previous > 0 && g.peak > kOvershoot * g.previous) {
-                gain = std::fmax(-0.05f, std::fmin(0.05f, gain * (1 + g.peak / g.previous)));
+            if (std::fabs(target) > std::fabs(game)) {
+                // The target crossed the game, not the game the target (live, 2026-10-19:
+                // letting go of a two-handed grip grew the pitch gain sevenfold this way):
+                // no overshoot; a new swing starts here.
+                g = {};
+            } else if (g.previous > 0 && g.peak > kOvershoot * g.previous) {
+                gain = std::fmax(-0.05f, std::fmin(0.05f, gain * std::fmin(kMaxGuardStep, 1 + g.peak / g.previous)));
                 g.previous = -1;
                 ++guards_;
             } else {
@@ -209,6 +228,7 @@ private:
         pendingX_ = pendingY_ = 0;
         flightX_ = flightY_ = {};
         guardX_ = guardY_ = {};
+        haveDesired_ = false;
         windowCountsX_ = windowCountsY_ = 0;
         windowYaw_ = windowPitch_ = 0;
         windowFrames_ = 0;
@@ -263,7 +283,8 @@ private:
     bool engaged_ = false, haveGame_ = false;
     float bodyYaw_ = 0, lastHandYaw_ = 0;
     float gainX_ = kInitialGain, gainY_ = -kInitialGain; // mouse down looks down: negative pitch per count
-    AimAngle lastGame_{}, desired_{};
+    AimAngle lastGame_{}, desired_{}, lastDesired_{}, lastGuardGame_{};
+    bool haveDesired_ = false;
     std::uint64_t lastSample_ = 0;
     long long pendingX_ = 0, pendingY_ = 0, windowCountsX_ = 0, windowCountsY_ = 0;
     std::array<int, 2> flightX_{}, flightY_{}; // counts sent in the last two updates

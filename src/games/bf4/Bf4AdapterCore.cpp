@@ -202,6 +202,18 @@ void AdapterCore::SetReloadMode(interaction::ReloadMode requested) {
                   (reloadMode_.note.empty() ? "" : " (" + reloadMode_.note + ")"));
 }
 
+bool AdapterCore::SetMenuSetting(const std::string& id, int value) {
+    ui::MenuItem* item = modMenu_.Find(id);
+    if (!item || !item->enabled || value < 0) return false;
+    if (item->kind == ui::MenuItemKind::Choice && value >= static_cast<int>(item->choices.size())) return false;
+    if (item->kind == ui::MenuItemKind::Toggle && value > 1) return false;
+    if (item->kind != ui::MenuItemKind::Choice && item->kind != ui::MenuItemKind::Toggle) return false;
+    item->value = value;
+    ApplyMenuCommand(InterpretChange(*item));
+    RefreshModMenu(modMenu_, caps_, session_.developerFeatures);
+    return true;
+}
+
 void AdapterCore::ResolveReload() {
     reloadMode_ = ResolveBf4ReloadMode(session_.reloadMode, caps_, session_.developerFeatures);
 }

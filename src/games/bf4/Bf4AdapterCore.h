@@ -151,6 +151,9 @@ public:
 
     // Runtime setting change from the in-headset mod menu.
     void SetReloadMode(interaction::ReloadMode requested);
+    // A mod menu item set to `value` as if chosen in the headset (developer research);
+    // false for an unknown or disabled item or a value out of range.
+    bool SetMenuSetting(const std::string& id, int value);
     // Session default for "3D depth" (off after a session that ended with 3D on).
     void SetWorldStereo(bool on);
 

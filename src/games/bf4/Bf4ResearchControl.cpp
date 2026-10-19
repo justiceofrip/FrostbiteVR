@@ -22,6 +22,11 @@ bool ParseHex(std::string_view t, std::uint64_t& out) {
     return !t.empty() && ec == std::errc{} && p == t.data() + t.size();
 }
 
+bool ParseInt(std::string_view t, std::int32_t& out) {
+    auto [p, ec] = std::from_chars(t.data(), t.data() + t.size(), out);
+    return !t.empty() && ec == std::errc{} && p == t.data() + t.size();
+}
+
 bool ParseUnit(std::string_view t, float& out) {
     const std::string v(t);
     char* end = nullptr;
@@ -60,6 +65,15 @@ std::vector<ResearchCommand> ParseResearchCommands(std::string_view text, std::u
             } else c.arg = std::string(verb);
         }
         else if (verb == "type" && !a1.empty() && a1.size() <= 120) { c.kind = ResearchCommand::Kind::Type; c.arg = std::string(a1); }
+        else if (verb == "depthprobe") c.kind = ResearchCommand::Kind::DepthProbe;
+        else if (verb == "mouse" && ParseInt(a1, c.x) && ParseInt(a2, c.y) && std::abs(c.x) <= 2000 && std::abs(c.y) <= 2000)
+            c.kind = ResearchCommand::Kind::Mouse;
+        else if (verb == "sendkey" && ParseHex(a1, c.value) && c.value >= 1 && c.value <= 0xFF)
+            c.kind = ResearchCommand::Kind::SendKey;
+        else if (verb == "setting" && !a1.empty() && a1.size() <= 40 && ParseInt(a2, c.x) && c.x >= 0 && c.x <= 16) {
+            c.kind = ResearchCommand::Kind::Setting;
+            c.arg = std::string(a1);
+        }
 
         else c.arg = std::string(verb);
         // A snap name becomes a file name: keep it to [A-Za-z0-9_-].

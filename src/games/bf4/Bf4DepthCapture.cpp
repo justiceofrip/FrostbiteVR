@@ -1,6 +1,8 @@
 #include "Bf4DepthCapture.h"
 
 #include <MinHook.h>
+#include <d3d11_1.h>
+#include <d3dcompiler.h>
 
 #include <array>
 #include <atomic>
@@ -171,6 +173,9 @@ void DepthCapture::OnClear(ID3D11DeviceContext* context, ID3D11DepthStencilView*
     lastMainClear_ = stats_.presents;
     stats_.clearValue = value;
     if (d.SampleDesc.Count != 1) ++stats_.msaaRefused; // counted only: copied as it is, read per sample
+    // One clear a frame: the copy at Present replaces anything taken here (a whole MSAA
+    // buffer, 65 MB at BF4's 2688x1512x4, for nothing).
+    if (!stats_.split) return;
     ComPtr<ID3D11Device> device;
     context->GetDevice(&device);
     if (!EnsureCopy(device.Get())) return;
@@ -229,25 +234,111 @@ std::string DepthCapture::Describe() const {
     return line;
 }
 
-bool DepthCapture::WriteBmp(ID3D11DeviceContext* immediate, const std::string& path, float nearZ, float farZ) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    if (!copy_ || !immediate) return false;
+namespace {
+// Sample 0 of a multisampled depth copy into a float target: a full-screen triangle under
+// our own device context state (the game's bindings are swapped out and back untouched).
+constexpr char kSampleZero[] = R"(
+Texture2DMS<float> depthMS : register(t0);
+float4 VS(uint id : SV_VertexID) : SV_Position {
+    const float2 uv = float2((id << 1) & 2, id & 2);
+    return float4(uv * float2(2, -2) + float2(-1, 1), 0, 1);
+}
+float PS(float4 p : SV_Position) : SV_Target { return depthMS.Load(int2(p.xy), 0); }
+)";
+
+DXGI_FORMAT DepthSrvFormat(DXGI_FORMAT typeless) {
+    switch (typeless) {
+    case DXGI_FORMAT_R24G8_TYPELESS: return DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
+    case DXGI_FORMAT_R32G8X24_TYPELESS: return DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS;
+    case DXGI_FORMAT_R32_TYPELESS: return DXGI_FORMAT_R32_FLOAT;
+    case DXGI_FORMAT_R16_TYPELESS: return DXGI_FORMAT_R16_UNORM;
+    default: return DXGI_FORMAT_UNKNOWN;
+    }
+}
+
+bool ResolveSampleZero(ID3D11DeviceContext* immediate, ID3D11Texture2D* msaa, ComPtr<ID3D11Texture2D>& out) {
+    ComPtr<ID3D11Device> device;
+    immediate->GetDevice(&device);
+    ComPtr<ID3D11Device1> device1;
+    ComPtr<ID3D11DeviceContext1> context1;
+    if (!device || FAILED(device.As(&device1)) || FAILED(immediate->QueryInterface(IID_PPV_ARGS(&context1)))) return false;
+    D3D11_TEXTURE2D_DESC d{};
+    msaa->GetDesc(&d);
+    const DXGI_FORMAT view = DepthSrvFormat(d.Format);
+    if (view == DXGI_FORMAT_UNKNOWN) return false;
+    ComPtr<ID3DBlob> vs, ps;
+    if (FAILED(D3DCompile(kSampleZero, sizeof(kSampleZero) - 1, "fvr_depth_sample0", nullptr, nullptr, "VS", "vs_4_1", 0, 0, &vs,
+                          nullptr)) ||
+        FAILED(D3DCompile(kSampleZero, sizeof(kSampleZero) - 1, "fvr_depth_sample0", nullptr, nullptr, "PS", "ps_4_1", 0, 0, &ps,
+                          nullptr)))
+        return false;
+    ComPtr<ID3D11VertexShader> vertex;
+    ComPtr<ID3D11PixelShader> pixel;
+    ComPtr<ID3D11ShaderResourceView> srv;
+    ComPtr<ID3D11RenderTargetView> rtv;
+    D3D11_SHADER_RESOURCE_VIEW_DESC sd{};
+    sd.Format = view;
+    sd.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DMS;
+    D3D11_TEXTURE2D_DESC td{};
+    td.Width = d.Width;
+    td.Height = d.Height;
+    td.MipLevels = td.ArraySize = 1;
+    td.Format = DXGI_FORMAT_R32_FLOAT;
+    td.SampleDesc.Count = 1;
+    td.Usage = D3D11_USAGE_DEFAULT;
+    td.BindFlags = D3D11_BIND_RENDER_TARGET;
+    if (FAILED(device->CreateVertexShader(vs->GetBufferPointer(), vs->GetBufferSize(), nullptr, &vertex)) ||
+        FAILED(device->CreatePixelShader(ps->GetBufferPointer(), ps->GetBufferSize(), nullptr, &pixel)) ||
+        FAILED(device->CreateShaderResourceView(msaa, &sd, &srv)) || FAILED(device->CreateTexture2D(&td, nullptr, &out)) ||
+        FAILED(device->CreateRenderTargetView(out.Get(), nullptr, &rtv)))
+        return false;
+    const D3D_FEATURE_LEVEL level = device->GetFeatureLevel();
+    D3D_FEATURE_LEVEL chosen{};
+    const UINT flags = (device->GetCreationFlags() & D3D11_CREATE_DEVICE_SINGLETHREADED)
+                           ? D3D11_1_CREATE_DEVICE_CONTEXT_STATE_SINGLETHREADED : 0;
+    ComPtr<ID3DDeviceContextState> state, previous;
+    if (FAILED(device1->CreateDeviceContextState(flags, &level, 1, D3D11_SDK_VERSION, __uuidof(ID3D11Device), &chosen, &state)))
+        return false;
+    context1->SwapDeviceContextState(state.Get(), &previous);
+    context1->ClearState();
+    const D3D11_VIEWPORT viewport{0, 0, float(d.Width), float(d.Height), 0, 1};
+    ID3D11RenderTargetView* targets[] = {rtv.Get()};
+    ID3D11ShaderResourceView* views[] = {srv.Get()};
+    context1->OMSetRenderTargets(1, targets, nullptr);
+    context1->RSSetViewports(1, &viewport);
+    context1->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    context1->VSSetShader(vertex.Get(), nullptr, 0);
+    context1->PSSetShader(pixel.Get(), nullptr, 0);
+    context1->PSSetShaderResources(0, 1, views);
+    context1->Draw(3, 0);
+    context1->ClearState();
+    context1->SwapDeviceContextState(previous.Get(), nullptr);
+    return true;
+}
+} // namespace
+
+bool DepthCapture::ReadDepth(ID3D11DeviceContext* immediate, std::vector<float>& values, std::uint32_t& w, std::uint32_t& h) {
     D3D11_TEXTURE2D_DESC d{};
     copy_->GetDesc(&d);
-    if (d.SampleDesc.Count != 1) return false; // no CPU copy of a multisampled buffer: no snapshot
+    ComPtr<ID3D11Texture2D> source = copy_;
+    if (d.SampleDesc.Count != 1) {
+        if (!ResolveSampleZero(immediate, copy_.Get(), source)) return false;
+        source->GetDesc(&d);
+    }
     d.Usage = D3D11_USAGE_STAGING;
     d.BindFlags = 0;
     d.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+    d.MiscFlags = 0;
     ComPtr<ID3D11Device> device;
     immediate->GetDevice(&device);
     ComPtr<ID3D11Texture2D> staging;
     if (!device || FAILED(device->CreateTexture2D(&d, nullptr, &staging))) return false;
-    immediate->CopyResource(staging.Get(), copy_.Get());
+    immediate->CopyResource(staging.Get(), source.Get());
     D3D11_MAPPED_SUBRESOURCE m{};
     if (FAILED(immediate->Map(staging.Get(), 0, D3D11_MAP_READ, 0, &m))) return false;
-    const bool reversed = stats_.clearValue < 0.5f;
-    const std::uint32_t w = d.Width, h = d.Height;
-    std::vector<std::uint8_t> pixels(std::size_t(w) * h * 4);
+    w = d.Width;
+    h = d.Height;
+    values.assign(std::size_t(w) * h, 0.0f);
     for (std::uint32_t y = 0; y < h; ++y) {
         const auto* row = static_cast<const std::uint8_t*>(m.pData) + std::size_t(y) * m.RowPitch;
         for (std::uint32_t x = 0; x < w; ++x) {
@@ -260,7 +351,7 @@ bool DepthCapture::WriteBmp(ID3D11DeviceContext* immediate, const std::string& p
                 break;
             }
             case DXGI_FORMAT_R32G8X24_TYPELESS: std::memcpy(&v, row + x * 8, 4); break;
-            case DXGI_FORMAT_R32_TYPELESS: std::memcpy(&v, row + x * 4, 4); break;
+            case DXGI_FORMAT_R32_TYPELESS: case DXGI_FORMAT_R32_FLOAT: std::memcpy(&v, row + x * 4, 4); break;
             case DXGI_FORMAT_R16_TYPELESS: {
                 std::uint16_t raw;
                 std::memcpy(&raw, row + x * 2, 2);
@@ -269,20 +360,47 @@ bool DepthCapture::WriteBmp(ID3D11DeviceContext* immediate, const std::string& p
             }
             default: break;
             }
-            float z = farZ;
-            if (nearZ > 0 && farZ > nearZ) {
-                const float denom = reversed ? nearZ + v * (farZ - nearZ) : farZ - v * (farZ - nearZ);
-                if (denom > 0) z = nearZ * farZ / denom;
-            }
-            // Near bright, far dark: 1 m reads white, 50 m about 10 %.
-            const float shade = std::fmin(1.0f, 1.0f / std::fmax(z, 1.0f) * 5.0f);
-            const auto g = static_cast<std::uint8_t>(std::lround(std::fmin(1.0f, shade) * 255.0f));
-            std::uint8_t* p = &pixels[(std::size_t(y) * w + x) * 4];
-            p[0] = p[1] = p[2] = g;
-            p[3] = 255;
+            values[std::size_t(y) * w + x] = v;
         }
     }
     immediate->Unmap(staging.Get(), 0);
+    return true;
+}
+
+bool DepthCapture::WriteBmp(ID3D11DeviceContext* immediate, const std::string& path, float nearZ, float farZ,
+                            std::string* summary) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!copy_ || !immediate) return false;
+    std::vector<float> values;
+    std::uint32_t w = 0, h = 0;
+    if (!ReadDepth(immediate, values, w, h)) return false;
+    const bool reversed = stats_.clearValue < 0.5f;
+    std::vector<std::uint8_t> pixels(std::size_t(w) * h * 4);
+    float nearest = farZ, centre = farZ;
+    std::size_t atFar = 0;
+    for (std::size_t i = 0; i < values.size(); ++i) {
+        const float v = values[i];
+        float z = farZ;
+        if (nearZ > 0 && farZ > nearZ) {
+            const float denom = reversed ? nearZ + v * (farZ - nearZ) : farZ - v * (farZ - nearZ);
+            if (denom > 0) z = nearZ * farZ / denom;
+        }
+        if (z < nearest) nearest = z;
+        if (reversed ? v <= 0.0f : v >= 1.0f) ++atFar;
+        // Near bright, far dark on a log scale: 0.1 m white, 200 m black (every range shows).
+        const float shade = std::fmax(0.0f, std::fmin(1.0f, 1.0f - std::log(std::fmax(z, 0.1f) / 0.1f) / std::log(2000.0f)));
+        const auto g = static_cast<std::uint8_t>(std::lround(std::fmin(1.0f, shade) * 255.0f));
+        std::uint8_t* p = &pixels[i * 4];
+        p[0] = p[1] = p[2] = g;
+        p[3] = 255;
+        if (i == std::size_t(h / 2) * w + w / 2) centre = z;
+    }
+    if (summary) {
+        char line[160];
+        std::snprintf(line, sizeof(line), "centre=%.2fm nearest=%.2fm far_plane=%.0f%%", centre, nearest,
+                      values.empty() ? 0.0 : 100.0 * double(atFar) / double(values.size()));
+        *summary = line;
+    }
     std::FILE* f = std::fopen(path.c_str(), "wb");
     if (!f) return false;
     const std::uint32_t size = w * h * 4;

@@ -1,6 +1,8 @@
-# BF4 headset session: checklist (0.4.42-local)
+# BF4 headset session: checklist (0.4.46-local)
 
 What to try in the next headset session, and what each check tells us. About 15 minutes.
+The game side of everything below already ran live without a headset (simulated headset,
+CURRENT-BF4.md): this session is about how it looks and feels.
 Everything is input-only or an exactly restored camera/FOV write, apart from the optional
 3D test at the end.
 
@@ -27,10 +29,12 @@ raise BF4's Video > Resolution Scale (150-200 %) before judging blur.
 ## In a mission (head-tracked view)
 
 1. Look around: the world should turn the same way as your head. Note how smooth it is:
-   two frame channels and the earlier next pose should update the view much more often
-   than before (~17-25 Hz; expected about game fps / 2 at frame sync 2).
+   about 45 new views a second at frame sync 2 (measured live; it was ~17-25 before).
+   Then try menu > Frame sync (developer) > 1 frame (~52 a second; every view matched its
+   head pose in the live check) and note whether the world swims or looks smoother.
 2. Aim with the right controller: the gun follows it, and a **green ring** shows where it
-   aims (BF4's own crosshair stays at the centre of your view). Grip with the left hand in
+   aims (BF4's own crosshair stays at the centre of your view and the gun model in front
+   of your face: both follow the head; shots go to the ring). Grip with the left hand in
    front of the gun to aim with both hands. The right stick turns in **30 degree steps**
    (menu: Snap turning off for smooth).
 3. The ammo panel and minimap appear as small framed insets in your lower right and left
@@ -56,8 +60,8 @@ raise BF4's Video > Resolution Scale (150-200 %) before judging blur.
 Menu > 3D from depth > On, in a mission. Each eye is shifted by the game's depth buffer, so
 near things should stand out (with BF4's deferred antialiasing on too: the depth is then
 read from its first sample). Look at something close (a wall, a crate) and something far.
-If it looks wrong (doubled edges, the gun at a strange depth, no depth at all), switch it
-off and mark the moment; `vr-snapshot-depth.bmp` and the `depth_capture` log line show what
+Some doubled outlines at depth edges are expected (seen live); if it looks wrong otherwise
+(the gun at a strange depth, no depth at all, discomfort), switch it off and mark the moment; `vr-snapshot-depth.bmp` and the `depth_capture` log line show what
 it found.
 
 ## Optional: 3D depth (developer)

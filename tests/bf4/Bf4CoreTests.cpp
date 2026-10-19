@@ -687,6 +687,37 @@ TEST_CASE(ControllerAimGoesQuietWhenTheGameIgnoresTheMouse) {
     CHECK(small.Mutes() >= 3 && active < frames / 6); // mostly quiet over 20 s of pause
 }
 
+TEST_CASE(ControllerAimTargetJumpsAreNoOvershoot) {
+    // Live (2026-10-19): letting go of a two-handed grip moved the target at once, the error
+    // changed sign without the game overshooting, and the guard grew the pitch gain sevenfold.
+    using namespace fvr;
+    using namespace fvr::bf4;
+    MotionAim aim;
+    SimulatedGameAim game;
+    MotionAimInput in;
+    in.engage = in.aimTracked = true;
+    in.reference.orientation = {0, 0, 0, 1};
+    in.dt = 1.0f / 60;
+    auto run = [&](float yaw, float pitch, int frames) {
+        in.aim.orientation = math::FromAxisAngle({0, 1, 0}, -yaw) * math::FromAxisAngle({1, 0, 0}, pitch);
+        for (int i = 0; i < frames; ++i) {
+            game.Frame();
+            in.gameValid = true;
+            in.game = game.aim;
+            in.gameSample = game.sample;
+            const auto out = aim.Update(in);
+            game.pendingX += out.mouseX;
+            game.pendingY += out.mouseY;
+        }
+    };
+    run(0.7f, 0.26f, 240); // learns the game's gains
+    const auto guards = aim.OscillationGuards();
+    for (int i = 0; i < 8; ++i) run(i % 2 ? 1.05f : -1.05f, i % 2 ? 0.44f : -0.44f, 45); // +-60 / +-25 deg jumps
+    CHECK(aim.OscillationGuards() == guards);
+    CHECK(Near(aim.GainX(), game.gainX, 0.25f * game.gainX) && Near(aim.GainY(), game.gainY, 0.25f * -game.gainY));
+    CHECK(Near(WrapPi(game.aim.yaw - 0.3f), 1.05f, 0.01f) && Near(game.aim.pitch, 0.44f, 0.01f));
+}
+
 namespace {
 // A standing player looking down -Z (OpenXR), hands at given points, both grips tracked.
 struct GestureRig {
@@ -1169,4 +1200,18 @@ TEST_CASE(DepthStereoLinearisesAndShiftsEachEyeItsWay) {
     CHECK(p.enabled && p.reversed && p.shift[0] < 0 && Near(p.shift[1], 0.032f / 3.0f) && Near(p.shift[0], -p.shift[1]));
     CHECK(!DepthStereoFor(0, 1.5f, n, f, 1).enabled && !DepthStereoFor(0.032f, 1.5f, 0, f, 1).enabled);
     CHECK(!DepthStereoFor(0.032f, 1.5f, n, f, 1.0f).reversed);
+}
+
+TEST_CASE(ResearchCommandsForLiveFlatSessions) {
+    using namespace fvr::bf4;
+    const auto c = ParseResearchCommands("1 depthprobe\n2 mouse 300 -40\n3 sendkey 0x03\n4 setting depth_stereo 1\n"
+                                         "5 mouse 99999 0\n6 sendkey 0x1FF\n7 setting x -1\n",
+                                         0);
+    CHECK(c.size() == 7);
+    CHECK(c[0].kind == ResearchCommand::Kind::DepthProbe);
+    CHECK(c[1].kind == ResearchCommand::Kind::Mouse && c[1].x == 300 && c[1].y == -40);
+    CHECK(c[2].kind == ResearchCommand::Kind::SendKey && c[2].value == 3);
+    CHECK(c[3].kind == ResearchCommand::Kind::Setting && c[3].arg == "depth_stereo" && c[3].x == 1);
+    CHECK(c[4].kind == ResearchCommand::Kind::Unknown && c[5].kind == ResearchCommand::Kind::Unknown &&
+          c[6].kind == ResearchCommand::Kind::Unknown); // out of range: rejected, not run
 }

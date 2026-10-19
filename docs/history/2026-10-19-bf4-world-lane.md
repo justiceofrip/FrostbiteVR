@@ -41,3 +41,15 @@ Decisions worth keeping:
 - The projection aspect cannot be narrowed to the eyes (the view setup takes it from the
   output size), so the corner HUD is shown through insets until the UI pass can be
   rendered separately.
+- Live checks without a headset use a developer OpenXR runtime (`FvrSimOpenXr`, 90 Hz,
+  poses and buttons from a control file, eye snapshots) under the real FvrXrHost and the
+  real game. Its pose-label check (head flipping between two poses every frame, pixels
+  classified against labels) is the evidence standard for frame sync: 751/751 pairs
+  matched at frame sync 1 and 2 in the prologue; the default stays 2 until a headset
+  agrees.
+- The aim overshoot guard judges only sign changes the game made (the target moved less
+  than the game in that update). Clearing it on fast target motion was rejected after
+  modelling: it disabled the guard on moving targets, which then ran away.
+- BF4 draws the first-person gun into its main (4x MSAA) depth buffer with one clear a
+  frame, so 3D from depth reads the buffer at Present; the pre-clear copy is kept only for
+  games that clear twice.

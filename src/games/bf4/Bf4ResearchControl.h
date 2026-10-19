@@ -15,6 +15,13 @@
 //   <id> census             read-only census of weapon-firing objects (background thread)
 // The channel never writes game memory.
 //   <id> type <text>        characters to the game window (e.g. its console); '_' = space
+//   <id> depthprobe         installs the depth capture (3D from depth), then after ~2 s logs
+//                           what it found and writes vr-snapshot-depth.bmp
+//   <id> mouse <dx> <dy>    relative mouse counts through SendInput (focused game only); logs
+//                           the camera's yaw/pitch before and ~20 frames after (rad/count)
+//   <id> sendkey <scan>     a key by set-1 scan code through SendInput (held 6 frames), as the
+//                           holster gestures press BF4's keys
+//   <id> setting <id> <n>   sets a mod menu item to choice n (as if clicked in the headset)
 
 #include "Bf4PointerInjector.h"
 
@@ -26,13 +33,16 @@
 namespace fvr::bf4 {
 
 struct ResearchCommand {
-    enum class Kind : std::uint8_t { Snap, Click, Move, Key, DumpImage, ScanQ, Peek, Type, Census, Unknown };
+    enum class Kind : std::uint8_t {
+        Snap, Click, Move, Key, DumpImage, ScanQ, Peek, Type, Census, DepthProbe, Mouse, SendKey, Setting, Unknown
+    };
     std::uint64_t id = 0;
     Kind kind = Kind::Unknown;
     std::string arg;    // snap name, key name, or the unparsed verb for Unknown
     float u = 0, v = 0; // click/move
     std::uint64_t value = 0; // scanq rva, peek address
     std::uint32_t length = 0; // peek length
+    std::int32_t x = 0, y = 0; // mouse counts; setting value (x)
 };
 
 // Lines "<id> <verb> [args]"; '#' comments and blank lines skipped. Returns the commands
