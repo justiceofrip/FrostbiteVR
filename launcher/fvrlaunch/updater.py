@@ -45,18 +45,20 @@ def http_fetch(url: str, dest: Path) -> None:
         shutil.copyfileobj(resp, out, 1 << 20)
 
 
-def list_releases(repo: str, fetch: Fetch, tmp: Path) -> list[ReleaseInfo]:
+def list_releases(repo: str, fetch: Fetch, tmp: Path, tag_prefix: str = "v") -> list[ReleaseInfo]:
+    """This game's releases only: the repository may also publish other games' releases."""
     dest = tmp / "releases.json"
-    fetch(f"https://api.github.com/repos/{repo}/releases?per_page=20", dest)
+    fetch(f"https://api.github.com/repos/{repo}/releases?per_page=50", dest)
     out = []
     for rel in json.loads(dest.read_text(encoding="utf-8")):
-        if rel.get("draft"):
+        tag = rel.get("tag_name", "")
+        if rel.get("draft") or not tag.startswith(tag_prefix):
             continue
         assets = {a["name"]: a["browser_download_url"] for a in rel.get("assets", [])}
         man = next((n for n in assets if n.endswith(".manifest.json")), None)
         pkg = next((n for n in assets if n.endswith(".zip")), None)
         if man and pkg:
-            out.append(ReleaseInfo(rel["tag_name"].lstrip("v"), bool(rel.get("prerelease")), assets[man], assets[pkg]))
+            out.append(ReleaseInfo(tag[len(tag_prefix):], bool(rel.get("prerelease")), assets[man], assets[pkg]))
     dest.unlink(missing_ok=True)
     return out
 

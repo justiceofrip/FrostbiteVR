@@ -35,7 +35,7 @@ def main(argv: list[str] | None = None) -> int:
     elif args.command == "update":
         settings = Settings.load(root / "settings.json")
         profile = load_profile(settings["game"])
-        pick = installer.pick_update(list_releases(profile.release_repo, installer.fetch, installer.tmp), settings["channel"])
+        pick = installer.pick_update(list_releases(profile.release_repo, installer.fetch, installer.tmp, profile.release_tag_prefix), settings["channel"])
         print(installer.install_from_urls(pick.manifest_url, pick.package_url) if pick else "up to date")
     elif args.command == "install-local":
         if len(args.files) != 2:

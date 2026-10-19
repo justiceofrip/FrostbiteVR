@@ -21,6 +21,8 @@ class GameProfile:
     stereo_proxy_name: str | None
     release_repo: str
     engine_cfg_file: str
+    # Several games share one repository: only releases tagged <prefix><version> are this game's.
+    release_tag_prefix: str = "v"
     engine_cfg_lines: tuple[str, ...] = field(default_factory=tuple)
     unsupported_exes: tuple[str, ...] = field(default_factory=tuple)
     profile_settings_file: str | None = None  # %DOCUMENTS% is expanded at session start
@@ -41,6 +43,7 @@ def load_profile(game_id: str, directory: Path = PROFILE_DIR) -> GameProfile:
         stereo_proxy_name=data.get("stereo_proxy_name"),
         session_section=data["session_section"],
         release_repo=data["release_repo"],
+        release_tag_prefix=data.get("release_tag_prefix", "v"),
         engine_cfg_file=data.get("engine_cfg_file", "user.cfg"),
         engine_cfg_lines=tuple(data.get("engine_cfg_lines", [])),
         unsupported_exes=tuple(data.get("unsupported_exes", [])),

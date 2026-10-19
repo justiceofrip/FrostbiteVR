@@ -90,6 +90,24 @@ class ReleaseContractTests(unittest.TestCase):
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("FvrXrHost.exe", r.stderr)
 
+    def test_updates_only_this_games_releases(self):
+        # One repository, several games: the BF4 launcher must never pick another game's package.
+        import json
+        from fvrlaunch.updater import list_releases
+        def asset(name):
+            return {"name": name, "browser_download_url": f"https://example.invalid/{name}"}
+        releases = [
+            {"tag_name": "bc2-v1.0.0", "prerelease": False, "assets": [asset("BC2.manifest.json"), asset("BC2.zip")]},
+            {"tag_name": "checkpoint-412", "prerelease": False, "assets": []},
+            {"tag_name": "bf4-v0.5.0-rc1", "prerelease": True,
+             "assets": [asset("FrostbiteVR-BF4-0.5.0-rc1.manifest.json"), asset("FrostbiteVR-BF4-0.5.0-rc1.zip")]},
+            {"tag_name": "bf4-v0.6.0", "draft": True, "assets": [asset("x.manifest.json"), asset("x.zip")]},
+        ]
+        def fetch(url, dest):
+            Path(dest).write_text(json.dumps(releases), encoding="utf-8")
+        found = list_releases("justiceofrip/FrostbiteVR", fetch, self.tmp, "bf4-v")
+        self.assertEqual([(r.version, r.prerelease) for r in found], [("0.5.0-rc1", True)])
+
     def test_install_local_cli(self):
         build = self.tmp / "build"
         build.mkdir()

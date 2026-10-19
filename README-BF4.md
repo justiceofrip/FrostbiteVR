@@ -1,14 +1,10 @@
 # FrostbiteVR: Battlefield 4 adapter (bootstrap)
 
 Campaign-only VR for Battlefield 4 (Steam/EA app, x64, DirectX 11), built as a second
-adapter on the FrostbiteVR framework. This tree overlays the FrostbiteVR repository:
-same paths, new files only, plus one `include()` line.
-
-## Merge into FrostbiteVR
-1. Copy this tree over a FrostbiteVR checkout (no existing file is replaced).
-2. In the root `CMakeLists.txt`, after FvrCore: `include(cmake/Bf4Adapter.cmake)`.
-3. Create the `BF4VR` releases repo (or edit `launcher/profiles/bf4.json`), and copy
-   `.github/ISSUE_TEMPLATE/vr-feedback.yml` there too.
+adapter on the FrostbiteVR framework, in this repository next to the BC2 adapter
+(`cmake/Bf4Adapter.cmake` is included from the root `CMakeLists.txt`). BF4 releases are
+published here under `bf4-v*` tags; the BF4 launcher installs only those, and its feedback
+button opens issues here (`.github/ISSUE_TEMPLATE/vr-feedback.yml`).
 
 ## Build and test (x64 only)
 ```
@@ -19,7 +15,7 @@ python -B -m unittest discover -s launcher/tests -p "test_*.py"
 ```
 
 ## Ship a hotfix
-Bump the patch version, tag `v0.1.1` (or `v0.1.1-rc1` for testers), push. CI builds,
+Bump the patch version, tag `bf4-v0.1.1` (or `bf4-v0.1.1-rc1` for testers), push. CI builds,
 runs the emulated tests, packages, and publishes the zip + manifest. Launchers pick it
 up from "Check for updates"; unchanged files are hard-linked, the previous version stays
 for one-click rollback.

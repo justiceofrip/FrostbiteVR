@@ -12,7 +12,7 @@ Cheapest tier first; run what the change touches.
 
 CI: `build.yml` runs `Build.ps1` on Windows x86/x64 for every push; the BF4 adapter is in
 the default CMake build, so `Bf4Core` runs on both and `Bf4Emulated` on x64. `bf4-emulated.yml`
-runs the portable tier on Ubuntu. `bf4-release.yml` (tags `v*`) downloads the Khronos
+runs the portable tier on Ubuntu. `bf4-release.yml` (tags `bf4-v*`) downloads the Khronos
 OpenXR 1.1.61 Windows loader and refuses to continue unless its x64 `openxr_loader.dll`
 matches the pinned SHA-256, builds the adapter, proxies and `FvrXrHost`, runs ctest
 `^Bf4` and the launcher suite, then packages with `--require-xr-host` (notices under

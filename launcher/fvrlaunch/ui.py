@@ -139,7 +139,8 @@ class LauncherWindow:
 
     def update(self) -> None:
         def work():
-            releases = list_releases(self.profile.release_repo, self.installer.fetch, self.installer.tmp)
+            releases = list_releases(self.profile.release_repo, self.installer.fetch, self.installer.tmp,
+                                     self.profile.release_tag_prefix)
             pick = self.installer.pick_update(releases, self.settings["channel"])
             if not pick:
                 self.say("You have the latest version.")

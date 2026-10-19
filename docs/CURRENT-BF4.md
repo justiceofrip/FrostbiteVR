@@ -111,7 +111,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
 
 ## CI and release pipeline (2026-10-19, not yet run on GitHub)
 
-- `bf4-release.yml` (tags `v*`): windows-2022 like `build.yml`, actions pinned to the same
+- `bf4-release.yml` (tags `bf4-v*`, so BF4 releases never collide with other games here): windows-2022 like `build.yml`, actions pinned to the same
   commits. Downloads `openxr_loader_windows-1.1.61.zip` from KhronosGroup/OpenXR-SDK-Source
   (asset name confirmed via the GitHub API) and stops unless `x64/bin/openxr_loader.dll`
   hashes to the pinned `a69729a3...0fa5f`; the local loader's provenance is not recorded,

@@ -159,7 +159,7 @@ class LauncherTests(unittest.TestCase):
         for secret in (home, "someone@example.com", "abc123", "ghp_aaaa", "203.0.113.7"):
             self.assertNotIn(secret, blob)
         self.assertLessEqual(len(report["logs"]["bf4-adapter.log"]), 64 * 1024)
-        url = issue_url("justiceofrip/BF4VR", report, None)
+        url = issue_url("justiceofrip/FrostbiteVR", report, None)
         self.assertLess(len(url), 20000)
         self.assertEqual(urllib.parse.parse_qs(urllib.parse.urlparse(url).query)["template"], ["vr-feedback.yml"])
 

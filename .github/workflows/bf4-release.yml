@@ -1,9 +1,11 @@
-# Build, test (emulated) and publish a BF4 VR release. Tag vX.Y.Z for a release,
-# vX.Y.Z-rcN (or any suffix) for a pre-release. Hotfixes are patch bumps: v0.1.1.
+# Build, test (emulated) and publish a BF4 VR release. Tag bf4-vX.Y.Z for a release,
+# bf4-vX.Y.Z-rcN (or any suffix) for a pre-release. Hotfixes are patch bumps: bf4-v0.1.1.
+# The bf4- prefix keeps BF4 releases apart from other games in this repository; the BF4
+# launcher only installs releases with it.
 name: bf4-release
 on:
   push:
-    tags: ["v*"]
+    tags: ["bf4-v*"]
   workflow_dispatch:
 
 permissions:
@@ -41,7 +43,7 @@ jobs:
       - name: Package
         shell: pwsh
         run: |
-          $v = "${{ github.ref_name }}".TrimStart("v")
+          $v = "${{ github.ref_name }}" -replace '^bf4-v', ''
           $ch = if ($v.Contains("-")) { "prerelease" } else { "stable" }
           python tools/release/make_release.py --build build/x64/Release --version $v --channel $ch --out dist --require-xr-host
       - name: Publish
