@@ -1102,3 +1102,41 @@ TEST_CASE(GadgetHolsterSelectsTheGadgetAndLeavesTheGunsMagazine) {
     out = r.Step();
     CHECK(!r.gestures.GadgetInHand() && r.gestures.Current() == Bf4Gun::Primary && out.blockFire);
 }
+
+TEST_CASE(PhysicalCrouchTogglesTheGamesCrouchWithTheBody) {
+    using namespace fvr::bf4;
+    PhysicalCrouch c;
+    CrouchInput in;
+    in.enabled = in.usable = true;
+    double t = 0;
+    auto step = [&](float head, double dt = 1.0 / 60) {
+        t += dt;
+        in.timeSeconds = t;
+        in.headHeight = head;
+        return c.Update(in);
+    };
+    for (int i = 0; i < 60; ++i) CHECK(!step(1.70f)); // standing: calibrated, nothing pressed
+    CHECK(Near(c.StandingHeight(), 1.70f));
+    CHECK(!step(1.45f)); // a duck of 25 cm is not a crouch
+    CHECK(step(1.30f) && c.Crouched()); // 40 cm down: the crouch pulse
+    for (int i = 0; i < 6; ++i) step(1.30f);
+    CHECK(!step(1.30f, 0.1)); // the pulse is short
+    for (int i = 0; i < 30 * 60; ++i) CHECK(!step(1.30f)); // a long crouch never reads as standing
+    CHECK(c.Crouched() && c.Toggles() == 1);
+    CHECK(step(1.62f) && !c.Crouched()); // stood up: toggled back
+    step(1.62f, 0.2);
+    // The player's own crouch button wins until the body changes posture.
+    in.crouchButton = true;
+    step(1.69f);
+    in.crouchButton = false;
+    for (int i = 0; i < 120; ++i) CHECK(!step(1.69f));
+    CHECK(c.Crouched() && c.Toggles() == 2);
+    // Sprinting stands the game up; the belief follows.
+    in.sprintButton = true;
+    step(1.69f);
+    in.sprintButton = false;
+    CHECK(!c.Crouched());
+    // Off: no pulses at all.
+    in.enabled = false;
+    for (int i = 0; i < 60; ++i) CHECK(!step(i < 30 ? 1.25f : 1.70f));
+}

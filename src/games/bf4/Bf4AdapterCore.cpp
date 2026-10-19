@@ -85,6 +85,7 @@ void AdapterCore::UpdatePad(const ControllerSnapshot& in) {
                 (gesture_.gripOwned[b.hand] || (b.hand == 1 && menuState_.holsters) || (b.hand == 0 && aim_.twoHanded)))
                 pad_.buttons &= static_cast<std::uint16_t>(~b.padButton);
         pad_.buttons |= gesture_.padButtons;
+        if (crouchPulse_) pad_.buttons |= interaction::pad::B;
         if (gesture_.blockFire) pad_.rightTrigger = 0;
     }
     if (aim_.engaged) {
@@ -132,6 +133,10 @@ void AdapterCore::ApplyMenuCommand(const ModMenuCommand& command) {
     case ModMenuAction::SetVignette:
         menuState_.vignette = command.value != 0;
         platform_.Log(menuState_.vignette ? "comfort vignette: on" : "comfort vignette: off");
+        break;
+    case ModMenuAction::SetPhysicalCrouch:
+        menuState_.physicalCrouch = command.value != 0;
+        platform_.Log(menuState_.physicalCrouch ? "physical crouch: on" : "physical crouch: off");
         break;
     case ModMenuAction::SetWalkDirection:
         menuState_.walkWithBody = command.value != 0;
@@ -422,6 +427,18 @@ void AdapterCore::UpdateGestures(const ControllerSnapshot& in, const PlatformFra
     for (const auto& b : padLayout_.buttons)
         if (b.padButton == interaction::pad::Y) g.switchButton = ControlDown(in.controls, b);
     gesture_ = gestures_.Update(g);
+    // Physical crouch: pulses the pad's crouch (a toggle in BF4) when the body's posture changes.
+    CrouchInput k;
+    k.enabled = menuState_.physicalCrouch;
+    k.usable = g.engage && in.controls.focused && in.controls.headValid;
+    k.timeSeconds = g.timeSeconds;
+    k.headHeight = in.controls.head.position.y;
+    for (const auto& b : padLayout_.buttons) {
+        if (b.padButton == interaction::pad::B) k.crouchButton = ControlDown(in.controls, b);
+        if (b.padButton == interaction::pad::LeftThumb) k.sprintButton = ControlDown(in.controls, b);
+        if (b.padButton == interaction::pad::A) k.jumpButton = ControlDown(in.controls, b);
+    }
+    crouchPulse_ = crouch_.Update(k);
     platform_.SetGameKeys(gesture_.keys);
     for (unsigned h = 0; h < 2; ++h)
         if (gesture_.haptic[h].valid)
@@ -622,7 +639,8 @@ std::string AdapterCore::Status() const {
                   static_cast<unsigned long long>(twoHandedEngages_),
                   static_cast<unsigned long long>(motionAim_.OscillationGuards()));
     s += aimLine;
-    s += gestures_.Describe() + " holsters=" + (menuState_.holsters ? "on" : "off") + "\n";
+    s += gestures_.Describe() + " holsters=" + (menuState_.holsters ? "on" : "off") +
+         " crouch=" + (crouch_.Crouched() ? "crouched" : "standing") + " crouch_toggles=" + std::to_string(crouch_.Toggles()) + "\n";
     s += "reload_requests=" + std::to_string(stats_.reloadRequests) + "\n";
     s += "stereo=" + std::string(StereoModeName(stereo_)) + "\n";
     s += "stereo_pairs=" + std::to_string(tracker_.Pairs()) + " stereo_pattern=" +

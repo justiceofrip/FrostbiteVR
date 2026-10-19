@@ -13,6 +13,7 @@
 #include "Bf4SessionInfo.h"
 #include "Bf4MotionAim.h"
 #include "Bf4BodyGestures.h"
+#include "Bf4PhysicalCrouch.h"
 #include "Bf4WorldView.h"
 #include "stereo/SideBySide.h"
 #include "stereo/StereoProbe.h"
@@ -222,6 +223,8 @@ private:
     void ResolveReload();
     BodyGestures gestures_;
     BodyGestureOutput gesture_{};
+    PhysicalCrouch crouch_;
+    bool crouchPulse_ = false;
     bool gameplayWas_ = false;
     std::string lastGestures_;
     void UpdateMotionAim(const ControllerSnapshot& input, const PlatformFrame& frame);

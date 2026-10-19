@@ -122,6 +122,12 @@ screen. Pieces (all on the analysed build only):
   the gun has no magazine, a green ring at the magazine well while one is in the hand.
   Each eye places a marker by its own pose (`MarkerInEye`), so markers have true depth
   over the mono world. Log: `marked_pairs=`.
+- Physical crouch (mod menu, default off; standing play): crouching 35 cm below the
+  self-calibrated standing height pulses BF4's crouch toggle (pad B), standing back above
+  20 cm toggles it off (`Bf4PhysicalCrouch.h`). The stance is believed, not read: it follows
+  our pulses, the player's own crouch button (which is never overridden until the body
+  changes posture) and BF4's own stand-ups on sprint and jump. Unit-tested; status
+  `crouch=... crouch_toggles=`.
 - Mod menu: "Body holsters: Off / On" (default on). Status/log: `gestures gun=...
   magazine_out=... draws= throws= knives= ejects= grabs= seats= drops= quick_reloads=`
   (logged at each change), plus `key_sends` / `haptics_sent` every 600 frames.
@@ -370,11 +376,11 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
   and notes were shortened to fit half width (GDI text now ends with an ellipsis when it
   does not fit). Unit test: every item on the panel, none overlapping; a GDI render of the
   developer menu was checked by eye.
-- Build.ps1 after the gadget holster: x64 284/284, x86 283/283. Bf4CoreTests 75 cases;
+- Build.ps1 after physical crouch: x64 284/284, x86 283/283. Bf4CoreTests 76 cases;
   Bf4Emulated pass (theater, world lane, stereo probe, census, lockdown, gestures, eye
   resampler reticle on WARP); launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
   `-World -FrameChannels 2` 5/5 (227 pairs); `-World` with one channel 4/4 (47 pairs).
-- Installed locally: runtime/bf4 0.4.32-local (rollback 0.4.31-local). Developer
+- Installed locally: runtime/bf4 0.4.33-local (rollback 0.4.32-local). Developer
   sessions still run the read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the
   framework's `StereoMath.h` (`Quat` = `Quaternion`; Pose is `{position, orientation}`).
