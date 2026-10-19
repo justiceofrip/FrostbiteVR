@@ -60,6 +60,15 @@ screen. Pieces (all on the analysed build only):
   fake OpenXR runtime submitted 165 pairs from the emulated game, 0 rejected, 0 runtime
   errors. Not yet seen in the real game: the settle depth (main thread vs render thread),
   BF4 accepting the wider FOV, pair rate in game.
+- Frame shape (worked out, not yet seen): the frame is rendered tall enough for the
+  taller eye (+3 %) at the window's 16:9, so it is about 1.7x wider than the two eyes need
+  (Quest 3 numbers: frame tangent ~2.35 across vs ~1.38 seen). The outer part of each side
+  is never shown: BF4's corner HUD (ammo bottom right, minimap bottom left) falls outside
+  the eyes, and about 40 % of the horizontal pixels are spent there. A narrower projection
+  aspect would fix both, but the view setup takes the aspect from the output size after
+  copying the submitted block (BF4-CAMERA-RE.md), so writing it there has no effect and the
+  renderer's own copy has no clean restore point. Open: a HUD route (render the UI pass
+  separately) or a game window closer to the eyes' shape (the laser needs 16:9 menus).
 - Known gaps: mono until engine stereo engages (below); pair rate is bounded by `settle`
   frames per pair (two frame channels remove the request round trip, below), so the world
   updates slower than the headset (the compositor reprojects head rotation every frame); HUD and
