@@ -142,6 +142,11 @@ screen. Pieces (all on the analysed build only):
   produce no turn (pause menu, cutscene) it goes quiet for 60 frames.
 - The virtual pad's right stick is released while it aims (no stick look), and the left
   stick is turned back by the aim's offset so walking stays relative to the body.
+- Walk toward (mod menu): Body (default) turns the left stick back by the aim's offset so
+  walking follows the body; Gun leaves the stick alone. Vehicles: the left stick is
+  throttle and steering there and the adapter cannot tell a vehicle from walking yet, so
+  Body would mix them while the gun aims off the body heading; switch to Gun in vehicle
+  sections (emulated test through the menu).
 - Two-handed aim (mod menu, default on): while the left grip is held 12-80 cm in front of
   the right grip and within 35 degrees of the right controller's aim (60 to keep it), the
   gun aims along the line between the grips, steadier than one wrist. Its grip is then not
@@ -361,12 +366,12 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
   and notes were shortened to fit half width (GDI text now ends with an ellipsis when it
   does not fit). Unit test: every item on the panel, none overlapping; a GDI render of the
   developer menu was checked by eye.
-- Build.ps1 after the aim gain and overshoot guard: x64 284/284, x86 283/283. Bf4CoreTests
-  73 cases;
+- Build.ps1 after the walk direction option: x64 284/284, x86 283/283. Bf4CoreTests
+  74 cases;
   Bf4Emulated pass (theater, world lane, stereo probe, census, lockdown, gestures, eye
   resampler reticle on WARP); launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
   `-World -FrameChannels 2` 5/5 (227 pairs); `-World` with one channel 4/4 (47 pairs).
-- Installed locally: runtime/bf4 0.4.29-local (rollback 0.4.28-local). Developer
+- Installed locally: runtime/bf4 0.4.30-local (rollback 0.4.29-local). Developer
   sessions still run the read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the
   framework's `StereoMath.h` (`Quat` = `Quaternion`; Pose is `{position, orientation}`).

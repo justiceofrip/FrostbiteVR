@@ -1,4 +1,4 @@
-# BF4 headset session: checklist (0.4.29-local)
+# BF4 headset session: checklist (0.4.30-local)
 
 What to try in the next headset session, and what each check tells us. About 15 minutes.
 Everything is input-only or an exactly restored camera/FOV write, apart from the optional
@@ -28,7 +28,8 @@ Everything is input-only or an exactly restored camera/FOV write, apart from the
    aims (BF4's own crosshair stays at the centre of your view). Grip with the left hand in
    front of the gun to aim with both hands. The right stick turns in **30 degree steps**
    (menu: Snap turning off for smooth).
-3. Walk with the left stick: the edges darken while moving (menu: Comfort vignette).
+3. Walk with the left stick: the edges darken while moving (menu: Comfort vignette). In a
+   vehicle, set the menu's "Walk toward" to Gun (the stick is throttle and steering there).
 4. Holsters (grip in the zone; a light buzz when your hand reaches one you can use):
    right hip = sidearm (key 2), over the right shoulder = primary (key 1), left hip =
    grenade (grab, then let go away from the hip to throw), chest with the left hand = knife.

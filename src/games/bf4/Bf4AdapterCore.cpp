@@ -89,8 +89,12 @@ void AdapterCore::UpdatePad(const ControllerSnapshot& in) {
     }
     if (aim_.engaged) {
         // The game aims by mouse now and turns with the body heading: no pad look, and
-        // walking stays relative to the body although the game moves relative to its aim.
+        // walking stays relative to the body although the game moves relative to its aim
+        // (unless the player walks toward the gun, e.g. in a vehicle, where the left stick
+        // is throttle and steering and must reach the game unchanged).
         pad_.thumbRX = pad_.thumbRY = 0;
+    }
+    if (aim_.engaged && menuState_.walkWithBody) {
         float forward = pad_.thumbLY / 32767.0f, strafe = pad_.thumbLX / 32767.0f;
         interaction::RotateMovement(-aim_.moveRotation, forward, strafe);
         auto toPad = [](float v) { return static_cast<std::int16_t>(std::lround(std::clamp(v, -1.0f, 1.0f) * 32767.0f)); };
@@ -128,6 +132,10 @@ void AdapterCore::ApplyMenuCommand(const ModMenuCommand& command) {
     case ModMenuAction::SetVignette:
         menuState_.vignette = command.value != 0;
         platform_.Log(menuState_.vignette ? "comfort vignette: on" : "comfort vignette: off");
+        break;
+    case ModMenuAction::SetWalkDirection:
+        menuState_.walkWithBody = command.value != 0;
+        platform_.Log(menuState_.walkWithBody ? "walk toward: body" : "walk toward: gun");
         break;
     case ModMenuAction::SetTwoHandedAim:
         menuState_.twoHandedAim = command.value != 0;

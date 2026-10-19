@@ -530,3 +530,61 @@ TEST_CASE(EmuControllerAimRecoversWhenTheGameIsMoreSensitiveThanLearned) {
         CHECK(worstLate < 0.02f);  // and settled on it
     }
 }
+
+TEST_CASE(EmuWalkTowardTheGunLeavesTheStickAlone) {
+    // Vehicles: the left stick is throttle and steering, so "Walk toward: Gun" must hand it
+    // to the game unturned while the gun aims off the body heading.
+    FakeImage image({names::kGameRenderer, names::kRenderViewUpdate, names::kClientGameContext, names::kLevelName});
+    FakePlatform platform;
+    AdapterCore core(Session(true), X64(), image.Resolve(), platform);
+    core.OnSwapchainAdopted(true);
+    platform.Campaign();
+    platform.aimKnown = true;
+    Clock clock;
+    int n = 0;
+    auto input = [&] {
+        auto in = Input(n / 90.0);
+        in.world.valid = true;
+        in.world.poseId = 100 + static_cast<std::uint64_t>(n);
+        in.world.head = in.head;
+        in.world.fov[0] = {-1.0f, 0.9f, 1.0f, -1.1f};
+        in.world.fov[1] = {-0.9f, 1.0f, 1.0f, -1.1f};
+        in.controls.focused = true;
+        in.controls.generation = 1 + static_cast<std::uint64_t>(n);
+        in.controls.spaceGeneration = 1;
+        in.controls.predictedNs = 1000000 + static_cast<std::int64_t>(n) * 11000000;
+        for (auto& h : in.controls.hands) h.active = interaction::Components;
+        auto& right = in.controls.hands[1];
+        right.aimTracked = right.gripTracked = true;
+        right.aim.orientation = math::FromAxisAngle({0, 1, 0}, -0.5235988f); // gun 30 degrees right
+        in.controls.hands[0].stickY = 1.0f;
+        ++n;
+        return in;
+    };
+    auto frame = [&](ControllerSnapshot in) {
+        platform.GameFrame();
+        core.OnFrame(clock.Next(), in);
+    };
+    for (int i = 0; i < 200; ++i) frame(input());
+    CHECK(core.Pad().thumbLX < -12000); // body-relative walking: the stick is turned back
+    // Menu: "Walk toward" -> Gun.
+    auto in = input();
+    in.menuButton = true;
+    frame(in);
+    const ui::Widget* walk = nullptr;
+    for (const auto& w : core.ModMenuPanel().Widgets())
+        if (w.text.find(L"Walk toward") != std::wstring::npos) walk = &w;
+    CHECK(walk != nullptr && walk->text.find(L"Body") != std::wstring::npos);
+    const float u = (walk->rect.x + walk->rect.w * 0.5f) / 1280.0f, v = (walk->rect.y + walk->rect.h * 0.5f) / 720.0f;
+    for (bool down : {false, true, false}) {
+        in = input();
+        in.pointer = {true, u, v, down};
+        frame(in);
+    }
+    CHECK(core.MenuSettings().walkWithBody == false);
+    in = input();
+    in.menuButton = true; // close
+    frame(in);
+    for (int i = 0; i < 30; ++i) frame(input());
+    CHECK(!core.ModMenuOpen() && core.Pad().thumbLX == 0 && core.Pad().thumbLY > 32000);
+}
