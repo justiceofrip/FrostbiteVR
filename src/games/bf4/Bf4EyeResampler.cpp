@@ -17,7 +17,19 @@ cbuffer Crop : register(b0) {
     float4 bounds;  // bu0 - bu1 -
     float4 reticle; // u v show -
     float4 scale;   // frame uv -> tangent units: x y
+    float4 marker0; // eye image u v, show, kind
+    float4 marker1;
+    float4 span;    // eye image uv -> tangent units: x y
 };
+float3 Marker(float3 c, float2 uv, float4 m) {
+    if (m.z < 0.5) return c;
+    const float d = length((uv - m.xy) * span.xy);
+    const float ring = 1 - smoothstep(0.003, 0.0055, abs(d - 0.03));
+    const float shade = 1 - smoothstep(0.004, 0.010, abs(d - 0.03));
+    const float3 colour = m.w > 0.5 ? float3(0.25, 1.0, 0.35) : float3(1.0, 0.72, 0.15);
+    c = lerp(c, c * 0.35, shade * 0.5);
+    return lerp(c, colour, ring * 0.85);
+}
 struct V { float4 position : SV_Position; float2 uv : TEXCOORD0; };
 V vs(uint n : SV_VertexID) {
     const float2 p[3] = {float2(-1, -1), float2(-1, 3), float2(3, -1)};
@@ -38,6 +50,8 @@ float4 ps(V v) : SV_Target {
         c = lerp(c, c * 0.35, shade * 0.6);
         c = lerp(c, float3(0.25, 1.0, 0.35), max(ring, centre) * 0.9);
     }
+    c = Marker(c, v.uv, marker0);
+    c = Marker(c, v.uv, marker1);
     return float4(c, 1);
 }
 )";
@@ -79,6 +93,8 @@ struct alignas(16) CropConstants {
     float bounds[4];
     float reticle[4];
     float scale[4];
+    float marker[2][4];
+    float span[4];
 };
 } // namespace
 
@@ -136,7 +152,8 @@ void EyeResampler::Reset() {
 }
 
 bool EyeResampler::Render(ID3D11DeviceContext* context, ID3D11Texture2D* source, const EyeCrop (&crops)[2],
-                          std::uint32_t width, std::uint32_t height, std::uint32_t format, const Reticle& reticle) {
+                          std::uint32_t width, std::uint32_t height, std::uint32_t format, const Reticle& reticle,
+                          const EyeOverlay* overlays) {
     if (broken_ || !context || !source || !width || !height || width > 16384 || height > 16384) return false;
     if (!initialized_ && !Initialize(context)) {
         broken_ = true; // no D3D11.1 state objects / shader compiler: the world lane stays off
@@ -196,10 +213,23 @@ bool EyeResampler::Render(ID3D11DeviceContext* context, ID3D11Texture2D* source,
     if (sd.SampleDesc.Count > 1) context_->ResolveSubresource(source_.Get(), 0, source, 0, Unorm(sd.Format));
     else context_->CopyResource(source_.Get(), source);
     for (int i = 0; i < 2; ++i) {
-        const CropConstants c{{crops[i].u0, crops[i].v0, crops[i].u1, crops[i].v1},
-                              {crops[i].bu0, 0, crops[i].bu1, 1},
-                              {reticle.u, reticle.v, reticle.show ? 1.0f : 0.0f, 0},
-                              {reticle.scaleX, reticle.scaleY, 0, 0}};
+        CropConstants c{{crops[i].u0, crops[i].v0, crops[i].u1, crops[i].v1},
+                        {crops[i].bu0, 0, crops[i].bu1, 1},
+                        {reticle.u, reticle.v, reticle.show ? 1.0f : 0.0f, 0},
+                        {reticle.scaleX, reticle.scaleY, 0, 0},
+                        {},
+                        {1, 1, 0, 0}};
+        if (overlays) {
+            for (int m = 0; m < 2; ++m) {
+                const EyeMarker& k = overlays[i].markers[m];
+                c.marker[m][0] = k.u;
+                c.marker[m][1] = k.v;
+                c.marker[m][2] = k.show ? 1.0f : 0.0f;
+                c.marker[m][3] = static_cast<float>(k.kind);
+            }
+            c.span[0] = overlays[i].spanX;
+            c.span[1] = overlays[i].spanY;
+        }
         context_->UpdateSubresource(constants_[i].Get(), 0, nullptr, &c, 0, 0);
     }
     {

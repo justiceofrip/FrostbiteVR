@@ -158,7 +158,7 @@ public:
         char line[640];
         std::snprintf(line, sizeof(line),
                       "theater_link connected=%d epoch=%llu states=%llu captured=%llu published=%llu failed=%llu discarded=%llu "
-                      "lane=%s bridges=%u leases=%llu queued=%llu pairs=%llu stereo_pairs=%llu reticle_pairs=%llu cancels=%llu capture_failures=%llu "
+                      "lane=%s bridges=%u leases=%llu queued=%llu pairs=%llu stereo_pairs=%llu reticle_pairs=%llu marked_pairs=%llu cancels=%llu capture_failures=%llu "
                       "fallbacks=%llu bridge_published=%llu consumed=%llu host_discarded=%llu bridge_failure=%u/0x%08lx "
                       "resampler=%u/0x%08lx%s\n",
                       !token_.empty() && !closed_ ? 1 : 0, static_cast<unsigned long long>(epoch_),
@@ -167,7 +167,7 @@ public:
                       static_cast<unsigned long long>(producer_.Discarded()), world_ ? "world" : "theater", connected,
                       static_cast<unsigned long long>(leases_), static_cast<unsigned long long>(queuedLeases_),
                       static_cast<unsigned long long>(pairs_), static_cast<unsigned long long>(stereoPairs_),
-                      static_cast<unsigned long long>(reticles_),
+                      static_cast<unsigned long long>(reticles_), static_cast<unsigned long long>(markedPairs_),
                       static_cast<unsigned long long>(cancels_), static_cast<unsigned long long>(captureFailures_),
                       static_cast<unsigned long long>(gate_.Fallbacks()), static_cast<unsigned long long>(published),
                       static_cast<unsigned long long>(consumed), static_cast<unsigned long long>(discarded), failureStage,
@@ -339,8 +339,20 @@ private:
         Reticle reticle;
         if (meta.reticle && meta.aimValid && !meta.stereoSplit && !untracked_)
             reticle = ReticleAt(meta.aimTanX, meta.aimTanY, tanX, tanY);
-        if (!resampler_.Render(context, backbuffer, crops, req.width, req.height, req.format, reticle)) return false;
+        EyeOverlay overlays[2];
+        bool marked = false;
+        for (int e = 0; e < 2; ++e) {
+            overlays[e].spanX = t.fov[e].right - t.fov[e].left;
+            overlays[e].spanY = t.fov[e].up - t.fov[e].down;
+            for (int m = 0; m < 2; ++m) {
+                if (!meta.markers[m].show) continue;
+                overlays[e].markers[m] = MarkerInEye(t.eyes[e], t.fov[e], meta.markers[m].position, meta.markers[m].kind);
+                marked |= overlays[e].markers[m].show;
+            }
+        }
+        if (!resampler_.Render(context, backbuffer, crops, req.width, req.height, req.format, reticle, overlays)) return false;
         if (reticle.show) ++reticles_;
+        if (marked) ++markedPairs_;
         if (!bridge->CaptureEye(0, resampler_.Eye(0), front.lease) || !bridge->CaptureEye(1, resampler_.Eye(1), front.lease) ||
             !bridge->PublishRestored(front.lease))
             return false;
@@ -479,7 +491,8 @@ private:
     WorldModeGate gate_;
     bool world_ = false, untracked_ = false;
     std::uint64_t nextPoseId_ = 0, frameSerial_ = 0, deviceEpoch_ = 0;
-    std::uint64_t reticles_ = 0; // pairs drawn with the aim reticle
+    std::uint64_t reticles_ = 0;    // pairs drawn with the aim reticle
+    std::uint64_t markedPairs_ = 0; // pairs drawn with a gesture marker
     std::uint64_t leases_ = 0, queuedLeases_ = 0, pairs_ = 0, stereoPairs_ = 0, cancels_ = 0, captureFailures_ = 0;
     ULONGLONG untrackedCheckedMs_ = 0;
     std::string snapshotDir_;

@@ -88,10 +88,19 @@ public:
     static math::Vec3 Magwell(const math::Pose& rightGrip);
     // A holster's position in the latest body frame (tracking space; zero before one).
     math::Vec3 SlotPosition(std::string_view id) const;
+    // What to show in the headset now (tracking space): the belt while the gun in hand has
+    // no magazine and the hand none either (kind 0), the magazine well while one is in the
+    // left hand (kind 1).
+    struct Marker {
+        bool show = false;
+        math::Vec3 position{};
+        std::uint32_t kind = 0;
+    };
+    std::array<Marker, 2> Markers() const;
 
     struct Counters {
         std::uint64_t draws = 0, throws = 0, knives = 0, ejects = 0, grabs = 0, seats = 0, drops = 0,
-                      quickReloads = 0, keyPresses = 0;
+                      quickReloads = 0, keyPresses = 0, hovers = 0;
     };
     const Counters& Stats() const { return stats_; }
 
@@ -103,12 +112,15 @@ private:
     enum class Held : std::uint8_t { None, Grenade };
     interaction::BodyFrameEstimator body_;
     interaction::BodyFrame lastBody_{};
+    math::Pose lastRightGrip_{};
+    bool rightGripTracked_ = false, manualReload_ = false, usable_ = false;
     interaction::HolsterSystem holsters_;
     Bf4Gun current_ = Bf4Gun::Primary;
     std::array<bool, 2> magazineOut_{};
     bool magazineInHand_ = false;
     std::array<bool, 2> grip_{}, gripOwned_{};
     std::array<Held, 2> held_{};
+    std::array<int, 2> hover_{-1, -1}; // usable holster each hand is in (pulse on entry)
     bool reloadWas_ = false, switchWas_ = false, quickDone_ = false;
     double reloadDownAt_ = 0;
     std::uint16_t key_ = 0;

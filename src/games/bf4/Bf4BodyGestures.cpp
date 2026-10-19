@@ -27,6 +27,17 @@ math::Vec3 BodyGestures::Magwell(const math::Pose& rightGrip) {
     return rightGrip.position + math::Rotate(rightGrip.orientation, math::Vec3{0, -0.07f, -0.06f});
 }
 
+std::array<BodyGestures::Marker, 2> BodyGestures::Markers() const {
+    std::array<Marker, 2> m{};
+    if (!usable_ || !manualReload_ || !lastBody_.valid) return m;
+    if (magazineInHand_) {
+        if (rightGripTracked_) m[0] = {true, Magwell(lastRightGrip_), 1};
+    } else if (magazineOut_[static_cast<int>(current_)]) {
+        m[0] = {true, SlotPosition("belt_front_left"), 0};
+    }
+    return m;
+}
+
 math::Vec3 BodyGestures::SlotPosition(std::string_view id) const {
     const int slot = holsters_.FindSlot(id);
     if (slot < 0 || !lastBody_.valid) return {};
@@ -52,6 +63,7 @@ BodyGestureOutput BodyGestures::Update(const BodyGestureInput& in) {
     const double now = in.timeSeconds;
     const auto& c = in.controls;
     const bool usable = in.engage && c.focused && c.headValid && interaction::ValidInput(c);
+    usable_ = usable;
 
     // Grip edges are tracked whenever a packet arrives, so a grip already held when the
     // gestures engage (menu closed, level loaded) never counts as a fresh grab.
@@ -92,6 +104,9 @@ BodyGestureOutput BodyGestures::Update(const BodyGestureInput& in) {
 
     const interaction::BodyFrame body = body_.Update(c.head, c.hands[0].grip, c.hands[1].grip, now);
     lastBody_ = body;
+    lastRightGrip_ = c.hands[1].grip;
+    rightGripTracked_ = c.hands[1].gripTracked;
+    manualReload_ = in.manualReload;
     const auto slots = holsters_.Slots();
     auto zoneAt = [&](const math::Vec3& p) -> int {
         int best = -1;
@@ -125,9 +140,27 @@ BodyGestureOutput BodyGestures::Update(const BodyGestureInput& in) {
             held_[h] = Held::None;
             gripOwned_[h] = false;
         }
-        if (!rising[h] || !hand.gripTracked || !in.holsters) continue;
-        const int zone = zoneAt(hand.grip.position);
-        if (zone < 0) continue;
+        const int zone = hand.gripTracked && in.holsters ? zoneAt(hand.grip.position) : -1;
+        // Holsters are invisible: a light pulse when an empty hand reaches one it could use now.
+        int usable = -1;
+        if (zone >= 0 && !grip_[h]) {
+            switch (slots[static_cast<std::size_t>(zone)].accepts) {
+            case EquipmentCategory::Primary: usable = current_ != Bf4Gun::Primary ? zone : -1; break;
+            case EquipmentCategory::Secondary: usable = current_ != Bf4Gun::Secondary ? zone : -1; break;
+            case EquipmentCategory::Grenade: usable = zone; break;
+            case EquipmentCategory::Knife: usable = h == 0 ? zone : -1; break;
+            case EquipmentCategory::Magazine:
+                usable = in.manualReload && h == 0 && !magazineInHand_ && magazineOut_[static_cast<int>(current_)] ? zone : -1;
+                break;
+            case EquipmentCategory::Gadget: break;
+            }
+        }
+        if (usable >= 0 && usable != hover_[h] && !out.haptic[h].valid) {
+            out.haptic[h] = {true, false};
+            ++stats_.hovers;
+        }
+        hover_[h] = usable;
+        if (!rising[h] || zone < 0) continue;
         switch (slots[static_cast<std::size_t>(zone)].accepts) {
         case EquipmentCategory::Primary: Select(Bf4Gun::Primary, now); break;
         case EquipmentCategory::Secondary: Select(Bf4Gun::Secondary, now); break;
@@ -189,6 +222,7 @@ void BodyGestures::OnLifetimeTransition() {
     magazineOut_ = {};
     magazineInHand_ = false;
     held_ = {};
+    hover_ = {-1, -1};
     current_ = Bf4Gun::Primary;
     key_ = 0;
     reloadUntil_ = 0;

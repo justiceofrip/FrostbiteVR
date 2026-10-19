@@ -8,6 +8,7 @@
 // publishes the pair. Mono: one head-centred render feeds both eyes (no parallax), both from
 // the same native frame. Stereo replaces the source with one render per eye in the same frame.
 #include "fvr/math/StereoMath.h"
+#include "fvr/math/Vec.h"
 
 #include <algorithm>
 #include <cmath>
@@ -88,6 +89,32 @@ inline Reticle ReticleAt(float aimTanX, float aimTanY, float tanX, float tanY) {
     r.show = r.u > 0 && r.u < 1 && r.v > 0 && r.v < 1;
     return r;
 }
+
+// Gesture markers (the magazine pouch, the magazine well) drawn into the eye images. Each
+// eye places a tracking-space point by its own pose and FOV, so a marker sits at its true
+// depth even though the world behind it is one mono render. u,v: the eye image (0..1).
+struct EyeMarker {
+    bool show = false;
+    float u = 0, v = 0;
+    std::uint32_t kind = 0; // 0 amber (take from here), 1 green (put it here)
+};
+inline EyeMarker MarkerInEye(const math::Pose& eye, const math::FovTangents& fov, const math::Vec3& point,
+                             std::uint32_t kind) {
+    EyeMarker m;
+    const math::Vec3 local = math::Rotate(math::Conjugate(eye.orientation), point - eye.position);
+    const float depth = -local.z, w = fov.right - fov.left, h = fov.up - fov.down;
+    if (!(depth > 0.05f) || !(w > 0) || !(h > 0)) return m;
+    m.u = (local.x / depth - fov.left) / w;
+    m.v = (fov.up - local.y / depth) / h;
+    m.kind = kind;
+    m.show = m.u > -0.05f && m.u < 1.05f && m.v > -0.05f && m.v < 1.05f;
+    return m;
+}
+// Per eye: up to two markers and the eye image's extent in tangent units (marker size).
+struct EyeOverlay {
+    EyeMarker markers[2];
+    float spanX = 1, spanY = 1;
+};
 
 inline constexpr std::uint64_t kWorldLeaseMaxMs = 140; // host requests live 150 ms
 // --frame-channels 2: requests live 200 ms (one waits behind the other); the margin covers

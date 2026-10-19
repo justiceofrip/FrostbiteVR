@@ -111,13 +111,20 @@ screen. Pieces (all on the analysed build only):
   before the well drops it. Holding B 0.6 s reloads at once. Custody persists across
   packets, menus and tracking loss; a level start is the lifetime transition. BF4's own
   ammunition and auto-reload are untouched (nothing native is acknowledged or written).
+- Feedback without visuals of the gear itself: a light pulse when an empty hand reaches a
+  holster it could use now (not the gun already in hand; the belt only while the gun is
+  empty), and two markers drawn into the eye pair: an amber ring at the belt pouch while
+  the gun has no magazine, a green ring at the magazine well while one is in the hand.
+  Each eye places a marker by its own pose (`MarkerInEye`), so markers have true depth
+  over the mono world. Log: `marked_pairs=`.
 - Mod menu: "Body holsters: Off / On" (default on). Status/log: `gestures gun=...
   magazine_out=... draws= throws= knives= ejects= grabs= seats= drops= quick_reloads=`
   (logged at each change), plus `key_sends` / `haptics_sent` every 600 frames.
 - Evidence: unit tests (each holster, put-back vs throw, knife hand, grip held at engage,
   holsters off; eject/hold fire/persistence/drop/seat/per-gun/quick reload/level start)
   and an emulated campaign through the whole core (keys reach the platform and go up,
-  pulses, RB/LB not pressed by gesture grips, RT held off, X on seating). Not yet seen in
+  pulses, RB/LB not pressed by gesture grips, RT held off, X on seating); hover pulses and
+  marker placement/parallax unit-tested; the WARP check draws a marker ring. Not yet seen in
   the real game: the default key bindings, whether BF4 mixes keyboard selection with the
   pad, holster positions for the player's body.
 
@@ -319,11 +326,11 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
 
 ## Tests (2026-10-19)
 
-- Build.ps1 after snap turning: x64 284/284, x86 283/283. Bf4CoreTests 64 cases;
+- Build.ps1 after gesture markers: x64 284/284, x86 283/283. Bf4CoreTests 66 cases;
   Bf4Emulated pass (theater, world lane, stereo probe, census, lockdown, gestures, eye
   resampler reticle on WARP); launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
   `-World -FrameChannels 2` 5/5 (227 pairs); `-World` with one channel 4/4 (47 pairs).
-- Installed locally: runtime/bf4 0.4.21-local (rollback 0.4.20-local). Developer
+- Installed locally: runtime/bf4 0.4.22-local (rollback 0.4.21-local). Developer
   sessions still run the read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the
   framework's `StereoMath.h` (`Quat` = `Quaternion`; Pose is `{position, orientation}`).

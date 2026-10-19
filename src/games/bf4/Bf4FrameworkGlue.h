@@ -47,6 +47,13 @@ struct FrameMeta {
     bool reticle = false;
     bool aimValid = false;
     float aimTanX = 0, aimTanY = 0;
+    // Gesture markers (tracking space, the XR host's reference): drawn per eye into the pair.
+    struct Marker {
+        bool show = false;
+        math::Vec3 position{};
+        std::uint32_t kind = 0; // 0 amber: take from here; 1 green: put it here
+    };
+    Marker markers[2];
 };
 
 class IFrameSink {

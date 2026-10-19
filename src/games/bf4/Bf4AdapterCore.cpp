@@ -527,6 +527,9 @@ void AdapterCore::OnFrame(const PlatformFrame& f, const ControllerSnapshot& in) 
         meta.worldSettle = static_cast<std::uint32_t>(menuState_.worldSettle);
         meta.worldStereo = session_.developerFeatures && menuState_.worldStereo;
         meta.reticle = menuState_.aimDot && aim_.engaged;
+        const auto marks = gestures_.Markers();
+        for (std::size_t i = 0; i < marks.size() && i < 2; ++i)
+            meta.markers[i] = {marks[i].show, marks[i].position, marks[i].kind};
         if (in.world.valid && in.world.halfEyeDistance > 0) halfEyeDistance_ = in.world.halfEyeDistance;
         meta.halfEyeDistance = halfEyeDistance_;
         const bool enginePair = pair && (stereo_ == StereoMode::Theater3D || stereo_ == StereoMode::EngineStereoTracked);

@@ -922,3 +922,63 @@ TEST_CASE(SnapTurningStepsTheBodyHeading) {
     for (int i = 0; i < 60; ++i) out = aim.Update(in);
     CHECK(Near(out.bodyYaw, -MotionAim::kTurnRate, 0.02f));
 }
+
+TEST_CASE(HolstersPulseWhenAHandReachesOneItCanUse) {
+    using namespace fvr;
+    using namespace fvr::bf4;
+    GestureRig r;
+    r.Move(1, r.Slot("hip_right"));
+    auto out = r.Step();
+    CHECK(out.haptic[1].valid && !out.haptic[1].strong && r.gestures.Stats().hovers == 1);
+    CHECK(!r.Step().haptic[1].valid); // staying inside: once
+    r.Move(1, {0.20f, 1.30f, -0.40f});
+    r.Step();
+    // The primary is already in hand: its holster has nothing to offer.
+    r.Move(1, r.Slot("back_right"));
+    CHECK(!r.Step().haptic[1].valid);
+    // The belt only matters with a magazine out and none in the hand.
+    r.Move(0, r.Slot("belt_front_left"));
+    CHECK(!r.Step().haptic[0].valid);
+    r.Move(0, {-0.25f, 1.20f, -0.30f});
+    r.Step();
+    r.in.reloadButton = true;
+    r.Step();
+    r.in.reloadButton = false;
+    r.Step();
+    r.Move(0, r.Slot("belt_front_left"));
+    CHECK(r.Step().haptic[0].valid);
+}
+
+TEST_CASE(GestureMarkersSitAtTheirDepthInEachEye) {
+    using namespace fvr;
+    using namespace fvr::bf4;
+    const math::FovTangents fov{-1.0f, 1.0f, 1.0f, -1.0f};
+    math::Pose left, right;
+    left.orientation = right.orientation = {0, 0, 0, 1};
+    left.position = {-0.032f, 0, 0};
+    right.position = {0.032f, 0, 0};
+    const math::Vec3 near{0.0f, -0.5f, -0.5f}; // half a metre ahead, below the eyes
+    const auto l = MarkerInEye(left, fov, near, 0), r = MarkerInEye(right, fov, near, 0);
+    CHECK(l.show && r.show && l.v > 0.5f && Near(l.v, r.v, 1e-5f));
+    CHECK(Near(l.u - r.u, 2 * 0.032f / 0.5f / 2.0f, 1e-4f)); // near: the eyes disagree (parallax)
+    CHECK(!MarkerInEye(left, fov, {0, 0, 0.5f}, 0).show); // behind
+    // The gestures ask for the belt while the gun is empty, the well while a magazine is held.
+    GestureRig g;
+    CHECK(!g.gestures.Markers()[0].show);
+    g.in.reloadButton = true;
+    g.Step();
+    g.in.reloadButton = false;
+    g.Step();
+    auto m = g.gestures.Markers();
+    CHECK(m[0].show && m[0].kind == 0 && Near(math::Length(m[0].position - g.Slot("belt_front_left")), 0.0f, 1e-5f));
+    g.Move(0, g.Slot("belt_front_left"));
+    g.Step();
+    g.Grip(0, true);
+    g.Step();
+    m = g.gestures.Markers();
+    CHECK(m[0].show && m[0].kind == 1 &&
+          Near(math::Length(m[0].position - BodyGestures::Magwell(g.in.controls.hands[1].grip)), 0.0f, 1e-5f));
+    g.Move(0, BodyGestures::Magwell(g.in.controls.hands[1].grip));
+    g.Step();
+    CHECK(!g.gestures.Markers()[0].show); // seated
+}

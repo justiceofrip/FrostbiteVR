@@ -38,6 +38,10 @@ bool Grey(std::uint32_t p) {
     const int r = p & 0xFF, g = (p >> 8) & 0xFF, b = (p >> 16) & 0xFF;
     return r > 110 && r < 145 && g > 110 && g < 145 && b > 110 && b < 145;
 }
+bool Amber(std::uint32_t p) {
+    const int r = p & 0xFF, g = (p >> 8) & 0xFF, b = (p >> 16) & 0xFF;
+    return r > 200 && g > 130 && g < 200 && b < 90;
+}
 bool Green(std::uint32_t p) {
     const int r = p & 0xFF, g = (p >> 8) & 0xFF, b = (p >> 16) & 0xFF;
     return g > 200 && r < 120 && b < 140;
@@ -80,5 +84,20 @@ bool CheckEyeResamplerReticle(ID3D11Device* device, const char*& why) {
         if (!Green(eye[32 * width + 32 + 14]) && !Green(eye[32 * width + 32 + 15])) return why = "reticle ring", false;
         if (!Grey(eye[2 * width + 2]) || !Grey(eye[32 * width + 32 + 7])) return why = "frame untouched away from the reticle", false;
     }
+    // A gesture marker in each eye's own image position: an amber ring of 0.03 tangent units
+    // around (0.25, 0.5); with an eye span of 0.2 that is ~9.6 px. No reticle this time.
+    fvr::bf4::EyeOverlay overlays[2];
+    for (auto& o : overlays) {
+        o.spanX = o.spanY = 0.2f;
+        o.markers[0].show = true;
+        o.markers[0].u = 0.25f;
+        o.markers[0].v = 0.5f;
+    }
+    if (!resampler.Render(context.Get(), frame.Get(), crops, kSize, kSize, DXGI_FORMAT_R8G8B8A8_UNORM, {}, overlays))
+        return why = "marker resample", false;
+    if (!ReadPixels(device, context.Get(), resampler.Eye(1), eye, width)) return why = "read back the marker eye", false;
+    if (!Amber(eye[32 * width + 16 + 10]) && !Amber(eye[32 * width + 16 + 9])) return why = "marker ring", false;
+    if (!Grey(eye[32 * width + 16]) || !Grey(eye[32 * width + 48]) || Green(eye[32 * width + 32]))
+        return why = "marker only at its place, no reticle", false;
     return true;
 }
