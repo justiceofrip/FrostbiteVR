@@ -19,5 +19,6 @@ private:
     void* dc_=nullptr;void* bitmap_=nullptr;void* old_=nullptr;void* bits_=nullptr;
     void* font_=nullptr;void* titleFont_=nullptr;void* smallFont_=nullptr;
     std::uint32_t width_=0,height_=0;std::vector<std::uint8_t> pixels_;
+    int fontScale_=100; // percent of the base item font sizes in use
 };
 }

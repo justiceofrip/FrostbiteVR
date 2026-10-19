@@ -19,7 +19,7 @@ TEST_CASE(ModMenuReflectsCapabilitiesInPlainWords) {
     auto menu = BuildModMenu(caps, false, {});
     CHECK(menu.Find("reload_mode")->note.empty()); // working button press: nothing to explain
     CHECK(!menu.Find("holsters")->enabled && menu.Find("holsters")->note == "Coming in a later update.");
-    CHECK(menu.Find("snap_turn")->enabled && !menu.Find("theater_distance")->enabled); // distance: not wired to the host yet
+    CHECK(menu.Find("snap_turn")->enabled && !menu.Find("theater_distance")); // no dead switches
 }
 
 TEST_CASE(EmuModMenuOpensAndChangesReloadMode) {

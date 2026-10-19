@@ -33,8 +33,6 @@ ui::ModMenuModel BuildModMenu(const game::CapabilityRegistry& caps, bool develop
     // Shown but disabled until the XR host consumes them (never offer a dead switch).
     menu.Add({"snap_turn", "Snap turning", MenuItemKind::Toggle, {}, state.snapTurn ? 1 : 0, true,
               "Right stick: 30 degree steps."});
-    menu.Add({"theater_distance", "Screen distance", MenuItemKind::Choice, {"Near", "Medium", "Far"},
-              state.theaterDistance, false, "Coming in a later update."});
     menu.Add({"hud_insets", "HUD corners", MenuItemKind::Choice, {"Off", "On"}, state.hudInsets ? 1 : 0, true,
               "Ammo and minimap moved into view."});
     menu.Add({"depth_stereo", "3D from depth", MenuItemKind::Choice, {"Off", "On"}, state.depthStereo ? 1 : 0, true,

@@ -32,6 +32,15 @@ bool GdiPanelRaster::Ensure(std::uint32_t w,std::uint32_t h)noexcept {
 bool GdiPanelRaster::Render(const ui::VrPanel& panel,bool bgra)noexcept {
     if(!Ensure(panel.Width(),panel.Height()))return false;
     const HDC dc=HDC(dc_);SetBkMode(dc,TRANSPARENT);
+    // Item text follows the item height: a long menu (shorter rows) gets smaller fonts so
+    // both lines of an item still fit. 66 px is the height the base sizes were made for.
+    float itemHeight=0;
+    for(const auto& w:panel.Widgets())if(w.kind!=ui::WidgetKind::Title&&w.kind!=ui::WidgetKind::Label&&(itemHeight<=0||w.rect.h<itemHeight))itemHeight=w.rect.h;
+    const int scaled=itemHeight>0&&itemHeight<66.f?int(itemHeight*100.f/66.f):100;
+    if(scaled!=fontScale_){
+        for(void* o:{font_,smallFont_})if(o)DeleteObject(HGDIOBJ(o));
+        font_=Font(30*scaled/100,500);smallFont_=Font(24*scaled/100,400);fontScale_=scaled;
+    }
     Fill(dc,{0,0,float(width_),float(height_)},0x12151a,0);
     Fill(dc,{0,0,float(width_),6},0x2f6fd6,0);
     for(const auto& w:panel.Widgets()){
