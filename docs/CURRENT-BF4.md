@@ -153,6 +153,12 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the
   framework's `StereoMath.h` (`Quat` = `Quaternion`; Pose is `{position, orientation}`).
 
+## Holsters and arm IK research (2026-10-19, static only)
+
+- BF4 can hide the first-person gun itself (`Animated1pOnlyWeaponBinding.HideWeapon1p`)
+  and its character IK scene op has hand IK inputs (`InEnableLeft/RightHandIK`,
+  `InLeft/RightHandIKReach`, `InHideWeapon`). Plan and unknowns: BF4-HOLSTER-IK-RE.md.
+
 ## Next live session
 
 Checklist: [BF4-FIRST-SESSION.md](BF4-FIRST-SESSION.md). Afterwards
