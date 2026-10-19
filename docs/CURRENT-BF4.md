@@ -96,8 +96,10 @@ screen. Pieces (all on the analysed build only):
 
 - `Bf4BodyGestures.h`: input-only (no game memory). Body-relative holsters (the
   framework's `BodyFrameEstimator` + BF4 layout): over the right shoulder = primary (key
-  1), right hip = sidearm (key 2), left hip = grenade (grab, let go away from the hip to
-  throw: G), chest with the left hand = knife (F), belt front left = magazine. Keys are BF4's
+  1), right hip = sidearm (key 2), over the left shoulder = first gadget (key 3; the VR
+  layout has no D-pad, so gadgets were unreachable before), left hip = grenade (grab, let
+  go away from the hip to throw: G), chest with the left hand = knife (F), belt front
+  left = magazine. A gadget in hand has no VR magazine: the gun's waits, fire is free. Keys are BF4's
   default PC bindings, sent as scan codes only into the focused game window, held 80 ms,
   and released on every outcome (key change, focus loss, detach). A grip press that starts
   in a holster is the gesture's, not the pad's; with holsters on, the right (gun) grip is
@@ -368,12 +370,11 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
   and notes were shortened to fit half width (GDI text now ends with an ellipsis when it
   does not fit). Unit test: every item on the panel, none overlapping; a GDI render of the
   developer menu was checked by eye.
-- Build.ps1 after B tap/hold (interact kept in manual mode): x64 284/284, x86 283/283.
-  Bf4CoreTests 74 cases;
+- Build.ps1 after the gadget holster: x64 284/284, x86 283/283. Bf4CoreTests 75 cases;
   Bf4Emulated pass (theater, world lane, stereo probe, census, lockdown, gestures, eye
   resampler reticle on WARP); launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
   `-World -FrameChannels 2` 5/5 (227 pairs); `-World` with one channel 4/4 (47 pairs).
-- Installed locally: runtime/bf4 0.4.31-local (rollback 0.4.30-local). Developer
+- Installed locally: runtime/bf4 0.4.32-local (rollback 0.4.31-local). Developer
   sessions still run the read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the
   framework's `StereoMath.h` (`Quat` = `Quaternion`; Pose is `{position, orientation}`).

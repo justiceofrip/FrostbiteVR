@@ -12,6 +12,7 @@ std::vector<interaction::HolsterSlot> Bf4HolsterLayout() {
     using interaction::BodyAnchor;
     return {
         {"back_right", BodyAnchor::BackRight, {0, 0, 0}, 0.18f, EquipmentCategory::Primary, -1},
+        {"back_left", BodyAnchor::BackLeft, {0, 0, 0}, 0.18f, EquipmentCategory::Gadget, -1},
         {"hip_right", BodyAnchor::HipRight, {0, 0, 0}, 0.13f, EquipmentCategory::Secondary, -1},
         {"hip_left", BodyAnchor::HipLeft, {0, 0, 0}, 0.13f, EquipmentCategory::Grenade, -1},
         {"chest", BodyAnchor::Chest, {0, 0, -0.10f}, 0.10f, EquipmentCategory::Knife, -1},
@@ -32,7 +33,7 @@ std::array<BodyGestures::Marker, 2> BodyGestures::Markers() const {
     if (!usable_ || !manualReload_ || !lastBody_.valid) return m;
     if (magazineInHand_) {
         if (rightGripTracked_) m[0] = {true, Magwell(lastRightGrip_), 1};
-    } else if (magazineOut_[static_cast<int>(current_)]) {
+    } else if (magazineOut_[static_cast<int>(current_)] && !gadget_) {
         m[0] = {true, SlotPosition("belt_front_left"), 0};
     }
     return m;
@@ -54,6 +55,7 @@ void BodyGestures::PulseReload(double now) { reloadUntil_ = now + kReloadPulseSe
 
 void BodyGestures::Select(Bf4Gun gun, double now) {
     current_ = gun;
+    gadget_ = false;
     PressKey(gun == Bf4Gun::Primary ? gamekey::Primary : gamekey::Secondary, now);
     ++stats_.draws;
 }
@@ -101,7 +103,10 @@ BodyGestureOutput BodyGestures::Update(const BodyGestureInput& in) {
         return out;
     }
 
-    if (switchRising) current_ = current_ == Bf4Gun::Primary ? Bf4Gun::Secondary : Bf4Gun::Primary; // pad Y toggles
+    if (switchRising) { // pad Y toggles the guns (from a gadget it returns to the gun in hand)
+        if (gadget_) gadget_ = false;
+        else current_ = current_ == Bf4Gun::Primary ? Bf4Gun::Secondary : Bf4Gun::Primary;
+    }
 
     const interaction::BodyFrame body = body_.Update(c.head, c.hands[0].grip, c.hands[1].grip, now);
     lastBody_ = body;
@@ -153,7 +158,7 @@ BodyGestureOutput BodyGestures::Update(const BodyGestureInput& in) {
             case EquipmentCategory::Magazine: // the belt buzzes when the gun needs a magazine
                 offer = in.manualReload && h == 0 && !magazineInHand_ && magazineOut_[static_cast<int>(current_)] ? zone : -1;
                 break;
-            case EquipmentCategory::Gadget: break;
+            case EquipmentCategory::Gadget: offer = zone; break;
             }
         }
         if (offer >= 0 && offer != hover_[h] && !out.haptic[h].valid) {
@@ -176,7 +181,11 @@ BodyGestureOutput BodyGestures::Update(const BodyGestureInput& in) {
             magazineInHand_ = true;
             ++stats_.grabs;
             break;
-        case EquipmentCategory::Gadget: continue;
+        case EquipmentCategory::Gadget: // BF4 keeps the gadget in hand until another selection
+            PressKey(gamekey::Gadget, now);
+            gadget_ = true;
+            ++stats_.gadgets;
+            break;
         }
         gripOwned_[h] = true;
         out.haptic[h] = {true, false};
@@ -194,7 +203,7 @@ BodyGestureOutput BodyGestures::Update(const BodyGestureInput& in) {
             gunOut = false; // BF4 reloads (or interacts; either way the gun is not left empty)
             ++stats_.quickReloads;
         }
-        if (reloadFalling && !holdActive_ && !gunOut) { // a tap: drop the magazine
+        if (reloadFalling && !holdActive_ && !gunOut && !gadget_) { // a tap: drop the gun's magazine
             gunOut = true;
             ++stats_.ejects;
             out.haptic[1] = {true, false};
@@ -213,7 +222,7 @@ BodyGestureOutput BodyGestures::Update(const BodyGestureInput& in) {
             out.haptic[0] = {true, true};
             out.haptic[1] = {true, true};
         }
-        out.blockFire = gunOut;
+        out.blockFire = gunOut && !gadget_; // a gadget has no VR magazine; the gun's waits
     }
 
     if (now < keyUntil_) out.keys[0] = key_;
@@ -229,6 +238,7 @@ void BodyGestures::OnLifetimeTransition() {
     held_ = {};
     hover_ = {-1, -1};
     current_ = Bf4Gun::Primary;
+    gadget_ = false;
     key_ = 0;
     reloadUntil_ = 0;
     body_.Reset();
@@ -239,11 +249,12 @@ void BodyGestures::OnLifetimeTransition() {
 std::string BodyGestures::Describe() const {
     char line[384];
     std::snprintf(line, sizeof(line),
-                  "gestures gun=%s magazine_out=%d/%d magazine_in_hand=%d draws=%llu throws=%llu knives=%llu ejects=%llu "
+                  "gestures gun=%s magazine_out=%d/%d magazine_in_hand=%d draws=%llu throws=%llu knives=%llu gadgets=%llu ejects=%llu "
                   "grabs=%llu seats=%llu tactical=%llu drops=%llu quick_reloads=%llu key_presses=%llu",
                   current_ == Bf4Gun::Primary ? "primary" : "sidearm", magazineOut_[0] ? 1 : 0, magazineOut_[1] ? 1 : 0,
                   magazineInHand_ ? 1 : 0, static_cast<unsigned long long>(stats_.draws),
                   static_cast<unsigned long long>(stats_.throws), static_cast<unsigned long long>(stats_.knives),
+                  static_cast<unsigned long long>(stats_.gadgets),
                   static_cast<unsigned long long>(stats_.ejects), static_cast<unsigned long long>(stats_.grabs),
                   static_cast<unsigned long long>(stats_.seats), static_cast<unsigned long long>(stats_.tacticalReloads),
                   static_cast<unsigned long long>(stats_.drops),

@@ -1,4 +1,4 @@
-# BF4 headset session: checklist (0.4.31-local)
+# BF4 headset session: checklist (0.4.32-local)
 
 What to try in the next headset session, and what each check tells us. About 15 minutes.
 Everything is input-only or an exactly restored camera/FOV write, apart from the optional
@@ -31,8 +31,9 @@ Everything is input-only or an exactly restored camera/FOV write, apart from the
 3. Walk with the left stick: the edges darken while moving (menu: Comfort vignette). In a
    vehicle, set the menu's "Walk toward" to Gun (the stick is throttle and steering there).
 4. Holsters (grip in the zone; a light buzz when your hand reaches one you can use):
-   right hip = sidearm (key 2), over the right shoulder = primary (key 1), left hip =
-   grenade (grab, then let go away from the hip to throw), chest with the left hand = knife.
+   right hip = sidearm (key 2), over the right shoulder = primary (key 1), over the left
+   shoulder = gadget (key 3), left hip = grenade (grab, then let go away from the hip to
+   throw), chest with the left hand = knife.
 5. Reload by hand (Reload: Manual): **tap B to drop the magazine** (the trigger stops
    firing; an amber ring marks the belt pouch, front left). Grab there with the left grip
    and push it to the green ring under the gun: BF4 plays its reload. Letting go early

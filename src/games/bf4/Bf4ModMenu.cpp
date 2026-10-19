@@ -72,7 +72,7 @@ void RefreshModMenu(ui::ModMenuModel& menu, const game::CapabilityRegistry& caps
     }
     if (MenuItem* holsters = menu.Find("holsters")) {
         holsters->enabled = caps.IsUsable(Feature::VirtualGamepad, developer); // input-only: game keys
-        holsters->note = holsters->enabled ? "R hip pistol, back rifle, L hip grenade."
+        holsters->note = holsters->enabled ? "Hips: pistol, grenade. Back: rifle, gadget."
                                            : Roadmap(caps, Feature::Holsters, developer);
     }
     if (MenuItem* view = menu.Find("view_mode")) {

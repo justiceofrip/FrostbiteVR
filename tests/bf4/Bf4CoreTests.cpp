@@ -1076,3 +1076,29 @@ TEST_CASE(TacticalReloadPushesAFreshMagazineIntoALoadedGun) {
     CHECK((out.padButtons & interaction::pad::X) && !out.blockFire);
     CHECK(r.gestures.Stats().seats == 1 && r.gestures.Stats().tacticalReloads == 1 && !r.gestures.MagazineInHand());
 }
+
+TEST_CASE(GadgetHolsterSelectsTheGadgetAndLeavesTheGunsMagazine) {
+    using namespace fvr;
+    using namespace fvr::bf4;
+    GestureRig r;
+    r.in.reloadButton = true; // tap: the rifle's magazine is out
+    r.Step();
+    r.in.reloadButton = false;
+    CHECK(r.Step().blockFire);
+    r.Move(1, r.Slot("back_left"));
+    r.Step();
+    r.Grip(1, true);
+    auto out = r.Step();
+    CHECK(out.keys[0] == gamekey::Gadget && r.gestures.GadgetInHand() && !out.blockFire); // the gadget fires
+    CHECK(!r.gestures.Markers()[0].show);
+    r.Grip(1, false);
+    r.Step(0.1);
+    r.in.reloadButton = true; // a tap with the gadget drops nothing
+    r.Step();
+    r.in.reloadButton = false;
+    r.Step();
+    CHECK(r.gestures.Stats().ejects == 1);
+    r.in.switchButton = true; // pad Y: back to the rifle, still empty
+    out = r.Step();
+    CHECK(!r.gestures.GadgetInHand() && r.gestures.Current() == Bf4Gun::Primary && out.blockFire);
+}

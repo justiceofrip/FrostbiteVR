@@ -7,6 +7,7 @@
 // with a dead zone):
 //   over the right shoulder  -> primary weapon     (key 1)
 //   right hip                -> sidearm            (key 2)
+//   over the left shoulder   -> first gadget       (key 3)
 //   left hip                 -> grenade: grab it, let go away from the hip to throw (G)
 //   chest                    -> knife              (F, BF4's melee)
 //   belt, front left         -> a magazine (manual reload)
@@ -38,6 +39,7 @@ namespace fvr::bf4 {
 namespace gamekey {
 inline constexpr std::uint16_t Primary = 0x02;   // 1
 inline constexpr std::uint16_t Secondary = 0x03; // 2
+inline constexpr std::uint16_t Gadget = 0x04;    // 3 (first gadget)
 inline constexpr std::uint16_t Grenade = 0x22;   // G (throw grenade)
 inline constexpr std::uint16_t Melee = 0x21;     // F (knife)
 } // namespace gamekey
@@ -84,6 +86,7 @@ public:
     void OnLifetimeTransition();
 
     Bf4Gun Current() const { return current_; }
+    bool GadgetInHand() const { return gadget_; }
     bool MagazineOut(Bf4Gun gun) const { return magazineOut_[static_cast<int>(gun)]; }
     bool MagazineInHand() const { return magazineInHand_; }
     std::string Describe() const;
@@ -102,7 +105,7 @@ public:
     std::array<Marker, 2> Markers() const;
 
     struct Counters {
-        std::uint64_t draws = 0, throws = 0, knives = 0, ejects = 0, grabs = 0, seats = 0, drops = 0,
+        std::uint64_t draws = 0, throws = 0, knives = 0, gadgets = 0, ejects = 0, grabs = 0, seats = 0, drops = 0,
                       quickReloads = 0, keyPresses = 0, hovers = 0, tacticalReloads = 0;
     };
     const Counters& Stats() const { return stats_; }
@@ -119,6 +122,7 @@ private:
     bool rightGripTracked_ = false, manualReload_ = false, usable_ = false;
     interaction::HolsterSystem holsters_;
     Bf4Gun current_ = Bf4Gun::Primary;
+    bool gadget_ = false; // a gadget is in hand (selected from its holster)
     std::array<bool, 2> magazineOut_{};
     bool magazineInHand_ = false;
     std::array<bool, 2> grip_{}, gripOwned_{};
