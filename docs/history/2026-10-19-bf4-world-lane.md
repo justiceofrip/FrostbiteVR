@@ -28,3 +28,16 @@ Decisions worth keeping:
   `PipelinedFrameProvider`; adapter FIFO over two bridges) instead of widening the
   single-slot protocol. Each pair stays labelled with its own request's pose; the
   second request is staggered (0.7 of a typical completion) so its pose is not stale.
+- Controller aim drives BF4's own mouse look from outside (no game writes). Its steering
+  was chosen by simulation, not by the emulator: half the error per frame with two
+  frames of counts treated as in flight, a deliberately high first gain estimate (an
+  under-estimate overshoots, an over-estimate is only slow), learning weighted by the
+  angle turned, and an overshoot guard. The emulator's ideal timing had hidden both an
+  unstable step and a re-anchoring bug at lease gaps.
+- Stereo has a second route that keeps "both eyes from one native frame": depth-image
+  stereo from the game's own depth buffer, found through its ClearDepthStencilView calls
+  (each lazily resolved d3d11 implementation hooked) and copied before the first-person
+  clear. BF4's split-screen stereo stays developer-only until the freeze is explained.
+- The projection aspect cannot be narrowed to the eyes (the view setup takes it from the
+  output size), so the corner HUD is shown through insets until the UI pass can be
+  rendered separately.
