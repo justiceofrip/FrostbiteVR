@@ -35,6 +35,8 @@ struct CameraRequest {
     int eye = -1; // -1 mono, 0 left, 1 right
     frostbite::LinearTransform local;
     frostbite::FovAngles fov;
+    std::uint64_t poseId = 0; // world lane lease the pose belongs to (0: none)
+    float renderFovY = 0;     // vertical FOV to render (radians); 0 keeps the game's
 };
 
 // Off: flat theater. Theater3D: engine stereo pair on the theater screen, no head tracking.
@@ -157,7 +159,7 @@ public:
 private:
     void Detach(std::string_view why);
     StereoMode ChooseStereo() const;
-    void UpdateCamera(const ControllerSnapshot& input);
+    void UpdateCamera(const ControllerSnapshot& input, const PlatformFrame& frame);
     void UpdateModMenu(const ControllerSnapshot& input);
     void ApplyMenuCommand(const ModMenuCommand& command);
 

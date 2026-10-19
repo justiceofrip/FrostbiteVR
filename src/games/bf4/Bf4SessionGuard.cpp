@@ -15,8 +15,9 @@ bool StartsWithNoCase(std::string_view s, std::string_view prefix) {
 } // namespace
 
 bool SessionGuard::IsCampaignLevel(std::string_view levelName) {
-    // Campaign levels live under Levels/SP_*. Tutorial/test levels are not admitted.
-    return StartsWithNoCase(levelName, "Levels/SP_");
+    // Campaign levels: "Levels/SP/SP_Prologue/SP_Prologue" on build 179547 (live, 2026-10-19);
+    // the older "Levels/SP_" form is kept. Everything else (Levels/MP/..., test levels) is not.
+    return StartsWithNoCase(levelName, "Levels/SP/") || StartsWithNoCase(levelName, "Levels/SP_");
 }
 
 bool SessionGuard::IsFrontEndLevel(std::string_view levelName) {

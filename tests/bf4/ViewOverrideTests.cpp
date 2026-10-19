@@ -164,3 +164,62 @@ TEST_CASE(ViewOverrideAppliesRestoresAndDetachesExactly) {
     r.vptr = foreignTable + 1; // another hook took the object over
     CHECK(vo.Remove(r.Object()) == ViewOverride::RemoveResult::ForeignVtable && r.vptr == foreignTable + 1);
 }
+
+namespace {
+struct Peek { // reads what the "game" saw during the call
+    static void Submit(void*, float, float, std::uint32_t, std::uint8_t* views, void*, void*) {
+        std::memcpy(&g_peekFov, views + kViewFovOffset, 4);
+        std::memcpy(&g_peekHorizontal, views + kViewHorizontalFovOffset, 4);
+        std::memcpy(&g_peekDirty, views + kViewDirtyOffset, 4);
+    }
+    static inline float g_peekFov = 0, g_peekHorizontal = 0;
+    static inline std::uint32_t g_peekDirty = 0;
+};
+} // namespace
+
+TEST_CASE(ViewOverrideFovAndPoseRunsForTheWorldLane) {
+    g_log = {};
+    FakeRenderer r;
+    const auto submit = reinterpret_cast<std::uintptr_t>(&FakeSubmit);
+    const LinearTransform game = Yawed(0, {1, 2, 3});
+    ViewOverride vo;
+    CHECK(vo.Install(r.Object(), submit) == ViewOverride::InstallResult::Ok);
+    Views v(game);
+    const float gameFov = 0.96f, aspect = 16.0f / 9.0f, horizontal = 1.5f;
+    std::memcpy(v.bytes + kViewFovOffset, &gameFov, 4);
+    std::memcpy(v.bytes + kViewAspectOffset, &aspect, 4);
+    std::memcpy(v.bytes + kViewHorizontalFovOffset, &horizontal, 4);
+    Views pristine = v;
+
+    float seenFov = 0, seenHorizontal = 0;
+    std::uint32_t seenDirty = 0;
+    vo.SetLocal(LinearTransform{}, false, /*poseId=*/7, /*fovY=*/1.9f);
+    CHECK(vo.Remove(r.Object()) == ViewOverride::RemoveResult::Restored);
+    r.table[1 + kRendererSubmitSlot] = reinterpret_cast<void*>(&Peek::Submit);
+    CHECK(vo.Install(r.Object(), reinterpret_cast<std::uintptr_t>(&Peek::Submit)) == ViewOverride::InstallResult::Ok);
+    vo.SetLocal(LinearTransform{}, false, 7, 1.9f);
+    r.SubmitThroughVtable(v.bytes);
+    seenFov = Peek::g_peekFov;
+    seenHorizontal = Peek::g_peekHorizontal;
+    seenDirty = Peek::g_peekDirty;
+    CHECK(Near(seenFov, 1.9f, 1e-6f));
+    CHECK(Near(seenHorizontal, 2.0f * std::atan(std::tan(0.95f) * aspect), 1e-5f)); // as the game's setter computes it
+    CHECK((seenDirty & kViewFovDirtyBits) == kViewFovDirtyBits);
+    CHECK(std::memcmp(v.bytes, pristine.bytes, sizeof(v.bytes)) == 0); // every byte back
+    auto s = vo.GetStats();
+    CHECK(s.fovApplied == 1 && s.poseId == 7 && s.poseRun == 1 && Near(s.gameFovY, gameFov, 1e-6f) &&
+          Near(s.renderedFovY, 1.9f, 1e-6f));
+    r.SubmitThroughVtable(v.bytes);
+    CHECK(vo.GetStats().poseRun == 2);
+    vo.SetLocal(LinearTransform{}, false, 8, 0); // next lease, game FOV kept
+    r.SubmitThroughVtable(v.bytes);
+    s = vo.GetStats();
+    CHECK(s.poseId == 8 && s.poseRun == 1 && s.fovApplied == 2 && Near(Peek::g_peekFov, gameFov, 1e-6f) &&
+          Near(s.renderedFovY, gameFov, 1e-6f));
+    Views garbage(game); // not a camera: the run breaks, so no frame is labelled with pose 8
+    const float two = 2.0f;
+    std::memcpy(garbage.bytes, &two, 4);
+    r.SubmitThroughVtable(garbage.bytes);
+    CHECK(vo.GetStats().poseRun == 0);
+    CHECK(vo.Remove(r.Object()) == ViewOverride::RemoveResult::Restored);
+}

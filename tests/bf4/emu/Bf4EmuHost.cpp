@@ -20,7 +20,7 @@
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
-#include <d3d11.h>
+#include <d3d11_1.h>
 #include <xinput.h>
 
 #include "fvr/graphics/D3D11SharedPair.h"
@@ -296,6 +296,135 @@ int wmain() {
         }
     }
 
+    // 4b. World lane (head-tracked view): the emulated host asks for eye pairs on the frame
+    // lane, as the real host does once the menu lane says Gameplay. The emulator has no
+    // renderer to move, so FVR_BF4_WORLD_UNTRACKED sends the game frame as it is; what is
+    // checked is the transport (lease -> crops -> bridge -> host copy) and each eye's crop.
+    // Game frame: left half orange, right half azure. Eyes (tangents) are asymmetric, so the
+    // colour boundary sits at 62.5 % of the left eye's width and 37.5 % of the right eye's.
+    if (!externalHost) {
+        SetEnvironmentVariableW(L"FVR_BF4_WORLD_UNTRACKED", L"1");
+        ID3D11DeviceContext1* ctx1 = nullptr;
+        ctx->QueryInterface(__uuidof(ID3D11DeviceContext1), reinterpret_cast<void**>(&ctx1));
+        LUID luid{};
+        IDXGIDevice* dxgiDevice = nullptr;
+        IDXGIAdapter* adapter = nullptr;
+        DXGI_ADAPTER_DESC adapterDesc{};
+        if (SUCCEEDED(dev->QueryInterface(__uuidof(IDXGIDevice), reinterpret_cast<void**>(&dxgiDevice))) &&
+            SUCCEEDED(dxgiDevice->GetAdapter(&adapter)) && SUCCEEDED(adapter->GetDesc(&adapterDesc)))
+            luid = adapterDesc.AdapterLuid;
+        if (adapter) adapter->Release();
+        if (dxgiDevice) dxgiDevice->Release();
+        fvr::runtime::PresentationRequirements req{};
+        req.width = 400;
+        req.height = 448;
+        req.format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+        req.adapterLow = luid.LowPart;
+        req.adapterHigh = luid.HighPart;
+        fvr::runtime::TrackingFrame t{};
+        t.spaceGeneration = 1;
+        t.focused = t.headValid = true;
+        t.head.orientation = {0, 0, 0, 1};
+        t.referenceHead = t.head;
+        t.eyes = {t.head, t.head};
+        t.eyes[0].position.x = -0.032f;
+        t.eyes[1].position.x = 0.032f;
+        t.fov[0] = {-1.0f, 0.6f, 0.8f, -0.8f};
+        t.fov[1] = {-0.6f, 1.0f, 0.8f, -0.8f};
+        const float orange[4] = {1.0f, 0.5f, 0.0f, 1.0f}, azure[4] = {0.0f, 0.5f, 1.0f, 1.0f};
+        const D3D11_RECT leftHalf{0, 0, kWidth / 2, kHeight}, rightHalf{kWidth / 2, 0, kWidth, kHeight};
+        fvr::graphics::D3D11PairConsumer worldConsumer;
+        fvr::graphics::TextureDescriptor worldOpened{};
+        std::array<ID3D11Texture2D*, 2> eyeOut{nullptr, nullptr};
+        unsigned pairs = 0, cropsRight = 0;
+        bool sawWorldLane = false;
+        auto pixel = [&](ID3D11Texture2D* eye, float x, float y, unsigned char out[4]) {
+            D3D11_TEXTURE2D_DESC td{};
+            eye->GetDesc(&td);
+            td.Usage = D3D11_USAGE_STAGING; td.BindFlags = 0; td.CPUAccessFlags = D3D11_CPU_ACCESS_READ; td.MiscFlags = 0;
+            ID3D11Texture2D* stage = nullptr;
+            if (FAILED(dev->CreateTexture2D(&td, nullptr, &stage))) return;
+            ctx->CopyResource(stage, eye);
+            D3D11_MAPPED_SUBRESOURCE m{};
+            if (SUCCEEDED(ctx->Map(stage, 0, D3D11_MAP_READ, 0, &m))) {
+                const unsigned px = static_cast<unsigned>(x * td.Width), py = static_cast<unsigned>(y * td.Height);
+                std::memcpy(out, static_cast<const unsigned char*>(m.pData) + py * m.RowPitch + px * 4, 4);
+                ctx->Unmap(stage, 0);
+            }
+            stage->Release();
+        };
+        auto isOrange = [](const unsigned char* p) { return p[0] > 200 && p[2] < 50; };
+        auto isAzure = [](const unsigned char* p) { return p[0] < 50 && p[2] > 200; };
+        for (int frame = 0; frame < 600 && (pairs < 8 || frame < 90); ++frame) {
+            ctx->OMSetRenderTargets(1, &rtv, nullptr);
+            ctx->ClearRenderTargetView(rtv, olive);
+            if (ctx1) {
+                ctx1->ClearView(rtv, orange, &leftHalf, 1);
+                ctx1->ClearView(rtv, azure, &rightHalf, 1);
+            }
+            sc->Present(0, 0);
+            hostFrame(150 + frame);
+            ++t.generation;
+            t.predictedNs = 2000000000LL + static_cast<std::int64_t>(frame) * 11000000LL;
+            fvr::runtime::TrackingFrame rendered{};
+            fvr::graphics::TextureDescriptor d{};
+            fvr::graphics::PairTicket ticket{};
+            if (xrFrames.TryGetCompletedPair(req, t, rendered, d, ticket)) {
+                if (std::memcmp(&worldOpened, &d, sizeof(d)) != 0) {
+                    worldOpened = {};
+                    worldConsumer.Reset();
+                    for (auto& e : eyeOut) if (e) { e->Release(); e = nullptr; }
+                    if (worldConsumer.Open(dev, d) == fvr::graphics::TransferResult::Ok) {
+                        D3D11_TEXTURE2D_DESC td{};
+                        td.Width = d.width; td.Height = d.height; td.Format = DXGI_FORMAT(d.format);
+                        td.MipLevels = td.ArraySize = td.SampleDesc.Count = 1;
+                        bool ok = true;
+                        for (auto& e : eyeOut) ok = ok && SUCCEEDED(dev->CreateTexture2D(&td, nullptr, &e));
+                        if (ok) worldOpened = d;
+                    }
+                }
+                const bool copied = fvr::graphics::Valid(worldOpened) &&
+                                    worldConsumer.Copy(ticket, {{{eyeOut[0], 0}, {eyeOut[1], 0}}}) == fvr::graphics::TransferResult::Ok;
+                xrFrames.PairConsumed(ticket, copied);
+                if (copied) {
+                    ++pairs;
+                    unsigned char l0[4]{}, l1[4]{}, r0[4]{}, r1[4]{};
+                    pixel(eyeOut[0], 0.30f, 0.5f, l0);
+                    pixel(eyeOut[0], 0.90f, 0.5f, l1);
+                    pixel(eyeOut[1], 0.10f, 0.5f, r0);
+                    pixel(eyeOut[1], 0.70f, 0.5f, r1);
+                    if (isOrange(l0) && isAzure(l1) && isOrange(r0) && isAzure(r1) && d.width == req.width &&
+                        d.height == req.height && rendered.generation != 0)
+                        ++cropsRight;
+                    else if (pairs == 1)
+                        std::printf("world eye pixels L %u,%u,%u / %u,%u,%u  R %u,%u,%u / %u,%u,%u (%ux%u)\n", l0[0], l0[1], l0[2],
+                                    l1[0], l1[1], l1[2], r0[0], r0[1], r0[2], r1[0], r1[1], r1[2], d.width, d.height);
+                }
+            }
+            pump();
+            Sleep(5);
+            sawWorldLane = sawWorldLane || Status().find("lane=world") != std::string::npos;
+        }
+        s = Status();
+        Check(pairs >= 5, "world lane: the XR host received eye pairs through the frame bridge");
+        Check(cropsRight >= 1, "world lane: each eye carries its own asymmetric crop of the game frame");
+        Check(sawWorldLane, "world lane: the menu lane switched to gameplay (no panel)");
+        if (pairs < 5 || !cropsRight) std::printf("%s\n", s.c_str());
+        for (auto& e : eyeOut) if (e) e->Release();
+        worldConsumer.Reset();
+        if (ctx1) ctx1->Release();
+        SetEnvironmentVariableW(L"FVR_BF4_WORLD_UNTRACKED", nullptr);
+        for (int frame = 0; frame < 60; ++frame) { // back to the theater panel
+            ctx->OMSetRenderTargets(1, &rtv, nullptr);
+            ctx->ClearRenderTargetView(rtv, olive);
+            sc->Present(0, 0);
+            hostFrame(800 + frame);
+            pump();
+            Sleep(10);
+        }
+        Check(Status().find("lane=theater") != std::string::npos, "world lane: back on the theater panel when not wanted");
+    }
+
     // 5. Engine stereo, BF4-style: our nvapi64.dll answers like a 3D Vision driver.
     HMODULE nv = LoadLibraryW((dir + L"\\nvapi64.dll").c_str());
     Check(nv != nullptr, "nvapi64.dll shim loaded from the game folder");
@@ -330,7 +459,12 @@ int wmain() {
         sc->Present(0, 0);
         pump();
     };
-    for (int frame = 0; frame < 200; ++frame) { stereoFrame(); Sleep(2); }
+    // The tracker judges the dominant pattern over the whole session, so the stereo phase
+    // runs until it outweighs the mono phases before it (theater + world lane).
+    for (int frame = 0; frame < 1500 && (frame < 200 || Status().find("stereo=3D theater") == std::string::npos); ++frame) {
+        stereoFrame();
+        Sleep(2);
+    }
     s = Status();
     Check(s.find("stereo=3D theater") != std::string::npos, "engine stereo pairs shown as 3D theater");
     Check(s.find("stereo_pattern=sequential-LR") != std::string::npos, "eye passes recognised as sequential L then R");

@@ -95,7 +95,9 @@ target_link_libraries(FrostbiteVR.Bf4 PRIVATE FvrBf4Core FvrMinHook64 d3d11 dxgi
 target_compile_definitions(FrostbiteVR.Bf4 PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 if(FVR_BF4_FRAMEWORK_GLUE)
   target_compile_definitions(FrostbiteVR.Bf4 PRIVATE FVR_BF4_FRAMEWORK_GLUE)
-  target_link_libraries(FrostbiteVR.Bf4 PRIVATE FvrFrameChannel FvrD3D11FrameBridge)
+  # World lane: eye crops resampled on the game's device (runtime-compiled shader).
+  target_sources(FrostbiteVR.Bf4 PRIVATE src/games/bf4/Bf4EyeResampler.cpp)
+  target_link_libraries(FrostbiteVR.Bf4 PRIVATE FvrFrameChannel FvrD3D11FrameBridge d3dcompiler)
 endif()
 
 # The XR host for BF4 sessions: the shared OpenXR host (BC2XrHost's main) under the name

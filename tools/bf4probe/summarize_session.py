@@ -51,6 +51,18 @@ def _floats(text: str) -> tuple[float, ...]:
     return tuple(out)
 
 
+def _num(text: str) -> float:
+    try:
+        return float(text)
+    except ValueError:
+        return float("nan")
+
+
+def _plausible(fov: str, near: str, far: str, aspect: str) -> bool:
+    f, n, fa, a = _num(fov), _num(near), _num(far), _num(aspect)
+    return 0.05 < f < 3.1 and 0 < n < 10 and fa > n and fa < 1e7 and 0.5 < a < 5
+
+
 @dataclass
 class Summary:
     camera: dict = field(default_factory=lambda: defaultdict(list))   # field -> samples
@@ -76,7 +88,10 @@ def parse(lines) -> Summary:
             s.slot19.add(m["slot19"])
             s.camera[m["field"]].append({
                 "rigid00": m["r00"] == "1", "rigid40": m["r40"] == "1", "t00": _floats(m["t00"]),
-                "plausible": m["plausible"] == "1", "fov": float(m["fov"]) if m["fov"].replace(".", "", 1).lstrip("-").isdigit() else float("nan"),
+                # Recomputed from the values (FOV in radians), so older logs that judged it in
+                # degrees still read right.
+                "plausible": _plausible(m["fov"], m["near"], m["far"], m["aspect"]),
+                "fov": _num(m["fov"]),
             })
         elif m := CAMERA_UNREADABLE.search(line):
             s.camera_unreadable[m["field"]] += 1
@@ -152,11 +167,11 @@ def render(s: Summary) -> str:
         out.append(f"  level={level or '(empty)'} mode={mode or '(empty)'} isMultiplayer={mp}")
     levels = [lvl for lvl, _, _ in s.sessions]
     frontend = any(lvl.lower().startswith("levels/frontend/") for lvl in levels)
-    campaign = [(lvl, mp) for lvl, _, mp in s.sessions if lvl.lower().startswith("levels/sp_")]
+    campaign = [(lvl, mp) for lvl, _, mp in s.sessions if lvl.lower().startswith(("levels/sp/", "levels/sp_"))]
     if s.sessions:
         out.append(f"  front end read as its own level: {'yes' if frontend else 'not seen'}")
         if campaign:
-            ok = all(mp == 0 for _, mp in campaign)
+            ok = all(mp in (0, -1) for _, mp in campaign) and any(mp == 0 for _, mp in campaign)
             out.append(f"  campaign level read with isMultiplayer=0: {'CONFIRMED' if ok else 'NO: isMultiplayer was not 0 in campaign'}")
         else:
             out.append("  campaign level: not seen (play past the menus into a mission)")

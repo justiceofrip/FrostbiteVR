@@ -5,6 +5,7 @@
 #include "TestHarness.h"
 
 #include "EmuFixtures.h"
+#include "../../src/games/bf4/Bf4WorldView.h"
 #include "fvr/runtime/ExactWrite.h"
 
 #include <array>
@@ -227,4 +228,37 @@ TEST_CASE(ExactWriteRestoresOnEveryOutcome) {
     mem.SetF(0, 1.4f); // the game wrote its own value afterwards
     const auto r = j.RestoreAll();
     CHECK(r.leftForeign == 1 && r.restored == 0 && Near(mem.F(0), 1.4f));
+}
+
+TEST_CASE(EmuMonoWorldLaneCameraOnlyForHostLeases) {
+    // Camera bindings without any stereo path: the head-tracked mono view (world lane).
+    FakeImage image({names::kGameRenderer, names::kRenderViewUpdate, names::kClientGameContext, names::kLevelName});
+    FakePlatform platform;
+    AdapterCore core(Session(true), X64(), image.Resolve(), platform);
+    core.OnSwapchainAdopted(true);
+    platform.Campaign();
+    Clock clock;
+    for (int i = 0; i < 3; ++i) core.OnFrame(clock.Next(), Input(i / 90.0));
+    CHECK(core.Stereo() == StereoMode::Mono);
+    // No eye-pair request from the host yet: the camera stays the game's, frames ask for the world lane.
+    CHECK(platform.cameraLog.empty());
+    CHECK(!platform.frames.empty() && platform.frames.back().world && platform.frames.back().worldSettle == 2);
+
+    auto in = Input(0.1);
+    in.world.valid = true;
+    in.world.poseId = 41;
+    in.world.head = in.head;
+    in.world.fov[0] = {-1.0f, 0.9f, 1.0f, -1.1f};
+    in.world.fov[1] = {-0.9f, 1.0f, 1.0f, -1.1f};
+    core.OnFrame(clock.Next(), in);
+    CHECK(platform.cameraLog.size() == 1);
+    const auto& r = platform.cameraLog.back();
+    CHECK(r.size() == 1 && r[0].eye == -1 && r[0].poseId == 41);
+    CHECK(Near(r[0].renderFovY, RequiredVerticalFov(in.world.fov[0], in.world.fov[1], 1920.0f / 1080.0f), 1e-5f));
+    CHECK(Near(r[0].local.forward.z, 1.0f)); // the first pose is the reference: straight ahead
+
+    // Back in the front end: no world lane, no camera.
+    platform.level = "Levels/FrontEnd/FrontEnd";
+    core.OnFrame(clock.Next(), in);
+    CHECK(core.Stereo() == StereoMode::Off && platform.cameraLog.size() == 1 && !platform.frames.back().world);
 }

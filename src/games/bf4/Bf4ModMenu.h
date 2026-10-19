@@ -12,9 +12,13 @@ struct ModMenuState {
     interaction::ReloadMode reloadMode = interaction::ReloadMode::ButtonPress;
     bool snapTurn = true;
     int theaterDistance = 1; // 0 near, 1 medium, 2 far
+    bool headTracking = true; // campaign levels: head-tracked view instead of the screen
+    int worldSettle = 2;      // developer: submits before a frame counts as head-tracked
 };
 
-enum class ModMenuAction : std::uint8_t { None, SetReloadMode, SetSnapTurn, SetTheaterDistance, Recenter, MarkFeedback, GameMenu };
+enum class ModMenuAction : std::uint8_t {
+    None, SetReloadMode, SetSnapTurn, SetTheaterDistance, Recenter, MarkFeedback, GameMenu, SetHeadTracking, SetWorldSettle
+};
 
 struct ModMenuCommand {
     ModMenuAction action = ModMenuAction::None;

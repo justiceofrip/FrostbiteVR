@@ -21,6 +21,7 @@
 #include "Bf4CameraProbe.h"
 #include "Bf4FiringCensus.h"
 #include "Bf4ViewOverride.h"
+#include "Bf4SessionSignals.h"
 #include "fvr/graphics/GdiPanelRaster.h"
 #include "stereo/SideBySide.h"
 
@@ -78,6 +79,10 @@ private:
 // skips the camera probe and the view override.
 constexpr char kAnalyzedBuildSha256[] = "9d9d1a3fca6ffd4c34a543b3fd7b049336ddbd43c0e6c5eee742e51431a6c2aa";
 bool ReadChecked(std::uintptr_t address, void* out, std::size_t size); // VirtualQuery-checked copy
+std::string ReadCStringChecked(std::uintptr_t address, std::size_t maxLength = 160);
+// R5 single-player signals (docs/BF4-SESSION-RE.md), analysed build only.
+constexpr std::uintptr_t kClientGameContextRva = 0x2670D80;
+constexpr std::uintptr_t kLevelInfoRva = 0x27A1918;
 
 bool InGameImage(std::uintptr_t address, std::size_t size) {
     const auto base = reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
@@ -117,7 +122,13 @@ public:
     bool shimBound = false, shimForeignLogged = false, suppressPending = false, splitMsaaLogged = false;
     StereoRoute stereoRoute = StereoRoute::Split;
     std::string exeSha256;
+    SessionSignalFilter sessionSignals_;
+    SessionObservation lastObservation_{}; // its levelName points into sessionSignals_
+    ULONGLONG lastObservationMs_ = 0;
+    bool haveObservation_ = false;
     ViewOverride viewOverride;
+    std::uint64_t lastSubmits_ = 0;
+    ULONGLONG lastSubmitMs_ = 0;
     bool viewInstallRefused = false;
 
     static void __cdecl OnEye(int eye, void* context) {
@@ -420,7 +431,26 @@ public:
     }
 
     // Level/server signals arrive with RE task R5 (ClientGameContext, ClientLevel.Name).
-    SessionObservation ObserveGame() override { return {}; }
+    // Level name [[+0x27A1918]+0x50] and isMultiplayer [[[[+0x2670D80]+0x28]+0x38]+0xA0],
+    // filtered as the live sessions require (Bf4SessionSignals.h). Read four times a second.
+    SessionObservation ObserveGame() override {
+        if (exeSha256 != kAnalyzedBuildSha256) return {};
+        const ULONGLONG now = GetTickCount64();
+        if (haveObservation_ && now - lastObservationMs_ < 250) return lastObservation_;
+        const auto base = reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
+        std::uintptr_t info = 0, name = 0, ctx = 0, level = 0, setup = 0;
+        std::uint8_t mp = 0xFF;
+        const bool readable = ReadChecked(base + kLevelInfoRva, &info, 8) && info;
+        std::string levelName;
+        if (readable && ReadChecked(info + 0x50, &name, 8)) levelName = ReadCStringChecked(name);
+        if (ReadChecked(base + kClientGameContextRva, &ctx, 8) && ctx && ReadChecked(ctx + 0x28, &level, 8) && level &&
+            ReadChecked(level + 0x38, &setup, 8) && setup)
+            ReadChecked(setup + 0xA0, &mp, 1);
+        lastObservation_ = sessionSignals_.Update(readable, levelName, mp == 0xFF ? -1 : (mp ? 1 : 0), now);
+        lastObservationMs_ = now;
+        haveObservation_ = true;
+        return lastObservation_;
+    }
 
     void ApplyPointer(std::span<const PointerEvent> events) override { pointer.Apply(window, events); }
     void ApplyPad(const interaction::PadState& pad, bool active) override { padSink.Apply(pad, active); }
@@ -439,6 +469,25 @@ public:
             device->Release();
             return ok;
         }
+        FrameMeta m = meta;
+        if (m.world) {
+            // The world lane only while the game renders world views: the override is put
+            // in place as soon as the core wants the world (it forwards untouched without a
+            // pose) and its submit count shows whether views arrive. Loading screens submit
+            // none, so they stay on the theater panel instead of a black headset.
+            if (!viewOverride.Installed() && core) InstallViewOverride();
+            const auto st = viewOverride.GetStats();
+            const ULONGLONG now = GetTickCount64();
+            if (st.submits != lastSubmits_) {
+                lastSubmits_ = st.submits;
+                lastSubmitMs_ = now;
+            }
+            m.world = viewOverride.Installed() && now - lastSubmitMs_ < 300;
+            // What the latest view submits carried: the world link labels frames with it.
+            m.poseId = st.poseId;
+            m.poseRun = st.poseRun;
+            m.renderFovY = st.renderedFovY;
+        }
         ID3D11Device* device = nullptr;
         ID3D11Texture2D* back = nullptr;
         bool ok = false;
@@ -446,7 +495,7 @@ public:
             SUCCEEDED(swapchain->GetBuffer(0, __uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&back)))) {
             ID3D11DeviceContext* ctx = nullptr;
             device->GetImmediateContext(&ctx);
-            ok = frames->Publish(device, ctx, back, meta);
+            ok = frames->Publish(device, ctx, back, m);
             if (ctx) ctx->Release();
         }
         if (back) back->Release();
@@ -455,13 +504,14 @@ public:
     }
 
     // RE task R3: head-tracked main view through a copy of the GameRenderer vtable with
-    // slot 5 replaced (Bf4ViewOverride.h). Mono only: the request is consumed on the main
-    // thread one or two frames later, so per-eye requests are refused until a presented
-    // frame can be tied to the eye it was rendered with. FOV stays the game's for now.
+    // slot 5 replaced (Bf4ViewOverride.h). Only a pose the XR host asked to see (a world
+    // lane lease, poseId != 0) is applied: the world link sends the frame back labelled
+    // with exactly that pose once the submits show it carried (FrameMeta poseId/poseRun).
+    // The FOV is the one both eyes need, written as the game's own FOV setter does.
     bool ApplyCamera(std::span<const CameraRequest> requests) override {
-        if (requests.size() != 1 || requests[0].eye >= 0 || !core) return false;
+        if (requests.size() != 1 || requests[0].eye >= 0 || !requests[0].poseId || !core) return false;
         if (!viewOverride.Installed() && !InstallViewOverride()) return false;
-        viewOverride.SetLocal(requests[0].local, /*keepGamePitch=*/false);
+        viewOverride.SetLocal(requests[0].local, /*keepGamePitch=*/false, requests[0].poseId, requests[0].renderFovY);
         return true;
     }
 
@@ -505,12 +555,16 @@ public:
 
     std::string DescribeViewOverride() const {
         const auto st = viewOverride.GetStats();
-        char line[160];
-        std::snprintf(line, sizeof(line), "view_override=%s submits=%llu applied=%llu restored=%llu foreign=%llu stale=%llu\n",
+        char line[260];
+        std::snprintf(line, sizeof(line),
+                      "view_override=%s submits=%llu applied=%llu restored=%llu foreign=%llu stale=%llu not_rigid=%llu "
+                      "fov_applied=%llu game_fov=%.3f rendered_fov=%.3f pose=%llu run=%u\n",
                       viewOverride.Installed() ? "on" : (viewInstallRefused ? "refused" : "off"),
                       static_cast<unsigned long long>(st.submits), static_cast<unsigned long long>(st.applied),
                       static_cast<unsigned long long>(st.restored), static_cast<unsigned long long>(st.foreign),
-                      static_cast<unsigned long long>(st.stale));
+                      static_cast<unsigned long long>(st.stale), static_cast<unsigned long long>(st.notRigid),
+                      static_cast<unsigned long long>(st.fovApplied), st.gameFovY, st.renderedFovY,
+                      static_cast<unsigned long long>(st.poseId), st.poseRun);
         return line;
     }
 
@@ -629,6 +683,9 @@ void OnPresent(Adapter& a, IDXGISwapChain* sc) {
         a.log.Write("%s frames=%llu backbuffer=%ux%u client=%ldx%ld", d.c_str(),
                     static_cast<unsigned long long>(a.core->Stats().frames), f.backbufferWidth, f.backbufferHeight,
                     static_cast<long>(f.clientWidth), static_cast<long>(f.clientHeight));
+        std::string v = a.platform.DescribeViewOverride(); // world lane: pose runs and FOV in the same log
+        while (!v.empty() && (v.back() == '\n' || v.back() == '\r')) v.pop_back();
+        a.log.Write("%s stereo=%s", v.c_str(), std::string(StereoModeName(a.core->Stereo())).c_str());
     }
 }
 
@@ -816,10 +873,7 @@ void CameraProbeTick(Adapter& a) {
 // takes its level name from [[+0x27A1918]+0x50] and its isMultiplayer byte from
 // [[[[+0x2670D80]+0x28]+0x38]+0xA0] (default multiplayer when a link is null). Logged
 // only; nothing consumes these until a live session confirms them.
-constexpr std::uintptr_t kClientGameContextRva = 0x2670D80;
-constexpr std::uintptr_t kLevelInfoRva = 0x27A1918;
-
-std::string ReadCStringChecked(std::uintptr_t address, std::size_t maxLength = 160) {
+std::string ReadCStringChecked(std::uintptr_t address, std::size_t maxLength) {
     std::string out;
     char c = 0;
     for (std::size_t i = 0; i < maxLength && address && ReadChecked(address + i, &c, 1) && c; ++i)

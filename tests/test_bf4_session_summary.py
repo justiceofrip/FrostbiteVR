@@ -12,9 +12,10 @@ import summarize_session as ss  # noqa: E402
 
 
 def camera(field: str, t: str, rigid: int = 1, plausible: int = 1) -> str:
+    fov = "0.79" if plausible else "55.00"  # radians, as the live sessions log
     return (f"10:00:01.000 camera probe: object=000001A2B3C4D5E0 slot19=+0x70 field=+0x{field} view=000001A2B3C4E000 | "
             f"+00 rigid={rigid} t=({t}) fwd=(0.00 0.00 1.00) | +40 rigid={rigid} t=({t}) | +420 rigid=0 | "
-            f"fov=55.00 near=0.100 far=1500.0 aspect=1.778 plausible={plausible}")
+            f"fov={fov} near=0.060 far=20000.1 aspect=1.778 plausible=0")
 
 
 LOG = [
@@ -27,7 +28,7 @@ LOG = [
     camera("70", "0.00 0.00 0.00", rigid=0, plausible=0),
     '10:00:02.000 session probe: level="Levels/FrontEnd/FrontEnd" mode="" isMultiplayer=0 (info=1 ctx=2 ctx+28=3 +38=4)',
     '10:00:04.000 session probe: level="Levels/FrontEnd/FrontEnd" mode="" isMultiplayer=0 (info=1 ctx=2 ctx+28=3 +38=4)',
-    '10:05:00.000 session probe: level="Levels/SP_Tashgar/SP_Tashgar" mode="SP" isMultiplayer=0 (info=1 ctx=2 ctx+28=3 +38=4)',
+    '10:05:00.000 session probe: level="Levels/SP/SP_Tashgar/SP_Tashgar" mode="" isMultiplayer=0 (info=1 ctx=2 ctx+28=3 +38=4)',
     "10:05:30.000 firing census (periodic): 3 objects (2 without unlimited ammo), 3 local matches, 2048MB in 900ms",
     "10:05:30.001   firing 2a0 vt=+0 data=d00 state=3->3 loaded=31 reserve=120 cap=31 mags=4 reloadType=2 fireLogic=2 "
     "mode=0 step=-1 mult=1.00 thr=0.60 time=2.40 flags=00/00",
@@ -71,7 +72,7 @@ class SessionSummaryTests(unittest.TestCase):
 
     def test_missing_evidence_is_said_plainly(self):
         text = ss.render(ss.parse([
-            '10:00:02.000 session probe: level="Levels/SP_Prologue/SP_Prologue" mode="SP" isMultiplayer=1 (info=1 ctx=2 ctx+28=3 +38=4)',
+            '10:00:02.000 session probe: level="Levels/SP/SP_Prologue/SP_Prologue" mode="" isMultiplayer=1 (info=1 ctx=2 ctx+28=3 +38=4)',
             camera("60", "1.00 2.00 3.00"),
             camera("60", "1.00 2.00 3.00"),
         ]))

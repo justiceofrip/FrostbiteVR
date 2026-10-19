@@ -26,6 +26,14 @@ struct FrameMeta {
     std::uint32_t width = 0, height = 0;
     int eye = -1;             // -1 mono (theater), 0 left, 1 right (stereo modes)
     bool menuVisible = false;
+    // World lane (head-tracked view in the headset). The core asks for it; the platform adds
+    // what the view override last submitted (Bf4WorldView.h decides when a frame carries
+    // the lease's pose).
+    bool world = false;
+    std::uint32_t worldSettle = 2;
+    std::uint64_t poseId = 0;
+    std::uint32_t poseRun = 0;
+    float renderFovY = 0;     // vertical FOV the tagged frames were rendered with (radians)
 };
 
 class IFrameSink {
@@ -50,6 +58,15 @@ struct EyeView {
     frostbite::FovAngles fov;  // OpenXR XrFovf, radians
 };
 
+// The XR host's current eye-pair request (world lane), as handed to the camera: the head
+// pose to render and the eyes' FOV tangents. poseId tags the pose through the view override.
+struct WorldRequest {
+    bool valid = false;
+    std::uint64_t poseId = 0;
+    math::Pose head;
+    math::FovTangents fov[2];
+};
+
 struct ControllerSnapshot {
     bool valid = false;
     math::Pose head, leftHand, rightHand;
@@ -63,6 +80,7 @@ struct ControllerSnapshot {
     // Full controller sample from the XR host (frame channel): sticks, triggers, grips,
     // buttons, poses. Drives the virtual gamepad; focused=false when nothing arrived.
     interaction::InputFrame controls;
+    WorldRequest world;
 };
 
 class IControllerSource {

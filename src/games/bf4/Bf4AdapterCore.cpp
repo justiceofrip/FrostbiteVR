@@ -1,4 +1,5 @@
 #include "Bf4AdapterCore.h"
+#include "Bf4WorldView.h"
 
 #include <algorithm>
 #include <cmath>
@@ -93,6 +94,14 @@ void AdapterCore::ApplyMenuCommand(const ModMenuCommand& command) {
         platform_.Log("recenter requested from the mod menu");
         break;
     case ModMenuAction::MarkFeedback: platform_.Log("FEEDBACK MARK: the player marked this moment"); break;
+    case ModMenuAction::SetHeadTracking:
+        menuState_.headTracking = command.value != 0;
+        platform_.Log(menuState_.headTracking ? "campaign view: head-tracked" : "campaign view: screen");
+        break;
+    case ModMenuAction::SetWorldSettle:
+        menuState_.worldSettle = std::clamp(command.value, 1, 4);
+        platform_.Log("head-tracking frame sync: " + std::to_string(menuState_.worldSettle) + " frame(s)");
+        break;
     case ModMenuAction::GameMenu: // BF4's own pause menu: a short Start press, menu closes
         padPulse_ = interaction::pad::Start;
         padPulseFrames_ = 10;
@@ -195,7 +204,8 @@ bool AdapterCore::OnSplitFrame() {
 StereoMode AdapterCore::ChooseStereo() const {
     const bool dev = session_.developerFeatures;
     const bool engine = EngineStereoAllowed();
-    const bool headTracked = guard_.GameplayAllowed() && caps_.IsUsable(Feature::HeadTrackedCamera, dev);
+    const bool headTracked =
+        menuState_.headTracking && guard_.GameplayAllowed() && caps_.IsUsable(Feature::HeadTrackedCamera, dev);
     if (!headTracked) return engine ? StereoMode::Theater3D : StereoMode::Off;
     if (caps_.IsUsable(Feature::StereoNative, dev)) return StereoMode::Native;
     if (engine) return StereoMode::EngineStereoTracked;
@@ -266,18 +276,27 @@ std::string AdapterCore::StereoReport() {
     return r;
 }
 
-void AdapterCore::UpdateCamera(const ControllerSnapshot& in) {
+void AdapterCore::UpdateCamera(const ControllerSnapshot& in, const PlatformFrame& f) {
     camera_.clear();
-    if (stereo_ == StereoMode::Off || stereo_ == StereoMode::Theater3D || !in.valid || !haveReference_) {
+    // Mono (world lane): the camera follows the head only for a pose the XR host asked to
+    // see (a lease); that frame then goes back as the eye pair labelled with exactly it.
+    const bool lane = stereo_ == StereoMode::Mono || stereo_ == StereoMode::EngineStereoTracked;
+    if (stereo_ == StereoMode::Off || stereo_ == StereoMode::Theater3D || !haveReference_ ||
+        (lane ? !in.world.valid : !in.valid)) {
         nextEye_ = 0; // an alternate-eye run always starts on the left eye
         return;
     }
+    const float aspect = f.backbufferHeight ? float(f.backbufferWidth) / float(f.backbufferHeight) : 16.0f / 9.0f;
     auto request = [&](int eye) {
         CameraRequest r;
         r.eye = eye;
-        const math::Pose& p = eye < 0 ? in.head : in.eyes[eye].pose;
+        const math::Pose& p = eye < 0 ? (lane ? in.world.head : in.head) : in.eyes[eye].pose;
         r.local = frostbite::XrPoseToFrostbite(ApplyReference(reference_, p));
         r.fov = eye < 0 ? UnionFov(in.eyes[0].fov, in.eyes[1].fov) : in.eyes[eye].fov;
+        if (lane) {
+            r.poseId = in.world.poseId;
+            r.renderFovY = RequiredVerticalFov(in.world.fov[0], in.world.fov[1], aspect);
+        }
         camera_.push_back(r);
     };
     switch (stereo_) {
@@ -310,9 +329,11 @@ void AdapterCore::OnFrame(const PlatformFrame& f, const ControllerSnapshot& in) 
     }
 
     // 2. Recenter: first valid pose sets the reference; afterwards on request edges only.
-    if (in.valid && (!haveReference_ || (in.recenterRequested && !recenterWasDown_))) {
+    //    The world lane's head pose wins (it is the pose the camera will carry).
+    const bool headKnown = in.world.valid || in.valid;
+    if (headKnown && (!haveReference_ || (in.recenterRequested && !recenterWasDown_))) {
         if (haveReference_) ++stats_.recenters;
-        reference_ = RecenterReference(in.head);
+        reference_ = RecenterReference(in.world.valid ? in.world.head : in.head);
         haveReference_ = true;
     }
     recenterWasDown_ = in.valid && in.recenterRequested;
@@ -358,7 +379,7 @@ void AdapterCore::OnFrame(const PlatformFrame& f, const ControllerSnapshot& in) 
 
     // 6. Camera / stereo mode.
     stereo_ = ChooseStereo();
-    UpdateCamera(in);
+    UpdateCamera(in, f);
 
     // 7. Frame out: the mod menu panel while it is open; else a stereo pair as two eye
     //    frames, otherwise one mono frame.
@@ -370,6 +391,8 @@ void AdapterCore::OnFrame(const PlatformFrame& f, const ControllerSnapshot& in) 
         meta.width = f.backbufferWidth;
         meta.height = f.backbufferHeight;
         meta.menuVisible = in.pointer.active;
+        meta.world = stereo_ == StereoMode::Mono; // head-tracked view goes to the headset as eye pairs
+        meta.worldSettle = static_cast<std::uint32_t>(menuState_.worldSettle);
         const bool enginePair = pair && (stereo_ == StereoMode::Theater3D || stereo_ == StereoMode::EngineStereoTracked);
         if (enginePair) {
             if (session_.stereoRoute == StereoRoute::Split) meta.width = f.backbufferWidth / 2; // one half per eye

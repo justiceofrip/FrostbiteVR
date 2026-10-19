@@ -27,6 +27,13 @@ inline constexpr std::size_t kViewTransformBytes = 0x90; // setter +0xB8A0A0 blo
 inline constexpr std::size_t kViewCopyOffset = 0x40;     // callers store the transform twice
 inline constexpr std::size_t kViewDirtyOffset = 0xE0;
 inline constexpr std::uint32_t kViewDirtyBits = 0xB;     // what the setter ORs in
+// Projection fields of the same view struct (FOV setter +0xB89EE0, aspect setter +0xB89D60,
+// both read by the view setup +0x848B00 after it copies the block): vertical FOV in radians,
+// aspect, and the horizontal FOV the setters derive as 2*atan(tan(fov/2)*aspect).
+inline constexpr std::size_t kViewFovOffset = 0xB4;
+inline constexpr std::size_t kViewAspectOffset = 0xC4;
+inline constexpr std::size_t kViewHorizontalFovOffset = 0x250;
+inline constexpr std::uint32_t kViewFovDirtyBits = 0xF;  // what the FOV setter ORs in
 
 using RendererSubmitFn = void (*)(void* renderer, float a, float b, std::uint32_t viewCount, std::uint8_t* views,
                                   void* sync, void* extra);
@@ -48,6 +55,14 @@ public:
     struct Stats {
         std::uint64_t submits = 0, applied = 0, stale = 0, restored = 0, foreign = 0;
         std::uint64_t notRigid = 0; // block 0 did not hold a camera transform: left alone
+        std::uint64_t fovApplied = 0;
+        // The pose the latest submit carried and how many submits in a row carried it: a
+        // presented frame is known to show pose `poseId` once enough submits did (the
+        // render thread runs at most a frame or two behind the main thread).
+        std::uint64_t poseId = 0;
+        std::uint32_t poseRun = 0;
+        float gameFovY = 0;     // the block's own FOV before the override (radians)
+        float renderedFovY = 0; // what the latest applied submit rendered with
     };
 
     ViewOverride() = default;
@@ -67,7 +82,10 @@ public:
 
     // Pose for the next submits; it expires after maxAge so a stopped producer can never
     // leave a stale view behind.
-    void SetLocal(const frostbite::LinearTransform& local, bool keepGamePitch);
+    // poseId != 0 tags the pose (world lane lease); fovY > 0 also replaces the vertical FOV
+    // (radians) for these submits, exactly as the game's FOV setter would.
+    void SetLocal(const frostbite::LinearTransform& local, bool keepGamePitch, std::uint64_t poseId = 0,
+                  float fovY = 0);
     void Clear();
     Stats GetStats() const;
 
@@ -83,6 +101,8 @@ private:
     mutable std::mutex mutex_;
     frostbite::LinearTransform local_{};
     bool keepGamePitch_ = false, havePose_ = false;
+    std::uint64_t poseId_ = 0;
+    float fovY_ = 0;
     std::chrono::steady_clock::time_point poseTime_{};
     Stats stats_{};
 };

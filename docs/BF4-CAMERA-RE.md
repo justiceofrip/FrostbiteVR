@@ -99,13 +99,13 @@ view, counted `notRigid`), and a pose older than 100 ms expires (stock view). St
 path of `+0x828090`; RenderView.Update = slot 5's prologue; both unique in the decrypted
 `.text`. Alternate-eye additionally needs Renderer.StereoActiveEye now.
 
-Blocked on R5: the core requests a camera only in Campaign mode, which needs the
-level-name and local-server signals bound, so nothing is installed in the real game yet.
+R5 is wired since 2026-10-19 (BF4-SESSION-RE.md); the world lane below drives this
+override with the XR host's tracked poses.
 
 Multi-view lead: slot 5 already takes a view count (local-player views). Rendering two
 eye views in one frame through this count is a possible native stereo route; untested.
 
-## Live read-only probe (built 2026-10-19, not yet run)
+## Live read-only probe (built 2026-10-19, run 2026-10-19)
 
 `Bf4CameraProbe.h` + `CameraProbeTick` (Bf4Module.cpp), developer sessions on build
 `9d9d1a3f...c6c2aa` only, every ~2 s (first minute) then ~10 s, VirtualQuery-checked reads:
@@ -116,3 +116,33 @@ w lanes ignored) with translation/forward, and FOV/near/far/aspect plausibility
 (`+0xB4/+0xBC/+0xC0/+0xC4`). Expected if the notes hold: entry 0 at `+0x60` holds a rigid
 transform at `+0x00` (and the same at `+0x40`) that follows the player, FOV = 55 x
 FovMultiplier. Only then does a binding get enrolled and the override get built.
+
+Live result (2026-10-19, prologue): entry 0 at `+0x60` is rigid and follows the player;
+`+0xB4` reads 0.79, i.e. the FOV is stored in **radians**; near 0.06, far 20000, aspect
+1.778. `+0x70` is not a camera.
+
+## FOV, aspect and the world lane (static, 2026-10-19)
+
+The view struct (0x4E0 bytes; a view block holds three, copied by `+0x83A710` into the
+renderer's buffer) has its projection fields set only through small setters:
+
+| Setter | Writes | Dirty |
+| --- | --- | --- |
+| `+0xB89EE0` FOV | `+0xB4` = fovY (radians); `+0x250` = 2*atan(tan(fovY/2) * aspect `+0xC4`) | `+0xE0 |= 0xF` |
+| `+0xB89D60` aspect | `+0xC4`; recomputes `+0x250` from `+0xB4` | `|= 0xF` |
+| `+0xB89F40` near | `+0xBC` | `|= 0xB` |
+| `+0xB89EC0` far | `+0xC0` | `|= 0xB` |
+| `+0xB89FB0` | `+0xC8` | `|= 0xB` |
+
+The view setup `+0x848B00` copies each submitted block, then applies "Render" settings
+(near from `+0x40`, far from `+0x44` plus near, a FOV override from `+0x48` only when it is
+not -1, aspect from the output size). So a FOV written into the submitted block reaches
+the render unless that override setting is used. The world lane writes `+0xB4` and `+0x250`
+the way the FOV setter computes them, ORs `0xF` into the dirty word, and restores all three
+exactly after the call (Bf4ViewOverride.cpp, ViewOverrideTests).
+
+Frame association: the override tags each pose with an id and counts how many submits
+in a row carried it (main thread). The world lane captures at Present (render thread)
+only once `settle` submits did (default 2: correct while the render thread presents the
+latest submitted frame or the one before). The live depth is not measured yet; the mod
+menu exposes 1-4.

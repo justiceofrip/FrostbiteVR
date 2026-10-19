@@ -11,8 +11,10 @@
 #include "../../src/games/bf4/Bf4Profile.h"
 #include "../../src/games/bf4/Bf4ResearchControl.h"
 #include "../../src/games/bf4/Bf4CameraProbe.h"
+#include "../../src/games/bf4/Bf4WorldView.h"
 #include "../../src/games/bf4/Bf4SessionGuard.h"
 #include "../../src/games/bf4/Bf4SessionInfo.h"
+#include "../../src/games/bf4/Bf4SessionSignals.h"
 
 #include "TestHarness.h"
 
@@ -162,6 +164,42 @@ TEST_CASE(SessionGuardFailsClosed) {
     CHECK(pb.Locked() && pb.Reason().find("PunkBuster") != std::string::npos);
 }
 
+TEST_CASE(SessionSignalsFromTheLiveReadings) {
+    using namespace fvr::bf4;
+    // The sequence the first live sessions logged: loading, menus with a noisy flag, campaign.
+    SessionSignalFilter f;
+    SessionGuard g;
+    auto step = [&](bool readable, const char* level, int mp, std::uint64_t t) { g.Observe(f.Update(readable, level, mp, t)); };
+    step(false, "", -1, 0);
+    CHECK(g.Mode() == SessionMode::Unknown && !g.Locked());
+    step(true, "", 1, 100); // loading: flag reads 1, never a lock
+    step(true, "Levels/FrontEnd/FrontEnd", 1, 200);
+    step(true, "Levels/FrontEnd/FrontEnd", 1, 5000); // menus: a long 1 is still noise
+    CHECK(g.Mode() == SessionMode::FrontEnd && !g.Locked());
+    step(true, "Levels/SP/SP_Prologue/SP_Prologue", -1, 6000); // in level, flag unreadable
+    CHECK(g.Mode() == SessionMode::Unknown && !g.GameplayAllowed());
+    step(true, "Levels/SP/SP_Prologue/SP_Prologue", 0, 6100);
+    CHECK(g.GameplayAllowed());
+    step(true, "Levels/SP/SP_Prologue/SP_Prologue", -1, 6200); // unreadable keeps the level's 0
+    CHECK(g.GameplayAllowed());
+    step(true, "Levels/SP/SP_Prologue/SP_Prologue", 1, 6300); // a short blip of 1 is ignored
+    step(true, "Levels/SP/SP_Prologue/SP_Prologue", 0, 6400);
+    CHECK(g.GameplayAllowed() && !g.Locked());
+    step(true, "Levels/FrontEnd/FrontEnd", 1, 7000); // back to the menus
+    CHECK(g.Mode() == SessionMode::FrontEnd && !g.GameplayAllowed());
+    // A multiplayer map locks by its name at once; a held 1 in a level locks after kConfirmMs.
+    SessionSignalFilter mpf;
+    SessionGuard mpg;
+    mpg.Observe(mpf.Update(true, "Levels/MP/MP_Siege/MP_Siege", 0, 0));
+    CHECK(mpg.Locked());
+    SessionSignalFilter held;
+    SessionGuard hg;
+    hg.Observe(held.Update(true, "Levels/SP/SP_Prologue/SP_Prologue", 1, 1000));
+    CHECK(!hg.Locked());
+    hg.Observe(held.Update(true, "Levels/SP/SP_Prologue/SP_Prologue", 1, 1000 + SessionSignalFilter::kConfirmMs));
+    CHECK(hg.Locked());
+}
+
 TEST_CASE(CameraConventions) {
     using namespace fvr;
     using namespace fvr::frostbite;
@@ -272,10 +310,58 @@ TEST_CASE(CameraProbeRulesAcceptOnlyRigidCameras) {
     projection.m = {0.79f, 0, 0, 0, 0, 1.40f, 0, 0, 0, 0, 1.0001f, 1, 0, 0, -0.1f, 0};
     CHECK(!IsRigidTransform(projection));
     ViewSample s;
-    s.fovY = 55.0f; s.nearPlane = 0.1f; s.farPlane = 1000.0f; s.aspect = 1.7777f;
+    s.fovY = 0.79f; s.nearPlane = 0.06f; s.farPlane = 20000.0f; s.aspect = 1.7777f; // the live reading
     CHECK(PlausibleProjection(s));
     s.farPlane = 0.05f;
     CHECK(!PlausibleProjection(s));
     const std::uint8_t getter70[] = {0x48, 0x8B, 0x41, 0x70, 0xC3}, notGetter[] = {0x48, 0x8B, 0x41, 0x70, 0x90};
     CHECK(FieldGetterOffset(getter70) == 0x70 && FieldGetterOffset(notGetter) == -1);
+}
+
+TEST_CASE(WorldLaneCropsDecisionsAndFallback) {
+    using namespace fvr::bf4;
+    // An eye whose FOV equals the render's covers the whole image; a narrower, asymmetric
+    // eye covers the matching part; a wider eye is partly outside (filled black).
+    const float tanY = 1.2f, tanX = tanY * 16.0f / 9.0f;
+    const auto full = EyeCropRect({-tanX, tanX, tanY, -tanY}, tanX, tanY);
+    CHECK(Near(full.u0, 0) && Near(full.u1, 1) && Near(full.v0, 0) && Near(full.v1, 1) && full.inside);
+    const auto left = EyeCropRect({-1.0f, 0.8f, 1.0f, -1.2f}, tanX, tanY);
+    CHECK(Near(left.u0, 0.5f - 1.0f / (2 * tanX)) && Near(left.u1, 0.5f + 0.8f / (2 * tanX)));
+    CHECK(Near(left.v0, 0.5f - 1.0f / 2.4f) && Near(left.v1, 1.0f) && left.inside);
+    CHECK(!EyeCropRect({-1.0f, 1.0f, 1.5f, -1.5f}, tanX, tanY).inside);
+    const auto half = EyeCropRect({-tanX, tanX, tanY, -tanY}, tanX, tanY, 0.5f, 1.0f); // right half of a side-by-side frame
+    CHECK(Near(half.u0, 0.5f) && Near(half.u1, 1.0f) && half.inside);
+    // Required render FOV: the taller of the two eyes (16:9 is wide enough here), plus 3 %.
+    const float fov = RequiredVerticalFov({-1.0f, 0.9f, 1.0f, -1.1f}, {-0.9f, 1.0f, 1.0f, -1.1f}, 16.0f / 9.0f);
+    CHECK(Near(fov, 2.0f * std::atan(1.1f * 1.03f), 1e-5f));
+    CHECK(Near(RequiredVerticalFov({-2.0f, 2.0f, 0.5f, -0.5f}, {-2.0f, 2.0f, 0.5f, -0.5f}, 2.0f), 2.0f * std::atan(1.03f), 1e-5f));
+
+    // Capture only once enough submits carried this lease's pose; cancel stale leases.
+    WorldCaptureInput in;
+    CHECK(DecideWorldStep(in) == WorldStep::None);
+    in.leaseHeld = true;
+    in.leasePoseId = 9;
+    in.appliedPoseId = 8; // still the previous pose
+    in.appliedRun = 5;
+    CHECK(DecideWorldStep(in) == WorldStep::Wait);
+    in.appliedPoseId = 9;
+    in.appliedRun = 1;
+    CHECK(DecideWorldStep(in) == WorldStep::Wait); // settle 2: the presented frame may be the one before
+    in.appliedRun = 2;
+    CHECK(DecideWorldStep(in) == WorldStep::Capture);
+    in.appliedRun = 0;
+    in.leaseAgeMs = kWorldLeaseMaxMs + 1;
+    CHECK(DecideWorldStep(in) == WorldStep::Cancel);
+    in.untracked = true;
+    CHECK(DecideWorldStep(in) == WorldStep::Capture);
+
+    // No pair for 2.5 s: back to the theater panel for 5 s, then another try.
+    WorldModeGate gate;
+    CHECK(!gate.Update(false, false, 1000));
+    CHECK(gate.Update(true, false, 1000));
+    CHECK(gate.Update(true, true, 3000) && gate.Update(true, false, 5400));
+    CHECK(!gate.Update(true, false, 5500) && gate.Fallbacks() == 1);
+    CHECK(!gate.Update(true, false, 10000));
+    CHECK(gate.Update(true, false, 10500) && gate.World());
+    CHECK(!gate.Update(false, false, 10600) && !gate.World()); // a menu or loading screen leaves at once
 }

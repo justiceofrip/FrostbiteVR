@@ -42,10 +42,10 @@ struct ViewSample {
     float fovY = 0, nearPlane = 0, farPlane = 0, aspect = 0; // +0xB4, +0xBC, +0xC0, +0xC4
 };
 
-// Plausible per the settings path: FOV-Y in degrees (BF4 clamps 50..105 vertical, ADS can
-// go lower), 0 < near < far, aspect of a real screen.
+// Plausible projection: FOV in radians (the live sessions read 0.79 at +0xB4), 0 < near <
+// far, aspect of a real screen.
 inline bool PlausibleProjection(const ViewSample& s) {
-    return std::isfinite(s.fovY) && s.fovY > 5.0f && s.fovY < 170.0f && std::isfinite(s.nearPlane) &&
+    return std::isfinite(s.fovY) && s.fovY > 0.05f && s.fovY < 3.1f && std::isfinite(s.nearPlane) &&
            s.nearPlane > 0.0f && s.nearPlane < 10.0f && std::isfinite(s.farPlane) && s.farPlane > s.nearPlane &&
            s.farPlane < 1.0e7f && std::isfinite(s.aspect) && s.aspect > 0.5f && s.aspect < 5.0f;
 }

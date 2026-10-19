@@ -2,6 +2,7 @@
 
 #include "Bf4CameraProbe.h"
 
+#include <cmath>
 #include <cstring>
 
 namespace fvr::bf4 {
@@ -24,6 +25,12 @@ void WriteRow(std::uint8_t* row, Vec3 v) {
     const float f[3] = {v.x, v.y, v.z};
     std::memcpy(row, f, sizeof(f)); // bytes 12..15 (the w lane) stay as the game left them
 }
+float ReadFloat(const std::uint8_t* at) {
+    float f;
+    std::memcpy(&f, at, sizeof(f));
+    return f;
+}
+bool PlausibleFov(float f) { return f > 0.05f && f < 3.1f; }
 } // namespace
 
 LinearTransform ReadViewTransform(const std::uint8_t* rows) {
@@ -100,10 +107,12 @@ ViewOverride::RemoveResult ViewOverride::Remove(void* currentRenderer) {
     return result;
 }
 
-void ViewOverride::SetLocal(const LinearTransform& local, bool keepGamePitch) {
+void ViewOverride::SetLocal(const LinearTransform& local, bool keepGamePitch, std::uint64_t poseId, float fovY) {
     std::lock_guard<std::mutex> lock(mutex_);
     local_ = local;
     keepGamePitch_ = keepGamePitch;
+    poseId_ = poseId;
+    fovY_ = PlausibleFov(fovY) ? fovY : 0.0f;
     havePose_ = true;
     poseTime_ = std::chrono::steady_clock::now();
 }
@@ -128,6 +137,8 @@ void ViewOverride::Submit(void* renderer, float a, float b, std::uint32_t viewCo
     }
     LinearTransform local;
     bool keepPitch = false, fresh = false;
+    std::uint64_t poseId = 0;
+    float fovY = 0;
     {
         std::lock_guard<std::mutex> lock(self->mutex_);
         ++self->stats_.submits;
@@ -138,6 +149,9 @@ void ViewOverride::Submit(void* renderer, float a, float b, std::uint32_t viewCo
         }
         local = self->local_;
         keepPitch = self->keepGamePitch_;
+        poseId = self->poseId_;
+        fovY = self->fovY_;
+        if (!fresh) self->stats_.poseRun = 0; // this frame shows the stock view
     }
     Matrix4f game;
     std::memcpy(game.m.data(), views, sizeof(game.m));
@@ -145,6 +159,7 @@ void ViewOverride::Submit(void* renderer, float a, float b, std::uint32_t viewCo
     if (fresh && !rigid) {
         std::lock_guard<std::mutex> lock(self->mutex_);
         ++self->stats_.notRigid;
+        self->stats_.poseRun = 0;
     }
     if (!fresh || !rigid) { // never compose onto something that is not a camera
         original(renderer, a, b, viewCount, views, sync, extra);
@@ -162,6 +177,20 @@ void ViewOverride::Submit(void* renderer, float a, float b, std::uint32_t viewCo
     std::memcpy(views + kViewDirtyOffset, &dirty, sizeof(dirty));
     std::uint8_t written[kViewTransformBytes];
     std::memcpy(written, views, sizeof(written));
+    // FOV: only onto a block whose FOV and aspect read as such, as the FOV setter writes it.
+    const float gameFov = ReadFloat(views + kViewFovOffset), aspect = ReadFloat(views + kViewAspectOffset);
+    const float savedHorizontal = ReadFloat(views + kViewHorizontalFovOffset);
+    const bool fovWrite = fovY > 0 && PlausibleFov(gameFov) && aspect > 0.2f && aspect < 5.0f;
+    float writtenHorizontal = 0;
+    if (fovWrite) {
+        writtenHorizontal = 2.0f * std::atan(std::tan(fovY * 0.5f) * aspect);
+        std::memcpy(views + kViewFovOffset, &fovY, 4);
+        std::memcpy(views + kViewHorizontalFovOffset, &writtenHorizontal, 4);
+        const std::uint32_t fovDirty = dirty | kViewFovDirtyBits;
+        std::memcpy(views + kViewDirtyOffset, &fovDirty, 4);
+    }
+    std::uint32_t writtenDirty = 0;
+    std::memcpy(&writtenDirty, views + kViewDirtyOffset, 4);
 
     original(renderer, a, b, viewCount, views, sync, extra);
 
@@ -170,12 +199,25 @@ void ViewOverride::Submit(void* renderer, float a, float b, std::uint32_t viewCo
         std::memcpy(views, saved, sizeof(saved));
         restored = true;
     }
+    if (fovWrite) { // each field back only if it still holds exactly what we wrote
+        if (ReadFloat(views + kViewFovOffset) == fovY) std::memcpy(views + kViewFovOffset, &gameFov, 4);
+        else restored = false;
+        if (ReadFloat(views + kViewHorizontalFovOffset) == writtenHorizontal)
+            std::memcpy(views + kViewHorizontalFovOffset, &savedHorizontal, 4);
+        else restored = false;
+    }
     std::uint32_t nowDirty = 0;
     std::memcpy(&nowDirty, views + kViewDirtyOffset, sizeof(nowDirty));
-    if (nowDirty == dirty) std::memcpy(views + kViewDirtyOffset, &savedDirty, sizeof(savedDirty));
+    if (nowDirty == writtenDirty) std::memcpy(views + kViewDirtyOffset, &savedDirty, sizeof(savedDirty));
     std::lock_guard<std::mutex> lock(self->mutex_);
     ++self->stats_.applied;
     ++(restored ? self->stats_.restored : self->stats_.foreign);
+    if (fovWrite) ++self->stats_.fovApplied;
+    if (PlausibleFov(gameFov)) self->stats_.gameFovY = gameFov;
+    self->stats_.renderedFovY = fovWrite ? fovY : gameFov;
+    if (poseId && poseId == self->stats_.poseId) ++self->stats_.poseRun;
+    else self->stats_.poseRun = poseId ? 1 : 0;
+    self->stats_.poseId = poseId;
 }
 
 } // namespace fvr::bf4

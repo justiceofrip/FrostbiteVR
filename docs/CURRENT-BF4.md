@@ -2,14 +2,15 @@
 
 The only BF4 state document; overwrite it when the state changes. BC2 state stays in
 [CURRENT.md](CURRENT.md). Start with [HANDOFF-BF4.md](../HANDOFF-BF4.md); stereo detail in
-[BF4-STEREO.md](BF4-STEREO.md). Nothing here is committed yet (branch `bf4/vr-adapter`).
+[BF4-STEREO.md](BF4-STEREO.md). Branch `bf4/vr-adapter` (pushed; no PR or release).
 
 ## Evidence levels (same vocabulary as CURRENT.md)
 
 - **Actual-game check**: unattended runs on the real bf4.exe (build 179547, sha256
   `9d9d1a3f...c6c2aa`), AMD RX 9070 XT, Steam -> EA app launch, campaign only, no headset.
 - **Emulated**: Bf4EmuHost (WARP or GPU), fake OpenXR runtimes, launcher emulated sessions.
-- **Headset acceptance**: none yet.
+- **Headset acceptance**: theater mode (game screen on a virtual screen, laser on the
+  menus) works in the player's headset (2026-10-19, SteamVR). Nothing else yet.
 
 ## Works on the real game (actual-game checks)
 
@@ -26,12 +27,57 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   vtable scan, read-only `peek`. It never writes game memory (a `poke` command was removed
   after the policy guard blocked it).
 
+## Head tracking: the world lane (2026-10-19, built; first headset check pending)
+
+In campaign levels the headset now shows the game's world from the player's tracked head
+(6DoF, both eyes from the same native frame, mono: no parallax yet) instead of the theater
+screen. Pieces (all on the analysed build only):
+
+- `Bf4FrameworkGlue.cpp` `TheaterLink` carries both lanes. World: the menu lane says
+  Gameplay, so FvrXrHost asks for eye pairs on the frame lane (`D3D11FrameBridge`, the
+  same transport BC2 uses; controller samples now arrive through it). Each host request
+  (a lease) is taken at the start of a Present; its head pose goes to the camera tagged
+  with a pose id.
+- `Bf4ViewOverride` (slot 5 of a copied GameRenderer vtable, exact restore) now also
+  writes the FOV both eyes need (`+0xB4`, derived `+0x250`, dirty `|= 0xF`), exactly as the
+  game's FOV setter `+0xB89EE0` does, and counts how many submits in a row carried each
+  pose id. FOV/aspect offsets are from the setter and the view setup `+0x848B00`
+  (BF4-CAMERA-RE.md).
+- `Bf4WorldView.h`: a frame is captured only once `settle` submits (default 2, mod menu
+  1-4) carried the lease's pose, so a pair is never labelled with a pose it was not
+  rendered with; a lease that cannot be met in 140 ms is cancelled. Each eye is the part
+  of the frame its FOV covers (asymmetric crop), resampled to the host's eye size by
+  `Bf4EyeResampler` (game device, own device-context state, raw bits kept).
+- The world lane runs only while the game submits world views (loading screens stay on
+  the theater panel) and falls back to the theater panel when no pair is published for
+  2.5 s (retry after 5 s). The mod menu (menu button) always opens on the theater panel and
+  has "In campaign levels: Screen / Head-tracked view".
+- Recentring: the first head pose of the session faces forward; mod menu "Recenter view".
+  Game yaw is kept, pitch/roll/position come from the headset (aim pitch stays the game's).
+- Evidence: unit tests (crops, decisions, fallback, FOV write and exact restore, pose
+  runs, lease-only camera); Bf4Emulated world phase (the emulated host receives pairs and
+  each eye carries its own crop); `Run-Bf4TheaterXr.ps1 -World`: the real FvrXrHost on the
+  fake OpenXR runtime submitted 165 pairs from the emulated game, 0 rejected, 0 runtime
+  errors. Not yet seen in the real game: the settle depth (main thread vs render thread),
+  BF4 accepting the wider FOV, pair rate in game.
+- Known gaps: mono only; pair rate is bounded by one request in flight (host asks again
+  only after the previous pair is consumed) plus `settle` frames, so the world updates
+  slower than the headset (the compositor reprojects head rotation every frame); HUD and
+  pause menu are drawn into the wide frame (pause menu: use the pad, or switch to Screen);
+  first-person weapon not yet re-projected.
+
 ## Stereo (see BF4-STEREO.md)
 
-- Not working yet. BF4 has a split-screen route (`StereoSplitScreenEnable`, read-only on
-  PC) and a 3D Vision route gated on `RenderDevice.StereoEnable` **at render-device
-  creation** (user.cfg is too late). A launch argument reaches BF4 through Steam only after
-  the player confirms Steam's "launch with arguments" prompt.
+- Not working yet; the world lane is mono. BF4 has a split-screen route
+  (`StereoSplitScreenEnable`, read-only on PC; per output mode 1 renders both eyes in one
+  frame) and a 3D Vision route gated on `RenderDevice.StereoEnable` **at render-device
+  creation** (user.cfg is too late). New static facts (2026-10-19): the render device is
+  the 0x610-byte object (vtable `+0x1DD1870`) the GameRenderer constructor creates and
+  stores in global `+0x2738080`; its settings are at `+0x80` (the fields above), outputs
+  at `+0x38` (stride 0x138, count `+0x30`; per output: mode `+0x7C`, on `+0x80`,
+  convergence `+0x84`, separation `+0x88`). Next: find where mode 1 builds the two eye
+  views (the per-eye geometry must be known before the world lane can use it), then a
+  live read-only check of `[[+0x2738080]+0x80]`.
 
 ## Headset path (emulated end to end)
 
@@ -47,26 +93,17 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
 - `tools/emulated/Run-Bf4TheaterXr.ps1` (explicit, GPU): real FvrXrHost on the theater
   fixture (FvrTheaterTestXr) + emulated game: 19 panel frames, 75 quad layers, panel
   centre pixel = the game's colour, 0 runtime errors.
-- Not done: a real-game run with the host (the last attempt was blocked by the Steam
-  prompt below), and anything in a headset.
+- Real game + headset: theater mode works (2026-10-19). The world lane above is next.
 
-## Camera (2026-10-19: static RE done, override built, nothing run in the game)
+## Camera and session signals (2026-10-19, live read-only probes done)
 
-- Static RE traced the per-frame view pipeline: camera manager fills view blocks, the
-  game submits them through GameRenderer vtable slot 5, which copies them before
-  returning (BF4-CAMERA-RE.md). Correction found on the way: slot 19 returns
-  `[renderer+0x70]`, not `+0x60`; the read-only probe now parses the getter and samples
-  both. The probe runs automatically in the next developer session on this build.
-- Head tracking (mono) is built: `Bf4ViewOverride` points the renderer at a copied vtable
-  whose slot 5 writes the head-tracked transform into view block 0, calls the game, then
-  restores the bytes exactly. No game code is patched. Game yaw is kept, pitch/roll come
-  from the headset. Unit-tested in-process (install checks, exact restore, foreign write
-  kept, stale pose expiry, non-rigid refusal, detach rules). Bindings GameRenderer.Instance
-  and RenderView.Update are enrolled (unique in the decrypted `.text`).
-- Dormant in the real game: the core asks for a camera only in Campaign mode, which needs
-  R5 (level name + local server). FOV is still the game's; matching the headset FOV is
-  next after the first live check. Alternate-eye stereo now also requires
-  Renderer.StereoActiveEye (frame-to-eye association).
+- Live probe: `[renderer+0x60]` entry 0 holds a rigid camera transform that follows the
+  player; FOV `+0xB4` is in radians (0.79 in the prologue), near 0.06, far 20000, aspect
+  1.778. Slot 19 returns `[renderer+0x70]` (not a camera).
+- Session signals (R5) are wired (`Bf4SessionSignals.h`): campaign levels read as
+  `Levels/SP/<name>/<name>`, the menus as `Levels/FrontEnd/FrontEnd`; isMultiplayer is
+  noise outside a level, so it counts only inside a non-front-end level and a 1 must hold
+  2 s before it locks (the lock is permanent). Campaign gameplay features now unlock.
 
 ## Controller input (2026-10-19, emulated)
 
@@ -142,14 +179,11 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
 
 ## Tests (2026-10-19)
 
-- Build.ps1 after the weapon-entity link: x64 283/283, x86 282/282. Bf4CoreTests 49 cases / 366 checks
-  (view override, front-end level, reload classifier, census rules, reload driver); Bf4Emulated now also runs the census; Bf4Emulated
-  pass; launcher 16/16; theater XR script 5/5 (last run 2026-10-18). One earlier parallel
-  x64 run failed Bf4Emulated's panel-pixel check once; not reproduced in four later
-  parallel runs, cause not captured (the emulator now prints busy/error copy counts).
-- Installed locally: runtime/bf4 0.4.6-local (rollback 0.4.5-local). Its developer
-  sessions run the read-only camera and session probes and the firing census
-  automatically.
+- Build.ps1 after the world lane: x64 283/283, x86 282/282. Bf4CoreTests 53 cases / 416
+  checks; Bf4Emulated pass (theater, world lane, stereo probe, census, lockdown); launcher
+  19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and `-World` 4/4 (165 pairs).
+- Installed locally: runtime/bf4 0.4.12-local (rollback 0.4.11-local). Developer
+  sessions still run the read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the
   framework's `StereoMath.h` (`Quat` = `Quaternion`; Pose is `{position, orientation}`).
 
@@ -168,20 +202,14 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
 
 ## Open / blocked
 
-- **Steam prompt pending on the player's PC** (since 23:19): "launch BF4 with
-  `-RenderDevice.StereoEnable 1`?" It came from the EA stub after a direct-launch test and
-  blocks further launches until answered (Cancel is the clean choice).
-- Player to set (in Steam, by hand) BF4's launch option `-RenderDevice.StereoEnable 1`
-  for the 3D Vision route; agreed 2026-10-18, not yet done.
-- Session signals (R5) block every gameplay feature, head tracking included. Static
-  candidates found 2026-10-19 through the game's own status message (BF4-SESSION-RE.md):
-  level name `[[+0x27A1918]+0x50]`, isMultiplayer `[[[[+0x2670D80]+0x28]+0x38]+0xA0]`
-  (null means multiplayer, as in the game). A read-only session probe logs both in the
-  next developer session; nothing consumes them yet. SessionGuard now treats
-  `Levels/FrontEnd/*` as the front end (it would have locked on it). Controller aim (R8)
-  and button reload (R6, now covered by the pad) not started. Game-memory writes for the camera need an
-  exact-write lease; the player authorised them (2026-10-18), but the writer waits for
-  the read-only probe's evidence.
+- First headset check of the world lane (head tracking): does the world follow the head
+  without swimming (else raise "frame sync" in the mod menu), does BF4 render the wide
+  FOV, pair rate (`theater_link ... pairs=` and `view_override ... run=` lines every 600
+  frames in `bf4-adapter.log`).
+- Stereo: per-eye geometry of the split route (above). Controller aim (R8) not started;
+  button reload (R6) is covered by the virtual pad.
+- The census holder chain matched nothing live (27 firing objects, 0 holders): redo the
+  walk from the live firing vtable `+0x1D53F18`.
 - Mod menu in VR: opens with the menu button, drawn by the adapter (VrPanel + GDI) on the
   theater lane, reload mode / recenter / feedback marker work (emulated core test); not
   yet seen through the real host or in a headset.

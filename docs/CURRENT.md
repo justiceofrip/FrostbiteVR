@@ -230,7 +230,7 @@ From the [412 handoff](../handoff/checkpoint412/README.md) "Limits and next work
    charging-handle and belt-fed mechanisms after native verification; scopes,
    optic dots, full-body IK and campaign/vehicle coverage.
 
-## Battlefield 4 adapter (in progress, uncommitted on `bf4/vr-adapter`)
+## Battlefield 4 adapter (in progress on `bf4/vr-adapter`)
 
 Separate state document: [CURRENT-BF4.md](CURRENT-BF4.md). It adds BF4-only targets
 (`cmake/Bf4Adapter.cmake`) and reuses the shared XR host as `FvrXrHost.exe` (new
@@ -243,7 +243,9 @@ while the menu lane shows). BC2 checkpoint 412 composition and receipts are unto
 CI: `build.yml` builds and tests BF4 with everything else; `bf4-emulated.yml` runs only the
 portable launcher tests on Ubuntu; `bf4-release.yml` (tags) adds the hash-pinned Khronos
 loader and packages (tags `bf4-v*`). Both CI workflows passed on GitHub for branch
-`bf4/vr-adapter` (2026-10-19); the release workflow has not run (no tag yet).
+`bf4/vr-adapter` (2026-10-19); the release workflow has not run (no tag yet). BF4 uses the
+shared frame lane (`D3D11FrameBridge`) unchanged for its head-tracked world lane; theater
+mode is confirmed in a headset, the world lane awaits its first headset check.
 
 ## Where to look
 
