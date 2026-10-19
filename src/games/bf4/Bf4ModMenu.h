@@ -17,11 +17,12 @@ struct ModMenuState {
     bool worldStereo = false; // developer: BF4's own two-eye render (freezes the game so far)
     bool controllerAim = true; // campaign: the gun follows the right controller
     bool holsters = true;      // campaign: body holster gestures (Bf4BodyGestures.h)
+    bool aimDot = true;        // head-tracked view + controller aim: reticle where the gun aims
 };
 
 enum class ModMenuAction : std::uint8_t {
     None, SetReloadMode, SetSnapTurn, SetTheaterDistance, Recenter, MarkFeedback, GameMenu, SetHeadTracking, SetWorldSettle,
-    SetWorldStereo, SetControllerAim, SetHolsters
+    SetWorldStereo, SetControllerAim, SetHolsters, SetAimDot
 };
 
 struct ModMenuCommand {

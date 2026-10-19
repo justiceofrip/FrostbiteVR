@@ -61,6 +61,16 @@ LinearTransform HeadTrackedView(const LinearTransform& game, const LinearTransfo
     return frostbite::Compose(parent, local);
 }
 
+bool AimInView(const math::Vec3& aimBack, const LinearTransform& view, float& tanX, float& tanY) {
+    const math::Vec3 f{-aimBack.x, -aimBack.y, -aimBack.z};
+    auto dot = [](const math::Vec3& a, const math::Vec3& b) { return a.x * b.x + a.y * b.y + a.z * b.z; };
+    const float depth = -dot(f, view.forward); // the view looks along -forward
+    if (!(depth > 0.1f)) return false;
+    tanX = dot(f, view.right) / depth;
+    tanY = dot(f, view.up) / depth;
+    return std::isfinite(tanX) && std::isfinite(tanY);
+}
+
 LinearTransform HeadTrackedViewAtYaw(const LinearTransform& game, const LinearTransform& local, float yaw) {
     LinearTransform parent = game;
     const float s = std::sin(yaw), c = std::cos(yaw);
@@ -191,8 +201,18 @@ void ViewOverride::Submit(void* renderer, float a, float b, std::uint32_t viewCo
     auto compose = [&](const LinearTransform& g) {
         return std::isfinite(parentYaw) ? HeadTrackedViewAtYaw(g, local, parentYaw) : HeadTrackedView(g, local, keepPitch);
     };
+    const LinearTransform gameCamera = ReadViewTransform(views + kViewCopyOffset);
+    const LinearTransform headCamera = compose(gameCamera);
     WriteViewTransform(views, compose(ReadViewTransform(views)));
-    WriteViewTransform(views + kViewCopyOffset, compose(ReadViewTransform(views + kViewCopyOffset)));
+    WriteViewTransform(views + kViewCopyOffset, headCamera);
+    {
+        float tx = 0, ty = 0;
+        const bool inView = AimInView(gameCamera.forward, headCamera, tx, ty);
+        std::lock_guard<std::mutex> lock(self->mutex_);
+        self->stats_.aimInView = inView;
+        self->stats_.aimTanX = tx;
+        self->stats_.aimTanY = ty;
+    }
     const std::uint32_t dirty = savedDirty | kViewDirtyBits; // as the native setter does
     std::memcpy(views + kViewDirtyOffset, &dirty, sizeof(dirty));
     std::uint8_t written[kViewTransformBytes];

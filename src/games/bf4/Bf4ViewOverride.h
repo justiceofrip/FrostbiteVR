@@ -59,6 +59,11 @@ frostbite::LinearTransform HeadTrackedView(const frostbite::LinearTransform& gam
 frostbite::LinearTransform HeadTrackedViewAtYaw(const frostbite::LinearTransform& game,
                                                 const frostbite::LinearTransform& local, float yaw);
 
+// The direction a camera with back row `aimBack` looks along, seen from camera `view`
+// (BF4 rows: right, up, +Z behind), as image-plane tangents. False when it points sideways
+// or behind.
+bool AimInView(const math::Vec3& aimBack, const frostbite::LinearTransform& view, float& tanX, float& tanY);
+
 class ViewOverride {
 public:
     enum class InstallResult { Ok, NoObject, UnexpectedSubmit, AlreadyInstalled };
@@ -78,6 +83,10 @@ public:
         // before any override: its +Z row (behind the camera) gives the game's aim.
         math::Vec3 gameBack{};
         std::uint64_t gameSamples = 0;
+        // That aim in the view the latest applied submit rendered (tangents, +x right, +y up):
+        // the aim reticle's place in the frame.
+        bool aimInView = false;
+        float aimTanX = 0, aimTanY = 0;
     };
 
     ViewOverride() = default;

@@ -70,6 +70,25 @@ inline void EyeCrops(const math::FovTangents (&fov)[2], float tanX, float tanY, 
 }
 
 // Capture decision at Present for the lease the camera is carrying.
+// Aim reticle (controller aiming): where the game's own aim crosses a mono render with
+// half-angle tangents tanX/tanY, as frame uv; scale converts frame uv to tangent units (the
+// reticle keeps its angular size whatever the render FOV).
+struct Reticle {
+    bool show = false;
+    float u = 0.5f, v = 0.5f;
+    float scaleX = 1, scaleY = 1;
+};
+inline Reticle ReticleAt(float aimTanX, float aimTanY, float tanX, float tanY) {
+    Reticle r;
+    if (!(tanX > 0 && tanY > 0) || !std::isfinite(aimTanX) || !std::isfinite(aimTanY)) return r;
+    r.u = 0.5f + aimTanX / (2 * tanX);
+    r.v = 0.5f - aimTanY / (2 * tanY);
+    r.scaleX = 2 * tanX;
+    r.scaleY = 2 * tanY;
+    r.show = r.u > 0 && r.u < 1 && r.v > 0 && r.v < 1;
+    return r;
+}
+
 inline constexpr std::uint64_t kWorldLeaseMaxMs = 140; // host requests live 150 ms
 // --frame-channels 2: requests live 200 ms (one waits behind the other); the margin covers
 // the time between the host's request and the adapter taking it at a frame start.

@@ -141,7 +141,14 @@ screen. Pieces (all on the analysed build only):
   input delay (core + fake game). Not seen in the real game: whether BF4 mixes mouse
   look with the virtual pad, vehicles, recoil interplay.
 - The gun is still the game's first-person model at the game camera (it points where the
-  controller points); hands/IK and holsters are separate work.
+  controller points); hands/IK are separate work.
+- Aim dot (mod menu "Aim dot", default on): BF4 draws its crosshair at the centre of the
+  frame, which is now where the head looks, not where the gun aims. While controller aim is
+  engaged the eye resampler draws a green ring and dot where the game's aim (its own camera,
+  read before the override) crosses the rendered head view (`AimInView`, `ReticleAt`;
+  ~0.6 deg, same direction in both eyes of the mono frame). Not drawn in split 3D. Evidence:
+  unit tests (geometry) and a WARP GPU check in Bf4Emulated (ring and dot drawn at the aim
+  point, frame untouched elsewhere, plain pass unchanged). Log: `reticle_pairs=`.
 
 ## Stereo: BF4's own two-eye render in the world lane (2026-10-19)
 
@@ -308,11 +315,11 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
 
 ## Tests (2026-10-19)
 
-- Build.ps1 after holsters and the magazine gesture: x64 284/284, x86 283/283.
-  Bf4CoreTests 62 cases; Bf4Emulated pass (theater, world lane, stereo probe, census,
-  lockdown, gestures); launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
+- Build.ps1 after the aim dot: x64 284/284, x86 283/283. Bf4CoreTests 63 cases;
+  Bf4Emulated pass (theater, world lane, stereo probe, census, lockdown, gestures, eye
+  resampler reticle on WARP); launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
   `-World -FrameChannels 2` 5/5 (227 pairs); `-World` with one channel 4/4 (47 pairs).
-- Installed locally: runtime/bf4 0.4.19-local (rollback 0.4.18-local). Developer
+- Installed locally: runtime/bf4 0.4.20-local (rollback 0.4.19-local). Developer
   sessions still run the read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the
   framework's `StereoMath.h` (`Quat` = `Quaternion`; Pose is `{position, orientation}`).

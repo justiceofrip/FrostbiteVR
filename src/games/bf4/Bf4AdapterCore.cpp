@@ -122,6 +122,10 @@ void AdapterCore::ApplyMenuCommand(const ModMenuCommand& command) {
         menuState_.headTracking = command.value != 0;
         platform_.Log(menuState_.headTracking ? "campaign view: head-tracked" : "campaign view: screen");
         break;
+    case ModMenuAction::SetAimDot:
+        menuState_.aimDot = command.value != 0;
+        platform_.Log(menuState_.aimDot ? "aim dot: on" : "aim dot: off");
+        break;
     case ModMenuAction::SetHolsters:
         menuState_.holsters = command.value != 0;
         platform_.Log(menuState_.holsters ? "body holsters: on" : "body holsters: off");
@@ -518,6 +522,7 @@ void AdapterCore::OnFrame(const PlatformFrame& f, const ControllerSnapshot& in) 
         meta.world = stereo_ == StereoMode::Mono; // head-tracked view goes to the headset as eye pairs
         meta.worldSettle = static_cast<std::uint32_t>(menuState_.worldSettle);
         meta.worldStereo = session_.developerFeatures && menuState_.worldStereo;
+        meta.reticle = menuState_.aimDot && aim_.engaged;
         if (in.world.valid && in.world.halfEyeDistance > 0) halfEyeDistance_ = in.world.halfEyeDistance;
         meta.halfEyeDistance = halfEyeDistance_;
         const bool enginePair = pair && (stereo_ == StereoMode::Theater3D || stereo_ == StereoMode::EngineStereoTracked);

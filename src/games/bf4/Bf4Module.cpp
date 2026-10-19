@@ -733,6 +733,9 @@ public:
             m.poseId = st.poseId;
             m.poseRun = st.poseRun;
             m.renderFovY = st.renderedFovY;
+            m.aimValid = st.aimInView;
+            m.aimTanX = st.aimTanX;
+            m.aimTanY = st.aimTanY;
         }
         if (m.world) {
             const float aspect = ReadViewAspect();

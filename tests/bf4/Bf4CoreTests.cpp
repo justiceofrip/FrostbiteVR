@@ -865,3 +865,25 @@ TEST_CASE(MagazineReloadIsAGestureThatPressesTheGamesReload) {
     r.Step();
     CHECK(!r.gestures.MagazineOut(Bf4Gun::Primary));
 }
+
+TEST_CASE(AimReticleSitsWhereTheGameAims) {
+    using namespace fvr;
+    using namespace fvr::bf4;
+    // Head view looking down -Z; the game aims 0.2 rad to the right and 0.1 rad up.
+    frostbite::LinearTransform view;
+    view.right = {1, 0, 0};
+    view.up = {0, 1, 0};
+    view.forward = {0, 0, 1}; // +Z behind
+    const float yaw = 0.2f, pitch = 0.1f;
+    const math::Vec3 f{std::sin(yaw) * std::cos(pitch), std::sin(pitch), -std::cos(yaw) * std::cos(pitch)};
+    float tx = 0, ty = 0;
+    CHECK(AimInView({-f.x, -f.y, -f.z}, view, tx, ty));
+    CHECK(Near(tx, std::tan(yaw), 1e-4f) && Near(ty, std::tan(pitch) / std::cos(yaw), 1e-4f));
+    CHECK(!AimInView({-1, 0, 0}, view, tx, ty)); // aiming sideways: not in this view
+    // Frame position for a 16:9 render: right of and above the centre, at the tangent ratio.
+    const float tanY = std::tan(0.95f), tanX = tanY * 16.0f / 9.0f;
+    const Reticle r = ReticleAt(std::tan(yaw), 0.1f, tanX, tanY);
+    CHECK(r.show && Near(r.u, 0.5f + std::tan(yaw) / (2 * tanX), 1e-5f) && r.v < 0.5f);
+    CHECK(Near((r.u - 0.5f) * r.scaleX, std::tan(yaw), 1e-5f)); // scale gives tangent units back
+    CHECK(!ReticleAt(10.0f, 0, tanX, tanY).show); // outside the frame
+}

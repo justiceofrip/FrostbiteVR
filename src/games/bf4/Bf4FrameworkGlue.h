@@ -42,6 +42,11 @@ struct FrameMeta {
     bool stereoSplit = false;         // this frame is BF4's side-by-side two-eye render
     float stereoSeparation = 0;       // the engine's per-eye NDC shift for that render
     std::uint32_t stereoStableFrames = ~0u;
+    // Aim reticle: the core asks (controller aim engaged, option on); the platform adds where
+    // the game's aim crosses the rendered view (tangents of the render camera).
+    bool reticle = false;
+    bool aimValid = false;
+    float aimTanX = 0, aimTanY = 0;
 };
 
 class IFrameSink {

@@ -12,7 +12,12 @@ namespace {
 constexpr char kShader[] = R"(
 Texture2D<float4> source : register(t0);
 SamplerState linearClamp : register(s0);
-cbuffer Crop : register(b0) { float4 rect; float4 bounds; }; // rect u0 v0 u1 v1; bounds bu0 - bu1 -
+cbuffer Crop : register(b0) {
+    float4 rect;    // u0 v0 u1 v1
+    float4 bounds;  // bu0 - bu1 -
+    float4 reticle; // u v show -
+    float4 scale;   // frame uv -> tangent units: x y
+};
 struct V { float4 position : SV_Position; float2 uv : TEXCOORD0; };
 V vs(uint n : SV_VertexID) {
     const float2 p[3] = {float2(-1, -1), float2(-1, 3), float2(3, -1)};
@@ -24,7 +29,16 @@ V vs(uint n : SV_VertexID) {
 float4 ps(V v) : SV_Target {
     const float2 s = float2(lerp(rect.x, rect.z, v.uv.x), lerp(rect.y, rect.w, v.uv.y));
     if (s.x < bounds.x || s.x > bounds.z || s.y < 0 || s.y > 1) return float4(0, 0, 0, 1); // not rendered
-    return float4(source.SampleLevel(linearClamp, s, 0).rgb, 1);
+    float3 c = source.SampleLevel(linearClamp, s, 0).rgb;
+    if (reticle.z > 0.5) { // aim reticle: a ring and a dot, sized in tangent units (~0.6 deg)
+        const float d = length((s - reticle.xy) * scale.xy);
+        const float ring = 1 - smoothstep(0.0012, 0.0024, abs(d - 0.011));
+        const float centre = 1 - smoothstep(0.0016, 0.0028, d);
+        const float shade = 1 - smoothstep(0.0020, 0.0045, abs(d - 0.011)); // dark rim for contrast
+        c = lerp(c, c * 0.35, shade * 0.6);
+        c = lerp(c, float3(0.25, 1.0, 0.35), max(ring, centre) * 0.9);
+    }
+    return float4(c, 1);
 }
 )";
 
@@ -63,6 +77,8 @@ struct StateScope {
 struct alignas(16) CropConstants {
     float rect[4];
     float bounds[4];
+    float reticle[4];
+    float scale[4];
 };
 } // namespace
 
@@ -120,7 +136,7 @@ void EyeResampler::Reset() {
 }
 
 bool EyeResampler::Render(ID3D11DeviceContext* context, ID3D11Texture2D* source, const EyeCrop (&crops)[2],
-                          std::uint32_t width, std::uint32_t height, std::uint32_t format) {
+                          std::uint32_t width, std::uint32_t height, std::uint32_t format, const Reticle& reticle) {
     if (broken_ || !context || !source || !width || !height || width > 16384 || height > 16384) return false;
     if (!initialized_ && !Initialize(context)) {
         broken_ = true; // no D3D11.1 state objects / shader compiler: the world lane stays off
@@ -180,7 +196,10 @@ bool EyeResampler::Render(ID3D11DeviceContext* context, ID3D11Texture2D* source,
     if (sd.SampleDesc.Count > 1) context_->ResolveSubresource(source_.Get(), 0, source, 0, Unorm(sd.Format));
     else context_->CopyResource(source_.Get(), source);
     for (int i = 0; i < 2; ++i) {
-        const CropConstants c{{crops[i].u0, crops[i].v0, crops[i].u1, crops[i].v1}, {crops[i].bu0, 0, crops[i].bu1, 1}};
+        const CropConstants c{{crops[i].u0, crops[i].v0, crops[i].u1, crops[i].v1},
+                              {crops[i].bu0, 0, crops[i].bu1, 1},
+                              {reticle.u, reticle.v, reticle.show ? 1.0f : 0.0f, 0},
+                              {reticle.scaleX, reticle.scaleY, 0, 0}};
         context_->UpdateSubresource(constants_[i].Get(), 0, nullptr, &c, 0, 0);
     }
     {

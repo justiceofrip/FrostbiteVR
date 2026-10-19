@@ -76,6 +76,9 @@ std::string Status() {
 }
 
 int g_fail = 0;
+}
+bool CheckEyeResamplerReticle(ID3D11Device* device, const char*& why); // ResamplerCheck.cpp
+namespace {
 void Check(bool ok, const char* what) {
     std::printf("%s %s\n", ok ? "PASS" : "FAIL", what);
     if (!ok) ++g_fail;
@@ -605,6 +608,14 @@ int wmain() {
         for (auto* o : objs) _aligned_free(o);
         _aligned_free(firingData);
         _aligned_free(weaponData);
+    }
+
+    // 5b. The world lane's eye resampler on this device: plain crops, then the aim reticle.
+    {
+        const char* why = "";
+        const bool ok = CheckEyeResamplerReticle(dev, why);
+        if (!ok) std::printf("resampler check: %s\n", why);
+        Check(ok, "eye resampler shader draws the aim reticle only where the gun aims");
     }
 
     // 6. Multiplayer evidence: a PunkBuster client module appears.

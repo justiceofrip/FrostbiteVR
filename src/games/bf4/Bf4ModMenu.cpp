@@ -39,6 +39,8 @@ ui::ModMenuModel BuildModMenu(const game::CapabilityRegistry& caps, bool develop
               state.headTracking ? 1 : 0, true, ""});
     menu.Add({"controller_aim", "Aim with", MenuItemKind::Choice, {"Right stick", "Right controller"},
               state.controllerAim ? 1 : 0, true, "Head-tracked view only. Right stick turns your body."});
+    menu.Add({"aim_dot", "Aim dot", MenuItemKind::Choice, {"Off", "On"}, state.aimDot ? 1 : 0, true,
+              "A green ring where the gun aims. The game's own crosshair stays at the centre of your view."});
     if (developer)
         menu.Add({"world_stereo", "3D depth (experimental)", MenuItemKind::Choice, {"Off", "On"},
                   state.worldStereo ? 1 : 0, true, "BF4's own side-by-side render. So far it freezes the game."});
@@ -90,6 +92,7 @@ ModMenuCommand InterpretChange(const MenuItem& item) {
     if (item.id == "world_stereo") return {ModMenuAction::SetWorldStereo, item.value};
     if (item.id == "controller_aim") return {ModMenuAction::SetControllerAim, item.value};
     if (item.id == "holsters") return {ModMenuAction::SetHolsters, item.value};
+    if (item.id == "aim_dot") return {ModMenuAction::SetAimDot, item.value};
     return {};
 }
 
