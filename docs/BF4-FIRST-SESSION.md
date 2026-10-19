@@ -1,4 +1,4 @@
-# BF4 headset session: checklist (0.4.40-local)
+# BF4 headset session: checklist (0.4.41-local)
 
 What to try in the next headset session, and what each check tells us. About 15 minutes.
 Everything is input-only or an exactly restored camera/FOV write, apart from the optional

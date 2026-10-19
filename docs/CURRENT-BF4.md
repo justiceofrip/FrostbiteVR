@@ -14,7 +14,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   three sessions (09:16-10:19; rotation was inverted and the gun oversized, both fixed in
   0.4.16); everything built since 0.4.17 is unseen in a headset.
 
-## At a glance (installed: 0.4.40-local)
+## At a glance (installed: 0.4.41-local)
 
 | Feature | State | Evidence |
 | --- | --- | --- |
@@ -471,7 +471,7 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
   launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
   `-World -FrameChannels 2` 5/5 (76-237 pairs, machine-dependent); `-World` with one
   channel 4/4 (47 pairs).
-- Installed locally: runtime/bf4 0.4.40-local (rollback 0.4.39-local). Developer
+- Installed locally: runtime/bf4 0.4.41-local (rollback 0.4.40-local). Developer
   sessions still run the read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the
   framework's `StereoMath.h` (`Quat` = `Quaternion`; Pose is `{position, orientation}`).
@@ -493,7 +493,7 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
 
 ## Open / blocked
 
-- Headset check of 0.4.40 (BF4-FIRST-SESSION.md): head rotation direction, gun size,
+- Headset check of 0.4.41 (BF4-FIRST-SESSION.md): head rotation direction, gun size,
   comfort, the pair rate (was ~17-25 Hz; expected about game fps / 2 at frame sync 2),
   controller aim (mouse look reaching the game, its learned gain), gestures, HUD corners,
   3D from depth (which depth target it finds; `vr-snapshot-depth.bmp`).
