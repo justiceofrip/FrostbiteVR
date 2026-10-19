@@ -225,7 +225,8 @@ using the frame's depth buffer (depth-image-based rendering; no simulation or re
 - Eye resampler: each eye samples the frame at its own tangent + b/z (b = signed half eye
   distance, z = view distance from the depth with the view's near/far, +0xBC/+0xC0, read
   live as 0.06 / 20000; reversed depth when the buffer clears to 0), by a four-step
-  fixed-point search; nearer than 0.25 m counts as 0.25 m (the weapon). The aim dot stays
+  fixed-point search; nearer than 0.4 m counts as 0.4 m (the weapon, about where a VR gun
+  is held; nearer would mean a very strong per-eye shift). The aim dot stays
   at infinity; gesture markers keep their own per-eye placement.
 - Mod menu "3D from depth: Off / On" (default off). Log: `depth_capture installed= main=WxH
   format= clear= split= ... hooked=` every 600 frames, `depth_pairs=`; developer sessions
@@ -414,7 +415,7 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
   Bf4Emulated pass (theater, world lane, stereo probe, census, lockdown, gestures, eye
   resampler reticle on WARP); launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
   `-World -FrameChannels 2` 5/5 (227 pairs); `-World` with one channel 4/4 (47 pairs).
-- Installed locally: runtime/bf4 0.4.34-local (rollback 0.4.33-local). Developer
+- Installed locally: runtime/bf4 0.4.35-local (rollback 0.4.34-local). Developer
   sessions still run the read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the
   framework's `StereoMath.h` (`Quat` = `Quaternion`; Pose is `{position, orientation}`).

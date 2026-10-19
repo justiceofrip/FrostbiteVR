@@ -152,7 +152,7 @@ struct DepthStereoParams {
     float shift[2] = {0, 0}; // per eye, frame uv x world units (left negative)
     float nearZ = 0.1f, farZ = 1000;
     bool reversed = false;   // the buffer clears to 0 (reversed depth)
-    float minDepth = 0.25f;  // nearer than this is treated as this far (first-person weapon)
+    float minDepth = 0.4f;   // nearer than this counts as this far (the weapon: about where a VR gun is held)
 };
 inline DepthStereoParams DepthStereoFor(float halfEye, float tanX, float nearZ, float farZ, float clearValue) {
     DepthStereoParams p;
