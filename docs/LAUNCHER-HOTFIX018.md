@@ -1,7 +1,9 @@
 # 0.1.8 startup hotfix
 
-Status: isolated builds and exact-package validation passed on 2026-10-19;
-the three release assets are frozen for publication.
+Status: isolated builds and exact-package validation passed on 2026-10-19.
+[0.1.8 was published](https://github.com/justiceofrip/BC2VR/releases/tag/v0.1.8)
+at 15:18:51 UTC. GitHub's SHA-256 digests and sizes match all three tested assets.
+Implementation commit: `475dc87f13a94546c0c6f639efedc51ad393a86c`.
 This hotfix starts from published 0.1.7 source commit
 `b6b89755e2947d953ecc39796a29d722dc74468c`. It retains the published gameplay
 implementation and explicitly excludes the ongoing knife investigation.

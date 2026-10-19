@@ -1,6 +1,7 @@
 # Current state: validated 0.1.8 startup hotfix; campaign blocked
 
-The latest published package is 0.1.7. Its opening-mission knife does not reliably
+The latest published package is [0.1.8](https://github.com/justiceofrip/BC2VR/releases/tag/v0.1.8).
+Its opening-mission knife does not reliably
 damage enemies, preventing campaign progression. Death/reload crashes remain
 unresolved. No playable-campaign, knife-damage or crash-fix claim is warranted.
 
@@ -31,7 +32,9 @@ rejection and settings preservation passed. The unchanged asset preparation
 recipe and cache were verified with the new staged runtime, without another
 cold preparation run. These checks did not start BC2 or a headset session.
 
-The installer, runtime and update manifest are frozen for publication. See
+The installer, runtime and update manifest were published on 2026-10-19 at
+15:18:51 UTC. All three uploaded asset sizes and SHA-256 digests match the
+validated files. See
 [the exact hotfix scope and validation hashes](LAUNCHER-HOTFIX018.md). The source
 closure is `2c285a89ee69cd02effc7ff1f09bf23c56eae8ec105a8b3a765bb94918fec7c1`.
 Actual EA/VDXR headset startup remains unverified. The separately saved
