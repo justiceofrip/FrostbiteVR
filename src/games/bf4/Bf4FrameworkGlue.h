@@ -53,6 +53,8 @@ public:
     virtual bool PublishTexture(ID3D11Texture2D*, std::uint32_t /*width*/, std::uint32_t /*height*/) { return false; }
     virtual std::string Describe() const { return {}; } // one status line (diagnostics)
     virtual bool WorldLane() const { return false; }    // the headset shows the world lane now
+    // Developer evidence: the next published eye pair and its source frame as BMPs in `dir`.
+    virtual void RequestSnapshot(const std::string& /*dir*/) {}
 };
 
 struct GamePointer {

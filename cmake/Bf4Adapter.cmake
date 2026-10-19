@@ -92,7 +92,8 @@ target_compile_definitions(Bf4NvapiShim PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 # The adapter.
 add_library(FrostbiteVR.Bf4 SHARED
   src/games/bf4/Bf4Module.cpp src/games/bf4/Bf4MenuBridge.cpp src/games/bf4/Bf4FrameworkGlue.cpp
-  src/games/bf4/Bf4GpuVendor.cpp src/games/bf4/Bf4XInputSink.cpp src/graphics/GdiPanelRaster.cpp)
+  src/games/bf4/Bf4GpuVendor.cpp src/games/bf4/Bf4XInputSink.cpp src/graphics/GdiPanelRaster.cpp
+  src/games/bf4/Bf4Diagnostics.cpp)
 target_link_libraries(FrostbiteVR.Bf4 PRIVATE FvrBf4Core FvrMinHook64 d3d11 dxgi psapi gdi32)
 target_compile_definitions(FrostbiteVR.Bf4 PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 if(FVR_BF4_FRAMEWORK_GLUE)

@@ -85,8 +85,22 @@ screen. Pieces (all on the analysed build only):
   it from the output's `+0x60/+0x64` size), not the frame's; crops, the render FOV and the
   eye distance assumed the frame's (inferred from the zoom; the stereo probe now logs that size). Now the adapter reads the aspect the engine applied
   (`[renderer+0x60]` view 0 `+0xC4`) and uses it for all three.
+- **Second headset session (0.4.14-local, 09:46)**: no crash, but the game stopped
+  presenting ~2 s after 3D engaged (eye-loop override installed, side-by-side render
+  confirmed, then no Present; the headset went black). The head-tracked mono view before
+  it was reported "way too zoomed in" and a "motion sickness machine"; the pair rate was
+  23-32 Hz at 100-200 game fps, render FOV 1.947 rad and view aspect 1.778 as intended.
+  `waitRenderSync` (`+0x8288B0`): the main thread waits after every submit, so it runs
+  at most one frame ahead and the settle-2 labelling rule holds. The zoom is not
+  explained yet; the projection is rebuilt from the written FOV (view update `+0xB8C180`
+  bit 1 -> `+0xB8CFC0`, matrix at view `+0x320`).
+- Evidence tools for the next session (developer): `vr-snapshot-frame.bmp` (the game
+  frame) and `vr-snapshot-eyes.bmp` (both eye images) 5 s into head tracking and on every
+  "Mark this moment for feedback"; a watchdog that logs every thread's stack (module +
+  offset) after 4 s without a Present (Bf4Diagnostics; emulated end to end); a fault log
+  (`faults.log`) armed while 3D is on; each laser click logged with its client position.
 - Crash guard: a marker written while 3D is on and removed when it goes off; a session
-  that starts with the marker present keeps 3D off and says so in the log.
+  that starts with the marker present starts with 3D off (the mod menu can switch it on).
 - The rest is as built: `Bf4EngineStereo` sets StereoEnable/StereoSplitScreenEnable and
   the stereo values through an exact-write journal and keeps the engine's eye distance at
   the headset's; 3D starts 10 s after head tracking; crops come from the halves with the
@@ -198,7 +212,7 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
 - Build.ps1 after the eye-loop fix: x64 283/283, x86 282/282. Bf4CoreTests 55 cases / 447
   checks; Bf4Emulated pass (theater, world lane, stereo probe, census, lockdown); launcher
   19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and `-World` 4/4 (157 pairs).
-- Installed locally: runtime/bf4 0.4.14-local (rollback 0.4.13-local). Developer
+- Installed locally: runtime/bf4 0.4.15-local (rollback 0.4.14-local). Developer
   sessions still run the read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the
   framework's `StereoMath.h` (`Quat` = `Quaternion`; Pose is `{position, orientation}`).
@@ -222,8 +236,10 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
   without swimming (else raise "frame sync" in the mod menu), does BF4 render the wide
   FOV, pair rate (`theater_link ... pairs=` and `view_override ... run=` lines every 600
   frames in `bf4-adapter.log`).
-- First headset check of 3D depth (engine split stereo): log lines `engine stereo:` and
-  `engine stereo render:`; depth scale and comfort. Controller aim (R8) not started;
+- Zoom/motion sickness in the head-tracked view: compare the snapshots with the eye
+  FOVs; then raise the pair rate (one request in flight is the limit).
+- 3D: the stall after the split render engages; the watchdog's stacks show where.
+- Laser click on "Resume" reported not to work (which screen is not known yet). Controller aim (R8) not started;
   button reload (R6) is covered by the virtual pad.
 - The census holder chain matched nothing live (27 firing objects, 0 holders): redo the
   walk from the live firing vtable `+0x1D53F18`.

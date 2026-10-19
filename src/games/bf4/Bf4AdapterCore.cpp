@@ -240,6 +240,11 @@ void AdapterCore::UpdateStereoDriverCapability() {
         caps_.Set(Feature::StereoDriver, game::FeatureState::Candidate, "engine renders L/R pairs; headset check pending");
 }
 
+void AdapterCore::SetWorldStereo(bool on) {
+    menuState_.worldStereo = on;
+    if (ui::MenuItem* item = modMenu_.Find("world_stereo")) item->value = on ? 1 : 0;
+}
+
 void AdapterCore::OnStereoEye(stereo::Eye eye) {
     if (detached_ || session_.stereo == StereoSetting::Off) return;
     const auto action = tracker_.OnActiveEye(eye);

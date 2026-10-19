@@ -24,6 +24,7 @@
 #include "Bf4SessionSignals.h"
 #include "Bf4EngineStereo.h"
 #include "Bf4EyeLoopOverride.h"
+#include "Bf4Diagnostics.h"
 #include "Bf4WorldView.h"
 #include "fvr/graphics/GdiPanelRaster.h"
 #include "stereo/SideBySide.h"
@@ -131,6 +132,8 @@ public:
     bool shimBound = false, shimForeignLogged = false, suppressPending = false, splitMsaaLogged = false;
     StereoRoute stereoRoute = StereoRoute::Split;
     std::string exeSha256;
+    bool developer = false;
+    bool worldSnapshotTaken = false;
     SessionSignalFilter sessionSignals_;
     SessionObservation lastObservation_{}; // its levelName points into sessionSignals_
     ULONGLONG lastObservationMs_ = 0;
@@ -240,7 +243,12 @@ public:
         const ULONGLONG now = GetTickCount64();
         if (!lane) worldLaneSinceMs = 0;
         else if (!worldLaneSinceMs) worldLaneSinceMs = now;
-        const bool wanted = lane && now - worldLaneSinceMs >= 10000 && meta.worldStereo && !stereoCrashGuard &&
+        if (developer && lane && !worldSnapshotTaken && now - worldLaneSinceMs >= 5000) {
+            worldSnapshotTaken = true;
+            frames->RequestSnapshot(logDir);
+            log_.Write("snapshot requested (5 s of head tracking): vr-snapshot-frame.bmp / vr-snapshot-eyes.bmp");
+        }
+        const bool wanted = lane && now - worldLaneSinceMs >= 10000 && meta.worldStereo &&
                             exeSha256 == kAnalyzedBuildSha256 && meta.halfEyeDistance > 0 && tanX > 0 && EnsureEyeLoop();
         const auto base = reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
         if (wanted && engineStereo.State() == EngineStereo::Status::Off) {
@@ -258,6 +266,7 @@ public:
             std::remove((logDir + "\\stereo-armed.txt").c_str());
             stereoMarker = false;
         }
+        Diagnostics::ArmFaultLogging(engineStereo.State() == EngineStereo::Status::On);
         if (engineStereo.State() == EngineStereo::Status::On) engineStereo.Update(meta.halfEyeDistance, tanX);
         const EngineStereoReading r = engineStereo.State() == EngineStereo::Status::On ? engineStereo.Read() : EngineStereoReading{};
         if (engineStereo.State() != lastStereoStatus) {
@@ -607,7 +616,17 @@ public:
         return lastObservation_;
     }
 
-    void ApplyPointer(std::span<const PointerEvent> events) override { pointer.Apply(window, events); }
+    void ApplyPointer(std::span<const PointerEvent> events) override {
+        if (developer)
+            for (const auto& e : events)
+                if (e.type == PointerEvent::Type::ButtonDown || e.type == PointerEvent::Type::ButtonUp) {
+                    RECT c{};
+                    GetClientRect(window, &c);
+                    log_.Write("laser click %s at %d,%d (client %ldx%ld)", e.type == PointerEvent::Type::ButtonDown ? "down" : "up",
+                               e.x, e.y, static_cast<long>(c.right), static_cast<long>(c.bottom));
+                }
+        pointer.Apply(window, events);
+    }
     void ApplyPad(const interaction::PadState& pad, bool active) override { padSink.Apply(pad, active); }
 
     bool PublishFrame(const FrameMeta& meta) override {
@@ -750,7 +769,14 @@ public:
         if (t) CloseHandle(t);
     }
 
-    void Log(std::string_view line) override { log_.Write("%.*s", static_cast<int>(line.size()), line.data()); }
+    void Log(std::string_view line) override {
+        log_.Write("%.*s", static_cast<int>(line.size()), line.data());
+        // "Mark this moment" also saves what the headset shows (developer evidence).
+        if (developer && frames && line.rfind("FEEDBACK MARK", 0) == 0) {
+            frames->RequestSnapshot(logDir);
+            log_.Write("snapshot requested: vr-snapshot-frame.bmp / vr-snapshot-eyes.bmp in the log folder");
+        }
+    }
 
 private:
     FileLog& log_;
@@ -871,6 +897,7 @@ void FiringCensusTick(Adapter& a); // read-only weapon-firing census, defined be
 
 void OnPresent(Adapter& a, IDXGISwapChain* sc) {
     if (!Adopt(a, sc)) return;
+    Diagnostics::FramePresented();
     if (!a.stopped && !a.core->Detached()) { // research and probes end with any lockdown
         ResearchTick(a);
         CameraProbeTick(a);
@@ -1654,12 +1681,19 @@ extern "C" __declspec(dllexport) int __cdecl FvrBf4_Start(const char* sessionTex
     a->platform.exeSha256 = a->session.exeSha256;
     a->platform.core = a->core.get();
     a->platform.coreMutex = &a->coreMutex;
+    a->platform.developer = a->session.developerFeatures;
+    if (a->session.developerFeatures && !a->session.logDir.empty()) {
+        Adapter* self = a;
+        Diagnostics::Start([self](const std::string& line) { self->log.Write("%s", line.c_str()); },
+                           a->session.logDir + "\\faults.log");
+    }
     {
         const std::string marker = a->session.logDir + "\\stereo-armed.txt";
         if (GetFileAttributesA(marker.c_str()) != INVALID_FILE_ATTRIBUTES) {
             a->platform.stereoCrashGuard = true;
             std::remove(marker.c_str());
-            a->log.Write("the last session ended with 3D on (crash?): 3D stays off this session");
+            a->core->SetWorldStereo(false); // the mod menu can still switch it on
+            a->log.Write("the last session ended with 3D on (crash or freeze?): 3D starts off; the mod menu can switch it on");
         }
     }
     if (MH_Initialize() != MH_OK) {

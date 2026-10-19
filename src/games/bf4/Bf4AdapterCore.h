@@ -129,6 +129,8 @@ public:
 
     // Runtime setting change from the in-headset mod menu.
     void SetReloadMode(interaction::ReloadMode requested);
+    // Session default for "3D depth" (off after a session that ended with 3D on).
+    void SetWorldStereo(bool on);
 
     // FrostbiteVR's own in-headset menu (menu button toggles it; the laser drives it).
     bool ModMenuOpen() const { return menuOpen_; }

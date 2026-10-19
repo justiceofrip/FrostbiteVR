@@ -425,6 +425,23 @@ int wmain() {
         Check(Status().find("lane=theater") != std::string::npos, "world lane: back on the theater panel when not wanted");
     }
 
+    // 4c. Hang diagnostics (developer sessions): no Present for > 4 s makes the adapter's
+    // watchdog log where every thread is, without deadlocking the process.
+    {
+        Sleep(5500);
+        std::string log;
+        if (std::FILE* f = _wfopen((dir + L"\\bf4-adapter.log").c_str(), L"rb")) {
+            char buf[4096];
+            for (size_t n; (n = std::fread(buf, 1, sizeof(buf), f)) > 0;) log.append(buf, n);
+            std::fclose(f);
+        }
+        const auto at = log.find("thread stacks follow");
+        Check(at != std::string::npos, "hang watchdog: a 4 s stall is reported");
+        Check(at != std::string::npos && log.find("  thread ", at) != std::string::npos &&
+                  (log.find("Bf4EmuHost.exe+0x", at) != std::string::npos || log.find("ntdll.dll+0x", at) != std::string::npos),
+              "hang watchdog: thread stacks resolve to module+offset");
+    }
+
     // 5. Engine stereo, BF4-style: our nvapi64.dll answers like a 3D Vision driver.
     HMODULE nv = LoadLibraryW((dir + L"\\nvapi64.dll").c_str());
     Check(nv != nullptr, "nvapi64.dll shim loaded from the game folder");

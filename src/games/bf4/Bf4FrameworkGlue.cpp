@@ -13,6 +13,7 @@
 
 #include "Bf4EyeResampler.h"
 #include "Bf4WorldView.h"
+#include "stereo/SideBySide.h"
 #include "fvr/graphics/D3D11FrameBridge.h"
 #include "fvr/graphics/D3D11MenuProducer.h"
 #include "fvr/ipc/MenuChannel.h"
@@ -102,6 +103,10 @@ public:
                 pair = CapturePair(context, backbuffer, meta);
                 if (!pair) ++captureFailures_;
                 else if (meta.stereoSplit) ++stereoPairs_;
+                if (pair && !snapshotDir_.empty()) {
+                    WriteSnapshot(context, backbuffer);
+                    snapshotDir_.clear();
+                }
             }
             if (step == WorldStep::Cancel || (step == WorldStep::Capture && !pair)) CancelLease();
         }
@@ -147,6 +152,11 @@ public:
     bool WorldLane() {
         std::lock_guard lock(mutex_);
         return world_;
+    }
+
+    void RequestSnapshot(const std::string& dir) {
+        std::lock_guard lock(mutex_);
+        snapshotDir_ = dir;
     }
 
     void Release() {
@@ -264,6 +274,53 @@ private:
         return true;
     }
 
+    // CPU readback of a texture (one-off evidence; stalls the GPU once).
+    template <typename Use>
+    static bool WithPixels(ID3D11DeviceContext* context, ID3D11Texture2D* texture, Use&& use) {
+        D3D11_TEXTURE2D_DESC d{};
+        texture->GetDesc(&d);
+        if (d.SampleDesc.Count != 1) return false;
+        const DXGI_FORMAT f = d.Format;
+        const bool rgba = f == DXGI_FORMAT_R8G8B8A8_UNORM || f == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB || f == DXGI_FORMAT_R8G8B8A8_TYPELESS;
+        const bool bgra = f == DXGI_FORMAT_B8G8R8A8_UNORM || f == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB || f == DXGI_FORMAT_B8G8R8A8_TYPELESS;
+        if (!rgba && !bgra) return false;
+        ID3D11Device* device = nullptr;
+        texture->GetDevice(&device);
+        d.Usage = D3D11_USAGE_STAGING;
+        d.BindFlags = 0;
+        d.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+        d.MiscFlags = 0;
+        ID3D11Texture2D* staging = nullptr;
+        bool ok = device && SUCCEEDED(device->CreateTexture2D(&d, nullptr, &staging));
+        if (ok) {
+            context->CopyResource(staging, texture);
+            D3D11_MAPPED_SUBRESOURCE m{};
+            ok = SUCCEEDED(context->Map(staging, 0, D3D11_MAP_READ, 0, &m));
+            if (ok) {
+                use(stereo::ImageView{static_cast<const std::uint8_t*>(m.pData), static_cast<int>(d.Width),
+                                      static_cast<int>(d.Height), static_cast<int>(m.RowPitch), rgba});
+                context->Unmap(staging, 0);
+            }
+            staging->Release();
+        }
+        if (device) device->Release();
+        return ok;
+    }
+
+    void WriteSnapshot(ID3D11DeviceContext* context, ID3D11Texture2D* backbuffer) {
+        WithPixels(context, backbuffer, [&](const stereo::ImageView& full) {
+            stereo::WriteSideBySideBmp(snapshotDir_ + "\\vr-snapshot-frame.bmp", stereo::LeftHalf(full), stereo::RightHalf(full), 2);
+        });
+        ID3D11Texture2D* left = resampler_.Eye(0);
+        ID3D11Texture2D* right = resampler_.Eye(1);
+        if (!left || !right) return;
+        WithPixels(context, left, [&](const stereo::ImageView& l) {
+            WithPixels(context, right, [&](const stereo::ImageView& r) {
+                stereo::WriteSideBySideBmp(snapshotDir_ + "\\vr-snapshot-eyes.bmp", l, r, 2);
+            });
+        });
+    }
+
     void CancelLease() {
         if (!leaseHeld_) return;
         if (bridge_) bridge_->Cancel(lease_);
@@ -325,6 +382,7 @@ private:
     std::uint64_t leasePoseId_ = 0, nextPoseId_ = 0, frameSerial_ = 0, deviceEpoch_ = 0;
     std::uint64_t leases_ = 0, pairs_ = 0, stereoPairs_ = 0, cancels_ = 0, captureFailures_ = 0;
     ULONGLONG leaseTakenMs_ = 0, untrackedCheckedMs_ = 0;
+    std::string snapshotDir_;
     std::uint64_t sequence_ = 0, epoch_ = 0, lastToggle_ = 0, statesPublished_ = 0;
     ULONGLONG lastAttempt_ = 0;
     std::string token_;       // the host session we are attached to
@@ -355,6 +413,7 @@ public:
     }
     std::string Describe() const override { return link_.Describe(); }
     bool WorldLane() const override { return link_.WorldLane(); }
+    void RequestSnapshot(const std::string& dir) override { link_.RequestSnapshot(dir); }
 
 private:
     TheaterLink& link_;
