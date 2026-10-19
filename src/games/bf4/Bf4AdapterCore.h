@@ -36,7 +36,8 @@ struct CameraRequest {
     frostbite::LinearTransform local;
     frostbite::FovAngles fov;
     std::uint64_t poseId = 0; // world lane lease the pose belongs to (0: none)
-    float renderFovY = 0;     // vertical FOV to render (radians); 0 keeps the game's
+    float renderFovY = 0;     // vertical FOV to render (radians) for the full frame's aspect
+    math::FovTangents eyeFov[2]; // the request's eye tangents (lane requests only)
 };
 
 // Off: flat theater. Theater3D: engine stereo pair on the theater screen, no head tracking.

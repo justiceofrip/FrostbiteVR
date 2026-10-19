@@ -66,31 +66,34 @@ screen. Pieces (all on the analysed build only):
   pause menu are drawn into the wide frame (pause menu: use the pad, or switch to Screen);
   first-person weapon not yet re-projected.
 
-## Stereo: BF4's own two-eye render in the world lane (2026-10-19, built; headset check pending)
+## Stereo: BF4's own two-eye render in the world lane (2026-10-19)
 
-- Static evidence (BF4-STEREO.md "Split-screen stereo, traced"): the render device
-  (global `+0x2738080`, vtable `+0x1DD1870`) recomputes each output's stereo fields every
-  frame from its settings (`+0xC12FF0`); with `StereoEnable` and `StereoSplitScreenEnable`
-  set, the two-eye loop `+0x8CAF70` renders every view twice in the same frame (eye 1 left
-  half, eye 0 right half) with view `+0xD0` = +-separation and `+0xD4` = convergence, and the
-  projection builder `+0xB7EA10` turns those into a per-eye camera offset of
-  separation x convergence x tanX plus a constant image shift. Both eyes come from one
-  simulation frame. `StereoSplitScreenEnable` is read in code only by `+0xC12FF0`.
-- `Bf4EngineStereo` (unit-tested against a simulated device): checks the device class and
-  settings, then sets both flags, StereoDepth 100, convergence 10 m and the separation
-  scale for the headset's half eye distance, all through an exact-write journal; a closed
-  loop corrects the scale from the separation the engine actually used (it applies an
-  extra x0.1 in some condition); a value changed by the game hands everything back.
-- World lane: stereo is on only while the headset shows the world lane, from 10 s after
-  head tracking starts (first sessions show each step); crops come from the halves with
-  the image shift removed; no capture until the mono/stereo layout has been stable for
-  settle + 2 presents. Mod menu (developer): "3D depth (experimental)" On/Off.
-- Not verified: anything in the real game (does the split render engage, HUD, cost, depth
-  scale). Each half keeps the full frame's projection, so per-eye horizontal resolution is
-  half the backbuffer's (a higher game resolution helps). Canted-display headsets are not
-  handled (eye rotations are assumed equal to the head's).
-- The 3D Vision route (`RenderDevice.StereoEnable` at device creation + nvapi shim) stays
-  for the theater 3D probe only.
+- **First headset session (0.4.13-local, 09:16)**: head tracking worked (world lane,
+  ~22 pairs/s at ~97 game fps, FOV written 1.947 rad). 3D engaged as designed
+  (`mode=1 on=1`, half eye 31 mm) but looked strongly zoomed and the game died within
+  seconds (BF4's own handler, no Windows crash report).
+- **Crash cause (static, confirmed)**: the two-eye loop `+0x8CAF70` appends one 0x1560-byte
+  entry per eye to an array (object `+0x1570/+0x1578/+0x1580`) whose inline storage at
+  `+0x1590` holds exactly one entry, with no bounds check; the second eye overwrote the next
+  0x1560 bytes of the object. Fix: `Bf4EyeLoopOverride` points that object at a copied
+  vtable (16 slots) whose slot 2 (`+0x8BE430`, the only way the loop is reached) gives the
+  array room for 8 entries for the length of each call and restores the three pointers
+  exactly afterwards. The object is found by a background read-only scan (class vtable
+  `+0x1D24258` with its array in inline storage; exactly one expected), re-checked right
+  before the one write. 3D is refused unless this override is in place.
+- **Zoom cause**: in split mode the view's aspect is an eye half's (the view setup takes
+  it from the output's `+0x60/+0x64` size), not the frame's; crops, the render FOV and the
+  eye distance assumed the frame's (inferred from the zoom; the stereo probe now logs that size). Now the adapter reads the aspect the engine applied
+  (`[renderer+0x60]` view 0 `+0xC4`) and uses it for all three.
+- Crash guard: a marker written while 3D is on and removed when it goes off; a session
+  that starts with the marker present keeps 3D off and says so in the log.
+- The rest is as built: `Bf4EngineStereo` sets StereoEnable/StereoSplitScreenEnable and
+  the stereo values through an exact-write journal and keeps the engine's eye distance at
+  the headset's; 3D starts 10 s after head tracking; crops come from the halves with the
+  engine's image shift removed; no capture until the layout is stable.
+- Not verified: whether anything else in the split render has one-eye capacity on PC
+  (the next session's log shows `eye_loop ... max_entries` and survives or not), HUD,
+  cost, depth comfort. Per-eye horizontal resolution is half the backbuffer's.
 
 ## Headset path (emulated end to end)
 
@@ -192,10 +195,10 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
 
 ## Tests (2026-10-19)
 
-- Build.ps1 after engine stereo: x64 283/283, x86 282/282. Bf4CoreTests 54 cases / 437
+- Build.ps1 after the eye-loop fix: x64 283/283, x86 282/282. Bf4CoreTests 55 cases / 447
   checks; Bf4Emulated pass (theater, world lane, stereo probe, census, lockdown); launcher
   19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and `-World` 4/4 (157 pairs).
-- Installed locally: runtime/bf4 0.4.13-local (rollback 0.4.12-local). Developer
+- Installed locally: runtime/bf4 0.4.14-local (rollback 0.4.13-local). Developer
   sessions still run the read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the
   framework's `StereoMath.h` (`Quat` = `Quaternion`; Pose is `{position, orientation}`).

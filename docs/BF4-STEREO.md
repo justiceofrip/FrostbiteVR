@@ -94,3 +94,17 @@ Launcher 3D off/probe/on; route `split` (default) or `nvapi`. Probe writes
   right axis plus a constant shift s. Eye 1 (left half, s = +sep) is the left eye.
 - Half eye distance = separation x convergence x tan(horizontal half FOV). The aspect stays
   the output's, so each half is the full projection squeezed to half width.
+
+## Why split stereo crashed on PC, and the fix (2026-10-19)
+
+- The two-eye loop's per-eye array (eye-loop object `+0x1570` begin, `+0x1578` end of data,
+  `+0x1580` end of storage) is initialised by the constructor at `+0x8B7185` to inline
+  storage `+0x1590` of exactly 0x1560 bytes, i.e. one entry; the loop resets it per call
+  (`+0x8CB0B6`) and appends per eye (`+0x8CB697`) without a bounds check; the consumer in
+  slot 2 (`+0x8BE71E`) counts entries as (end - begin) / 0x1560. Readers of these fields
+  in the whole `.text`: the constructor, the loop and slot 2 only.
+- The loop `+0x8CAF70` is called only from `+0x8BE430`, which is only reachable through
+  vtable `+0x1D24258` slot 2 (16 slots). Its arguments: this, an unused second, an int,
+  float (xmm3), float (stack), view count, views, a pointer, two values passed on.
+- In split mode the view setup takes the view aspect from the output's `+0x60/+0x64`
+  size; that it is an eye half's in split mode is inferred from the zoom seen in the headset (the probe now logs it).

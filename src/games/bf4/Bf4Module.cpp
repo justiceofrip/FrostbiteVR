@@ -23,6 +23,7 @@
 #include "Bf4ViewOverride.h"
 #include "Bf4SessionSignals.h"
 #include "Bf4EngineStereo.h"
+#include "Bf4EyeLoopOverride.h"
 #include "Bf4WorldView.h"
 #include "fvr/graphics/GdiPanelRaster.h"
 #include "stereo/SideBySide.h"
@@ -85,6 +86,9 @@ std::string ReadCStringChecked(std::uintptr_t address, std::size_t maxLength = 1
 // Render device (docs/BF4-STEREO.md): global and class, analysed build only.
 constexpr std::uintptr_t kRenderDeviceGlobalRva = 0x2738080;
 constexpr std::uintptr_t kRenderDeviceClassRva = 0x1DD1870;
+// Two-eye loop class (vtable) and its slot 2 (docs/BF4-STEREO.md, Bf4EyeLoopOverride.h).
+constexpr std::uintptr_t kEyeLoopClassRva = 0x1D24258;
+constexpr std::uintptr_t kEyeLoopEntryRva = 0x8BE430;
 // R5 single-player signals (docs/BF4-SESSION-RE.md), analysed build only.
 constexpr std::uintptr_t kClientGameContextRva = 0x2670D80;
 constexpr std::uintptr_t kLevelInfoRva = 0x27A1918;
@@ -159,14 +163,72 @@ public:
     ULONGLONG worldLaneSinceMs = 0;
     EngineStereoReading lastReading{};
     float lastTanX = 0;
+    float lastViewAspect = 0;
+    EyeLoopOverride eyeLoop;
+    bool eyeLoopRefused = false, stereoCrashGuard = false, stereoMarker = false;
+    // Background search for the two-eye loop object (read-only): 0 idle, 1 running, 2 done.
+    std::atomic<int> eyeLoopScan{0};
+    std::atomic<std::uintptr_t> eyeLoopFound{0};
+    std::atomic<int> eyeLoopCandidates{0};
+    std::atomic<std::uint64_t> eyeLoopScannedMb{0};
+
+    // The renderer's copy of view 0 carries the aspect the view setup applied.
+    float ReadViewAspect() {
+        void* renderer = viewOverride.Object();
+        std::uintptr_t views = 0;
+        float aspect = 0;
+        if (!renderer || !ReadChecked(reinterpret_cast<std::uintptr_t>(renderer) + 0x60, &views, 8) || !views ||
+            !ReadChecked(views + kViewAspectOffset, &aspect, 4))
+            return 0;
+        return aspect;
+    }
+
+    void StartEyeLoopScan();
+
+    // Split stereo needs room for two eyes in the eye loop's array (Bf4EyeLoopOverride.h).
+    bool EnsureEyeLoop() {
+        if (eyeLoop.Installed()) return true;
+        if (eyeLoopRefused) return false;
+        if (eyeLoopScan.load() == 0) StartEyeLoopScan();
+        if (eyeLoopScan.load() != 2) return false;
+        const int candidates = eyeLoopCandidates.load();
+        const auto object = eyeLoopFound.load();
+        const auto base = reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
+        // Still the object the scan found (class, inline array) right before the one write.
+        std::uintptr_t check[3] = {};
+        const bool still = object && ReadChecked(object, &check[0], 8) && check[0] == base + kEyeLoopClassRva &&
+                           ReadChecked(object + kEyeArrayBegin, &check[1], 8) && check[1] == object + kEyeArrayInline &&
+                           ReadChecked(object + kEyeArrayCapacity, &check[2], 8) &&
+                           check[2] == object + kEyeArrayInline + kEyeEntryBytes;
+        if (candidates != 1 || !still) {
+            log_.Write("eye loop: %d candidate objects in %lluMB; 3D stays off", candidates,
+                       static_cast<unsigned long long>(eyeLoopScannedMb.load()));
+            eyeLoopRefused = true;
+            return false;
+        }
+        const auto r = eyeLoop.Install(reinterpret_cast<void*>(object), base + kEyeLoopEntryRva);
+        log_.Write("eye loop: object %p, override %s", reinterpret_cast<void*>(object),
+                   r == EyeLoopOverride::InstallResult::Ok ? "installed (room for two eyes)" :
+                   r == EyeLoopOverride::InstallResult::UnexpectedSlot ? "refused (slot 2 is not the analysed entry)" :
+                   r == EyeLoopOverride::InstallResult::NotInlineArray ? "refused (array not in its inline storage)" : "refused");
+        if (r != EyeLoopOverride::InstallResult::Ok) eyeLoopRefused = true;
+        return r == EyeLoopOverride::InstallResult::Ok;
+    }
 
     std::string DescribeEngineStereo() const {
         static const char* names[] = {"off", "on", "refused", "handed-back"};
-        char line[200];
-        std::snprintf(line, sizeof(line), "engine_stereo=%s split=%d separation=%.5f convergence=%.3f half_eye=%.4f adjustments=%llu",
-                      names[static_cast<int>(engineStereo.State())], lastReading.SplitActive() ? 1 : 0, lastReading.separation,
-                      lastReading.convergence, lastReading.HalfEyeDistance(lastTanX),
-                      static_cast<unsigned long long>(engineStereo.Adjustments()));
+        char line[400];
+        const auto es = eyeLoop.GetStats();
+        std::snprintf(line, sizeof(line),
+                      "engine_stereo=%s%s split=%d separation=%.5f convergence=%.3f half_eye=%.4f view_aspect=%.3f adjustments=%llu "
+                      "eye_loop=%s calls=%llu widened=%llu restored=%llu foreign=%llu max_entries=%llu",
+                      names[static_cast<int>(engineStereo.State())], stereoCrashGuard ? "(crash guard)" : "",
+                      lastReading.SplitActive() ? 1 : 0, lastReading.separation, lastReading.convergence,
+                      lastReading.HalfEyeDistance(lastTanX), lastViewAspect,
+                      static_cast<unsigned long long>(engineStereo.Adjustments()),
+                      eyeLoop.Installed() ? "on" : (eyeLoopRefused ? "refused" : "off"), static_cast<unsigned long long>(es.calls),
+                      static_cast<unsigned long long>(es.widened), static_cast<unsigned long long>(es.restored),
+                      static_cast<unsigned long long>(es.foreign), static_cast<unsigned long long>(es.maxEntries));
         return line;
     }
 
@@ -178,13 +240,24 @@ public:
         const ULONGLONG now = GetTickCount64();
         if (!lane) worldLaneSinceMs = 0;
         else if (!worldLaneSinceMs) worldLaneSinceMs = now;
-        const bool wanted = lane && now - worldLaneSinceMs >= 10000 && meta.worldStereo &&
-                            exeSha256 == kAnalyzedBuildSha256 && meta.halfEyeDistance > 0 && tanX > 0;
+        const bool wanted = lane && now - worldLaneSinceMs >= 10000 && meta.worldStereo && !stereoCrashGuard &&
+                            exeSha256 == kAnalyzedBuildSha256 && meta.halfEyeDistance > 0 && tanX > 0 && EnsureEyeLoop();
         const auto base = reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
-        if (wanted && engineStereo.State() == EngineStereo::Status::Off)
+        if (wanted && engineStereo.State() == EngineStereo::Status::Off) {
+            // A session that dies with 3D on leaves this marker; the next one keeps 3D off.
+            if (std::FILE* f = std::fopen((logDir + "\\stereo-armed.txt").c_str(), "wb")) {
+                std::fputs("3D was on when this session ended (crash?)\n", f);
+                std::fclose(f);
+                stereoMarker = true;
+            }
             engineStereo.Enable({base + kRenderDeviceGlobalRva, base + kRenderDeviceClassRva}, meta.halfEyeDistance, tanX);
-        else if (!wanted && engineStereo.State() == EngineStereo::Status::On)
+        } else if (!wanted && engineStereo.State() == EngineStereo::Status::On) {
             engineStereo.Disable();
+        }
+        if (stereoMarker && engineStereo.State() != EngineStereo::Status::On) {
+            std::remove((logDir + "\\stereo-armed.txt").c_str());
+            stereoMarker = false;
+        }
         if (engineStereo.State() == EngineStereo::Status::On) engineStereo.Update(meta.halfEyeDistance, tanX);
         const EngineStereoReading r = engineStereo.State() == EngineStereo::Status::On ? engineStereo.Read() : EngineStereoReading{};
         if (engineStereo.State() != lastStereoStatus) {
@@ -195,10 +268,15 @@ public:
         }
         const bool split = r.SplitActive();
         splitStableFrames = split == lastSplit ? splitStableFrames + 1 : 0;
-        if (split != lastSplit)
-            log_.Write("engine stereo render: %s (mode=%u on=%d separation=%.5f convergence=%.3f half_eye=%.4f adjustments=%llu)",
+        if (split != lastSplit) {
+            const auto es = eyeLoop.GetStats();
+            log_.Write("engine stereo render: %s (mode=%u on=%d separation=%.5f convergence=%.3f half_eye=%.4f "
+                       "view_aspect=%.3f adjustments=%llu eye_loop calls=%llu widened=%llu max_entries=%llu)",
                        split ? "side by side" : "single view", r.mode, r.on ? 1 : 0, r.separation, r.convergence,
-                       r.HalfEyeDistance(tanX), static_cast<unsigned long long>(engineStereo.Adjustments()));
+                       r.HalfEyeDistance(tanX), lastViewAspect, static_cast<unsigned long long>(engineStereo.Adjustments()),
+                       static_cast<unsigned long long>(es.calls), static_cast<unsigned long long>(es.widened),
+                       static_cast<unsigned long long>(es.maxEntries));
+        }
         lastSplit = split;
         lastReading = r;
         lastTanX = tanX;
@@ -565,7 +643,13 @@ public:
             m.poseRun = st.poseRun;
             m.renderFovY = st.renderedFovY;
         }
-        const float tanX = m.renderFovY > 0 && meta.height ? std::tan(m.renderFovY * 0.5f) * float(meta.width) / float(meta.height) : 0.0f;
+        if (m.world) {
+            const float aspect = ReadViewAspect();
+            if (aspect > 0.2f && aspect < 5.0f) lastViewAspect = aspect;
+        }
+        m.renderAspect = lastViewAspect;
+        const float aspect = lastViewAspect > 0 ? lastViewAspect : (meta.height ? float(meta.width) / float(meta.height) : 0.0f);
+        const float tanX = m.renderFovY > 0 ? std::tan(m.renderFovY * 0.5f) * aspect : 0.0f;
         UpdateEngineStereo(m, meta, tanX);
         ID3D11Device* device = nullptr;
         ID3D11Texture2D* back = nullptr;
@@ -590,7 +674,10 @@ public:
     bool ApplyCamera(std::span<const CameraRequest> requests) override {
         if (requests.size() != 1 || requests[0].eye >= 0 || !requests[0].poseId || !core) return false;
         if (!viewOverride.Installed() && !InstallViewOverride()) return false;
-        viewOverride.SetLocal(requests[0].local, /*keepGamePitch=*/false, requests[0].poseId, requests[0].renderFovY);
+        float fov = requests[0].renderFovY;
+        if (lastViewAspect > 0.2f && lastViewAspect < 5.0f) // the aspect the engine used last frame
+            fov = RequiredVerticalFov(requests[0].eyeFov[0], requests[0].eyeFov[1], lastViewAspect);
+        viewOverride.SetLocal(requests[0].local, /*keepGamePitch=*/false, requests[0].poseId, fov);
         return true;
     }
 
@@ -654,6 +741,7 @@ public:
         pointer.Uninstall();
         padSink.Deactivate();
         engineStereo.Disable();
+        if (eyeLoop.Installed()) log_.Write("eye loop override removed: %s", eyeLoop.Remove() ? "vtable restored" : "vtable not ours, left alone");
         RemoveViewOverride();
         log_.Write("detaching all hooks: %.*s", static_cast<int>(reason.size()), reason.data());
         // Never patch code from inside the Present detour; a worker does it. MinHook
@@ -669,6 +757,58 @@ private:
 };
 
 // ---- Adapter instance ----------------------------------------------------------------------
+// Region scan for the two-eye loop object: its class vtable first and its per-eye array in
+// its inline storage. SEH-guarded reads: a region can be released while it is scanned.
+int ScanRegionForEyeLoop(std::uintptr_t start, std::size_t bytes, std::uint64_t vtable, std::uintptr_t* found, int maxFound) {
+    int n = 0;
+    __try {
+        const auto* q = reinterpret_cast<const std::uint64_t*>(start);
+        const std::size_t count = bytes / 8;
+        for (std::size_t i = 0; i + kEyeArrayCapacity / 8 < count && n < maxFound; ++i) {
+            if (q[i] != vtable) continue;
+            const std::uintptr_t object = start + i * 8, storage = object + kEyeArrayInline;
+            if (q[i + kEyeArrayBegin / 8] == storage && q[i + kEyeArrayCapacity / 8] == storage + kEyeEntryBytes)
+                found[n++] = object;
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    }
+    return n;
+}
+
+void Win32Platform::StartEyeLoopScan() {
+    eyeLoopScan.store(1);
+    HANDLE t = CreateThread(nullptr, 0, [](LPVOID p) -> DWORD {
+        auto* self = static_cast<Win32Platform*>(p);
+        const auto base = reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
+        const std::uint64_t vtable = base + kEyeLoopClassRva;
+        std::uintptr_t first = 0;
+        int total = 0;
+        std::uint64_t scanned = 0;
+        for (std::uintptr_t at = 0x10000;;) {
+            MEMORY_BASIC_INFORMATION mbi{};
+            if (!VirtualQuery(reinterpret_cast<LPCVOID>(at), &mbi, sizeof(mbi))) break;
+            const auto start = reinterpret_cast<std::uintptr_t>(mbi.BaseAddress);
+            if (mbi.State == MEM_COMMIT && mbi.Type == MEM_PRIVATE && (mbi.Protect & PAGE_READWRITE) &&
+                !(mbi.Protect & (PAGE_GUARD | PAGE_NOACCESS))) {
+                std::uintptr_t hits[4] = {};
+                const int n = ScanRegionForEyeLoop(start, mbi.RegionSize, vtable, hits, 4);
+                if (n && !first) first = hits[0];
+                total += n;
+                scanned += mbi.RegionSize;
+            }
+            at = start + mbi.RegionSize;
+            if (at < start) break;
+        }
+        self->eyeLoopCandidates.store(total);
+        self->eyeLoopFound.store(first);
+        self->eyeLoopScannedMb.store(scanned >> 20);
+        self->eyeLoopScan.store(2);
+        return 0;
+    }, this, 0, nullptr);
+    if (t) CloseHandle(t);
+    else eyeLoopScan.store(2); // no thread: no candidates, 3D stays off
+}
+
 struct Adapter {
     SessionInfo session;
     FileLog log;
@@ -997,13 +1137,14 @@ void StereoProbeTick(Adapter& a) {
     std::uint16_t ow = 0, oh = 0;
     if (haveOutput) { std::memcpy(&ow, o + 0x58, 2); std::memcpy(&oh, o + 0x5C, 2); }
     a.log.Write("stereo probe: device=%p outputs=%u settings=%p fullscreen=%ux%u render_ahead=%d stereo_depth=%.3f "
-                "convergence_scale=%.3f separation_scale=%.3f stereo_enable=%u split_screen=%u | output0 %ux%u mode=%u on=%u "
+                "convergence_scale=%.3f separation_scale=%.3f stereo_enable=%u split_screen=%u | output0 %ux%u view_size=%ux%u mode=%u on=%u "
                 "convergence=%.4f separation=%.4f",
                 reinterpret_cast<void*>(device), outputCount, reinterpret_cast<void*>(settings),
                 haveSettings ? u32(s, 0x2C) : 0, haveSettings ? u32(s, 0x28) : 0,
                 haveSettings ? static_cast<int>(u32(s, 0x40)) : -1, haveSettings ? f32(s, 0x44) : 0.0f,
                 haveSettings ? f32(s, 0x48) : 0.0f, haveSettings ? f32(s, 0x4C) : 0.0f, haveSettings ? s[0x7D] : 0xFF,
-                haveSettings ? s[0x7E] : 0xFF, ow, oh, haveOutput ? u32(o, 0x7C) : 0xFFFFFFFF, haveOutput ? o[0x80] : 0xFF,
+                haveSettings ? s[0x7E] : 0xFF, ow, oh, haveOutput ? u32(o, 0x60) : 0, haveOutput ? u32(o, 0x64) : 0,
+                haveOutput ? u32(o, 0x7C) : 0xFFFFFFFF, haveOutput ? o[0x80] : 0xFF,
                 haveOutput ? f32(o, 0x84) : 0.0f, haveOutput ? f32(o, 0x88) : 0.0f);
     std::uintptr_t renderer = 0, views = 0;
     std::uint8_t v[0xEB0] = {};
@@ -1513,6 +1654,14 @@ extern "C" __declspec(dllexport) int __cdecl FvrBf4_Start(const char* sessionTex
     a->platform.exeSha256 = a->session.exeSha256;
     a->platform.core = a->core.get();
     a->platform.coreMutex = &a->coreMutex;
+    {
+        const std::string marker = a->session.logDir + "\\stereo-armed.txt";
+        if (GetFileAttributesA(marker.c_str()) != INVALID_FILE_ATTRIBUTES) {
+            a->platform.stereoCrashGuard = true;
+            std::remove(marker.c_str());
+            a->log.Write("the last session ended with 3D on (crash?): 3D stays off this session");
+        }
+    }
     if (MH_Initialize() != MH_OK) {
         a->log.Write("MinHook init failed");
         return -3;

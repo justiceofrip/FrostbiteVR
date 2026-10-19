@@ -34,6 +34,7 @@ struct FrameMeta {
     std::uint64_t poseId = 0;
     std::uint32_t poseRun = 0;
     float renderFovY = 0;     // vertical FOV the tagged frames were rendered with (radians)
+    float renderAspect = 0;   // aspect the engine's view uses (half the frame's in split stereo)
     // Stereo: the core asks (mod menu), the platform reports what the engine renders.
     bool worldStereo = false;
     float halfEyeDistance = 0;        // the headset's, world units

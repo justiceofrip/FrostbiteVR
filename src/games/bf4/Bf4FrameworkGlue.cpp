@@ -245,7 +245,9 @@ private:
         if (!context || !backbuffer || !meta.width || !meta.height) return false;
         const auto& req = lease_.requirements;
         const auto& t = lease_.tracking;
-        const float aspect = float(meta.width) / float(meta.height);
+        const float frameAspect = float(meta.width) / float(meta.height);
+        // The projection's own aspect: the frame's in mono, an eye half's in split stereo.
+        const float aspect = meta.renderAspect > 0.2f && meta.renderAspect < 5.0f && !untracked_ ? meta.renderAspect : frameAspect;
         float fovY = meta.renderFovY;
         if (untracked_) fovY = RequiredVerticalFov(t.fov[0], t.fov[1], aspect);
         if (!(fovY > 0.05f && fovY < 3.1f)) return false;

@@ -300,6 +300,8 @@ void AdapterCore::UpdateCamera(const ControllerSnapshot& in, const PlatformFrame
         if (lane) {
             r.poseId = in.world.poseId;
             r.renderFovY = RequiredVerticalFov(in.world.fov[0], in.world.fov[1], aspect);
+            r.eyeFov[0] = in.world.fov[0];
+            r.eyeFov[1] = in.world.fov[1];
         }
         camera_.push_back(r);
     };
