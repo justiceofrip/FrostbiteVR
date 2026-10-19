@@ -60,11 +60,37 @@ screen. Pieces (all on the analysed build only):
   fake OpenXR runtime submitted 165 pairs from the emulated game, 0 rejected, 0 runtime
   errors. Not yet seen in the real game: the settle depth (main thread vs render thread),
   BF4 accepting the wider FOV, pair rate in game.
-- Known gaps: mono until engine stereo engages (below); pair rate is bounded by one request in flight (host asks again
-  only after the previous pair is consumed) plus `settle` frames, so the world updates
-  slower than the headset (the compositor reprojects head rotation every frame); HUD and
+- Known gaps: mono until engine stereo engages (below); pair rate is bounded by `settle`
+  frames per pair (two frame channels remove the request round trip, below), so the world
+  updates slower than the headset (the compositor reprojects head rotation every frame); HUD and
   pause menu are drawn into the wide frame (pause menu: use the pad, or switch to Screen);
   first-person weapon not yet re-projected.
+
+## Two frame channels: higher head-tracked update rate (2026-10-19, built; emulated only)
+
+- One frame channel holds one request: after each pair the host had to see it, give
+  feedback and ask again before the game could take the next head pose (a request round
+  trip of 1-2 game frames on top of the `settle` frames). The launcher now starts
+  FvrXrHost with `--frame-channels 2`: the host alternates two independent channels
+  (`PipelinedFrameProvider`, own textures and ticket sessions, single-slot protocol
+  unchanged) and the adapter's `TheaterLink` serves two bridges as a FIFO, so the next
+  request is already queued when a pair is captured. Each pair is still labelled with its
+  own request's pose (oldest request first; its pose goes to the camera).
+- Staggering: one channel begins per XR frame and only once the other request is 0.7 of a
+  typical completion old, so the queued pose is not much older than a fresh one. If both
+  complete in one XR frame the older is shown and the newer held one frame (never
+  dropped). Menu/recenter hands a held pair back as not consumed.
+- Requests live 200 ms with two channels (one waits behind the other); the adapter cancels
+  a queued lease after 170 ms (140 ms with one channel). The host keeps both channels'
+  shared textures open (two-entry cache), so alternation never reopens them.
+- Second token: `logs/xr-channel-2.txt`, written before `xr-channel.txt`. An adapter or
+  host without it falls back to one channel. Host report: `frame_channels`,
+  `channel2_*`, `pipelined_held_pairs`. Adapter log: `theater_link ... bridges=2 queued=`.
+- Evidence: `PipelinedFrameProviderTests` (real shared-memory channels: one begin per
+  frame, older pair first and the newer held, stagger, suspend hands back the held pair,
+  input on channel 0); `Run-Bf4TheaterXr.ps1 -World -FrameChannels 2`: 237 pairs (119 +
+  118), 0 rejected, vs 47 with one channel in the same emulated run (untracked capture,
+  so this measures the transport, not the settle frames). Not yet seen in the real game.
 
 ## Controller aiming (2026-10-19, built; emulated only)
 
@@ -251,10 +277,11 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
 
 ## Tests (2026-10-19)
 
-- Build.ps1 after controller aiming: x64 283/283, x86 282/282. Bf4CoreTests 60 cases /
-  480 checks; Bf4Emulated pass (theater, world lane, stereo probe, census, lockdown); launcher
-  19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and `-World` 4/4 (157 pairs).
-- Installed locally: runtime/bf4 0.4.17-local (rollback 0.4.16-local). Developer
+- Build.ps1 after the two frame channels: x64 284/284, x86 283/283. Bf4CoreTests 60
+  cases; Bf4Emulated pass (theater, world lane, stereo probe, census, lockdown); launcher
+  19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1 -World -FrameChannels 2` 5/5 (237
+  pairs) and `-World` 4/4 (47 pairs).
+- Installed locally: runtime/bf4 0.4.18-local (rollback 0.4.17-local). Developer
   sessions still run the read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the
   framework's `StereoMath.h` (`Quat` = `Quaternion`; Pose is `{position, orientation}`).
@@ -278,9 +305,10 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
   without swimming (else raise "frame sync" in the mod menu), does BF4 render the wide
   FOV, pair rate (`theater_link ... pairs=` and `view_override ... run=` lines every 600
   frames in `bf4-adapter.log`).
-- Headset check of 0.4.16: head rotation direction, gun size, comfort. Then the pair
-  rate (~17-25 Hz: one request slot plus two submits per pair; settle 1 is selectable but
-  only exact if the render thread presents the latest submit).
+- Headset check of 0.4.18: head rotation direction, gun size, comfort, controller aim.
+  Then the pair rate with two frame channels (was ~17-25 Hz with one; expected about
+  game fps / 3 at settle 2; settle 1 is selectable but only exact if the render thread
+  presents the latest submit).
 - 3D: the stall after the split render engages; the watchdog's stacks show where.
 - Laser click on the campaign screen's "Resume" (main menu) did not register while other
   menu clicks did. Cause assumed: no click lock, so hand jitter while the trigger was held

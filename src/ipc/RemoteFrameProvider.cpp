@@ -5,7 +5,7 @@ void RemoteFrameProvider::Suspend()noexcept {
     if(!cancelling_)pending_=false;
 }
 bool RemoteFrameProvider::TryGetCompletedPair(const runtime::PresentationRequirements& r,const runtime::TrackingFrame& current,
-    runtime::TrackingFrame& rendered,graphics::TextureDescriptor& d,graphics::PairTicket& ticket)noexcept {
+    runtime::TrackingFrame& rendered,graphics::TextureDescriptor& d,graphics::PairTicket& ticket,bool allowBegin)noexcept {
     channel_.FlushFeedback();
     const bool changed=r.width!=pendingRequirements_.width||r.height!=pendingRequirements_.height||r.format!=pendingRequirements_.format||
         r.adapterLow!=pendingRequirements_.adapterLow||r.adapterHigh!=pendingRequirements_.adapterHigh||
@@ -21,6 +21,7 @@ bool RemoteFrameProvider::TryGetCompletedPair(const runtime::PresentationRequire
             rendered=pendingTracking_;return true;
         }
     }
+    if(!allowBegin)return false;
     const auto started=std::chrono::steady_clock::now();
     if(channel_.BeginRequest(r,current,requestLifetimeMs_)==ChannelResult::Ok){
         pendingRequirements_=r;pendingTracking_=current;pending_=true;pendingStarted_=started;++stats_.requested;

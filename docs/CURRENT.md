@@ -239,7 +239,10 @@ now extends `StereoMath.h`; `tests/FakeOpenXrRuntime.cpp` gained a theater fixtu
 (4 swapchains, quad layers) without changing the existing fixtures' limits or checks;
 `D3D11MenuProducer` gained a texture `Pump` overload (adapter-drawn panels on the menu
 lane); the host gained `--theater-input` (off by default: controller input keeps flowing
-while the menu lane shows). BC2 checkpoint 412 composition and receipts are untouched.
+while the menu lane shows) and `--frame-channels 2` (off by default: two independent frame
+channels behind `PipelinedFrameProvider`, second token `<channel-file stem>-2<ext>`, a
+two-entry shared-texture cache; `RemoteFrameProvider` gained a poll-only overload, its
+existing call is unchanged). BC2 checkpoint 412 composition and receipts are untouched.
 CI: `build.yml` builds and tests BF4 with everything else; `bf4-emulated.yml` runs only the
 portable launcher tests on Ubuntu; `bf4-release.yml` (tags) adds the hash-pinned Khronos
 loader and packages (tags `bf4-v*`). Both CI workflows passed on GitHub for branch

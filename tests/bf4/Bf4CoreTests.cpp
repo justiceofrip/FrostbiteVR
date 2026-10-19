@@ -358,6 +358,13 @@ TEST_CASE(WorldLaneCropsDecisionsAndFallback) {
     in.appliedRun = 0;
     in.leaseAgeMs = kWorldLeaseMaxMs + 1;
     CHECK(DecideWorldStep(in) == WorldStep::Cancel);
+    // Two frame channels: a queued lease waits behind the current one, and the host gives
+    // those requests 200 ms, so the same age still waits.
+    in.leaseMaxMs = kWorldPipelinedLeaseMaxMs;
+    CHECK(kWorldPipelinedLeaseMaxMs > kWorldLeaseMaxMs && kWorldPipelinedLeaseMaxMs < 200);
+    CHECK(DecideWorldStep(in) == WorldStep::Wait);
+    in.leaseAgeMs = kWorldPipelinedLeaseMaxMs + 1;
+    CHECK(DecideWorldStep(in) == WorldStep::Cancel);
     in.untracked = true;
     CHECK(DecideWorldStep(in) == WorldStep::Capture);
 

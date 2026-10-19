@@ -51,7 +51,9 @@ def start_xr_host(version_dir: Path, profile: GameProfile, pid: int, log_dir: Pa
                   loader: str = ""):
     """Starts the OpenXR host once the game's PID is known. It shows the game screen as a
     theater panel with the laser pointer (menu lane) and exits with the game. The adapter
-    connects when the host writes its channel token to logs/xr-channel.txt."""
+    connects when the host writes its channel token to logs/xr-channel.txt. Two frame
+    channels (xr-channel-2.txt) let the game take the next head pose while it renders the
+    current eye pair, which raises the head-tracked view's update rate."""
     host = version_dir / "bin" / "FvrXrHost.exe"
     if not host.exists():
         report("XR host is not in this package; the game will run, but nothing is shown in the headset.")
@@ -61,6 +63,7 @@ def start_xr_host(version_dir: Path, profile: GameProfile, pid: int, log_dir: Pa
     try:
         return subprocess.Popen([str(host), "--ipc", "--controllers", "--theater-input", "--game-exe", profile.exe,
                                  "--until-game-exit", str(pid), "--channel-file", str(log_dir / "xr-channel.txt"),
+                                 "--frame-channels", "2",
                                  *(["--loader", loader] if loader else [])],
                                 cwd=str(host.parent), stdout=out, stderr=err, creationflags=0x08000000)
     finally:
@@ -118,7 +121,8 @@ def run_session(profile: GameProfile, settings: Settings, install_root: Path, ve
                             bool(settings["apply_engine_cfg"]), journal, extra_proxies=extra, profile_keys=keys,
                             extra_cfg_lines=(profile.stereo_engine_cfg_lines.get(route, ()) if stereo != "off" else ()) +
                             (tuple(settings["developer_cfg_lines"]) if settings["developer"] else ()))
-        (log_dir / "xr-channel.txt").unlink(missing_ok=True)  # the host requires a new token file
+        for name in ("xr-channel.txt", "xr-channel-2.txt"):
+            (log_dir / name).unlink(missing_ok=True)  # the host requires new token files
         launch_args = tuple(settings["launch_args"]) if settings["developer"] else ()
         if launch_args:
             env.start_game(profile, game_dir, report, launch_args)

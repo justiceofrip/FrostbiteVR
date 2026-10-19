@@ -25,8 +25,16 @@ public:
         graphics::TextureDescriptor& d,graphics::PairTicket& p)noexcept override {
         return channel_.RequestPair(r,t,budgetMs_,d,p)==ChannelResult::Ok;
     }
+    bool TryGetCompletedPair(const runtime::PresentationRequirements& r,const runtime::TrackingFrame& t,
+        runtime::TrackingFrame& rendered,graphics::TextureDescriptor& d,graphics::PairTicket& p)noexcept override {
+        return TryGetCompletedPair(r,t,rendered,d,p,true);
+    }
+    // allowBegin=false only polls: a composite of several channels decides which one may
+    // start the next request this frame (PipelinedFrameProvider).
     bool TryGetCompletedPair(const runtime::PresentationRequirements&,const runtime::TrackingFrame&,
-        runtime::TrackingFrame&,graphics::TextureDescriptor&,graphics::PairTicket&)noexcept override;
+        runtime::TrackingFrame&,graphics::TextureDescriptor&,graphics::PairTicket&,bool allowBegin)noexcept;
+    bool Pending()const noexcept{return pending_||cancelling_;}
+    std::chrono::steady_clock::time_point PendingStarted()const noexcept{return pendingStarted_;}
     bool ReadBodyProps(const graphics::PairTicket& t,graphics::BodyPropFrame& p)noexcept override{return channel_.ReadBodyProps(t,p);}
     bool ReadSceneDepth(const graphics::TextureDescriptor& d,const graphics::PairTicket& t,graphics::SceneDepthFrame& p)noexcept override{return channel_.ReadSceneDepth(d,t,p);}
     void UpdateInput(const interaction::InputFrame& input)noexcept override{channel_.PublishInput(input);}

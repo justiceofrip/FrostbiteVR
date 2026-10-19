@@ -18,6 +18,7 @@
 #include "fvr/graphics/D3D11MenuProducer.h"
 #include "fvr/ipc/MenuChannel.h"
 
+#include <deque>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -75,27 +76,38 @@ private:
 //    cancelled, and with no pair for 2.5 s the screen returns to the theater panel.
 // The frame lane also carries the controller samples (one producer per channel, so they
 // arrive through the bridge). The host writes its channel token to <log_dir>\xr-channel.txt;
-// the link connects whenever that file appears (the host may start after the game).
+// the link connects whenever that file appears (the host may start after the game). A host
+// started with --frame-channels 2 also writes xr-channel-2.txt first: a second bridge then
+// takes the next request while the current one renders (FIFO, oldest pose first).
 class TheaterLink {
 public:
-    explicit TheaterLink(std::string tokenFile) : tokenFile_(std::move(tokenFile)) {}
+    explicit TheaterLink(std::string tokenFile) : tokenFile_(std::move(tokenFile)) {
+        // The host's second frame channel (--frame-channels 2): <stem>-2<ext>.
+        const auto dot = tokenFile_.find_last_of('.');
+        const auto slash = tokenFile_.find_last_of("\\/");
+        secondTokenFile_ = dot != std::string::npos && (slash == std::string::npos || dot > slash)
+                               ? tokenFile_.substr(0, dot) + "-2" + tokenFile_.substr(dot)
+                               : tokenFile_ + "-2";
+    }
 
     void Publish(ID3D11Device* device, ID3D11DeviceContext* context, ID3D11Texture2D* backbuffer, const FrameMeta& meta) {
         std::lock_guard lock(mutex_);
         if (!Connect()) return;
-        EnsureBridge(device);
+        EnsureBridges(device);
         const ULONGLONG now = GetTickCount64();
         RefreshUntracked(now);
-        const bool worldAllowed = (meta.world || untracked_) && BridgeUsable();
+        const bool worldAllowed = (meta.world || untracked_) && BridgeUsable(0);
         bool pair = false;
-        if (leaseHeld_) {
+        if (!queue_.empty()) {
+            const Lease& front = queue_.front();
             WorldCaptureInput in;
             in.leaseHeld = true;
-            in.leasePoseId = leasePoseId_;
+            in.leasePoseId = front.poseId;
             in.appliedPoseId = meta.poseId;
             in.appliedRun = meta.poseRun;
             in.settle = meta.worldSettle;
-            in.leaseAgeMs = now - leaseTakenMs_;
+            in.leaseAgeMs = now - front.takenMs;
+            in.leaseMaxMs = LeaseMaxMs();
             in.untracked = untracked_;
             in.stableFrames = meta.stereoStableFrames;
             const WorldStep step = worldAllowed ? DecideWorldStep(in) : WorldStep::Cancel;
@@ -108,11 +120,12 @@ public:
                     snapshotDir_.clear();
                 }
             }
-            if (step == WorldStep::Cancel || (step == WorldStep::Capture && !pair)) CancelLease();
+            if (step == WorldStep::Cancel && !worldAllowed) CancelLeases();
+            else if (step == WorldStep::Cancel || (step == WorldStep::Capture && !pair)) CancelFront();
         }
         world_ = gate_.Update(worldAllowed, pair, now);
-        if (!world_ && leaseHeld_) CancelLease();
-        if (bridge_) bridge_->PumpGraphics();
+        if (!world_) CancelLeases();
+        PumpBridges();
         PublishState(backbuffer, meta.width, meta.height, world_);
     }
 
@@ -121,31 +134,44 @@ public:
         std::lock_guard lock(mutex_);
         if (!Connect()) return;
         world_ = gate_.Update(false, false, GetTickCount64());
-        if (leaseHeld_) CancelLease();
-        if (bridge_) bridge_->PumpGraphics();
+        CancelLeases();
+        PumpBridges();
         PublishState(texture, width, height, false);
     }
 
     std::string Describe() {
         std::lock_guard lock(mutex_);
-        char line[512];
+        std::uint64_t published = 0, consumed = 0, discarded = 0;
+        unsigned connected = 0, failureStage = 0;
+        unsigned long failureCode = 0;
+        for (const auto& b : bridges_) {
+            if (!b) continue;
+            if (b->Connected()) ++connected;
+            published += b->Published();
+            consumed += b->Consumed();
+            discarded += b->Discarded();
+            if (!failureStage && b->FailureStage()) {
+                failureStage = b->FailureStage();
+                failureCode = static_cast<unsigned long>(b->FailureCode());
+            }
+        }
+        char line[640];
         std::snprintf(line, sizeof(line),
                       "theater_link connected=%d epoch=%llu states=%llu captured=%llu published=%llu failed=%llu discarded=%llu "
-                      "lane=%s bridge=%d leases=%llu pairs=%llu stereo_pairs=%llu cancels=%llu capture_failures=%llu fallbacks=%llu "
-                      "bridge_published=%llu consumed=%llu host_discarded=%llu bridge_failure=%u/0x%08lx resampler=%u/0x%08lx%s\n",
+                      "lane=%s bridges=%u leases=%llu queued=%llu pairs=%llu stereo_pairs=%llu cancels=%llu capture_failures=%llu "
+                      "fallbacks=%llu bridge_published=%llu consumed=%llu host_discarded=%llu bridge_failure=%u/0x%08lx "
+                      "resampler=%u/0x%08lx%s\n",
                       !token_.empty() && !closed_ ? 1 : 0, static_cast<unsigned long long>(epoch_),
                       static_cast<unsigned long long>(statesPublished_), static_cast<unsigned long long>(producer_.Captured()),
                       static_cast<unsigned long long>(producer_.Published()), static_cast<unsigned long long>(producer_.Failed()),
-                      static_cast<unsigned long long>(producer_.Discarded()), world_ ? "world" : "theater",
-                      bridge_ && bridge_->Connected() ? 1 : 0, static_cast<unsigned long long>(leases_),
+                      static_cast<unsigned long long>(producer_.Discarded()), world_ ? "world" : "theater", connected,
+                      static_cast<unsigned long long>(leases_), static_cast<unsigned long long>(queuedLeases_),
                       static_cast<unsigned long long>(pairs_), static_cast<unsigned long long>(stereoPairs_),
-                      static_cast<unsigned long long>(cancels_),
-                      static_cast<unsigned long long>(captureFailures_), static_cast<unsigned long long>(gate_.Fallbacks()),
-                      static_cast<unsigned long long>(bridge_ ? bridge_->Published() : 0),
-                      static_cast<unsigned long long>(bridge_ ? bridge_->Consumed() : 0),
-                      static_cast<unsigned long long>(bridge_ ? bridge_->Discarded() : 0), bridge_ ? bridge_->FailureStage() : 0u,
-                      static_cast<unsigned long>(bridge_ ? bridge_->FailureCode() : 0), resampler_.LastStage(),
-                      static_cast<unsigned long>(resampler_.LastError()), untracked_ ? " untracked" : "");
+                      static_cast<unsigned long long>(cancels_), static_cast<unsigned long long>(captureFailures_),
+                      static_cast<unsigned long long>(gate_.Fallbacks()), static_cast<unsigned long long>(published),
+                      static_cast<unsigned long long>(consumed), static_cast<unsigned long long>(discarded), failureStage,
+                      failureCode, resampler_.LastStage(), static_cast<unsigned long>(resampler_.LastError()),
+                      untracked_ ? " untracked" : "");
         return line;
     }
 
@@ -169,35 +195,32 @@ public:
         std::lock_guard lock(mutex_);
         out = {};
         if (!Connect()) return false;
-        if (bridge_) {
-            bridge_->PumpGraphics();
-            // Controller sample for the virtual gamepad (host publishes one per XR frame); a
-            // stale or invalid sample leaves `controls` unfocused, i.e. a neutral pad.
+        PumpBridges();
+        if (bridges_[0]) {
+            // Controller sample for the virtual gamepad (host publishes one per XR frame, on its
+            // first frame channel); a stale or invalid sample leaves `controls` unfocused, i.e.
+            // a neutral pad.
             interaction::InputFrame f{};
-            if (bridge_->ReadInput(f) == ipc::ChannelResult::Ok && interaction::ValidInput(f)) {
+            if (bridges_[0]->ReadInput(f) == ipc::ChannelResult::Ok && interaction::ValidInput(f)) {
                 out.controls = f;
                 if (f.headValid) out.head = f.head;
             }
-            // World lane: take the host's current eye-pair request at the start of the frame,
-            // so this frame's camera update already carries its pose.
-            if (world_ && !leaseHeld_ && BridgeUsable() &&
-                bridge_->TryBegin({kLeaseOwner, ++frameSerial_, deviceEpoch_}, lease_)) {
-                leaseHeld_ = true;
-                leasePoseId_ = ++nextPoseId_;
-                leaseTakenMs_ = GetTickCount64();
-                ++leases_;
-            }
         }
-        if (leaseHeld_) {
+        // World lane: take the host's eye-pair requests at the start of the frame. With two
+        // frame channels the next request is already queued while the current one renders;
+        // the oldest one's pose goes to the camera (requests are served in host order).
+        if (world_) TakeLeases();
+        if (!queue_.empty()) {
+            const Lease& front = queue_.front();
             out.world.valid = true;
-            out.world.poseId = leasePoseId_;
-            out.world.head = lease_.tracking.head;
-            out.world.fov[0] = lease_.tracking.fov[0];
-            out.world.fov[1] = lease_.tracking.fov[1];
-            const auto& e = lease_.tracking.eyes;
+            out.world.poseId = front.poseId;
+            out.world.head = front.lease.tracking.head;
+            out.world.fov[0] = front.lease.tracking.fov[0];
+            out.world.fov[1] = front.lease.tracking.fov[1];
+            const auto& e = front.lease.tracking.eyes;
             const float dx = e[1].position.x - e[0].position.x, dy = e[1].position.y - e[0].position.y,
                         dz = e[1].position.z - e[0].position.z;
-            out.world.halfEyeDistance = 0.5f * std::sqrt(dx * dx + dy * dy + dz * dz) * lease_.tracking.worldUnitsPerMeter;
+            out.world.halfEyeDistance = 0.5f * std::sqrt(dx * dx + dy * dy + dz * dz) * front.lease.tracking.worldUnitsPerMeter;
         }
         ipc::MenuControl c{};
         const auto r = channel_.ReadControl(c);
@@ -215,6 +238,14 @@ public:
 
 private:
     static constexpr std::uint64_t kLeaseOwner = 0xB4F0000000000001ULL;
+    static constexpr unsigned kBridges = 2;
+
+    struct Lease {
+        ipc::FrameLease lease{};
+        unsigned bridge = 0;
+        std::uint64_t poseId = 0;
+        ULONGLONG takenMs = 0;
+    };
 
     // Bf4EmuHost only: FVR_BF4_WORLD_UNTRACKED=1 sends frames on the world lane without a
     // camera (the emulator has no renderer), to test transport and crops end to end. Read
@@ -226,7 +257,38 @@ private:
         untracked_ = GetEnvironmentVariableA("FVR_BF4_WORLD_UNTRACKED", v, sizeof(v)) == 1 && v[0] == '1';
     }
 
-    bool BridgeUsable() const { return bridge_ && bridge_->Connected() && !bridge_->Fatal(); }
+    bool BridgeUsable(unsigned i) const { return bridges_[i] && bridges_[i]->Connected() && !bridges_[i]->Fatal(); }
+
+    // A pipelined host gives its requests the longest lifetime (200 ms), since one waits
+    // behind the other; a single channel keeps the 150 ms one.
+    std::uint64_t LeaseMaxMs() const { return BridgeUsable(1) ? kWorldPipelinedLeaseMaxMs : kWorldLeaseMaxMs; }
+
+    void PumpBridges() {
+        for (auto& b : bridges_)
+            if (b) b->PumpGraphics();
+    }
+
+    void TakeLeases() {
+        Lease taken[kBridges];
+        unsigned count = 0;
+        for (unsigned i = 0; i < kBridges; ++i) {
+            if (held_[i] || !BridgeUsable(i)) continue;
+            Lease l;
+            if (!bridges_[i]->TryBegin({kLeaseOwner, ++frameSerial_, deviceEpoch_}, l.lease)) continue;
+            l.bridge = i;
+            l.takenMs = GetTickCount64();
+            taken[count++] = l;
+        }
+        // Two taken at once: serve the host's older request first.
+        if (count == 2 && taken[1].lease.tracking.predictedNs < taken[0].lease.tracking.predictedNs) std::swap(taken[0], taken[1]);
+        for (unsigned n = 0; n < count; ++n) {
+            taken[n].poseId = ++nextPoseId_;
+            held_[taken[n].bridge] = true;
+            if (!queue_.empty()) ++queuedLeases_;
+            queue_.push_back(taken[n]);
+            ++leases_;
+        }
+    }
 
     void PublishState(ID3D11Texture2D* image, std::uint32_t width, std::uint32_t height, bool world) {
         ipc::MenuState s{};
@@ -250,11 +312,14 @@ private:
 
     // Both eyes from this one presented frame: crop, resample to the host's exact eye size,
     // capture, publish (the bridge restores nothing native: the camera write was already
-    // restored inside the submit call).
+    // restored inside the submit call). Serves the oldest queued lease.
     bool CapturePair(ID3D11DeviceContext* context, ID3D11Texture2D* backbuffer, const FrameMeta& meta) {
-        if (!context || !backbuffer || !meta.width || !meta.height) return false;
-        const auto& req = lease_.requirements;
-        const auto& t = lease_.tracking;
+        if (!context || !backbuffer || !meta.width || !meta.height || queue_.empty()) return false;
+        const Lease& front = queue_.front();
+        auto& bridge = bridges_[front.bridge];
+        if (!bridge) return false;
+        const auto& req = front.lease.requirements;
+        const auto& t = front.lease.tracking;
         const float frameAspect = float(meta.width) / float(meta.height);
         // The projection's own aspect: the frame's in mono, an eye half's in split stereo.
         const float aspect = meta.renderAspect > 0.2f && meta.renderAspect < 5.0f && !untracked_ ? meta.renderAspect : frameAspect;
@@ -266,10 +331,11 @@ private:
         const math::FovTangents fov[2] = {t.fov[0], t.fov[1]};
         EyeCrops(fov, tanX, tanY, meta.stereoSplit && !untracked_, meta.stereoSeparation, crops);
         if (!resampler_.Render(context, backbuffer, crops, req.width, req.height, req.format)) return false;
-        if (!bridge_->CaptureEye(0, resampler_.Eye(0), lease_) || !bridge_->CaptureEye(1, resampler_.Eye(1), lease_) ||
-            !bridge_->PublishRestored(lease_))
+        if (!bridge->CaptureEye(0, resampler_.Eye(0), front.lease) || !bridge->CaptureEye(1, resampler_.Eye(1), front.lease) ||
+            !bridge->PublishRestored(front.lease))
             return false;
-        leaseHeld_ = false;
+        held_[front.bridge] = false;
+        queue_.pop_front();
         ++pairs_;
         return true;
     }
@@ -321,24 +387,50 @@ private:
         });
     }
 
-    void CancelLease() {
-        if (!leaseHeld_) return;
-        if (bridge_) bridge_->Cancel(lease_);
-        leaseHeld_ = false;
+    // The oldest lease could not be met (too old, or its capture failed): hand it back. The
+    // next queued one, if any, becomes the camera's pose at the next frame.
+    void CancelFront() {
+        if (queue_.empty()) return;
+        const Lease& front = queue_.front();
+        if (bridges_[front.bridge]) bridges_[front.bridge]->Cancel(front.lease);
+        held_[front.bridge] = false;
+        queue_.pop_front();
         ++cancels_;
     }
 
-    // Frame lane: the bridge needs the game's device, so it connects on the graphics thread
-    // at the first Present after the host token is known (both hooks run on that thread).
-    void EnsureBridge(ID3D11Device* device) {
-        if (!device || bridgeToken_ == token_) return;
-        if (bridge_ && leaseHeld_) CancelLease();
-        if (bridge_) bridge_->CloseGraphics();
-        bridge_ = std::make_unique<graphics::D3D11FrameBridge>(); // failures are sticky per bridge
-        const std::wstring wide(token_.begin(), token_.end());
-        bridgeToken_ = token_;
-        ++deviceEpoch_;
-        if (!bridge_->ConnectGraphics(device, wide)) bridge_.reset();
+    void CancelLeases() {
+        while (!queue_.empty()) CancelFront();
+    }
+
+    // Frame lane: the bridges need the game's device, so they connect on the graphics thread
+    // at the first Present after the host tokens are known (both hooks run on that thread).
+    void EnsureBridges(ID3D11Device* device) {
+        if (!device) return;
+        const std::string* tokens[kBridges] = {&token_, &token2_};
+        for (unsigned i = 0; i < kBridges; ++i) {
+            if (bridgeTokens_[i] == *tokens[i]) continue;
+            CancelLeases(); // queue order spans both bridges
+            if (bridges_[i]) bridges_[i]->CloseGraphics();
+            bridges_[i].reset();
+            bridgeTokens_[i] = *tokens[i];
+            if (tokens[i]->empty()) continue;
+            bridges_[i] = std::make_unique<graphics::D3D11FrameBridge>(); // failures are sticky per bridge
+            const std::wstring wide(tokens[i]->begin(), tokens[i]->end());
+            ++deviceEpoch_;
+            if (!bridges_[i]->ConnectGraphics(device, wide)) bridges_[i].reset();
+        }
+    }
+
+    static std::string ReadToken(const std::string& path) {
+        std::string token;
+        if (std::FILE* f = std::fopen(path.c_str(), "rb")) {
+            char buf[256];
+            const std::size_t n = std::fread(buf, 1, sizeof(buf), f);
+            std::fclose(f);
+            for (std::size_t i = 0; i < n; ++i)
+                if (buf[i] > ' ' && buf[i] < 127) token += buf[i]; // tolerate UTF-16 or trailing newline
+        }
+        return token;
     }
 
     // Attached to a host session: stay attached until a call reports Closed (the host ended).
@@ -350,20 +442,15 @@ private:
         const ULONGLONG now = GetTickCount64();
         if (now - lastAttempt_ < 1000) return false;
         lastAttempt_ = now;
-        std::string token;
-        if (std::FILE* f = std::fopen(tokenFile_.c_str(), "rb")) {
-            char buf[256];
-            const std::size_t n = std::fread(buf, 1, sizeof(buf), f);
-            std::fclose(f);
-            for (std::size_t i = 0; i < n; ++i)
-                if (buf[i] > ' ' && buf[i] < 127) token += buf[i]; // tolerate UTF-16 or trailing newline
-        }
+        const std::string token = ReadToken(tokenFile_);
         if (token.empty() || token == token_) return false; // nothing new to attach to
         channel_.Close();
         producer_.Reset();
         const std::wstring wide(token.begin(), token.end());
         if (!channel_.ConnectProducer(wide)) return false;
         token_ = token;
+        // Written by the host before the main token file, so it is there now if it exists.
+        token2_ = ReadToken(secondTokenFile_);
         closed_ = false;
         world_ = false;
         ++epoch_; // a new host connection starts a new pointer epoch
@@ -371,22 +458,24 @@ private:
     }
 
     std::mutex mutex_;
-    std::string tokenFile_;
+    std::string tokenFile_, secondTokenFile_;
     ipc::MenuChannel channel_;
     graphics::D3D11MenuProducer producer_;
-    std::unique_ptr<graphics::D3D11FrameBridge> bridge_;
+    std::unique_ptr<graphics::D3D11FrameBridge> bridges_[kBridges];
+    std::string bridgeTokens_[kBridges]; // the host channel each bridge is attached to
+    bool held_[kBridges] = {};           // the bridge has a lease in the queue
+    std::deque<Lease> queue_;            // oldest host request first
     EyeResampler resampler_;
     WorldModeGate gate_;
-    ipc::FrameLease lease_{};
-    bool leaseHeld_ = false, world_ = false, untracked_ = false;
-    std::uint64_t leasePoseId_ = 0, nextPoseId_ = 0, frameSerial_ = 0, deviceEpoch_ = 0;
-    std::uint64_t leases_ = 0, pairs_ = 0, stereoPairs_ = 0, cancels_ = 0, captureFailures_ = 0;
-    ULONGLONG leaseTakenMs_ = 0, untrackedCheckedMs_ = 0;
+    bool world_ = false, untracked_ = false;
+    std::uint64_t nextPoseId_ = 0, frameSerial_ = 0, deviceEpoch_ = 0;
+    std::uint64_t leases_ = 0, queuedLeases_ = 0, pairs_ = 0, stereoPairs_ = 0, cancels_ = 0, captureFailures_ = 0;
+    ULONGLONG untrackedCheckedMs_ = 0;
     std::string snapshotDir_;
     std::uint64_t sequence_ = 0, epoch_ = 0, lastToggle_ = 0, statesPublished_ = 0;
     ULONGLONG lastAttempt_ = 0;
-    std::string token_;       // the host session we are attached to
-    std::string bridgeToken_; // the host session the frame lane is attached to
+    std::string token_;  // the host session we are attached to
+    std::string token2_; // the host's second frame channel, empty with one channel
     bool closed_ = false;
 };
 

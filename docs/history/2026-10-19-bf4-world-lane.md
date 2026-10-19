@@ -24,3 +24,7 @@ Decisions worth keeping:
   the Z mirror the generic Frostbite helper applies; the mirror inverted yaw and pitch in
   the first sessions. The FOV override also sets the view's default FOV so BF4's
   weapon-size compensation (`+0x258`) does not enlarge the gun in VR.
+- Head-tracked update rate: two independent frame channels (host `--frame-channels 2`,
+  `PipelinedFrameProvider`; adapter FIFO over two bridges) instead of widening the
+  single-slot protocol. Each pair stays labelled with its own request's pose; the
+  second request is staggered (0.7 of a typical completion) so its pose is not stale.

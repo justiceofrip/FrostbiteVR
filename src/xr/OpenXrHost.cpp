@@ -81,9 +81,9 @@ struct Host {
     std::array<bool,2> acquired{},waited{};
     ComPtr<ID3D11Device> device;
     ComPtr<ID3D11DeviceContext> context;
-    graphics::D3D11PairConsumer consumer;
+    std::array<graphics::D3D11PairConsumer,2> consumers;unsigned pairStreams=1,nextConsumer=0;
     graphics::D3D11SceneDepthConsumer sceneDepth;bool sceneDepthSeen=false;
-    graphics::TextureDescriptor openedDescriptor{};
+    std::array<graphics::TextureDescriptor,2> openedDescriptors{};
     runtime::RetainedPresentation retained;
     std::array<ComPtr<ID3D11Texture2D>,2> scratch;
     graphics::D3D11StereoComfort stereoComfort;
@@ -101,7 +101,7 @@ struct Host {
         // diagnostics never perform per-frame file I/O or change XR scheduling.
         if(eventLog){eventLog<<"{\"event\":\"host_frame_diagnostics\",\"wall_ms\":"<<GetTickCount64()<<",\"diagnostics\":";
             report.frameDiagnostics.Write(eventLog);eventLog<<"}\n";eventLog.flush();}
-        consumer.Reset();controls.reset();menu.reset();ammoHud.reset();bodyProps.reset();
+        for(auto& consumer:consumers)consumer.Reset();controls.reset();menu.reset();ammoHud.reset();bodyProps.reset();
         for(auto& targets:imageTargets)targets.clear();
         for(auto chain:swapchains)if(chain&&api.DestroySwapchain)api.DestroySwapchain(chain);
         if(headSpace&&api.DestroySpace)api.DestroySpace(headSpace);
@@ -380,11 +380,17 @@ struct Host {
                     if(candidate.Commit(report.requirements,renderedTracking,descriptor,ticket)&&
                        renderedTracking.spaceGeneration==tracking.spaceGeneration&&renderedTracking.predictedNs<=tracking.predictedNs&&
                        tracking.predictedNs-renderedTracking.predictedNs<=runtime::RetainedPresentation::MaxAgeNs){
-                        if(!graphics::Valid(openedDescriptor)||std::memcmp(&descriptor,&openedDescriptor,sizeof(descriptor))!=0){
+                        unsigned stream=pairStreams;
+                        for(unsigned n=0;n<pairStreams;++n)
+                            if(graphics::Valid(openedDescriptors[n])&&std::memcmp(&descriptor,&openedDescriptors[n],sizeof(descriptor))==0)stream=n;
+                        if(stream==pairStreams){ // a new texture stream (producer started or rebuilt)
                             retained.Reset();sceneDepth.Reset();sceneDepthSeen=false;if(ammoHud)ammoHud->Reset();
-                            if(timed(HostStage::SharedOpen,[&]{return consumer.Open(device.Get(),descriptor);})==graphics::TransferResult::Ok)openedDescriptor=descriptor;else openedDescriptor={};
+                            stream=nextConsumer;nextConsumer=(nextConsumer+1)%pairStreams;
+                            auto& opened=openedDescriptors[stream];
+                            if(timed(HostStage::SharedOpen,[&]{return consumers[stream].Open(device.Get(),descriptor);})==graphics::TransferResult::Ok)opened=descriptor;else opened={};
                         }
-                        if(graphics::Valid(openedDescriptor)){
+                        auto& consumer=consumers[stream];
+                        if(graphics::Valid(openedDescriptors[stream])){
                             const std::array<graphics::TextureSlice,2> destinations{{{scratch[0].Get(),0},{scratch[1].Get(),0}}};
                             graphics::SceneDepthFrame depthFrame;graphics::SceneDepthViews depthViews;
                             const bool hasDepth=provider->ReadSceneDepth(descriptor,ticket,depthFrame);
@@ -489,7 +495,7 @@ HostReport RunOpenXrHost(const HostOptions& options)noexcept {
     HostReport report;
     try {Require(options.probeOnly||options.seconds||bool(options.stopRequested),"Continuous session requires a stop source");Host host(report);
         struct ReleaseInput {Host& host;IFrameProvider* provider;~ReleaseInput(){if(provider){interaction::InputFrame f{};f.generation=++host.inputGeneration;f.spaceGeneration=host.spaceGeneration;f.predictedNs=host.frameTime>0?host.frameTime:1;provider->UpdateInput(f);provider->Suspend();}}} release{host,options.provider};
-        host.Initialize(options);if(!options.probeOnly)host.Run(options);report.okay=true;}
+        host.pairStreams=options.pairStreams==2?2u:1u;host.Initialize(options);if(!options.probeOnly)host.Run(options);report.okay=true;}
     catch(const std::exception& error){report.error=error.what();}
     catch(...){report.error="Unknown OpenXR host failure";}
     return report;

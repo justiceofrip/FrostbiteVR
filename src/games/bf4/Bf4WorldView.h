@@ -70,6 +70,10 @@ inline void EyeCrops(const math::FovTangents (&fov)[2], float tanX, float tanY, 
 }
 
 // Capture decision at Present for the lease the camera is carrying.
+inline constexpr std::uint64_t kWorldLeaseMaxMs = 140; // host requests live 150 ms
+// --frame-channels 2: requests live 200 ms (one waits behind the other); the margin covers
+// the time between the host's request and the adapter taking it at a frame start.
+inline constexpr std::uint64_t kWorldPipelinedLeaseMaxMs = 170;
 struct WorldCaptureInput {
     bool leaseHeld = false;
     std::uint64_t leasePoseId = 0;   // tag given to the view override with this lease's pose
@@ -77,11 +81,11 @@ struct WorldCaptureInput {
     std::uint32_t appliedRun = 0;    // submits in a row that carried it
     std::uint32_t settle = 2;        // submits needed before the presented frame must show it
     std::uint64_t leaseAgeMs = 0;
+    std::uint64_t leaseMaxMs = kWorldLeaseMaxMs;
     bool untracked = false;          // emulator only: no camera, publish the frame as it is
     std::uint32_t stableFrames = ~0u; // presents since the stereo/mono layout last changed
 };
 enum class WorldStep { None, Wait, Capture, Cancel };
-inline constexpr std::uint64_t kWorldLeaseMaxMs = 140; // host requests live 150 ms
 
 inline WorldStep DecideWorldStep(const WorldCaptureInput& in) {
     if (!in.leaseHeld) return WorldStep::None;
@@ -90,7 +94,7 @@ inline WorldStep DecideWorldStep(const WorldCaptureInput& in) {
     const bool layoutSettled = in.stableFrames >= std::max(1u, in.settle) + 2;
     if (in.leasePoseId && in.appliedPoseId == in.leasePoseId && in.appliedRun >= std::max(1u, in.settle) && layoutSettled)
         return WorldStep::Capture;
-    return in.leaseAgeMs > kWorldLeaseMaxMs ? WorldStep::Cancel : WorldStep::Wait;
+    return in.leaseAgeMs > in.leaseMaxMs ? WorldStep::Cancel : WorldStep::Wait;
 }
 
 // World presentation with a way back: when the world lane publishes no pair for kNoPairMs

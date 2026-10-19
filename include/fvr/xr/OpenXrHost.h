@@ -22,6 +22,9 @@ struct HostOptions {
     unsigned eyeWidth=0,eyeHeight=0; // Zero selects the runtime recommendation.
     std::filesystem::path readyPath; // Optional bounded-launcher readiness file.
     IFrameProvider* provider=nullptr;
+    // Texture streams the provider alternates between (PipelinedFrameProvider: 2). Each
+    // stream's shared textures stay open, so alternating pairs never reopen them.
+    unsigned pairStreams=1;
     ipc::MenuChannel* menu=nullptr;
     std::shared_ptr<const graphics::BodyPropCatalog> bodyProps;
 };
