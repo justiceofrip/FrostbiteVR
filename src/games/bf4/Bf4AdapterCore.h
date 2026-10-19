@@ -227,6 +227,8 @@ private:
     void UpdateMotionAim(const ControllerSnapshot& input, const PlatformFrame& frame);
     MotionAim motionAim_;
     MotionAimOutput aim_{};
+    static constexpr std::uint64_t kWorldLaneHoldMs = 500; // lease gaps shorter than this keep aiming engaged
+    std::uint64_t lastLeaseMs_ = 0;
     ComfortVignette vignette_;
     bool twoHandedWas_ = false;
     std::uint64_t twoHandedEngages_ = 0;

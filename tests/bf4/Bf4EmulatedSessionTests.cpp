@@ -392,3 +392,48 @@ TEST_CASE(EmuHolstersAndMagazineReloadInACampaign) {
     frame();
     CHECK(core.Status().find("gestures gun=sidearm") != std::string::npos);
 }
+
+TEST_CASE(EmuControllerAimHoldsAcrossLeaseGaps) {
+    // Live, the world lane holds a lease on most frames but not all: aiming must not
+    // re-anchor the body heading (a view jump by the controller's offset) at every gap.
+    FakeImage image({names::kGameRenderer, names::kRenderViewUpdate, names::kClientGameContext, names::kLevelName});
+    FakePlatform platform;
+    AdapterCore core(Session(true), X64(), image.Resolve(), platform);
+    core.OnSwapchainAdopted(true);
+    platform.Campaign();
+    platform.aimKnown = true;
+    Clock clock;
+    int n = 0;
+    auto frame = [&](float handYaw) {
+        const double t = n / 90.0;
+        auto in = Input(t);
+        in.world.valid = n % 3 != 2; // every third frame has no lease
+        in.world.poseId = 100 + static_cast<std::uint64_t>(n);
+        in.world.head = in.head;
+        in.world.fov[0] = {-1.0f, 0.9f, 1.0f, -1.1f};
+        in.world.fov[1] = {-0.9f, 1.0f, 1.0f, -1.1f};
+        in.controls.focused = true;
+        in.controls.generation = 1 + static_cast<std::uint64_t>(n);
+        in.controls.spaceGeneration = 1;
+        in.controls.predictedNs = 1000000 + static_cast<std::int64_t>(t * 1e9);
+        for (auto& h : in.controls.hands) h.active = interaction::Components;
+        auto& right = in.controls.hands[1];
+        right.aimTracked = right.gripTracked = true;
+        right.aim.orientation = math::FromAxisAngle({0, 1, 0}, -handYaw);
+        in.controls.hands[0].gripTracked = true;
+        platform.GameFrame();
+        core.OnFrame(clock.Next(), in);
+        ++n;
+    };
+    for (int i = 0; i < 3; ++i) frame(0);
+    std::vector<float> body;
+    for (int i = 0; i < 240; ++i) {
+        frame(0.5235988f);
+        const auto& r = platform.cameraLog.back();
+        if (!r.empty() && std::isfinite(r[0].parentYaw)) body.push_back(r[0].parentYaw);
+    }
+    CHECK(body.size() > 100);
+    for (const float b : body) CHECK(Near(b, body.front(), 1e-4f)); // one heading throughout
+    CHECK(Near(WrapPi(platform.gameAim.yaw - body.front()), 0.5235988f, 0.02f));
+    CHECK(core.Status().find("controller_aim=engaged") != std::string::npos);
+}

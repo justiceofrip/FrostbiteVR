@@ -353,8 +353,13 @@ std::string AdapterCore::StereoReport() {
 
 void AdapterCore::UpdateMotionAim(const ControllerSnapshot& in, const PlatformFrame& f) {
     MotionAimInput m;
-    m.engage = menuState_.controllerAim && !menuOpen_ && stereo_ == StereoMode::Mono && in.world.valid &&
-               haveReference_ && guard_.GameplayAllowed();
+    // The world lane holds a lease on most frames but not all (between a capture and the
+    // next request): aiming stays engaged across such gaps, or every gap would re-anchor the
+    // body heading to the game's aim and reset the learned mouse gain.
+    if (in.world.valid) lastLeaseMs_ = f.tickMs;
+    const bool worldLane = lastLeaseMs_ && f.tickMs - lastLeaseMs_ <= kWorldLaneHoldMs;
+    m.engage = menuState_.controllerAim && !menuOpen_ && stereo_ == StereoMode::Mono && worldLane && haveReference_ &&
+               guard_.GameplayAllowed();
     const auto& hand = in.controls.hands[1];
     m.aimTracked = in.controls.focused && hand.aimTracked;
     m.reference = reference_;
