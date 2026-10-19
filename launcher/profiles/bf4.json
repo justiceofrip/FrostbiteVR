@@ -1,0 +1,27 @@
+{
+  "id": "bf4",
+  "title": "Battlefield 4",
+  "exe": "bf4.exe",
+  "unsupported_exes": ["bf4_x86.exe"],
+  "default_dir": "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Battlefield 4",
+  "steam_app_id": "1238860",
+  "proxy_name": "dxgi.dll",
+  "stereo_proxy_name": "nvapi64.dll",
+  "session_section": "Local\\FrostbiteVR_BF4_Session",
+  "release_repo": "justiceofrip/BF4VR",
+  "profile_settings_file": "%DOCUMENTS%\\Battlefield 4\\settings\\PROFSAVE_profile",
+  "stereo_profile_lines": ["GstRender.Stereoscopy 1"],
+  "stereo_engine_cfg_lines": {
+    "split": ["RenderDevice.StereoEnable 1", "RenderDevice.StereoSplitScreenEnable 1"],
+    "nvapi": ["RenderDevice.StereoEnable 1", "RenderDevice.StereoSplitScreenEnable 0"]
+  },
+  "engine_cfg_file": "user.cfg",
+  "engine_cfg_lines": [
+    "WorldRender.MotionBlurEnable 0",
+    "WorldRender.MotionBlurQuality 0",
+    "WorldRender.MotionBlurMaxSampleCount 0",
+    "RenderDevice.VSyncEnable 0",
+    "RenderDevice.TripleBufferingEnable 0",
+    "RenderDevice.RenderAheadLimit 1"
+  ]
+}

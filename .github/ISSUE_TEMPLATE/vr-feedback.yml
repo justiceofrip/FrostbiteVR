@@ -1,0 +1,21 @@
+name: VR feedback (Battlefield 4)
+description: Report a bug or share feedback from a VR session. The launcher pre-fills this form.
+labels: [feedback, bf4]
+body:
+  - type: input
+    id: summary
+    attributes:
+      label: What happened, in one line?
+    validations: { required: true }
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: What you did, what you expected, what you saw. Headset and runtime help (Quest + Virtual Desktop, SteamVR, WMR...).
+    validations: { required: true }
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: Filled in by the launcher (sanitized). Attach the saved feedback zip for full logs.
+      render: text
