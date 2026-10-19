@@ -10,7 +10,26 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   `9d9d1a3f...c6c2aa`), AMD RX 9070 XT, Steam -> EA app launch, campaign only, no headset.
 - **Emulated**: Bf4EmuHost (WARP or GPU), fake OpenXR runtimes, launcher emulated sessions.
 - **Headset acceptance**: theater mode (game screen on a virtual screen, laser on the
-  menus) works in the player's headset (2026-10-19, SteamVR). Nothing else yet.
+  menus) works in the player's headset (2026-10-19, SteamVR). Head tracking was seen in
+  three sessions (09:16-10:19; rotation was inverted and the gun oversized, both fixed in
+  0.4.16); everything built since 0.4.17 is unseen in a headset.
+
+## At a glance (installed: 0.4.39-local)
+
+| Feature | State | Evidence |
+| --- | --- | --- |
+| Theater screen + laser menus | on | headset |
+| Head-tracked campaign view (6DoF head) | on | headset (earlier build); rate work emulated |
+| Two frame channels + next pose in the capturing frame | on | emulated |
+| Controller aim (mouse look), aim dot, two-handed aim, snap turn | on | emulated (delay/gain/gap cases) |
+| Comfort vignette, walk toward body/gun | on / body | emulated |
+| Holsters (keys 1/2/3, G, F) with pulses | on | emulated |
+| Manual reload (magazine gesture; B tap/hold) with markers | on (player setting) | emulated |
+| HUD corners (ammo, minimap insets) | on | real frame rendered offline |
+| Physical crouch | off | unit-tested |
+| 3D from depth (depth buffer) | off | WARP checks |
+| BF4 split stereo ("3D depth", developer) | off | freezes live; watchdog armed |
+| Hands / IK, gun at the hand | not built | needs live RE |
 
 ## Works on the real game (actual-game checks)
 
@@ -27,11 +46,11 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   vtable scan, read-only `peek`. It never writes game memory (a `poke` command was removed
   after the policy guard blocked it).
 
-## Head tracking: the world lane (2026-10-19, built; first headset check pending)
+## Head tracking: the world lane (2026-10-19, built; seen in a headset)
 
-In campaign levels the headset now shows the game's world from the player's tracked head
-(6DoF, both eyes from the same native frame, mono: no parallax yet) instead of the theater
-screen. Pieces (all on the analysed build only):
+In campaign levels the headset shows the game's world from the player's tracked head
+(6DoF, both eyes from the same native frame; mono unless 3D from depth is on) instead of
+the theater screen. Pieces (all on the analysed build only):
 
 - `Bf4FrameworkGlue.cpp` `TheaterLink` carries both lanes. World: the menu lane says
   Gameplay, so FvrXrHost asks for eye pairs on the frame lane (`D3D11FrameBridge`, the
@@ -45,7 +64,8 @@ screen. Pieces (all on the analysed build only):
   (BF4-CAMERA-RE.md).
 - `Bf4WorldView.h`: a frame is captured only once `settle` submits (default 2, mod menu
   1-4) carried the lease's pose, so a pair is never labelled with a pose it was not
-  rendered with; a lease that cannot be met in 140 ms is cancelled. Each eye is the part
+  rendered with; a lease that cannot be met in 140 ms (170 ms with two channels) is
+  cancelled. Each eye is the part
   of the frame its FOV covers (asymmetric crop), resampled to the host's eye size by
   `Bf4EyeResampler` (game device, own device-context state, raw bits kept).
 - The world lane runs only while the game submits world views (loading screens stay on
@@ -53,7 +73,8 @@ screen. Pieces (all on the analysed build only):
   2.5 s (retry after 5 s). The mod menu (menu button) always opens on the theater panel and
   has "In campaign levels: Screen / Head-tracked view".
 - Recentring: the first head pose of the session faces forward; mod menu "Recenter view".
-  Game yaw is kept, pitch/roll/position come from the headset (aim pitch stays the game's).
+  With controller aim the view is anchored to the body heading (right stick); without it,
+  game yaw is kept and pitch/roll/position come from the headset.
 - Evidence: unit tests (crops, decisions, fallback, FOV write and exact restore, pose
   runs, lease-only camera); Bf4Emulated world phase (the emulated host receives pairs and
   each eye carries its own crop); `Run-Bf4TheaterXr.ps1 -World`: the real FvrXrHost on the
@@ -438,12 +459,15 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
   and notes were shortened to fit half width (GDI text now ends with an ellipsis when it
   does not fit). With more items than two columns of full rows hold, rows get shorter and
   the item fonts scale with them (checked by rendering the 18-item developer menu); the
-  dead "Screen distance" entry is gone (the host has no way to receive it yet). Unit test: every item on the panel, none overlapping; a GDI render of the
-  developer menu was checked by eye.
-- Build.ps1 after the early next pose: x64 284/284, x86 283/283. Bf4CoreTests 78 cases;
-  Bf4Emulated pass (theater, world lane, stereo probe, census, lockdown, gestures, eye
-  resampler reticle on WARP); launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
-  `-World -FrameChannels 2` 5/5 (227 pairs); `-World` with one channel 4/4 (47 pairs).
+  dead "Screen distance" entry is gone (the host has no way to receive it yet). Unit
+  test: every item on the panel, none overlapping; a GDI render of the developer menu was
+  checked by eye.
+- Build.ps1 after the menu fonts: x64 284/284, x86 283/283. Bf4CoreTests 78 cases;
+  Bf4Emulated pass (theater, world lane, stereo probe, census, lockdown, gestures; WARP:
+  eye resampler reticle/markers/vignette/depth stereo/HUD corners, depth capture detour);
+  launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
+  `-World -FrameChannels 2` 5/5 (76-237 pairs, machine-dependent); `-World` with one
+  channel 4/4 (47 pairs).
 - Installed locally: runtime/bf4 0.4.39-local (rollback 0.4.38-local). Developer
   sessions still run the read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the
@@ -466,24 +490,23 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
 
 ## Open / blocked
 
-- First headset check of the world lane (head tracking): does the world follow the head
-  without swimming (else raise "frame sync" in the mod menu), does BF4 render the wide
-  FOV, pair rate (`theater_link ... pairs=` and `view_override ... run=` lines every 600
-  frames in `bf4-adapter.log`).
-- Headset check of 0.4.18: head rotation direction, gun size, comfort, controller aim.
-  Then the pair rate with two frame channels (was ~17-25 Hz with one; expected about
-  game fps / 3 at settle 2; settle 1 is selectable but only exact if the render thread
-  presents the latest submit).
+- Headset check of 0.4.39 (BF4-FIRST-SESSION.md): head rotation direction, gun size,
+  comfort, the pair rate (was ~17-25 Hz; expected about game fps / 2 at frame sync 2),
+  controller aim (mouse look reaching the game, its learned gain), gestures, HUD corners,
+  3D from depth (which depth target it finds; `vr-snapshot-depth.bmp`).
 - 3D: the stall after the split render engages; the watchdog's stacks show where.
 - Laser click on the campaign screen's "Resume" (main menu) did not register while other
   menu clicks did. Cause assumed: no click lock, so hand jitter while the trigger was held
   went out as a drag (that screen scrolls on drags), and the trigger also reached the
   virtual pad. Now the cursor holds its press position unless the laser moves more than
-  2 % of the screen, and the pad's triggers are released while the laser points at the
+  6 % of the screen, and the pad's triggers are released while the laser points at the
   screen outside campaign play (unit-tested; live check pending; clicks are logged).
 - Holsters and the magazine gesture: first live check (keys, positions, pulses).
 - The census holder chain matched nothing live (27 firing objects, 0 holders): redo the
   walk from the live firing vtable `+0x1D53F18`.
 - Mod menu in VR: opens with the menu button, drawn by the adapter (VrPanel + GDI) on the
-  theater lane, reload mode / recenter / feedback marker work (emulated core test); not
-  yet seen through the real host or in a headset.
+  theater lane (emulated core tests, GDI render checked); not yet seen in a headset.
+- Corner HUD outside the eyes (frame shape, above): insets are a workaround; the real fix
+  needs the UI pass rendered separately (native RE).
+- Gun at the hand / arm IK: needs the player's first-person binding and IK scene op
+  (BF4-HOLSTER-IK-RE.md), i.e. live RE first.
