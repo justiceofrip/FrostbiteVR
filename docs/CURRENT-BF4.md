@@ -70,12 +70,13 @@ screen. Pieces (all on the analysed build only):
   renderer's own copy has no clean restore point. Open: a HUD route (render the UI pass
   separately) or a game window closer to the eyes' shape (the laser needs 16:9 menus).
 - HUD corners (mod menu, default on): meanwhile the resampler copies the frame's bottom
-  corners (ammo panel: frame uv 0.78-0.995 x 0.80-0.985; minimap: 0.005-0.215 x 0.66-0.985)
-  into insets inside the visible lower corners (view tangents x 0.40..0.88 / -0.88..-0.40,
-  y -0.6..-0.96), at the same tangents in both eyes, framed, above the vignette. The source
-  rectangles are BF4's default 16:9 layout as remembered, not measured: the eye snapshot of
-  the next session shows whether they need moving. WARP check: a corner panel outside the
-  eyes appears in the inset and nowhere else.
+  corners into framed insets inside the visible lower corners, at the same view tangents in
+  both eyes, above the vignette. Measured on the 10:21 session's frame snapshot (16:9): ammo
+  panel u 0.865-0.995 v 0.835-0.985 -> tangents x 0.38..0.82 y -0.64..-0.93; minimap with
+  objective text u 0.008-0.142 v 0.705-0.985 -> x -0.82..-0.43 y -0.50..-0.96 (aspects kept;
+  inside both eyes of a Quest 3, checked by rendering the real frame through the resampler).
+  That session's eye snapshot confirms neither reached the eyes before. WARP check: a corner
+  panel outside the eyes appears in the inset and nowhere else.
 - Known gaps: mono until engine stereo engages (below); pair rate is bounded by `settle`
   frames per pair (two frame channels remove the request round trip, below), so the world
   updates slower than the headset (the compositor reprojects head rotation every frame); HUD and
@@ -431,7 +432,7 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
   Bf4Emulated pass (theater, world lane, stereo probe, census, lockdown, gestures, eye
   resampler reticle on WARP); launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
   `-World -FrameChannels 2` 5/5 (227 pairs); `-World` with one channel 4/4 (47 pairs).
-- Installed locally: runtime/bf4 0.4.36-local (rollback 0.4.35-local). Developer
+- Installed locally: runtime/bf4 0.4.37-local (rollback 0.4.36-local). Developer
   sessions still run the read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the
   framework's `StereoMath.h` (`Quat` = `Quaternion`; Pose is `{position, orientation}`).

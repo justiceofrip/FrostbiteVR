@@ -113,13 +113,15 @@ inline EyeMarker MarkerInEye(const math::Pose& eye, const math::FovTangents& fov
 // HUD corners: BF4 draws its ammo panel and minimap in the frame's bottom corners, which a
 // 16:9 frame tall enough for the headset puts outside both eyes. Each is copied into an inset
 // inside the visible lower corners, at the same view tangents in both eyes (so at infinity).
-// Source: frame uv (u0, v0, u1, v1); target: view tangents (left, top, right, bottom).
+// Source: frame uv (u0, v0, u1, v1), measured on a 16:9 campaign frame (2026-10-19 session
+// snapshot: ammo panel u 0.87-0.99 v 0.84-0.98; minimap with its objective text u 0.01-0.14
+// v 0.71-0.98); target: view tangents (left, top, right, bottom), same aspect as the source.
 struct HudInset {
     float src[4];
     float tan[4];
 };
-inline constexpr HudInset kAmmoInset{{0.78f, 0.80f, 0.995f, 0.985f}, {0.40f, -0.60f, 0.88f, -0.96f}};
-inline constexpr HudInset kMinimapInset{{0.005f, 0.66f, 0.215f, 0.985f}, {-0.88f, -0.46f, -0.40f, -0.96f}};
+inline constexpr HudInset kAmmoInset{{0.865f, 0.835f, 0.995f, 0.985f}, {0.38f, -0.64f, 0.82f, -0.93f}};
+inline constexpr HudInset kMinimapInset{{0.008f, 0.705f, 0.142f, 0.985f}, {-0.82f, -0.50f, -0.43f, -0.96f}};
 
 // Per eye: up to two markers, the eye image's extent in tangent units (marker size), the
 // comfort vignette and the HUD corners (its FOV tangents place both in the view).
