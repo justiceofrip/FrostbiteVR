@@ -16,7 +16,8 @@ runs the portable tier on Ubuntu. `bf4-release.yml` (tags `bf4-v*`) downloads th
 OpenXR 1.1.61 Windows loader and refuses to continue unless its x64 `openxr_loader.dll`
 matches the pinned SHA-256, builds the adapter, proxies and `FvrXrHost`, runs ctest
 `^Bf4` and the launcher suite, then packages with `--require-xr-host` (notices under
-`licenses/`). The download and hash match have not been exercised on a runner yet.
+`licenses/`). The download and hash match run only on a release tag and have not run yet. `build.yml` and
+`bf4-emulated.yml` passed on GitHub for `bf4/vr-adapter` (2026-10-19).
 
 `tools/wincheck` (declarations-only SDK shim) predates the theater link, XInput and GDI
 code and no longer covers the adapter; it is not run by CI.

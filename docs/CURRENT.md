@@ -242,7 +242,8 @@ lane); the host gained `--theater-input` (off by default: controller input keeps
 while the menu lane shows). BC2 checkpoint 412 composition and receipts are untouched.
 CI: `build.yml` builds and tests BF4 with everything else; `bf4-emulated.yml` runs only the
 portable launcher tests on Ubuntu; `bf4-release.yml` (tags) adds the hash-pinned Khronos
-loader and packages. Neither BF4 workflow has run on GitHub yet.
+loader and packages (tags `bf4-v*`). Both CI workflows passed on GitHub for branch
+`bf4/vr-adapter` (2026-10-19); the release workflow has not run (no tag yet).
 
 ## Where to look
 

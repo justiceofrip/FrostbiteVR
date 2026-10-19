@@ -109,7 +109,14 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
 - Open: the live census result; the rest of the ownership chain to the player (R8)
   before any write.
 
-## CI and release pipeline (2026-10-19, not yet run on GitHub)
+## CI and release pipeline (2026-10-19)
+
+- Pushed to `bf4/vr-adapter`; first GitHub runs green at `440594f`: `build.yml` Windows
+  x86 and x64 (all 283/282 suites incl. Bf4Core and Bf4Emulated) and `bf4-emulated`
+  (launcher tests on Linux). Fixed on the way: script permissions and line endings, a
+  POSIX path bug in the launcher's profile settings resolver, and the emulator's menu
+  button assuming a 1280x720 client on runners with small desktops. The release workflow
+  (tags `bf4-v*`) has not run: no release is tagged until a headset session passes.
 
 - `bf4-release.yml` (tags `bf4-v*`, so BF4 releases never collide with other games here): windows-2022 like `build.yml`, actions pinned to the same
   commits. Downloads `openxr_loader_windows-1.1.61.zip` from KhronosGroup/OpenXR-SDK-Source
