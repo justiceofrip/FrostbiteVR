@@ -999,3 +999,26 @@ TEST_CASE(ComfortVignetteFollowsArtificialMotion) {
     for (int i = 0; i < 90; ++i) level = v.Update(false, 1.0f, 1.0f / 90); // option off
     CHECK(level == 0);
 }
+
+TEST_CASE(EveryModMenuItemFitsOnThePanel) {
+    using namespace fvr;
+    using namespace fvr::bf4;
+    game::CapabilityRegistry caps;
+    for (const bool developer : {false, true}) {
+        const auto menu = BuildModMenu(caps, developer, ModMenuState{});
+        ui::VrPanel panel(1280, 720);
+        ui::LayoutModMenu(menu, panel);
+        std::vector<ui::Widget> items;
+        for (const auto& w : panel.Widgets())
+            if (w.id) items.push_back(w);
+        CHECK(items.size() == menu.Items().size() && items.size() > 8); // more than one column holds
+        for (std::size_t i = 0; i < items.size(); ++i) {
+            const auto& r = items[i].rect;
+            CHECK(r.x >= 0 && r.y >= 0 && r.x + r.w <= 1280.5f && r.y + r.h <= 720.5f && r.h >= 40);
+            for (std::size_t j = 0; j < i; ++j) {
+                const auto& o = items[j].rect;
+                CHECK(r.x >= o.x + o.w || o.x >= r.x + r.w || r.y >= o.y + o.h || o.y >= r.y + r.h);
+            }
+        }
+    }
+}

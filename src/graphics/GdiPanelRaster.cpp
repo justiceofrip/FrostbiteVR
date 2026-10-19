@@ -11,7 +11,7 @@ void Fill(HDC dc,const ui::Rect& r,unsigned color,int radius){
     SelectObject(dc,oldBrush);SelectObject(dc,oldPen);DeleteObject(brush);DeleteObject(pen);
 }
 void Text(HDC dc,HFONT font,const std::wstring& s,RECT r,unsigned color,UINT format){
-    if(s.empty())return;SelectObject(dc,font);SetTextColor(dc,Rgb(color));DrawTextW(dc,s.c_str(),int(s.size()),&r,format|DT_NOPREFIX);
+    if(s.empty())return;SelectObject(dc,font);SetTextColor(dc,Rgb(color));DrawTextW(dc,s.c_str(),int(s.size()),&r,format|DT_NOPREFIX|DT_END_ELLIPSIS);
 }
 HFONT Font(int height,int weight){return CreateFontW(-height,0,0,0,weight,0,0,0,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,L"Segoe UI");}
 }
