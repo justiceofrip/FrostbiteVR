@@ -80,7 +80,9 @@ public:
         s.logicalWidth = wide169 ? 1280 : width;
         s.logicalHeight = wide169 ? 720 : height;
         s.inputReady = 1;
-        if (channel_.PublishState(s) == ipc::ChannelResult::Ok) ++statesPublished_;
+        const auto r = channel_.PublishState(s);
+        if (r == ipc::ChannelResult::Ok) ++statesPublished_;
+        else if (r == ipc::ChannelResult::Closed) { closed_ = true; return; }
         producer_.Pump(backbuffer, channel_);
     }
 
@@ -88,7 +90,7 @@ public:
         std::lock_guard lock(mutex_);
         char line[200];
         std::snprintf(line, sizeof(line), "theater_link connected=%d epoch=%llu states=%llu captured=%llu published=%llu failed=%llu discarded=%llu\n",
-                      channel_.Connected() ? 1 : 0, static_cast<unsigned long long>(epoch_),
+                      !token_.empty() && !closed_ ? 1 : 0, static_cast<unsigned long long>(epoch_),
                       static_cast<unsigned long long>(statesPublished_), static_cast<unsigned long long>(producer_.Captured()),
                       static_cast<unsigned long long>(producer_.Published()), static_cast<unsigned long long>(producer_.Failed()),
                       static_cast<unsigned long long>(producer_.Discarded()));
@@ -109,7 +111,9 @@ public:
         interaction::InputFrame f{};
         if (input_.ReadInput(f) == ipc::ChannelResult::Ok && interaction::ValidInput(f)) out.controls = f;
         ipc::MenuControl c{};
-        if (channel_.ReadControl(c) != ipc::ChannelResult::Ok) return out.controls.focused;
+        const auto r = channel_.ReadControl(c);
+        if (r == ipc::ChannelResult::Closed) closed_ = true;
+        if (r != ipc::ChannelResult::Ok) return out.controls.focused;
         out.valid = true;
         out.pointer.active = (c.flags & ipc::MenuPoint) && c.menuEpoch == epoch_;
         out.pointer.u = c.u;
@@ -121,8 +125,12 @@ public:
     }
 
 private:
+    // Attached to a host session: stay attached until a call reports Closed (the host ended).
+    // MenuChannel::Connected() also reads false while the shared lock is merely busy (a
+    // stall on either side), and Close() ends a token's session for good, so a busy lock
+    // must never trigger a teardown. Reattach only to a NEW token (a restarted host).
     bool Connect() {
-        if (channel_.Connected()) return true;
+        if (!token_.empty() && !closed_) return true;
         const ULONGLONG now = GetTickCount64();
         if (now - lastAttempt_ < 1000) return false;
         lastAttempt_ = now;
@@ -134,12 +142,14 @@ private:
             for (std::size_t i = 0; i < n; ++i)
                 if (buf[i] > ' ' && buf[i] < 127) token += buf[i]; // tolerate UTF-16 or trailing newline
         }
-        if (token.empty()) return false;
+        if (token.empty() || token == token_) return false; // nothing new to attach to
         channel_.Close();
         input_.Close();
         producer_.Reset();
         const std::wstring wide(token.begin(), token.end());
         if (!channel_.ConnectProducer(wide)) return false;
+        token_ = token;
+        closed_ = false;
         // Same token: the frame channel carries the controller samples. The adapter never
         // takes frame requests (the host stops asking while the theater panel is up).
         input_.ConnectProducer(wide);
@@ -154,6 +164,8 @@ private:
     graphics::D3D11MenuProducer producer_;
     std::uint64_t sequence_ = 0, epoch_ = 0, lastToggle_ = 0, statesPublished_ = 0;
     ULONGLONG lastAttempt_ = 0;
+    std::string token_; // the host session we are attached to
+    bool closed_ = false;
 };
 
 TheaterLink* g_link = nullptr; // one per adapter process; lives until exit

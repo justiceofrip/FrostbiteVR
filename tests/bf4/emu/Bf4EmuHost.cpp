@@ -406,7 +406,7 @@ int wmain() {
         CreateDirectoryW((dir + L"\\research-emu").c_str(), nullptr);
         std::ofstream(dir + L"\\research-emu\\cmd.txt") << "1 census\n";
         std::string census;
-        for (int frame = 0; frame < 2000 && census.find("firing census (research)") == std::string::npos; ++frame) {
+        for (int frame = 0; frame < 2000 && census.find("firing census (research): done") == std::string::npos; ++frame) {
             stereoFrame();
             Sleep(5);
             if (frame % 50 == 0) {

@@ -621,6 +621,15 @@ void OnPresent(Adapter& a, IDXGISwapChain* sc) {
     } else if ((a.core->Stats().frames % 30) == 0) {
         PublishStatus(a);
     }
+    // Theater link health in the log (captured/published/failed/discarded), every ~600 frames:
+    // the only way to see from a live session whether the game's frames reach the XR host.
+    if (a.platform.frames && a.core->Stats().frames % 600 == 0) {
+        std::string d = a.platform.frames->Describe();
+        while (!d.empty() && (d.back() == '\n' || d.back() == '\r')) d.pop_back();
+        a.log.Write("%s frames=%llu backbuffer=%ux%u client=%ldx%ld", d.c_str(),
+                    static_cast<unsigned long long>(a.core->Stats().frames), f.backbufferWidth, f.backbufferHeight,
+                    static_cast<long>(f.clientWidth), static_cast<long>(f.clientHeight));
+    }
 }
 
 HRESULT STDMETHODCALLTYPE HookPresent(IDXGISwapChain* sc, UINT sync, UINT flags) {
@@ -1101,6 +1110,7 @@ void RunFiringCensus(Adapter& a, const char* why) {
                         static_cast<unsigned long long>(objectStart), static_cast<unsigned long long>(vtable - image.base),
                         static_cast<unsigned long long>(hit.second - objectStart));
         }
+        a.log.Write("firing census (%s): done in %llums", j->why.c_str(), static_cast<unsigned long long>(GetTickCount64() - t0));
         g_censusRunning = false;
         return 0;
     }, job, 0, nullptr);

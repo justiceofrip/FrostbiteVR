@@ -31,9 +31,10 @@ $checks = [ordered]@{
     'emulated game checks passed' = $emuExit -eq 0
     'host showed game frames on the panel (menu_frames > 10)' = $menuFrames -gt 10
     'compositor received quad layers' = $quads -and $quads.quads -gt 20
-    'panel pixels are the game image (olive 3d4229)' = $quads -and $quads.centre -eq '3d4229'
+    # The emulator clears olive, then red/blue in its stereo phase: any of them is the game image.
+    'panel pixels are the game image (olive/red/blue)' = $quads -and @('3d4229', 'ff0000', '0000ff') -contains $quads.centre
     'fake runtime validation errors = 0' = $quads -and $quads.errors -eq 0
 }
 $checks.GetEnumerator() | ForEach-Object { '{0} {1}' -f ($(if ($_.Value) { 'PASS' } else { 'FAIL' })), $_.Key }
-$emu | Select-String 'theater_link' | ForEach-Object { $_.Line }
+$emu | Select-String 'theater_link|^FAIL ' | ForEach-Object { $_.Line }
 if ($checks.Values -contains $false) { exit 1 }
