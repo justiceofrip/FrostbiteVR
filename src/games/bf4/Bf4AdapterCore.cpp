@@ -82,7 +82,7 @@ void AdapterCore::UpdatePad(const ControllerSnapshot& in) {
         // magazine holds fire until one is seated; seating presses the game's reload.
         for (const auto& b : padLayout_.buttons)
             if (b.control == interaction::VrControl::Squeeze && b.hand < 2 &&
-                (gesture_.gripOwned[b.hand] || (b.hand == 1 && menuState_.holsters)))
+                (gesture_.gripOwned[b.hand] || (b.hand == 1 && menuState_.holsters) || (b.hand == 0 && aim_.twoHanded)))
                 pad_.buttons &= static_cast<std::uint16_t>(~b.padButton);
         pad_.buttons |= gesture_.padButtons;
         if (gesture_.blockFire) pad_.rightTrigger = 0;
@@ -128,6 +128,10 @@ void AdapterCore::ApplyMenuCommand(const ModMenuCommand& command) {
     case ModMenuAction::SetVignette:
         menuState_.vignette = command.value != 0;
         platform_.Log(menuState_.vignette ? "comfort vignette: on" : "comfort vignette: off");
+        break;
+    case ModMenuAction::SetTwoHandedAim:
+        menuState_.twoHandedAim = command.value != 0;
+        platform_.Log(menuState_.twoHandedAim ? "two-handed aim: on" : "two-handed aim: off");
         break;
     case ModMenuAction::SetAimDot:
         menuState_.aimDot = command.value != 0;
@@ -358,11 +362,21 @@ void AdapterCore::UpdateMotionAim(const ControllerSnapshot& in, const PlatformFr
     m.gameValid = platform_.GameAim(m.game, m.gameSample);
     m.turn = std::fabs(hand.stickX) > 0.2f ? hand.stickX : 0.0f;
     m.snapTurn = menuState_.snapTurn;
+    // Two-handed aim: the left grip held in front of the gun, unless that grip carries
+    // something (a magazine, a grenade) for the gestures.
+    const auto& left = in.controls.hands[0];
+    m.twoHanded = menuState_.twoHandedAim;
+    m.supportGrip = in.controls.focused && left.gripTracked && hand.gripTracked && (left.active & interaction::Squeeze) &&
+                    left.squeeze >= 0.7f && !gesture_.gripOwned[0] && !gestures_.MagazineInHand();
+    m.rearGrip = hand.grip.position;
+    m.frontGrip = left.grip.position;
     m.dt = lastAimTickMs_ && f.tickMs > lastAimTickMs_ ? std::min(0.1f, (f.tickMs - lastAimTickMs_) / 1000.0f) : 0.0f;
     lastAimTickMs_ = f.tickMs;
     const bool was = aim_.engaged;
     aim_ = motionAim_.Update(m);
     if (aim_.engaged != was) platform_.Log(aim_.engaged ? "controller aim engaged" : "controller aim released");
+    if (aim_.twoHanded && !twoHandedWas_) ++twoHandedEngages_;
+    twoHandedWas_ = aim_.twoHanded;
     if (aim_.engaged && (aim_.mouseX || aim_.mouseY)) platform_.SendMouse(aim_.mouseX, aim_.mouseY);
 }
 
@@ -588,9 +602,10 @@ std::string AdapterCore::Status() const {
     s += padLine;
     s += "clicks_posted=" + std::to_string(pointer_.Clicks()) + "\n";
     char aimLine[200];
-    std::snprintf(aimLine, sizeof(aimLine), "controller_aim=%s body_yaw=%.3f gain=%.6f,%.6f mutes=%llu snaps=%llu\n",
+    std::snprintf(aimLine, sizeof(aimLine), "controller_aim=%s body_yaw=%.3f gain=%.6f,%.6f mutes=%llu snaps=%llu two_handed=%llu\n",
                   aim_.engaged ? "engaged" : "off", aim_.bodyYaw, motionAim_.GainX(), motionAim_.GainY(),
-                  static_cast<unsigned long long>(motionAim_.Mutes()), static_cast<unsigned long long>(motionAim_.Snaps()));
+                  static_cast<unsigned long long>(motionAim_.Mutes()), static_cast<unsigned long long>(motionAim_.Snaps()),
+                  static_cast<unsigned long long>(twoHandedEngages_));
     s += aimLine;
     s += gestures_.Describe() + " holsters=" + (menuState_.holsters ? "on" : "off") + "\n";
     s += "reload_requests=" + std::to_string(stats_.reloadRequests) + "\n";

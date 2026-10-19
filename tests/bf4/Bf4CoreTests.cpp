@@ -1022,3 +1022,37 @@ TEST_CASE(EveryModMenuItemFitsOnThePanel) {
         }
     }
 }
+
+TEST_CASE(TwoHandedAimFollowsTheLineBetweenTheHands) {
+    using namespace fvr;
+    using namespace fvr::bf4;
+    MotionAim aim;
+    MotionAimInput in;
+    in.engage = in.aimTracked = in.gameValid = true;
+    in.reference.orientation = {0, 0, 0, 1};
+    in.aim.orientation = math::FromAxisAngle({0, 1, 0}, -0.1f); // the right wrist points 0.1 rad right
+    in.dt = 1.0f / 60;
+    in.twoHanded = true;
+    in.rearGrip = {0.2f, 1.3f, -0.3f};
+    in.frontGrip = {0.2f + 0.4f * std::tan(0.25f), 1.3f + 0.05f, -0.7f}; // 0.25 rad right, slightly up
+    auto out = aim.Update(in);
+    CHECK(!out.twoHanded && Near(aim.Desired().yaw, 0.1f, 1e-3f)); // left grip not held: the wrist aims
+    in.supportGrip = true;
+    out = aim.Update(in);
+    CHECK(out.twoHanded && Near(aim.Desired().yaw, 0.25f, 1e-3f) && aim.Desired().pitch > 0.1f);
+    // The left hand drifts 45 degrees off the wrist's aim: still both hands (hysteresis) ...
+    in.frontGrip = {0.2f + 0.4f * std::tan(0.1f + 0.785f), 1.3f, -0.7f};
+    CHECK(aim.Update(in).twoHanded);
+    // ... but a hand off to the side, or one beside the gun hand, is not holding the gun.
+    in.frontGrip = {0.9f, 1.3f, -0.3f};
+    CHECK(!aim.Update(in).twoHanded);
+    in.frontGrip = {0.25f, 1.3f, -0.35f};
+    CHECK(!aim.Update(in).twoHanded);
+    // A fresh start needs the tighter 35 degree cone.
+    in.frontGrip = {0.2f + 0.4f * std::tan(0.1f + 0.785f), 1.3f, -0.7f};
+    CHECK(!aim.Update(in).twoHanded);
+    // Option off: the wrist aims.
+    in.frontGrip = {0.2f + 0.4f * std::tan(0.25f), 1.3f, -0.7f};
+    in.twoHanded = false;
+    CHECK(!aim.Update(in).twoHanded && Near(aim.Desired().yaw, 0.1f, 1e-3f));
+}

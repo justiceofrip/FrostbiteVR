@@ -11,7 +11,11 @@
 //   actually did with the counts sent, over a sliding window.
 // - Movement: the game moves relative to its aim, so the left stick is turned by the
 //   aim's offset from the body to keep walking relative to the body.
+// - Two-handed aim: while the left grip is held in front of the gun (along the right
+//   controller's aim), the gun aims along the line from the right grip to the left grip,
+//   which is steadier than one wrist (a rifle held with both hands).
 #include "fvr/interaction/AimFrame.h"
+#include "fvr/math/Vec.h"
 
 #include <array>
 #include <cmath>
@@ -46,6 +50,11 @@ struct MotionAimInput {
     float turn = 0;         // right stick X, -1..1 (body turning)
     float dt = 0;           // seconds since the last update
     bool snapTurn = false;  // turn in fixed steps (comfort) instead of smoothly
+    // Two-handed aim: the left grip is held (and not carrying a magazine or grenade); the
+    // grip positions in tracking space.
+    bool twoHanded = false;
+    bool supportGrip = false;
+    math::Vec3 rearGrip{}, frontGrip{};
 };
 
 struct MotionAimOutput {
@@ -53,6 +62,7 @@ struct MotionAimOutput {
     float bodyYaw = 0;      // heading the headset view is anchored to
     int mouseX = 0, mouseY = 0; // relative counts to send this frame
     float moveRotation = 0; // radians to turn the left stick by (RotateMovement)
+    bool twoHanded = false; // the left hand steadies the aim (its grip is not a pad button)
 };
 
 class MotionAim {
@@ -64,6 +74,10 @@ public:
     // kSnapRearm before the next one.
     static constexpr float kSnapAngle = 0.5235988f; // 30 degrees
     static constexpr float kSnapPush = 0.7f, kSnapRearm = 0.3f;
+    // Two-handed aim: the front hand 12-80 cm from the rear one, within 35 degrees of the
+    // right controller's aim to start (60 to keep).
+    static constexpr float kTwoHandMin = 0.12f, kTwoHandMax = 0.80f;
+    static constexpr float kTwoHandStart = 0.6108652f, kTwoHandKeep = 1.0471976f;
 
     MotionAimOutput Update(const MotionAimInput& in) {
         MotionAimOutput out;
@@ -100,7 +114,10 @@ public:
         const auto hand = interaction::ControllerAim(in.reference, in.aim, lastHandYaw_);
         if (!hand) return out;
         lastHandYaw_ = hand->yaw;
-        desired_ = {WrapPi(bodyYaw_ + hand->yaw), hand->pitch};
+        AimAngle aim{hand->yaw, hand->pitch};
+        twoHanded_ = TwoHanded(in, aim);
+        out.twoHanded = twoHanded_;
+        desired_ = {WrapPi(bodyYaw_ + aim.yaw), aim.pitch};
         out.mouseX = Counts(WrapPi(desired_.yaw - in.game.yaw), gainX_);
         out.mouseY = Counts(desired_.pitch - in.game.pitch, gainY_);
         pendingX_ += out.mouseX;
@@ -112,10 +129,29 @@ public:
     bool Engaged() const { return engaged_; }
     std::uint64_t Mutes() const { return mutes_; }
     std::uint64_t Snaps() const { return snaps_; }
+    bool TwoHandedNow() const { return twoHanded_; }
     static constexpr int kMuteFrames = 60;
     AimAngle Desired() const { return desired_; }
 
 private:
+    // The line from the rear grip to the front grip, in the reference's frame, replaces the
+    // one-hand aim when it runs along it (both hands on one gun).
+    bool TwoHanded(const MotionAimInput& in, AimAngle& aim) const {
+        if (!in.twoHanded || !in.supportGrip) return false;
+        const math::Vec3 d = math::Rotate(math::Conjugate(in.reference.orientation), in.frontGrip - in.rearGrip);
+        const float length = math::Length(d);
+        if (!(length >= kTwoHandMin && length <= kTwoHandMax)) return false;
+        const AimAngle line{std::atan2(d.x, -d.z), std::asin(std::fmax(-1.0f, std::fmin(1.0f, d.y / length)))};
+        // Angle between the line and the one-hand aim (both as directions).
+        auto dir = [](const AimAngle& a) {
+            return math::Vec3{std::sin(a.yaw) * std::cos(a.pitch), std::sin(a.pitch), -std::cos(a.yaw) * std::cos(a.pitch)};
+        };
+        const math::Vec3 u = dir(line), v = dir(aim);
+        const float c = std::fmax(-1.0f, std::fmin(1.0f, u.x * v.x + u.y * v.y + u.z * v.z));
+        if (std::acos(c) > (twoHanded_ ? kTwoHandKeep : kTwoHandStart)) return false;
+        aim = line;
+        return true;
+    }
     // Proportional step with a 0.7 margin against the one-frame input delay.
     static int Counts(float error, float gain) {
         const float c = 0.7f * error / gain;
@@ -183,6 +219,7 @@ private:
     int muted_ = 0;
     std::uint64_t mutes_ = 0;
     bool snapArmed_ = false; // a stick already pushed when aiming engages is not a turn
+    bool twoHanded_ = false;
     std::uint64_t snaps_ = 0;
 };
 

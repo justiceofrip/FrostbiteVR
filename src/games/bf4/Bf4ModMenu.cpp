@@ -39,6 +39,8 @@ ui::ModMenuModel BuildModMenu(const game::CapabilityRegistry& caps, bool develop
               state.headTracking ? 1 : 0, true, ""});
     menu.Add({"controller_aim", "Aim with", MenuItemKind::Choice, {"Right stick", "Right controller"},
               state.controllerAim ? 1 : 0, true, "Right stick turns your body."});
+    menu.Add({"two_handed", "Two-handed aim", MenuItemKind::Choice, {"Off", "On"}, state.twoHandedAim ? 1 : 0, true,
+              "Left grip in front of the gun steadies it."});
     menu.Add({"vignette", "Comfort vignette", MenuItemKind::Choice, {"Off", "On"}, state.vignette ? 1 : 0, true,
               "Darkens the edges while walking."});
     menu.Add({"aim_dot", "Aim dot", MenuItemKind::Choice, {"Off", "On"}, state.aimDot ? 1 : 0, true,
@@ -95,6 +97,7 @@ ModMenuCommand InterpretChange(const MenuItem& item) {
     if (item.id == "holsters") return {ModMenuAction::SetHolsters, item.value};
     if (item.id == "aim_dot") return {ModMenuAction::SetAimDot, item.value};
     if (item.id == "vignette") return {ModMenuAction::SetVignette, item.value};
+    if (item.id == "two_handed") return {ModMenuAction::SetTwoHandedAim, item.value};
     return {};
 }
 

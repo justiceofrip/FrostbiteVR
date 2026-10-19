@@ -1,4 +1,4 @@
-# BF4 headset session: checklist (0.4.24-local)
+# BF4 headset session: checklist (0.4.25-local)
 
 What to try in the next headset session, and what each check tells us. About 15 minutes.
 Everything is input-only or an exactly restored camera/FOV write, apart from the optional
@@ -25,8 +25,9 @@ Everything is input-only or an exactly restored camera/FOV write, apart from the
 1. Look around: the world should turn the same way as your head. Note how smooth it is:
    two frame channels should update the view more often than before (~17-25 Hz).
 2. Aim with the right controller: the gun follows it, and a **green ring** shows where it
-   aims (BF4's own crosshair stays at the centre of your view). The right stick turns in
-   **30 degree steps** (menu: Snap turning off for smooth).
+   aims (BF4's own crosshair stays at the centre of your view). Grip with the left hand in
+   front of the gun to aim with both hands. The right stick turns in **30 degree steps**
+   (menu: Snap turning off for smooth).
 3. Walk with the left stick: the edges darken while moving (menu: Comfort vignette).
 4. Holsters (grip in the zone; a light buzz when your hand reaches one you can use):
    right hip = sidearm (key 2), over the right shoulder = primary (key 1), left hip =

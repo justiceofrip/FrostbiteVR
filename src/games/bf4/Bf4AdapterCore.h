@@ -228,6 +228,8 @@ private:
     MotionAim motionAim_;
     MotionAimOutput aim_{};
     ComfortVignette vignette_;
+    bool twoHandedWas_ = false;
+    std::uint64_t twoHandedEngages_ = 0;
     std::uint64_t lastVignetteMs_ = 0;
     std::uint64_t lastAimTickMs_ = 0;
 
