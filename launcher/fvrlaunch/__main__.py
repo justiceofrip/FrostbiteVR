@@ -30,6 +30,9 @@ def main(argv: list[str] | None = None) -> int:
         print(note)
 
     if args.command == "ui":
+        from .gui_python import ensure_gui_python
+        if not ensure_gui_python(root, Path(__file__).resolve().parents[1]):
+            return 0  # restarted under a Python with tkinter, or the reason was shown
         from .ui import LauncherWindow  # tkinter only when needed
         LauncherWindow(root).run()
     elif args.command == "update":

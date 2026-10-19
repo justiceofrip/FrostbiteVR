@@ -81,6 +81,10 @@ class ReleaseContractTests(unittest.TestCase):
         cmd = next(installed.rglob("Launch FrostbiteVR.cmd")).read_text(encoding="ascii")
         self.assertIn("\\Programs\\Python\\Launcher\\pyw.exe", cmd)  # finds Python that is not on PATH
         self.assertIn("pause", cmd)  # and says so when there is none
+        # Python starts in the folder the script changes into: the launcher package must be there.
+        start_dir = next(installed.rglob("Launch FrostbiteVR.cmd")).parent / "launcher"
+        self.assertIn('cd /d "%~dp0launcher"', cmd)
+        self.assertTrue((start_dir / "fvrlaunch" / "__main__.py").is_file())
 
     def test_published_release_requires_the_xr_host(self):
         build = self.tmp / "build"

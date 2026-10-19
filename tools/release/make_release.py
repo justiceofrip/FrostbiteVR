@@ -36,10 +36,10 @@ FORBIDDEN = ("bf4.exe", "bf4_x86.exe", ".sb", ".toc", ".cas", ".cat")
 LAUNCH_CMD = "\r\n".join([
     "@echo off",
     "setlocal",
-    'cd /d "%~dp0"',
+    'cd /d "%~dp0launcher"',  # Python starts where the fvrlaunch package is: <version>\launcher
     'set "ROOT=%~dp0..\\.."',
     'set "ARGS=-m fvrlaunch ui --root "%ROOT%""',
-    'if exist "python\\pythonw.exe" (start "" "python\\pythonw.exe" %ARGS% & exit /b 0)',
+    'if exist "%~dp0python\\pythonw.exe" (start "" "%~dp0python\\pythonw.exe" %ARGS% & exit /b 0)',
     'if exist "%LOCALAPPDATA%\\Programs\\Python\\Launcher\\pyw.exe" '
     '(start "" "%LOCALAPPDATA%\\Programs\\Python\\Launcher\\pyw.exe" -3 %ARGS% & exit /b 0)',
     'if exist "%WINDIR%\\pyw.exe" (start "" "%WINDIR%\\pyw.exe" -3 %ARGS% & exit /b 0)',
