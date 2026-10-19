@@ -35,6 +35,8 @@ ui::ModMenuModel BuildModMenu(const game::CapabilityRegistry& caps, bool develop
               "Right stick: 30 degree steps."});
     menu.Add({"theater_distance", "Screen distance", MenuItemKind::Choice, {"Near", "Medium", "Far"},
               state.theaterDistance, false, "Coming in a later update."});
+    menu.Add({"hud_insets", "HUD corners", MenuItemKind::Choice, {"Off", "On"}, state.hudInsets ? 1 : 0, true,
+              "Ammo and minimap moved into view."});
     menu.Add({"depth_stereo", "3D from depth", MenuItemKind::Choice, {"Off", "On"}, state.depthStereo ? 1 : 0, true,
               "Experimental: each eye shifted by depth."});
     menu.Add({"view_mode", "In campaign levels", MenuItemKind::Choice, {"Screen", "Head-tracked view"},
@@ -107,6 +109,7 @@ ModMenuCommand InterpretChange(const MenuItem& item) {
     if (item.id == "walk_direction") return {ModMenuAction::SetWalkDirection, item.value};
     if (item.id == "physical_crouch") return {ModMenuAction::SetPhysicalCrouch, item.value};
     if (item.id == "depth_stereo") return {ModMenuAction::SetDepthStereo, item.value};
+    if (item.id == "hud_insets") return {ModMenuAction::SetHudInsets, item.value};
     return {};
 }
 

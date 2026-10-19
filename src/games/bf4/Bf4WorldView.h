@@ -110,13 +110,25 @@ inline EyeMarker MarkerInEye(const math::Pose& eye, const math::FovTangents& fov
     m.show = m.u > -0.05f && m.u < 1.05f && m.v > -0.05f && m.v < 1.05f;
     return m;
 }
-// Per eye: up to two markers, the eye image's extent in tangent units (marker size), and
-// the comfort vignette (its FOV tangents place the centre of the view).
+// HUD corners: BF4 draws its ammo panel and minimap in the frame's bottom corners, which a
+// 16:9 frame tall enough for the headset puts outside both eyes. Each is copied into an inset
+// inside the visible lower corners, at the same view tangents in both eyes (so at infinity).
+// Source: frame uv (u0, v0, u1, v1); target: view tangents (left, top, right, bottom).
+struct HudInset {
+    float src[4];
+    float tan[4];
+};
+inline constexpr HudInset kAmmoInset{{0.78f, 0.80f, 0.995f, 0.985f}, {0.40f, -0.60f, 0.88f, -0.96f}};
+inline constexpr HudInset kMinimapInset{{0.005f, 0.66f, 0.215f, 0.985f}, {-0.88f, -0.46f, -0.40f, -0.96f}};
+
+// Per eye: up to two markers, the eye image's extent in tangent units (marker size), the
+// comfort vignette and the HUD corners (its FOV tangents place both in the view).
 struct EyeOverlay {
     EyeMarker markers[2];
     float spanX = 1, spanY = 1;
     math::FovTangents fov{-1, 1, 1, -1};
     float vignette = 0; // 0 none .. 1 full
+    bool hudInsets = false;
 };
 
 // Comfort vignette: darkens the edge of view while the player moves by stick or turns

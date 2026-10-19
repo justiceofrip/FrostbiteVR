@@ -150,5 +150,34 @@ bool CheckEyeResamplerReticle(ID3D11Device* device, const char*& why) {
         if (!(nearLeft < 66 - 8 && nearRight > 66 + 8 && std::abs(farLeft - farRight) <= 2))
             return why = "depth stereo shifts near things per eye and leaves far ones", false;
     }
+    // HUD corners: a blue ammo panel in the frame's bottom-right corner (outside the eyes'
+    // +-1.2 tangents) shows up in the inset inside each eye's lower right, nowhere else.
+    {
+        std::vector<std::uint32_t> hud(kSize * kSize, 0xFF808080u);
+        for (UINT y = 52; y < kSize; ++y)
+            for (UINT x = 52; x < kSize; ++x) hud[y * kSize + x] = 0xFFFF0000u; // blue (ABGR)
+        const D3D11_SUBRESOURCE_DATA hudData{hud.data(), kSize * 4, 0};
+        ComPtr<ID3D11Texture2D> hudFrame;
+        if (FAILED(device->CreateTexture2D(&d, &hudData, &hudFrame))) return why = "create the HUD frame", false;
+        fvr::bf4::EyeOverlay corners[2];
+        for (auto& o : corners) {
+            o.fov = {-1.2f, 1.2f, 1.2f, -1.2f};
+            o.hudInsets = true;
+        }
+        fvr::bf4::EyeCrop centre[2];
+        for (auto& c : centre) { // the eyes see the middle of the frame
+            c.u0 = c.v0 = 0.25f;
+            c.u1 = c.v1 = 0.75f;
+        }
+        if (!resampler.Render(context.Get(), hudFrame.Get(), centre, kSize, kSize, DXGI_FORMAT_R8G8B8A8_UNORM, {}, corners))
+            return why = "HUD corners resample", false;
+        auto blue = [](std::uint32_t p) { return ((p >> 16) & 0xFF) > 200 && (p & 0xFF) < 60; };
+        for (int e = 0; e < 2; ++e) {
+            if (!ReadPixels(device, context.Get(), resampler.Eye(e), eye, width)) return why = "read back the HUD eye", false;
+            // Inset centre: tangents (0.64, -0.78) -> eye uv (0.767, 0.825).
+            if (!blue(eye[52 * width + 49])) return why = "ammo panel shown in the lower right inset", false;
+            if (blue(eye[32 * width + 32]) || blue(eye[52 * width + 14])) return why = "HUD corners only in their insets", false;
+        }
+    }
     return true;
 }

@@ -25,8 +25,18 @@ cbuffer Crop : register(b0) {
     float4 eyeFov;  // left right up down (tangents)
     float4 comfort; // vignette strength, -, -, -
     float4 stereo;  // depth stereo: shift (frame uv x world units), near, far, mode (0 off, 1, 2 reversed)
-    float4 stereo2; // min depth, -, -, -
+    float4 stereo2; // min depth, HUD insets on, -, -
+    float4 insetSrc[2]; // HUD corner sources (frame uv rect)
+    float4 insetTan[2]; // and where they go (view tangents: left top right bottom)
 };
+// A HUD corner copied into its inset, with a thin dark frame; c unchanged outside it.
+float3 Inset(float3 c, float2 t, float4 src, float4 dst) {
+    const float2 f = float2((t.x - dst.x) / (dst.z - dst.x), (dst.y - t.y) / (dst.y - dst.w));
+    if (any(f < 0) || any(f > 1)) return c;
+    const float2 edge = min(f, 1 - f) * float2(dst.z - dst.x, dst.y - dst.w);
+    if (min(edge.x, edge.y) < 0.006) return float3(0.08, 0.09, 0.11);
+    return source.SampleLevel(linearClamp, lerp(src.xy, src.zw, f), 0).rgb;
+}
 float LinearZ(float d) {
     const float n = stereo.y, f = stereo.z;
     const float denom = stereo.w > 1.5 ? n + d * (f - n) : f - d * (f - n);
@@ -70,9 +80,13 @@ float4 ps(V v) : SV_Target {
     }
     c = Marker(c, v.uv, marker0);
     c = Marker(c, v.uv, marker1);
+    const float2 t = float2(lerp(eyeFov.x, eyeFov.y, v.uv.x), lerp(eyeFov.z, eyeFov.w, v.uv.y));
     if (comfort.x > 0.001) { // comfort vignette: clear to ~35 deg off centre, dark by ~50 deg
-        const float2 t = float2(lerp(eyeFov.x, eyeFov.y, v.uv.x), lerp(eyeFov.z, eyeFov.w, v.uv.y));
         c *= 1 - comfort.x * 0.9 * smoothstep(0.70, 1.19, length(t));
+    }
+    if (stereo2.y > 0.5) { // HUD corners stay readable over the vignette
+        c = Inset(c, t, insetSrc[0], insetTan[0]);
+        c = Inset(c, t, insetSrc[1], insetTan[1]);
     }
     return float4(c, 1);
 }
@@ -121,6 +135,8 @@ struct alignas(16) CropConstants {
     float comfort[4];
     float stereo[4];
     float stereo2[4];
+    float insetSrc[2][4];
+    float insetTan[2][4];
 };
 
 // Shader view of a typeless depth family.
@@ -298,6 +314,15 @@ bool EyeResampler::Render(ID3D11DeviceContext* context, ID3D11Texture2D* source,
             c.eyeFov[2] = fov.up;
             c.eyeFov[3] = fov.down;
             c.comfort[0] = overlays[i].vignette;
+            if (overlays[i].hudInsets) {
+                c.stereo2[1] = 1;
+                const HudInset* insets[2] = {&kAmmoInset, &kMinimapInset};
+                for (int k = 0; k < 2; ++k)
+                    for (int n = 0; n < 4; ++n) {
+                        c.insetSrc[k][n] = insets[k]->src[n];
+                        c.insetTan[k][n] = insets[k]->tan[n];
+                    }
+            }
         }
         if (stereo) {
             c.stereo[0] = depth->params.shift[i];
