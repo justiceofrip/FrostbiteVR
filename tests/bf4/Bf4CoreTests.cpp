@@ -14,6 +14,8 @@
 #include "../../src/games/bf4/Bf4WorldView.h"
 #include "../../src/games/bf4/Bf4EngineStereo.h"
 #include "../../src/games/bf4/Bf4PointerInjector.h"
+#include "../../src/games/bf4/Bf4AdapterCore.h"
+#include "../../src/games/bf4/Bf4ViewOverride.h"
 
 #include <map>
 #include "../../src/games/bf4/Bf4SessionGuard.h"
@@ -490,8 +492,8 @@ TEST_CASE(EngineStereoDrivesSplitRenderAndRestoresExactly) {
     EyeCrop c[2];
     EyeCrops(fov, tanX, tanY, true, 0.01f, c);
     CHECK(Near(c[0].bu0, 0.0f) && Near(c[0].bu1, 0.5f) && Near(c[1].bu0, 0.5f) && Near(c[1].bu1, 1.0f));
-    CHECK(Near(c[0].u0, 0.5f * (0.5f - 1.0f / (2 * tanX) + 0.005f), 1e-6f));
-    CHECK(Near(c[1].u1, 0.5f + 0.5f * (0.5f + 1.0f / (2 * tanX) - 0.005f), 1e-6f));
+    CHECK(Near(c[0].u0, 0.5f * (0.5f - 1.0f / (2 * tanX) - 0.005f), 1e-6f)); // right-handed view: left eye -sep
+    CHECK(Near(c[1].u1, 0.5f + 0.5f * (0.5f + 1.0f / (2 * tanX) + 0.005f), 1e-6f));
     EyeCrops(fov, tanX, tanY, false, 0.01f, c);
     CHECK(Near(c[0].bu1, 1.0f) && Near(c[0].u0, 0.5f - 1.0f / (2 * tanX)));
 
@@ -539,4 +541,30 @@ TEST_CASE(LaserClickHoldsItsPositionUnlessItIsADrag) {
     p.Update(g, 1920, 1080, out);
     CHECK(out.size() == 1 && out[0].type == T::ButtonUp && out[0].x == 1152);
     CHECK(p.Clicks() == 2);
+}
+
+TEST_CASE(HeadPoseTurnsTheBf4CameraTheSameWay) {
+    using namespace fvr;
+    using namespace fvr::bf4;
+    // BF4 camera rows: right, up, +Z (behind the camera); the view looks along -Z.
+    frostbite::LinearTransform game; // facing world -Z
+    game.right = {1, 0, 0};
+    game.up = {0, 1, 0};
+    game.forward = {0, 0, 1};
+    auto look = [&](const math::Pose& head) {
+        const auto cam = HeadTrackedView(game, AdapterCore::XrPoseToBf4Camera(head), false);
+        return math::Vec3{-cam.forward.x, -cam.forward.y, -cam.forward.z}; // view direction
+    };
+    math::Pose left; // head turned 90 degrees left (OpenXR: +90 about +Y)
+    left.orientation = math::FromAxisAngle({0, 1, 0}, 1.5707963f);
+    const auto l = look(left);
+    CHECK(Near(l.x, -1.0f) && Near(l.z, 0.0f)); // the camera looks left (-X) too
+    math::Pose up; // head pitched 30 degrees up (OpenXR: +30 about +X)
+    up.orientation = math::FromAxisAngle({1, 0, 0}, 0.5235988f);
+    const auto u = look(up);
+    CHECK(Near(u.y, 0.5f) && Near(u.z, -0.8660254f)); // and up
+    math::Pose leaned; // head 10 cm right and 5 cm forward (OpenXR -Z)
+    leaned.position = {0.1f, 0, -0.05f};
+    const auto cam = HeadTrackedView(game, AdapterCore::XrPoseToBf4Camera(leaned), false);
+    CHECK(Near(cam.trans.x, 0.1f) && Near(cam.trans.z, -0.05f)); // forward for a -Z facing camera
 }

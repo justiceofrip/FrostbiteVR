@@ -158,6 +158,8 @@ public:
     static math::Pose RecenterReference(const math::Pose& head);
     static math::Pose ApplyReference(const math::Pose& reference, const math::Pose& pose);
     static frostbite::FovAngles UnionFov(const frostbite::FovAngles& a, const frostbite::FovAngles& b);
+    // OpenXR pose (relative to the recentre reference) as a BF4 camera-space transform.
+    static frostbite::LinearTransform XrPoseToBf4Camera(const math::Pose& pose);
 
 private:
     void Detach(std::string_view why);

@@ -94,6 +94,26 @@ screen. Pieces (all on the analysed build only):
   at most one frame ahead and the settle-2 labelling rule holds. The zoom is not
   explained yet; the projection is rebuilt from the written FOV (view update `+0xB8C180`
   bit 1 -> `+0xB8CFC0`, matrix at view `+0x320`).
+- **Third headset session (0.4.15-local, 10:19)**: the player found the cause of the
+  sickness: every head rotation was inverted (look left -> turned right, look up -> looked
+  down). Snapshots (`vr-snapshot-frame.bmp`, `vr-snapshot-eyes.bmp`) and the probe showed
+  the renderer's view at FOV 1.95 rad with the real world camera position during head
+  tracking, eye crops consistent with that FOV, and the gun/HUD drawn far too large.
+  Fixed in 0.4.16-local:
+  - Handedness: BF4's view space is right-handed (projection builder `+0xB7EAE0`: w = -z
+    when view `+0xD9` is set, which it is live); camera rows are right, up and +Z behind
+    the camera, as in OpenXR. The head pose now goes in unmirrored
+    (`AdapterCore::XrPoseToBf4Camera`; unit test: head left/up turns the camera left/up).
+  - Gun size: view update bit 4 (`+0xB8C910`) sets `+0x258 = tan(fov/2) /
+    tan(defaultFov/2)` from the default FOV at `+0xB8`, which keeps the first-person gun
+    at its normal on-screen size; with the 111 degree render it was ~3.5x too big in the
+    headset. The override now writes the FOV to `+0xB8` too (restored exactly), so the
+    scale is 1 and the gun is at true size. The HUD is screen space and stays magnified
+    by the crop (~2.3x).
+  - Split stereo image shift sign follows the right-handed view (left eye -separation).
+  - Resume click: the logged press/release drifted 63 px (1920 wide), beyond the 2 % lock;
+    the lock is now 6 %.
+  - 3D depth now defaults to off (the split render still freezes the game).
 - Evidence tools for the next session (developer): `vr-snapshot-frame.bmp` (the game
   frame) and `vr-snapshot-eyes.bmp` (both eye images) 5 s into head tracking and on every
   "Mark this moment for feedback"; a watchdog that logs every thread's stack (module +
@@ -209,10 +229,10 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
 
 ## Tests (2026-10-19)
 
-- Build.ps1 after the eye-loop fix: x64 283/283, x86 282/282. Bf4CoreTests 55 cases / 447
-  checks; Bf4Emulated pass (theater, world lane, stereo probe, census, lockdown); launcher
+- Build.ps1 after the handedness and gun-scale fixes: x64 283/283, x86 282/282.
+  Bf4CoreTests 57 cases / 459 checks; Bf4Emulated pass (theater, world lane, stereo probe, census, lockdown); launcher
   19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and `-World` 4/4 (157 pairs).
-- Installed locally: runtime/bf4 0.4.15-local (rollback 0.4.14-local). Developer
+- Installed locally: runtime/bf4 0.4.16-local (rollback 0.4.15-local). Developer
   sessions still run the read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the
   framework's `StereoMath.h` (`Quat` = `Quaternion`; Pose is `{position, orientation}`).
@@ -236,8 +256,9 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
   without swimming (else raise "frame sync" in the mod menu), does BF4 render the wide
   FOV, pair rate (`theater_link ... pairs=` and `view_override ... run=` lines every 600
   frames in `bf4-adapter.log`).
-- Zoom/motion sickness in the head-tracked view: compare the snapshots with the eye
-  FOVs; then raise the pair rate (one request in flight is the limit).
+- Headset check of 0.4.16: head rotation direction, gun size, comfort. Then the pair
+  rate (~17-25 Hz: one request slot plus two submits per pair; settle 1 is selectable but
+  only exact if the render thread presents the latest submit).
 - 3D: the stall after the split render engages; the watchdog's stacks show where.
 - Laser click on the campaign screen's "Resume" (main menu) did not register while other
   menu clicks did. Cause assumed: no click lock, so hand jitter while the trigger was held

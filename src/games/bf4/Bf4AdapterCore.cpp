@@ -171,6 +171,20 @@ math::Pose AdapterCore::ApplyReference(const math::Pose& reference, const math::
     return local;
 }
 
+frostbite::LinearTransform AdapterCore::XrPoseToBf4Camera(const math::Pose& pose) {
+    // BF4's view space is right-handed: the projection builder (+0xB7EAE0) puts w = -z when
+    // the view's +0xD9 flag is set, and it is set in every live session. The camera
+    // transform's rows are right, up, and the +Z axis (behind the camera), as in OpenXR, so
+    // the headset pose goes in unmirrored. (The mirrored, left-handed conversion turned
+    // the world the wrong way: looking left turned right, looking up looked down.)
+    frostbite::LinearTransform t;
+    t.right = math::Rotate(pose.orientation, {1, 0, 0});
+    t.up = math::Rotate(pose.orientation, {0, 1, 0});
+    t.forward = math::Rotate(pose.orientation, {0, 0, 1});
+    t.trans = pose.position;
+    return t;
+}
+
 frostbite::FovAngles AdapterCore::UnionFov(const frostbite::FovAngles& a, const frostbite::FovAngles& b) {
     return {std::min(a.left, b.left), std::max(a.right, b.right), std::max(a.up, b.up), std::min(a.down, b.down)};
 }
@@ -303,7 +317,7 @@ void AdapterCore::UpdateCamera(const ControllerSnapshot& in, const PlatformFrame
         CameraRequest r;
         r.eye = eye;
         const math::Pose& p = eye < 0 ? (lane ? in.world.head : in.head) : in.eyes[eye].pose;
-        r.local = frostbite::XrPoseToFrostbite(ApplyReference(reference_, p));
+        r.local = XrPoseToBf4Camera(ApplyReference(reference_, p));
         r.fov = eye < 0 ? UnionFov(in.eyes[0].fov, in.eyes[1].fov) : in.eyes[eye].fov;
         if (lane) {
             r.poseId = in.world.poseId;

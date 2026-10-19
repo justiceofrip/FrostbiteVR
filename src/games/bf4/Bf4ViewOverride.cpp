@@ -180,12 +180,15 @@ void ViewOverride::Submit(void* renderer, float a, float b, std::uint32_t viewCo
     // FOV: only onto a block whose FOV and aspect read as such, as the FOV setter writes it.
     const float gameFov = ReadFloat(views + kViewFovOffset), aspect = ReadFloat(views + kViewAspectOffset);
     const float savedHorizontal = ReadFloat(views + kViewHorizontalFovOffset);
+    const float savedDefault = ReadFloat(views + kViewDefaultFovOffset);
     const bool fovWrite = fovY > 0 && PlausibleFov(gameFov) && aspect > 0.2f && aspect < 5.0f;
+    const bool defaultWrite = fovWrite && PlausibleFov(savedDefault);
     float writtenHorizontal = 0;
     if (fovWrite) {
         writtenHorizontal = 2.0f * std::atan(std::tan(fovY * 0.5f) * aspect);
         std::memcpy(views + kViewFovOffset, &fovY, 4);
         std::memcpy(views + kViewHorizontalFovOffset, &writtenHorizontal, 4);
+        if (defaultWrite) std::memcpy(views + kViewDefaultFovOffset, &fovY, 4);
         const std::uint32_t fovDirty = dirty | kViewFovDirtyBits;
         std::memcpy(views + kViewDirtyOffset, &fovDirty, 4);
     }
@@ -205,6 +208,10 @@ void ViewOverride::Submit(void* renderer, float a, float b, std::uint32_t viewCo
         if (ReadFloat(views + kViewHorizontalFovOffset) == writtenHorizontal)
             std::memcpy(views + kViewHorizontalFovOffset, &savedHorizontal, 4);
         else restored = false;
+        if (defaultWrite) {
+            if (ReadFloat(views + kViewDefaultFovOffset) == fovY) std::memcpy(views + kViewDefaultFovOffset, &savedDefault, 4);
+            else restored = false;
+        }
     }
     std::uint32_t nowDirty = 0;
     std::memcpy(&nowDirty, views + kViewDirtyOffset, sizeof(nowDirty));

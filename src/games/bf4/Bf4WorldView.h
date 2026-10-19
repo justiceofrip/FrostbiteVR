@@ -54,9 +54,10 @@ inline float RequiredVerticalFov(const math::FovTangents& left, const math::FovT
 }
 
 // Both eye crops of one presented frame. Mono: the same head-centred image. Split stereo
-// (BF4's own two-eye render): eye 0 (left) is the engine's eye 1 in the left half, shifted
-// by +separation; eye 1 (right) is the right half, shifted by -separation. Halves keep the
-// full frame's projection (anamorphic), so tanX is the full frame's.
+// (BF4's own two-eye render): eye 0 (left) is the engine's eye 1 in the left half, eye 1
+// (right) the right half. In BF4's right-handed view space (w = -z) the engine's +s per
+// eye shifts the image by -s (left eye -separation, right eye +separation); tanX is the
+// eye half's own projection (its aspect).
 inline void EyeCrops(const math::FovTangents (&fov)[2], float tanX, float tanY, bool split, float separation,
                      EyeCrop (&out)[2]) {
     if (!split) {
@@ -64,8 +65,8 @@ inline void EyeCrops(const math::FovTangents (&fov)[2], float tanX, float tanY, 
         out[1] = EyeCropRect(fov[1], tanX, tanY);
         return;
     }
-    out[0] = EyeCropRect(fov[0], tanX, tanY, 0.0f, 0.5f, separation);
-    out[1] = EyeCropRect(fov[1], tanX, tanY, 0.5f, 1.0f, -separation);
+    out[0] = EyeCropRect(fov[0], tanX, tanY, 0.0f, 0.5f, -separation);
+    out[1] = EyeCropRect(fov[1], tanX, tanY, 0.5f, 1.0f, separation);
 }
 
 // Capture decision at Present for the lease the camera is carrying.

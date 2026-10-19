@@ -20,3 +20,7 @@ Decisions worth keeping:
   headset's eye distance; its geometry was derived from the projection builder before
   any write (BF4-STEREO.md). Rejected: submitting two views through slot 5 (each view
   renders to its own target object) and alternate-eye frames (two simulation frames).
+- BF4's camera space is right-handed (w = -z projection), so headset poses go in without
+  the Z mirror the generic Frostbite helper applies; the mirror inverted yaw and pitch in
+  the first sessions. The FOV override also sets the view's default FOV so BF4's
+  weapon-size compensation (`+0x258`) does not enlarge the gun in VR.

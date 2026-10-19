@@ -33,7 +33,7 @@ public:
     bool ButtonDown() const { return down_; }
     std::uint64_t Clicks() const { return clicks_; }
 
-    static constexpr float kDragFraction = 0.02f;
+    static constexpr float kDragFraction = 0.06f; // a live click on Resume drifted 63 px of 1920
 
 private:
     bool active_ = false;

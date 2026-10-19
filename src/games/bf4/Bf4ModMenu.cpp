@@ -27,7 +27,7 @@ ui::ModMenuModel BuildModMenu(const game::CapabilityRegistry& caps, bool develop
               state.headTracking ? 1 : 0, true, ""});
     if (developer)
         menu.Add({"world_stereo", "3D depth (experimental)", MenuItemKind::Choice, {"Off", "On"},
-                  state.worldStereo ? 1 : 0, true, "BF4's own side-by-side stereo render. Off if it looks wrong."});
+                  state.worldStereo ? 1 : 0, true, "BF4's own side-by-side render. So far it freezes the game."});
     if (developer)
         menu.Add({"world_settle", "Head-tracking frame sync (developer)", MenuItemKind::Choice,
                   {"1 frame", "2 frames", "3 frames", "4 frames"}, std::clamp(state.worldSettle, 1, 4) - 1, true,

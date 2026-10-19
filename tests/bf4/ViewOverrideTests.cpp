@@ -170,9 +170,10 @@ struct Peek { // reads what the "game" saw during the call
     static void Submit(void*, float, float, std::uint32_t, std::uint8_t* views, void*, void*) {
         std::memcpy(&g_peekFov, views + kViewFovOffset, 4);
         std::memcpy(&g_peekHorizontal, views + kViewHorizontalFovOffset, 4);
+        std::memcpy(&g_peekDefault, views + kViewDefaultFovOffset, 4);
         std::memcpy(&g_peekDirty, views + kViewDirtyOffset, 4);
     }
-    static inline float g_peekFov = 0, g_peekHorizontal = 0;
+    static inline float g_peekFov = 0, g_peekHorizontal = 0, g_peekDefault = 0;
     static inline std::uint32_t g_peekDirty = 0;
 };
 } // namespace
@@ -189,6 +190,8 @@ TEST_CASE(ViewOverrideFovAndPoseRunsForTheWorldLane) {
     std::memcpy(v.bytes + kViewFovOffset, &gameFov, 4);
     std::memcpy(v.bytes + kViewAspectOffset, &aspect, 4);
     std::memcpy(v.bytes + kViewHorizontalFovOffset, &horizontal, 4);
+    const float defaultFov = 0.96f; // the game's baseline FOV (weapon scale reference)
+    std::memcpy(v.bytes + kViewDefaultFovOffset, &defaultFov, 4);
     Views pristine = v;
 
     float seenFov = 0, seenHorizontal = 0;
@@ -205,6 +208,7 @@ TEST_CASE(ViewOverrideFovAndPoseRunsForTheWorldLane) {
     CHECK(Near(seenFov, 1.9f, 1e-6f));
     CHECK(Near(seenHorizontal, 2.0f * std::atan(std::tan(0.95f) * aspect), 1e-5f)); // as the game's setter computes it
     CHECK((seenDirty & kViewFovDirtyBits) == kViewFovDirtyBits);
+    CHECK(Near(Peek::g_peekDefault, 1.9f, 1e-6f)); // weapon scale tan(fov/2)/tan(default/2) becomes 1
     CHECK(std::memcmp(v.bytes, pristine.bytes, sizeof(v.bytes)) == 0); // every byte back
     auto s = vo.GetStats();
     CHECK(s.fovApplied == 1 && s.poseId == 7 && s.poseRun == 1 && Near(s.gameFovY, gameFov, 1e-6f) &&

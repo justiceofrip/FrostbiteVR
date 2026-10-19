@@ -31,6 +31,11 @@ inline constexpr std::uint32_t kViewDirtyBits = 0xB;     // what the setter ORs 
 // both read by the view setup +0x848B00 after it copies the block): vertical FOV in radians,
 // aspect, and the horizontal FOV the setters derive as 2*atan(tan(fov/2)*aspect).
 inline constexpr std::size_t kViewFovOffset = 0xB4;
+// The view's "default" FOV: view update bit 4 (+0xB8C910) derives
+// +0x258 = tan(fov/2) / tan(defaultFov/2), the scale BF4 uses to keep the first-person
+// weapon the same size on screen at any FOV. Writing it with the FOV makes that scale 1,
+// so the gun is drawn at true size in the headset (it was ~3.5x at 111 degrees).
+inline constexpr std::size_t kViewDefaultFovOffset = 0xB8;
 inline constexpr std::size_t kViewAspectOffset = 0xC4;
 inline constexpr std::size_t kViewHorizontalFovOffset = 0x250;
 inline constexpr std::uint32_t kViewFovDirtyBits = 0xF;  // what the FOV setter ORs in
