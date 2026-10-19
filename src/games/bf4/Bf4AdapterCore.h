@@ -175,6 +175,7 @@ private:
     std::vector<PointerEvent> events_;
     std::vector<CameraRequest> camera_;
     math::Pose reference_{};
+    float halfEyeDistance_ = 0; // the headset's, from the latest world request
     bool haveReference_ = false;
     bool recenterWasDown_ = false;
     bool detached_ = false;

@@ -25,14 +25,17 @@ struct EyeCrop {
 };
 
 // tanX/tanY: half-angle tangents of the game's render. Eye tangents: left/down negative.
-inline EyeCrop EyeCropRect(const math::FovTangents& eye, float tanX, float tanY, float bu0 = 0, float bu1 = 1) {
+// shiftNdc: a constant horizontal image shift the render carries (BF4 split stereo shifts
+// each eye's image by +-separation in NDC); the crop takes it back out.
+inline EyeCrop EyeCropRect(const math::FovTangents& eye, float tanX, float tanY, float bu0 = 0, float bu1 = 1,
+                           float shiftNdc = 0) {
     EyeCrop c;
     c.bu0 = bu0;
     c.bu1 = bu1;
     if (!(tanX > 0) || !(tanY > 0) || !(bu1 > bu0)) return {0, 0, 0, 0, bu0, bu1, false};
     const float w = bu1 - bu0;
-    c.u0 = bu0 + w * (0.5f + eye.left / (2 * tanX));
-    c.u1 = bu0 + w * (0.5f + eye.right / (2 * tanX));
+    c.u0 = bu0 + w * (0.5f + eye.left / (2 * tanX) + shiftNdc / 2);
+    c.u1 = bu0 + w * (0.5f + eye.right / (2 * tanX) + shiftNdc / 2);
     c.v0 = 0.5f - eye.up / (2 * tanY);
     c.v1 = 0.5f - eye.down / (2 * tanY);
     constexpr float kSlack = 1e-4f;
@@ -50,6 +53,21 @@ inline float RequiredVerticalFov(const math::FovTangents& left, const math::FovT
     return std::min(2.0f * std::atan(ty * margin), 3.0f);
 }
 
+// Both eye crops of one presented frame. Mono: the same head-centred image. Split stereo
+// (BF4's own two-eye render): eye 0 (left) is the engine's eye 1 in the left half, shifted
+// by +separation; eye 1 (right) is the right half, shifted by -separation. Halves keep the
+// full frame's projection (anamorphic), so tanX is the full frame's.
+inline void EyeCrops(const math::FovTangents (&fov)[2], float tanX, float tanY, bool split, float separation,
+                     EyeCrop (&out)[2]) {
+    if (!split) {
+        out[0] = EyeCropRect(fov[0], tanX, tanY);
+        out[1] = EyeCropRect(fov[1], tanX, tanY);
+        return;
+    }
+    out[0] = EyeCropRect(fov[0], tanX, tanY, 0.0f, 0.5f, separation);
+    out[1] = EyeCropRect(fov[1], tanX, tanY, 0.5f, 1.0f, -separation);
+}
+
 // Capture decision at Present for the lease the camera is carrying.
 struct WorldCaptureInput {
     bool leaseHeld = false;
@@ -59,6 +77,7 @@ struct WorldCaptureInput {
     std::uint32_t settle = 2;        // submits needed before the presented frame must show it
     std::uint64_t leaseAgeMs = 0;
     bool untracked = false;          // emulator only: no camera, publish the frame as it is
+    std::uint32_t stableFrames = ~0u; // presents since the stereo/mono layout last changed
 };
 enum class WorldStep { None, Wait, Capture, Cancel };
 inline constexpr std::uint64_t kWorldLeaseMaxMs = 140; // host requests live 150 ms
@@ -66,7 +85,9 @@ inline constexpr std::uint64_t kWorldLeaseMaxMs = 140; // host requests live 150
 inline WorldStep DecideWorldStep(const WorldCaptureInput& in) {
     if (!in.leaseHeld) return WorldStep::None;
     if (in.untracked) return WorldStep::Capture;
-    if (in.leasePoseId && in.appliedPoseId == in.leasePoseId && in.appliedRun >= std::max(1u, in.settle))
+    // A frame rendered across a mono/stereo switch could be either layout: wait it out.
+    const bool layoutSettled = in.stableFrames >= std::max(1u, in.settle) + 2;
+    if (in.leasePoseId && in.appliedPoseId == in.leasePoseId && in.appliedRun >= std::max(1u, in.settle) && layoutSettled)
         return WorldStep::Capture;
     return in.leaseAgeMs > kWorldLeaseMaxMs ? WorldStep::Cancel : WorldStep::Wait;
 }

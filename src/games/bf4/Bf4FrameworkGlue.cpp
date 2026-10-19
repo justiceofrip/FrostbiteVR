@@ -96,10 +96,12 @@ public:
             in.settle = meta.worldSettle;
             in.leaseAgeMs = now - leaseTakenMs_;
             in.untracked = untracked_;
+            in.stableFrames = meta.stereoStableFrames;
             const WorldStep step = worldAllowed ? DecideWorldStep(in) : WorldStep::Cancel;
             if (step == WorldStep::Capture) {
                 pair = CapturePair(context, backbuffer, meta);
                 if (!pair) ++captureFailures_;
+                else if (meta.stereoSplit) ++stereoPairs_;
             }
             if (step == WorldStep::Cancel || (step == WorldStep::Capture && !pair)) CancelLease();
         }
@@ -124,14 +126,15 @@ public:
         char line[512];
         std::snprintf(line, sizeof(line),
                       "theater_link connected=%d epoch=%llu states=%llu captured=%llu published=%llu failed=%llu discarded=%llu "
-                      "lane=%s bridge=%d leases=%llu pairs=%llu cancels=%llu capture_failures=%llu fallbacks=%llu "
+                      "lane=%s bridge=%d leases=%llu pairs=%llu stereo_pairs=%llu cancels=%llu capture_failures=%llu fallbacks=%llu "
                       "bridge_published=%llu consumed=%llu host_discarded=%llu bridge_failure=%u/0x%08lx resampler=%u/0x%08lx%s\n",
                       !token_.empty() && !closed_ ? 1 : 0, static_cast<unsigned long long>(epoch_),
                       static_cast<unsigned long long>(statesPublished_), static_cast<unsigned long long>(producer_.Captured()),
                       static_cast<unsigned long long>(producer_.Published()), static_cast<unsigned long long>(producer_.Failed()),
                       static_cast<unsigned long long>(producer_.Discarded()), world_ ? "world" : "theater",
                       bridge_ && bridge_->Connected() ? 1 : 0, static_cast<unsigned long long>(leases_),
-                      static_cast<unsigned long long>(pairs_), static_cast<unsigned long long>(cancels_),
+                      static_cast<unsigned long long>(pairs_), static_cast<unsigned long long>(stereoPairs_),
+                      static_cast<unsigned long long>(cancels_),
                       static_cast<unsigned long long>(captureFailures_), static_cast<unsigned long long>(gate_.Fallbacks()),
                       static_cast<unsigned long long>(bridge_ ? bridge_->Published() : 0),
                       static_cast<unsigned long long>(bridge_ ? bridge_->Consumed() : 0),
@@ -139,6 +142,11 @@ public:
                       static_cast<unsigned long>(bridge_ ? bridge_->FailureCode() : 0), resampler_.LastStage(),
                       static_cast<unsigned long>(resampler_.LastError()), untracked_ ? " untracked" : "");
         return line;
+    }
+
+    bool WorldLane() {
+        std::lock_guard lock(mutex_);
+        return world_;
     }
 
     void Release() {
@@ -176,6 +184,10 @@ public:
             out.world.head = lease_.tracking.head;
             out.world.fov[0] = lease_.tracking.fov[0];
             out.world.fov[1] = lease_.tracking.fov[1];
+            const auto& e = lease_.tracking.eyes;
+            const float dx = e[1].position.x - e[0].position.x, dy = e[1].position.y - e[0].position.y,
+                        dz = e[1].position.z - e[0].position.z;
+            out.world.halfEyeDistance = 0.5f * std::sqrt(dx * dx + dy * dy + dz * dz) * lease_.tracking.worldUnitsPerMeter;
         }
         ipc::MenuControl c{};
         const auto r = channel_.ReadControl(c);
@@ -238,7 +250,9 @@ private:
         if (untracked_) fovY = RequiredVerticalFov(t.fov[0], t.fov[1], aspect);
         if (!(fovY > 0.05f && fovY < 3.1f)) return false;
         const float tanY = std::tan(fovY * 0.5f), tanX = tanY * aspect;
-        const EyeCrop crops[2] = {EyeCropRect(t.fov[0], tanX, tanY), EyeCropRect(t.fov[1], tanX, tanY)};
+        EyeCrop crops[2];
+        const math::FovTangents fov[2] = {t.fov[0], t.fov[1]};
+        EyeCrops(fov, tanX, tanY, meta.stereoSplit && !untracked_, meta.stereoSeparation, crops);
         if (!resampler_.Render(context, backbuffer, crops, req.width, req.height, req.format)) return false;
         if (!bridge_->CaptureEye(0, resampler_.Eye(0), lease_) || !bridge_->CaptureEye(1, resampler_.Eye(1), lease_) ||
             !bridge_->PublishRestored(lease_))
@@ -307,7 +321,7 @@ private:
     ipc::FrameLease lease_{};
     bool leaseHeld_ = false, world_ = false, untracked_ = false;
     std::uint64_t leasePoseId_ = 0, nextPoseId_ = 0, frameSerial_ = 0, deviceEpoch_ = 0;
-    std::uint64_t leases_ = 0, pairs_ = 0, cancels_ = 0, captureFailures_ = 0;
+    std::uint64_t leases_ = 0, pairs_ = 0, stereoPairs_ = 0, cancels_ = 0, captureFailures_ = 0;
     ULONGLONG leaseTakenMs_ = 0, untrackedCheckedMs_ = 0;
     std::uint64_t sequence_ = 0, epoch_ = 0, lastToggle_ = 0, statesPublished_ = 0;
     ULONGLONG lastAttempt_ = 0;
@@ -338,6 +352,7 @@ public:
         return true;
     }
     std::string Describe() const override { return link_.Describe(); }
+    bool WorldLane() const override { return link_.WorldLane(); }
 
 private:
     TheaterLink& link_;

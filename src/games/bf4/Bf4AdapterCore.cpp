@@ -98,6 +98,10 @@ void AdapterCore::ApplyMenuCommand(const ModMenuCommand& command) {
         menuState_.headTracking = command.value != 0;
         platform_.Log(menuState_.headTracking ? "campaign view: head-tracked" : "campaign view: screen");
         break;
+    case ModMenuAction::SetWorldStereo:
+        menuState_.worldStereo = command.value != 0;
+        platform_.Log(menuState_.worldStereo ? "3D depth: on" : "3D depth: off");
+        break;
     case ModMenuAction::SetWorldSettle:
         menuState_.worldSettle = std::clamp(command.value, 1, 4);
         platform_.Log("head-tracking frame sync: " + std::to_string(menuState_.worldSettle) + " frame(s)");
@@ -393,6 +397,9 @@ void AdapterCore::OnFrame(const PlatformFrame& f, const ControllerSnapshot& in) 
         meta.menuVisible = in.pointer.active;
         meta.world = stereo_ == StereoMode::Mono; // head-tracked view goes to the headset as eye pairs
         meta.worldSettle = static_cast<std::uint32_t>(menuState_.worldSettle);
+        meta.worldStereo = session_.developerFeatures && menuState_.worldStereo;
+        if (in.world.valid && in.world.halfEyeDistance > 0) halfEyeDistance_ = in.world.halfEyeDistance;
+        meta.halfEyeDistance = halfEyeDistance_;
         const bool enginePair = pair && (stereo_ == StereoMode::Theater3D || stereo_ == StereoMode::EngineStereoTracked);
         if (enginePair) {
             if (session_.stereoRoute == StereoRoute::Split) meta.width = f.backbufferWidth / 2; // one half per eye

@@ -22,6 +22,8 @@
 #include "Bf4FiringCensus.h"
 #include "Bf4ViewOverride.h"
 #include "Bf4SessionSignals.h"
+#include "Bf4EngineStereo.h"
+#include "Bf4WorldView.h"
 #include "fvr/graphics/GdiPanelRaster.h"
 #include "stereo/SideBySide.h"
 
@@ -80,6 +82,9 @@ private:
 constexpr char kAnalyzedBuildSha256[] = "9d9d1a3fca6ffd4c34a543b3fd7b049336ddbd43c0e6c5eee742e51431a6c2aa";
 bool ReadChecked(std::uintptr_t address, void* out, std::size_t size); // VirtualQuery-checked copy
 std::string ReadCStringChecked(std::uintptr_t address, std::size_t maxLength = 160);
+// Render device (docs/BF4-STEREO.md): global and class, analysed build only.
+constexpr std::uintptr_t kRenderDeviceGlobalRva = 0x2738080;
+constexpr std::uintptr_t kRenderDeviceClassRva = 0x1DD1870;
 // R5 single-player signals (docs/BF4-SESSION-RE.md), analysed build only.
 constexpr std::uintptr_t kClientGameContextRva = 0x2670D80;
 constexpr std::uintptr_t kLevelInfoRva = 0x27A1918;
@@ -129,6 +134,78 @@ public:
     ViewOverride viewOverride;
     std::uint64_t lastSubmits_ = 0;
     ULONGLONG lastSubmitMs_ = 0;
+
+    // Game memory for the engine stereo controller: VirtualQuery-checked, writes only to
+    // committed read-write pages.
+    struct Win32Memory final : runtime::IMemory {
+        bool Read(std::uint64_t address, void* out, std::size_t size) override {
+            return ReadChecked(static_cast<std::uintptr_t>(address), out, size);
+        }
+        bool Write(std::uint64_t address, const void* in, std::size_t size) override {
+            MEMORY_BASIC_INFORMATION mbi{};
+            if (address < 0x10000 || !VirtualQuery(reinterpret_cast<LPCVOID>(address), &mbi, sizeof(mbi)) ||
+                mbi.State != MEM_COMMIT || !(mbi.Protect & (PAGE_READWRITE | PAGE_EXECUTE_READWRITE)) ||
+                (mbi.Protect & PAGE_GUARD) ||
+                address + size > reinterpret_cast<std::uintptr_t>(mbi.BaseAddress) + mbi.RegionSize)
+                return false;
+            std::memcpy(reinterpret_cast<void*>(address), in, size);
+            return true;
+        }
+    } gameMemory;
+    EngineStereo engineStereo{gameMemory};
+    EngineStereo::Status lastStereoStatus = EngineStereo::Status::Off;
+    bool lastSplit = false;
+    std::uint32_t splitStableFrames = 0;
+    ULONGLONG worldLaneSinceMs = 0;
+    EngineStereoReading lastReading{};
+    float lastTanX = 0;
+
+    std::string DescribeEngineStereo() const {
+        static const char* names[] = {"off", "on", "refused", "handed-back"};
+        char line[200];
+        std::snprintf(line, sizeof(line), "engine_stereo=%s split=%d separation=%.5f convergence=%.3f half_eye=%.4f adjustments=%llu",
+                      names[static_cast<int>(engineStereo.State())], lastReading.SplitActive() ? 1 : 0, lastReading.separation,
+                      lastReading.convergence, lastReading.HalfEyeDistance(lastTanX),
+                      static_cast<unsigned long long>(engineStereo.Adjustments()));
+        return line;
+    }
+
+    // World-lane stereo: BF4's own split-screen two-eye render, on only while the headset
+    // shows the world lane (a theater panel must never be side by side).
+    void UpdateEngineStereo(FrameMeta& m, const FrameMeta& meta, float tanX) {
+        // 3D starts after 10 s of working head tracking, so a first session shows each step.
+        const bool lane = m.world && frames && frames->WorldLane();
+        const ULONGLONG now = GetTickCount64();
+        if (!lane) worldLaneSinceMs = 0;
+        else if (!worldLaneSinceMs) worldLaneSinceMs = now;
+        const bool wanted = lane && now - worldLaneSinceMs >= 10000 && meta.worldStereo &&
+                            exeSha256 == kAnalyzedBuildSha256 && meta.halfEyeDistance > 0 && tanX > 0;
+        const auto base = reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
+        if (wanted && engineStereo.State() == EngineStereo::Status::Off)
+            engineStereo.Enable({base + kRenderDeviceGlobalRva, base + kRenderDeviceClassRva}, meta.halfEyeDistance, tanX);
+        else if (!wanted && engineStereo.State() == EngineStereo::Status::On)
+            engineStereo.Disable();
+        if (engineStereo.State() == EngineStereo::Status::On) engineStereo.Update(meta.halfEyeDistance, tanX);
+        const EngineStereoReading r = engineStereo.State() == EngineStereo::Status::On ? engineStereo.Read() : EngineStereoReading{};
+        if (engineStereo.State() != lastStereoStatus) {
+            static const char* names[] = {"off", "on", "refused (device or settings not as analysed)", "handed back (game changed a value)"};
+            log_.Write("engine stereo: %s (half eye distance %.4f, tanX %.3f)", names[static_cast<int>(engineStereo.State())],
+                       meta.halfEyeDistance, tanX);
+            lastStereoStatus = engineStereo.State();
+        }
+        const bool split = r.SplitActive();
+        splitStableFrames = split == lastSplit ? splitStableFrames + 1 : 0;
+        if (split != lastSplit)
+            log_.Write("engine stereo render: %s (mode=%u on=%d separation=%.5f convergence=%.3f half_eye=%.4f adjustments=%llu)",
+                       split ? "side by side" : "single view", r.mode, r.on ? 1 : 0, r.separation, r.convergence,
+                       r.HalfEyeDistance(tanX), static_cast<unsigned long long>(engineStereo.Adjustments()));
+        lastSplit = split;
+        lastReading = r;
+        lastTanX = tanX;
+        m.stereoSplit = split;
+        m.stereoSeparation = r.separation;
+        m.stereoStableFrames = splitStableFrames;
+    }
     bool viewInstallRefused = false;
 
     static void __cdecl OnEye(int eye, void* context) {
@@ -488,6 +565,8 @@ public:
             m.poseRun = st.poseRun;
             m.renderFovY = st.renderedFovY;
         }
+        const float tanX = m.renderFovY > 0 && meta.height ? std::tan(m.renderFovY * 0.5f) * float(meta.width) / float(meta.height) : 0.0f;
+        UpdateEngineStereo(m, meta, tanX);
         ID3D11Device* device = nullptr;
         ID3D11Texture2D* back = nullptr;
         bool ok = false;
@@ -574,6 +653,7 @@ public:
     void DetachAll(std::string_view reason) override {
         pointer.Uninstall();
         padSink.Deactivate();
+        engineStereo.Disable();
         RemoveViewOverride();
         log_.Write("detaching all hooks: %.*s", static_cast<int>(reason.size()), reason.data());
         // Never patch code from inside the Present detour; a worker does it. MinHook
@@ -646,6 +726,7 @@ bool Adopt(Adapter& a, IDXGISwapChain* sc) {
 void ResearchTick(Adapter& a); // developer research channel, defined below
 void CameraProbeTick(Adapter& a); // read-only camera discovery, defined below
 void SessionProbeTick(Adapter& a); // read-only session-signal discovery, defined below
+void StereoProbeTick(Adapter& a); // read-only stereo route evidence, defined below
 void FiringCensusTick(Adapter& a); // read-only weapon-firing census, defined below
 
 void OnPresent(Adapter& a, IDXGISwapChain* sc) {
@@ -654,6 +735,7 @@ void OnPresent(Adapter& a, IDXGISwapChain* sc) {
         ResearchTick(a);
         CameraProbeTick(a);
         SessionProbeTick(a);
+        StereoProbeTick(a);
         FiringCensusTick(a);
     }
     PlatformFrame f;
@@ -685,7 +767,8 @@ void OnPresent(Adapter& a, IDXGISwapChain* sc) {
                     static_cast<long>(f.clientWidth), static_cast<long>(f.clientHeight));
         std::string v = a.platform.DescribeViewOverride(); // world lane: pose runs and FOV in the same log
         while (!v.empty() && (v.back() == '\n' || v.back() == '\r')) v.pop_back();
-        a.log.Write("%s stereo=%s", v.c_str(), std::string(StereoModeName(a.core->Stereo())).c_str());
+        a.log.Write("%s stereo=%s %s", v.c_str(), std::string(StereoModeName(a.core->Stereo())).c_str(),
+                    a.platform.DescribeEngineStereo().c_str());
     }
 }
 
@@ -879,6 +962,63 @@ std::string ReadCStringChecked(std::uintptr_t address, std::size_t maxLength) {
     for (std::size_t i = 0; i < maxLength && address && ReadChecked(address + i, &c, 1) && c; ++i)
         out.push_back(c >= 0x20 && c < 0x7F ? c : '?');
     return out;
+}
+
+// Read-only stereo evidence (docs/CURRENT-BF4.md "Stereo"): the render device the
+// GameRenderer constructor stores in +0x2738080 (vtable +0x1DD1870), its settings at +0x80
+// (RenderDevice.* reflection offsets), output 0's per-frame stereo fields (+0xC12FF0 writes
+// them), and view 0's projection inputs (projection builder +0xB7EA10: type +0xB0, frustum
+// offsets +0x90/+0x98/+0xA0, +0xC8..+0xD4, flags +0xD8/+0xD9, target +0xEA8). Logged at
+// ~5 s, ~20 s and then every ~2 min in developer sessions.
+
+void StereoProbeTick(Adapter& a) {
+    if (!a.session.developerFeatures || a.session.exeSha256 != kAnalyzedBuildSha256 || !a.core) return;
+    const std::uint64_t frame = a.core->Stats().frames;
+    if (frame != 300 && frame != 1200 && (frame < 1200 || frame % 7200)) return;
+    const auto base = reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
+    std::uintptr_t device = 0, vtable = 0, settings = 0, outputs = 0;
+    std::uint32_t outputCount = 0;
+    const bool haveDevice = ReadChecked(base + kRenderDeviceGlobalRva, &device, 8) && device && ReadChecked(device, &vtable, 8);
+    const bool expected = haveDevice && vtable == base + kRenderDeviceClassRva;
+    if (!expected) {
+        a.log.Write("stereo probe: device=%p vtable=+0x%llx (not the analysed render device)", reinterpret_cast<void*>(device),
+                    static_cast<unsigned long long>(vtable ? vtable - base : 0));
+        return;
+    }
+    ReadChecked(device + 0x80, &settings, 8);
+    ReadChecked(device + 0x30, &outputCount, 4);
+    ReadChecked(device + 0x38, &outputs, 8);
+    std::uint8_t s[0x84] = {};
+    const bool haveSettings = settings && ReadChecked(settings, s, sizeof(s));
+    auto f32 = [](const std::uint8_t* p, std::size_t off) { float v; std::memcpy(&v, p + off, 4); return v; };
+    auto u32 = [](const std::uint8_t* p, std::size_t off) { std::uint32_t v; std::memcpy(&v, p + off, 4); return v; };
+    std::uint8_t o[0x90] = {};
+    const bool haveOutput = outputs && outputCount && ReadChecked(outputs, o, sizeof(o));
+    std::uint16_t ow = 0, oh = 0;
+    if (haveOutput) { std::memcpy(&ow, o + 0x58, 2); std::memcpy(&oh, o + 0x5C, 2); }
+    a.log.Write("stereo probe: device=%p outputs=%u settings=%p fullscreen=%ux%u render_ahead=%d stereo_depth=%.3f "
+                "convergence_scale=%.3f separation_scale=%.3f stereo_enable=%u split_screen=%u | output0 %ux%u mode=%u on=%u "
+                "convergence=%.4f separation=%.4f",
+                reinterpret_cast<void*>(device), outputCount, reinterpret_cast<void*>(settings),
+                haveSettings ? u32(s, 0x2C) : 0, haveSettings ? u32(s, 0x28) : 0,
+                haveSettings ? static_cast<int>(u32(s, 0x40)) : -1, haveSettings ? f32(s, 0x44) : 0.0f,
+                haveSettings ? f32(s, 0x48) : 0.0f, haveSettings ? f32(s, 0x4C) : 0.0f, haveSettings ? s[0x7D] : 0xFF,
+                haveSettings ? s[0x7E] : 0xFF, ow, oh, haveOutput ? u32(o, 0x7C) : 0xFFFFFFFF, haveOutput ? o[0x80] : 0xFF,
+                haveOutput ? f32(o, 0x84) : 0.0f, haveOutput ? f32(o, 0x88) : 0.0f);
+    std::uintptr_t renderer = 0, views = 0;
+    std::uint8_t v[0xEB0] = {};
+    if (ReadChecked(base + kRendererGlobalRva, &renderer, 8) && renderer && ReadChecked(renderer + 0x60, &views, 8) && views &&
+        ReadChecked(views, v, sizeof(v))) {
+        std::uintptr_t target = 0;
+        std::memcpy(&target, v + 0xEA8, 8);
+        std::uint32_t count = 0;
+        ReadChecked(renderer + 0x58, &count, 4);
+        a.log.Write("stereo probe: views=%u view0 type=%u fov=%.3f aspect=%.3f off90=(%.4f %.4f) off98=(%.4f %.4f) "
+                    "offA0=(%.4f %.4f) c8=%.4f cc=%.4f d0=%.4f d4=%.4f d8=%u d9=%u secondary=%u target=%p",
+                    count, u32(v, 0xB0), f32(v, 0xB4), f32(v, 0xC4), f32(v, 0x90), f32(v, 0x94), f32(v, 0x98), f32(v, 0x9C),
+                    f32(v, 0xA0), f32(v, 0xA4), f32(v, 0xC8), f32(v, 0xCC), f32(v, 0xD0), f32(v, 0xD4), v[0xD8], v[0xD9],
+                    v[0xEA0], reinterpret_cast<void*>(target));
+    }
 }
 
 void SessionProbeTick(Adapter& a) {

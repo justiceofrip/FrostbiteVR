@@ -34,6 +34,12 @@ struct FrameMeta {
     std::uint64_t poseId = 0;
     std::uint32_t poseRun = 0;
     float renderFovY = 0;     // vertical FOV the tagged frames were rendered with (radians)
+    // Stereo: the core asks (mod menu), the platform reports what the engine renders.
+    bool worldStereo = false;
+    float halfEyeDistance = 0;        // the headset's, world units
+    bool stereoSplit = false;         // this frame is BF4's side-by-side two-eye render
+    float stereoSeparation = 0;       // the engine's per-eye NDC shift for that render
+    std::uint32_t stereoStableFrames = ~0u;
 };
 
 class IFrameSink {
@@ -45,6 +51,7 @@ public:
     // An adapter-owned image (the mod menu panel) on the same lane, same device as the game.
     virtual bool PublishTexture(ID3D11Texture2D*, std::uint32_t /*width*/, std::uint32_t /*height*/) { return false; }
     virtual std::string Describe() const { return {}; } // one status line (diagnostics)
+    virtual bool WorldLane() const { return false; }    // the headset shows the world lane now
 };
 
 struct GamePointer {
@@ -65,6 +72,7 @@ struct WorldRequest {
     std::uint64_t poseId = 0;
     math::Pose head;
     math::FovTangents fov[2];
+    float halfEyeDistance = 0; // half the distance between the request's eye positions (world units)
 };
 
 struct ControllerSnapshot {

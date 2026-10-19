@@ -12,6 +12,9 @@
 #include "../../src/games/bf4/Bf4ResearchControl.h"
 #include "../../src/games/bf4/Bf4CameraProbe.h"
 #include "../../src/games/bf4/Bf4WorldView.h"
+#include "../../src/games/bf4/Bf4EngineStereo.h"
+
+#include <map>
 #include "../../src/games/bf4/Bf4SessionGuard.h"
 #include "../../src/games/bf4/Bf4SessionInfo.h"
 #include "../../src/games/bf4/Bf4SessionSignals.h"
@@ -364,4 +367,140 @@ TEST_CASE(WorldLaneCropsDecisionsAndFallback) {
     CHECK(!gate.Update(true, false, 10000));
     CHECK(gate.Update(true, false, 10500) && gate.World());
     CHECK(!gate.Update(false, false, 10600) && !gate.World()); // a menu or loading screen leaves at once
+}
+
+namespace {
+// A render device laid out as on the analysed build: global -> device (vtable, settings at
+// +0x80, outputs at +0x38, count at +0x30) -> settings (RenderDevice.* fields) and output 0.
+struct FakeDeviceMemory final : fvr::runtime::IMemory {
+    std::map<std::uint64_t, std::uint8_t> bytes;
+    bool engineTenth = false; // the two-eye loop's extra 0.1 factor (seen under some condition)
+    static constexpr std::uint64_t kGlobal = 0x1000, kDevice = 0x2000, kSettings = 0x3000, kOutputs = 0x4000;
+    static constexpr std::uint64_t kVtable = 0x140001DD1870ULL;
+    bool Read(std::uint64_t a, void* out, std::size_t n) override {
+        auto* o = static_cast<std::uint8_t*>(out);
+        for (std::size_t i = 0; i < n; ++i) {
+            const auto it = bytes.find(a + i);
+            if (it == bytes.end()) return false;
+            o[i] = it->second;
+        }
+        return true;
+    }
+    bool Write(std::uint64_t a, const void* in, std::size_t n) override {
+        const auto* p = static_cast<const std::uint8_t*>(in);
+        for (std::size_t i = 0; i < n; ++i) {
+            if (!bytes.count(a + i)) return false;
+            bytes[a + i] = p[i];
+        }
+        return true;
+    }
+    template <typename T> void Put(std::uint64_t a, T v) {
+        std::uint8_t b[sizeof(T)];
+        std::memcpy(b, &v, sizeof(T));
+        for (std::size_t i = 0; i < sizeof(T); ++i) bytes[a + i] = b[i];
+    }
+    template <typename T> T Get(std::uint64_t a) {
+        T v{};
+        Read(a, &v, sizeof(T));
+        return v;
+    }
+    FakeDeviceMemory() {
+        for (std::uint64_t a = kSettings; a < kSettings + 0x90; ++a) bytes[a] = 0;
+        for (std::uint64_t a = kOutputs; a < kOutputs + 0x138; ++a) bytes[a] = 0;
+        Put(kGlobal, kDevice);
+        Put(kDevice, kVtable);
+        Put(kDevice + 0x30, std::uint32_t{1});
+        Put(kDevice + 0x38, kOutputs);
+        Put(kDevice + 0x80, kSettings);
+        Put(kSettings + 0x28, std::uint32_t{1080});
+        Put(kSettings + 0x2C, std::uint32_t{1920});
+        Put(kSettings + 0x44, 1.0f);  // StereoDepth
+        Put(kSettings + 0x48, 1.0f);  // StereoConvergenceScale
+        Put(kSettings + 0x4C, 1.0f);  // StereoSeparationScale
+    }
+    // +0xC12FF0, then the two-eye loop's optional factor.
+    void EngineFrame() {
+        const bool split = Get<std::uint8_t>(kSettings + 0x7D) && Get<std::uint8_t>(kSettings + 0x7E);
+        Put(kOutputs + 0x84, Get<float>(kSettings + 0x48) * 0.1f);
+        float sep = Get<float>(kSettings + 0x44) * 0.01f * Get<float>(kSettings + 0x4C);
+        if (engineTenth) sep *= 0.1f;
+        Put(kOutputs + 0x88, sep);
+        Put(kOutputs + 0x7C, std::uint32_t{split ? 1u : 0u});
+        Put(kOutputs + 0x80, std::uint8_t{split ? std::uint8_t{1} : std::uint8_t{0}});
+    }
+};
+} // namespace
+
+TEST_CASE(EngineStereoDrivesSplitRenderAndRestoresExactly) {
+    using namespace fvr::bf4;
+    const EngineStereoLayout layout{FakeDeviceMemory::kGlobal, FakeDeviceMemory::kVtable};
+    const float half = 0.032f, tanX = 2.1f;
+    {
+        FakeDeviceMemory mem;
+        const auto before = mem.bytes;
+        EngineStereo wrongClass(mem);
+        CHECK(wrongClass.Enable({FakeDeviceMemory::kGlobal, FakeDeviceMemory::kVtable + 8}, half, tanX) ==
+              EngineStereo::Status::Refused);
+        CHECK(mem.bytes == before); // nothing written for an unexpected object
+    }
+    FakeDeviceMemory mem;
+    const auto pristine = mem.bytes;
+    {
+        EngineStereo stereo(mem);
+        CHECK(stereo.Enable(layout, half, tanX) == EngineStereo::Status::On);
+        mem.EngineFrame();
+        auto r = stereo.Read();
+        CHECK(r.SplitActive() && Near(r.convergence, EngineStereo::kConvergenceMeters, 1e-4f));
+        CHECK(Near(r.HalfEyeDistance(tanX), half, 1e-5f)); // the engine's eyes sit at the headset's
+        for (int i = 0; i < 40; ++i) { stereo.Update(half, tanX); mem.EngineFrame(); }
+        CHECK(stereo.Adjustments() == 0);
+
+        // The two-eye loop scales separation by 0.1 under some condition: measured and corrected.
+        mem.engineTenth = true;
+        mem.EngineFrame();
+        for (int i = 0; i < 40; ++i) { stereo.Update(half, tanX); mem.EngineFrame(); }
+        CHECK(stereo.Adjustments() == 1 && Near(stereo.Read().HalfEyeDistance(tanX), half, 1e-5f));
+
+        stereo.Disable();
+        mem.EngineFrame();
+        CHECK(!stereo.Read().SplitActive());
+        // Every settings byte is back (outputs are the engine's own per-frame values).
+        bool same = true;
+        for (std::uint64_t a = FakeDeviceMemory::kSettings; a < FakeDeviceMemory::kSettings + 0x90; ++a)
+            same = same && mem.bytes[a] == pristine.at(a);
+        CHECK(same);
+    }
+    {
+        FakeDeviceMemory game;
+        EngineStereo stereo(game);
+        CHECK(stereo.Enable(layout, half, tanX) == EngineStereo::Status::On);
+        game.Put(FakeDeviceMemory::kSettings + 0x4C, 0.5f); // the game changed the scale itself
+        stereo.Update(half, tanX);
+        CHECK(stereo.State() == EngineStereo::Status::Foreign);
+        CHECK(Near(game.Get<float>(FakeDeviceMemory::kSettings + 0x4C), 0.5f)); // the game's value stays
+        CHECK(game.Get<std::uint8_t>(FakeDeviceMemory::kSettings + 0x7E) == 0); // ours went back
+    }
+    CHECK(Near(EngineStereo::NextSeparationScale(1.0f, 0.0032f, 0.032f), 10.0f, 1e-4f));
+    CHECK(Near(EngineStereo::NextSeparationScale(1.0f, 1.0f, 1000.0f), 10.0f, 1e-4f)); // clamped step
+
+    // Split crops: left eye from the left half shifted by +separation, right from the right half.
+    const float tanY = 1.2f;
+    const fvr::math::FovTangents fov[2] = {{-1.0f, 0.8f, 1.0f, -1.1f}, {-0.8f, 1.0f, 1.0f, -1.1f}};
+    EyeCrop c[2];
+    EyeCrops(fov, tanX, tanY, true, 0.01f, c);
+    CHECK(Near(c[0].bu0, 0.0f) && Near(c[0].bu1, 0.5f) && Near(c[1].bu0, 0.5f) && Near(c[1].bu1, 1.0f));
+    CHECK(Near(c[0].u0, 0.5f * (0.5f - 1.0f / (2 * tanX) + 0.005f), 1e-6f));
+    CHECK(Near(c[1].u1, 0.5f + 0.5f * (0.5f + 1.0f / (2 * tanX) - 0.005f), 1e-6f));
+    EyeCrops(fov, tanX, tanY, false, 0.01f, c);
+    CHECK(Near(c[0].bu1, 1.0f) && Near(c[0].u0, 0.5f - 1.0f / (2 * tanX)));
+
+    // No capture across a mono/stereo switch until the layout has been stable for settle + 2.
+    WorldCaptureInput in;
+    in.leaseHeld = true;
+    in.leasePoseId = in.appliedPoseId = 3;
+    in.appliedRun = 2;
+    in.stableFrames = 3;
+    CHECK(DecideWorldStep(in) == WorldStep::Wait);
+    in.stableFrames = 4;
+    CHECK(DecideWorldStep(in) == WorldStep::Capture);
 }

@@ -15,5 +15,8 @@ Decisions worth keeping:
   one render.
 - The world lane must never leave the headset black: it runs only while world views are
   submitted and falls back to the theater panel after 2.5 s without a pair.
-- Stereo next: BF4's split-screen stereo route (render device `+0x2738080`, settings
-  `+0x80`, read-only flag `+0x7E`) needs its per-eye geometry found before use.
+- Stereo uses BF4's own split-screen two-eye render (both eyes in one native frame),
+  switched on at runtime by an exact-write of its two settings flags and driven to the
+  headset's eye distance; its geometry was derived from the projection builder before
+  any write (BF4-STEREO.md). Rejected: submitting two views through slot 5 (each view
+  renders to its own target object) and alternate-eye frames (two simulation frames).

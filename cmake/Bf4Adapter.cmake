@@ -32,6 +32,7 @@ add_library(FvrBf4Core STATIC
   src/games/bf4/Bf4ModMenu.cpp
   src/games/bf4/Bf4ResearchControl.cpp
   src/games/bf4/Bf4ViewOverride.cpp
+  src/games/bf4/Bf4EngineStereo.cpp
   src/games/bf4/Bf4ReloadClassifier.cpp
   src/games/bf4/Bf4ReloadDriver.cpp
   src/games/bf4/stereo/NvapiStereoEmu.cpp

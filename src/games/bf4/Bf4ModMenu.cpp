@@ -26,6 +26,9 @@ ui::ModMenuModel BuildModMenu(const game::CapabilityRegistry& caps, bool develop
     menu.Add({"view_mode", "In campaign levels", MenuItemKind::Choice, {"Screen", "Head-tracked view"},
               state.headTracking ? 1 : 0, true, ""});
     if (developer)
+        menu.Add({"world_stereo", "3D depth (experimental)", MenuItemKind::Choice, {"Off", "On"},
+                  state.worldStereo ? 1 : 0, true, "BF4's own side-by-side stereo render. Off if it looks wrong."});
+    if (developer)
         menu.Add({"world_settle", "Head-tracking frame sync (developer)", MenuItemKind::Choice,
                   {"1 frame", "2 frames", "3 frames", "4 frames"}, std::clamp(state.worldSettle, 1, 4) - 1, true,
                   "Raise it if the world swims when you turn your head."});
@@ -65,6 +68,7 @@ ModMenuCommand InterpretChange(const MenuItem& item) {
     if (item.id == "game_menu") return {ModMenuAction::GameMenu, 0};
     if (item.id == "view_mode") return {ModMenuAction::SetHeadTracking, item.value};
     if (item.id == "world_settle") return {ModMenuAction::SetWorldSettle, item.value + 1};
+    if (item.id == "world_stereo") return {ModMenuAction::SetWorldStereo, item.value};
     return {};
 }
 

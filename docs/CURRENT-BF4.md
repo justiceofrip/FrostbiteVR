@@ -60,24 +60,37 @@ screen. Pieces (all on the analysed build only):
   fake OpenXR runtime submitted 165 pairs from the emulated game, 0 rejected, 0 runtime
   errors. Not yet seen in the real game: the settle depth (main thread vs render thread),
   BF4 accepting the wider FOV, pair rate in game.
-- Known gaps: mono only; pair rate is bounded by one request in flight (host asks again
+- Known gaps: mono until engine stereo engages (below); pair rate is bounded by one request in flight (host asks again
   only after the previous pair is consumed) plus `settle` frames, so the world updates
   slower than the headset (the compositor reprojects head rotation every frame); HUD and
   pause menu are drawn into the wide frame (pause menu: use the pad, or switch to Screen);
   first-person weapon not yet re-projected.
 
-## Stereo (see BF4-STEREO.md)
+## Stereo: BF4's own two-eye render in the world lane (2026-10-19, built; headset check pending)
 
-- Not working yet; the world lane is mono. BF4 has a split-screen route
-  (`StereoSplitScreenEnable`, read-only on PC; per output mode 1 renders both eyes in one
-  frame) and a 3D Vision route gated on `RenderDevice.StereoEnable` **at render-device
-  creation** (user.cfg is too late). New static facts (2026-10-19): the render device is
-  the 0x610-byte object (vtable `+0x1DD1870`) the GameRenderer constructor creates and
-  stores in global `+0x2738080`; its settings are at `+0x80` (the fields above), outputs
-  at `+0x38` (stride 0x138, count `+0x30`; per output: mode `+0x7C`, on `+0x80`,
-  convergence `+0x84`, separation `+0x88`). Next: find where mode 1 builds the two eye
-  views (the per-eye geometry must be known before the world lane can use it), then a
-  live read-only check of `[[+0x2738080]+0x80]`.
+- Static evidence (BF4-STEREO.md "Split-screen stereo, traced"): the render device
+  (global `+0x2738080`, vtable `+0x1DD1870`) recomputes each output's stereo fields every
+  frame from its settings (`+0xC12FF0`); with `StereoEnable` and `StereoSplitScreenEnable`
+  set, the two-eye loop `+0x8CAF70` renders every view twice in the same frame (eye 1 left
+  half, eye 0 right half) with view `+0xD0` = +-separation and `+0xD4` = convergence, and the
+  projection builder `+0xB7EA10` turns those into a per-eye camera offset of
+  separation x convergence x tanX plus a constant image shift. Both eyes come from one
+  simulation frame. `StereoSplitScreenEnable` is read in code only by `+0xC12FF0`.
+- `Bf4EngineStereo` (unit-tested against a simulated device): checks the device class and
+  settings, then sets both flags, StereoDepth 100, convergence 10 m and the separation
+  scale for the headset's half eye distance, all through an exact-write journal; a closed
+  loop corrects the scale from the separation the engine actually used (it applies an
+  extra x0.1 in some condition); a value changed by the game hands everything back.
+- World lane: stereo is on only while the headset shows the world lane, from 10 s after
+  head tracking starts (first sessions show each step); crops come from the halves with
+  the image shift removed; no capture until the mono/stereo layout has been stable for
+  settle + 2 presents. Mod menu (developer): "3D depth (experimental)" On/Off.
+- Not verified: anything in the real game (does the split render engage, HUD, cost, depth
+  scale). Each half keeps the full frame's projection, so per-eye horizontal resolution is
+  half the backbuffer's (a higher game resolution helps). Canted-display headsets are not
+  handled (eye rotations are assumed equal to the head's).
+- The 3D Vision route (`RenderDevice.StereoEnable` at device creation + nvapi shim) stays
+  for the theater 3D probe only.
 
 ## Headset path (emulated end to end)
 
@@ -179,10 +192,10 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
 
 ## Tests (2026-10-19)
 
-- Build.ps1 after the world lane: x64 283/283, x86 282/282. Bf4CoreTests 53 cases / 416
+- Build.ps1 after engine stereo: x64 283/283, x86 282/282. Bf4CoreTests 54 cases / 437
   checks; Bf4Emulated pass (theater, world lane, stereo probe, census, lockdown); launcher
-  19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and `-World` 4/4 (165 pairs).
-- Installed locally: runtime/bf4 0.4.12-local (rollback 0.4.11-local). Developer
+  19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and `-World` 4/4 (157 pairs).
+- Installed locally: runtime/bf4 0.4.13-local (rollback 0.4.12-local). Developer
   sessions still run the read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the
   framework's `StereoMath.h` (`Quat` = `Quaternion`; Pose is `{position, orientation}`).
@@ -206,7 +219,8 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
   without swimming (else raise "frame sync" in the mod menu), does BF4 render the wide
   FOV, pair rate (`theater_link ... pairs=` and `view_override ... run=` lines every 600
   frames in `bf4-adapter.log`).
-- Stereo: per-eye geometry of the split route (above). Controller aim (R8) not started;
+- First headset check of 3D depth (engine split stereo): log lines `engine stereo:` and
+  `engine stereo render:`; depth scale and comfort. Controller aim (R8) not started;
   button reload (R6) is covered by the virtual pad.
 - The census holder chain matched nothing live (27 firing objects, 0 holders): redo the
   walk from the live firing vtable `+0x1D53F18`.

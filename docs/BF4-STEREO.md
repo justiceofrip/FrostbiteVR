@@ -68,3 +68,29 @@ Launcher 3D off/probe/on; route `split` (default) or `nvapi`. Probe writes
 `logs/stereo-probe.txt` and one snapshot. Split checks use normalised patch correlation
 (SideBySide.cpp): engine side-by-side halves correlate > 0.75; real mono BF4 frames measured
 0.30-0.39 (menus, loading art, dark level).
+
+## Split-screen stereo, traced (static, 2026-10-19)
+
+- Render device: the 0x610-byte object the GameRenderer constructor (`+0x8391E0`) creates
+  with constructor `+0xBD61D0` (vtable `+0x1DD1870`) and stores in global `+0x2738080`.
+  Settings at `+0x80`; outputs at `+0x38` (stride 0x138), count at `+0x30` (vtable slot 11
+  returns it; the per-frame view pipeline makes one view per output). Output fields:
+  width/height u16 at `+0x58/+0x5C`, stereo mode `+0x7C`, on `+0x80`, convergence `+0x84`,
+  separation `+0x88`; vtable `+0x60` of the screen manager returns `&output+0x58`.
+- `+0xC12FF0` (device slot 6, per output, every frame): mode 1 when `StereoEnable &&
+  StereoSplitScreenEnable`; convergence = StereoConvergenceScale x 0.1; separation =
+  StereoDepth x 0.01 x StereoSeparationScale. The two flags are read in code only here and
+  at device creation (3D Vision init).
+- Two-eye loop `+0x8CAF70` (called from `+0x8BE430`, slot 2 of vtable `+0x1D24258`): for an
+  output with `on` set, each view is built twice (`edi` = 0, 1): view `+0xD0` =
+  -separation for eye 0, +separation for eye 1, `+0xD4` = convergence, dirty `|= 0xB`; in
+  mode 1 eye 0 gets viewport x = width/2 and eye 1 x = 0, both width/2 wide. Under one
+  condition (`[block+0x1014]` equal to a constant) the separation of every output is
+  first multiplied by 0.1.
+- Projection builder `+0xB7EA10` -> `+0xB7EAE0` (inputs: type `+0xB0`, fovY `+0xB4`, aspect
+  `+0xC4`, near `+0xBC`, far `+0xC0`, `+0xC8/+0xCC`, separation `+0xD0`, convergence `+0xD4`,
+  offsets `+0x90/+0x98/+0xA0`, flags `+0xD8/+0xD9`): row 2 x += s, row 3 x = s x c (row
+  vectors, w = z). So x_ndc = x P00 / z + s + s c / z: a camera at -s c / P00 on the view's
+  right axis plus a constant shift s. Eye 1 (left half, s = +sep) is the left eye.
+- Half eye distance = separation x convergence x tan(horizontal half FOV). The aspect stays
+  the output's, so each half is the full projection squeezed to half width.
