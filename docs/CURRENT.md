@@ -230,6 +230,20 @@ From the [412 handoff](../handoff/checkpoint412/README.md) "Limits and next work
    charging-handle and belt-fed mechanisms after native verification; scopes,
    optic dots, full-body IK and campaign/vehicle coverage.
 
+## Battlefield 4 adapter (in progress, uncommitted on `bf4/vr-adapter`)
+
+Separate state document: [CURRENT-BF4.md](CURRENT-BF4.md). It adds BF4-only targets
+(`cmake/Bf4Adapter.cmake`) and reuses the shared XR host as `FvrXrHost.exe` (new
+`--game-exe` option; BC2XrHost behaviour unchanged). Shared-code changes: `fvr/math/Vec.h`
+now extends `StereoMath.h`; `tests/FakeOpenXrRuntime.cpp` gained a theater fixture variant
+(4 swapchains, quad layers) without changing the existing fixtures' limits or checks;
+`D3D11MenuProducer` gained a texture `Pump` overload (adapter-drawn panels on the menu
+lane); the host gained `--theater-input` (off by default: controller input keeps flowing
+while the menu lane shows). BC2 checkpoint 412 composition and receipts are untouched.
+CI: `build.yml` builds and tests BF4 with everything else; `bf4-emulated.yml` runs only the
+portable launcher tests on Ubuntu; `bf4-release.yml` (tags) adds the hash-pinned Khronos
+loader and packages. Neither BF4 workflow has run on GitHub yet.
+
 ## Where to look
 
 - Code entry points per area: the table in the [412 handoff](../handoff/checkpoint412/README.md).
