@@ -11,7 +11,9 @@ using Microsoft::WRL::ComPtr;
 namespace {
 constexpr char kShader[] = R"(
 Texture2D<float4> source : register(t0);
+Texture2D<float> sceneDepth : register(t1);
 SamplerState linearClamp : register(s0);
+SamplerState pointClamp : register(s1);
 cbuffer Crop : register(b0) {
     float4 rect;    // u0 v0 u1 v1
     float4 bounds;  // bu0 - bu1 -
@@ -22,7 +24,14 @@ cbuffer Crop : register(b0) {
     float4 span;    // eye image uv -> tangent units: x y
     float4 eyeFov;  // left right up down (tangents)
     float4 comfort; // vignette strength, -, -, -
+    float4 stereo;  // depth stereo: shift (frame uv x world units), near, far, mode (0 off, 1, 2 reversed)
+    float4 stereo2; // min depth, -, -, -
 };
+float LinearZ(float d) {
+    const float n = stereo.y, f = stereo.z;
+    const float denom = stereo.w > 1.5 ? n + d * (f - n) : f - d * (f - n);
+    return denom > 0 ? n * f / denom : f;
+}
 float3 Marker(float3 c, float2 uv, float4 m) {
     if (m.z < 0.5) return c;
     const float d = length((uv - m.xy) * span.xy);
@@ -41,11 +50,18 @@ V vs(uint n : SV_VertexID) {
     return o;
 }
 float4 ps(V v) : SV_Target {
-    const float2 s = float2(lerp(rect.x, rect.z, v.uv.x), lerp(rect.y, rect.w, v.uv.y));
+    const float2 s0 = float2(lerp(rect.x, rect.z, v.uv.x), lerp(rect.y, rect.w, v.uv.y));
+    float2 s = s0;
+    if (stereo.w > 0.5) { // depth stereo: this eye's parallax, by fixed-point search on depth
+        [unroll] for (int i = 0; i < 4; ++i) {
+            const float z = max(LinearZ(sceneDepth.SampleLevel(pointClamp, s, 0)), stereo2.x);
+            s.x = s0.x + stereo.x / z;
+        }
+    }
     if (s.x < bounds.x || s.x > bounds.z || s.y < 0 || s.y > 1) return float4(0, 0, 0, 1); // not rendered
     float3 c = source.SampleLevel(linearClamp, s, 0).rgb;
     if (reticle.z > 0.5) { // aim reticle: a ring and a dot, sized in tangent units (~0.6 deg)
-        const float d = length((s - reticle.xy) * scale.xy);
+        const float d = length((s0 - reticle.xy) * scale.xy); // at infinity: no parallax
         const float ring = 1 - smoothstep(0.0012, 0.0024, abs(d - 0.011));
         const float centre = 1 - smoothstep(0.0016, 0.0028, d);
         const float shade = 1 - smoothstep(0.0020, 0.0045, abs(d - 0.011)); // dark rim for contrast
@@ -103,7 +119,20 @@ struct alignas(16) CropConstants {
     float span[4];
     float eyeFov[4];
     float comfort[4];
+    float stereo[4];
+    float stereo2[4];
 };
+
+// Shader view of a typeless depth family.
+DXGI_FORMAT DepthViewFormat(DXGI_FORMAT typeless) {
+    switch (typeless) {
+    case DXGI_FORMAT_R24G8_TYPELESS: return DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
+    case DXGI_FORMAT_R32G8X24_TYPELESS: return DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS;
+    case DXGI_FORMAT_R32_TYPELESS: return DXGI_FORMAT_R32_FLOAT;
+    case DXGI_FORMAT_R16_TYPELESS: return DXGI_FORMAT_R16_UNORM;
+    default: return DXGI_FORMAT_UNKNOWN;
+    }
+}
 } // namespace
 
 bool EyeResampler::Initialize(ID3D11DeviceContext* context) {
@@ -135,6 +164,8 @@ bool EyeResampler::Initialize(ID3D11DeviceContext* context) {
     s.AddressU = s.AddressV = s.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
     s.MaxLOD = D3D11_FLOAT32_MAX;
     if (FAILED(hr = device_->CreateSamplerState(&s, &sampler_))) return Fail(5, hr);
+    s.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT; // depth: never blend across an edge
+    if (FAILED(hr = device_->CreateSamplerState(&s, &pointSampler_))) return Fail(5, hr);
     D3D11_RASTERIZER_DESC r{};
     r.FillMode = D3D11_FILL_SOLID;
     r.CullMode = D3D11_CULL_NONE;
@@ -157,11 +188,14 @@ void EyeResampler::Reset() {
     for (auto& t : targets_) t.Reset();
     for (auto& e : eyes_) e.Reset();
     eyeWidth_ = eyeHeight_ = eyeFormat_ = 0;
+    depthView_.Reset();
+    depthHeld_.Reset();
+    depthSource_ = nullptr;
 }
 
 bool EyeResampler::Render(ID3D11DeviceContext* context, ID3D11Texture2D* source, const EyeCrop (&crops)[2],
                           std::uint32_t width, std::uint32_t height, std::uint32_t format, const Reticle& reticle,
-                          const EyeOverlay* overlays) {
+                          const EyeOverlay* overlays, const DepthStereoInput* depth) {
     if (broken_ || !context || !source || !width || !height || width > 16384 || height > 16384) return false;
     if (!initialized_ && !Initialize(context)) {
         broken_ = true; // no D3D11.1 state objects / shader compiler: the world lane stays off
@@ -220,6 +254,27 @@ bool EyeResampler::Render(ID3D11DeviceContext* context, ID3D11Texture2D* source,
     // run in ours, swapped in and out around them.
     if (sd.SampleDesc.Count > 1) context_->ResolveSubresource(source_.Get(), 0, source, 0, Unorm(sd.Format));
     else context_->CopyResource(source_.Get(), source);
+    bool stereo = false;
+    if (depth && depth->texture && depth->params.enabled) {
+        if (depth->texture != depthSource_) {
+            depthView_.Reset();
+            depthHeld_.Reset();
+            depthSource_ = nullptr;
+            D3D11_TEXTURE2D_DESC dd{};
+            depth->texture->GetDesc(&dd);
+            const DXGI_FORMAT view = DepthViewFormat(dd.Format);
+            D3D11_SHADER_RESOURCE_VIEW_DESC v{};
+            v.Format = view;
+            v.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+            v.Texture2D.MipLevels = 1;
+            if (view != DXGI_FORMAT_UNKNOWN && dd.SampleDesc.Count == 1 &&
+                SUCCEEDED(device_->CreateShaderResourceView(depth->texture, &v, &depthView_))) {
+                depthSource_ = depth->texture;
+                depthHeld_ = depth->texture;
+            }
+        }
+        stereo = depthView_ != nullptr;
+    }
     for (int i = 0; i < 2; ++i) {
         CropConstants c{{crops[i].u0, crops[i].v0, crops[i].u1, crops[i].v1},
                         {crops[i].bu0, 0, crops[i].bu1, 1},
@@ -244,6 +299,13 @@ bool EyeResampler::Render(ID3D11DeviceContext* context, ID3D11Texture2D* source,
             c.eyeFov[3] = fov.down;
             c.comfort[0] = overlays[i].vignette;
         }
+        if (stereo) {
+            c.stereo[0] = depth->params.shift[i];
+            c.stereo[1] = depth->params.nearZ;
+            c.stereo[2] = depth->params.farZ;
+            c.stereo[3] = depth->params.reversed ? 2.0f : 1.0f;
+            c.stereo2[0] = depth->params.minDepth;
+        }
         context_->UpdateSubresource(constants_[i].Get(), 0, nullptr, &c, 0, 0);
     }
     {
@@ -254,8 +316,12 @@ bool EyeResampler::Render(ID3D11DeviceContext* context, ID3D11Texture2D* source,
         context_->RSSetState(raster_.Get());
         ID3D11SamplerState* samplers[] = {sampler_.Get()};
         context_->PSSetSamplers(0, 1, samplers);
+        ID3D11SamplerState* points[] = {pointSampler_.Get()};
+        context_->PSSetSamplers(1, 1, points);
         ID3D11ShaderResourceView* views[] = {sourceView_.Get()};
         context_->PSSetShaderResources(0, 1, views);
+        ID3D11ShaderResourceView* depthViews[] = {stereo ? depthView_.Get() : nullptr};
+        context_->PSSetShaderResources(1, 1, depthViews);
         const D3D11_VIEWPORT viewport{0, 0, float(width), float(height), 0, 1};
         context_->RSSetViewports(1, &viewport);
         for (int i = 0; i < 2; ++i) {

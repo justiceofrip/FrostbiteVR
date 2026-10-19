@@ -22,12 +22,13 @@ struct ModMenuState {
     bool twoHandedAim = true;  // controller aim: the left grip in front of the gun steadies it
     bool walkWithBody = true;  // controller aim: the left stick walks relative to the body (else the gun)
     bool physicalCrouch = false; // crouch for real to crouch in game (Bf4PhysicalCrouch.h; standing play)
+    bool depthStereo = false;    // head-tracked view: 3D from the game's depth buffer (Bf4DepthCapture.h)
 };
 
 enum class ModMenuAction : std::uint8_t {
     None, SetReloadMode, SetSnapTurn, SetTheaterDistance, Recenter, MarkFeedback, GameMenu, SetHeadTracking, SetWorldSettle,
     SetWorldStereo, SetControllerAim, SetHolsters, SetAimDot, SetVignette, SetTwoHandedAim, SetWalkDirection,
-    SetPhysicalCrouch
+    SetPhysicalCrouch, SetDepthStereo
 };
 
 struct ModMenuCommand {

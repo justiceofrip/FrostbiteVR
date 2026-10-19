@@ -38,6 +38,9 @@ inline constexpr std::size_t kViewFovOffset = 0xB4;
 // so the gun is drawn at true size in the headset (it was ~3.5x at 111 degrees).
 inline constexpr std::size_t kViewDefaultFovOffset = 0xB8;
 inline constexpr std::size_t kViewAspectOffset = 0xC4;
+// Near and far planes (setters +0xB89F40 / +0xB89EC0; read live as 0.06 and 20000).
+inline constexpr std::size_t kViewNearOffset = 0xBC;
+inline constexpr std::size_t kViewFarOffset = 0xC0;
 inline constexpr std::size_t kViewHorizontalFovOffset = 0x250;
 inline constexpr std::uint32_t kViewFovDirtyBits = 0xF;  // what the FOV setter ORs in
 
@@ -87,6 +90,7 @@ public:
         // the aim reticle's place in the frame.
         bool aimInView = false;
         float aimTanX = 0, aimTanY = 0;
+        float nearZ = 0, farZ = 0; // the main view's planes (depth stereo linearises with them)
     };
 
     ViewOverride() = default;

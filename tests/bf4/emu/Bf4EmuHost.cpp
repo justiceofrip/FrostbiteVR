@@ -78,6 +78,7 @@ std::string Status() {
 int g_fail = 0;
 }
 bool CheckEyeResamplerReticle(ID3D11Device* device, const char*& why); // ResamplerCheck.cpp
+bool CheckDepthCapture(ID3D11Device* device, const char*& why);        // DepthCaptureCheck.cpp
 namespace {
 void Check(bool ok, const char* what) {
     std::printf("%s %s\n", ok ? "PASS" : "FAIL", what);
@@ -616,6 +617,12 @@ int wmain() {
         const bool ok = CheckEyeResamplerReticle(dev, why);
         if (!ok) std::printf("resampler check: %s\n", why);
         Check(ok, "eye resampler shader draws the aim reticle only where the gun aims");
+    }
+    {
+        const char* why = "";
+        const bool ok = CheckDepthCapture(dev, why);
+        if (!ok) std::printf("depth capture check: %s\n", why);
+        Check(ok, "depth capture finds the main depth and keeps the world from before the first-person clear");
     }
 
     // 6. Multiplayer evidence: a PunkBuster client module appears.

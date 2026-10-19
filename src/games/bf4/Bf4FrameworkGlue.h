@@ -55,6 +55,12 @@ struct FrameMeta {
     };
     Marker markers[2];
     float vignette = 0; // comfort vignette strength (0..1)
+    // Depth stereo: the core asks; the platform adds the frame's depth (Bf4DepthCapture) and
+    // the view's planes. The texture is valid for the Publish call only.
+    bool depthStereo = false;
+    ID3D11Texture2D* depth = nullptr;
+    std::uint32_t depthFormat = 0;
+    float depthClear = 1, nearZ = 0, farZ = 0;
 };
 
 class IFrameSink {

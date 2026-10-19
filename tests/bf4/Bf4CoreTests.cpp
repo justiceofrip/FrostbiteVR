@@ -1140,3 +1140,21 @@ TEST_CASE(PhysicalCrouchTogglesTheGamesCrouchWithTheBody) {
     in.enabled = false;
     for (int i = 0; i < 60; ++i) CHECK(!step(i < 30 ? 1.25f : 1.70f));
 }
+
+TEST_CASE(DepthStereoLinearisesAndShiftsEachEyeItsWay) {
+    using namespace fvr::bf4;
+    // Standard and reversed depth give back the distance they encode.
+    const float n = 0.06f, f = 20000.0f;
+    for (const float z : {0.5f, 2.0f, 30.0f, 900.0f}) {
+        const float standard = f * (1 - n / z) / (f - n);
+        const float reversed = 1 - standard;
+        CHECK(Near(LinearDepth(standard, n, f, false), z, z * 2e-3f));
+        CHECK(Near(LinearDepth(reversed, n, f, true), z, z * 2e-3f));
+    }
+    // The left eye samples further left for near things, the right eye further right; a
+    // 32 mm half eye distance across a frame 2*1.5 tangent units wide.
+    const auto p = DepthStereoFor(0.032f, 1.5f, n, f, 0.0f);
+    CHECK(p.enabled && p.reversed && p.shift[0] < 0 && Near(p.shift[1], 0.032f / 3.0f) && Near(p.shift[0], -p.shift[1]));
+    CHECK(!DepthStereoFor(0, 1.5f, n, f, 1).enabled && !DepthStereoFor(0.032f, 1.5f, 0, f, 1).enabled);
+    CHECK(!DepthStereoFor(0.032f, 1.5f, n, f, 1.0f).reversed);
+}

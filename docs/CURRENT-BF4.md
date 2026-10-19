@@ -205,6 +205,40 @@ screen. Pieces (all on the analysed build only):
   unit tests (geometry) and a WARP GPU check in Bf4Emulated (ring and dot drawn at the aim
   point, frame untouched elsewhere, plain pass unchanged). Log: `reticle_pairs=`.
 
+## 3D from depth (2026-10-19, built; emulated only; opt-in)
+
+Native split stereo still freezes (below), so a second route gives depth without a second
+render: both eyes are cut from the one mono frame and each is shifted by its own parallax
+using the frame's depth buffer (depth-image-based rendering; no simulation or render replay).
+
+- `Bf4DepthCapture`: finds the frame's main depth buffer through the game's own
+  `ClearDepthStencilView` calls (MinHook detours on d3d11.dll's implementations; the
+  calls always proceed): the largest single-sample depth target with the backbuffer's
+  aspect. The D3D11 runtime resolves a context's vtable entries lazily and immediate and
+  deferred contexts have their own implementations, so the install resolves them first
+  (one clear of a 4x4 target of ours on each) and hooks each implementation it sees,
+  re-checking at every Present. Just before each clear of the main depth a copy is recorded
+  on the same context (in order, even on deferred contexts). Frostbite clears depth again
+  before the first-person weapon (BC2 does), so with two or more clears a frame the copy
+  from before the last clear holds the world; with one, the live buffer is copied at
+  Present. A target picked before the backbuffer's shape was known is dropped once it is.
+- Eye resampler: each eye samples the frame at its own tangent + b/z (b = signed half eye
+  distance, z = view distance from the depth with the view's near/far, +0xBC/+0xC0, read
+  live as 0.06 / 20000; reversed depth when the buffer clears to 0), by a four-step
+  fixed-point search; nearer than 0.25 m counts as 0.25 m (the weapon). The aim dot stays
+  at infinity; gesture markers keep their own per-eye placement.
+- Mod menu "3D from depth: Off / On" (default off). Log: `depth_capture installed= main=WxH
+  format= clear= split= ... hooked=` every 600 frames, `depth_pairs=`; developer sessions
+  write `vr-snapshot-depth.bmp` (near bright, far dark) the first time it works and with
+  the other snapshots.
+- Evidence: linearisation and per-eye shift signs unit-tested; WARP checks in Bf4Emulated:
+  near content shifts each eye its own way while far content stays (shader), and the real
+  detour picks a 16:9 depth over a larger square shadow map, detects two clears a frame,
+  keeps the depth from before the second clear, and uses the live buffer with one clear
+  (that check found the lazily resolved vtable entry and the shadow-map pick before the
+  game did). Not yet seen in the game: which target BF4 clears, its format (MSAA depth is
+  refused), whether the weapon pass clears depth, how the parallax looks.
+
 ## Stereo: BF4's own two-eye render in the world lane (2026-10-19)
 
 - **First headset session (0.4.13-local, 09:16)**: head tracking worked (world lane,
@@ -376,11 +410,11 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
   and notes were shortened to fit half width (GDI text now ends with an ellipsis when it
   does not fit). Unit test: every item on the panel, none overlapping; a GDI render of the
   developer menu was checked by eye.
-- Build.ps1 after physical crouch: x64 284/284, x86 283/283. Bf4CoreTests 76 cases;
+- Build.ps1 after 3D from depth: x64 284/284, x86 283/283. Bf4CoreTests 77 cases;
   Bf4Emulated pass (theater, world lane, stereo probe, census, lockdown, gestures, eye
   resampler reticle on WARP); launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
   `-World -FrameChannels 2` 5/5 (227 pairs); `-World` with one channel 4/4 (47 pairs).
-- Installed locally: runtime/bf4 0.4.33-local (rollback 0.4.32-local). Developer
+- Installed locally: runtime/bf4 0.4.34-local (rollback 0.4.33-local). Developer
   sessions still run the read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the
   framework's `StereoMath.h` (`Quat` = `Quaternion`; Pose is `{position, orientation}`).

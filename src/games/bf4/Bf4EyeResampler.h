@@ -16,6 +16,14 @@
 
 namespace fvr::bf4 {
 
+// The frame's depth for depth stereo: a texture of a typeless depth family (R24G8, R32G8X24,
+// R32 or R16), single-sample, any size (sampled in frame uv).
+struct DepthStereoInput {
+    ID3D11Texture2D* texture = nullptr;
+    std::uint32_t format = 0;
+    DepthStereoParams params;
+};
+
 class EyeResampler {
 public:
     // source: the frame to read (the backbuffer; MSAA is resolved). width/height/format: the
@@ -24,7 +32,7 @@ public:
     // overlays: optional per-eye gesture markers (eye image positions).
     bool Render(ID3D11DeviceContext* context, ID3D11Texture2D* source, const EyeCrop (&crops)[2], std::uint32_t width,
                 std::uint32_t height, std::uint32_t format, const Reticle& reticle = {},
-                const EyeOverlay* overlays = nullptr);
+                const EyeOverlay* overlays = nullptr, const DepthStereoInput* depth = nullptr);
     ID3D11Texture2D* Eye(int eye) const { return eyes_[eye & 1].Get(); }
     void Reset(); // size-dependent resources (swapchain resize); shaders stay
     HRESULT LastError() const { return error_; }
@@ -43,7 +51,10 @@ private:
     Microsoft::WRL::ComPtr<ID3DDeviceContextState> state_;
     Microsoft::WRL::ComPtr<ID3D11VertexShader> vs_;
     Microsoft::WRL::ComPtr<ID3D11PixelShader> ps_;
-    Microsoft::WRL::ComPtr<ID3D11SamplerState> sampler_;
+    Microsoft::WRL::ComPtr<ID3D11SamplerState> sampler_, pointSampler_;
+    Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> depthView_;
+    ID3D11Texture2D* depthSource_ = nullptr; // what depthView_ views (held by the caller)
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> depthHeld_; // keeps it alive while viewed
     Microsoft::WRL::ComPtr<ID3D11RasterizerState> raster_;
     Microsoft::WRL::ComPtr<ID3D11Buffer> constants_[2];
     Microsoft::WRL::ComPtr<ID3D11Texture2D> source_;

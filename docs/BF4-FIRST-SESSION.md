@@ -1,4 +1,4 @@
-# BF4 headset session: checklist (0.4.33-local)
+# BF4 headset session: checklist (0.4.34-local)
 
 What to try in the next headset session, and what each check tells us. About 15 minutes.
 Everything is input-only or an exactly restored camera/FOV write, apart from the optional
@@ -47,6 +47,14 @@ raise BF4's Video > Resolution Scale (150-200 %) before judging blur.
 7. If something feels wrong, open the menu and click "Mark this moment for feedback".
 8. Quit from the game's own menu, so the launcher restores the game folder.
 
+## Try: 3D from depth
+
+Menu > 3D from depth > On, in a mission. Each eye is shifted by the game's depth buffer, so
+near things should stand out. Look at something close (a wall, a crate) and something far.
+If it looks wrong (doubled edges, the gun at a strange depth, no depth at all), switch it
+off and mark the moment; `vr-snapshot-depth.bmp` and the `depth_capture` log line show what
+it found.
+
 ## Optional: 3D depth (developer)
 
 Menu > 3D depth > On, in a mission. So far the game stops presenting about 2 s later. If
@@ -65,7 +73,8 @@ The launcher's feedback button bundles the logs. The lines that answer the open 
 | `view_override ... run=` | head tracking frame sync |
 | `controller_aim=... gain= mutes= snaps= guards=` and `mouse_sends=` | mouse aiming reached the game; its learned sensitivity |
 | `gestures gun=... draws= throws= ejects= seats=` and `key_sends= haptics_sent=` | holsters, keys and pulses |
-| `reticle_pairs= marked_pairs=` | aim dot and gesture markers drawn |
+| `reticle_pairs= marked_pairs= depth_pairs=` | aim dot, gesture markers, 3D from depth drawn |
+| `depth_capture ...` | the depth buffer 3D from depth found |
 | `diagnostics: no frame presented ...` and the stacks after it | where a 3D freeze waits |
 | `laser click down/up at x,y` | menu clicks (Resume) |
 

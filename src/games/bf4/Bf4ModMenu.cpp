@@ -35,6 +35,8 @@ ui::ModMenuModel BuildModMenu(const game::CapabilityRegistry& caps, bool develop
               "Right stick: 30 degree steps."});
     menu.Add({"theater_distance", "Screen distance", MenuItemKind::Choice, {"Near", "Medium", "Far"},
               state.theaterDistance, false, "Coming in a later update."});
+    menu.Add({"depth_stereo", "3D from depth", MenuItemKind::Choice, {"Off", "On"}, state.depthStereo ? 1 : 0, true,
+              "Experimental: each eye shifted by depth."});
     menu.Add({"view_mode", "In campaign levels", MenuItemKind::Choice, {"Screen", "Head-tracked view"},
               state.headTracking ? 1 : 0, true, ""});
     menu.Add({"controller_aim", "Aim with", MenuItemKind::Choice, {"Right stick", "Right controller"},
@@ -104,6 +106,7 @@ ModMenuCommand InterpretChange(const MenuItem& item) {
     if (item.id == "two_handed") return {ModMenuAction::SetTwoHandedAim, item.value};
     if (item.id == "walk_direction") return {ModMenuAction::SetWalkDirection, item.value};
     if (item.id == "physical_crouch") return {ModMenuAction::SetPhysicalCrouch, item.value};
+    if (item.id == "depth_stereo") return {ModMenuAction::SetDepthStereo, item.value};
     return {};
 }
 

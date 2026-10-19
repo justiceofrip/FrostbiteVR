@@ -26,6 +26,7 @@
 #include "Bf4EyeLoopOverride.h"
 #include "Bf4Diagnostics.h"
 #include "Bf4WorldView.h"
+#include "Bf4DepthCapture.h"
 #include "fvr/graphics/GdiPanelRaster.h"
 #include "stereo/SideBySide.h"
 
@@ -168,6 +169,9 @@ public:
     float lastTanX = 0;
     float lastViewAspect = 0;
     EyeLoopOverride eyeLoop;
+    // Depth stereo (opt-in): the frame's scene depth, found through the game's own depth clears.
+    DepthCapture depthCapture;
+    bool depthInstallTried = false, depthSnapshotPending = false, depthSeen = false;
     bool eyeLoopRefused = false, stereoCrashGuard = false, stereoMarker = false;
     // Background search for the two-eye loop object (read-only): 0 idle, 1 running, 2 done.
     std::atomic<int> eyeLoopScan{0};
@@ -246,6 +250,7 @@ public:
         if (developer && lane && !worldSnapshotTaken && now - worldLaneSinceMs >= 5000) {
             worldSnapshotTaken = true;
             frames->RequestSnapshot(logDir);
+            depthSnapshotPending = depthCapture.Installed();
             log_.Write("snapshot requested (5 s of head tracking): vr-snapshot-frame.bmp / vr-snapshot-eyes.bmp");
         }
         const bool wanted = lane && now - worldLaneSinceMs >= 10000 && meta.worldStereo &&
@@ -752,7 +757,33 @@ public:
             SUCCEEDED(swapchain->GetBuffer(0, __uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&back)))) {
             ID3D11DeviceContext* ctx = nullptr;
             device->GetImmediateContext(&ctx);
+            DepthCapture::Frame depth;
+            if (ctx && m.depthStereo && !depthCapture.Installed() && !depthInstallTried) {
+                depthInstallTried = true;
+                const bool installed = depthCapture.Install(ctx);
+                log_.Write("depth stereo: depth clear observer %s", installed ? "installed" : "refused (not d3d11.dll's, or hook failed)");
+            }
+            if (ctx && depthCapture.Installed() && meta.height &&
+                depthCapture.TakeFrame(ctx, float(meta.width) / float(meta.height), depth) && m.depthStereo) {
+                const auto st = viewOverride.GetStats();
+                m.depth = depth.texture.Get();
+                m.depthFormat = depth.format;
+                m.depthClear = depth.clear;
+                m.nearZ = st.nearZ;
+                m.farZ = st.farZ;
+                if (!depthSeen && developer) { // evidence: what the depth looks like, once
+                    depthSeen = true;
+                    depthSnapshotPending = true;
+                }
+            }
             ok = frames->Publish(device, ctx, back, m);
+            if (ctx && depthSnapshotPending && depthCapture.Installed()) {
+                depthSnapshotPending = false;
+                const auto st = viewOverride.GetStats();
+                const bool written = depthCapture.WriteBmp(ctx, logDir + "\\vr-snapshot-depth.bmp", st.nearZ, st.farZ);
+                log_.Write("depth snapshot %s (%s, near=%.3f far=%.1f)", written ? "written: vr-snapshot-depth.bmp" : "not written",
+                           depthCapture.Describe().c_str(), st.nearZ, st.farZ);
+            }
             if (ctx) ctx->Release();
         }
         if (back) back->Release();
@@ -851,6 +882,7 @@ public:
         // "Mark this moment" also saves what the headset shows (developer evidence).
         if (developer && frames && line.rfind("FEEDBACK MARK", 0) == 0) {
             frames->RequestSnapshot(logDir);
+            depthSnapshotPending = depthCapture.Installed();
             log_.Write("snapshot requested: vr-snapshot-frame.bmp / vr-snapshot-eyes.bmp in the log folder");
         }
     }
@@ -1013,6 +1045,7 @@ void OnPresent(Adapter& a, IDXGISwapChain* sc) {
         while (!v.empty() && (v.back() == '\n' || v.back() == '\r')) v.pop_back();
         a.log.Write("%s stereo=%s %s", v.c_str(), std::string(StereoModeName(a.core->Stereo())).c_str(),
                     a.platform.DescribeEngineStereo().c_str());
+        if (a.platform.depthCapture.Installed()) a.log.Write("%s", a.platform.depthCapture.Describe().c_str());
         const std::string status = a.core->Status();
         const auto at = status.find("controller_aim=");
         if (at != std::string::npos)

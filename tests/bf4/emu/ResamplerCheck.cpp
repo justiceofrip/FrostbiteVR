@@ -6,6 +6,7 @@
 #include <d3d11.h>
 
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <vector>
 
@@ -110,5 +111,44 @@ bool CheckEyeResamplerReticle(ID3D11Device* device, const char*& why) {
     if (!ReadPixels(device, context.Get(), resampler.Eye(0), eye, width)) return why = "read back the vignette eye", false;
     if (!Grey(eye[32 * width + 32])) return why = "vignette leaves the centre clear", false;
     if ((eye[1 * width + 1] & 0xFF) > 30) return why = "vignette darkens the corners", false;
+    // Depth stereo: a striped frame (red = 4 x column) whose left half is 1 m away and right
+    // half at the far plane. Each eye samples near things shifted its own way, far ones not.
+    {
+        std::vector<std::uint32_t> stripes(kSize * kSize);
+        for (UINT y = 0; y < kSize; ++y)
+            for (UINT x = 0; x < kSize; ++x) stripes[y * kSize + x] = 0xFF808000u | (x * 4);
+        const D3D11_SUBRESOURCE_DATA stripeData{stripes.data(), kSize * 4, 0};
+        ComPtr<ID3D11Texture2D> striped;
+        if (FAILED(device->CreateTexture2D(&d, &stripeData, &striped))) return why = "create the striped frame", false;
+        const float n = 0.1f, f = 1000.0f;
+        const float nearValue = f * (1 - n / 1.0f) / (f - n); // standard depth of 1 m
+        std::vector<float> depthValues(kSize * kSize);
+        for (UINT y = 0; y < kSize; ++y)
+            for (UINT x = 0; x < kSize; ++x) depthValues[y * kSize + x] = x < kSize / 2 ? nearValue : 1.0f;
+        D3D11_TEXTURE2D_DESC dd = d;
+        dd.Format = DXGI_FORMAT_R32_TYPELESS;
+        const D3D11_SUBRESOURCE_DATA depthData{depthValues.data(), kSize * 4, 0};
+        ComPtr<ID3D11Texture2D> depthTexture;
+        if (FAILED(device->CreateTexture2D(&dd, &depthData, &depthTexture))) return why = "create the depth", false;
+        fvr::bf4::DepthStereoInput depth;
+        depth.texture = depthTexture.Get();
+        depth.format = DXGI_FORMAT_R32_TYPELESS;
+        depth.params.enabled = true;
+        depth.params.shift[0] = -0.05f;
+        depth.params.shift[1] = 0.05f;
+        depth.params.nearZ = n;
+        depth.params.farZ = f;
+        if (!resampler.Render(context.Get(), striped.Get(), crops, kSize, kSize, DXGI_FORMAT_R8G8B8A8_UNORM, {}, nullptr, &depth))
+            return why = "depth stereo resample", false;
+        std::vector<std::uint32_t> left, right;
+        if (!ReadPixels(device, context.Get(), resampler.Eye(0), left, width) ||
+            !ReadPixels(device, context.Get(), resampler.Eye(1), right, width))
+            return why = "read back the depth stereo eyes", false;
+        const int nearLeft = left[32 * width + 16] & 0xFF, nearRight = right[32 * width + 16] & 0xFF;
+        const int farLeft = left[32 * width + 48] & 0xFF, farRight = right[32 * width + 48] & 0xFF;
+        // 0.05 uv = 3.2 columns = ~13 red steps each way at 1 m; nothing at 1000 m.
+        if (!(nearLeft < 66 - 8 && nearRight > 66 + 8 && std::abs(farLeft - farRight) <= 2))
+            return why = "depth stereo shifts near things per eye and leaves far ones", false;
+    }
     return true;
 }

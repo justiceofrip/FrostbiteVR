@@ -180,7 +180,14 @@ void ViewOverride::Submit(void* renderer, float a, float b, std::uint32_t viewCo
     const bool rigid = IsRigidTransform(game);
     if (rigid) { // the game's own aim, read before anything is written
         const LinearTransform camera = ReadViewTransform(views + kViewCopyOffset);
+        float nearZ = 0, farZ = 0;
+        std::memcpy(&nearZ, views + kViewNearOffset, sizeof(nearZ));
+        std::memcpy(&farZ, views + kViewFarOffset, sizeof(farZ));
         std::lock_guard<std::mutex> lock(self->mutex_);
+        if (nearZ > 0 && farZ > nearZ && std::isfinite(farZ)) {
+            self->stats_.nearZ = nearZ;
+            self->stats_.farZ = farZ;
+        }
         self->stats_.gameBack = camera.forward;
         ++self->stats_.gameSamples;
     }

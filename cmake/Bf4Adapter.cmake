@@ -94,7 +94,7 @@ target_compile_definitions(Bf4NvapiShim PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 add_library(FrostbiteVR.Bf4 SHARED
   src/games/bf4/Bf4Module.cpp src/games/bf4/Bf4MenuBridge.cpp src/games/bf4/Bf4FrameworkGlue.cpp
   src/games/bf4/Bf4GpuVendor.cpp src/games/bf4/Bf4XInputSink.cpp src/graphics/GdiPanelRaster.cpp
-  src/games/bf4/Bf4Diagnostics.cpp)
+  src/games/bf4/Bf4Diagnostics.cpp src/games/bf4/Bf4DepthCapture.cpp)
 target_link_libraries(FrostbiteVR.Bf4 PRIVATE FvrBf4Core FvrMinHook64 d3d11 dxgi psapi gdi32)
 target_compile_definitions(FrostbiteVR.Bf4 PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 if(FVR_BF4_FRAMEWORK_GLUE)
@@ -128,10 +128,11 @@ if(BUILD_TESTING AND FVR_BF4_EMU_TEST)
   add_library(Bf4FakePunkBuster SHARED tests/bf4/emu/FakePunkBuster.cpp)
   set_target_properties(Bf4FakePunkBuster PROPERTIES OUTPUT_NAME pbcl)
   # ResamplerCheck: the world lane's eye resampler shader (aim reticle) on the emulator's device.
-  add_executable(Bf4EmuHost tests/bf4/emu/Bf4EmuHost.cpp tests/bf4/emu/ResamplerCheck.cpp src/games/bf4/Bf4EyeResampler.cpp)
+  add_executable(Bf4EmuHost tests/bf4/emu/Bf4EmuHost.cpp tests/bf4/emu/ResamplerCheck.cpp src/games/bf4/Bf4EyeResampler.cpp
+    tests/bf4/emu/DepthCaptureCheck.cpp src/games/bf4/Bf4DepthCapture.cpp)
   target_compile_definitions(Bf4EmuHost PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX UNICODE _UNICODE)
   # The emulator also plays the XR host's side of the theater link (menu lane).
-  target_link_libraries(Bf4EmuHost PRIVATE d3d11 dxgi delayimp FvrFrameChannel FvrD3D11 d3dcompiler)
+  target_link_libraries(Bf4EmuHost PRIVATE d3d11 dxgi delayimp FvrFrameChannel FvrD3D11 d3dcompiler FvrMinHook64)
   # Delay-load D3D11 and DXGI: they must bind to the proxy loaded first, as in bf4.exe.
   target_link_options(Bf4EmuHost PRIVATE /DELAYLOAD:d3d11.dll /DELAYLOAD:dxgi.dll)
   add_dependencies(Bf4EmuHost Bf4DxgiProxy Bf4NvapiShim FrostbiteVR.Bf4 Bf4FakePunkBuster)

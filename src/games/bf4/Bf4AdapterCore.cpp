@@ -134,6 +134,10 @@ void AdapterCore::ApplyMenuCommand(const ModMenuCommand& command) {
         menuState_.vignette = command.value != 0;
         platform_.Log(menuState_.vignette ? "comfort vignette: on" : "comfort vignette: off");
         break;
+    case ModMenuAction::SetDepthStereo:
+        menuState_.depthStereo = command.value != 0;
+        platform_.Log(menuState_.depthStereo ? "3D from depth: on" : "3D from depth: off");
+        break;
     case ModMenuAction::SetPhysicalCrouch:
         menuState_.physicalCrouch = command.value != 0;
         platform_.Log(menuState_.physicalCrouch ? "physical crouch: on" : "physical crouch: off");
@@ -575,6 +579,7 @@ void AdapterCore::OnFrame(const PlatformFrame& f, const ControllerSnapshot& in) 
         meta.worldSettle = static_cast<std::uint32_t>(menuState_.worldSettle);
         meta.worldStereo = session_.developerFeatures && menuState_.worldStereo;
         meta.reticle = menuState_.aimDot && aim_.engaged;
+        meta.depthStereo = menuState_.depthStereo && meta.world;
         {
             // Comfort vignette: stick walking and smooth turning (snap turns are instant).
             const float walk = std::hypot(pad_.thumbLX / 32767.0f, pad_.thumbLY / 32767.0f);

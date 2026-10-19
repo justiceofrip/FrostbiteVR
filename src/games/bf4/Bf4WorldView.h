@@ -138,6 +138,34 @@ private:
     float level_ = 0;
 };
 
+// Depth stereo: both eyes from the one mono frame, each shifted by its own parallax using
+// the frame's depth buffer (Bf4DepthCapture). A point at view distance z appears in an eye
+// offset b (world units, + right) at head tangent - b/z, so each eye samples the frame at
+// its own tangent + b/z. In frame uv (which spans 2 tanX across) the shift is
+// shift/z with shift = b / (2 tanX).
+inline float LinearDepth(float d, float nearZ, float farZ, bool reversed) {
+    const float denom = reversed ? nearZ + d * (farZ - nearZ) : farZ - d * (farZ - nearZ);
+    return denom > 0 ? nearZ * farZ / denom : farZ;
+}
+struct DepthStereoParams {
+    bool enabled = false;
+    float shift[2] = {0, 0}; // per eye, frame uv x world units (left negative)
+    float nearZ = 0.1f, farZ = 1000;
+    bool reversed = false;   // the buffer clears to 0 (reversed depth)
+    float minDepth = 0.25f;  // nearer than this is treated as this far (first-person weapon)
+};
+inline DepthStereoParams DepthStereoFor(float halfEye, float tanX, float nearZ, float farZ, float clearValue) {
+    DepthStereoParams p;
+    if (!(halfEye > 0 && tanX > 0 && nearZ > 0 && farZ > nearZ)) return p;
+    p.enabled = true;
+    p.shift[0] = -halfEye / (2 * tanX);
+    p.shift[1] = halfEye / (2 * tanX);
+    p.nearZ = nearZ;
+    p.farZ = farZ;
+    p.reversed = clearValue < 0.5f;
+    return p;
+}
+
 inline constexpr std::uint64_t kWorldLeaseMaxMs = 140; // host requests live 150 ms
 // --frame-channels 2: requests live 200 ms (one waits behind the other); the margin covers
 // the time between the host's request and the adapter taking it at a frame start.
