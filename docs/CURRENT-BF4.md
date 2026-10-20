@@ -951,6 +951,17 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
   screen outside campaign play (unit-tested; live check pending; clicks are logged).
 - Holsters: key 2 (sidearm) not yet seen working live (the prologue loadout has none: key 2
   did nothing again in session 19; HUD slots 3, 4, T, V).
+- 10 s stalls: cause found (session 31, 2026-10-20). A 4.5 s stall in a running level, the
+  game in front; the watchdog's stacks show BF4's main thread (+0x128a6 -> +0xea3e ->
+  +0x626b3e, its timed-message dispatch) in `IDirectInput8::EnumDevices(GAMECTRL, attached)`
+  (+0x94B6E0, on message hash 0x91F1A519; hooked by the Steam overlay) whose callback
+  (+0x946830) runs the well-known `IsXInputDevice` WMI scan: `CreateInstanceEnum
+  ("Win32_PNPEntity")` (+0x94A208, also through the Steam overlay) and `Next` with a 10,000 ms
+  timeout, blocked in RPC to the WMI service. So BF4 itself stalls whenever it re-enumerates its
+  DirectInput controllers, once per attached controller; not the VR code. Developer sessions now
+  log every WM_DEVICECHANGE at the game window (`device change: event 0x...`) to tie stalls to
+  their trigger. A mitigation (answering BF4's WMI scan from a cache) is possible but not built.
+  Earlier notes:
 - 10 s stalls (no Present), twice now in a running level (sessions 12 and 15), each
   starting as one of my test commands began after a pause. Session 16+ logs the foreground
   owner at stalls and at every change of the game window's focus, to tell a focus thief

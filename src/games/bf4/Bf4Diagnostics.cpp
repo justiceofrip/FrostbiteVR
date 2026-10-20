@@ -199,6 +199,31 @@ LONG CALLBACK FaultLogger(EXCEPTION_POINTERS* e) {
 }
 } // namespace
 
+namespace {
+HHOOK g_deviceHook = nullptr;
+LRESULT CALLBACK DeviceChangeHook(int code, WPARAM wParam, LPARAM lParam) {
+    if (code == HC_ACTION && lParam) {
+        const auto* m = reinterpret_cast<const CWPSTRUCT*>(lParam);
+        if (m->message == WM_DEVICECHANGE && g_sink) {
+            static std::uint64_t count = 0;
+            if (++count <= 200) // a flood (a hub re-plugged) is still told, then quiet
+                g_sink("device change: event 0x" + [&] {
+                    char hex[16];
+                    std::snprintf(hex, sizeof(hex), "%04llx", static_cast<unsigned long long>(m->wParam));
+                    return std::string(hex);
+                }() + " (#" + std::to_string(count) + "; BF4 re-enumerates its controllers on these)");
+        }
+    }
+    return CallNextHookEx(g_deviceHook, code, wParam, lParam);
+}
+} // namespace
+
+void Diagnostics::WatchDeviceChanges(void* window) {
+    if (g_deviceHook || !window) return;
+    const DWORD thread = GetWindowThreadProcessId(static_cast<HWND>(window), nullptr);
+    if (thread) g_deviceHook = SetWindowsHookExW(WH_CALLWNDPROC, &DeviceChangeHook, nullptr, thread);
+}
+
 void Diagnostics::Start(std::function<void(const std::string&)> sink, const std::string& faultFile) {
     if (g_sink) return;
     g_sink = std::move(sink);

@@ -1128,6 +1128,7 @@ bool Adopt(Adapter& a, IDXGISwapChain* sc) {
     a.height = desc.BufferDesc.Height;
     a.log.Write("adopted swapchain %ux%u fmt=%u windowed=%d", a.width, a.height,
                 static_cast<unsigned>(desc.BufferDesc.Format), static_cast<int>(desc.Windowed));
+    if (a.session.developerFeatures) Diagnostics::WatchDeviceChanges(desc.OutputWindow);
     a.core->OnSwapchainAdopted(true);
     // Developer research: reflect every vertex shader created from now on (the level's are
     // created when it loads). Observes CreateVertexShader only.
