@@ -21,7 +21,10 @@ raise BF4's Video > Resolution Scale (150-200 %) before judging blur.
 
 - The laser clicks the game's menus, including **Campaign > Resume** (a held trigger keeps
   its press position unless the laser moves more than 6 % of the screen).
-- The menu button opens the FrostbiteVR menu: two columns now, every item clickable
+- Hold **X and Y** on the left controller together for half a second to open or close the
+  FrostbiteVR menu (works on every headset). The left menu button opens it too only where the
+  runtime passes that button to games: on a Quest 3 over Steam Link it opens SteamVR's own
+  dashboard instead (seen 2026-10-20: the game lost focus on each press). Two columns, every item clickable
   (Recenter was off the panel before). Your choices there are remembered for the next session
   (`runtime/bf4/menu-settings.txt`; delete it to go back to the defaults).
 - Never open Multiplayer: the adapter locks itself off there.
