@@ -1,5 +1,13 @@
 # Handoff: Battlefield 4 VR adapter for FrostbiteVR
 
+> **Status 2026-10-20: the current state is docs/CURRENT-BF4.md, and the next headset session's
+> checklist is docs/BF4-FIRST-SESSION.md.** What follows is the original hand-over of
+> 2026-10-18 and is history: the frame glue is no longer a stub (the XR host shows the theater
+> screen and a head-tracked 6DoF view), BF4's own split / 3D Vision stereo is retired in favour
+> of alternate eyes and 3D from depth, and the game side (gun in the hand, controller aiming,
+> holsters, manual reload, laser menus, the controller scan) runs live on a simulated headset.
+> Not yet seen in a real headset since 0.4.16; arm IK and vehicles remain open.
+
 Written 2026-10-18 at the end of a claude.ai chat session (sandboxed Linux, no access to
 the player's PC, the game, Windows or a headset). Read this first, then AGENTS.md, then
 docs/CURRENT-BF4.md and docs/BF4-STEREO.md.
