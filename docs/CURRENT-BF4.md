@@ -18,7 +18,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   three sessions (09:16-10:19; rotation was inverted and the gun oversized, both fixed in
   0.4.16); everything built since 0.4.17 is unseen in a headset.
 
-## At a glance (installed: 0.4.51-local)
+## At a glance (installed: 0.4.52-local)
 
 | Feature | State | Evidence |
 | --- | --- | --- |
@@ -28,10 +28,10 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
 | Controller aim (mouse look), aim dot, two-handed aim, snap turn | on | live sim: gain learned = measured, 20 deg -> 19.6 deg |
 | Gun follows aim (barrel on the bullets' line) | on | live sim: gun/laser on the aim, labels 335/335 |
 | Comfort vignette, walk toward body/gun | on / body | live sim (vignette seen while walking) |
-| Holsters (keys 1/2/3, G, F) with pulses | on | live sim: 1 and 3 switch weapons; 2, G, F not seen |
+| Holsters (keys 1/2/3, G, F) with pulses | on | live sim: 1, 3, grenade, knife work; 2 not seen (no sidearm) |
 | Manual reload (magazine gesture; B tap/hold) with markers | on (player setting) | live sim: B, belt, magwell -> BF4 reloads |
 | HUD corners (ammo, minimap insets) | on | live sim (eye snapshots) |
-| Physical crouch | off | unit-tested; live sim suggestive |
+| Physical crouch | off | live sim: pulses both ways, view lower |
 | 3D from depth (depth buffer) | off | live sim: depth found, parallax direction right |
 | BF4 split stereo (developer) | unsupported (retired) | live sim: crashes BF4's one-view world renderer |
 | Hands / IK, gun at the hand | not built | needs live RE |
@@ -103,8 +103,8 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
     it to the magazine well seated it and BF4 played its own reload (20/105 -> 21/104).
   - HUD corners and the comfort vignette (while walking) appear in both eyes as designed.
   - Physical crouch: with the head 0.4 m low the view sat lower with crouch on than off,
-    and standing restored it; the dark spot made this suggestive only. Crouch state and
-    toggles are now in the periodic gestures log line.
+    and standing restored it; in a later session the log showed the pulses both ways
+    (`crouch=crouched crouch_toggles=1`, then `standing ... 2`).
   - 3D from depth: see that section (depth found, parallax direction right).
   - BF4's split 3D (third session, 0.4.47-local): reproduced the headset "freeze" in
     0.1 s and caught it as a crash in the one-view world renderer (Stereo, below).
@@ -285,8 +285,10 @@ the theater screen. Pieces (all on the analysed build only):
   pulses, RB/LB not pressed by gesture grips, RT held off, X on seating); hover pulses and
   marker placement/parallax unit-tested; the WARP check draws a marker ring. Live on the
   simulated headset: keys 1 and 3 by gesture switch weapons, the magazine gesture's pad X
-  reloads after keyboard selection (BF4 takes both), hover pulses arrive. Not seen: key 2
-  (no sidearm in the prologue), G and F, holster positions on a real body.
+  reloads after keyboard selection (BF4 takes both), hover pulses arrive; the left-hip
+  grenade (grab, release away) threw one (HUD 3 -> 2) and the left-hand chest grab drew the
+  knife (HUD melee). Not seen: key 2 (no sidearm in the prologue), holster positions on a
+  real body.
 
 ## Controller aiming (2026-10-19, built; emulated only)
 
@@ -615,7 +617,8 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
   launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
   `-World -FrameChannels 2` 5/5 (76-237 pairs, machine-dependent); `-World` with one
   channel 4/4 (47 pairs).
-- Installed locally: runtime/bf4 0.4.51-local (gun follows aim; rollback 0.4.50-local);
+- Installed locally: runtime/bf4 0.4.52-local (same build as 0.4.51, installed by the
+  gesture session; rollback 0.4.51-local);
   launcher settings
   restored to the player's after the developer sessions. Developer sessions still run the
   read-only probes and the firing census.
@@ -656,7 +659,7 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
   virtual pad. Now the cursor holds its press position unless the laser moves more than
   6 % of the screen, and the pad's triggers are released while the laser points at the
   screen outside campaign play (unit-tested; live check pending; clicks are logged).
-- Holsters: key 2 (sidearm), G (grenade) and F (knife) not yet seen working live.
+- Holsters: key 2 (sidearm) not yet seen working live (the prologue has no sidearm).
 - The census holder chain matched nothing live (27 firing objects, 0 holders): redo the
   walk from the live firing vtable `+0x1D53F18`.
 - Mod menu in VR: opens with the menu button, drawn by the adapter (VrPanel + GDI) on the
