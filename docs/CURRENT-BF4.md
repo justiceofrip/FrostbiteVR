@@ -132,9 +132,8 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
     re-engaged (twice); both sticks held 1.3 s with the right one pressed first ->
     `recenter: both sticks held`, view recentered (checked by a second recenter at a fixed
     head pose shifting the view ~30 deg), rifle still in hand. One 10 s stall (no Present
-    from about 21:40:40 to 21:40:50, main thread in the window message pump under the
-    Steam and EA overlay hooks) swallowed one laser click on the mod menu; 20 s with the
-    menu open later did not repeat it. Cause unknown (Open, below).
+    from about 21:40:40 to 21:40:50) swallowed one laser click on the mod menu; 20 s with
+    the menu open later did not repeat it. Cause unknown (Open, below).
 
 ## Gun follows aim: the barrel on the bullets' line (2026-10-19, built; live sim)
 
@@ -172,6 +171,10 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   shots). Live (0.4.58-local): hand 15 deg up with the head level put crosshair, gun and
   aim dot together about 5 deg up. The upward reach is small for Quest-like eyes (their
   vertical FOV is already the render's limit); a wider budget would cost sharpness.
+- A turned render brings BF4's own HUD corners (minimap, ammo panel) into the eyes' outer
+  edges, skewed (seen live at 20 deg: a second minimap at the left eye's edge). With HUD
+  corners on they are shown once, in their insets: the eye resampler draws their source
+  regions dark in a turned render (WARP check; fails without it).
 - Mod menu "Gun follows aim: Off / On" (default on). Log: `aim_pairs=` (theater_link),
   `rendered_fov=` (view_override).
 - Evidence: unit tests (rotation math, ellipse coverage, budget, the override's aim-turned
@@ -430,6 +433,12 @@ the theater screen. Pieces (all on the analysed build only):
   (its old form teleported the target in the same frame, which overshoots ~1 rad at three
   frames of delay whatever the guard does: the counts leave before the game shows any;
   it had passed only because the teleport misfired the guard).
+- An axis not learned yet starts from the other axis's learned gain (x1.2, the cautious
+  side) instead of the first estimate: BF4 turns as far per count on both axes (0.00140 /
+  -0.00140; ADS 0.00084 / -0.00084), and with the gun's reach keeping vertical moves small
+  the pitch gain had stayed at the first estimate (2x: half-speed vertical aim; session 12
+  ended at -0.003). An axis counts as learned after windows worth 0.1 rad of turning; its
+  own learning then takes over. Unit-tested.
 - Paused game (BF4's Esc menu moves a cursor with the mouse): when a 20-sample window sent
   200 counts or more and the game did not turn at all, aiming goes quiet for 1 s, then 2,
   4, 8 s while it keeps happening; any turn resets that. (The old 1500-count threshold
@@ -767,16 +776,15 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
   6 % of the screen, and the pad's triggers are released while the laser points at the
   screen outside campaign play (unit-tested; live check pending; clicks are logged).
 - Holsters: key 2 (sidearm) not yet seen working live (the prologue has no sidearm).
-- A 10 s stall in BF4's window message pump (no Present; the main thread under the Steam
-  overlay and EA in-game overlay hooks) once in session 12, with the mod menu open; a laser
-  click during it was lost, because the adapter runs per Present. Not repeated in 20 s with
-  the menu open. Cause unknown; the watchdog stacks are in that session's log. If it
-  recurs, compare with overlays disabled.
+- A 10 s stall (no Present) once in session 12, with the mod menu open; a laser click
+  during it was lost, because the adapter runs per Present. Not repeated in 20 s with the
+  menu open. The watchdog's first stack (the window thread, under the Steam and EA overlay
+  hooks) is BF4's ordinary blocking `GetMessage` loop at `+0x110a2` (decoded from the
+  image), so it does not explain the stall; the frame-producing thread has to be found
+  among the others (one slept at `+0x21d86d`). Cause unknown; if it recurs, compare the
+  watchdog stacks with a normal frame and with the overlays disabled.
 - The upward reach of the gun with Quest-like eyes is small (~5 deg with the head level);
   a menu choice of a wider render budget (less sharp) is possible if players want more.
-- Pitch gain: the reach limit keeps vertical aim moves small, so the pitch gain may stay at
-  the cautious first estimate longer (session 12 ended at -0.003, 2x the measured value):
-  vertical aim then steers at half speed until a large vertical move teaches it.
 - The census holder chain matched nothing live (27 firing objects, 0 holders): redo the
   walk from the live firing vtable `+0x1D53F18`.
 - Mod menu in VR: opens with the menu button, drawn by the adapter (VrPanel + GDI) on the

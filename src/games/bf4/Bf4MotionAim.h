@@ -312,8 +312,16 @@ private:
                 } else if (turned) {
                     ignoredInARow_ = 0;
                 }
-                Adapt(windowYaw_, windowCountsX_, gainX_);
-                Adapt(windowPitch_, windowCountsY_, gainY_);
+                trustX_ += Adapt(windowYaw_, windowCountsX_, gainX_);
+                trustY_ += Adapt(windowPitch_, windowCountsY_, gainY_);
+                const bool learnedX = trustX_ >= kLearnedTrust, learnedY = trustY_ >= kLearnedTrust;
+                // BF4 turns as far per count on both axes (live: 0.00140 / -0.00140, aiming
+                // down sights 0.00084 / -0.00084): an axis not learned yet starts from the
+                // other's gain, kSeedMargin above it (the cautious side), not from the first
+                // estimate. Small vertical moves (the gun's reach keeps them small) may never
+                // teach the pitch gain and steered at half speed (live, 2026-10-19).
+                if (learnedX && !learnedY) gainY_ = std::copysign(kSeedMargin * std::fabs(gainX_), gainY_);
+                if (learnedY && !learnedX) gainX_ = std::copysign(kSeedMargin * std::fabs(gainY_), gainX_);
                 windowYaw_ = windowPitch_ = 0;
                 windowCountsX_ = windowCountsY_ = 0;
                 windowFrames_ = 0;
@@ -322,22 +330,27 @@ private:
         lastGame_ = in.game;
         haveGame_ = true;
     }
-    static void Adapt(float angle, long long counts, float& gain) {
-        if (std::llabs(counts) < 200 || std::fabs(angle) < 0.01f) return; // not enough signal
+    // An axis counts as learned once its windows carried this much trust (0.1 rad of turning).
+    static constexpr float kSeedMargin = 1.2f, kLearnedTrust = 0.5f;
+    // Returns the trust the window carried (0: it taught nothing).
+    static float Adapt(float angle, long long counts, float& gain) {
+        if (std::llabs(counts) < 200 || std::fabs(angle) < 0.01f) return 0; // not enough signal
         const float measured = angle / static_cast<float>(counts);
         const float magnitude = std::fabs(measured);
-        if (magnitude < 1e-6f || magnitude > 0.05f) return;
+        if (magnitude < 1e-6f || magnitude > 0.05f) return 0;
         // Trust a window in proportion to how far the game turned in it (0.2 rad: fully), not
         // to the counts sent (those depend on the estimate itself). Follows sign flips too
         // (inverted look).
         const float weight = std::fmin(1.0f, std::fabs(angle) / 0.2f);
         gain += weight * (measured - gain);
         if (std::fabs(gain) < 1e-6f) gain = measured;
+        return weight;
     }
 
     bool engaged_ = false, haveGame_ = false;
     float bodyYaw_ = 0, lastHandYaw_ = 0;
     float gainX_ = kInitialGain, gainY_ = -kInitialGain; // mouse down looks down: negative pitch per count
+    float trustX_ = 0, trustY_ = 0; // what each axis's windows have taught so far (Adapt)
     AimAngle lastGame_{}, desired_{}, lastDesired_{}, lastGuardGame_{};
     bool haveDesired_ = false;
     std::uint64_t lastSample_ = 0;

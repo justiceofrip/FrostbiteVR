@@ -178,6 +178,20 @@ bool CheckEyeResamplerReticle(ID3D11Device* device, const char*& why) {
             if (!blue(eye[52 * width + 49])) return why = "ammo panel shown in the lower right inset", false;
             if (blue(eye[32 * width + 32]) || blue(eye[52 * width + 14])) return why = "HUD corners only in their insets", false;
         }
+        // Gun follows aim: a turned render brings its own HUD corners into the eyes' edges; with
+        // the insets on they are drawn dark there. The eye ray at tangent (0.86, -0.82), eye
+        // pixel (55, 54), lands on the frame's ammo panel outside its inset.
+        fvr::bf4::FrameView turned;
+        turned.rotation.enabled = true; // no turn: the frame's corner is simply in view
+        turned.tanX = turned.tanY = 1.0f;
+        if (!resampler.Render(context.Get(), hudFrame.Get(), centre, kSize, kSize, DXGI_FORMAT_R8G8B8A8_UNORM, {}, corners, nullptr,
+                              &turned))
+            return why = "HUD corners with a turned render", false;
+        for (int e = 0; e < 2; ++e) {
+            if (!ReadPixels(device, context.Get(), resampler.Eye(e), eye, width)) return why = "read back the turned HUD eye", false;
+            if (blue(eye[54 * width + 55])) return why = "turned render: its own HUD corner is not shown a second time", false;
+            if (!blue(eye[52 * width + 49])) return why = "turned render: the inset still shows the ammo panel", false;
+        }
     }
     // Depth stereo from a 4x multisampled depth buffer (BF4 with deferred MSAA): sample 0.
     {

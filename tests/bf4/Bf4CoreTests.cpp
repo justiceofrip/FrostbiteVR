@@ -843,6 +843,47 @@ TEST_CASE(ControllerAimTargetJumpsAreNoOvershoot) {
     CHECK(Near(WrapPi(game.aim.yaw - 0.3f), 1.05f, 0.01f) && Near(game.aim.pitch, 0.44f, 0.01f));
 }
 
+TEST_CASE(ControllerAimSeedsAnUnlearnedAxisFromTheOther) {
+    // BF4 turns as far per count on both axes (live 0.0014). With the gun's reach keeping the
+    // vertical moves small, the pitch gain never learned and stayed at the first estimate
+    // (2x: half-speed vertical aim, live 2026-10-19). Now it starts from the yaw gain.
+    using namespace fvr;
+    using namespace fvr::bf4;
+    MotionAim aim;
+    SimulatedGameAim game;
+    game.gainX = 0.0014f;
+    game.gainY = -0.0014f;
+    MotionAimInput in;
+    in.engage = in.aimTracked = true;
+    in.reference.orientation = {0, 0, 0, 1};
+    in.dt = 1.0f / 60;
+    in.aim.orientation = math::FromAxisAngle({0, 1, 0}, -0.7f) * math::FromAxisAngle({1, 0, 0}, 0.005f);
+    CHECK(Near(aim.GainY(), -MotionAim::kInitialGain));
+    for (int i = 0; i < 240; ++i) {
+        game.Frame();
+        in.gameValid = true;
+        in.game = game.aim;
+        in.gameSample = game.sample;
+        const auto out = aim.Update(in);
+        game.pendingX += out.mouseX;
+        game.pendingY += out.mouseY;
+    }
+    CHECK(Near(aim.GainX(), 0.0014f, 0.0002f));
+    CHECK(aim.GainY() < 0 && Near(-aim.GainY(), 1.2f * aim.GainX(), 1e-5f)); // seeded, its own sign kept
+    CHECK(Near(game.aim.pitch, 0.005f, 0.003f));
+    // A vertical move then teaches the pitch gain itself, which is no longer overwritten.
+    in.aim.orientation = math::FromAxisAngle({0, 1, 0}, -0.7f) * math::FromAxisAngle({1, 0, 0}, 0.5f);
+    for (int i = 0; i < 240; ++i) {
+        game.Frame();
+        in.game = game.aim;
+        in.gameSample = game.sample;
+        const auto out = aim.Update(in);
+        game.pendingX += out.mouseX;
+        game.pendingY += out.mouseY;
+    }
+    CHECK(Near(aim.GainY(), -0.0014f, 0.0002f) && Near(game.aim.pitch, 0.5f, 0.01f));
+}
+
 namespace {
 // A standing player looking down -Z (OpenXR), hands at given points, both grips tracked.
 struct GestureRig {

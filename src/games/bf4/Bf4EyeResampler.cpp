@@ -106,6 +106,12 @@ float4 ps(V v) : SV_Target {
     }
     if (s.x < bounds.x || s.x > bounds.z || s.y < 0 || s.y > 1) return float4(0, 0, 0, 1); // not rendered
     float3 c = source.SampleLevel(linearClamp, s, 0).rgb;
+    if (stereo2.y > 0.5 && frame.z > 0.5) {
+        // A turned render brings its own HUD corners into the eye's edge, skewed (live,
+        // 2026-10-19): they are shown once, in their insets, so their sources are dark here.
+        [unroll] for (int k = 0; k < 2; ++k)
+            if (all(s >= insetSrc[k].xy) && all(s <= insetSrc[k].zw)) c = float3(0.02, 0.02, 0.025);
+    }
     if (reticle.z > 0.5) { // aim reticle: a ring and a dot, sized in tangent units (~0.6 deg)
         // Where the source point under the aim is shown in this eye: with depth stereo the dot
         // sits on the surface it covers (no double image when looking at the target).
@@ -317,9 +323,9 @@ bool EyeResampler::Render(ID3D11DeviceContext* context, ID3D11Texture2D* source,
             depthSource_ = nullptr;
             D3D11_TEXTURE2D_DESC dd{};
             depth->texture->GetDesc(&dd);
-            const DXGI_FORMAT view = DepthViewFormat(dd.Format);
+            const DXGI_FORMAT viewFormat = DepthViewFormat(dd.Format);
             D3D11_SHADER_RESOURCE_VIEW_DESC v{};
-            v.Format = view;
+            v.Format = viewFormat;
             depthMultisampled_ = dd.SampleDesc.Count > 1;
             if (depthMultisampled_) {
                 v.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DMS;
@@ -327,7 +333,7 @@ bool EyeResampler::Render(ID3D11DeviceContext* context, ID3D11Texture2D* source,
                 v.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
                 v.Texture2D.MipLevels = 1;
             }
-            if (view != DXGI_FORMAT_UNKNOWN && SUCCEEDED(device_->CreateShaderResourceView(depth->texture, &v, &depthView_))) {
+            if (viewFormat != DXGI_FORMAT_UNKNOWN && SUCCEEDED(device_->CreateShaderResourceView(depth->texture, &v, &depthView_))) {
                 depthSource_ = depth->texture;
                 depthHeld_ = depth->texture;
             }
