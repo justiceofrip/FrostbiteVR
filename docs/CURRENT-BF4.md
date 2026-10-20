@@ -91,7 +91,10 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   repository): the pad polled; the left stick walked 4.8 m; the trigger fired 6 rounds; the left
   trigger aimed down the sights with the gun held in the hand; B reloaded (button mode; 21 in
   the magazine); key 3 drew the underbarrel launcher in the hand and key 1 the rifle; 3D
-  alternate eyes on and off again (pairs stop with it).
+  alternate eyes on and off again (pairs stop with it). Repeated in session 69 (0.4.111-local,
+  arms from the body on by default): walked 4.6 m, fired, aimed down the sights (gun held),
+  reloaded, launcher in the hand with the arm reaching from the body, 3D alternate eyes on and
+  off; both arms solved every pass; no errors in the log.
 
 - `tools/simxr/SimOpenXrRuntime.cpp` -> `FvrSimOpenXr.dll` (x64, developer only, never
   packaged or registered): an OpenXR runtime the XR host loads through the developer
