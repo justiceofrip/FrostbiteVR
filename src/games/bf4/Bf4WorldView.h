@@ -70,6 +70,132 @@ inline void EyeCrops(const math::FovTangents (&fov)[2], float tanX, float tanY, 
     out[1] = EyeCropRect(fov[1], tanX, tanY, 0.5f, 1.0f, separation);
 }
 
+// Gun follows aim. BF4 draws its first-person gun at rest relative to the camera that renders
+// the frame (live, 2026-10-19), so with the camera at the head the gun stays in front of the
+// face while bullets go along the game's aim. Rendering the frame with the camera turned to
+// the aim (at the head's position) puts the barrel on the bullets' line; each eye ray is then
+// rotated into that render, which reproduces the head's view exactly (a pure rotation).
+//
+// A camera orientation as BF4 stores it: its world axes as rows (right, up, back; the camera
+// looks along -back).
+struct CameraAxes {
+    float row[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
+};
+// Maps a head-camera direction (x right, y up, -z forward) to the render camera's.
+struct FrameRotation {
+    bool enabled = false;
+    float m[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
+};
+inline float Dot3(const float (&a)[3], const float (&b)[3]) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
+// Render-from-head rotation for cameras with axes `head` and `render`: m[i][j] = render_i . head_j.
+inline FrameRotation RotationBetween(const CameraAxes& head, const CameraAxes& render) {
+    FrameRotation f;
+    f.enabled = true;
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 3; ++j) f.m[i][j] = Dot3(render.row[i], head.row[j]);
+    return f;
+}
+// The render camera's axes from the head's and a render-from-head rotation (inverse of the above).
+inline CameraAxes ApplyRotation(const CameraAxes& head, const FrameRotation& f) {
+    CameraAxes o;
+    for (int i = 0; i < 3; ++i)
+        for (int k = 0; k < 3; ++k) o.row[i][k] = f.m[i][0] * head.row[0][k] + f.m[i][1] * head.row[1][k] + f.m[i][2] * head.row[2][k];
+    return o;
+}
+// The render tangents of a head-space tangent direction; false when it falls behind the render.
+inline bool RotateTangent(const FrameRotation& f, float tx, float ty, float& fx, float& fy) {
+    const float d[3] = {tx, ty, -1};
+    const float o0 = Dot3(f.m[0], d), o1 = Dot3(f.m[1], d), o2 = Dot3(f.m[2], d);
+    if (!(o2 < -1e-3f)) return false;
+    fx = o0 / -o2;
+    fy = o1 / -o2;
+    return true;
+}
+// The vertical FOV the render needs so both eyes fit after the rotation. Each eye counts by
+// the ellipse inscribed in its tangent rectangle: the lens shows about that (runtimes mask the
+// rectangle's corners), and rotated corners would stretch the render far more (modelled for
+// Quest-like eyes: 20 degrees sideways needs 2.07 rad with the ellipse, 2.40 with corners).
+// Unrotated it equals RequiredVerticalFov. 3 rad when part of an eye would fall behind.
+inline float RequiredVerticalFovRotated(const FrameRotation& f, const math::FovTangents& left, const math::FovTangents& right,
+                                        float aspect, float margin = 1.03f) {
+    if (!f.enabled) return RequiredVerticalFov(left, right, aspect, margin);
+    constexpr int kPoints = 32;
+    float ty = 0;
+    for (const math::FovTangents* e : {&left, &right}) {
+        const float cx = 0.5f * (e->left + e->right), cy = 0.5f * (e->up + e->down);
+        const float ax = 0.5f * (e->right - e->left), ay = 0.5f * (e->up - e->down);
+        for (int k = 0; k < kPoints; ++k) {
+            const float a = 6.2831853f * float(k) / kPoints;
+            float fx = 0, fy = 0;
+            if (!RotateTangent(f, cx + ax * std::cos(a), cy + ay * std::sin(a), fx, fy)) return 3.0f;
+            ty = std::max(ty, std::fabs(fy));
+            if (aspect > 0) ty = std::max(ty, std::fabs(fx) / aspect);
+        }
+    }
+    return std::min(2.0f * std::atan(ty * margin), 3.0f);
+}
+// The head's axes turned toward the aim's by the fraction t of the rotation between them
+// (about the one axis that takes the head's onto the aim's).
+inline CameraAxes TurnToward(const CameraAxes& head, const CameraAxes& aim, float t) {
+    // Q = sum_i aim_i (x) head_i: the world rotation taking each head axis onto the aim's.
+    float q[3][3] = {};
+    for (int i = 0; i < 3; ++i)
+        for (int r = 0; r < 3; ++r)
+            for (int c = 0; c < 3; ++c) q[r][c] += aim.row[i][r] * head.row[i][c];
+    const float cosA = std::clamp((q[0][0] + q[1][1] + q[2][2] - 1) * 0.5f, -1.0f, 1.0f);
+    const float angle = std::acos(cosA);
+    if (angle < 1e-5f) return head;
+    const float s = std::sin(angle);
+    if (s < 1e-3f) return t >= 1 ? aim : head; // ~180 degrees: no stable axis
+    const float k[3] = {(q[2][1] - q[1][2]) / (2 * s), (q[0][2] - q[2][0]) / (2 * s), (q[1][0] - q[0][1]) / (2 * s)};
+    const float a = angle * std::clamp(t, 0.0f, 1.0f), ca = std::cos(a), sa = std::sin(a);
+    CameraAxes o;
+    for (int i = 0; i < 3; ++i) { // Rodrigues: v cos a + (k x v) sin a + k (k.v)(1 - cos a)
+        const float* v = head.row[i];
+        const float kv = k[0] * v[0] + k[1] * v[1] + k[2] * v[2];
+        const float cr[3] = {k[1] * v[2] - k[2] * v[1], k[2] * v[0] - k[0] * v[2], k[0] * v[1] - k[1] * v[0]};
+        for (int n = 0; n < 3; ++n) o.row[i][n] = v[n] * ca + cr[n] * sa + k[n] * kv * (1 - ca);
+    }
+    return o;
+}
+// The render orientation for the gun to follow the aim: as far toward the aim as the FOV
+// budget allows (the frame must still cover both eyes; a wider frame is less sharp). Beyond
+// it (the head looks far from where the gun points) the gun follows only part of the way.
+struct GunAim {
+    FrameRotation rotation; // render-from-head
+    float fovY = 0;         // vertical FOV to render (radians)
+    float fraction = 0;     // how far toward the aim: 1 = all the way
+};
+// What the eye resampler needs to rotate each eye's rays into the render.
+struct FrameView {
+    FrameRotation rotation;
+    float tanX = 0, tanY = 0; // the render's half-angle tangents
+    float halfEye = 0;        // world units (depth stereo's per-eye offset, rotated too)
+};
+// Budget: 2.1 rad (~120 deg vertical). For Quest-like eyes (head-only 1.88 rad) the gun follows
+// fully up to about 20 degrees sideways or 7 down; the centre is then up to ~22 % less sharp.
+inline constexpr float kGunAimFovBudget = 2.1f;
+inline GunAim GunAimRotation(const CameraAxes& head, const CameraAxes& aim, const math::FovTangents& left,
+                             const math::FovTangents& right, float aspect, float maxFovY = kGunAimFovBudget) {
+    const float budget = std::max(RequiredVerticalFov(left, right, aspect), maxFovY);
+    auto at = [&](float t, GunAim& g) {
+        g.rotation = RotationBetween(head, TurnToward(head, aim, t));
+        g.fovY = RequiredVerticalFovRotated(g.rotation, left, right, aspect);
+        g.fraction = t;
+        return g.fovY <= budget;
+    };
+    GunAim best;
+    if (at(1.0f, best)) return best;
+    float lo = 0, hi = 1;
+    for (int i = 0; i < 12; ++i) {
+        const float mid = 0.5f * (lo + hi);
+        GunAim g;
+        if (at(mid, g)) lo = mid;
+        else hi = mid;
+    }
+    at(lo, best);
+    return best;
+}
 // Capture decision at Present for the lease the camera is carrying.
 // Aim reticle (controller aiming): where the game's own aim crosses a mono render with
 // half-angle tangents tanX/tanY, as frame uv; scale converts frame uv to tangent units (the

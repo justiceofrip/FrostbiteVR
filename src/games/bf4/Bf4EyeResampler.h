@@ -30,9 +30,12 @@ public:
     // host's eye requirements (format RGBA8 or BGRA8, any of their typeless/UNORM/sRGB forms).
     // reticle: drawn over both eyes at its frame position (a mono frame: same direction).
     // overlays: optional per-eye gesture markers (eye image positions).
+    // view: gun follows aim; each eye's rays are rotated into the render (the crops' source
+    // regions still bound what was rendered).
     bool Render(ID3D11DeviceContext* context, ID3D11Texture2D* source, const EyeCrop (&crops)[2], std::uint32_t width,
                 std::uint32_t height, std::uint32_t format, const Reticle& reticle = {},
-                const EyeOverlay* overlays = nullptr, const DepthStereoInput* depth = nullptr);
+                const EyeOverlay* overlays = nullptr, const DepthStereoInput* depth = nullptr,
+                const FrameView* view = nullptr);
     ID3D11Texture2D* Eye(int eye) const { return eyes_[eye & 1].Get(); }
     void Reset(); // size-dependent resources (swapchain resize); shaders stay
     HRESULT LastError() const { return error_; }

@@ -158,6 +158,10 @@ void AdapterCore::ApplyMenuCommand(const ModMenuCommand& command) {
         menuState_.aimDot = command.value != 0;
         platform_.Log(menuState_.aimDot ? "aim dot: on" : "aim dot: off");
         break;
+    case ModMenuAction::SetGunFollowsAim:
+        menuState_.gunFollowsAim = command.value != 0;
+        platform_.Log(menuState_.gunFollowsAim ? "gun follows aim: on" : "gun follows aim: off");
+        break;
     case ModMenuAction::SetHolsters:
         menuState_.holsters = command.value != 0;
         platform_.Log(menuState_.holsters ? "body holsters: on" : "body holsters: off");
@@ -496,6 +500,7 @@ void AdapterCore::UpdateCamera(const ControllerSnapshot& in, const PlatformFrame
             r.renderFovY = RequiredVerticalFov(in.world.fov[0], in.world.fov[1], aspect);
             r.eyeFov[0] = in.world.fov[0];
             r.eyeFov[1] = in.world.fov[1];
+            r.gunFollowsAim = menuState_.gunFollowsAim && stereo_ == StereoMode::Mono;
         }
         camera_.push_back(r);
     };

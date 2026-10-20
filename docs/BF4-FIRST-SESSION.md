@@ -1,4 +1,4 @@
-# BF4 headset session: checklist (0.4.48-local)
+# BF4 headset session: checklist (0.4.51-local)
 
 What to try in the next headset session, and what each check tells us. About 15 minutes.
 The game side of everything below already ran live without a headset (simulated headset,
@@ -31,9 +31,10 @@ raise BF4's Video > Resolution Scale (150-200 %) before judging blur.
    about 45 new views a second at frame sync 2 (measured live; it was ~17-25 before).
    Then try menu > Frame sync (developer) > 1 frame (~52 a second; every view matched its
    head pose in the live check) and note whether the world swims or looks smoother.
-2. Aim with the right controller: the gun follows it, and a **green ring** shows where it
-   aims (BF4's own crosshair stays at the centre of your view and the gun model in front
-   of your face: both follow the head; shots go to the ring). Grip with the left hand in
+2. Aim with the right controller: the game's aim follows it, a **green ring** shows where
+   shots go, and the gun itself now points there too (menu: Gun follows aim): turn the
+   controller and the barrel swings onto the ring. Note whether it stays steady and sharp;
+   looking far away from where the gun points, it follows only part of the way. Grip with the left hand in
    front of the gun to aim with both hands. The right stick turns in **30 degree steps**
    (menu: Snap turning off for smooth).
 3. The ammo panel and minimap appear as small framed insets in your lower right and left

@@ -24,12 +24,13 @@ struct ModMenuState {
     bool physicalCrouch = false; // crouch for real to crouch in game (Bf4PhysicalCrouch.h; standing play)
     bool depthStereo = false;    // head-tracked view: 3D from the game's depth buffer (Bf4DepthCapture.h)
     bool hudInsets = true;       // head-tracked view: the corner HUD copied into the visible corners
+    bool gunFollowsAim = true;   // head-tracked view: render along the aim so the barrel is on the bullets' line
 };
 
 enum class ModMenuAction : std::uint8_t {
     None, SetReloadMode, SetSnapTurn, SetTheaterDistance, Recenter, MarkFeedback, GameMenu, SetHeadTracking, SetWorldSettle,
     SetWorldStereo, SetControllerAim, SetHolsters, SetAimDot, SetVignette, SetTwoHandedAim, SetWalkDirection,
-    SetPhysicalCrouch, SetDepthStereo, SetHudInsets
+    SetPhysicalCrouch, SetDepthStereo, SetHudInsets, SetGunFollowsAim
 };
 
 struct ModMenuCommand {

@@ -324,6 +324,67 @@ TEST_CASE(CameraProbeRulesAcceptOnlyRigidCameras) {
     CHECK(FieldGetterOffset(getter70) == 0x70 && FieldGetterOffset(notGetter) == -1);
 }
 
+namespace {
+// BF4 camera axes (rows right, up, back) turned right by `yaw` and up by `pitch` (radians).
+fvr::bf4::CameraAxes Turned(float yaw, float pitch) {
+    const float cy = std::cos(yaw), sy = std::sin(yaw), cp = std::cos(pitch), sp = std::sin(pitch);
+    const float fwd[3] = {sy * cp, sp, -cy * cp}; // looks along -back
+    const float right[3] = {cy, 0, sy};
+    fvr::bf4::CameraAxes a;
+    for (int k = 0; k < 3; ++k) {
+        a.row[0][k] = right[k];
+        a.row[2][k] = -fwd[k];
+    }
+    // up = back x right
+    a.row[1][0] = a.row[2][1] * a.row[0][2] - a.row[2][2] * a.row[0][1];
+    a.row[1][1] = a.row[2][2] * a.row[0][0] - a.row[2][0] * a.row[0][2];
+    a.row[1][2] = a.row[2][0] * a.row[0][1] - a.row[2][1] * a.row[0][0];
+    return a;
+}
+} // namespace
+
+TEST_CASE(GunFollowsAimRotatesEachEyeIntoTheAimRender) {
+    using namespace fvr::bf4;
+    const float deg = 3.14159265f / 180;
+    const CameraAxes head = Turned(0, 0), aim = Turned(20 * deg, 0);
+    CHECK(Near(head.row[1][1], 1.0f) && Near(aim.row[1][1], 1.0f));
+    // The head ray 20 degrees right is the render's centre; the head's centre is 20 left.
+    const FrameRotation r = RotationBetween(head, aim);
+    float fx = 0, fy = 0;
+    CHECK(RotateTangent(r, std::tan(20 * deg), 0, fx, fy) && Near(fx, 0.0f) && Near(fy, 0.0f));
+    CHECK(RotateTangent(r, 0, 0, fx, fy) && Near(fx, -std::tan(20 * deg)) && Near(fy, 0.0f));
+    // Back and forth exactly; half way is 10 degrees.
+    const CameraAxes back = ApplyRotation(head, r);
+    bool same = true;
+    for (int i = 0; i < 3; ++i)
+        for (int k = 0; k < 3; ++k) same = same && Near(back.row[i][k], aim.row[i][k], 1e-5f);
+    CHECK(same);
+    const CameraAxes half = TurnToward(head, aim, 0.5f), ten = Turned(10 * deg, 0);
+    CHECK(Near(half.row[2][0], ten.row[2][0], 1e-5f) && Near(half.row[2][2], ten.row[2][2], 1e-5f));
+    // No turn needs the head-only FOV; a turn needs more where the frame has no slack.
+    const fvr::math::FovTangents eyeL{-1.0f, 0.9f, 1.0f, -1.1f}, eyeR{-0.9f, 1.0f, 1.0f, -1.1f};
+    const float aspect = 16.0f / 9.0f;
+    CHECK(Near(RequiredVerticalFovRotated(RotationBetween(head, head), eyeL, eyeR, aspect),
+               RequiredVerticalFov(eyeL, eyeR, aspect), 1e-5f));
+    const GunAim sideways = GunAimRotation(head, Turned(8 * deg, 0), eyeL, eyeR, aspect); // small turns: all the way
+    CHECK(sideways.rotation.enabled && Near(sideways.fraction, 1.0f) && sideways.fovY <= kGunAimFovBudget);
+    const GunAim down = GunAimRotation(head, Turned(0, -60 * deg), eyeL, eyeR, aspect); // gun at the hip
+    CHECK(down.fraction > 0.05f && down.fraction < 1.0f && down.fovY <= kGunAimFovBudget + 1e-4f);
+    CHECK(down.fovY > RequiredVerticalFov(eyeL, eyeR, aspect));
+    // Whatever the turn, each eye's lens ellipse stays inside the render.
+    const float tanY = std::tan(down.fovY * 0.5f), tanX = tanY * aspect;
+    bool inside = true;
+    for (const auto* e : {&eyeL, &eyeR})
+        for (int k = 0; k < 64; ++k) {
+            const float a = 6.2831853f * k / 64;
+            const float px = 0.5f * (e->left + e->right) + 0.5f * (e->right - e->left) * std::cos(a);
+            const float py = 0.5f * (e->up + e->down) + 0.5f * (e->up - e->down) * std::sin(a);
+            inside = inside && RotateTangent(down.rotation, px, py, fx, fy) && std::fabs(fx) <= tanX * 1.001f &&
+                     std::fabs(fy) <= tanY * 1.001f;
+        }
+    CHECK(inside);
+}
+
 TEST_CASE(WorldLaneCropsDecisionsAndFallback) {
     using namespace fvr::bf4;
     // An eye whose FOV equals the render's covers the whole image; a narrower, asymmetric
@@ -1214,4 +1275,7 @@ TEST_CASE(ResearchCommandsForLiveFlatSessions) {
     CHECK(c[3].kind == ResearchCommand::Kind::Setting && c[3].arg == "depth_stereo" && c[3].x == 1);
     CHECK(c[4].kind == ResearchCommand::Kind::Unknown && c[5].kind == ResearchCommand::Kind::Unknown &&
           c[6].kind == ResearchCommand::Kind::Unknown); // out of range: rejected, not run
+    const auto v = ParseResearchCommands("1 viewcopies 2\n2 viewcopies 4\n", 0);
+    CHECK(v.size() == 2 && v[0].kind == ResearchCommand::Kind::ViewCopies && v[0].x == 2 &&
+          v[1].kind == ResearchCommand::Kind::Unknown);
 }

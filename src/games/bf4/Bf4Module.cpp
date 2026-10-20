@@ -757,6 +757,7 @@ public:
             m.poseId = st.poseId;
             m.poseRun = st.poseRun;
             m.renderFovY = st.renderedFovY;
+            m.frameRotation = st.frameRotation; // recorded with st.poseId by the same submit
             m.aimValid = st.aimInView;
             m.aimTanX = st.aimTanX;
             m.aimTanY = st.aimTanY;
@@ -821,6 +822,12 @@ public:
         float fov = requests[0].renderFovY;
         if (lastViewAspect > 0.2f && lastViewAspect < 5.0f) // the aspect the engine used last frame
             fov = RequiredVerticalFov(requests[0].eyeFov[0], requests[0].eyeFov[1], lastViewAspect);
+        ViewOverride::GunAimSettings gun;
+        gun.enabled = requests[0].gunFollowsAim;
+        gun.eye[0] = requests[0].eyeFov[0];
+        gun.eye[1] = requests[0].eyeFov[1];
+        gun.aspect = lastViewAspect;
+        viewOverride.SetGunAim(gun);
         viewOverride.SetLocal(requests[0].local, /*keepGamePitch=*/false, requests[0].poseId, fov, requests[0].parentYaw);
         return true;
     }
@@ -865,16 +872,16 @@ public:
 
     std::string DescribeViewOverride() const {
         const auto st = viewOverride.GetStats();
-        char line[260];
+        char line[320];
         std::snprintf(line, sizeof(line),
                       "view_override=%s submits=%llu applied=%llu restored=%llu foreign=%llu stale=%llu not_rigid=%llu "
-                      "fov_applied=%llu game_fov=%.3f rendered_fov=%.3f pose=%llu run=%u\n",
+                      "fov_applied=%llu game_fov=%.3f rendered_fov=%.3f pose=%llu run=%u copies=%u copies_differ=%.4f\n",
                       viewOverride.Installed() ? "on" : (viewInstallRefused ? "refused" : "off"),
                       static_cast<unsigned long long>(st.submits), static_cast<unsigned long long>(st.applied),
                       static_cast<unsigned long long>(st.restored), static_cast<unsigned long long>(st.foreign),
                       static_cast<unsigned long long>(st.stale), static_cast<unsigned long long>(st.notRigid),
                       static_cast<unsigned long long>(st.fovApplied), st.gameFovY, st.renderedFovY,
-                      static_cast<unsigned long long>(st.poseId), st.poseRun);
+                      static_cast<unsigned long long>(st.poseId), st.poseRun, viewOverride.CopyMask(), st.copiesDiffer);
         return line;
     }
 
@@ -1859,6 +1866,14 @@ void ResearchTick(Adapter& a) {
         a.sendKeyFrames = 6;
         char msg[48];
         std::snprintf(msg, sizeof(msg), "sendkey 0x%02x", static_cast<unsigned>(c.value));
+        ResearchAck(a, c.id, msg);
+        break;
+    }
+    case ResearchCommand::Kind::ViewCopies: {
+        a.platform.viewOverride.SetCopyMask(static_cast<std::uint32_t>(c.x));
+        char msg[48];
+        std::snprintf(msg, sizeof(msg), "viewcopies %u", a.platform.viewOverride.CopyMask());
+        a.log.Write("research %s", msg);
         ResearchAck(a, c.id, msg);
         break;
     }

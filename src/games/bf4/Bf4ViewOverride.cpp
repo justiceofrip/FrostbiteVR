@@ -44,6 +44,23 @@ void WriteViewTransform(std::uint8_t* rows, const LinearTransform& t) {
     WriteRow(rows + 48, t.trans);
 }
 
+namespace {
+CameraAxes AxesOf(const LinearTransform& t) {
+    CameraAxes a;
+    const math::Vec3 rows[3] = {t.right, t.up, t.forward};
+    for (int i = 0; i < 3; ++i) {
+        a.row[i][0] = rows[i].x;
+        a.row[i][1] = rows[i].y;
+        a.row[i][2] = rows[i].z;
+    }
+    return a;
+}
+void SetAxes(LinearTransform& t, const CameraAxes& a) {
+    t.right = {a.row[0][0], a.row[0][1], a.row[0][2]};
+    t.up = {a.row[1][0], a.row[1][1], a.row[1][2]};
+    t.forward = {a.row[2][0], a.row[2][1], a.row[2][2]};
+}
+} // namespace
 LinearTransform HeadTrackedView(const LinearTransform& game, const LinearTransform& local, bool keepGamePitch) {
     LinearTransform parent = game;
     if (!keepGamePitch) {
@@ -138,6 +155,11 @@ void ViewOverride::SetLocal(const LinearTransform& local, bool keepGamePitch, st
     poseTime_ = std::chrono::steady_clock::now();
 }
 
+void ViewOverride::SetGunAim(const GunAimSettings& settings) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    gunAim_ = settings;
+}
+
 void ViewOverride::Clear() {
     std::lock_guard<std::mutex> lock(mutex_);
     havePose_ = false;
@@ -190,6 +212,15 @@ void ViewOverride::Submit(void* renderer, float a, float b, std::uint32_t viewCo
         }
         self->stats_.gameBack = camera.forward;
         ++self->stats_.gameSamples;
+        float differ = 0;
+        for (std::size_t i = 0; i < 16; ++i) {
+            if (i % 4 == 3) continue; // w lanes are padding
+            float first = 0, second = 0;
+            std::memcpy(&first, views + i * 4, 4);
+            std::memcpy(&second, views + kViewCopyOffset + i * 4, 4);
+            differ = std::fmax(differ, std::fabs(first - second));
+        }
+        self->stats_.copiesDiffer = differ;
     }
     if (fresh && !rigid) {
         std::lock_guard<std::mutex> lock(self->mutex_);
@@ -210,11 +241,35 @@ void ViewOverride::Submit(void* renderer, float a, float b, std::uint32_t viewCo
     };
     const LinearTransform gameCamera = ReadViewTransform(views + kViewCopyOffset);
     const LinearTransform headCamera = compose(gameCamera);
-    WriteViewTransform(views, compose(ReadViewTransform(views)));
-    WriteViewTransform(views + kViewCopyOffset, headCamera);
+    // Gun follows aim: the camera turned toward the game's aim at the head's position, the
+    // turn latched per pose so every submit of a lease renders the same view of the world.
+    GunAim gun;
+    {
+        std::lock_guard<std::mutex> lock(self->mutex_);
+        if (self->gunAim_.enabled && poseId) {
+            if (self->gunLatchPose_ != poseId) {
+                const float blockAspect = ReadFloat(views + kViewAspectOffset);
+                const float viewAspect = self->gunAim_.aspect > 0.2f ? self->gunAim_.aspect : blockAspect;
+                self->gunLatched_ = GunAimRotation(AxesOf(headCamera), AxesOf(gameCamera), self->gunAim_.eye[0],
+                                                   self->gunAim_.eye[1], viewAspect);
+                self->gunLatchPose_ = poseId;
+            }
+            gun = self->gunLatched_;
+        }
+    }
+    LinearTransform renderCamera = headCamera;
+    if (gun.rotation.enabled) {
+        SetAxes(renderCamera, ApplyRotation(AxesOf(headCamera), gun.rotation));
+        fovY = PlausibleFov(fovY) ? std::max(fovY, gun.fovY) : gun.fovY;
+    }
+    const std::uint32_t mask = self->copyMask_.load();
+    // +0x00 (the camera relative to the soldier) feeds BF4's weapon lag: with the gun on the
+    // aim it keeps the game's own value, so head motion never swings the gun.
+    if ((mask & 1u) && !gun.rotation.enabled) WriteViewTransform(views, compose(ReadViewTransform(views)));
+    if (mask & 2u) WriteViewTransform(views + kViewCopyOffset, renderCamera);
     {
         float tx = 0, ty = 0;
-        const bool inView = AimInView(gameCamera.forward, headCamera, tx, ty);
+        const bool inView = AimInView(gameCamera.forward, renderCamera, tx, ty);
         std::lock_guard<std::mutex> lock(self->mutex_);
         self->stats_.aimInView = inView;
         self->stats_.aimTanX = tx;
@@ -272,6 +327,8 @@ void ViewOverride::Submit(void* renderer, float a, float b, std::uint32_t viewCo
     if (poseId && poseId == self->stats_.poseId) ++self->stats_.poseRun;
     else self->stats_.poseRun = poseId ? 1 : 0;
     self->stats_.poseId = poseId;
+    self->stats_.frameRotation = gun.rotation; // with the pose id: a capture reads both together
+    self->stats_.gunFraction = gun.fraction;
 }
 
 } // namespace fvr::bf4

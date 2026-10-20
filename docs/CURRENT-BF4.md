@@ -18,7 +18,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   three sessions (09:16-10:19; rotation was inverted and the gun oversized, both fixed in
   0.4.16); everything built since 0.4.17 is unseen in a headset.
 
-## At a glance (installed: 0.4.48-local)
+## At a glance (installed: 0.4.51-local)
 
 | Feature | State | Evidence |
 | --- | --- | --- |
@@ -26,6 +26,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
 | Head-tracked campaign view (6DoF head) | on | headset (earlier build); live sim: direction, labels 100 % |
 | Two frame channels + next pose in the capturing frame | on | live sim: 44.8 pairs/s at 118.6 game fps, 0 failures |
 | Controller aim (mouse look), aim dot, two-handed aim, snap turn | on | live sim: gain learned = measured, 20 deg -> 19.6 deg |
+| Gun follows aim (barrel on the bullets' line) | on | live sim: gun/laser on the aim, labels 335/335 |
 | Comfort vignette, walk toward body/gun | on / body | live sim (vignette seen while walking) |
 | Holsters (keys 1/2/3, G, F) with pulses | on | live sim: 1 and 3 switch weapons; 2, G, F not seen |
 | Manual reload (magazine gesture; B tap/hold) with markers | on (player setting) | live sim: B, belt, magwell -> BF4 reloads |
@@ -48,7 +49,8 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
 - Developer research channel (developer sessions with `research_dump_image` only):
   snapshots, clicks, `dumpimage` (decrypted bf4.exe image for offline RE), background
   vtable scan, read-only `peek`. It never writes game memory (a `poke` command was removed
-  after the policy guard blocked it). Added 2026-10-19: `depthprobe` (installs the depth
+  after the policy guard blocked it). Added 2026-10-19: `viewcopies <0..3>` (which view
+  block transform copies get the head pose; research only), `depthprobe` (installs the depth
   capture, reports it and writes `vr-snapshot-depth.bmp`), `mouse dx dy` (SendInput counts,
   camera yaw/pitch before and 20 frames after), `sendkey <scan>` (a key as the holsters
   press it) and `setting <id> <n>` (a mod menu item as if chosen in the headset).
@@ -106,6 +108,41 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   - 3D from depth: see that section (depth found, parallax direction right).
   - BF4's split 3D (third session, 0.4.47-local): reproduced the headset "freeze" in
     0.1 s and caught it as a crash in the one-view world renderer (Stereo, below).
+
+## Gun follows aim: the barrel on the bullets' line (2026-10-19, built; live sim)
+
+- Problem (player, 2026-10-19): with controller aim the bullets go where the controller
+  points, but BF4's first-person gun stayed in front of the face. Live experiments on the
+  simulated headset (research `viewcopies`, head turned and flipped every frame): BF4 draws
+  the gun at rest relative to the camera that renders the frame (`+0x40` of the submitted
+  view block), whatever the soldier aims at; `+0x00` (a soldier-relative camera, about
+  600 units from `+0x40` in the prologue) only feeds its weapon-lag motion. So no single
+  write moves the gun alone.
+- Route (input/render only, no new native write): the override renders each frame with the
+  camera turned to the game's aim at the head's position, so BF4 draws its gun along the
+  bullets' line (and its own crosshair on the aim); `+0x00` keeps the game's value so head
+  motion does not swing the gun. Each eye ray is rotated back into that render by the eye
+  resampler (`FrameView`, a pure rotation: exact, no depth needed), so the world matches the
+  head; depth stereo rotates each eye's offset too. The turn is latched per pose id and
+  recorded with it, so every submit of a lease shows the same world and the capture uses the
+  matching rotation.
+- Cost: a turned render must still cover both eyes, so it is wider. Coverage counts each eye's
+  lens ellipse (runtimes mask the rectangle's corners; the rotated corners would cost far
+  more); the turn stops at a 2.1 rad (~120 deg) vertical budget (`kGunAimFovBudget`). Quest-like
+  eyes (head-only 1.88 rad): full follow up to ~20 deg sideways or ~7 deg down (up/down costs
+  most: the vertical FOV is already the limit); the centre is up to ~22 % less sharp then.
+  Beyond the budget the gun follows part of the way (looking far from where the gun points).
+  Lens corners that fall just outside take the frame's edge colour.
+- Mod menu "Gun follows aim: Off / On" (default on). Log: `aim_pairs=` (theater_link),
+  `rendered_fov=` (view_override).
+- Evidence: unit tests (rotation math, ellipse coverage, budget, the override's aim-turned
+  write at the head position with `+0x00` untouched, per-pose latch, exact restore); WARP
+  checks (an eye's centre ray lands where the turned render shows it; depth stereo with the
+  turn); live on the simulated headset: hand 15 deg right -> the rifle swings onto the aim dot
+  with BF4's crosshair; head 20 deg right with the hand straight -> the gun's laser still
+  ends on the aim dot; pose-label check 335/335 with head flips of 25 deg and the aim off
+  centre; 3D from depth coherent with the turn; hand 50 deg down while looking ahead hits
+  the budget (partial follow, as designed). Not seen in a headset yet.
 
 ## Head tracking: the world lane (2026-10-19, built; seen in a headset)
 
@@ -570,16 +607,16 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
   test: every item on the panel, none overlapping; a GDI render of the developer menu was
   checked by eye.
 - Build.ps1 after the guard fix and the simulated headset: x64 284/284, x86 283/283.
-  Bf4CoreTests 82 cases (new: research commands, target teleports at a learned gain,
-  split 3D stays off);
+  Bf4CoreTests 83 cases (new: research commands, target teleports at a learned gain,
+  split 3D stays off, gun-follows-aim rotation);
   Bf4Emulated pass (theater, world lane, stereo probe, census, lockdown, gestures; WARP:
   eye resampler reticle/markers/vignette/depth stereo/HUD corners, depth capture detour
   incl. the MSAA snapshot);
   launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
   `-World -FrameChannels 2` 5/5 (76-237 pairs, machine-dependent); `-World` with one
   channel 4/4 (47 pairs).
-- Installed locally: runtime/bf4 0.4.48-local (split 3D retired; rollback 0.4.47-local,
-  the build of the split-3D session); launcher settings
+- Installed locally: runtime/bf4 0.4.51-local (gun follows aim; rollback 0.4.50-local);
+  launcher settings
   restored to the player's after the developer sessions. Developer sessions still run the
   read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the
@@ -602,13 +639,15 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
 
 ## Open / blocked
 
-- Headset check of 0.4.48 (BF4-FIRST-SESSION.md). The simulated headset settled the game
+- Headset check of 0.4.51 (BF4-FIRST-SESSION.md). The simulated headset settled the game
   side (direction, labels, rate, aim, gestures, depth target); what only a headset can
   answer: comfort at ~45 pairs/s (and whether frame sync 1, ~52/s, still holds there),
   gun size and the head-locked gun, the HUD corners' readability, 3D from depth's feel,
   holster positions on a real body, the laser on "Resume".
-- In VR the game's crosshair marks the head, not the gun (the aim dot is the true aim);
-  hiding it needs the UI pass (native RE).
+- Gun at the hand: the gun now points along the aim but sits where BF4 puts it relative to
+  the eye (not in the controller's hand), and follows only part of the way when the head
+  looks far from where it points (FOV budget). Moving it into the hand needs the
+  first-person transform or IK (BF4-HOLSTER-IK-RE.md).
 - 3D: BF4's split route is unsupported (above); 3D from depth is the stereo route. The
   NVAPI route (sequential eye passes, emulated) needs a Steam launch option to test live.
 - Laser click on the campaign screen's "Resume" (main menu) did not register while other

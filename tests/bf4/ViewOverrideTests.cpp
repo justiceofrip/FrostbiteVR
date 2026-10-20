@@ -127,6 +127,43 @@ TEST_CASE(ViewOverrideAppliesRestoresAndDetachesExactly) {
     CHECK(std::memcmp(v.bytes, pristine.bytes, sizeof(v.bytes)) == 0); // exact restore, w lane and dirty too
     auto s = vo.GetStats();
     CHECK(s.submits == 2 && s.applied == 1 && s.restored == 1 && s.foreign == 0);
+    CHECK(s.copiesDiffer == 0.0f); // the game submitted the same camera twice
+
+    vo.SetCopyMask(2); // research: only the +0x40 copy gets the head pose
+    vo.SetLocal(Yawed(30, {}), false);
+    r.SubmitThroughVtable(v.bytes);
+    CHECK(Same(g_log.seen.forward, game.forward) && Same(g_log.seenCopy.forward, Yawed(30, {}).forward));
+    CHECK(std::memcmp(v.bytes, pristine.bytes, sizeof(v.bytes)) == 0);
+    vo.SetCopyMask(3);
+
+    // Gun follows aim: the camera turned to the game's aim at the head's position, latched per
+    // pose; +0x00 keeps the game's own value; exact restore as always.
+    ViewOverride::GunAimSettings gun;
+    gun.enabled = true;
+    gun.eye[0] = {-1.0f, 0.9f, 1.0f, -1.1f};
+    gun.eye[1] = {-0.9f, 1.0f, 1.0f, -1.1f};
+    gun.aspect = 16.0f / 9.0f;
+    vo.SetGunAim(gun);
+    LinearTransform headLocal = Yawed(8, {}); // a small turn: the render goes all the way to the aim
+    headLocal.trans = {0.1f, 0, 0};
+    vo.SetLocal(headLocal, false, /*poseId=*/5, /*fovY=*/1.6f);
+    r.SubmitThroughVtable(v.bytes);
+    CHECK(Same(g_log.seenCopy.forward, game.forward));           // rendered along the aim
+    CHECK(Same(g_log.seenCopy.trans, {1.1f, 2, 3}));             // from the head's position
+    CHECK(Same(g_log.seen.forward, game.forward) && Same(g_log.seen.trans, game.trans)); // +0x00 untouched
+    CHECK(std::memcmp(v.bytes, pristine.bytes, sizeof(v.bytes)) == 0);
+    auto gs = vo.GetStats();
+    CHECK(gs.frameRotation.enabled && Near(gs.gunFraction, 1.0f, 1e-5f) && gs.poseId == 5);
+    const FrameRotation latched = gs.frameRotation;
+    r.SubmitThroughVtable(v.bytes); // same pose: the same turn relative to the head
+    gs = vo.GetStats();
+    bool sameTurn = true;
+    for (int i = 0; i < 3; ++i)
+        for (int k = 0; k < 3; ++k) sameTurn = sameTurn && gs.frameRotation.m[i][k] == latched.m[i][k];
+    CHECK(sameTurn && gs.poseRun == 2);
+    gun.enabled = false;
+    vo.SetGunAim(gun);
+    vo.SetLocal(Yawed(30, {}), false);
 
     g_log.scribble = true; // the game wrote its own value during the call: keep the game's
     r.SubmitThroughVtable(v.bytes);

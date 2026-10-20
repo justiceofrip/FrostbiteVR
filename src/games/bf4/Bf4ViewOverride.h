@@ -10,6 +10,7 @@
 //
 // Portable C++: tests drive it with a fake renderer object and vtable in-process.
 #include "../../engines/frostbite/Fb3CameraMath.h"
+#include "Bf4WorldView.h"
 
 #include <array>
 #include <atomic>
@@ -91,6 +92,20 @@ public:
         bool aimInView = false;
         float aimTanX = 0, aimTanY = 0;
         float nearZ = 0, farZ = 0; // the main view's planes (depth stereo linearises with them)
+        // Largest difference between the block's two transform copies (+0x00 and +0x40) as
+        // the game submitted them (latest rigid submit): 0 when they are the same camera.
+        float copiesDiffer = 0;
+        // Gun follows aim: the latest applied submit's render-from-head rotation (enabled when
+        // the camera was turned toward the aim) and how far toward it the FOV budget allowed.
+        FrameRotation frameRotation;
+        float gunFraction = 0;
+    };
+    // Gun follows aim (world lane): render with the camera turned toward the game's aim at
+    // the head's position, latched per pose id, with a FOV that still covers both eyes.
+    struct GunAimSettings {
+        bool enabled = false;
+        math::FovTangents eye[2]{{-1, 1, 1, -1}, {-1, 1, 1, -1}};
+        float aspect = 0; // the engine's view aspect (0: the block's own)
     };
 
     ViewOverride() = default;
@@ -116,6 +131,11 @@ public:
                   float fovY = 0, float parentYaw = std::numeric_limits<float>::quiet_NaN());
     void Clear();
     Stats GetStats() const;
+    // Developer research: which of the block's two transform copies get the head pose
+    // (bit 0: +0x00, bit 1: +0x40; default both). The restore is exact either way.
+    void SetCopyMask(std::uint32_t mask) { copyMask_.store(mask & 3u); }
+    void SetGunAim(const GunAimSettings& settings);
+    std::uint32_t CopyMask() const { return copyMask_.load(); }
 
     static constexpr std::chrono::milliseconds kMaxAge{100};
 
@@ -123,6 +143,10 @@ private:
     static void Submit(void* renderer, float a, float b, std::uint32_t viewCount, std::uint8_t* views, void* sync,
                        void* extra);
     void* object_ = nullptr;
+    std::atomic<std::uint32_t> copyMask_{3};
+    GunAimSettings gunAim_;        // under mutex_
+    std::uint64_t gunLatchPose_ = 0;
+    GunAim gunLatched_;
     void* originalVtable_ = nullptr;
     RendererSubmitFn original_ = nullptr;
     void** copy_ = nullptr; // [locator, slots...]; leaked on purpose: a call may still be in flight

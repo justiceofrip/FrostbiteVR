@@ -29,7 +29,13 @@ cbuffer Crop : register(b0) {
     float4 stereo2; // min depth, HUD insets on, -, -
     float4 insetSrc[2]; // HUD corner sources (frame uv rect)
     float4 insetTan[2]; // and where they go (view tangents: left top right bottom)
+    float4 rot[3];      // gun follows aim: render-from-head rotation rows
+    float4 frame;       // the render's tangents x y, rotation on, this eye's signed half eye distance
 };
+// Frame uv of a render tangent.
+float2 FrameUv(float2 f) {
+    return float2(lerp(bounds.x, bounds.z, 0.5 + f.x / (2 * frame.x)), 0.5 - f.y / (2 * frame.y));
+}
 // A HUD corner copied into its inset, with a thin dark frame; c unchanged outside it.
 float3 Inset(float3 c, float2 t, float4 src, float4 dst) {
     const float2 f = float2((t.x - dst.x) / (dst.z - dst.x), (dst.y - t.y) / (dst.y - dst.w));
@@ -71,12 +77,31 @@ V vs(uint n : SV_VertexID) {
     return o;
 }
 float4 ps(V v) : SV_Target {
-    const float2 s0 = float2(lerp(rect.x, rect.z, v.uv.x), lerp(rect.y, rect.w, v.uv.y));
-    float2 s = s0;
-    if (stereo.w > 0.5) { // depth stereo: this eye's parallax, by fixed-point search on depth
-        [unroll] for (int i = 0; i < 4; ++i) {
-            const float z = max(LinearZ(DepthAt(s)), stereo2.x);
-            s.x = s0.x + stereo.x / z;
+    const float2 t = float2(lerp(eyeFov.x, eyeFov.y, v.uv.x), lerp(eyeFov.z, eyeFov.w, v.uv.y));
+    float2 s;
+    if (frame.z > 0.5) { // gun follows aim: this eye's ray rotated into the aim-turned render
+        const float3 d = float3(t, -1);
+        const float3 o = float3(dot(rot[0].xyz, d), dot(rot[1].xyz, d), dot(rot[2].xyz, d));
+        if (o.z > -1e-3) return float4(0, 0, 0, 1); // behind the render
+        float2 f = o.xy / -o.z;
+        if (stereo.w > 0.5) { // depth stereo: the eye's offset rotated into the render as well
+            const float3 b = float3(rot[0].x, rot[1].x, rot[2].x) * frame.w;
+            [unroll] for (int i = 0; i < 4; ++i) {
+                const float z = max(LinearZ(DepthAt(FrameUv(f))), stereo2.x);
+                f = (b.xy + o.xy * ((-z - b.z) / o.z)) / z;
+            }
+        }
+        // The lens corners may fall just outside the turned render (it is sized for the lens
+        // ellipse): the nearest edge, not black.
+        s = clamp(FrameUv(f), float2(bounds.x, 0), float2(bounds.z, 1));
+    } else {
+        const float2 s0 = float2(lerp(rect.x, rect.z, v.uv.x), lerp(rect.y, rect.w, v.uv.y));
+        s = s0;
+        if (stereo.w > 0.5) { // depth stereo: this eye's parallax, by fixed-point search on depth
+            [unroll] for (int i = 0; i < 4; ++i) {
+                const float z = max(LinearZ(DepthAt(s)), stereo2.x);
+                s.x = s0.x + stereo.x / z;
+            }
         }
     }
     if (s.x < bounds.x || s.x > bounds.z || s.y < 0 || s.y > 1) return float4(0, 0, 0, 1); // not rendered
@@ -93,7 +118,6 @@ float4 ps(V v) : SV_Target {
     }
     c = Marker(c, v.uv, marker0);
     c = Marker(c, v.uv, marker1);
-    const float2 t = float2(lerp(eyeFov.x, eyeFov.y, v.uv.x), lerp(eyeFov.z, eyeFov.w, v.uv.y));
     if (comfort.x > 0.001) { // comfort vignette: clear to ~35 deg off centre, dark by ~50 deg
         c *= 1 - comfort.x * 0.9 * smoothstep(0.70, 1.19, length(t));
     }
@@ -150,6 +174,8 @@ struct alignas(16) CropConstants {
     float stereo2[4];
     float insetSrc[2][4];
     float insetTan[2][4];
+    float rot[3][4];
+    float frame[4];
 };
 
 // Shader view of a typeless depth family.
@@ -224,7 +250,7 @@ void EyeResampler::Reset() {
 
 bool EyeResampler::Render(ID3D11DeviceContext* context, ID3D11Texture2D* source, const EyeCrop (&crops)[2],
                           std::uint32_t width, std::uint32_t height, std::uint32_t format, const Reticle& reticle,
-                          const EyeOverlay* overlays, const DepthStereoInput* depth) {
+                          const EyeOverlay* overlays, const DepthStereoInput* depth, const FrameView* view) {
     if (broken_ || !context || !source || !width || !height || width > 16384 || height > 16384) return false;
     if (!initialized_ && !Initialize(context)) {
         broken_ = true; // no D3D11.1 state objects / shader compiler: the world lane stays off
@@ -348,6 +374,14 @@ bool EyeResampler::Render(ID3D11DeviceContext* context, ID3D11Texture2D* source,
             c.stereo[3] = depth->params.reversed ? 2.0f : 1.0f;
             c.stereo2[0] = depth->params.minDepth;
             c.stereo2[2] = depthMultisampled_ ? 1.0f : 0.0f;
+        }
+        if (view && view->rotation.enabled && view->tanX > 0 && view->tanY > 0) {
+            for (int r = 0; r < 3; ++r)
+                for (int k = 0; k < 3; ++k) c.rot[r][k] = view->rotation.m[r][k];
+            c.frame[0] = view->tanX;
+            c.frame[1] = view->tanY;
+            c.frame[2] = 1;
+            c.frame[3] = i == 0 ? -view->halfEye : view->halfEye;
         }
         context_->UpdateSubresource(constants_[i].Get(), 0, nullptr, &c, 0, 0);
     }

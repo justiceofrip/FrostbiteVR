@@ -22,6 +22,8 @@
 //   <id> sendkey <scan>     a key by set-1 scan code through SendInput (held 6 frames), as the
 //                           holster gestures press BF4's keys
 //   <id> setting <id> <n>   sets a mod menu item to choice n (as if clicked in the headset)
+//   <id> viewcopies <0..3>  which of the view block's transform copies get the head pose
+//                           (bit 0: +0x00, bit 1: +0x40; 3 = both, the default)
 
 #include "Bf4PointerInjector.h"
 
@@ -34,7 +36,8 @@ namespace fvr::bf4 {
 
 struct ResearchCommand {
     enum class Kind : std::uint8_t {
-        Snap, Click, Move, Key, DumpImage, ScanQ, Peek, Type, Census, DepthProbe, Mouse, SendKey, Setting, Unknown
+        Snap, Click, Move, Key, DumpImage, ScanQ, Peek, Type, Census, DepthProbe, Mouse, SendKey, Setting, ViewCopies,
+        Unknown
     };
     std::uint64_t id = 0;
     Kind kind = Kind::Unknown;

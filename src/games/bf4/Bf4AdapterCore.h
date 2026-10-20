@@ -44,6 +44,7 @@ struct CameraRequest {
     float parentYaw = std::numeric_limits<float>::quiet_NaN(); // body heading (controller aiming)
     float renderFovY = 0;     // vertical FOV to render (radians) for the full frame's aspect
     math::FovTangents eyeFov[2]; // the request's eye tangents (lane requests only)
+    bool gunFollowsAim = false;  // render along the game's aim, eyes rotated back (Bf4WorldView.h)
 };
 
 // Off: flat theater. Theater3D: engine stereo pair on the theater screen, no head tracking.

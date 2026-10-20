@@ -221,5 +221,66 @@ bool CheckEyeResamplerReticle(ID3D11Device* device, const char*& why) {
             if (!(l < 130 - 8 && r > 130 + 8)) return why = "MSAA depth stereo shifts each eye its way", false;
         }
     }
+    // Gun follows aim: the frame was rendered turned right by atan(0.25) (frame tangents +-1),
+    // so each eye's centre ray lands a quarter tangent left of the frame's centre: column 24
+    // (red ~96) instead of 32; the eyes' +-0.5 views stay inside the frame.
+    {
+        std::vector<std::uint32_t> stripes(kSize * kSize);
+        for (UINT y = 0; y < kSize; ++y)
+            for (UINT x = 0; x < kSize; ++x) stripes[y * kSize + x] = 0xFF808000u | (x * 4);
+        const D3D11_SUBRESOURCE_DATA stripeData{stripes.data(), kSize * 4, 0};
+        ComPtr<ID3D11Texture2D> striped;
+        if (FAILED(device->CreateTexture2D(&d, &stripeData, &striped))) return why = "create the striped frame (aim)", false;
+        const float c = 1.0f / std::sqrt(1.0f + 0.0625f), s = 0.25f * c; // cos, sin of atan(0.25)
+        fvr::bf4::CameraAxes head, aim;
+        const float right[3] = {c, 0, s}, back[3] = {-s, 0, c};
+        for (int k = 0; k < 3; ++k) {
+            aim.row[0][k] = right[k];
+            aim.row[2][k] = back[k];
+        }
+        fvr::bf4::FrameView view;
+        view.rotation = fvr::bf4::RotationBetween(head, aim);
+        view.tanX = view.tanY = 1.0f;
+        fvr::bf4::EyeOverlay eyesFov[2];
+        for (auto& o : eyesFov) o.fov = {-0.5f, 0.5f, 0.5f, -0.5f};
+        if (!resampler.Render(context.Get(), striped.Get(), crops, kSize, kSize, DXGI_FORMAT_R8G8B8A8_UNORM, {}, eyesFov, nullptr,
+                              &view))
+            return why = "aim-turned resample", false;
+        for (int e = 0; e < 2; ++e) {
+            if (!ReadPixels(device, context.Get(), resampler.Eye(e), eye, width)) return why = "read back the aim-turned eye", false;
+            const int centre = eye[32 * width + 32] & 0xFF, edge = eye[32 * width + 0] & 0xFF;
+            if (std::abs(centre - 96) > 6) return why = "aim-turned render: the eye's centre ray lands left of the frame's", false;
+            if (!(edge > 0 && edge < 40) || (eye[32 * width + 0] >> 24) != 0xFF)
+                return why = "aim-turned render: the eye's edge is the frame's far left, not black", false;
+        }
+        // With depth stereo (everything 1 m away, 5 cm half eye distance): each eye's offset is
+        // rotated into the render too; the left eye samples ~0.1 tangent further left.
+        std::vector<float> metre(kSize * kSize, 1000.0f * (1 - 0.1f / 1.0f) / (1000.0f - 0.1f));
+        D3D11_TEXTURE2D_DESC dd = d;
+        dd.Format = DXGI_FORMAT_R32_TYPELESS;
+        const D3D11_SUBRESOURCE_DATA metreData{metre.data(), kSize * 4, 0};
+        ComPtr<ID3D11Texture2D> metreDepth;
+        if (FAILED(device->CreateTexture2D(&dd, &metreData, &metreDepth))) return why = "create the 1 m depth", false;
+        fvr::bf4::DepthStereoInput depth;
+        depth.texture = metreDepth.Get();
+        depth.format = DXGI_FORMAT_R32_TYPELESS;
+        depth.params.enabled = true;
+        depth.params.nearZ = 0.1f;
+        depth.params.farZ = 1000.0f;
+        view.halfEye = 0.05f;
+        if (!resampler.Render(context.Get(), striped.Get(), crops, kSize, kSize, DXGI_FORMAT_R8G8B8A8_UNORM, {}, eyesFov, &depth,
+                              &view))
+            return why = "aim-turned depth stereo resample", false;
+        std::vector<std::uint32_t> leftEye, rightEye;
+        if (!ReadPixels(device, context.Get(), resampler.Eye(0), leftEye, width) ||
+            !ReadPixels(device, context.Get(), resampler.Eye(1), rightEye, width))
+            return why = "read back the aim-turned depth stereo eyes", false;
+        const int l = leftEye[32 * width + 32] & 0xFF, r = rightEye[32 * width + 32] & 0xFF;
+        if (!(l < r - 6 && l > 70 && r < 115)) return why = "aim-turned depth stereo: each eye's offset rotated into the render", false;
+        if (!resampler.Render(context.Get(), striped.Get(), crops, kSize, kSize, DXGI_FORMAT_R8G8B8A8_UNORM, {}, eyesFov))
+            return why = "plain resample after the aim-turned one", false;
+        if (!ReadPixels(device, context.Get(), resampler.Eye(0), eye, width) || std::abs(int(eye[32 * width + 32] & 0xFF) - 130) > 6)
+            return why = "without the turn the centre is the frame's centre", false;
+    }
     return true;
 }

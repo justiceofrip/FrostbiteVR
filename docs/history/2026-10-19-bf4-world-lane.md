@@ -57,3 +57,8 @@ Decisions worth keeping:
   simulated headset, it is a crash (not a stall) because the PC world renderer is built
   for one view (one-element view-renderer array, one 0x34000-byte view block in a
   0x34400-byte object). Stereo now means 3D from depth.
+- The gun is aligned with the bullets by rendering along the aim, not by moving the gun:
+  BF4 draws its first-person gun at rest relative to the render camera (live experiments),
+  so the frame is rendered with the camera turned to the game's aim at the head's position
+  and each eye ray is rotated back to the head (exact for a rotation). The turn is latched
+  per pose and limited by a FOV budget (lens-ellipse coverage).

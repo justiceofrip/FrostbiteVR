@@ -6,6 +6,7 @@
 // implementation, one menu renderer. The host runs its laser pointer for every surface
 // and sends the adapter only game-screen pointer events.
 #include "../../engines/frostbite/Fb3CameraMath.h"
+#include "Bf4WorldView.h"
 #include "fvr/interaction/ControllerInput.h"
 #include "fvr/interaction/Feedback.h"
 #include "fvr/math/Vec.h"
@@ -37,6 +38,7 @@ struct FrameMeta {
     std::uint32_t poseRun = 0;
     float renderFovY = 0;     // vertical FOV the tagged frames were rendered with (radians)
     float renderAspect = 0;   // aspect the engine's view uses (half the frame's in split stereo)
+    FrameRotation frameRotation; // gun follows aim: render-from-head rotation of the tagged frames
     // Stereo: the core asks (mod menu), the platform reports what the engine renders.
     bool worldStereo = false;
     float halfEyeDistance = 0;        // the headset's, world units
