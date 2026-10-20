@@ -1121,7 +1121,12 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
   indices -> 15762 and 14958 + 804), so those are the weapon; the arms are among the others
   (19431 + 7416 in two G-buffer passes, 14217, and the depth-only 34695 and 6369, whose
   6369-index part stays through the weapon switch). With 17 captures most bone pairs of the
-  19431 mesh solve to a well-conditioned shared point. Left: reading those points as the arms'
-  shoulder, elbow and wrist needs BF4's own first-person view (the probe reads the moved one when
-  the gun is in the hand), then the chains, the two-bone solve and the palette rewrite. Not
-  built.
+  19431 mesh solve to a well-conditioned shared point. Session 61 (the gun at BF4's own place,
+  so the probe reads BF4's first-person view; scratch `fp_joints2.py`): in BF4's first-person
+  camera space the 19431-index mesh is the left arm: its hand and finger joints at the handguard
+  (x 0.0, y -0.21, z -0.42; moving ~21 cm through a reload), a joint at (-0.09, -0.36, -0.25)
+  (the elbow, likely) and one at (-0.08, -0.19, 0.0) (the shoulder end, moving ~19 cm with
+  sprinting); the 6369-index mesh is the right hand at the pistol grip (wrist ~(0.10, -0.21,
+  -0.17)). Left for IK: the right arm's chain, recognising arm meshes in general (index counts
+  differ per mesh), learning their joints while playing, the two-bone solve and the palette
+  rewrite. Not built.
