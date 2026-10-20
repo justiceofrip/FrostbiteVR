@@ -2,6 +2,11 @@
 
 ## Tester startup correction — October 20
 
+[BC2VR 0.1.10](https://github.com/justiceofrip/BC2VR/releases/tag/v0.1.10)
+was published at 12:37 UTC on October 20. The installer, runtime ZIP and update
+manifest all match the tested asset sizes and SHA-256 digests returned by GitHub.
+Source checkpoint: `aaad4c7` on `checkpoint/427-knife-investigation`.
+
 The supplied 0.1.9 EA/VirtualDesktopXR log establishes two local software bugs:
 the host disabled pointing for the tester's 1024×768 raster, and the launcher
 stopped a healthy main-menu-only session after 35 seconds because its readiness
