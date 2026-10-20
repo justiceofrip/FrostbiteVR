@@ -125,6 +125,7 @@ Control g_control;
 FILETIME g_controlStamp{};
 std::int64_t g_lastPollNs = 0, g_startNs = 0, g_nextFrameNs = 0;
 std::string g_doneSnap;
+bool g_firstParse = true; // the file's one-shot lines (snap, sig) at start are history
 bool g_snapPending = false;
 unsigned g_snapWait = 0;
 
@@ -219,6 +220,11 @@ void ParseControl(const std::string& text) {
         clamp(h.stickY, -1, 1);
     }
     g_control = c;
+    if (g_firstParse) { // one-shot requests already in the file belong to an earlier session
+        g_firstParse = false;
+        g_doneSnap = c.snapId;
+        g_doneSig = c.sigId;
+    }
     if (!c.sigId.empty() && c.sigId != g_doneSig) g_sigPending = true;
     if (!c.snapId.empty() && c.snapId != g_doneSnap) {
         g_snapPending = true;
@@ -515,6 +521,7 @@ XrResult XRAPI_CALL CreateInstance(const XrInstanceCreateInfo*, XrInstance* out)
     g_startNs = QpcNs();
     g_control = Control{};
     g_controlStamp = {};
+    g_firstParse = true;
     g_lastPollNs = 0;
     *out = Instance();
     return XR_SUCCESS;

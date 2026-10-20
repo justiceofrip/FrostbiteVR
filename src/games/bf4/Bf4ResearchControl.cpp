@@ -122,4 +122,10 @@ std::vector<TimedPointerEvent> PointerSequence(float u, float v, int w, int h, b
     return out;
 }
 
+std::uint64_t LastResearchCommandId(std::string_view text) {
+    std::uint64_t last = 0;
+    for (const auto& c : ParseResearchCommands(text, 0)) last = std::max(last, c.id);
+    return last;
+}
+
 } // namespace fvr::bf4

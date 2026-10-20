@@ -51,6 +51,10 @@ struct ResearchCommand {
 // Lines "<id> <verb> [args]"; '#' comments and blank lines skipped. Returns the commands
 // with id > afterId in file order. Malformed lines become Unknown (reported, not run).
 std::vector<ResearchCommand> ParseResearchCommands(std::string_view text, std::uint64_t afterId);
+// The highest command id in the file: what a session opening the channel starts after, so
+// commands of earlier sessions are never replayed (a stale menu click once landed on a
+// multiplayer tile at startup).
+std::uint64_t LastResearchCommandId(std::string_view text);
 
 // Windows virtual-key code for a key name; 0 if unknown. Names: enter, esc, space, tab,
 // backspace, up, down, left, right, grave (console), f1..f12, a..z, 0..9.

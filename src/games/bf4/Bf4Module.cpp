@@ -1916,7 +1916,17 @@ extern "C" __declspec(dllexport) int __cdecl FvrBf4_Start(const char* sessionTex
     Identify(*a, build, bindings);
     if (a->session.developerFeatures && !a->session.researchDumpDir.empty()) {
         CreateDirectoryA(a->session.researchDumpDir.c_str(), nullptr);
-        a->log.Write("research channel: %s\\cmd.txt", a->session.researchDumpDir.c_str());
+        // Commands already in the file belong to earlier sessions: never replay them.
+        std::string earlier;
+        if (std::FILE* f = std::fopen((a->session.researchDumpDir + "\\cmd.txt").c_str(), "rb")) {
+            char buf[4096];
+            std::size_t n;
+            while ((n = std::fread(buf, 1, sizeof(buf), f)) > 0 && earlier.size() < 65536) earlier.append(buf, n);
+            std::fclose(f);
+        }
+        a->researchLastId = LastResearchCommandId(earlier);
+        a->log.Write("research channel: %s\\cmd.txt (commands after id %llu)", a->session.researchDumpDir.c_str(),
+                     static_cast<unsigned long long>(a->researchLastId));
     }
     a->core = std::make_unique<AdapterCore>(a->session, build, std::move(bindings), a->platform);
     g_adapter = a;

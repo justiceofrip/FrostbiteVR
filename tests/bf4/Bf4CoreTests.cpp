@@ -1275,6 +1275,8 @@ TEST_CASE(ResearchCommandsForLiveFlatSessions) {
     CHECK(c[3].kind == ResearchCommand::Kind::Setting && c[3].arg == "depth_stereo" && c[3].x == 1);
     CHECK(c[4].kind == ResearchCommand::Kind::Unknown && c[5].kind == ResearchCommand::Kind::Unknown &&
           c[6].kind == ResearchCommand::Kind::Unknown); // out of range: rejected, not run
+    // A new session starts after the commands already in the file (never replays them).
+    CHECK(LastResearchCommandId("1 snap a\n7 click 0.25 0.5\n3 bogus words\n") == 7 && LastResearchCommandId("") == 0);
     const auto v = ParseResearchCommands("1 viewcopies 2\n2 viewcopies 4\n", 0);
     CHECK(v.size() == 2 && v[0].kind == ResearchCommand::Kind::ViewCopies && v[0].x == 2 &&
           v[1].kind == ResearchCommand::Kind::Unknown);

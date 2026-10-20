@@ -1,4 +1,4 @@
-# BF4 headset session: checklist (0.4.51-local)
+# BF4 headset session: checklist (0.4.54-local)
 
 What to try in the next headset session, and what each check tells us. About 15 minutes.
 The game side of everything below already ran live without a headset (simulated headset,

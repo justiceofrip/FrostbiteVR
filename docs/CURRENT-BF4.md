@@ -18,11 +18,11 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   three sessions (09:16-10:19; rotation was inverted and the gun oversized, both fixed in
   0.4.16); everything built since 0.4.17 is unseen in a headset.
 
-## At a glance (installed: 0.4.52-local)
+## At a glance (installed: 0.4.54-local)
 
 | Feature | State | Evidence |
 | --- | --- | --- |
-| Theater screen + laser menus | on | headset |
+| Theater screen + laser menus | on | headset; live sim: laser Resume and mod menu clicks |
 | Head-tracked campaign view (6DoF head) | on | headset (earlier build); live sim: direction, labels 100 % |
 | Two frame channels + next pose in the capturing frame | on | live sim: 44.8 pairs/s at 118.6 game fps, 0 failures |
 | Controller aim (mouse look), aim dot, two-handed aim, snap turn | on | live sim: gain learned = measured, 20 deg -> 19.6 deg |
@@ -54,6 +54,11 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   capture, reports it and writes `vr-snapshot-depth.bmp`), `mouse dx dy` (SendInput counts,
   camera yaw/pitch before and 20 frames after), `sendkey <scan>` (a key as the holsters
   press it) and `setting <id> <n>` (a mod menu item as if chosen in the headset).
+  Fixed 2026-10-19: a session used to replay every command already in `cmd.txt` at start
+  (old menu clicks, keys, settings); one replayed click landed on the home screen's
+  multiplayer quick-match tile ("Failed to join game session", nothing joined). The channel
+  now starts after the highest id in the file (`LastResearchCommandId`, unit-tested); the
+  simulated headset likewise ignores one-shot lines already in its control file.
 - Live input facts (2026-10-19, prologue): BF4's mouse look turns 0.00140 rad per count on
   both axes, linear (200 and 100 counts alike, exact return), +x turns right, +y looks
   down; the controller aim's first estimate (0.003) is 2.1x that, so it starts at about
@@ -617,8 +622,7 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
   launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
   `-World -FrameChannels 2` 5/5 (76-237 pairs, machine-dependent); `-World` with one
   channel 4/4 (47 pairs).
-- Installed locally: runtime/bf4 0.4.52-local (same build as 0.4.51, installed by the
-  gesture session; rollback 0.4.51-local);
+- Installed locally: runtime/bf4 0.4.54-local (research replay fix; rollback 0.4.53-local);
   launcher settings
   restored to the player's after the developer sessions. Developer sessions still run the
   read-only probes and the firing census.
@@ -642,7 +646,7 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
 
 ## Open / blocked
 
-- Headset check of 0.4.51 (BF4-FIRST-SESSION.md). The simulated headset settled the game
+- Headset check of 0.4.54 (BF4-FIRST-SESSION.md). The simulated headset settled the game
   side (direction, labels, rate, aim, gestures, depth target); what only a headset can
   answer: comfort at ~45 pairs/s (and whether frame sync 1, ~52/s, still holds there),
   gun size and the head-locked gun, the HUD corners' readability, 3D from depth's feel,
@@ -653,7 +657,10 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
   first-person transform or IK (BF4-HOLSTER-IK-RE.md).
 - 3D: BF4's split route is unsupported (above); 3D from depth is the stereo route. The
   NVAPI route (sequential eye passes, emulated) needs a Steam launch option to test live.
-- Laser click on the campaign screen's "Resume" (main menu) did not register while other
+- Laser click on "Resume": fixed on the game side. Live on the simulated headset
+  (0.4.53-local) the VR laser aimed at RESUME on the campaign screen pressed and released at
+  the same pixel (236, 297) and the mission loaded; the mod menu opened with the menu button
+  and a laser click toggled an item. Earlier report: it did not register while other
   menu clicks did. Cause assumed: no click lock, so hand jitter while the trigger was held
   went out as a drag (that screen scrolls on drags), and the trigger also reached the
   virtual pad. Now the cursor holds its press position unless the laser moves more than
