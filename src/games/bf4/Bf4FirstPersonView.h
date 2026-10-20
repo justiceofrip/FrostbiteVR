@@ -76,8 +76,8 @@ public:
             bool valid = false;
             math::Pose body{};   // arms from the body: the torso relative to the head, when bodyValid
             bool bodyValid = false; // (else the head's yaw, level: BodyInHead)
-            math::Pose leftHand{}; // ...the left controller's grip relative to the head, when the hand is off the gun
-            bool leftFree = false;
+            math::Pose leftHand{}; // ...the left controller's grip relative to the head, when leftValid
+            bool leftValid = false, leftFree = false; // ...and whether the hand is off the gun
         };
         std::array<Hand, 6> hands{};
         math::Pose gripAtRest = GunGripAtRest();
@@ -230,7 +230,11 @@ private:
     ArmCorrections armCorr_{};
     Mat4 armHeadFromPass_{}, armBody_{};
     math::Vec3 armLeftTarget_{};  // the free left hand's wrist (head space)
+    Mat4 armLeftTurn_ = Identity4(); // ...and its turn since it let go (head space)
     float armLeftBlend_ = 0;      // 0 on the gun .. 1 at the controller
+    // The left controller's turn relative to the gun while it steadies it (two-handed): the
+    // free hand keeps that relation, so it turns as its controller turns from the gun.
+    Mat4 armLeftGrip_ = Identity4();
     std::int64_t armLastPassTick_ = 0;
 };
 

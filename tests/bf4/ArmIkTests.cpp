@@ -255,6 +255,34 @@ TEST_CASE(ArmIkAFreeHandTakesItsFingers) {
     }
 }
 
+TEST_CASE(ArmIkAFreeHandTurnsWithItsController) {
+    // The free hand turns about the wrist by its turn (scaled by the blend): a point on the hand
+    // keeps its distance from the wrist and swings by that rotation.
+    const ArmBindJoints bind = Bf4ArmBindJoints();
+    const Rig base = MakeRig();
+    ArmSolveInput in;
+    FindArmChains(base.palette.data(), Rig::kBones, bind, in.chains);
+    in.headFromPass = Translation({0, -1.9f, 0});
+    in.body = Identity4();
+    const math::Vec3 wrist = TransformPoint(in.headFromPass, base.w[0]);
+    in.wristTarget[0] = wrist + math::Vec3{-0.1f, 0, 0};
+    in.hasWristTarget[0] = true;
+    in.handTurn[0] = Rotation({0, 1, 0}, 0.8f);
+    BoneClass cls[Rig::kBones];
+    ClassifyBones(base.palette.data(), Rig::kBones, bind, in.chains, kArmClassTolerance, cls, kArmFingerReach);
+    const math::Vec3 p = bind.wrist[0] + math::Vec3{0.05f, 0.02f, 0.06f}; // a point on the hand
+    const math::Vec3 before = TransformPoint(in.headFromPass, Map(base.palette, 6, p)) - wrist;
+    for (float blend : {1.0f, 0.5f}) {
+        in.wristBlend[0] = blend;
+        Rig rig = base;
+        ApplyArmCorrections(rig.palette.data(), Rig::kBones, cls, in.headFromPass, SolveArms(in));
+        const math::Vec3 target = wrist + (in.wristTarget[0] - wrist) * blend;
+        const math::Vec3 after = TransformPoint(in.headFromPass, Map(rig.palette, 6, p)) - target;
+        CHECK(NearV(TransformPoint(in.headFromPass, Map(rig.palette, 6, bind.wrist[0])), target));
+        CHECK(NearV(after, TransformVector(Rotation({0, 1, 0}, 0.8f * blend), before), 1e-3f));
+    }
+}
+
 TEST_CASE(ArmIkSlidesTheShoulderWhenTheGunIsOutOfReach) {
     const ArmBindJoints bind = Bf4ArmBindJoints();
     Rig rig = MakeRig();

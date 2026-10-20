@@ -156,13 +156,14 @@ void ViewOverride::SetLocal(const LinearTransform& local, bool keepGamePitch, st
 }
 
 void ViewOverride::SetHand(const math::Pose& handInHead, bool valid, const math::Pose& bodyInHead, bool bodyValid,
-                           const math::Pose& leftHandInHead, bool leftFree) {
+                           const math::Pose& leftHandInHead, bool leftValid, bool leftFree) {
     std::lock_guard<std::mutex> lock(mutex_);
     hand_ = handInHead;
     handValid_ = valid;
     body_ = bodyInHead;
     bodyValid_ = bodyValid;
     left_ = leftHandInHead;
+    leftValid_ = leftValid;
     leftFree_ = leftFree;
 }
 
@@ -214,7 +215,7 @@ void ViewOverride::Submit(void* renderer, float a, float b, std::uint32_t viewCo
     std::uint64_t poseId = 0;
     float fovY = 0, parentYaw = std::numeric_limits<float>::quiet_NaN();
     math::Pose hand{}, body{}, left{};
-    bool handValid = false, bodyValid = false, leftFree = false;
+    bool handValid = false, bodyValid = false, leftValid = false, leftFree = false;
     {
         std::lock_guard<std::mutex> lock(self->mutex_);
         ++self->stats_.submits;
@@ -233,6 +234,7 @@ void ViewOverride::Submit(void* renderer, float a, float b, std::uint32_t viewCo
         body = self->body_;
         bodyValid = self->bodyValid_;
         left = self->left_;
+        leftValid = self->leftValid_;
         leftFree = self->leftFree_;
         if (!fresh) self->stats_.poseRun = 0; // this frame shows the stock view
         if (self->dumpRequested_) { // research: block 0 as the game submitted it
@@ -328,6 +330,7 @@ void ViewOverride::Submit(void* renderer, float a, float b, std::uint32_t viewCo
         r.body = body;
         r.bodyValid = bodyValid;
         r.leftHand = left;
+        r.leftValid = leftValid;
         r.leftFree = leftFree;
     }
     const std::uint32_t mask = self->copyMask_.load();

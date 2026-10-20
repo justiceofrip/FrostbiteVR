@@ -61,7 +61,8 @@ struct CameraRequest {
     bool armIk = false;       // ...and the arms reach it from the body (Bf4ArmIk.h)
     bool bodyValid = false;   // ...the torso then (the holsters' body frame: level, its heading) relative to this head
     math::Pose bodyInHead{};
-    bool leftFree = false;    // ...and the left hand, off the gun (not steadying it), at its controller's grip
+    bool leftValid = false;   // ...the left controller's grip relative to this head (tracked)
+    bool leftFree = false;    // ...and whether the left hand is off the gun (not steadying it)
     math::Pose leftHandInHead{};
     // Alternate eyes (3D): the platform renders each frame from one eye, the eyes in turn,
     // half the eye distance (world units) from this head (Bf4FirstPersonView.h).

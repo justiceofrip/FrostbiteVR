@@ -162,6 +162,23 @@ Reach SolveReach(math::Vec3 s, math::Vec3 hint, math::Vec3 wt, float lu, float l
 
 constexpr float kShoulderShift = 0.08f; // the most a shoulder follows the hand (m)
 
+// `fraction` of a rotation matrix's turn (about the same axis).
+Mat4 ScaledRotation(const Mat4& r, float fraction) {
+    if (fraction >= 1.0f) {
+        Mat4 out = r;
+        out[3] = out[7] = out[11] = 0;
+        return out;
+    }
+    const float trace = r[0] + r[5] + r[10];
+    const float angle = std::acos(std::clamp((trace - 1.0f) * 0.5f, -1.0f, 1.0f));
+    const math::Vec3 axis{r[9] - r[6], r[2] - r[8], r[4] - r[1]};
+    const float len = math::Length(axis);
+    if (angle < 1e-5f || len < 1e-6f) return Identity4();
+    math::Pose p;
+    p.orientation = math::FromAxisAngle(axis * (1.0f / len), angle * std::max(fraction, 0.0f));
+    return FromPose(p);
+}
+
 // `fraction` of the smallest rotation taking `from` onto `to`.
 Mat4 PartialRotation(math::Vec3 from, math::Vec3 to, float fraction) {
     const math::Vec3 a = math::Normalize(from), b = math::Normalize(to);
@@ -221,7 +238,11 @@ ArmCorrections SolveArms(const ArmSolveInput& in) {
                 : body;
         const Mat4 fore = Mul(Translation(e),
                               Mul(RotationBetween(TransformPoint(upper, w0) - e, wt - e), Mul(Translation(e * -1.0f), upper)));
-        const Mat4 hand = in.hasWristTarget[side] && blend > 0 ? Translation(wt - w0) : Identity4();
+        Mat4 hand = Identity4();
+        if (in.hasWristTarget[side] && blend > 0) {
+            const Mat4 turn = ScaledRotation(in.handTurn[side], blend);
+            hand = Mul(Translation(wt), Mul(turn, Translation(w0 * -1.0f)));
+        }
         if (!AllFinite(clavicle) || !AllFinite(upper) || !AllFinite(fore) || !AllFinite(hand)) continue;
         c.part[side][static_cast<int>(ArmPart::Body)] = clavicle;
         c.part[side][static_cast<int>(ArmPart::Upper)] = upper;

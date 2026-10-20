@@ -297,6 +297,7 @@ void FirstPersonView::RewriteArms(ID3D11DeviceContext* context, const void* mapp
         in.hasWristTarget[0] = armLeftBlend_ > 0;
         in.wristTarget[0] = armLeftTarget_;
         in.wristBlend[0] = armLeftBlend_;
+        in.handTurn[0] = armLeftTurn_;
         armCorr_ = SolveArms(in);
         armSolved_ = true;
     }
@@ -626,9 +627,19 @@ void FirstPersonView::OnBindConstants(ID3D11DeviceContext* context, ContextHooks
                                                   : 0.0f;
                 armLastPassTick_ = now.QuadPart;
                 const float step = dt / kArmHandMoveSeconds;
-                armLeftBlend_ = std::clamp(armLeftBlend_ + (hand->leftFree ? step : -step), 0.0f, 1.0f);
-                if (hand->leftFree)
-                    armLeftTarget_ = TransformPoint(FromPose(hand->leftHand), {0, 0, kArmWristBehindGrip});
+                const bool free = hand->leftValid && hand->leftFree;
+                armLeftBlend_ = std::clamp(armLeftBlend_ + (free ? step : -step), 0.0f, 1.0f);
+                if (hand->leftValid) {
+                    Mat4 controller = FromPose(hand->leftHand), gun = move;
+                    controller[3] = controller[7] = controller[11] = 0; // rotations only
+                    gun[3] = gun[7] = gun[11] = 0;
+                    if (free) {
+                        armLeftTarget_ = TransformPoint(FromPose(hand->leftHand), {0, 0, kArmWristBehindGrip});
+                        armLeftTurn_ = Mul(controller, Mul(armLeftGrip_, InverseRigid(gun)));
+                    } else {
+                        armLeftGrip_ = Mul(InverseRigid(controller), gun); // on the gun: the relation to keep
+                    }
+                }
                 armSolved_ = false;
             }
         }

@@ -68,6 +68,9 @@ struct ArmSolveInput {
     // How far the wrist goes toward its target (0: stays on the gun, 1: at the target), so a hand
     // leaving or taking the gun moves there over a few frames instead of jumping.
     float wristBlend[2] = {1, 1};
+    // With a wrist target: the hand also turns about the wrist by this rotation (head space,
+    // scaled by the blend), e.g. as its controller turned since it let go of the gun.
+    Mat4 handTurn[2] = {Identity4(), Identity4()};
     // How much of the hand's move (from where BF4's rig holds it, placed with the body) the
     // shoulder follows, up to 8 cm, the clavicle turning about the neck's base (the shoulders'
     // midpoint): raised hands shrug it, a reach brings it forward (0: it stays at the body).

@@ -18,7 +18,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   three sessions (09:16-10:19; rotation was inverted and the gun oversized, both fixed in
   0.4.16); everything built since 0.4.17 is unseen in a headset.
 
-## At a glance (installed: 0.4.112-local)
+## At a glance (installed: 0.4.113-local)
 
 | Feature | State | Evidence |
 | --- | --- | --- |
@@ -296,8 +296,11 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   shoulder slides along the line to the hand, the clavicle takes half the upper arm's swing.
   The right hand stays where the gun puts it; the left hand too while its grip steadies the gun
   (two-handed aim), else it goes to its controller (the wrist 6 cm behind the grip, the hand
-  keeping its grip shape and its turn with the gun), moving there or back over 0.15 s; bones
-  that map none of the chain's joints but the wrist within 10 cm are its fingers and go along.
+  keeping its grip shape), moving there or back over 0.15 s; bones that map none of the chain's
+  joints but the wrist within 10 cm are its fingers and go along. The free hand turns about the
+  wrist as its controller turns from the gun: while two-handed the controller's turn relative to
+  the gun is kept (until then: the controller along the gun), so letting go in place changes
+  nothing and turning the controller turns the hand.
   Each classified bone S becomes C S with
   C = headFromPass^-1 D headFromPass, and the bind proceeds with our copy of the palette.
 - The body frame: the holsters' estimator (`Bf4BodyGestures`: the head's heading, followed
@@ -318,9 +321,13 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   gate); aiming 40 deg up smeared the shoulder skin (eased: the clavicle's share).
 - Free left hand (live, session 70, 0.4.112-local): the left grip released, the hand left the
   gun for its controller (low left; raised in front: the arm reaching from the left shoulder);
-  the grip held in front of the gun, the hand was back on the handguard.
-- Gaps: the free hand keeps its turn with the gun (not the controller's: needs the grip-to-hand
-  turn); the skeleton's joints are the prologue rig's (another rig finds no chains and stays as
+  the grip held in front of the gun, the hand was back on the handguard. Session 72
+  (0.4.113-local): let go in place after holding the gun two-handed, the hand stayed; in front,
+  rolling the controller 90 deg laid the hand flat, pitching it turned the hand again. Session 71:
+  quick knife and grenade with the arms on (grenade thrown, nothing torn; the throw's hands
+  still spread where BF4 animates them).
+- Gaps: the forearm does not share the free hand's twist (the wrist skin twists instead); the
+  skeleton's joints are the prologue rig's (another rig finds no chains and stays as
   BF4 draws it); aiming steeply up still shows the near upper arm large; not seen in a headset.
 
 ## No crosshair in the head-tracked view (2026-10-20, built; live sim)
@@ -1034,9 +1041,10 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
   launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
   `-World -FrameChannels 2` 5/5 (76-237 pairs, machine-dependent); `-World` with one
   channel 4/4 (47 pairs).
-- Installed locally: runtime/bf4 0.4.112-local (the source at this commit: gun in the hand and
-  arms from the body by default with a free left hand, no crosshair (centre mask), controller
-  scan with its cache, 3D option; rollback 0.4.111-local); launcher settings
+- Installed locally: runtime/bf4 0.4.113-local (the source at this commit: gun in the hand and
+  arms from the body by default with a free left hand that turns with its controller, no
+  crosshair (centre mask), controller scan with its cache, 3D option; rollback 0.4.112-local);
+  launcher settings
   restored to the player's after the developer sessions. Developer sessions still run the
   read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the
@@ -1178,8 +1186,9 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
   toggled an item. Not yet seen in a headset.
 - Corner HUD outside the eyes (frame shape, above): insets are a workaround; the real fix
   needs the UI pass rendered separately (native RE).
-- Arm IK: built (Arms from the body, above: shoulders at the body, a free left hand at its
-  controller); open: the free hand's turn, and rigs other than the prologue's (their joints).
+- Arm IK: built (Arms from the body, above: shoulders at the body, a free left hand at and
+  turning with its controller); open: the forearm's share of the hand's twist, and rigs other
+  than the prologue's (their joints).
   Earlier research notes follow. BF4's own hand IK inputs: BF4-HOLSTER-IK-RE.md. How it looks (live sim, session 56): the gun turned 40 deg left reads
   as plausible arms from below; turned 60 deg right, the left (support) arm's sleeve swings across
   the lower middle of the view. Leads (2026-10-20, developer): the draw probe now writes each
