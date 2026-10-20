@@ -38,6 +38,9 @@ namespace fvr::bf4 {
 // write journaled for exact restoration.
 // The platform builds the projection from `fov` with the game's own near/far and depth
 // convention (learned in RE task R3), so the core never guesses those.
+// Gun in the hand: where the shots cross the drawn barrel's line (MotionAimInput::converge).
+inline constexpr float kGunConvergeMeters = 20.0f;
+
 struct CameraRequest {
     int eye = -1; // -1 mono, 0 left, 1 right
     frostbite::LinearTransform local;

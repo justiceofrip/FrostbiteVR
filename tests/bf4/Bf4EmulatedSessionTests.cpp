@@ -758,6 +758,38 @@ TEST_CASE(EmuBothSticksHeldRecenterWithoutReachingTheGame) {
     CHECK(platform.pad.buttons & interaction::pad::LeftThumb);
 }
 
+TEST_CASE(EmuGunInTheHandFollowsTheTwoHandedLine) {
+    // Gun in the hand with the left grip held in front: the aim follows the line between the
+    // hands, and so must the drawn barrel (not the right controller's own aim, 11 deg off).
+    FakeImage image({names::kGameRenderer, names::kRenderViewUpdate, names::kClientGameContext, names::kLevelName});
+    FakePlatform platform;
+    AdapterCore core(Session(true), X64(), image.Resolve(), platform);
+    core.OnSwapchainAdopted(true);
+    platform.Campaign();
+    platform.aimKnown = true;
+    CHECK(core.SetMenuSetting("gun_aim", 3));
+    Clock clock;
+    for (std::uint64_t n = 0; n < 300; ++n) {
+        LaneFrame l(n / 90.0, n + 1);
+        auto& right = l.in.controls.hands[1];
+        right.aim.orientation = math::FromAxisAngle({0, 1, 0}, -0.2f); // 11 deg right
+        auto& left = l.in.controls.hands[0];
+        left.grip.position = {0.2f, 1.35f, -0.7f}; // 40 cm ahead of the right grip, 5 cm up
+        left.aim = left.grip;
+        left.active |= interaction::Squeeze;
+        left.squeeze = 1.0f;
+        platform.GameFrame();
+        core.OnFrame(clock.Next(), l.in);
+    }
+    CHECK(core.Status().find("two_handed=1") != std::string::npos);
+    CHECK(!platform.cameraLog.empty() && platform.cameraLog.back().size() == 1);
+    const CameraRequest& r = platform.cameraLog.back()[0];
+    CHECK(r.gunInHand && r.handValid);
+    const math::Vec3 barrel = math::Rotate(r.handInHead.orientation, {0, 0, -1});
+    const float pitch = std::atan2(0.05f, 0.4f);
+    CHECK(Near(barrel.x, 0.0f, 1e-3f) && Near(barrel.y, std::sin(pitch), 1e-3f) && Near(barrel.z, -std::cos(pitch), 1e-3f));
+}
+
 TEST_CASE(EmuGunFollowsAimKeepsTheBulletsOnTheBarrel) {
     // The hand 30 degrees up with the head level. Gun follows aim: the game's aim stops where
     // the render can turn all the way to it (the barrel on the bullets' line); wide reach lets
@@ -786,8 +818,17 @@ TEST_CASE(EmuGunFollowsAimKeepsTheBulletsOnTheBarrel) {
             platform.GameFrame();
             core.OnFrame(clock.Next(), l.in);
         }
-        CHECK(Near(WrapPi(platform.gameAim.yaw - 0.5f), 0.0f, 0.01f));
-        if (follow) {
+        if (choice == 3) {
+            // In the hand: no reach limit; the shots cross the barrel's line 20 m out (the hand
+            // 20 cm right of and 40 cm below the eye, aiming 30 deg up).
+            CHECK(Near(WrapPi(platform.gameAim.yaw - 0.5f), 0.01135f, 0.003f));
+            CHECK(Near(platform.gameAim.pitch, 0.49898f, 0.01f));
+            CHECK(core.Status().find("reach_limited=0 ") != std::string::npos);
+        } else {
+            CHECK(Near(WrapPi(platform.gameAim.yaw - 0.5f), 0.0f, 0.01f));
+        }
+        if (choice == 3) {
+        } else if (follow) {
             CHECK(expected.pitch > 0.03f && expected.pitch < up - 0.1f);
             CHECK(Near(platform.gameAim.pitch, expected.pitch, 0.01f));
             CHECK(core.Status().find("reach_limited=0 ") == std::string::npos);

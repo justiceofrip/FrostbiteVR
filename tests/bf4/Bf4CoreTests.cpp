@@ -976,6 +976,52 @@ TEST_CASE(ControllerAimReplaysALiveDeathCamera) {
     }
 }
 
+TEST_CASE(ControllerAimConvergesOnTheDrawnBarrel) {
+    // Gun in the hand: the game fires from the eye while the barrel is drawn at the hand. The aim
+    // goes from the eye to the barrel's line `converge` metres out; the barrel itself stays
+    // along the hand (MotionAimOutput::barrel).
+    using namespace fvr;
+    using namespace fvr::bf4;
+    MotionAimInput in;
+    in.reference.orientation = {0, 0, 0, 1};
+    in.reference.position = {0, 1.7f, 0};
+    in.eye = {0, 1.7f, 0};
+    in.muzzle = {0.2f, 1.3f, -0.3f};
+    in.converge = 20.0f;
+    const AimAngle level = MotionAim::ConvergedAim(in, {0, 0});
+    // To (0.2, -0.4, -20.3) from the eye: a little right and down.
+    CHECK(Near(level.yaw, std::atan2(0.2f, 20.3f), 1e-5f) && Near(level.pitch, std::asin(-0.4f / std::sqrt(0.04f + 0.16f + 412.09f)), 1e-5f));
+    MotionAimInput degenerate = in; // the point on the eye itself: the barrel's own aim
+    degenerate.converge = 0.2f;
+    degenerate.eye = {0.2f, 1.3f, -0.5f};
+    const AimAngle same = MotionAim::ConvergedAim(degenerate, {0, 0});
+    CHECK(Near(same.yaw, 0.0f) && Near(same.pitch, 0.0f));
+    // Through the controller: the game ends on the converged aim, the barrel on the hand's.
+    MotionAim aim;
+    SimulatedGameAim game;
+    game.gainX = 0.0014f;
+    game.gainY = -0.0014f;
+    MotionAimInput run = in;
+    run.converge = 20.0f;
+    run.engage = run.aimTracked = true;
+    run.dt = 1.0f / 60;
+    run.aim.orientation = math::FromAxisAngle({0, 1, 0}, -0.2f) * math::FromAxisAngle({1, 0, 0}, 0.1f);
+    MotionAimOutput out;
+    for (int i = 0; i < 240; ++i) {
+        game.Frame();
+        run.gameValid = true;
+        run.game = game.aim;
+        run.gameSample = game.sample;
+        out = aim.Update(run);
+        game.pendingX += out.mouseX;
+        game.pendingY += out.mouseY;
+    }
+    const AimAngle expected = MotionAim::ConvergedAim(run, {0.2f, 0.1f});
+    CHECK(out.barrelValid && Near(out.barrel.yaw, 0.2f, 1e-4f) && Near(out.barrel.pitch, 0.1f, 1e-4f));
+    CHECK(Near(WrapPi(game.aim.yaw - out.bodyYaw), expected.yaw, 0.003f) && Near(game.aim.pitch, expected.pitch, 0.003f));
+    CHECK(std::fabs(expected.pitch - 0.1f) > 0.01f); // the convergence is not nothing
+}
+
 TEST_CASE(ControllerAimHoldsThroughRecoil) {
     // BF4's recoil turns the camera by itself (up, and a little sideways) on every shot and
     // does not bring it back; aiming pulls it back to the controller. That must not look like

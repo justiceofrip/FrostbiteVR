@@ -1777,7 +1777,16 @@ void ResearchTick(Adapter& a) {
     if (a.drawProbeFrames) { // research drawprobe: one whole frame between two Presents
         if (a.drawProbe.OnPresent()) {
             a.drawProbeFrames = 0;
-            const std::string report = a.drawProbe.TakeReport();
+            std::string report = a.drawProbe.TakeReport();
+            ID3D11Texture2D* back = nullptr;
+            if (a.platform.swapchain &&
+                SUCCEEDED(a.platform.swapchain->GetBuffer(0, __uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&back))) && back) {
+                char line[64];
+                std::snprintf(line, sizeof(line), "backbuffer @%llx\n",
+                              static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(back) & 0xFFFFFFull));
+                report = line + report;
+                back->Release();
+            }
             const std::string file = a.session.researchDumpDir + "\\" + a.drawProbeName + ".txt";
             bool ok = false;
             if (std::FILE* f = std::fopen(file.c_str(), "wb")) {

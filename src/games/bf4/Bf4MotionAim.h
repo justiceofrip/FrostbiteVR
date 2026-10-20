@@ -111,6 +111,12 @@ struct MotionAimInput {
     math::FovTangents eyes[2];
     float aspect = 0;
     float renderBudget = kGunAimFovBudget; // the render's widest FOV (the player's reach choice)
+    // Gun in the hand: the game fires from the eye, the drawn barrel starts at the hand. With
+    // converge > 0 (metres) the aim goes from the eye to the barrel's line at that distance, so
+    // the shots cross it there instead of running parallel a hand's distance away. Positions
+    // in tracking space.
+    float converge = 0;
+    math::Vec3 eye{}, muzzle{};
 };
 
 struct MotionAimOutput {
@@ -119,6 +125,10 @@ struct MotionAimOutput {
     int mouseX = 0, mouseY = 0; // relative counts to send this frame
     float moveRotation = 0; // radians to turn the left stick by (RotateMovement)
     bool twoHanded = false; // the left hand steadies the aim (its grip is not a pad button)
+    // The direction the gun is drawn along, in the reference's frame: the one-hand aim or the
+    // two-handed line (before any convergence; the game aims along it, or through its line).
+    AimAngle barrel{};
+    bool barrelValid = false;
 };
 
 class MotionAim {
@@ -179,6 +189,9 @@ public:
         if (in.limitToRender &&
             LimitAimToRender(in.head, aim, in.eyes[0], in.eyes[1], in.aspect, in.renderBudget - kReachSlack))
             ++limited_;
+        out.barrel = aim;
+        out.barrelValid = true;
+        if (in.converge > 0) aim = ConvergedAim(in, aim);
         desired_ = {WrapPi(bodyYaw_ + aim.yaw), aim.pitch};
         // What moved since the last update: the target (hand, snap turn, the second hand
         // taking over or letting go) or the game. The guard only judges swings the game made.
@@ -218,6 +231,19 @@ public:
     std::uint64_t ForeignTurns() const { return foreign_; } // windows the game turned by itself
     std::uint64_t SignFlips() const { return flips_; }       // probes that found inverted look
     bool TwoHandedNow() const { return twoHanded_; }
+    // The aim from the eye through the barrel's line `converge` metres from the muzzle (all in
+    // the reference's frame); the barrel's own aim when the geometry is degenerate.
+    static AimAngle ConvergedAim(const MotionAimInput& in, const AimAngle& barrel) {
+        const math::Vec3 dir{std::sin(barrel.yaw) * std::cos(barrel.pitch), std::sin(barrel.pitch),
+                             -std::cos(barrel.yaw) * std::cos(barrel.pitch)};
+        const math::Quat toReference = math::Conjugate(in.reference.orientation);
+        const math::Vec3 eye = math::Rotate(toReference, in.eye - in.reference.position);
+        const math::Vec3 muzzle = math::Rotate(toReference, in.muzzle - in.reference.position);
+        const math::Vec3 to = muzzle + dir * in.converge - eye;
+        const float length = math::Length(to);
+        if (!(length > 0.5f)) return barrel;
+        return {std::atan2(to.x, -to.z), std::asin(std::fmax(-1.0f, std::fmin(1.0f, to.y / length)))};
+    }
     static constexpr int kMuteFrames = 60;
     AimAngle Desired() const { return desired_; }
 

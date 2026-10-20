@@ -481,6 +481,12 @@ void AdapterCore::UpdateMotionAim(const ControllerSnapshot& in, const PlatformFr
                     left.squeeze >= 0.7f && !gesture_.gripOwned[0] && !gestures_.MagazineInHand();
     m.rearGrip = hand.grip.position;
     m.frontGrip = left.grip.position;
+    // Gun in the hand: the shots cross the drawn barrel's line kGunConvergeMeters out.
+    if (menuState_.gunInHand && head && hand.gripTracked) {
+        m.converge = kGunConvergeMeters;
+        m.eye = head->position;
+        m.muzzle = hand.grip.position;
+    }
     m.dt = lastAimTickMs_ && f.tickMs > lastAimTickMs_ ? std::min(0.1f, (f.tickMs - lastAimTickMs_) / 1000.0f) : 0.0f;
     lastAimTickMs_ = f.tickMs;
     const bool was = aim_.engaged;
@@ -585,7 +591,12 @@ void AdapterCore::UpdateCamera(const ControllerSnapshot& in, const PlatformFrame
                 math::Pose held;
                 held.position = hand.grip.position; // where the hand holds the grip...
                 held.orientation = hand.aim.orientation; // ...the barrel along the aim ray (the bullets' direction)
-                if (const auto rel = math::MakeRelativePose(ApplyReference(reference_, p), ApplyReference(reference_, held))) {
+                math::Pose heldRef = ApplyReference(reference_, held);
+                // Two-handed: the barrel along the line between the hands, as the aim is.
+                if (aim_.engaged && aim_.twoHanded && aim_.barrelValid)
+                    heldRef.orientation = math::FromAxisAngle({0, 1, 0}, -aim_.barrel.yaw) *
+                                          math::FromAxisAngle({1, 0, 0}, aim_.barrel.pitch);
+                if (const auto rel = math::MakeRelativePose(ApplyReference(reference_, p), heldRef)) {
                     r.handInHead = *rel;
                     r.handValid = true;
                 }

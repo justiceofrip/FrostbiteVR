@@ -198,9 +198,10 @@ std::string DrawProbe::Target(ID3D11View* view) {
     if (r && SUCCEEDED(r.As(&t))) {
         D3D11_TEXTURE2D_DESC d{};
         t->GetDesc(&d);
-        char buf[64];
-        std::snprintf(buf, sizeof(buf), "%ux%u/%u%s", d.Width, d.Height, static_cast<unsigned>(d.Format),
-                      d.SampleDesc.Count > 1 ? "ms" : "");
+        char buf[96];
+        std::snprintf(buf, sizeof(buf), "%ux%u/%u%s@%llx", d.Width, d.Height, static_cast<unsigned>(d.Format),
+                      d.SampleDesc.Count > 1 ? "ms" : "",
+                      static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(t.Get()) & 0xFFFFFFull));
         text = buf;
     }
     targets_[view] = text;
@@ -237,6 +238,19 @@ void DrawProbe::OnDraw(ID3D11DeviceContext* context, const char* kind, UINT coun
                       Target(rtv).c_str(), Target(dsv).c_str()));
     if (rtv) rtv->Release();
     if (dsv) dsv->Release();
+    {
+        ID3D11ShaderResourceView* srvs[4]{};
+        context->PSGetShaderResources(0, 4, srvs);
+        bool any = false;
+        for (int k = 0; k < 4; ++k) {
+            if (!srvs[k]) continue;
+            if (!any) line += " ps=[";
+            any = true;
+            add(std::snprintf(tmp, sizeof(tmp), "%d:%s ", k, Target(srvs[k]).c_str()));
+            srvs[k]->Release();
+        }
+        if (any) line += "]";
+    }
     const std::string text = census_ && layout >= 0 ? census_->LayoutText(layout) : std::string();
     std::vector<std::uint8_t> bytes;
     // viewConstants (b2): the camera position the draw is rendered from.

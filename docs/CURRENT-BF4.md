@@ -208,6 +208,13 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   largest rigid mesh of the pass, read from its b0 `worldMatrix`) is tracked each pass, its hip
   pose held while the game's FOV is zoomed, and the rig moved back by the difference (live:
   9.5 cm, the gun stays in the hand). Hip bob, sway and recoil stay visible.
+- The game fires from the eye while the barrel is drawn at the hand: the aim goes from the eye
+  to the barrel's line 20 m out (`kGunConvergeMeters`, `MotionAim::ConvergedAim`), so shots
+  cross the barrel's line there instead of running parallel a hand's distance (~30 cm) away
+  (off by 20 cm at 5 m, ~0.5 m at 50 m: under a degree either way). With the left grip
+  steadying the gun the barrel is drawn along the line between the hands, as the aim goes
+  (`MotionAimOutput::barrel`; emulated test: the right controller 11 deg off, the barrel on
+  the line). Unit test: the convergence geometry and the controller converging on it.
 - With the gun in the hand the render is not turned (full sharpness, no reach limit: the aim
   follows the hand anywhere) and +0x00 keeps the game's value. Mod menu "Gun follows aim: Off /
   On / Wide reach / In the hand" (default In the hand). Log: `gun in the hand: on/off`,
