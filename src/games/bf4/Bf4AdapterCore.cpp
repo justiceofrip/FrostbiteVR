@@ -242,6 +242,47 @@ bool AdapterCore::SetMenuSetting(const std::string& id, int value) {
     return true;
 }
 
+namespace {
+bool PlayerSetting(const ui::MenuItem& item) {
+    if (item.kind != ui::MenuItemKind::Choice && item.kind != ui::MenuItemKind::Toggle) return false;
+    // The launcher's settings own the reload mode; developer items stay per session.
+    return item.id != "reload_mode" && item.id != "world_settle" && item.id != "world_stereo";
+}
+} // namespace
+
+std::string AdapterCore::MenuValuesText() const {
+    std::string out;
+    for (const auto& item : modMenu_.Items())
+        if (item.enabled && PlayerSetting(item)) out += item.id + " " + std::to_string(item.value) + "\n";
+    return out;
+}
+
+int AdapterCore::ApplyMenuValuesText(std::string_view text) {
+    int applied = 0;
+    std::size_t at = 0;
+    while (at < text.size()) {
+        std::size_t end = text.find('\n', at);
+        if (end == std::string_view::npos) end = text.size();
+        const std::string_view line = text.substr(at, end - at);
+        at = end + 1;
+        const std::size_t space = line.find(' ');
+        if (space == std::string_view::npos || space == 0) continue;
+        const std::string id(line.substr(0, space));
+        int value = 0;
+        bool digits = space + 1 < line.size();
+        for (std::size_t k = space + 1; k < line.size() && digits; ++k) {
+            const char c = line[k];
+            if (c == '\r') break;
+            if (c < '0' || c > '9' || value > 1000) digits = false;
+            else value = value * 10 + (c - '0');
+        }
+        const ui::MenuItem* item = modMenu_.Find(id);
+        if (!digits || !item || !PlayerSetting(*item) || item->value == value) continue;
+        if (SetMenuSetting(id, value)) ++applied;
+    }
+    return applied;
+}
+
 void AdapterCore::ResolveReload() {
     reloadMode_ = ResolveBf4ReloadMode(session_.reloadMode, caps_, session_.developerFeatures);
 }

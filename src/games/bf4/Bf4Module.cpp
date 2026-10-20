@@ -869,6 +869,7 @@ public:
             log_.Write("%s", ControllerScan::Describe().c_str());
             log_.Write("%s", XInputSink::Describe().c_str());
         }
+        if (presentCount % 120 == 0) SaveMenuSettings();
         const bool lane = laneFrame && presentCount - laneFrame <= 3;
         if (!lane && !hudSplit.Installed()) return;
         if (!hudSplit.Installed()) {
@@ -892,6 +893,22 @@ public:
         if (presentCount % 600 == 0) log_.Write("%s", hudSplit.Describe().c_str());
     }
     static constexpr std::uint64_t kControllerScanFrame = 600; // ~5-10 s after adoption, at the menus
+    // The player's menu choices, written when they change (checked every 120 Presents).
+    std::string menuSettingsFile, menuSettingsSaved;
+    void SaveMenuSettings() {
+        if (!core || menuSettingsFile.empty()) return;
+        const std::string now = core->MenuValuesText();
+        if (now.empty() || now == menuSettingsSaved) return;
+        const std::string temp = menuSettingsFile + ".tmp";
+        if (std::FILE* f = std::fopen(temp.c_str(), "wb")) {
+            const bool written = std::fwrite(now.data(), 1, now.size(), f) == now.size();
+            std::fclose(f);
+            if (written && MoveFileExA(temp.c_str(), menuSettingsFile.c_str(), MOVEFILE_REPLACE_EXISTING)) {
+                menuSettingsSaved = now;
+                log_.Write("menu settings saved");
+            }
+        }
+    }
     // Of the frame's height: the hip crosshair spans ~0.12; a full-auto burst spread its arms along
     // the axes to ~0.20 end to end (live, session 41), out of the 0.20 box used before. Arms of
     // 0.30 leave margin; longer ones hid an objective marker near the eye line (session 42).
@@ -1157,6 +1174,19 @@ bool Adopt(Adapter& a, IDXGISwapChain* sc) {
     if (a.session.developerFeatures) Diagnostics::WatchDeviceChanges(desc.OutputWindow);
     ControllerScan::SetWindow(desc.OutputWindow); // a changed controller list is posted to it
     a.core->OnSwapchainAdopted(true);
+    // The player's menu choices from earlier sessions (the menu's items are enabled by now).
+    if (!a.platform.menuSettingsFile.empty()) {
+        std::string saved;
+        if (std::FILE* f = std::fopen(a.platform.menuSettingsFile.c_str(), "rb")) {
+            char buf[2048];
+            const std::size_t n = std::fread(buf, 1, sizeof(buf), f);
+            saved.assign(buf, n);
+            std::fclose(f);
+        }
+        const int applied = saved.empty() ? 0 : a.core->ApplyMenuValuesText(saved);
+        a.platform.menuSettingsSaved = a.core->MenuValuesText();
+        if (!saved.empty()) a.log.Write("menu settings: %d restored from %s", applied, a.platform.menuSettingsFile.c_str());
+    }
     // Developer research: reflect every vertex shader created from now on (the level's are
     // created when it loads). Observes CreateVertexShader only.
     if (a.session.developerFeatures && !a.session.researchDumpDir.empty()) {
@@ -2244,6 +2274,13 @@ extern "C" __declspec(dllexport) int __cdecl FvrBf4_Start(const char* sessionTex
     a->platform.frames = CreateFrameSink(a->session);
     a->input = CreateControllerSource(a->session);
     a->platform.logDir = a->session.logDir;
+    if (!a->session.researchDumpDir.empty()) { // research sessions keep their own: never the player's choices
+        a->platform.menuSettingsFile = a->session.researchDumpDir + "\\menu-settings.txt";
+    } else if (!a->session.logDir.empty()) { // next to the logs folder: <runtime root>\menu-settings.txt
+        const std::string& logs = a->session.logDir;
+        const std::size_t slash = logs.find_last_of("\\/", logs.size() > 1 ? logs.size() - 2 : 0);
+        a->platform.menuSettingsFile = (slash == std::string::npos ? logs : logs.substr(0, slash)) + "\\menu-settings.txt";
+    }
     a->platform.stereoSetting = a->session.stereo;
     a->platform.stereoRoute = a->session.stereoRoute;
     a->platform.exeSha256 = a->session.exeSha256;

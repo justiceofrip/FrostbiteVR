@@ -18,7 +18,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   three sessions (09:16-10:19; rotation was inverted and the gun oversized, both fixed in
   0.4.16); everything built since 0.4.17 is unseen in a headset.
 
-## At a glance (installed: 0.4.103-local)
+## At a glance (installed: 0.4.104-local)
 
 | Feature | State | Evidence |
 | --- | --- | --- |
@@ -961,9 +961,9 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
   launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
   `-World -FrameChannels 2` 5/5 (76-237 pairs, machine-dependent); `-World` with one
   channel 4/4 (47 pairs).
-- Installed locally: runtime/bf4 0.4.103-local (the source at this commit: gun in the hand by
+- Installed locally: runtime/bf4 0.4.104-local (the source at this commit: gun in the hand by
   default, no crosshair (centre mask), controller scan with its cache, 3D option; rollback
-  0.4.102-local); launcher settings
+  0.4.103-local); launcher settings
   restored to the player's after the developer sessions. Developer sessions still run the
   read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the
@@ -1093,6 +1093,12 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
   BF4 sets that window from its tiled-screenshot state every frame (BF4-CAMERA-RE.md).
 - The census holder chain matched nothing live (27 firing objects, 0 holders): redo the
   walk from the live firing vtable `+0x1D53F18`.
+- Mod menu choices are kept between sessions (2026-10-20): the enabled choice and toggle items as
+  "id value" lines in `runtime/bf4/menu-settings.txt` (written when they change, checked every
+  120 Presents; set back at adoption), except the reload mode (the launcher's setting) and the
+  developer items. Research sessions use `research/menu-settings.txt` instead, so testing never
+  changes the player's choices. Core test (written, read back in a new core, the launcher's and
+  developer items left out); live (sessions 59-60): Snap 45 and vignette off saved, restored.
 - Mod menu in VR: opens with the menu button, drawn by the adapter (VrPanel + GDI) on the
   theater lane; live on the simulated headset it opened in a level and a laser click
   toggled an item. Not yet seen in a headset.

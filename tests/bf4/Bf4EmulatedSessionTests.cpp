@@ -790,6 +790,30 @@ TEST_CASE(EmuGunInTheHandFollowsTheTwoHandedLine) {
     CHECK(Near(barrel.x, 0.0f, 1e-3f) && Near(barrel.y, std::sin(pitch), 1e-3f) && Near(barrel.z, -std::cos(pitch), 1e-3f));
 }
 
+TEST_CASE(EmuMenuChoicesCarryOverToTheNextSession) {
+    // The player's choices are written as "id value" lines and set back in a new session; the
+    // launcher's reload mode and developer items are not part of them.
+    FakeImage image({names::kGameRenderer, names::kRenderViewUpdate, names::kClientGameContext, names::kLevelName});
+    std::string saved;
+    {
+        FakePlatform platform;
+        AdapterCore core(Session(true), X64(), image.Resolve(), platform);
+        core.OnSwapchainAdopted(true);
+        CHECK(core.SetMenuSetting("snap_turn", 2) && core.SetMenuSetting("depth_stereo", 2) && core.SetMenuSetting("vignette", 0));
+        saved = core.MenuValuesText();
+        CHECK(saved.find("snap_turn 2\n") != std::string::npos && saved.find("depth_stereo 2\n") != std::string::npos);
+        CHECK(saved.find("reload_mode") == std::string::npos && saved.find("world_settle") == std::string::npos);
+    }
+    FakePlatform platform;
+    AdapterCore core(Session(true), X64(), image.Resolve(), platform);
+    core.OnSwapchainAdopted(true);
+    CHECK(core.MenuSettings().snapDegrees == 30 && !core.MenuSettings().alternateEyes);
+    CHECK(core.ApplyMenuValuesText(saved + "unknown_item 1\nsnap_turn x\n") == 3);
+    CHECK(core.MenuSettings().snapTurn && core.MenuSettings().snapDegrees == 45);
+    CHECK(core.MenuSettings().alternateEyes && !core.MenuSettings().vignette);
+    CHECK(core.MenuValuesText() == saved);
+}
+
 TEST_CASE(EmuAlternateEyesRenderEachEyeInTurn) {
     // 3D: Alternate eyes. The lane's camera stays at the head; each request tells the platform
     // to render each frame from one eye (chosen per frame on the render thread,

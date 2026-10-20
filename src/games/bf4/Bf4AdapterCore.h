@@ -180,6 +180,11 @@ public:
     // A mod menu item set to `value` as if chosen in the headset (developer research);
     // false for an unknown or disabled item or a value out of range.
     bool SetMenuSetting(const std::string& id, int value);
+    // The player's menu choices kept between sessions: "id value" lines of the enabled choice and
+    // toggle items, except what the launcher owns (reload mode) and developer items. Apply sets
+    // the known ones back (after adoption, when the items are enabled); returns how many.
+    std::string MenuValuesText() const;
+    int ApplyMenuValuesText(std::string_view text);
     // BF4's split two-view 3D: unsupported (its world renderer holds one view), always off.
     void SetWorldStereo(bool on);
 
