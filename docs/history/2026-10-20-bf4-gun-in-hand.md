@@ -19,3 +19,10 @@
   thread (5.5 s here). While the adapter runs, game-controller enumerations are answered with
   no devices (in front of the Steam overlay's vtable entry, restored exactly): BF4 reads pads
   through XInput, so only DirectInput-only devices are given up during VR play.
+- Superseded the same day: answering those enumerations empty also took the VR pad from the game
+  (BF4 makes its XInput devices only from them; inside BF4 the Steam overlay lists its own virtual
+  pads, 28DE:11FF, and answers the WMI scan for them as XInput pads, which is how the VR pad had
+  reached user 0). Instead BF4's `IsXInputDevice` is answered without WMI by a code hook on an
+  enrolled binding (raw-input names plus Steam's pads), the enumerations pass through, and a
+  stand-in pad is offered first when none of the devices is an XInput pad (BF4 polls only one:
+  offered last it was made but never polled). Live: pad polled, no stall.

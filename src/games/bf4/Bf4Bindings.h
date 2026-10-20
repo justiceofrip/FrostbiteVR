@@ -52,6 +52,7 @@ inline constexpr std::string_view kLevelName = "ClientLevel.Name";
 inline constexpr std::string_view kInputConceptCache = "Input.ConceptCache";
 inline constexpr std::string_view kUiCursorRead = "UI.CursorRead";
 inline constexpr std::string_view kSoldierWeaponTransform = "Soldier.WeaponTransform";
+inline constexpr std::string_view kIsXInputDevice = "Input.IsXInputDevice";
 } // namespace names
 
 std::span<const BindingSpec> DefaultBindingSpecs();

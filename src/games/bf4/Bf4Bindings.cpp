@@ -12,7 +12,7 @@ namespace {
 // cheat forums: they target other builds and carry no validation; enroll only what you
 // located and checked yourself in this bf4.exe. Each enrolled pattern was checked unique
 // in the decrypted .text of build 179547 (research image, 2026-10-19).
-const std::array<BindingSpec, 10> kSpecs{{
+const std::array<BindingSpec, 11> kSpecs{{
     // lea rcx,[rbp+0xF0]; call; mov rcx,[GameRenderer]; mov rdx,[rcx]; mov rax,[r12+0x40]:
     // the per-frame view submit in +0x828090 (normal path). Global +0x2672378.
     {names::kGameRenderer, "48 8D 8D F0 00 00 00 E8 ?? ?? ?? ?? 48 8B 0D ?? ?? ?? ?? 48 8B 11 49 8B 44 24 40",
@@ -41,6 +41,13 @@ const std::array<BindingSpec, 10> kSpecs{{
      "RE task R7: where UI reads mouse position, if Win32 cursor injection is not enough"},
     {names::kSoldierWeaponTransform, "", BindingKind::Code, 0, 0, 0,
      "RE task R8: first-person weapon transform write (controller aim, roadmap M3)"},
+    // BF4's IsXInputDevice (+0x94A090, the DirectX SDK WMI routine; the 0x98-byte device array
+    // cleared after the prologue), called by its controller re-enumeration (+0x946830, +0x946690).
+    // The adapter checks the Next(10000 ms) call at +0x1A7 before hooking it (Bf4ControllerScan.h).
+    {names::kIsXInputDevice,
+     "48 89 5C 24 08 55 56 57 41 54 41 55 41 56 41 57 48 8D 6C 24 D0 48 81 EC 30 01 00 00 "
+     "45 33 ED 4C 8B F9 48 8D 4D 98 33 D2 41 B8 98 00 00 00",
+     BindingKind::Code, 0, 0, 0, "static: WMI IsXInputDevice of the controller re-enumeration; unique in .text"},
 }};
 } // namespace
 

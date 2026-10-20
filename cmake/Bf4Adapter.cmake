@@ -96,7 +96,7 @@ add_library(FrostbiteVR.Bf4 SHARED
   src/games/bf4/Bf4GpuVendor.cpp src/games/bf4/Bf4XInputSink.cpp src/graphics/GdiPanelRaster.cpp
   src/games/bf4/Bf4Diagnostics.cpp src/games/bf4/Bf4DepthCapture.cpp src/games/bf4/Bf4ShaderCensus.cpp
   src/games/bf4/Bf4DrawProbe.cpp src/games/bf4/Bf4ContextHooks.cpp src/games/bf4/Bf4FirstPersonView.cpp
-  src/games/bf4/Bf4HudSplit.cpp src/games/bf4/Bf4DirectInputFilter.cpp)
+  src/games/bf4/Bf4HudSplit.cpp src/games/bf4/Bf4ControllerScan.cpp)
 target_link_libraries(FrostbiteVR.Bf4 PRIVATE FvrBf4Core FvrMinHook64 d3d11 dxgi psapi gdi32 d3dcompiler)
 target_compile_definitions(FrostbiteVR.Bf4 PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 if(FVR_BF4_FRAMEWORK_GLUE)
@@ -134,7 +134,7 @@ if(BUILD_TESTING AND FVR_BF4_EMU_TEST)
     tests/bf4/emu/DepthCaptureCheck.cpp src/games/bf4/Bf4DepthCapture.cpp
     tests/bf4/emu/ShaderCensusCheck.cpp src/games/bf4/Bf4ShaderCensus.cpp src/games/bf4/Bf4DrawProbe.cpp
     src/games/bf4/Bf4ContextHooks.cpp src/games/bf4/Bf4FirstPersonView.cpp src/games/bf4/Bf4HudSplit.cpp
-    src/games/bf4/Bf4DirectInputFilter.cpp tests/bf4/emu/DirectInputFilterCheck.cpp)
+    src/games/bf4/Bf4ControllerScan.cpp tests/bf4/emu/ControllerScanCheck.cpp)
   target_compile_definitions(Bf4EmuHost PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX UNICODE _UNICODE)
   # The emulator also plays the XR host's side of the theater link (menu lane).
   target_link_libraries(Bf4EmuHost PRIVATE d3d11 dxgi delayimp FvrFrameChannel FvrD3D11 d3dcompiler FvrMinHook64)

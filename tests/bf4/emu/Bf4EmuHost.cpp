@@ -83,7 +83,7 @@ bool CheckShaderCensus(ID3D11Device* device, const char*& why);        // Shader
 bool CheckDrawProbe(ID3D11Device* device, const char*& why);           // ShaderCensusCheck.cpp
 bool CheckFirstPersonView(ID3D11Device* device, const char*& why);     // ShaderCensusCheck.cpp
 bool CheckHudSplit(ID3D11Device* device, const char*& why);           // ShaderCensusCheck.cpp
-bool CheckDirectInputFilter(const char*& why);                         // DirectInputFilterCheck.cpp
+bool CheckControllerScan(const char*& why);                            // ControllerScanCheck.cpp
 namespace {
 void Check(bool ok, const char* what) {
     std::printf("%s %s\n", ok ? "PASS" : "FAIL", what);
@@ -655,9 +655,9 @@ int wmain() {
     }
     {
         const char* why = "";
-        const bool ok = CheckDirectInputFilter(why);
-        if (!ok) std::printf("directinput filter check: %s\n", why);
-        Check(ok, "DirectInput game-controller enumerations answered empty (no WMI scan); other classes passed on");
+        const bool ok = CheckControllerScan(why);
+        if (!ok) std::printf("controller scan check: %s\n", why);
+        Check(ok, "BF4's controller scan: DirectInput's pads passed through, the stand-in pad ahead of them, its check answered without WMI");
     }
 
     // 6. Multiplayer evidence: a PunkBuster client module appears.

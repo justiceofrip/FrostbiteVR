@@ -1,4 +1,4 @@
-# BF4 adapter: current state (2026-10-19)
+# BF4 adapter: current state (2026-10-20)
 
 The only BF4 state document; overwrite it when the state changes. BC2 state stays in
 [CURRENT.md](CURRENT.md). Start with [HANDOFF-BF4.md](../HANDOFF-BF4.md); stereo detail in
@@ -18,13 +18,14 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   three sessions (09:16-10:19; rotation was inverted and the gun oversized, both fixed in
   0.4.16); everything built since 0.4.17 is unseen in a headset.
 
-## At a glance (installed: 0.4.76-local)
+## At a glance (installed: 0.4.88-local)
 
 | Feature | State | Evidence |
 | --- | --- | --- |
 | Theater screen + laser menus | on | headset; live sim: laser Resume and mod menu clicks |
 | Head-tracked campaign view (6DoF head) | on | headset (earlier build); live sim: direction, labels 100 % |
 | Three frame channels + next pose in the capturing frame | on | live sim: 52.9 pairs/s at 117.7 game fps (2: 44.8), labels 525/525 |
+| VR pad reaches BF4 (controller scan: no WMI freeze, stand-in pad) | on | live sim: polled ~150/s, walked 5.2 m, bursts; stand-in polled alone and first |
 | Controller aim (mouse look), aim dot, two-handed aim, snap turn | on | live sim: gain learned = measured, 20 deg -> 19.6 deg; ADS and firing; gains kept through a death camera |
 | Gun in the hand (BF4's rig drawn at the controller, barrel along the aim) | on (default) | live sim: follows hand position and turn, true size, held through ADS, firing |
 | No crosshair in the head-tracked view (HUD split, centre box) | on | live sim: eye pairs without it, every frame |
@@ -226,9 +227,12 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   left/up and turned 25 deg: the rig followed; hip and ADS frames show the gun at the hand;
   full-auto bursts: three eye pairs mid-burst with the gun at the hand (before the shake
   tolerance, frames drawn while firing showed BF4's own gun).
-- Gaps: the muzzle flash, smoke and tracers BF4 spawns as world particles at its own muzzle
-  (in front of the eye along the aim), not at the moved gun (small with the gun raised to the
-  eye, ~30 cm at a low hip); the grip at rest is the
+- Muzzle effects (live, session 38, the gun held 40 cm low and 25 cm right): the first-person
+  muzzle flash is drawn at the hand-held barrel's tip (it belongs to the first-person pass and
+  moves with it). Not yet looked at: tracers and smoke BF4 may spawn as world particles at its
+  own muzzle. One frame mid-burst showed BF4's crosshair (2 of 14,640 frames went without the
+  centre-box restore; cause not found).
+- Gaps: tracers and smoke (above, unverified); the grip at rest is the
   prologue rifle's (other weapons may sit a few cm off in the hand); the left hand follows the
   gun, not the left controller (no arm IK); the barrel is parallel to the bullets' line, offset
   by the hand-eye distance; not seen in a headset.
@@ -796,7 +800,9 @@ using the frame's depth buffer (depth-image-based rendering; no simulation or re
   pad X). Bf4EmuHost: the emulated host publishes a controller sample and the game's own
   `XInputGetState` call sees reload + left stick forward through the real hooks. Core
   tests: deadzones, reload gating by mode, neutral while the mod menu is open, Start pulse
-  from "Game menu (pause)", pad released on lockdown. Not yet seen in the real game.
+  from "Game menu (pause)", pad released on lockdown. Live (simulated headset): walking,
+  firing, reload and recenter go through it; BF4 polls it only through an XInput device its
+  controller scan made (Open / blocked, stalls: `Bf4ControllerScan`).
 - XR host `--theater-input` (launcher passes it): gameplay input continues under the
   theater panel. Launcher: experimental features on by default for pre-release (theater
   view is a Candidate), 3D route defaults to the 3D Vision emulation with the launch-option
@@ -898,8 +904,8 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
   launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
   `-World -FrameChannels 2` 5/5 (76-237 pairs, machine-dependent); `-World` with one
   channel 4/4 (47 pairs).
-- Installed locally: runtime/bf4 0.4.76-local (the source at this commit, gun in the hand by
-  default; rollback 0.4.75-local); launcher settings
+- Installed locally: runtime/bf4 0.4.88-local (the source at this commit: gun in the hand by
+  default, no crosshair, controller scan; rollback 0.4.87-local); launcher settings
   restored to the player's after the developer sessions. Developer sessions still run the
   read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the
@@ -927,9 +933,8 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
   answer: comfort at ~45 pairs/s (and whether frame sync 1, ~52/s, still holds there),
   gun size and the head-locked gun, the HUD corners' readability, 3D from depth's feel,
   holster positions on a real body, the laser on "Resume".
-- Gun in the hand (above): the remaining gaps are the world-particle muzzle effects at BF4's
-  own muzzle, BF4's crosshair at the head's centre, the grip at rest measured on one rifle,
-  and no arm IK. Static leads kept for that (2026-10-19/20): the weapon offset data
+- Gun in the hand (above): the remaining gaps are tracers and smoke (unverified), an occasional
+  frame with BF4's crosshair, the grip at rest measured on one rifle, and no arm IK. Static leads kept for that (2026-10-19/20): the weapon offset data
   (`WeaponOffsetData`, `FirstPersonCameraData` `Offset`/`WeaponBaseOffset`) are shared assets,
   not to be written; `WeaponLagBinding` outputs only pitch/yaw/roll results (the lag is a
   rotation, no offset); skinning palettes reach the GPU as bone x inverse-bind matrices (b0
@@ -963,15 +968,42 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
   ViGEm virtual-pad buses). Developer sessions log every WM_DEVICECHANGE at the game window
   (`device change: event 0x...`): session 32 showed a burst of ~20 (DBT_DEVNODES_CHANGED and a
   device arrival) and BF4 froze 11 s right after it, the same WMI stack.
-  Fixed (`Bf4DirectInputFilter`, session 34): while the adapter runs, BF4's DirectInput
-  game-controller enumerations get no devices, so the scan never starts. The Steam overlay had
-  already swapped the IDirectInput8 class vtable's EnumDevices entry, so the filter sits in front
-  of that entry (calling what it held otherwise) and puts it back on detach only while it still
-  holds ours. Live: two enumerations after device bursts answered empty, no stall. BF4 reads pads
-  through XInput (the virtual pad, a real Xbox pad), unaffected; DirectInput-only devices (flight
-  sticks, wheels) are not offered to BF4 meanwhile. Log: `directinput_filter installed ...
-  game_controller_enumerations= answered_empty=`. WARP-free emulator check on this machine's
-  dinput8 (answered empty, keyboards passed on, off passes on, removal restores).
+  Fixed (`Bf4ControllerScan`, sessions 35-40), replacing a first fix that broke the VR pad:
+  session 34 answered BF4's game-controller enumerations with no devices, and the stall was gone,
+  but BF4 makes its XInput devices only from those enumerations (`+0x946690`: every device its
+  check accepts becomes an XInput device, user index = the count so far; the update `+0x94C2B0`
+  then polls `XInputGetState`), so it stopped polling the pad: session 35 walked and fired
+  nothing. Now:
+  - BF4's `IsXInputDevice` (`+0x94A090`, binding `Input.IsXInputDevice`, a unique prologue
+    pattern; the `Next(10000 ms)` call checked at +0x1A7 before hooking) is answered without
+    WMI by a MinHook: raw-input device names (the same `IG_` and VID/PID test), plus Steam's
+    virtual pads. Live: under 0.01 ms per check (was 5.5 s).
+  - Steam's virtual pads: inside BF4 the Steam overlay lists 8 "Controller (XBOX 360 For
+    Windows)" pads (VID 28DE PID 11FF) through DirectInput (a plain process on this PC sees no
+    game controller at all) and answers BF4's WMI scan for them with XInput IDs; they are no
+    raw-input devices. BF4 made them its XInput devices, the first one user 0, which is how the
+    VR pad reached the game all along. The check now says the same for them.
+  - The enumerations pass through (DirectInput's own time 214-275 ms per enumeration, live) and,
+    when none of the devices is an XInput pad, a stand-in Xbox 360 pad is offered first (the VR
+    pad on a PC without Steam's pads or any real pad). First, because BF4 polls one pad: offered
+    after eight DirectInput pads it was made an XInput device but never polled (session 37);
+    first, it is polled (session 40, Steam's pads as DirectInput pads); alone, it is polled
+    (session 39, Steam's pads hidden).
+  - The XInput sink keeps user 0 connected while the adapter runs (a neutral pad when idle and
+    no real pad answers), since BF4 checks the connection when it makes the device.
+  - One device change is posted to the game window ~600 frames after adoption if BF4 has not
+    enumerated by then (it has, live: two enumerations ~8 s after start).
+  Live (session 38, default): BF4 polls user 0 ~150 times a second, all answered by the VR pad;
+  the left stick walked 5.2 m, the trigger fired bursts; level-load device changes made two
+  enumerations of 214-274 ms, no stall. The class vtable entries (in front of the Steam overlay's)
+  go back on detach while they hold ours; the code hook goes with the detach worker's MinHook
+  removal (exact bytes). Log: `controller_scan ... code_hook= enumerations= devices=
+  with_xinput_pad= stand_ins= checks=accepted/all enum_ms=`, `virtual_pad ... user0_polls=
+  states_by_user= caps_by_user=`; developer sessions log each enumeration's devices and each
+  check (first 64 lines). Developer experiments (files in the research folder):
+  `controller-scan-hide-steam`, `controller-scan-steam-as-di`. Emulator check on this machine's
+  dinput8 (device paths, the stand-in ahead of DirectInput's devices, checks answered without
+  the routine's body, Steam's pads per mode, off passes through, removal restores entry and code).
   Earlier notes:
 - 10 s stalls (no Present), twice now in a running level (sessions 12 and 15), each
   starting as one of my test commands began after a pause. Session 16+ logs the foreground

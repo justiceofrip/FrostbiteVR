@@ -61,12 +61,13 @@ TEST_CASE(BindingsGateCapabilities) {
     using namespace fvr::bf4;
     std::vector<std::uint8_t> code(256, 0xCC);
 
-    // Default table over foreign code: the camera bindings are enrolled for build 179547 but
-    // absent here, the rest are unenrolled -> only the swapchain-based M0 features qualify.
+    // Default table over foreign code: the camera and controller-scan bindings are enrolled for
+    // build 179547 but absent here, the rest are unenrolled -> only the swapchain-based M0 features qualify.
     BindingTable table(DefaultBindingSpecs());
     table.Resolve(code, 0x140001000ull);
     for (const auto& b : table.All())
-        CHECK(b.status == (b.name == names::kGameRenderer || b.name == names::kRenderViewUpdate
+        CHECK(b.status == (b.name == names::kGameRenderer || b.name == names::kRenderViewUpdate ||
+                                   b.name == names::kIsXInputDevice
                                ? frostbite::ScanStatus::NotFound
                                : frostbite::ScanStatus::Unenrolled));
     game::CapabilityRegistry caps;

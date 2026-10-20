@@ -27,7 +27,7 @@
 #include "Bf4Diagnostics.h"
 #include "Bf4WorldView.h"
 #include "Bf4DepthCapture.h"
-#include "Bf4DirectInputFilter.h"
+#include "Bf4ControllerScan.h"
 #include "Bf4DrawProbe.h"
 #include "Bf4FirstPersonView.h"
 #include "Bf4HudSplit.h"
@@ -854,6 +854,14 @@ public:
     // comes from the scene as it was before the HUD. The theater view keeps BF4's crosshair.
     void HudTick() {
         ++presentCount;
+        // BF4 builds its pad list only on a device change; one is posted at the menus if it has
+        // not enumerated yet, so the stand-in pad (the VR controllers) exists from the start.
+        if (presentCount == kControllerScanFrame && ControllerScan::RequestEnumeration(window))
+            log_.Write("controller scan: device change posted (BF4 had not enumerated its controllers yet)");
+        if (presentCount % 600 == 0) {
+            log_.Write("%s", ControllerScan::Describe().c_str());
+            log_.Write("%s", XInputSink::Describe().c_str());
+        }
         const bool lane = laneFrame && presentCount - laneFrame <= 3;
         if (!lane && !hudSplit.Installed()) return;
         if (!hudSplit.Installed()) {
@@ -874,11 +882,9 @@ public:
         if (swapchain) swapchain->GetBuffer(0, __uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&back));
         hudSplit.OnPresent(back, lane, kCrosshairBox);
         if (back) back->Release();
-        if (presentCount % 600 == 0) {
-            log_.Write("%s", hudSplit.Describe().c_str());
-            log_.Write("%s", DirectInputFilter::Describe().c_str());
-        }
+        if (presentCount % 600 == 0) log_.Write("%s", hudSplit.Describe().c_str());
     }
+    static constexpr std::uint64_t kControllerScanFrame = 600; // ~5-10 s after adoption, at the menus
     static constexpr float kCrosshairBox = 0.20f; // of the frame's height: the hip crosshair spans ~0.12, more when it spreads
 
     // Gun in the hand: the first-person pass gets the render's projection and is moved to the
@@ -990,7 +996,7 @@ public:
         pointer.Uninstall();
         padSink.Deactivate();
         engineStereo.Disable();
-        DirectInputFilter::Remove(); // BF4's controller enumerations reach DirectInput again
+        ControllerScan::Remove(); // vtable entries back; its code hook goes with the worker's MH_DisableHook below
         firstPersonView.SetFrame({}); // every bind passes through again (the hooks go with the rest)
         gunInHandFrame = 0;
         laneFrame = 0;
@@ -2247,8 +2253,32 @@ extern "C" __declspec(dllexport) int __cdecl FvrBf4_Start(const char* sessionTex
                  a->platform.gpu.spoofInstalled ? "installed (stereo probe)" : "off");
     if (!a->platform.pointer.Install()) a->log.Write("pointer hooks unavailable; game-menu pointer will not move the cursor");
     a->log.Write("virtual gamepad (XInput) hooks: %s", a->platform.padSink.Install() ? "installed" : "unavailable");
-    DirectInputFilter::Install(); // BF4's controller re-enumeration stalls on a WMI scan (Bf4DirectInputFilter.h)
-    a->log.Write("%s", DirectInputFilter::Describe().c_str());
+    {
+        // BF4's controller scan (Bf4ControllerScan.h): its WMI IsXInputDevice froze the game for
+        // seconds per device change, and with no XInput pad attached it never polled the VR pad.
+        void* check = nullptr;
+        const auto* binding = a->core->Bindings().Find(names::kIsXInputDevice);
+        if (binding && binding->status == fvr::frostbite::ScanStatus::Ok) {
+            void* fn = reinterpret_cast<void*>(binding->address);
+            if (ControllerScan::LooksLikeWmiCheck(fn)) check = fn;
+            else a->log.Write("controller scan: Input.IsXInputDevice matched but its WMI call is not where expected; BF4's own check stays");
+        }
+        if (a->session.developerFeatures) {
+            ControllerScan::SetLog([](const char* line) { if (g_adapter) g_adapter->log.Write("%s", line); });
+            // Developer experiments: a file in the research folder sets how Steam's pads count.
+            const auto flag = [&](const char* name) {
+                const std::string file = a->session.researchDumpDir + "\\" + name;
+                return !a->session.researchDumpDir.empty() && GetFileAttributesA(file.c_str()) != INVALID_FILE_ATTRIBUTES;
+            };
+            if (flag("controller-scan-hide-steam")) ControllerScan::SetSteamPads(ControllerScan::SteamPads::Hidden);
+            else if (flag("controller-scan-steam-as-di")) ControllerScan::SetSteamPads(ControllerScan::SteamPads::AsDirectInput);
+            if (flag("controller-scan-hide-steam") || flag("controller-scan-steam-as-di"))
+                a->log.Write("controller scan: Steam's virtual pads %s (developer experiment)",
+                             flag("controller-scan-hide-steam") ? "hidden" : "as DirectInput pads");
+        }
+        ControllerScan::Install(check);
+        a->log.Write("%s", ControllerScan::Describe().c_str());
+    }
     const bool hooked = HookSwapchainVtable(a->log);
     if (!hooked) a->core->OnSwapchainAdopted(false);
     PublishStatus(*a);
