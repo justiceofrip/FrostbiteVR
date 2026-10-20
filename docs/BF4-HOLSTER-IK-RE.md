@@ -59,12 +59,13 @@ derived by the view update `+0xB8C910`, stored at `+0xB8C991`):
   and integer accesses were not covered), two in the renderer region, `+0x85EC01` and
   `+0x86867B` (two variants of one pass setup), pass a float read at `+0x258` of their object
   together with a 4x4 matrix from a table at its `+0x38` (indexed by the table's bytes `+9`
-  and `+0xA`, 0x20-byte stride) to `+0x928350`. That object has pointers at `+0x28/+0x30/+0x38`,
-  unlike the view struct, so it may be another type and the float unrelated.
-- `+0x928350` copies its arguments into a packet and posts it to a job system (global
-  `+0x2670D80`, `+0x626A80`).
-Next: confirm or drop these live (read the object and its matrix table at a known pose),
-widen the scan to SIB/integer accesses, then find the job the packet is posted to.
+  and `+0xA`, 0x20-byte stride) to `+0x928350`, which posts them to a job system (global
+  `+0x2670D80`, `+0x626A80`). Dropped: the code is a chained chunk of a larger function
+  whose object has a vtable of at least 75 slots (`call [rax+0x250]`) and arrays of
+  64-byte entries, pointers at `+0x28/+0x30/+0x38`; it reads like an entity spawning
+  something at a bone with a scale, not a view or a render pass.
+Next: widen the scan to SIB-addressed and integer accesses of `+0x258`, or start from the
+weapon side (`ClientWeaponLagEntity`'s bindings, live, read-only).
 
 ## Next steps
 
