@@ -77,7 +77,12 @@ public:
     InstallResult Install(void* object, std::uintptr_t expectedSlot, Hooks* hooks, std::uintptr_t expectedDraw = 0);
     // Detaches from the object only if it still points at our copy; never frees the copy.
     bool Remove();
+    // The object is gone or no longer ours (a level change replaced it): dropped without
+    // touching its memory; a call through the old copy just forwards.
+    void Forget();
     bool Installed() const { return object_ != nullptr; }
+    // The vtable pointer the object carries while it is ours (our copy's first slot).
+    const void* OurVtable() const { return copy_ ? static_cast<const void*>(copy_ + 1) : nullptr; }
     // The game's wait for a job handle, called on the first run's two handles before the second.
     void SetJobWait(JobWaitFn wait) { wait_.store(wait); }
     void* Object() const { return object_; }

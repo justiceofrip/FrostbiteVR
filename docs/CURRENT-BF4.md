@@ -18,7 +18,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   three sessions (09:16-10:19; rotation was inverted and the gun oversized, both fixed in
   0.4.16); everything built since 0.4.17 is unseen in a headset.
 
-## At a glance (installed: 0.4.154-local)
+## At a glance (installed: 0.4.158-local)
 
 | Feature | State | Evidence |
 | --- | --- | --- |
@@ -379,13 +379,22 @@ view on PC (the split-stereo crash, below), and running its whole render or view
 only builds data twice. What works: the simulation and the world's build (main thread) run once;
 the world's **draw** (render thread) runs once per eye.
 
-- Where: the world renderer (`[eye loop +0x30]`, vtable `+0x1DF4B60`, found by the read-only eye
-  loop scan; the analysed bf4.exe only) is overridden through a copy of its vtable
+- Where: the world renderer (`[eye loop +0x30]`, vtable `+0x1DF4B60`; the analysed bf4.exe
+  only) is overridden through a copy of its vtable
   (`Bf4WorldRenderOverride`): slot 2 `+0xCDE440` (build, main thread, passes through) and slot 3
   `+0xCE56F0(this, ctx, a3, a4)` (draw, render thread), called twice per frame. Slot 3 opens by
   waiting for the build's jobs (handle at renderer `+0x34378`: `+0xD1E570` valid, `+0xD1CF50`
   done, device `+0x2738080` slot 9, `+0x63CA00`, slot 8); the adapter does the same wait before
   the first draw so the per-frame data are in place when it is read.
+- Finding it: the eye loop (vtable `+0x1D24258`) is one of the six render views at GameRenderer
+  `+0x100` whose slot 2 the view submit calls (`+0x83F418..+0x83F51B`), so it is read from the
+  GameRenderer global (binding `GameRenderer`), exactly one of its class or nothing; the old
+  scan of the process's memory (~1 min) is only the fallback. A level change or checkpoint
+  restart replaces both the eye loop and the world renderer: every 60 Presents the override
+  checks that the eye loop still holds our object with our table, else drops it without a write
+  (`WorldRenderOverride::Forget`) and attaches to the new one. Live (session 115): on at the
+  first world frame; after "Restart checkpoint" back on 4 s after the old one was dropped
+  (9 s after the click, the reload included), no fault.
 - Per eye: before each draw the main views' constants are moved to that eye
   (`FirstPersonView::SetCallEye`, half the headset's eye distance along the head's right axis;
   the gun in the hand and the arms are drawn from the same eye). After the first draw the back
@@ -426,11 +435,12 @@ the world's **draw** (render thread) runs once per eye.
   stand-ins (3D from depth, alternate eyes) are no longer offered (code kept, unreachable from
   the menu); a saved `depth_stereo 2` is skipped (default applies). "Gun follows aim" (a turned
   render) needs one camera: with native eyes the gun is not turned and the aim is not limited.
+- Installed: 0.4.158-local.
 - Gaps: not seen in a headset (comfort, scale, cost at the headset's rate); one level checked
   (prologue): another scene may use up a field not on the verified list (logged; the second eye
   could then miss something or fault); BF4's HUD and markers are at the head's centre camera in
-  both eyes (at infinity); the world renderer must be found again after a level change (the
-  eye loop scan reruns on refusal after ~1,200 frames); the second draw re-runs the whole world
+  both eyes (at infinity); only a checkpoint restart checked as a level change (a new mission
+  not yet); the second draw re-runs the whole world
   draw (shadows and other view-independent passes included), so the cost could come down.
 - Earlier tries, retired (kept as developer research `secondview 1-4`): the world render's build
   (slot 2) twice per frame (session 84 died on the first doubled frame; BF4 double-buffers its

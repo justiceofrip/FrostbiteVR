@@ -72,6 +72,14 @@ bool WorldRenderOverride::Remove() {
     return ours;
 }
 
+void WorldRenderOverride::Forget() {
+    g_active.store(nullptr, std::memory_order_release);
+    object_ = nullptr;
+    originalVtable_ = nullptr;
+    copy_ = nullptr; // intentionally not freed
+    hooks_ = nullptr;
+}
+
 WorldRenderOverride::Stats WorldRenderOverride::GetStats() const {
     std::lock_guard<std::mutex> lock(mutex_);
     return stats_;

@@ -547,3 +547,37 @@ TEST_CASE(WorldRenderOverrideDrawsTheWorldOncePerEye) {
     CHECK(wo.Remove());
     delete obj;
 }
+
+TEST_CASE(WorldRenderOverrideForgetsAReplacedRendererWithoutWritingIt) {
+    // A level change can replace BF4's world renderer: the old object is dropped without a write
+    // (its memory may be another object's now), a draw through the old table only forwards, and
+    // the new renderer can be taken over.
+    if (sizeof(void*) != 8) return;
+    g_world = {};
+    g_worldDraws = 0;
+    auto* oldObj = new FakeWorldObject;
+    TwiceHooks hooks;
+    hooks.runs = 1;
+    hooks.draws = 2;
+    WorldRenderOverride wo;
+    const auto build = reinterpret_cast<std::uintptr_t>(&FakeWorldRender), draw = reinterpret_cast<std::uintptr_t>(&FakeWorldDraw);
+    CHECK(wo.Install(oldObj->bytes, build, &hooks, draw) == WorldRenderOverride::InstallResult::Ok);
+    void* ours = nullptr;
+    std::memcpy(&ours, oldObj->bytes, 8);
+    CHECK(ours == wo.OurVtable() && ours != oldObj->table + 1);
+    std::uint8_t before[sizeof(oldObj->bytes)];
+    std::memcpy(before, oldObj->bytes, sizeof(before));
+    wo.Forget();
+    CHECK(!wo.Installed() && wo.OurVtable() == nullptr);
+    CHECK(std::memcmp(before, oldObj->bytes, sizeof(before)) == 0); // nothing written
+    oldObj->Draw(); // a draw still in flight through the old table: forwarded once, no hooks
+    CHECK(g_worldDraws == 1 && (g_world.order == std::vector<int>{50}));
+    auto* newObj = new FakeWorldObject;
+    g_world.order.clear();
+    CHECK(wo.Install(newObj->bytes, build, &hooks, draw) == WorldRenderOverride::InstallResult::Ok);
+    newObj->Draw();
+    CHECK(g_worldDraws == 3 && (g_world.order == std::vector<int>{-10, 50, 10, -11, 50, 11}));
+    CHECK(wo.Remove());
+    delete newObj;
+    delete oldObj;
+}

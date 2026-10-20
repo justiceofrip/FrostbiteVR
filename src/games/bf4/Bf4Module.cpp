@@ -108,6 +108,8 @@ constexpr std::uintptr_t kRenderDeviceGlobalRva = 0x2738080;
 constexpr std::uintptr_t kRenderDeviceClassRva = 0x1DD1870;
 // Two-eye loop class (vtable) and its slot 2 (docs/BF4-STEREO.md, Bf4EyeLoopOverride.h).
 constexpr std::uintptr_t kEyeLoopClassRva = 0x1D24258;
+// GameRenderer's render views: six pointers at +0x100, each one's slot 2 called by the view submit.
+constexpr std::size_t kRenderViewsOffset = 0x100, kRenderViewSlots = 6;
 constexpr std::uintptr_t kEyeLoopEntryRva = 0x8BE430;
 // The world renderer the eye loop hands its views to ([eye loop +0x30]): class vtable and its
 // slot 2, the per-frame world render (docs/BF4-STEREO.md, Bf4WorldRenderOverride.h).
@@ -819,9 +821,39 @@ public:
     }
 
     // The world renderer, through the eye loop object the read-only scan found.
+    // The eye loop straight from the GameRenderer: its view submit (slot 5) calls slot 2 of each
+    // of the six render views at GameRenderer +0x100 (+0x83F418..+0x83F51B, nulls skipped); the
+    // eye loop is the one of its class. Read-only; 0 when not exactly one is there.
+    std::uintptr_t EyeLoopFromGameRenderer() {
+        const auto* global = core ? core->Bindings().Find(names::kGameRenderer) : nullptr;
+        if (!global || global->status != frostbite::ScanStatus::Ok) return 0;
+        const auto base = reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
+        std::uintptr_t renderer = 0, found = 0;
+        if (!ReadChecked(global->address, &renderer, 8) || !renderer) return 0;
+        int count = 0;
+        for (std::uintptr_t i = 0; i < kRenderViewSlots; ++i) {
+            std::uintptr_t view = 0, cls = 0;
+            if (!ReadChecked(renderer + kRenderViewsOffset + 8 * i, &view, 8) || !view) continue;
+            if (ReadChecked(view, &cls, 8) && cls == base + kEyeLoopClassRva) {
+                found = view;
+                ++count;
+            }
+        }
+        return count == 1 ? found : 0;
+    }
+
     bool EnsureWorldRender() {
         if (worldRender.Installed()) return true;
         if (worldRenderRefused || exeSha256 != kAnalyzedBuildSha256) return false;
+        if (eyeLoopScan.load() != 1) { // not while a scan runs: it writes the same fields
+            if (const std::uintptr_t loop = EyeLoopFromGameRenderer()) {
+                if (loop != eyeLoopFound.load() || eyeLoopScan.load() != 2)
+                    log_.Write("second view: eye loop %p read from the GameRenderer (no scan)", reinterpret_cast<void*>(loop));
+                eyeLoopFound.store(loop);
+                eyeLoopCandidates.store(1);
+                eyeLoopScan.store(2);
+            }
+        }
         if (eyeLoopScan.load() == 0) StartEyeLoopScan();
         if (eyeLoopScan.load() != 2) return false; // asked again next frame
         const auto base = reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
@@ -832,12 +864,15 @@ public:
                         vt == base + kWorldRendererClassRva && ReadChecked(vt + 8 * kWorldRenderSlot, &slot, 8) &&
                         slot == base + kWorldRenderEntryRva;
         if (!ok) {
-            log_.Write("second view: world renderer not found (eye loop candidates %d, object %p, renderer %p, vtable %p); off",
-                       eyeLoopCandidates.load(), reinterpret_cast<void*>(object), reinterpret_cast<void*>(renderer),
-                       reinterpret_cast<void*>(vt));
+            if (++worldRenderMisses <= 3 || worldRenderMisses % 50 == 0)
+                log_.Write("second view: world renderer not found (eye loop candidates %d, object %p, renderer %p, vtable %p; "
+                           "miss %llu); off",
+                           eyeLoopCandidates.load(), reinterpret_cast<void*>(object), reinterpret_cast<void*>(renderer),
+                           reinterpret_cast<void*>(vt), static_cast<unsigned long long>(worldRenderMisses));
             worldRenderRefused = true;
             return false;
         }
+        worldRenderMisses = 0;
         secondView.owner = this;
         worldRender.SetJobWait(reinterpret_cast<JobWaitFn>(base + kJobWaitRva));
         const auto r = worldRender.Install(reinterpret_cast<void*>(renderer), base + kWorldRenderEntryRva, &secondView,
@@ -1598,7 +1633,37 @@ public:
     // once per eye, each moved to its eye (Bf4WorldRenderOverride.h, SetCallEye); off a few
     // frames after it stops asking. The world renderer is found by the eye loop scan; without
     // it (another build, or none found) the view stays mono and the log says why.
+    std::uint64_t worldRenderMisses = 0;
+    // The eye loop object the scan found, still one (its class)? Then a replaced world renderer is
+    // read from it again without a new scan of the process's memory (~1 min).
+    bool EyeLoopAlive() {
+        const auto base = reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
+        const auto object = eyeLoopFound.load();
+        std::uintptr_t cls = 0;
+        return eyeLoopScan.load() == 2 && object && ReadChecked(object, &cls, 8) && cls == base + kEyeLoopClassRva;
+    }
+    // Still the world renderer the eye loop draws with, and still ours? (Read-only.)
+    bool WorldRendererCurrent() {
+        const auto base = reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
+        const auto object = eyeLoopFound.load();
+        std::uintptr_t cls = 0, renderer = 0, vt = 0;
+        return object && ReadChecked(object, &cls, 8) && cls == base + kEyeLoopClassRva &&
+               ReadChecked(object + kEyeLoopRendererOffset, &renderer, 8) &&
+               renderer == reinterpret_cast<std::uintptr_t>(worldRender.Object()) && ReadChecked(renderer, &vt, 8) &&
+               vt == reinterpret_cast<std::uintptr_t>(worldRender.OurVtable());
+    }
+
     void NativeEyesTick() {
+        // A level change can replace the world renderer (or the eye loop): the old one is dropped
+        // without touching its memory and the new one looked for (checked every 60 Presents).
+        if (worldRender.Installed() && presentCount % 60 == 0 && !WorldRendererCurrent()) {
+            log_.Write("3D native: the world renderer is no longer the one in use (a level change?); looking for it again");
+            worldRender.Forget();
+            secondViewInstalled = false;
+            worldRenderRefused = false;
+            if (!EyeLoopAlive() && eyeLoopScan.load() == 2) eyeLoopScan.store(0); // the eye loop too: scan again
+            nativeOn = false; // on again once the new one is found
+        }
         const bool wanted = nativeFrame && presentCount - nativeFrame <= 3 && viewOverride.Installed();
         if (!wanted) {
             if (nativeOn) {
@@ -1618,11 +1683,14 @@ public:
             if (worldRenderRefused) {
                 if (!nativeRefusedLogged) log_.Write("3D native: world renderer not found yet; the view stays mono, looking again");
                 nativeRefusedLogged = true;
-                if (!nativeRetryAt) nativeRetryAt = presentCount + 1200;
+                // The eye loop still there (a level loading): its renderer is read again each
+                // second; without it the process is scanned again (every ~20 s).
+                const bool loopAlive = EyeLoopAlive();
+                if (!nativeRetryAt) nativeRetryAt = presentCount + (loopAlive ? 60 : 1200);
                 if (presentCount < nativeRetryAt) return;
                 nativeRetryAt = 0;
                 worldRenderRefused = false; // look again (a level may have finished loading since)
-                if (eyeLoopScan.load() == 2) eyeLoopScan.store(0);
+                if (!loopAlive && eyeLoopScan.load() == 2) eyeLoopScan.store(0);
             }
             if (!EnsureWorldRender()) return; // still scanning: asked again next frame
             Diagnostics::ArmFaultLogging(true);
