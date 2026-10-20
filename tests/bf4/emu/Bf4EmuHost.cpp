@@ -82,6 +82,7 @@ bool CheckDepthCapture(ID3D11Device* device, const char*& why);        // DepthC
 bool CheckShaderCensus(ID3D11Device* device, const char*& why);        // ShaderCensusCheck.cpp
 bool CheckDrawProbe(ID3D11Device* device, const char*& why);           // ShaderCensusCheck.cpp
 bool CheckFirstPersonView(ID3D11Device* device, const char*& why);     // ShaderCensusCheck.cpp
+bool CheckHudSplit(ID3D11Device* device, const char*& why);           // ShaderCensusCheck.cpp
 namespace {
 void Check(bool ok, const char* what) {
     std::printf("%s %s\n", ok ? "PASS" : "FAIL", what);
@@ -644,6 +645,12 @@ int wmain() {
         const bool ok = CheckFirstPersonView(dev, why);
         if (!ok) std::printf("first-person view check: %s\n", why);
         Check(ok, "first-person view pass gets the render's projection and a moved view; other binds pass through");
+    }
+    {
+        const char* why = "";
+        const bool ok = CheckHudSplit(dev, why);
+        if (!ok) std::printf("hud split check: %s\n", why);
+        Check(ok, "HUD split copies the scene before the first HUD draw and puts back the centre box only");
     }
 
     // 6. Multiplayer evidence: a PunkBuster client module appears.

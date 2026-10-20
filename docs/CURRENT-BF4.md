@@ -27,6 +27,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
 | Three frame channels + next pose in the capturing frame | on | live sim: 52.9 pairs/s at 117.7 game fps (2: 44.8), labels 525/525 |
 | Controller aim (mouse look), aim dot, two-handed aim, snap turn | on | live sim: gain learned = measured, 20 deg -> 19.6 deg; ADS and firing; gains kept through a death camera |
 | Gun in the hand (BF4's rig drawn at the controller, barrel along the aim) | on (default) | live sim: follows hand position and turn, true size, held through ADS, firing |
+| No crosshair in the head-tracked view (HUD split, centre box) | on | live sim: eye pairs without it, every frame |
 | Gun follows aim (turned render), reach limit | option | live sim: gun/laser on the aim, labels 335/335; past the reach gun and dot stop together |
 | BF4's pause/death/end menus in a level on the theater screen | on | live sim: pause -> screen -> laser RESUME -> head-tracked, twice; restart checkpoint |
 | Recenter: both stick clicks 1 s (or mod menu) | on | live sim: recentered twice, no stick click reached the game |
@@ -227,8 +228,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   tolerance, frames drawn while firing showed BF4's own gun).
 - Gaps: the muzzle flash, smoke and tracers BF4 spawns as world particles at its own muzzle
   (in front of the eye along the aim), not at the moved gun (small with the gun raised to the
-  eye, ~30 cm at a low hip); BF4's crosshair stays at the head's centre (its visibility lives in
-  shared HUD data, not a setting; hiding it needs its UI draw found); the grip at rest is the
+  eye, ~30 cm at a low hip); the grip at rest is the
   prologue rifle's (other weapons may sit a few cm off in the hand); the left hand follows the
   gun, not the left controller (no arm IK); the barrel is parallel to the bullets' line, offset
   by the hand-eye distance; not seen in a headset.
@@ -237,6 +237,25 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   hand mode by the game rotation only; receiver tracking picks the largest rigid mesh; weapon
   part test), emulated session (the request carries the hand relative to the head, no turn, no
   reach limit, no dot), live as above.
+
+## No crosshair in the head-tracked view (2026-10-20, built; live sim)
+
+- BF4's hip crosshair and hit marker sit at the frame's centre, which in the head-tracked view
+  is wherever the head looks: meaningless there (the barrel shows the aim; the player wants no
+  crosshair). Its visibility lives in the weapons' shared `HudData`, not a setting.
+- Found (research `drawprobe` with target identities): BF4 composites the scene into the
+  swapchain buffer (a draw reading the render-resolution target) and then draws the HUD straight
+  onto it (draws reading BC3 UI atlases), all on the immediate context.
+- `Bf4HudSplit` (a `Bf4ContextHooks` listener; render targets tracked through
+  OMSetRenderTargets): before the first HUD draw after the composite it copies the buffer (the
+  scene without the HUD); at Present, while the world lane runs, a box of 20 % of the frame's
+  height around the centre is put back from that copy, before the frame is captured. The rest of
+  the HUD (minimap, ammo, markers) stays; the theater view keeps BF4's crosshair. Only our copy
+  and that box of the presented image are written (the flat mirror shows it too). Log:
+  `hud_split ... copies= restores= no_composite=`.
+- Evidence: WARP check (the centre box comes back from the scene, outside it stays as the HUD
+  left it, one copy and one restore); live (session 30): eye pairs without the crosshair,
+  2359 copies and restores in 2360 frames.
 
 ## Gun follows aim: the barrel on the bullets' line (2026-10-19, built; live sim; an option since 2026-10-20)
 

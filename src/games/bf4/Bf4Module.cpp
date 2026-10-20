@@ -29,6 +29,7 @@
 #include "Bf4DepthCapture.h"
 #include "Bf4DrawProbe.h"
 #include "Bf4FirstPersonView.h"
+#include "Bf4HudSplit.h"
 #include "Bf4ShaderCensus.h"
 #include "fvr/graphics/GdiPanelRaster.h"
 #include "stereo/SideBySide.h"
@@ -175,7 +176,9 @@ public:
     // Depth stereo (opt-in): the frame's scene depth, found through the game's own depth clears.
     DepthCapture depthCapture;
     FirstPersonView firstPersonView; // gun in the hand (Bf4FirstPersonView.h)
-    std::uint64_t presentCount = 0, gunInHandFrame = 0;
+    HudSplit hudSplit;               // BF4's crosshair out of the head-tracked view (Bf4HudSplit.h)
+    bool hudInstallTried = false;
+    std::uint64_t presentCount = 0, gunInHandFrame = 0, laneFrame = 0;
     bool firstPersonOn = false, firstPersonInstallTried = false;
     bool depthInstallTried = false, depthSnapshotPending = false, depthSeen = false;
     bool eyeLoopRefused = false, stereoCrashGuard = false, stereoMarker = false;
@@ -841,14 +844,43 @@ public:
         viewOverride.SetHand(requests[0].handInHead, requests[0].handValid);
         viewOverride.SetLocal(requests[0].local, /*keepGamePitch=*/false, requests[0].poseId, fov, requests[0].parentYaw);
         gunInHandFrame = requests[0].gunInHand ? presentCount : 0;
+        laneFrame = presentCount;
         return true;
     }
+
+    // First thing each Present, before the frame is captured: while the head-tracked view is
+    // on, the centre box (where BF4 draws its crosshair and hit marker, the head's centre in VR)
+    // comes from the scene as it was before the HUD. The theater view keeps BF4's crosshair.
+    void HudTick() {
+        ++presentCount;
+        const bool lane = laneFrame && presentCount - laneFrame <= 3;
+        if (!lane && !hudSplit.Installed()) return;
+        if (!hudSplit.Installed()) {
+            if (hudInstallTried) return;
+            hudInstallTried = true;
+            ID3D11Device* device = nullptr;
+            ID3D11DeviceContext* ctx = nullptr;
+            if (swapchain && SUCCEEDED(swapchain->GetDevice(__uuidof(ID3D11Device), reinterpret_cast<void**>(&device)))) {
+                device->GetImmediateContext(&ctx);
+                if (ctx) hudSplit.Install(ctx);
+                if (ctx) ctx->Release();
+                device->Release();
+            }
+            log_.Write("crosshair out of the head-tracked view: hooks %s", hudSplit.Installed() ? "installed" : "not installed");
+            if (!hudSplit.Installed()) return;
+        }
+        ID3D11Texture2D* back = nullptr;
+        if (swapchain) swapchain->GetBuffer(0, __uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&back));
+        hudSplit.OnPresent(back, lane, kCrosshairBox);
+        if (back) back->Release();
+        if (presentCount % 600 == 0) log_.Write("%s", hudSplit.Describe().c_str());
+    }
+    static constexpr float kCrosshairBox = 0.20f; // of the frame's height: the hip crosshair spans ~0.12, more when it spreads
 
     // Gun in the hand: the first-person pass gets the render's projection and is moved to the
     // hand of its own frame (Bf4FirstPersonView.h). Called each Present; off a few frames after
     // the world lane stops asking (the theater view shows BF4's own pass).
     void FirstPersonTick() {
-        ++presentCount;
         const bool wanted = gunInHandFrame && presentCount - gunInHandFrame <= 3 && viewOverride.Installed();
         if (!wanted) {
             if (firstPersonView.Installed() && firstPersonOn) {
@@ -956,6 +988,7 @@ public:
         engineStereo.Disable();
         firstPersonView.SetFrame({}); // every bind passes through again (the hooks go with the rest)
         gunInHandFrame = 0;
+        laneFrame = 0;
         if (eyeLoop.Installed()) log_.Write("eye loop override removed: %s", eyeLoop.Remove() ? "vtable restored" : "vtable not ours, left alone");
         RemoveViewOverride();
         log_.Write("detaching all hooks: %.*s", static_cast<int>(reason.size()), reason.data());
@@ -1148,6 +1181,7 @@ void OnPresent(Adapter& a, IDXGISwapChain* sc) {
     a.input->Poll(in);
     a.platform.TryBindShim();
     std::lock_guard<std::mutex> lock(a.coreMutex);
+    if (!a.core->Detached()) a.platform.HudTick();
     a.core->OnFrame(f, in);
     if (!a.core->Detached()) a.platform.FirstPersonTick();
     if (a.core->Detached()) {

@@ -3,6 +3,7 @@
 // draw probe: one frame's draw with its bone palette and camera position read back.
 #include "../../../src/games/bf4/Bf4DrawProbe.h"
 #include "../../../src/games/bf4/Bf4FirstPersonView.h"
+#include "../../../src/games/bf4/Bf4HudSplit.h"
 #include "../../../src/games/bf4/Bf4ShaderCensus.h"
 
 #include <MinHook.h>
@@ -322,5 +323,78 @@ bool CheckFirstPersonView(ID3D11Device* device, const char*& why) {
     ID3D11Buffer* none[1]{};
     context->VSSetConstantBuffers(2, 1, none);
     context->PSSetConstantBuffers(2, 1, none);
+    return ok;
+}
+
+bool CheckHudSplit(ID3D11Device* device, const char*& why) {
+    const MH_STATUS init = MH_Initialize();
+    if (init != MH_OK && init != MH_ERROR_ALREADY_INITIALIZED) return why = "MinHook", false;
+    ComPtr<ID3D11DeviceContext> context;
+    device->GetImmediateContext(&context);
+    auto texture = [&](UINT w, UINT h, UINT bind, ComPtr<ID3D11Texture2D>& t) {
+        D3D11_TEXTURE2D_DESC d{};
+        d.Width = w;
+        d.Height = h;
+        d.MipLevels = d.ArraySize = 1;
+        d.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        d.SampleDesc.Count = 1;
+        d.Usage = D3D11_USAGE_DEFAULT;
+        d.BindFlags = bind;
+        return SUCCEEDED(device->CreateTexture2D(&d, nullptr, &t));
+    };
+    // The swapchain's buffer (100x100), the scene's render target and a UI atlas (no RT bind).
+    ComPtr<ID3D11Texture2D> back, scene, atlas;
+    if (!texture(100, 100, D3D11_BIND_RENDER_TARGET, back) ||
+        !texture(140, 140, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE, scene) ||
+        !texture(64, 64, D3D11_BIND_SHADER_RESOURCE, atlas))
+        return why = "textures", false;
+    ComPtr<ID3D11RenderTargetView> backView;
+    ComPtr<ID3D11ShaderResourceView> sceneView, atlasView;
+    if (FAILED(device->CreateRenderTargetView(back.Get(), nullptr, &backView)) ||
+        FAILED(device->CreateShaderResourceView(scene.Get(), nullptr, &sceneView)) ||
+        FAILED(device->CreateShaderResourceView(atlas.Get(), nullptr, &atlasView)))
+        return why = "views", false;
+    bool ok = true;
+    {
+        fvr::bf4::HudSplit hud;
+        if (!hud.Install(context.Get())) return why = "install", false;
+        hud.OnPresent(back.Get(), false); // the previous frame: learns the back buffer
+        const float blue[4] = {0, 0, 1, 1}, red[4] = {1, 0, 0, 1};
+        ID3D11RenderTargetView* target[1] = {backView.Get()};
+        context->OMSetRenderTargets(1, target, nullptr);
+        context->ClearRenderTargetView(backView.Get(), blue); // what the composite leaves: the scene
+        ID3D11ShaderResourceView* srv[1] = {sceneView.Get()};
+        context->PSSetShaderResources(0, 1, srv);
+        context->Draw(3, 0); // the composite (reads a render target)
+        srv[0] = atlasView.Get();
+        context->PSSetShaderResources(0, 1, srv);
+        context->Draw(3, 0); // the HUD's first draw: the scene is copied before it
+        context->ClearRenderTargetView(backView.Get(), red); // the HUD (everywhere, here)
+        hud.OnPresent(back.Get(), true, 0.2f); // the centre 20x20 back from the scene
+        const auto st = hud.GetStats();
+        if (st.copies != 1 || st.restores != 1) ok = (why = "copy/restore counts", false);
+        ID3D11ShaderResourceView* none[1]{};
+        context->PSSetShaderResources(0, 1, none);
+        ID3D11RenderTargetView* noTarget[1]{};
+        context->OMSetRenderTargets(1, noTarget, nullptr);
+        hud.Remove();
+    }
+    if (ok) {
+        D3D11_TEXTURE2D_DESC d{};
+        back->GetDesc(&d);
+        d.Usage = D3D11_USAGE_STAGING;
+        d.BindFlags = 0;
+        d.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+        ComPtr<ID3D11Texture2D> staging;
+        if (FAILED(device->CreateTexture2D(&d, nullptr, &staging))) return why = "staging", false;
+        context->CopyResource(staging.Get(), back.Get());
+        D3D11_MAPPED_SUBRESOURCE m{};
+        if (FAILED(context->Map(staging.Get(), 0, D3D11_MAP_READ, 0, &m))) return why = "map", false;
+        auto pixel = [&](int x, int y) { return static_cast<const std::uint32_t*>(m.pData)[y * (m.RowPitch / 4) + x]; };
+        const std::uint32_t centre = pixel(50, 50), edge = pixel(45, 50), outside = pixel(5, 5), justOut = pixel(39, 50);
+        context->Unmap(staging.Get(), 0);
+        if (centre != 0xFFFF0000u || edge != 0xFFFF0000u) ok = (why = "the centre box is not the scene", false); // blue (ABGR)
+        else if (outside != 0xFF0000FFu || justOut != 0xFF0000FFu) ok = (why = "outside the box changed", false); // red
+    }
     return ok;
 }

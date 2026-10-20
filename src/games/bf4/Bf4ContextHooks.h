@@ -26,6 +26,8 @@ public:
         // plain binds) are a copy of the game's arguments: entries may be replaced.
         virtual void OnBindConstants(ID3D11DeviceContext*, Stage, UINT /*startSlot*/, UINT /*numBuffers*/,
                                      ID3D11Buffer** /*buffers*/, UINT* /*first*/, UINT* /*count*/) {}
+        // OMSetRenderTargets / ...AndUnorderedAccessViews: the first render target (null: none).
+        virtual void OnSetRenderTarget(ID3D11DeviceContext*, ID3D11RenderTargetView* /*first*/) {}
     };
     static constexpr int kMaxListeners = 4;
 

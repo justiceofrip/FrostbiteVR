@@ -18,7 +18,8 @@ using Stage = ContextHooks::Stage;
 
 // ID3D11DeviceContext / ID3D11DeviceContext1 vtable slots.
 constexpr unsigned kVsSetConstantBuffers = 7, kDrawIndexed = 12, kDraw = 13, kMap = 14, kUnmap = 15,
-                   kPsSetConstantBuffers = 16, kDrawIndexedInstanced = 20, kDrawInstanced = 21, kUpdateSubresource = 48,
+                   kPsSetConstantBuffers = 16, kDrawIndexedInstanced = 20, kDrawInstanced = 21, kOmSetRenderTargets = 33,
+                   kOmSetRenderTargetsAndUav = 34, kUpdateSubresource = 48,
                    kVsSetConstantBuffers1 = 119, kPsSetConstantBuffers1 = 123;
 constexpr UINT kMaxSlots = D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT;
 
@@ -33,6 +34,9 @@ using DrawIndexedInstancedFn = void(STDMETHODCALLTYPE*)(ID3D11DeviceContext*, UI
 using DrawInstancedFn = void(STDMETHODCALLTYPE*)(ID3D11DeviceContext*, UINT, UINT, UINT, UINT);
 using UpdateFn = void(STDMETHODCALLTYPE*)(ID3D11DeviceContext*, ID3D11Resource*, UINT, const D3D11_BOX*, const void*, UINT,
                                           UINT);
+using SetRtFn = void(STDMETHODCALLTYPE*)(ID3D11DeviceContext*, UINT, ID3D11RenderTargetView* const*, ID3D11DepthStencilView*);
+using SetRtUavFn = void(STDMETHODCALLTYPE*)(ID3D11DeviceContext*, UINT, ID3D11RenderTargetView* const*, ID3D11DepthStencilView*,
+                                            UINT, UINT, ID3D11UnorderedAccessView* const*, const UINT*);
 // [0] the immediate context's implementation, [1] the deferred one's.
 std::array<SetCbFn, 2> g_vsSet{}, g_psSet{};
 std::array<SetCb1Fn, 2> g_vsSet1{}, g_psSet1{};
@@ -43,6 +47,8 @@ std::array<UnmapFn, 2> g_unmap{};
 std::array<DrawIndexedInstancedFn, 2> g_drawIndexedInstanced{};
 std::array<DrawInstancedFn, 2> g_drawInstanced{};
 std::array<UpdateFn, 2> g_update{};
+std::array<SetRtFn, 2> g_setRt{};
+std::array<SetRtUavFn, 2> g_setRtUav{};
 
 std::array<std::atomic<Listener*>, ContextHooks::kMaxListeners> g_listeners{};
 std::atomic<int> g_active{0}; // listeners registered
@@ -129,6 +135,21 @@ template <int I> void STDMETHODCALLTYPE UpdateHook(ID3D11DeviceContext* c, ID3D1
     g_update[I](c, r, sub, box, src, rowPitch, depthPitch);
 }
 
+template <int I> void STDMETHODCALLTYPE SetRtHook(ID3D11DeviceContext* c, UINT n, ID3D11RenderTargetView* const* rtv,
+                                                   ID3D11DepthStencilView* dsv) {
+    g_setRt[I](c, n, rtv, dsv);
+    ID3D11RenderTargetView* first = n && rtv ? rtv[0] : nullptr;
+    Each([&](Listener* l) { l->OnSetRenderTarget(c, first); });
+}
+template <int I> void STDMETHODCALLTYPE SetRtUavHook(ID3D11DeviceContext* c, UINT n, ID3D11RenderTargetView* const* rtv,
+                                                      ID3D11DepthStencilView* dsv, UINT uavStart, UINT uavCount,
+                                                      ID3D11UnorderedAccessView* const* uavs, const UINT* counts) {
+    g_setRtUav[I](c, n, rtv, dsv, uavStart, uavCount, uavs, counts);
+    if (n == D3D11_KEEP_RENDER_TARGETS_AND_DEPTH_STENCIL) return; // only the UAVs changed
+    ID3D11RenderTargetView* first = n && rtv ? rtv[0] : nullptr;
+    Each([&](Listener* l) { l->OnSetRenderTarget(c, first); });
+}
+
 bool InD3D11(void* function) {
     HMODULE owner = nullptr;
     return GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
@@ -159,6 +180,8 @@ template <int I> void HookAll(void** table, bool context1) {
          reinterpret_cast<LPVOID*>(&g_drawIndexedInstanced[I]));
     hook(kDrawInstanced, reinterpret_cast<LPVOID>(&DrawInstancedHook<I>), reinterpret_cast<LPVOID*>(&g_drawInstanced[I]));
     hook(kUpdateSubresource, reinterpret_cast<LPVOID>(&UpdateHook<I>), reinterpret_cast<LPVOID*>(&g_update[I]));
+    hook(kOmSetRenderTargets, reinterpret_cast<LPVOID>(&SetRtHook<I>), reinterpret_cast<LPVOID*>(&g_setRt[I]));
+    hook(kOmSetRenderTargetsAndUav, reinterpret_cast<LPVOID>(&SetRtUavHook<I>), reinterpret_cast<LPVOID*>(&g_setRtUav[I]));
     if (context1) {
         hook(kVsSetConstantBuffers1, reinterpret_cast<LPVOID>(&VsSet1Hook<I>), reinterpret_cast<LPVOID*>(&g_vsSet1[I]));
         hook(kPsSetConstantBuffers1, reinterpret_cast<LPVOID>(&PsSet1Hook<I>), reinterpret_cast<LPVOID*>(&g_psSet1[I]));
@@ -204,6 +227,9 @@ bool ContextHooks::Install(ID3D11DeviceContext* immediate) {
                 d1->PSSetConstantBuffers1(0, 1, one, first, count);
             }
         }
+        ID3D11RenderTargetView* noTargets[1]{};
+        deferred->OMSetRenderTargets(1, noTargets, nullptr);
+        deferred->OMSetRenderTargetsAndUnorderedAccessViews(1, noTargets, nullptr, 1, 0, nullptr, nullptr);
         deferred->Draw(0, 0);
         deferred->DrawIndexed(0, 0, 0);
         deferred->DrawInstanced(0, 0, 0, 0);
