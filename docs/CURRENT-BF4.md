@@ -18,7 +18,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   three sessions (09:16-10:19; rotation was inverted and the gun oversized, both fixed in
   0.4.16); everything built since 0.4.17 is unseen in a headset.
 
-## At a glance (installed: 0.4.58-local)
+## At a glance (installed: 0.4.60-local)
 
 | Feature | State | Evidence |
 | --- | --- | --- |
@@ -27,7 +27,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
 | Three frame channels + next pose in the capturing frame | on | live sim: 52.9 pairs/s at 117.7 game fps (2: 44.8), labels 525/525 |
 | Controller aim (mouse look), aim dot, two-handed aim, snap turn | on | live sim: gain learned = measured, 20 deg -> 19.6 deg; ADS and firing |
 | Gun follows aim (barrel on the bullets' line), reach limit | on | live sim: gun/laser on the aim, labels 335/335; past the reach gun and dot stop together |
-| BF4's pause/death/end menus in a level on the theater screen | on | live sim: pause -> screen -> laser RESUME -> head-tracked, twice |
+| BF4's pause/death/end menus in a level on the theater screen | on | live sim: pause -> screen -> laser RESUME -> head-tracked, twice; restart checkpoint |
 | Recenter: both stick clicks 1 s (or mod menu) | on | live sim: recentered twice, no stick click reached the game |
 | Comfort vignette, walk toward body/gun | on / body | live sim (vignette seen while walking) |
 | Holsters (keys 1/2/3, G, F) with pulses | on | live sim: 1, 3, grenade, knife work; 2 not seen (no sidearm) |
@@ -134,6 +134,13 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
     head pose shifting the view ~30 deg), rifle still in hand. One 10 s stall (no Present
     from about 21:40:40 to 21:40:50) swallowed one laser click on the mod menu; 20 s with
     the menu open later did not repeat it. Cause unknown (Open, below).
+  - 0.4.59-local (session 13; 0.4.59 also carried a developer window-shift experiment,
+    removed again): HUD corners in a turned render: hand 20 deg either side, the eyes'
+    outer edges show dark where the second minimap / ammo panel had been. Pitch gain seeded
+    from the learned yaw gain (-0.001680 = 1.2 x 0.001400). Pause -> RESTART CHECKPOINT ->
+    its confirmation dialog (OK) by laser on the theater screen -> the checkpoint reloaded
+    -> `game menu closed`, aim engaged and the world lane back in the level. The lens
+    shift for a wider gun reach does not work (BF4-CAMERA-RE.md).
 
 ## Gun follows aim: the barrel on the bullets' line (2026-10-19, built; live sim)
 
@@ -716,8 +723,9 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
   launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
   `-World -FrameChannels 2` 5/5 (76-237 pairs, machine-dependent); `-World` with one
   channel 4/4 (47 pairs).
-- Installed locally: runtime/bf4 0.4.58-local (reach limit, game menus, recenter gesture;
-  installed by live session 12; rollback 0.4.57-local);
+- Installed locally: runtime/bf4 0.4.60-local (the source at this commit: reach limit, game
+  menus, recenter gesture, HUD-corner fix, pitch gain seed; installed without a session;
+  rollback 0.4.59-local, which also carried the removed developer `viewshift` experiment);
   launcher settings
   restored to the player's after the developer sessions. Developer sessions still run the
   read-only probes and the firing census.
@@ -741,7 +749,7 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
 
 ## Open / blocked
 
-- Headset check of 0.4.58 (BF4-FIRST-SESSION.md). The simulated headset settled the game
+- Headset check of 0.4.60 (BF4-FIRST-SESSION.md). The simulated headset settled the game
   side (direction, labels, rate, aim, gestures, depth target); what only a headset can
   answer: comfort at ~45 pairs/s (and whether frame sync 1, ~52/s, still holds there),
   gun size and the head-locked gun, the HUD corners' readability, 3D from depth's feel,
@@ -783,8 +791,10 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
   image), so it does not explain the stall; the frame-producing thread has to be found
   among the others (one slept at `+0x21d86d`). Cause unknown; if it recurs, compare the
   watchdog stacks with a normal frame and with the overlays disabled.
-- The upward reach of the gun with Quest-like eyes is small (~5 deg with the head level);
-  a menu choice of a wider render budget (less sharp) is possible if players want more.
+- The upward reach of the gun with Quest-like eyes is small (~5 deg with the head level,
+  ~10-15 deg sideways); a menu choice of a wider render budget (less sharp) is possible if
+  players want more. A lens shift (projection window) would have avoided the cost, but
+  BF4 sets that window from its tiled-screenshot state every frame (BF4-CAMERA-RE.md).
 - The census holder chain matched nothing live (27 firing objects, 0 holders): redo the
   walk from the live firing vtable `+0x1D53F18`.
 - Mod menu in VR: opens with the menu button, drawn by the adapter (VrPanel + GDI) on the

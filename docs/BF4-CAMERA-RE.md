@@ -141,6 +141,24 @@ the render unless that override setting is used. The world lane writes `+0xB4` a
 the way the FOV setter computes them, ORs `0xF` into the dirty word, and restores all three
 exactly after the call (Bf4ViewOverride.cpp, ViewOverrideTests).
 
+### Projection window (lens shift): not usable (2026-10-19, static + live)
+
+Looked for to let the gun follow the aim farther: a shifted frustum would keep the camera on
+the aim while the image covers the eyes, with no extra width.
+- The projection builder `+0xB7EAE0` (called from `+0xB7EA10` with fovY `+0xB4`, aspect
+  `+0xC4`, near `+0xBC`, far `+0xC0`, separation `+0xD0`, convergence `+0xD4`, and pointers to
+  `+0x90`, `+0x98`, `+0xA0`) frames a sub-window: with T = near tan(fovY/2), A = T aspect,
+  x in [A(-1 + 2 o.x), A(-1 + 2 o.x + 2 s.x)] and y likewise, o = `+0x90`, s = `+0x98`
+  (constants 0.5, 2, -2), then writes the off-centre terms (r+l)/(r-l), (t+b)/(t-b).
+- But the view setup `+0x848B00` sets `+0x90` every frame through its setter `+0xB8A1A0`
+  (`+0xB8A1D0` sets `+0x98`) from `+0xCAE0F0`, which copies the state of BF4's tiled
+  screenshot manager (global `+0x273D6E8`, accessor `+0xCC0390` comparing tile counts with 1;
+  zeros without it). The window is the screenshot tile.
+- Live (developer `viewshift`, session 13): `+0x90` written into the submitted block for 420
+  submits (restored exactly) shifted nothing; snapshots identical at 0.1 and 0.3. Driving it
+  would mean manipulating the global screenshot state every frame: not pursued. The gun's
+  reach therefore stays limited by the render's width (Gun follows aim, CURRENT-BF4.md).
+
 Frame association: the override tags each pose with an id and counts how many submits
 in a row carried it (main thread). The world lane captures at Present (render thread)
 only once `settle` submits did (default 2: correct while the render thread presents the
