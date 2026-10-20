@@ -720,6 +720,13 @@ public:
     // Controller pulses through the XR host's haptic policy (it checks the packet, the
     // reference space and the 100 ms window itself).
     void Haptic(unsigned hand, bool strong, std::uint64_t inputGeneration, std::uint64_t space) override {
+        SendHaptic(hand, strong ? interaction::FeedbackKind::ReloadApplied : interaction::FeedbackKind::ReloadCapture,
+                   inputGeneration, space);
+    }
+    void HapticRecoil(unsigned hand, std::uint64_t inputGeneration, std::uint64_t space) override {
+        SendHaptic(hand, interaction::FeedbackKind::Recoil, inputGeneration, space);
+    }
+    void SendHaptic(unsigned hand, interaction::FeedbackKind kind, std::uint64_t inputGeneration, std::uint64_t space) {
         if (!frames || !inputGeneration || !space || hand > 1) return;
         LARGE_INTEGER q{}, frequency{};
         if (!QueryPerformanceCounter(&q) || !QueryPerformanceFrequency(&frequency) || frequency.QuadPart <= 0) return;
@@ -731,7 +738,7 @@ public:
         e.space = space;
         e.observedNs = now;
         e.deadlineNs = now + 80000000LL;
-        e.kind = strong ? interaction::FeedbackKind::ReloadApplied : interaction::FeedbackKind::ReloadCapture;
+        e.kind = kind;
         e.hand = hand;
         if (frames->Haptic(e)) ++hapticsSent;
     }
@@ -1249,6 +1256,7 @@ void OnPresent(Adapter& a, IDXGISwapChain* sc) {
     a.platform.TryBindShim();
     std::lock_guard<std::mutex> lock(a.coreMutex);
     if (!a.core->Detached()) a.platform.HudTick();
+    if (a.platform.firstPersonView.Installed()) a.core->NoteRecoilKicks(a.platform.firstPersonView.GetStats().kicks);
     a.core->OnFrame(f, in);
     if (!a.core->Detached()) a.platform.FirstPersonTick();
     if (a.core->Detached()) {

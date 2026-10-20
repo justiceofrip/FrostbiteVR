@@ -34,9 +34,15 @@ int WireLayoutAndMalformedInputs(){auto e=Event();FeedbackPacket wire;CHECK(Enco
         if(bad==4)p.kind=999;if(bad==5)p.hand=2;if(bad==6)p.event=0;if(bad==7)p.deadlineNs=p.observedNs+100000001;
         CHECK(!DecodeFeedback(p,Now,out)&&out.id==0);}
     CHECK(!DecodeFeedback(wire,e.deadlineNs,out));return 0;}
+int RecoilPulsesShortAndRateLimited(){HapticFeedbackPolicy p;auto i=Input();auto e=Event();e.kind=FeedbackKind::Recoil;e.hand=1;
+    auto r=p.Update(i,Now,&e);CHECK(r.pulse&&r.pulse->hand==1&&r.pulse->durationNs==25000000&&Near(r.pulse->amplitude,.75f));
+    ++e.id;CHECK(!p.Update(i,Now+40000000,&e).pulse); // closer than 50 ms
+    ++e.id;e.deadlineNs=Now+150000000;e.observedNs=Now+60000000;CHECK(p.Update(i,Now+60000000,&e).pulse);
+    FeedbackPacket wire;FeedbackEvent out;CHECK(EncodeFeedback(e,Now+60000000,wire)&&DecodeFeedback(wire,Now+60000000,out)&&out.kind==FeedbackKind::Recoil);
+    return 0;}
 int CaptureRateLimitDoesNotSuppressReceipt(){HapticFeedbackPolicy p;auto i=Input();auto e=Event();CHECK(p.Update(i,Now,&e).pulse);
     ++e.id;CHECK(!p.Update(i,Now+1000000,&e).pulse);++e.id;e.kind=FeedbackKind::ReloadApplied;
     CHECK(p.Update(i,Now+1000001,&e).pulse);return 0;}
 }
-int main(){if(DistinctCaptureAndReceiptWithNoReplay()||FocusAndMenuBarrier()||SessionEventSuspendBlocksOldInput()||SpaceTrackingClockAndExpiry()||WireLayoutAndMalformedInputs()||CaptureRateLimitDoesNotSuppressReceipt())return 1;
-    std::cout<<"Feedback: six semantic/wire/safety groups passed\n";return 0;}
+int main(){if(DistinctCaptureAndReceiptWithNoReplay()||FocusAndMenuBarrier()||SessionEventSuspendBlocksOldInput()||SpaceTrackingClockAndExpiry()||WireLayoutAndMalformedInputs()||CaptureRateLimitDoesNotSuppressReceipt()||RecoilPulsesShortAndRateLimited())return 1;
+    std::cout<<"Feedback: seven semantic/wire/safety groups passed\n";return 0;}

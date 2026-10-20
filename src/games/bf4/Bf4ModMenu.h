@@ -31,6 +31,8 @@ struct ModMenuState {
     bool gunReachWide = false;   // ...and let that render grow wider (less sharp) so the gun follows farther
     bool gunInHand = true;       // ...or (default) draw BF4's first-person rig at the right controller (no turned render)
     bool armIk = true;           // ...with the shoulders kept at the body and the arms reaching the gun (Bf4ArmIk.h)
+    bool freeLeftHand = false;   // ...and the left hand at its controller when off the gun (experimental: parts of
+                                 // the hand can stay on the gun, stretched; seen by the player 2026-10-20)
 };
 
 enum class ModMenuAction : std::uint8_t {

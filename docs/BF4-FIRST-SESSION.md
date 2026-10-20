@@ -41,9 +41,10 @@ raise BF4's Video > Resolution Scale (150-200 %) before judging blur.
    both hands (the barrel then follows the line between the hands). The arms reach the gun
    from your shoulders (menu: Arms > From the body, the default; With the gun is BF4's rig
    moving as one piece): turn the gun far left and right and look down; note whether the
-   arms look attached to you and whether the shoulders stay put when you look around. Let go
-   of the left grip and move the left hand: BF4's left hand should follow it; hold the grip in
-   front of the gun and it goes back on the handguard. The right stick turns in
+   arms look attached to you and whether the shoulders stay put when you look around. Each shot
+   should give a short buzz in the right controller. (Menu: Arms > Free left hand lets BF4's
+   left hand follow your left controller when you are not gripping the gun: experimental, parts
+   of the hand can stay stretched to the gun.) The right stick turns in
    **30 degree steps** (menu: Turning: Smooth / Snap 30 / 45 / 90; Smooth turn speed). The old modes stay in the menu:
    Gun > On the aim (the render turned along the aim) and Aim dot (a green ring).
 3. The ammo panel and minimap appear as small framed insets in your lower right and left

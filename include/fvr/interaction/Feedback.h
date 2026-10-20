@@ -5,7 +5,9 @@
 #include <optional>
 
 namespace fvr::interaction {
-enum class FeedbackKind : std::uint32_t {ReloadCapture=1,ReloadApplied=2};
+// Recoil: one short pulse per shot the game's own weapon animation shows (BF4: its right hand
+// kicked back along the gun while the trigger is held).
+enum class FeedbackKind : std::uint32_t {ReloadCapture=1,ReloadApplied=2,Recoil=3};
 // Runtime-neutral event. Times are monotonic host/native shared-clock
 // nanoseconds, NOT predicted XR display time. No native object crosses IPC.
 struct FeedbackEvent {
@@ -15,7 +17,7 @@ struct FeedbackEvent {
 };
 inline bool ValidFeedback(const FeedbackEvent& e,std::int64_t now)noexcept {
     return e.id&&e.inputSequence&&e.space&&e.hand<2&&
-        (e.kind==FeedbackKind::ReloadCapture||e.kind==FeedbackKind::ReloadApplied)&&
+        (e.kind==FeedbackKind::ReloadCapture||e.kind==FeedbackKind::ReloadApplied||e.kind==FeedbackKind::Recoil)&&
         e.observedNs>0&&now>=e.observedNs&&e.deadlineNs>now&&
         e.deadlineNs>e.observedNs&&e.deadlineNs-e.observedNs<=100000000;
 }
@@ -43,11 +45,14 @@ public:
             if(lastCapture_&&now-lastCapture_<60000000)return out;
             // Stronger shell cues after headset feedback; authority and freshness are unchanged.
             lastCapture_=now;out.pulse=HapticPulse{event->hand,.55f,35000000};
+        }else if(event->kind==FeedbackKind::Recoil){
+            if(lastRecoil_&&now-lastRecoil_<50000000)return out; // full auto: at most 20 a second
+            lastRecoil_=now;out.pulse=HapticPulse{event->hand,.75f,25000000};
         }else out.pulse=HapticPulse{event->hand,.9f,75000000};
         return out;
     }
 private:
     std::uint64_t seen_=0,space_=0,barrier_=0,lastInput_=0;
-    std::int64_t lastNow_=0,lastCapture_=0;
+    std::int64_t lastNow_=0,lastCapture_=0,lastRecoil_=0;
 };
 }

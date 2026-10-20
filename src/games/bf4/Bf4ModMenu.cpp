@@ -56,7 +56,8 @@ ui::ModMenuModel BuildModMenu(const game::CapabilityRegistry& caps, bool develop
     menu.Add({"gun_aim", "Gun", MenuItemKind::Choice, {"BF4's place", "On the aim", "Aim, wide", "In the hand"},
               state.gunInHand ? 3 : state.gunFollowsAim ? (state.gunReachWide ? 2 : 1) : 0, true,
               "In the hand: at your controller."});
-    menu.Add({"arms", "Arms", MenuItemKind::Choice, {"With the gun", "From the body"}, state.armIk ? 1 : 0, true,
+    menu.Add({"arms", "Arms", MenuItemKind::Choice, {"With the gun", "From the body", "Free left hand"},
+              state.armIk ? (state.freeLeftHand ? 2 : 1) : 0, true,
               "Gun in the hand: shoulders stay, arms reach."});
     menu.Add({"aim_dot", "Aim dot", MenuItemKind::Choice, {"Off", "On"}, state.aimDot ? 1 : 0, true,
               "Green ring where the gun aims."});

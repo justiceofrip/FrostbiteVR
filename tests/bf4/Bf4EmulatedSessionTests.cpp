@@ -800,7 +800,7 @@ TEST_CASE(EmuArmsFromTheBodyCarryTheTorso) {
     core.OnSwapchainAdopted(true);
     platform.Campaign();
     platform.aimKnown = true;
-    CHECK(core.SetMenuSetting("gun_aim", 3) && core.SetMenuSetting("arms", 1));
+    CHECK(core.SetMenuSetting("gun_aim", 3) && core.SetMenuSetting("arms", 2)); // with the free left hand
     Clock clock;
     auto run = [&](float headYaw, int frames) {
         for (int n = 0; n < frames; ++n) {
@@ -852,6 +852,50 @@ TEST_CASE(EmuArmsLeftHandStaysOnTheGunWhileSteadyingIt) {
     CHECK(core.Status().find("two_handed=1") != std::string::npos);
     const CameraRequest& r = platform.cameraLog.back()[0];
     CHECK(r.armIk && r.gunInHand && !r.leftFree);
+}
+
+TEST_CASE(EmuRecoilKicksPulseTheRightControllerWhileFiring) {
+    // Each recoil kick the first-person pass saw is one pulse on the right controller, but only
+    // while its trigger is held (a kick from an animation without firing, or an empty gun that
+    // kicks nothing, gives none).
+    FakeImage image({names::kGameRenderer, names::kRenderViewUpdate, names::kClientGameContext, names::kLevelName});
+    FakePlatform platform;
+    AdapterCore core(Session(true), X64(), image.Resolve(), platform);
+    core.OnSwapchainAdopted(true);
+    platform.Campaign();
+    platform.aimKnown = true;
+    CHECK(core.SetMenuSetting("gun_aim", 3));
+    Clock clock;
+    std::uint64_t kicks = 0;
+    auto frame = [&](bool trigger, bool kick) {
+        static std::uint64_t generation = 1;
+        LaneFrame l(generation / 90.0, generation);
+        ++generation;
+        auto& right = l.in.controls.hands[1];
+        if (trigger) {
+            right.active |= interaction::Trigger;
+            right.trigger = 1.0f;
+        }
+        if (kick) ++kicks;
+        core.NoteRecoilKicks(kicks);
+        platform.GameFrame();
+        core.OnFrame(clock.Next(), l.in);
+    };
+    for (int n = 0; n < 200; ++n) frame(false, false);
+    frame(false, true); // a kick without the trigger: no pulse
+    CHECK(platform.recoils.empty());
+    frame(true, false); // the trigger alone: no pulse
+    CHECK(platform.recoils.empty());
+    frame(true, true);
+    frame(true, false);
+    frame(true, true);
+    CHECK(platform.recoils.size() == 2 && platform.recoils[0] == 1 && platform.recoils[1] == 1);
+    // A quick tap: the kick shows after the release, still within the window.
+    frame(false, true);
+    CHECK(platform.recoils.size() == 3);
+    for (int n = 0; n < 40; ++n) frame(false, false); // ~0.4 s later: an animation, not a shot
+    frame(false, true);
+    CHECK(platform.recoils.size() == 3);
 }
 
 TEST_CASE(EmuMenuChoicesCarryOverToTheNextSession) {

@@ -125,6 +125,9 @@ struct FakePlatform final : IAdapterPlatform {
             if (k && keys[0] != k && keys[1] != k) keyPresses.push_back(k);
         keys = held;
     }
+    void HapticRecoil(unsigned hand, std::uint64_t generation, std::uint64_t space) override {
+        if (generation && space) recoils.push_back(hand);
+    }
     void Haptic(unsigned hand, bool strong, std::uint64_t generation, std::uint64_t space) override {
         if (generation && space) haptics.push_back({hand, strong});
     }
@@ -136,6 +139,7 @@ struct FakePlatform final : IAdapterPlatform {
     std::array<std::uint16_t, 2> keys{};
     std::vector<std::uint16_t> keyPresses;
     std::vector<std::pair<unsigned, bool>> haptics;
+    std::vector<unsigned> recoils; // HapticRecoil pulses (hand)
 
     // ---- engine stereo (fake shim + fake backbuffer) ----
     stereo::NvapiStereoEmu* shim = nullptr;   // set when the "game" loaded nvapi64.dll

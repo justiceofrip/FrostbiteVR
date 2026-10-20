@@ -187,7 +187,10 @@ void AdapterCore::ApplyMenuCommand(const ModMenuCommand& command) {
         break;
     case ModMenuAction::SetArms:
         menuState_.armIk = command.value != 0;
-        platform_.Log(menuState_.armIk ? "arms: from the body" : "arms: with the gun");
+        menuState_.freeLeftHand = command.value == 2;
+        platform_.Log(menuState_.freeLeftHand ? "arms: from the body, free left hand"
+                      : menuState_.armIk  ? "arms: from the body"
+                                          : "arms: with the gun");
         break;
     case ModMenuAction::SetHolsters:
         menuState_.holsters = command.value != 0;
@@ -611,6 +614,16 @@ void AdapterCore::UpdateGestures(const ControllerSnapshot& in, const PlatformFra
     for (unsigned h = 0; h < 2; ++h)
         if (gesture_.haptic[h].valid)
             platform_.Haptic(h, gesture_.haptic[h].strong, in.controls.generation, in.controls.spaceGeneration);
+    // Recoil: a kick the first-person pass saw while the right trigger is held or was a moment
+    // ago (live: BF4's kick shows 60-120 ms after the press, after a quick tap's release).
+    const auto& right = in.controls.hands[1];
+    if ((right.active & interaction::Trigger) && right.trigger >= 0.5f) triggerMs_ = f.tickMs ? f.tickMs : 1;
+    if (recoilKicks_ != recoilSeen_) {
+        const bool firing = triggerMs_ && f.tickMs - triggerMs_ <= kRecoilWindowMs;
+        if (firing && gameplay && menuState_.gunInHand && in.controls.focused)
+            platform_.HapticRecoil(1, in.controls.generation, in.controls.spaceGeneration);
+        recoilSeen_ = recoilKicks_;
+    }
     // Gestures happen at human pace: log each change of their state.
     std::string d = gestures_.Describe();
     if (d != lastGestures_) {
@@ -685,7 +698,7 @@ void AdapterCore::UpdateCamera(const ControllerSnapshot& in, const PlatformFrame
                     if (const auto rel = math::MakeRelativePose(p, left.grip)) {
                         r.leftHandInHead = *rel;
                         r.leftValid = true;
-                        r.leftFree = !(aim_.engaged && aim_.twoHanded);
+                        r.leftFree = menuState_.freeLeftHand && !(aim_.engaged && aim_.twoHanded);
                     }
             }
         }

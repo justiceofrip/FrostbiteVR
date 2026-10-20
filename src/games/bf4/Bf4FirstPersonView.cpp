@@ -291,13 +291,14 @@ void FirstPersonView::RewriteArms(ID3D11DeviceContext* context, const void* mapp
         }
     }
     if (changedRef) armSolved_ = false;
-    // The grip from BF4's right hand: its hand bone in a palette whose right arm is the pass's.
-    if (own[1].found && armRef_[1].found && ChainDistance(own[1], armRef_[1]) < kArmChainTolerance) {
+    // The grip from BF4's right hand: every palette's right hand bone is a candidate (EndPass
+    // takes one of the pass's right arm).
+    if (own[1].found && anchorCandidateCount_ < kAnchorCandidates) {
         const int hand = FindHandBone(palette, bones, armBind_, own[1], 1);
         if (hand >= 0) {
             const float* h = palette + hand * kArmBoneFloats;
-            anchorPass_ = Mul(passView_, Mat4{h[0], h[1], h[2], h[3], h[4], h[5], h[6], h[7], h[8], h[9], h[10], h[11], 0, 0, 0, 1});
-            anchorPassValid_ = AllFinite(anchorPass_);
+            const Mat4 m = Mul(passView_, Mat4{h[0], h[1], h[2], h[3], h[4], h[5], h[6], h[7], h[8], h[9], h[10], h[11], 0, 0, 0, 1});
+            if (AllFinite(m)) anchorCandidates_[anchorCandidateCount_++] = {m, own[1]};
         }
     }
     if (!armPass_) {
@@ -433,14 +434,18 @@ std::string FirstPersonView::Describe() const {
                   static_cast<unsigned long long>(s.shiftedFrames));
     if (n > 0 && n < static_cast<int>(sizeof(line)))
         std::snprintf(line + n, sizeof(line) - n,
-                      " arms=%llu/%llu bones=%llu solved=%llu switches=%llu slide=(%.3f %.3f) arm_us_per_pass=read %.0f%s work %.0f upload %.0f anchor=%llu/%llu grip_from_rest=(%.1f cm %.1f deg)",
+                      " arms=%llu/%llu bones=%llu solved=%llu switches=%llu slide=(%.3f %.3f) arm_us_per_pass=read %.0f%s work %.0f upload %.0f anchor=%llu/%llu/jumps %llu grip_from_rest=(%.1f cm %.1f deg) kicks=%llu last=[%.1f/%.1f/%.0f %.1f/%.1f/%.0f %.1f/%.1f/%.0f %.1f/%.1f/%.0f]",
                       static_cast<unsigned long long>(s.armPalettes), static_cast<unsigned long long>(s.armRewritten),
                       static_cast<unsigned long long>(s.armBones), static_cast<unsigned long long>(s.armSolved),
                       static_cast<unsigned long long>(s.armSwitches),
                       s.armSlide[0], s.armSlide[1], s.armSolved ? s.armReadUs / s.armSolved : 0.0,
                       s.armStreamingReads ? " (streaming)" : "", s.armSolved ? s.armWorkUs / s.armSolved : 0.0,
                       s.armSolved ? s.armUploadUs / s.armSolved : 0.0, static_cast<unsigned long long>(s.anchorFound),
-                      static_cast<unsigned long long>(s.anchorUsed), s.anchorCm, s.anchorDeg);
+                      static_cast<unsigned long long>(s.anchorUsed), static_cast<unsigned long long>(s.anchorJumps),
+                      s.anchorCm, s.anchorDeg,
+                      static_cast<unsigned long long>(s.kicks), s.kickLog[0][0], s.kickLog[0][1], s.kickLog[0][2],
+                      s.kickLog[1][0], s.kickLog[1][1], s.kickLog[1][2], s.kickLog[2][0], s.kickLog[2][1], s.kickLog[2][2],
+                      s.kickLog[3][0], s.kickLog[3][1], s.kickLog[3][2]);
     return line;
 }
 
@@ -478,6 +483,27 @@ bool FirstPersonView::WeaponPart(const Mat4& w, const float camera[3], float rad
 
 void FirstPersonView::EndPass() {
     inPass_ = false;
+    // The right hand of the pass: a candidate of the pass's right arm (the most voted), the one
+    // nearest the hand in use (live, sessions 78-80: weapon palettes' stale arm copies gave
+    // hands 0.4-0.5 m away).
+    {
+        const AnchorCandidate* best = nullptr;
+        float bestDistance = 1e9f;
+        for (int k = 0; k < anchorCandidateCount_; ++k) {
+            const AnchorCandidate& c = anchorCandidates_[k];
+            if (armRef_[1].found && ChainDistance(c.arm, armRef_[1]) >= kArmChainTolerance) continue;
+            const float d = anchorValid_ ? RigidDistance(c.hand, anchor_) : 0.0f;
+            if (d < bestDistance) {
+                bestDistance = d;
+                best = &c;
+            }
+        }
+        if (best) {
+            anchorPass_ = best->hand;
+            anchorPassValid_ = true;
+        }
+        anchorCandidateCount_ = 0;
+    }
     const bool both = armPass_ && armSolved_ && armCorr_.solved[0] && armCorr_.solved[1];
     for (int side = 0; side < 2; ++side) {
         if (armPass_ && armRef_[side].found) armPrev_[side] = armRef_[side];
@@ -486,6 +512,17 @@ void FirstPersonView::EndPass() {
     }
     armPass_ = armSolved_ = palettePass_ = false;
     // The right hand's grip: smoothed toward this pass's hand (time-based), or stale when missing.
+    // A hand far from the smoothed one is not taken (live, session 78: 0.4-0.5 m jumps, a weapon
+    // palette's stale arm copy leading half a split pass), unless such hands keep coming.
+    if (anchorPassValid_ && anchorValid_ && RigidDistance(anchorPass_, anchor_) > kAnchorJump) {
+        if (++anchorJumps_ <= kAnchorJumpPasses) {
+            anchorPassValid_ = false;
+            std::lock_guard<std::mutex> lock(mutex_);
+            ++stats_.anchorJumps;
+        }
+    } else if (anchorPassValid_) {
+        anchorJumps_ = 0;
+    }
     if (anchorPassValid_) {
         LARGE_INTEGER now{}, freq{};
         QueryPerformanceCounter(&now);
@@ -494,6 +531,34 @@ void FirstPersonView::EndPass() {
                                                           static_cast<float>(freq.QuadPart))
                                      : 1.0f;
         anchorTick_ = now.QuadPart;
+        // Recoil: the raw hand's step back along the gun (the grip's +z) since the last pass at
+        // least kKickMinGap ago (live: the pass can be split in two within a frame, ~0 ms apart).
+        const float kickDt = kickRawTick_ ? static_cast<float>(now.QuadPart - kickRawTick_) / static_cast<float>(freq.QuadPart) : 0.0f;
+        const bool kickStep = anchorValid_ && kickDt >= kKickMinGap;
+        if (kickStep && kickDt < 0.1f) {
+            const Mat4 grip = Mul(anchorPass_, GripInRightHandBind());
+            const math::Vec3 back = math::Normalize(TransformVector(grip, {0, 0, 1}));
+            const math::Vec3 step{anchorPass_[3] - anchorLastRaw_[3], anchorPass_[7] - anchorLastRaw_[7],
+                                  anchorPass_[11] - anchorLastRaw_[11]};
+            const float backMm = math::Dot(step, back) * 1000.0f;
+            const float sideMm = math::Length(step - back * math::Dot(step, back)) * 1000.0f;
+            const float speed = math::Dot(step, back) / kickDt;
+            const float sinceKick = kickTick_ ? static_cast<float>(now.QuadPart - kickTick_) / static_cast<float>(freq.QuadPart)
+                                              : kKickGap;
+            if (speed >= kKickSpeed && math::Length(step) <= kKickMaxStep && sinceKick >= kKickGap) {
+                kickTick_ = now.QuadPart;
+                std::lock_guard<std::mutex> lock(mutex_);
+                const int slot = static_cast<int>(stats_.kicks % 4);
+                stats_.kickLog[slot][0] = backMm;
+                stats_.kickLog[slot][1] = sideMm;
+                stats_.kickLog[slot][2] = kickDt * 1000.0f;
+                ++stats_.kicks;
+            }
+        }
+        if (kickStep || !kickRawTick_ || kickDt >= 0.1f) {
+            anchorLastRaw_ = anchorPass_;
+            kickRawTick_ = now.QuadPart;
+        }
         anchor_ = anchorValid_ ? BlendRigid(anchor_, anchorPass_, 1.0f - std::exp(-dt / kAnchorSeconds)) : anchorPass_;
         anchorValid_ = true;
         anchorMisses_ = 0;

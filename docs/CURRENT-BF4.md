@@ -18,7 +18,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   three sessions (09:16-10:19; rotation was inverted and the gun oversized, both fixed in
   0.4.16); everything built since 0.4.17 is unseen in a headset.
 
-## At a glance (installed: 0.4.114-local)
+## At a glance (installed: 0.4.122-local)
 
 | Feature | State | Evidence |
 | --- | --- | --- |
@@ -40,7 +40,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
 | 3D from depth (depth buffer) | off | live sim: depth found, parallax direction right |
 | 3D: alternate eyes (each frame from one eye, true parallax) | off (option) | live sim: gun and walls at their depths, labels 327/327, 52 pairs/s |
 | BF4 split stereo (developer) | unsupported (retired) | live sim: crashes BF4's one-view world renderer |
-| Arms from the body (arm IK by palette rewrite: shoulders at the body, the left hand free unless steadying the gun) | on (default, "Arms") | live sim: both arms solved every pass, all arm draws agree < 0.5 mm, turned 60 deg no sleeve across the view, left hand at its controller and back on the gun two-handed, reload/ADS; no frame-rate cost (116/116 presents/s) |
+| Arms from the body (arm IK by palette rewrite: shoulders at the body, hands on the gun; "Free left hand" option) | on (default, "Arms") | live sim: both arms solved every pass, all arm draws agree < 0.5 mm, turned 60 deg no sleeve across the view, left hand at its controller and back on the gun two-handed, reload/ADS; no frame-rate cost (116/116 presents/s) |
 
 ## Works on the real game (actual-game checks)
 
@@ -231,6 +231,19 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   (no arms drawn) the rifle's grip at rest and the receiver hold below come back. Log:
   `first_person_view ... anchor=found/used grip_from_rest=(cm deg)` (live: rifle 0.1 cm 0.4
   deg; launcher 6.8 cm 28.4 deg; aiming down sights 9.3 cm 1.8 deg).
+- Robustness (live, sessions 77-80): the first-person pass can come split in two within a frame
+  (~0 ms apart), and in a half without the arms a weapon palette's stale arm copy can lead: the
+  hand used is chosen at the pass's end among every palette's right hand bone, of the pass's
+  right arm and nearest the hand in use, and a hand more than 10 cm from it is not taken for up
+  to 10 passes (log `anchor=found/used/jumps N`).
+- Recoil pulses: BF4's right hand kicking back along the gun (faster than 0.45 m/s over at least
+  4 ms, at most a 3 cm step, one per 50 ms) while the right trigger is held or was within 400 ms
+  is one short pulse on the right controller (new feedback kind `Recoil`: amplitude 0.75, 25 ms,
+  at most 20 a second, in the XR host's haptic policy). An empty gun kicks nothing, so it does
+  not buzz. Live (sessions 75-79, ~120 fps): idle and walking 0-1 kicks (never a pulse: no
+  trigger), ten single shots ten pulses, a 2 s burst 10-15; at 60 fps (session 80, after a
+  display-mode change) taps were missed until the window grew to 400 ms (not yet re-checked).
+  Log: `first_person_view ... kicks=N`, `gestures ... haptics_sent=`. Not felt in a headset.
 - Aiming down sights without the hand's grip: BF4 animates the gun ~10 cm toward the eye line;
   the receiver (the largest rigid mesh of the pass, read from its b0 `worldMatrix`) is tracked
   each pass, its hip pose held while the game's FOV is zoomed, and the rig moved back by the
@@ -308,7 +321,9 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   hand's move from BF4's hold (up to 8 cm, the clavicle turning about the neck's base), the
   elbow is solved on BF4's elbow side (two bones, lengths from the chain), out of reach the
   shoulder slides along the line to the hand, the clavicle takes half the upper arm's swing.
-  The right hand stays where the gun puts it; the left hand too while its grip steadies the gun
+  The right hand stays where the gun puts it; so does the left by default. With "Arms: Free left
+  hand" (option, off by default since the player saw part of the hand left stretched between the
+  gun and the free hand, 2026-10-20) the left hand stays only while its grip steadies the gun
   (two-handed aim), else it goes to its controller (the wrist 6 cm behind the grip, the hand
   keeping its grip shape), moving there or back over 0.15 s; bones that map none of the chain's
   joints but the wrist within 10 cm are its fingers and go along. The free hand turns about the
@@ -340,7 +355,9 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   rolling the controller 90 deg laid the hand flat, pitching it turned the hand again. Session 71:
   quick knife and grenade with the arms on (grenade thrown, nothing torn; the throw's hands
   still spread where BF4 animates them).
-- Gaps: the forearm does not share the free hand's twist (the wrist skin twists instead); the
+- Gaps: the free left hand leaves some geometry stretched back to the gun (seen by the player on
+  the desktop mirror, 2026-10-20; which bones are missed is not known yet: the option is off by
+  default); the forearm does not share the free hand's twist (the wrist skin twists instead); the
   skeleton's joints are the prologue rig's (another rig finds no chains and stays as
   BF4 draws it); aiming steeply up still shows the near upper arm large; not seen in a headset.
 
@@ -1055,10 +1072,10 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
   launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
   `-World -FrameChannels 2` 5/5 (76-237 pairs, machine-dependent); `-World` with one
   channel 4/4 (47 pairs).
-- Installed locally: runtime/bf4 0.4.114-local (the source at this commit: gun in the hand held by
-  BF4's right hand's grip, arms from the body by default with a free left hand that turns with
-  its controller, no crosshair (centre mask), controller scan with its cache, 3D option;
-  rollback 0.4.113-local); launcher settings
+- Installed locally: runtime/bf4 0.4.122-local (the source at this commit: gun in the hand held by
+  BF4's right hand's grip, arms from the body by default (free left hand an option), recoil
+  pulses, no crosshair (centre mask), controller scan with its cache, 3D option; rollback
+  0.4.121-local); launcher settings
   restored to the player's after the developer sessions. Developer sessions still run the
   read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the

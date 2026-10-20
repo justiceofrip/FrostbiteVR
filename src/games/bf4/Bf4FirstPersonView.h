@@ -124,7 +124,13 @@ public:
         // (its upload ring: write-combined memory), finding/solving/rewriting, uploading ours.
         // The grip from BF4's right hand: passes it was found in, binds that used it, and how far
         // the grip it gave was from the rifle's grip at rest (last bind: cm, degrees).
-        std::uint64_t anchorFound = 0, anchorUsed = 0;
+        std::uint64_t anchorFound = 0, anchorUsed = 0, anchorJumps = 0; // ...and hands not taken (jumps)
+        // Recoil kicks: BF4's right hand stepping back along the gun faster than kKickSpeed
+        // (live, session 75: idle and walking never reached 4 mm a pass at ~120 passes/s; ten
+        // single shots made 17 such passes, a 2.5 s burst 50), at most one per kKickGap.
+        std::uint64_t kicks = 0;
+        // Diagnostics: the last kicks' backward step (mm), sideways step (mm) and pass gap (ms).
+        float kickLog[4][3]{};
         float anchorCm = 0, anchorDeg = 0;
         double armReadUs = 0, armWorkUs = 0, armUploadUs = 0;
         bool armStreamingReads = false; // the reads use SSE4.1 streaming loads
@@ -184,6 +190,12 @@ public:
     static constexpr float kArmHandMoveSeconds = 0.15f; // a hand leaving or taking the gun gets there in this time
     static constexpr float kAnchorSeconds = 0.06f;      // the right hand's grip is smoothed over this (s)
     static constexpr int kAnchorStalePasses = 30;       // without it this many passes: back to the grip at rest
+    static constexpr float kKickSpeed = 0.45f;          // m/s back along the gun (4 mm in a 120 Hz pass)
+    static constexpr float kKickGap = 0.05f;            // s between two kicks (full auto: up to 20 a second)
+    static constexpr float kKickMinGap = 0.004f;        // s: steps are measured over at least this
+    static constexpr float kKickMaxStep = 0.03f;        // m: a longer step is a jump, not a kick
+    static constexpr float kAnchorJump = 0.10f;         // m: a hand this far from the smoothed one is not taken...
+    static constexpr int kAnchorJumpPasses = 10;        // ...for this many passes in a row
     // Alternate eyes, each Present (render thread): the eye the frame just drawn was rendered
     // from (-1: none moved), read before OnPresent; OnPresent then turns to the other eye.
     int FrameEye() const;
@@ -254,10 +266,19 @@ private:
     std::int64_t armLastPassTick_ = 0;
     // The grip from BF4's right hand (GripInRightHandBind): this pass's hand bone (first-person
     // camera space), the smoothed one in use, and for how many passes it was not found.
-    Mat4 anchorPass_{}, anchor_{};
+    Mat4 anchorPass_{}, anchor_{}, anchorLastRaw_{};
+    // This pass's right hand bones (first-person camera space) with the right arm each palette
+    // posed: at the pass's end the one of the pass's arm nearest the hand in use is taken.
+    struct AnchorCandidate {
+        Mat4 hand;
+        ArmChain arm;
+    };
+    static constexpr int kAnchorCandidates = 8;
+    AnchorCandidate anchorCandidates_[kAnchorCandidates]{};
+    int anchorCandidateCount_ = 0;
     bool anchorPassValid_ = false, anchorValid_ = false;
-    int anchorMisses_ = 0;
-    std::int64_t anchorTick_ = 0;
+    int anchorMisses_ = 0, anchorJumps_ = 0;
+    std::int64_t anchorTick_ = 0, kickTick_ = 0, kickRawTick_ = 0;
 };
 
 } // namespace fvr::bf4

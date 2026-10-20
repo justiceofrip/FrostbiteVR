@@ -135,6 +135,8 @@ public:
     // A short controller pulse on the XR host (hand 0 left, 1 right) answering the input
     // packet `inputGeneration` of reference space `space`.
     virtual void Haptic(unsigned /*hand*/, bool /*strong*/, std::uint64_t /*inputGeneration*/, std::uint64_t /*space*/) {}
+    // One short recoil pulse (interaction::FeedbackKind::Recoil).
+    virtual void HapticRecoil(unsigned /*hand*/, std::uint64_t /*inputGeneration*/, std::uint64_t /*space*/) {}
     // The world lane's current eye-pair request (the oldest queued lease) as it stands now,
     // e.g. after this Present captured the previous one; false when none is held.
     virtual bool CurrentWorld(WorldRequest& /*out*/) { return false; }
@@ -200,6 +202,10 @@ public:
     const ModMenuState& MenuSettings() const { return menuState_; }
     const interaction::PadState& Pad() const { return pad_; }
     const BodyGestures& Gestures() const { return gestures_; }
+    // Gun in the hand: how many recoil kicks the first-person pass has seen so far (BF4's right
+    // hand stepping back along the gun, Bf4FirstPersonView.h); each new one is a pulse on the
+    // right controller while its trigger is held (an empty gun kicks nothing).
+    void NoteRecoilKicks(std::uint64_t kicks) { recoilKicks_ = kicks; }
 
     // Engine stereo: SetActiveEye seen by the shim (render thread).
     void OnStereoEye(stereo::Eye eye);
@@ -281,6 +287,8 @@ private:
     void UpdateGestures(const ControllerSnapshot& input, const PlatformFrame& frame);
     void ResolveReload();
     BodyGestures gestures_;
+    std::uint64_t recoilKicks_ = 0, recoilSeen_ = 0, triggerMs_ = 0; // ...and when the trigger was last held
+    static constexpr std::uint64_t kRecoilWindowMs = 400; // (60 fps: the kick shows up to ~300 ms after a tap)
     BodyGestureOutput gesture_{};
     PhysicalCrouch crouch_;
     bool crouchPulse_ = false;
