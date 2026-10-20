@@ -220,6 +220,41 @@ TEST_CASE(ArmIkShouldersFollowTheArmsPartway) {
     }
 }
 
+TEST_CASE(ArmIkAFreeHandTakesItsFingers) {
+    // The left hand off the gun goes to its controller; its fingers (no joint of the chain, the
+    // wrist within reach) go with it. Halfway through the blend, the wrist is halfway there.
+    const ArmBindJoints bind = Bf4ArmBindJoints();
+    const Rig base = MakeRig();
+    ArmSolveInput in;
+    FindArmChains(base.palette.data(), Rig::kBones, bind, in.chains);
+    in.headFromPass = Translation({0, -1.9f, 0});
+    in.body = Identity4();
+    const math::Vec3 wrist = TransformPoint(in.headFromPass, base.w[0]);
+    in.wristTarget[0] = wrist + math::Vec3{-0.15f, -0.1f, 0.05f};
+    in.hasWristTarget[0] = true;
+    BoneClass cls[Rig::kBones];
+    ClassifyBones(base.palette.data(), Rig::kBones, bind, in.chains, kArmClassTolerance, cls);
+    CHECK(cls[7].part == ArmPart::None); // without finger reach the finger stays
+    ClassifyBones(base.palette.data(), Rig::kBones, bind, in.chains, kArmClassTolerance, cls, kArmFingerReach);
+    CHECK(cls[7].part == ArmPart::Hand && cls[7].side == 0 && cls[14].part == ArmPart::Hand && cls[14].side == 1);
+    CHECK(cls[0].part == ArmPart::None && cls[16].part == ArmPart::None && cls[17].part == ArmPart::None);
+    for (float blend : {1.0f, 0.5f}) {
+        in.wristBlend[0] = blend;
+        const ArmCorrections c = SolveArms(in);
+        CHECK(c.solved[0]);
+        Rig rig = base;
+        ApplyArmCorrections(rig.palette.data(), Rig::kBones, cls, in.headFromPass, c);
+        auto head = [&](const Rig& r, int bone, math::Vec3 p) { return TransformPoint(in.headFromPass, Map(r.palette, bone, p)); };
+        const math::Vec3 target = wrist + (in.wristTarget[0] - wrist) * blend;
+        CHECK(NearV(head(rig, 4, bind.wrist[0]), target) && NearV(head(rig, 6, bind.wrist[0]), target));
+        // The finger keeps its place on the hand: moved as the hand moved.
+        const math::Vec3 tip = bind.wrist[0] + math::Vec3{-0.12f, 0, 0};
+        CHECK(NearV(head(rig, 7, tip) - head(base, 7, tip), target - wrist));
+        // The right hand stays on the gun.
+        CHECK(NearV(head(rig, 13, bind.wrist[1]), TransformPoint(in.headFromPass, base.w[1])));
+    }
+}
+
 TEST_CASE(ArmIkSlidesTheShoulderWhenTheGunIsOutOfReach) {
     const ArmBindJoints bind = Bf4ArmBindJoints();
     Rig rig = MakeRig();

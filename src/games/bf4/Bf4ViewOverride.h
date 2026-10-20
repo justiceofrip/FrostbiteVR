@@ -156,9 +156,12 @@ public:
         std::uint64_t poseId = 0;
         math::Pose body{};   // the torso relative to the same head (arms from the body), when bodyValid
         bool bodyValid = false;
+        math::Pose leftHand{}; // the left controller's grip relative to the same head, when leftFree
+        bool leftFree = false;
     };
     static constexpr std::size_t kHandRecords = 6;
-    void SetHand(const math::Pose& handInHead, bool valid, const math::Pose& bodyInHead = {}, bool bodyValid = false);
+    void SetHand(const math::Pose& handInHead, bool valid, const math::Pose& bodyInHead = {}, bool bodyValid = false,
+                 const math::Pose& leftHandInHead = {}, bool leftFree = false);
     std::array<HandRecord, kHandRecords> RecentHands() const;
     // Developer research (read-only): the next submit copies block 0 as the game submitted it
     // (before the override writes anything); TakeBlockDump hands the copy over once.
@@ -186,8 +189,8 @@ private:
     float parentYaw_ = std::numeric_limits<float>::quiet_NaN();
     math::Pose hand_{};
     bool handValid_ = false;
-    math::Pose body_{};
-    bool bodyValid_ = false;
+    math::Pose body_{}, left_{};
+    bool bodyValid_ = false, leftFree_ = false;
     std::array<HandRecord, kHandRecords> hands_{};
     std::size_t handNext_ = 0;
     bool dumpRequested_ = false, dumpReady_ = false; // RequestBlockDump

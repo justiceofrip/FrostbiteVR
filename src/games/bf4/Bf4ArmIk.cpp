@@ -95,7 +95,7 @@ int FindArmChains(const float* palette, int bones, const ArmBindJoints& bind, Ar
 }
 
 void ClassifyBones(const float* palette, int bones, const ArmBindJoints& bind, const ArmChain chains[2], float tolerance,
-                   BoneClass* out) {
+                   BoneClass* out, float fingerReach) {
     bones = std::min(bones, kArmMaxBones);
     for (int i = 0; i < bones; ++i) {
         out[i] = BoneClass{};
@@ -115,6 +115,17 @@ void ClassifyBones(const float* palette, int bones, const ArmBindJoints& bind, c
             if (part != ArmPart::None) {
                 out[i] = {part, static_cast<std::uint8_t>(side)};
                 break;
+            }
+        }
+        if (out[i].part != ArmPart::None || fingerReach <= 0) continue;
+        // A finger: no joint of the chain, but the wrist within reach (nearest arm).
+        float best = fingerReach;
+        for (int side = 0; side < 2; ++side) {
+            if (!chains[side].found) continue;
+            const float d = math::Length(MapPoint(b, bind.wrist[side]) - chains[side].wrist);
+            if (d < best) {
+                best = d;
+                out[i] = {ArmPart::Hand, static_cast<std::uint8_t>(side)};
             }
         }
     }
@@ -180,7 +191,8 @@ ArmCorrections SolveArms(const ArmSolveInput& in) {
                          w0 = TransformPoint(in.headFromPass, ch.wrist);
         const float lu = math::Length(e0 - s0), lf = math::Length(w0 - e0);
         if (!(lu > 0.05f && lf > 0.05f && lu < 1.0f && lf < 1.0f)) continue; // not an arm
-        const math::Vec3 wt = in.hasWristTarget[side] ? in.wristTarget[side] : w0;
+        const float blend = std::clamp(in.wristBlend[side], 0.0f, 1.0f);
+        const math::Vec3 wt = in.hasWristTarget[side] ? w0 + (in.wristTarget[side] - w0) * blend : w0;
         // The torso with the body; then the clavicle turns about the neck's base so the shoulder
         // follows part of the hand's move from where BF4's rig holds it (up: a shrug; forward:
         // reaching), at most kShoulderShift.
@@ -209,7 +221,7 @@ ArmCorrections SolveArms(const ArmSolveInput& in) {
                 : body;
         const Mat4 fore = Mul(Translation(e),
                               Mul(RotationBetween(TransformPoint(upper, w0) - e, wt - e), Mul(Translation(e * -1.0f), upper)));
-        const Mat4 hand = in.hasWristTarget[side] ? Translation(wt - w0) : Identity4();
+        const Mat4 hand = in.hasWristTarget[side] && blend > 0 ? Translation(wt - w0) : Identity4();
         if (!AllFinite(clavicle) || !AllFinite(upper) || !AllFinite(fore) || !AllFinite(hand)) continue;
         c.part[side][static_cast<int>(ArmPart::Body)] = clavicle;
         c.part[side][static_cast<int>(ArmPart::Upper)] = upper;

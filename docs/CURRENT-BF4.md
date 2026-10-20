@@ -18,7 +18,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   three sessions (09:16-10:19; rotation was inverted and the gun oversized, both fixed in
   0.4.16); everything built since 0.4.17 is unseen in a headset.
 
-## At a glance (installed: 0.4.111-local)
+## At a glance (installed: 0.4.112-local)
 
 | Feature | State | Evidence |
 | --- | --- | --- |
@@ -40,7 +40,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
 | 3D from depth (depth buffer) | off | live sim: depth found, parallax direction right |
 | 3D: alternate eyes (each frame from one eye, true parallax) | off (option) | live sim: gun and walls at their depths, labels 327/327, 52 pairs/s |
 | BF4 split stereo (developer) | unsupported (retired) | live sim: crashes BF4's one-view world renderer |
-| Arms from the body (arm IK by palette rewrite: shoulders at the body, hands on the gun) | on (default, "Arms") | live sim: both arms solved every pass, all arm draws agree < 0.5 mm, turned 60 deg no sleeve across the view, reload/ADS; no frame-rate cost (116/116 presents/s) |
+| Arms from the body (arm IK by palette rewrite: shoulders at the body, the left hand free unless steadying the gun) | on (default, "Arms") | live sim: both arms solved every pass, all arm draws agree < 0.5 mm, turned 60 deg no sleeve across the view, left hand at its controller and back on the gun two-handed, reload/ADS; no frame-rate cost (116/116 presents/s) |
 
 ## Works on the real game (actual-game checks)
 
@@ -294,7 +294,11 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   hand's move from BF4's hold (up to 8 cm, the clavicle turning about the neck's base), the
   elbow is solved on BF4's elbow side (two bones, lengths from the chain), out of reach the
   shoulder slides along the line to the hand, the clavicle takes half the upper arm's swing.
-  The hands stay where the gun puts them. Each classified bone S becomes C S with
+  The right hand stays where the gun puts it; the left hand too while its grip steadies the gun
+  (two-handed aim), else it goes to its controller (the wrist 6 cm behind the grip, the hand
+  keeping its grip shape and its turn with the gun), moving there or back over 0.15 s; bones
+  that map none of the chain's joints but the wrist within 10 cm are its fingers and go along.
+  Each classified bone S becomes C S with
   C = headFromPass^-1 D headFromPass, and the bind proceeds with our copy of the palette.
 - The body frame: the holsters' estimator (`Bf4BodyGestures`: the head's heading, followed
   only past 37 deg at 4 rad/s), carried with each request's hand (`CameraRequest.bodyInHead`,
@@ -312,9 +316,12 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   the shoulders stay; reloads (the left hand to the magazine) and aiming down sights keep
   working. Session 64 found a stale weapon copy leading the first arms draw (fixed: the distance
   gate); aiming 40 deg up smeared the shoulder skin (eased: the clavicle's share).
-- Gaps: the left hand stays on the gun (not on the left controller when it lets go); the
-  skeleton's joints are the prologue rig's (another rig finds no chains and stays as BF4 draws
-  it); aiming steeply up still shows the near upper arm large; not seen in a headset.
+- Free left hand (live, session 70, 0.4.112-local): the left grip released, the hand left the
+  gun for its controller (low left; raised in front: the arm reaching from the left shoulder);
+  the grip held in front of the gun, the hand was back on the handguard.
+- Gaps: the free hand keeps its turn with the gun (not the controller's: needs the grip-to-hand
+  turn); the skeleton's joints are the prologue rig's (another rig finds no chains and stays as
+  BF4 draws it); aiming steeply up still shows the near upper arm large; not seen in a headset.
 
 ## No crosshair in the head-tracked view (2026-10-20, built; live sim)
 
@@ -1027,9 +1034,9 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
   launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
   `-World -FrameChannels 2` 5/5 (76-237 pairs, machine-dependent); `-World` with one
   channel 4/4 (47 pairs).
-- Installed locally: runtime/bf4 0.4.111-local (the source at this commit: gun in the hand and
-  arms from the body by default, no crosshair (centre mask), controller scan with its cache, 3D
-  option; rollback 0.4.110-local); launcher settings
+- Installed locally: runtime/bf4 0.4.112-local (the source at this commit: gun in the hand and
+  arms from the body by default with a free left hand, no crosshair (centre mask), controller
+  scan with its cache, 3D option; rollback 0.4.111-local); launcher settings
   restored to the player's after the developer sessions. Developer sessions still run the
   read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the
@@ -1171,8 +1178,8 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
   toggled an item. Not yet seen in a headset.
 - Corner HUD outside the eyes (frame shape, above): insets are a workaround; the real fix
   needs the UI pass rendered separately (native RE).
-- Arm IK: built for the shoulders (Arms from the body, above); open: the left hand on the left
-  controller when it is off the gun, and rigs other than the prologue's (their joints).
+- Arm IK: built (Arms from the body, above: shoulders at the body, a free left hand at its
+  controller); open: the free hand's turn, and rigs other than the prologue's (their joints).
   Earlier research notes follow. BF4's own hand IK inputs: BF4-HOLSTER-IK-RE.md. How it looks (live sim, session 56): the gun turned 40 deg left reads
   as plausible arms from below; turned 60 deg right, the left (support) arm's sleeve swings across
   the lower middle of the view. Leads (2026-10-20, developer): the draw probe now writes each

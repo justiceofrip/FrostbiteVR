@@ -679,6 +679,13 @@ void AdapterCore::UpdateCamera(const ControllerSnapshot& in, const PlatformFrame
                         r.bodyValid = true;
                     }
                 }
+                // The left hand leaves the gun unless its grip steadies it (two-handed aim).
+                const auto& left = in.controls.hands[0];
+                if (r.armIk && left.gripTracked && !(aim_.engaged && aim_.twoHanded))
+                    if (const auto rel = math::MakeRelativePose(p, left.grip)) {
+                        r.leftHandInHead = *rel;
+                        r.leftFree = true;
+                    }
             }
         }
         camera_.push_back(r);

@@ -847,7 +847,8 @@ public:
         gun.budget = requests[0].gunFovBudget;
         gun.handHeld = requests[0].gunInHand;
         viewOverride.SetGunAim(gun);
-        viewOverride.SetHand(requests[0].handInHead, requests[0].handValid, requests[0].bodyInHead, requests[0].bodyValid);
+        viewOverride.SetHand(requests[0].handInHead, requests[0].handValid, requests[0].bodyInHead, requests[0].bodyValid,
+                             requests[0].leftHandInHead, requests[0].leftFree);
         viewOverride.SetLocal(requests[0].local, /*keepGamePitch=*/false, requests[0].poseId, fov, requests[0].parentYaw);
         gunInHandFrame = requests[0].gunInHand ? presentCount : 0;
         armIk = requests[0].armIk;
@@ -964,6 +965,8 @@ public:
             frame.hands[i].valid = recent[i].valid;
             frame.hands[i].body = recent[i].body;
             frame.hands[i].bodyValid = recent[i].bodyValid;
+            frame.hands[i].leftHand = recent[i].leftHand;
+            frame.hands[i].leftFree = recent[i].leftFree;
         }
         firstPersonView.SetFrame(frame);
         if (!firstPersonOn && frame.enabled) log_.Write(hand ? "gun in the hand: on%s" : "first-person view: on%s", alternate ? " (alternate eyes)" : "");

@@ -822,9 +822,36 @@ TEST_CASE(EmuArmsFromTheBodyCarryTheTorso) {
     const CameraRequest turned = platform.cameraLog.back()[0];
     const math::Vec3 forward = math::Rotate(turned.bodyInHead.orientation, {0, 0, -1}); // in the head's space
     CHECK(turned.bodyValid && Near(forward.x, std::sin(0.35f), 1e-3f) && Near(forward.z, -std::cos(0.35f), 1e-3f));
+    // The left hand is free (its grip not held): its controller relative to the head travels too.
+    CHECK(turned.leftFree && Near(math::Length(turned.leftHandInHead.position), math::Length(math::Vec3{0.2f, -0.4f, -0.3f}), 1e-3f));
     CHECK(core.SetMenuSetting("arms", 0));
     run(0.35f, 5);
-    CHECK(!platform.cameraLog.back()[0].armIk && !platform.cameraLog.back()[0].bodyValid);
+    CHECK(!platform.cameraLog.back()[0].armIk && !platform.cameraLog.back()[0].bodyValid && !platform.cameraLog.back()[0].leftFree);
+}
+
+TEST_CASE(EmuArmsLeftHandStaysOnTheGunWhileSteadyingIt) {
+    // Two-handed aim (the left grip held in front of the gun): the left hand is on the gun, not free.
+    FakeImage image({names::kGameRenderer, names::kRenderViewUpdate, names::kClientGameContext, names::kLevelName});
+    FakePlatform platform;
+    AdapterCore core(Session(true), X64(), image.Resolve(), platform);
+    core.OnSwapchainAdopted(true);
+    platform.Campaign();
+    platform.aimKnown = true;
+    CHECK(core.SetMenuSetting("gun_aim", 3) && core.SetMenuSetting("arms", 1));
+    Clock clock;
+    for (std::uint64_t n = 0; n < 300; ++n) {
+        LaneFrame l(n / 90.0, n + 1);
+        auto& left = l.in.controls.hands[0];
+        left.grip.position = {0.2f, 1.35f, -0.7f}; // in front of the right grip
+        left.aim = left.grip;
+        left.active |= interaction::Squeeze;
+        left.squeeze = 1.0f;
+        platform.GameFrame();
+        core.OnFrame(clock.Next(), l.in);
+    }
+    CHECK(core.Status().find("two_handed=1") != std::string::npos);
+    const CameraRequest& r = platform.cameraLog.back()[0];
+    CHECK(r.armIk && r.gunInHand && !r.leftFree);
 }
 
 TEST_CASE(EmuMenuChoicesCarryOverToTheNextSession) {

@@ -155,12 +155,15 @@ void ViewOverride::SetLocal(const LinearTransform& local, bool keepGamePitch, st
     poseTime_ = std::chrono::steady_clock::now();
 }
 
-void ViewOverride::SetHand(const math::Pose& handInHead, bool valid, const math::Pose& bodyInHead, bool bodyValid) {
+void ViewOverride::SetHand(const math::Pose& handInHead, bool valid, const math::Pose& bodyInHead, bool bodyValid,
+                           const math::Pose& leftHandInHead, bool leftFree) {
     std::lock_guard<std::mutex> lock(mutex_);
     hand_ = handInHead;
     handValid_ = valid;
     body_ = bodyInHead;
     bodyValid_ = bodyValid;
+    left_ = leftHandInHead;
+    leftFree_ = leftFree;
 }
 
 std::array<ViewOverride::HandRecord, ViewOverride::kHandRecords> ViewOverride::RecentHands() const {
@@ -210,8 +213,8 @@ void ViewOverride::Submit(void* renderer, float a, float b, std::uint32_t viewCo
     bool keepPitch = false, fresh = false;
     std::uint64_t poseId = 0;
     float fovY = 0, parentYaw = std::numeric_limits<float>::quiet_NaN();
-    math::Pose hand{}, body{};
-    bool handValid = false, bodyValid = false;
+    math::Pose hand{}, body{}, left{};
+    bool handValid = false, bodyValid = false, leftFree = false;
     {
         std::lock_guard<std::mutex> lock(self->mutex_);
         ++self->stats_.submits;
@@ -229,6 +232,8 @@ void ViewOverride::Submit(void* renderer, float a, float b, std::uint32_t viewCo
         handValid = self->handValid_;
         body = self->body_;
         bodyValid = self->bodyValid_;
+        left = self->left_;
+        leftFree = self->leftFree_;
         if (!fresh) self->stats_.poseRun = 0; // this frame shows the stock view
         if (self->dumpRequested_) { // research: block 0 as the game submitted it
             std::memcpy(self->dump_.data(), views, kViewBlockBytes);
@@ -322,6 +327,8 @@ void ViewOverride::Submit(void* renderer, float a, float b, std::uint32_t viewCo
         r.poseId = poseId;
         r.body = body;
         r.bodyValid = bodyValid;
+        r.leftHand = left;
+        r.leftFree = leftFree;
     }
     const std::uint32_t mask = self->copyMask_.load();
     // +0x00 (the camera relative to the soldier) feeds BF4's weapon lag: with the gun on the

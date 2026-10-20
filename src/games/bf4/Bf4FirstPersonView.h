@@ -76,6 +76,8 @@ public:
             bool valid = false;
             math::Pose body{};   // arms from the body: the torso relative to the head, when bodyValid
             bool bodyValid = false; // (else the head's yaw, level: BodyInHead)
+            math::Pose leftHand{}; // ...the left controller's grip relative to the head, when the hand is off the gun
+            bool leftFree = false;
         };
         std::array<Hand, 6> hands{};
         math::Pose gripAtRest = GunGripAtRest();
@@ -165,6 +167,8 @@ public:
     static constexpr float kArmNearCamera = 0.6f;      // a palette's arms count when the shoulder is this near the camera (m)
     static constexpr float kArmShoulderFollow = 0.35f; // the shoulder's share of the hand's move (ArmSolveInput)
     static constexpr float kArmClavicleShare = 0.5f;   // the clavicle's share of the upper arm's swing
+    static constexpr float kArmWristBehindGrip = 0.06f; // a controller's grip to BF4's wrist joint, back along it (m)
+    static constexpr float kArmHandMoveSeconds = 0.15f; // a hand leaving or taking the gun gets there in this time
     // Alternate eyes, each Present (render thread): the eye the frame just drawn was rendered
     // from (-1: none moved), read before OnPresent; OnPresent then turns to the other eye.
     int FrameEye() const;
@@ -225,6 +229,9 @@ private:
     int armCandidates_[2]{};
     ArmCorrections armCorr_{};
     Mat4 armHeadFromPass_{}, armBody_{};
+    math::Vec3 armLeftTarget_{};  // the free left hand's wrist (head space)
+    float armLeftBlend_ = 0;      // 0 on the gun .. 1 at the controller
+    std::int64_t armLastPassTick_ = 0;
 };
 
 } // namespace fvr::bf4

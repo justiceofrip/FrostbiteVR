@@ -51,9 +51,12 @@ constexpr float kArmClassTolerance = 5e-3f; // ...an entry belongs to a chain wi
 // (the upper arm) and by another with a wrist point (the forearm). Returns the arms found.
 int FindArmChains(const float* palette, int bones, const ArmBindJoints& bind, ArmChain out[2]);
 
-// Each entry's part against the chains: the joints it maps within `tolerance` of them.
+// Each entry's part against the chains: the joints it maps within `tolerance` of them. With
+// `fingerReach` > 0, an entry mapping none but the wrist within that distance is a finger and
+// moves with the hand (live: the fingers map it 0.6-10 cm from the hand's wrist).
 void ClassifyBones(const float* palette, int bones, const ArmBindJoints& bind, const ArmChain chains[2],
-                   float tolerance, BoneClass* out);
+                   float tolerance, BoneClass* out, float fingerReach = 0);
+constexpr float kArmFingerReach = 0.10f;
 
 // The solve, in head space (the render camera's: x right, y up, -z forward).
 struct ArmSolveInput {
@@ -62,6 +65,9 @@ struct ArmSolveInput {
     Mat4 body{};             // head space: takes the rig's torso from the gun to the body
     math::Vec3 wristTarget[2]{}; // head space, when set (else the wrist stays where the gun puts it)
     bool hasWristTarget[2]{};
+    // How far the wrist goes toward its target (0: stays on the gun, 1: at the target), so a hand
+    // leaving or taking the gun moves there over a few frames instead of jumping.
+    float wristBlend[2] = {1, 1};
     // How much of the hand's move (from where BF4's rig holds it, placed with the body) the
     // shoulder follows, up to 8 cm, the clavicle turning about the neck's base (the shoulders'
     // midpoint): raised hands shrug it, a reach brings it forward (0: it stays at the body).

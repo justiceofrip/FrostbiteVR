@@ -294,13 +294,16 @@ void FirstPersonView::RewriteArms(ID3D11DeviceContext* context, const void* mapp
         in.body = armBody_;
         in.shoulderFollow = kArmShoulderFollow;
         in.clavicleShare = kArmClavicleShare;
+        in.hasWristTarget[0] = armLeftBlend_ > 0;
+        in.wristTarget[0] = armLeftTarget_;
+        in.wristBlend[0] = armLeftBlend_;
         armCorr_ = SolveArms(in);
         armSolved_ = true;
     }
     int changed = 0;
     if (armSolved_) {
         BoneClass classes[kArmMaxBones];
-        ClassifyBones(palette, bones, armBind_, armRef_, kArmClassTolerance, classes);
+        ClassifyBones(palette, bones, armBind_, armRef_, kArmClassTolerance, classes, kArmFingerReach);
         changed = ApplyArmCorrections(palette, bones, classes, armHeadFromPass_, armCorr_);
     }
     const double workUs = MicrosecondsSince(t1);
@@ -604,6 +607,7 @@ void FirstPersonView::OnBindConstants(ID3D11DeviceContext* context, ContextHooks
         }
         // Arms from the body: the rig as drawn in the head's space (before any eye shift) and
         // where its torso goes.
+        const bool armStart = frame.armIk && inPass_ && oursPalette_ && !armPass_;
         armPass_ = frame.armIk && inPass_ && oursPalette_;
         if (armPass_) {
             const Mat4 headFromPass = Mul(move, Load(block.data(), L::kViewMatrix));
@@ -612,6 +616,21 @@ void FirstPersonView::OnBindConstants(ID3D11DeviceContext* context, ContextHooks
             if (headFromPass != armHeadFromPass_ || body != armBody_) armSolved_ = false; // solve again
             armHeadFromPass_ = headFromPass;
             armBody_ = body;
+            // The left hand: once per pass, toward its controller when free, back to the gun when not.
+            if (armStart) {
+                LARGE_INTEGER now{}, freq{};
+                QueryPerformanceCounter(&now);
+                QueryPerformanceFrequency(&freq);
+                const float dt = armLastPassTick_ ? std::min(0.1f, static_cast<float>(now.QuadPart - armLastPassTick_) /
+                                                                       static_cast<float>(freq.QuadPart))
+                                                  : 0.0f;
+                armLastPassTick_ = now.QuadPart;
+                const float step = dt / kArmHandMoveSeconds;
+                armLeftBlend_ = std::clamp(armLeftBlend_ + (hand->leftFree ? step : -step), 0.0f, 1.0f);
+                if (hand->leftFree)
+                    armLeftTarget_ = TransformPoint(FromPose(hand->leftHand), {0, 0, kArmWristBehindGrip});
+                armSolved_ = false;
+            }
         }
     }
     if (shift) move = Mul(eyeMove, move); // the rig seen from this frame's eye
