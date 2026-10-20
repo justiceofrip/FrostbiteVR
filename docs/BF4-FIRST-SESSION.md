@@ -1,4 +1,4 @@
-# BF4 headset session: checklist (0.4.60-local)
+# BF4 headset session: checklist (0.4.97-local)
 
 What to try in the next headset session, and what each check tells us. About 15 minutes.
 The game side of everything below already ran live without a headset (simulated headset,
@@ -31,13 +31,15 @@ raise BF4's Video > Resolution Scale (150-200 %) before judging blur.
    about 53 new views a second at frame sync 2 (measured live; it was ~17-25 before).
    Then try menu > Frame sync (developer) > 1 frame (~52 a second; every view matched its
    head pose in the live check) and note whether the world swims or looks smoother.
-2. Aim with the right controller: the game's aim follows it, a **green ring** shows where
-   shots go, and the gun itself now points there too (menu: Gun follows aim): turn the
-   controller and the barrel swings onto the ring. Note whether it stays steady and sharp.
-   Pointing far from where you look, gun and shots stop together at the edge of what the
-   view can follow; look toward the target to reach further. Grip with the left hand in
-   front of the gun to aim with both hands. The right stick turns in **30 degree steps**
-   (menu: Snap turning off for smooth).
+2. The gun is **in your right hand** (menu: Gun > In the hand, the default): BF4's own rifle,
+   arms and sight drawn at the controller, true size. Aim with it: the shots go where the
+   barrel points (they cross the barrel's line 20 m out), there is no crosshair in the view,
+   and the left trigger aims down the sights with the gun staying in the hand. Note whether the
+   gun sits right in the hand (BF4's grip at rest was measured on the prologue rifle) and
+   whether shots land along the barrel. Grip with the left hand in front of the gun to aim with
+   both hands (the barrel then follows the line between the hands). The right stick turns in
+   **30 degree steps** (menu: Snap turning off for smooth). The old modes stay in the menu:
+   Gun > On the aim (the render turned along the aim) and Aim dot (a green ring).
 3. The ammo panel and minimap appear as small framed insets in your lower right and left
    (menu: HUD corners); BF4 draws them outside what the headset shows. Note whether they
    show the right part of the HUD.
@@ -61,9 +63,18 @@ raise BF4's Video > Resolution Scale (150-200 %) before judging blur.
    game should react to that hold (it used to draw the knife).
 11. Quit from the game's own menu, so the launcher restores the game folder.
 
-## Try: 3D from depth
+## Try: 3D
 
-Menu > 3D from depth > On, in a mission. Each eye is shifted by the game's depth buffer, so
+Menu > 3D (default Off) has two ways to give the world depth. Try each in a mission, look at
+the gun and at something near and far, and mark the moment if anything is uncomfortable.
+
+**Alternate eyes** (new, 0.4.97): each game frame is rendered from one eye, the eyes in turn,
+so both the world and the gun in your hand have real depth; each eye updates at half the game's
+frame rate and moving things are a frame apart between the eyes. Note comfort when turning the
+head and when things move fast. Log: `alternate_pairs=` (`theater_link`) and `eye_views=`
+(`first_person_view`).
+
+**From depth**: Menu > 3D > From depth, in a mission. Each eye is shifted by the game's depth buffer, so
 near things should stand out (with BF4's deferred antialiasing on too: the depth is then
 read from its first sample). Look at something close (a wall, a crate) and something far.
 Some doubled outlines at depth edges are expected (seen live); if it looks wrong otherwise
@@ -80,7 +91,11 @@ The launcher's feedback button bundles the logs. The lines that answer the open 
 
 | Log line (`runtime/bf4/logs/bf4-adapter.log`) | Tells us |
 | --- | --- |
-| `theater_link ... bridges=2 pairs= queued=` | the two-channel pair rate in game |
+| `theater_link ... bridges=3 pairs= queued=` | the pair rate in game |
+| `theater_link ... alternate_pairs= alternate_one_frame=` | 3D alternate eyes |
+| `first_person_view ... hand= passes= zoom_held=` | the gun in the hand matched every frame, aiming down sights |
+| `hud_split ... restores=` | BF4's crosshair kept out of the view |
+| `controller_scan ... checks=` and `virtual_pad ... user0_polls=` | the controllers reach BF4 as a pad (no freeze on device changes) |
 | `view_override ... run=` | head tracking frame sync |
 | `controller_aim=... gain= mutes= snaps= guards=` and `mouse_sends=` | mouse aiming reached the game; its learned sensitivity |
 | `gestures gun=... draws= throws= ejects= seats=` and `key_sends= haptics_sent=` | holsters, keys and pulses |

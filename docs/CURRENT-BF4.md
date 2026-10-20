@@ -86,6 +86,12 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
 
 ## Simulated headset: live sessions without one (2026-10-19)
 
+- Regression pass (session 51, 0.4.97-local, prologue; `build/scratch/regress.ps1`, not in the
+  repository): the pad polled; the left stick walked 4.8 m; the trigger fired 6 rounds; the left
+  trigger aimed down the sights with the gun held in the hand; B reloaded (button mode; 21 in
+  the magazine); key 3 drew the underbarrel launcher in the hand and key 1 the rifle; 3D
+  alternate eyes on and off again (pairs stop with it).
+
 - `tools/simxr/SimOpenXrRuntime.cpp` -> `FvrSimOpenXr.dll` (x64, developer only, never
   packaged or registered): an OpenXR runtime the XR host loads through the developer
   `xr_loader` setting. Unlike the test fixtures it has no script and no end: 90 Hz on the
@@ -1042,6 +1048,9 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
     no real pad answers), since BF4 checks the connection when it makes the device.
   - One device change is posted to the game window ~600 frames after adoption if BF4 has not
     enumerated by then (it has, live: two enumerations ~8 s after start).
+  Left: DirectInput's own enumeration still blocks BF4's main thread ~210-280 ms per device-change
+  burst (rare live: only BF4's start-up enumerations in session 51); answering BF4 from a list a
+  worker thread refreshes would remove it.
   Live (session 38, default): BF4 polls user 0 ~150 times a second, all answered by the VR pad;
   the left stick walked 5.2 m, the trigger fired bursts; level-load device changes made two
   enumerations of 214-274 ms, no stall. The class vtable entries (in front of the Steam overlay's)
