@@ -18,7 +18,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   three sessions (09:16-10:19; rotation was inverted and the gun oversized, both fixed in
   0.4.16); everything built since 0.4.17 is unseen in a headset.
 
-## At a glance (installed: 0.4.104-local)
+## At a glance (installed: 0.4.105-local)
 
 | Feature | State | Evidence |
 | --- | --- | --- |
@@ -240,10 +240,17 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   moves with it). Not yet looked at: tracers and smoke BF4 may spawn as world particles at its
   own muzzle. One frame mid-burst showed BF4's crosshair: fire spreads its arms out of the old
   centre box (fixed: the plus-shaped mask, No crosshair below).
+- Quick knife and grenade (live, session 62, 0.4.105-local, keys F and G): both play and the
+  view stays intact; the grenade count went 3 -> 2 -> 1 across the in-hand and BF4's-place
+  runs, and every first-person bind stayed matched. The whole rig stays on the controller
+  through these animations, so the stock throw and slash arms appear where the hand is rather
+  than where BF4 puts them in front of the eye (the throw's arms spread across the lower view
+  at the pull). Acceptable for short actions; anchoring the rig to the head during throws
+  needs a reliable "not holding the gun" signal first.
 - Gaps: tracers and smoke (above, unverified); the grip at rest is the
   prologue rifle's (other weapons may sit a few cm off in the hand); the left hand follows the
-  gun, not the left controller (no arm IK); the barrel is parallel to the bullets' line, offset
-  by the hand-eye distance; not seen in a headset.
+  gun, not the left controller (no arm IK); shots cross the barrel's line 20 m out rather than
+  running along it (under a degree either way); not seen in a headset.
 - Evidence: WARP checks in Bf4Emulated (the first-person block gets the render's projection
   and a moved view, the world's passes through, pixel stage too, off passes everything through;
   hand mode by the game rotation only; receiver tracking picks the largest rigid mesh; weapon
@@ -961,9 +968,9 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
   launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
   `-World -FrameChannels 2` 5/5 (76-237 pairs, machine-dependent); `-World` with one
   channel 4/4 (47 pairs).
-- Installed locally: runtime/bf4 0.4.104-local (the source at this commit: gun in the hand by
+- Installed locally: runtime/bf4 0.4.105-local (the source at this commit: gun in the hand by
   default, no crosshair (centre mask), controller scan with its cache, 3D option; rollback
-  0.4.103-local); launcher settings
+  0.4.104-local); launcher settings
   restored to the player's after the developer sessions. Developer sessions still run the
   read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the

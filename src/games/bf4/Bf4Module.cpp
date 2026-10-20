@@ -961,7 +961,7 @@ public:
             frame.hands[i].valid = recent[i].valid;
         }
         firstPersonView.SetFrame(frame);
-        if (!firstPersonOn) log_.Write(hand ? "gun in the hand: on%s" : "first-person view: on%s", alternate ? " (alternate eyes)" : "");
+        if (!firstPersonOn && frame.enabled) log_.Write(hand ? "gun in the hand: on%s" : "first-person view: on%s", alternate ? " (alternate eyes)" : "");
         if (presentCount % 600 == 0) log_.Write("%s", firstPersonView.Describe().c_str());
         firstPersonOn = frame.enabled;
     }
