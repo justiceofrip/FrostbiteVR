@@ -2217,12 +2217,16 @@ constexpr std::uintptr_t kRendererGlobalRva = 0x2672378;
 // or the store faults.
 bool SwapChecked8(std::uintptr_t address, std::uint64_t expect, std::uint64_t value) {
     if (address < 0x10000 || (address & 7)) return false;
+    bool swapped = false;
+    Diagnostics::EnterGuardedAccess();
     __try {
         auto* p = reinterpret_cast<volatile LONG64*>(address);
-        return static_cast<std::uint64_t>(InterlockedCompareExchange64(p, static_cast<LONG64>(value), static_cast<LONG64>(expect))) == expect;
+        swapped = static_cast<std::uint64_t>(InterlockedCompareExchange64(p, static_cast<LONG64>(value), static_cast<LONG64>(expect))) == expect;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return false;
+        swapped = false;
     }
+    Diagnostics::LeaveGuardedAccess();
+    return swapped;
 }
 
 // Memory regions seen so far (render thread only), sorted and disjoint as VirtualQuery reports
@@ -2325,12 +2329,17 @@ std::vector<MemoryRange> ThreadStacks() {
 
 bool ReadFast(std::uintptr_t address, void* out, std::size_t size) {
     if (address < 0x10000 || address > 0x7FFFFFFF0000ull || !Readable(address, size)) return false;
+    bool copied = false;
+    Diagnostics::EnterGuardedAccess(); // a fault here is a region freed since it was seen
     __try {
         std::memcpy(out, reinterpret_cast<const void*>(address), size);
-        return true;
+        copied = true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return false;
+        copied = false;
     }
+    Diagnostics::LeaveGuardedAccess();
+    if (!copied) ResetReadable(); // the regions changed: ask again
+    return copied;
 }
 
 bool ReadChecked(std::uintptr_t address, void* out, std::size_t size) {

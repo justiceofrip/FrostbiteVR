@@ -18,6 +18,7 @@ constexpr ULONGLONG kStallMs = 4000;
 std::atomic<ULONGLONG> g_lastPresent{0};
 std::atomic<bool> g_faultArmed{false};
 std::atomic<int> g_faultsLogged{0};
+thread_local int t_guardedAccess = 0; // our guarded reads/writes in progress on this thread
 HANDLE g_faultFile = INVALID_HANDLE_VALUE;
 std::function<void(const std::string&)> g_sink;
 
@@ -184,7 +185,7 @@ LONG CALLBACK FaultLogger(EXCEPTION_POINTERS* e) {
     const bool fault = code == EXCEPTION_ACCESS_VIOLATION || code == EXCEPTION_ILLEGAL_INSTRUCTION ||
                        code == EXCEPTION_PRIV_INSTRUCTION || code == 0xC0000374 /* heap corruption */ ||
                        code == EXCEPTION_INT_DIVIDE_BY_ZERO;
-    if (!fault || !g_faultArmed.load() || g_faultsLogged.fetch_add(1) >= 24) return EXCEPTION_CONTINUE_SEARCH;
+    if (!fault || !g_faultArmed.load() || t_guardedAccess > 0 || g_faultsLogged.fetch_add(1) >= 24) return EXCEPTION_CONTINUE_SEARCH;
     char line[2048];
     int at = std::snprintf(line, sizeof(line), "fault 0x%08lx thread %lu addr=0x%llx info=0x%llx,0x%llx stack:",
                            static_cast<unsigned long>(code), static_cast<unsigned long>(GetCurrentThreadId()),
@@ -249,6 +250,9 @@ void Diagnostics::Start(std::function<void(const std::string&)> sink, const std:
 }
 
 void Diagnostics::FramePresented() { g_lastPresent.store(GetTickCount64(), std::memory_order_relaxed); }
+
+void Diagnostics::EnterGuardedAccess() { ++t_guardedAccess; }
+void Diagnostics::LeaveGuardedAccess() { --t_guardedAccess; }
 
 void Diagnostics::ArmFaultLogging(bool armed) { g_faultArmed.store(armed); }
 

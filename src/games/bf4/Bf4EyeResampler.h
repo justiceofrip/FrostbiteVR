@@ -36,6 +36,13 @@ struct AlternateEyes {
     float keptTanX = 0, keptTanY = 0;
 };
 
+// Native eyes: BF4 draws its HUD once, flat on the frame. Copied onto the other eye at the same
+// pixels it would be seen at infinity, behind everything near that it covers; this shift (in
+// frame pixels, for the eye `kept`, the presented one being the other) puts it at `depth`
+// metres instead: the disparity of a point straight ahead, half eye distance `halfEye`, in a
+// frame `width` pixels wide spanning tangents -tanX..tanX. 0 without valid inputs.
+int HudShiftPixels(int kept, float halfEye, float depth, std::uint32_t width, float tanX);
+
 class EyeResampler {
 public:
     // source: the frame to read (the backbuffer; MSAA is resolved). width/height/format: the
@@ -55,9 +62,11 @@ public:
     // `world`, `eye`'s own render of this frame, as that eye's, with BF4's HUD put over it at the
     // same place. The HUD is drawn over the other eye's render only: its pixels are where `shown`
     // (the presented frame) differs from `scene` (the same frame before its HUD, Bf4HudSplit.h).
-    // All three the same size, 8-bit. False (nothing kept) otherwise.
+    // All three the same size, 8-bit. False (nothing kept) otherwise. `hudShiftPx`: the HUD moved
+    // that many pixels to the right (negative: left) in the kept eye, so that it is seen at a
+    // finite depth instead of at infinity (HudShiftPixels).
     bool KeepWithHud(ID3D11DeviceContext* context, ID3D11Texture2D* world, ID3D11Texture2D* scene,
-                     ID3D11Texture2D* shown, int eye);
+                     ID3D11Texture2D* shown, int eye, int hudShiftPx = 0);
     bool HasKept(int eye) const { return (eye == 0 || eye == 1) && keptValid_[eye]; }
     void DropKept() { keptValid_[0] = keptValid_[1] = false; }
     ID3D11Texture2D* Eye(int eye) const { return eyes_[eye & 1].Get(); }
@@ -94,6 +103,7 @@ private:
     Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> keptViews_[2];
     Microsoft::WRL::ComPtr<ID3D11RenderTargetView> keptTargets_[2]; // native eyes: the HUD drawn into the kept eye
     Microsoft::WRL::ComPtr<ID3D11VertexShader> hudVs_;
+    Microsoft::WRL::ComPtr<ID3D11Buffer> hudConstants_;
     Microsoft::WRL::ComPtr<ID3D11PixelShader> hudPs_;
     Microsoft::WRL::ComPtr<ID3D11Texture2D> hudScene_, hudShown_;
     Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> hudSceneView_, hudShownView_;

@@ -369,6 +369,30 @@ bool CheckEyeResamplerReticle(ID3D11Device* device, const char*& why) {
         if (channel(1, 8) < 180) return why = "native eyes: the HUD is not in the right eye", false;
         if (resampler.KeepWithHud(context.Get(), redFrame.Get(), frame.Get(), nullptr, 0))
             return why = "native eyes: kept without the presented frame", false;
+        // The shift for a HUD 2 m ahead: 32 mm half eye distance, a 1920 px frame spanning tangents
+        // +-2.43 (BF4's 107.6 deg render at 16:9): 0.032 / 2 * 1920 / 2.43 = 12.6 px, to the right
+        // in a kept left eye, to the left in a kept right eye; nothing without valid inputs.
+        if (fvr::bf4::HudShiftPixels(0, 0.032f, 2.0f, 1920, 2.43f) != 13 || fvr::bf4::HudShiftPixels(1, 0.032f, 2.0f, 1920, 2.43f) != -13 ||
+            fvr::bf4::HudShiftPixels(0, 0.0f, 2.0f, 1920, 2.43f) != 0 || fvr::bf4::HudShiftPixels(2, 0.032f, 2.0f, 1920, 2.43f) != 0)
+            return why = "native eyes: the HUD shift for 2 m", false;
+        // The HUD moved in the kept eye (seen nearer than infinity). A square left of the centre
+        // (x 20..27) reaches the centre only when moved 8 px to the right; the centre is the one
+        // pixel whose place the eye crop keeps.
+        std::vector<std::uint32_t> hudLeft(kSize * kSize, 0xFF808080u);
+        for (UINT y = 28; y < 36; ++y)
+            for (UINT x = 20; x < 28; ++x) hudLeft[y * kSize + x] = 0xFF00C000u;
+        const D3D11_SUBRESOURCE_DATA hudLeftData{hudLeft.data(), kSize * 4, 0};
+        ComPtr<ID3D11Texture2D> hudLeftFrame;
+        if (FAILED(device->CreateTexture2D(&d, &hudLeftData, &hudLeftFrame))) return why = "create the left HUD frame", false;
+        for (const int shift : {0, 8}) {
+            if (!resampler.KeepWithHud(context.Get(), redFrame.Get(), frame.Get(), hudLeftFrame.Get(), 0, shift) ||
+                !resampler.Render(context.Get(), hudLeftFrame.Get(), crops, kSize, kSize, DXGI_FORMAT_R8G8B8A8_UNORM, {}, eyesFov,
+                                  nullptr, nullptr, &alt))
+                return why = "native eyes: a pair with the HUD moved", false;
+            const bool hudAtCentre = channel(0, 8) > 180 && channel(0, 0) < 40;
+            const bool ownAtCentre = channel(0, 0) > 180 && channel(0, 8) < 40;
+            if (shift ? !hudAtCentre : !ownAtCentre) return why = "native eyes: the kept eye's HUD not moved by the shift", false;
+        }
         resampler.DropKept();
     }
     return true;

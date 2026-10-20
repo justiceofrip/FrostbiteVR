@@ -260,6 +260,9 @@ struct EyeOverlay {
     math::FovTangents fov{-1, 1, 1, -1};
     float vignette = 0; // 0 none .. 1 full
     bool hudInsets = false;
+    // Native eyes: the HUD seen at a finite depth. The insets' sources move with the HUD in this
+    // eye's image (frame u), their places by this eye's share of the disparity (tangent x).
+    float insetSrcShiftU = 0, insetTanShift = 0;
 };
 
 // Comfort vignette: darkens the edge of view while the player moves by stick or turns

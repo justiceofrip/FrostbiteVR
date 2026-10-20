@@ -2,6 +2,7 @@
 
 #include <d3dcompiler.h>
 
+#include <algorithm>
 #include <cstring>
 
 namespace fvr::bf4 {
@@ -375,11 +376,16 @@ bool EyeResampler::Render(ID3D11DeviceContext* context, ID3D11Texture2D* source,
             if (overlays[i].hudInsets) {
                 c.stereo2[1] = 1;
                 const HudInset* insets[2] = {&kAmmoInset, &kMinimapInset};
-                for (int k = 0; k < 2; ++k)
+                for (int k = 0; k < 2; ++k) {
                     for (int n = 0; n < 4; ++n) {
                         c.insetSrc[k][n] = insets[k]->src[n];
                         c.insetTan[k][n] = insets[k]->tan[n];
                     }
+                    for (int n : {0, 2}) {
+                        c.insetSrc[k][n] = std::clamp(c.insetSrc[k][n] + overlays[i].insetSrcShiftU, 0.0f, 1.0f);
+                        c.insetTan[k][n] += overlays[i].insetTanShift;
+                    }
+                }
             }
         }
         if (stereo) {
@@ -488,12 +494,16 @@ namespace {
 constexpr char kHudShader[] = R"(
 Texture2D<float4> scene : register(t0);
 Texture2D<float4> shown : register(t1);
+cbuffer Hud : register(b0) {
+    int4 shift; // x: the HUD's move in pixels (to the right), y: the frame's width
+};
 float4 vs(uint id : SV_VertexID) : SV_Position {
     float2 uv = float2((id << 1) & 2, id & 2);
     return float4(uv * float2(2, -2) + float2(-1, 1), 0, 1);
 }
 float4 ps(float4 pos : SV_Position) : SV_Target {
-    int3 p = int3(pos.xy, 0);
+    int3 p = int3(int(pos.x) - shift.x, int(pos.y), 0);
+    if (p.x < 0 || p.x >= shift.y) discard;
     float4 h = shown.Load(p);
     if (all(abs(h.rgb - scene.Load(p).rgb) < 0.5 / 255.0)) discard;
     return h;
@@ -534,8 +544,17 @@ bool EyeResampler::CopyToView(ID3D11Texture2D* source, ComPtr<ID3D11Texture2D>& 
     return true;
 }
 
+int HudShiftPixels(int kept, float halfEye, float depth, std::uint32_t width, float tanX) {
+    if ((kept != 0 && kept != 1) || !(halfEye > 0 && halfEye < 0.2f) || !(depth > 0.1f) || !width || !(tanX > 0.05f)) return 0;
+    // Straight ahead at `depth`: tangent +halfEye/depth in the left eye, -halfEye/depth in the
+    // right; the kept eye's copy carries the whole difference.
+    const float pixels = 2.0f * halfEye / depth * static_cast<float>(width) / (2.0f * tanX);
+    const int rounded = static_cast<int>(pixels + 0.5f);
+    return kept == 0 ? rounded : -rounded;
+}
+
 bool EyeResampler::KeepWithHud(ID3D11DeviceContext* context, ID3D11Texture2D* world, ID3D11Texture2D* scene,
-                               ID3D11Texture2D* shown, int eye) {
+                               ID3D11Texture2D* shown, int eye, int hudShiftPx) {
     if (!world || !scene || !shown || (eye != 0 && eye != 1)) return false;
     D3D11_TEXTURE2D_DESC wd{}, sd{}, hd{};
     world->GetDesc(&wd);
@@ -559,7 +578,14 @@ bool EyeResampler::KeepWithHud(ID3D11DeviceContext* context, ID3D11Texture2D* wo
                         D3DCOMPILE_ENABLE_STRICTNESS, 0, &code, &errors);
         if (FAILED(hr) || FAILED(hr = device_->CreatePixelShader(code->GetBufferPointer(), code->GetBufferSize(), nullptr, &hudPs_)))
             return Fail(22, hr);
+        D3D11_BUFFER_DESC b{};
+        b.ByteWidth = 16;
+        b.Usage = D3D11_USAGE_DEFAULT;
+        b.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+        if (FAILED(hr = device_->CreateBuffer(&b, nullptr, &hudConstants_))) return Fail(24, hr);
     }
+    const std::int32_t shift[4] = {hudShiftPx, static_cast<std::int32_t>(wd.Width), 0, 0};
+    context_->UpdateSubresource(hudConstants_.Get(), 0, nullptr, shift, 0, 0);
     if (!CopyToView(scene, hudScene_, hudSceneView_) || !CopyToView(shown, hudShown_, hudShownView_)) return false;
     if (!keptTargets_[eye]) {
         D3D11_RENDER_TARGET_VIEW_DESC r{};
@@ -575,6 +601,8 @@ bool EyeResampler::KeepWithHud(ID3D11DeviceContext* context, ID3D11Texture2D* wo
         context_->RSSetState(raster_.Get());
         ID3D11ShaderResourceView* views[] = {hudSceneView_.Get(), hudShownView_.Get()};
         context_->PSSetShaderResources(0, 2, views);
+        ID3D11Buffer* buffers[] = {hudConstants_.Get()};
+        context_->PSSetConstantBuffers(0, 1, buffers);
         const D3D11_VIEWPORT viewport{0, 0, float(wd.Width), float(wd.Height), 0, 1};
         context_->RSSetViewports(1, &viewport);
         ID3D11RenderTargetView* target = keptTargets_[eye].Get();

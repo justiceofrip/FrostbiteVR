@@ -18,7 +18,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   three sessions (09:16-10:19; rotation was inverted and the gun oversized, both fixed in
   0.4.16); everything built since 0.4.17 is unseen in a headset.
 
-## At a glance (installed: 0.4.158-local)
+## At a glance (installed: 0.4.161-local)
 
 | Feature | State | Evidence |
 | --- | --- | --- |
@@ -422,6 +422,18 @@ the world's **draw** (render thread) runs once per eye.
   left eye with BF4's HUD put over it at the same place (the pixels where the presented frame
   differs from `HudSplit`'s copy of it before the HUD: the HUD is drawn once, after the second
   draw); the pair is cut from both with the same camera (no turn, no reprojection).
+- The HUD at 2 m: copied at the same pixels it would be seen at infinity, behind the walls and
+  the gun it covers. The left eye's copy is moved right by the disparity of a point 2 m ahead
+  (`HudShiftPixels`: 13 px live, 32 mm half eye distance, 1920 px over tangents +-2.43), and the
+  corner insets read the moved HUD and are placed with the same disparity (`EyeOverlay::
+  insetSrcShiftU / insetTanShift`). Live (session 118): minimap and ammo insets whole in both
+  eyes, insets and the bottom icons ~13 px further apart than at infinity. Log:
+  `native_hud_shift=`.
+- Our guarded reads: the region cache kept across frames can name a region BF4 freed during a
+  level load; the read is caught (as designed) and the cache is dropped. Those caught faults are
+  no longer written to `faults.log` (`Diagnostics::EnterGuardedAccess`), which had filled its 24
+  lines at a level start in session 118 and would have hidden a real BF4 fault; session 119:
+  none through a level start and a checkpoint restart.
 - Live (simulated headset, prologue, sessions 108-112): equal GPU draws in both eye draws
   (858-954 each); eye images differ by parallax (near rows 7-11 px, far rows 4-5 px at 960 px,
   the right eye's content to the left: correct); headset eye snapshots show the gun, arm and
@@ -435,11 +447,12 @@ the world's **draw** (render thread) runs once per eye.
   stand-ins (3D from depth, alternate eyes) are no longer offered (code kept, unreachable from
   the menu); a saved `depth_stereo 2` is skipped (default applies). "Gun follows aim" (a turned
   render) needs one camera: with native eyes the gun is not turned and the aim is not limited.
-- Installed: 0.4.158-local.
-- Gaps: not seen in a headset (comfort, scale, cost at the headset's rate); one level checked
+- Installed: 0.4.161-local.
+- Gaps: not seen in a headset (comfort, scale, cost at the headset's rate; whether 2 m suits the
+  HUD); one level checked
   (prologue): another scene may use up a field not on the verified list (logged; the second eye
-  could then miss something or fault); BF4's HUD and markers are at the head's centre camera in
-  both eyes (at infinity); only a checkpoint restart checked as a level change (a new mission
+  could then miss something or fault); BF4's world markers (objectives) are drawn by its HUD at
+  the head's camera, so they sit at the HUD's 2 m, not at their own depth; only a checkpoint restart checked as a level change (a new mission
   not yet); the second draw re-runs the whole world
   draw (shadows and other view-independent passes included), so the cost could come down.
 - Earlier tries, retired (kept as developer research `secondview 1-4`): the world render's build

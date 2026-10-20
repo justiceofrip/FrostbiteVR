@@ -167,7 +167,7 @@ public:
         char line[900];
         std::snprintf(line, sizeof(line),
                       "theater_link connected=%d epoch=%llu states=%llu captured=%llu published=%llu failed=%llu discarded=%llu "
-                      "lane=%s bridges=%u leases=%llu queued=%llu pairs=%llu stereo_pairs=%llu alternate_pairs=%llu alternate_one_frame=%llu kept_frames=%llu native_pairs=%llu native_hud=%llu native_failed=%llu reticle_pairs=%llu marked_pairs=%llu depth_pairs=%llu aim_pairs=%llu cancels=%llu capture_failures=%llu "
+                      "lane=%s bridges=%u leases=%llu queued=%llu pairs=%llu stereo_pairs=%llu alternate_pairs=%llu alternate_one_frame=%llu kept_frames=%llu native_pairs=%llu native_hud=%llu native_failed=%llu native_hud_shift=%d reticle_pairs=%llu marked_pairs=%llu depth_pairs=%llu aim_pairs=%llu cancels=%llu capture_failures=%llu "
                       "fallbacks=%llu bridge_published=%llu consumed=%llu host_discarded=%llu bridge_failure=%u/0x%08lx "
                       "resampler=%u/0x%08lx%s\n",
                       !token_.empty() && !closed_ ? 1 : 0, static_cast<unsigned long long>(epoch_),
@@ -179,6 +179,7 @@ public:
                       static_cast<unsigned long long>(alternatePairs_), static_cast<unsigned long long>(alternateOneFrame_),
                       static_cast<unsigned long long>(keptFrames_), static_cast<unsigned long long>(nativePairs_),
                       static_cast<unsigned long long>(nativeWithHud_), static_cast<unsigned long long>(nativeFailures_),
+                      nativeHudShift_,
                       static_cast<unsigned long long>(reticles_), static_cast<unsigned long long>(markedPairs_),
                       static_cast<unsigned long long>(depthPairs_), static_cast<unsigned long long>(aimPairs_),
                       static_cast<unsigned long long>(cancels_), static_cast<unsigned long long>(captureFailures_),
@@ -371,14 +372,17 @@ private:
             !(meta.renderFovY > 0.05f && meta.renderFovY < 3.1f) || !meta.width || !meta.height)
             return;
         const int other = 1 - meta.laneEye;
-        const bool kept = meta.hudScene ? resampler_.KeepWithHud(context, meta.otherEye, meta.hudScene, backbuffer, other)
+        const float aspect = meta.renderAspect > 0.2f && meta.renderAspect < 5.0f ? meta.renderAspect : float(meta.width) / float(meta.height);
+        const float tanY = std::tan(meta.renderFovY * 0.5f);
+        // BF4's HUD at a comfortable distance in front, not at infinity behind near things.
+        const int shift = HudShiftPixels(other, meta.halfEyeDistance, kNativeHudDepth, meta.width, tanY * aspect);
+        const bool kept = meta.hudScene ? resampler_.KeepWithHud(context, meta.otherEye, meta.hudScene, backbuffer, other, shift)
                                         : resampler_.Keep(context, meta.otherEye, other);
         if (!kept) {
             ++nativeFailures_;
             return;
         }
-        const float aspect = meta.renderAspect > 0.2f && meta.renderAspect < 5.0f ? meta.renderAspect : float(meta.width) / float(meta.height);
-        const float tanY = std::tan(meta.renderFovY * 0.5f);
+        nativeHudShift_ = shift;
         kept_[other] = {true, now, AxesOf(meta), tanY * aspect, tanY};
         nativeKeptFrame_ = meta.frameIndex;
         if (meta.hudScene) ++nativeWithHud_;
@@ -417,6 +421,14 @@ private:
                 overlays[e].markers[m] = MarkerInEye(t.eyes[e], t.fov[e], meta.markers[m].position, meta.markers[m].kind);
                 marked |= overlays[e].markers[m].show;
             }
+        }
+        // Native eyes: the HUD at kNativeHudDepth. The kept eye's HUD was moved in its image
+        // (KeepNative); the corner insets read it there and are placed with the same disparity.
+        if (meta.otherEye && nativeKeptFrame_ == meta.frameIndex && (meta.laneEye == 0 || meta.laneEye == 1) && meta.width) {
+            overlays[1 - meta.laneEye].insetSrcShiftU = static_cast<float>(nativeHudShift_) / static_cast<float>(meta.width);
+            const float half = meta.halfEyeDistance > 0 && meta.halfEyeDistance < 0.2f ? meta.halfEyeDistance / kNativeHudDepth : 0.0f;
+            overlays[0].insetTanShift = half;
+            overlays[1].insetTanShift = -half;
         }
         // Alternate eyes: this frame was rendered from one eye; the other comes from its own last
         // frame, turned onto this frame's pose (Bf4EyeResampler.h).
@@ -613,6 +625,8 @@ private:
     // Native eyes: pairs whose eyes are both this frame's own renders; of the kept eyes, how many
     // carried BF4's HUD over; kept eyes that failed.
     std::uint64_t nativePairs_ = 0, nativeWithHud_ = 0, nativeFailures_ = 0, nativeKeptFrame_ = ~0ull;
+    int nativeHudShift_ = 0;                     // the last kept eye's HUD shift (pixels)
+    static constexpr float kNativeHudDepth = 2.0f; // metres: BF4's HUD seen there in native eyes
     ULONGLONG untrackedCheckedMs_ = 0;
     std::string snapshotDir_;
     std::uint64_t sequence_ = 0, epoch_ = 0, lastToggle_ = 0, statesPublished_ = 0;
