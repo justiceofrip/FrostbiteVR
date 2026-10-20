@@ -319,6 +319,84 @@ bool CheckFirstPersonView(ID3D11Device* device, const char*& why) {
                    fvr::bf4::FirstPersonView::WeaponPart(projective, camera)))
             ok = (why = "weapon part test", false);
     }
+    // Alternate eyes: this frame's main view goes to one eye (the left here: the camera 32 mm
+    // left), the first-person pass with it; after the Present the next frame's to the other.
+    if (ok) {
+        using FPV = fvr::bf4::FirstPersonView;
+        FPV::Frame eyes = frame;
+        eyes.transform = fvr::bf4::Identity4();
+        eyes.handMode = false;
+        eyes.alternateEyes = true;
+        eyes.halfEye = 0.032f;
+        view.OnPresent(); // a frame boundary: nothing moved yet, the eye stays
+        view.SetFrame(eyes);
+        auto worldViewX = [&](float& viewX, float& cameraX) {
+            if (FAILED(context->Map(ring.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &m))) return false;
+            MakeViewBlock(static_cast<std::uint8_t*>(m.pData) + 256, gameKy / aspect, gameKy, fpCam);
+            MakeViewBlock(static_cast<std::uint8_t*>(m.pData) + 1024, renderKy / aspect, renderKy, worldCam);
+            context->Unmap(ring.Get(), 0);
+            context1->VSSetConstantBuffers1(2, 1, bind, worldFirst, count);
+            ID3D11Buffer* b = nullptr;
+            UINT f = 0, c = 0;
+            context1->VSGetConstantBuffers1(2, 1, &b, &f, &c);
+            const bool read = b && b != ring.Get() && ReadBuffer(device, context.Get(), b, got);
+            if (b) b->Release();
+            if (!read) return false;
+            viewX = FloatAt(got, L::kViewMatrix + 3 * 4);
+            cameraX = FloatAt(got, L::kCameraPos);
+            return std::fabs(FloatAt(got, L::kProjMatrix + 5 * 4) - renderKy) < 1e-6f; // its own projection kept
+        };
+        float viewX = 0, cameraX = 0;
+        if (view.FrameEye() != -1) ok = (why = "alternate eyes: an eye reported before any view moved", false);
+        else if (!worldViewX(viewX, cameraX)) ok = (why = "alternate eyes: the main view not moved", false);
+        else if (std::fabs(cameraX - (worldCam[0] - 0.032f)) > 1e-4f || std::fabs(viewX - (600.0f + 0.032f)) > 1e-4f)
+            ok = (why = "alternate eyes: the main view not at the left eye", false);
+        else if (view.FrameEye() != 0) ok = (why = "alternate eyes: the frame's eye not reported", false);
+        if (ok) {
+            // The first-person pass is BF4's in this mode (no hand): passes through.
+            context1->VSSetConstantBuffers1(2, 1, bind, fpFirst, count);
+            ID3D11Buffer* b = nullptr;
+            UINT f = 0, c = 0;
+            context1->VSGetConstantBuffers1(2, 1, &b, &f, &c);
+            if (b != ring.Get()) ok = (why = "alternate eyes: BF4's first-person pass changed without the hand", false);
+            if (b) b->Release();
+        }
+        if (ok) {
+            view.OnPresent();
+            if (!worldViewX(viewX, cameraX) || std::fabs(cameraX - (worldCam[0] + 0.032f)) > 1e-4f || view.FrameEye() != 1)
+                ok = (why = "alternate eyes: the next frame not at the right eye", false);
+        }
+        if (ok) { // with the hand: the rig is seen from this frame's eye as well
+            view.OnPresent(); // the left eye again
+            FPV::Frame both = eyes;
+            both.handMode = true;
+            auto& h = both.hands[0];
+            const float identity[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1};
+            std::memcpy(h.gameRotation, identity, sizeof(identity));
+            h.hand.position = {0.2f, -0.3f, -0.4f};
+            h.hand.orientation = {0, 0, 0, 1};
+            h.valid = true;
+            both.gripAtRest.position = {0.07f, -0.1f, -0.2f};
+            both.gripAtRest.orientation = {0, 0, 0, 1};
+            view.SetFrame(both);
+            if (FAILED(context->Map(ring.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &m))) return why = "map the ring (eyes)", false;
+            MakeViewBlock(static_cast<std::uint8_t*>(m.pData) + 256, gameKy / aspect, gameKy, fpCam);
+            context->Unmap(ring.Get(), 0);
+            context1->VSSetConstantBuffers1(2, 1, bind, fpFirst, count);
+            ID3D11Buffer* b = nullptr;
+            UINT f = 0, c = 0;
+            context1->VSGetConstantBuffers1(2, 1, &b, &f, &c);
+            // Without the eye: -0.3 + 0.2 - 0.07 (as in hand mode above); from the left eye 32 mm more.
+            if (!b || b == ring.Get() || !ReadBuffer(device, context.Get(), b, got) ||
+                std::fabs(FloatAt(got, L::kViewMatrix + 3 * 4) - (-0.3f + 0.2f - 0.07f + 0.032f)) > 1e-5f)
+                ok = (why = "alternate eyes: the hand-held rig not seen from the frame's eye", false);
+            if (b) b->Release();
+        }
+        const auto es = view.GetStats();
+        if (ok && (es.shiftedViews < 2 || es.shiftedFrames < 2)) ok = (why = "alternate eyes: counts", false);
+        if (ok && (FPV::EyeShift(1, 0.03f)[3] != -0.03f || FPV::EyeShift(0, 0.03f)[3] != 0.03f))
+            ok = (why = "alternate eyes: eye shift", false);
+    }
     view.Remove();
     ID3D11Buffer* none[1]{};
     context->VSSetConstantBuffers(2, 1, none);

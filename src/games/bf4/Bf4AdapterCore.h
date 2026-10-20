@@ -40,6 +40,8 @@ namespace fvr::bf4 {
 // convention (learned in RE task R3), so the core never guesses those.
 // Gun in the hand: where the shots cross the drawn barrel's line (MotionAimInput::converge).
 inline constexpr float kGunConvergeMeters = 20.0f;
+// Alternate eyes before the headset reported its eye distance: half a typical 64 mm.
+inline constexpr float kDefaultHalfEye = 0.032f;
 
 struct CameraRequest {
     int eye = -1; // -1 mono, 0 left, 1 right
@@ -56,6 +58,10 @@ struct CameraRequest {
     bool gunInHand = false;
     bool handValid = false;
     math::Pose handInHead{};
+    // Alternate eyes (3D): the platform renders each frame from one eye, the eyes in turn,
+    // half the eye distance (world units) from this head (Bf4FirstPersonView.h).
+    bool alternateEyes = false;
+    float halfEye = 0;
 };
 
 // Off: flat theater. Theater3D: engine stereo pair on the theater screen, no head tracking.

@@ -389,6 +389,12 @@ void ViewOverride::Submit(void* renderer, float a, float b, std::uint32_t viewCo
     self->stats_.poseId = poseId;
     self->stats_.frameRotation = gun.rotation; // with the pose id: a capture reads both together
     self->stats_.gunFraction = gun.fraction;
+    const math::Vec3 rows[3] = {renderCamera.right, renderCamera.up, renderCamera.forward};
+    for (int i = 0; i < 3; ++i) {
+        self->stats_.renderRotation[i * 3 + 0] = rows[i].x;
+        self->stats_.renderRotation[i * 3 + 1] = rows[i].y;
+        self->stats_.renderRotation[i * 3 + 2] = rows[i].z;
+    }
 }
 
 } // namespace fvr::bf4

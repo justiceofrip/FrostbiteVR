@@ -35,8 +35,9 @@ ui::ModMenuModel BuildModMenu(const game::CapabilityRegistry& caps, bool develop
               "Right stick: 30 degree steps."});
     menu.Add({"hud_insets", "HUD corners", MenuItemKind::Choice, {"Off", "On"}, state.hudInsets ? 1 : 0, true,
               "Ammo and minimap moved into view."});
-    menu.Add({"depth_stereo", "3D from depth", MenuItemKind::Choice, {"Off", "On"}, state.depthStereo ? 1 : 0, true,
-              "Experimental: each eye shifted by depth."});
+    menu.Add({"depth_stereo", "3D", MenuItemKind::Choice, {"Off", "From depth", "Alternate eyes"},
+              state.alternateEyes ? 2 : state.depthStereo ? 1 : 0, true,
+              "Experimental. Alternate eyes: one eye per frame."});
     menu.Add({"view_mode", "In campaign levels", MenuItemKind::Choice, {"Screen", "Head-tracked view"},
               state.headTracking ? 1 : 0, true, ""});
     menu.Add({"controller_aim", "Aim with", MenuItemKind::Choice, {"Right stick", "Right controller"},

@@ -24,6 +24,18 @@ struct DepthStereoInput {
     DepthStereoParams params;
 };
 
+// Alternate-eye stereo: the source frame was rendered from eye `fresh` (the camera at that
+// eye). The other eye comes from the frame Keep() kept for it, its rays turned by
+// `staleRotation` (the kept frame's camera from this frame's: a pair stays labelled with
+// exactly this frame's pose) at the kept frame's tangents; without one it comes from this
+// frame too.
+struct AlternateEyes {
+    int fresh = -1;
+    bool useKept = false;
+    FrameRotation staleRotation;
+    float keptTanX = 0, keptTanY = 0;
+};
+
 class EyeResampler {
 public:
     // source: the frame to read (the backbuffer; MSAA is resolved). width/height/format: the
@@ -35,7 +47,12 @@ public:
     bool Render(ID3D11DeviceContext* context, ID3D11Texture2D* source, const EyeCrop (&crops)[2], std::uint32_t width,
                 std::uint32_t height, std::uint32_t format, const Reticle& reticle = {},
                 const EyeOverlay* overlays = nullptr, const DepthStereoInput* depth = nullptr,
-                const FrameView* view = nullptr);
+                const FrameView* view = nullptr, const AlternateEyes* alternate = nullptr);
+    // Alternate eyes: keep this frame as `eye`'s (a copy; MSAA is resolved). Every frame of the
+    // eye is kept, so the other half of a pair is at most a frame old.
+    bool Keep(ID3D11DeviceContext* context, ID3D11Texture2D* source, int eye);
+    bool HasKept(int eye) const { return (eye == 0 || eye == 1) && keptValid_[eye]; }
+    void DropKept() { keptValid_[0] = keptValid_[1] = false; }
     ID3D11Texture2D* Eye(int eye) const { return eyes_[eye & 1].Get(); }
     void Reset(); // size-dependent resources (swapchain resize); shaders stay
     HRESULT LastError() const { return error_; }
@@ -64,6 +81,9 @@ private:
     Microsoft::WRL::ComPtr<ID3D11Texture2D> source_;
     Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> sourceView_;
     Microsoft::WRL::ComPtr<ID3D11Texture2D> eyes_[2];
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> kept_[2]; // alternate eyes: each eye's last frame
+    Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> keptViews_[2];
+    bool keptValid_[2]{};
     Microsoft::WRL::ComPtr<ID3D11RenderTargetView> targets_[2];
     D3D11_TEXTURE2D_DESC sourceDesc_{};
     std::uint32_t eyeWidth_ = 0, eyeHeight_ = 0, eyeFormat_ = 0;

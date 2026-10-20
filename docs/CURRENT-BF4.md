@@ -18,7 +18,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   three sessions (09:16-10:19; rotation was inverted and the gun oversized, both fixed in
   0.4.16); everything built since 0.4.17 is unseen in a headset.
 
-## At a glance (installed: 0.4.90-local)
+## At a glance (installed: 0.4.97-local)
 
 | Feature | State | Evidence |
 | --- | --- | --- |
@@ -38,6 +38,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
 | HUD corners (ammo, minimap insets) | on | live sim (eye snapshots) |
 | Physical crouch | off | live sim: pulses both ways, view lower |
 | 3D from depth (depth buffer) | off | live sim: depth found, parallax direction right |
+| 3D: alternate eyes (each frame from one eye, true parallax) | off (option) | live sim: gun and walls at their depths, labels 327/327, 52 pairs/s |
 | BF4 split stereo (developer) | unsupported (retired) | live sim: crashes BF4's one-view world renderer |
 | Arms | BF4's own | its first-person arms move with the gun; no arm IK to the controllers |
 
@@ -652,6 +653,46 @@ the theater screen. Pieces (all on the analysed build only):
   unit tests (geometry) and a WARP GPU check in Bf4Emulated (ring and dot drawn at the aim
   point, frame untouched elsewhere, plain pass unchanged). Log: `reticle_pairs=`.
 
+## 3D: alternate eyes (2026-10-20, built; live sim; option)
+
+True stereo without a second render per frame: each frame is rendered from one eye, the eyes in
+turn, and each pair shows the new frame in its eye and the other eye's latest frame, turned onto
+the new frame's pose (the approach of alternate-eye rendering mods).
+
+- The eye is chosen on the render thread, per frame (`Bf4FirstPersonView`, a
+  `Bf4ContextHooks` listener; it toggles at each Present): every main view bound in the frame
+  (`viewConstants` at the render's projection scale, rigid perspective; ~16 binds a frame live)
+  gets a camera moved half the eye distance (the headset's, else 32 mm) along the head's right
+  axis, and the first-person pass with the gun in the hand is seen from the same eye. The CPU
+  camera (the view override) stays at the head, so culling, lighting and the pose labels are
+  the mono lane's; BF4's deferred lighting reconstructs positions with the head's camera (3 cm
+  off, not visible). The frame's eye goes to the frame lane with the Present (`laneEye`).
+- First try, discarded: moving the CPU camera to an eye per lease. BF4 draws the first-person
+  rig into the G-buffer before the frame's main view, and which submit a render frame shows is
+  not predictable (live: 1-4 submits behind the newest, sometimes skipping one; predicting "the
+  previous + 1" missed 14 %), so the rig's G-buffer draw came out at the other eye: a lit gun
+  beside a dark silhouette in one eye.
+- Frame lane (`Bf4FrameworkGlue`): every frame known to show its pose (`settle` submits) is
+  kept as its eye's (`EyeResampler::Keep`, one copy a frame); a pair takes the new frame's eye
+  from it and the other eye from that eye's kept frame (at most ~200 ms old, else this frame
+  in both), turned by the rotation between the two frames' cameras
+  (`AlternateEyes::staleRotation`, the view override records each submit's camera axes).
+  3D from depth and "Gun follows aim" (a turned render) are off with it.
+- Live (simulated headset, session 50, prologue): one lit gun in each eye in every pair; the
+  hand-held gun 40-70 px of near parallax against the walls' ~6-10 px (a ~1440 px eye),
+  pose-label flip check (head yaw alternating 0/10 deg every frame) 327 pairs, 327 matched,
+  none mismatched; 52.4 pairs/s at 117 game fps (as mono); 1-2 % of pairs had no recent kept
+  frame. Log: `alternate_pairs= alternate_one_frame= kept_frames=` (`theater_link`),
+  `eye_views= eye_frames=` (`first_person_view`).
+- Evidence: core test (requests carry the option and the half eye distance; the camera stays
+  at the head); WARP checks: the resampler (kept frames, the other eye turned onto the new
+  camera, one-frame fallback) and the first-person view (the main view at the left eye, the
+  next frame's at the right, BF4's first-person pass untouched without the hand, the hand-held
+  rig seen from the frame's eye). Not seen in a headset: comfort (each eye refreshes at half
+  the game's rate; moving things are a frame apart between the eyes).
+- Gaps: BF4's HUD markers and the corner HUD are drawn at the frame's centre camera in both eyes
+  (at infinity); with "Gun: BF4's place" the first-person rig is not moved to the eyes.
+
 ## 3D from depth (2026-10-19, built; emulated only; opt-in)
 
 Native split stereo is unsupported on PC (below), so this route gives depth without a second
@@ -685,7 +726,8 @@ using the frame's depth buffer (depth-image-based rendering; no simulation or re
   live as 0.06 / 20000; reversed depth when the buffer clears to 0), by a four-step
   fixed-point search; nearer than 0.4 m counts as 0.4 m (the weapon, about where a VR gun
   is held; nearer would mean a very strong per-eye shift). The aim dot is drawn where the source point under the aim lands in each eye, so it sits on the surface it covers (no double image on a near target); gesture markers keep their own per-eye placement.
-- Mod menu "3D from depth: Off / On" (default off). Log: `depth_capture installed= main=WxH
+- Mod menu "3D: Off / From depth / Alternate eyes" (id `depth_stereo`, values 0-2; default
+  off). Log: `depth_capture installed= main=WxH
   format= clear= split= ... msaa_clears= hooked=` every 600 frames, `depth_pairs=`; developer sessions
   write `vr-snapshot-depth.bmp` (log scale: 0.1 m white, 200 m black; multisampled buffers
   read at sample 0) the first time it works, with the other snapshots and on `depthprobe`
@@ -910,8 +952,8 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
   launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
   `-World -FrameChannels 2` 5/5 (76-237 pairs, machine-dependent); `-World` with one
   channel 4/4 (47 pairs).
-- Installed locally: runtime/bf4 0.4.90-local (the source at this commit: gun in the hand by
-  default, no crosshair (centre mask), controller scan; rollback 0.4.89-local); launcher settings
+- Installed locally: runtime/bf4 0.4.97-local (the source at this commit: gun in the hand by
+  default, no crosshair (centre mask), controller scan, 3D option; rollback 0.4.96-local); launcher settings
   restored to the player's after the developer sessions. Developer sessions still run the
   read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the

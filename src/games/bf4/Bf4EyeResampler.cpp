@@ -256,7 +256,8 @@ void EyeResampler::Reset() {
 
 bool EyeResampler::Render(ID3D11DeviceContext* context, ID3D11Texture2D* source, const EyeCrop (&crops)[2],
                           std::uint32_t width, std::uint32_t height, std::uint32_t format, const Reticle& reticle,
-                          const EyeOverlay* overlays, const DepthStereoInput* depth, const FrameView* view) {
+                          const EyeOverlay* overlays, const DepthStereoInput* depth, const FrameView* view,
+                          const AlternateEyes* alternate) {
     if (broken_ || !context || !source || !width || !height || width > 16384 || height > 16384) return false;
     if (!initialized_ && !Initialize(context)) {
         broken_ = true; // no D3D11.1 state objects / shader compiler: the world lane stays off
@@ -288,6 +289,14 @@ bool EyeResampler::Render(ID3D11DeviceContext* context, ID3D11Texture2D* source,
         if (FAILED(hr = device_->CreateShaderResourceView(source_.Get(), &v, &sourceView_))) return Fail(12, hr);
         sourceDesc_ = sd;
     }
+    const int fresh = alternate && (alternate->fresh == 0 || alternate->fresh == 1) ? alternate->fresh : -1;
+    // This frame's other eye from its kept frame (alternate eyes, same size), else from this frame.
+    const auto keptFor = [&](int eye) {
+        if (fresh < 0 || eye == fresh || !alternate->useKept || !keptValid_[eye] || !kept_[eye]) return false;
+        D3D11_TEXTURE2D_DESC k{};
+        kept_[eye]->GetDesc(&k);
+        return k.Width == sd.Width && k.Height == sd.Height;
+    };
     if (!eyes_[0] || width != eyeWidth_ || height != eyeHeight_ || static_cast<std::uint32_t>(eyeFormat) != eyeFormat_) {
         for (int i = 0; i < 2; ++i) {
             targets_[i].Reset();
@@ -381,7 +390,14 @@ bool EyeResampler::Render(ID3D11DeviceContext* context, ID3D11Texture2D* source,
             c.stereo2[0] = depth->params.minDepth;
             c.stereo2[2] = depthMultisampled_ ? 1.0f : 0.0f;
         }
-        if (view && view->rotation.enabled && view->tanX > 0 && view->tanY > 0) {
+        if (keptFor(i) && alternate->keptTanX > 0 && alternate->keptTanY > 0) {
+            for (int r = 0; r < 3; ++r)
+                for (int k = 0; k < 3; ++k) c.rot[r][k] = alternate->staleRotation.m[r][k];
+            c.frame[0] = alternate->keptTanX;
+            c.frame[1] = alternate->keptTanY;
+            c.frame[2] = 1;
+            c.frame[3] = 0;
+        } else if (view && view->rotation.enabled && view->tanX > 0 && view->tanY > 0) {
             for (int r = 0; r < 3; ++r)
                 for (int k = 0; k < 3; ++k) c.rot[r][k] = view->rotation.m[r][k];
             c.frame[0] = view->tanX;
@@ -409,6 +425,8 @@ bool EyeResampler::Render(ID3D11DeviceContext* context, ID3D11Texture2D* source,
         const D3D11_VIEWPORT viewport{0, 0, float(width), float(height), 0, 1};
         context_->RSSetViewports(1, &viewport);
         for (int i = 0; i < 2; ++i) {
+            ID3D11ShaderResourceView* eyeSource[] = {keptFor(i) ? keptViews_[i].Get() : sourceView_.Get()};
+            context_->PSSetShaderResources(0, 1, eyeSource);
             ID3D11RenderTargetView* target = targets_[i].Get();
             context_->OMSetRenderTargets(1, &target, nullptr);
             ID3D11Buffer* buffers[] = {constants_[i].Get()};
@@ -418,6 +436,48 @@ bool EyeResampler::Render(ID3D11DeviceContext* context, ID3D11Texture2D* source,
     }
     stage_ = 0;
     error_ = S_OK;
+    return true;
+}
+
+bool EyeResampler::Keep(ID3D11DeviceContext* context, ID3D11Texture2D* source, int eye) {
+    if (broken_ || !context || !source || (eye != 0 && eye != 1)) return false;
+    if (!initialized_ && !Initialize(context)) {
+        broken_ = true;
+        return false;
+    }
+    D3D11_TEXTURE2D_DESC sd{};
+    source->GetDesc(&sd);
+    if (!EightBit(Typeless(sd.Format))) return false;
+    HRESULT hr = S_OK;
+    D3D11_TEXTURE2D_DESC have{};
+    if (kept_[eye]) kept_[eye]->GetDesc(&have);
+    if (!kept_[eye] || have.Width != sd.Width || have.Height != sd.Height || have.Format != Typeless(sd.Format)) {
+        kept_[eye].Reset();
+        keptViews_[eye].Reset();
+        keptValid_[eye] = false;
+        D3D11_TEXTURE2D_DESC d{};
+        d.Width = sd.Width;
+        d.Height = sd.Height;
+        d.MipLevels = d.ArraySize = 1;
+        d.Format = Typeless(sd.Format);
+        d.SampleDesc.Count = 1;
+        d.Usage = D3D11_USAGE_DEFAULT;
+        d.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+        D3D11_SHADER_RESOURCE_VIEW_DESC v{};
+        v.Format = Unorm(sd.Format);
+        v.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+        v.Texture2D.MipLevels = 1;
+        if (FAILED(hr = device_->CreateTexture2D(&d, nullptr, &kept_[eye])) ||
+            FAILED(hr = device_->CreateShaderResourceView(kept_[eye].Get(), &v, &keptViews_[eye]))) {
+            kept_[eye].Reset();
+            keptViews_[eye].Reset();
+            return Fail(15, hr);
+        }
+    }
+    // A copy in the game's own state (it binds nothing).
+    if (sd.SampleDesc.Count > 1) context_->ResolveSubresource(kept_[eye].Get(), 0, source, 0, Unorm(sd.Format));
+    else context_->CopyResource(kept_[eye].Get(), source);
+    keptValid_[eye] = true;
     return true;
 }
 

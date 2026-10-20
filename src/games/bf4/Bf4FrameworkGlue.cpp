@@ -101,6 +101,7 @@ public:
         const ULONGLONG now = GetTickCount64();
         RefreshUntracked(now);
         const bool worldAllowed = (meta.world || untracked_) && BridgeUsable(0);
+        KeepEye(context, backbuffer, meta, now);
         bool pair = false;
         if (!queue_.empty()) {
             const Lease& front = queue_.front();
@@ -128,7 +129,10 @@ public:
             else if (step == WorldStep::Cancel || (step == WorldStep::Capture && !pair)) CancelFront();
         }
         world_ = gate_.Update(worldAllowed, pair, now);
-        if (!world_) CancelLeases();
+        if (!world_) {
+            CancelLeases();
+            kept_[0].valid = kept_[1].valid = false; // a new run starts both eyes afresh
+        }
         PumpBridges();
         PublishState(backbuffer, meta.width, meta.height, world_);
     }
@@ -159,10 +163,10 @@ public:
                 failureCode = static_cast<unsigned long>(b->FailureCode());
             }
         }
-        char line[640];
+        char line[768];
         std::snprintf(line, sizeof(line),
                       "theater_link connected=%d epoch=%llu states=%llu captured=%llu published=%llu failed=%llu discarded=%llu "
-                      "lane=%s bridges=%u leases=%llu queued=%llu pairs=%llu stereo_pairs=%llu reticle_pairs=%llu marked_pairs=%llu depth_pairs=%llu aim_pairs=%llu cancels=%llu capture_failures=%llu "
+                      "lane=%s bridges=%u leases=%llu queued=%llu pairs=%llu stereo_pairs=%llu alternate_pairs=%llu alternate_one_frame=%llu kept_frames=%llu reticle_pairs=%llu marked_pairs=%llu depth_pairs=%llu aim_pairs=%llu cancels=%llu capture_failures=%llu "
                       "fallbacks=%llu bridge_published=%llu consumed=%llu host_discarded=%llu bridge_failure=%u/0x%08lx "
                       "resampler=%u/0x%08lx%s\n",
                       !token_.empty() && !closed_ ? 1 : 0, static_cast<unsigned long long>(epoch_),
@@ -171,6 +175,8 @@ public:
                       static_cast<unsigned long long>(producer_.Discarded()), world_ ? "world" : "theater", connected,
                       static_cast<unsigned long long>(leases_), static_cast<unsigned long long>(queuedLeases_),
                       static_cast<unsigned long long>(pairs_), static_cast<unsigned long long>(stereoPairs_),
+                      static_cast<unsigned long long>(alternatePairs_), static_cast<unsigned long long>(alternateOneFrame_),
+                      static_cast<unsigned long long>(keptFrames_),
                       static_cast<unsigned long long>(reticles_), static_cast<unsigned long long>(markedPairs_),
                       static_cast<unsigned long long>(depthPairs_), static_cast<unsigned long long>(aimPairs_),
                       static_cast<unsigned long long>(cancels_), static_cast<unsigned long long>(captureFailures_),
@@ -336,6 +342,26 @@ private:
     // Both eyes from this one presented frame: crop, resample to the host's exact eye size,
     // capture, publish (the bridge restores nothing native: the camera write was already
     // restored inside the submit call). Serves the oldest queued lease.
+    static CameraAxes AxesOf(const FrameMeta& meta) {
+        CameraAxes axes;
+        for (int i = 0; i < 3; ++i)
+            for (int k = 0; k < 3; ++k) axes.row[i][k] = meta.renderRotation[i * 3 + k];
+        return axes;
+    }
+
+    // Alternate eyes: every frame known to show its pose (the view submits carried it `settle`
+    // times) is kept as its eye's, so a pair's other eye is at most a frame or two old.
+    void KeepEye(ID3D11DeviceContext* context, ID3D11Texture2D* backbuffer, const FrameMeta& meta, ULONGLONG now) {
+        if (!(meta.world && (meta.laneEye == 0 || meta.laneEye == 1)) || meta.stereoSplit || untracked_ || !meta.poseId ||
+            meta.poseRun < meta.worldSettle || !(meta.renderFovY > 0.05f && meta.renderFovY < 3.1f) || !meta.width || !meta.height)
+            return;
+        const float aspect = meta.renderAspect > 0.2f && meta.renderAspect < 5.0f ? meta.renderAspect : float(meta.width) / float(meta.height);
+        const float tanY = std::tan(meta.renderFovY * 0.5f);
+        if (!resampler_.Keep(context, backbuffer, meta.laneEye)) return;
+        kept_[meta.laneEye] = {true, now, AxesOf(meta), tanY * aspect, tanY};
+        ++keptFrames_;
+    }
+
     bool CapturePair(ID3D11DeviceContext* context, ID3D11Texture2D* backbuffer, const FrameMeta& meta) {
         if (!context || !backbuffer || !meta.width || !meta.height || queue_.empty()) return false;
         const Lease& front = queue_.front();
@@ -370,8 +396,24 @@ private:
                 marked |= overlays[e].markers[m].show;
             }
         }
+        // Alternate eyes: this frame was rendered from one eye; the other comes from its own last
+        // frame, turned onto this frame's pose (Bf4EyeResampler.h).
+        AlternateEyes alternate;
+        const bool alternating = (meta.laneEye == 0 || meta.laneEye == 1) && !meta.stereoSplit && !untracked_;
+        const ULONGLONG now = GetTickCount64();
+        const CameraAxes axes = AxesOf(meta);
+        if (alternating) {
+            alternate.fresh = meta.laneEye;
+            const Kept& other = kept_[1 - meta.laneEye];
+            if (other.valid && now - other.ms <= kKeptMaxMs && resampler_.HasKept(1 - meta.laneEye)) {
+                alternate.useKept = true;
+                alternate.staleRotation = RotationBetween(axes, other.axes);
+                alternate.keptTanX = other.tanX;
+                alternate.keptTanY = other.tanY;
+            }
+        }
         DepthStereoInput depth;
-        if (meta.depthStereo && meta.depth && !meta.stereoSplit && !untracked_) {
+        if (meta.depthStereo && meta.depth && !meta.stereoSplit && !untracked_ && !alternating) {
             depth.texture = meta.depth;
             depth.format = meta.depthFormat;
             depth.params = DepthStereoFor(meta.halfEyeDistance, tanX, meta.nearZ, meta.farZ, meta.depthClear);
@@ -381,9 +423,12 @@ private:
         view.tanX = tanX;
         view.tanY = tanY;
         view.halfEye = meta.halfEyeDistance;
+        if (alternating) view.rotation = FrameRotation{}; // each eye's camera has the head's turn
         if (!resampler_.Render(context, backbuffer, crops, req.width, req.height, req.format, reticle, overlays,
-                               depth.params.enabled ? &depth : nullptr, view.rotation.enabled ? &view : nullptr))
+                               depth.params.enabled ? &depth : nullptr, view.rotation.enabled ? &view : nullptr,
+                               alternating ? &alternate : nullptr))
             return false;
+        if (alternating) ++(alternate.useKept ? alternatePairs_ : alternateOneFrame_);
         if (view.rotation.enabled) ++aimPairs_;
         if (depth.params.enabled) ++depthPairs_;
         if (reticle.show) ++reticles_;
@@ -531,6 +576,17 @@ private:
     std::uint64_t markedPairs_ = 0; // pairs drawn with a gesture marker
     std::uint64_t depthPairs_ = 0;  // pairs given depth stereo
     std::uint64_t leases_ = 0, queuedLeases_ = 0, pairs_ = 0, stereoPairs_ = 0, cancels_ = 0, captureFailures_ = 0;
+    // Alternate eyes: each eye's last frame (its camera axes and tangents); older than this it
+    // is not used (the pair then shows this frame in both eyes).
+    struct Kept {
+        bool valid = false;
+        ULONGLONG ms = 0;
+        CameraAxes axes;
+        float tanX = 0, tanY = 0;
+    };
+    static constexpr ULONGLONG kKeptMaxMs = 200;
+    Kept kept_[2];
+    std::uint64_t alternatePairs_ = 0, alternateOneFrame_ = 0, keptFrames_ = 0;
     ULONGLONG untrackedCheckedMs_ = 0;
     std::string snapshotDir_;
     std::uint64_t sequence_ = 0, epoch_ = 0, lastToggle_ = 0, statesPublished_ = 0;

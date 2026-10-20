@@ -172,6 +172,46 @@ void FirstPersonView::Rewrite(std::uint8_t* block, float renderKx, float renderK
     std::memcpy(block + L::kCameraPos, camera, sizeof(camera));
 }
 
+bool FirstPersonView::IsMainViewBlock(const std::uint8_t* block, float renderKy) {
+    const Mat4 p = Load(block, L::kProjMatrix), v = Load(block, L::kViewMatrix);
+    return renderKy > 0 && PerspectiveRigid(p, v) && std::fabs(p[5] - renderKy) < 1e-3f * renderKy;
+}
+
+Mat4 FirstPersonView::EyeShift(int eye, float halfEye) {
+    // The camera moves to x = -half (left) or +half (right) of the head's camera space; what the
+    // head saw at p the eye sees at p - (x, 0, 0).
+    Mat4 m = Identity4();
+    m[3] = eye == 0 ? halfEye : -halfEye;
+    return m;
+}
+
+int FirstPersonView::FrameEye() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return shiftedThisFrame_ ? eye_ : -1;
+}
+
+void FirstPersonView::OnPresent() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (shiftedThisFrame_) {
+        ++stats_.shiftedFrames;
+        eye_ ^= 1;
+    }
+    shiftedThisFrame_ = false;
+}
+
+bool FirstPersonView::Upload(ID3D11DeviceContext* context, const std::uint8_t* block, ID3D11Buffer** buffers, UINT i,
+                             UINT* first, UINT* count) {
+    D3D11_MAPPED_SUBRESOURCE m{};
+    if (FAILED(context->Map(ours_.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &m)) || !m.pData) return false;
+    std::memset(m.pData, 0, kOurBytes);
+    std::memcpy(m.pData, block, L::kSize);
+    context->Unmap(ours_.Get(), 0);
+    buffers[i] = ours_.Get(); // the bind proceeds with our buffer in this slot only
+    if (first) first[i] = 0;
+    if (count && count[i] * 16 > kOurBytes) count[i] = kOurBytes / 16;
+    return true;
+}
+
 FirstPersonView::~FirstPersonView() { Remove(); }
 
 bool FirstPersonView::Install(ID3D11DeviceContext* immediate) {
@@ -209,9 +249,9 @@ FirstPersonView::Stats FirstPersonView::GetStats() const {
 
 std::string FirstPersonView::Describe() const {
     const Stats s = GetStats();
-    char line[480];
+    char line[560];
     std::snprintf(line, sizeof(line),
-                  "first_person_view installed=%d binds=%llu matched=%llu replaced=%llu unreadable=%llu ky=%.4f fp_cam=(%.2f %.2f %.2f) hand=%llu/%llu/%llu by_render=%llu by_game=%llu diff=%.4f passes=%llu weapon=%llu (%.3f %.3f %.3f) zoom_held=%llu shift=%.3f",
+                  "first_person_view installed=%d binds=%llu matched=%llu replaced=%llu unreadable=%llu ky=%.4f fp_cam=(%.2f %.2f %.2f) hand=%llu/%llu/%llu by_render=%llu by_game=%llu diff=%.4f passes=%llu weapon=%llu (%.3f %.3f %.3f) zoom_held=%llu shift=%.3f eye_views=%llu eye_frames=%llu",
                   static_cast<int>(installed_), static_cast<unsigned long long>(s.binds),
                   static_cast<unsigned long long>(s.matched), static_cast<unsigned long long>(s.replaced),
                   static_cast<unsigned long long>(s.unreadable), s.lastKy, s.cameraPos[0], s.cameraPos[1], s.cameraPos[2],
@@ -219,7 +259,8 @@ std::string FirstPersonView::Describe() const {
                   static_cast<unsigned long long>(s.handMissing), static_cast<unsigned long long>(s.byRender),
                   static_cast<unsigned long long>(s.byGame), s.nearestDiff, static_cast<unsigned long long>(s.passes),
                   static_cast<unsigned long long>(s.weaponFound), s.weapon[0], s.weapon[1], s.weapon[2],
-                  static_cast<unsigned long long>(s.zoomHeld), s.weaponShift);
+                  static_cast<unsigned long long>(s.zoomHeld), s.weaponShift, static_cast<unsigned long long>(s.shiftedViews),
+                  static_cast<unsigned long long>(s.shiftedFrames));
     return line;
 }
 
@@ -335,6 +376,30 @@ void FirstPersonView::OnBindConstants(ID3D11DeviceContext* context, ContextHooks
         ++stats_.unreadable;
         return;
     }
+    // Alternate eyes: a main view of this frame goes to this frame's eye (it ends a first-person
+    // pass like any other view).
+    const bool shift = frame.alternateEyes && frame.halfEye > 0;
+    int eye = 0;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        eye = eye_;
+    }
+    const Mat4 eyeMove = shift ? EyeShift(eye, frame.halfEye) : Identity4();
+    if (shift && IsMainViewBlock(block.data(), frame.renderKy)) {
+        if (stage == ContextHooks::Stage::Vertex && inPass_) EndPass();
+        float kx = 0, ky = 0;
+        std::memcpy(&kx, block.data() + L::kProjMatrix + 0 * 4, 4);
+        std::memcpy(&ky, block.data() + L::kProjMatrix + 5 * 4, 4);
+        Rewrite(block.data(), kx, ky, eyeMove);
+        const bool uploaded = Upload(context, block.data(), buffers, i, first, count);
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (uploaded) {
+            ++stats_.shiftedViews;
+            shiftedThisFrame_ = true;
+        }
+        return;
+    }
+    if (shift && !frame.handMode) return; // the first-person pass is left as BF4 draws it
     bool exactHand = false, shaped = false;
     const Frame::Hand* passHand = frame.handMode ? FirstPersonHand(block.data(), frame, &exactHand, &shaped) : nullptr;
     if (frame.handMode && shaped && !passHand) {
@@ -373,17 +438,9 @@ void FirstPersonView::OnBindConstants(ID3D11DeviceContext* context, ContextHooks
             stats_.weaponShift = std::sqrt(back[3] * back[3] + back[7] * back[7] + back[11] * back[11]);
         }
     }
+    if (shift) move = Mul(eyeMove, move); // the rig seen from this frame's eye
     Rewrite(block.data(), frame.renderKx, frame.renderKy, move);
-    D3D11_MAPPED_SUBRESOURCE m{};
-    const bool uploaded = SUCCEEDED(context->Map(ours_.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &m)) && m.pData;
-    if (uploaded) {
-        std::memset(m.pData, 0, kOurBytes);
-        std::memcpy(m.pData, block.data(), block.size());
-        context->Unmap(ours_.Get(), 0);
-        buffers[i] = ours_.Get(); // the bind proceeds with our buffer in this slot only
-        if (first) first[i] = 0;
-        if (count && count[i] * 16 > kOurBytes) count[i] = kOurBytes / 16;
-    }
+    const bool uploaded = Upload(context, block.data(), buffers, i, first, count);
     std::lock_guard<std::mutex> lock(mutex_);
     ++stats_.matched;
     if (uploaded) ++stats_.replaced;

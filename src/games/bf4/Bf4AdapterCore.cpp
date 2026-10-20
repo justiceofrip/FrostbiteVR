@@ -146,9 +146,10 @@ void AdapterCore::ApplyMenuCommand(const ModMenuCommand& command) {
         menuState_.hudInsets = command.value != 0;
         platform_.Log(menuState_.hudInsets ? "HUD corners: on" : "HUD corners: off");
         break;
-    case ModMenuAction::SetDepthStereo:
-        menuState_.depthStereo = command.value != 0;
-        platform_.Log(menuState_.depthStereo ? "3D from depth: on" : "3D from depth: off");
+    case ModMenuAction::SetDepthStereo: // "3D": Off, From depth, Alternate eyes
+        menuState_.depthStereo = command.value == 1;
+        menuState_.alternateEyes = command.value == 2;
+        platform_.Log(menuState_.alternateEyes ? "3D: alternate eyes" : menuState_.depthStereo ? "3D: from depth" : "3D: off");
         break;
     case ModMenuAction::SetPhysicalCrouch:
         menuState_.physicalCrouch = command.value != 0;
@@ -571,10 +572,18 @@ void AdapterCore::UpdateCamera(const ControllerSnapshot& in, const PlatformFrame
         return;
     }
     const float aspect = f.backbufferHeight ? float(f.backbufferWidth) / float(f.backbufferHeight) : 16.0f / 9.0f;
+    // Alternate eyes: the platform moves each frame's camera to one eye (render thread).
+    const bool alternate = lane && stereo_ == StereoMode::Mono && menuState_.alternateEyes;
     auto request = [&](int eye) {
         CameraRequest r;
         r.eye = eye;
         const math::Pose& p = eye < 0 ? (lane ? in.world.head : in.head) : in.eyes[eye].pose;
+        if (alternate && eye < 0) {
+            r.alternateEyes = true;
+            r.halfEye = in.world.halfEyeDistance > 0 ? in.world.halfEyeDistance
+                        : halfEyeDistance_ > 0      ? halfEyeDistance_
+                                                    : kDefaultHalfEye;
+        }
         r.local = XrPoseToBf4Camera(ApplyReference(reference_, p));
         r.fov = eye < 0 ? UnionFov(in.eyes[0].fov, in.eyes[1].fov) : in.eyes[eye].fov;
         if (lane) {
@@ -583,7 +592,7 @@ void AdapterCore::UpdateCamera(const ControllerSnapshot& in, const PlatformFrame
             r.renderFovY = RequiredVerticalFov(in.world.fov[0], in.world.fov[1], aspect);
             r.eyeFov[0] = in.world.fov[0];
             r.eyeFov[1] = in.world.fov[1];
-            r.gunFollowsAim = menuState_.gunFollowsAim && stereo_ == StereoMode::Mono;
+            r.gunFollowsAim = menuState_.gunFollowsAim && stereo_ == StereoMode::Mono && !alternate;
             r.gunFovBudget = menuState_.gunReachWide ? kGunAimFovBudgetWide : kGunAimFovBudget;
             r.gunInHand = menuState_.gunInHand && stereo_ == StereoMode::Mono;
             const auto& hand = in.controls.hands[1];

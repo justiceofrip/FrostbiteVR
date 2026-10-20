@@ -102,6 +102,9 @@ public:
         // the camera was turned toward the aim) and how far toward it the FOV budget allowed.
         FrameRotation frameRotation;
         float gunFraction = 0;
+        // The latest applied submit's render camera axes (rows right, up, back; BF4 world), with
+        // the pose id: alternate eyes turn a kept frame onto a newer one with them.
+        float renderRotation[9]{};
     };
     // Gun follows aim (world lane): render with the camera turned toward the game's aim at
     // the head's position, latched per pose id, with a FOV that still covers both eyes.

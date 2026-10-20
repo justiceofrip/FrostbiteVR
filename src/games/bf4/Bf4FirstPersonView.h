@@ -6,6 +6,14 @@
 // the render's. The meshes are posed in camera space, so on screen the gun is fixed in place
 // and drawn for the game's FOV, whatever the head-tracked render uses.
 //
+// Alternate eyes (3D): each frame is rendered from one eye, the eyes in turn. The eye is chosen
+// here, on the render thread, per frame (OnPresent): every main view of the frame (its constants
+// at the render's projection scale) and its first-person pass get a camera moved half the eye
+// distance sideways, so all of a frame's passes agree. (Choosing it on the main thread per
+// submit failed live: BF4 draws the first-person rig into the G-buffer before the frame's main
+// view, and which submit a frame shows is not predictable, so the rig came out at the other eye.)
+// BF4's deferred lighting still reconstructs with the head's camera: 3 cm off, not visible.
+//
 // This listener (Bf4ContextHooks.h) gives that pass constants of our own when BF4 binds them
 // (b2, viewConstants, vertex and pixel stage): the render's projection (true size), and the
 // view composed with a camera-space rigid transform M, so the whole first-person rig moves
@@ -67,6 +75,10 @@ public:
         // sights: the receiver's hip pose is held while the game's FOV is zoomed and the rig
         // moved back by the difference (hip bob, sway and recoil stay).
         bool holdThroughZoom = true;
+        // Alternate eyes: this frame's camera at one eye (chosen per frame), `halfEye` metres
+        // from the head along its right axis.
+        bool alternateEyes = false;
+        float halfEye = 0.032f;
     };
     struct Stats {
         std::uint64_t binds = 0;     // slot-2 binds seen
@@ -79,6 +91,7 @@ public:
         std::uint64_t passes = 0, weaponFound = 0, zoomHeld = 0; // receiver tracking
         float weapon[3]{};                      // the receiver in camera space (last pass)
         float weaponShift = 0;                  // how far the hold moved it back (m)
+        std::uint64_t shiftedViews = 0, shiftedFrames = 0; // alternate eyes: main views moved to the eye, frames
         float lastKy = 0;            // the matched pass's projection scale
         float cameraPos[3]{};        // the matched pass's first-person camera position
     };
@@ -122,8 +135,19 @@ public:
     // Pure: a mesh transform that can be the weapon's (rigid, unscaled, row 3 = 0 0 0 1) within
     // `radius` of the first-person camera.
     static bool WeaponPart(const Mat4& world, const float camera[3], float radius = 1.5f);
+    // Pure: is this block a main view (rigid perspective at the render's projection scale)?
+    static bool IsMainViewBlock(const std::uint8_t* block, float renderKy);
+    // Pure: the camera-space move from the head's camera to eye 0 (left) or 1 (right).
+    static Mat4 EyeShift(int eye, float halfEye);
+    // Alternate eyes, each Present (render thread): the eye the frame just drawn was rendered
+    // from (-1: none moved), read before OnPresent; OnPresent then turns to the other eye.
+    int FrameEye() const;
+    void OnPresent();
 
 private:
+    // The block (rewritten) bound in place of BF4's, in slot i: false when ours could not be filled.
+    bool Upload(ID3D11DeviceContext* context, const std::uint8_t* block, ID3D11Buffer** buffers, UINT i, UINT* first,
+                UINT* count);
     struct Source {
         void* mapped = nullptr;         // what Map returned last (BF4's ring buffer is mapped no-overwrite)
         std::uint32_t size = 0;
@@ -141,6 +165,8 @@ private:
     // mesh drawn in it is the weapon's receiver.
     void EndPass();
     bool inPass_ = false;
+    int eye_ = 0;               // alternate eyes: this frame's (render thread)
+    bool shiftedThisFrame_ = false;
     Mat4 passView_{};
     float passCamera_[3]{};
     Mat4 pendingWorld_{};

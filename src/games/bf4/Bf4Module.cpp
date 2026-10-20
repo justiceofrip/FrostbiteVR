@@ -179,7 +179,8 @@ public:
     FirstPersonView firstPersonView; // gun in the hand (Bf4FirstPersonView.h)
     HudSplit hudSplit;               // BF4's crosshair out of the head-tracked view (Bf4HudSplit.h)
     bool hudInstallTried = false;
-    std::uint64_t presentCount = 0, gunInHandFrame = 0, laneFrame = 0;
+    std::uint64_t presentCount = 0, gunInHandFrame = 0, laneFrame = 0, alternateFrame = 0;
+    float halfEye = 0.032f; // alternate eyes: the headset's half eye distance (world units)
     bool firstPersonOn = false, firstPersonInstallTried = false;
     bool depthInstallTried = false, depthSnapshotPending = false, depthSeen = false;
     bool eyeLoopRefused = false, stereoCrashGuard = false, stereoMarker = false;
@@ -770,6 +771,9 @@ public:
             m.poseRun = st.poseRun;
             m.renderFovY = st.renderedFovY;
             m.frameRotation = st.frameRotation; // recorded with st.poseId by the same submit
+            std::memcpy(m.renderRotation, st.renderRotation, sizeof(m.renderRotation)); // ...and so is this
+            // Alternate eyes: the eye this frame was drawn from (chosen on this thread per frame).
+            m.laneEye = alternateFrame && presentCount - alternateFrame <= 3 ? firstPersonView.FrameEye() : -1;
             m.aimValid = st.aimInView;
             m.aimTanX = st.aimTanX;
             m.aimTanY = st.aimTanY;
@@ -845,6 +849,8 @@ public:
         viewOverride.SetHand(requests[0].handInHead, requests[0].handValid);
         viewOverride.SetLocal(requests[0].local, /*keepGamePitch=*/false, requests[0].poseId, fov, requests[0].parentYaw);
         gunInHandFrame = requests[0].gunInHand ? presentCount : 0;
+        alternateFrame = requests[0].alternateEyes ? presentCount : 0;
+        if (requests[0].alternateEyes) halfEye = requests[0].halfEye;
         laneFrame = presentCount;
         return true;
     }
@@ -895,7 +901,9 @@ public:
     // hand of its own frame (Bf4FirstPersonView.h). Called each Present; off a few frames after
     // the world lane stops asking (the theater view shows BF4's own pass).
     void FirstPersonTick() {
-        const bool wanted = gunInHandFrame && presentCount - gunInHandFrame <= 3 && viewOverride.Installed();
+        const bool hand = gunInHandFrame && presentCount - gunInHandFrame <= 3;
+        const bool alternate = alternateFrame && presentCount - alternateFrame <= 3;
+        const bool wanted = (hand || alternate) && viewOverride.Installed();
         if (!wanted) {
             if (firstPersonView.Installed() && firstPersonOn) {
                 firstPersonView.SetFrame({});
@@ -918,13 +926,16 @@ public:
             log_.Write("gun in the hand: first-person pass hooks %s", firstPersonView.Installed() ? "installed" : "not installed");
             if (!firstPersonView.Installed()) return;
         }
+        firstPersonView.OnPresent(); // the frame just presented ended: alternate eyes turn to the other eye
         const auto st = viewOverride.GetStats();
         FirstPersonView::Frame frame;
         frame.enabled = st.renderedFovY > 0.1f && st.gameFovY > 0.1f && lastViewAspect > 0.2f;
         frame.gameFovY = st.gameFovY;
         frame.renderKy = frame.enabled ? 1.0f / std::tan(st.renderedFovY * 0.5f) : 0.0f;
         frame.renderKx = frame.enabled ? frame.renderKy / lastViewAspect : 0.0f;
-        frame.handMode = true;
+        frame.handMode = hand;
+        frame.alternateEyes = alternate;
+        frame.halfEye = halfEye;
         const auto recent = viewOverride.RecentHands();
         for (std::size_t i = 0; i < recent.size() && i < frame.hands.size(); ++i) {
             std::memcpy(frame.hands[i].rotation, recent[i].rotation, sizeof(frame.hands[i].rotation));
@@ -933,7 +944,7 @@ public:
             frame.hands[i].valid = recent[i].valid;
         }
         firstPersonView.SetFrame(frame);
-        if (!firstPersonOn) log_.Write("gun in the hand: on");
+        if (!firstPersonOn) log_.Write(hand ? "gun in the hand: on%s" : "first-person view: on%s", alternate ? " (alternate eyes)" : "");
         if (presentCount % 600 == 0) log_.Write("%s", firstPersonView.Describe().c_str());
         firstPersonOn = frame.enabled;
     }

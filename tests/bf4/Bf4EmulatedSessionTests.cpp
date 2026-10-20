@@ -790,6 +790,42 @@ TEST_CASE(EmuGunInTheHandFollowsTheTwoHandedLine) {
     CHECK(Near(barrel.x, 0.0f, 1e-3f) && Near(barrel.y, std::sin(pitch), 1e-3f) && Near(barrel.z, -std::cos(pitch), 1e-3f));
 }
 
+TEST_CASE(EmuAlternateEyesRenderEachEyeInTurn) {
+    // 3D: Alternate eyes. The lane's camera stays at the head; each request tells the platform
+    // to render each frame from one eye (chosen per frame on the render thread,
+    // Bf4FirstPersonView.h), half the eye distance (32 mm by default) to the side; never a
+    // turned render. Off again: plain requests.
+    FakeImage image({names::kGameRenderer, names::kRenderViewUpdate, names::kClientGameContext, names::kLevelName});
+    FakePlatform platform;
+    AdapterCore core(Session(true), X64(), image.Resolve(), platform);
+    core.OnSwapchainAdopted(true);
+    platform.Campaign();
+    platform.aimKnown = true;
+    CHECK(core.SetMenuSetting("depth_stereo", 2));
+    CHECK(core.MenuSettings().alternateEyes && !core.MenuSettings().depthStereo);
+    CHECK(core.SetMenuSetting("gun_aim", 1)); // gun follows aim: no turned render with alternate eyes
+    Clock clock;
+    std::vector<CameraRequest> seen;
+    for (std::uint64_t n = 0; n < 240; ++n) {
+        LaneFrame l(n / 90.0, n / 2 + 1);
+        platform.GameFrame();
+        core.OnFrame(clock.Next(), l.in);
+        if (n >= 200 && !platform.cameraLog.empty() && platform.cameraLog.back().size() == 1)
+            seen.push_back(platform.cameraLog.back()[0]);
+    }
+    CHECK(seen.size() >= 8);
+    for (std::size_t i = 0; i < seen.size(); ++i) {
+        const CameraRequest& r = seen[i];
+        CHECK(r.alternateEyes && Near(r.halfEye, kDefaultHalfEye, 1e-6f) && !r.gunFollowsAim);
+        if (i) CHECK(Near(r.local.trans.x, seen[0].local.trans.x, 1e-6f)); // the head's camera, not an eye's
+    }
+    CHECK(core.SetMenuSetting("depth_stereo", 0));
+    LaneFrame l(3.0, 1000);
+    platform.GameFrame();
+    core.OnFrame(clock.Next(), l.in);
+    CHECK(!platform.cameraLog.empty() && platform.cameraLog.back().size() == 1 && !platform.cameraLog.back()[0].alternateEyes);
+}
+
 TEST_CASE(EmuGunFollowsAimKeepsTheBulletsOnTheBarrel) {
     // The hand 30 degrees up with the head level. Gun follows aim: the game's aim stops where
     // the render can turn all the way to it (the barrel on the bullets' line); wide reach lets

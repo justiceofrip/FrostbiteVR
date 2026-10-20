@@ -39,6 +39,10 @@ struct FrameMeta {
     float renderFovY = 0;     // vertical FOV the tagged frames were rendered with (radians)
     float renderAspect = 0;   // aspect the engine's view uses (half the frame's in split stereo)
     FrameRotation frameRotation; // gun follows aim: render-from-head rotation of the tagged frames
+    // Alternate eyes: the eye the tagged frames were rendered from (-1: the head) and their
+    // camera's axes (rows right, up, back; BF4 world), recorded by the same submits.
+    int laneEye = -1;
+    float renderRotation[9]{};
     // Stereo: the core asks (mod menu), the platform reports what the engine renders.
     bool worldStereo = false;
     float halfEyeDistance = 0;        // the headset's, world units

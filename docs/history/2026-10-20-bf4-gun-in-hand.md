@@ -26,3 +26,9 @@
   enrolled binding (raw-input names plus Steam's pads), the enumerations pass through, and a
   stand-in pad is offered first when none of the devices is an XInput pad (BF4 polls only one:
   offered last it was made but never polled). Live: pad polled, no stall.
+- 3D by alternate eyes: the eye is chosen per frame on the render thread and applied to the
+  frame's main-view constants and its first-person pass (camera half the eye distance to the
+  side), not to the CPU camera per submit: BF4 draws the first-person rig into the G-buffer
+  before the frame's main view, and a render frame's submit is not predictable (1-4 behind the
+  newest, sometimes skipped), so per-submit eyes put the rig's G-buffer draw at the other eye.
+  Pairs take the other eye's last kept frame turned onto the new pose. An option, off by default.

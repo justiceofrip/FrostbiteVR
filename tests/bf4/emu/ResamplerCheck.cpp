@@ -295,6 +295,52 @@ bool CheckEyeResamplerReticle(ID3D11Device* device, const char*& why) {
             return why = "plain resample after the aim-turned one", false;
         if (!ReadPixels(device, context.Get(), resampler.Eye(0), eye, width) || std::abs(int(eye[32 * width + 32] & 0xFF) - 130) > 6)
             return why = "without the turn the centre is the frame's centre", false;
+
+        // Alternate eyes: each frame is rendered from one eye and kept as its eye's; the other eye
+        // comes from its own kept frame, turned onto this frame's camera. Red from the left,
+        // stripes from the right, then green from the left with the head turned since the stripes
+        // (yaw atan 0.25).
+        std::vector<std::uint32_t> red(kSize * kSize, 0xFF0000C0u), green(kSize * kSize, 0xFF00C000u);
+        const D3D11_SUBRESOURCE_DATA redData{red.data(), kSize * 4, 0}, greenData{green.data(), kSize * 4, 0};
+        ComPtr<ID3D11Texture2D> redFrame, greenFrame;
+        if (FAILED(device->CreateTexture2D(&d, &redData, &redFrame)) || FAILED(device->CreateTexture2D(&d, &greenData, &greenFrame)))
+            return why = "create the alternate-eye frames", false;
+        auto channel = [&](int e, int shift) {
+            return ReadPixels(device, context.Get(), resampler.Eye(e), eye, width) ? int((eye[32 * width + 32] >> shift) & 0xFF) : -1;
+        };
+        fvr::bf4::AlternateEyes alt;
+        alt.fresh = 0;
+        alt.useKept = true; // nothing kept yet: both eyes from this frame
+        alt.staleRotation.enabled = true;
+        alt.keptTanX = alt.keptTanY = 1.0f;
+        resampler.DropKept();
+        if (!resampler.Keep(context.Get(), redFrame.Get(), 0) ||
+            !resampler.Render(context.Get(), redFrame.Get(), crops, kSize, kSize, DXGI_FORMAT_R8G8B8A8_UNORM, {}, eyesFov, nullptr,
+                              nullptr, &alt))
+            return why = "alternate eyes: first frame", false;
+        if (channel(0, 0) < 180 || channel(1, 0) < 180) return why = "alternate eyes: the first pair is one frame twice", false;
+        if (!resampler.HasKept(0) || resampler.HasKept(1)) return why = "alternate eyes: the left frame not kept", false;
+        alt.fresh = 1;
+        if (!resampler.Keep(context.Get(), striped.Get(), 1) ||
+            !resampler.Render(context.Get(), striped.Get(), crops, kSize, kSize, DXGI_FORMAT_R8G8B8A8_UNORM, {}, eyesFov, nullptr,
+                              nullptr, &alt))
+            return why = "alternate eyes: second frame", false;
+        if (channel(0, 0) < 180 || channel(0, 8) > 40) return why = "alternate eyes: the left eye is not its kept frame", false;
+        if (std::abs(channel(1, 0) - 130) > 6) return why = "alternate eyes: the right eye is not the new frame", false;
+        alt.fresh = 0;
+        alt.staleRotation = fvr::bf4::RotationBetween(head, aim); // the right frame's camera from this one's
+        if (!resampler.Keep(context.Get(), greenFrame.Get(), 0) ||
+            !resampler.Render(context.Get(), greenFrame.Get(), crops, kSize, kSize, DXGI_FORMAT_R8G8B8A8_UNORM, {}, eyesFov, nullptr,
+                              nullptr, &alt))
+            return why = "alternate eyes: third frame", false;
+        if (channel(0, 8) < 180) return why = "alternate eyes: the left eye is not the new frame", false;
+        if (std::abs(channel(1, 0) - 96) > 6) return why = "alternate eyes: the kept right frame not turned onto this camera", false;
+        alt.useKept = false; // a run restarts: this frame in both eyes
+        if (!resampler.Render(context.Get(), redFrame.Get(), crops, kSize, kSize, DXGI_FORMAT_R8G8B8A8_UNORM, {}, eyesFov, nullptr,
+                              nullptr, &alt) ||
+            channel(1, 0) < 180)
+            return why = "alternate eyes: without a kept frame the other eye shows this one", false;
+        resampler.DropKept();
     }
     return true;
 }
