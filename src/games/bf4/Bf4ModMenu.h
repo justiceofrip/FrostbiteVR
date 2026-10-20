@@ -17,15 +17,16 @@ struct ModMenuState {
     bool worldStereo = false; // BF4's own split two-eye render: unsupported, always false
     bool controllerAim = true; // campaign: the gun follows the right controller
     bool holsters = true;      // campaign: body holster gestures (Bf4BodyGestures.h)
-    bool aimDot = true;        // head-tracked view + controller aim: reticle where the gun aims
+    bool aimDot = false;       // controller aim: reticle where the gun aims (off: the barrel shows it, player 2026-10-19)
     bool vignette = true;      // head-tracked view: darken the edges while moving by stick
     bool twoHandedAim = true;  // controller aim: the left grip in front of the gun steadies it
     bool walkWithBody = true;  // controller aim: the left stick walks relative to the body (else the gun)
     bool physicalCrouch = false; // crouch for real to crouch in game (Bf4PhysicalCrouch.h; standing play)
     bool depthStereo = false;    // head-tracked view: 3D from the game's depth buffer (Bf4DepthCapture.h)
     bool hudInsets = true;       // head-tracked view: the corner HUD copied into the visible corners
-    bool gunFollowsAim = true;   // head-tracked view: render along the aim so the barrel is on the bullets' line
+    bool gunFollowsAim = false;  // head-tracked view: render along the aim so the barrel is on the bullets' line
     bool gunReachWide = false;   // ...and let that render grow wider (less sharp) so the gun follows farther
+    bool gunInHand = true;       // ...or (default) draw BF4's first-person rig at the right controller (no turned render)
 };
 
 enum class ModMenuAction : std::uint8_t {

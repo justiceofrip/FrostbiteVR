@@ -40,7 +40,7 @@ namespace fvr::bf4 {
 struct ResearchCommand {
     enum class Kind : std::uint8_t {
         Snap, Click, Move, Key, DumpImage, ScanQ, Peek, Type, Census, DepthProbe, Mouse, SendKey, Setting, ViewCopies,
-        ViewDump, AimTrace, Unknown
+        ViewDump, AimTrace, ShaderNames, ShaderDump, DrawProbe, FirstPersonView, Unknown
     };
     std::uint64_t id = 0;
     Kind kind = Kind::Unknown;

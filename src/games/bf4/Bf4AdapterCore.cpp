@@ -167,9 +167,11 @@ void AdapterCore::ApplyMenuCommand(const ModMenuCommand& command) {
         platform_.Log(menuState_.aimDot ? "aim dot: on" : "aim dot: off");
         break;
     case ModMenuAction::SetGunFollowsAim:
-        menuState_.gunFollowsAim = command.value != 0;
+        menuState_.gunInHand = command.value == 3; // BF4's rig drawn at the hand: no turned render needed
+        menuState_.gunFollowsAim = command.value == 1 || command.value == 2;
         menuState_.gunReachWide = command.value == 2;
-        platform_.Log(!menuState_.gunFollowsAim ? "gun follows aim: off"
+        platform_.Log(menuState_.gunInHand ? "gun follows aim: in the hand"
+                      : !menuState_.gunFollowsAim ? "gun follows aim: off"
                       : menuState_.gunReachWide ? "gun follows aim: on, wide reach" : "gun follows aim: on");
         break;
     case ModMenuAction::SetHolsters:
@@ -577,6 +579,17 @@ void AdapterCore::UpdateCamera(const ControllerSnapshot& in, const PlatformFrame
             r.eyeFov[1] = in.world.fov[1];
             r.gunFollowsAim = menuState_.gunFollowsAim && stereo_ == StereoMode::Mono;
             r.gunFovBudget = menuState_.gunReachWide ? kGunAimFovBudgetWide : kGunAimFovBudget;
+            r.gunInHand = menuState_.gunInHand && stereo_ == StereoMode::Mono;
+            const auto& hand = in.controls.hands[1];
+            if (r.gunInHand && in.controls.focused && hand.gripTracked && hand.aimTracked) {
+                math::Pose held;
+                held.position = hand.grip.position; // where the hand holds the grip...
+                held.orientation = hand.aim.orientation; // ...the barrel along the aim ray (the bullets' direction)
+                if (const auto rel = math::MakeRelativePose(ApplyReference(reference_, p), ApplyReference(reference_, held))) {
+                    r.handInHead = *rel;
+                    r.handValid = true;
+                }
+            }
         }
         camera_.push_back(r);
     };
@@ -684,7 +697,9 @@ void AdapterCore::OnFrame(const PlatformFrame& f, const ControllerSnapshot& in) 
         meta.world = stereo_ == StereoMode::Mono; // head-tracked view goes to the headset as eye pairs
         meta.worldSettle = static_cast<std::uint32_t>(menuState_.worldSettle);
         meta.worldStereo = session_.developerFeatures && menuState_.worldStereo;
-        meta.reticle = menuState_.aimDot && aim_.engaged;
+        // The barrel shows where the shots go while the gun follows the aim (the player wants
+        // no crosshair then); with that off nothing else would, so the dot comes back.
+        meta.reticle = (menuState_.aimDot || (!menuState_.gunFollowsAim && !menuState_.gunInHand)) && aim_.engaged;
         meta.depthStereo = menuState_.depthStereo && meta.world;
         meta.hudInsets = menuState_.hudInsets && meta.world;
         {

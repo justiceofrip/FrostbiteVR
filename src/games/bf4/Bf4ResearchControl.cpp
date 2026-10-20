@@ -69,6 +69,10 @@ std::vector<ResearchCommand> ParseResearchCommands(std::string_view text, std::u
         else if (verb == "viewcopies" && ParseInt(a1, c.x) && c.x >= 0 && c.x <= 3) c.kind = ResearchCommand::Kind::ViewCopies;
         else if (verb == "viewdump" && !a1.empty()) { c.kind = ResearchCommand::Kind::ViewDump; c.arg = std::string(a1); }
         else if (verb == "aimtrace" && !a1.empty()) { c.kind = ResearchCommand::Kind::AimTrace; c.arg = std::string(a1); }
+        else if (verb == "shadernames") c.kind = ResearchCommand::Kind::ShaderNames;
+        else if (verb == "drawprobe" && !a1.empty()) { c.kind = ResearchCommand::Kind::DrawProbe; c.arg = std::string(a1); }
+        else if (verb == "fpview" && ParseInt(a1, c.x) && c.x >= 0 && c.x <= 3) c.kind = ResearchCommand::Kind::FirstPersonView;
+        else if (verb == "shaderdump" && !a1.empty()) { c.kind = ResearchCommand::Kind::ShaderDump; c.arg = std::string(a1); }
         else if (verb == "mouse" && ParseInt(a1, c.x) && ParseInt(a2, c.y) && std::abs(c.x) <= 2000 && std::abs(c.y) <= 2000)
             c.kind = ResearchCommand::Kind::Mouse;
         else if (verb == "sendkey" && ParseHex(a1, c.value) && c.value >= 1 && c.value <= 0xFF)
@@ -81,7 +85,8 @@ std::vector<ResearchCommand> ParseResearchCommands(std::string_view text, std::u
         else c.arg = std::string(verb);
         // A snap or dump name becomes a file name: keep it to [A-Za-z0-9_-].
         if ((c.kind == ResearchCommand::Kind::Snap || c.kind == ResearchCommand::Kind::ViewDump ||
-             c.kind == ResearchCommand::Kind::AimTrace) &&
+             c.kind == ResearchCommand::Kind::AimTrace || c.kind == ResearchCommand::Kind::ShaderDump ||
+             c.kind == ResearchCommand::Kind::DrawProbe) &&
             !std::all_of(c.arg.begin(), c.arg.end(), [](char ch) {
                 return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '-';
             }))

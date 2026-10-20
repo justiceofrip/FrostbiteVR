@@ -155,6 +155,17 @@ void ViewOverride::SetLocal(const LinearTransform& local, bool keepGamePitch, st
     poseTime_ = std::chrono::steady_clock::now();
 }
 
+void ViewOverride::SetHand(const math::Pose& handInHead, bool valid) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    hand_ = handInHead;
+    handValid_ = valid;
+}
+
+std::array<ViewOverride::HandRecord, ViewOverride::kHandRecords> ViewOverride::RecentHands() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return hands_;
+}
+
 void ViewOverride::SetGunAim(const GunAimSettings& settings) {
     std::lock_guard<std::mutex> lock(mutex_);
     gunAim_ = settings;
@@ -197,6 +208,8 @@ void ViewOverride::Submit(void* renderer, float a, float b, std::uint32_t viewCo
     bool keepPitch = false, fresh = false;
     std::uint64_t poseId = 0;
     float fovY = 0, parentYaw = std::numeric_limits<float>::quiet_NaN();
+    math::Pose hand{};
+    bool handValid = false;
     {
         std::lock_guard<std::mutex> lock(self->mutex_);
         ++self->stats_.submits;
@@ -210,6 +223,8 @@ void ViewOverride::Submit(void* renderer, float a, float b, std::uint32_t viewCo
         poseId = self->poseId_;
         fovY = self->fovY_;
         parentYaw = self->parentYaw_;
+        hand = self->hand_;
+        handValid = self->handValid_;
         if (!fresh) self->stats_.poseRun = 0; // this frame shows the stock view
         if (self->dumpRequested_) { // research: block 0 as the game submitted it
             std::memcpy(self->dump_.data(), views, kViewBlockBytes);
@@ -283,10 +298,34 @@ void ViewOverride::Submit(void* renderer, float a, float b, std::uint32_t viewCo
         SetAxes(renderCamera, ApplyRotation(AxesOf(headCamera), gun.rotation));
         fovY = PlausibleFov(fovY) ? std::max(fovY, gun.fovY) : gun.fovY;
     }
+    {
+        // The hand of this pose, keyed by the rotation this frame renders with (the gun pass
+        // carries that rotation in its own view constants).
+        std::lock_guard<std::mutex> lock(self->mutex_);
+        HandRecord& r = self->hands_[self->handNext_++ % kHandRecords];
+        const math::Vec3 rows[3] = {renderCamera.right, renderCamera.up, renderCamera.forward};
+        const math::Vec3 gameRows[3] = {gameCamera.right, gameCamera.up, gameCamera.forward};
+        for (int i = 0; i < 3; ++i) {
+            r.rotation[i * 3 + 0] = rows[i].x;
+            r.rotation[i * 3 + 1] = rows[i].y;
+            r.rotation[i * 3 + 2] = rows[i].z;
+            r.gameRotation[i * 3 + 0] = gameRows[i].x;
+            r.gameRotation[i * 3 + 1] = gameRows[i].y;
+            r.gameRotation[i * 3 + 2] = gameRows[i].z;
+        }
+        r.hand = hand;
+        r.valid = handValid;
+        r.poseId = poseId;
+    }
     const std::uint32_t mask = self->copyMask_.load();
     // +0x00 (the camera relative to the soldier) feeds BF4's weapon lag: with the gun on the
     // aim it keeps the game's own value, so head motion never swings the gun.
-    if ((mask & 1u) && !gun.rotation.enabled) WriteViewTransform(views, compose(ReadViewTransform(views)));
+    bool handHeld = false;
+    {
+        std::lock_guard<std::mutex> lock(self->mutex_);
+        handHeld = self->gunAim_.handHeld;
+    }
+    if ((mask & 1u) && !gun.rotation.enabled && !handHeld) WriteViewTransform(views, compose(ReadViewTransform(views)));
     if (mask & 2u) WriteViewTransform(views + kViewCopyOffset, renderCamera);
     {
         float tx = 0, ty = 0;

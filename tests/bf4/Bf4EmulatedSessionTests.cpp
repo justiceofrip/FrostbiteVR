@@ -769,8 +769,8 @@ TEST_CASE(EmuGunFollowsAimKeepsTheBulletsOnTheBarrel) {
     CHECK(LimitAimToRender(CameraAxes{}, normal, eyeL, eyeR, 1920.0f / 1080.0f));
     CHECK(LimitAimToRender(CameraAxes{}, wide, eyeL, eyeR, 1920.0f / 1080.0f, kGunAimFovBudgetWide - kReachSlack));
     CHECK(wide.pitch > normal.pitch + 0.03f);
-    for (const int choice : {1, 2, 0}) { // On, Wide reach, Off
-        const bool follow = choice != 0;
+    for (const int choice : {1, 2, 0, 3}) { // On, Wide reach, Off, In the hand
+        const bool follow = choice == 1 || choice == 2;
         const AimAngle expected = choice == 2 ? wide : normal;
         FakeImage image({names::kGameRenderer, names::kRenderViewUpdate, names::kClientGameContext, names::kLevelName});
         FakePlatform platform;
@@ -795,5 +795,25 @@ TEST_CASE(EmuGunFollowsAimKeepsTheBulletsOnTheBarrel) {
             CHECK(Near(platform.gameAim.pitch, up, 0.01f));
             CHECK(core.Status().find("reach_limited=0 ") != std::string::npos);
         }
+        // No aim dot while the barrel shows the aim (the player's choice); without the gun
+        // following, the dot is the only sign of where shots go. The menu can switch it on.
+        CHECK(!platform.frames.empty() && platform.frames.back().reticle == (choice == 0));
+        // In the hand: no turned render; each world request carries the right hand relative to
+        // the head (grip position, aim orientation) for the first-person pass.
+        CHECK(!platform.cameraLog.empty() && platform.cameraLog.back().size() == 1);
+        const CameraRequest& r = platform.cameraLog.back()[0];
+        CHECK(r.gunInHand == (choice == 3) && r.handValid == (choice == 3) && r.gunFollowsAim == follow);
+        if (choice == 3) {
+            CHECK(Near(r.handInHead.position.x, 0.2f, 1e-4f) && Near(r.handInHead.position.y, -0.4f, 1e-4f) &&
+                  Near(r.handInHead.position.z, -0.3f, 1e-4f));
+            const math::Vec3 barrel = math::Rotate(r.handInHead.orientation, {0, 0, -1}); // the aim ray, 30 deg up
+            CHECK(Near(barrel.y, std::sin(up), 1e-4f) && Near(barrel.z, -std::cos(up), 1e-4f));
+        }
+        CHECK(core.SetMenuSetting("aim_dot", 1));
+        LaneFrame l(300 / 90.0, 301);
+        l.in.controls.hands[1].aim.orientation = math::FromAxisAngle({1, 0, 0}, up);
+        platform.GameFrame();
+        core.OnFrame(clock.Next(), l.in);
+        CHECK(platform.frames.back().reticle);
     }
 }

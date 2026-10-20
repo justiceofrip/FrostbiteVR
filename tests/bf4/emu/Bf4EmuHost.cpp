@@ -79,6 +79,9 @@ int g_fail = 0;
 }
 bool CheckEyeResamplerReticle(ID3D11Device* device, const char*& why); // ResamplerCheck.cpp
 bool CheckDepthCapture(ID3D11Device* device, const char*& why);        // DepthCaptureCheck.cpp
+bool CheckShaderCensus(ID3D11Device* device, const char*& why);        // ShaderCensusCheck.cpp
+bool CheckDrawProbe(ID3D11Device* device, const char*& why);           // ShaderCensusCheck.cpp
+bool CheckFirstPersonView(ID3D11Device* device, const char*& why);     // ShaderCensusCheck.cpp
 namespace {
 void Check(bool ok, const char* what) {
     std::printf("%s %s\n", ok ? "PASS" : "FAIL", what);
@@ -623,6 +626,24 @@ int wmain() {
         const bool ok = CheckDepthCapture(dev, why);
         if (!ok) std::printf("depth capture check: %s\n", why);
         Check(ok, "depth capture finds the main depth and keeps the world from before the first-person clear");
+    }
+    {
+        const char* why = "";
+        const bool ok = CheckShaderCensus(dev, why);
+        if (!ok) std::printf("shader census check: %s\n", why);
+        Check(ok, "shader census names a vertex shader's constant buffer and variables, and stops when removed");
+    }
+    {
+        const char* why = "";
+        const bool ok = CheckDrawProbe(dev, why);
+        if (!ok) std::printf("draw probe check: %s\n", why);
+        Check(ok, "draw probe records one frame's draw with its layout, camera position and bone palette");
+    }
+    {
+        const char* why = "";
+        const bool ok = CheckFirstPersonView(dev, why);
+        if (!ok) std::printf("first-person view check: %s\n", why);
+        Check(ok, "first-person view pass gets the render's projection and a moved view; other binds pass through");
     }
 
     // 6. Multiplayer evidence: a PunkBuster client module appears.

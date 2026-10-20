@@ -48,6 +48,11 @@ struct CameraRequest {
     math::FovTangents eyeFov[2]; // the request's eye tangents (lane requests only)
     bool gunFollowsAim = false;  // render along the game's aim, eyes rotated back (Bf4WorldView.h)
     float gunFovBudget = kGunAimFovBudget; // how wide that render may get (the player's reach choice)
+    // Gun in the hand (Bf4FirstPersonView.h): the right hand relative to this request's head
+    // (grip position, aim orientation; OpenXR convention), for the first-person pass.
+    bool gunInHand = false;
+    bool handValid = false;
+    math::Pose handInHead{};
 };
 
 // Off: flat theater. Theater3D: engine stereo pair on the theater screen, no head tracking.

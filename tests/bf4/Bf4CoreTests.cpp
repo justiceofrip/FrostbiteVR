@@ -976,6 +976,77 @@ TEST_CASE(ControllerAimReplaysALiveDeathCamera) {
     }
 }
 
+TEST_CASE(ControllerAimHoldsThroughRecoil) {
+    // BF4's recoil turns the camera by itself (up, and a little sideways) on every shot and
+    // does not bring it back; aiming pulls it back to the controller. That must not look like
+    // the game's own camera to the probe (aiming would go quiet while firing), teach a wrong
+    // gain or fire the guard. Two frames of input delay, 120 game frames a second.
+    using namespace fvr;
+    using namespace fvr::bf4;
+    for (const bool sniper : {false, true}) {
+        MotionAim aim;
+        SimulatedGameAim game;
+        game.gainX = 0.0014f;
+        game.gainY = -0.0014f;
+        MotionAimInput in;
+        in.engage = in.aimTracked = in.gameValid = true;
+        in.reference.orientation = {0, 0, 0, 1};
+        in.dt = 1.0f / 120;
+        in.gameFov = 0.785f;
+        std::array<int, 2> queuedX{}, queuedY{}; // counts not applied yet, newest first
+        auto step = [&](float kickYaw, float kickPitch) {
+            game.pendingX += queuedX[1]; // sent two updates ago: shows in this reading
+            game.pendingY += queuedY[1];
+            game.Frame();
+            game.aim.yaw = WrapPi(game.aim.yaw + kickYaw);
+            game.aim.pitch += kickPitch;
+            in.game = game.aim;
+            in.gameSample = game.sample;
+            const auto out = aim.Update(in);
+            queuedX = {out.mouseX, queuedX[0]};
+            queuedY = {out.mouseY, queuedY[0]};
+            return out;
+        };
+        auto aimAt = [&](float yaw, float pitch) {
+            in.aim.orientation = math::FromAxisAngle({0, 1, 0}, -yaw) * math::FromAxisAngle({1, 0, 0}, pitch);
+        };
+        for (int k = 0; k < 3; ++k) {
+            aimAt(0.4f, 0.3f);
+            for (int i = 0; i < 120; ++i) step(0, 0);
+            aimAt(-0.4f, -0.2f);
+            for (int i = 0; i < 120; ++i) step(0, 0);
+        }
+        aimAt(0.2f, 0.1f);
+        float body = 0;
+        for (int i = 0; i < 120; ++i) body = step(0, 0).bodyYaw;
+        const float targetYaw = WrapPi(body + 0.2f);
+        const auto foreign = aim.ForeignTurns(), flips = aim.SignFlips(), guards = aim.OscillationGuards();
+        const auto mutes = aim.Mutes();
+        const float gainX = aim.GainX(), gainY = aim.GainY();
+        CHECK(Near(gainX, 0.0014f, 0.0002f) && Near(gainY, -0.0014f, 0.0002f));
+        // Full auto: ~13 shots a second, 0.3-0.4 deg up and 0.1 deg sideways each, for 3 s.
+        // Sniper: one 3 deg kick every 1.5 s.
+        const int interval = sniper ? 180 : 9, frames = 360;
+        float worstPitch = 0, settledWorst = 0;
+        int quietFrames = 0;
+        for (int i = 0; i < frames; ++i) {
+            const bool shot = i % interval == 0;
+            const float kickPitch = !shot ? 0.0f : sniper ? 0.052f : (i == 0 ? 0.007f : 0.005f);
+            const float kickYaw = !shot ? 0.0f : (i / interval) % 2 ? 0.0017f : -0.0017f;
+            const auto out = step(kickYaw, kickPitch);
+            if (out.engaged && !out.mouseX && !out.mouseY && std::fabs(game.aim.pitch - 0.1f) > 0.01f) ++quietFrames;
+            const float off = std::fabs(game.aim.pitch - 0.1f);
+            worstPitch = std::max(worstPitch, off);
+            if (i % interval >= 12) settledWorst = std::max(settledWorst, std::max(off, std::fabs(WrapPi(game.aim.yaw - targetYaw))));
+        }
+        CHECK(aim.ForeignTurns() == foreign && aim.SignFlips() == flips && aim.OscillationGuards() == guards);
+        CHECK(aim.Mutes() == mutes && quietFrames <= 1); // never quiet (1: counts already in flight)
+        CHECK(Near(aim.GainX(), gainX, 0.15f * gainX) && Near(aim.GainY(), gainY, 0.15f * -gainY));
+        CHECK(worstPitch < (sniper ? 0.06f : 0.02f));
+        CHECK(settledWorst < 0.01f); // back on the controller's aim within 12 frames of each shot
+    }
+}
+
 TEST_CASE(ControllerAimFindsInvertedLookByProbing) {
     // The same signature as a death camera (the game turns against the counts), but here the
     // counts did it: inverted vertical look. Going quiet shows it (the game holds still), so
@@ -1553,4 +1624,14 @@ TEST_CASE(ResearchCommandsForLiveFlatSessions) {
     const auto dumps = ParseResearchCommands("1 viewdump block_a\n2 viewdump ../x\n3 viewdump\n", 0);
     CHECK(dumps.size() == 3 && dumps[0].kind == ResearchCommand::Kind::ViewDump && dumps[0].arg == "block_a" &&
           dumps[1].kind == ResearchCommand::Kind::Unknown && dumps[2].kind == ResearchCommand::Kind::Unknown);
+    const auto shaders = ParseResearchCommands("1 shadernames\n2 shaderdump bone\n3 shaderdump ..\\x\n4 shaderdump\n", 0);
+    CHECK(shaders.size() == 4 && shaders[0].kind == ResearchCommand::Kind::ShaderNames &&
+          shaders[1].kind == ResearchCommand::Kind::ShaderDump && shaders[1].arg == "bone" &&
+          shaders[2].kind == ResearchCommand::Kind::Unknown && shaders[3].kind == ResearchCommand::Kind::Unknown);
+    const auto probes = ParseResearchCommands("1 drawprobe level_a\n2 drawprobe a/b\n", 0);
+    CHECK(probes.size() == 2 && probes[0].kind == ResearchCommand::Kind::DrawProbe && probes[0].arg == "level_a" &&
+          probes[1].kind == ResearchCommand::Kind::Unknown);
+    const auto fp = ParseResearchCommands("1 fpview 2\n2 fpview 0\n3 fpview 4\n", 0);
+    CHECK(fp.size() == 3 && fp[0].kind == ResearchCommand::Kind::FirstPersonView && fp[0].x == 2 &&
+          fp[1].kind == ResearchCommand::Kind::FirstPersonView && fp[1].x == 0 && fp[2].kind == ResearchCommand::Kind::Unknown);
 }

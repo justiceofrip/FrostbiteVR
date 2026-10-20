@@ -18,7 +18,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   three sessions (09:16-10:19; rotation was inverted and the gun oversized, both fixed in
   0.4.16); everything built since 0.4.17 is unseen in a headset.
 
-## At a glance (installed: 0.4.65-local)
+## At a glance (installed: 0.4.76-local)
 
 | Feature | State | Evidence |
 | --- | --- | --- |
@@ -26,7 +26,8 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
 | Head-tracked campaign view (6DoF head) | on | headset (earlier build); live sim: direction, labels 100 % |
 | Three frame channels + next pose in the capturing frame | on | live sim: 52.9 pairs/s at 117.7 game fps (2: 44.8), labels 525/525 |
 | Controller aim (mouse look), aim dot, two-handed aim, snap turn | on | live sim: gain learned = measured, 20 deg -> 19.6 deg; ADS and firing; gains kept through a death camera |
-| Gun follows aim (barrel on the bullets' line), reach limit | on | live sim: gun/laser on the aim, labels 335/335; past the reach gun and dot stop together |
+| Gun in the hand (BF4's rig drawn at the controller, barrel along the aim) | on (default) | live sim: follows hand position and turn, true size, held through ADS, firing |
+| Gun follows aim (turned render), reach limit | option | live sim: gun/laser on the aim, labels 335/335; past the reach gun and dot stop together |
 | BF4's pause/death/end menus in a level on the theater screen | on | live sim: pause -> screen -> laser RESUME -> head-tracked, twice; restart checkpoint |
 | Recenter: both stick clicks 1 s (or mod menu) | on | live sim: recentered twice, no stick click reached the game |
 | Comfort vignette, walk toward body/gun | on / body | live sim (vignette seen while walking) |
@@ -36,7 +37,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
 | Physical crouch | off | live sim: pulses both ways, view lower |
 | 3D from depth (depth buffer) | off | live sim: depth found, parallax direction right |
 | BF4 split stereo (developer) | unsupported (retired) | live sim: crashes BF4's one-view world renderer |
-| Hands / IK, gun at the hand | not built | needs live RE |
+| Arms | BF4's own | its first-person arms move with the gun; no arm IK to the controllers |
 
 ## Works on the real game (actual-game checks)
 
@@ -59,7 +60,15 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   later: `viewdump <name>` (the next submitted view block, 0x1020 bytes as the game
   submitted it, to `<research>/<name>.bin`; `build/scratch/pytools/viewblock.py` lists its
   transforms, FOVs and differences between dumps) and `aimtrace <name>` (the controller
-  aim's recent updates as CSV; Controller aiming).
+  aim's recent updates as CSV; Controller aiming). Added 2026-10-20 (observe only: hooked calls
+  proceed unchanged): a shader census from swapchain adoption (D3DReflect on each
+  CreateVertexShader; `shadernames` writes every constant buffer, variable and resource name
+  with counts and each layout, `shaderdump <word>` saves matching bytecode; BF4's shaders keep
+  their reflection: 4214 in the prologue, 1189 layouts), `drawprobe <name>` (one frame of draws:
+  shader layout, bound constant buffers read back, targets, camera position, bone palettes near
+  the camera, whole `viewConstants` on each camera change; shared context hooks
+  `Bf4ContextHooks`) and `fpview <0-3>` (the experiment that proved the gun route: the
+  first-person pass with the render's projection, then moved 10 cm down / right).
   Fixed 2026-10-19: a session used to replay every command already in `cmd.txt` at start
   (old menu clicks, keys, settings); one replayed click landed on the home screen's
   multiplayer quick-match tile ("Failed to join game session", nothing joined). The channel
@@ -164,8 +173,65 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
     0.000839 in ADS and 0.001400 after it, 0 guards, and the trace shows no overshoot past
     the target after any step. The 10 s pauses on these reloads had the game itself in the
     foreground (loading), not another window.
+  - 0.4.66-0.4.75-local (sessions 19-28, prologue/Baku): recoil (Controller aiming); no aim dot
+    by default; key 2 still nothing (no sidearm); then the first-person pass research and the
+    gun in the hand (that section). Navigation in these sessions used the research `click`
+    (the same pointer path) after the laser's offsets varied with the panel's placement.
 
-## Gun follows aim: the barrel on the bullets' line (2026-10-19, built; live sim)
+## Gun in the hand (2026-10-20, built; live sim; the default)
+
+- Finding (live, sessions 20-23; research `shadernames`, `drawprobe`): BF4 draws its
+  first-person meshes (arms, weapon, their effects) in a pass of their own inside the G-buffer
+  pass, with their own `viewConstants` (every shader binds them at b2; names from the shaders'
+  reflection: `viewMatrix`, `projMatrix`, `viewProjMatrix`, `crViewProjMatrix`,
+  `projectionKxKyKzKw`, `cameraPos`). That view has the game camera's rotation (not the
+  head-tracked render's), a camera position in a first-person space near its origin, and a
+  projection at the game's own FOV (cot 2.414: 45 deg at hip; cot 5.14 aiming down sights),
+  uploaded through a 1 MB ring buffer (map no-overwrite, bound with an offset). The meshes are
+  posed in that camera's space, so the gun is fixed on screen and drawn for 45 deg however wide
+  the render is; that is why it sat in front of the face, oversized, whatever the hand did.
+- Route (`Bf4ContextHooks` + `Bf4FirstPersonView`, GPU side, nothing in BF4's memory written):
+  when BF4 binds b2 (vertex and pixel stage) with a block that is a rigid perspective view not
+  at the render's scale whose rotation is exactly (or, with recoil and camera shake, within
+  ~4.5 deg of) a game camera rotation the view override recorded for a recent submit, the bind
+  proceeds with a constant buffer of ours: the render's projection (true size) and the view
+  composed with M = hand x grip-at-rest^-1, with viewProj, the camera-relative viewProj, the
+  projection terms and the camera position kept consistent. The whole first-person rig (gun,
+  arms, their first-person effects) then sits where the right controller is: grip position,
+  aim orientation, so the barrel points where motion aim sends the bullets. The hand is taken
+  relative to the head of the same submit (`CameraRequest.handInHead`, recorded with that
+  submit's rotations, so a frame never gets another frame's hand).
+- Grip at rest (`GunGripAtRest`, live): the rifle's root bone sits at (0.066, -0.022, -0.254)
+  in BF4's first-person camera space, bore along (-0.029, 0.019, -0.999); the hand holds the
+  pistol grip ~8 cm below and ~6.5 cm behind the root.
+- Aiming down sights: BF4 animates the gun ~10 cm toward the eye line; the receiver (the
+  largest rigid mesh of the pass, read from its b0 `worldMatrix`) is tracked each pass, its hip
+  pose held while the game's FOV is zoomed, and the rig moved back by the difference (live:
+  9.5 cm, the gun stays in the hand). Hip bob, sway and recoil stay visible.
+- With the gun in the hand the render is not turned (full sharpness, no reach limit: the aim
+  follows the hand anywhere) and +0x00 keeps the game's value. Mod menu "Gun follows aim: Off /
+  On / Wide reach / In the hand" (default In the hand). Log: `gun in the hand: on/off`,
+  `first_person_view ... hand=exact/near/missing by_game= passes= weapon=(...) zoom_held= shift=`
+  every 600 frames (`missing` also counts perspective spot-light shadow views, left alone).
+- Live (simulated headset, sessions 24-28): every first-person bind of the pass matched and
+  replaced (diff 0.0000 by the game rotation; the render rotation never matches); hand moved
+  left/up and turned 25 deg: the rig followed; hip and ADS frames show the gun at the hand;
+  full-auto bursts: three eye pairs mid-burst with the gun at the hand (before the shake
+  tolerance, frames drawn while firing showed BF4's own gun).
+- Gaps: the muzzle flash, smoke and tracers BF4 spawns as world particles at its own muzzle
+  (in front of the eye along the aim), not at the moved gun (small with the gun raised to the
+  eye, ~30 cm at a low hip); BF4's crosshair stays at the head's centre (its visibility lives in
+  shared HUD data, not a setting; hiding it needs its UI draw found); the grip at rest is the
+  prologue rifle's (other weapons may sit a few cm off in the hand); the left hand follows the
+  gun, not the left controller (no arm IK); the barrel is parallel to the bullets' line, offset
+  by the hand-eye distance; not seen in a headset.
+- Evidence: WARP checks in Bf4Emulated (the first-person block gets the render's projection
+  and a moved view, the world's passes through, pixel stage too, off passes everything through;
+  hand mode by the game rotation only; receiver tracking picks the largest rigid mesh; weapon
+  part test), emulated session (the request carries the hand relative to the head, no turn, no
+  reach limit, no dot), live as above.
+
+## Gun follows aim: the barrel on the bullets' line (2026-10-19, built; live sim; an option since 2026-10-20)
 
 - Problem (player, 2026-10-19): with controller aim the bullets go where the controller
   points, but BF4's first-person gun stayed in front of the face. Live experiments on the
@@ -498,6 +564,10 @@ the theater screen. Pieces (all on the analysed build only):
   tests (death camera with yaw swing; 3x sensitivity with a FOV change at delays 1 and 2)
   and live. A sensitivity change without a FOV change (a settings menu) is now relearned
   by windows, at most 2.5x per window, instead of by the guard.
+- Recoil (live, session 19, 0.4.66-local): a full 20-round magazine on full auto with the hand
+  held still: BF4 kicked the view up 68 times (mean 0.0022 rad, max 0.0057) and aiming pulled
+  each back; the aim stayed within 0.011 rad of the hand (mean 0.0023), gains unchanged, no
+  guard, mute or probe. Unit test with two frames of delay: full auto and a 3 deg sniper kick.
 - Aim trace (developer research `aimtrace <name>`): the last 4096 aim updates (~35-49 s)
   as CSV (`tick_ms,sample,game_yaw,game_pitch,target_yaw,target_pitch,mouse_x,mouse_y,
   gain_x,gain_y,guards,mutes,foreign,flips,engaged`) in `<research>/<name>.csv`; dump it
@@ -536,7 +606,9 @@ the theater screen. Pieces (all on the analysed build only):
   game: vehicles, recoil interplay.
 - The gun is still the game's first-person model at the game camera (it points where the
   controller points); hands/IK are separate work.
-- Aim dot (mod menu "Aim dot", default on): BF4 draws its crosshair at the centre of the
+- Aim dot (mod menu "Aim dot", default off since 2026-10-20: the player wants no crosshair,
+  the barrel shows the aim; shown anyway with "Gun follows aim: Off", where nothing else
+  would): BF4 draws its crosshair at the centre of the
   frame, which is now where the head looks, not where the gun aims. While controller aim is
   engaged the eye resampler draws a green ring and dot where the game's aim (its own camera,
   read before the override) crosses the rendered head view (`AimInView`, `ReticleAt`;
@@ -777,6 +849,12 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
   dead "Screen distance" entry is gone (the host has no way to receive it yet). Unit
   test: every item on the panel, none overlapping; a GDI render of the developer menu was
   checked by eye.
+- Build.ps1 after the gun in the hand (sessions 19-28): x64 284/284, x86 283/283;
+  Bf4CoreTests 93 cases, 3480 checks (new: recoil at two frames of delay; research verbs
+  `shadernames`/`shaderdump`/`drawprobe`/`fpview`; the "In the hand" request carries the hand
+  relative to the head, no turn, no reach limit; no aim dot by default); Bf4Emulated WARP checks:
+  shader census, draw probe, first-person view (projection, moved view, pass-through, pixel
+  stage, hand by game rotation, receiver tracking).
 - Build.ps1 after the FOV-armed guard and the aim trace (sessions 16-18): x64 284/284,
   x86 283/283; Bf4CoreTests 92 cases, 3439 checks (new: death camera with yaw swing,
   replay of the live death trace, inverted look by probing, axis seeding, wide reach,
@@ -794,8 +872,8 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
   launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
   `-World -FrameChannels 2` 5/5 (76-237 pairs, machine-dependent); `-World` with one
   channel 4/4 (47 pairs).
-- Installed locally: runtime/bf4 0.4.65-local (the source at this commit; rollback
-  0.4.64-local); launcher settings
+- Installed locally: runtime/bf4 0.4.76-local (the source at this commit, gun in the hand by
+  default; rollback 0.4.75-local); launcher settings
   restored to the player's after the developer sessions. Developer sessions still run the
   read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the
@@ -823,20 +901,13 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
   answer: comfort at ~45 pairs/s (and whether frame sync 1, ~52/s, still holds there),
   gun size and the head-locked gun, the HUD corners' readability, 3D from depth's feel,
   holster positions on a real body, the laser on "Resume".
-- Gun at the hand: the gun now points along the aim but sits where BF4 puts it relative to
-  the eye (not in the controller's hand), and the aim stops at the reach edge when the hand
-  points far from where the head looks (FOV budget). Leads (static, 2026-10-19): the offset from
-  the camera lives in weapon data assets (`WeaponOffsetData` / `WeaponAnimationSettingsData`
-  `WeaponOffsetX/Y/Z`, `FirstPersonCameraData` `Offset`/`WeaponBaseOffset`/
-  `WeaponLagRotationOffset`), shared with AI soldiers, so not to be written; the per-player
-  runtime side is the weapon lag (`ClientWeaponLagEntity`, `WeaponLagBinding`,
-  `WeaponLagSceneOp`) in the animation system. Live (read-only, 2026-10-19): the entity's
-  vtable is `+0x1E6F030` (type getter `+0xFFF750`, type object `+0x2C85030`, 0x68-byte
-  objects); the player's instance holds only pointers (data, owner, bindings; a second
-  interface vtable at `+0x30`), so the lag offset itself lives in the animation graph's
-  parameters behind them: the next RE step. Rendering from a camera
-  moved to the hand and reprojecting the world by depth was rejected (a 20-30 cm baseline
-  smears every near edge).
+- Gun in the hand (above): the remaining gaps are the world-particle muzzle effects at BF4's
+  own muzzle, BF4's crosshair at the head's centre, the grip at rest measured on one rifle,
+  and no arm IK. Static leads kept for that (2026-10-19/20): the weapon offset data
+  (`WeaponOffsetData`, `FirstPersonCameraData` `Offset`/`WeaponBaseOffset`) are shared assets,
+  not to be written; `WeaponLagBinding` outputs only pitch/yaw/roll results (the lag is a
+  rotation, no offset); skinning palettes reach the GPU as bone x inverse-bind matrices (b0
+  `boneVectors`, 60 bones of 3 rows), so joint positions need the bind poses.
 - Update rate: 52.9 pairs/s with three frame channels at frame sync 2 (the game allows ~59
   there: 2 Presents per pair). Frame sync 1 (label-checked clean at 118 fps) could double
   the game's limit, but BF4's main thread may run a frame ahead when GPU-bound, so 2 stays
@@ -852,7 +923,8 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
   virtual pad. Now the cursor holds its press position unless the laser moves more than
   6 % of the screen, and the pad's triggers are released while the laser points at the
   screen outside campaign play (unit-tested; live check pending; clicks are logged).
-- Holsters: key 2 (sidearm) not yet seen working live (the prologue has no sidearm).
+- Holsters: key 2 (sidearm) not yet seen working live (the prologue loadout has none: key 2
+  did nothing again in session 19; HUD slots 3, 4, T, V).
 - 10 s stalls (no Present), twice now in a running level (sessions 12 and 15), each
   starting as one of my test commands began after a pause. Session 16+ logs the foreground
   owner at stalls and at every change of the game window's focus, to tell a focus thief
@@ -865,9 +937,9 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
   image), so it does not explain the stall; the frame-producing thread has to be found
   among the others (one slept at `+0x21d86d`). Cause unknown; if it recurs, compare the
   watchdog stacks with a normal frame and with the overlays disabled.
-- The upward reach of the gun with Quest-like eyes is small (~5 deg with the head level,
-  ~10-15 deg sideways); a menu choice of a wider render budget (less sharp) is possible if
-  players want more. A lens shift (projection window) would have avoided the cost, but
+- The upward reach of the turned-render option ("Gun follows aim: On") with Quest-like eyes
+  is small (~5 deg with the head level, ~10-15 deg sideways; "Wide reach" ~10 deg); the default
+  gun in the hand has no reach limit. A lens shift (projection window) would have avoided the cost, but
   BF4 sets that window from its tiled-screenshot state every frame (BF4-CAMERA-RE.md).
 - The census holder chain matched nothing live (27 firing objects, 0 holders): redo the
   walk from the live firing vtable `+0x1D53F18`.
@@ -876,5 +948,6 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
   toggled an item. Not yet seen in a headset.
 - Corner HUD outside the eyes (frame shape, above): insets are a workaround; the real fix
   needs the UI pass rendered separately (native RE).
-- Gun at the hand / arm IK: needs the player's first-person binding and IK scene op
-  (BF4-HOLSTER-IK-RE.md), i.e. live RE first.
+- Arm IK (the left hand on the left controller): BF4's first-person arms now move with the gun
+  as one rig; IK to the controllers needs the arms' bind poses or BF4's own hand IK inputs
+  (BF4-HOLSTER-IK-RE.md).

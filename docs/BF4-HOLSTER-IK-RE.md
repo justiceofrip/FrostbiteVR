@@ -80,6 +80,42 @@ derived by the view update `+0xB8C910`, stored at `+0xB8C991`):
 Next: the animation side (`ClientWeaponLagEntity`'s pointers above, read-only), or a
 SIB/integer-access scan of `+0x258`.
 
+## The gun at the hand: solved on the GPU side (2026-10-20, live)
+
+- Weapon lag ends there: `WeaponLagBinding` has inputs `EntityPitch`/`EntityYaw` and outputs
+  `PitchResult`/`YawResult`/`RollResult` only (a rotation, no offset); the entity's update
+  (`+0x1008170`, slot 0 of its second vtable) writes a vec3 to one animation property.
+  `FirstPersonCameraData` (`Offset`, `WeaponBaseOffset`, `WeaponLagRotationOffset`) is the
+  soldier data's `FirstPersonCamera` field (+0x150), consumed by `ClientSoldierCameraComponent`:
+  shared data, not written.
+- The view struct's first-person scale: view update bit 4 (`+0xB8C910`) writes `+0x254` =
+  cot(fov/2), `+0x258` = tan(fov/2)/tan(default/2), `+0x25C` = its square; the update's other
+  bits build projection `+0x320` (transposed `+0x3A0`), `+0x260`/`+0x2A0`, `+0x420`/`+0x460` and
+  the product `+0x4A0`: no separate first-person projection in the view struct.
+- What the GPU gets (shader census and draw probe, prologue): every shader binds
+  `viewConstants` at b2 (368 bytes: time, screenSize, viewMatrix@48, projMatrix@112,
+  viewProjMatrix@176, crViewProjMatrix@240, projectionKxKyKzKw@304, cameraPos@320) and
+  `functionConstants` at b0 (rigid: `worldMatrix`; skinned: 60 bones of 3 float4 rows,
+  `boneVectors` 2880 bytes, sometimes after a `worldMatrix`). Matrices are row-major for column
+  vectors (translation in column 3), viewProj = proj x view, crViewProj = proj x the view's
+  rotation, cameraPos = -R^T t.
+- The first-person pass: ~35-40 draws inside the G-buffer pass (and a few later effect draws,
+  half resolution and HDR) bound to a `viewConstants` of their own: the game camera's rotation
+  (not the head-tracked render's; exact to 1e-4), a camera at about (0.3, 2.1, 0.95) in a
+  first-person space near its origin (not `+0x00` of the submitted block, which read (0.00,
+  1.56, 0.08)), and a projection at cot(gameFov/2) (2.414 = 45 deg at hip, 5.14 aiming down
+  sights) with BF4's infinite-far shape. Bones and rigid parts are in that space, so the rig is
+  posed in camera space. Uploaded through a 1 MB ring (map no-overwrite), bound with offsets.
+- Camera space of the rifle at hip: root bone (0.066, -0.022, -0.254), bore (-0.029, 0.019,
+  -0.999), magazine bone 9.5 cm below; rigid receiver mesh (6321 indices) at (0.070, -0.046,
+  -0.282); muzzle part at (0.053, -0.079, -0.850). Aiming down sights moves the receiver to
+  (-0.004, -0.029, -0.221). Skinned palettes are bone x inverse-bind matrices: their
+  translations are not joint positions (the arms' hands cannot be read from them directly).
+- Route taken (CURRENT-BF4.md, Gun in the hand): that pass's b2 bind gets a constant buffer
+  of ours with the render's projection and the view composed with a camera-space transform;
+  nothing in BF4's memory is written. Proven first with `fpview` (true size, then moved 10 cm),
+  then driven by the hand.
+
 ## Next steps
 
 1. Live: locate the player's 1P weapon binding and the IK scene op instance from the

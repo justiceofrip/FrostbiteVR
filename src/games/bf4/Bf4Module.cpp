@@ -27,6 +27,9 @@
 #include "Bf4Diagnostics.h"
 #include "Bf4WorldView.h"
 #include "Bf4DepthCapture.h"
+#include "Bf4DrawProbe.h"
+#include "Bf4FirstPersonView.h"
+#include "Bf4ShaderCensus.h"
 #include "fvr/graphics/GdiPanelRaster.h"
 #include "stereo/SideBySide.h"
 
@@ -171,6 +174,9 @@ public:
     EyeLoopOverride eyeLoop;
     // Depth stereo (opt-in): the frame's scene depth, found through the game's own depth clears.
     DepthCapture depthCapture;
+    FirstPersonView firstPersonView; // gun in the hand (Bf4FirstPersonView.h)
+    std::uint64_t presentCount = 0, gunInHandFrame = 0;
+    bool firstPersonOn = false, firstPersonInstallTried = false;
     bool depthInstallTried = false, depthSnapshotPending = false, depthSeen = false;
     bool eyeLoopRefused = false, stereoCrashGuard = false, stereoMarker = false;
     // Background search for the two-eye loop object (read-only): 0 idle, 1 running, 2 done.
@@ -830,9 +836,60 @@ public:
         gun.eye[1] = requests[0].eyeFov[1];
         gun.aspect = lastViewAspect;
         gun.budget = requests[0].gunFovBudget;
+        gun.handHeld = requests[0].gunInHand;
         viewOverride.SetGunAim(gun);
+        viewOverride.SetHand(requests[0].handInHead, requests[0].handValid);
         viewOverride.SetLocal(requests[0].local, /*keepGamePitch=*/false, requests[0].poseId, fov, requests[0].parentYaw);
+        gunInHandFrame = requests[0].gunInHand ? presentCount : 0;
         return true;
+    }
+
+    // Gun in the hand: the first-person pass gets the render's projection and is moved to the
+    // hand of its own frame (Bf4FirstPersonView.h). Called each Present; off a few frames after
+    // the world lane stops asking (the theater view shows BF4's own pass).
+    void FirstPersonTick() {
+        ++presentCount;
+        const bool wanted = gunInHandFrame && presentCount - gunInHandFrame <= 3 && viewOverride.Installed();
+        if (!wanted) {
+            if (firstPersonView.Installed() && firstPersonOn) {
+                firstPersonView.SetFrame({});
+                firstPersonOn = false;
+                log_.Write("gun in the hand: off (%s)", firstPersonView.Describe().c_str());
+            }
+            return;
+        }
+        if (!firstPersonView.Installed()) {
+            if (firstPersonInstallTried) return;
+            firstPersonInstallTried = true;
+            ID3D11Device* device = nullptr;
+            ID3D11DeviceContext* ctx = nullptr;
+            if (swapchain && SUCCEEDED(swapchain->GetDevice(__uuidof(ID3D11Device), reinterpret_cast<void**>(&device)))) {
+                device->GetImmediateContext(&ctx);
+                if (ctx) firstPersonView.Install(ctx);
+                if (ctx) ctx->Release();
+                device->Release();
+            }
+            log_.Write("gun in the hand: first-person pass hooks %s", firstPersonView.Installed() ? "installed" : "not installed");
+            if (!firstPersonView.Installed()) return;
+        }
+        const auto st = viewOverride.GetStats();
+        FirstPersonView::Frame frame;
+        frame.enabled = st.renderedFovY > 0.1f && st.gameFovY > 0.1f && lastViewAspect > 0.2f;
+        frame.gameFovY = st.gameFovY;
+        frame.renderKy = frame.enabled ? 1.0f / std::tan(st.renderedFovY * 0.5f) : 0.0f;
+        frame.renderKx = frame.enabled ? frame.renderKy / lastViewAspect : 0.0f;
+        frame.handMode = true;
+        const auto recent = viewOverride.RecentHands();
+        for (std::size_t i = 0; i < recent.size() && i < frame.hands.size(); ++i) {
+            std::memcpy(frame.hands[i].rotation, recent[i].rotation, sizeof(frame.hands[i].rotation));
+            std::memcpy(frame.hands[i].gameRotation, recent[i].gameRotation, sizeof(frame.hands[i].gameRotation));
+            frame.hands[i].hand = recent[i].hand;
+            frame.hands[i].valid = recent[i].valid;
+        }
+        firstPersonView.SetFrame(frame);
+        if (!firstPersonOn) log_.Write("gun in the hand: on");
+        if (presentCount % 600 == 0) log_.Write("%s", firstPersonView.Describe().c_str());
+        firstPersonOn = frame.enabled;
     }
 
     bool InstallViewOverride() {
@@ -897,6 +954,8 @@ public:
         pointer.Uninstall();
         padSink.Deactivate();
         engineStereo.Disable();
+        firstPersonView.SetFrame({}); // every bind passes through again (the hooks go with the rest)
+        gunInHandFrame = 0;
         if (eyeLoop.Installed()) log_.Write("eye loop override removed: %s", eyeLoop.Remove() ? "vtable restored" : "vtable not ours, left alone");
         RemoveViewOverride();
         log_.Write("detaching all hooks: %.*s", static_cast<int>(reason.size()), reason.data());
@@ -997,6 +1056,13 @@ struct Adapter {
     std::int32_t mouseProbeX = 0, mouseProbeY = 0;
     AimAngle mouseBefore{};
     std::uint16_t sendKeyScan = 0;
+    ShaderCensus shaderCensus; // developer research: vertex shader reflection names
+    DrawProbe drawProbe;       // developer research: one frame of draws (Bf4DrawProbe.h)
+    std::uint64_t drawProbeId = 0;
+    std::uint32_t drawProbeFrames = 0;
+    std::string drawProbeName;
+    FirstPersonView firstPersonView; // developer experiment `fpview <mode>` (Bf4FirstPersonView.h)
+    int firstPersonMode = 0;
 };
 
 Adapter* g_adapter = nullptr;
@@ -1030,6 +1096,15 @@ bool Adopt(Adapter& a, IDXGISwapChain* sc) {
     a.log.Write("adopted swapchain %ux%u fmt=%u windowed=%d", a.width, a.height,
                 static_cast<unsigned>(desc.BufferDesc.Format), static_cast<int>(desc.Windowed));
     a.core->OnSwapchainAdopted(true);
+    // Developer research: reflect every vertex shader created from now on (the level's are
+    // created when it loads). Observes CreateVertexShader only.
+    if (a.session.developerFeatures && !a.session.researchDumpDir.empty()) {
+        ID3D11Device* device = nullptr;
+        if (SUCCEEDED(sc->GetDevice(__uuidof(ID3D11Device), reinterpret_cast<void**>(&device))) && device) {
+            a.log.Write("shader census: %s", a.shaderCensus.Install(device) ? "installed" : "not installed");
+            device->Release();
+        }
+    }
     PublishStatus(a);
     return true;
 }
@@ -1074,6 +1149,7 @@ void OnPresent(Adapter& a, IDXGISwapChain* sc) {
     a.platform.TryBindShim();
     std::lock_guard<std::mutex> lock(a.coreMutex);
     a.core->OnFrame(f, in);
+    if (!a.core->Detached()) a.platform.FirstPersonTick();
     if (a.core->Detached()) {
         a.stopped = true;
         PublishStatus(a);
@@ -1667,6 +1743,20 @@ void ResearchAck(Adapter& a, std::uint64_t id, const char* result) {
 void ResearchTick(Adapter& a) {
     if (!a.session.developerFeatures || a.session.researchDumpDir.empty() || !a.platform.window) return;
     HWND hwnd = a.platform.window;
+    // 0. Experiment fpview: the first-person pass's view constants, set per frame.
+    if (a.firstPersonMode && a.firstPersonView.Installed()) {
+        const auto st = a.platform.viewOverride.GetStats();
+        FirstPersonView::Frame frame;
+        frame.enabled = st.renderedFovY > 0.1f && st.gameFovY > 0.1f && a.height;
+        frame.gameFovY = st.gameFovY;
+        frame.renderKy = frame.enabled ? 1.0f / std::tan(st.renderedFovY * 0.5f) : 0.0f;
+        frame.renderKx = a.height ? frame.renderKy * float(a.height) / float(a.width) : 0.0f;
+        Mat4 m = Identity4();
+        if (a.firstPersonMode == 2) m[7] = -0.10f; // 10 cm down (camera space: +y up)
+        if (a.firstPersonMode == 3) { m[3] = 0.15f; m[7] = -0.10f; m[11] = 0.10f; } // right, down, closer
+        frame.transform = m;
+        a.firstPersonView.SetFrame(frame);
+    }
     // 0. Follow-ups of depthprobe / mouse / sendkey (per frame).
     if (a.sendKeyFrames && --a.sendKeyFrames == 0) Win32Platform::SendKey(a.sendKeyScan, false);
     if (a.mouseProbeFrames && --a.mouseProbeFrames == 0) {
@@ -1683,6 +1773,25 @@ void ResearchTick(Adapter& a) {
         }
         a.log.Write("research %s", msg);
         ResearchAck(a, a.mouseProbeId, msg);
+    }
+    if (a.drawProbeFrames) { // research drawprobe: one whole frame between two Presents
+        if (a.drawProbe.OnPresent()) {
+            a.drawProbeFrames = 0;
+            const std::string report = a.drawProbe.TakeReport();
+            const std::string file = a.session.researchDumpDir + "\\" + a.drawProbeName + ".txt";
+            bool ok = false;
+            if (std::FILE* f = std::fopen(file.c_str(), "wb")) {
+                ok = std::fwrite(report.data(), 1, report.size(), f) == report.size();
+                std::fclose(f);
+            }
+            const std::string msg = "drawprobe " + a.drawProbeName + (ok ? ": written " : ": write failed ") +
+                                    report.substr(0, report.find('\n'));
+            a.log.Write("research %s", msg.c_str());
+            ResearchAck(a, a.drawProbeId, msg.c_str());
+        } else if (--a.drawProbeFrames == 0) {
+            DrawProbe::state.store(static_cast<int>(DrawProbe::State::Idle));
+            ResearchAck(a, a.drawProbeId, "drawprobe: no frame recorded");
+        }
     }
     if (a.viewDumpFrames) { // research viewdump: the copy is taken by the next submit
         std::array<std::uint8_t, kViewBlockBytes> block{};
@@ -1781,6 +1890,67 @@ void ResearchTick(Adapter& a) {
             std::fclose(f);
         }
         ResearchAck(a, c.id, (std::string("aimtrace ") + c.arg + (ok ? ": written" : ": write failed")).c_str());
+        break;
+    }
+    case ResearchCommand::Kind::ShaderNames: {
+        const std::string report = a.shaderCensus.Report();
+        const std::string file = a.session.researchDumpDir + "\\shader-names.txt";
+        bool ok = false;
+        if (std::FILE* f = std::fopen(file.c_str(), "wb")) {
+            ok = std::fwrite(report.data(), 1, report.size(), f) == report.size();
+            std::fclose(f);
+        }
+        ResearchAck(a, c.id, (a.shaderCensus.Describe() + (ok ? " written" : " write failed")).c_str());
+        break;
+    }
+    case ResearchCommand::Kind::ShaderDump: {
+        const std::string dir = a.session.researchDumpDir + "\\shaders";
+        CreateDirectoryA(dir.c_str(), nullptr);
+        const int n = a.shaderCensus.Dump(dir, c.arg, 64);
+        ResearchAck(a, c.id, ("shaderdump " + c.arg + ": " + std::to_string(n) + " written").c_str());
+        break;
+    }
+    case ResearchCommand::Kind::FirstPersonView: {
+        bool ok = a.firstPersonView.Installed();
+        ID3D11Device* device = nullptr;
+        if (!ok && c.x && a.platform.swapchain &&
+            SUCCEEDED(a.platform.swapchain->GetDevice(__uuidof(ID3D11Device), reinterpret_cast<void**>(&device)))) {
+            ID3D11DeviceContext* ctx = nullptr;
+            device->GetImmediateContext(&ctx);
+            if (ctx) {
+                ok = a.firstPersonView.Install(ctx);
+                ctx->Release();
+            }
+            device->Release();
+        }
+        a.firstPersonMode = ok ? c.x : 0;
+        if (!a.firstPersonMode) a.firstPersonView.SetFrame({}); // off: every bind passes through
+        const std::string msg = "fpview " + std::to_string(a.firstPersonMode) + " " + a.firstPersonView.Describe();
+        a.log.Write("research %s", msg.c_str());
+        ResearchAck(a, c.id, msg.c_str());
+        break;
+    }
+    case ResearchCommand::Kind::DrawProbe: {
+        bool ok = a.drawProbe.Installed();
+        ID3D11Device* device = nullptr;
+        if (!ok && a.platform.swapchain &&
+            SUCCEEDED(a.platform.swapchain->GetDevice(__uuidof(ID3D11Device), reinterpret_cast<void**>(&device)))) {
+            ID3D11DeviceContext* ctx = nullptr;
+            device->GetImmediateContext(&ctx);
+            if (ctx) {
+                ok = a.drawProbe.Install(ctx, a.shaderCensus.Installed() ? &a.shaderCensus : nullptr);
+                ctx->Release();
+            }
+            device->Release();
+        }
+        if (ok) {
+            a.drawProbe.Start();
+            a.drawProbeFrames = 10;
+            a.drawProbeId = c.id;
+            a.drawProbeName = c.arg;
+        } else {
+            ResearchAck(a, c.id, "drawprobe: hooks not installed");
+        }
         break;
     }
     case ResearchCommand::Kind::ViewDump: {

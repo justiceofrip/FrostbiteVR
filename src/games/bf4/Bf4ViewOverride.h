@@ -110,6 +110,7 @@ public:
         math::FovTangents eye[2]{{-1, 1, 1, -1}, {-1, 1, 1, -1}};
         float aspect = 0; // the engine's view aspect (0: the block's own)
         float budget = kGunAimFovBudget; // widest render the turn may need (radians)
+        bool handHeld = false; // gun in the hand: +0x00 (weapon lag) keeps the game's value too
     };
 
     ViewOverride() = default;
@@ -140,6 +141,20 @@ public:
     void SetCopyMask(std::uint32_t mask) { copyMask_.store(mask & 3u); }
     void SetGunAim(const GunAimSettings& settings);
     std::uint32_t CopyMask() const { return copyMask_.load(); }
+    // Gun in the hand (Bf4FirstPersonView.h): the right hand relative to the head of the pose
+    // set with the same SetLocal (OpenXR convention, which BF4's view space shares). Each
+    // applied submit records it with the rotation the frame is rendered with, so the
+    // first-person pass of that frame finds the hand of exactly its pose.
+    struct HandRecord {
+        float rotation[9]{}; // the render camera's axes as the view's rows: right, up, back
+        float gameRotation[9]{}; // the game's own camera (before the override), the same way
+        math::Pose hand{};
+        bool valid = false;
+        std::uint64_t poseId = 0;
+    };
+    static constexpr std::size_t kHandRecords = 6;
+    void SetHand(const math::Pose& handInHead, bool valid);
+    std::array<HandRecord, kHandRecords> RecentHands() const;
     // Developer research (read-only): the next submit copies block 0 as the game submitted it
     // (before the override writes anything); TakeBlockDump hands the copy over once.
     void RequestBlockDump();
@@ -164,6 +179,10 @@ private:
     std::uint64_t poseId_ = 0;
     float fovY_ = 0;
     float parentYaw_ = std::numeric_limits<float>::quiet_NaN();
+    math::Pose hand_{};
+    bool handValid_ = false;
+    std::array<HandRecord, kHandRecords> hands_{};
+    std::size_t handNext_ = 0;
     bool dumpRequested_ = false, dumpReady_ = false; // RequestBlockDump
     std::uint32_t dumpViewCount_ = 0;
     std::array<std::uint8_t, kViewBlockBytes> dump_{};
