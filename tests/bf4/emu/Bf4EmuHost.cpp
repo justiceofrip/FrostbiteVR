@@ -83,6 +83,7 @@ bool CheckShaderCensus(ID3D11Device* device, const char*& why);        // Shader
 bool CheckDrawProbe(ID3D11Device* device, const char*& why);           // ShaderCensusCheck.cpp
 bool CheckFirstPersonView(ID3D11Device* device, const char*& why);     // ShaderCensusCheck.cpp
 bool CheckHudSplit(ID3D11Device* device, const char*& why);           // ShaderCensusCheck.cpp
+bool CheckDirectInputFilter(const char*& why);                         // DirectInputFilterCheck.cpp
 namespace {
 void Check(bool ok, const char* what) {
     std::printf("%s %s\n", ok ? "PASS" : "FAIL", what);
@@ -651,6 +652,12 @@ int wmain() {
         const bool ok = CheckHudSplit(dev, why);
         if (!ok) std::printf("hud split check: %s\n", why);
         Check(ok, "HUD split copies the scene before the first HUD draw and puts back the centre box only");
+    }
+    {
+        const char* why = "";
+        const bool ok = CheckDirectInputFilter(why);
+        if (!ok) std::printf("directinput filter check: %s\n", why);
+        Check(ok, "DirectInput game-controller enumerations answered empty (no WMI scan); other classes passed on");
     }
 
     // 6. Multiplayer evidence: a PunkBuster client module appears.

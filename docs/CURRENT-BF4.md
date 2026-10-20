@@ -958,9 +958,20 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
   (+0x946830) runs the well-known `IsXInputDevice` WMI scan: `CreateInstanceEnum
   ("Win32_PNPEntity")` (+0x94A208, also through the Steam overlay) and `Next` with a 10,000 ms
   timeout, blocked in RPC to the WMI service. So BF4 itself stalls whenever it re-enumerates its
-  DirectInput controllers, once per attached controller; not the VR code. Developer sessions now
-  log every WM_DEVICECHANGE at the game window (`device change: event 0x...`) to tie stalls to
-  their trigger. A mitigation (answering BF4's WMI scan from a cache) is possible but not built.
+  DirectInput controllers, once per attached controller; not the VR code. A full
+  `Win32_PnPEntity` scan takes 5.5 s on this PC (309 devices, with Oculus, Virtual Desktop and
+  ViGEm virtual-pad buses). Developer sessions log every WM_DEVICECHANGE at the game window
+  (`device change: event 0x...`): session 32 showed a burst of ~20 (DBT_DEVNODES_CHANGED and a
+  device arrival) and BF4 froze 11 s right after it, the same WMI stack.
+  Fixed (`Bf4DirectInputFilter`, session 34): while the adapter runs, BF4's DirectInput
+  game-controller enumerations get no devices, so the scan never starts. The Steam overlay had
+  already swapped the IDirectInput8 class vtable's EnumDevices entry, so the filter sits in front
+  of that entry (calling what it held otherwise) and puts it back on detach only while it still
+  holds ours. Live: two enumerations after device bursts answered empty, no stall. BF4 reads pads
+  through XInput (the virtual pad, a real Xbox pad), unaffected; DirectInput-only devices (flight
+  sticks, wheels) are not offered to BF4 meanwhile. Log: `directinput_filter installed ...
+  game_controller_enumerations= answered_empty=`. WARP-free emulator check on this machine's
+  dinput8 (answered empty, keyboards passed on, off passes on, removal restores).
   Earlier notes:
 - 10 s stalls (no Present), twice now in a running level (sessions 12 and 15), each
   starting as one of my test commands began after a pause. Session 16+ logs the foreground

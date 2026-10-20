@@ -27,6 +27,7 @@
 #include "Bf4Diagnostics.h"
 #include "Bf4WorldView.h"
 #include "Bf4DepthCapture.h"
+#include "Bf4DirectInputFilter.h"
 #include "Bf4DrawProbe.h"
 #include "Bf4FirstPersonView.h"
 #include "Bf4HudSplit.h"
@@ -873,7 +874,10 @@ public:
         if (swapchain) swapchain->GetBuffer(0, __uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&back));
         hudSplit.OnPresent(back, lane, kCrosshairBox);
         if (back) back->Release();
-        if (presentCount % 600 == 0) log_.Write("%s", hudSplit.Describe().c_str());
+        if (presentCount % 600 == 0) {
+            log_.Write("%s", hudSplit.Describe().c_str());
+            log_.Write("%s", DirectInputFilter::Describe().c_str());
+        }
     }
     static constexpr float kCrosshairBox = 0.20f; // of the frame's height: the hip crosshair spans ~0.12, more when it spreads
 
@@ -986,6 +990,7 @@ public:
         pointer.Uninstall();
         padSink.Deactivate();
         engineStereo.Disable();
+        DirectInputFilter::Remove(); // BF4's controller enumerations reach DirectInput again
         firstPersonView.SetFrame({}); // every bind passes through again (the hooks go with the rest)
         gunInHandFrame = 0;
         laneFrame = 0;
@@ -2242,6 +2247,8 @@ extern "C" __declspec(dllexport) int __cdecl FvrBf4_Start(const char* sessionTex
                  a->platform.gpu.spoofInstalled ? "installed (stereo probe)" : "off");
     if (!a->platform.pointer.Install()) a->log.Write("pointer hooks unavailable; game-menu pointer will not move the cursor");
     a->log.Write("virtual gamepad (XInput) hooks: %s", a->platform.padSink.Install() ? "installed" : "unavailable");
+    DirectInputFilter::Install(); // BF4's controller re-enumeration stalls on a WMI scan (Bf4DirectInputFilter.h)
+    a->log.Write("%s", DirectInputFilter::Describe().c_str());
     const bool hooked = HookSwapchainVtable(a->log);
     if (!hooked) a->core->OnSwapchainAdopted(false);
     PublishStatus(*a);

@@ -14,3 +14,8 @@
   option. Aiming down sights keeps the gun in the hand by holding the receiver's hip pose
   while the game's FOV is zoomed. Known gaps: world-particle muzzle effects at BF4's own muzzle,
   BF4's crosshair at the head's centre, one rifle's grip calibration, no arm IK.
+- BF4's in-level freezes (4-11 s) come from its own DirectInput controller re-enumeration on
+  device changes: per attached controller it runs a WMI scan of every PnP device on its main
+  thread (5.5 s here). While the adapter runs, game-controller enumerations are answered with
+  no devices (in front of the Steam overlay's vtable entry, restored exactly): BF4 reads pads
+  through XInput, so only DirectInput-only devices are given up during VR play.
