@@ -18,13 +18,13 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   three sessions (09:16-10:19; rotation was inverted and the gun oversized, both fixed in
   0.4.16); everything built since 0.4.17 is unseen in a headset.
 
-## At a glance (installed: 0.4.54-local)
+## At a glance (installed: 0.4.55-local)
 
 | Feature | State | Evidence |
 | --- | --- | --- |
 | Theater screen + laser menus | on | headset; live sim: laser Resume and mod menu clicks |
 | Head-tracked campaign view (6DoF head) | on | headset (earlier build); live sim: direction, labels 100 % |
-| Two frame channels + next pose in the capturing frame | on | live sim: 44.8 pairs/s at 118.6 game fps, 0 failures |
+| Three frame channels + next pose in the capturing frame | on | live sim: 52.9 pairs/s at 117.7 game fps (2: 44.8), labels 525/525 |
 | Controller aim (mouse look), aim dot, two-handed aim, snap turn | on | live sim: gain learned = measured, 20 deg -> 19.6 deg |
 | Gun follows aim (barrel on the bullets' line) | on | live sim: gun/laser on the aim, labels 335/335 |
 | Comfort vignette, walk toward body/gun | on / body | live sim (vignette seen while walking) |
@@ -208,7 +208,23 @@ the theater screen. Pieces (all on the analysed build only):
   pause menu are drawn into the wide frame (pause menu: use the pad, or switch to Screen);
   first-person weapon not yet re-projected.
 
-## Two frame channels: higher head-tracked update rate (2026-10-19, built; emulated only)
+## Frame channels: higher head-tracked update rate (2026-10-19, built; live sim)
+
+- Three channels (default since 0.4.55-local, launcher `--frame-channels 3`): the composite
+  provider now takes 2-4 channels (one begin per XR frame; a channel begins once the
+  youngest outstanding request is 0.7/(channels-1) of a typical completion old; pairs that
+  complete together go out oldest first, the rest held, none dropped); the host writes
+  `xr-channel-3.txt` too and the adapter serves three bridges (leases taken together are
+  queued oldest first). Live on the simulated headset (prologue, frame sync 2): 52.9 pairs/s
+  at 117.7 game fps vs 44.8 with two; 6,227 new pairs against 4,674 re-shown frames (two
+  channels: about one to one); mean request latency 33-41 ms vs 27 ms (requests now wait
+  behind others; the compositor reprojects rotation either way); timeouts 0.4 % (0.24 %);
+  pose-label check 525/525 with head flips of 60 degrees and the gun following the aim.
+  Emulated (`Run-Bf4TheaterXr.ps1 -World -FrameChannels 3`): 396 pairs through the real host,
+  every channel delivering, 0 rejected. Unit test: three channels begin one per frame and
+  three pairs completing together come out oldest first over three frames.
+
+### Two channels (the first step)
 
 - One frame channel holds one request: after each pair the host had to see it, give
   feedback and ask again before the game could take the next head pose (a request round
@@ -622,7 +638,7 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
   launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
   `-World -FrameChannels 2` 5/5 (76-237 pairs, machine-dependent); `-World` with one
   channel 4/4 (47 pairs).
-- Installed locally: runtime/bf4 0.4.54-local (research replay fix; rollback 0.4.53-local);
+- Installed locally: runtime/bf4 0.4.55-local (three frame channels; rollback 0.4.54-local);
   launcher settings
   restored to the player's after the developer sessions. Developer sessions still run the
   read-only probes and the firing census.
@@ -646,7 +662,7 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
 
 ## Open / blocked
 
-- Headset check of 0.4.54 (BF4-FIRST-SESSION.md). The simulated headset settled the game
+- Headset check of 0.4.55 (BF4-FIRST-SESSION.md). The simulated headset settled the game
   side (direction, labels, rate, aim, gestures, depth target); what only a headset can
   answer: comfort at ~45 pairs/s (and whether frame sync 1, ~52/s, still holds there),
   gun size and the head-locked gun, the HUD corners' readability, 3D from depth's feel,
@@ -661,11 +677,10 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
   `WeaponLagSceneOp`) in the animation system, which needs live RE. Rendering from a camera
   moved to the hand and reprojecting the world by depth was rejected (a 20-30 cm baseline
   smears every near edge).
-- Update rate: ~45 pairs/s at frame sync 2; the game allows ~59 there (2 Presents per
-  pair). A third frame channel would close most of the gap (host + adapter + composite
-  provider); frame sync 1 (label-checked clean at 118 fps) could double the game's limit
-  but BF4's main thread may run a frame ahead when GPU-bound, so 2 stays the default until
-  a headset session shows otherwise.
+- Update rate: 52.9 pairs/s with three frame channels at frame sync 2 (the game allows ~59
+  there: 2 Presents per pair). Frame sync 1 (label-checked clean at 118 fps) could double
+  the game's limit, but BF4's main thread may run a frame ahead when GPU-bound, so 2 stays
+  the default until a headset session shows otherwise.
 - 3D: BF4's split route is unsupported (above); 3D from depth is the stereo route. The
   NVAPI route (sequential eye passes, emulated) needs a Steam launch option to test live.
 - Laser click on "Resume": fixed on the game side. Live on the simulated headset

@@ -1,4 +1,4 @@
-# BF4 headset session: checklist (0.4.54-local)
+# BF4 headset session: checklist (0.4.55-local)
 
 What to try in the next headset session, and what each check tells us. About 15 minutes.
 The game side of everything below already ran live without a headset (simulated headset,
@@ -28,7 +28,7 @@ raise BF4's Video > Resolution Scale (150-200 %) before judging blur.
 ## In a mission (head-tracked view)
 
 1. Look around: the world should turn the same way as your head. Note how smooth it is:
-   about 45 new views a second at frame sync 2 (measured live; it was ~17-25 before).
+   about 53 new views a second at frame sync 2 (measured live; it was ~17-25 before).
    Then try menu > Frame sync (developer) > 1 frame (~52 a second; every view matched its
    head pose in the live check) and note whether the world swims or looks smoother.
 2. Aim with the right controller: the game's aim follows it, a **green ring** shows where

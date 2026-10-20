@@ -1,6 +1,7 @@
 #include "Bf4FrameworkGlue.h"
 #include "Bf4SessionInfo.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -77,17 +78,20 @@ private:
 // The frame lane also carries the controller samples (one producer per channel, so they
 // arrive through the bridge). The host writes its channel token to <log_dir>\xr-channel.txt;
 // the link connects whenever that file appears (the host may start after the game). A host
-// started with --frame-channels 2 also writes xr-channel-2.txt first: a second bridge then
-// takes the next request while the current one renders (FIFO, oldest pose first).
+// started with --frame-channels N (2 or 3) also writes xr-channel-2.txt (and -3) first: the
+// extra bridges take the next requests while the current one renders (FIFO, oldest pose
+// first).
 class TheaterLink {
 public:
     explicit TheaterLink(std::string tokenFile) : tokenFile_(std::move(tokenFile)) {
-        // The host's second frame channel (--frame-channels 2): <stem>-2<ext>.
+        // The host's extra frame channels (--frame-channels N): <stem>-k<ext>, k = 2..N.
         const auto dot = tokenFile_.find_last_of('.');
         const auto slash = tokenFile_.find_last_of("\\/");
-        secondTokenFile_ = dot != std::string::npos && (slash == std::string::npos || dot > slash)
-                               ? tokenFile_.substr(0, dot) + "-2" + tokenFile_.substr(dot)
-                               : tokenFile_ + "-2";
+        const bool hasExt = dot != std::string::npos && (slash == std::string::npos || dot > slash);
+        for (unsigned k = 1; k < kBridges; ++k) {
+            const std::string suffix = "-" + std::to_string(k + 1);
+            extraTokenFiles_[k - 1] = hasExt ? tokenFile_.substr(0, dot) + suffix + tokenFile_.substr(dot) : tokenFile_ + suffix;
+        }
     }
 
     void Publish(ID3D11Device* device, ID3D11DeviceContext* context, ID3D11Texture2D* backbuffer, const FrameMeta& meta) {
@@ -241,7 +245,7 @@ public:
 
 private:
     static constexpr std::uint64_t kLeaseOwner = 0xB4F0000000000001ULL;
-    static constexpr unsigned kBridges = 2;
+    static constexpr unsigned kBridges = 3;
 
     struct Lease {
         ipc::FrameLease lease{};
@@ -297,8 +301,9 @@ private:
             l.takenMs = GetTickCount64();
             taken[count++] = l;
         }
-        // Two taken at once: serve the host's older request first.
-        if (count == 2 && taken[1].lease.tracking.predictedNs < taken[0].lease.tracking.predictedNs) std::swap(taken[0], taken[1]);
+        // Several taken at once: serve the host's older requests first.
+        std::sort(taken, taken + count,
+                  [](const Lease& a, const Lease& b) { return a.lease.tracking.predictedNs < b.lease.tracking.predictedNs; });
         for (unsigned n = 0; n < count; ++n) {
             taken[n].poseId = ++nextPoseId_;
             held_[taken[n].bridge] = true;
@@ -458,7 +463,7 @@ private:
     // at the first Present after the host tokens are known (both hooks run on that thread).
     void EnsureBridges(ID3D11Device* device) {
         if (!device) return;
-        const std::string* tokens[kBridges] = {&token_, &token2_};
+        const std::string* tokens[kBridges] = {&token_, &extraTokens_[0], &extraTokens_[1]};
         for (unsigned i = 0; i < kBridges; ++i) {
             if (bridgeTokens_[i] == *tokens[i]) continue;
             CancelLeases(); // queue order spans both bridges
@@ -501,8 +506,8 @@ private:
         const std::wstring wide(token.begin(), token.end());
         if (!channel_.ConnectProducer(wide)) return false;
         token_ = token;
-        // Written by the host before the main token file, so it is there now if it exists.
-        token2_ = ReadToken(secondTokenFile_);
+        // Written by the host before the main token file, so they are there now if they exist.
+        for (unsigned k = 0; k + 1 < kBridges; ++k) extraTokens_[k] = ReadToken(extraTokenFiles_[k]);
         closed_ = false;
         world_ = false;
         ++epoch_; // a new host connection starts a new pointer epoch
@@ -510,7 +515,7 @@ private:
     }
 
     std::mutex mutex_;
-    std::string tokenFile_, secondTokenFile_;
+    std::string tokenFile_, extraTokenFiles_[kBridges - 1];
     ipc::MenuChannel channel_;
     graphics::D3D11MenuProducer producer_;
     std::unique_ptr<graphics::D3D11FrameBridge> bridges_[kBridges];
@@ -531,7 +536,7 @@ private:
     std::uint64_t sequence_ = 0, epoch_ = 0, lastToggle_ = 0, statesPublished_ = 0;
     ULONGLONG lastAttempt_ = 0;
     std::string token_;  // the host session we are attached to
-    std::string token2_; // the host's second frame channel, empty with one channel
+    std::string extraTokens_[kBridges - 1]; // the host's extra frame channels, empty when it has fewer
     bool closed_ = false;
 };
 

@@ -81,9 +81,9 @@ struct Host {
     std::array<bool,2> acquired{},waited{};
     ComPtr<ID3D11Device> device;
     ComPtr<ID3D11DeviceContext> context;
-    std::array<graphics::D3D11PairConsumer,2> consumers;unsigned pairStreams=1,nextConsumer=0;
+    std::array<graphics::D3D11PairConsumer,3> consumers;unsigned pairStreams=1,nextConsumer=0;
     graphics::D3D11SceneDepthConsumer sceneDepth;bool sceneDepthSeen=false;
-    std::array<graphics::TextureDescriptor,2> openedDescriptors{};
+    std::array<graphics::TextureDescriptor,3> openedDescriptors{};
     runtime::RetainedPresentation retained;
     std::array<ComPtr<ID3D11Texture2D>,2> scratch;
     graphics::D3D11StereoComfort stereoComfort;
@@ -495,7 +495,7 @@ HostReport RunOpenXrHost(const HostOptions& options)noexcept {
     HostReport report;
     try {Require(options.probeOnly||options.seconds||bool(options.stopRequested),"Continuous session requires a stop source");Host host(report);
         struct ReleaseInput {Host& host;IFrameProvider* provider;~ReleaseInput(){if(provider){interaction::InputFrame f{};f.generation=++host.inputGeneration;f.spaceGeneration=host.spaceGeneration;f.predictedNs=host.frameTime>0?host.frameTime:1;provider->UpdateInput(f);provider->Suspend();}}} release{host,options.provider};
-        host.pairStreams=options.pairStreams==2?2u:1u;host.Initialize(options);if(!options.probeOnly)host.Run(options);report.okay=true;}
+        host.pairStreams=options.pairStreams>=3?3u:options.pairStreams==2?2u:1u;host.Initialize(options);if(!options.probeOnly)host.Run(options);report.okay=true;}
     catch(const std::exception& error){report.error=error.what();}
     catch(...){report.error="Unknown OpenXR host failure";}
     return report;

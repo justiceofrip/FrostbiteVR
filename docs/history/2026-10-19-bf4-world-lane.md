@@ -62,3 +62,6 @@ Decisions worth keeping:
   so the frame is rendered with the camera turned to the game's aim at the head's position
   and each eye ray is rotated back to the head (exact for a rotation). The turn is latched
   per pose and limited by a FOV budget (lens-ellipse coverage).
+- Three frame channels by default: +18 % eye pairs at frame sync 2 (44.8 -> 52.9/s, close
+  to the game's ~59 limit there) for ~6-14 ms more request latency; fresher pairs were
+  judged worth more than the latency the compositor's reprojection hides.

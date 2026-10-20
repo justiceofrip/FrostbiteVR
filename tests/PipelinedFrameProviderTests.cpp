@@ -2,7 +2,7 @@
 #include "fvr/ipc/PipelinedFrameProvider.h"
 #include <Windows.h>
 using namespace fvr;
-// Two host frame channels behind one provider (BF4 --frame-channels 2), each answered by its
+// Two (and three) host frame channels behind one provider (BF4 --frame-channels), each answered by its
 // own producer as the adapter's two bridges do.
 static void Ticket(const ipc::FrameRequest& request,std::uint8_t session,graphics::TextureDescriptor& d,graphics::PairTicket& t){
     d={};d.width=request.width;d.height=request.height;d.format=request.format;d.adapterLow=request.adapterLow;d.adapterHigh=request.adapterHigh;d.resourceEpoch=1;d.session[0]=session;
@@ -83,5 +83,38 @@ int main(){
     CHECK(pa.ReadInput(controls)==ipc::ChannelResult::Ok&&controls.hands[1].trigger==.7f);
     CHECK(pb.ReadInput(controls)!=ipc::ChannelResult::Ok);
     p.Suspend();pa.Close();pb.Close();a.Close();b.Close();
+
+    // Three channels (--frame-channels 3): one begins per host frame; three pairs completing
+    // together come out oldest first over three frames (two held, none dropped); a channel
+    // whose pair is held does not begin until it is delivered and fed back.
+    {
+        ipc::RemoteFrameProvider x,y,z;CHECK(x.Create()&&y.Create()&&z.Create());
+        ipc::FrameChannel px,py,pz;CHECK(px.ConnectProducer(x.Token())&&py.ConnectProducer(y.Token())&&pz.ConnectProducer(z.Token()));
+        ipc::PipelinedFrameProvider p3({&x,&y,&z});
+        CHECK(p3.Channels()==3);
+        ipc::FrameRequest rx,ry,rz;
+        runtime::TrackingFrame t1=Next(now),t2=Next(t1),t3=Next(t2);
+        CHECK(!p3.TryGetCompletedPair(req,t1,rendered,d,ticket));CHECK(x.Pending()&&!y.Pending()&&!z.Pending());
+        CHECK(!p3.TryGetCompletedPair(req,t2,rendered,d,ticket));CHECK(y.Pending()&&!z.Pending());
+        CHECK(!p3.TryGetCompletedPair(req,t3,rendered,d,ticket));CHECK(z.Pending());
+        CHECK(px.TryTake(rx)==ipc::ChannelResult::Ok&&py.TryTake(ry)==ipc::ChannelResult::Ok&&pz.TryTake(rz)==ipc::ChannelResult::Ok);
+        Ticket(rz,3,source,ready);CHECK(pz.Publish(source,ready)==ipc::ChannelResult::Ok);
+        Ticket(ry,2,source,ready);CHECK(py.Publish(source,ready)==ipc::ChannelResult::Ok);
+        Ticket(rx,1,source,ready);CHECK(px.Publish(source,ready)==ipc::ChannelResult::Ok);
+        auto t=Next(t3);
+        CHECK(p3.TryGetCompletedPair(req,t,rendered,d,ticket)&&rendered.generation==t1.generation&&ticket.session[0]==1);
+        CHECK(p3.HeldPairs()==2&&p3.Delivered(0)==1);
+        p3.PairConsumed(ticket,true);CHECK(px.PollOutcome()==ipc::Outcome::Consumed);
+        t=Next(t);
+        CHECK(p3.TryGetCompletedPair(req,t,rendered,d,ticket)&&rendered.generation==t2.generation&&ticket.session[0]==2);
+        p3.PairConsumed(ticket,true);CHECK(py.PollOutcome()==ipc::Outcome::Consumed);
+        t=Next(t);
+        CHECK(p3.TryGetCompletedPair(req,t,rendered,d,ticket)&&rendered.generation==t3.generation&&ticket.session[0]==3);
+        CHECK(p3.Delivered(0)==1&&p3.Delivered(1)==1&&p3.Delivered(2)==1&&p3.HeldPairs()==2);
+        p3.PairConsumed(ticket,true);CHECK(pz.PollOutcome()==ipc::Outcome::Consumed);
+        // The first channel was free after its pair was fed back and began again meanwhile.
+        CHECK(x.Pending());
+        p3.Suspend();px.Close();py.Close();pz.Close();x.Close();y.Close();z.Close();
+    }
     return 0;
 }
