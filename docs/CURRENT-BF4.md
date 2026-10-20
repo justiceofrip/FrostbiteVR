@@ -240,6 +240,15 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   moves with it). Not yet looked at: tracers and smoke BF4 may spawn as world particles at its
   own muzzle. One frame mid-burst showed BF4's crosshair: fire spreads its arms out of the old
   centre box (fixed: the plus-shaped mask, No crosshair below).
+- Firing effects (live, session 63, the gun held low right, then low left): the muzzle flash and
+  the rifle's laser beam start at the hand-held barrel, and the laser dot sits on the bullet
+  impacts. Ejected casings do not follow the gun: they fly out right of centre from BF4's own
+  gun position whichever side the gun is held. They are world-space draws of their own, only
+  while firing: in the main G-buffer pass one 240-index instanced draw per casing (`dii n=240
+  i=1`, a vertex shader that binds only `viewConstants`, 9 inputs, 49 instructions) and the
+  same in the shadow cascades. Moving them with the hand would mean rebinding the main view
+  for exactly those draws (needs a stable identity for that shader, e.g. a bytecode hash);
+  not built. No tracers were seen in first person (prologue rifle).
 - Quick knife and grenade (live, session 62, 0.4.105-local, keys F and G): both play and the
   view stays intact; the grenade count went 3 -> 2 -> 1 across the in-hand and BF4's-place
   runs, and every first-person bind stayed matched. The whole rig stays on the controller
@@ -247,7 +256,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   than where BF4 puts them in front of the eye (the throw's arms spread across the lower view
   at the pull). Acceptable for short actions; anchoring the rig to the head during throws
   needs a reliable "not holding the gun" signal first.
-- Gaps: tracers and smoke (above, unverified); the grip at rest is the
+- Gaps: the ejected casings (above); the grip at rest is the
   prologue rifle's (other weapons may sit a few cm off in the hand); the left hand follows the
   gun, not the left controller (no arm IK); shots cross the barrel's line 20 m out rather than
   running along it (under a degree either way); not seen in a headset.
@@ -998,9 +1007,10 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
   answer: comfort at ~45 pairs/s (and whether frame sync 1, ~52/s, still holds there),
   gun size and the head-locked gun, the HUD corners' readability, 3D from depth's feel,
   holster positions on a real body, the laser on "Resume".
-- Gun in the hand (above): the remaining gaps are tracers and smoke (unverified), the grip at
-  rest measured on one rifle (the underbarrel launcher looked right in the hand, session 41),
-  and no arm IK. Reloads animate at the hand (session 41). Static leads kept for that (2026-10-19/20): the weapon offset data
+- Gun in the hand (above): the remaining gaps are the ejected casings (drawn at BF4's own gun
+  position, session 63), the grip at rest measured on one rifle (the underbarrel launcher looked
+  right in the hand, session 41; it is drawn as one skinned mesh, so receiver tracking has no
+  rigid part to follow while it is selected), and no arm IK. Reloads animate at the hand (session 41). Static leads kept for that (2026-10-19/20): the weapon offset data
   (`WeaponOffsetData`, `FirstPersonCameraData` `Offset`/`WeaponBaseOffset`) are shared assets,
   not to be written; `WeaponLagBinding` outputs only pitch/yaw/roll results (the lag is a
   rotation, no offset); skinning palettes reach the GPU as bone x inverse-bind matrices (b0
