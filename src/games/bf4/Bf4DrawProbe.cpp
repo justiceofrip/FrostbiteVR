@@ -282,8 +282,11 @@ void DrawProbe::OnDraw(ID3D11DeviceContext* context, const char* kind, UINT coun
     const float origin[3]{0, 0, 0};
     // functionConstants (b0): bone palette (3 float4 rows per bone, translation in .w) and/or
     // world matrix: how far from the camera (world space) or the origin (camera-relative).
-    if (cbs[0] && Field(text, "boneVectors", off, size) && size >= 48 &&
-        Bytes(context, cbs[0], first[0] * 16 + off, size, bytes) && bytes.size() >= 48) {
+    // Only the bound part of the palette is the draw's (BF4 binds fewer constants than the
+    // 60-bone declaration; what lies past them belongs to other draws).
+    const bool skinned = cbs[0] && Field(text, "boneVectors", off, size);
+    if (skinned && num[0] && num[0] * 16 > off) size = std::min<std::uint32_t>(size, num[0] * 16 - off) / 48 * 48;
+    if (skinned && size >= 48 && Bytes(context, cbs[0], first[0] * 16 + off, size, bytes) && bytes.size() >= 48) {
         const std::size_t bones = bytes.size() / 48;
         const float* f = reinterpret_cast<const float*>(bytes.data());
         float camMin = 1e30f, camMax = 0, orgMin = 1e30f, orgMax = 0;
@@ -308,6 +311,10 @@ void DrawProbe::OnDraw(ID3D11DeviceContext* context, const char* kind, UINT coun
             for (std::size_t b = 0; b < bones; ++b)
                 add(std::snprintf(tmp, sizeof(tmp), b ? " %.3f,%.3f,%.3f" : "%.3f,%.3f,%.3f", f[b * 12 + 3], f[b * 12 + 7],
                                   f[b * 12 + 11]));
+            line += "]";
+            // ...and the whole palette (3 rows of 4 per bone), for the arms' skeleton offline.
+            line += " palette=[";
+            for (std::size_t k = 0; k < bones * 12; ++k) add(std::snprintf(tmp, sizeof(tmp), k ? " %.6g" : "%.6g", f[k]));
             line += "]";
         }
     } else if (cbs[0] && Field(text, "worldMatrix", off, size) && size == 64 &&

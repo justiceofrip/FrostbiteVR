@@ -99,6 +99,8 @@ struct MotionAimInput {
     float turn = 0;         // right stick X, -1..1 (body turning)
     float dt = 0;           // seconds since the last update
     bool snapTurn = false;  // turn in fixed steps (comfort) instead of smoothly
+    float snapAngle = 0.5235988f; // radians per step (the player's choice; 30 degrees by default)
+    float turnRate = 2.6f;        // smooth turning, rad/s at full stick (~150 deg/s by default)
     // Two-handed aim: the left grip is held (and not carrying a magazine or grenade); the
     // grip positions in tracking space.
     bool twoHanded = false;
@@ -161,14 +163,14 @@ public:
         }
         if (in.snapTurn) {
             if (snapArmed_ && std::fabs(in.turn) >= kSnapPush) {
-                bodyYaw_ = WrapPi(bodyYaw_ + (in.turn > 0 ? kSnapAngle : -kSnapAngle));
+                bodyYaw_ = WrapPi(bodyYaw_ + (in.turn > 0 ? in.snapAngle : -in.snapAngle));
                 snapArmed_ = false;
                 ++snaps_;
             } else if (std::fabs(in.turn) < kSnapRearm) {
                 snapArmed_ = true;
             }
         } else {
-            bodyYaw_ = WrapPi(bodyYaw_ + in.turn * kTurnRate * in.dt);
+            bodyYaw_ = WrapPi(bodyYaw_ + in.turn * in.turnRate * in.dt);
             snapArmed_ = std::fabs(in.turn) < kSnapRearm;
         }
         out.engaged = true;

@@ -1400,6 +1400,15 @@ TEST_CASE(SnapTurningStepsTheBodyHeading) {
         out = aim.Update(in);
     }
     CHECK(Near(out.bodyYaw, MotionAim::kSnapAngle, 1e-5f) && aim.Snaps() == 1);
+    {   // the player's step: 90 degrees
+        MotionAim wide;
+        MotionAimInput w = in;
+        w.snapAngle = 1.5707963f;
+        w.turn = 0;
+        wide.Update(w);
+        w.turn = 1.0f;
+        CHECK(Near(wide.Update(w).bodyYaw, WrapPi(w.game.yaw + 1.5707963f), 1e-4f));
+    }
     in.turn = 0.5f; // eased off but not back under the re-arm point: still no step
     out = aim.Update(in);
     in.turn = 0.9f;

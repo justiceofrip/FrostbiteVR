@@ -18,7 +18,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   three sessions (09:16-10:19; rotation was inverted and the gun oversized, both fixed in
   0.4.16); everything built since 0.4.17 is unseen in a headset.
 
-## At a glance (installed: 0.4.101-local)
+## At a glance (installed: 0.4.103-local)
 
 | Feature | State | Evidence |
 | --- | --- | --- |
@@ -637,10 +637,11 @@ the theater screen. Pieces (all on the analysed build only):
   the game's aim (a view jump by the controller's offset) and reset the learned mouse gain;
   the emulated test had held a lease every frame. Regression test with a lease gap every
   third frame (fails without the hold).
-- Snap turning (mod menu, default on): the right stick turns the body heading in 30 degree
-  steps (one per push past 0.7, re-armed under 0.3); off: smooth ~150 deg/s. The game's aim
+- Turning (mod menu "Turning: Smooth / Snap 30 / Snap 45 / Snap 90", default Snap 30): the
+  right stick turns the body heading in steps (one per push past 0.7, re-armed under 0.3), or
+  smoothly at the "Smooth turn speed" (Slow 90, Normal ~150, Fast 240 deg/s). The game's aim
   follows through the mouse within a frame or two; the head view jumps with the heading.
-  Unit-tested; log `snaps=`.
+  Unit-tested (30 and 90 degree steps, smooth rate); log `snaps=`, `turning: ...`.
 - Mod menu: "Aim with: Right stick / Right controller" (default right controller).
   Status/log: `controller_aim=... gain=... mutes=... mouse_sends=...`.
 - Evidence: unit tests (convergence onto controller yaw/pitch, gain learning with signs,
@@ -959,9 +960,9 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
   launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
   `-World -FrameChannels 2` 5/5 (76-237 pairs, machine-dependent); `-World` with one
   channel 4/4 (47 pairs).
-- Installed locally: runtime/bf4 0.4.101-local (the source at this commit: gun in the hand by
+- Installed locally: runtime/bf4 0.4.103-local (the source at this commit: gun in the hand by
   default, no crosshair (centre mask), controller scan with its cache, 3D option; rollback
-  0.4.100-local); launcher settings
+  0.4.102-local); launcher settings
   restored to the player's after the developer sessions. Developer sessions still run the
   read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the
@@ -1098,4 +1099,13 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
   needs the UI pass rendered separately (native RE).
 - Arm IK (the left hand on the left controller): BF4's first-person arms now move with the gun
   as one rig; IK to the controllers needs the arms' bind poses or BF4's own hand IK inputs
-  (BF4-HOLSTER-IK-RE.md).
+  (BF4-HOLSTER-IK-RE.md). How it looks (live sim, session 56): the gun turned 40 deg left reads
+  as plausible arms from below; turned 60 deg right, the left (support) arm's sleeve swings across
+  the lower middle of the view. Leads (2026-10-20, developer): the draw probe now writes each
+  first-person skinned draw's bound palette (`palette=[...]`, 3 rows per bone; only the bound
+  constants: BF4 declares 60 bones and binds fewer data past them); the rig is several
+  meshes (prologue: L77 34695 and 6369 indices, drawn three times; L108 23178/2370; L98
+  22461/717/2370; L631/L738 7416/19431 in other passes), the largest with ~50 distinct bones of
+  60, many matrices shared between meshes. Joints can be solved from captures as the points two
+  bones map alike in every pose (scratch `fp_joints.py`); three captures pinned hinges only to
+  lines, so more varied poses (walking, sprinting, a whole reload) are needed. Not built.

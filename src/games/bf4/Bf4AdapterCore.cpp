@@ -124,9 +124,19 @@ void AdapterCore::ApplyMenuCommand(const ModMenuCommand& command) {
         menuState_.reloadMode = command.value == 1 ? interaction::ReloadMode::Manual : interaction::ReloadMode::ButtonPress;
         SetReloadMode(menuState_.reloadMode);
         break;
-    case ModMenuAction::SetSnapTurn:
+    case ModMenuAction::SetSnapTurn: { // Smooth, Snap 30, Snap 45, Snap 90
+        static constexpr int kDegrees[] = {30, 30, 45, 90};
         menuState_.snapTurn = command.value != 0;
-        platform_.Log(menuState_.snapTurn ? "turning: snap (30 degrees)" : "turning: smooth");
+        menuState_.snapDegrees = kDegrees[std::clamp(command.value, 0, 3)];
+        char line[48];
+        std::snprintf(line, sizeof(line), "turning: %s (%d degrees)", menuState_.snapTurn ? "snap" : "smooth", menuState_.snapDegrees);
+        platform_.Log(menuState_.snapTurn ? line : "turning: smooth");
+        break;
+    }
+    case ModMenuAction::SetTurnSpeed:
+        menuState_.turnSpeed = std::clamp(command.value, 0, 2);
+        platform_.Log(menuState_.turnSpeed == 0 ? "smooth turn speed: slow" : menuState_.turnSpeed == 2 ? "smooth turn speed: fast"
+                                                                                                        : "smooth turn speed: normal");
         break;
     case ModMenuAction::SetTheaterDistance: menuState_.theaterDistance = command.value; break;
     case ModMenuAction::Recenter:
@@ -474,6 +484,9 @@ void AdapterCore::UpdateMotionAim(const ControllerSnapshot& in, const PlatformFr
     m.gameFov = platform_.GameFovY();
     m.turn = std::fabs(hand.stickX) > 0.2f ? hand.stickX : 0.0f;
     m.snapTurn = menuState_.snapTurn;
+    m.snapAngle = static_cast<float>(menuState_.snapDegrees) * 0.017453293f;
+    static constexpr float kTurnRates[] = {1.5708f, MotionAim::kTurnRate, 4.1888f}; // 90, ~150, 240 deg/s
+    m.turnRate = kTurnRates[std::clamp(menuState_.turnSpeed, 0, 2)];
     // Two-handed aim: the left grip held in front of the gun, unless that grip carries
     // something (a magazine, a grenade) for the gestures.
     const auto& left = in.controls.hands[0];

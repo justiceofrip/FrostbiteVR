@@ -31,8 +31,11 @@ ui::ModMenuModel BuildModMenu(const game::CapabilityRegistry& caps, bool develop
     menu.Add({"reload_mode", "Reload", MenuItemKind::Choice, {"Button", "Manual (magazine)"},
               static_cast<int>(state.reloadMode), true, ""});
     // Shown but disabled until the XR host consumes them (never offer a dead switch).
-    menu.Add({"snap_turn", "Snap turning", MenuItemKind::Toggle, {}, state.snapTurn ? 1 : 0, true,
-              "Right stick: 30 degree steps."});
+    menu.Add({"snap_turn", "Turning", MenuItemKind::Choice, {"Smooth", "Snap 30", "Snap 45", "Snap 90"},
+              !state.snapTurn ? 0 : state.snapDegrees >= 90 ? 3 : state.snapDegrees >= 45 ? 2 : 1, true,
+              "Right stick turns your body."});
+    menu.Add({"turn_speed", "Smooth turn speed", MenuItemKind::Choice, {"Slow", "Normal", "Fast"},
+              std::clamp(state.turnSpeed, 0, 2), true, ""});
     menu.Add({"hud_insets", "HUD corners", MenuItemKind::Choice, {"Off", "On"}, state.hudInsets ? 1 : 0, true,
               "Ammo and minimap moved into view."});
     menu.Add({"depth_stereo", "3D", MenuItemKind::Choice, {"Off", "From depth", "Alternate eyes"},
@@ -98,6 +101,7 @@ void RefreshModMenu(ui::ModMenuModel& menu, const game::CapabilityRegistry& caps
 ModMenuCommand InterpretChange(const MenuItem& item) {
     if (item.id == "reload_mode") return {ModMenuAction::SetReloadMode, item.value};
     if (item.id == "snap_turn") return {ModMenuAction::SetSnapTurn, item.value};
+    if (item.id == "turn_speed") return {ModMenuAction::SetTurnSpeed, item.value};
     if (item.id == "theater_distance") return {ModMenuAction::SetTheaterDistance, item.value};
     if (item.id == "recenter") return {ModMenuAction::Recenter, 0};
     if (item.id == "mark_feedback") return {ModMenuAction::MarkFeedback, 0};

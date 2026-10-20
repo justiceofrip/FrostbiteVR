@@ -38,7 +38,7 @@ raise BF4's Video > Resolution Scale (150-200 %) before judging blur.
    gun sits right in the hand (BF4's grip at rest was measured on the prologue rifle) and
    whether shots land along the barrel. Grip with the left hand in front of the gun to aim with
    both hands (the barrel then follows the line between the hands). The right stick turns in
-   **30 degree steps** (menu: Snap turning off for smooth). The old modes stay in the menu:
+   **30 degree steps** (menu: Turning: Smooth / Snap 30 / 45 / 90; Smooth turn speed). The old modes stay in the menu:
    Gun > On the aim (the render turned along the aim) and Aim dot (a green ring).
 3. The ammo panel and minimap appear as small framed insets in your lower right and left
    (menu: HUD corners); BF4 draws them outside what the headset shows. Note whether they

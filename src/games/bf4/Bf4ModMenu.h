@@ -11,6 +11,8 @@ namespace fvr::bf4 {
 struct ModMenuState {
     interaction::ReloadMode reloadMode = interaction::ReloadMode::ButtonPress;
     bool snapTurn = true;
+    int snapDegrees = 30;     // snap turning's step: 30, 45 or 90 degrees
+    int turnSpeed = 1;        // smooth turning: 0 slow (90 deg/s), 1 normal (150), 2 fast (240)
     int theaterDistance = 1; // 0 near, 1 medium, 2 far
     bool headTracking = true; // campaign levels: head-tracked view instead of the screen
     int worldSettle = 2;      // developer: submits before a frame counts as head-tracked
@@ -33,7 +35,7 @@ struct ModMenuState {
 enum class ModMenuAction : std::uint8_t {
     None, SetReloadMode, SetSnapTurn, SetTheaterDistance, Recenter, MarkFeedback, GameMenu, SetHeadTracking, SetWorldSettle,
     SetWorldStereo, SetControllerAim, SetHolsters, SetAimDot, SetVignette, SetTwoHandedAim, SetWalkDirection,
-    SetPhysicalCrouch, SetDepthStereo, SetHudInsets, SetGunFollowsAim
+    SetPhysicalCrouch, SetDepthStereo, SetHudInsets, SetGunFollowsAim, SetTurnSpeed
 };
 
 struct ModMenuCommand {
