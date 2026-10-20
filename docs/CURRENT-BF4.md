@@ -452,7 +452,7 @@ the world's **draw** (render thread) runs once per eye.
   HUD); one level checked
   (prologue): another scene may use up a field not on the verified list (logged; the second eye
   could then miss something or fault); BF4's world markers (objectives) are drawn by its HUD at
-  the head's camera, so they sit at the HUD's 2 m, not at their own depth; only a checkpoint restart checked as a level change (a new mission
+  the head's camera, so they sit at the HUD's 2 m, not at their own depth; with "Gun: BF4's place" (not the default) BF4's first-person pass is not moved to the eyes (the gun at infinity); only a checkpoint restart checked as a level change (a new mission
   not yet); the second draw re-runs the whole world
   draw (shadows and other view-independent passes included), so the cost could come down.
 - Earlier tries, retired (kept as developer research `secondview 1-4`): the world render's build
