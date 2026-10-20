@@ -82,3 +82,8 @@ Decisions worth keeping:
   moving by itself (death camera, cutscene) and teaches nothing, one that holds still has
   inverted look. A window-only rule cannot tell the two apart (live: a death camera
   flipped the pitch sign and the guard then ran the yaw gain to its clamp).
+- The controller aim's overshoot guard is armed only for ~1.5 s after BF4's own FOV
+  changes (and while nothing is learned yet): BF4 changes its mouse sensitivity exactly
+  when its view zooms, while a death camera's sway passed every motion-based test (live,
+  sessions 16-17: guard firings grew the yaw gain about sixfold). Other sensitivity
+  changes are left to bounded window learning. Verified live in session 18.

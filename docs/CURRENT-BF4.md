@@ -18,14 +18,14 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   three sessions (09:16-10:19; rotation was inverted and the gun oversized, both fixed in
   0.4.16); everything built since 0.4.17 is unseen in a headset.
 
-## At a glance (installed: 0.4.60-local)
+## At a glance (installed: 0.4.65-local)
 
 | Feature | State | Evidence |
 | --- | --- | --- |
 | Theater screen + laser menus | on | headset; live sim: laser Resume and mod menu clicks |
 | Head-tracked campaign view (6DoF head) | on | headset (earlier build); live sim: direction, labels 100 % |
 | Three frame channels + next pose in the capturing frame | on | live sim: 52.9 pairs/s at 117.7 game fps (2: 44.8), labels 525/525 |
-| Controller aim (mouse look), aim dot, two-handed aim, snap turn | on | live sim: gain learned = measured, 20 deg -> 19.6 deg; ADS and firing |
+| Controller aim (mouse look), aim dot, two-handed aim, snap turn | on | live sim: gain learned = measured, 20 deg -> 19.6 deg; ADS and firing; gains kept through a death camera |
 | Gun follows aim (barrel on the bullets' line), reach limit | on | live sim: gun/laser on the aim, labels 335/335; past the reach gun and dot stop together |
 | BF4's pause/death/end menus in a level on the theater screen | on | live sim: pause -> screen -> laser RESUME -> head-tracked, twice; restart checkpoint |
 | Recenter: both stick clicks 1 s (or mod menu) | on | live sim: recentered twice, no stick click reached the game |
@@ -58,7 +58,8 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   press it) and `setting <id> <n>` (a mod menu item as if chosen in the headset). Added
   later: `viewdump <name>` (the next submitted view block, 0x1020 bytes as the game
   submitted it, to `<research>/<name>.bin`; `build/scratch/pytools/viewblock.py` lists its
-  transforms, FOVs and differences between dumps).
+  transforms, FOVs and differences between dumps) and `aimtrace <name>` (the controller
+  aim's recent updates as CSV; Controller aiming).
   Fixed 2026-10-19: a session used to replay every command already in `cmd.txt` at start
   (old menu clicks, keys, settings); one replayed click landed on the home screen's
   multiplayer quick-match tile ("Failed to join game session", nothing joined). The channel
@@ -152,6 +153,17 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
     (23:04:12-22, no Present, every thread idle-waiting; the window thread in its normal
     GetMessage) began as a command of mine started after a pause, like the first; the
     watchdog and Present now log who has the foreground when the game loses it or stalls.
+  - 0.4.63-0.4.65-local (sessions 16-18, Baku; the same grenade death each time): session
+    16 (probe build): the death camera also swings the yaw both ways for seconds, partly
+    the way steering pushes; overshoot guards fired between probes and grew the yaw gain
+    sixfold. Session 17 (with the anchor cap and `aimtrace`): three guard firings still
+    grew the yaw gain 5.8x; the trace showed every one passing the guard's tests, so the
+    guard is now armed only after the game's FOV changes (Controller aiming). Session 18
+    (0.4.65-local): through the death, the fade and the checkpoint reload the gains stayed
+    0.0014 / -0.0014 with 0 guards (`foreign_turns=2`); an ADS round trip learned
+    0.000839 in ADS and 0.001400 after it, 0 guards, and the trace shows no overshoot past
+    the target after any step. The 10 s pauses on these reloads had the game itself in the
+    foreground (loading), not another window.
 
 ## Gun follows aim: the barrel on the bullets' line (2026-10-19, built; live sim)
 
@@ -470,6 +482,30 @@ the theater screen. Pieces (all on the analysed build only):
   gain only when the game moved the way recent counts pushed it, by no more than they
   explain. Unit tests: death camera and respawn (gains stay within 2x, aiming converges
   after), inverted look found by probing; the 3x sensitivity tests at delays 1 and 2 pass.
+- Death camera, second round (live, sessions 16-17): the death camera also swings the yaw
+  both ways, sometimes the way steering pushes, so guard firings between probes still grew
+  the yaw gain (6x, then 5.8x with a cap). Now: (1) the overshoot guard is armed only for
+  ~1.5 s (180 game samples) after the game's own vertical FOV changes by more than 2 %
+  (BF4 changes its mouse sensitivity exactly when its view zooms: sights, scopes,
+  vehicles; `GameFovY` from the view override), or while nothing is learned yet; (2) a
+  guard never takes a gain past 4x the anchor, the gain learning last confirmed (set only
+  by a window that taught something, or by seeding an axis from the other, never by a
+  guard); (3) after a probe finds the game's own camera, ~2 s (240 samples) pass with
+  neither learning nor guards; (4) a window teaches with 200 counts, or with 40 counts and a
+  turn of 0.05 rad (an estimate that is too high sends few counts and could otherwise never
+  relearn). Session 18 verified it live (above). Not modelled in
+  `tools/models/aim_guard_model.py` (which covers the earlier rules); checked by the unit
+  tests (death camera with yaw swing; 3x sensitivity with a FOV change at delays 1 and 2)
+  and live. A sensitivity change without a FOV change (a settings menu) is now relearned
+  by windows, at most 2.5x per window, instead of by the guard.
+- Aim trace (developer research `aimtrace <name>`): the last 4096 aim updates (~35-49 s)
+  as CSV (`tick_ms,sample,game_yaw,game_pitch,target_yaw,target_pitch,mouse_x,mouse_y,
+  gain_x,gain_y,guards,mutes,foreign,flips,engaged`) in `<research>/<name>.csv`; dump it
+  within ~12 s of the event. Session 17's death trace is replayed by a unit test
+  (`tests/bf4/data/DeathCameraTrace.h`, 796 rows, generated by
+  `build/scratch/pytools/trace_to_header.py`). That replay checks the data path and the
+  current code on real camera motion; it is not a reproduction (the pre-fix code also
+  passes it, as its window alignment differs from the live run's).
 - An axis not learned yet starts from the other axis's learned gain (x1.2, the cautious
   side) instead of the first estimate: BF4 turns as far per count on both axes (0.00140 /
   -0.00140; ADS 0.00084 / -0.00084), and with the gun's reach keeping vertical moves small
@@ -741,6 +777,11 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
   dead "Screen distance" entry is gone (the host has no way to receive it yet). Unit
   test: every item on the panel, none overlapping; a GDI render of the developer menu was
   checked by eye.
+- Build.ps1 after the FOV-armed guard and the aim trace (sessions 16-18): x64 284/284,
+  x86 283/283; Bf4CoreTests 92 cases, 3439 checks (new: death camera with yaw swing,
+  replay of the live death trace, inverted look by probing, axis seeding, wide reach,
+  `viewdump`/`aimtrace` parsing). The emulated sensitivity test now also changes the fake
+  game's FOV with its sensitivity, as BF4 does.
 - Build.ps1 after the reach limit, game menus and recenter gesture: x64 284/284, x86
   283/283. Bf4CoreTests 88 cases (new: reach limit, stick chord, game menu in a level,
   both-sticks recenter, reach limit through the core; three aim-loop tests now switch
@@ -753,10 +794,8 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
   launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
   `-World -FrameChannels 2` 5/5 (76-237 pairs, machine-dependent); `-World` with one
   channel 4/4 (47 pairs).
-- Installed locally: runtime/bf4 0.4.60-local (the source at this commit: reach limit, game
-  menus, recenter gesture, HUD-corner fix, pitch gain seed; installed without a session;
-  rollback 0.4.59-local, which also carried the removed developer `viewshift` experiment);
-  launcher settings
+- Installed locally: runtime/bf4 0.4.65-local (the source at this commit; rollback
+  0.4.64-local); launcher settings
   restored to the player's after the developer sessions. Developer sessions still run the
   read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the
@@ -779,7 +818,7 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
 
 ## Open / blocked
 
-- Headset check of 0.4.60 (BF4-FIRST-SESSION.md). The simulated headset settled the game
+- Headset check of 0.4.65 (BF4-FIRST-SESSION.md). The simulated headset settled the game
   side (direction, labels, rate, aim, gestures, depth target); what only a headset can
   answer: comfort at ~45 pairs/s (and whether frame sync 1, ~52/s, still holds there),
   gun size and the head-locked gun, the HUD corners' readability, 3D from depth's feel,
@@ -814,9 +853,12 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
   6 % of the screen, and the pad's triggers are released while the laser points at the
   screen outside campaign play (unit-tested; live check pending; clicks are logged).
 - Holsters: key 2 (sidearm) not yet seen working live (the prologue has no sidearm).
-- 10 s stalls (no Present), twice now (sessions 12 and 15), each starting as one of my test
-  commands began after a pause. Session 16+ logs the foreground owner at stalls and at every
-  change of the game window's focus, to tell a focus thief from an in-game wait. First one: with the mod menu open; a laser click
+- 10 s stalls (no Present), twice now in a running level (sessions 12 and 15), each
+  starting as one of my test commands began after a pause. Session 16+ logs the foreground
+  owner at stalls and at every change of the game window's focus, to tell a focus thief
+  from an in-game wait. Sessions 16 and 18 stalled only during checkpoint reloads, with the
+  game in the foreground (loading), so those are not the in-level stalls; no in-level stall
+  recurred. First one: with the mod menu open; a laser click
   during it was lost, because the adapter runs per Present. Not repeated in 20 s with the
   menu open. The watchdog's first stack (the window thread, under the Steam and EA overlay
   hooks) is BF4's ordinary blocking `GetMessage` loop at `+0x110a2` (decoded from the

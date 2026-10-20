@@ -113,6 +113,8 @@ struct FakePlatform final : IAdapterPlatform {
         sample = aimSample;
         return true;
     }
+    float gameFov = 0.785f; // the game's vertical FOV (BF4 zooms it when its sensitivity changes)
+    float GameFovY() override { return aimKnown ? gameFov : 0.0f; }
     void SendMouse(int dx, int dy) override {
         sentX += dx;
         sentY += dy;

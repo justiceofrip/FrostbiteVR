@@ -23,6 +23,7 @@
 #include "../../src/games/bf4/Bf4SessionSignals.h"
 
 #include "TestHarness.h"
+#include "data/DeathCameraTrace.h"
 
 #include <cmath>
 #include <cstring>
@@ -892,6 +893,87 @@ TEST_CASE(ControllerAimKeepsItsGainThroughDeathAndRespawn) {
     run(0.5f, 0.2f, 120, false);
     CHECK(Near(WrapPi(game.aim.yaw - 0.3f), 0.5f, 0.02f) && Near(game.aim.pitch, 0.2f, 0.02f));
     CHECK(aim.GainX() > 0.0010f && aim.GainX() < 0.0020f);
+
+    // Live again (session 16): a death camera that also swings the yaw both ways, sometimes
+    // the way steering pushes, for several seconds; guards fired between probes and grew the
+    // yaw gain sixfold. Here: within 2x throughout, and aiming recovers.
+    in.aim.orientation = math::FromAxisAngle({0, 1, 0}, -0.5f) * math::FromAxisAngle({1, 0, 0}, 0.2f);
+    float worstX = 0;
+    for (int i = 0; i < 600; ++i) {
+        game.pendingX = game.pendingY = 0;
+        game.aim.yaw = WrapPi(game.aim.yaw + ((i / 40) % 2 ? 0.03f : -0.03f));
+        game.aim.pitch = std::fmax(-1.2f, game.aim.pitch - 0.01f);
+        game.Frame();
+        in.gameValid = true;
+        in.game = game.aim;
+        in.gameSample = game.sample;
+        const auto out = aim.Update(in);
+        game.pendingX += out.mouseX;
+        game.pendingY += out.mouseY;
+        worstX = std::max(worstX, aim.GainX() / 0.0014f);
+    }
+    game.aim = {-1.0f, 0.0f}; // respawn
+    run(0.5f, 0.2f, 240, false);
+    CHECK(worstX < 2.0f && aim.GainX() > 0.0007f && aim.GainY() < -0.0007f && aim.GainY() > -0.0028f);
+    CHECK(Near(WrapPi(game.aim.yaw - 0.3f), 0.5f, 0.02f) && Near(game.aim.pitch, 0.2f, 0.02f));
+}
+
+TEST_CASE(ControllerAimReplaysALiveDeathCamera) {
+    // The recorded live event (session 17): learned gains 0.0014 on both axes, then BF4's death
+    // camera swaying the view (from row 108) while aiming kept a steady target. Live, three
+    // guard firings grew the yaw gain 5.8x. Replayed open loop (the game ignored the mouse),
+    // the gains stay in range; the replay does not reach the live firings even with the
+    // earlier code (they depended on the controller's state then: learning-window alignment,
+    // earlier mutes), so this is a check on real data, not a reproduction. The fix is checked
+    // live (CURRENT-BF4.md).
+    using namespace fvr;
+    using namespace fvr::bf4;
+    using testdata::kDeathCameraTrace;
+    for (const bool zoomAtDeath : {false, true}) {
+        MotionAim aim;
+        SimulatedGameAim game;
+        game.gainX = 0.0014f;
+        game.gainY = -0.0014f;
+        MotionAimInput in;
+        in.engage = in.aimTracked = in.gameValid = true;
+        in.reference.orientation = {0, 0, 0, 1};
+        in.dt = 1.0f / 120;
+        in.gameFov = 0.785f;
+        MotionAimOutput out;
+        auto learnTo = [&](float yaw, float pitch) {
+            in.aim.orientation = math::FromAxisAngle({0, 1, 0}, -yaw) * math::FromAxisAngle({1, 0, 0}, pitch);
+            for (int i = 0; i < 120; ++i) {
+                game.Frame();
+                in.game = game.aim;
+                in.gameSample = game.sample;
+                out = aim.Update(in);
+                game.pendingX += out.mouseX;
+                game.pendingY += out.mouseY;
+            }
+        };
+        for (int k = 0; k < 3; ++k) {
+            learnTo(0.4f, 0.3f);
+            learnTo(-0.4f, -0.3f);
+        }
+        CHECK(Near(aim.GainX(), 0.0014f, 0.0003f) && Near(aim.GainY(), -0.0014f, 0.0003f));
+        const float body = out.bodyYaw;
+        const std::uint64_t base = game.sample + 1;
+        float most = 1, least = 1;
+        for (std::size_t i = 0; i < std::size(kDeathCameraTrace); ++i) {
+            const auto& s = kDeathCameraTrace[i];
+            if (zoomAtDeath && i >= 108) in.gameFov = 0.9f; // worst case: a FOV change arms the guard
+            in.game = {s.gameYaw, s.gamePitch};
+            in.gameSample = base + s.sample;
+            in.aim.orientation = math::FromAxisAngle({0, 1, 0}, -WrapPi(s.targetYaw - body)) *
+                                 math::FromAxisAngle({1, 0, 0}, s.targetPitch);
+            aim.Update(in);
+            for (const float ratio : {aim.GainX() / 0.0014f, -aim.GainY() / 0.0014f}) {
+                most = std::max(most, ratio);
+                least = std::min(least, ratio);
+            }
+        }
+        CHECK(least > 0.5f && most < (zoomAtDeath ? 4.01f : 2.0f));
+    }
 }
 
 TEST_CASE(ControllerAimFindsInvertedLookByProbing) {
@@ -1465,6 +1547,9 @@ TEST_CASE(ResearchCommandsForLiveFlatSessions) {
     const auto v = ParseResearchCommands("1 viewcopies 2\n2 viewcopies 4\n", 0);
     CHECK(v.size() == 2 && v[0].kind == ResearchCommand::Kind::ViewCopies && v[0].x == 2 &&
           v[1].kind == ResearchCommand::Kind::Unknown);
+    const auto traces = ParseResearchCommands("1 aimtrace death_1\n2 aimtrace a\\b\n", 0);
+    CHECK(traces.size() == 2 && traces[0].kind == ResearchCommand::Kind::AimTrace && traces[0].arg == "death_1" &&
+          traces[1].kind == ResearchCommand::Kind::Unknown);
     const auto dumps = ParseResearchCommands("1 viewdump block_a\n2 viewdump ../x\n3 viewdump\n", 0);
     CHECK(dumps.size() == 3 && dumps[0].kind == ResearchCommand::Kind::ViewDump && dumps[0].arg == "block_a" &&
           dumps[1].kind == ResearchCommand::Kind::Unknown && dumps[2].kind == ResearchCommand::Kind::Unknown);

@@ -314,6 +314,9 @@ TEST_CASE(EmuControllerAimInTheHeadTrackedView) {
     CHECK(body > 0.9f);
     for (int i = 0; i < 120; ++i) frame(3.0 + i / 90.0, 0.5235988f, 0, 0);
     CHECK(Near(WrapPi(platform.gameAim.yaw - body), 0.5235988f, 0.02f));
+    // Developer sessions keep a trace of the aim updates (research `aimtrace`).
+    const std::string trace = core.AimTraceCsv();
+    CHECK(trace.rfind("tick_ms,sample,game_yaw,", 0) == 0 && std::count(trace.begin(), trace.end(), '\n') > 300);
     // Opening the front end releases it: no more mouse movement.
     platform.level = "Levels/FrontEnd/FrontEnd";
     const int calls = platform.mouseCalls;
@@ -530,6 +533,7 @@ TEST_CASE(EmuControllerAimRecoversWhenTheGameIsMoreSensitiveThanLearned) {
         const float from = 0.5f * std::sin(599 / 40.0f);
         for (int i = 0; i < 30; ++i) frame(from);
         platform.mouseGainX *= 3.0f;
+        platform.gameFov = 0.95f; // leaving the sights: BF4 widens its view as it raises the sensitivity
         float worstPast = 0, worstLate = 0;
         for (int i = 0; i < 360; ++i) {
             frame(i < 22 ? from + (-0.35f - from) * float(i + 1) / 22.0f : -0.35f);

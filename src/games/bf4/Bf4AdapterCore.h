@@ -105,6 +105,8 @@ public:
     // Controller aiming (Bf4MotionAim.h): the game's current aim as its last view submit
     // carried it (sample increments per submit), and relative mouse look to steer it.
     virtual bool GameAim(AimAngle& /*aim*/, std::uint64_t& /*sample*/) { return false; }
+    // The game's own vertical FOV as its last view submit carried it (0: unknown).
+    virtual float GameFovY() { return 0; }
     virtual void SendMouse(int /*dx*/, int /*dy*/) {}
 
     // Holster gestures (Bf4BodyGestures.h): the BF4 keys to hold this frame (set-1 scan
@@ -187,6 +189,10 @@ public:
     const interaction::ReloadModeResolution& ReloadMode() const { return reloadMode_; }
     StereoMode Stereo() const { return stereo_; }
     bool GameMenuOnScreen() const { return gameUi_; } // BF4's own menu during a level (theater view)
+    // Developer research: the last kAimTraceSize controller-aim updates as CSV (one row each:
+    // tick, game sample, the game's aim, the target, counts sent, gains and counters), oldest
+    // first, so a live event (e.g. a death camera) can be replayed in a test.
+    std::string AimTraceCsv() const;
     const CoreStats& Stats() const { return stats_; }
     std::uint64_t Clicks() const { return pointer_.Clicks(); }
     std::string Status() const;
@@ -258,6 +264,16 @@ private:
     void UpdateMotionAim(const ControllerSnapshot& input, const PlatformFrame& frame);
     MotionAim motionAim_;
     MotionAimOutput aim_{};
+    struct AimTraceRow {
+        std::uint64_t tickMs = 0, sample = 0;
+        float gameYaw = 0, gamePitch = 0, targetYaw = 0, targetPitch = 0, gainX = 0, gainY = 0;
+        int mouseX = 0, mouseY = 0;
+        std::uint32_t guards = 0, mutes = 0, foreign = 0, flips = 0;
+        bool engaged = false;
+    };
+    static constexpr std::size_t kAimTraceSize = 4096;
+    std::vector<AimTraceRow> aimTrace_;
+    std::size_t aimTraceNext_ = 0;
     static constexpr std::uint64_t kWorldLaneHoldMs = 500; // lease gaps shorter than this keep aiming engaged
     std::uint64_t lastLeaseMs_ = 0;
     math::FovTangents lastEyeFov_[2]; // the latest world request's eyes (gun follows aim's reach)

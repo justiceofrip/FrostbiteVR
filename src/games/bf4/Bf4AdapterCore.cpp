@@ -319,6 +319,22 @@ bool AdapterCore::OnSplitFrame() {
     return true;
 }
 
+std::string AdapterCore::AimTraceCsv() const {
+    std::string csv = "tick_ms,sample,game_yaw,game_pitch,target_yaw,target_pitch,mouse_x,mouse_y,gain_x,gain_y,guards,mutes,"
+                      "foreign,flips,engaged\n";
+    const std::size_t count = std::min(aimTraceNext_, aimTrace_.size());
+    for (std::size_t i = aimTraceNext_ - count; i < aimTraceNext_; ++i) {
+        const AimTraceRow& r = aimTrace_[i % kAimTraceSize];
+        char line[256];
+        std::snprintf(line, sizeof(line), "%llu,%llu,%.6f,%.6f,%.6f,%.6f,%d,%d,%.7f,%.7f,%u,%u,%u,%u,%d\n",
+                      static_cast<unsigned long long>(r.tickMs), static_cast<unsigned long long>(r.sample), r.gameYaw, r.gamePitch,
+                      r.targetYaw, r.targetPitch, r.mouseX, r.mouseY, r.gainX, r.gainY, r.guards, r.mutes, r.foreign, r.flips,
+                      r.engaged ? 1 : 0);
+        csv += line;
+    }
+    return csv;
+}
+
 void AdapterCore::UpdateGameUi(const PlatformFrame& f) {
     // Only during a level: the front end's menus are on the screen anyway.
     const bool shown = f.gameCursor && guard_.GameplayAllowed();
@@ -452,6 +468,7 @@ void AdapterCore::UpdateMotionAim(const ControllerSnapshot& in, const PlatformFr
     m.reference = reference_;
     m.aim = hand.aim;
     m.gameValid = platform_.GameAim(m.game, m.gameSample);
+    m.gameFov = platform_.GameFovY();
     m.turn = std::fabs(hand.stickX) > 0.2f ? hand.stickX : 0.0f;
     m.snapTurn = menuState_.snapTurn;
     // Two-handed aim: the left grip held in front of the gun, unless that grip carries
@@ -466,6 +483,16 @@ void AdapterCore::UpdateMotionAim(const ControllerSnapshot& in, const PlatformFr
     lastAimTickMs_ = f.tickMs;
     const bool was = aim_.engaged;
     aim_ = motionAim_.Update(m);
+    if (session_.developerFeatures && (aim_.engaged || was)) {
+        if (aimTrace_.size() != kAimTraceSize) aimTrace_.assign(kAimTraceSize, {});
+        AimTraceRow& r = aimTrace_[aimTraceNext_ % kAimTraceSize];
+        ++aimTraceNext_;
+        const AimAngle target = motionAim_.Desired();
+        r = {f.tickMs, m.gameSample, m.game.yaw, m.game.pitch, target.yaw, target.pitch, motionAim_.GainX(), motionAim_.GainY(),
+             aim_.mouseX, aim_.mouseY, static_cast<std::uint32_t>(motionAim_.OscillationGuards()),
+             static_cast<std::uint32_t>(motionAim_.Mutes()), static_cast<std::uint32_t>(motionAim_.ForeignTurns()),
+             static_cast<std::uint32_t>(motionAim_.SignFlips()), aim_.engaged};
+    }
     if (aim_.engaged != was) platform_.Log(aim_.engaged ? "controller aim engaged" : "controller aim released");
     if (aim_.twoHanded && !twoHandedWas_) ++twoHandedEngages_;
     twoHandedWas_ = aim_.twoHanded;

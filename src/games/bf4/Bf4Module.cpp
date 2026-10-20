@@ -660,6 +660,8 @@ public:
         return std::isfinite(aim.yaw) && std::isfinite(aim.pitch);
     }
 
+    float GameFovY() override { return viewOverride.Installed() ? viewOverride.GetStats().gameFovY : 0.0f; }
+
     // Relative mouse look for controller aiming; only into the focused game window (it
     // reads the mouse as raw input).
     void SendMouse(int dx, int dy) override {
@@ -1764,6 +1766,21 @@ void ResearchTick(Adapter& a) {
     case ResearchCommand::Kind::Snap: {
         const bool ok = a.platform.WriteBackbufferBmp(a.session.researchDumpDir + "\\" + c.arg + ".bmp");
         ResearchAck(a, c.id, ok ? ("snap " + c.arg).c_str() : "snap failed");
+        break;
+    }
+    case ResearchCommand::Kind::AimTrace: {
+        std::string csv;
+        {
+            std::lock_guard<std::mutex> lock(a.coreMutex);
+            csv = a.core->AimTraceCsv();
+        }
+        const std::string path = a.session.researchDumpDir + "\\" + c.arg + ".csv";
+        bool ok = false;
+        if (std::FILE* f = std::fopen(path.c_str(), "wb")) {
+            ok = std::fwrite(csv.data(), 1, csv.size(), f) == csv.size();
+            std::fclose(f);
+        }
+        ResearchAck(a, c.id, (std::string("aimtrace ") + c.arg + (ok ? ": written" : ": write failed")).c_str());
         break;
     }
     case ResearchCommand::Kind::ViewDump: {

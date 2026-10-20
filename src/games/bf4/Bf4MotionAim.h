@@ -95,6 +95,7 @@ struct MotionAimInput {
     bool gameValid = false; // the game's aim was read this frame
     AimAngle game;          // the game's current aim
     std::uint64_t gameSample = 0; // increments with each new game reading (a view submit)
+    float gameFov = 0;            // the game's own vertical FOV (0: unknown); a change arms the guard
     float turn = 0;         // right stick X, -1..1 (body turning)
     float dt = 0;           // seconds since the last update
     bool snapTurn = false;  // turn in fixed steps (comfort) instead of smoothly
@@ -197,8 +198,8 @@ public:
         // What the game may be applying now: the recent pushes the way it moved (its input
         // delay is one to three frames, and the newest counts may already pull back).
         const float landingX = Landing(gameX, gainX_, flightX_), landingY = Landing(gameY, gainY_, flightY_);
-        GuardOvershoot(WrapPi(desired_.yaw - in.game.yaw), targetX, gameX, landingX, guardX_, gainX_);
-        GuardOvershoot(desired_.pitch - in.game.pitch, targetY, gameY, landingY, guardY_, gainY_);
+        GuardOvershoot(WrapPi(desired_.yaw - in.game.yaw), targetX, gameX, landingX, anchorX_, guardX_, gainX_);
+        GuardOvershoot(desired_.pitch - in.game.pitch, targetY, gameY, landingY, anchorY_, guardY_, gainY_);
         out.mouseX = Counts(WrapPi(desired_.yaw - in.game.yaw) - flightX, gainX_);
         out.mouseY = Counts(desired_.pitch - in.game.pitch - flightY, gainY_);
         flightX_ = {out.mouseX, flightX_[0], flightX_[1], flightX_[2]};
@@ -257,8 +258,16 @@ private:
     static constexpr float kMaxGuardStep = 4.0f; // one guard grows the estimate at most this much
     // `target` and `game`: how far each moved since the last update; `pushed`: how far the
     // counts the game is applying now should move it at the current estimate.
-    void GuardOvershoot(float error, float target, float game, float pushed, Guard& g, float& gain) {
+    void GuardOvershoot(float error, float target, float game, float pushed, float anchor, Guard& g, float& gain) {
         if (std::fabs(error) < 0.01f) return;
+        // BF4 changes its mouse sensitivity when its view zooms (aiming down sights, scopes,
+        // vehicles): the guard is armed only for a moment after the game's FOV changed, or
+        // while nothing is learned yet. A death camera's sway passed every other test (live,
+        // session 17: three firings grew the yaw gain 5.8x).
+        if (judgeQuiet_ > 0 || (guardArmed_ == 0 && anchor > 0)) {
+            g = {};
+            return;
+        }
         const int now = error > 0 ? 1 : -1;
         if (g.sign && now != g.sign) {
             // An overshoot is the game going past the target the way our counts pushed it, by
@@ -271,7 +280,10 @@ private:
                 // the game moved on its own: no overshoot; a new swing starts here.
                 g = {};
             } else if (g.previous > 0 && g.peak > kOvershoot * g.previous) {
-                gain = std::copysign(std::fmin(kMaxGain, std::fabs(gain) * std::fmin(kMaxGuardStep, 1 + g.peak / g.previous)), gain);
+                // Never past kMaxGuardStep times what learning last confirmed (live: guards
+                // between probes of a death camera still grew the yaw gain sixfold).
+                const float cap = anchor > 0 ? std::fmin(kMaxGain, kMaxGuardStep * anchor) : kMaxGain;
+                gain = std::copysign(std::fmin(cap, std::fabs(gain) * std::fmin(kMaxGuardStep, 1 + g.peak / g.previous)), gain);
                 g.previous = -1;
                 ++guards_;
             } else {
@@ -317,6 +329,12 @@ private:
             const float dYaw = WrapPi(in.game.yaw - lastGame_.yaw), dPitch = in.game.pitch - lastGame_.pitch;
             const long long cx = pendingX_, cy = pendingY_;
             pendingX_ = pendingY_ = 0;
+            if (judgeQuiet_ > 0) --judgeQuiet_;
+            if (guardArmed_ > 0) --guardArmed_;
+            if (in.gameFov > 0) {
+                if (lastFov_ > 0 && std::fabs(in.gameFov / lastFov_ - 1) > 0.02f) guardArmed_ = kGuardArmSamples;
+                lastFov_ = in.gameFov;
+            }
             if (probe_ != Probe::None) Probing(dYaw, dPitch);
             else Window(dYaw, dPitch, cx, cy);
         }
@@ -354,6 +372,7 @@ private:
         probe_ = Probe::None;
         if (std::fabs(probeYaw_) >= kProbeStill || std::fabs(probePitch_) >= kProbeStill) {
             ++foreign_; // the game's own camera: quiet a while, longer each time
+            judgeQuiet_ = kJudgeQuietSamples;
             muted_ = kMuteFrames << std::min(ignoredInARow_, 3);
             ++ignoredInARow_;
             ++mutes_;
@@ -407,8 +426,15 @@ private:
                     ++mutes_;
                 } else {
                     if (turned) ignoredInARow_ = 0;
-                    trustX_ += Adapt(windowYaw_, windowCountsX_, gainX_, trustX_, outlierX_);
-                    trustY_ += Adapt(windowPitch_, windowCountsY_, gainY_, trustY_, outlierY_);
+                    if (judgeQuiet_ == 0) {
+                        // The anchor moves only with what a window measured, never with a guard.
+                        const float wx = Adapt(windowYaw_, windowCountsX_, gainX_, trustX_, outlierX_);
+                        const float wy = Adapt(windowPitch_, windowCountsY_, gainY_, trustY_, outlierY_);
+                        trustX_ += wx;
+                        trustY_ += wy;
+                        if (wx > 0 && trustX_ >= kLearnedTrust) anchorX_ = std::fabs(gainX_);
+                        if (wy > 0 && trustY_ >= kLearnedTrust) anchorY_ = std::fabs(gainY_);
+                    }
                 }
                 const bool learnedX = trustX_ >= kLearnedTrust, learnedY = trustY_ >= kLearnedTrust;
                 // BF4 turns as far per count on both axes (live: 0.00140 / -0.00140, aiming
@@ -416,8 +442,14 @@ private:
                 // other's gain, kSeedMargin above it (the cautious side), not from the first
                 // estimate. Small vertical moves (the gun's reach keeps them small) may never
                 // teach the pitch gain and steered at half speed (live, 2026-10-19).
-                if (learnedX && !learnedY) gainY_ = std::copysign(kSeedMargin * std::fabs(gainX_), gainY_);
-                if (learnedY && !learnedX) gainX_ = std::copysign(kSeedMargin * std::fabs(gainY_), gainX_);
+                if (learnedX && !learnedY) {
+                    gainY_ = std::copysign(kSeedMargin * std::fabs(gainX_), gainY_);
+                    anchorY_ = std::fabs(gainY_);
+                }
+                if (learnedY && !learnedX) {
+                    gainX_ = std::copysign(kSeedMargin * std::fabs(gainY_), gainX_);
+                    anchorX_ = std::fabs(gainX_);
+                }
                 ResetWindow();
         }
     }
@@ -431,7 +463,10 @@ private:
     // Returns the trust the window carried (0: it taught nothing). `pendingRatio`: an
     // unconfirmed large change of the previous window (0: none).
     static float Adapt(float angle, long long counts, float& gain, float trust, float& pendingRatio) {
-        if (std::llabs(counts) < 200 || std::fabs(angle) < 0.01f) return 0; // not enough signal
+        // Enough signal: 200 counts, or fewer with a clear turn (an estimate that is too high
+        // sends few counts and would otherwise never relearn).
+        const bool enough = std::llabs(counts) >= 200 || (std::llabs(counts) >= 40 && std::fabs(angle) >= 0.05f);
+        if (!enough || std::fabs(angle) < 0.01f) return 0;
         float measured = angle / static_cast<float>(counts);
         const float magnitude = std::fabs(measured);
         if (magnitude < kMinGain || magnitude > kMaxGain) return 0;
@@ -461,6 +496,12 @@ private:
     float gainX_ = kInitialGain, gainY_ = -kInitialGain; // mouse down looks down: negative pitch per count
     float trustX_ = 0, trustY_ = 0; // what each axis's windows have taught so far (Adapt)
     float outlierX_ = 0, outlierY_ = 0; // an unconfirmed large change per axis (Adapt)
+    float anchorX_ = 0, anchorY_ = 0;   // the gains learning last confirmed (0: none yet)
+    int judgeQuiet_ = 0;                // game samples left without learning or guards
+    int guardArmed_ = 0;                // game samples left with the guard armed (a FOV change)
+    float lastFov_ = 0;
+    static constexpr int kGuardArmSamples = 180; // ~1.5 s
+    static constexpr int kJudgeQuietSamples = 240; // ~2 s after the game turned by itself
     std::uint64_t foreign_ = 0, flips_ = 0; // probes that found the game's own camera / inverted look
     Probe probe_ = Probe::None;
     int probeSamples_ = 0;

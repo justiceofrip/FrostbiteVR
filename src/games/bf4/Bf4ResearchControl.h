@@ -26,6 +26,7 @@
 //                           (bit 0: +0x00, bit 1: +0x40; 3 = both, the default)
 //   <id> viewdump <name>    the next submitted view block (0x1020 bytes, as the game
 //                           submitted it, before any override) -> <research>/<name>.bin
+//   <id> aimtrace <name>    the last 4096 controller-aim updates -> <research>/<name>.csv
 
 #include "Bf4PointerInjector.h"
 
@@ -39,7 +40,7 @@ namespace fvr::bf4 {
 struct ResearchCommand {
     enum class Kind : std::uint8_t {
         Snap, Click, Move, Key, DumpImage, ScanQ, Peek, Type, Census, DepthProbe, Mouse, SendKey, Setting, ViewCopies,
-        ViewDump, Unknown
+        ViewDump, AimTrace, Unknown
     };
     std::uint64_t id = 0;
     Kind kind = Kind::Unknown;
