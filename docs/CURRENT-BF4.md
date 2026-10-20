@@ -691,7 +691,8 @@ the new frame's pose (the approach of alternate-eye rendering mods).
   pose-label flip check (head yaw alternating 0/10 deg every frame) 327 pairs, 327 matched,
   none mismatched; 52.4 pairs/s at 117 game fps (as mono); 1-2 % of pairs had no recent kept
   frame. Log: `alternate_pairs= alternate_one_frame= kept_frames=` (`theater_link`),
-  `eye_views= eye_frames=` (`first_person_view`).
+  `eye_views= eye_frames=` (`first_person_view`). Session 57: BF4's pause menu (Esc) took the
+  view to the screen and RESUME brought the alternate-eye pairs back, the gun lit in both eyes.
 - Evidence: core test (requests carry the option and the half eye distance; the camera stays
   at the head); WARP checks: the resampler (kept frames, the other eye turned onto the new
   camera, one-frame fallback) and the first-person view (the main view at the left eye, the
@@ -1108,4 +1109,13 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
   22461/717/2370; L631/L738 7416/19431 in other passes), the largest with ~50 distinct bones of
   60, many matrices shared between meshes. Joints can be solved from captures as the points two
   bones map alike in every pose (scratch `fp_joints.py`); three captures pinned hinges only to
-  lines, so more varied poses (walking, sprinting, a whole reload) are needed. Not built.
+  lines. Session 58: 18 captures (idle, walk, sprint, a whole reload, aiming in and out, the
+  underbarrel launcher; local research data, not in the repository). Switching to the launcher
+  replaced the two meshes drawn by the weapon's G-buffer shaders (23178+2370 and 22461+717+2370
+  indices -> 15762 and 14958 + 804), so those are the weapon; the arms are among the others
+  (19431 + 7416 in two G-buffer passes, 14217, and the depth-only 34695 and 6369, whose
+  6369-index part stays through the weapon switch). With 17 captures most bone pairs of the
+  19431 mesh solve to a well-conditioned shared point. Left: reading those points as the arms'
+  shoulder, elbow and wrist needs BF4's own first-person view (the probe reads the moved one when
+  the gun is in the hand), then the chains, the two-bone solve and the palette rewrite. Not
+  built.
