@@ -70,6 +70,10 @@ std::vector<ResearchCommand> ParseResearchCommands(std::string_view text, std::u
         else if (verb == "viewdump" && !a1.empty()) { c.kind = ResearchCommand::Kind::ViewDump; c.arg = std::string(a1); }
         else if (verb == "aimtrace" && !a1.empty()) { c.kind = ResearchCommand::Kind::AimTrace; c.arg = std::string(a1); }
         else if (verb == "shadernames") c.kind = ResearchCommand::Kind::ShaderNames;
+        else if (verb == "devicechange") { // optional event (hex): 7 nodes changed, 8000 arrival, 8004 removal
+            c.kind = ResearchCommand::Kind::DeviceChange;
+            if (!ParseHex(a1, c.value)) c.value = 0x8000;
+        }
         else if (verb == "drawprobe" && !a1.empty()) { c.kind = ResearchCommand::Kind::DrawProbe; c.arg = std::string(a1); }
         else if (verb == "fpview" && ParseInt(a1, c.x) && c.x >= 0 && c.x <= 3) c.kind = ResearchCommand::Kind::FirstPersonView;
         else if (verb == "shaderdump" && !a1.empty()) { c.kind = ResearchCommand::Kind::ShaderDump; c.arg = std::string(a1); }

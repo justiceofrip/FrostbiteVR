@@ -89,6 +89,22 @@ bool CheckControllerScan(const char*& why) {
     if (ok && standIns != (realPad ? 0 : 1)) ok = (why = realPad ? "stand-in offered next to a real XInput pad" : "no stand-in pad", false);
     if (ok && !realPad && !IsStandIn(g_seen.front())) ok = (why = "stand-in not ahead of DirectInput's devices", false);
     if (ok && !realPad && (g_seen.front().dwDevType & 0xFF) != DI8DEVTYPE_GAMEPAD) ok = (why = "stand-in is not a game pad", false);
+    // Again: answered from the last list at once; a worker enumerates behind it and finds the
+    // same devices (nothing posted).
+    if (ok) {
+        const auto c0 = ControllerScan::GetStats();
+        const std::vector<DIDEVICEINSTANCEW> first = g_seen;
+        g_seen.clear();
+        if (di->EnumDevices(DI8DEVCLASS_GAMECTRL, &Collect, nullptr, DIEDFL_ATTACHEDONLY) != DI_OK)
+            ok = (why = "cached enumeration failed", false);
+        const auto c1 = ControllerScan::GetStats();
+        if (ok && (c1.cached != c0.cached + 1 || g_seen.size() != first.size()))
+            ok = (why = "second enumeration not answered from the last list", false);
+        for (int i = 0; ok && i < 300 && ControllerScan::GetStats().refreshes == c0.refreshes; ++i) Sleep(10);
+        const auto c2 = ControllerScan::GetStats();
+        if (ok && (c2.refreshes == c0.refreshes || c2.refreshChanges != c0.refreshChanges))
+            ok = (why = "the worker did not enumerate again, or saw a change", false);
+    }
     // BF4's check: answered without running its body; the stand-in is an XInput device.
     if (ok) {
         const long runs = g_bodyRuns;

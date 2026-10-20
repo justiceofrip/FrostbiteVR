@@ -17,8 +17,12 @@
 //   entry), and when they found no XInput pad a stand-in Xbox 360 pad is offered first, which
 //   BF4 takes as XInput user 0 (the virtual pad). Only with the code hook installed: BF4's own
 //   scan would not know the stand-in.
-// - one device change is posted to the game window after adoption if BF4 has not enumerated
-//   yet, so the stand-in exists from the menus on.
+// - BF4 enumerates on a device arrival (live: a sent DBT_DEVICEARRIVAL with a device-interface
+//   record did; DBT_DEVNODES_CHANGED and DBT_DEVICEREMOVECOMPLETE did not). One is sent after
+//   adoption if BF4 has not enumerated yet, so the stand-in exists from the menus on.
+// - after the first enumeration BF4 is answered at once from the last list, and a worker thread
+//   enumerates again (DirectInput itself takes ~250 ms here, on BF4's main thread before); when
+//   the list changed the worker sends one device arrival, so BF4 enumerates the new list.
 
 #include <cstdint>
 #include <string>
@@ -39,9 +43,17 @@ public:
     // guard? Checked before the code hook goes in.
     static bool LooksLikeWmiCheck(const void* fn);
     static void SetEnabled(bool enabled);
-    // After adoption: posts one WM_DEVICECHANGE (DBT_DEVNODES_CHANGED) if BF4 has not
-    // enumerated since Install, so it builds its device list with the stand-in. Once only.
+    // After adoption: the worker sends one device arrival if BF4 has not enumerated since
+    // Install, so it builds its device list with the stand-in. Once only.
     static bool RequestEnumeration(void* window);
+    // The game window the worker posts a device change to when the list changed.
+    static void SetWindow(void* window);
+    // WM_DEVICECHANGE with this event: arrival (0x8000) and removal (0x8004) carry a HID
+    // device-interface record, as Windows sends them to a window registered for them, and go
+    // synchronously (bounded at 200 ms; Windows refuses them posted); other events are posted.
+    static bool PostDeviceChange(void* window, std::uint32_t event);
+    // Off: every enumeration goes to DirectInput on the caller's thread (the worker stops).
+    static void SetCaching(bool caching);
     // Developer evidence: each enumeration's devices and each answered check, as log lines
     // (the first 64). Called on BF4's thread; null turns it off.
     using LogFn = void (*)(const char* line);
@@ -53,6 +65,8 @@ public:
 
     struct Stats {
         std::uint64_t enumerations = 0;  // BF4's game-controller enumerations
+        std::uint64_t cached = 0;        // ... answered from the last list
+        std::uint64_t refreshes = 0, refreshChanges = 0; // worker enumerations, of them with another list
         std::uint64_t devices = 0;       // devices DirectInput reported to it
         std::uint64_t xinputDevices = 0; // ... of them XInput pads
         std::uint64_t standIns = 0;      // stand-in pads offered

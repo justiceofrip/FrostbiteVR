@@ -9,13 +9,16 @@
 
 #include <MinHook.h>
 
+#include <algorithm>
 #include <atomic>
+#include <condition_variable>
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
 #include <cwchar>
 #include <cwctype>
 #include <mutex>
+#include <thread>
 #include <vector>
 
 namespace fvr::bf4 {
@@ -38,6 +41,10 @@ CheckFn g_bf4Check = nullptr;
 void* g_checkTarget = nullptr;
 std::atomic<bool> g_enabled{true}, g_codeHook{false}, g_requested{false};
 std::atomic<int> g_steamPads{0}; // ControllerScan::SteamPads
+std::atomic<bool> g_caching{true};
+std::atomic<std::uint64_t> g_cached{0}, g_refreshes{0}, g_refreshChanges{0};
+std::atomic<HWND> g_window{nullptr};
+thread_local bool t_refreshing = false; // this thread is the worker's enumeration: no cache
 std::atomic<std::uint64_t> g_enumerations{0}, g_devices{0}, g_xinput{0}, g_standIns{0}, g_checks{0}, g_accepted{0};
 std::mutex g_timeLock;
 float g_lastMs = 0, g_maxMs = 0, g_checkMaxMs = 0;
@@ -161,19 +168,75 @@ BOOL CALLBACK CollectDevice(const Instance* device, LPVOID context) {
     return DIENUM_CONTINUE;
 }
 
-// The game's enumeration: DirectInput's devices (or the entry before ours) collected, then
-// handed to the game in their order, the stand-in first when none of them is an XInput pad
-// and BF4's check knows it. First, because BF4 polls only one pad: the stand-in after eight
-// DirectInput pads was made an XInput device but never polled (live 2026-10-20).
-template <class Instance, class Callback, class Previous, class Self>
-HRESULT Relayed(Previous previous, Self* self, DWORD type, Callback callback, LPVOID ref, DWORD flags) {
-    g_enumerations.fetch_add(1, std::memory_order_relaxed);
-    Log("controller scan: enumeration type=%lu flags=%lu", type, flags);
-    std::vector<Instance> found;
-    LARGE_INTEGER start;
-    QueryPerformanceCounter(&start);
-    const HRESULT hr = previous(self, type, &CollectDevice<Instance>, &found, flags);
-    const float ms = MillisecondsSince(start);
+// The list BF4 was answered with last, per call (wide/narrow, type, flags), and the worker
+// that enumerates again behind it.
+template <class Instance>
+struct Cache {
+    bool valid = false;
+    DWORD type = 0, flags = 0;
+    std::vector<Instance> devices;
+};
+std::mutex g_cacheLock;
+Cache<DIDEVICEINSTANCEW> g_cacheW;
+Cache<DIDEVICEINSTANCEA> g_cacheA;
+
+template <class Instance>
+bool SameDevices(const std::vector<Instance>& a, const std::vector<Instance>& b) {
+    if (a.size() != b.size()) return false;
+    for (const auto& d : a) {
+        const bool found = std::any_of(b.begin(), b.end(), [&](const Instance& e) {
+            return std::memcmp(&d.guidInstance, &e.guidInstance, sizeof(GUID)) == 0 &&
+                   std::memcmp(&d.guidProduct, &e.guidProduct, sizeof(GUID)) == 0 && d.dwDevType == e.dwDevType;
+        });
+        if (!found) return false;
+    }
+    return true;
+}
+
+struct Worker {
+    std::mutex lock;
+    std::condition_variable wake;
+    bool pending = false, notify = false, stop = false, running = false;
+};
+Worker g_worker;
+void RefreshLists(); // the worker's enumeration (defined below)
+void TellGame();     // a device arrival to the game window (defined below)
+
+void WorkerLoop() {
+    t_refreshing = true;
+    for (;;) {
+        bool refresh = false, notify = false;
+        {
+            std::unique_lock<std::mutex> lock(g_worker.lock);
+            g_worker.wake.wait(lock, [] { return g_worker.pending || g_worker.notify || g_worker.stop; });
+            if (g_worker.stop) {
+                g_worker.running = false;
+                return;
+            }
+            refresh = g_worker.pending;
+            notify = g_worker.notify;
+            g_worker.pending = g_worker.notify = false;
+        }
+        if (notify) TellGame();
+        if (refresh) RefreshLists();
+    }
+}
+
+void Wake(bool refresh, bool notify) {
+    std::lock_guard<std::mutex> lock(g_worker.lock);
+    g_worker.pending = g_worker.pending || refresh;
+    g_worker.notify = g_worker.notify || notify;
+    if (!g_worker.running && !g_worker.stop) {
+        g_worker.running = true;
+        std::thread(WorkerLoop).detach(); // ends on Remove (stop)
+    }
+    g_worker.wake.notify_one();
+}
+void AskRefresh() { Wake(true, false); }
+
+// BF4 gets the devices in their order, the stand-in first when none of them is an XInput pad.
+template <class Instance, class Callback>
+void Dispatch(const std::vector<Instance>& found, DWORD type, DWORD flags, Callback callback, LPVOID ref) {
     bool sawXInput = false;
     for (const auto& d : found) {
         const bool xinput = AnswersXInput(d);
@@ -182,22 +245,112 @@ HRESULT Relayed(Previous previous, Self* self, DWORD type, Callback callback, LP
     }
     g_devices.fetch_add(found.size(), std::memory_order_relaxed);
     if (sawXInput) g_xinput.fetch_add(1, std::memory_order_relaxed);
-    {
-        std::lock_guard<std::mutex> lock(g_timeLock);
-        g_lastMs = ms;
-        if (ms > g_maxMs) g_maxMs = ms;
-    }
-    if (FAILED(hr)) return hr;
     const bool padClass = type == DI8DEVCLASS_GAMECTRL || type == DI8DEVTYPE_GAMEPAD;
     if (padClass && !(flags & DIEDFL_FORCEFEEDBACK) && g_codeHook.load(std::memory_order_acquire) && !sawXInput) {
         const Instance standIn = StandIn<Instance>();
         g_standIns.fetch_add(1, std::memory_order_relaxed);
         LogDevice("stand-in", standIn, true);
-        if (callback(&standIn, ref) == DIENUM_STOP) return hr;
+        if (callback(&standIn, ref) == DIENUM_STOP) return;
     }
     for (const auto& d : found)
         if (callback(&d, ref) == DIENUM_STOP) break;
+}
+
+// The game's enumeration: DirectInput's devices (or the entry before ours) collected, then
+// handed to the game in their order, the stand-in first when none of them is an XInput pad
+// and BF4's check knows it. First, because BF4 polls only one pad: the stand-in after eight
+// DirectInput pads was made an XInput device but never polled (live 2026-10-20).
+template <class Instance>
+Cache<Instance>& CacheOf();
+template <>
+Cache<DIDEVICEINSTANCEW>& CacheOf<DIDEVICEINSTANCEW>() { return g_cacheW; }
+template <>
+Cache<DIDEVICEINSTANCEA>& CacheOf<DIDEVICEINSTANCEA>() { return g_cacheA; }
+
+template <class Instance, class Callback, class Previous, class Self>
+HRESULT Relayed(Previous previous, Self* self, DWORD type, Callback callback, LPVOID ref, DWORD flags) {
+    g_enumerations.fetch_add(1, std::memory_order_relaxed);
+    Log("controller scan: enumeration type=%lu flags=%lu%s", type, flags, t_refreshing ? " (worker)" : "");
+    // From the last list when there is one for this call (not on the worker's own thread).
+    const bool caching = g_caching.load(std::memory_order_acquire) && !t_refreshing;
+    std::vector<Instance> found;
+    bool cached = false;
+    if (caching) {
+        std::lock_guard<std::mutex> lock(g_cacheLock);
+        const Cache<Instance>& c = CacheOf<Instance>();
+        if (c.valid && c.type == type && c.flags == flags) {
+            found = c.devices;
+            cached = true;
+        }
+    }
+    LARGE_INTEGER start;
+    QueryPerformanceCounter(&start);
+    HRESULT hr = DI_OK;
+    if (!cached) hr = previous(self, type, &CollectDevice<Instance>, &found, flags);
+    const float ms = MillisecondsSince(start);
+    if (!t_refreshing) { // the caller's (BF4's) wait
+        std::lock_guard<std::mutex> lock(g_timeLock);
+        g_lastMs = ms;
+        if (ms > g_maxMs) g_maxMs = ms;
+    }
+    if (FAILED(hr)) return hr;
+    if (cached) g_cached.fetch_add(1, std::memory_order_relaxed);
+    if (caching && !cached) { // the first list for this call
+        std::lock_guard<std::mutex> lock(g_cacheLock);
+        Cache<Instance>& c = CacheOf<Instance>();
+        c = {true, type, flags, found};
+    }
+    Dispatch(found, type, flags, callback, ref);
+    if (cached) AskRefresh(); // the device change that made BF4 ask may have changed the list
     return hr;
+}
+
+// The worker: each cached call enumerated again on its own DirectInput (through the entry before
+// ours, as BF4's would be); a changed list replaces the cache and BF4 is told of a device change.
+template <class Iface, class Instance, class Fn>
+bool RefreshOne(const GUID& iid, Fn previous) {
+    DWORD type = 0, flags = 0;
+    {
+        std::lock_guard<std::mutex> lock(g_cacheLock);
+        const Cache<Instance>& c = CacheOf<Instance>();
+        if (!c.valid || !previous) return false;
+        type = c.type;
+        flags = c.flags;
+    }
+    HMODULE dinput = GetModuleHandleW(L"dinput8.dll");
+    using CreateFn = HRESULT(WINAPI*)(HINSTANCE, DWORD, REFIID, LPVOID*, LPUNKNOWN);
+    const auto create = dinput ? reinterpret_cast<CreateFn>(GetProcAddress(dinput, "DirectInput8Create")) : nullptr;
+    Iface* di = nullptr;
+    if (!create || FAILED(create(GetModuleHandleW(nullptr), DIRECTINPUT_VERSION, iid, reinterpret_cast<LPVOID*>(&di), nullptr)) || !di)
+        return false;
+    std::vector<Instance> found;
+    const HRESULT hr = previous(di, type, &CollectDevice<Instance>, &found, flags);
+    di->Release();
+    if (FAILED(hr)) return false;
+    g_refreshes.fetch_add(1, std::memory_order_relaxed);
+    std::lock_guard<std::mutex> lock(g_cacheLock);
+    Cache<Instance>& c = CacheOf<Instance>();
+    if (!c.valid || SameDevices(c.devices, found)) return false;
+    c.devices = std::move(found);
+    return true;
+}
+
+void RefreshLists() {
+    // The interface IDs and entries are those of the Install below.
+    constexpr GUID kW{0xBF798031, 0x483A, 0x4DA2, {0xAA, 0x99, 0x5D, 0x64, 0xED, 0x36, 0x97, 0x00}};
+    constexpr GUID kA{0xBF798030, 0x483A, 0x4DA2, {0xAA, 0x99, 0x5D, 0x64, 0xED, 0x36, 0x97, 0x00}};
+    const bool changedW = RefreshOne<IDirectInput8W, DIDEVICEINSTANCEW>(kW, g_enumW);
+    const bool changedA = RefreshOne<IDirectInput8A, DIDEVICEINSTANCEA>(kA, g_enumA);
+    if (!changedW && !changedA) return;
+    g_refreshChanges.fetch_add(1, std::memory_order_relaxed);
+    Log("controller scan: the device list changed; BF4 told of a device arrival");
+    TellGame();
+}
+
+// BF4 enumerates its controllers on a device arrival with a device-interface record (live: a
+// sent DBT_DEVICEARRIVAL did, DBT_DEVNODES_CHANGED and DBT_DEVICEREMOVECOMPLETE did not).
+void TellGame() {
+    if (const HWND window = g_window.load(std::memory_order_acquire)) ControllerScan::PostDeviceChange(window, DBT_DEVICEARRIVAL);
 }
 
 HRESULT STDMETHODCALLTYPE EnumHookW(IDirectInput8W* self, DWORD type, LPDIENUMDEVICESCALLBACKW callback, LPVOID ref, DWORD flags) {
@@ -301,6 +454,10 @@ bool ControllerScan::LooksLikeWmiCheck(const void* fn) {
 }
 
 bool ControllerScan::Install(void* isXInputDevice) {
+    {
+        std::lock_guard<std::mutex> lock(g_worker.lock);
+        g_worker.stop = false;
+    }
     if (isXInputDevice && !g_checkTarget) {
         if (MH_CreateHook(isXInputDevice, reinterpret_cast<LPVOID>(&CheckHook), reinterpret_cast<LPVOID*>(&g_bf4Check)) == MH_OK) {
             if (MH_EnableHook(isXInputDevice) == MH_OK) {
@@ -324,7 +481,50 @@ bool ControllerScan::Install(void* isXInputDevice) {
     return g_hookedW || g_hookedA;
 }
 
+bool ControllerScan::PostDeviceChange(void* window, std::uint32_t event) {
+    // Static: a posted message is read later, on the window's thread.
+    static DEV_BROADCAST_DEVICEINTERFACE_W record = [] {
+        DEV_BROADCAST_DEVICEINTERFACE_W r{};
+        r.dbcc_size = sizeof(r);
+        r.dbcc_devicetype = DBT_DEVTYP_DEVICEINTERFACE;
+        r.dbcc_classguid = {0x4D1E55B2, 0xF16F, 0x11CF, {0x88, 0xCB, 0x00, 0x11, 0x11, 0x00, 0x00, 0x30}}; // HID
+        r.dbcc_name[0] = 0;
+        return r;
+    }();
+    if (!window) {
+        SetLastError(ERROR_INVALID_WINDOW_HANDLE);
+        return false;
+    }
+    const bool device = event == DBT_DEVICEARRIVAL || event == DBT_DEVICEREMOVECOMPLETE;
+    if (!device) return PostMessageW(static_cast<HWND>(window), WM_DEVICECHANGE, event, 0) != 0;
+    // With a record Windows delivers it synchronously only (a posted one is refused): sent, with
+    // a bound so a busy window thread never holds the caller.
+    DWORD_PTR result = 0;
+    return SendMessageTimeoutW(static_cast<HWND>(window), WM_DEVICECHANGE, event, reinterpret_cast<LPARAM>(&record),
+                               SMTO_ABORTIFHUNG | SMTO_NORMAL, 200, &result) != 0;
+}
+
+void ControllerScan::SetWindow(void* window) { g_window.store(static_cast<HWND>(window), std::memory_order_release); }
+
+void ControllerScan::SetCaching(bool caching) {
+    g_caching.store(caching, std::memory_order_release);
+    if (caching) return;
+    std::lock_guard<std::mutex> lock(g_cacheLock);
+    g_cacheW = {};
+    g_cacheA = {};
+}
+
 void ControllerScan::Remove(bool unhookCode) {
+    {
+        std::lock_guard<std::mutex> lock(g_worker.lock); // the worker ends (it holds no hook)
+        g_worker.stop = true;
+        g_worker.wake.notify_one();
+    }
+    {
+        std::lock_guard<std::mutex> lock(g_cacheLock);
+        g_cacheW = {};
+        g_cacheA = {};
+    }
     for (Slot* slot : {&g_slotW, &g_slotA}) {
         if (slot->entry && *slot->entry == slot->ours) WriteEntry(slot->entry, slot->previous);
         *slot = {};
@@ -348,7 +548,9 @@ void ControllerScan::SetEnabled(bool enabled) { g_enabled.store(enabled, std::me
 bool ControllerScan::RequestEnumeration(void* window) {
     if (!window || g_requested.load() || g_enumerations.load() > 0 || !g_codeHook.load() || !g_enabled.load()) return false;
     g_requested.store(true);
-    return PostMessageW(static_cast<HWND>(window), WM_DEVICECHANGE, DBT_DEVNODES_CHANGED, 0) != 0;
+    g_window.store(static_cast<HWND>(window), std::memory_order_release);
+    Wake(false, true); // sent from the worker: never holds this (render) thread
+    return true;
 }
 
 ControllerScan::Stats ControllerScan::GetStats() {
@@ -361,6 +563,9 @@ ControllerScan::Stats ControllerScan::GetStats() {
     s.accepted = g_accepted.load(std::memory_order_relaxed);
     s.codeHook = g_codeHook.load(std::memory_order_relaxed);
     s.requested = g_requested.load(std::memory_order_relaxed);
+    s.cached = g_cached.load(std::memory_order_relaxed);
+    s.refreshes = g_refreshes.load(std::memory_order_relaxed);
+    s.refreshChanges = g_refreshChanges.load(std::memory_order_relaxed);
     std::lock_guard<std::mutex> lock(g_timeLock);
     s.lastMs = g_lastMs;
     s.maxMs = g_maxMs;
@@ -370,11 +575,13 @@ ControllerScan::Stats ControllerScan::GetStats() {
 
 std::string ControllerScan::Describe() {
     const Stats s = GetStats();
-    char line[320];
+    char line[400];
     std::snprintf(line, sizeof(line),
-                  "controller_scan %s code_hook=%d enabled=%d enumerations=%llu devices=%llu with_xinput_pad=%llu stand_ins=%llu checks=%llu/%llu check_max_ms=%.2f enum_ms=%.1f max=%.1f requested=%d",
+                  "controller_scan %s code_hook=%d enabled=%d enumerations=%llu cached=%llu refreshes=%llu changed=%llu devices=%llu with_xinput_pad=%llu stand_ins=%llu checks=%llu/%llu check_max_ms=%.2f enum_ms=%.1f max=%.1f requested=%d",
                   g_status, static_cast<int>(s.codeHook), static_cast<int>(g_enabled.load()),
-                  static_cast<unsigned long long>(s.enumerations), static_cast<unsigned long long>(s.devices),
+                  static_cast<unsigned long long>(s.enumerations), static_cast<unsigned long long>(s.cached),
+                  static_cast<unsigned long long>(s.refreshes), static_cast<unsigned long long>(s.refreshChanges),
+                  static_cast<unsigned long long>(s.devices),
                   static_cast<unsigned long long>(s.xinputDevices), static_cast<unsigned long long>(s.standIns),
                   static_cast<unsigned long long>(s.accepted), static_cast<unsigned long long>(s.checks), s.checkMaxMs,
                   s.lastMs, s.maxMs, static_cast<int>(s.requested));

@@ -1155,6 +1155,7 @@ bool Adopt(Adapter& a, IDXGISwapChain* sc) {
     a.log.Write("adopted swapchain %ux%u fmt=%u windowed=%d", a.width, a.height,
                 static_cast<unsigned>(desc.BufferDesc.Format), static_cast<int>(desc.Windowed));
     if (a.session.developerFeatures) Diagnostics::WatchDeviceChanges(desc.OutputWindow);
+    ControllerScan::SetWindow(desc.OutputWindow); // a changed controller list is posted to it
     a.core->OnSwapchainAdopted(true);
     // Developer research: reflect every vertex shader created from now on (the level's are
     // created when it loads). Observes CreateVertexShader only.
@@ -1978,6 +1979,14 @@ void ResearchTick(Adapter& a) {
         CreateDirectoryA(dir.c_str(), nullptr);
         const int n = a.shaderCensus.Dump(dir, c.arg, 64);
         ResearchAck(a, c.id, ("shaderdump " + c.arg + ": " + std::to_string(n) + " written").c_str());
+        break;
+    }
+    case ResearchCommand::Kind::DeviceChange: { // as Windows posts it when a device comes or goes
+        const bool posted = ControllerScan::PostDeviceChange(a.platform.window, static_cast<std::uint32_t>(c.value));
+        char text[64];
+        std::snprintf(text, sizeof(text), "devicechange 0x%04x: %s (error %lu)", static_cast<unsigned>(c.value),
+                      posted ? "delivered" : "failed", posted ? 0ul : static_cast<unsigned long>(GetLastError()));
+        ResearchAck(a, c.id, text);
         break;
     }
     case ResearchCommand::Kind::FirstPersonView: {

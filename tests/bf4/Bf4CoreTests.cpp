@@ -1658,6 +1658,8 @@ TEST_CASE(ResearchCommandsForLiveFlatSessions) {
     CHECK(c[1].kind == ResearchCommand::Kind::Mouse && c[1].x == 300 && c[1].y == -40);
     CHECK(c[2].kind == ResearchCommand::Kind::SendKey && c[2].value == 3);
     CHECK(c[3].kind == ResearchCommand::Kind::Setting && c[3].arg == "depth_stereo" && c[3].x == 1);
+    const auto change = ParseResearchCommands("9 devicechange\n", 0);
+    CHECK(change.size() == 1 && change[0].kind == ResearchCommand::Kind::DeviceChange);
     CHECK(c[4].kind == ResearchCommand::Kind::Unknown && c[5].kind == ResearchCommand::Kind::Unknown &&
           c[6].kind == ResearchCommand::Kind::Unknown); // out of range: rejected, not run
     // A new session starts after the commands already in the file (never replays them).

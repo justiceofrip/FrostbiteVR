@@ -18,7 +18,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   three sessions (09:16-10:19; rotation was inverted and the gun oversized, both fixed in
   0.4.16); everything built since 0.4.17 is unseen in a headset.
 
-## At a glance (installed: 0.4.97-local)
+## At a glance (installed: 0.4.101-local)
 
 | Feature | State | Evidence |
 | --- | --- | --- |
@@ -63,7 +63,8 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   later: `viewdump <name>` (the next submitted view block, 0x1020 bytes as the game
   submitted it, to `<research>/<name>.bin`; `build/scratch/pytools/viewblock.py` lists its
   transforms, FOVs and differences between dumps) and `aimtrace <name>` (the controller
-  aim's recent updates as CSV; Controller aiming). Added 2026-10-20 (observe only: hooked calls
+  aim's recent updates as CSV; Controller aiming), `devicechange [event]` (a WM_DEVICECHANGE to
+  the game window, BF4's controller scan). Added 2026-10-20 (observe only: hooked calls
   proceed unchanged): a shader census from swapchain adoption (D3DReflect on each
   CreateVertexShader; `shadernames` writes every constant buffer, variable and resource name
   with counts and each layout, `shaderdump <word>` saves matching bytecode; BF4's shaders keep
@@ -958,8 +959,9 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
   launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
   `-World -FrameChannels 2` 5/5 (76-237 pairs, machine-dependent); `-World` with one
   channel 4/4 (47 pairs).
-- Installed locally: runtime/bf4 0.4.97-local (the source at this commit: gun in the hand by
-  default, no crosshair (centre mask), controller scan, 3D option; rollback 0.4.96-local); launcher settings
+- Installed locally: runtime/bf4 0.4.101-local (the source at this commit: gun in the hand by
+  default, no crosshair (centre mask), controller scan with its cache, 3D option; rollback
+  0.4.100-local); launcher settings
   restored to the player's after the developer sessions. Developer sessions still run the
   read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the
@@ -1048,9 +1050,17 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
     no real pad answers), since BF4 checks the connection when it makes the device.
   - One device change is posted to the game window ~600 frames after adoption if BF4 has not
     enumerated by then (it has, live: two enumerations ~8 s after start).
-  Left: DirectInput's own enumeration still blocks BF4's main thread ~210-280 ms per device-change
-  burst (rare live: only BF4's start-up enumerations in session 51); answering BF4 from a list a
-  worker thread refreshes would remove it.
+  - After BF4's first enumeration it is answered at once from the last list, and a worker
+    thread enumerates again on its own DirectInput (DirectInput itself takes ~210-280 ms here,
+    which BF4's main thread waited before); a changed list replaces the cache and the worker
+    tells BF4 of a device arrival, so it enumerates the new one. BF4 enumerates on a device
+    arrival with a device-interface record: live, a sent DBT_DEVICEARRIVAL did,
+    DBT_DEVNODES_CHANGED and DBT_DEVICEREMOVECOMPLETE did not (Windows refuses the record posted,
+    so it is sent, bounded at 200 ms, from the worker). Live (sessions 54-55): three arrivals,
+    each answered from the cache in 0.0 ms on BF4's thread, the worker re-enumerating behind
+    (no change); walking before and after. Research verb `devicechange [event]` (hex, default
+    8000) sends one; log `controller_scan ... cached= refreshes= changed=`. The "list changed"
+    path has not happened live (no device came or went).
   Live (session 38, default): BF4 polls user 0 ~150 times a second, all answered by the VR pad;
   the left stick walked 5.2 m, the trigger fired bursts; level-load device changes made two
   enumerations of 214-274 ms, no stall. The class vtable entries (in front of the Steam overlay's)
