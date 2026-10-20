@@ -1,5 +1,6 @@
 #include "Bf4HudSplit.h"
 
+#include <algorithm>
 #include <cstdio>
 
 namespace fvr::bf4 {
@@ -89,7 +90,28 @@ bool HudSplit::EnsureCopy(ID3D11Texture2D* back) {
     return true;
 }
 
-void HudSplit::OnPresent(ID3D11Texture2D* backBuffer, bool restoreCentre, float boxFraction) {
+int HudSplit::MaskBoxes(UINT width, UINT height, const CentreMask& mask, D3D11_BOX boxes[3]) {
+    const float h = static_cast<float>(height);
+    const auto even = [](float v) { return v > 0 ? static_cast<UINT>(v) & ~1u : 0u; };
+    const UINT sizes[3][2] = {{even(mask.square * h), even(mask.square * h)},
+                              {even(mask.reach * h), even(mask.band * h)},
+                              {even(mask.band * h), even(mask.reach * h)}};
+    int n = 0;
+    for (const auto& size : sizes) {
+        const UINT w = (std::min)(size[0], width & ~1u), t = (std::min)(size[1], height & ~1u);
+        if (w < 2 || t < 2) continue;
+        D3D11_BOX& b = boxes[n++];
+        b.left = (width - w) / 2;
+        b.top = (height - t) / 2;
+        b.right = b.left + w;
+        b.bottom = b.top + t;
+        b.front = 0;
+        b.back = 1;
+    }
+    return n;
+}
+
+void HudSplit::OnPresent(ID3D11Texture2D* backBuffer, bool restoreCentre, const CentreMask& mask) {
     {
         std::lock_guard<std::mutex> lock(mutex_);
         ++stats_.frames;
@@ -98,15 +120,11 @@ void HudSplit::OnPresent(ID3D11Texture2D* backBuffer, bool restoreCentre, float 
     if (restoreCentre && copied_ && backBuffer && backBuffer == back_ && copy_ && immediate_) {
         D3D11_TEXTURE2D_DESC d{};
         backBuffer->GetDesc(&d);
-        const UINT side = static_cast<UINT>(boxFraction * static_cast<float>(d.Height)) & ~1u;
-        if (side >= 2 && side <= d.Height && d.SampleDesc.Count == 1) {
-            D3D11_BOX box{};
-            box.left = (d.Width - side) / 2;
-            box.top = (d.Height - side) / 2;
-            box.right = box.left + side;
-            box.bottom = box.top + side;
-            box.back = 1;
-            immediate_->CopySubresourceRegion(backBuffer, 0, box.left, box.top, 0, copy_.Get(), 0, &box);
+        D3D11_BOX boxes[3]{};
+        const int n = d.SampleDesc.Count == 1 ? MaskBoxes(d.Width, d.Height, mask, boxes) : 0;
+        for (int i = 0; i < n; ++i)
+            immediate_->CopySubresourceRegion(backBuffer, 0, boxes[i].left, boxes[i].top, 0, copy_.Get(), 0, &boxes[i]);
+        if (n > 0) {
             std::lock_guard<std::mutex> lock(mutex_);
             ++stats_.restores;
         }

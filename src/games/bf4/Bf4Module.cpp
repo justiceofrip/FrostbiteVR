@@ -850,8 +850,9 @@ public:
     }
 
     // First thing each Present, before the frame is captured: while the head-tracked view is
-    // on, the centre box (where BF4 draws its crosshair and hit marker, the head's centre in VR)
-    // comes from the scene as it was before the HUD. The theater view keeps BF4's crosshair.
+    // on, a plus-shaped mask at the centre (where BF4 draws its crosshair and hit marker, the
+    // head's centre in VR) comes from the scene as it was before the HUD. The theater view keeps
+    // BF4's crosshair.
     void HudTick() {
         ++presentCount;
         // BF4 builds its pad list only on a device change; one is posted at the menus if it has
@@ -880,12 +881,15 @@ public:
         }
         ID3D11Texture2D* back = nullptr;
         if (swapchain) swapchain->GetBuffer(0, __uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&back));
-        hudSplit.OnPresent(back, lane, kCrosshairBox);
+        hudSplit.OnPresent(back, lane, kCrosshairMask);
         if (back) back->Release();
         if (presentCount % 600 == 0) log_.Write("%s", hudSplit.Describe().c_str());
     }
     static constexpr std::uint64_t kControllerScanFrame = 600; // ~5-10 s after adoption, at the menus
-    static constexpr float kCrosshairBox = 0.20f; // of the frame's height: the hip crosshair spans ~0.12, more when it spreads
+    // Of the frame's height: the hip crosshair spans ~0.12; a full-auto burst spread its arms along
+    // the axes to ~0.20 end to end (live, session 41), out of the 0.20 box used before. Arms of
+    // 0.30 leave margin; longer ones hid an objective marker near the eye line (session 42).
+    static constexpr HudSplit::CentreMask kCrosshairMask{0.10f, 0.30f, 0.04f};
 
     // Gun in the hand: the first-person pass gets the render's projection and is moved to the
     // hand of its own frame (Bf4FirstPersonView.h). Called each Present; off a few frames after

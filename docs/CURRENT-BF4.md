@@ -18,7 +18,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   three sessions (09:16-10:19; rotation was inverted and the gun oversized, both fixed in
   0.4.16); everything built since 0.4.17 is unseen in a headset.
 
-## At a glance (installed: 0.4.88-local)
+## At a glance (installed: 0.4.90-local)
 
 | Feature | State | Evidence |
 | --- | --- | --- |
@@ -28,7 +28,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
 | VR pad reaches BF4 (controller scan: no WMI freeze, stand-in pad) | on | live sim: polled ~150/s, walked 5.2 m, bursts; stand-in polled alone and first |
 | Controller aim (mouse look), aim dot, two-handed aim, snap turn | on | live sim: gain learned = measured, 20 deg -> 19.6 deg; ADS and firing; gains kept through a death camera |
 | Gun in the hand (BF4's rig drawn at the controller, barrel along the aim) | on (default) | live sim: follows hand position and turn, true size, held through ADS, firing |
-| No crosshair in the head-tracked view (HUD split, centre box) | on | live sim: eye pairs without it, every frame |
+| No crosshair in the head-tracked view (HUD split, centre mask) | on | live sim: eye pairs without it, also mid-burst |
 | Gun follows aim (turned render), reach limit | option | live sim: gun/laser on the aim, labels 335/335; past the reach gun and dot stop together |
 | BF4's pause/death/end menus in a level on the theater screen | on | live sim: pause -> screen -> laser RESUME -> head-tracked, twice; restart checkpoint |
 | Recenter: both stick clicks 1 s (or mod menu) | on | live sim: recentered twice, no stick click reached the game |
@@ -230,8 +230,8 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
 - Muzzle effects (live, session 38, the gun held 40 cm low and 25 cm right): the first-person
   muzzle flash is drawn at the hand-held barrel's tip (it belongs to the first-person pass and
   moves with it). Not yet looked at: tracers and smoke BF4 may spawn as world particles at its
-  own muzzle. One frame mid-burst showed BF4's crosshair (2 of 14,640 frames went without the
-  centre-box restore; cause not found).
+  own muzzle. One frame mid-burst showed BF4's crosshair: fire spreads its arms out of the old
+  centre box (fixed: the plus-shaped mask, No crosshair below).
 - Gaps: tracers and smoke (above, unverified); the grip at rest is the
   prologue rifle's (other weapons may sit a few cm off in the hand); the left hand follows the
   gun, not the left controller (no arm IK); the barrel is parallel to the bullets' line, offset
@@ -252,14 +252,20 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   onto it (draws reading BC3 UI atlases), all on the immediate context.
 - `Bf4HudSplit` (a `Bf4ContextHooks` listener; render targets tracked through
   OMSetRenderTargets): before the first HUD draw after the composite it copies the buffer (the
-  scene without the HUD); at Present, while the world lane runs, a box of 20 % of the frame's
-  height around the centre is put back from that copy, before the frame is captured. The rest of
-  the HUD (minimap, ammo, markers) stays; the theater view keeps BF4's crosshair. Only our copy
-  and that box of the presented image are written (the flat mirror shows it too). Log:
-  `hud_split ... copies= restores= no_composite=`.
-- Evidence: WARP check (the centre box comes back from the scene, outside it stays as the HUD
-  left it, one copy and one restore); live (session 30): eye pairs without the crosshair,
-  2359 copies and restores in 2360 frames.
+  scene without the HUD); at Present, while the world lane runs, a plus-shaped mask around the
+  centre is put back from that copy, before the frame is captured: a square of 10 % of the
+  frame's height, and bands 4 % thick reaching 15 % each way along the axes. A 20 % box (the
+  first version) let the crosshair's arms out mid-burst: full-auto fire spreads them along the
+  axes to ~10 % from the centre (live, sessions 38 and 41); a 44 % plus hid an objective marker
+  near the eye line (session 42). The rest of the HUD (minimap, ammo, markers off the axes)
+  stays; the theater view keeps BF4's crosshair. Only our copy and that mask of the presented
+  image are written (the flat mirror shows it too). Log: `hud_split ... copies= restores=
+  no_composite=`.
+- Evidence: WARP check (the centre square and the arms come back from the scene, off the axes
+  it stays as the HUD left it, one copy and one restore); live (session 30): eye pairs without
+  the crosshair, 2359 copies and restores in 2360 frames; session 43: still and mid-burst eye
+  pairs without it, the objective marker left of the centre kept. Markers on the axes near the
+  centre (one looked at straight) are still hidden.
 
 ## Gun follows aim: the barrel on the bullets' line (2026-10-19, built; live sim; an option since 2026-10-20)
 
@@ -904,8 +910,8 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
   launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
   `-World -FrameChannels 2` 5/5 (76-237 pairs, machine-dependent); `-World` with one
   channel 4/4 (47 pairs).
-- Installed locally: runtime/bf4 0.4.88-local (the source at this commit: gun in the hand by
-  default, no crosshair, controller scan; rollback 0.4.87-local); launcher settings
+- Installed locally: runtime/bf4 0.4.90-local (the source at this commit: gun in the hand by
+  default, no crosshair (centre mask), controller scan; rollback 0.4.89-local); launcher settings
   restored to the player's after the developer sessions. Developer sessions still run the
   read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the
@@ -933,8 +939,9 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
   answer: comfort at ~45 pairs/s (and whether frame sync 1, ~52/s, still holds there),
   gun size and the head-locked gun, the HUD corners' readability, 3D from depth's feel,
   holster positions on a real body, the laser on "Resume".
-- Gun in the hand (above): the remaining gaps are tracers and smoke (unverified), an occasional
-  frame with BF4's crosshair, the grip at rest measured on one rifle, and no arm IK. Static leads kept for that (2026-10-19/20): the weapon offset data
+- Gun in the hand (above): the remaining gaps are tracers and smoke (unverified), the grip at
+  rest measured on one rifle (the underbarrel launcher looked right in the hand, session 41),
+  and no arm IK. Reloads animate at the hand (session 41). Static leads kept for that (2026-10-19/20): the weapon offset data
   (`WeaponOffsetData`, `FirstPersonCameraData` `Offset`/`WeaponBaseOffset`) are shared assets,
   not to be written; `WeaponLagBinding` outputs only pitch/yaw/roll results (the lag is a
   rotation, no offset); skinning palettes reach the GPU as bone x inverse-bind matrices (b0

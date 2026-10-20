@@ -370,7 +370,8 @@ bool CheckHudSplit(ID3D11Device* device, const char*& why) {
         context->PSSetShaderResources(0, 1, srv);
         context->Draw(3, 0); // the HUD's first draw: the scene is copied before it
         context->ClearRenderTargetView(backView.Get(), red); // the HUD (everywhere, here)
-        hud.OnPresent(back.Get(), true, 0.2f); // the centre 20x20 back from the scene
+        // The mask back from the scene: a 20x20 centre square, bands 60 long and 6 thick.
+        hud.OnPresent(back.Get(), true, fvr::bf4::HudSplit::CentreMask{0.2f, 0.6f, 0.06f});
         const auto st = hud.GetStats();
         if (st.copies != 1 || st.restores != 1) ok = (why = "copy/restore counts", false);
         ID3D11ShaderResourceView* none[1]{};
@@ -391,10 +392,13 @@ bool CheckHudSplit(ID3D11Device* device, const char*& why) {
         D3D11_MAPPED_SUBRESOURCE m{};
         if (FAILED(context->Map(staging.Get(), 0, D3D11_MAP_READ, 0, &m))) return why = "map", false;
         auto pixel = [&](int x, int y) { return static_cast<const std::uint32_t*>(m.pData)[y * (m.RowPitch / 4) + x]; };
-        const std::uint32_t centre = pixel(50, 50), edge = pixel(45, 50), outside = pixel(5, 5), justOut = pixel(39, 50);
+        const std::uint32_t centre = pixel(50, 50), edge = pixel(41, 58), armX = pixel(22, 50), armY = pixel(50, 78),
+                            outside = pixel(5, 5), offAxis = pixel(25, 44), corner = pixel(39, 39);
         context->Unmap(staging.Get(), 0);
-        if (centre != 0xFFFF0000u || edge != 0xFFFF0000u) ok = (why = "the centre box is not the scene", false); // blue (ABGR)
-        else if (outside != 0xFF0000FFu || justOut != 0xFF0000FFu) ok = (why = "outside the box changed", false); // red
+        if (centre != 0xFFFF0000u || edge != 0xFFFF0000u) ok = (why = "the centre square is not the scene", false); // blue (ABGR)
+        else if (armX != 0xFFFF0000u || armY != 0xFFFF0000u) ok = (why = "the crosshair's arms are not the scene", false);
+        else if (outside != 0xFF0000FFu || offAxis != 0xFF0000FFu || corner != 0xFF0000FFu)
+            ok = (why = "outside the mask changed", false); // red
     }
     return ok;
 }
