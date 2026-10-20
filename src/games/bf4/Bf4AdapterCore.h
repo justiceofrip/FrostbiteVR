@@ -67,6 +67,9 @@ struct CameraRequest {
     // Alternate eyes (3D): the platform renders each frame from one eye, the eyes in turn,
     // half the eye distance (world units) from this head (Bf4FirstPersonView.h).
     bool alternateEyes = false;
+    // Native eyes (3D): the platform draws the world once per eye each frame, each half the eye
+    // distance (`halfEye`) to its side of this head (Bf4WorldRenderOverride.h).
+    bool nativeEyes = false;
     float halfEye = 0;
 };
 
@@ -198,6 +201,9 @@ public:
 
     // FrostbiteVR's own in-headset menu (menu button toggles it; the laser drives it).
     bool ModMenuOpen() const { return menuOpen_; }
+    // "Gun follows aim" turns the render toward the aim; each eye's own camera (native eyes,
+    // alternate eyes) keeps the head's turn, so with those the gun does not follow the aim.
+    bool TurnedRender() const { return menuState_.gunFollowsAim && !menuState_.nativeEyes && !menuState_.alternateEyes; }
     const ui::VrPanel& ModMenuPanel() const { return menuPanel_; }
     const ModMenuState& MenuSettings() const { return menuState_; }
     const interaction::PadState& Pad() const { return pad_; }

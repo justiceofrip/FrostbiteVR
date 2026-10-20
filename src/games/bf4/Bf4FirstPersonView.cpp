@@ -3,6 +3,8 @@
 #include <intrin.h>
 #include <smmintrin.h>
 
+#include "Bf4Diagnostics.h"
+
 #include <algorithm>
 #include <cmath>
 #include <vector>
@@ -372,12 +374,21 @@ void FirstPersonView::RewriteArms(ID3D11DeviceContext* context, const void* mapp
     stats_.armSlide[1] = armCorr_.slide[1];
 }
 
+bool FirstPersonView::TakeDrawStack(std::string& out) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!drawStackReady_) return false;
+    out = drawStack_;
+    drawStackReady_ = false;
+    return true;
+}
+
 int FirstPersonView::FrameEye() const {
     std::lock_guard<std::mutex> lock(mutex_);
     return shiftedThisFrame_ ? eye_ : -1;
 }
 
 void FirstPersonView::OnPresent() {
+    frameDraws_.store(0);
     std::lock_guard<std::mutex> lock(mutex_);
     if (shiftedThisFrame_) {
         ++stats_.shiftedFrames;
@@ -639,6 +650,18 @@ void FirstPersonView::ResearchBind(ID3D11DeviceContext* context, ID3D11Buffer* b
 
 void FirstPersonView::OnDraw(ID3D11DeviceContext* context, const char*, UINT count, UINT) {
     if (context != immediate_) return;
+    draws_.fetch_add(1, std::memory_order_relaxed);
+    drawThread_.store(GetCurrentThreadId(), std::memory_order_relaxed);
+    if (const std::uint32_t at = drawStackAt_.load(); at) {
+        if (frameDraws_.fetch_add(1) + 1 == at) {
+            drawStackAt_.store(0);
+            std::string stack = "draw " + std::to_string(at) + " (" + std::to_string(count) + " indices) thread " +
+                                std::to_string(GetCurrentThreadId()) + ":" + Diagnostics::CurrentStack();
+            std::lock_guard<std::mutex> lock(mutex_);
+            drawStack_ = std::move(stack);
+            drawStackReady_ = true;
+        }
+    }
     if (researchB0_) ResearchBind(context, nullptr); // BF4's own b0 back for this draw
     if (!inPass_) return;
     if (const UINT hide = hideCount_.load(); hide && count == hide && zeroPalette_)
@@ -729,7 +752,8 @@ void FirstPersonView::OnBindConstants(ID3D11DeviceContext* context, ContextHooks
         eye = callEye >= 0 ? callEye : eye_;
     }
     const Mat4 eyeMove = shift ? EyeShift(eye, frame.halfEye) : Identity4();
-    if (shift && IsMainViewBlock(block.data(), frame.renderKy)) {
+    const bool shiftMain = shift && (callEye < 0 || callEyeMain_.load());
+    if (shiftMain && IsMainViewBlock(block.data(), frame.renderKy)) {
         if (stage == ContextHooks::Stage::Vertex && inPass_) EndPass();
         float kx = 0, ky = 0;
         std::memcpy(&kx, block.data() + L::kProjMatrix + 0 * 4, 4);

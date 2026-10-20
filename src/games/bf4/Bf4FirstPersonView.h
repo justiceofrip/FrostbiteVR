@@ -205,10 +205,20 @@ public:
     // from (-1: none moved), read before OnPresent; OnPresent then turns to the other eye.
     int FrameEye() const;
     void OnPresent();
-    // Second view (Bf4WorldRenderOverride.h): the world render runs once per eye in a frame;
-    // each run's main views and first-person pass are seen from `eye` (0 left, 1 right; half
-    // eye distance `Frame::halfEye`). -1: back to the frame's own eye (alternate eyes or none).
-    void SetCallEye(int eye) { callEye_.store(eye); }
+    // Second view: BF4 renders once per eye in a frame; each render's first-person pass (and
+    // with `mainViews` its main views, when the camera itself is not at the eye) is seen from
+    // `eye` (0 left, 1 right; half eye distance `Frame::halfEye`). -1: back to the frame's own
+    // eye (alternate eyes or none).
+    void SetCallEye(int eye, bool mainViews = true) {
+        callEyeMain_.store(mainViews);
+        callEye_.store(eye);
+    }
+    // Draws seen on the immediate context so far (second view: draws per render).
+    std::uint64_t Draws() const { return draws_.load(); }
+    unsigned long DrawThread() const { return drawThread_.load(); } // the thread of the latest draw
+    // Research: the call stack at draw number `n` of the next frame (counted from a Present).
+    void RequestDrawStack(std::uint32_t n) { drawStackAt_.store(n); }
+    bool TakeDrawStack(std::string& out);
     // Developer research: first-person draws with this index count are drawn with an all-zero
     // palette (collapsed, unseen), to tell the pass's meshes apart. 0: none.
     void SetHideIndexCount(UINT count) { hideCount_.store(count); }
@@ -265,6 +275,12 @@ private:
     bool hideBodyPass_ = false;
     std::atomic<UINT> hideCount_{0};
     std::atomic<int> callEye_{-1};
+    std::atomic<bool> callEyeMain_{true};
+    std::atomic<std::uint64_t> draws_{0};
+    std::atomic<unsigned long> drawThread_{0};
+    std::atomic<std::uint32_t> frameDraws_{0}, drawStackAt_{0};
+    std::string drawStack_; // under mutex_
+    bool drawStackReady_ = false;
     std::atomic<UINT> maskCount_{0};
     std::atomic<int> maskLo_{0}, maskHi_{0};
     Microsoft::WRL::ComPtr<ID3D11Buffer> maskPalette_;

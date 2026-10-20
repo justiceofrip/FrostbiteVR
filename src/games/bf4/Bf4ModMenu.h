@@ -26,6 +26,10 @@ struct ModMenuState {
     bool physicalCrouch = false; // crouch for real to crouch in game (Bf4PhysicalCrouch.h; standing play)
     bool depthStereo = false;    // head-tracked view: 3D from the game's depth buffer (Bf4DepthCapture.h)
     bool alternateEyes = false;  // ...or each frame rendered from one eye, the eyes in turn (Bf4EyeResampler.h)
+    // Head-tracked view: BF4 draws the world once per eye each frame, each from its own eye
+    // (Bf4WorldRenderOverride.h). The menu's only 3D route (on by default: the player's goal);
+    // the stand-ins above (depth reprojection, alternate eyes) are no longer offered.
+    bool nativeEyes = true;
     bool hudInsets = true;       // head-tracked view: the corner HUD copied into the visible corners
     bool gunFollowsAim = false;  // head-tracked view: render along the aim so the barrel is on the bullets' line
     bool gunReachWide = false;   // ...and let that render grow wider (less sharp) so the gun follows farther

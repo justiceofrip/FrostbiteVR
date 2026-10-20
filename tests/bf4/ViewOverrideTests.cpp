@@ -392,6 +392,11 @@ void FakeWorldRender(void*, void* args, void* a3, void* a4) {
     g_world.a4 = a4;
     g_world.order.push_back(0);
 }
+int g_worldDraws = 0;
+void FakeWorldDraw(void*, void* context, void*, void*) {
+    ++g_worldDraws;
+    g_world.order.push_back(context ? 50 : 51);
+}
 struct FakeWorldObject {
     void* table[1 + kWorldRendererVtableSlots];
     std::uint8_t bytes[0x200] = {};
@@ -399,8 +404,14 @@ struct FakeWorldObject {
         table[0] = nullptr; // no RTTI, as in bf4.exe
         for (std::size_t i = 1; i <= kWorldRendererVtableSlots; ++i) table[i] = reinterpret_cast<void*>(&OtherEyeSlot);
         table[1 + kWorldRenderSlot] = reinterpret_cast<void*>(&FakeWorldRender);
+        table[1 + kWorldDrawSlot] = reinterpret_cast<void*>(&FakeWorldDraw);
         void** vptr = table + 1;
         std::memcpy(bytes, &vptr, 8);
+    }
+    void Draw() {
+        void** vt = nullptr;
+        std::memcpy(&vt, bytes, 8);
+        reinterpret_cast<WorldDrawFn>(vt[kWorldDrawSlot])(bytes, bytes + 32, nullptr, nullptr);
     }
     void Call(std::uint32_t views) {
         std::uint8_t args[0x60] = {};
@@ -416,8 +427,11 @@ void FakeJobWait(void* handle) {
     g_world.order.push_back(9); // a wait between runs
 }
 struct TwiceHooks : WorldRenderOverride::Hooks {
-    int runs = 2;
+    int runs = 2, draws = 1;
     int Runs(std::uint32_t) override { return runs; }
+    int Draws() override { return draws; }
+    void BeforeDraw(int index, int) override { g_world.order.push_back(-10 - index); }
+    void AfterDraw(int index, int) override { g_world.order.push_back(10 + index); }
     void BeforeRun(int index, int) override { g_world.order.push_back(-1 - index); }
     void AfterRun(int index, int) override { g_world.order.push_back(1 + index); }
 };
@@ -509,4 +523,27 @@ TEST_CASE(ViewOverrideSecondViewRendersEachEyeAfterTheFirstEyesJobs) {
     r.SubmitThroughVtable(v.bytes, &syncObject);
     CHECK(g_log.calls == 1 && std::memcmp(v.bytes, pristine.bytes, sizeof(v.bytes)) == 0);
     CHECK(vo.Remove(r.Object()) == ViewOverride::RemoveResult::Restored);
+}
+
+TEST_CASE(WorldRenderOverrideDrawsTheWorldOncePerEye) {
+    if (sizeof(void*) != 8) return;
+    g_world = {};
+    g_worldDraws = 0;
+    auto* obj = new FakeWorldObject;
+    TwiceHooks hooks;
+    hooks.runs = 1;
+    WorldRenderOverride wo;
+    const auto build = reinterpret_cast<std::uintptr_t>(&FakeWorldRender), draw = reinterpret_cast<std::uintptr_t>(&FakeWorldDraw);
+    CHECK(wo.Install(obj->bytes, build, &hooks, draw + 1) == WorldRenderOverride::InstallResult::UnexpectedSlot);
+    CHECK(wo.Install(obj->bytes, build, &hooks, draw) == WorldRenderOverride::InstallResult::Ok);
+    obj->Draw(); // one draw as the game does
+    CHECK(g_worldDraws == 1 && (g_world.order == std::vector<int>{-10, 50, 10}));
+    g_world.order.clear();
+    hooks.draws = 2; // once per eye, the hooks around each, the context passed on
+    obj->Draw();
+    CHECK(g_worldDraws == 3 && (g_world.order == std::vector<int>{-10, 50, 10, -11, 50, 11}));
+    const auto s = wo.GetStats();
+    CHECK(s.drawCalls == 2 && s.drawsDoubled == 1);
+    CHECK(wo.Remove());
+    delete obj;
 }

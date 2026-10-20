@@ -454,6 +454,7 @@ bool EyeResampler::Keep(ID3D11DeviceContext* context, ID3D11Texture2D* source, i
     if (!kept_[eye] || have.Width != sd.Width || have.Height != sd.Height || have.Format != Typeless(sd.Format)) {
         kept_[eye].Reset();
         keptViews_[eye].Reset();
+        keptTargets_[eye].Reset();
         keptValid_[eye] = false;
         D3D11_TEXTURE2D_DESC d{};
         d.Width = sd.Width;
@@ -462,7 +463,7 @@ bool EyeResampler::Keep(ID3D11DeviceContext* context, ID3D11Texture2D* source, i
         d.Format = Typeless(sd.Format);
         d.SampleDesc.Count = 1;
         d.Usage = D3D11_USAGE_DEFAULT;
-        d.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+        d.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET; // a target too: the HUD over a native eye
         D3D11_SHADER_RESOURCE_VIEW_DESC v{};
         v.Format = Unorm(sd.Format);
         v.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
@@ -477,6 +478,109 @@ bool EyeResampler::Keep(ID3D11DeviceContext* context, ID3D11Texture2D* source, i
     // A copy in the game's own state (it binds nothing).
     if (sd.SampleDesc.Count > 1) context_->ResolveSubresource(kept_[eye].Get(), 0, source, 0, Unorm(sd.Format));
     else context_->CopyResource(kept_[eye].Get(), source);
+    keptValid_[eye] = true;
+    return true;
+}
+
+namespace {
+// Native eyes: BF4's HUD from the presented frame over an eye's own render. Pixels the HUD left
+// unchanged (within half a step) are discarded: the eye's render stays there.
+constexpr char kHudShader[] = R"(
+Texture2D<float4> scene : register(t0);
+Texture2D<float4> shown : register(t1);
+float4 vs(uint id : SV_VertexID) : SV_Position {
+    float2 uv = float2((id << 1) & 2, id & 2);
+    return float4(uv * float2(2, -2) + float2(-1, 1), 0, 1);
+}
+float4 ps(float4 pos : SV_Position) : SV_Target {
+    int3 p = int3(pos.xy, 0);
+    float4 h = shown.Load(p);
+    if (all(abs(h.rgb - scene.Load(p).rgb) < 0.5 / 255.0)) discard;
+    return h;
+}
+)";
+} // namespace
+
+bool EyeResampler::CopyToView(ID3D11Texture2D* source, ComPtr<ID3D11Texture2D>& copy, ComPtr<ID3D11ShaderResourceView>& view) {
+    D3D11_TEXTURE2D_DESC sd{}, have{};
+    source->GetDesc(&sd);
+    if (!EightBit(Typeless(sd.Format))) return false;
+    if (copy) copy->GetDesc(&have);
+    if (!copy || have.Width != sd.Width || have.Height != sd.Height || have.Format != Typeless(sd.Format)) {
+        copy.Reset();
+        view.Reset();
+        D3D11_TEXTURE2D_DESC d{};
+        d.Width = sd.Width;
+        d.Height = sd.Height;
+        d.MipLevels = d.ArraySize = 1;
+        d.Format = Typeless(sd.Format);
+        d.SampleDesc.Count = 1;
+        d.Usage = D3D11_USAGE_DEFAULT;
+        d.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+        D3D11_SHADER_RESOURCE_VIEW_DESC v{};
+        v.Format = Unorm(sd.Format);
+        v.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+        v.Texture2D.MipLevels = 1;
+        HRESULT hr = S_OK;
+        if (FAILED(hr = device_->CreateTexture2D(&d, nullptr, &copy)) ||
+            FAILED(hr = device_->CreateShaderResourceView(copy.Get(), &v, &view))) {
+            copy.Reset();
+            view.Reset();
+            return Fail(20, hr);
+        }
+    }
+    if (sd.SampleDesc.Count > 1) context_->ResolveSubresource(copy.Get(), 0, source, 0, Unorm(sd.Format));
+    else context_->CopyResource(copy.Get(), source);
+    return true;
+}
+
+bool EyeResampler::KeepWithHud(ID3D11DeviceContext* context, ID3D11Texture2D* world, ID3D11Texture2D* scene,
+                               ID3D11Texture2D* shown, int eye) {
+    if (!world || !scene || !shown || (eye != 0 && eye != 1)) return false;
+    D3D11_TEXTURE2D_DESC wd{}, sd{}, hd{};
+    world->GetDesc(&wd);
+    scene->GetDesc(&sd);
+    shown->GetDesc(&hd);
+    if (sd.Width != wd.Width || sd.Height != wd.Height || hd.Width != wd.Width || hd.Height != wd.Height ||
+        Typeless(sd.Format) != Typeless(wd.Format) || Typeless(hd.Format) != Typeless(wd.Format))
+        return false;
+    if (!Keep(context, world, eye)) return false;
+    keptValid_[eye] = false; // kept only with its HUD
+    HRESULT hr = S_OK;
+    if (!hudPs_) {
+        ComPtr<ID3DBlob> code, errors;
+        hr = D3DCompile(kHudShader, sizeof(kHudShader) - 1, nullptr, nullptr, nullptr, "vs", "vs_4_0",
+                        D3DCOMPILE_ENABLE_STRICTNESS, 0, &code, &errors);
+        if (FAILED(hr) || FAILED(hr = device_->CreateVertexShader(code->GetBufferPointer(), code->GetBufferSize(), nullptr, &hudVs_)))
+            return Fail(21, hr);
+        code.Reset();
+        errors.Reset();
+        hr = D3DCompile(kHudShader, sizeof(kHudShader) - 1, nullptr, nullptr, nullptr, "ps", "ps_4_0",
+                        D3DCOMPILE_ENABLE_STRICTNESS, 0, &code, &errors);
+        if (FAILED(hr) || FAILED(hr = device_->CreatePixelShader(code->GetBufferPointer(), code->GetBufferSize(), nullptr, &hudPs_)))
+            return Fail(22, hr);
+    }
+    if (!CopyToView(scene, hudScene_, hudSceneView_) || !CopyToView(shown, hudShown_, hudShownView_)) return false;
+    if (!keptTargets_[eye]) {
+        D3D11_RENDER_TARGET_VIEW_DESC r{};
+        r.Format = Unorm(wd.Format);
+        r.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+        if (FAILED(hr = device_->CreateRenderTargetView(kept_[eye].Get(), &r, &keptTargets_[eye]))) return Fail(23, hr);
+    }
+    {
+        StateScope scope(context_.Get(), state_.Get());
+        context_->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        context_->VSSetShader(hudVs_.Get(), nullptr, 0);
+        context_->PSSetShader(hudPs_.Get(), nullptr, 0);
+        context_->RSSetState(raster_.Get());
+        ID3D11ShaderResourceView* views[] = {hudSceneView_.Get(), hudShownView_.Get()};
+        context_->PSSetShaderResources(0, 2, views);
+        const D3D11_VIEWPORT viewport{0, 0, float(wd.Width), float(wd.Height), 0, 1};
+        context_->RSSetViewports(1, &viewport);
+        ID3D11RenderTargetView* target = keptTargets_[eye].Get();
+        context_->OMSetRenderTargets(1, &target, nullptr);
+        context_->Draw(3, 0);
+    }
     keptValid_[eye] = true;
     return true;
 }

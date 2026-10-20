@@ -556,8 +556,8 @@ TEST_CASE(EmuBf4SplitStereoStaysOffAsUnsupported) {
     CHECK(!core.SetMenuSetting("world_stereo", 1)); // disabled item: refused
     core.SetWorldStereo(true);
     CHECK(!core.MenuSettings().worldStereo);
-    CHECK(core.SetMenuSetting("depth_stereo", 1)); // the depth route is the stereo option
-    CHECK(core.MenuSettings().depthStereo);
+    CHECK(core.SetMenuSetting("depth_stereo", 1)); // native eyes are the stereo option
+    CHECK(core.MenuSettings().nativeEyes && !core.MenuSettings().depthStereo);
 }
 
 TEST_CASE(EmuWalkTowardTheGunLeavesTheStickAlone) {
@@ -907,35 +907,37 @@ TEST_CASE(EmuMenuChoicesCarryOverToTheNextSession) {
         FakePlatform platform;
         AdapterCore core(Session(true), X64(), image.Resolve(), platform);
         core.OnSwapchainAdopted(true);
-        CHECK(core.SetMenuSetting("snap_turn", 2) && core.SetMenuSetting("depth_stereo", 2) && core.SetMenuSetting("vignette", 0));
+        CHECK(core.SetMenuSetting("snap_turn", 2) && core.SetMenuSetting("depth_stereo", 0) && core.SetMenuSetting("vignette", 0));
         saved = core.MenuValuesText();
-        CHECK(saved.find("snap_turn 2\n") != std::string::npos && saved.find("depth_stereo 2\n") != std::string::npos);
+        CHECK(saved.find("snap_turn 2\n") != std::string::npos && saved.find("depth_stereo 0\n") != std::string::npos);
         CHECK(saved.find("reload_mode") == std::string::npos && saved.find("world_settle") == std::string::npos);
     }
     FakePlatform platform;
     AdapterCore core(Session(true), X64(), image.Resolve(), platform);
     core.OnSwapchainAdopted(true);
-    CHECK(core.MenuSettings().snapDegrees == 30 && !core.MenuSettings().alternateEyes);
+    CHECK(core.MenuSettings().snapDegrees == 30 && core.MenuSettings().nativeEyes); // native eyes by default
     CHECK(core.ApplyMenuValuesText(saved + "unknown_item 1\nsnap_turn x\n") == 3);
     CHECK(core.MenuSettings().snapTurn && core.MenuSettings().snapDegrees == 45);
-    CHECK(core.MenuSettings().alternateEyes && !core.MenuSettings().vignette);
+    CHECK(!core.MenuSettings().nativeEyes && !core.MenuSettings().vignette);
     CHECK(core.MenuValuesText() == saved);
 }
 
-TEST_CASE(EmuAlternateEyesRenderEachEyeInTurn) {
-    // 3D: Alternate eyes. The lane's camera stays at the head; each request tells the platform
-    // to render each frame from one eye (chosen per frame on the render thread,
-    // Bf4FirstPersonView.h), half the eye distance (32 mm by default) to the side; never a
-    // turned render. Off again: plain requests.
+TEST_CASE(EmuNativeEyesDrawTheWorldForEachEye) {
+    // 3D: Native (each eye). The lane's camera stays at the head; each request tells the
+    // platform to draw the world once per eye (Bf4WorldRenderOverride.h), each half the eye
+    // distance (32 mm by default) to its side; never a turned render. The stand-ins (depth,
+    // alternate eyes) are not offered. Off again: plain requests.
     FakeImage image({names::kGameRenderer, names::kRenderViewUpdate, names::kClientGameContext, names::kLevelName});
     FakePlatform platform;
     AdapterCore core(Session(true), X64(), image.Resolve(), platform);
     core.OnSwapchainAdopted(true);
     platform.Campaign();
     platform.aimKnown = true;
-    CHECK(core.SetMenuSetting("depth_stereo", 2));
-    CHECK(core.MenuSettings().alternateEyes && !core.MenuSettings().depthStereo);
-    CHECK(core.SetMenuSetting("gun_aim", 1)); // gun follows aim: no turned render with alternate eyes
+    CHECK(!core.SetMenuSetting("depth_stereo", 2)); // no third choice
+    CHECK(core.MenuSettings().nativeEyes); // the default
+    CHECK(core.SetMenuSetting("depth_stereo", 1));
+    CHECK(core.MenuSettings().nativeEyes && !core.MenuSettings().alternateEyes && !core.MenuSettings().depthStereo);
+    CHECK(core.SetMenuSetting("gun_aim", 1)); // gun follows aim: no turned render with native eyes
     Clock clock;
     std::vector<CameraRequest> seen;
     for (std::uint64_t n = 0; n < 240; ++n) {
@@ -948,14 +950,14 @@ TEST_CASE(EmuAlternateEyesRenderEachEyeInTurn) {
     CHECK(seen.size() >= 8);
     for (std::size_t i = 0; i < seen.size(); ++i) {
         const CameraRequest& r = seen[i];
-        CHECK(r.alternateEyes && Near(r.halfEye, kDefaultHalfEye, 1e-6f) && !r.gunFollowsAim);
+        CHECK(r.nativeEyes && !r.alternateEyes && Near(r.halfEye, kDefaultHalfEye, 1e-6f) && !r.gunFollowsAim);
         if (i) CHECK(Near(r.local.trans.x, seen[0].local.trans.x, 1e-6f)); // the head's camera, not an eye's
     }
     CHECK(core.SetMenuSetting("depth_stereo", 0));
     LaneFrame l(3.0, 1000);
     platform.GameFrame();
     core.OnFrame(clock.Next(), l.in);
-    CHECK(!platform.cameraLog.empty() && platform.cameraLog.back().size() == 1 && !platform.cameraLog.back()[0].alternateEyes);
+    CHECK(!platform.cameraLog.empty() && platform.cameraLog.back().size() == 1 && !platform.cameraLog.back()[0].nativeEyes);
 }
 
 TEST_CASE(EmuGunFollowsAimKeepsTheBulletsOnTheBarrel) {
@@ -978,6 +980,7 @@ TEST_CASE(EmuGunFollowsAimKeepsTheBulletsOnTheBarrel) {
         core.OnSwapchainAdopted(true);
         platform.Campaign();
         platform.aimKnown = true;
+        CHECK(core.SetMenuSetting("depth_stereo", 0)); // a turned render needs one camera (no per-eye ones)
         CHECK(core.SetMenuSetting("gun_aim", choice));
         Clock clock;
         for (std::uint64_t n = 0; n < 300; ++n) {

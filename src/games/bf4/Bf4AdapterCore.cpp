@@ -156,10 +156,10 @@ void AdapterCore::ApplyMenuCommand(const ModMenuCommand& command) {
         menuState_.hudInsets = command.value != 0;
         platform_.Log(menuState_.hudInsets ? "HUD corners: on" : "HUD corners: off");
         break;
-    case ModMenuAction::SetDepthStereo: // "3D": Off, From depth, Alternate eyes
-        menuState_.depthStereo = command.value == 1;
-        menuState_.alternateEyes = command.value == 2;
-        platform_.Log(menuState_.alternateEyes ? "3D: alternate eyes" : menuState_.depthStereo ? "3D: from depth" : "3D: off");
+    case ModMenuAction::SetDepthStereo: // "3D": Off, Native (each eye)
+        menuState_.nativeEyes = command.value == 1;
+        menuState_.depthStereo = menuState_.alternateEyes = false;
+        platform_.Log(menuState_.nativeEyes ? "3D: native (each eye)" : "3D: off");
         break;
     case ModMenuAction::SetPhysicalCrouch:
         menuState_.physicalCrouch = command.value != 0;
@@ -510,7 +510,7 @@ void AdapterCore::UpdateMotionAim(const ControllerSnapshot& in, const PlatformFr
         haveEyeFov_ = true;
     }
     const math::Pose* head = in.world.valid ? &in.world.head : (in.controls.focused && in.controls.headValid ? &in.controls.head : nullptr);
-    m.limitToRender = menuState_.gunFollowsAim && haveEyeFov_ && head && haveReference_;
+    m.limitToRender = TurnedRender() && haveEyeFov_ && head && haveReference_;
     if (m.limitToRender) {
         const auto camera = XrPoseToBf4Camera(ApplyReference(reference_, *head));
         const math::Vec3 rows[3] = {camera.right, camera.up, camera.forward};
@@ -645,12 +645,16 @@ void AdapterCore::UpdateCamera(const ControllerSnapshot& in, const PlatformFrame
     const float aspect = f.backbufferHeight ? float(f.backbufferWidth) / float(f.backbufferHeight) : 16.0f / 9.0f;
     // Alternate eyes: the platform moves each frame's camera to one eye (render thread).
     const bool alternate = lane && stereo_ == StereoMode::Mono && menuState_.alternateEyes;
+    // Native eyes: the lane's camera stays at the head; the platform draws the world once per
+    // eye, each moved half the eye distance to its side (render thread).
+    const bool native = lane && stereo_ == StereoMode::Mono && menuState_.nativeEyes;
     auto request = [&](int eye) {
         CameraRequest r;
         r.eye = eye;
         const math::Pose& p = eye < 0 ? (lane ? in.world.head : in.head) : in.eyes[eye].pose;
-        if (alternate && eye < 0) {
-            r.alternateEyes = true;
+        if ((alternate || native) && eye < 0) {
+            r.alternateEyes = alternate;
+            r.nativeEyes = native;
             r.halfEye = in.world.halfEyeDistance > 0 ? in.world.halfEyeDistance
                         : halfEyeDistance_ > 0      ? halfEyeDistance_
                                                     : kDefaultHalfEye;
@@ -663,7 +667,7 @@ void AdapterCore::UpdateCamera(const ControllerSnapshot& in, const PlatformFrame
             r.renderFovY = RequiredVerticalFov(in.world.fov[0], in.world.fov[1], aspect);
             r.eyeFov[0] = in.world.fov[0];
             r.eyeFov[1] = in.world.fov[1];
-            r.gunFollowsAim = menuState_.gunFollowsAim && stereo_ == StereoMode::Mono && !alternate;
+            r.gunFollowsAim = TurnedRender() && stereo_ == StereoMode::Mono;
             r.gunFovBudget = menuState_.gunReachWide ? kGunAimFovBudgetWide : kGunAimFovBudget;
             r.gunInHand = menuState_.gunInHand && stereo_ == StereoMode::Mono;
             r.armIk = r.gunInHand && menuState_.armIk;
@@ -810,7 +814,7 @@ void AdapterCore::OnFrame(const PlatformFrame& f, const ControllerSnapshot& in) 
         meta.worldStereo = session_.developerFeatures && menuState_.worldStereo;
         // The barrel shows where the shots go while the gun follows the aim (the player wants
         // no crosshair then); with that off nothing else would, so the dot comes back.
-        meta.reticle = (menuState_.aimDot || (!menuState_.gunFollowsAim && !menuState_.gunInHand)) && aim_.engaged;
+        meta.reticle = (menuState_.aimDot || (!TurnedRender() && !menuState_.gunInHand)) && aim_.engaged;
         meta.depthStereo = menuState_.depthStereo && meta.world;
         meta.hudInsets = menuState_.hudInsets && meta.world;
         {

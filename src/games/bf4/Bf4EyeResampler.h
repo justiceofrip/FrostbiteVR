@@ -51,6 +51,13 @@ public:
     // Alternate eyes: keep this frame as `eye`'s (a copy; MSAA is resolved). Every frame of the
     // eye is kept, so the other half of a pair is at most a frame old.
     bool Keep(ID3D11DeviceContext* context, ID3D11Texture2D* source, int eye);
+    // Native eyes (BF4 drew the world once per eye this frame, Bf4WorldRenderOverride.h): keep
+    // `world`, `eye`'s own render of this frame, as that eye's, with BF4's HUD put over it at the
+    // same place. The HUD is drawn over the other eye's render only: its pixels are where `shown`
+    // (the presented frame) differs from `scene` (the same frame before its HUD, Bf4HudSplit.h).
+    // All three the same size, 8-bit. False (nothing kept) otherwise.
+    bool KeepWithHud(ID3D11DeviceContext* context, ID3D11Texture2D* world, ID3D11Texture2D* scene,
+                     ID3D11Texture2D* shown, int eye);
     bool HasKept(int eye) const { return (eye == 0 || eye == 1) && keptValid_[eye]; }
     void DropKept() { keptValid_[0] = keptValid_[1] = false; }
     ID3D11Texture2D* Eye(int eye) const { return eyes_[eye & 1].Get(); }
@@ -60,6 +67,8 @@ public:
 
 private:
     bool Initialize(ID3D11DeviceContext* context);
+    bool CopyToView(ID3D11Texture2D* source, Microsoft::WRL::ComPtr<ID3D11Texture2D>& copy,
+                    Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>& view);
     bool Fail(unsigned stage, HRESULT hr) {
         stage_ = stage;
         error_ = hr;
@@ -83,6 +92,11 @@ private:
     Microsoft::WRL::ComPtr<ID3D11Texture2D> eyes_[2];
     Microsoft::WRL::ComPtr<ID3D11Texture2D> kept_[2]; // alternate eyes: each eye's last frame
     Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> keptViews_[2];
+    Microsoft::WRL::ComPtr<ID3D11RenderTargetView> keptTargets_[2]; // native eyes: the HUD drawn into the kept eye
+    Microsoft::WRL::ComPtr<ID3D11VertexShader> hudVs_;
+    Microsoft::WRL::ComPtr<ID3D11PixelShader> hudPs_;
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> hudScene_, hudShown_;
+    Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> hudSceneView_, hudShownView_;
     bool keptValid_[2]{};
     Microsoft::WRL::ComPtr<ID3D11RenderTargetView> targets_[2];
     D3D11_TEXTURE2D_DESC sourceDesc_{};

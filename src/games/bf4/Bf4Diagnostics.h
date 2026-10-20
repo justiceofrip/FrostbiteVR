@@ -23,6 +23,8 @@ public:
     // "foreground=<process> class=<class> own=<class>[(minimized)]...": who is in front and the
     // state of this process's visible top-level windows (stall reports, focus changes).
     static std::string DescribeForeground();
+    // The calling thread's stack as module+offset (research: where a draw comes from).
+    static std::string CurrentStack();
     // Logs WM_DEVICECHANGE reaching the game window's thread (a thread WH_CALLWNDPROC hook that
     // only looks). BF4 re-enumerates its DirectInput controllers on device changes, and each
     // controller costs a WMI scan of every PnP device on its main thread (live: 4-10 s

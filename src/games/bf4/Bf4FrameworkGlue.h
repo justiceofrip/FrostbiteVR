@@ -43,6 +43,12 @@ struct FrameMeta {
     // camera's axes (rows right, up, back; BF4 world), recorded by the same submits.
     int laneEye = -1;
     float renderRotation[9]{};
+    // Native eyes: BF4 drew the world once per eye this frame, this frame's (laneEye) last.
+    // otherEye: the other eye's world from the same frame (copied between the two draws);
+    // hudScene: this frame before its HUD (the HUD goes over the other eye at the same place).
+    // Valid for the Publish call only.
+    ID3D11Texture2D* otherEye = nullptr;
+    ID3D11Texture2D* hudScene = nullptr;
     // Stereo: the core asks (mod menu), the platform reports what the engine renders.
     bool worldStereo = false;
     float halfEyeDistance = 0;        // the headset's, world units

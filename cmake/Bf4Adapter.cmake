@@ -136,7 +136,7 @@ if(BUILD_TESTING AND FVR_BF4_EMU_TEST)
   add_executable(Bf4EmuHost tests/bf4/emu/Bf4EmuHost.cpp tests/bf4/emu/ResamplerCheck.cpp src/games/bf4/Bf4EyeResampler.cpp
     tests/bf4/emu/DepthCaptureCheck.cpp src/games/bf4/Bf4DepthCapture.cpp
     tests/bf4/emu/ShaderCensusCheck.cpp src/games/bf4/Bf4ShaderCensus.cpp src/games/bf4/Bf4DrawProbe.cpp
-    src/games/bf4/Bf4ContextHooks.cpp src/games/bf4/Bf4FirstPersonView.cpp src/games/bf4/Bf4HudSplit.cpp
+    src/games/bf4/Bf4ContextHooks.cpp src/games/bf4/Bf4FirstPersonView.cpp src/games/bf4/Bf4Diagnostics.cpp src/games/bf4/Bf4HudSplit.cpp
     src/games/bf4/Bf4ControllerScan.cpp tests/bf4/emu/ControllerScanCheck.cpp src/games/bf4/Bf4Mat4.cpp
     src/games/bf4/Bf4ArmIk.cpp)
   target_compile_definitions(Bf4EmuHost PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX UNICODE _UNICODE)

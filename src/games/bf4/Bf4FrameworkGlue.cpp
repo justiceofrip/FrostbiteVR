@@ -101,7 +101,8 @@ public:
         const ULONGLONG now = GetTickCount64();
         RefreshUntracked(now);
         const bool worldAllowed = (meta.world || untracked_) && BridgeUsable(0);
-        KeepEye(context, backbuffer, meta, now);
+        if (meta.otherEye) KeepNative(context, backbuffer, meta, now);
+        else KeepEye(context, backbuffer, meta, now);
         bool pair = false;
         if (!queue_.empty()) {
             const Lease& front = queue_.front();
@@ -163,10 +164,10 @@ public:
                 failureCode = static_cast<unsigned long>(b->FailureCode());
             }
         }
-        char line[768];
+        char line[900];
         std::snprintf(line, sizeof(line),
                       "theater_link connected=%d epoch=%llu states=%llu captured=%llu published=%llu failed=%llu discarded=%llu "
-                      "lane=%s bridges=%u leases=%llu queued=%llu pairs=%llu stereo_pairs=%llu alternate_pairs=%llu alternate_one_frame=%llu kept_frames=%llu reticle_pairs=%llu marked_pairs=%llu depth_pairs=%llu aim_pairs=%llu cancels=%llu capture_failures=%llu "
+                      "lane=%s bridges=%u leases=%llu queued=%llu pairs=%llu stereo_pairs=%llu alternate_pairs=%llu alternate_one_frame=%llu kept_frames=%llu native_pairs=%llu native_hud=%llu native_failed=%llu reticle_pairs=%llu marked_pairs=%llu depth_pairs=%llu aim_pairs=%llu cancels=%llu capture_failures=%llu "
                       "fallbacks=%llu bridge_published=%llu consumed=%llu host_discarded=%llu bridge_failure=%u/0x%08lx "
                       "resampler=%u/0x%08lx%s\n",
                       !token_.empty() && !closed_ ? 1 : 0, static_cast<unsigned long long>(epoch_),
@@ -176,7 +177,8 @@ public:
                       static_cast<unsigned long long>(leases_), static_cast<unsigned long long>(queuedLeases_),
                       static_cast<unsigned long long>(pairs_), static_cast<unsigned long long>(stereoPairs_),
                       static_cast<unsigned long long>(alternatePairs_), static_cast<unsigned long long>(alternateOneFrame_),
-                      static_cast<unsigned long long>(keptFrames_),
+                      static_cast<unsigned long long>(keptFrames_), static_cast<unsigned long long>(nativePairs_),
+                      static_cast<unsigned long long>(nativeWithHud_), static_cast<unsigned long long>(nativeFailures_),
                       static_cast<unsigned long long>(reticles_), static_cast<unsigned long long>(markedPairs_),
                       static_cast<unsigned long long>(depthPairs_), static_cast<unsigned long long>(aimPairs_),
                       static_cast<unsigned long long>(cancels_), static_cast<unsigned long long>(captureFailures_),
@@ -362,6 +364,26 @@ private:
         ++keptFrames_;
     }
 
+    // Native eyes: the other eye of this very frame (its own render, BF4's HUD put over it) is
+    // kept as that eye's, with this frame's camera: the pair below takes it unturned.
+    void KeepNative(ID3D11DeviceContext* context, ID3D11Texture2D* backbuffer, const FrameMeta& meta, ULONGLONG now) {
+        if (!(meta.world && (meta.laneEye == 0 || meta.laneEye == 1)) || meta.stereoSplit || untracked_ ||
+            !(meta.renderFovY > 0.05f && meta.renderFovY < 3.1f) || !meta.width || !meta.height)
+            return;
+        const int other = 1 - meta.laneEye;
+        const bool kept = meta.hudScene ? resampler_.KeepWithHud(context, meta.otherEye, meta.hudScene, backbuffer, other)
+                                        : resampler_.Keep(context, meta.otherEye, other);
+        if (!kept) {
+            ++nativeFailures_;
+            return;
+        }
+        const float aspect = meta.renderAspect > 0.2f && meta.renderAspect < 5.0f ? meta.renderAspect : float(meta.width) / float(meta.height);
+        const float tanY = std::tan(meta.renderFovY * 0.5f);
+        kept_[other] = {true, now, AxesOf(meta), tanY * aspect, tanY};
+        nativeKeptFrame_ = meta.frameIndex;
+        if (meta.hudScene) ++nativeWithHud_;
+    }
+
     bool CapturePair(ID3D11DeviceContext* context, ID3D11Texture2D* backbuffer, const FrameMeta& meta) {
         if (!context || !backbuffer || !meta.width || !meta.height || queue_.empty()) return false;
         const Lease& front = queue_.front();
@@ -428,7 +450,8 @@ private:
                                depth.params.enabled ? &depth : nullptr, view.rotation.enabled ? &view : nullptr,
                                alternating ? &alternate : nullptr))
             return false;
-        if (alternating) ++(alternate.useKept ? alternatePairs_ : alternateOneFrame_);
+        if (alternating && meta.otherEye && alternate.useKept && nativeKeptFrame_ == meta.frameIndex) ++nativePairs_;
+        else if (alternating) ++(alternate.useKept ? alternatePairs_ : alternateOneFrame_);
         if (view.rotation.enabled) ++aimPairs_;
         if (depth.params.enabled) ++depthPairs_;
         if (reticle.show) ++reticles_;
@@ -587,6 +610,9 @@ private:
     static constexpr ULONGLONG kKeptMaxMs = 200;
     Kept kept_[2];
     std::uint64_t alternatePairs_ = 0, alternateOneFrame_ = 0, keptFrames_ = 0;
+    // Native eyes: pairs whose eyes are both this frame's own renders; of the kept eyes, how many
+    // carried BF4's HUD over; kept eyes that failed.
+    std::uint64_t nativePairs_ = 0, nativeWithHud_ = 0, nativeFailures_ = 0, nativeKeptFrame_ = ~0ull;
     ULONGLONG untrackedCheckedMs_ = 0;
     std::string snapshotDir_;
     std::uint64_t sequence_ = 0, epoch_ = 0, lastToggle_ = 0, statesPublished_ = 0;

@@ -12,6 +12,7 @@
 #include <d3d11.h>
 #include <dxgi.h>
 #include <psapi.h>
+#include <tlhelp32.h>
 
 #include "Bf4AdapterCore.h"
 #include "Bf4GpuVendor.h"
@@ -48,6 +49,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 namespace fvr::bf4 {
@@ -90,6 +92,16 @@ private:
 // skips the camera probe and the view override.
 constexpr char kAnalyzedBuildSha256[] = "9d9d1a3fca6ffd4c34a543b3fd7b049336ddbd43c0e6c5eee742e51431a6c2aa";
 bool ReadChecked(std::uintptr_t address, void* out, std::size_t size); // VirtualQuery-checked copy
+bool SwapChecked8(std::uintptr_t address, std::uint64_t expect, std::uint64_t value);
+bool ReadFast(std::uintptr_t address, void* out, std::size_t size); // checked against cached readable regions
+void ResetReadable(); // forget the cached regions (memory may have changed)
+// Private read-write memory (heap), not a module image or a mapped view: where the second
+// view's re-arm may write.
+bool PrivateWritable(std::uintptr_t address, std::size_t size);
+struct MemoryRange {
+    std::uintptr_t begin = 0, end = 0;
+};
+std::vector<MemoryRange> ThreadStacks(); // every thread's reserved stack in this process
 std::string ReadCStringChecked(std::uintptr_t address, std::size_t maxLength = 160);
 // Render device (docs/BF4-STEREO.md): global and class, analysed build only.
 constexpr std::uintptr_t kRenderDeviceGlobalRva = 0x2738080;
@@ -101,10 +113,16 @@ constexpr std::uintptr_t kEyeLoopEntryRva = 0x8BE430;
 // slot 2, the per-frame world render (docs/BF4-STEREO.md, Bf4WorldRenderOverride.h).
 constexpr std::uintptr_t kWorldRendererClassRva = 0x1DF4B60;
 constexpr std::uintptr_t kWorldRenderEntryRva = 0xCDE440;
+constexpr std::uintptr_t kWorldDrawEntryRva = 0xCE56F0; // slot 3: the world's draw (render thread)
 constexpr std::size_t kEyeLoopRendererOffset = 0x30;
 // The render thread's wait for a job handle (help run jobs until done; +0x82892C waits on the
 // world render's output handle with it).
 constexpr std::uintptr_t kJobWaitRva = 0x63C940;
+// The world draw (slot 3) opens by waiting for the world render's build jobs, exactly so
+// (+0xCE5747..+0xCE578A): if the handle at renderer +0x34378 is valid (+0xD1E570) and not done
+// (+0xD1CF50), render device (global +0x2738080) slot 9, wait (+0x63CA00), device slot 8.
+constexpr std::uintptr_t kJobValidRva = 0xD1E570, kJobDoneRva = 0xD1CF50, kJobWaitDrawRva = 0x63CA00;
+constexpr std::size_t kWorldBuildJobOffset = 0x34378;
 // R5 single-player signals (docs/BF4-SESSION-RE.md), analysed build only.
 constexpr std::uintptr_t kClientGameContextRva = 0x2670D80;
 constexpr std::uintptr_t kLevelInfoRva = 0x27A1918;
@@ -190,7 +208,59 @@ public:
         Win32Platform* owner = nullptr;
         std::atomic<bool> on{false};
         std::atomic<bool> bare{false}; // research: the second run alone (no eye camera, no copies)
+        std::atomic<bool> drawTwice{false}; // research: the world's draw (slot 3) once per eye
         int Runs(std::uint32_t) override { return on.load() ? 2 : 1; }
+        int Draws() override { return drawTwice.load() ? 2 : 1; }
+        std::atomic<int> diffFrames{0}; // research: frames whose world draw is diffed (read-only)
+        void BeforeDraw(int index, int runs) override {
+            double t = NowUs();
+            if (index == 0 && (runs == 2 || diffFrames.load() > 0)) { // the per-frame data in place first
+                owner->WaitWorldBuild();
+                owner->Cost(0, t);
+            }
+            if (index == 0 && diffFrames.load() > 0) owner->ProbeConsumer(false);
+            if (index == 0 && (diffFrames.load() > 0 || runs == 2)) {
+                t = NowUs();
+                owner->SnapshotDrawState();
+                owner->Cost(1, t);
+            }
+            if (index == 1) {
+                t = NowUs();
+                owner->RearmDrawState();
+                owner->Cost(2, t);
+                owner->LogRearm();
+            }
+            if (runs != 2) return;
+            if (index == 0) owner->drawsAtDraw[0] = owner->firstPersonView.Draws();
+            if (index == 1) owner->drawsAtDraw[1] = owner->firstPersonView.Draws();
+            owner->firstPersonView.SetCallEye(index, /*mainViews=*/true); // the GPU camera at the eye
+        }
+        void AfterDraw(int index, int runs) override {
+            if (index == 0 && diffFrames.load() > 0) {
+                owner->ProbeConsumer(true);
+                owner->DiffDrawState();
+                diffFrames.fetch_sub(1);
+            }
+            if (runs != 2) return;
+            if (index == 0) { // the first eye's world, before the second draws over it
+                const double t = NowUs();
+                owner->KeepFirstRun();
+                owner->Cost(3, t);
+            }
+            if (index == 1) {
+                const double t = NowUs();
+                owner->UndoRearm();
+                owner->Cost(4, t);
+                const std::uint64_t n = ++owner->doubledFrames;
+                if (n <= 5 || n % 300 == 0)
+                    owner->log_.Write("second view: %llu frames drawn twice (thread %lu, %zu stacks known, %llu blocks skipped)",
+                                      static_cast<unsigned long long>(n), static_cast<unsigned long>(GetCurrentThreadId()),
+                                      owner->threadStacks.size(), static_cast<unsigned long long>(owner->skippedBlocks));
+                owner->drawsLast[0] = owner->drawsAtDraw[1] - owner->drawsAtDraw[0];
+                owner->drawsLast[1] = owner->firstPersonView.Draws() - owner->drawsAtDraw[1];
+                owner->firstPersonView.SetCallEye(-1);
+            }
+        }
         void BeforeRun(int index, int runs) override {
             if (runs != 2) return;
             if (index == 0) owner->ProbeRendererFlips(0);
@@ -209,9 +279,350 @@ public:
     WorldRenderOverride worldRender;
     bool worldRenderRefused = false, secondViewWanted = false;
     int submitTwice = 0; // research: the view submit renders twice (1 same camera, 2 per eye)
+    bool drawStackPending = false;
+    bool secondViewInstalled = false; // research: the world renderer override is in place and switched on
+    std::uint64_t submitDraws[3] = {}, submitDrawsLast[2] = {};
+    std::uint64_t drawsAtDraw[2] = {}, drawsLast[2] = {}; // research: GPU draws issued by each world draw
+    // Research (read-only): what one world draw changes in the world renderer's sub-renderers
+    // ([renderer +0xB0 .. +0xB8)) and the objects their pointer fields lead to (one level),
+    // 0x400 bytes each: fields that go from non-zero to zero are per-frame data it used up.
+    struct DrawBlock {
+        std::uintptr_t address = 0, owner = 0; // owner: the sub-renderer it was reached from
+        std::uint32_t via = 0;                 // the sub-renderer field that pointed at it (0: itself)
+        std::uint8_t bytes[0x400];
+    };
+    std::vector<DrawBlock> drawBlocks;
+    // Second view: the per-frame fields the first draw used up, put back for the second draw
+    // (temporary): pointers it cleared (non-zero to zero) and lists it emptied (a vector's end
+    // set back to its begin, the field before it). After the second draw, any field it did not
+    // use up again goes back to what the first draw left.
+    struct Rearmed {
+        std::uintptr_t address = 0;
+        std::uint64_t value = 0, left = 0; // what we put back, what the first draw left
+        std::size_t block = 0;             // drawBlocks index (research log)
+    };
+    // bf4.exe's mapped image: a used-up field that held an address in it is a callback or a job
+    // function (live: a job descriptor's +0x10, cleared by the worker at +0xD1C7E1 after the
+    // call), never a draw list; re-arming one re-queues work the job system owns.
+    std::uint64_t rearmCodeSkipped = 0, rearmClassless = 0, rearmUnverified = 0;
+    // Fields a second world draw needs back (class vtable RVA, offset), each from the code that
+    // uses it up. Any other used-up field is left as the first draw left it (logged once).
+    struct RearmField {
+        std::uint32_t vtable, offset;
+    };
+    static constexpr RearmField kRearmVerified[] = {
+        // The draw's command: +0xC60174 takes it, +0xC60195 clears it; a second draw without it
+        // faults at +0xC60185 (live, session 104).
+        {0x1DE24F8, 0x200},
+        // Per-frame scratch from the frame allocator (+0x64DB00 on the global +0x23170E0, stored at +0xC68598);
+        // re-armed in every doubled frame since session 106 without a fault.
+        {0x1DE2420, 0x108},
+    };
+    static bool RearmVerified(std::uint32_t vtable, std::uint32_t offset) {
+        for (const RearmField& f : kRearmVerified)
+            if (f.vtable == vtable && f.offset == offset) return true;
+        return false;
+    }
+    std::vector<RearmField> unverifiedSeen;
+    void NoteUnverified(std::uint32_t vtable, std::uint32_t offset, std::uintptr_t owner, std::uint32_t via, std::uint64_t before) {
+        ++rearmUnverified;
+        for (const RearmField& f : unverifiedSeen)
+            if (f.vtable == vtable && f.offset == offset) return;
+        if (unverifiedSeen.size() >= 64) return;
+        unverifiedSeen.push_back({vtable, offset});
+        const auto base = reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
+        std::uint64_t subVt = 0, targetVt = 0;
+        ReadFast(owner, &subVt, 8);
+        const bool target = ReadFast(before, &targetVt, 8) && InGameImage(targetVt, 1);
+        log_.Write("second view: used-up field not re-armed (unverified): class +%x field +%x (sub +%llx via %x.%x), held %s%llx",
+                   vtable, offset, static_cast<unsigned long long>(subVt - base), via >> 12, via & 0xFFF,
+                   target ? "an object of class +" : "", static_cast<unsigned long long>(target ? targetVt - base : before));
+    }
+    std::vector<Rearmed> rearmed;
+    std::uint64_t rearmTotal = 0, rearmUndone = 0, rearmFailed = 0;
+    // Research: the sub-renderer whose draw is +0xC4B3C0 (its child [+0x40] holds the list at
+    // +0xC8/+0xD0 and the command pointer at +0x200 that a second draw found empty).
+    void ProbeConsumer(bool after) {
+        const auto base = reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
+        const auto renderer = reinterpret_cast<std::uintptr_t>(worldRender.Object());
+        std::uintptr_t begin = 0, end = 0;
+        if (!renderer || !ReadChecked(renderer + 0xB0, &begin, 8) || !ReadChecked(renderer + 0xB8, &end, 8)) return;
+        std::string line;
+        for (std::uintptr_t at = begin; at < end && at - begin < 8 * 64; at += 8) {
+            std::uintptr_t sub = 0, vt = 0, member = 0, child = 0;
+            if (!ReadChecked(at, &sub, 8) || !sub || !ReadChecked(sub, &vt, 8) || vt != base + 0x1DE23B0) continue;
+            std::uint64_t f[3] = {};
+            const bool ok = ReadChecked(sub + 0x20, &member, 8) && member && ReadChecked(member + 0x40, &child, 8) && child &&
+                            ReadChecked(child + 0xC8, &f[0], 16) && ReadChecked(child + 0x200, &f[2], 8);
+            char item[240];
+            std::snprintf(item, sizeof(item), " sub %p member %p child %p list %llx..%llx (%lld) cmd %llx%s", reinterpret_cast<void*>(sub),
+                          reinterpret_cast<void*>(member), reinterpret_cast<void*>(child), static_cast<unsigned long long>(f[0]),
+                          static_cast<unsigned long long>(f[1]), static_cast<long long>((f[1] - f[0]) / 8),
+                          static_cast<unsigned long long>(f[2]), ok ? "" : " (unreadable)");
+            line += item;
+        }
+        log_.Write("second view consumer %s draw:%s", after ? "after" : "before", line.empty() ? " none" : line.c_str());
+    }
+
+    void WaitWorldBuild() {
+        const auto base = reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
+        const auto renderer = reinterpret_cast<std::uintptr_t>(worldRender.Object());
+        std::uintptr_t device = 0, vt = 0;
+        if (!renderer || !ReadChecked(base + kRenderDeviceGlobalRva, &device, 8) || !device || !ReadChecked(device, &vt, 8) || !vt)
+            return;
+        using Is = bool (*)(void*);
+        using Call = void (*)(void*);
+        void* handle = reinterpret_cast<void*>(renderer + kWorldBuildJobOffset);
+        if (!reinterpret_cast<Is>(base + kJobValidRva)(handle) || reinterpret_cast<Is>(base + kJobDoneRva)(handle)) return;
+        std::uintptr_t slot9 = 0, slot8 = 0;
+        if (!ReadChecked(vt + 0x48, &slot9, 8) || !ReadChecked(vt + 0x40, &slot8, 8)) return;
+        reinterpret_cast<Call>(slot9)(reinterpret_cast<void*>(device));
+        reinterpret_cast<Call>(base + kJobWaitDrawRva)(handle);
+        reinterpret_cast<Call>(slot8)(reinterpret_cast<void*>(device));
+        ++buildWaits;
+    }
+    std::uint64_t buildWaits = 0;
+    void RearmDrawState() {
+        rearmed.clear();
+        for (const DrawBlock& b : drawBlocks) {
+            std::uint8_t now[sizeof(b.bytes)];
+            if (!ReadFast(b.address, now, sizeof(now))) continue;
+            for (std::uint32_t k = 0; k < sizeof(now); k += 8) {
+                std::uint64_t before = 0, after = 0;
+                std::memcpy(&before, b.bytes + k, 8);
+                std::memcpy(&after, now + k, 8);
+                if (!before || before == after) continue;
+                bool consumed = after == 0;
+                if (!consumed && k >= 8) { // a list emptied: end back to begin (begin unchanged)
+                    std::uint64_t beginBefore = 0, beginAfter = 0;
+                    std::memcpy(&beginBefore, b.bytes + k - 8, 8);
+                    std::memcpy(&beginAfter, now + k - 8, 8);
+                    consumed = beginBefore && beginBefore == beginAfter && after == beginAfter && before > beginBefore &&
+                               before - beginBefore <= 0x100000 && ((before - beginBefore) & 7) == 0;
+                }
+                if (!consumed) continue;
+                if (InGameImage(before, 1)) { // a callback or job function: not ours to re-arm
+                    ++rearmCodeSkipped;
+                    continue;
+                }
+                // Only fields of renderer objects (a block that starts with a bf4.exe vtable).
+                // Classless blocks were, live, the job system's continuation lists: their
+                // head (+0) cleared once the nodes ran; put back, the workers ran the nodes
+                // again after their function (+0x10) had been cleared (call to null, +0xD1C7DA).
+                std::uint64_t blockVt = 0;
+                std::memcpy(&blockVt, b.bytes, 8);
+                if (!InGameImage(blockVt, 1)) {
+                    ++rearmClassless;
+                    continue;
+                }
+                // ...and of those only the fields verified as per-frame draw data. A pool's free
+                // list emptied by the first draw also reads as used up: put back, the second draw
+                // took chunks still in use (live: a free list whose head became 1, fault +0xC5869B).
+                const auto base = reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
+                if (!RearmVerified(static_cast<std::uint32_t>(blockVt - base), k)) {
+                    NoteUnverified(static_cast<std::uint32_t>(blockVt - base), k, b.owner, b.via, before);
+                    continue;
+                }
+                if (SwapChecked8(b.address + k, after, before)) {
+                    rearmed.push_back({b.address + k, before, after, static_cast<std::size_t>(&b - drawBlocks.data())});
+                    ++rearmTotal;
+                } else {
+                    ++rearmFailed;
+                }
+            }
+        }
+    }
+    std::vector<MemoryRange> threadStacks;
+    std::uint64_t stackRefresh = 0, skippedBlocks = 0, classlessBlocks = 0, doubledFrames = 0;
+    int readableAge = 0;
+    // Per-eye draw costs on the render thread (smoothed, microseconds): waiting for the build,
+    // the snapshot, the re-arm, keeping the first eye's image, undoing the re-arm.
+    double costUs[5]{};
+    static double NowUs() {
+        static const double perUs = [] {
+            LARGE_INTEGER f{};
+            QueryPerformanceFrequency(&f);
+            return static_cast<double>(f.QuadPart) / 1e6;
+        }();
+        LARGE_INTEGER t{};
+        QueryPerformanceCounter(&t);
+        return static_cast<double>(t.QuadPart) / perUs;
+    }
+    void Cost(int i, double startUs) { costUs[i] = costUs[i] * 0.97 + (NowUs() - startUs) * 0.03; }
+    int rearmLogs = 0;
+    void LogRearm() { // research: the first doubled frames' re-arm, and the known consumer's command pointer
+        if (rearmLogs >= 3) return;
+        ++rearmLogs;
+        const auto base = reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
+        const auto renderer = reinterpret_cast<std::uintptr_t>(worldRender.Object());
+        std::uintptr_t begin = 0, end = 0, consumerCmd = 0;
+        if (renderer && ReadFast(renderer + 0xB0, &begin, 8) && ReadFast(renderer + 0xB8, &end, 8))
+            for (std::uintptr_t at = begin; at < end && at - begin < 8 * 64; at += 8) {
+                std::uintptr_t sub = 0, vt = 0, member = 0, child = 0;
+                if (ReadFast(at, &sub, 8) && sub && ReadFast(sub, &vt, 8) && vt == base + 0x1DE23B0 && ReadFast(sub + 0x20, &member, 8) &&
+                    member && ReadFast(member + 0x40, &child, 8) && child)
+                    consumerCmd = child + 0x200;
+            }
+        bool inBlocks = false, armed = false;
+        for (const DrawBlock& b : drawBlocks)
+            if (consumerCmd >= b.address && consumerCmd < b.address + sizeof(b.bytes)) inBlocks = true;
+        for (const Rearmed& r : rearmed)
+            if (r.address == consumerCmd) armed = true;
+        // Each field: the block's class (its vtable, when it starts with one in the image), the
+        // sub-renderer it was reached from, the path (sub field -> member field) and the offset.
+        std::string fields;
+        for (const Rearmed& r : rearmed) {
+            if (fields.size() > 1700) break;
+            const DrawBlock& b = drawBlocks[r.block];
+            std::uint64_t blockVt = 0, subVt = 0;
+            std::memcpy(&blockVt, b.bytes, 8);
+            ReadFast(b.owner, &subVt, 8);
+            char item[160];
+            std::snprintf(item, sizeof(item), " {%s%llx sub+%llx via %x.%x +%llx %s}", InGameImage(blockVt, 1) ? "vt+" : "novt ",
+                          static_cast<unsigned long long>(InGameImage(blockVt, 1) ? blockVt - base : 0),
+                          static_cast<unsigned long long>(subVt - base), b.via >> 12, b.via & 0xFFF,
+                          static_cast<unsigned long long>(r.address - b.address), r.left ? "list" : "ptr");
+            fields += item;
+        }
+        log_.Write("second view rearm: %zu blocks, %zu fields re-armed (total %llu, failed %llu, code skipped %llu, classless skipped %llu); "
+                   "consumer cmd %p in blocks %d re-armed %d;%s",
+                   drawBlocks.size(), rearmed.size(), static_cast<unsigned long long>(rearmTotal),
+                   static_cast<unsigned long long>(rearmFailed), static_cast<unsigned long long>(rearmCodeSkipped),
+                   static_cast<unsigned long long>(rearmClassless),
+                   reinterpret_cast<void*>(consumerCmd), inBlocks ? 1 : 0, armed ? 1 : 0, fields.c_str());
+    }
+    void UndoRearm() {
+        for (const Rearmed& r : rearmed)
+            if (SwapChecked8(r.address, r.value, r.left)) ++rearmUndone; // the second draw left it: as one draw leaves it
+        rearmed.clear();
+    }
+    // Two levels: each sub-renderer, every object its fields point to, and the objects the first
+    // 0x100 bytes of those point to (a sub's draw can hand over to a member: live, +0xC609E0
+    // jumps to [sub +0x20]'s draw, whose [+0x40] holds the list it uses up).
+    static bool HeapLike(std::uintptr_t p) { return p >= 0x10000 && p <= 0x7FFFFFFFFFFFull && !(p & 7); }
+    void SnapshotDrawState() {
+        if (++readableAge >= 300) { // regions are kept across frames; forgotten now and then
+            readableAge = 0;
+            ResetReadable();
+        }
+        drawBlocks.clear();
+        drawBlocks.reserve(4096); // no reallocation below the 4000 cap: references stay valid
+        const auto renderer = reinterpret_cast<std::uintptr_t>(worldRender.Object());
+        std::uintptr_t begin = 0, end = 0;
+        if (!renderer || !ReadFast(renderer + 0xB0, &begin, 8) || !ReadFast(renderer + 0xB8, &end, 8) || end < begin ||
+            end - begin > 8 * 64)
+            return;
+        // Pointer fields also lead into thread stacks (a view block handed down by pointer) and
+        // module data. Those are never snapshotted: a stack slot that read as a consumed field
+        // is a saved register or a return address a moment later, and the re-arm would write it.
+        if (threadStacks.empty() || ++stackRefresh % 600 == 0) threadStacks = ThreadStacks();
+        auto onStack = [&](std::uintptr_t address) {
+            for (const MemoryRange& r : threadStacks)
+                if (address + sizeof(DrawBlock::bytes) > r.begin && address < r.end) return true;
+            return false;
+        };
+        // Only renderer objects (a block that starts with a bf4.exe vtable) are kept: the re-arm
+        // writes nothing else. Classless blocks one level down are still followed (their first
+        // 0x100 bytes, not kept): a renderer object can hang off one.
+        std::unordered_set<std::uintptr_t> seen;
+        seen.reserve(8192);
+        struct Next {
+            std::uintptr_t address, owner;
+            std::uint32_t via;
+        };
+        // Reads a block: kept when classful (index returned), its first `expand` bytes into `scan`.
+        std::uint8_t scan[0x100];
+        auto visit = [&](std::uintptr_t address, std::uintptr_t owner, std::uint32_t via, bool expand) -> int {
+            if (drawBlocks.size() >= 4000 || seen.count(address)) return -1;
+            seen.insert(address);
+            if (onStack(address) || !PrivateWritable(address, sizeof(DrawBlock::bytes))) {
+                ++skippedBlocks;
+                return -1;
+            }
+            std::uint64_t vt = 0;
+            if (!ReadFast(address, &vt, 8)) return -1;
+            if (InGameImage(vt, 1)) {
+                DrawBlock& b = drawBlocks.emplace_back();
+                b.address = address;
+                b.owner = owner;
+                b.via = via;
+                if (!ReadFast(address, b.bytes, sizeof(b.bytes))) {
+                    drawBlocks.pop_back();
+                    return -1;
+                }
+                if (expand) std::memcpy(scan, b.bytes, sizeof(scan));
+                return 1;
+            }
+            ++classlessBlocks;
+            return expand && ReadFast(address, scan, sizeof(scan)) ? 0 : -1;
+        };
+        std::vector<Next> level1, level2;
+        for (std::uintptr_t at = begin; at < end; at += 8) {
+            std::uintptr_t sub = 0;
+            if (!ReadFast(at, &sub, 8) || !HeapLike(sub)) continue;
+            if (visit(sub, sub, 0, false) != 1) continue;
+            const DrawBlock& s = drawBlocks.back();
+            for (std::uint32_t k = 8; k < sizeof(DrawBlock::bytes); k += 8) {
+                std::uintptr_t child = 0;
+                std::memcpy(&child, s.bytes + k, 8);
+                if (HeapLike(child)) level1.push_back({child, sub, k});
+            }
+        }
+        for (const Next& n : level1) {
+            if (visit(n.address, n.owner, n.via, true) < 0) continue;
+            for (std::uint32_t j = 8; j < sizeof(scan); j += 8) {
+                std::uintptr_t grand = 0;
+                std::memcpy(&grand, scan + j, 8);
+                if (HeapLike(grand)) level2.push_back({grand, n.owner, (n.via << 12) | j});
+            }
+        }
+        for (const Next& n : level2) visit(n.address, n.owner, n.via, false);
+    }
+    void DiffDrawState() {
+        const auto base = reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
+        int cleared = 0, blocks = 0;
+        std::string line;
+        for (const DrawBlock& b : drawBlocks) {
+            std::uint8_t now[sizeof(b.bytes)];
+            if (!ReadFast(b.address, now, sizeof(now))) continue;
+            ++blocks;
+            for (std::uint32_t k = 0; k < sizeof(now); k += 8) {
+                std::uint64_t before = 0, after = 0;
+                std::memcpy(&before, b.bytes + k, 8);
+                std::memcpy(&after, now + k, 8);
+                if (!before || after) continue;
+                ++cleared;
+                if (line.size() < 1500) {
+                    std::uint64_t vt = 0;
+                    ReadChecked(b.owner, &vt, 8);
+                    char item[96];
+                    std::snprintf(item, sizeof(item), " [sub vt +%llx]%s+%x:+%x", static_cast<unsigned long long>(vt - base),
+                                  b.via ? "->" : "", b.via, k);
+                    line += item;
+                }
+            }
+        }
+        log_.Write("second view draw diff: %d blocks, %d fields cleared by one world draw:%s", blocks, cleared, line.c_str());
+    }
+    std::atomic<unsigned long> submitThread{0};
+    std::uint64_t presentDrawsAt = 0, presentDrawsLast = 0; // draws between two Presents
+    unsigned long presentThread = 0;
     static void SubmitTwiceHook(void* context, int eye) {
         auto* self = static_cast<Win32Platform*>(context);
-        if (eye == 1) self->KeepFirstRun(); // the first render's jobs are done by now
+        self->submitThread.store(GetCurrentThreadId());
+        const std::uint64_t now = self->firstPersonView.Draws();
+        if (eye == 0) self->submitDraws[0] = now;
+        if (eye == 1) {
+            self->submitDraws[1] = now;
+            self->KeepFirstRun(); // the first render's jobs are done by now
+        }
+        if (eye < 0) {
+            self->submitDrawsLast[0] = self->submitDraws[1] - self->submitDraws[0];
+            self->submitDrawsLast[1] = now - self->submitDraws[1];
+        }
+        // Per eye (mode 2): the camera is at the eye already; the first-person pass (the gun in
+        // the hand, placed relative to the head) is seen from the same eye.
+        if (self->submitTwice == 2) self->firstPersonView.SetCallEye(eye, /*mainViews=*/false);
     }
     std::mutex secondMutex;
     ID3D11Texture2D* secondBack = nullptr;   // the back buffer after the first run
@@ -234,6 +645,11 @@ public:
     HudSplit hudSplit;               // BF4's crosshair out of the head-tracked view (Bf4HudSplit.h)
     bool hudInstallTried = false;
     std::uint64_t presentCount = 0, gunInHandFrame = 0, laneFrame = 0, alternateFrame = 0;
+    // Native eyes (3D): the frame the core last asked for them; whether the world's draw runs
+    // once per eye now; the doubled-draw count a published pair last used; when a world
+    // renderer that was not found is looked for again.
+    std::uint64_t nativeFrame = 0, nativeDoubledAt = 0, nativeRetryAt = 0;
+    bool nativeOn = false, nativeRefusedLogged = false;
     float halfEye = 0.032f; // alternate eyes: the headset's half eye distance (world units)
     bool armIk = false;     // gun in the hand: the arms reach it from the body (Bf4ArmIk.h)
     bool firstPersonOn = false, firstPersonInstallTried = false;
@@ -424,7 +840,8 @@ public:
         }
         secondView.owner = this;
         worldRender.SetJobWait(reinterpret_cast<JobWaitFn>(base + kJobWaitRva));
-        const auto r = worldRender.Install(reinterpret_cast<void*>(renderer), base + kWorldRenderEntryRva, &secondView);
+        const auto r = worldRender.Install(reinterpret_cast<void*>(renderer), base + kWorldRenderEntryRva, &secondView,
+                                           base + kWorldDrawEntryRva);
         log_.Write("second view: world renderer %p, override %s", reinterpret_cast<void*>(renderer),
                    r == WorldRenderOverride::InstallResult::Ok ? "installed" : "refused");
         if (r != WorldRenderOverride::InstallResult::Ok) worldRenderRefused = true;
@@ -438,12 +855,21 @@ public:
             std::lock_guard<std::mutex> lock(secondMutex);
             copies = secondCopies;
         }
-        char line[200];
-        std::snprintf(line, sizeof(line), "second_view=%s calls=%llu doubled=%llu waits=%llu run_us=%.0f/%.0f first_run_copies=%llu submit_twice=%d renders=%llu",
+        char line[900];
+        std::snprintf(line, sizeof(line), "second_view=%s calls=%llu doubled=%llu waits=%llu run_us=%.0f/%.0f first_run_copies=%llu submit_twice=%d renders=%llu draws=%llu/%llu frame_draws=%llu threads submit=%lu draw=%lu present=%lu world_draws=%llu doubled=%llu draw_us=%.0f/%.0f gpu_draws=%llu/%llu rearmed=%llu undone=%llu failed=%llu unverified=%llu build_waits=%llu cost_us wait/snap/rearm/keep/undo=%.0f/%.0f/%.0f/%.0f/%.0f "
+                      "blocks=%zu classless=%llu",
                       worldRender.Installed() ? (secondView.on.load() ? "on" : "installed") : (worldRenderRefused ? "refused" : "off"),
                       static_cast<unsigned long long>(s.calls), static_cast<unsigned long long>(s.doubled),
                       static_cast<unsigned long long>(s.waits), s.runUs[0], s.runUs[1], static_cast<unsigned long long>(copies),
-                      submitTwice, static_cast<unsigned long long>(viewOverride.SecondViewRenders()));
+                      submitTwice, static_cast<unsigned long long>(viewOverride.SecondViewRenders()),
+                      static_cast<unsigned long long>(submitDrawsLast[0]), static_cast<unsigned long long>(submitDrawsLast[1]),
+                      static_cast<unsigned long long>(presentDrawsLast), submitThread.load(), firstPersonView.DrawThread(), presentThread,
+                      static_cast<unsigned long long>(s.drawCalls), static_cast<unsigned long long>(s.drawsDoubled), s.drawUs[0], s.drawUs[1],
+                      static_cast<unsigned long long>(drawsLast[0]), static_cast<unsigned long long>(drawsLast[1]),
+                      static_cast<unsigned long long>(rearmTotal), static_cast<unsigned long long>(rearmUndone),
+                      static_cast<unsigned long long>(rearmFailed), static_cast<unsigned long long>(rearmUnverified),
+                      static_cast<unsigned long long>(buildWaits), costUs[0],
+                      costUs[1], costUs[2], costUs[3], costUs[4], drawBlocks.size(), static_cast<unsigned long long>(classlessBlocks));
         return line;
     }
 
@@ -526,7 +952,8 @@ public:
             std::remove((logDir + "\\stereo-armed.txt").c_str());
             stereoMarker = false;
         }
-        Diagnostics::ArmFaultLogging(engineStereo.State() == EngineStereo::Status::On || secondView.on.load() || submitTwice != 0);
+        Diagnostics::ArmFaultLogging(engineStereo.State() == EngineStereo::Status::On || secondView.on.load() || submitTwice != 0 ||
+                                     secondView.drawTwice.load());
         if (engineStereo.State() == EngineStereo::Status::On) engineStereo.Update(meta.halfEyeDistance, tanX);
         const EngineStereoReading r = engineStereo.State() == EngineStereo::Status::On ? engineStereo.Read() : EngineStereoReading{};
         if (engineStereo.State() != lastStereoStatus) {
@@ -1013,6 +1440,14 @@ public:
             std::memcpy(m.renderRotation, st.renderRotation, sizeof(m.renderRotation)); // ...and so is this
             // Alternate eyes: the eye this frame was drawn from (chosen on this thread per frame).
             m.laneEye = alternateFrame && presentCount - alternateFrame <= 3 ? firstPersonView.FrameEye() : -1;
+            // Native eyes: this frame's world was drawn once per eye, the right eye's last (it is
+            // the presented frame); the left eye's was copied between the two draws.
+            if (nativeOn && secondView.drawTwice.load() && doubledFrames != nativeDoubledAt && secondBack) {
+                nativeDoubledAt = doubledFrames;
+                m.laneEye = 1;
+                m.otherEye = secondBack;
+                m.hudScene = hudSplit.PresentedScene();
+            }
             m.aimValid = st.aimInView;
             m.aimTanX = st.aimTanX;
             m.aimTanY = st.aimTanY;
@@ -1091,7 +1526,8 @@ public:
         gunInHandFrame = requests[0].gunInHand ? presentCount : 0;
         armIk = requests[0].armIk;
         alternateFrame = requests[0].alternateEyes ? presentCount : 0;
-        if (requests[0].alternateEyes) halfEye = requests[0].halfEye;
+        nativeFrame = requests[0].nativeEyes ? presentCount : 0;
+        if (requests[0].alternateEyes || requests[0].nativeEyes) halfEye = requests[0].halfEye;
         laneFrame = presentCount;
         return true;
     }
@@ -1158,10 +1594,51 @@ public:
     // Gun in the hand: the first-person pass gets the render's projection and is moved to the
     // hand of its own frame (Bf4FirstPersonView.h). Called each Present; off a few frames after
     // the world lane stops asking (the theater view shows BF4's own pass).
+    // Native eyes (3D, each Present): while the core asks, BF4's world draw (render thread) runs
+    // once per eye, each moved to its eye (Bf4WorldRenderOverride.h, SetCallEye); off a few
+    // frames after it stops asking. The world renderer is found by the eye loop scan; without
+    // it (another build, or none found) the view stays mono and the log says why.
+    void NativeEyesTick() {
+        const bool wanted = nativeFrame && presentCount - nativeFrame <= 3 && viewOverride.Installed();
+        if (!wanted) {
+            if (nativeOn) {
+                secondView.drawTwice.store(false);
+                nativeOn = false;
+                log_.Write("3D native: off (%s)", DescribeSecondView().c_str());
+            }
+            return;
+        }
+        if (nativeOn) return;
+        if (exeSha256 != kAnalyzedBuildSha256) {
+            if (!nativeRefusedLogged) log_.Write("3D native: unavailable (not the analysed bf4.exe); the view stays mono");
+            nativeRefusedLogged = true;
+            return;
+        }
+        if (!worldRender.Installed()) {
+            if (worldRenderRefused) {
+                if (!nativeRefusedLogged) log_.Write("3D native: world renderer not found yet; the view stays mono, looking again");
+                nativeRefusedLogged = true;
+                if (!nativeRetryAt) nativeRetryAt = presentCount + 1200;
+                if (presentCount < nativeRetryAt) return;
+                nativeRetryAt = 0;
+                worldRenderRefused = false; // look again (a level may have finished loading since)
+                if (eyeLoopScan.load() == 2) eyeLoopScan.store(0);
+            }
+            if (!EnsureWorldRender()) return; // still scanning: asked again next frame
+            Diagnostics::ArmFaultLogging(true);
+            secondView.on.store(false); // the build runs once; only the draw is per eye
+            secondViewInstalled = true;
+        }
+        secondView.drawTwice.store(true);
+        nativeOn = true;
+        nativeRefusedLogged = false;
+        log_.Write("3D native: on (BF4 draws the world once per eye each frame, %.1f mm to each side)", halfEye * 1000.0f);
+    }
+
     void FirstPersonTick() {
         const bool hand = gunInHandFrame && presentCount - gunInHandFrame <= 3;
         const bool alternate = alternateFrame && presentCount - alternateFrame <= 3;
-        const bool wanted = (hand || alternate) && viewOverride.Installed();
+        const bool wanted = (hand || alternate || nativeOn) && viewOverride.Installed();
         if (!wanted) {
             if (firstPersonView.Installed() && firstPersonOn) {
                 firstPersonView.SetFrame({});
@@ -1185,6 +1662,12 @@ public:
             if (!firstPersonView.Installed()) return;
         }
         firstPersonView.OnPresent(); // the frame just presented ended: alternate eyes turn to the other eye
+        {
+            const std::uint64_t draws = firstPersonView.Draws();
+            presentDrawsLast = draws - presentDrawsAt;
+            presentDrawsAt = draws;
+            presentThread = GetCurrentThreadId();
+        }
         const auto st = viewOverride.GetStats();
         FirstPersonView::Frame frame;
         frame.enabled = st.renderedFovY > 0.1f && st.gameFovY > 0.1f && lastViewAspect > 0.2f;
@@ -1281,6 +1764,9 @@ public:
         laneFrame = 0;
         if (eyeLoop.Installed()) log_.Write("eye loop override removed: %s", eyeLoop.Remove() ? "vtable restored" : "vtable not ours, left alone");
         secondView.on.store(false);
+        secondView.drawTwice.store(false);
+        nativeOn = false;
+        nativeFrame = 0;
         if (worldRender.Installed()) log_.Write("second view override removed: %s", worldRender.Remove() ? "vtable restored" : "vtable not ours, left alone");
         firstPersonView.SetCallEye(-1);
         RemoveViewOverride();
@@ -1492,7 +1978,10 @@ void OnPresent(Adapter& a, IDXGISwapChain* sc) {
     if (!a.core->Detached()) a.platform.HudTick();
     if (a.platform.firstPersonView.Installed()) a.core->NoteRecoilKicks(a.platform.firstPersonView.GetStats().kicks);
     a.core->OnFrame(f, in);
-    if (!a.core->Detached()) a.platform.FirstPersonTick();
+    if (!a.core->Detached()) {
+        a.platform.NativeEyesTick();
+        a.platform.FirstPersonTick();
+    }
     if (a.core->Detached()) {
         a.stopped = true;
         PublishStatus(a);
@@ -1654,6 +2143,127 @@ void WriteResearchImage(Adapter& a) {
 // Addresses come from the static analysis of ONE build (docs/BF4-CAMERA-RE.md); any other
 // executable hash skips the probe. Every read is VirtualQuery-checked; nothing is written.
 constexpr std::uintptr_t kRendererGlobalRva = 0x2672378;
+
+// One aligned 8-byte store to game memory that was readable as that value moments ago
+// (research: the second view's re-armed per-frame fields). False if it no longer holds `expect`
+// or the store faults.
+bool SwapChecked8(std::uintptr_t address, std::uint64_t expect, std::uint64_t value) {
+    if (address < 0x10000 || (address & 7)) return false;
+    __try {
+        auto* p = reinterpret_cast<volatile LONG64*>(address);
+        return static_cast<std::uint64_t>(InterlockedCompareExchange64(p, static_cast<LONG64>(value), static_cast<LONG64>(expect))) == expect;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+// Memory regions seen so far (render thread only), sorted and disjoint as VirtualQuery reports
+// them, readable or not: a frame's reads land in a few heap regions, and the many field values
+// that only look like pointers in unmapped ones, so most checks need no system call. Kept
+// across frames (the caller forgets them every few hundred); a region freed meanwhile is a
+// caught fault in the guarded copy, never a crash.
+struct ReadableRegion {
+    std::uintptr_t begin = 0, end = 0;
+    bool readable = false;
+    bool privateWritable = false; // MEM_PRIVATE and PAGE_READWRITE
+};
+thread_local std::vector<ReadableRegion> t_readable;
+thread_local std::size_t t_readableLast = 0;
+const ReadableRegion* RegionOf(std::uintptr_t address) {
+    if (t_readableLast < t_readable.size()) {
+        const ReadableRegion& r = t_readable[t_readableLast];
+        if (address >= r.begin && address < r.end) return &r;
+    }
+    auto it = std::upper_bound(t_readable.begin(), t_readable.end(), address,
+                               [](std::uintptr_t a, const ReadableRegion& r) { return a < r.begin; });
+    if (it != t_readable.begin() && address < std::prev(it)->end) {
+        t_readableLast = static_cast<std::size_t>(std::prev(it) - t_readable.begin());
+        return &*std::prev(it);
+    }
+    MEMORY_BASIC_INFORMATION mbi{};
+    if (!VirtualQuery(reinterpret_cast<LPCVOID>(address), &mbi, sizeof(mbi))) return nullptr;
+    ReadableRegion r;
+    r.begin = reinterpret_cast<std::uintptr_t>(mbi.BaseAddress);
+    r.end = r.begin + mbi.RegionSize;
+    if (address < r.begin || address >= r.end) return nullptr;
+    r.readable = mbi.State == MEM_COMMIT && !(mbi.Protect & (PAGE_GUARD | PAGE_NOACCESS)) &&
+                 (mbi.Protect & (PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE));
+    r.privateWritable = r.readable && mbi.Type == MEM_PRIVATE && (mbi.Protect & 0xFF) == PAGE_READWRITE;
+    if (t_readable.size() >= 8192) t_readable.clear(); // bounded; filled again as reads arrive
+    it = std::upper_bound(t_readable.begin(), t_readable.end(), r.begin,
+                          [](std::uintptr_t a, const ReadableRegion& x) { return a < x.begin; });
+    // Overlaps (a region that changed since it was seen) are dropped first: the new answer wins.
+    auto first = it;
+    while (first != t_readable.begin() && std::prev(first)->end > r.begin) --first;
+    auto last = it;
+    while (last != t_readable.end() && last->begin < r.end) ++last;
+    it = t_readable.erase(first, last);
+    it = t_readable.insert(it, r);
+    t_readableLast = static_cast<std::size_t>(it - t_readable.begin());
+    return &*it;
+}
+
+bool Readable(std::uintptr_t address, std::size_t size) {
+    const ReadableRegion* r = RegionOf(address);
+    return r && r->readable && address + size <= r->end;
+}
+
+void ResetReadable() {
+    t_readable.clear();
+    t_readableLast = 0;
+}
+
+bool PrivateWritable(std::uintptr_t address, std::size_t size) {
+    if (address < 0x10000) return false;
+    const ReadableRegion* r = RegionOf(address);
+    return r && r->privateWritable && address + size <= r->end;
+}
+
+std::vector<MemoryRange> ThreadStacks() {
+    std::vector<MemoryRange> out;
+    using QueryThread = LONG(NTAPI*)(HANDLE, int, PVOID, ULONG, PULONG);
+    static const auto query =
+        reinterpret_cast<QueryThread>(GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtQueryInformationThread"));
+    if (!query) return out;
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+    if (snap == INVALID_HANDLE_VALUE) return out;
+    const DWORD pid = GetCurrentProcessId();
+    THREADENTRY32 te{sizeof(te)};
+    for (BOOL ok = Thread32First(snap, &te); ok; ok = Thread32Next(snap, &te)) {
+        if (te.th32OwnerProcessID != pid) continue;
+        HANDLE thread = OpenThread(THREAD_QUERY_INFORMATION, FALSE, te.th32ThreadID);
+        if (!thread) continue;
+        struct {
+            LONG exitStatus;
+            PVOID teb;
+            PVOID clientProcess, clientThread;
+            ULONG_PTR affinity;
+            LONG priority, basePriority;
+        } info{};
+        NT_TIB tib{};
+        if (query(thread, 0 /* ThreadBasicInformation */, &info, sizeof(info), nullptr) >= 0 && info.teb &&
+            ReadChecked(reinterpret_cast<std::uintptr_t>(info.teb), &tib, sizeof(tib)) && tib.StackBase) {
+            // The whole reservation: from the allocation the committed part belongs to.
+            MEMORY_BASIC_INFORMATION mbi{};
+            std::uintptr_t low = reinterpret_cast<std::uintptr_t>(tib.StackLimit);
+            if (VirtualQuery(tib.StackLimit, &mbi, sizeof(mbi))) low = reinterpret_cast<std::uintptr_t>(mbi.AllocationBase);
+            out.push_back({low, reinterpret_cast<std::uintptr_t>(tib.StackBase)});
+        }
+        CloseHandle(thread);
+    }
+    CloseHandle(snap);
+    return out;
+}
+
+bool ReadFast(std::uintptr_t address, void* out, std::size_t size) {
+    if (address < 0x10000 || address > 0x7FFFFFFF0000ull || !Readable(address, size)) return false;
+    __try {
+        std::memcpy(out, reinterpret_cast<const void*>(address), size);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
 
 bool ReadChecked(std::uintptr_t address, void* out, std::size_t size) {
     if (address < 0x10000) return false;
@@ -2086,11 +2696,20 @@ void ResearchAck(Adapter& a, std::uint64_t id, const char* result) {
 void ResearchTick(Adapter& a) {
     if (!a.session.developerFeatures || a.session.researchDumpDir.empty() || !a.platform.window) return;
     HWND hwnd = a.platform.window;
+    if (a.platform.drawStackPending) { // research drawstack: log it once captured
+        std::string stack;
+        if (a.platform.firstPersonView.TakeDrawStack(stack)) {
+            a.platform.drawStackPending = false;
+            a.log.Write("research drawstack: %s", stack.c_str());
+        }
+    }
     // 0. Experiment secondview: once the world renderer is found, its render runs once per eye.
-    if (a.platform.secondViewWanted && !a.platform.secondView.on.load() && a.platform.EnsureWorldRender()) {
+    if (a.platform.secondViewWanted && !a.platform.secondViewInstalled && a.platform.EnsureWorldRender()) {
         Diagnostics::ArmFaultLogging(true); // a fault in the doubled render is logged
-        a.platform.secondView.on.store(true);
-        a.log.Write("second view: on (the world render runs once per eye each frame)");
+        const bool draw = a.platform.secondView.drawTwice.load();
+        a.platform.secondView.on.store(!draw); // the build doubled (1, 2) or only the draw (5)
+        a.platform.secondViewInstalled = true;
+        a.log.Write("second view: on (%s)", draw ? "the world's draw runs once per eye each frame" : "the world render runs once per eye each frame");
     }
     // 0. Experiment fpview: the first-person pass's view constants, set per frame.
     if (a.firstPersonMode && a.firstPersonView.Installed()) {
@@ -2297,7 +2916,7 @@ void ResearchTick(Adapter& a) {
         break;
     }
     case ResearchCommand::Kind::SecondView: { // developer: BF4's world render once per eye each frame
-        if (c.x >= 3 || c.x == 0) { // the view submit rendered twice (or off)
+        if (c.x == 3 || c.x == 4 || c.x == 0) { // the view submit rendered twice (or off)
             const int mode = c.x >= 3 ? c.x - 2 : 0;
             const bool analysed = a.platform.exeSha256 == kAnalyzedBuildSha256;
             const auto base = reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
@@ -2314,14 +2933,39 @@ void ResearchTick(Adapter& a) {
                 break;
             }
         }
+        if (c.x >= 5) { // the world's draw (render thread) once per eye; the build runs once
+            a.platform.secondView.drawTwice.store(c.x == 5);
+            if (c.x == 6) a.platform.secondView.diffFrames.store(3); // research: diff three single draws
+            if (a.platform.secondViewInstalled) a.platform.secondView.on.store(false); // the build single
+            a.platform.secondViewWanted = true; // installs the override (its build stays single)
+            a.platform.secondView.bare.store(false);
+            if (!a.platform.worldRender.Installed()) {
+                a.platform.worldRenderRefused = false;
+                if (a.platform.eyeLoopScan.load() == 2) a.platform.eyeLoopScan.store(0);
+            }
+            const std::string msg = "secondview draw twice (render thread), installing";
+            a.log.Write("research %s", msg.c_str());
+            ResearchAck(a, c.id, msg.c_str());
+            break;
+        }
+        a.platform.secondView.drawTwice.store(false);
         a.platform.secondViewWanted = c.x != 0;
         a.platform.secondView.bare.store(c.x == 2);
+        if (a.platform.secondViewInstalled) a.platform.secondView.on.store(c.x == 1 || c.x == 2);
         if (c.x && !a.platform.worldRender.Installed()) { // asked again: look again (a level may have loaded since)
             a.platform.worldRenderRefused = false;
             if (a.platform.eyeLoopScan.load() == 2) a.platform.eyeLoopScan.store(0);
         }
         if (!a.platform.secondViewWanted) a.platform.secondView.on.store(false);
         const std::string msg = std::string("secondview ") + (c.x == 2 ? "bare (installing)" : c.x ? "on (installing)" : "off");
+        a.log.Write("research %s", msg.c_str());
+        ResearchAck(a, c.id, msg.c_str());
+        break;
+    }
+    case ResearchCommand::Kind::DrawStack: { // developer: where the next frame's n-th draw comes from
+        a.platform.firstPersonView.RequestDrawStack(static_cast<std::uint32_t>(c.x));
+        a.platform.drawStackPending = true;
+        const std::string msg = "drawstack " + std::to_string(c.x) + " requested";
         a.log.Write("research %s", msg.c_str());
         ResearchAck(a, c.id, msg.c_str());
         break;

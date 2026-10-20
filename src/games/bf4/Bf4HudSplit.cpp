@@ -129,6 +129,7 @@ void HudSplit::OnPresent(ID3D11Texture2D* backBuffer, bool restoreCentre, const 
             ++stats_.restores;
         }
     }
+    sceneValid_ = copied_ && backBuffer && backBuffer == back_ && copy_;
     // The next frame: the back buffer may change with the swap chain.
     back_ = backBuffer;
     compositeSeen_ = copied_ = false;

@@ -32,6 +32,11 @@ ThreadStack g_stacks[kMaxThreads]; // filled while threads are suspended: no all
 int Unwind(CONTEXT ctx, DWORD64* out, int max) {
     int n = 0;
     __try {
+        if (!ctx.Rip && ctx.Rsp && max > 0) { // a call or return to null: the caller is on top of the stack
+            out[n++] = 0;
+            ctx.Rip = *reinterpret_cast<DWORD64*>(ctx.Rsp);
+            ctx.Rsp += 8;
+        }
         while (n < max && ctx.Rip) {
             out[n++] = ctx.Rip;
             DWORD64 imageBase = 0;
@@ -193,6 +198,16 @@ LONG CALLBACK FaultLogger(EXCEPTION_POINTERS* e) {
         Describe(frames[i], where, sizeof(where));
         at += std::snprintf(line + at, sizeof(line) - at, " %s", where);
     }
+    const CONTEXT& c = *e->ContextRecord;
+    if (at > 0 && at < static_cast<int>(sizeof(line)))
+        std::snprintf(line + at, sizeof(line) - at,
+                      " | rax=%llx rbx=%llx rcx=%llx rdx=%llx rsi=%llx rdi=%llx rbp=%llx rsp=%llx r12=%llx r13=%llx r14=%llx r15=%llx",
+                      static_cast<unsigned long long>(c.Rax), static_cast<unsigned long long>(c.Rbx),
+                      static_cast<unsigned long long>(c.Rcx), static_cast<unsigned long long>(c.Rdx),
+                      static_cast<unsigned long long>(c.Rsi), static_cast<unsigned long long>(c.Rdi),
+                      static_cast<unsigned long long>(c.Rbp), static_cast<unsigned long long>(c.Rsp),
+                      static_cast<unsigned long long>(c.R12), static_cast<unsigned long long>(c.R13),
+                      static_cast<unsigned long long>(c.R14), static_cast<unsigned long long>(c.R15));
     WriteRaw(line);
     WriteRaw("\r\n");
     return EXCEPTION_CONTINUE_SEARCH;
@@ -238,5 +253,20 @@ void Diagnostics::FramePresented() { g_lastPresent.store(GetTickCount64(), std::
 void Diagnostics::ArmFaultLogging(bool armed) { g_faultArmed.store(armed); }
 
 std::string Diagnostics::DescribeForeground() { return fvr::bf4::DescribeForeground(); }
+
+std::string Diagnostics::CurrentStack() {
+    CONTEXT ctx{};
+    RtlCaptureContext(&ctx);
+    DWORD64 rip[40] = {};
+    const int frames = Unwind(ctx, rip, 40);
+    std::string line;
+    for (int f = 0; f < frames; ++f) {
+        char where[160];
+        Describe(rip[f], where, sizeof(where));
+        line += " ";
+        line += where;
+    }
+    return line;
+}
 
 } // namespace fvr::bf4

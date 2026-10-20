@@ -18,7 +18,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   three sessions (09:16-10:19; rotation was inverted and the gun oversized, both fixed in
   0.4.16); everything built since 0.4.17 is unseen in a headset.
 
-## At a glance (installed: 0.4.133-local)
+## At a glance (installed: 0.4.154-local)
 
 | Feature | State | Evidence |
 | --- | --- | --- |
@@ -37,11 +37,10 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
 | Manual reload (magazine gesture; B tap/hold) with markers | on (player setting) | live sim: B, belt, magwell -> BF4 reloads |
 | HUD corners (ammo, minimap insets) | on | live sim (eye snapshots) |
 | Physical crouch | off | live sim: pulses both ways, view lower |
-| 3D from depth (depth buffer) | off | live sim: depth found, parallax direction right |
-| 3D: alternate eyes (each frame from one eye, true parallax) | off (option) | live sim: gun and walls at their depths, labels 327/327, 52 pairs/s |
+| 3D: native, each eye drawn by BF4 every frame | on (default, menu "3D") | live sim: 5,100 doubled frames through a head sweep, no fault; eye pairs with parallax and the HUD in both; 86 fps (115 mono); not seen in a headset |
+| 3D from depth (depth buffer), 3D alternate eyes | retired from the menu (stand-ins) | live sim earlier; code kept, unreachable |
 | BF4 split stereo (developer) | unsupported (retired) | live sim: crashes BF4's one-view world renderer |
 | Arms from the body (arm IK by palette rewrite: shoulders at the body, hands on the gun; "Free left hand" option) | on (default, "Arms") | live sim: both arms solved every pass, all arm draws agree < 0.5 mm, turned 60 deg no sleeve across the view, left hand at its controller and back on the gun two-handed, reload/ADS; no frame-rate cost (116/116 presents/s) |
-| Native per-eye rendering (BF4's view submit rendered once per eye each frame) | in progress (developer research `secondview 3/4`) | live sim: doubled submit 225 frames / 450 renders, no fault (same camera); per-eye cameras, the gun per eye and both images to the headset not done |
 | BF4's own body mesh hidden with the gun in the hand (drawn collapsed) | on (gun in the hand) | stock captures: the rule picks the body mesh 88/90 times (misses: a broken arm reference), no other of 12 meshes in 800+ draws; emulated; not yet seen live |
 
 ## Works on the real game (actual-game checks)
@@ -372,38 +371,71 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   skeleton's joints are the prologue rig's (another rig finds no chains and stays as
   BF4 draws it); aiming steeply up still shows the near upper arm large; not seen in a headset.
 
-## Native per-eye rendering (2026-10-20, in progress; developer research)
+## 3D: native, each eye drawn by BF4 (2026-10-20, built; live sim; the default)
 
-The goal (the player's): BF4 renders each eye from its own position every frame, as BC2's
-framework does with a second native view. The player rejected the stand-ins ("3D from depth",
-"Alternate eyes"); they are not the route. BF4's world renderer keeps per-view state for one
-view on PC (the split-stereo crash, below), so instead of two views in one render, BF4's
-render runs twice per frame, once per eye; the simulation runs once.
+The player's goal: BF4 renders each eye from its own position every frame (as BC2's framework
+does with a second native view), no stand-ins. BF4's world renderer keeps per-view state for one
+view on PC (the split-stereo crash, below), and running its whole render or view submit twice
+only builds data twice. What works: the simulation and the world's build (main thread) run once;
+the world's **draw** (render thread) runs once per eye.
 
-- First try, retired: the world render itself twice (`Bf4WorldRenderOverride`: world renderer
-  `[eye loop +0x30]`, vtable `+0x1DF4B60` 21 slots no RTTI, slot 2 `+0xCDE440(this, args, out
-  handle, out handle)`; developer `secondview 1/2`). Session 84 died on the first doubled frame;
-  session 86 (the second call alone): a worker job read a null at `+0xCB41B2`. The call returns
-  with its per-view render running as jobs and writes two 24-byte job handles to its 3rd/4th
-  arguments, which the render thread later waits on with `+0x63C940` (help run jobs until
-  done). Waiting on them between the runs (session 89) removed that race, but other jobs
-  (`+0xC1B2E7`, `+0xC140AD`, a divide by zero at `+0xBB6858`, texture/material work at
-  `+0xC1B250`) then faulted: BF4 double-buffers its render state per call (the per-view object
-  at `[renderer +0x850]` alternates between two buffers; session 90's diff of the whole 0x34400-
-  byte renderer around both runs shows fields rebuilt between frames outside this call) and
-  two calls a frame flip it twice. Kept as research code; not used.
-- Current route: GameRenderer slot 5 (`+0x83F0E0`, the view submit the view override already
-  wraps; it runs the per-frame view setup, the eye loop and the world render, and its 6th
-  argument `sync` is the job group its caller waits on at `+0x82892C`) called twice per frame,
-  `sync` waited on with the game's own `+0x63C940` in between (`ViewOverride::SetSecondView`;
-  developer `secondview 3` same camera, `secondview 4` the render camera half the eye distance
-  left, then right; view block restored exactly after both). Live (simulated headset, session
-  91, prologue): `secondview 3` ran 225 frames (450 renders) with no fault until the window
-  was minimized (the player took focus; no thread was in our code).
-- Not done yet: `secondview 4` live; the first-person pass (gun in the hand) per eye; both
-  eye images to the headset (the first render's image copied before the second draws over it,
-  `KeepFirstRun`, then a pair per frame); cost (two renders per frame); the HUD per eye; fault
-  logging is armed while either research mode is on (`faults.log`).
+- Where: the world renderer (`[eye loop +0x30]`, vtable `+0x1DF4B60`, found by the read-only eye
+  loop scan; the analysed bf4.exe only) is overridden through a copy of its vtable
+  (`Bf4WorldRenderOverride`): slot 2 `+0xCDE440` (build, main thread, passes through) and slot 3
+  `+0xCE56F0(this, ctx, a3, a4)` (draw, render thread), called twice per frame. Slot 3 opens by
+  waiting for the build's jobs (handle at renderer `+0x34378`: `+0xD1E570` valid, `+0xD1CF50`
+  done, device `+0x2738080` slot 9, `+0x63CA00`, slot 8); the adapter does the same wait before
+  the first draw so the per-frame data are in place when it is read.
+- Per eye: before each draw the main views' constants are moved to that eye
+  (`FirstPersonView::SetCallEye`, half the headset's eye distance along the head's right axis;
+  the gun in the hand and the arms are drawn from the same eye). After the first draw the back
+  buffer (the first eye's composited world) is copied (`KeepFirstRun`); the second draw's result
+  is the presented frame (right eye).
+- Used-up per-frame data: one draw uses up some per-frame fields (live: the draw command at
+  `[[sub +0x20] +0x40] +0x200` of the sub-renderer with vtable `+0x1DE23B0`, taken at
+  `+0xC60174`, cleared at `+0xC60195`; a second draw without it faults at `+0xC60185`). Before the
+  first draw the sub-renderers (`[renderer +0xB0..+0xB8)`) and the renderer objects their fields
+  lead to (two levels; classless blocks one level down are followed, not kept; never thread
+  stacks, module images or mapped views) are snapshotted; after it, only **verified** fields that
+  went to zero are put back for the second draw (compare-exchange, the value the first draw
+  left), and after the second draw any it did not use up again goes back exactly:
+  `+0x1DE24F8 +0x200` (the command above) and `+0x1DE2420 +0x108` (per-frame scratch from the
+  frame allocator, stored at `+0xC68598`). Every other used-up field is left as the first draw
+  left it and logged once (`used-up field not re-armed (unverified)`). Found the hard way
+  (sessions 105-111): putting back any used-up field wrote thread stacks (a view block passed by
+  pointer: return addresses and a frame pointer zeroed), job continuation lists (finished nodes
+  run again, a call to null at `+0xD1C7DA`), callbacks, and a pool's free list emptied by the
+  first draw (the second draw took chunks still in use: a head of 1, fault `+0xC5869B`). The
+  upload pointer `+0x1DC4820 +0xD0` also reads as used up but its dirty flag (`+0xF0`) makes
+  the second draw skip the upload, so it is not put back.
+- To the headset: the frame lane (`Bf4FrameworkGlue`) gets the presented frame as the right eye
+  (`laneEye` 1) and the copy as the left (`otherEye`); `EyeResampler::KeepWithHud` keeps the
+  left eye with BF4's HUD put over it at the same place (the pixels where the presented frame
+  differs from `HudSplit`'s copy of it before the HUD: the HUD is drawn once, after the second
+  draw); the pair is cut from both with the same camera (no turn, no reprojection).
+- Live (simulated headset, prologue, sessions 108-112): equal GPU draws in both eye draws
+  (858-954 each); eye images differ by parallax (near rows 7-11 px, far rows 4-5 px at 960 px,
+  the right eye's content to the left: correct); headset eye snapshots show the gun, arm and
+  walls at their own depths in each eye and the HUD in both; 5,100 doubled frames through a head
+  sweep (yaw +-140 deg, pitch -40..+30) without a fault; 86 game fps with native on against 115
+  mono at 1920x1080 (the adapter's part on the render thread: snapshot ~0.25 ms, re-arm ~0.1 ms,
+  copy and HUD pass on the GPU). Log: `3D native: on`, `theater_link ... native_pairs=
+  native_hud= native_failed=`, `second_view=... rearmed= undone= unverified= cost_us
+  wait/snap/rearm/keep/undo=`.
+- Menu "3D: Off / Native (each eye)" (id `depth_stereo`, values 0-1, default Native). The
+  stand-ins (3D from depth, alternate eyes) are no longer offered (code kept, unreachable from
+  the menu); a saved `depth_stereo 2` is skipped (default applies). "Gun follows aim" (a turned
+  render) needs one camera: with native eyes the gun is not turned and the aim is not limited.
+- Gaps: not seen in a headset (comfort, scale, cost at the headset's rate); one level checked
+  (prologue): another scene may use up a field not on the verified list (logged; the second eye
+  could then miss something or fault); BF4's HUD and markers are at the head's centre camera in
+  both eyes (at infinity); the world renderer must be found again after a level change (the
+  eye loop scan reruns on refusal after ~1,200 frames); the second draw re-runs the whole world
+  draw (shadows and other view-independent passes included), so the cost could come down.
+- Earlier tries, retired (kept as developer research `secondview 1-4`): the world render's build
+  (slot 2) twice per frame (session 84 died on the first doubled frame; BF4 double-buffers its
+  per-view state per call, flipped twice), and the GameRenderer view submit (slot 5) twice with
+  its `sync` waited between (stable, 225 frames, but it only builds data: one draw follows).
 
 ## BF4's own body hidden with the gun in the hand (2026-10-20, built; not live)
 
@@ -922,8 +954,7 @@ using the frame's depth buffer (depth-image-based rendering; no simulation or re
   live as 0.06 / 20000; reversed depth when the buffer clears to 0), by a four-step
   fixed-point search; nearer than 0.4 m counts as 0.4 m (the weapon, about where a VR gun
   is held; nearer would mean a very strong per-eye shift). The aim dot is drawn where the source point under the aim lands in each eye, so it sits on the surface it covers (no double image on a near target); gesture markers keep their own per-eye placement.
-- Mod menu "3D: Off / From depth / Alternate eyes" (id `depth_stereo`, values 0-2; default
-  off). Log: `depth_capture installed= main=WxH
+- No longer in the mod menu (2026-10-20: "3D" is Off / Native; the player rejected stand-ins). Log: `depth_capture installed= main=WxH
   format= clear= split= ... msaa_clears= hooked=` every 600 frames, `depth_pairs=`; developer sessions
   write `vr-snapshot-depth.bmp` (log scale: 0.1 m white, 200 m black; multisampled buffers
   read at sample 0) the first time it works, with the other snapshots and on `depthprobe`
@@ -1199,7 +1230,7 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
   there: 2 Presents per pair). Frame sync 1 (label-checked clean at 118 fps) could double
   the game's limit, but BF4's main thread may run a frame ahead when GPU-bound, so 2 stays
   the default until a headset session shows otherwise.
-- 3D: BF4's split route is unsupported (above); 3D from depth is the stereo route. The
+- 3D: native each-eye drawing is the stereo route (above); BF4's split route is unsupported. The
   NVAPI route (sequential eye passes, emulated) needs a Steam launch option to test live.
 - Laser click on "Resume": fixed on the game side. Live on the simulated headset
   (0.4.53-local) the VR laser aimed at RESUME on the campaign screen pressed and released at

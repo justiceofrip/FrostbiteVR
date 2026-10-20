@@ -48,6 +48,9 @@ public:
     // the swap chain); with `restoreCentre` the mask around the centre is copied back from the
     // scene. Re-arms for the next frame.
     void OnPresent(ID3D11Texture2D* backBuffer, bool restoreCentre, const CentreMask& mask = {});
+    // After OnPresent: the presented frame's scene before its HUD (our copy), when this frame
+    // had one; it stays until the next frame's first HUD draw. Null otherwise.
+    ID3D11Texture2D* PresentedScene() const { return sceneValid_ ? copy_.Get() : nullptr; }
     Stats GetStats() const;
     std::string Describe() const;
 
@@ -63,6 +66,7 @@ private:
     ID3D11Resource* back_ = nullptr; // the current back buffer (not owned; refreshed each Present)
     bool targetIsBack_ = false;      // the immediate context draws into it now
     bool compositeSeen_ = false, copied_ = false;
+    bool sceneValid_ = false; // the frame just presented had its scene copied
     mutable std::mutex mutex_;
     Stats stats_;
 };

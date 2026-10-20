@@ -10,6 +10,7 @@ namespace fvr::bf4 {
 
 namespace {
 std::atomic<WorldRenderFn> g_original{nullptr};
+std::atomic<WorldDrawFn> g_originalDraw{nullptr};
 std::atomic<WorldRenderOverride*> g_active{nullptr};
 
 double NowUs() {
@@ -33,15 +34,20 @@ WorldRenderOverride::~WorldRenderOverride() {
     g_active.compare_exchange_strong(expected, nullptr, std::memory_order_acq_rel);
 }
 
-WorldRenderOverride::InstallResult WorldRenderOverride::Install(void* object, std::uintptr_t expectedSlot, Hooks* hooks) {
+WorldRenderOverride::InstallResult WorldRenderOverride::Install(void* object, std::uintptr_t expectedSlot, Hooks* hooks,
+                                                              std::uintptr_t expectedDraw) {
     if (object_) return InstallResult::AlreadyInstalled;
     if (!object || !hooks || sizeof(void*) != 8) return InstallResult::NoObject; // the analysed layout is x64's
     void** vtable = *static_cast<void***>(object);
     if (!vtable || reinterpret_cast<std::uintptr_t>(vtable[kWorldRenderSlot]) != expectedSlot)
         return InstallResult::UnexpectedSlot;
+    if (expectedDraw && reinterpret_cast<std::uintptr_t>(vtable[kWorldDrawSlot]) != expectedDraw)
+        return InstallResult::UnexpectedSlot;
     copy_ = new void*[kWorldRendererVtableSlots + 1];
     std::memcpy(copy_, vtable - 1, sizeof(void*) * (kWorldRendererVtableSlots + 1));
     copy_[1 + kWorldRenderSlot] = reinterpret_cast<void*>(&WorldRenderOverride::Call);
+    if (expectedDraw) copy_[1 + kWorldDrawSlot] = reinterpret_cast<void*>(&WorldRenderOverride::Draw);
+    g_originalDraw.store(reinterpret_cast<WorldDrawFn>(vtable[kWorldDrawSlot]), std::memory_order_release);
     originalVtable_ = vtable;
     object_ = object;
     hooks_ = hooks;
@@ -108,6 +114,29 @@ void WorldRenderOverride::Call(void* self, void* args, void* a3, void* a4) {
     o->stats_.waits += waits;
     o->stats_.runUs[0] = us[0];
     o->stats_.runUs[1] = us[1];
+}
+
+void WorldRenderOverride::Draw(void* self, void* context, void* a3, void* a4) {
+    const WorldDrawFn original = g_originalDraw.load(std::memory_order_acquire);
+    WorldRenderOverride* o = g_active.load(std::memory_order_acquire);
+    if (!o || self != o->object_ || !o->hooks_) {
+        original(self, context, a3, a4);
+        return;
+    }
+    const int runs = o->hooks_->Draws() == 2 ? 2 : 1;
+    double us[2] = {0, 0};
+    for (int i = 0; i < runs; ++i) {
+        o->hooks_->BeforeDraw(i, runs);
+        const double t0 = NowUs();
+        original(self, context, a3, a4);
+        us[i] = NowUs() - t0;
+        o->hooks_->AfterDraw(i, runs);
+    }
+    std::lock_guard<std::mutex> lock(o->mutex_);
+    ++o->stats_.drawCalls;
+    if (runs == 2) ++o->stats_.drawsDoubled;
+    o->stats_.drawUs[0] = us[0];
+    o->stats_.drawUs[1] = us[1];
 }
 
 } // namespace fvr::bf4

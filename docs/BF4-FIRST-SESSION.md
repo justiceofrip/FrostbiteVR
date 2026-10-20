@@ -75,21 +75,16 @@ raise BF4's Video > Resolution Scale (150-200 %) before judging blur.
 
 ## Try: 3D
 
-Menu > 3D (default Off) has two ways to give the world depth. Try each in a mission, look at
-the gun and at something near and far, and mark the moment if anything is uncomfortable.
+Menu > 3D: **Native (each eye)** is the default (0.4.154): BF4 draws the world twice every
+frame, once from each eye, so the world, the gun in your hand and your arms have real depth
+and both eyes show the same moment. In a mission, look at the gun and at something near and
+far, turn your head, and mark the moment if anything is uncomfortable or looks wrong in one eye
+(something missing, flicker). The frame rate is lower than mono (live without a headset: 86
+against 115 game fps). Menu > 3D > Off goes back to one image for both eyes. The log says
+`3D native: on` when it starts; if BF4 is not the analysed build or its world renderer is not
+found it says so and stays mono. Log: `native_pairs=` (`theater_link`), `second_view=`.
 
-**Alternate eyes** (new, 0.4.97): each game frame is rendered from one eye, the eyes in turn,
-so both the world and the gun in your hand have real depth; each eye updates at half the game's
-frame rate and moving things are a frame apart between the eyes. Note comfort when turning the
-head and when things move fast. Log: `alternate_pairs=` (`theater_link`) and `eye_views=`
-(`first_person_view`).
-
-**From depth**: Menu > 3D > From depth, in a mission. Each eye is shifted by the game's depth buffer, so
-near things should stand out (with BF4's deferred antialiasing on too: the depth is then
-read from its first sample). Look at something close (a wall, a crate) and something far.
-Some doubled outlines at depth edges are expected (seen live); if it looks wrong otherwise
-(the gun at a strange depth, no depth at all, discomfort), switch it off and mark the moment; `vr-snapshot-depth.bmp` and the `depth_capture` log line show what
-it found.
+The earlier stand-ins (3D from depth, alternate eyes) are no longer in the menu.
 
 BF4's own split 3D (the old developer "3D depth") is retired: it crashed BF4's one-view
 world renderer (found live without a headset; BF4-STEREO.md). Its menu item is shown
@@ -102,7 +97,8 @@ The launcher's feedback button bundles the logs. The lines that answer the open 
 | Log line (`runtime/bf4/logs/bf4-adapter.log`) | Tells us |
 | --- | --- |
 | `theater_link ... bridges=3 pairs= queued=` | the pair rate in game |
-| `theater_link ... alternate_pairs= alternate_one_frame=` | 3D alternate eyes |
+| `theater_link ... native_pairs= native_hud= native_failed=` | 3D native: pairs whose eyes are both BF4's own renders |
+| `second_view=... unverified= cost_us` and `used-up field not re-armed` | 3D native: the second draw's health and cost |
 | `first_person_view ... hand= passes= zoom_held=` | the gun in the hand matched every frame, aiming down sights |
 | `first_person_view ... arms=read/rewritten solved= arm_us_per_pass=` | arms from the body solved every frame and what it cost |
 | `hud_split ... restores=` | BF4's crosshair kept out of the view |

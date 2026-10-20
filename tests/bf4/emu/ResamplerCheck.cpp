@@ -340,6 +340,35 @@ bool CheckEyeResamplerReticle(ID3D11Device* device, const char*& why) {
                               nullptr, &alt) ||
             channel(1, 0) < 180)
             return why = "alternate eyes: without a kept frame the other eye shows this one", false;
+
+        // Native eyes: both eyes are this frame's own renders. The left eye's (red) is kept with
+        // BF4's HUD put over it where the presented frame differs from the same frame before its
+        // HUD (grey): no HUD, then a green square at the centre; the right eye is the presented
+        // frame, the pair cut from both with the same camera.
+        std::vector<std::uint32_t> hud(kSize * kSize, 0xFF808080u);
+        for (UINT y = 28; y < 36; ++y)
+            for (UINT x = 28; x < 36; ++x) hud[y * kSize + x] = 0xFF00C000u;
+        const D3D11_SUBRESOURCE_DATA hudData{hud.data(), kSize * 4, 0};
+        ComPtr<ID3D11Texture2D> hudFrame;
+        if (FAILED(device->CreateTexture2D(&d, &hudData, &hudFrame))) return why = "create the HUD frame", false;
+        alt.fresh = 1;
+        alt.useKept = true;
+        alt.staleRotation = {};
+        resampler.DropKept();
+        if (!resampler.KeepWithHud(context.Get(), redFrame.Get(), frame.Get(), frame.Get(), 0) ||
+            !resampler.Render(context.Get(), frame.Get(), crops, kSize, kSize, DXGI_FORMAT_R8G8B8A8_UNORM, {}, eyesFov, nullptr,
+                              nullptr, &alt))
+            return why = "native eyes: a pair without a HUD", false;
+        if (channel(0, 0) < 180 || channel(0, 8) > 40) return why = "native eyes: the left eye is not its own render", false;
+        if (std::abs(channel(1, 0) - 128) > 6) return why = "native eyes: the right eye is not the presented frame", false;
+        if (!resampler.KeepWithHud(context.Get(), redFrame.Get(), frame.Get(), hudFrame.Get(), 0) ||
+            !resampler.Render(context.Get(), hudFrame.Get(), crops, kSize, kSize, DXGI_FORMAT_R8G8B8A8_UNORM, {}, eyesFov, nullptr,
+                              nullptr, &alt))
+            return why = "native eyes: a pair with a HUD", false;
+        if (channel(0, 8) < 180 || channel(0, 0) > 40) return why = "native eyes: the HUD is not over the left eye", false;
+        if (channel(1, 8) < 180) return why = "native eyes: the HUD is not in the right eye", false;
+        if (resampler.KeepWithHud(context.Get(), redFrame.Get(), frame.Get(), nullptr, 0))
+            return why = "native eyes: kept without the presented frame", false;
         resampler.DropKept();
     }
     return true;
