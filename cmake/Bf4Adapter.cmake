@@ -37,6 +37,8 @@ add_library(FvrBf4Core STATIC
   src/games/bf4/Bf4ReloadClassifier.cpp
   src/games/bf4/Bf4ReloadDriver.cpp
   src/games/bf4/Bf4BodyGestures.cpp
+  src/games/bf4/Bf4Mat4.cpp
+  src/games/bf4/Bf4ArmIk.cpp
   src/games/bf4/stereo/NvapiStereoEmu.cpp
   src/games/bf4/stereo/NvapiCoreEmu.cpp
   src/games/bf4/stereo/EyeSequence.cpp
@@ -53,7 +55,7 @@ if(BUILD_TESTING)
   add_executable(Bf4CoreTests tests/bf4/TestMain.cpp tests/bf4/Bf4CoreTests.cpp
     tests/bf4/Bf4EmulatedSessionTests.cpp tests/bf4/HolsterTests.cpp tests/bf4/Bf4ModMenuTests.cpp
     tests/bf4/Bf4StereoTests.cpp tests/bf4/VirtualPadTests.cpp tests/bf4/ViewOverrideTests.cpp
-    tests/bf4/ReloadClassifierTests.cpp tests/bf4/ReloadDriverTests.cpp)
+    tests/bf4/ReloadClassifierTests.cpp tests/bf4/ReloadDriverTests.cpp tests/bf4/ArmIkTests.cpp)
   target_link_libraries(Bf4CoreTests PRIVATE FvrBf4Core)
   add_test(NAME Bf4Core COMMAND Bf4CoreTests)
 endif()
@@ -134,7 +136,8 @@ if(BUILD_TESTING AND FVR_BF4_EMU_TEST)
     tests/bf4/emu/DepthCaptureCheck.cpp src/games/bf4/Bf4DepthCapture.cpp
     tests/bf4/emu/ShaderCensusCheck.cpp src/games/bf4/Bf4ShaderCensus.cpp src/games/bf4/Bf4DrawProbe.cpp
     src/games/bf4/Bf4ContextHooks.cpp src/games/bf4/Bf4FirstPersonView.cpp src/games/bf4/Bf4HudSplit.cpp
-    src/games/bf4/Bf4ControllerScan.cpp tests/bf4/emu/ControllerScanCheck.cpp)
+    src/games/bf4/Bf4ControllerScan.cpp tests/bf4/emu/ControllerScanCheck.cpp src/games/bf4/Bf4Mat4.cpp
+    src/games/bf4/Bf4ArmIk.cpp)
   target_compile_definitions(Bf4EmuHost PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX UNICODE _UNICODE)
   # The emulator also plays the XR host's side of the theater link (menu lane).
   target_link_libraries(Bf4EmuHost PRIVATE d3d11 dxgi delayimp FvrFrameChannel FvrD3D11 d3dcompiler FvrMinHook64)

@@ -56,6 +56,8 @@ ui::ModMenuModel BuildModMenu(const game::CapabilityRegistry& caps, bool develop
     menu.Add({"gun_aim", "Gun", MenuItemKind::Choice, {"BF4's place", "On the aim", "Aim, wide", "In the hand"},
               state.gunInHand ? 3 : state.gunFollowsAim ? (state.gunReachWide ? 2 : 1) : 0, true,
               "In the hand: at your controller."});
+    menu.Add({"arms", "Arms", MenuItemKind::Choice, {"With the gun", "From the body"}, state.armIk ? 1 : 0, true,
+              "Gun in the hand: shoulders stay, arms reach."});
     menu.Add({"aim_dot", "Aim dot", MenuItemKind::Choice, {"Off", "On"}, state.aimDot ? 1 : 0, true,
               "Green ring where the gun aims."});
     // BF4's own split-screen two-view render: unsupported on PC (its world renderer is built
@@ -113,6 +115,7 @@ ModMenuCommand InterpretChange(const MenuItem& item) {
     if (item.id == "holsters") return {ModMenuAction::SetHolsters, item.value};
     if (item.id == "aim_dot") return {ModMenuAction::SetAimDot, item.value};
     if (item.id == "gun_aim") return {ModMenuAction::SetGunFollowsAim, item.value};
+    if (item.id == "arms") return {ModMenuAction::SetArms, item.value};
     if (item.id == "vignette") return {ModMenuAction::SetVignette, item.value};
     if (item.id == "two_handed") return {ModMenuAction::SetTwoHandedAim, item.value};
     if (item.id == "walk_direction") return {ModMenuAction::SetWalkDirection, item.value};

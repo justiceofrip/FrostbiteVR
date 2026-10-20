@@ -404,6 +404,171 @@ bool CheckFirstPersonView(ID3D11Device* device, const char*& why) {
     return ok;
 }
 
+namespace {
+fvr::bf4::Mat4 RotationAbout(fvr::math::Vec3 axis, float radians) {
+    fvr::math::Pose p;
+    p.orientation = fvr::math::FromAxisAngle(axis, radians);
+    return fvr::bf4::FromPose(p);
+}
+// A rigid S with S(j) = p, turned by r about j.
+fvr::bf4::Mat4 About(fvr::math::Vec3 j, fvr::math::Vec3 p, const fvr::bf4::Mat4& r) {
+    using namespace fvr::bf4;
+    return Mul(Translation(p), Mul(r, Translation(j * -1.0f)));
+}
+// A rigid S with S(ja) = pa and S(jb) = pb, twisted about that segment.
+fvr::bf4::Mat4 Segment(fvr::math::Vec3 ja, fvr::math::Vec3 jb, fvr::math::Vec3 pa, fvr::math::Vec3 pb, float twist) {
+    using namespace fvr::bf4;
+    return About(ja, pa, Mul(RotationAbout(pb - pa, twist), RotationBetween(jb - ja, pb - pa)));
+}
+fvr::math::Vec3 MapBone(const float* b, fvr::math::Vec3 p) {
+    return {b[0] * p.x + b[1] * p.y + b[2] * p.z + b[3], b[4] * p.x + b[5] * p.y + b[6] * p.z + b[7],
+            b[8] * p.x + b[9] * p.y + b[10] * p.z + b[11]};
+}
+} // namespace
+
+// Arms from the body (Bf4ArmIk.h): in the first-person pass, a bone palette bound at b0 comes
+// back as ours with each arm's shoulder where the body puts it and the wrist still on the gun.
+bool CheckFirstPersonArms(ID3D11Device* device, const char*& why) {
+    using namespace fvr::bf4;
+    using fvr::math::Vec3;
+    const MH_STATUS init = MH_Initialize();
+    if (init != MH_OK && init != MH_ERROR_ALREADY_INITIALIZED) return why = "MinHook", false;
+    ComPtr<ID3D11DeviceContext> context;
+    device->GetImmediateContext(&context);
+    ComPtr<ID3D11DeviceContext1> context1;
+    if (FAILED(context.As(&context1))) return why = "no ID3D11DeviceContext1", false;
+    D3D11_BUFFER_DESC bd{};
+    bd.ByteWidth = 4096;
+    bd.Usage = D3D11_USAGE_DYNAMIC;
+    bd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+    bd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+    ComPtr<ID3D11Buffer> ring;
+    if (FAILED(device->CreateBuffer(&bd, nullptr, &ring))) return why = "ring buffer", false;
+    const float gameKy = 1.0f / std::tan(0.785398f * 0.5f), renderKy = 0.6982f, aspect = 16.0f / 9.0f;
+    const float fpCam[3] = {0.3f, 2.1f, 0.9f};
+    // The arms posed in the pass's world: shoulders 20 cm below the first-person camera, elbows
+    // bent, wrists in front (bones: clavicle, upper, upper twist, forearm, hand per arm; then
+    // fillers up to 24 bones, a palette's size).
+    const ArmBindJoints bind = Bf4ArmBindJoints();
+    std::vector<float> palette;
+    auto put = [&](const Mat4& m) { palette.insert(palette.end(), m.begin(), m.begin() + 12); };
+    Vec3 s[2], e[2], w[2];
+    for (int side = 0; side < 2; ++side) {
+        const float x = side == 0 ? -1.0f : 1.0f;
+        const float lu = fvr::math::Length(bind.elbow[side] - bind.shoulder[side]);
+        const float lf = fvr::math::Length(bind.wrist[side] - bind.elbow[side]);
+        s[side] = Vec3{fpCam[0], fpCam[1], fpCam[2]} + Vec3{0.12f * x, -0.2f, 0.05f};
+        e[side] = s[side] + fvr::math::Normalize({0.1f * x, -0.6f, -0.8f}) * lu;
+        w[side] = e[side] + fvr::math::Normalize({-0.3f * x, 0.2f, -0.93f}) * lf;
+        put(About(bind.shoulder[side], s[side], RotationAbout({0, 0, 1}, 0.35f * x)));
+        put(Segment(bind.shoulder[side], bind.elbow[side], s[side], e[side], 0.0f));
+        put(Segment(bind.shoulder[side], bind.elbow[side], s[side], e[side], 0.5f));
+        put(Segment(bind.elbow[side], bind.wrist[side], e[side], w[side], 0.2f));
+        put(About(bind.wrist[side], w[side], RotationAbout({1, 0.3f, 0}, 0.6f)));
+    }
+    for (int k = 0; palette.size() < 24 * 12; ++k) put(Translation({0.01f * k, 5.0f, 0}));
+    FirstPersonView view;
+    if (!view.Install(context.Get())) return why = "install", false;
+    FirstPersonView::Frame frame;
+    frame.enabled = true;
+    frame.gameFovY = 0.785398f;
+    frame.renderKy = renderKy;
+    frame.renderKx = renderKy / aspect;
+    frame.handMode = true;
+    frame.armIk = true;
+    auto& h = frame.hands[0];
+    const float identity[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1};
+    std::memcpy(h.gameRotation, identity, sizeof(identity));
+    std::memcpy(h.rotation, identity, sizeof(identity)); // the head level, the body facing as it does
+    frame.gripAtRest.position = {0.07f, -0.1f, -0.2f};
+    frame.gripAtRest.orientation = {0, 0, 0, 1};
+    h.hand.position = {0.12f, -0.1f, -0.2f}; // the gun 5 cm right of where BF4 holds it
+    h.hand.orientation = {0, 0, 0, 1};
+    h.valid = true;
+    view.SetFrame(frame);
+    D3D11_MAPPED_SUBRESOURCE m{}; // BF4 fills its ring (seen by the view once it is on)
+    if (FAILED(context->Map(ring.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &m))) return why = "map the ring", false;
+    MakeViewBlock(static_cast<std::uint8_t*>(m.pData) + 256, gameKy / aspect, gameKy, fpCam);
+    std::memcpy(static_cast<std::uint8_t*>(m.pData) + 2048, palette.data(), palette.size() * sizeof(float));
+    context->Unmap(ring.Get(), 0);
+    ID3D11Buffer* bind1[1] = {ring.Get()};
+    const UINT fpFirst[1] = {16}, count[1] = {32}, paletteFirst[1] = {128}, paletteCount[1] = {80};
+    bool ok = true;
+    context1->VSSetConstantBuffers1(2, 1, bind1, fpFirst, count); // the pass begins
+    context1->VSSetConstantBuffers1(0, 1, bind1, paletteFirst, paletteCount);
+    ID3D11Buffer* bound = nullptr;
+    UINT boundFirst = 99, boundCount = 0;
+    context1->VSGetConstantBuffers1(0, 1, &bound, &boundFirst, &boundCount);
+    std::vector<std::uint8_t> got;
+    if (!bound || bound == ring.Get() || boundFirst != 0) ok = (why = "palette not rebound", false);
+    else if (!ReadBuffer(device, context.Get(), bound, got)) ok = (why = "read the palette back", false);
+    if (bound) bound->Release();
+    if (ok) {
+        // Head space = move (5 cm right) x first-person view (camera at fpCam, unturned). The
+        // body is the head level: the shoulders stay where BF4's view puts them (5 cm left of
+        // the moved rig); the wrists move with the gun.
+        const float* out = reinterpret_cast<const float*>(got.data());
+        const Mat4 headFromPass = Mul(Translation({0.05f, 0, 0}), Translation({-fpCam[0], -fpCam[1], -fpCam[2]}));
+        for (int side = 0; side < 2 && ok; ++side) {
+            const float* b = out + side * 5 * 12;
+            const Vec3 shoulder = TransformPoint(headFromPass, s[side]) - Vec3{0.05f, 0, 0};
+            const Vec3 wrist = TransformPoint(headFromPass, w[side]);
+            for (int bone : {0, 1, 2})
+                if (fvr::math::Length(TransformPoint(headFromPass, MapBone(b + bone * 12, bind.shoulder[side])) - shoulder) > 1e-3f)
+                    ok = (why = "a shoulder not at the body", false);
+            if (ok && fvr::math::Length(TransformPoint(headFromPass, MapBone(b + 3 * 12, bind.wrist[side])) - wrist) > 1e-3f)
+                ok = (why = "a forearm not reaching the wrist on the gun", false);
+            if (ok && fvr::math::Length(MapBone(b + 1 * 12, bind.elbow[side]) - MapBone(b + 3 * 12, bind.elbow[side])) > 1e-3f)
+                ok = (why = "an elbow not joined", false);
+            if (ok && std::memcmp(b + 4 * 12, palette.data() + (side * 5 + 4) * 12, 12 * sizeof(float)) != 0)
+                ok = (why = "a hand moved off the gun", false);
+        }
+        if (ok && std::memcmp(out + 10 * 12, palette.data() + 10 * 12, 14 * 12 * sizeof(float)) != 0)
+            ok = (why = "other bones changed", false);
+    }
+    const auto st = view.GetStats();
+    if (ok && (st.armPalettes != 1 || st.armRewritten != 1 || st.armBones != 8))
+        ok = (why = "arms: palette counts", false);
+    // A small b0 bind (a rigid mesh's world matrix) passes through.
+    if (ok) {
+        const UINT rigidFirst[1] = {96}, sixteen[1] = {16};
+        context1->VSSetConstantBuffers1(0, 1, bind1, rigidFirst, sixteen);
+        bound = nullptr;
+        context1->VSGetConstantBuffers1(0, 1, &bound, &boundFirst, &boundCount);
+        if (bound != ring.Get() || boundFirst != 96) ok = (why = "a rigid mesh's bind changed", false);
+        if (bound) bound->Release();
+    }
+    // Option off: the palette passes through.
+    if (ok) {
+        frame.armIk = false;
+        view.SetFrame(frame);
+        if (FAILED(context->Map(ring.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &m))) return why = "map the ring again", false;
+        MakeViewBlock(static_cast<std::uint8_t*>(m.pData) + 256, gameKy / aspect, gameKy, fpCam);
+        std::memcpy(static_cast<std::uint8_t*>(m.pData) + 2048, palette.data(), palette.size() * sizeof(float));
+        context->Unmap(ring.Get(), 0);
+        context1->VSSetConstantBuffers1(2, 1, bind1, fpFirst, count);
+        context1->VSSetConstantBuffers1(0, 1, bind1, paletteFirst, paletteCount);
+        bound = nullptr;
+        context1->VSGetConstantBuffers1(0, 1, &bound, &boundFirst, &boundCount);
+        if (bound != ring.Get() || boundFirst != 128) ok = (why = "palette rebound with the option off", false);
+        if (bound) bound->Release();
+    }
+    // The body from the head's axes: level, the head's heading.
+    if (ok) {
+        const float down[9] = {1, 0, 0, 0, 0.7071068f, -0.7071068f, 0, 0.7071068f, 0.7071068f}; // looking 45 deg down
+        const Mat4 b = FirstPersonView::BodyInHead(down);
+        const Vec3 bodyUp = TransformVector(b, {0, 1, 0}), bodyBack = TransformVector(b, {0, 0, 1});
+        if (std::fabs(bodyUp.y - 0.7071068f) > 1e-4f || std::fabs(bodyUp.z - 0.7071068f) > 1e-4f ||
+            std::fabs(bodyBack.y + 0.7071068f) > 1e-4f || std::fabs(bodyBack.x) > 1e-4f)
+            ok = (why = "body frame from a lowered head", false);
+    }
+    view.Remove();
+    ID3D11Buffer* none[1]{};
+    context->VSSetConstantBuffers(0, 1, none);
+    context->VSSetConstantBuffers(2, 1, none);
+    return ok;
+}
+
 bool CheckHudSplit(ID3D11Device* device, const char*& why) {
     const MH_STATUS init = MH_Initialize();
     if (init != MH_OK && init != MH_ERROR_ALREADY_INITIALIZED) return why = "MinHook", false;

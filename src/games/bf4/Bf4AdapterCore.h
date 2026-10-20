@@ -58,6 +58,9 @@ struct CameraRequest {
     bool gunInHand = false;
     bool handValid = false;
     math::Pose handInHead{};
+    bool armIk = false;       // ...and the arms reach it from the body (Bf4ArmIk.h)
+    bool bodyValid = false;   // ...the torso then (the holsters' body frame: level, its heading) relative to this head
+    math::Pose bodyInHead{};
     // Alternate eyes (3D): the platform renders each frame from one eye, the eyes in turn,
     // half the eye distance (world units) from this head (Bf4FirstPersonView.h).
     bool alternateEyes = false;

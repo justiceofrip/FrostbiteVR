@@ -30,12 +30,13 @@ struct ModMenuState {
     bool gunFollowsAim = false;  // head-tracked view: render along the aim so the barrel is on the bullets' line
     bool gunReachWide = false;   // ...and let that render grow wider (less sharp) so the gun follows farther
     bool gunInHand = true;       // ...or (default) draw BF4's first-person rig at the right controller (no turned render)
+    bool armIk = true;           // ...with the shoulders kept at the body and the arms reaching the gun (Bf4ArmIk.h)
 };
 
 enum class ModMenuAction : std::uint8_t {
     None, SetReloadMode, SetSnapTurn, SetTheaterDistance, Recenter, MarkFeedback, GameMenu, SetHeadTracking, SetWorldSettle,
     SetWorldStereo, SetControllerAim, SetHolsters, SetAimDot, SetVignette, SetTwoHandedAim, SetWalkDirection,
-    SetPhysicalCrouch, SetDepthStereo, SetHudInsets, SetGunFollowsAim, SetTurnSpeed
+    SetPhysicalCrouch, SetDepthStereo, SetHudInsets, SetGunFollowsAim, SetTurnSpeed, SetArms
 };
 
 struct ModMenuCommand {

@@ -18,7 +18,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   three sessions (09:16-10:19; rotation was inverted and the gun oversized, both fixed in
   0.4.16); everything built since 0.4.17 is unseen in a headset.
 
-## At a glance (installed: 0.4.105-local)
+## At a glance (installed: 0.4.111-local)
 
 | Feature | State | Evidence |
 | --- | --- | --- |
@@ -40,7 +40,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
 | 3D from depth (depth buffer) | off | live sim: depth found, parallax direction right |
 | 3D: alternate eyes (each frame from one eye, true parallax) | off (option) | live sim: gun and walls at their depths, labels 327/327, 52 pairs/s |
 | BF4 split stereo (developer) | unsupported (retired) | live sim: crashes BF4's one-view world renderer |
-| Arms | BF4's own | its first-person arms move with the gun; no arm IK to the controllers |
+| Arms from the body (arm IK by palette rewrite: shoulders at the body, hands on the gun) | on (default, "Arms") | live sim: both arms solved every pass, all arm draws agree < 0.5 mm, turned 60 deg no sleeve across the view, reload/ADS; no frame-rate cost (116/116 presents/s) |
 
 ## Works on the real game (actual-game checks)
 
@@ -257,14 +257,61 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   at the pull). Acceptable for short actions; anchoring the rig to the head during throws
   needs a reliable "not holding the gun" signal first.
 - Gaps: the ejected casings (above); the grip at rest is the
-  prologue rifle's (other weapons may sit a few cm off in the hand); the left hand follows the
-  gun, not the left controller (no arm IK); shots cross the barrel's line 20 m out rather than
+  prologue rifle's (other weapons may sit a few cm off in the hand); the left hand stays on the
+  gun, not on the left controller (the arms reach from the body: next section); shots cross the barrel's line 20 m out rather than
   running along it (under a degree either way); not seen in a headset.
 - Evidence: WARP checks in Bf4Emulated (the first-person block gets the render's projection
   and a moved view, the world's passes through, pixel stage too, off passes everything through;
   hand mode by the game rotation only; receiver tracking picks the largest rigid mesh; weapon
   part test), emulated session (the request carries the hand relative to the head, no turn, no
   reach limit, no dot), live as above.
+
+## Arms from the body (2026-10-20, built; live sim; option "Arms")
+
+- Problem: with the gun in the hand the whole first-person rig follows the controller, so the
+  shoulders swing with the gun (live, sessions 56 and 64: the gun turned 60 deg, the support
+  arm's sleeve swept across the lower view).
+- Finding (draw-probe palettes, sessions 58-64; scratch `fp_rig.py`, `fp_classify.py`): BF4's
+  first-person arms skeleton has fixed bind-space joints (the points two bones map alike in every
+  pose): shoulders (+-0.1641, 1.4745, -0.0396), elbows (+-0.3729, 1.2601, -0.0125), wrists
+  (+-0.5089, 1.1205, 0.1609) (+x: the left arm). The 34695-index depth mesh and the 19431-index
+  G-buffer mesh each hold both arms (clavicle, two upper-arm and three forearm bones, the hand and
+  fingers per side); other meshes (sleeves, the right hand) hold parts. Palettes order bones per
+  mesh, and the weapon's palettes carry copies of the arm bones: the same pose, a few cm apart
+  during reloads, or stale ones metres away.
+- Route (`Bf4ArmIk`, pure, core tests; `Bf4FirstPersonView`, GPU side, nothing in BF4's memory
+  written): in the first-person pass each bone palette BF4 binds at vertex b0 (>= 1 KB) is read;
+  each arm's chain is found where an upper-arm bone shares the shoulder with another bone and the
+  elbow with a forearm bone that shares the wrist with another (1 mm). Chains near the
+  first-person camera (shoulder within 0.6 m) vote; the most voted is the pass's reference (ties:
+  nearest the previous pass's). Every palette's bones are classified against it (5 mm): upper
+  arm (maps shoulder and elbow), forearm (elbow and wrist), clavicle (shoulder), hand (wrist);
+  fingers and weapon bones map none and stay. One solve per pass, in the head's space: the torso
+  goes to the body frame (the head's yaw, level, at the eye), the shoulder follows 35 % of the
+  hand's move from BF4's hold (up to 8 cm, the clavicle turning about the neck's base), the
+  elbow is solved on BF4's elbow side (two bones, lengths from the chain), out of reach the
+  shoulder slides along the line to the hand, the clavicle takes half the upper arm's swing.
+  The hands stay where the gun puts them. Each classified bone S becomes C S with
+  C = headFromPass^-1 D headFromPass, and the bind proceeds with our copy of the palette.
+- The body frame: the holsters' estimator (`Bf4BodyGestures`: the head's heading, followed
+  only past 37 deg at 4 rad/s), carried with each request's hand (`CameraRequest.bodyInHead`,
+  recorded per submit like the hand); without it the head's yaw, level (`BodyInHead`).
+- Cost: BF4's ring is write-combined memory; plain loads took 61.9 us per 2.9 KB palette, SSE4.1
+  streaming loads 3.1 us (live, session 68), now used for every ring read of the first-person
+  view (view blocks and receiver too). Per pass: read ~30 us, find/solve/rewrite ~180 us, upload
+  ~3 us (~10 palettes); 116 presents/s with or without (session 67, before streaming: 99 vs 119).
+- Mod menu "Arms: With the gun / From the body" (id `arms`; default From the body; gun in the
+  hand only). Log: `arms: from the body`; `first_person_view ... arms=read/rewritten bones=
+  solved= switches= slide=(left right) arm_us_per_pass=read N (streaming) work N upload N`.
+- Live (simulated headset, sessions 64-68): every pass solved both arms; all arm draws of a pass
+  agree within 0.5 mm (depth prepass and G-buffer); turned 60 deg left or right the arms reach
+  from the body (no sleeve across the view); the head turned 30 deg either way with the gun ahead:
+  the shoulders stay; reloads (the left hand to the magazine) and aiming down sights keep
+  working. Session 64 found a stale weapon copy leading the first arms draw (fixed: the distance
+  gate); aiming 40 deg up smeared the shoulder skin (eased: the clavicle's share).
+- Gaps: the left hand stays on the gun (not on the left controller when it lets go); the
+  skeleton's joints are the prologue rig's (another rig finds no chains and stays as BF4 draws
+  it); aiming steeply up still shows the near upper arm large; not seen in a headset.
 
 ## No crosshair in the head-tracked view (2026-10-20, built; live sim)
 
@@ -977,9 +1024,9 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
   launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
   `-World -FrameChannels 2` 5/5 (76-237 pairs, machine-dependent); `-World` with one
   channel 4/4 (47 pairs).
-- Installed locally: runtime/bf4 0.4.105-local (the source at this commit: gun in the hand by
-  default, no crosshair (centre mask), controller scan with its cache, 3D option; rollback
-  0.4.104-local); launcher settings
+- Installed locally: runtime/bf4 0.4.111-local (the source at this commit: gun in the hand and
+  arms from the body by default, no crosshair (centre mask), controller scan with its cache, 3D
+  option; rollback 0.4.110-local); launcher settings
   restored to the player's after the developer sessions. Developer sessions still run the
   read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the
@@ -1121,9 +1168,9 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
   toggled an item. Not yet seen in a headset.
 - Corner HUD outside the eyes (frame shape, above): insets are a workaround; the real fix
   needs the UI pass rendered separately (native RE).
-- Arm IK (the left hand on the left controller): BF4's first-person arms now move with the gun
-  as one rig; IK to the controllers needs the arms' bind poses or BF4's own hand IK inputs
-  (BF4-HOLSTER-IK-RE.md). How it looks (live sim, session 56): the gun turned 40 deg left reads
+- Arm IK: built for the shoulders (Arms from the body, above); open: the left hand on the left
+  controller when it is off the gun, and rigs other than the prologue's (their joints).
+  Earlier research notes follow. BF4's own hand IK inputs: BF4-HOLSTER-IK-RE.md. How it looks (live sim, session 56): the gun turned 40 deg left reads
   as plausible arms from below; turned 60 deg right, the left (support) arm's sleeve swings across
   the lower middle of the view. Leads (2026-10-20, developer): the draw probe now writes each
   first-person skinned draw's bound palette (`palette=[...]`, 3 rows per bone; only the bound

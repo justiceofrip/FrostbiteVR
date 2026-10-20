@@ -38,7 +38,10 @@ raise BF4's Video > Resolution Scale (150-200 %) before judging blur.
    and the left trigger aims down the sights with the gun staying in the hand. Note whether the
    gun sits right in the hand (BF4's grip at rest was measured on the prologue rifle) and
    whether shots land along the barrel. Grip with the left hand in front of the gun to aim with
-   both hands (the barrel then follows the line between the hands). The right stick turns in
+   both hands (the barrel then follows the line between the hands). The arms reach the gun
+   from your shoulders (menu: Arms > From the body, the default; With the gun is BF4's rig
+   moving as one piece): turn the gun far left and right and look down; note whether the
+   arms look attached to you and whether the shoulders stay put when you look around. The right stick turns in
    **30 degree steps** (menu: Turning: Smooth / Snap 30 / 45 / 90; Smooth turn speed). The old modes stay in the menu:
    Gun > On the aim (the render turned along the aim) and Aim dot (a green ring).
 3. The ammo panel and minimap appear as small framed insets in your lower right and left
@@ -95,6 +98,7 @@ The launcher's feedback button bundles the logs. The lines that answer the open 
 | `theater_link ... bridges=3 pairs= queued=` | the pair rate in game |
 | `theater_link ... alternate_pairs= alternate_one_frame=` | 3D alternate eyes |
 | `first_person_view ... hand= passes= zoom_held=` | the gun in the hand matched every frame, aiming down sights |
+| `first_person_view ... arms=read/rewritten solved= arm_us_per_pass=` | arms from the body solved every frame and what it cost |
 | `hud_split ... restores=` | BF4's crosshair kept out of the view |
 | `controller_scan ... checks=` and `virtual_pad ... user0_polls=` | the controllers reach BF4 as a pad (no freeze on device changes) |
 | `view_override ... run=` | head tracking frame sync |

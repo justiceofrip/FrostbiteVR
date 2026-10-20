@@ -32,3 +32,13 @@
   before the frame's main view, and a render frame's submit is not predictable (1-4 behind the
   newest, sometimes skipped), so per-submit eyes put the rig's G-buffer draw at the other eye.
   Pairs take the other eye's last kept frame turned onto the new pose. An option, off by default.
+- Arm IK by palette rewrite (arms from the body, default): the shoulders go back to the body
+  while the gun and the hands stay at the controller, by rewriting the arm bones of each bone
+  palette BF4 binds in the first-person pass (GPU side, nothing of BF4's written). Chosen over
+  BF4's own hand IK inputs (unbound research) because the palettes carry everything needed: the
+  arms' bind-space joints are fixed, so each frame's chains and every palette's arm bones are
+  found by the joints they map, whatever order a mesh keeps its bones in. A per-pass vote over
+  chains near the camera picks the player's arms over the weapon palettes' stale copies.
+- Reads of BF4's upload ring use SSE4.1 streaming loads: it is write-combined memory, where
+  plain loads cost ~20x more (61.9 against 3.1 us per palette; the arms cost 20 % of the frame
+  rate with plain loads, none measurable with streaming ones).

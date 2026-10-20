@@ -19,8 +19,19 @@
 // view composed with a camera-space rigid transform M, so the whole first-person rig moves
 // by M. BF4's own memory, buffers and arrays are never written: the bind proceeds with our
 // buffer in that one slot. Unmatched binds pass through untouched.
+//
+// Arms from the body (gun in the hand, option; Bf4ArmIk.h): inside that pass each bone palette
+// BF4 binds (vertex b0, at least kArmMinPaletteBytes) is read, the arms' shoulders, elbows and
+// wrists found in it, and the bind proceeds with a copy of ours whose arm bones put the
+// shoulders at the body (the head's yaw, level) and turn the upper arms and forearms to reach
+// the hands, which stay on the gun. One solve per pass from the pass's reference arms (the first
+// palette holding them, replaced by a later one that continues the previous pass's arms when
+// the first does not: the weapon's palettes carry copies posed apart); every palette's bones
+// are classified against it, so the same bone moves alike in every mesh.
 
+#include "Bf4ArmIk.h"
 #include "Bf4ContextHooks.h"
+#include "Bf4Mat4.h"
 #include "fvr/math/Vec.h"
 
 #include <d3d11_1.h>
@@ -42,12 +53,7 @@ struct ViewConstantsLayout {
                                    kCrViewProjMatrix = 240, kProjectionK = 304, kCameraPos = 320;
 };
 
-// Matrices as stored there: row-major, column vectors (p' = M p), translation in column 3.
-using Mat4 = std::array<float, 16>;
-Mat4 Mul(const Mat4& a, const Mat4& b);
-Mat4 Identity4();
-Mat4 FromPose(const math::Pose& pose); // OpenXR pose (BF4's view space shares its axes)
-Mat4 InverseRigid(const Mat4& m);
+// Matrices as stored there: Bf4Mat4.h (row-major, column vectors, translation in column 3).
 // Where BF4 holds the gun's grip at hip in its first-person camera space (live, prologue rifle:
 // receiver at (0.068, -0.045, -0.287), barrel along -Z within 3 degrees; the grip ~6 cm below
 // and behind it): the VR hand takes this place.
@@ -68,6 +74,8 @@ public:
             float gameRotation[9]{}; // the game camera's, the same way
             math::Pose hand{};   // the right hand relative to the head (camera space)
             bool valid = false;
+            math::Pose body{};   // arms from the body: the torso relative to the head, when bodyValid
+            bool bodyValid = false; // (else the head's yaw, level: BodyInHead)
         };
         std::array<Hand, 6> hands{};
         math::Pose gripAtRest = GunGripAtRest();
@@ -79,6 +87,8 @@ public:
         // from the head along its right axis.
         bool alternateEyes = false;
         float halfEye = 0.032f;
+        // Gun in the hand: the arms reach the gun from the body (above).
+        bool armIk = false;
     };
     struct Stats {
         std::uint64_t binds = 0;     // slot-2 binds seen
@@ -94,6 +104,15 @@ public:
         std::uint64_t shiftedViews = 0, shiftedFrames = 0; // alternate eyes: main views moved to the eye, frames
         float lastKy = 0;            // the matched pass's projection scale
         float cameraPos[3]{};        // the matched pass's first-person camera position
+        // Arms from the body: palettes read in the pass, rewritten (bound as ours), bones moved,
+        // passes with both arms solved, reference changes within a pass, and the last shoulder
+        // slides.
+        std::uint64_t armPalettes = 0, armRewritten = 0, armBones = 0, armSolved = 0, armSwitches = 0;
+        float armSlide[2]{};
+        // ...and the render thread's time in it (microseconds, totals): reading BF4's palettes
+        // (its upload ring: write-combined memory), finding/solving/rewriting, uploading ours.
+        double armReadUs = 0, armWorkUs = 0, armUploadUs = 0;
+        bool armStreamingReads = false; // the reads use SSE4.1 streaming loads
     };
 
     ~FirstPersonView() override;
@@ -139,6 +158,13 @@ public:
     static bool IsMainViewBlock(const std::uint8_t* block, float renderKy);
     // Pure: the camera-space move from the head's camera to eye 0 (left) or 1 (right).
     static Mat4 EyeShift(int eye, float halfEye);
+    // Pure: the body frame in the head's camera space from the render camera's axes (view
+    // rows in BF4's y-up world): the head's yaw, level, at the eye.
+    static Mat4 BodyInHead(const float rows[9]);
+    static constexpr std::uint32_t kArmMinPaletteBytes = 1024; // >= 21 bones: a skinned mesh's palette
+    static constexpr float kArmNearCamera = 0.6f;      // a palette's arms count when the shoulder is this near the camera (m)
+    static constexpr float kArmShoulderFollow = 0.35f; // the shoulder's share of the hand's move (ArmSolveInput)
+    static constexpr float kArmClavicleShare = 0.5f;   // the clavicle's share of the upper arm's swing
     // Alternate eyes, each Present (render thread): the eye the frame just drawn was rendered
     // from (-1: none moved), read before OnPresent; OnPresent then turns to the other eye.
     int FrameEye() const;
@@ -148,6 +174,9 @@ private:
     // The block (rewritten) bound in place of BF4's, in slot i: false when ours could not be filled.
     bool Upload(ID3D11DeviceContext* context, const std::uint8_t* block, ID3D11Buffer** buffers, UINT i, UINT* first,
                 UINT* count);
+    // Arms from the body: a palette bound at b0 in the pass, rewritten and bound as ours.
+    void RewriteArms(ID3D11DeviceContext* context, const void* mapped, std::uint32_t size, ID3D11Buffer** buffers,
+                     UINT* first, UINT* count);
     struct Source {
         void* mapped = nullptr;         // what Map returned last (BF4's ring buffer is mapped no-overwrite)
         std::uint32_t size = 0;
@@ -179,6 +208,23 @@ private:
     bool restValid_ = false;
     float hipFov_ = 0;       // the widest game FOV seen (hip)
     int hipPasses_ = 0;      // passes at hip FOV in a row
+    // Arms from the body (render thread only).
+    Microsoft::WRL::ComPtr<ID3D11Buffer> oursPalette_;
+    ArmBindJoints armBind_ = Bf4ArmBindJoints();
+    bool armPass_ = false;     // this pass rewrites palettes (hand found, option on)
+    bool armSolved_ = false;   // armCorr_ is this pass's
+    ArmChain armRef_[2]{}, armPrev_[2]{}; // this pass's reference arms, the previous pass's
+    // The arms each palette of the pass poses (within 1 mm: one candidate) and how many palettes
+    // did: the most voted is the reference (ties: the nearest to the previous pass's).
+    struct ArmCandidate {
+        ArmChain chain;
+        int votes = 0;
+    };
+    static constexpr int kArmCandidates = 8;
+    ArmCandidate armVotes_[2][kArmCandidates]{};
+    int armCandidates_[2]{};
+    ArmCorrections armCorr_{};
+    Mat4 armHeadFromPass_{}, armBody_{};
 };
 
 } // namespace fvr::bf4

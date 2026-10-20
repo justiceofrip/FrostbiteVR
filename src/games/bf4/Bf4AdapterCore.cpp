@@ -185,6 +185,10 @@ void AdapterCore::ApplyMenuCommand(const ModMenuCommand& command) {
                       : !menuState_.gunFollowsAim ? "gun follows aim: off"
                       : menuState_.gunReachWide ? "gun follows aim: on, wide reach" : "gun follows aim: on");
         break;
+    case ModMenuAction::SetArms:
+        menuState_.armIk = command.value != 0;
+        platform_.Log(menuState_.armIk ? "arms: from the body" : "arms: with the gun");
+        break;
     case ModMenuAction::SetHolsters:
         menuState_.holsters = command.value != 0;
         platform_.Log(menuState_.holsters ? "body holsters: on" : "body holsters: off");
@@ -649,6 +653,7 @@ void AdapterCore::UpdateCamera(const ControllerSnapshot& in, const PlatformFrame
             r.gunFollowsAim = menuState_.gunFollowsAim && stereo_ == StereoMode::Mono && !alternate;
             r.gunFovBudget = menuState_.gunReachWide ? kGunAimFovBudgetWide : kGunAimFovBudget;
             r.gunInHand = menuState_.gunInHand && stereo_ == StereoMode::Mono;
+            r.armIk = r.gunInHand && menuState_.armIk;
             const auto& hand = in.controls.hands[1];
             if (r.gunInHand && in.controls.focused && hand.gripTracked && hand.aimTracked) {
                 math::Pose held;
@@ -662,6 +667,17 @@ void AdapterCore::UpdateCamera(const ControllerSnapshot& in, const PlatformFrame
                 if (const auto rel = math::MakeRelativePose(ApplyReference(reference_, p), heldRef)) {
                     r.handInHead = *rel;
                     r.handValid = true;
+                }
+                // Arms from the body: the torso at the eye, level, facing the body frame's heading
+                // (it follows the head only past a deadzone, so looking around keeps the shoulders).
+                if (r.armIk && gestures_.BodyValid()) {
+                    math::Pose torso;
+                    torso.position = p.position;
+                    torso.orientation = math::FromAxisAngle({0, 1, 0}, gestures_.BodyYaw());
+                    if (const auto rel = math::MakeRelativePose(p, torso)) {
+                        r.bodyInHead = *rel;
+                        r.bodyValid = true;
+                    }
                 }
             }
         }

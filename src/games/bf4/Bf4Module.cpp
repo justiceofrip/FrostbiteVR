@@ -181,6 +181,7 @@ public:
     bool hudInstallTried = false;
     std::uint64_t presentCount = 0, gunInHandFrame = 0, laneFrame = 0, alternateFrame = 0;
     float halfEye = 0.032f; // alternate eyes: the headset's half eye distance (world units)
+    bool armIk = false;     // gun in the hand: the arms reach it from the body (Bf4ArmIk.h)
     bool firstPersonOn = false, firstPersonInstallTried = false;
     bool depthInstallTried = false, depthSnapshotPending = false, depthSeen = false;
     bool eyeLoopRefused = false, stereoCrashGuard = false, stereoMarker = false;
@@ -846,9 +847,10 @@ public:
         gun.budget = requests[0].gunFovBudget;
         gun.handHeld = requests[0].gunInHand;
         viewOverride.SetGunAim(gun);
-        viewOverride.SetHand(requests[0].handInHead, requests[0].handValid);
+        viewOverride.SetHand(requests[0].handInHead, requests[0].handValid, requests[0].bodyInHead, requests[0].bodyValid);
         viewOverride.SetLocal(requests[0].local, /*keepGamePitch=*/false, requests[0].poseId, fov, requests[0].parentYaw);
         gunInHandFrame = requests[0].gunInHand ? presentCount : 0;
+        armIk = requests[0].armIk;
         alternateFrame = requests[0].alternateEyes ? presentCount : 0;
         if (requests[0].alternateEyes) halfEye = requests[0].halfEye;
         laneFrame = presentCount;
@@ -951,6 +953,7 @@ public:
         frame.renderKy = frame.enabled ? 1.0f / std::tan(st.renderedFovY * 0.5f) : 0.0f;
         frame.renderKx = frame.enabled ? frame.renderKy / lastViewAspect : 0.0f;
         frame.handMode = hand;
+        frame.armIk = hand && armIk;
         frame.alternateEyes = alternate;
         frame.halfEye = halfEye;
         const auto recent = viewOverride.RecentHands();
@@ -959,6 +962,8 @@ public:
             std::memcpy(frame.hands[i].gameRotation, recent[i].gameRotation, sizeof(frame.hands[i].gameRotation));
             frame.hands[i].hand = recent[i].hand;
             frame.hands[i].valid = recent[i].valid;
+            frame.hands[i].body = recent[i].body;
+            frame.hands[i].bodyValid = recent[i].bodyValid;
         }
         firstPersonView.SetFrame(frame);
         if (!firstPersonOn && frame.enabled) log_.Write(hand ? "gun in the hand: on%s" : "first-person view: on%s", alternate ? " (alternate eyes)" : "");

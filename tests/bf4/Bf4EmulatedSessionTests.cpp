@@ -790,6 +790,43 @@ TEST_CASE(EmuGunInTheHandFollowsTheTwoHandedLine) {
     CHECK(Near(barrel.x, 0.0f, 1e-3f) && Near(barrel.y, std::sin(pitch), 1e-3f) && Near(barrel.z, -std::cos(pitch), 1e-3f));
 }
 
+TEST_CASE(EmuArmsFromTheBodyCarryTheTorso) {
+    // Arms from the body: each request with the gun in the hand also carries the torso relative
+    // to its head (the holsters' body frame: level, keeping its heading while the head turns
+    // within the deadzone), for the first-person pass's arm IK. Off: no torso.
+    FakeImage image({names::kGameRenderer, names::kRenderViewUpdate, names::kClientGameContext, names::kLevelName});
+    FakePlatform platform;
+    AdapterCore core(Session(true), X64(), image.Resolve(), platform);
+    core.OnSwapchainAdopted(true);
+    platform.Campaign();
+    platform.aimKnown = true;
+    CHECK(core.SetMenuSetting("gun_aim", 3) && core.SetMenuSetting("arms", 1));
+    Clock clock;
+    auto run = [&](float headYaw, int frames) {
+        for (int n = 0; n < frames; ++n) {
+            static std::uint64_t generation = 1;
+            LaneFrame l(generation / 90.0, generation);
+            ++generation;
+            l.in.head.orientation = math::FromAxisAngle({0, 1, 0}, headYaw);
+            l.in.world.head = l.in.controls.head = l.in.controls.referenceHead = l.in.head;
+            platform.GameFrame();
+            core.OnFrame(clock.Next(), l.in);
+        }
+    };
+    run(0.0f, 200);
+    CHECK(!platform.cameraLog.empty() && platform.cameraLog.back().size() == 1);
+    const CameraRequest ahead = platform.cameraLog.back()[0];
+    CHECK(ahead.armIk && ahead.bodyValid && ahead.gunInHand);
+    CHECK(Near(math::Rotate(ahead.bodyInHead.orientation, {0, 0, -1}).z, -1.0f, 1e-3f)); // facing as the head
+    run(0.35f, 60); // the head 20 deg left: within the deadzone, the torso keeps its heading
+    const CameraRequest turned = platform.cameraLog.back()[0];
+    const math::Vec3 forward = math::Rotate(turned.bodyInHead.orientation, {0, 0, -1}); // in the head's space
+    CHECK(turned.bodyValid && Near(forward.x, std::sin(0.35f), 1e-3f) && Near(forward.z, -std::cos(0.35f), 1e-3f));
+    CHECK(core.SetMenuSetting("arms", 0));
+    run(0.35f, 5);
+    CHECK(!platform.cameraLog.back()[0].armIk && !platform.cameraLog.back()[0].bodyValid);
+}
+
 TEST_CASE(EmuMenuChoicesCarryOverToTheNextSession) {
     // The player's choices are written as "id value" lines and set back in a new session; the
     // launcher's reload mode and developer items are not part of them.

@@ -1,5 +1,9 @@
 #include "Bf4FirstPersonView.h"
 
+#include <intrin.h>
+#include <smmintrin.h>
+
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -22,6 +26,53 @@ bool SafeCopy(void* dst, const void* src, std::size_t n) {
     }
 }
 
+// Reading BF4's upload ring (write-combined memory: plain loads are uncached and slow):
+// SSE4.1 streaming loads fetch a line at a time. 16-byte aligned source and size only.
+bool HasStreamingLoads() {
+    int info[4]{};
+    __cpuid(info, 1);
+    return (info[2] & (1 << 19)) != 0; // SSE4.1
+}
+
+bool StreamCopy(void* dst, const void* src, std::size_t n) {
+    if ((reinterpret_cast<std::uintptr_t>(src) & 15) || (n & 15)) return SafeCopy(dst, src, n);
+    __try {
+        auto* s = static_cast<__m128i*>(const_cast<void*>(src));
+        auto* d = static_cast<__m128i*>(dst);
+        std::size_t i = 0;
+        for (; i + 4 <= n / 16; i += 4) {
+            const __m128i a = _mm_stream_load_si128(s + i), b = _mm_stream_load_si128(s + i + 1),
+                          c = _mm_stream_load_si128(s + i + 2), e = _mm_stream_load_si128(s + i + 3);
+            _mm_storeu_si128(d + i, a);
+            _mm_storeu_si128(d + i + 1, b);
+            _mm_storeu_si128(d + i + 2, c);
+            _mm_storeu_si128(d + i + 3, e);
+        }
+        for (; i < n / 16; ++i) _mm_storeu_si128(d + i, _mm_stream_load_si128(s + i));
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+// Every read of BF4's ring: streaming loads where the CPU has them (live, session 68: a 2.9 KB
+// palette in 3.1 us against 61.9 us with plain loads; the arms read ~10 per frame).
+bool RingCopy(void* dst, const void* src, std::size_t n) {
+    static const bool streaming = HasStreamingLoads();
+    return streaming ? StreamCopy(dst, src, n) : SafeCopy(dst, src, n);
+}
+
+double MicrosecondsSince(LARGE_INTEGER start) {
+    static const double perUs = [] {
+        LARGE_INTEGER f{};
+        QueryPerformanceFrequency(&f);
+        return static_cast<double>(f.QuadPart) / 1e6;
+    }();
+    LARGE_INTEGER now{};
+    QueryPerformanceCounter(&now);
+    return static_cast<double>(now.QuadPart - start.QuadPart) / perUs;
+}
+
 Mat4 Load(const std::uint8_t* block, std::uint32_t offset) {
     Mat4 m;
     std::memcpy(m.data(), block + offset, sizeof(m));
@@ -29,33 +80,6 @@ Mat4 Load(const std::uint8_t* block, std::uint32_t offset) {
 }
 void Store(std::uint8_t* block, std::uint32_t offset, const Mat4& m) { std::memcpy(block + offset, m.data(), sizeof(m)); }
 } // namespace
-
-Mat4 Mul(const Mat4& a, const Mat4& b) {
-    Mat4 r{};
-    for (int i = 0; i < 4; ++i)
-        for (int j = 0; j < 4; ++j) {
-            float s = 0;
-            for (int k = 0; k < 4; ++k) s += a[i * 4 + k] * b[k * 4 + j];
-            r[i * 4 + j] = s;
-        }
-    return r;
-}
-
-Mat4 Identity4() { return {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1}; }
-
-Mat4 FromPose(const math::Pose& pose) {
-    const math::Vec3 x = math::Rotate(pose.orientation, {1, 0, 0}), y = math::Rotate(pose.orientation, {0, 1, 0}),
-                     z = math::Rotate(pose.orientation, {0, 0, 1});
-    return {x.x, y.x, z.x, pose.position.x, x.y, y.y, z.y, pose.position.y, x.z, y.z, z.z, pose.position.z, 0, 0, 0, 1};
-}
-
-Mat4 InverseRigid(const Mat4& m) {
-    Mat4 r = Identity4();
-    for (int i = 0; i < 3; ++i)
-        for (int j = 0; j < 3; ++j) r[i * 4 + j] = m[j * 4 + i];
-    for (int i = 0; i < 3; ++i) r[i * 4 + 3] = -(r[i * 4 + 0] * m[3] + r[i * 4 + 1] * m[7] + r[i * 4 + 2] * m[11]);
-    return r;
-}
 
 math::Pose GunGripAtRest() {
     // Live (prologue rifle, hip, 2026-10-20): the weapon's root bone sits at (0.066, -0.022,
@@ -185,6 +209,127 @@ Mat4 FirstPersonView::EyeShift(int eye, float halfEye) {
     return m;
 }
 
+Mat4 FirstPersonView::BodyInHead(const float rows[9]) {
+    const math::Vec3 r0{rows[0], rows[1], rows[2]}, r1{rows[3], rows[4], rows[5]}, r2{rows[6], rows[7], rows[8]};
+    const math::Vec3 up{0, 1, 0};
+    // The body's back: the head's, level. Looking far down or up the head's up axis carries the
+    // heading, so both are blended (r2 tilts up as r1 tilts forward when looking down).
+    const math::Vec3 r2h = r2 - up * math::Dot(r2, up), r1h = r1 - up * math::Dot(r1, up);
+    const math::Vec3 back = math::Normalize(r2h - r1h * (r2.y >= 0 ? 1.0f : -1.0f));
+    if (math::Length(back) < 0.5f) return Identity4();
+    const math::Vec3 right = math::Normalize(math::Cross(up, back));
+    const math::Vec3 axes[3] = {right, up, back};
+    const math::Vec3 head[3] = {r0, r1, r2};
+    Mat4 m = Identity4();
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 3; ++j) m[i * 4 + j] = math::Dot(head[i], axes[j]);
+    return m;
+}
+
+namespace {
+float ChainDistance(const ArmChain& a, const ArmChain& b) {
+    return std::fmax(math::Length(a.shoulder - b.shoulder),
+                     std::fmax(math::Length(a.elbow - b.elbow), math::Length(a.wrist - b.wrist)));
+}
+} // namespace
+
+void FirstPersonView::RewriteArms(ID3D11DeviceContext* context, const void* mapped, std::uint32_t size,
+                                  ID3D11Buffer** buffers, UINT* first, UINT* count) {
+    const std::uint32_t offset = first ? first[0] * 16 : 0;
+    const std::uint32_t bytes = count ? count[0] * 16 : (size > offset ? size - offset : 0);
+    if (bytes < kArmMinPaletteBytes || bytes > kOurBytes || offset + bytes > size) return;
+    static const bool streaming = HasStreamingLoads();
+    LARGE_INTEGER t0{};
+    QueryPerformanceCounter(&t0);
+    alignas(16) std::uint8_t data[kOurBytes];
+    if (!RingCopy(data, static_cast<const std::uint8_t*>(mapped) + offset, bytes)) return;
+    const double readUs = MicrosecondsSince(t0);
+    LARGE_INTEGER t1{};
+    QueryPerformanceCounter(&t1);
+    float* palette = reinterpret_cast<float*>(data);
+    const int bones = std::min(static_cast<int>(bytes / (kArmBoneFloats * sizeof(float))), kArmMaxBones);
+    // This palette's own arms vote; the most voted (ties: nearest the previous pass's) lead.
+    ArmChain own[2];
+    FindArmChains(palette, bones, armBind_, own);
+    // The player's arms sit by the first-person camera; the stale copies some weapon palettes
+    // carry lie metres away (live, session 64: one of them led the pass's first arms draw).
+    const math::Vec3 camera{passCamera_[0], passCamera_[1], passCamera_[2]};
+    for (ArmChain& chain : own)
+        if (chain.found && math::Length(chain.shoulder - camera) > kArmNearCamera) chain.found = false;
+    bool changedRef = false;
+    for (int side = 0; side < 2; ++side) {
+        if (!own[side].found) continue;
+        ArmCandidate* hit = nullptr;
+        for (int k = 0; k < armCandidates_[side] && !hit; ++k)
+            if (ChainDistance(armVotes_[side][k].chain, own[side]) < kArmChainTolerance) hit = &armVotes_[side][k];
+        if (!hit && armCandidates_[side] < kArmCandidates) {
+            hit = &armVotes_[side][armCandidates_[side]++];
+            hit->chain = own[side];
+            hit->votes = 0;
+        }
+        if (hit) ++hit->votes;
+        const ArmCandidate* best = nullptr;
+        for (int k = 0; k < armCandidates_[side]; ++k) {
+            const ArmCandidate& c = armVotes_[side][k];
+            if (!best || c.votes > best->votes ||
+                (c.votes == best->votes && armPrev_[side].found &&
+                 ChainDistance(c.chain, armPrev_[side]) < ChainDistance(best->chain, armPrev_[side])))
+                best = &c;
+        }
+        if (best && (!armRef_[side].found || ChainDistance(best->chain, armRef_[side]) >= kArmChainTolerance)) {
+            if (armRef_[side].found) {
+                std::lock_guard<std::mutex> lock(mutex_);
+                ++stats_.armSwitches;
+            }
+            armRef_[side] = best->chain;
+            changedRef = true;
+        }
+    }
+    if (changedRef) armSolved_ = false;
+    if (!armSolved_ && (armRef_[0].found || armRef_[1].found)) {
+        ArmSolveInput in;
+        in.chains[0] = armRef_[0];
+        in.chains[1] = armRef_[1];
+        in.headFromPass = armHeadFromPass_;
+        in.body = armBody_;
+        in.shoulderFollow = kArmShoulderFollow;
+        in.clavicleShare = kArmClavicleShare;
+        armCorr_ = SolveArms(in);
+        armSolved_ = true;
+    }
+    int changed = 0;
+    if (armSolved_) {
+        BoneClass classes[kArmMaxBones];
+        ClassifyBones(palette, bones, armBind_, armRef_, kArmClassTolerance, classes);
+        changed = ApplyArmCorrections(palette, bones, classes, armHeadFromPass_, armCorr_);
+    }
+    const double workUs = MicrosecondsSince(t1);
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        ++stats_.armPalettes;
+        stats_.armReadUs += readUs;
+        stats_.armWorkUs += workUs;
+        stats_.armStreamingReads = streaming;
+    }
+    if (!changed) return;
+    LARGE_INTEGER t2{};
+    QueryPerformanceCounter(&t2);
+    D3D11_MAPPED_SUBRESOURCE m{};
+    if (FAILED(context->Map(oursPalette_.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &m)) || !m.pData) return;
+    std::memcpy(m.pData, data, bytes);
+    if (bytes < kOurBytes) std::memset(static_cast<std::uint8_t*>(m.pData) + bytes, 0, kOurBytes - bytes);
+    context->Unmap(oursPalette_.Get(), 0);
+    buffers[0] = oursPalette_.Get(); // the bind proceeds with our palette in this slot only
+    if (first) first[0] = 0;
+    const double uploadUs = MicrosecondsSince(t2);
+    std::lock_guard<std::mutex> lock(mutex_);
+    stats_.armUploadUs += uploadUs;
+    ++stats_.armRewritten;
+    stats_.armBones += static_cast<std::uint64_t>(changed);
+    stats_.armSlide[0] = armCorr_.slide[0];
+    stats_.armSlide[1] = armCorr_.slide[1];
+}
+
 int FirstPersonView::FrameEye() const {
     std::lock_guard<std::mutex> lock(mutex_);
     return shiftedThisFrame_ ? eye_ : -1;
@@ -224,7 +369,9 @@ bool FirstPersonView::Install(ID3D11DeviceContext* immediate) {
     d.Usage = D3D11_USAGE_DYNAMIC;
     d.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
     d.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-    if (!device || FAILED(device->CreateBuffer(&d, nullptr, &ours_))) return false;
+    if (!device || FAILED(device->CreateBuffer(&d, nullptr, &ours_)) ||
+        FAILED(device->CreateBuffer(&d, nullptr, &oursPalette_)))
+        return false;
     immediate_ = immediate;
     if (!ContextHooks::Install(immediate) || !ContextHooks::Add(this)) return false;
     installed_ = true;
@@ -249,8 +396,8 @@ FirstPersonView::Stats FirstPersonView::GetStats() const {
 
 std::string FirstPersonView::Describe() const {
     const Stats s = GetStats();
-    char line[560];
-    std::snprintf(line, sizeof(line),
+    char line[760];
+    int n = std::snprintf(line, sizeof(line),
                   "first_person_view installed=%d binds=%llu matched=%llu replaced=%llu unreadable=%llu ky=%.4f fp_cam=(%.2f %.2f %.2f) hand=%llu/%llu/%llu by_render=%llu by_game=%llu diff=%.4f passes=%llu weapon=%llu (%.3f %.3f %.3f) zoom_held=%llu shift=%.3f eye_views=%llu eye_frames=%llu",
                   static_cast<int>(installed_), static_cast<unsigned long long>(s.binds),
                   static_cast<unsigned long long>(s.matched), static_cast<unsigned long long>(s.replaced),
@@ -261,6 +408,15 @@ std::string FirstPersonView::Describe() const {
                   static_cast<unsigned long long>(s.weaponFound), s.weapon[0], s.weapon[1], s.weapon[2],
                   static_cast<unsigned long long>(s.zoomHeld), s.weaponShift, static_cast<unsigned long long>(s.shiftedViews),
                   static_cast<unsigned long long>(s.shiftedFrames));
+    if (n > 0 && n < static_cast<int>(sizeof(line)))
+        std::snprintf(line + n, sizeof(line) - n,
+                      " arms=%llu/%llu bones=%llu solved=%llu switches=%llu slide=(%.3f %.3f) arm_us_per_pass=read %.0f%s work %.0f upload %.0f",
+                      static_cast<unsigned long long>(s.armPalettes), static_cast<unsigned long long>(s.armRewritten),
+                      static_cast<unsigned long long>(s.armBones), static_cast<unsigned long long>(s.armSolved),
+                      static_cast<unsigned long long>(s.armSwitches),
+                      s.armSlide[0], s.armSlide[1], s.armSolved ? s.armReadUs / s.armSolved : 0.0,
+                      s.armStreamingReads ? " (streaming)" : "", s.armSolved ? s.armWorkUs / s.armSolved : 0.0,
+                      s.armSolved ? s.armUploadUs / s.armSolved : 0.0);
     return line;
 }
 
@@ -298,7 +454,15 @@ bool FirstPersonView::WeaponPart(const Mat4& w, const float camera[3], float rad
 
 void FirstPersonView::EndPass() {
     inPass_ = false;
+    const bool both = armPass_ && armSolved_ && armCorr_.solved[0] && armCorr_.solved[1];
+    for (int side = 0; side < 2; ++side) {
+        if (armPass_ && armRef_[side].found) armPrev_[side] = armRef_[side];
+        armRef_[side] = {};
+        armCandidates_[side] = 0;
+    }
+    armPass_ = armSolved_ = false;
     std::lock_guard<std::mutex> lock(mutex_);
+    if (both) ++stats_.armSolved;
     ++stats_.passes;
     if (!bestCount_) return;
     weapon_ = Mul(passView_, bestWorld_);
@@ -348,10 +512,11 @@ void FirstPersonView::OnBindConstants(ID3D11DeviceContext* context, ContextHooks
         const std::uint32_t offset = first ? first[0] * 16 : 0;
         Mat4 w{};
         if (known && source.mapped && offset + 64 <= source.size &&
-            SafeCopy(w.data(), static_cast<const std::uint8_t*>(source.mapped) + offset, 64) && WeaponPart(w, passCamera_)) {
+            RingCopy(w.data(), static_cast<const std::uint8_t*>(source.mapped) + offset, 64) && WeaponPart(w, passCamera_)) {
             pendingWorld_ = w;
             havePending_ = true;
         }
+        if (armPass_ && known && source.mapped) RewriteArms(context, source.mapped, source.size, buffers, first, count);
     }
     if (kViewSlot < startSlot || kViewSlot >= startSlot + numBuffers) return;
     const UINT i = kViewSlot - startSlot;
@@ -371,7 +536,7 @@ void FirstPersonView::OnBindConstants(ID3D11DeviceContext* context, ContextHooks
     const std::uint32_t offset = first ? first[i] * 16 : 0;
     if (!source.mapped || offset + L::kSize > source.size) return;
     std::array<std::uint8_t, L::kSize> block{};
-    if (!SafeCopy(block.data(), static_cast<const std::uint8_t*>(source.mapped) + offset, block.size())) {
+    if (!RingCopy(block.data(), static_cast<const std::uint8_t*>(source.mapped) + offset, block.size())) {
         std::lock_guard<std::mutex> lock(mutex_);
         ++stats_.unreadable;
         return;
@@ -436,6 +601,17 @@ void FirstPersonView::OnBindConstants(ID3D11DeviceContext* context, ContextHooks
             std::lock_guard<std::mutex> lock(mutex_);
             ++stats_.zoomHeld;
             stats_.weaponShift = std::sqrt(back[3] * back[3] + back[7] * back[7] + back[11] * back[11]);
+        }
+        // Arms from the body: the rig as drawn in the head's space (before any eye shift) and
+        // where its torso goes.
+        armPass_ = frame.armIk && inPass_ && oursPalette_;
+        if (armPass_) {
+            const Mat4 headFromPass = Mul(move, Load(block.data(), L::kViewMatrix));
+            const Mat4 torso = hand->bodyValid ? FromPose(hand->body) : BodyInHead(hand->rotation);
+            const Mat4 body = Mul(torso, InverseRigid(move));
+            if (headFromPass != armHeadFromPass_ || body != armBody_) armSolved_ = false; // solve again
+            armHeadFromPass_ = headFromPass;
+            armBody_ = body;
         }
     }
     if (shift) move = Mul(eyeMove, move); // the rig seen from this frame's eye

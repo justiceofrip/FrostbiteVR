@@ -83,6 +83,7 @@ bool CheckShaderCensus(ID3D11Device* device, const char*& why);        // Shader
 bool CheckDrawProbe(ID3D11Device* device, const char*& why);           // ShaderCensusCheck.cpp
 bool CheckFirstPersonView(ID3D11Device* device, const char*& why);     // ShaderCensusCheck.cpp
 bool CheckHudSplit(ID3D11Device* device, const char*& why);           // ShaderCensusCheck.cpp
+bool CheckFirstPersonArms(ID3D11Device* device, const char*& why);    // ShaderCensusCheck.cpp
 bool CheckControllerScan(const char*& why);                            // ControllerScanCheck.cpp
 namespace {
 void Check(bool ok, const char* what) {
@@ -646,6 +647,12 @@ int wmain() {
         const bool ok = CheckFirstPersonView(dev, why);
         if (!ok) std::printf("first-person view check: %s\n", why);
         Check(ok, "first-person view pass gets the render's projection and a moved view; other binds pass through");
+    }
+    {
+        const char* why = "";
+        const bool ok = CheckFirstPersonArms(dev, why);
+        if (!ok) std::printf("first-person arms check: %s\n", why);
+        Check(ok, "arms from the body: a palette bound in the pass is rebound with the shoulders at the body, hands on the gun");
     }
     {
         const char* why = "";

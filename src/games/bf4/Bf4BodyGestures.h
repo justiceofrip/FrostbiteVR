@@ -89,6 +89,10 @@ public:
     bool GadgetInHand() const { return gadget_; }
     bool MagazineOut(Bf4Gun gun) const { return magazineOut_[static_cast<int>(gun)]; }
     bool MagazineInHand() const { return magazineInHand_; }
+    // The torso's heading (the holsters' body frame: follows the head beyond a deadzone), in
+    // the controllers' space, while the gestures are engaged.
+    bool BodyValid() const { return usable_; }
+    float BodyYaw() const { return body_.BodyYaw(); }
     std::string Describe() const;
     // Where the magazine well is for a right-hand grip pose (tracking space).
     static math::Vec3 Magwell(const math::Pose& rightGrip);
