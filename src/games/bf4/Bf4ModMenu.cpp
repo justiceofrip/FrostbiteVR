@@ -49,8 +49,8 @@ ui::ModMenuModel BuildModMenu(const game::CapabilityRegistry& caps, bool develop
               "Left grip in front of the gun steadies it."});
     menu.Add({"vignette", "Comfort vignette", MenuItemKind::Choice, {"Off", "On"}, state.vignette ? 1 : 0, true,
               "Darkens the edges while walking."});
-    menu.Add({"gun_aim", "Gun follows aim", MenuItemKind::Choice, {"Off", "On"}, state.gunFollowsAim ? 1 : 0, true,
-              "Barrel on the bullets' line."});
+    menu.Add({"gun_aim", "Gun follows aim", MenuItemKind::Choice, {"Off", "On", "Wide reach"},
+              state.gunFollowsAim ? (state.gunReachWide ? 2 : 1) : 0, true, "Barrel on the bullets. Wide: blurrier."});
     menu.Add({"aim_dot", "Aim dot", MenuItemKind::Choice, {"Off", "On"}, state.aimDot ? 1 : 0, true,
               "Green ring where the gun aims."});
     // BF4's own split-screen two-view render: unsupported on PC (its world renderer is built

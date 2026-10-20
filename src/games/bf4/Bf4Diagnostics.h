@@ -20,6 +20,9 @@ public:
     static void Start(std::function<void(const std::string&)> sink, const std::string& faultFile);
     static void FramePresented();          // every Present
     static void ArmFaultLogging(bool armed); // e.g. while a risky feature is on
+    // "foreground=<process> class=<class> own=<class>[(minimized)]...": who is in front and the
+    // state of this process's visible top-level windows (stall reports, focus changes).
+    static std::string DescribeForeground();
 };
 
 } // namespace fvr::bf4

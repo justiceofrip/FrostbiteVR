@@ -168,7 +168,9 @@ void AdapterCore::ApplyMenuCommand(const ModMenuCommand& command) {
         break;
     case ModMenuAction::SetGunFollowsAim:
         menuState_.gunFollowsAim = command.value != 0;
-        platform_.Log(menuState_.gunFollowsAim ? "gun follows aim: on" : "gun follows aim: off");
+        menuState_.gunReachWide = command.value == 2;
+        platform_.Log(!menuState_.gunFollowsAim ? "gun follows aim: off"
+                      : menuState_.gunReachWide ? "gun follows aim: on, wide reach" : "gun follows aim: on");
         break;
     case ModMenuAction::SetHolsters:
         menuState_.holsters = command.value != 0;
@@ -443,6 +445,7 @@ void AdapterCore::UpdateMotionAim(const ControllerSnapshot& in, const PlatformFr
         m.eyes[0] = lastEyeFov_[0];
         m.eyes[1] = lastEyeFov_[1];
         m.aspect = f.backbufferHeight ? float(f.backbufferWidth) / float(f.backbufferHeight) : 16.0f / 9.0f;
+        m.renderBudget = menuState_.gunReachWide ? kGunAimFovBudgetWide : kGunAimFovBudget;
     }
     const auto& hand = in.controls.hands[1];
     m.aimTracked = in.controls.focused && hand.aimTracked;
@@ -546,6 +549,7 @@ void AdapterCore::UpdateCamera(const ControllerSnapshot& in, const PlatformFrame
             r.eyeFov[0] = in.world.fov[0];
             r.eyeFov[1] = in.world.fov[1];
             r.gunFollowsAim = menuState_.gunFollowsAim && stereo_ == StereoMode::Mono;
+            r.gunFovBudget = menuState_.gunReachWide ? kGunAimFovBudgetWide : kGunAimFovBudget;
         }
         camera_.push_back(r);
     };
@@ -726,11 +730,13 @@ std::string AdapterCore::Status() const {
     char aimLine[384];
     std::snprintf(aimLine, sizeof(aimLine),
                   "controller_aim=%s body_yaw=%.3f gain=%.6f,%.6f mutes=%llu snaps=%llu two_handed=%llu guards=%llu "
-                  "reach_limited=%llu recenters=%llu recenter_gestures=%llu stick_chords=%llu game_menus=%llu game_menu=%s\n",
+                  "foreign_turns=%llu reach_limited=%llu recenters=%llu recenter_gestures=%llu stick_chords=%llu game_menus=%llu "
+                  "game_menu=%s\n",
                   aim_.engaged ? "engaged" : "off", aim_.bodyYaw, motionAim_.GainX(), motionAim_.GainY(),
                   static_cast<unsigned long long>(motionAim_.Mutes()), static_cast<unsigned long long>(motionAim_.Snaps()),
                   static_cast<unsigned long long>(twoHandedEngages_),
                   static_cast<unsigned long long>(motionAim_.OscillationGuards()),
+                  static_cast<unsigned long long>(motionAim_.ForeignTurns()),
                   static_cast<unsigned long long>(motionAim_.ReachLimited()), static_cast<unsigned long long>(stats_.recenters),
                   static_cast<unsigned long long>(stats_.recenterGestures), static_cast<unsigned long long>(stickChord_.Chords()),
                   static_cast<unsigned long long>(stats_.gameMenus), gameUi_ ? "on" : "off");

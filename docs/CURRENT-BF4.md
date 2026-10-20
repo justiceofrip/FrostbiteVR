@@ -144,6 +144,14 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
     its confirmation dialog (OK) by laser on the theater screen -> the checkpoint reloaded
     -> `game menu closed`, aim engaged and the world lane back in the level. The lens
     shift for a wider gun reach does not work (BF4-CAMERA-RE.md).
+  - 0.4.62-local (session 15): "Wide reach": hand 15 deg up with the head level, crosshair,
+    gun and dot together ~4-5 deg up with On, ~9-10 deg with Wide. Death by a grenade
+    (left hip grab, thrown at the feet): BF4's campaign shows no menu on death; the view
+    fades and the checkpoint reloads by itself, then the head-tracked view and aiming came
+    back. That death broke the aim's mouse gain (fixed above). A second 10 s game stall
+    (23:04:12-22, no Present, every thread idle-waiting; the window thread in its normal
+    GetMessage) began as a command of mine started after a pause, like the first; the
+    watchdog and Present now log who has the foreground when the game loses it or stalls.
 
 ## Gun follows aim: the barrel on the bullets' line (2026-10-19, built; live sim)
 
@@ -181,6 +189,11 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   shots). Live (0.4.58-local): hand 15 deg up with the head level put crosshair, gun and
   aim dot together about 5 deg up. The upward reach is small for Quest-like eyes (their
   vertical FOV is already the render's limit); a wider budget would cost sharpness.
+- Mod menu "Gun follows aim: Off / On / Wide reach": Wide lets the turned render grow to
+  2.3 rad instead of 2.1 (`kGunAimFovBudgetWide`; the centre up to ~39 % less sharp than the
+  head alone needs, against ~21 %), so the gun follows farther from the gaze before it
+  stops. Unit and emulated tests (the aim stops farther up with Wide, still all the way
+  followed).
 - A turned render brings BF4's own HUD corners (minimap, ammo panel) into the eyes' outer
   edges, skewed (seen live at 20 deg: a second minimap at the left eye's edge). With HUD
   corners on they are shown once, in their insets: the eye resampler draws their source
@@ -443,6 +456,20 @@ the theater screen. Pieces (all on the analysed build only):
   (its old form teleported the target in the same frame, which overshoots ~1 rad at three
   frames of delay whatever the guard does: the counts leave before the game shows any;
   it had passed only because the teleport misfired the guard).
+- The game turning by itself (found live, session 15: a grenade at the player's feet; BF4's
+  death camera sank and turned the view while the aim kept sending counts): learning took
+  that for the mouse (pitch gain sign flipped, both gains collapsed to ~1e-5) and the
+  overshoot guard then grew the yaw gain to its 0.05 clamp, 35x the real value, which
+  survived the respawn. Now: a window in which the game turned against one-signed counts
+  (compared with the counts it has applied by then, two samples later) starts a probe:
+  aiming goes quiet for a moment and watches. If the game keeps turning, it is its own
+  camera (`foreign_turns=`): nothing is learned and aiming stays quiet, longer each time.
+  If it holds still, the counts did it: inverted look, and that axis's sign flips (a sign
+  changes only this way). Once an axis is learned, one window may change its gain at most
+  2.5x either way unless the next agrees; gains stay within 5e-5..0.02. The guard grows a
+  gain only when the game moved the way recent counts pushed it, by no more than they
+  explain. Unit tests: death camera and respawn (gains stay within 2x, aiming converges
+  after), inverted look found by probing; the 3x sensitivity tests at delays 1 and 2 pass.
 - An axis not learned yet starts from the other axis's learned gain (x1.2, the cautious
   side) instead of the first estimate: BF4 turns as far per count on both axes (0.00140 /
   -0.00140; ADS 0.00084 / -0.00084), and with the gun's reach keeping vertical moves small
@@ -787,7 +814,9 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
   6 % of the screen, and the pad's triggers are released while the laser points at the
   screen outside campaign play (unit-tested; live check pending; clicks are logged).
 - Holsters: key 2 (sidearm) not yet seen working live (the prologue has no sidearm).
-- A 10 s stall (no Present) once in session 12, with the mod menu open; a laser click
+- 10 s stalls (no Present), twice now (sessions 12 and 15), each starting as one of my test
+  commands began after a pause. Session 16+ logs the foreground owner at stalls and at every
+  change of the game window's focus, to tell a focus thief from an in-game wait. First one: with the mod menu open; a laser click
   during it was lost, because the adapter runs per Present. Not repeated in 20 s with the
   menu open. The watchdog's first stack (the window thread, under the Steam and EA overlay
   hooks) is BF4's ordinary blocking `GetMessage` loop at `+0x110a2` (decoded from the

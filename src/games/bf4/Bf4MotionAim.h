@@ -109,6 +109,7 @@ struct MotionAimInput {
     CameraAxes head;
     math::FovTangents eyes[2];
     float aspect = 0;
+    float renderBudget = kGunAimFovBudget; // the render's widest FOV (the player's reach choice)
 };
 
 struct MotionAimOutput {
@@ -174,7 +175,9 @@ public:
         AimAngle aim{hand->yaw, hand->pitch};
         twoHanded_ = TwoHanded(in, aim);
         out.twoHanded = twoHanded_;
-        if (in.limitToRender && LimitAimToRender(in.head, aim, in.eyes[0], in.eyes[1], in.aspect)) ++limited_;
+        if (in.limitToRender &&
+            LimitAimToRender(in.head, aim, in.eyes[0], in.eyes[1], in.aspect, in.renderBudget - kReachSlack))
+            ++limited_;
         desired_ = {WrapPi(bodyYaw_ + aim.yaw), aim.pitch};
         // What moved since the last update: the target (hand, snap turn, the second hand
         // taking over or letting go) or the game. The guard only judges swings the game made.
@@ -191,12 +194,15 @@ public:
         const float flightX = gainX_ * static_cast<float>(flightX_[0] + flightX_[1]);
         const float flightY = gainY_ * static_cast<float>(flightY_[0] + flightY_[1]);
         ++updates_;
-        GuardOvershoot(WrapPi(desired_.yaw - in.game.yaw), targetX, gameX, guardX_, gainX_);
-        GuardOvershoot(desired_.pitch - in.game.pitch, targetY, gameY, guardY_, gainY_);
+        // What the game may be applying now: the recent pushes the way it moved (its input
+        // delay is one to three frames, and the newest counts may already pull back).
+        const float landingX = Landing(gameX, gainX_, flightX_), landingY = Landing(gameY, gainY_, flightY_);
+        GuardOvershoot(WrapPi(desired_.yaw - in.game.yaw), targetX, gameX, landingX, guardX_, gainX_);
+        GuardOvershoot(desired_.pitch - in.game.pitch, targetY, gameY, landingY, guardY_, gainY_);
         out.mouseX = Counts(WrapPi(desired_.yaw - in.game.yaw) - flightX, gainX_);
         out.mouseY = Counts(desired_.pitch - in.game.pitch - flightY, gainY_);
-        flightX_ = {out.mouseX, flightX_[0]};
-        flightY_ = {out.mouseY, flightY_[0]};
+        flightX_ = {out.mouseX, flightX_[0], flightX_[1], flightX_[2]};
+        flightY_ = {out.mouseY, flightY_[0], flightY_[1], flightY_[2]};
         pendingX_ += out.mouseX;
         pendingY_ += out.mouseY;
         return out;
@@ -208,6 +214,8 @@ public:
     std::uint64_t Snaps() const { return snaps_; }
     std::uint64_t OscillationGuards() const { return guards_; }
     std::uint64_t ReachLimited() const { return limited_; } // updates whose aim was brought back
+    std::uint64_t ForeignTurns() const { return foreign_; } // windows the game turned by itself
+    std::uint64_t SignFlips() const { return flips_; }       // probes that found inverted look
     bool TwoHandedNow() const { return twoHanded_; }
     static constexpr int kMuteFrames = 60;
     AimAngle Desired() const { return desired_; }
@@ -247,18 +255,23 @@ private:
     };
     static constexpr float kOvershoot = 0.3f;
     static constexpr float kMaxGuardStep = 4.0f; // one guard grows the estimate at most this much
-    // `target` and `game`: how far each moved since the last update.
-    void GuardOvershoot(float error, float target, float game, Guard& g, float& gain) {
+    // `target` and `game`: how far each moved since the last update; `pushed`: how far the
+    // counts the game is applying now should move it at the current estimate.
+    void GuardOvershoot(float error, float target, float game, float pushed, Guard& g, float& gain) {
         if (std::fabs(error) < 0.01f) return;
         const int now = error > 0 ? 1 : -1;
         if (g.sign && now != g.sign) {
-            if (std::fabs(target) > std::fabs(game)) {
+            // An overshoot is the game going past the target the way our counts pushed it, by
+            // no more than they can explain. A game turning by itself (its death camera,
+            // live 2026-10-19: guards grew the yaw gain to the clamp, 35x) is not one.
+            const bool ours = game * pushed > 0 && std::fabs(game) <= (kMaxGuardStep + 1) * std::fabs(pushed) + 0.01f;
+            if (std::fabs(target) > std::fabs(game) || !ours) {
                 // The target crossed the game, not the game the target (live, 2026-10-19:
-                // letting go of a two-handed grip grew the pitch gain sevenfold this way):
-                // no overshoot; a new swing starts here.
+                // letting go of a two-handed grip grew the pitch gain sevenfold this way), or
+                // the game moved on its own: no overshoot; a new swing starts here.
                 g = {};
             } else if (g.previous > 0 && g.peak > kOvershoot * g.previous) {
-                gain = std::fmax(-0.05f, std::fmin(0.05f, gain * std::fmin(kMaxGuardStep, 1 + g.peak / g.previous)));
+                gain = std::copysign(std::fmin(kMaxGain, std::fabs(gain) * std::fmin(kMaxGuardStep, 1 + g.peak / g.previous)), gain);
                 g.previous = -1;
                 ++guards_;
             } else {
@@ -268,6 +281,14 @@ private:
         }
         g.sign = now;
         g.peak = std::fmax(g.peak, std::fabs(error));
+    }
+    static float Landing(float game, float gain, const std::array<int, 4>& flight) {
+        float same = 0;
+        for (const int c : flight) {
+            const float m = gain * static_cast<float>(c);
+            if (m * game > 0) same += m;
+        }
+        return same;
     }
     // Proportional step. With two frames of counts treated as in flight, half the remaining
     // error per frame settles without overshoot for game input delays of one to three
@@ -284,9 +305,8 @@ private:
         flightX_ = flightY_ = {};
         guardX_ = guardY_ = {};
         haveDesired_ = false;
-        windowCountsX_ = windowCountsY_ = 0;
-        windowYaw_ = windowPitch_ = 0;
-        windowFrames_ = 0;
+        probe_ = Probe::None;
+        ResetWindow();
     }
     // Gain = angle the game turned / counts sent, accumulated over a window of game
     // samples (the window absorbs the input-to-view delay).
@@ -294,26 +314,102 @@ private:
         if (in.gameSample == lastSample_) return;
         lastSample_ = in.gameSample;
         if (haveGame_) {
-            windowYaw_ += WrapPi(in.game.yaw - lastGame_.yaw);
-            windowPitch_ += in.game.pitch - lastGame_.pitch;
-            windowCountsX_ += pendingX_;
-            windowCountsY_ += pendingY_;
+            const float dYaw = WrapPi(in.game.yaw - lastGame_.yaw), dPitch = in.game.pitch - lastGame_.pitch;
+            const long long cx = pendingX_, cy = pendingY_;
             pendingX_ = pendingY_ = 0;
-            if (++windowFrames_ >= 20) {
+            if (probe_ != Probe::None) Probing(dYaw, dPitch);
+            else Window(dYaw, dPitch, cx, cy);
+        }
+        lastGame_ = in.game;
+        haveGame_ = true;
+    }
+    // The game turning against the counts (one-signed counts in the window, compared with
+    // what the game has applied of them by now, kLag samples later) is either inverted look
+    // or the game turning by itself (its death camera, live 2026-10-19: taken for the mouse,
+    // it flipped the pitch gain and collapsed both). No window tells them apart; stopping
+    // does: Probing keeps quiet for a moment and watches. Still: the counts did it, the sign
+    // flips. Turning on: the game's own camera, nothing is learned and aiming stays quiet.
+    enum class Probe : std::uint8_t { None, Settle, Measure };
+    static constexpr int kLag = 2, kProbeSettle = 4, kProbeMeasure = 12;
+    static constexpr float kAgainst = 0.05f, kProbeStill = 0.01f;
+    static bool Against(float angle, long long applied, long long appliedAbs, float gain) {
+        const float expected = gain * static_cast<float>(applied);
+        return std::fabs(expected) >= kAgainst && std::fabs(angle) >= kAgainst && angle * expected < 0 &&
+               static_cast<double>(std::llabs(applied)) >= 0.8 * static_cast<double>(appliedAbs);
+    }
+    void Probing(float dYaw, float dPitch) {
+        muted_ = std::max(muted_, 2); // nothing is sent while the game is watched
+        ++probeSamples_;
+        if (probe_ == Probe::Settle) { // counts already sent land first
+            if (probeSamples_ >= kProbeSettle) {
+                probe_ = Probe::Measure;
+                probeSamples_ = 0;
+                probeYaw_ = probePitch_ = 0;
+            }
+            return;
+        }
+        probeYaw_ += dYaw;
+        probePitch_ += dPitch;
+        if (probeSamples_ < kProbeMeasure) return;
+        probe_ = Probe::None;
+        if (std::fabs(probeYaw_) >= kProbeStill || std::fabs(probePitch_) >= kProbeStill) {
+            ++foreign_; // the game's own camera: quiet a while, longer each time
+            muted_ = kMuteFrames << std::min(ignoredInARow_, 3);
+            ++ignoredInARow_;
+            ++mutes_;
+        } else { // our counts turned it the other way: inverted look on that axis
+            if (probeAgainst_[0]) gainX_ = -gainX_;
+            if (probeAgainst_[1]) gainY_ = -gainY_;
+            ++flips_;
+            muted_ = 0;
+        }
+        outlierX_ = outlierY_ = 0;
+        ResetWindow();
+    }
+    void ResetWindow() {
+        windowYaw_ = windowPitch_ = 0;
+        windowCountsX_ = windowCountsY_ = 0;
+        windowAppliedX_ = windowAppliedY_ = windowAppliedAbsX_ = windowAppliedAbsY_ = 0;
+        lagX_ = lagY_ = {};
+        windowFrames_ = 0;
+    }
+    void Window(float dYaw, float dPitch, long long cx, long long cy) {
+        windowYaw_ += dYaw;
+        windowPitch_ += dPitch;
+        windowCountsX_ += cx;
+        windowCountsY_ += cy;
+        windowAppliedX_ += lagX_[0];
+        windowAppliedY_ += lagY_[0];
+        windowAppliedAbsX_ += std::llabs(lagX_[0]);
+        windowAppliedAbsY_ += std::llabs(lagY_[0]);
+        lagX_ = {lagX_[1], cx};
+        lagY_ = {lagY_[1], cy};
+        if (++windowFrames_ >= 20) {
                 // Counts sent and no turn at all: the game is not listening to the mouse
                 // right now (its pause menu moves a cursor with it instead). Quiet for a
                 // while, longer each time it happens again, until the game turns again.
                 // 200 counts: the cautious first gain sends few counts per frame.
                 const bool turned = std::fabs(windowYaw_) >= 0.005f || std::fabs(windowPitch_) >= 0.005f;
-                if (std::llabs(windowCountsX_) + std::llabs(windowCountsY_) >= 200 && !turned) {
+                const bool sent = std::llabs(windowCountsX_) + std::llabs(windowCountsY_) >= 200;
+                const bool againstX = Against(windowYaw_, windowAppliedX_, windowAppliedAbsX_, gainX_);
+                const bool againstY = Against(windowPitch_, windowAppliedY_, windowAppliedAbsY_, gainY_);
+                if (againstX || againstY) {
+                    probe_ = Probe::Settle;
+                    probeSamples_ = 0;
+                    probeAgainst_ = {againstX, againstY};
+                    muted_ = std::max(muted_, 2);
+                    ResetWindow();
+                    return;
+                }
+                if (sent && !turned) {
                     muted_ = kMuteFrames << std::min(ignoredInARow_, 3);
                     ++ignoredInARow_;
                     ++mutes_;
-                } else if (turned) {
-                    ignoredInARow_ = 0;
+                } else {
+                    if (turned) ignoredInARow_ = 0;
+                    trustX_ += Adapt(windowYaw_, windowCountsX_, gainX_, trustX_, outlierX_);
+                    trustY_ += Adapt(windowPitch_, windowCountsY_, gainY_, trustY_, outlierY_);
                 }
-                trustX_ += Adapt(windowYaw_, windowCountsX_, gainX_);
-                trustY_ += Adapt(windowPitch_, windowCountsY_, gainY_);
                 const bool learnedX = trustX_ >= kLearnedTrust, learnedY = trustY_ >= kLearnedTrust;
                 // BF4 turns as far per count on both axes (live: 0.00140 / -0.00140, aiming
                 // down sights 0.00084 / -0.00084): an axis not learned yet starts from the
@@ -322,28 +418,41 @@ private:
                 // teach the pitch gain and steered at half speed (live, 2026-10-19).
                 if (learnedX && !learnedY) gainY_ = std::copysign(kSeedMargin * std::fabs(gainX_), gainY_);
                 if (learnedY && !learnedX) gainX_ = std::copysign(kSeedMargin * std::fabs(gainY_), gainX_);
-                windowYaw_ = windowPitch_ = 0;
-                windowCountsX_ = windowCountsY_ = 0;
-                windowFrames_ = 0;
-            }
+                ResetWindow();
         }
-        lastGame_ = in.game;
-        haveGame_ = true;
     }
     // An axis counts as learned once its windows carried this much trust (0.1 rad of turning).
     static constexpr float kSeedMargin = 1.2f, kLearnedTrust = 0.5f;
-    // Returns the trust the window carried (0: it taught nothing).
-    static float Adapt(float angle, long long counts, float& gain) {
+    // Plausible gains (rad per count) and the largest change one window may make once an axis
+    // is learned (aiming down sights changes BF4's by 0.6x / 1.67x); a bigger one needs the
+    // next window to agree.
+    static constexpr float kMinGain = 5e-5f, kMaxGain = 0.02f, kMaxLearnStep = 2.5f;
+
+    // Returns the trust the window carried (0: it taught nothing). `pendingRatio`: an
+    // unconfirmed large change of the previous window (0: none).
+    static float Adapt(float angle, long long counts, float& gain, float trust, float& pendingRatio) {
         if (std::llabs(counts) < 200 || std::fabs(angle) < 0.01f) return 0; // not enough signal
-        const float measured = angle / static_cast<float>(counts);
+        float measured = angle / static_cast<float>(counts);
         const float magnitude = std::fabs(measured);
-        if (magnitude < 1e-6f || magnitude > 0.05f) return 0;
+        if (magnitude < kMinGain || magnitude > kMaxGain) return 0;
+        const float ratio = measured / gain;
+        if (ratio <= 0) return 0; // the sign changes only after a probe (Probing)
+        if (trust >= kLearnedTrust) {
+            if (ratio > kMaxLearnStep || ratio < 1 / kMaxLearnStep) {
+                const bool confirmed = pendingRatio > 0 && std::fabs(ratio / pendingRatio - 1) < 0.3f;
+                pendingRatio = ratio;
+                if (!confirmed) return 0;
+                measured = gain * std::clamp(ratio, 1 / kMaxLearnStep, kMaxLearnStep);
+            } else {
+                pendingRatio = 0;
+            }
+        }
         // Trust a window in proportion to how far the game turned in it (0.2 rad: fully), not
-        // to the counts sent (those depend on the estimate itself). Follows sign flips too
-        // (inverted look).
+        // to the counts sent (those depend on the estimate itself).
         const float weight = std::fmin(1.0f, std::fabs(angle) / 0.2f);
         gain += weight * (measured - gain);
-        if (std::fabs(gain) < 1e-6f) gain = measured;
+        if (std::fabs(gain) < kMinGain) gain = measured;
+        gain = std::copysign(std::clamp(std::fabs(gain), kMinGain, kMaxGain), gain);
         return weight;
     }
 
@@ -351,11 +460,19 @@ private:
     float bodyYaw_ = 0, lastHandYaw_ = 0;
     float gainX_ = kInitialGain, gainY_ = -kInitialGain; // mouse down looks down: negative pitch per count
     float trustX_ = 0, trustY_ = 0; // what each axis's windows have taught so far (Adapt)
+    float outlierX_ = 0, outlierY_ = 0; // an unconfirmed large change per axis (Adapt)
+    std::uint64_t foreign_ = 0, flips_ = 0; // probes that found the game's own camera / inverted look
+    Probe probe_ = Probe::None;
+    int probeSamples_ = 0;
+    float probeYaw_ = 0, probePitch_ = 0;
+    std::array<bool, 2> probeAgainst_{};
+    long long windowAppliedX_ = 0, windowAppliedY_ = 0, windowAppliedAbsX_ = 0, windowAppliedAbsY_ = 0;
+    std::array<long long, kLag> lagX_{}, lagY_{}; // counts of the last kLag samples, not applied yet
     AimAngle lastGame_{}, desired_{}, lastDesired_{}, lastGuardGame_{};
     bool haveDesired_ = false;
     std::uint64_t lastSample_ = 0;
     long long pendingX_ = 0, pendingY_ = 0, windowCountsX_ = 0, windowCountsY_ = 0;
-    std::array<int, 2> flightX_{}, flightY_{}; // counts sent in the last two updates
+    std::array<int, 4> flightX_{}, flightY_{}; // counts sent in the last four updates, newest first
     Guard guardX_{}, guardY_{};
     std::uint64_t updates_ = 0, guards_ = 0, limited_ = 0;
     float windowYaw_ = 0, windowPitch_ = 0;

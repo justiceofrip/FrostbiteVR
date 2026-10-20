@@ -412,6 +412,11 @@ TEST_CASE(GunFollowsAimKeepsTheAimWhereTheRenderCanFollow) {
     AimAngle turned{30 * deg, 15 * deg};
     CHECK(LimitAimToRender(Turned(30 * deg, 0), turned, eyeL, eyeR, aspect));
     CHECK(Near(turned.yaw, 30 * deg, 1e-3f) && Near(turned.pitch, up.pitch, 1e-3f));
+    // The player's wide reach (a wider render allowed) follows farther, still all the way.
+    AimAngle wide{0, 15 * deg};
+    LimitAimToRender(level, wide, eyeL, eyeR, aspect, kGunAimFovBudgetWide - kReachSlack);
+    CHECK(wide.pitch > up.pitch + 2 * deg);
+    CHECK(Near(GunAimRotation(level, AimAxes(wide), eyeL, eyeR, aspect, kGunAimFovBudgetWide).fraction, 1.0f));
     // Pointing behind: still a finite aim the render follows all the way.
     AimAngle behind{170 * deg, 0};
     CHECK(LimitAimToRender(level, behind, eyeL, eyeR, aspect));
@@ -841,6 +846,81 @@ TEST_CASE(ControllerAimTargetJumpsAreNoOvershoot) {
     CHECK(aim.OscillationGuards() == guards);
     CHECK(Near(aim.GainX(), game.gainX, 0.25f * game.gainX) && Near(aim.GainY(), game.gainY, 0.25f * -game.gainY));
     CHECK(Near(WrapPi(game.aim.yaw - 0.3f), 1.05f, 0.01f) && Near(game.aim.pitch, 0.44f, 0.01f));
+}
+
+TEST_CASE(ControllerAimKeepsItsGainThroughDeathAndRespawn) {
+    // Live (2026-10-19, a grenade at the player's feet): BF4's death camera turned and pitched
+    // the view on its own, ignoring the mouse, then the respawn put the aim somewhere else.
+    // Learning took that for the mouse (pitch gain sign flipped, both collapsed to ~1e-5) and
+    // the overshoot guard then grew the yaw gain to its 0.05 clamp: 35x too slow afterwards.
+    using namespace fvr;
+    using namespace fvr::bf4;
+    MotionAim aim;
+    SimulatedGameAim game;
+    game.gainX = 0.0014f;
+    game.gainY = -0.0014f;
+    MotionAimInput in;
+    in.engage = in.aimTracked = true;
+    in.reference.orientation = {0, 0, 0, 1};
+    in.dt = 1.0f / 60;
+    auto run = [&](float yaw, float pitch, int frames, bool deathCam) {
+        in.aim.orientation = math::FromAxisAngle({0, 1, 0}, -yaw) * math::FromAxisAngle({1, 0, 0}, pitch);
+        for (int i = 0; i < frames; ++i) {
+            if (deathCam) { // the body falls: the view sinks and turns, the mouse does nothing
+                game.pendingX = game.pendingY = 0;
+                game.aim.pitch -= 0.02f;
+                game.aim.yaw = WrapPi(game.aim.yaw + 0.008f * std::sin(i * 0.2f));
+            }
+            game.Frame();
+            in.gameValid = true;
+            in.game = game.aim;
+            in.gameSample = game.sample;
+            const auto out = aim.Update(in);
+            game.pendingX += out.mouseX;
+            game.pendingY += out.mouseY;
+        }
+    };
+    run(0.5f, 0.2f, 240, false); // learns
+    CHECK(Near(aim.GainX(), 0.0014f, 0.0003f) && Near(aim.GainY(), -0.0014f, 0.0003f));
+    run(0.5f, 0.2f, 60, true); // death camera, one second
+    game.aim = {2.4f, 0.0f};   // respawn somewhere else
+    run(0.5f, 0.2f, 120, true);
+    // Whatever happened meanwhile, the estimates stayed of the right sign and size...
+    CHECK(aim.GainX() > 0.0007f && aim.GainX() < 0.0028f);
+    CHECK(aim.GainY() < -0.0007f && aim.GainY() > -0.0028f);
+    // ...and aiming works again at once afterwards.
+    run(0.5f, 0.2f, 120, false);
+    CHECK(Near(WrapPi(game.aim.yaw - 0.3f), 0.5f, 0.02f) && Near(game.aim.pitch, 0.2f, 0.02f));
+    CHECK(aim.GainX() > 0.0010f && aim.GainX() < 0.0020f);
+}
+
+TEST_CASE(ControllerAimFindsInvertedLookByProbing) {
+    // The same signature as a death camera (the game turns against the counts), but here the
+    // counts did it: inverted vertical look. Going quiet shows it (the game holds still), so
+    // the pitch sign flips and aiming converges.
+    using namespace fvr;
+    using namespace fvr::bf4;
+    MotionAim aim;
+    SimulatedGameAim game;
+    game.gainX = 0.0014f;
+    game.gainY = 0.0014f; // mouse down looks up
+    MotionAimInput in;
+    in.engage = in.aimTracked = true;
+    in.reference.orientation = {0, 0, 0, 1};
+    in.dt = 1.0f / 60;
+    in.aim.orientation = math::FromAxisAngle({0, 1, 0}, -0.4f) * math::FromAxisAngle({1, 0, 0}, 0.3f);
+    for (int i = 0; i < 360; ++i) {
+        game.Frame();
+        in.gameValid = true;
+        in.game = game.aim;
+        in.gameSample = game.sample;
+        const auto out = aim.Update(in);
+        game.pendingX += out.mouseX;
+        game.pendingY += out.mouseY;
+    }
+    CHECK(aim.SignFlips() == 1 && aim.ForeignTurns() == 0);
+    CHECK(aim.GainY() > 0 && aim.GainX() > 0);
+    CHECK(Near(WrapPi(game.aim.yaw - 0.3f), 0.4f, 0.02f) && Near(game.aim.pitch, 0.3f, 0.02f));
 }
 
 TEST_CASE(ControllerAimSeedsAnUnlearnedAxisFromTheOther) {

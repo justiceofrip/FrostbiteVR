@@ -756,19 +756,25 @@ TEST_CASE(EmuBothSticksHeldRecenterWithoutReachingTheGame) {
 
 TEST_CASE(EmuGunFollowsAimKeepsTheBulletsOnTheBarrel) {
     // The hand 30 degrees up with the head level. Gun follows aim: the game's aim stops where
-    // the render can turn all the way to it (the barrel on the bullets' line). Off: the aim
-    // follows the hand and the gun stays in front of the face.
+    // the render can turn all the way to it (the barrel on the bullets' line); wide reach lets
+    // that render grow wider, so it stops farther up. Off: the aim follows the hand and the
+    // gun stays in front of the face.
     const float up = 0.5235988f;
-    AimAngle expected{0, up};
-    CHECK(LimitAimToRender(CameraAxes{}, expected, {-1.0f, 0.9f, 1.0f, -1.1f}, {-0.9f, 1.0f, 1.0f, -1.1f}, 1920.0f / 1080.0f));
-    for (const bool follow : {true, false}) {
+    const math::FovTangents eyeL{-1.0f, 0.9f, 1.0f, -1.1f}, eyeR{-0.9f, 1.0f, 1.0f, -1.1f};
+    AimAngle normal{0, up}, wide{0, up};
+    CHECK(LimitAimToRender(CameraAxes{}, normal, eyeL, eyeR, 1920.0f / 1080.0f));
+    CHECK(LimitAimToRender(CameraAxes{}, wide, eyeL, eyeR, 1920.0f / 1080.0f, kGunAimFovBudgetWide - kReachSlack));
+    CHECK(wide.pitch > normal.pitch + 0.03f);
+    for (const int choice : {1, 2, 0}) { // On, Wide reach, Off
+        const bool follow = choice != 0;
+        const AimAngle expected = choice == 2 ? wide : normal;
         FakeImage image({names::kGameRenderer, names::kRenderViewUpdate, names::kClientGameContext, names::kLevelName});
         FakePlatform platform;
         AdapterCore core(Session(true), X64(), image.Resolve(), platform);
         core.OnSwapchainAdopted(true);
         platform.Campaign();
         platform.aimKnown = true;
-        CHECK(core.SetMenuSetting("gun_aim", follow ? 1 : 0));
+        CHECK(core.SetMenuSetting("gun_aim", choice));
         Clock clock;
         for (std::uint64_t n = 0; n < 300; ++n) {
             LaneFrame l(n / 90.0, n + 1);

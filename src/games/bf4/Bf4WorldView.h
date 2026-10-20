@@ -175,6 +175,9 @@ struct FrameView {
 // Budget: 2.1 rad (~120 deg vertical). For Quest-like eyes (head-only 1.88 rad) the gun follows
 // fully up to about 20 degrees sideways or 7 down; the centre is then up to ~22 % less sharp.
 inline constexpr float kGunAimFovBudget = 2.1f;
+// The player's "Wide reach" choice: the gun follows farther from where the head looks, at up
+// to ~2.3 rad of render (the centre up to ~39 % less sharp than the head alone needs).
+inline constexpr float kGunAimFovBudgetWide = 2.3f;
 inline GunAim GunAimRotation(const CameraAxes& head, const CameraAxes& aim, const math::FovTangents& left,
                              const math::FovTangents& right, float aspect, float maxFovY = kGunAimFovBudget) {
     const float budget = std::max(RequiredVerticalFov(left, right, aspect), maxFovY);

@@ -77,3 +77,8 @@ Decisions worth keeping:
 - The both-sticks recenter is recognised by the BF4 adapter itself (the shared host takes
   it only in roomscale mode, which BF4 does not use); a chord of both stick clicks never
   reaches the game, while a lone click still does after 80 ms or as a tap.
+- The controller aim's mouse-gain sign changes only after a quiet probe: when the game
+  turns against one-signed counts, aiming stops for a moment; a game that keeps turning is
+  moving by itself (death camera, cutscene) and teaches nothing, one that holds still has
+  inverted look. A window-only rule cannot tell the two apart (live: a death camera
+  flipped the pitch sign and the guard then ran the yaw gain to its clamp).

@@ -109,6 +109,7 @@ public:
         bool enabled = false;
         math::FovTangents eye[2]{{-1, 1, 1, -1}, {-1, 1, 1, -1}};
         float aspect = 0; // the engine's view aspect (0: the block's own)
+        float budget = kGunAimFovBudget; // widest render the turn may need (radians)
     };
 
     ViewOverride() = default;

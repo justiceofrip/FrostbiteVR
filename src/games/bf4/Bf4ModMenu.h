@@ -25,6 +25,7 @@ struct ModMenuState {
     bool depthStereo = false;    // head-tracked view: 3D from the game's depth buffer (Bf4DepthCapture.h)
     bool hudInsets = true;       // head-tracked view: the corner HUD copied into the visible corners
     bool gunFollowsAim = true;   // head-tracked view: render along the aim so the barrel is on the bullets' line
+    bool gunReachWide = false;   // ...and let that render grow wider (less sharp) so the gun follows farther
 };
 
 enum class ModMenuAction : std::uint8_t {

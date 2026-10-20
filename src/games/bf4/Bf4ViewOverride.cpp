@@ -272,7 +272,7 @@ void ViewOverride::Submit(void* renderer, float a, float b, std::uint32_t viewCo
                 const float blockAspect = ReadFloat(views + kViewAspectOffset);
                 const float viewAspect = self->gunAim_.aspect > 0.2f ? self->gunAim_.aspect : blockAspect;
                 self->gunLatched_ = GunAimRotation(AxesOf(headCamera), AxesOf(gameCamera), self->gunAim_.eye[0],
-                                                   self->gunAim_.eye[1], viewAspect);
+                                                   self->gunAim_.eye[1], viewAspect, self->gunAim_.budget);
                 self->gunLatchPose_ = poseId;
             }
             gun = self->gunLatched_;

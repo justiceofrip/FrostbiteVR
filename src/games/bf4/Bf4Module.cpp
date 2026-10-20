@@ -827,6 +827,7 @@ public:
         gun.eye[0] = requests[0].eyeFov[0];
         gun.eye[1] = requests[0].eyeFov[1];
         gun.aspect = lastViewAspect;
+        gun.budget = requests[0].gunFovBudget;
         viewOverride.SetGunAim(gun);
         viewOverride.SetLocal(requests[0].local, /*keepGamePitch=*/false, requests[0].poseId, fov, requests[0].parentYaw);
         return true;
@@ -987,6 +988,7 @@ struct Adapter {
     std::deque<TimedPointerEvent> researchPointer;
     std::uint32_t researchWait = 0;
     unsigned researchKeyUp = 0, researchKeyFrames = 0;
+    bool gameInFront = true; // the game window had the foreground at the last Present
     std::uint32_t depthProbeFrames = 0, mouseProbeFrames = 0, sendKeyFrames = 0, viewDumpFrames = 0;
     std::uint64_t depthProbeId = 0, mouseProbeId = 0, viewDumpId = 0;
     std::string viewDumpName;
@@ -1054,10 +1056,16 @@ void OnPresent(Adapter& a, IDXGISwapChain* sc) {
     GetClientRect(a.platform.window, &client);
     f.clientWidth = client.right - client.left;
     f.clientHeight = client.bottom - client.top;
-    if (a.platform.window && GetForegroundWindow() == a.platform.window) { // Win32 state only, no game memory
+    const bool inFront = a.platform.window && GetForegroundWindow() == a.platform.window;
+    if (inFront) { // Win32 state only, no game memory
         CURSORINFO cursor{};
         cursor.cbSize = sizeof(cursor);
         f.gameCursor = GetCursorInfo(&cursor) && (cursor.flags & CURSOR_SHOWING) && cursor.hCursor;
+    }
+    if (a.platform.window && inFront != a.gameInFront) { // focus changes explain stalls and lost input
+        a.gameInFront = inFront;
+        a.log.Write("game window %s; %s", inFront ? "in front again" : "lost the foreground",
+                    Diagnostics::DescribeForeground().c_str());
     }
     ControllerSnapshot in;
     a.input->Poll(in);

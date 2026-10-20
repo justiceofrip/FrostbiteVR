@@ -72,7 +72,12 @@ derived by the view update `+0xB8C910`, stored at `+0xB8C991`):
   them; the secondary view's enable byte `+0xEA0` is 0. The submitted aspect is 1.333 and
   default FOV 0.9599 (55 deg); the setup replaces the aspect. So the gun cannot be moved by
   a view of its own: its camera-space pose comes from the animation side.
-Next: the animation side (`ClientWeaponLagEntity`'s bindings, live, read-only), or a
+- `ClientWeaponLagEntity` live (session 14, `scanq 1E6F030`: one instance, ~2 min over
+  4.2 GB): qwords vtable `+0x1E6F030`; pointers at `+0x08`, `+0x10`; `0x10000300E` at
+  `+0x18`; pointers at `+0x20`, `+0x28`; second vtable `+0x1E6F0E0` at `+0x30`; pointers at
+  `+0x38`, `+0x40`; floats 0.07 at `+0x54` and 6.017 at `+0x58` (lag tuning, probably).
+  Walking from here is a one-256-byte-peek-at-a-time animation-graph exploration.
+Next: the animation side (`ClientWeaponLagEntity`'s pointers above, read-only), or a
 SIB/integer-access scan of `+0x258`.
 
 ## Next steps

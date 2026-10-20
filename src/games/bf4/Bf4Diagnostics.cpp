@@ -103,6 +103,49 @@ void DumpThreads() {
     }
 }
 
+// Who has the foreground, and the state of this process's own top-level windows: a stall
+// with the game in the background (another window took focus) reads differently from one
+// with the game in front.
+BOOL CALLBACK OwnWindow(HWND hwnd, LPARAM out) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (pid != GetCurrentProcessId() || !IsWindowVisible(hwnd)) return TRUE;
+    auto* text = reinterpret_cast<std::string*>(out);
+    char cls[64] = {};
+    GetClassNameA(hwnd, cls, sizeof(cls));
+    *text += std::string(" own=") + cls + (IsIconic(hwnd) ? "(minimized)" : "");
+    return TRUE;
+}
+
+std::string DescribeForeground() {
+    std::string text = "foreground=";
+    const HWND fg = GetForegroundWindow();
+    if (!fg) {
+        text += "none";
+    } else {
+        DWORD pid = 0;
+        GetWindowThreadProcessId(fg, &pid);
+        char cls[64] = {}, image[MAX_PATH] = "?";
+        GetClassNameA(fg, cls, sizeof(cls));
+        if (pid == GetCurrentProcessId()) {
+            std::snprintf(image, sizeof(image), "this game");
+        } else if (HANDLE p = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid)) {
+            char path[MAX_PATH] = {};
+            DWORD size = MAX_PATH;
+            if (QueryFullProcessImageNameA(p, 0, path, &size)) {
+                const char* name = path;
+                for (const char* c = path; *c; ++c)
+                    if (*c == '\\' || *c == '/') name = c + 1;
+                std::snprintf(image, sizeof(image), "%s", name);
+            }
+            CloseHandle(p);
+        }
+        text += std::string(image) + " class=" + cls;
+    }
+    EnumWindows(OwnWindow, reinterpret_cast<LPARAM>(&text));
+    return text;
+}
+
 DWORD WINAPI Watchdog(LPVOID) {
     bool reported = false;
     int dumps = 0;
@@ -112,14 +155,15 @@ DWORD WINAPI Watchdog(LPVOID) {
         if (!last) continue;
         const ULONGLONG stalled = GetTickCount64() - last;
         if (stalled < kStallMs) {
-            if (reported) g_sink("diagnostics: frames are being presented again");
+            if (reported) g_sink("diagnostics: frames are being presented again; " + DescribeForeground());
             reported = false;
             continue;
         }
         if (reported || dumps >= 3) continue;
         reported = true;
         ++dumps;
-        g_sink("diagnostics: no frame presented for " + std::to_string(stalled) + " ms; thread stacks follow");
+        g_sink("diagnostics: no frame presented for " + std::to_string(stalled) + " ms; " + DescribeForeground() +
+               "; thread stacks follow");
         DumpThreads();
     }
 }
@@ -167,5 +211,7 @@ void Diagnostics::Start(std::function<void(const std::string&)> sink, const std:
 void Diagnostics::FramePresented() { g_lastPresent.store(GetTickCount64(), std::memory_order_relaxed); }
 
 void Diagnostics::ArmFaultLogging(bool armed) { g_faultArmed.store(armed); }
+
+std::string Diagnostics::DescribeForeground() { return fvr::bf4::DescribeForeground(); }
 
 } // namespace fvr::bf4
