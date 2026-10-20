@@ -49,6 +49,21 @@ fallback and the source of targets. Unknowns: where the hand targets come from (
 attachment points vs a settable target), the scene op instance for the player, and
 whether `InHideWeapon` here is the same switch as `HideWeapon1p`.
 
+## The gun at the hand (R8): renderer-side leads (static, 2026-10-19)
+
+The 1P gun is drawn at rest relative to the camera that renders the frame (live), so it
+is posed in camera space; moving it to the controller means changing that camera-space
+pose. Anchors from the view's first-person scale `+0x258` (tan(fov/2) / tan(defaultFov/2),
+derived by the view update `+0xB8C910`, stored at `+0xB8C991`):
+- Its only renderer readers among 23 float accesses at that displacement: `+0x85EC01` and
+  `+0x86867B`, two variants of one pass setup. Each takes a 4x4 matrix from a per-view
+  table (`[view+0x38]`, indexed by the bytes at `+9` and `+0xA` of that table, 0x20-byte
+  stride) and passes it with the scale to `+0x928350`.
+- `+0x928350` copies its arguments (scale included) into a packet and posts it to a job
+  system (global `+0x2670D80`, `+0x626A80`): the consumer is a job still to be found.
+Next: read that matrix table live (research `peek`) at a known pose to see whether it is
+the 1P camera, then find the job function it is posted to.
+
 ## Next steps
 
 1. Live: locate the player's 1P weapon binding and the IK scene op instance from the
