@@ -18,7 +18,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   three sessions (09:16-10:19; rotation was inverted and the gun oversized, both fixed in
   0.4.16); everything built since 0.4.17 is unseen in a headset.
 
-## At a glance (installed: 0.4.124-local; the body hiding below is built, not installed)
+## At a glance (installed: 0.4.125-local)
 
 | Feature | State | Evidence |
 | --- | --- | --- |
@@ -398,8 +398,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   (default on). Log: `first_person_view ... body_hidden=N`. Emulated (WARP): the body bind is
   rebound to zeros in the pass, with the arms on the gun too, and passes through with the flag
   off.
-- Gaps: not seen live yet (BF4 was still open from the previous session; installing needs it
-  closed); prone, vehicles and other missions' bodies unchecked (a body whose root tilts, e.g.
+- Gaps: not seen live yet (installed in 0.4.125-local for the player's headset test); prone, vehicles and other missions' bodies unchecked (a body whose root tilts, e.g.
   prone, would show as before); the 14217-index mesh (clavicles, a neck/spine bone shared with
   the body, the left hand) keeps that spine bone with the gun; whether that shows is unknown
   (research `fpmask` can tell).
@@ -1120,11 +1119,11 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
   launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
   `-World -FrameChannels 2` 5/5 (76-237 pairs, machine-dependent); `-World` with one
   channel 4/4 (47 pairs).
-- Installed locally: runtime/bf4 0.4.124-local (gun in the hand held by BF4's right hand's grip,
-  arms from the body by default (free left hand an option, curled-finger fix), recoil pulses,
-  no crosshair (centre mask), controller scan with its cache, 3D option, research `fphide`;
-  rollback 0.4.123-local). This commit adds the body hiding and `fpmask`: built and tested, not
-  installed (BF4 from the last session was still running); launcher settings
+- Installed locally: runtime/bf4 0.4.125-local (the source at commit dfbcfc5: gun in the hand
+  held by BF4's right hand's grip, arms from the body by default (free left hand an option,
+  curled-finger fix), BF4's own body hidden with the gun in the hand, recoil pulses, no
+  crosshair (centre mask), controller scan with its cache, 3D option, research `fphide`/
+  `fpmask`; rollback 0.4.124-local); launcher settings
   restored to the player's after the developer sessions. Developer sessions still run the
   read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the
