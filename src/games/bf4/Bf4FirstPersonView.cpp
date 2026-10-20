@@ -94,6 +94,11 @@ math::Pose GunGripAtRest() {
     return p;
 }
 
+Mat4 GripInRightHandBind() {
+    return {-0.54443f, 0.44305f, 0.71225f, -0.45786f, 0.82528f, 0.43479f, 0.36038f, 1.12034f,
+            -0.15001f, 0.78401f, -0.60235f, 0.26732f, 0, 0, 0, 1};
+}
+
 const FirstPersonView::Frame::Hand* FirstPersonView::HandFor(const std::uint8_t* block, const Frame& frame, int& how,
                                                              bool& game, float& diff) {
     const Mat4 v = Load(block, L::kViewMatrix);
@@ -286,6 +291,20 @@ void FirstPersonView::RewriteArms(ID3D11DeviceContext* context, const void* mapp
         }
     }
     if (changedRef) armSolved_ = false;
+    // The grip from BF4's right hand: its hand bone in a palette whose right arm is the pass's.
+    if (own[1].found && armRef_[1].found && ChainDistance(own[1], armRef_[1]) < kArmChainTolerance) {
+        const int hand = FindHandBone(palette, bones, armBind_, own[1], 1);
+        if (hand >= 0) {
+            const float* h = palette + hand * kArmBoneFloats;
+            anchorPass_ = Mul(passView_, Mat4{h[0], h[1], h[2], h[3], h[4], h[5], h[6], h[7], h[8], h[9], h[10], h[11], 0, 0, 0, 1});
+            anchorPassValid_ = AllFinite(anchorPass_);
+        }
+    }
+    if (!armPass_) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        stats_.armReadUs += readUs;
+        return;
+    }
     if (!armSolved_ && (armRef_[0].found || armRef_[1].found)) {
         ArmSolveInput in;
         in.chains[0] = armRef_[0];
@@ -414,13 +433,14 @@ std::string FirstPersonView::Describe() const {
                   static_cast<unsigned long long>(s.shiftedFrames));
     if (n > 0 && n < static_cast<int>(sizeof(line)))
         std::snprintf(line + n, sizeof(line) - n,
-                      " arms=%llu/%llu bones=%llu solved=%llu switches=%llu slide=(%.3f %.3f) arm_us_per_pass=read %.0f%s work %.0f upload %.0f",
+                      " arms=%llu/%llu bones=%llu solved=%llu switches=%llu slide=(%.3f %.3f) arm_us_per_pass=read %.0f%s work %.0f upload %.0f anchor=%llu/%llu grip_from_rest=(%.1f cm %.1f deg)",
                       static_cast<unsigned long long>(s.armPalettes), static_cast<unsigned long long>(s.armRewritten),
                       static_cast<unsigned long long>(s.armBones), static_cast<unsigned long long>(s.armSolved),
                       static_cast<unsigned long long>(s.armSwitches),
                       s.armSlide[0], s.armSlide[1], s.armSolved ? s.armReadUs / s.armSolved : 0.0,
                       s.armStreamingReads ? " (streaming)" : "", s.armSolved ? s.armWorkUs / s.armSolved : 0.0,
-                      s.armSolved ? s.armUploadUs / s.armSolved : 0.0);
+                      s.armSolved ? s.armUploadUs / s.armSolved : 0.0, static_cast<unsigned long long>(s.anchorFound),
+                      static_cast<unsigned long long>(s.anchorUsed), s.anchorCm, s.anchorDeg);
     return line;
 }
 
@@ -464,9 +484,27 @@ void FirstPersonView::EndPass() {
         armRef_[side] = {};
         armCandidates_[side] = 0;
     }
-    armPass_ = armSolved_ = false;
+    armPass_ = armSolved_ = palettePass_ = false;
+    // The right hand's grip: smoothed toward this pass's hand (time-based), or stale when missing.
+    if (anchorPassValid_) {
+        LARGE_INTEGER now{}, freq{};
+        QueryPerformanceCounter(&now);
+        QueryPerformanceFrequency(&freq);
+        const float dt = anchorTick_ ? std::min(0.1f, static_cast<float>(now.QuadPart - anchorTick_) /
+                                                          static_cast<float>(freq.QuadPart))
+                                     : 1.0f;
+        anchorTick_ = now.QuadPart;
+        anchor_ = anchorValid_ ? BlendRigid(anchor_, anchorPass_, 1.0f - std::exp(-dt / kAnchorSeconds)) : anchorPass_;
+        anchorValid_ = true;
+        anchorMisses_ = 0;
+    } else if (anchorValid_ && ++anchorMisses_ > kAnchorStalePasses) {
+        anchorValid_ = false;
+    }
+    const bool anchorFound = anchorPassValid_;
+    anchorPassValid_ = false;
     std::lock_guard<std::mutex> lock(mutex_);
     if (both) ++stats_.armSolved;
+    if (anchorFound) ++stats_.anchorFound;
     ++stats_.passes;
     if (!bestCount_) return;
     weapon_ = Mul(passView_, bestWorld_);
@@ -520,7 +558,7 @@ void FirstPersonView::OnBindConstants(ID3D11DeviceContext* context, ContextHooks
             pendingWorld_ = w;
             havePending_ = true;
         }
-        if (armPass_ && known && source.mapped) RewriteArms(context, source.mapped, source.size, buffers, first, count);
+        if (palettePass_ && known && source.mapped) RewriteArms(context, source.mapped, source.size, buffers, first, count);
     }
     if (kViewSlot < startSlot || kViewSlot >= startSlot + numBuffers) return;
     const UINT i = kViewSlot - startSlot;
@@ -598,8 +636,18 @@ void FirstPersonView::OnBindConstants(ID3D11DeviceContext* context, ContextHooks
             ++stats_.byGame;
         }
         move = Mul(FromPose(hand->hand), InverseRigid(FromPose(frame.gripAtRest)));
-        // Zoomed: BF4 moved the receiver from its hip pose; move it back onto the hand.
-        if (frame.holdThroughZoom && weaponValid_ && restValid_ && frame.gameFovY < hipFov_ - 0.005f) {
+        palettePass_ = inPass_ && oursPalette_;
+        if (frame.handAnchor && anchorValid_) {
+            // The grip BF4's right hand holds now (smoothed), wherever BF4 holds the gun.
+            const Mat4 grip = Mul(anchor_, GripInRightHandBind());
+            move = Mul(FromPose(hand->hand), InverseRigid(grip));
+            const Mat4 rest = FromPose(frame.gripAtRest);
+            std::lock_guard<std::mutex> lock(mutex_);
+            ++stats_.anchorUsed;
+            stats_.anchorCm = RigidDistance(grip, rest) * 100.0f;
+            stats_.anchorDeg = RigidAngle(grip, rest) * 57.29578f;
+        } else if (frame.holdThroughZoom && weaponValid_ && restValid_ && frame.gameFovY < hipFov_ - 0.005f) {
+            // Zoomed: BF4 moved the receiver from its hip pose; move it back onto the hand.
             const Mat4 back = Mul(weaponRest_, InverseRigid(weapon_));
             move = Mul(move, back);
             std::lock_guard<std::mutex> lock(mutex_);

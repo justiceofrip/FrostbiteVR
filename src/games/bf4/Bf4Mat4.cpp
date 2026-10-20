@@ -71,6 +71,45 @@ Mat4 RotationBetween(math::Vec3 from, math::Vec3 to) {
             0,                 0,                 0,                 1};
 }
 
+namespace {
+Mat4 RotationOnly(Mat4 m) {
+    m[3] = m[7] = m[11] = 0;
+    return m;
+}
+} // namespace
+
+float RigidAngle(const Mat4& a, const Mat4& b) {
+    const Mat4 d = Mul(RotationOnly(b), InverseRigid(RotationOnly(a)));
+    const float c = (d[0] + d[5] + d[10] - 1.0f) * 0.5f;
+    return std::acos(c > 1.0f ? 1.0f : c < -1.0f ? -1.0f : c);
+}
+
+float RigidDistance(const Mat4& a, const Mat4& b) {
+    return math::Length(math::Vec3{a[3] - b[3], a[7] - b[7], a[11] - b[11]});
+}
+
+Mat4 BlendRigid(const Mat4& a, const Mat4& b, float t) {
+    if (t <= 0) return a;
+    if (t >= 1) return b;
+    // The turn from a to b, scaled: axis from the skew part, angle from the trace.
+    const Mat4 d = Mul(RotationOnly(b), InverseRigid(RotationOnly(a)));
+    const float angle = RigidAngle(a, b);
+    const math::Vec3 axis{d[9] - d[6], d[2] - d[8], d[4] - d[1]};
+    const float len = math::Length(axis);
+    Mat4 out = RotationOnly(a);
+    if (angle > 1e-6f && len > 1e-7f) {
+        math::Pose p;
+        p.orientation = math::FromAxisAngle(axis * (1.0f / len), angle * t);
+        out = Mul(FromPose(p), out);
+    } else if (angle > 1e-6f) {
+        out = RotationOnly(t < 0.5f ? a : b); // half a turn: no axis to scale about
+    }
+    out[3] = a[3] + (b[3] - a[3]) * t;
+    out[7] = a[7] + (b[7] - a[7]) * t;
+    out[11] = a[11] + (b[11] - a[11]) * t;
+    return out;
+}
+
 bool AllFinite(const Mat4& m) {
     for (float x : m)
         if (!std::isfinite(x)) return false;

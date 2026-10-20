@@ -58,6 +58,11 @@ void ClassifyBones(const float* palette, int bones, const ArmBindJoints& bind, c
                    float tolerance, BoneClass* out, float fingerReach = 0);
 constexpr float kArmFingerReach = 0.10f;
 
+// The hand bone of one arm in this palette: the entry mapping the chain's wrist closest (within
+// 1 mm) without mapping its elbow (live: one entry at 0.0 mm; finger roots at 0.1-0.2 mm). -1:
+// none.
+int FindHandBone(const float* palette, int bones, const ArmBindJoints& bind, const ArmChain& chain, int side);
+
 // The solve, in head space (the render camera's: x right, y up, -z forward).
 struct ArmSolveInput {
     ArmChain chains[2];      // pass world (found ones are solved)

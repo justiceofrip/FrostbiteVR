@@ -283,6 +283,29 @@ TEST_CASE(ArmIkAFreeHandTurnsWithItsController) {
     }
 }
 
+TEST_CASE(ArmIkFindsEachHandBone) {
+    // The hand bone maps the chain's wrist exactly and not its elbow; the finger (3.5 cm off) and
+    // the forearm (it maps the elbow) are not it.
+    const ArmBindJoints bind = Bf4ArmBindJoints();
+    const Rig rig = MakeRig();
+    ArmChain chains[2];
+    FindArmChains(rig.palette.data(), Rig::kBones, bind, chains);
+    CHECK(FindHandBone(rig.palette.data(), Rig::kBones, bind, chains[0], 0) == 6);
+    CHECK(FindHandBone(rig.palette.data(), Rig::kBones, bind, chains[1], 1) == 13);
+    CHECK(FindHandBone(rig.palette.data(), Rig::kBones, bind, ArmChain{}, 1) == -1);
+}
+
+TEST_CASE(Mat4BlendsRigidTransforms) {
+    const Mat4 a = Translation({0.1f, 0, 0});
+    const Mat4 b = Mul(Translation({0.3f, 0.2f, 0}), Rotation({0, 0, 1}, 1.0f));
+    const Mat4 half = BlendRigid(a, b, 0.5f);
+    CHECK(fvrtest::Near(RigidAngle(a, half), 0.5f, 1e-4f) && fvrtest::Near(RigidAngle(half, b), 0.5f, 1e-4f));
+    CHECK(NearV({half[3], half[7], half[11]}, {0.2f, 0.1f, 0}) && fvrtest::Near(RigidDistance(a, b), std::sqrt(0.08f)));
+    CHECK(BlendRigid(a, b, 0) == a && BlendRigid(a, b, 1) == b);
+    // The axis is kept: the blend turns about z only.
+    CHECK(fvrtest::Near(half[10], 1.0f, 1e-5f));
+}
+
 TEST_CASE(ArmIkSlidesTheShoulderWhenTheGunIsOutOfReach) {
     const ArmBindJoints bind = Bf4ArmBindJoints();
     Rig rig = MakeRig();

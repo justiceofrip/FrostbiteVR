@@ -569,6 +569,107 @@ bool CheckFirstPersonArms(ID3D11Device* device, const char*& why) {
     return ok;
 }
 
+// The grip from BF4's right hand: a pass whose arms palette holds the right hand bone; the next
+// first-person view is moved so that hand x GripInRightHandBind lands on the VR hand.
+bool CheckFirstPersonAnchor(ID3D11Device* device, const char*& why) {
+    using namespace fvr::bf4;
+    using fvr::math::Vec3;
+    using L = ViewConstantsLayout;
+    const MH_STATUS init = MH_Initialize();
+    if (init != MH_OK && init != MH_ERROR_ALREADY_INITIALIZED) return why = "MinHook", false;
+    ComPtr<ID3D11DeviceContext> context;
+    device->GetImmediateContext(&context);
+    ComPtr<ID3D11DeviceContext1> context1;
+    if (FAILED(context.As(&context1))) return why = "no ID3D11DeviceContext1", false;
+    D3D11_BUFFER_DESC bd{};
+    bd.ByteWidth = 4096;
+    bd.Usage = D3D11_USAGE_DYNAMIC;
+    bd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+    bd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+    ComPtr<ID3D11Buffer> ring;
+    if (FAILED(device->CreateBuffer(&bd, nullptr, &ring))) return why = "ring buffer", false;
+    const float gameKy = 1.0f / std::tan(0.785398f * 0.5f), renderKy = 0.6982f, aspect = 16.0f / 9.0f;
+    const float fpCam[3] = {0.3f, 2.1f, 0.9f}, worldCam[3] = {-600, 383, -273};
+    // The arms posed by the camera (as in CheckFirstPersonArms); the right hand is bone 9.
+    const ArmBindJoints bind = Bf4ArmBindJoints();
+    std::vector<float> palette;
+    auto put = [&](const Mat4& m) { palette.insert(palette.end(), m.begin(), m.begin() + 12); };
+    Mat4 rightHand{};
+    for (int side = 0; side < 2; ++side) {
+        const float x = side == 0 ? -1.0f : 1.0f;
+        const float lu = fvr::math::Length(bind.elbow[side] - bind.shoulder[side]);
+        const float lf = fvr::math::Length(bind.wrist[side] - bind.elbow[side]);
+        const Vec3 s = Vec3{fpCam[0], fpCam[1], fpCam[2]} + Vec3{0.12f * x, -0.2f, 0.05f};
+        const Vec3 e = s + fvr::math::Normalize({0.1f * x, -0.6f, -0.8f}) * lu;
+        const Vec3 w = e + fvr::math::Normalize({-0.3f * x, 0.2f, -0.93f}) * lf;
+        put(About(bind.shoulder[side], s, RotationAbout({0, 0, 1}, 0.35f * x)));
+        put(Segment(bind.shoulder[side], bind.elbow[side], s, e, 0.0f));
+        put(Segment(bind.shoulder[side], bind.elbow[side], s, e, 0.5f));
+        put(Segment(bind.elbow[side], bind.wrist[side], e, w, 0.2f));
+        const Mat4 hand = About(bind.wrist[side], w, RotationAbout({1, 0.3f, 0}, 0.6f));
+        put(hand);
+        if (side == 1) rightHand = hand;
+    }
+    for (int k = 0; palette.size() < 24 * 12; ++k) put(Translation({0.01f * k, 5.0f, 0}));
+    FirstPersonView view;
+    if (!view.Install(context.Get())) return why = "install", false;
+    FirstPersonView::Frame frame;
+    frame.enabled = true;
+    frame.gameFovY = 0.785398f;
+    frame.renderKy = renderKy;
+    frame.renderKx = renderKy / aspect;
+    frame.handMode = true;
+    frame.armIk = false; // the grip comes from the hand with or without the arms
+    auto& h = frame.hands[0];
+    const float identity[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1};
+    std::memcpy(h.gameRotation, identity, sizeof(identity));
+    std::memcpy(h.rotation, identity, sizeof(identity));
+    h.hand.position = {0.15f, -0.2f, -0.3f};
+    h.hand.orientation = fvr::math::FromAxisAngle({0, 1, 0}, 0.3f);
+    h.valid = true;
+    view.SetFrame(frame);
+    D3D11_MAPPED_SUBRESOURCE m{};
+    if (FAILED(context->Map(ring.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &m))) return why = "map the ring", false;
+    MakeViewBlock(static_cast<std::uint8_t*>(m.pData) + 256, gameKy / aspect, gameKy, fpCam);
+    MakeViewBlock(static_cast<std::uint8_t*>(m.pData) + 1024, renderKy / aspect, renderKy, worldCam);
+    std::memcpy(static_cast<std::uint8_t*>(m.pData) + 2048, palette.data(), palette.size() * sizeof(float));
+    context->Unmap(ring.Get(), 0);
+    ID3D11Buffer* bind1[1] = {ring.Get()};
+    const UINT fpFirst[1] = {16}, worldFirst[1] = {64}, count[1] = {32}, paletteFirst[1] = {128}, paletteCount[1] = {80};
+    context1->VSSetConstantBuffers1(2, 1, bind1, fpFirst, count);           // a pass: the grip at rest
+    context1->VSSetConstantBuffers1(0, 1, bind1, paletteFirst, paletteCount); // its arms: the right hand
+    context1->VSSetConstantBuffers1(2, 1, bind1, worldFirst, count);        // the world: the pass ends
+    context1->VSSetConstantBuffers1(2, 1, bind1, fpFirst, count);           // the next pass
+    ID3D11Buffer* bound = nullptr;
+    UINT boundFirst = 99, boundCount = 0;
+    context1->VSGetConstantBuffers1(2, 1, &bound, &boundFirst, &boundCount);
+    std::vector<std::uint8_t> got;
+    bool ok = true;
+    if (!bound || bound == ring.Get()) ok = (why = "first-person view not replaced", false);
+    else if (!ReadBuffer(device, context.Get(), bound, got)) ok = (why = "read back", false);
+    if (bound) bound->Release();
+    if (ok) {
+        // Expected: move = hand x (view x right hand x grip-in-hand)^-1, drawn as move x view.
+        const Mat4 fpView{1, 0, 0, -fpCam[0], 0, 1, 0, -fpCam[1], 0, 0, 1, -fpCam[2], 0, 0, 0, 1};
+        const Mat4 grip = Mul(Mul(fpView, rightHand), GripInRightHandBind());
+        const Mat4 expected = Mul(Mul(FromPose(h.hand), InverseRigid(grip)), fpView);
+        float worst = 0;
+        for (int k = 0; k < 12; ++k) {
+            float v = 0;
+            std::memcpy(&v, got.data() + L::kViewMatrix + k * 4, 4);
+            worst = std::fmax(worst, std::fabs(v - expected[k]));
+        }
+        if (worst > 1e-4f) ok = (why = "the view does not hold the hand's grip", false);
+    }
+    const auto st = view.GetStats();
+    if (ok && (st.anchorFound != 1 || st.anchorUsed != 1)) ok = (why = "anchor counts", false);
+    view.Remove();
+    ID3D11Buffer* none[1]{};
+    context->VSSetConstantBuffers(0, 1, none);
+    context->VSSetConstantBuffers(2, 1, none);
+    return ok;
+}
+
 bool CheckHudSplit(ID3D11Device* device, const char*& why) {
     const MH_STATUS init = MH_Initialize();
     if (init != MH_OK && init != MH_ERROR_ALREADY_INITIALIZED) return why = "MinHook", false;

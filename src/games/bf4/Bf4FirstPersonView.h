@@ -58,6 +58,12 @@ struct ViewConstantsLayout {
 // receiver at (0.068, -0.045, -0.287), barrel along -Z within 3 degrees; the grip ~6 cm below
 // and behind it): the VR hand takes this place.
 math::Pose GunGripAtRest();
+// The grip at rest (GunGripAtRest) in BF4's right hand bone's bind space: live (sessions 61 and
+// 63, prologue rifle at hip), BF4's first-person view x the hand's palette entry at rest, inverted,
+// x the grip at rest. The right hand holds every gun's grip, so wherever BF4 holds the gun (the
+// underbarrel launcher turned 28 deg, sprinting 62 deg, reloads 5-8 deg, other weapons) the
+// grip it holds is that hand x this, idle within 0.1 cm and 0.3 deg of the rifle's grip at rest.
+Mat4 GripInRightHandBind();
 
 class FirstPersonView : public ContextHooks::Listener {
 public:
@@ -91,6 +97,9 @@ public:
         float halfEye = 0.032f;
         // Gun in the hand: the arms reach the gun from the body (above).
         bool armIk = false;
+        // Gun in the hand: hold the grip BF4's right hand holds (GripInRightHandBind, from the
+        // arms' palettes, smoothed) instead of the rifle's grip at rest.
+        bool handAnchor = true;
     };
     struct Stats {
         std::uint64_t binds = 0;     // slot-2 binds seen
@@ -113,6 +122,10 @@ public:
         float armSlide[2]{};
         // ...and the render thread's time in it (microseconds, totals): reading BF4's palettes
         // (its upload ring: write-combined memory), finding/solving/rewriting, uploading ours.
+        // The grip from BF4's right hand: passes it was found in, binds that used it, and how far
+        // the grip it gave was from the rifle's grip at rest (last bind: cm, degrees).
+        std::uint64_t anchorFound = 0, anchorUsed = 0;
+        float anchorCm = 0, anchorDeg = 0;
         double armReadUs = 0, armWorkUs = 0, armUploadUs = 0;
         bool armStreamingReads = false; // the reads use SSE4.1 streaming loads
     };
@@ -169,6 +182,8 @@ public:
     static constexpr float kArmClavicleShare = 0.5f;   // the clavicle's share of the upper arm's swing
     static constexpr float kArmWristBehindGrip = 0.06f; // a controller's grip to BF4's wrist joint, back along it (m)
     static constexpr float kArmHandMoveSeconds = 0.15f; // a hand leaving or taking the gun gets there in this time
+    static constexpr float kAnchorSeconds = 0.06f;      // the right hand's grip is smoothed over this (s)
+    static constexpr int kAnchorStalePasses = 30;       // without it this many passes: back to the grip at rest
     // Alternate eyes, each Present (render thread): the eye the frame just drawn was rendered
     // from (-1: none moved), read before OnPresent; OnPresent then turns to the other eye.
     int FrameEye() const;
@@ -215,7 +230,8 @@ private:
     // Arms from the body (render thread only).
     Microsoft::WRL::ComPtr<ID3D11Buffer> oursPalette_;
     ArmBindJoints armBind_ = Bf4ArmBindJoints();
-    bool armPass_ = false;     // this pass rewrites palettes (hand found, option on)
+    bool palettePass_ = false; // this pass reads palettes (gun in the hand)
+    bool armPass_ = false;     // ...and rewrites them (arms from the body)
     bool armSolved_ = false;   // armCorr_ is this pass's
     ArmChain armRef_[2]{}, armPrev_[2]{}; // this pass's reference arms, the previous pass's
     // The arms each palette of the pass poses (within 1 mm: one candidate) and how many palettes
@@ -236,6 +252,12 @@ private:
     // free hand keeps that relation, so it turns as its controller turns from the gun.
     Mat4 armLeftGrip_ = Identity4();
     std::int64_t armLastPassTick_ = 0;
+    // The grip from BF4's right hand (GripInRightHandBind): this pass's hand bone (first-person
+    // camera space), the smoothed one in use, and for how many passes it was not found.
+    Mat4 anchorPass_{}, anchor_{};
+    bool anchorPassValid_ = false, anchorValid_ = false;
+    int anchorMisses_ = 0;
+    std::int64_t anchorTick_ = 0;
 };
 
 } // namespace fvr::bf4

@@ -42,3 +42,8 @@
 - Reads of BF4's upload ring use SSE4.1 streaming loads: it is write-combined memory, where
   plain loads cost ~20x more (61.9 against 3.1 us per palette; the arms cost 20 % of the frame
   rate with plain loads, none measurable with streaming ones).
+- The gun is held by BF4's right hand, not by the rifle's hip pose: each pass the right hand
+  bone from the arms' palettes gives the grip BF4 holds now (the grip at rest kept in the hand
+  bone's bind space). Chosen because BF4 moves the gun in camera space by state (launcher 28
+  deg, sprint 62 deg, reloads, aiming down sights) and per weapon, while the hand always holds
+  the grip; so the barrel stays on the aim everywhere without per-weapon calibration.

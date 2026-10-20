@@ -19,5 +19,10 @@ math::Vec3 TransformVector(const Mat4& m, math::Vec3 v); // rotation part only
 // The smallest rotation taking direction `from` onto direction `to` (any axis when opposite).
 Mat4 RotationBetween(math::Vec3 from, math::Vec3 to);
 bool AllFinite(const Mat4& m);
+// Rigid a..b at t (0: a, 1: b): the position lerped, the rotation turned that far toward b's.
+Mat4 BlendRigid(const Mat4& a, const Mat4& b, float t);
+// How far apart two rigid transforms are: their positions (m) and rotations (radians).
+float RigidDistance(const Mat4& a, const Mat4& b);
+float RigidAngle(const Mat4& a, const Mat4& b);
 
 } // namespace fvr::bf4

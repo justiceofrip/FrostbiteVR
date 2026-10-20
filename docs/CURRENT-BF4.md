@@ -18,7 +18,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   three sessions (09:16-10:19; rotation was inverted and the gun oversized, both fixed in
   0.4.16); everything built since 0.4.17 is unseen in a headset.
 
-## At a glance (installed: 0.4.113-local)
+## At a glance (installed: 0.4.114-local)
 
 | Feature | State | Evidence |
 | --- | --- | --- |
@@ -217,10 +217,24 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
 - Grip at rest (`GunGripAtRest`, live): the rifle's root bone sits at (0.066, -0.022, -0.254)
   in BF4's first-person camera space, bore along (-0.029, 0.019, -0.999); the hand holds the
   pistol grip ~8 cm below and ~6.5 cm behind the root.
-- Aiming down sights: BF4 animates the gun ~10 cm toward the eye line; the receiver (the
-  largest rigid mesh of the pass, read from its b0 `worldMatrix`) is tracked each pass, its hip
-  pose held while the game's FOV is zoomed, and the rig moved back by the difference (live:
-  9.5 cm, the gun stays in the hand). Hip bob, sway and recoil stay visible.
+- The grip BF4's right hand holds (2026-10-20, live sessions 73-74): the fixed grip at rest
+  is the rifle's at hip, but BF4 holds the gun elsewhere in other states, measured against it
+  from the hand's palette entry: the underbarrel launcher 6.8 cm / 28 deg (its barrel ~26 deg
+  right of the aim), sprinting 62-65 deg, reloads 5-8 deg, aiming down sights 7-9 cm higher,
+  weapon switches 30 deg. The right hand holds every gun's grip, so the grip at rest is kept
+  in the hand bone's bind space (`GripInRightHandBind`, solved once from a hip capture; idle in
+  another session within 0.1 cm and 0.3 deg) and each pass the right hand bone (`FindHandBone`
+  in the arms palettes, the pass's reference right arm) gives the grip held now, smoothed over
+  0.06 s: the hand x grip-at-rest^-1 move then uses it. The gun keeps its line to the hand in
+  every state and for any weapon BF4 puts in that hand; fast kicks shrink, BF4's own tilts
+  (sprint, reload, launcher, aiming down sights) are undone. Without a hand bone for 30 passes
+  (no arms drawn) the rifle's grip at rest and the receiver hold below come back. Log:
+  `first_person_view ... anchor=found/used grip_from_rest=(cm deg)` (live: rifle 0.1 cm 0.4
+  deg; launcher 6.8 cm 28.4 deg; aiming down sights 9.3 cm 1.8 deg).
+- Aiming down sights without the hand's grip: BF4 animates the gun ~10 cm toward the eye line;
+  the receiver (the largest rigid mesh of the pass, read from its b0 `worldMatrix`) is tracked
+  each pass, its hip pose held while the game's FOV is zoomed, and the rig moved back by the
+  difference (live: 9.5 cm, the gun stays in the hand).
 - The game fires from the eye while the barrel is drawn at the hand: the aim goes from the eye
   to the barrel's line 20 m out (`kGunConvergeMeters`, `MotionAim::ConvergedAim`), so shots
   cross the barrel's line there instead of running parallel a hand's distance (~30 cm) away
@@ -259,10 +273,10 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   than where BF4 puts them in front of the eye (the throw's arms spread across the lower view
   at the pull). Acceptable for short actions; anchoring the rig to the head during throws
   needs a reliable "not holding the gun" signal first.
-- Gaps: the ejected casings (above); the grip at rest is the
-  prologue rifle's (other weapons may sit a few cm off in the hand); the left hand stays on the
-  gun, not on the left controller (the arms reach from the body: next section); shots cross the barrel's line 20 m out rather than
-  running along it (under a degree either way); not seen in a headset.
+- Gaps: the ejected casings (above); other weapons' barrels relative to the hand are BF4's
+  (only the rifle and its launcher seen); recoil now barely shows on the gun (the hand's grip
+  follows BF4's kick within 0.06 s); shots cross the barrel's line 20 m out rather than running
+  along it (under a degree either way); not seen in a headset.
 - Evidence: WARP checks in Bf4Emulated (the first-person block gets the render's projection
   and a moved view, the world's passes through, pixel stage too, off passes everything through;
   hand mode by the game rotation only; receiver tracking picks the largest rigid mesh; weapon
@@ -1041,10 +1055,10 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
   launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
   `-World -FrameChannels 2` 5/5 (76-237 pairs, machine-dependent); `-World` with one
   channel 4/4 (47 pairs).
-- Installed locally: runtime/bf4 0.4.113-local (the source at this commit: gun in the hand and
-  arms from the body by default with a free left hand that turns with its controller, no
-  crosshair (centre mask), controller scan with its cache, 3D option; rollback 0.4.112-local);
-  launcher settings
+- Installed locally: runtime/bf4 0.4.114-local (the source at this commit: gun in the hand held by
+  BF4's right hand's grip, arms from the body by default with a free left hand that turns with
+  its controller, no crosshair (centre mask), controller scan with its cache, 3D option;
+  rollback 0.4.113-local); launcher settings
   restored to the player's after the developer sessions. Developer sessions still run the
   read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the

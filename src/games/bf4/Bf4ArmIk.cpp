@@ -131,6 +131,23 @@ void ClassifyBones(const float* palette, int bones, const ArmBindJoints& bind, c
     }
 }
 
+int FindHandBone(const float* palette, int bones, const ArmBindJoints& bind, const ArmChain& chain, int side) {
+    if (!chain.found || side < 0 || side > 1) return -1;
+    bones = std::min(bones, kArmMaxBones);
+    int best = -1;
+    float bestDistance = kArmChainTolerance;
+    for (int i = 0; i < bones; ++i) {
+        const float* b = palette + i * kArmBoneFloats;
+        if (!Usable(b) || Near(MapPoint(b, bind.elbow[side]), chain.elbow, kArmChainTolerance)) continue;
+        const float d = math::Length(MapPoint(b, bind.wrist[side]) - chain.wrist);
+        if (d < bestDistance) {
+            bestDistance = d;
+            best = i;
+        }
+    }
+    return best;
+}
+
 namespace {
 // The elbow of an arm from shoulder `s` reaching `wt` (lengths lu, lf), on the side of `hint`
 // (else below); `slide`: how far the shoulder had to move along the line to reach.
