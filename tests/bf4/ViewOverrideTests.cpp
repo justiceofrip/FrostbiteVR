@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstring>
 #include <thread>
+#include <vector>
 
 using namespace fvr;
 using namespace fvr::bf4;
@@ -38,13 +39,17 @@ struct FakeSubmitLog {
     LinearTransform seen, seenCopy;
     std::uint32_t seenDirty = 0;
     bool scribble = false; // the "game" rewrites the block during the call
+    std::vector<math::Vec3> copyTrans; // every call's +0x40 position
+    std::vector<int> events;           // second view: 0 render, 10 wait, 20+eye hook
 };
 FakeSubmitLog g_log;
 void FakeSubmit(void*, float, float, std::uint32_t count, std::uint8_t* views, void*, void*) {
     ++g_log.calls;
+    g_log.events.push_back(0);
     if (!count || !views) return;
     g_log.seen = ReadViewTransform(views);
     g_log.seenCopy = ReadViewTransform(views + kViewCopyOffset);
+    g_log.copyTrans.push_back(g_log.seenCopy.trans);
     std::memcpy(&g_log.seenDirty, views + kViewDirtyOffset, 4);
     if (g_log.scribble) WriteViewTransform(views, Yawed(-45, {9, 9, 9}));
 }
@@ -60,9 +65,9 @@ struct FakeRenderer {
         vptr = table + 1;
     }
     void* Object() { return &vptr; }
-    void SubmitThroughVtable(std::uint8_t* views) { // what bf4.exe's +0x8288DE call does
+    void SubmitThroughVtable(std::uint8_t* views, void* sync = nullptr) { // what bf4.exe's +0x8288DE call does
         void** vt = vptr;
-        reinterpret_cast<RendererSubmitFn>(vt[kRendererSubmitSlot])(Object(), 0.016f, 1.0f, 1, views, nullptr, nullptr);
+        reinterpret_cast<RendererSubmitFn>(vt[kRendererSubmitSlot])(Object(), 0.016f, 1.0f, 1, views, sync, nullptr);
     }
 };
 
@@ -368,4 +373,140 @@ TEST_CASE(EyeLoopOverrideGivesTheSecondEyeRoomAndRestoresExactly) {
     std::memcpy(&vt, obj->bytes, 8);
     CHECK(vt == obj->table + 1);
     delete obj;
+}
+
+#include "../../src/games/bf4/Bf4WorldRenderOverride.h"
+
+namespace {
+// bf4.exe's world renderer slot 2 as seen from outside: renders the args' views.
+struct FakeWorldLog {
+    int calls = 0;
+    void *args = nullptr, *a3 = nullptr, *a4 = nullptr;
+    std::vector<int> order; // hook events (-1-index before, +1+index after) and renders (0)
+};
+FakeWorldLog g_world;
+void FakeWorldRender(void*, void* args, void* a3, void* a4) {
+    ++g_world.calls;
+    g_world.args = args;
+    g_world.a3 = a3;
+    g_world.a4 = a4;
+    g_world.order.push_back(0);
+}
+struct FakeWorldObject {
+    void* table[1 + kWorldRendererVtableSlots];
+    std::uint8_t bytes[0x200] = {};
+    FakeWorldObject() {
+        table[0] = nullptr; // no RTTI, as in bf4.exe
+        for (std::size_t i = 1; i <= kWorldRendererVtableSlots; ++i) table[i] = reinterpret_cast<void*>(&OtherEyeSlot);
+        table[1 + kWorldRenderSlot] = reinterpret_cast<void*>(&FakeWorldRender);
+        void** vptr = table + 1;
+        std::memcpy(bytes, &vptr, 8);
+    }
+    void Call(std::uint32_t views) {
+        std::uint8_t args[0x60] = {};
+        std::memcpy(args + kWorldRenderArgsViewCount, &views, 4);
+        void** vt = nullptr;
+        std::memcpy(&vt, bytes, 8);
+        reinterpret_cast<WorldRenderFn>(vt[kWorldRenderSlot])(bytes, args, bytes + 8, bytes + 16);
+    }
+};
+std::vector<void*> g_waited;
+void FakeJobWait(void* handle) {
+    g_waited.push_back(handle);
+    g_world.order.push_back(9); // a wait between runs
+}
+struct TwiceHooks : WorldRenderOverride::Hooks {
+    int runs = 2;
+    int Runs(std::uint32_t) override { return runs; }
+    void BeforeRun(int index, int) override { g_world.order.push_back(-1 - index); }
+    void AfterRun(int index, int) override { g_world.order.push_back(1 + index); }
+};
+} // namespace
+
+TEST_CASE(WorldRenderOverrideRunsTheRenderOncePerEyeAndRestoresExactly) {
+    if (sizeof(void*) != 8) {
+        WorldRenderOverride wo;
+        TwiceHooks hooks;
+        CHECK(wo.Install(&wo, 0, &hooks) == WorldRenderOverride::InstallResult::NoObject);
+        return;
+    }
+    g_world = {};
+    auto* obj = new FakeWorldObject;
+    const auto slot = reinterpret_cast<std::uintptr_t>(&FakeWorldRender);
+    TwiceHooks hooks;
+    WorldRenderOverride wo;
+    CHECK(wo.Install(obj->bytes, slot + 1, &hooks) == WorldRenderOverride::InstallResult::UnexpectedSlot);
+    CHECK(wo.Install(obj->bytes, slot, &hooks) == WorldRenderOverride::InstallResult::Ok);
+    obj->Call(1); // BF4's one view: rendered once per eye, the hooks around each run
+    CHECK(g_world.calls == 2 && g_world.a3 == obj->bytes + 8 && g_world.a4 == obj->bytes + 16);
+    CHECK((g_world.order == std::vector<int>{-1, 0, 1, -2, 0, 2}));
+    // With the game's job wait: the first run's two job handles are waited on before the second.
+    g_world.order.clear();
+    g_waited.clear();
+    wo.SetJobWait(&FakeJobWait);
+    obj->Call(1);
+    CHECK((g_world.order == std::vector<int>{-1, 0, 1, 9, 9, -2, 0, 2}));
+    CHECK(g_waited.size() == 2 && g_waited[0] == obj->bytes + 8 && g_waited[1] == obj->bytes + 16);
+    wo.SetJobWait(nullptr);
+    g_world.calls = 2;
+    // Two views (not BF4's PC shape) and runs = 1 render once.
+    g_world.order.clear();
+    obj->Call(2);
+    hooks.runs = 1;
+    obj->Call(1);
+    CHECK(g_world.calls == 4 && (g_world.order == std::vector<int>{-1, 0, 1, -1, 0, 1})); // single runs: hooks told, nothing doubled
+    const auto s = wo.GetStats();
+    CHECK(s.calls == 4 && s.doubled == 2 && s.foreign == 0 && s.waits == 1);
+    // Every other slot is BF4's; Remove puts the original table back exactly.
+    void** vt = nullptr;
+    std::memcpy(&vt, obj->bytes, 8);
+    CHECK(vt != obj->table + 1 && vt[-1] == nullptr && vt[0] == obj->table[1] && vt[kWorldRendererVtableSlots - 1] == obj->table[kWorldRendererVtableSlots]);
+    CHECK(wo.Remove());
+    std::memcpy(&vt, obj->bytes, 8);
+    CHECK(vt == obj->table + 1);
+    delete obj;
+}
+
+namespace {
+void* g_waitedSync = nullptr;
+void FakeSyncWait(void* sync) {
+    g_waitedSync = sync;
+    g_log.events.push_back(10);
+}
+void FakeEyeHook(void* context, int eye) {
+    ++*static_cast<int*>(context);
+    g_log.events.push_back(20 + eye);
+}
+} // namespace
+
+TEST_CASE(ViewOverrideSecondViewRendersEachEyeAfterTheFirstEyesJobs) {
+    g_log = {};
+    FakeRenderer r;
+    ViewOverride vo;
+    CHECK(vo.Install(r.Object(), reinterpret_cast<std::uintptr_t>(&FakeSubmit)) == ViewOverride::InstallResult::Ok);
+    const LinearTransform game = Yawed(0, {1, 2, 3});
+    Views v(game), pristine(game);
+    int hookCalls = 0, syncObject = 0;
+    vo.SetLocal(Yawed(0, {}), false);
+    vo.SetSecondView(2, 0.032f, &FakeSyncWait, &FakeEyeHook, &hookCalls);
+    r.SubmitThroughVtable(v.bytes, &syncObject);
+    // Two renders, the game's job group waited on between them; the left eye first.
+    CHECK(g_log.calls == 2 && g_waitedSync == &syncObject && hookCalls == 3);
+    CHECK((g_log.events == std::vector<int>{20, 0, 10, 21, 0, 19}));
+    CHECK(g_log.copyTrans.size() == 2 && Same(g_log.copyTrans[0], {1 - 0.032f, 2, 3}) && Same(g_log.copyTrans[1], {1 + 0.032f, 2, 3}));
+    CHECK(std::memcmp(v.bytes, pristine.bytes, sizeof(v.bytes)) == 0); // exact restore after both
+    CHECK(vo.GetStats().restored == 1 && vo.SecondViewRenders() == 2);
+    // Mode 1: the same camera twice. Without a sync to wait on: one render, as the game does.
+    g_log = {};
+    vo.SetSecondView(1, 0.032f, &FakeSyncWait, nullptr, nullptr);
+    r.SubmitThroughVtable(v.bytes, &syncObject);
+    CHECK(g_log.calls == 2 && g_log.copyTrans.size() == 2 && Same(g_log.copyTrans[0], g_log.copyTrans[1]));
+    g_log = {};
+    r.SubmitThroughVtable(v.bytes, nullptr);
+    CHECK(g_log.calls == 1);
+    vo.SetSecondView(0, 0, nullptr, nullptr, nullptr);
+    g_log = {};
+    r.SubmitThroughVtable(v.bytes, &syncObject);
+    CHECK(g_log.calls == 1 && std::memcmp(v.bytes, pristine.bytes, sizeof(v.bytes)) == 0);
+    CHECK(vo.Remove(r.Object()) == ViewOverride::RemoveResult::Restored);
 }

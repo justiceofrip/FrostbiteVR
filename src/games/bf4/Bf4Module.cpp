@@ -32,6 +32,7 @@
 #include "Bf4FirstPersonView.h"
 #include "Bf4HudSplit.h"
 #include "Bf4ShaderCensus.h"
+#include "Bf4WorldRenderOverride.h"
 #include "fvr/graphics/GdiPanelRaster.h"
 #include "stereo/SideBySide.h"
 
@@ -96,6 +97,14 @@ constexpr std::uintptr_t kRenderDeviceClassRva = 0x1DD1870;
 // Two-eye loop class (vtable) and its slot 2 (docs/BF4-STEREO.md, Bf4EyeLoopOverride.h).
 constexpr std::uintptr_t kEyeLoopClassRva = 0x1D24258;
 constexpr std::uintptr_t kEyeLoopEntryRva = 0x8BE430;
+// The world renderer the eye loop hands its views to ([eye loop +0x30]): class vtable and its
+// slot 2, the per-frame world render (docs/BF4-STEREO.md, Bf4WorldRenderOverride.h).
+constexpr std::uintptr_t kWorldRendererClassRva = 0x1DF4B60;
+constexpr std::uintptr_t kWorldRenderEntryRva = 0xCDE440;
+constexpr std::size_t kEyeLoopRendererOffset = 0x30;
+// The render thread's wait for a job handle (help run jobs until done; +0x82892C waits on the
+// world render's output handle with it).
+constexpr std::uintptr_t kJobWaitRva = 0x63C940;
 // R5 single-player signals (docs/BF4-SESSION-RE.md), analysed build only.
 constexpr std::uintptr_t kClientGameContextRva = 0x2670D80;
 constexpr std::uintptr_t kLevelInfoRva = 0x27A1918;
@@ -174,6 +183,51 @@ public:
     float lastTanX = 0;
     float lastViewAspect = 0;
     EyeLoopOverride eyeLoop;
+    // Second view (developer research): BF4's world render run once per eye each frame. After
+    // the first (left) run the back buffer and the bound render target are copied, to see where
+    // the first eye's image is before the second run draws over it.
+    struct SecondViewHooks : WorldRenderOverride::Hooks {
+        Win32Platform* owner = nullptr;
+        std::atomic<bool> on{false};
+        std::atomic<bool> bare{false}; // research: the second run alone (no eye camera, no copies)
+        int Runs(std::uint32_t) override { return on.load() ? 2 : 1; }
+        void BeforeRun(int index, int runs) override {
+            if (runs != 2) return;
+            if (index == 0) owner->ProbeRendererFlips(0);
+            owner->ProbeViewBlock(index, false);
+            if (bare.load()) return;
+            if (index == 1) owner->KeepFirstRun(); // after the first run's jobs were waited on
+            owner->firstPersonView.SetCallEye(index);
+        }
+        void AfterRun(int index, int runs) override {
+            if (runs != 2) return;
+            owner->ProbeRendererFlips(index + 1);
+            owner->ProbeViewBlock(index, true);
+            if (!bare.load() && index == runs - 1) owner->firstPersonView.SetCallEye(-1);
+        }
+    } secondView;
+    WorldRenderOverride worldRender;
+    bool worldRenderRefused = false, secondViewWanted = false;
+    int submitTwice = 0; // research: the view submit renders twice (1 same camera, 2 per eye)
+    static void SubmitTwiceHook(void* context, int eye) {
+        auto* self = static_cast<Win32Platform*>(context);
+        if (eye == 1) self->KeepFirstRun(); // the first render's jobs are done by now
+    }
+    std::mutex secondMutex;
+    ID3D11Texture2D* secondBack = nullptr;   // the back buffer after the first run
+    ID3D11Texture2D* secondTarget = nullptr; // the render target bound after the first run
+    std::uint64_t secondCopies = 0;
+    // Research: what the first run changes in view 0's per-view object ([renderer+0x850], read by
+    // the per-view render job at +0xCEBE9B; its +0x10 was null in the second run, session 86).
+    int probeFrames = 0;
+    std::uint8_t probeBefore[0x100]{};
+    std::uintptr_t probeObject = 0;
+    // Research: the whole world renderer (0x34400 bytes) before the first run, after it and
+    // after the second, for a few frames: fields that flip on every call (A != B, B != C,
+    // A == C) or count calls are what two calls a frame change twice.
+    static constexpr std::size_t kRendererBytes = 0x34400;
+    std::vector<std::uint8_t> flipA, flipB;
+    int flipFrames = 0;
     // Depth stereo (opt-in): the frame's scene depth, found through the game's own depth clears.
     DepthCapture depthCapture;
     FirstPersonView firstPersonView; // gun in the hand (Bf4FirstPersonView.h)
@@ -220,6 +274,178 @@ public:
     }
 
     void StartEyeLoopScan();
+
+    static bool CopyInto(ID3D11Device* device, ID3D11DeviceContext* ctx, ID3D11Texture2D* source, ID3D11Texture2D*& kept) {
+        D3D11_TEXTURE2D_DESC d{};
+        source->GetDesc(&d);
+        if (kept) {
+            D3D11_TEXTURE2D_DESC k{};
+            kept->GetDesc(&k);
+            if (k.Width != d.Width || k.Height != d.Height || k.Format != d.Format || k.SampleDesc.Count != d.SampleDesc.Count) {
+                kept->Release();
+                kept = nullptr;
+            }
+        }
+        if (!kept) {
+            D3D11_TEXTURE2D_DESC k = d;
+            k.Usage = D3D11_USAGE_DEFAULT;
+            k.BindFlags = 0;
+            k.CPUAccessFlags = 0;
+            k.MiscFlags = 0;
+            k.MipLevels = 1;
+            k.ArraySize = 1;
+            if (d.MipLevels != 1 || d.ArraySize != 1 || FAILED(device->CreateTexture2D(&k, nullptr, &kept))) return false;
+        }
+        ctx->CopyResource(kept, source);
+        return true;
+    }
+
+    void ProbeRendererFlips(int stage) { // 0 before run 0, 1 after run 0, 2 after run 1
+        if (flipFrames >= 3) return;
+        const auto renderer = reinterpret_cast<std::uintptr_t>(worldRender.Object());
+        if (!renderer) return;
+        std::vector<std::uint8_t> now(kRendererBytes);
+        if (!ReadChecked(renderer, now.data(), now.size())) {
+            log_.Write("second view flip probe: renderer unreadable");
+            flipFrames = 3;
+            return;
+        }
+        if (stage == 0) { flipA.swap(now); return; }
+        if (stage == 1) { flipB.swap(now); return; }
+        if (flipA.size() != kRendererBytes || flipB.size() != kRendererBytes) return;
+        std::string flips, counts;
+        int nf = 0, nc = 0;
+        for (std::size_t k = 0; k + 8 <= kRendererBytes; k += 8) {
+            std::uint64_t a = 0, b = 0, c = 0;
+            std::memcpy(&a, flipA.data() + k, 8);
+            std::memcpy(&b, flipB.data() + k, 8);
+            std::memcpy(&c, now.data() + k, 8);
+            if (a == b && b == c) continue;
+            char item[96];
+            if (a != b && b != c && a == c) {
+                if (nf++ < 40) {
+                    std::snprintf(item, sizeof(item), " +%zx:%llx/%llx", k, static_cast<unsigned long long>(a), static_cast<unsigned long long>(b));
+                    flips += item;
+                }
+            } else if (nc++ < 40) {
+                std::snprintf(item, sizeof(item), " +%zx:%llx>%llx>%llx", k, static_cast<unsigned long long>(a),
+                              static_cast<unsigned long long>(b), static_cast<unsigned long long>(c));
+                counts += item;
+            }
+        }
+        log_.Write("second view flip probe: frame %d: %d fields flip per call:%s", flipFrames, nf, flips.c_str());
+        log_.Write("second view flip probe: frame %d: %d other changed fields:%s", flipFrames, nc, counts.c_str());
+        ++flipFrames;
+    }
+
+    // Second view research (read-only): view 0's per-view object around the first few doubled frames.
+    void ProbeViewBlock(int index, bool after) {
+        if (probeFrames >= 6) return;
+        const auto renderer = reinterpret_cast<std::uintptr_t>(worldRender.Object());
+        std::uintptr_t object = 0;
+        std::uint8_t now[sizeof(probeBefore)]{};
+        const bool ok = renderer && ReadChecked(renderer + 0x850, &object, 8) && object && ReadChecked(object, now, sizeof(now));
+        char line[1600];
+        int n = std::snprintf(line, sizeof(line), "second view probe: frame %d run %d %s: object %p%s", probeFrames, index,
+                              after ? "after" : "before", reinterpret_cast<void*>(object), ok ? "" : " (unreadable)");
+        if (ok && !after && index == 0) {
+            std::memcpy(probeBefore, now, sizeof(now));
+            probeObject = object;
+            for (int k = 0; k < 0x40 && n > 0 && n < static_cast<int>(sizeof(line)) - 40; k += 8) {
+                std::uint64_t v = 0;
+                std::memcpy(&v, now + k, 8);
+                n += std::snprintf(line + n, sizeof(line) - n, " +%02x=%llx", k, static_cast<unsigned long long>(v));
+            }
+        } else if (ok && object == probeObject) {
+            for (int k = 0; k < static_cast<int>(sizeof(now)) && n > 0 && n < static_cast<int>(sizeof(line)) - 60; k += 8) {
+                std::uint64_t a = 0, b = 0;
+                std::memcpy(&a, probeBefore + k, 8);
+                std::memcpy(&b, now + k, 8);
+                if (a != b)
+                    n += std::snprintf(line + n, sizeof(line) - n, " +%02x:%llx->%llx", k, static_cast<unsigned long long>(a),
+                                       static_cast<unsigned long long>(b));
+            }
+        }
+        log_.Write("%s", line);
+        if (after && index == 1) ++probeFrames;
+    }
+
+    // Second view: between the runs (the first's jobs done), on the render thread inside BF4's frame.
+    void KeepFirstRun() {
+        if (!swapchain) return;
+        ID3D11Texture2D* back = nullptr;
+        if (FAILED(swapchain->GetBuffer(0, __uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&back))) || !back) return;
+        ID3D11Device* device = nullptr;
+        back->GetDevice(&device);
+        ID3D11DeviceContext* ctx = nullptr;
+        if (device) device->GetImmediateContext(&ctx);
+        if (ctx) {
+            std::lock_guard<std::mutex> lock(secondMutex);
+            bool ok = CopyInto(device, ctx, back, secondBack);
+            ID3D11RenderTargetView* rtv = nullptr;
+            ctx->OMGetRenderTargets(1, &rtv, nullptr);
+            if (rtv) {
+                ID3D11Resource* r = nullptr;
+                rtv->GetResource(&r);
+                ID3D11Texture2D* t = nullptr;
+                if (r && SUCCEEDED(r->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&t))) && t) {
+                    if (t != back) ok = CopyInto(device, ctx, t, secondTarget) && ok;
+                    t->Release();
+                }
+                if (r) r->Release();
+                rtv->Release();
+            }
+            if (ok) ++secondCopies;
+            ctx->Release();
+        }
+        if (device) device->Release();
+        back->Release();
+    }
+
+    // The world renderer, through the eye loop object the read-only scan found.
+    bool EnsureWorldRender() {
+        if (worldRender.Installed()) return true;
+        if (worldRenderRefused || exeSha256 != kAnalyzedBuildSha256) return false;
+        if (eyeLoopScan.load() == 0) StartEyeLoopScan();
+        if (eyeLoopScan.load() != 2) return false; // asked again next frame
+        const auto base = reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
+        const auto object = eyeLoopFound.load();
+        std::uintptr_t cls = 0, renderer = 0, vt = 0, slot = 0;
+        const bool ok = eyeLoopCandidates.load() == 1 && object && ReadChecked(object, &cls, 8) && cls == base + kEyeLoopClassRva &&
+                        ReadChecked(object + kEyeLoopRendererOffset, &renderer, 8) && renderer && ReadChecked(renderer, &vt, 8) &&
+                        vt == base + kWorldRendererClassRva && ReadChecked(vt + 8 * kWorldRenderSlot, &slot, 8) &&
+                        slot == base + kWorldRenderEntryRva;
+        if (!ok) {
+            log_.Write("second view: world renderer not found (eye loop candidates %d, object %p, renderer %p, vtable %p); off",
+                       eyeLoopCandidates.load(), reinterpret_cast<void*>(object), reinterpret_cast<void*>(renderer),
+                       reinterpret_cast<void*>(vt));
+            worldRenderRefused = true;
+            return false;
+        }
+        secondView.owner = this;
+        worldRender.SetJobWait(reinterpret_cast<JobWaitFn>(base + kJobWaitRva));
+        const auto r = worldRender.Install(reinterpret_cast<void*>(renderer), base + kWorldRenderEntryRva, &secondView);
+        log_.Write("second view: world renderer %p, override %s", reinterpret_cast<void*>(renderer),
+                   r == WorldRenderOverride::InstallResult::Ok ? "installed" : "refused");
+        if (r != WorldRenderOverride::InstallResult::Ok) worldRenderRefused = true;
+        return r == WorldRenderOverride::InstallResult::Ok;
+    }
+
+    std::string DescribeSecondView() {
+        const auto s = worldRender.GetStats();
+        std::uint64_t copies = 0;
+        {
+            std::lock_guard<std::mutex> lock(secondMutex);
+            copies = secondCopies;
+        }
+        char line[200];
+        std::snprintf(line, sizeof(line), "second_view=%s calls=%llu doubled=%llu waits=%llu run_us=%.0f/%.0f first_run_copies=%llu submit_twice=%d renders=%llu",
+                      worldRender.Installed() ? (secondView.on.load() ? "on" : "installed") : (worldRenderRefused ? "refused" : "off"),
+                      static_cast<unsigned long long>(s.calls), static_cast<unsigned long long>(s.doubled),
+                      static_cast<unsigned long long>(s.waits), s.runUs[0], s.runUs[1], static_cast<unsigned long long>(copies),
+                      submitTwice, static_cast<unsigned long long>(viewOverride.SecondViewRenders()));
+        return line;
+    }
 
     // Split stereo needs room for two eyes in the eye loop's array (Bf4EyeLoopOverride.h).
     bool EnsureEyeLoop() {
@@ -300,7 +526,7 @@ public:
             std::remove((logDir + "\\stereo-armed.txt").c_str());
             stereoMarker = false;
         }
-        Diagnostics::ArmFaultLogging(engineStereo.State() == EngineStereo::Status::On);
+        Diagnostics::ArmFaultLogging(engineStereo.State() == EngineStereo::Status::On || secondView.on.load() || submitTwice != 0);
         if (engineStereo.State() == EngineStereo::Status::On) engineStereo.Update(meta.halfEyeDistance, tanX);
         const EngineStereoReading r = engineStereo.State() == EngineStereo::Status::On ? engineStereo.Read() : EngineStereoReading{};
         if (engineStereo.State() != lastStereoStatus) {
@@ -435,6 +661,12 @@ public:
         if (!swapchain) return false;
         ID3D11Texture2D* back = nullptr;
         if (FAILED(swapchain->GetBuffer(0, __uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&back)))) return false;
+        const bool ok = WithTexturePixels(back, use);
+        back->Release();
+        return ok;
+    }
+    bool WithTexturePixels(ID3D11Texture2D* back, const std::function<void(const stereo::ImageView&)>& use) {
+        if (!back) return false;
         D3D11_TEXTURE2D_DESC d{};
         back->GetDesc(&d);
         const bool rgba = d.Format == DXGI_FORMAT_R8G8B8A8_UNORM || d.Format == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
@@ -465,7 +697,6 @@ public:
             if (ctx) ctx->Release();
             if (device) device->Release();
         }
-        back->Release();
         return ok;
     }
 
@@ -1049,6 +1280,9 @@ public:
         gunInHandFrame = 0;
         laneFrame = 0;
         if (eyeLoop.Installed()) log_.Write("eye loop override removed: %s", eyeLoop.Remove() ? "vtable restored" : "vtable not ours, left alone");
+        secondView.on.store(false);
+        if (worldRender.Installed()) log_.Write("second view override removed: %s", worldRender.Remove() ? "vtable restored" : "vtable not ours, left alone");
+        firstPersonView.SetCallEye(-1);
         RemoveViewOverride();
         log_.Write("detaching all hooks: %.*s", static_cast<int>(reason.size()), reason.data());
         // Never patch code from inside the Present detour; a worker does it. MinHook
@@ -1275,8 +1509,8 @@ void OnPresent(Adapter& a, IDXGISwapChain* sc) {
                     static_cast<long>(f.clientWidth), static_cast<long>(f.clientHeight));
         std::string v = a.platform.DescribeViewOverride(); // world lane: pose runs and FOV in the same log
         while (!v.empty() && (v.back() == '\n' || v.back() == '\r')) v.pop_back();
-        a.log.Write("%s stereo=%s %s", v.c_str(), std::string(StereoModeName(a.core->Stereo())).c_str(),
-                    a.platform.DescribeEngineStereo().c_str());
+        a.log.Write("%s stereo=%s %s %s", v.c_str(), std::string(StereoModeName(a.core->Stereo())).c_str(),
+                    a.platform.DescribeEngineStereo().c_str(), a.platform.DescribeSecondView().c_str());
         if (a.platform.depthCapture.Installed()) a.log.Write("%s", a.platform.depthCapture.Describe().c_str());
         const std::string status = a.core->Status();
         const auto at = status.find("controller_aim=");
@@ -1852,6 +2086,12 @@ void ResearchAck(Adapter& a, std::uint64_t id, const char* result) {
 void ResearchTick(Adapter& a) {
     if (!a.session.developerFeatures || a.session.researchDumpDir.empty() || !a.platform.window) return;
     HWND hwnd = a.platform.window;
+    // 0. Experiment secondview: once the world renderer is found, its render runs once per eye.
+    if (a.platform.secondViewWanted && !a.platform.secondView.on.load() && a.platform.EnsureWorldRender()) {
+        Diagnostics::ArmFaultLogging(true); // a fault in the doubled render is logged
+        a.platform.secondView.on.store(true);
+        a.log.Write("second view: on (the world render runs once per eye each frame)");
+    }
     // 0. Experiment fpview: the first-person pass's view constants, set per frame.
     if (a.firstPersonMode && a.firstPersonView.Installed()) {
         const auto st = a.platform.viewOverride.GetStats();
@@ -2056,15 +2296,71 @@ void ResearchTick(Adapter& a) {
         ResearchAck(a, c.id, msg.c_str());
         break;
     }
+    case ResearchCommand::Kind::SecondView: { // developer: BF4's world render once per eye each frame
+        if (c.x >= 3 || c.x == 0) { // the view submit rendered twice (or off)
+            const int mode = c.x >= 3 ? c.x - 2 : 0;
+            const bool analysed = a.platform.exeSha256 == kAnalyzedBuildSha256;
+            const auto base = reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
+            a.platform.submitTwice = analysed ? mode : 0;
+            a.platform.viewOverride.SetSecondView(a.platform.submitTwice, a.platform.halfEye,
+                                                  reinterpret_cast<ViewOverride::SecondViewWait>(base + kJobWaitRva),
+                                                  &Win32Platform::SubmitTwiceHook, &a.platform);
+            if (a.platform.submitTwice) Diagnostics::ArmFaultLogging(true);
+            if (c.x >= 3) {
+                const std::string msg = std::string("secondview submit twice ") + (mode == 2 ? "per eye" : "same camera") +
+                                        (analysed ? "" : " refused (not the analysed build)");
+                a.log.Write("research %s", msg.c_str());
+                ResearchAck(a, c.id, msg.c_str());
+                break;
+            }
+        }
+        a.platform.secondViewWanted = c.x != 0;
+        a.platform.secondView.bare.store(c.x == 2);
+        if (c.x && !a.platform.worldRender.Installed()) { // asked again: look again (a level may have loaded since)
+            a.platform.worldRenderRefused = false;
+            if (a.platform.eyeLoopScan.load() == 2) a.platform.eyeLoopScan.store(0);
+        }
+        if (!a.platform.secondViewWanted) a.platform.secondView.on.store(false);
+        const std::string msg = std::string("secondview ") + (c.x == 2 ? "bare (installing)" : c.x ? "on (installing)" : "off");
+        a.log.Write("research %s", msg.c_str());
+        ResearchAck(a, c.id, msg.c_str());
+        break;
+    }
+    case ResearchCommand::Kind::SecondSnap: { // developer: the second view's first-run copies and the presented frame
+        bool back = false, target = false;
+        std::string targetFormat = "none";
+        {
+            std::lock_guard<std::mutex> lock(a.platform.secondMutex);
+            const std::string dir = a.session.researchDumpDir + "\\" + c.arg;
+            back = a.platform.secondBack && a.platform.WithTexturePixels(a.platform.secondBack, [&](const stereo::ImageView& v) {
+                stereo::WriteSideBySideBmp(dir + "-run0-back.bmp", stereo::LeftHalf(v), stereo::RightHalf(v), 2);
+            });
+            if (a.platform.secondTarget) {
+                D3D11_TEXTURE2D_DESC d{};
+                a.platform.secondTarget->GetDesc(&d);
+                targetFormat = std::to_string(d.Width) + "x" + std::to_string(d.Height) + " fmt " + std::to_string(d.Format) +
+                               " x" + std::to_string(d.SampleDesc.Count);
+                target = a.platform.WithTexturePixels(a.platform.secondTarget, [&](const stereo::ImageView& v) {
+                    stereo::WriteSideBySideBmp(dir + "-run0-target.bmp", stereo::LeftHalf(v), stereo::RightHalf(v), 2);
+                });
+            }
+        }
+        const bool presented = a.platform.WriteBackbufferBmp(a.session.researchDumpDir + "\\" + c.arg + "-presented.bmp");
+        const std::string msg = "secondsnap " + c.arg + ": run0 back " + (back ? "written" : "none") + ", run0 target " +
+                                targetFormat + (target ? " written" : " not written") + ", presented " + (presented ? "written" : "none");
+        a.log.Write("research %s", msg.c_str());
+        ResearchAck(a, c.id, msg.c_str());
+        break;
+    }
     case ResearchCommand::Kind::FirstPersonMask: { // developer: which bones a first-person mesh's parts use
-        a.firstPersonView.SetMaskIndexCount(static_cast<UINT>(c.x), c.y, static_cast<int>(c.length));
+        a.platform.firstPersonView.SetMaskIndexCount(static_cast<UINT>(c.x), c.y, static_cast<int>(c.length));
         const std::string msg = "fpmask " + std::to_string(c.x) + " " + std::to_string(c.y) + " " + std::to_string(c.length);
         a.log.Write("research %s", msg.c_str());
         ResearchAck(a, c.id, msg.c_str());
         break;
     }
     case ResearchCommand::Kind::FirstPersonHide: { // developer: which first-person mesh is which
-        a.firstPersonView.SetHideIndexCount(static_cast<UINT>(c.x));
+        a.platform.firstPersonView.SetHideIndexCount(static_cast<UINT>(c.x));
         const std::string msg = "fphide " + std::to_string(c.x);
         a.log.Write("research %s", msg.c_str());
         ResearchAck(a, c.id, msg.c_str());

@@ -721,11 +721,12 @@ void FirstPersonView::OnBindConstants(ID3D11DeviceContext* context, ContextHooks
     }
     // Alternate eyes: a main view of this frame goes to this frame's eye (it ends a first-person
     // pass like any other view).
-    const bool shift = frame.alternateEyes && frame.halfEye > 0;
+    const int callEye = callEye_.load();
+    const bool shift = (frame.alternateEyes || callEye >= 0) && frame.halfEye > 0;
     int eye = 0;
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        eye = eye_;
+        eye = callEye >= 0 ? callEye : eye_;
     }
     const Mat4 eyeMove = shift ? EyeShift(eye, frame.halfEye) : Identity4();
     if (shift && IsMainViewBlock(block.data(), frame.renderKy)) {

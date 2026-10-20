@@ -18,7 +18,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   three sessions (09:16-10:19; rotation was inverted and the gun oversized, both fixed in
   0.4.16); everything built since 0.4.17 is unseen in a headset.
 
-## At a glance (installed: 0.4.125-local)
+## At a glance (installed: 0.4.133-local)
 
 | Feature | State | Evidence |
 | --- | --- | --- |
@@ -41,6 +41,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
 | 3D: alternate eyes (each frame from one eye, true parallax) | off (option) | live sim: gun and walls at their depths, labels 327/327, 52 pairs/s |
 | BF4 split stereo (developer) | unsupported (retired) | live sim: crashes BF4's one-view world renderer |
 | Arms from the body (arm IK by palette rewrite: shoulders at the body, hands on the gun; "Free left hand" option) | on (default, "Arms") | live sim: both arms solved every pass, all arm draws agree < 0.5 mm, turned 60 deg no sleeve across the view, left hand at its controller and back on the gun two-handed, reload/ADS; no frame-rate cost (116/116 presents/s) |
+| Native per-eye rendering (BF4's view submit rendered once per eye each frame) | in progress (developer research `secondview 3/4`) | live sim: doubled submit 225 frames / 450 renders, no fault (same camera); per-eye cameras, the gun per eye and both images to the headset not done |
 | BF4's own body mesh hidden with the gun in the hand (drawn collapsed) | on (gun in the hand) | stock captures: the rule picks the body mesh 88/90 times (misses: a broken arm reference), no other of 12 meshes in 800+ draws; emulated; not yet seen live |
 
 ## Works on the real game (actual-game checks)
@@ -370,6 +371,39 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   forearm does not share the free hand's twist (the wrist skin twists instead); the
   skeleton's joints are the prologue rig's (another rig finds no chains and stays as
   BF4 draws it); aiming steeply up still shows the near upper arm large; not seen in a headset.
+
+## Native per-eye rendering (2026-10-20, in progress; developer research)
+
+The goal (the player's): BF4 renders each eye from its own position every frame, as BC2's
+framework does with a second native view. The player rejected the stand-ins ("3D from depth",
+"Alternate eyes"); they are not the route. BF4's world renderer keeps per-view state for one
+view on PC (the split-stereo crash, below), so instead of two views in one render, BF4's
+render runs twice per frame, once per eye; the simulation runs once.
+
+- First try, retired: the world render itself twice (`Bf4WorldRenderOverride`: world renderer
+  `[eye loop +0x30]`, vtable `+0x1DF4B60` 21 slots no RTTI, slot 2 `+0xCDE440(this, args, out
+  handle, out handle)`; developer `secondview 1/2`). Session 84 died on the first doubled frame;
+  session 86 (the second call alone): a worker job read a null at `+0xCB41B2`. The call returns
+  with its per-view render running as jobs and writes two 24-byte job handles to its 3rd/4th
+  arguments, which the render thread later waits on with `+0x63C940` (help run jobs until
+  done). Waiting on them between the runs (session 89) removed that race, but other jobs
+  (`+0xC1B2E7`, `+0xC140AD`, a divide by zero at `+0xBB6858`, texture/material work at
+  `+0xC1B250`) then faulted: BF4 double-buffers its render state per call (the per-view object
+  at `[renderer +0x850]` alternates between two buffers; session 90's diff of the whole 0x34400-
+  byte renderer around both runs shows fields rebuilt between frames outside this call) and
+  two calls a frame flip it twice. Kept as research code; not used.
+- Current route: GameRenderer slot 5 (`+0x83F0E0`, the view submit the view override already
+  wraps; it runs the per-frame view setup, the eye loop and the world render, and its 6th
+  argument `sync` is the job group its caller waits on at `+0x82892C`) called twice per frame,
+  `sync` waited on with the game's own `+0x63C940` in between (`ViewOverride::SetSecondView`;
+  developer `secondview 3` same camera, `secondview 4` the render camera half the eye distance
+  left, then right; view block restored exactly after both). Live (simulated headset, session
+  91, prologue): `secondview 3` ran 225 frames (450 renders) with no fault until the window
+  was minimized (the player took focus; no thread was in our code).
+- Not done yet: `secondview 4` live; the first-person pass (gun in the hand) per eye; both
+  eye images to the headset (the first render's image copied before the second draws over it,
+  `KeepFirstRun`, then a pair per frame); cost (two renders per frame); the HUD per eye; fault
+  logging is armed while either research mode is on (`faults.log`).
 
 ## BF4's own body hidden with the gun in the hand (2026-10-20, built; not live)
 
@@ -1119,11 +1153,13 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
   launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
   `-World -FrameChannels 2` 5/5 (76-237 pairs, machine-dependent); `-World` with one
   channel 4/4 (47 pairs).
-- Installed locally: runtime/bf4 0.4.125-local (the source at commit dfbcfc5: gun in the hand
-  held by BF4's right hand's grip, arms from the body by default (free left hand an option,
+- Installed locally: runtime/bf4 0.4.133-local (as 0.4.125-local for play: gun in the hand held
+  by BF4's right hand's grip, arms from the body by default (free left hand an option,
   curled-finger fix), BF4's own body hidden with the gun in the hand, recoil pulses, no
-  crosshair (centre mask), controller scan with its cache, 3D option, research `fphide`/
-  `fpmask`; rollback 0.4.124-local); launcher settings
+  crosshair (centre mask), controller scan with its cache; plus the developer-only research
+  switches `secondview 0-4`, `secondsnap`, `fphide`/`fpmask` (now on the gun-in-hand view;
+  before they reached the fpview experiment's object and did nothing); rollback
+  0.4.132-local); launcher settings
   restored to the player's after the developer sessions. Developer sessions still run the
   read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the

@@ -205,6 +205,10 @@ public:
     // from (-1: none moved), read before OnPresent; OnPresent then turns to the other eye.
     int FrameEye() const;
     void OnPresent();
+    // Second view (Bf4WorldRenderOverride.h): the world render runs once per eye in a frame;
+    // each run's main views and first-person pass are seen from `eye` (0 left, 1 right; half
+    // eye distance `Frame::halfEye`). -1: back to the frame's own eye (alternate eyes or none).
+    void SetCallEye(int eye) { callEye_.store(eye); }
     // Developer research: first-person draws with this index count are drawn with an all-zero
     // palette (collapsed, unseen), to tell the pass's meshes apart. 0: none.
     void SetHideIndexCount(UINT count) { hideCount_.store(count); }
@@ -260,6 +264,7 @@ private:
     Microsoft::WRL::ComPtr<ID3D11Buffer> zeroPalette_; // all zero: a skinned draw bound with it collapses
     bool hideBodyPass_ = false;
     std::atomic<UINT> hideCount_{0};
+    std::atomic<int> callEye_{-1};
     std::atomic<UINT> maskCount_{0};
     std::atomic<int> maskLo_{0}, maskHi_{0};
     Microsoft::WRL::ComPtr<ID3D11Buffer> maskPalette_;

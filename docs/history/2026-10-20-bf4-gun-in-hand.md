@@ -55,3 +55,9 @@
 - A free hand's fingers are found by how they move relative to the hand bone (a turn about a
   joint near the wrist), not by where they put the wrist: curled fingers put it up to 24 cm away
   and were left on the gun.
+- Native per-eye rendering is the stereo route; depth reprojection and alternate-eye
+  rendering are not (the player rejected both as stand-ins). With BF4's world renderer limited
+  to one view on PC, the render runs twice per frame instead, at the view submit (GameRenderer
+  slot 5) rather than at the world render: the submit includes BF4's per-frame view setup and
+  hands its caller one job group to wait on, while the world render alone double-buffers its
+  state per call and broke when called twice a frame.

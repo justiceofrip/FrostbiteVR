@@ -197,6 +197,14 @@ void ViewOverride::Clear() {
     havePose_ = false;
 }
 
+void ViewOverride::SetSecondView(int mode, float halfEye, SecondViewWait wait, SecondViewHook hook, void* context) {
+    secondHook_.store(hook);
+    secondContext_.store(context);
+    secondWait_.store(wait);
+    secondHalfEye_.store(halfEye);
+    secondMode_.store(mode == 1 || mode == 2 ? mode : 0);
+}
+
 ViewOverride::Stats ViewOverride::GetStats() const {
     std::lock_guard<std::mutex> lock(mutex_);
     return stats_;
@@ -373,7 +381,31 @@ void ViewOverride::Submit(void* renderer, float a, float b, std::uint32_t viewCo
     std::uint32_t writtenDirty = 0;
     std::memcpy(&writtenDirty, views + kViewDirtyOffset, 4);
 
-    original(renderer, a, b, viewCount, views, sync, extra);
+    const int second = self->secondMode_.load();
+    const SecondViewWait secondWait = self->secondWait_.load();
+    if (second && secondWait && sync) {
+        // Second view: the submit renders twice (the game's simulation ran once), the first
+        // render's jobs waited on before the second; each render's camera at its eye (mode 2).
+        const SecondViewHook hook = self->secondHook_.load();
+        void* context = self->secondContext_.load();
+        const float halfEye = self->secondHalfEye_.load();
+        for (int eye = 0; eye < 2; ++eye) {
+            if (eye == 1) secondWait(sync);
+            if (second == 2 && (mask & 2u)) {
+                LinearTransform e = renderCamera;
+                e.trans = renderCamera.trans + renderCamera.right * (eye == 0 ? -halfEye : halfEye);
+                WriteViewTransform(views + kViewCopyOffset, e);
+                std::memcpy(views + kViewDirtyOffset, &writtenDirty, 4); // dirty again for this render
+                std::memcpy(written, views, sizeof(written));             // what the restore expects
+            }
+            if (hook) hook(context, eye);
+            original(renderer, a, b, viewCount, views, sync, extra);
+        }
+        if (hook) hook(context, -1);
+        self->secondRenders_.fetch_add(2);
+    } else {
+        original(renderer, a, b, viewCount, views, sync, extra);
+    }
 
     bool restored = false;
     if (std::memcmp(views, written, sizeof(written)) == 0) {

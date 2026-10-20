@@ -77,6 +77,8 @@ std::vector<ResearchCommand> ParseResearchCommands(std::string_view text, std::u
         else if (verb == "drawprobe" && !a1.empty()) { c.kind = ResearchCommand::Kind::DrawProbe; c.arg = std::string(a1); }
         else if (verb == "fpview" && ParseInt(a1, c.x) && c.x >= 0 && c.x <= 3) c.kind = ResearchCommand::Kind::FirstPersonView;
         else if (verb == "fphide" && ParseInt(a1, c.x) && c.x >= 0 && c.x <= 1000000) c.kind = ResearchCommand::Kind::FirstPersonHide;
+        else if (verb == "secondview" && ParseInt(a1, c.x) && c.x >= 0 && c.x <= 4) c.kind = ResearchCommand::Kind::SecondView;
+        else if (verb == "secondsnap" && !a1.empty() && a1.size() <= 40) { c.kind = ResearchCommand::Kind::SecondSnap; c.arg = std::string(a1); }
         else if (verb == "fpmask" && ParseInt(a1, c.x) && c.x >= 0 && c.x <= 1000000 && ParseInt(a2, c.y) && c.y >= 0 &&
                  c.y <= 255) {
             std::int32_t hi = 0;

@@ -163,6 +163,16 @@ public:
     void SetHand(const math::Pose& handInHead, bool valid, const math::Pose& bodyInHead = {}, bool bodyValid = false,
                  const math::Pose& leftHandInHead = {}, bool leftValid = false, bool leftFree = false);
     std::array<HandRecord, kHandRecords> RecentHands() const;
+    // Second view (developer research): each applied submit renders twice, the game's job
+    // group (`sync`, the submit's 6th argument, which its caller waits on afterwards) waited on
+    // in between with `wait` (bf4.exe +0x63C940), so the first render's jobs are done before
+    // the second rebuilds the views. Mode 1: the same camera both times; mode 2: the render
+    // camera half the eye distance (`halfEye`) left of the head, then right. `hook(context,
+    // eye)` runs before each render (eye 0, 1; the second after the wait) and after (-1).
+    using SecondViewWait = void (*)(void* sync);
+    using SecondViewHook = void (*)(void* context, int eye);
+    void SetSecondView(int mode, float halfEye, SecondViewWait wait, SecondViewHook hook, void* context);
+    std::uint64_t SecondViewRenders() const { return secondRenders_.load(); }
     // Developer research (read-only): the next submit copies block 0 as the game submitted it
     // (before the override writes anything); TakeBlockDump hands the copy over once.
     void RequestBlockDump();
@@ -175,6 +185,12 @@ private:
                        void* extra);
     void* object_ = nullptr;
     std::atomic<std::uint32_t> copyMask_{3};
+    std::atomic<int> secondMode_{0};
+    std::atomic<float> secondHalfEye_{0};
+    std::atomic<SecondViewWait> secondWait_{nullptr};
+    std::atomic<SecondViewHook> secondHook_{nullptr};
+    std::atomic<void*> secondContext_{nullptr};
+    std::atomic<std::uint64_t> secondRenders_{0};
     GunAimSettings gunAim_;        // under mutex_
     std::uint64_t gunLatchPose_ = 0;
     GunAim gunLatched_;

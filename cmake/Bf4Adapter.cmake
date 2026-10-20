@@ -34,6 +34,7 @@ add_library(FvrBf4Core STATIC
   src/games/bf4/Bf4ViewOverride.cpp
   src/games/bf4/Bf4EngineStereo.cpp
   src/games/bf4/Bf4EyeLoopOverride.cpp
+  src/games/bf4/Bf4WorldRenderOverride.cpp
   src/games/bf4/Bf4ReloadClassifier.cpp
   src/games/bf4/Bf4ReloadDriver.cpp
   src/games/bf4/Bf4BodyGestures.cpp
