@@ -14,6 +14,9 @@
 // - Two-handed aim: while the left grip is held in front of the gun (along the right
 //   controller's aim), the gun aims along the line from the right grip to the left grip,
 //   which is steadier than one wrist (a rifle held with both hands).
+// - Gun follows aim: the aim stays where the render can turn all the way to it (see
+//   LimitAimToRender), so the barrel never leaves the bullets' line.
+#include "Bf4WorldView.h"
 #include "fvr/interaction/AimFrame.h"
 #include "fvr/math/Vec.h"
 
@@ -39,6 +42,50 @@ inline float WrapPi(float a) {
     if (a < 0) a += kTau;
     return a - 3.14159265f;
 }
+// The axes of a camera with this aim and no roll (BF4's own camera keeps its right row level).
+inline CameraAxes AimAxes(const AimAngle& a) {
+    const float sy = std::sin(a.yaw), cy = std::cos(a.yaw), sp = std::sin(a.pitch), cp = std::cos(a.pitch);
+    const float right[3] = {cy, 0, sy}, back[3] = {-sy * cp, -sp, cy * cp};
+    CameraAxes x;
+    for (int k = 0; k < 3; ++k) {
+        x.row[0][k] = right[k];
+        x.row[2][k] = back[k];
+    }
+    x.row[1][0] = back[1] * right[2] - back[2] * right[1]; // up = back x right
+    x.row[1][1] = back[2] * right[0] - back[0] * right[2];
+    x.row[1][2] = back[0] * right[1] - back[1] * right[0];
+    return x;
+}
+// Gun follows aim: GunAimRotation turns the render only as far toward the game's aim as the
+// FOV budget allows, and beyond it the gun stopped short while the bullets went on along the
+// aim (live, 2026-10-19: 15 degrees up with the head level, the barrel a third of the way).
+// This brings an aim back toward the head, along the turn from the head to it, until the
+// render can turn all the way: the gun then stops at that edge with the bullets on its line,
+// and looking toward a target brings it into reach. `head`: the head camera's axes in the
+// aim's frame. kReachSlack keeps the head's motion until the render, and the game's lag
+// behind the aim, inside the budget. True when the aim was brought back.
+inline constexpr float kReachSlack = 0.05f;
+inline bool LimitAimToRender(const CameraAxes& head, AimAngle& aim, const math::FovTangents& left,
+                             const math::FovTangents& right, float aspect, float maxFovY = kGunAimFovBudget - kReachSlack) {
+    const float budget = std::max(RequiredVerticalFov(left, right, aspect), maxFovY);
+    auto fits = [&](const AimAngle& a) {
+        return RequiredVerticalFovRotated(RotationBetween(head, AimAxes(a)), left, right, aspect) <= budget;
+    };
+    if (fits(aim)) return false;
+    const CameraAxes target = AimAxes(aim);
+    auto toward = [&](float t) {
+        const CameraAxes c = TurnToward(head, target, t);
+        return CameraAim({c.row[2][0], c.row[2][1], c.row[2][2]});
+    };
+    float lo = 0, hi = 1;
+    for (int i = 0; i < 12; ++i) {
+        const float mid = 0.5f * (lo + hi);
+        if (fits(toward(mid))) lo = mid;
+        else hi = mid;
+    }
+    aim = toward(lo);
+    return true;
+}
 
 struct MotionAimInput {
     bool engage = false;    // world lane, campaign play, feature on
@@ -56,6 +103,12 @@ struct MotionAimInput {
     bool twoHanded = false;
     bool supportGrip = false;
     math::Vec3 rearGrip{}, frontGrip{};
+    // Gun follows aim (LimitAimToRender): the head camera's axes in the reference's frame,
+    // the eyes' FOV tangents and the render's aspect.
+    bool limitToRender = false;
+    CameraAxes head;
+    math::FovTangents eyes[2];
+    float aspect = 0;
 };
 
 struct MotionAimOutput {
@@ -121,6 +174,7 @@ public:
         AimAngle aim{hand->yaw, hand->pitch};
         twoHanded_ = TwoHanded(in, aim);
         out.twoHanded = twoHanded_;
+        if (in.limitToRender && LimitAimToRender(in.head, aim, in.eyes[0], in.eyes[1], in.aspect)) ++limited_;
         desired_ = {WrapPi(bodyYaw_ + aim.yaw), aim.pitch};
         // What moved since the last update: the target (hand, snap turn, the second hand
         // taking over or letting go) or the game. The guard only judges swings the game made.
@@ -153,6 +207,7 @@ public:
     std::uint64_t Mutes() const { return mutes_; }
     std::uint64_t Snaps() const { return snaps_; }
     std::uint64_t OscillationGuards() const { return guards_; }
+    std::uint64_t ReachLimited() const { return limited_; } // updates whose aim was brought back
     bool TwoHandedNow() const { return twoHanded_; }
     static constexpr int kMuteFrames = 60;
     AimAngle Desired() const { return desired_; }
@@ -289,7 +344,7 @@ private:
     long long pendingX_ = 0, pendingY_ = 0, windowCountsX_ = 0, windowCountsY_ = 0;
     std::array<int, 2> flightX_{}, flightY_{}; // counts sent in the last two updates
     Guard guardX_{}, guardY_{};
-    std::uint64_t updates_ = 0, guards_ = 0;
+    std::uint64_t updates_ = 0, guards_ = 0, limited_ = 0;
     float windowYaw_ = 0, windowPitch_ = 0;
     int windowFrames_ = 0;
     int muted_ = 0;

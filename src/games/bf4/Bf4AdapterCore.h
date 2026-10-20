@@ -14,11 +14,13 @@
 #include "Bf4MotionAim.h"
 #include "Bf4BodyGestures.h"
 #include "Bf4PhysicalCrouch.h"
+#include "Bf4StickChord.h"
 #include "Bf4WorldView.h"
 #include "stereo/SideBySide.h"
 #include "stereo/StereoProbe.h"
 #include "../../engines/frostbite/Fb3CameraMath.h"
 #include "fvr/game/Capability.h"
+#include "fvr/interaction/ControllerInput.h"
 #include "fvr/interaction/ReloadPolicy.h"
 #include "fvr/ui/ModMenuPanel.h"
 
@@ -119,6 +121,10 @@ struct PlatformFrame {
     std::uint64_t tickMs = 0;
     std::uint32_t backbufferWidth = 0, backbufferHeight = 0;
     int clientWidth = 0, clientHeight = 0;
+    // The game's window is in front and shows the system cursor: BF4's own menus (pause,
+    // death, mission end) own the screen. Hidden in play (live, 2026-10-19: pause menu
+    // CURSOR_SHOWING with a cursor handle; playing, neither).
+    bool gameCursor = false;
 };
 
 struct StereoStats {
@@ -138,6 +144,8 @@ struct CoreStats {
     std::uint64_t reloadRequests = 0;
     std::uint64_t cameraFrames = 0;
     std::uint64_t recenters = 0;
+    std::uint64_t recenterGestures = 0; // both stick clicks held a second
+    std::uint64_t gameMenus = 0;        // times BF4's own menu took the screen during a level
     std::uint64_t menuPanels = 0;
     std::uint64_t menuCommands = 0;
     std::uint64_t padFrames = 0;
@@ -177,6 +185,7 @@ public:
     const BindingTable& Bindings() const { return bindings_; }
     const interaction::ReloadModeResolution& ReloadMode() const { return reloadMode_; }
     StereoMode Stereo() const { return stereo_; }
+    bool GameMenuOnScreen() const { return gameUi_; } // BF4's own menu during a level (theater view)
     const CoreStats& Stats() const { return stats_; }
     std::uint64_t Clicks() const { return pointer_.Clicks(); }
     std::string Status() const;
@@ -210,6 +219,16 @@ private:
     float halfEyeDistance_ = 0; // the headset's, from the latest world request
     bool haveReference_ = false;
     bool recenterWasDown_ = false;
+    // BF4's host runs without --roomscale, where the host itself would take the both-sticks
+    // hold: the adapter recognises it from the controller sample instead.
+    interaction::RecenterGesture recenterGesture_;
+    StickChord stickChord_;
+    // BF4's own menu on screen (PlatformFrame::gameCursor) for kGameUiFrames frames in a row
+    // switches to the theater view; as many frames without it switch back.
+    static constexpr int kGameUiFrames = 4;
+    bool gameUi_ = false;
+    int gameUiRun_ = 0;
+    void UpdateGameUi(const PlatformFrame& frame);
     bool detached_ = false;
     bool adopted_ = false;
     std::uint64_t lastModuleScan_ = 0;
@@ -226,7 +245,7 @@ private:
     bool padActive_ = false;
     std::uint16_t padPulse_ = 0;
     int padPulseFrames_ = 0;
-    void UpdatePad(const ControllerSnapshot& input);
+    void UpdatePad(const ControllerSnapshot& input, const PlatformFrame& frame);
     void UpdateGestures(const ControllerSnapshot& input, const PlatformFrame& frame);
     void ResolveReload();
     BodyGestures gestures_;
@@ -240,6 +259,8 @@ private:
     MotionAimOutput aim_{};
     static constexpr std::uint64_t kWorldLaneHoldMs = 500; // lease gaps shorter than this keep aiming engaged
     std::uint64_t lastLeaseMs_ = 0;
+    math::FovTangents lastEyeFov_[2]; // the latest world request's eyes (gun follows aim's reach)
+    bool haveEyeFov_ = false;
     ComfortVignette vignette_;
     bool twoHandedWas_ = false;
     std::uint64_t twoHandedEngages_ = 0;

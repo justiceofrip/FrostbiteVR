@@ -65,3 +65,15 @@ Decisions worth keeping:
 - Three frame channels by default: +18 % eye pairs at frame sync 2 (44.8 -> 52.9/s, close
   to the game's ~59 limit there) for ~6-14 ms more request latency; fresher pairs were
   judged worth more than the latency the compositor's reprojection hides.
+- Past the FOV budget the aim is held back instead of the gun: the controller's aim target
+  is limited to the cone the render can turn to all the way, so the barrel stays on the
+  bullets' line and stops at that edge (turning the head brings more into reach). The
+  partial follow it replaces let the bullets leave the barrel (live: 15 degrees up with the
+  head level, the gun a third of the way).
+- BF4's own menus in a level (pause, death, mission end) are recognised by the system
+  cursor being shown while the game window is in front (Win32 only, no game memory; live:
+  shown in the pause menu, hidden in play) and go to the theater screen, where the laser
+  works; controller aim stops sending mouse look meanwhile.
+- The both-sticks recenter is recognised by the BF4 adapter itself (the shared host takes
+  it only in roomscale mode, which BF4 does not use); a chord of both stick clicks never
+  reaches the game, while a lone click still does after 80 ms or as a tap.

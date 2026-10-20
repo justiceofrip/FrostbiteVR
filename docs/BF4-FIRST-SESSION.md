@@ -1,4 +1,4 @@
-# BF4 headset session: checklist (0.4.55-local)
+# BF4 headset session: checklist (0.4.58-local)
 
 What to try in the next headset session, and what each check tells us. About 15 minutes.
 The game side of everything below already ran live without a headset (simulated headset,
@@ -33,8 +33,9 @@ raise BF4's Video > Resolution Scale (150-200 %) before judging blur.
    head pose in the live check) and note whether the world swims or looks smoother.
 2. Aim with the right controller: the game's aim follows it, a **green ring** shows where
    shots go, and the gun itself now points there too (menu: Gun follows aim): turn the
-   controller and the barrel swings onto the ring. Note whether it stays steady and sharp;
-   looking far away from where the gun points, it follows only part of the way. Grip with the left hand in
+   controller and the barrel swings onto the ring. Note whether it stays steady and sharp.
+   Pointing far from where you look, gun and shots stop together at the edge of what the
+   view can follow; look toward the target to reach further. Grip with the left hand in
    front of the gun to aim with both hands. The right stick turns in **30 degree steps**
    (menu: Snap turning off for smooth).
 3. The ammo panel and minimap appear as small framed insets in your lower right and left
@@ -53,7 +54,12 @@ raise BF4's Video > Resolution Scale (150-200 %) before judging blur.
    at once, or to use / pick up things (it holds the pad's X, BF4's interact button).
 7. Optional, standing: menu > Physical crouch > On, then crouch for real.
 8. If something feels wrong, open the menu and click "Mark this moment for feedback".
-9. Quit from the game's own menu, so the launcher restores the game folder.
+9. Menu > Game menu (pause): BF4's pause menu should appear on the flat screen (not around
+   you); click RESUME with the laser and the head-tracked view returns. The same holds
+   for BF4's death and mission-end screens.
+10. Recenter: hold both stick clicks for a second (or menu > Recenter view). Nothing in the
+   game should react to that hold (it used to draw the knife).
+11. Quit from the game's own menu, so the launcher restores the game folder.
 
 ## Try: 3D from depth
 

@@ -54,7 +54,7 @@ void AdapterCore::UpdateModMenu(const ControllerSnapshot& in) {
         ui::LayoutModMenu(modMenu_, menuPanel_); // show the change in this frame's panel
 }
 
-void AdapterCore::UpdatePad(const ControllerSnapshot& in) {
+void AdapterCore::UpdatePad(const ControllerSnapshot& in, const PlatformFrame& f) {
     // VR controllers -> virtual XInput pad. Presentation-level input like the laser (no
     // game memory), so it follows the presentation guard; neutral while the mod menu owns
     // input; reload only while button reload is effective and no native binding does it.
@@ -87,6 +87,14 @@ void AdapterCore::UpdatePad(const ControllerSnapshot& in) {
         pad_.buttons |= gesture_.padButtons;
         if (crouchPulse_) pad_.buttons |= interaction::pad::B;
         if (gesture_.blockFire) pad_.rightTrigger = 0;
+        // Both stick clicks together are the recenter gesture: neither reaches the game.
+        const auto stick = [&](unsigned hand) { return controls.focused && (controls.hands[hand].held & interaction::StickClick) != 0; };
+        const unsigned sticks = stickChord_.Update(stick(0), stick(1), static_cast<double>(f.tickMs) / 1000.0);
+        for (const auto& b : padLayout_.buttons)
+            if (b.control == interaction::VrControl::StickClick && b.hand < 2) {
+                if (sticks & (1u << b.hand)) pad_.buttons |= b.padButton;
+                else pad_.buttons &= static_cast<std::uint16_t>(~b.padButton);
+            }
     }
     if (aim_.engaged) {
         // The game aims by mouse now and turns with the body heading: no pad look, and
@@ -102,9 +110,9 @@ void AdapterCore::UpdatePad(const ControllerSnapshot& in) {
         pad_.thumbLY = toPad(forward);
         pad_.thumbLX = toPad(strafe);
     }
-    // Outside campaign play the trigger pointed at the screen is a mouse click, not the
-    // pad's trigger as well (the front end reacts to both).
-    if (in.pointer.active && !guard_.GameplayAllowed()) pad_.leftTrigger = pad_.rightTrigger = 0;
+    // Outside campaign play (and while BF4's own menu is up in a level) the trigger pointed
+    // at the screen is a mouse click, not the pad's trigger as well (menus react to both).
+    if (in.pointer.active && (!guard_.GameplayAllowed() || gameUi_)) pad_.leftTrigger = pad_.rightTrigger = 0;
     platform_.ApplyPad(pad_, true);
     padActive_ = true;
     ++stats_.padFrames;
@@ -309,11 +317,27 @@ bool AdapterCore::OnSplitFrame() {
     return true;
 }
 
+void AdapterCore::UpdateGameUi(const PlatformFrame& f) {
+    // Only during a level: the front end's menus are on the screen anyway.
+    const bool shown = f.gameCursor && guard_.GameplayAllowed();
+    if (shown == gameUi_) {
+        gameUiRun_ = 0;
+        return;
+    }
+    if (++gameUiRun_ < kGameUiFrames) return;
+    gameUiRun_ = 0;
+    gameUi_ = shown;
+    if (gameUi_) ++stats_.gameMenus;
+    platform_.Log(gameUi_ ? "game menu on screen: theater view" : "game menu closed");
+}
+
 StereoMode AdapterCore::ChooseStereo() const {
     const bool dev = session_.developerFeatures;
     const bool engine = EngineStereoAllowed();
-    const bool headTracked =
-        menuState_.headTracking && guard_.GameplayAllowed() && caps_.IsUsable(Feature::HeadTrackedCamera, dev);
+    // BF4's own menu in a level (pause, death, mission end) goes on the screen like the
+    // front end's: the head-tracked view would show a magnified piece of it, out of the laser's reach.
+    const bool headTracked = menuState_.headTracking && guard_.GameplayAllowed() && !gameUi_ &&
+                             caps_.IsUsable(Feature::HeadTrackedCamera, dev);
     if (!headTracked) return engine ? StereoMode::Theater3D : StereoMode::Off;
     if (caps_.IsUsable(Feature::StereoNative, dev)) return StereoMode::Native;
     if (engine) return StereoMode::EngineStereoTracked;
@@ -397,8 +421,29 @@ void AdapterCore::UpdateMotionAim(const ControllerSnapshot& in, const PlatformFr
     // body heading to the game's aim and reset the learned mouse gain.
     if (in.world.valid) lastLeaseMs_ = f.tickMs;
     const bool worldLane = lastLeaseMs_ && f.tickMs - lastLeaseMs_ <= kWorldLaneHoldMs;
-    m.engage = menuState_.controllerAim && !menuOpen_ && stereo_ == StereoMode::Mono && worldLane && haveReference_ &&
+    m.engage = menuState_.controllerAim && !menuOpen_ && !gameUi_ && stereo_ == StereoMode::Mono && worldLane && haveReference_ &&
                guard_.GameplayAllowed();
+    // Gun follows aim: the aim stays where the render can turn all the way to it, judged with
+    // the head pose the camera will carry (else the latest tracked one) and the lane's eyes.
+    if (in.world.valid) {
+        lastEyeFov_[0] = in.world.fov[0];
+        lastEyeFov_[1] = in.world.fov[1];
+        haveEyeFov_ = true;
+    }
+    const math::Pose* head = in.world.valid ? &in.world.head : (in.controls.focused && in.controls.headValid ? &in.controls.head : nullptr);
+    m.limitToRender = menuState_.gunFollowsAim && haveEyeFov_ && head && haveReference_;
+    if (m.limitToRender) {
+        const auto camera = XrPoseToBf4Camera(ApplyReference(reference_, *head));
+        const math::Vec3 rows[3] = {camera.right, camera.up, camera.forward};
+        for (int i = 0; i < 3; ++i) {
+            m.head.row[i][0] = rows[i].x;
+            m.head.row[i][1] = rows[i].y;
+            m.head.row[i][2] = rows[i].z;
+        }
+        m.eyes[0] = lastEyeFov_[0];
+        m.eyes[1] = lastEyeFov_[1];
+        m.aspect = f.backbufferHeight ? float(f.backbufferWidth) / float(f.backbufferHeight) : 16.0f / 9.0f;
+    }
     const auto& hand = in.controls.hands[1];
     m.aimTracked = in.controls.focused && hand.aimTracked;
     m.reference = reference_;
@@ -444,7 +489,7 @@ void AdapterCore::UpdateGestures(const ControllerSnapshot& in, const PlatformFra
     if (gameplay && !gameplayWas_) gestures_.OnLifetimeTransition(); // a level starts: full loadout
     gameplayWas_ = gameplay;
     BodyGestureInput g;
-    g.engage = gameplay && !menuOpen_ && caps_.IsUsable(Feature::VirtualGamepad, dev) && guard_.PresentationAllowed();
+    g.engage = gameplay && !menuOpen_ && !gameUi_ && caps_.IsUsable(Feature::VirtualGamepad, dev) && guard_.PresentationAllowed();
     g.holsters = menuState_.holsters;
     g.manualReload = reloadMode_.effective == interaction::ReloadMode::Manual;
     g.timeSeconds = static_cast<double>(f.tickMs) / 1000.0;
@@ -535,8 +580,14 @@ void AdapterCore::OnFrame(const PlatformFrame& f, const ControllerSnapshot& in) 
 
     // 2. Recenter: first valid pose sets the reference; afterwards on request edges only.
     //    The world lane's head pose wins (it is the pose the camera will carry).
+    //    Both stick clicks held a second (the host recenters by itself only in roomscale).
+    const bool gesture = !menuOpen_ && recenterGesture_.Update(in.controls);
+    if (gesture) {
+        ++stats_.recenterGestures;
+        platform_.Log("recenter: both sticks held");
+    }
     const bool headKnown = in.world.valid || in.valid;
-    if (headKnown && (!haveReference_ || (in.recenterRequested && !recenterWasDown_))) {
+    if (headKnown && (!haveReference_ || (in.recenterRequested && !recenterWasDown_) || gesture)) {
         if (haveReference_) ++stats_.recenters;
         reference_ = RecenterReference(in.world.valid ? in.world.head : in.head);
         haveReference_ = true;
@@ -544,11 +595,12 @@ void AdapterCore::OnFrame(const PlatformFrame& f, const ControllerSnapshot& in) 
     recenterWasDown_ = in.valid && in.recenterRequested;
 
     // 3. Menus. FrostbiteVR's own menu takes the laser while open; otherwise the laser
-    //    drives BF4's menus through the Win32 cursor path.
+    //    drives BF4's menus through the Win32 cursor path, BF4's in-level ones on the screen.
+    UpdateGameUi(f);
     UpdateModMenu(in);
     UpdateMotionAim(in, f);
     UpdateGestures(in, f);
-    UpdatePad(in);
+    UpdatePad(in, f);
     if (!menuOpen_ && caps_.IsUsable(Feature::GameMenuPointer, dev) && guard_.PresentationAllowed()) {
         pointer_.Update(in.pointer, f.clientWidth, f.clientHeight, events_);
     } else {
@@ -671,13 +723,17 @@ std::string AdapterCore::Status() const {
                   pad_.leftTrigger, pad_.rightTrigger, pad_.thumbLX, pad_.thumbLY, pad_.thumbRX, pad_.thumbRY);
     s += padLine;
     s += "clicks_posted=" + std::to_string(pointer_.Clicks()) + "\n";
-    char aimLine[256];
+    char aimLine[384];
     std::snprintf(aimLine, sizeof(aimLine),
-                  "controller_aim=%s body_yaw=%.3f gain=%.6f,%.6f mutes=%llu snaps=%llu two_handed=%llu guards=%llu\n",
+                  "controller_aim=%s body_yaw=%.3f gain=%.6f,%.6f mutes=%llu snaps=%llu two_handed=%llu guards=%llu "
+                  "reach_limited=%llu recenters=%llu recenter_gestures=%llu stick_chords=%llu game_menus=%llu game_menu=%s\n",
                   aim_.engaged ? "engaged" : "off", aim_.bodyYaw, motionAim_.GainX(), motionAim_.GainY(),
                   static_cast<unsigned long long>(motionAim_.Mutes()), static_cast<unsigned long long>(motionAim_.Snaps()),
                   static_cast<unsigned long long>(twoHandedEngages_),
-                  static_cast<unsigned long long>(motionAim_.OscillationGuards()));
+                  static_cast<unsigned long long>(motionAim_.OscillationGuards()),
+                  static_cast<unsigned long long>(motionAim_.ReachLimited()), static_cast<unsigned long long>(stats_.recenters),
+                  static_cast<unsigned long long>(stats_.recenterGestures), static_cast<unsigned long long>(stickChord_.Chords()),
+                  static_cast<unsigned long long>(stats_.gameMenus), gameUi_ ? "on" : "off");
     s += aimLine;
     s += gestures_.Describe() + " holsters=" + (menuState_.holsters ? "on" : "off") +
          " crouch=" + (crouch_.Crouched() ? "crouched" : "standing") + " crouch_toggles=" + std::to_string(crouch_.Toggles()) + "\n";

@@ -385,6 +385,70 @@ TEST_CASE(GunFollowsAimRotatesEachEyeIntoTheAimRender) {
     CHECK(inside);
 }
 
+TEST_CASE(GunFollowsAimKeepsTheAimWhereTheRenderCanFollow) {
+    using namespace fvr::bf4;
+    const float deg = 3.14159265f / 180;
+    const fvr::math::FovTangents eyeL{-1.0f, 0.9f, 1.0f, -1.1f}, eyeR{-0.9f, 1.0f, 1.0f, -1.1f};
+    const float aspect = 16.0f / 9.0f;
+    // AimAxes is BF4's own camera (no roll).
+    const CameraAxes a = AimAxes({20 * deg, -10 * deg}), b = Turned(20 * deg, -10 * deg);
+    bool same = true;
+    for (int i = 0; i < 3; ++i)
+        for (int k = 0; k < 3; ++k) same = same && Near(a.row[i][k], b.row[i][k], 1e-5f);
+    CHECK(same);
+    const CameraAxes level = Turned(0, 0);
+    // Within reach: unchanged.
+    AimAngle close{5 * deg, -3 * deg};
+    CHECK(!LimitAimToRender(level, close, eyeL, eyeR, aspect) && Near(close.yaw, 5 * deg) && Near(close.pitch, -3 * deg));
+    // 15 degrees up with the head level (live, the barrel stopped a third of the way): brought
+    // back along the same line until the render turns all the way, with the slack to spare.
+    AimAngle up{0, 15 * deg};
+    CHECK(LimitAimToRender(level, up, eyeL, eyeR, aspect));
+    CHECK(up.pitch > 2 * deg && up.pitch < 15 * deg && Near(up.yaw, 0.0f, 1e-3f));
+    CHECK(Near(GunAimRotation(level, AimAxes(up), eyeL, eyeR, aspect).fraction, 1.0f));
+    CHECK(RequiredVerticalFovRotated(RotationBetween(level, AimAxes({0, up.pitch + 1 * deg})), eyeL, eyeR, aspect) >
+          kGunAimFovBudget - kReachSlack);
+    // The reach turns with the head: looking 30 degrees right, the same 15 degrees up relative to it.
+    AimAngle turned{30 * deg, 15 * deg};
+    CHECK(LimitAimToRender(Turned(30 * deg, 0), turned, eyeL, eyeR, aspect));
+    CHECK(Near(turned.yaw, 30 * deg, 1e-3f) && Near(turned.pitch, up.pitch, 1e-3f));
+    // Pointing behind: still a finite aim the render follows all the way.
+    AimAngle behind{170 * deg, 0};
+    CHECK(LimitAimToRender(level, behind, eyeL, eyeR, aspect));
+    CHECK(std::isfinite(behind.yaw) && std::fabs(behind.yaw) < 90 * deg &&
+          Near(GunAimRotation(level, AimAxes(behind), eyeL, eyeR, aspect).fraction, 1.0f));
+}
+
+TEST_CASE(StickChordKeepsTheRecenterGestureFromTheGame) {
+    fvr::bf4::StickChord chord;
+    double t = 0;
+    auto step = [&](bool left, bool right) { return chord.Update(left, right, t += 0.011); };
+    // A held click reaches the game once it has waited for the other stick (sprint)...
+    unsigned first = 0, last = 0;
+    for (int i = 0; i < 10; ++i) {
+        last = step(true, false);
+        if (i == 0) first = last;
+    }
+    CHECK(first == 0 && last == 1u);
+    CHECK(step(false, false) == 0); // ...and stops with it.
+    // A quicker click (melee) still reaches the game, as a tap once released.
+    for (int i = 0; i < 3; ++i) CHECK(step(false, true) == 0);
+    CHECK(step(false, false) == 2u);
+    for (int i = 0; i < 8; ++i) step(false, false);
+    CHECK(step(false, false) == 0);
+    // Both together (recenter): neither, from the first press to the last release, however
+    // the presses and releases are staggered.
+    unsigned seen = 0;
+    for (int i = 0; i < 2; ++i) seen |= step(false, true);
+    for (int i = 0; i < 100; ++i) seen |= step(true, true);
+    for (int i = 0; i < 3; ++i) seen |= step(false, true);
+    for (int i = 0; i < 10; ++i) seen |= step(false, false);
+    CHECK(seen == 0 && chord.Chords() == 1);
+    // Afterwards a lone click works again.
+    for (int i = 0; i < 10; ++i) last = step(true, false);
+    CHECK(last == 1u);
+}
+
 TEST_CASE(WorldLaneCropsDecisionsAndFallback) {
     using namespace fvr::bf4;
     // An eye whose FOV equals the render's covers the whole image; a narrower, asymmetric

@@ -1053,6 +1053,11 @@ void OnPresent(Adapter& a, IDXGISwapChain* sc) {
     GetClientRect(a.platform.window, &client);
     f.clientWidth = client.right - client.left;
     f.clientHeight = client.bottom - client.top;
+    if (a.platform.window && GetForegroundWindow() == a.platform.window) { // Win32 state only, no game memory
+        CURSORINFO cursor{};
+        cursor.cbSize = sizeof(cursor);
+        f.gameCursor = GetCursorInfo(&cursor) && (cursor.flags & CURSOR_SHOWING) && cursor.hCursor;
+    }
     ControllerSnapshot in;
     a.input->Poll(in);
     a.platform.TryBindShim();

@@ -271,6 +271,9 @@ TEST_CASE(EmuControllerAimInTheHeadTrackedView) {
     core.OnSwapchainAdopted(true);
     platform.Campaign();
     platform.aimKnown = true;
+    // The aim loop itself: 30 degrees from the head is beyond the gun's reach when the gun
+    // follows the aim (EmuGunFollowsAimKeepsTheBulletsOnTheBarrel).
+    CHECK(core.SetMenuSetting("gun_aim", 0));
     Clock clock;
     auto frame = [&](double t, float handYaw, float stickX, float leftY) {
         auto in = Input(t);
@@ -402,6 +405,7 @@ TEST_CASE(EmuControllerAimHoldsAcrossLeaseGaps) {
     core.OnSwapchainAdopted(true);
     platform.Campaign();
     platform.aimKnown = true;
+    CHECK(core.SetMenuSetting("gun_aim", 0)); // 30 degrees from the head is beyond the gun's reach
     Clock clock;
     int n = 0;
     auto frame = [&](float handYaw) {
@@ -449,6 +453,7 @@ TEST_CASE(EmuControllerAimSettlesWithLongerInputDelays) {
         core.OnSwapchainAdopted(true);
         platform.Campaign();
         platform.aimKnown = true;
+        CHECK(core.SetMenuSetting("gun_aim", 0)); // the swings go beyond the gun's reach
         Clock clock;
         int n = 0;
         auto frame = [&](float handYaw) {
@@ -637,4 +642,148 @@ TEST_CASE(EmuNextLeasePoseReachesTheCameraInTheCapturingFrame) {
     platform.nextWorld = {}; // nothing queued: no second camera write
     core.OnFrame(clock.Next(), in);
     CHECK(platform.cameraLog.size() == before + 3);
+}
+
+namespace {
+// A campaign frame on the world lane with a full controller sample (hands tracked, head valid).
+struct LaneFrame {
+    ControllerSnapshot in;
+    explicit LaneFrame(double t, std::uint64_t generation) : in(Input(t)) {
+        in.world.valid = true;
+        in.world.poseId = 100 + generation;
+        in.world.head = in.head;
+        in.world.fov[0] = {-1.0f, 0.9f, 1.0f, -1.1f};
+        in.world.fov[1] = {-0.9f, 1.0f, 1.0f, -1.1f};
+        auto& c = in.controls;
+        c.focused = c.headValid = true;
+        c.head = c.referenceHead = in.head;
+        c.generation = generation;
+        c.spaceGeneration = 1;
+        c.predictedNs = 1000000 + static_cast<std::int64_t>(t * 1e9);
+        for (auto& h : c.hands) {
+            h.active = interaction::Components;
+            h.gripTracked = h.aimTracked = true;
+            h.grip.position = {0.2f, 1.3f, -0.3f};
+            h.aim = h.grip;
+        }
+    }
+};
+} // namespace
+
+TEST_CASE(EmuGameMenuInALevelGoesToTheScreen) {
+    // BF4's own menu in a level (pause) shows the game's cursor (live, 2026-10-19): the view
+    // goes to the screen for the laser and the gun stops steering the game's cursor; back to
+    // the head-tracked view when it closes.
+    FakeImage image({names::kGameRenderer, names::kRenderViewUpdate, names::kClientGameContext, names::kLevelName});
+    FakePlatform platform;
+    AdapterCore core(Session(true), X64(), image.Resolve(), platform);
+    core.OnSwapchainAdopted(true);
+    platform.Campaign();
+    platform.aimKnown = true;
+    Clock clock;
+    std::uint64_t n = 0;
+    auto frame = [&](bool cursor, bool pointerTrigger = false) {
+        LaneFrame l(n / 90.0, ++n);
+        l.in.controls.hands[1].aim.orientation = math::FromAxisAngle({0, 1, 0}, -0.2f); // 0.2 rad right
+        if (pointerTrigger) {
+            l.in.pointer.active = true;
+            l.in.controls.hands[1].trigger = 1.0f;
+        }
+        auto f = clock.Next();
+        f.gameCursor = cursor;
+        platform.GameFrame();
+        core.OnFrame(f, l.in);
+    };
+    for (int i = 0; i < 60; ++i) frame(false);
+    CHECK(core.Stereo() == StereoMode::Mono && !core.GameMenuOnScreen() && platform.mouseCalls > 0);
+    // A cursor for a frame or two is no menu.
+    frame(true);
+    frame(true);
+    frame(false);
+    CHECK(core.Stereo() == StereoMode::Mono && !core.GameMenuOnScreen());
+    for (int i = 0; i < 6; ++i) frame(true);
+    CHECK(core.GameMenuOnScreen() && core.Stereo() == StereoMode::Off && !platform.frames.back().world);
+    const int calls = platform.mouseCalls;
+    for (int i = 0; i < 20; ++i) frame(true, true);
+    CHECK(platform.mouseCalls == calls);         // no mouse look into the menu
+    CHECK(platform.pad.rightTrigger == 0);       // the trigger at the screen clicks, not fires
+    CHECK(core.Status().find("game_menu=on") != std::string::npos);
+    for (int i = 0; i < 6; ++i) frame(false);
+    CHECK(!core.GameMenuOnScreen() && core.Stereo() == StereoMode::Mono && core.Stats().gameMenus == 1);
+    for (int i = 0; i < 30; ++i) frame(false);
+    CHECK(platform.mouseCalls > calls); // aiming again
+    // The front end's menus are on the screen anyway: not counted as an in-level menu.
+    platform.level = "Levels/FrontEnd/FrontEnd";
+    for (int i = 0; i < 10; ++i) frame(true);
+    CHECK(!core.GameMenuOnScreen() && core.Stats().gameMenus == 1);
+}
+
+TEST_CASE(EmuBothSticksHeldRecenterWithoutReachingTheGame) {
+    // BF4's host runs without --roomscale, so the adapter takes the both-sticks hold itself;
+    // neither click reaches the game meanwhile (live, 2026-10-19: the right one drew the knife).
+    FakeImage image({names::kGameRenderer, names::kRenderViewUpdate, names::kClientGameContext, names::kLevelName});
+    FakePlatform platform;
+    AdapterCore core(Session(true), X64(), image.Resolve(), platform);
+    core.OnSwapchainAdopted(true);
+    platform.Campaign();
+    Clock clock;
+    std::uint64_t n = 0;
+    bool leaked = false;
+    auto frame = [&](float headYaw, bool left, bool right) {
+        LaneFrame l(n / 90.0, ++n);
+        const auto q = math::FromAxisAngle({0, 1, 0}, headYaw);
+        l.in.head.orientation = l.in.world.head.orientation = l.in.controls.head.orientation = q;
+        if (left) l.in.controls.hands[0].held |= interaction::StickClick;
+        if (right) l.in.controls.hands[1].held |= interaction::StickClick;
+        core.OnFrame(clock.Next(), l.in);
+        leaked = leaked || (platform.pad.buttons & (interaction::pad::LeftThumb | interaction::pad::RightThumb));
+    };
+    for (int i = 0; i < 5; ++i) frame(0, false, false);
+    // Turned 0.5 rad left; the view follows the head until the recenter.
+    for (int i = 0; i < 5; ++i) frame(0.5f, false, false);
+    CHECK(Near(platform.cameraLog.back()[0].local.forward.x, std::sin(0.5f), 1e-3f)); // back row of a left turn
+    frame(0.5f, false, true); // the right stick a frame early
+    for (int i = 0; i < 100; ++i) frame(0.5f, true, true); // 1.1 s
+    frame(0.5f, true, false);
+    for (int i = 0; i < 5; ++i) frame(0.5f, false, false);
+    CHECK(!leaked);
+    CHECK(core.Stats().recenters == 1 && core.Stats().recenterGestures == 1);
+    CHECK(Near(platform.cameraLog.back()[0].local.forward.z, 1.0f, 1e-3f)); // straight ahead again
+    // A lone click still reaches the game (sprint).
+    for (int i = 0; i < 12; ++i) frame(0.5f, true, false);
+    CHECK(platform.pad.buttons & interaction::pad::LeftThumb);
+}
+
+TEST_CASE(EmuGunFollowsAimKeepsTheBulletsOnTheBarrel) {
+    // The hand 30 degrees up with the head level. Gun follows aim: the game's aim stops where
+    // the render can turn all the way to it (the barrel on the bullets' line). Off: the aim
+    // follows the hand and the gun stays in front of the face.
+    const float up = 0.5235988f;
+    AimAngle expected{0, up};
+    CHECK(LimitAimToRender(CameraAxes{}, expected, {-1.0f, 0.9f, 1.0f, -1.1f}, {-0.9f, 1.0f, 1.0f, -1.1f}, 1920.0f / 1080.0f));
+    for (const bool follow : {true, false}) {
+        FakeImage image({names::kGameRenderer, names::kRenderViewUpdate, names::kClientGameContext, names::kLevelName});
+        FakePlatform platform;
+        AdapterCore core(Session(true), X64(), image.Resolve(), platform);
+        core.OnSwapchainAdopted(true);
+        platform.Campaign();
+        platform.aimKnown = true;
+        CHECK(core.SetMenuSetting("gun_aim", follow ? 1 : 0));
+        Clock clock;
+        for (std::uint64_t n = 0; n < 300; ++n) {
+            LaneFrame l(n / 90.0, n + 1);
+            l.in.controls.hands[1].aim.orientation = math::FromAxisAngle({1, 0, 0}, up);
+            platform.GameFrame();
+            core.OnFrame(clock.Next(), l.in);
+        }
+        CHECK(Near(WrapPi(platform.gameAim.yaw - 0.5f), 0.0f, 0.01f));
+        if (follow) {
+            CHECK(expected.pitch > 0.03f && expected.pitch < up - 0.1f);
+            CHECK(Near(platform.gameAim.pitch, expected.pitch, 0.01f));
+            CHECK(core.Status().find("reach_limited=0 ") == std::string::npos);
+        } else {
+            CHECK(Near(platform.gameAim.pitch, up, 0.01f));
+            CHECK(core.Status().find("reach_limited=0 ") != std::string::npos);
+        }
+    }
 }

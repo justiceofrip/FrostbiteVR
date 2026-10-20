@@ -18,15 +18,17 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   three sessions (09:16-10:19; rotation was inverted and the gun oversized, both fixed in
   0.4.16); everything built since 0.4.17 is unseen in a headset.
 
-## At a glance (installed: 0.4.56-local)
+## At a glance (installed: 0.4.58-local)
 
 | Feature | State | Evidence |
 | --- | --- | --- |
 | Theater screen + laser menus | on | headset; live sim: laser Resume and mod menu clicks |
 | Head-tracked campaign view (6DoF head) | on | headset (earlier build); live sim: direction, labels 100 % |
 | Three frame channels + next pose in the capturing frame | on | live sim: 52.9 pairs/s at 117.7 game fps (2: 44.8), labels 525/525 |
-| Controller aim (mouse look), aim dot, two-handed aim, snap turn | on | live sim: gain learned = measured, 20 deg -> 19.6 deg |
-| Gun follows aim (barrel on the bullets' line) | on | live sim: gun/laser on the aim, labels 335/335 |
+| Controller aim (mouse look), aim dot, two-handed aim, snap turn | on | live sim: gain learned = measured, 20 deg -> 19.6 deg; ADS and firing |
+| Gun follows aim (barrel on the bullets' line), reach limit | on | live sim: gun/laser on the aim, labels 335/335; past the reach gun and dot stop together |
+| BF4's pause/death/end menus in a level on the theater screen | on | live sim: pause -> screen -> laser RESUME -> head-tracked, twice |
+| Recenter: both stick clicks 1 s (or mod menu) | on | live sim: recentered twice, no stick click reached the game |
 | Comfort vignette, walk toward body/gun | on / body | live sim (vignette seen while walking) |
 | Holsters (keys 1/2/3, G, F) with pulses | on | live sim: 1, 3, grenade, knife work; 2 not seen (no sidearm) |
 | Manual reload (magazine gesture; B tap/hold) with markers | on (player setting) | live sim: B, belt, magwell -> BF4 reloads |
@@ -113,6 +115,26 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   - 3D from depth: see that section (depth found, parallax direction right).
   - BF4's split 3D (third session, 0.4.47-local): reproduced the headset "freeze" in
     0.1 s and caught it as a crash in the one-view world renderer (Stereo, below).
+- Play-flow sessions (2026-10-19 evening, Baku; navigation by the VR laser only):
+  - 0.4.57-local (session 11): left trigger aims down sights: the holographic sight comes
+    up with its dot where the hip crosshair was, BF4 asks for FOV 0.785 -> 0.698 and the
+    render stays at 2.10 (no zoom in VR); the learned gain followed BF4's ADS sensitivity
+    (0.0014 -> 0.00084 rad/count, no guard), 2 guard steps on leaving ADS, no runaway.
+    Right trigger fires (20 -> 15 -> 11 rounds, impacts on the aim dot). Three faults
+    found: past the FOV budget the gun stopped short of the aim (fixed: reach limit);
+    "Game menu (pause)" left the head-tracked view on a magnified piece of the pause menu
+    and controller aim drove its cursor to the edge (fixed: Game menus in a level); the
+    both-sticks recenter did nothing and drew the knife (fixed: recenter gesture).
+  - 0.4.58-local (session 12): hand 15 deg up with the head level: BF4's crosshair, gun and
+    aim dot together about 5 deg up (Quest-like eyes reach little upward); pause through
+    the mod menu -> theater screen in 0.28-0.29 s with the whole pause menu, cursor left
+    centred, laser click on RESUME (224, 247) -> game resumed, `game menu closed`, aim
+    re-engaged (twice); both sticks held 1.3 s with the right one pressed first ->
+    `recenter: both sticks held`, view recentered (checked by a second recenter at a fixed
+    head pose shifting the view ~30 deg), rifle still in hand. One 10 s stall (no Present
+    from about 21:40:40 to 21:40:50, main thread in the window message pump under the
+    Steam and EA overlay hooks) swallowed one laser click on the mod menu; 20 s with the
+    menu open later did not repeat it. Cause unknown (Open, below).
 
 ## Gun follows aim: the barrel on the bullets' line (2026-10-19, built; live sim)
 
@@ -136,8 +158,20 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   more); the turn stops at a 2.1 rad (~120 deg) vertical budget (`kGunAimFovBudget`). Quest-like
   eyes (head-only 1.88 rad): full follow up to ~20 deg sideways or ~7 deg down (up/down costs
   most: the vertical FOV is already the limit); the centre is up to ~22 % less sharp then.
-  Beyond the budget the gun follows part of the way (looking far from where the gun points).
   Lens corners that fall just outside take the frame's edge colour.
+- Reach (2026-10-19, session 11 finding): beyond the budget the gun used to follow only part
+  of the way while the bullets went on along the controller (live: hand 15 deg up with the
+  head level, gun and BF4 crosshair a third of the way to the aim dot; the menu pose 42 deg
+  left/21 up barely moved them). Now the aim itself is kept inside the reach: the
+  controller's direction is brought back toward the head, along the turn between them,
+  until the render can turn all the way with 0.05 rad to spare (`LimitAimToRender` in
+  `Bf4MotionAim.h`, judged with the lease's head pose and eyes). Barrel and bullets then
+  stop together at that edge; looking toward a target brings it into reach. Log:
+  `reach_limited=` (updates whose aim was held back). With "Gun follows aim" off the aim
+  follows the hand fully (the gun then stays in front of the face; the aim dot shows the
+  shots). Live (0.4.58-local): hand 15 deg up with the head level put crosshair, gun and
+  aim dot together about 5 deg up. The upward reach is small for Quest-like eyes (their
+  vertical FOV is already the render's limit); a wider budget would cost sharpness.
 - Mod menu "Gun follows aim: Off / On" (default on). Log: `aim_pairs=` (theater_link),
   `rendered_fov=` (view_override).
 - Evidence: unit tests (rotation math, ellipse coverage, budget, the override's aim-turned
@@ -148,6 +182,35 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   ends on the aim dot; pose-label check 335/335 with head flips of 25 deg and the aim off
   centre; 3D from depth coherent with the turn; hand 50 deg down while looking ahead hits
   the budget (partial follow, as designed). Not seen in a headset yet.
+
+## Game menus in a level, recenter gesture (2026-10-19, built; emulated; live sim)
+
+- Found live (session 11): pausing through the mod menu's "Game menu (pause)" kept the
+  head-tracked view, because BF4 keeps rendering the world behind its pause menu. The
+  headset then showed a magnified, gun-turned piece of the 2D menu with RESUME out of view
+  and no screen for the laser; controller aim also pushed the menu's cursor to the edge.
+  Pad Start does not close the menu again; pad A (RESUME is preselected) did.
+- Signal (Win32 only, no game memory): BF4 shows the system cursor in its menus and hides
+  it in play (live: pause menu `CURSOR_SHOWING` with a cursor handle; playing, flags 0 and
+  no handle). With the game window in front and a campaign level loaded, 4 frames of a
+  shown cursor switch to the theater screen (the laser clicks there, the triggers are not
+  the pad's, controller aim and body gestures stop); 4 frames hidden switch back. Covers
+  the death and mission-end screens too. Log: `game menu on screen: theater view` /
+  `game menu closed`; status `game_menus=` / `game_menu=`.
+- Recenter by holding both stick clicks 1 s (as the mod menu says) never worked in BF4: the
+  shared XR host takes that gesture only in roomscale mode, which BF4's host does not use,
+  and nothing set the adapter's request. Live, the hold did nothing but drew the knife (BF4's
+  pad: left click sprints, right click melees). The adapter now runs the framework's
+  `RecenterGesture` on the controller sample, and `StickChord` keeps both clicks from the
+  game while they are held together (a lone click reaches it after 80 ms, or as a 60 ms tap
+  when released sooner). Log: `recenter: both sticks held`; status `recenters=`,
+  `recenter_gestures=`, `stick_chords=`.
+- Evidence: unit tests (`StickChord`, reach limit) and emulated campaign sessions (game
+  menu on/off with flicker rejection, no mouse or pad trigger into the menu, front end not
+  counted; both-sticks recenter with a staggered press and no pad click leaking; reach
+  limit through the real core, on and off). Live on the simulated headset (0.4.58-local):
+  pause and resume twice, two recenters (Simulated headset, above). Not seen: the death
+  and mission-end screens, a headset.
 
 ## Head tracking: the world lane (2026-10-19, built; seen in a headset)
 
@@ -370,7 +433,9 @@ the theater screen. Pieces (all on the analysed build only):
 - Paused game (BF4's Esc menu moves a cursor with the mouse): when a 20-sample window sent
   200 counts or more and the game did not turn at all, aiming goes quiet for 1 s, then 2,
   4, 8 s while it keeps happening; any turn resets that. (The old 1500-count threshold
-  never tripped at the cautious first gain.) Unit-tested.
+  never tripped at the cautious first gain.) Unit-tested. Live (session 11) this was not
+  enough: aiming re-engaged when the mod menu closed and pushed the pause menu's cursor to
+  the screen edge. BF4's own menus now release aiming outright (Game menus in a level).
 - Aiming stays engaged across short gaps between world-lane leases (500 ms hold). Before,
   each frame without a lease released it, and re-engaging re-anchored the body heading to
   the game's aim (a view jump by the controller's offset) and reset the learned mouse gain;
@@ -384,8 +449,9 @@ the theater screen. Pieces (all on the analysed build only):
   Status/log: `controller_aim=... gain=... mutes=... mouse_sends=...`.
 - Evidence: unit tests (convergence onto controller yaw/pitch, gain learning with signs,
   body turning, release, stall guard) and an emulated campaign session with a one-frame
-  input delay (core + fake game); live on the simulated headset (above). Not seen in the
-  real game: vehicles, recoil interplay, aim-down-sights sensitivity.
+  input delay (core + fake game); live on the simulated headset (above), including
+  aim-down-sights (gain followed BF4's ADS sensitivity) and firing. Not seen in the real
+  game: vehicles, recoil interplay.
 - The gun is still the game's first-person model at the game camera (it points where the
   controller points); hands/IK are separate work.
 - Aim dot (mod menu "Aim dot", default on): BF4 draws its crosshair at the centre of the
@@ -629,17 +695,20 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
   dead "Screen distance" entry is gone (the host has no way to receive it yet). Unit
   test: every item on the panel, none overlapping; a GDI render of the developer menu was
   checked by eye.
-- Build.ps1 after the guard fix and the simulated headset: x64 284/284, x86 283/283.
-  Bf4CoreTests 83 cases (new: research commands, target teleports at a learned gain,
-  split 3D stays off, gun-follows-aim rotation);
+- Build.ps1 after the reach limit, game menus and recenter gesture: x64 284/284, x86
+  283/283. Bf4CoreTests 88 cases (new: reach limit, stick chord, game menu in a level,
+  both-sticks recenter, reach limit through the core; three aim-loop tests now switch
+  "Gun follows aim" off, since their 30 degree aims are beyond the reach).
+- Earlier, after the guard fix and the simulated headset: Bf4CoreTests 83 cases (research
+  commands, target teleports at a learned gain, split 3D stays off, gun-follows-aim rotation);
   Bf4Emulated pass (theater, world lane, stereo probe, census, lockdown, gestures; WARP:
   eye resampler reticle/markers/vignette/depth stereo/HUD corners, depth capture detour
   incl. the MSAA snapshot);
   launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
   `-World -FrameChannels 2` 5/5 (76-237 pairs, machine-dependent); `-World` with one
   channel 4/4 (47 pairs).
-- Installed locally: runtime/bf4 0.4.56-local (same build as 0.4.55, installed by the RE
-  session; rollback 0.4.55-local);
+- Installed locally: runtime/bf4 0.4.58-local (reach limit, game menus, recenter gesture;
+  installed by live session 12; rollback 0.4.57-local);
   launcher settings
   restored to the player's after the developer sessions. Developer sessions still run the
   read-only probes and the firing census.
@@ -663,14 +732,14 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
 
 ## Open / blocked
 
-- Headset check of 0.4.55 (BF4-FIRST-SESSION.md). The simulated headset settled the game
+- Headset check of 0.4.58 (BF4-FIRST-SESSION.md). The simulated headset settled the game
   side (direction, labels, rate, aim, gestures, depth target); what only a headset can
   answer: comfort at ~45 pairs/s (and whether frame sync 1, ~52/s, still holds there),
   gun size and the head-locked gun, the HUD corners' readability, 3D from depth's feel,
   holster positions on a real body, the laser on "Resume".
 - Gun at the hand: the gun now points along the aim but sits where BF4 puts it relative to
-  the eye (not in the controller's hand), and follows only part of the way when the head
-  looks far from where it points (FOV budget). Leads (static, 2026-10-19): the offset from
+  the eye (not in the controller's hand), and the aim stops at the reach edge when the hand
+  points far from where the head looks (FOV budget). Leads (static, 2026-10-19): the offset from
   the camera lives in weapon data assets (`WeaponOffsetData` / `WeaponAnimationSettingsData`
   `WeaponOffsetX/Y/Z`, `FirstPersonCameraData` `Offset`/`WeaponBaseOffset`/
   `WeaponLagRotationOffset`), shared with AI soldiers, so not to be written; the per-player
@@ -698,6 +767,16 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
   6 % of the screen, and the pad's triggers are released while the laser points at the
   screen outside campaign play (unit-tested; live check pending; clicks are logged).
 - Holsters: key 2 (sidearm) not yet seen working live (the prologue has no sidearm).
+- A 10 s stall in BF4's window message pump (no Present; the main thread under the Steam
+  overlay and EA in-game overlay hooks) once in session 12, with the mod menu open; a laser
+  click during it was lost, because the adapter runs per Present. Not repeated in 20 s with
+  the menu open. Cause unknown; the watchdog stacks are in that session's log. If it
+  recurs, compare with overlays disabled.
+- The upward reach of the gun with Quest-like eyes is small (~5 deg with the head level);
+  a menu choice of a wider render budget (less sharp) is possible if players want more.
+- Pitch gain: the reach limit keeps vertical aim moves small, so the pitch gain may stay at
+  the cautious first estimate longer (session 12 ended at -0.003, 2x the measured value):
+  vertical aim then steers at half speed until a large vertical move teaches it.
 - The census holder chain matched nothing live (27 firing objects, 0 holders): redo the
   walk from the live firing vtable `+0x1D53F18`.
 - Mod menu in VR: opens with the menu button, drawn by the adapter (VrPanel + GDI) on the
