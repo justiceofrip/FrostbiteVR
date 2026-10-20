@@ -217,8 +217,8 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   (`MotionAimOutput::barrel`; emulated test: the right controller 11 deg off, the barrel on
   the line). Unit test: the convergence geometry and the controller converging on it.
 - With the gun in the hand the render is not turned (full sharpness, no reach limit: the aim
-  follows the hand anywhere) and +0x00 keeps the game's value. Mod menu "Gun follows aim: Off /
-  On / Wide reach / In the hand" (default In the hand). Log: `gun in the hand: on/off`,
+  follows the hand anywhere) and +0x00 keeps the game's value. Mod menu "Gun: BF4's place /
+  On the aim / Aim, wide / In the hand" (default In the hand; id `gun_aim`, values 0-3). Log: `gun in the hand: on/off`,
   `first_person_view ... hand=exact/near/missing by_game= passes= weapon=(...) zoom_held= shift=`
   every 600 frames (`missing` also counts perspective spot-light shadow views, left alone).
 - Live (simulated headset, sessions 24-28): every first-person bind of the pass matched and
@@ -293,7 +293,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   shots). Live (0.4.58-local): hand 15 deg up with the head level put crosshair, gun and
   aim dot together about 5 deg up. The upward reach is small for Quest-like eyes (their
   vertical FOV is already the render's limit); a wider budget would cost sharpness.
-- Mod menu "Gun follows aim: Off / On / Wide reach": Wide lets the turned render grow to
+- Mod menu "Gun: ... On the aim / Aim, wide": Wide lets the turned render grow to
   2.3 rad instead of 2.1 (`kGunAimFovBudgetWide`; the centre up to ~39 % less sharp than the
   head alone needs, against ~21 %), so the gun follows farther from the gaze before it
   stops. Unit and emulated tests (the aim stops farther up with Wide, still all the way
@@ -302,7 +302,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   edges, skewed (seen live at 20 deg: a second minimap at the left eye's edge). With HUD
   corners on they are shown once, in their insets: the eye resampler draws their source
   regions dark in a turned render (WARP check; fails without it).
-- Mod menu "Gun follows aim: Off / On" (default on). Log: `aim_pairs=` (theater_link),
+- Mod menu "Gun: On the aim" (the default until 2026-10-20). Log: `aim_pairs=` (theater_link),
   `rendered_fov=` (view_override).
 - Evidence: unit tests (rotation math, ellipse coverage, budget, the override's aim-turned
   write at the head position with `+0x00` untouched, per-pose latch, exact restore); WARP
