@@ -2056,6 +2056,20 @@ void ResearchTick(Adapter& a) {
         ResearchAck(a, c.id, msg.c_str());
         break;
     }
+    case ResearchCommand::Kind::FirstPersonMask: { // developer: which bones a first-person mesh's parts use
+        a.firstPersonView.SetMaskIndexCount(static_cast<UINT>(c.x), c.y, static_cast<int>(c.length));
+        const std::string msg = "fpmask " + std::to_string(c.x) + " " + std::to_string(c.y) + " " + std::to_string(c.length);
+        a.log.Write("research %s", msg.c_str());
+        ResearchAck(a, c.id, msg.c_str());
+        break;
+    }
+    case ResearchCommand::Kind::FirstPersonHide: { // developer: which first-person mesh is which
+        a.firstPersonView.SetHideIndexCount(static_cast<UINT>(c.x));
+        const std::string msg = "fphide " + std::to_string(c.x);
+        a.log.Write("research %s", msg.c_str());
+        ResearchAck(a, c.id, msg.c_str());
+        break;
+    }
     case ResearchCommand::Kind::DrawProbe: {
         bool ok = a.drawProbe.Installed();
         ID3D11Device* device = nullptr;

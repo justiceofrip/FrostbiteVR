@@ -48,7 +48,7 @@ std::vector<ResearchCommand> ParseResearchCommands(std::string_view text, std::u
         auto [p, ec] = std::from_chars(idText.data(), idText.data() + idText.size(), c.id);
         if (ec != std::errc{} || p != idText.data() + idText.size() || c.id <= afterId) continue;
         const std::string_view verb = NextToken(rest);
-        const std::string_view a1 = NextToken(rest), a2 = NextToken(rest);
+        const std::string_view a1 = NextToken(rest), a2 = NextToken(rest), a3 = NextToken(rest);
         if (verb == "snap" && !a1.empty()) { c.kind = ResearchCommand::Kind::Snap; c.arg = std::string(a1); }
         else if ((verb == "click" || verb == "move") && ParseUnit(a1, c.u) && ParseUnit(a2, c.v))
             c.kind = verb == "click" ? ResearchCommand::Kind::Click : ResearchCommand::Kind::Move;
@@ -76,6 +76,15 @@ std::vector<ResearchCommand> ParseResearchCommands(std::string_view text, std::u
         }
         else if (verb == "drawprobe" && !a1.empty()) { c.kind = ResearchCommand::Kind::DrawProbe; c.arg = std::string(a1); }
         else if (verb == "fpview" && ParseInt(a1, c.x) && c.x >= 0 && c.x <= 3) c.kind = ResearchCommand::Kind::FirstPersonView;
+        else if (verb == "fphide" && ParseInt(a1, c.x) && c.x >= 0 && c.x <= 1000000) c.kind = ResearchCommand::Kind::FirstPersonHide;
+        else if (verb == "fpmask" && ParseInt(a1, c.x) && c.x >= 0 && c.x <= 1000000 && ParseInt(a2, c.y) && c.y >= 0 &&
+                 c.y <= 255) {
+            std::int32_t hi = 0;
+            if (ParseInt(a3, hi) && hi >= c.y && hi <= 256) {
+                c.kind = ResearchCommand::Kind::FirstPersonMask;
+                c.length = static_cast<std::uint32_t>(hi);
+            }
+        }
         else if (verb == "shaderdump" && !a1.empty()) { c.kind = ResearchCommand::Kind::ShaderDump; c.arg = std::string(a1); }
         else if (verb == "mouse" && ParseInt(a1, c.x) && ParseInt(a2, c.y) && std::abs(c.x) <= 2000 && std::abs(c.y) <= 2000)
             c.kind = ResearchCommand::Kind::Mouse;

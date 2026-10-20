@@ -52,16 +52,40 @@ constexpr float kArmClassTolerance = 5e-3f; // ...an entry belongs to a chain wi
 int FindArmChains(const float* palette, int bones, const ArmBindJoints& bind, ArmChain out[2]);
 
 // Each entry's part against the chains: the joints it maps within `tolerance` of them. With
-// `fingerReach` > 0, an entry mapping none but the wrist within that distance is a finger and
-// moves with the hand (live: the fingers map it 0.6-10 cm from the hand's wrist).
+// `fingerReach` > 0 an entry mapping none of them is a finger, moving with the hand, when
+// relative to that arm's hand bone in the palette it only turns about an axis passing within
+// `fingerReach` of the wrist (a finger joint: live, every finger bone's pivot 2-13 cm from the
+// wrist, curled up to 170 deg; curled fingers carry the wrist point 15-24 cm away, so a test on
+// the wrist alone missed them and they stayed stretched on the gun, seen by the player
+// 2026-10-20). Without a hand bone in the palette: the wrist within `fingerReach`.
 void ClassifyBones(const float* palette, int bones, const ArmBindJoints& bind, const ArmChain chains[2],
                    float tolerance, BoneClass* out, float fingerReach = 0);
-constexpr float kArmFingerReach = 0.10f;
+constexpr float kArmFingerReach = 0.18f;
+
+// Pure: does `bone` only turn relative to `hand` (3x4 palette entries) about an axis passing
+// within `reach` of the bind-space point `pivotNear` (the slide along the axis under 1 cm)?
+bool TurnsAboutNear(const float* hand, const float* bone, math::Vec3 pivotNear, float reach);
 
 // The hand bone of one arm in this palette: the entry mapping the chain's wrist closest (within
 // 1 mm) without mapping its elbow (live: one entry at 0.0 mm; finger roots at 0.1-0.2 mm). -1:
 // none.
-int FindHandBone(const float* palette, int bones, const ArmBindJoints& bind, const ArmChain& chain, int side);
+int FindHandBone(const float* palette, int bones, const ArmBindJoints& bind, const ArmChain& chain, int side,
+                 float tolerance = kArmChainTolerance);
+
+// The player's own body mesh, which BF4 draws in the first-person pass where it stays out of
+// view: its palette's first entry is the body's root, upright and under the shoulders (live,
+// sessions 58-82, prologue: in every stock capture 0.86 deg off the pass world's +y whatever the
+// aim's pitch, mapping the bind shoulders' midpoint 9-29 cm from the arms'). The arms' meshes
+// start with a clavicle, and the gun's skinned parts tilt with the aim or map that point 35 cm
+// to 3.5 m away. True when the first entry is rigid, within kBodyMaxTiltDeg of upright and maps
+// the bind shoulders' midpoint within kBodyNeckReach of the chains' (both found), and none of
+// the first kBodyLeadBones entries maps a chain's joint within `tolerance` (a mesh's own bones
+// come first: the arms' clavicle and upper arms by entry 7; the body's spare slots, from entry
+// 17 live, can hold a stale copy of the arms).
+bool IsBodyPalette(const float* palette, int bones, const ArmBindJoints& bind, const ArmChain chains[2], float tolerance);
+constexpr float kBodyMaxTiltDeg = 2.5f;
+constexpr float kBodyNeckReach = 0.30f;
+constexpr int kBodyLeadBones = 8;
 
 // The solve, in head space (the render camera's: x right, y up, -z forward).
 struct ArmSolveInput {

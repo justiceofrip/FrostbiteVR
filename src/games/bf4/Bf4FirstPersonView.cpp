@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <vector>
 #include <cstdio>
 #include <cstring>
 
@@ -249,6 +250,11 @@ void FirstPersonView::RewriteArms(ID3D11DeviceContext* context, const void* mapp
     alignas(16) std::uint8_t data[kOurBytes];
     if (!RingCopy(data, static_cast<const std::uint8_t*>(mapped) + offset, bytes)) return;
     const double readUs = MicrosecondsSince(t0);
+    const auto keepForMask = [&] { // research (fpmask): the palette this pass's next draw uses
+        if (!maskCount_.load()) return;
+        std::memcpy(lastPalette_.data(), data, bytes);
+        lastPaletteBytes_ = bytes;
+    };
     LARGE_INTEGER t1{};
     QueryPerformanceCounter(&t1);
     float* palette = reinterpret_cast<float*>(data);
@@ -291,6 +297,16 @@ void FirstPersonView::RewriteArms(ID3D11DeviceContext* context, const void* mapp
         }
     }
     if (changedRef) armSolved_ = false;
+    // BF4's own body: the bind proceeds with the all-zero palette (every vertex at one point,
+    // nothing drawn), as out of view as BF4 keeps it.
+    if (hideBodyPass_ && zeroPalette_ && IsBodyPalette(palette, bones, armBind_, armRef_, kArmClassTolerance)) {
+        buffers[0] = zeroPalette_.Get();
+        if (first) first[0] = 0;
+        std::lock_guard<std::mutex> lock(mutex_);
+        ++stats_.bodyHidden;
+        stats_.armReadUs += readUs;
+        return;
+    }
     // The grip from BF4's right hand: every palette's right hand bone is a candidate (EndPass
     // takes one of the pass's right arm).
     if (own[1].found && anchorCandidateCount_ < kAnchorCandidates) {
@@ -302,6 +318,7 @@ void FirstPersonView::RewriteArms(ID3D11DeviceContext* context, const void* mapp
         }
     }
     if (!armPass_) {
+        keepForMask();
         std::lock_guard<std::mutex> lock(mutex_);
         stats_.armReadUs += readUs;
         return;
@@ -335,6 +352,7 @@ void FirstPersonView::RewriteArms(ID3D11DeviceContext* context, const void* mapp
         stats_.armWorkUs += workUs;
         stats_.armStreamingReads = streaming;
     }
+    keepForMask();
     if (!changed) return;
     LARGE_INTEGER t2{};
     QueryPerformanceCounter(&t2);
@@ -396,6 +414,15 @@ bool FirstPersonView::Install(ID3D11DeviceContext* immediate) {
     if (!device || FAILED(device->CreateBuffer(&d, nullptr, &ours_)) ||
         FAILED(device->CreateBuffer(&d, nullptr, &oursPalette_)))
         return false;
+    device->CreateBuffer(&d, nullptr, &maskPalette_); // research only (fpmask)
+    {
+        D3D11_BUFFER_DESC z = d;
+        z.Usage = D3D11_USAGE_DEFAULT;
+        z.CPUAccessFlags = 0;
+        std::vector<std::uint8_t> zeros(kOurBytes, 0);
+        D3D11_SUBRESOURCE_DATA init{zeros.data(), 0, 0};
+        device->CreateBuffer(&z, &init, &zeroPalette_);
+    }
     immediate_ = immediate;
     if (!ContextHooks::Install(immediate) || !ContextHooks::Add(this)) return false;
     installed_ = true;
@@ -434,7 +461,7 @@ std::string FirstPersonView::Describe() const {
                   static_cast<unsigned long long>(s.shiftedFrames));
     if (n > 0 && n < static_cast<int>(sizeof(line)))
         std::snprintf(line + n, sizeof(line) - n,
-                      " arms=%llu/%llu bones=%llu solved=%llu switches=%llu slide=(%.3f %.3f) arm_us_per_pass=read %.0f%s work %.0f upload %.0f anchor=%llu/%llu/jumps %llu grip_from_rest=(%.1f cm %.1f deg) kicks=%llu last=[%.1f/%.1f/%.0f %.1f/%.1f/%.0f %.1f/%.1f/%.0f %.1f/%.1f/%.0f]",
+                      " arms=%llu/%llu bones=%llu solved=%llu switches=%llu slide=(%.3f %.3f) arm_us_per_pass=read %.0f%s work %.0f upload %.0f anchor=%llu/%llu/jumps %llu grip_from_rest=(%.1f cm %.1f deg) kicks=%llu last=[%.1f/%.1f/%.0f %.1f/%.1f/%.0f %.1f/%.1f/%.0f %.1f/%.1f/%.0f] body_hidden=%llu",
                       static_cast<unsigned long long>(s.armPalettes), static_cast<unsigned long long>(s.armRewritten),
                       static_cast<unsigned long long>(s.armBones), static_cast<unsigned long long>(s.armSolved),
                       static_cast<unsigned long long>(s.armSwitches),
@@ -445,7 +472,7 @@ std::string FirstPersonView::Describe() const {
                       s.anchorCm, s.anchorDeg,
                       static_cast<unsigned long long>(s.kicks), s.kickLog[0][0], s.kickLog[0][1], s.kickLog[0][2],
                       s.kickLog[1][0], s.kickLog[1][1], s.kickLog[1][2], s.kickLog[2][0], s.kickLog[2][1], s.kickLog[2][2],
-                      s.kickLog[3][0], s.kickLog[3][1], s.kickLog[3][2]);
+                      s.kickLog[3][0], s.kickLog[3][1], s.kickLog[3][2], static_cast<unsigned long long>(s.bodyHidden));
     return line;
 }
 
@@ -592,8 +619,44 @@ void FirstPersonView::EndPass() {
     }
 }
 
+void FirstPersonView::ResearchBind(ID3D11DeviceContext* context, ID3D11Buffer* buffer) {
+    researchBinding_ = true;
+    if (buffer) {
+        ID3D11Buffer* b[1] = {buffer};
+        context->VSSetConstantBuffers(0, 1, b);
+    } else {
+        ID3D11Buffer* b[1] = {gameB0_.Get()};
+        Microsoft::WRL::ComPtr<ID3D11DeviceContext1> c1;
+        if (gameB0Ranged_ &&
+            SUCCEEDED(context->QueryInterface(__uuidof(ID3D11DeviceContext1), reinterpret_cast<void**>(c1.GetAddressOf()))))
+            c1->VSSetConstantBuffers1(0, 1, b, &gameB0First_, &gameB0Count_);
+        else
+            context->VSSetConstantBuffers(0, 1, b);
+    }
+    researchBinding_ = false;
+    researchB0_ = buffer != nullptr;
+}
+
 void FirstPersonView::OnDraw(ID3D11DeviceContext* context, const char*, UINT count, UINT) {
-    if (context != immediate_ || !inPass_ || !havePending_) return;
+    if (context != immediate_) return;
+    if (researchB0_) ResearchBind(context, nullptr); // BF4's own b0 back for this draw
+    if (!inPass_) return;
+    if (const UINT hide = hideCount_.load(); hide && count == hide && zeroPalette_)
+        ResearchBind(context, zeroPalette_.Get()); // research only: this draw collapses
+    if (const UINT mask = maskCount_.load(); mask && count == mask && maskPalette_ && lastPaletteBytes_) {
+        alignas(16) std::uint8_t data[kOurBytes] = {};
+        std::memcpy(data, lastPalette_.data(), lastPaletteBytes_);
+        const int bones = static_cast<int>(lastPaletteBytes_ / (kArmBoneFloats * sizeof(float)));
+        const int lo = std::max(0, maskLo_.load()), hi = std::min(bones, maskHi_.load());
+        for (int b = lo; b < hi; ++b) std::memset(data + b * kArmBoneFloats * sizeof(float), 0, kArmBoneFloats * sizeof(float));
+        D3D11_MAPPED_SUBRESOURCE m{};
+        if (SUCCEEDED(context->Map(maskPalette_.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &m)) && m.pData) {
+            std::memcpy(m.pData, data, kOurBytes);
+            context->Unmap(maskPalette_.Get(), 0);
+            ResearchBind(context, maskPalette_.Get()); // research only
+        }
+    }
+    if (!havePending_) return;
     if (count > bestCount_) {
         bestCount_ = count;
         bestWorld_ = pendingWorld_;
@@ -602,7 +665,7 @@ void FirstPersonView::OnDraw(ID3D11DeviceContext* context, const char*, UINT cou
 
 void FirstPersonView::OnBindConstants(ID3D11DeviceContext* context, ContextHooks::Stage stage, UINT startSlot, UINT numBuffers,
                                       ID3D11Buffer** buffers, UINT* first, UINT* count) {
-    if (context != immediate_) return;
+    if (context != immediate_ || researchBinding_) return;
     // functionConstants (b0) inside the pass: a rigid mesh's world matrix, if it is one.
     if (stage == ContextHooks::Stage::Vertex && inPass_ && startSlot == 0 && buffers[0]) {
         havePending_ = false;
@@ -624,6 +687,14 @@ void FirstPersonView::OnBindConstants(ID3D11DeviceContext* context, ContextHooks
             havePending_ = true;
         }
         if (palettePass_ && known && source.mapped) RewriteArms(context, source.mapped, source.size, buffers, first, count);
+    }
+    if (stage == ContextHooks::Stage::Vertex && startSlot == 0 && (hideCount_.load() || maskCount_.load() || researchB0_)) {
+        // Research overrides on: b0 as this bind proceeds (put back after an override).
+        gameB0_ = buffers[0];
+        gameB0Ranged_ = first && count;
+        gameB0First_ = first ? first[0] : 0;
+        gameB0Count_ = count ? count[0] : 0;
+        researchB0_ = false;
     }
     if (kViewSlot < startSlot || kViewSlot >= startSlot + numBuffers) return;
     const UINT i = kViewSlot - startSlot;
@@ -702,6 +773,7 @@ void FirstPersonView::OnBindConstants(ID3D11DeviceContext* context, ContextHooks
         }
         move = Mul(FromPose(hand->hand), InverseRigid(FromPose(frame.gripAtRest)));
         palettePass_ = inPass_ && oursPalette_;
+        hideBodyPass_ = frame.hideBody;
         if (frame.handAnchor && anchorValid_) {
             // The grip BF4's right hand holds now (smoothed), wherever BF4 holds the gun.
             const Mat4 grip = Mul(anchor_, GripInRightHandBind());

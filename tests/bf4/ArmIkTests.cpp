@@ -306,6 +306,45 @@ TEST_CASE(Mat4BlendsRigidTransforms) {
     CHECK(fvrtest::Near(half[10], 1.0f, 1e-5f));
 }
 
+TEST_CASE(ArmIkCurledFingersGoWithTheHand) {
+    // A finger curled 150 deg about a knuckle 10 cm past the wrist carries the wrist point ~19 cm
+    // away (live: such fingers stayed stretched on the gun). Relative to the hand it only turns
+    // about a pivot near the wrist, so it is the hand's; the spine and the weapon bone are not.
+    const ArmBindJoints bind = Bf4ArmBindJoints();
+    Rig rig = MakeRig();
+    const float* hand = rig.palette.data() + 6 * 12;
+    const Mat4 handM{hand[0], hand[1], hand[2], hand[3], hand[4], hand[5], hand[6], hand[7], hand[8], hand[9], hand[10], hand[11],
+                     0, 0, 0, 1};
+    const math::Vec3 knuckle = bind.wrist[0] + math::Vec3{0.10f, -0.01f, 0.02f};
+    const Mat4 curled = Mul(handM, About(knuckle, knuckle, Rotation({0, 0.2f, 1}, 2.6f)));
+    for (int k = 0; k < 12; ++k) rig.palette.push_back(curled[k]);
+    const int bones = Rig::kBones + 1;
+    ArmChain chains[2];
+    FindArmChains(rig.palette.data(), bones, bind, chains);
+    CHECK(math::Length(TransformPoint(curled, bind.wrist[0]) - chains[0].wrist) > 0.15f);
+    BoneClass cls[Rig::kBones + 1];
+    ClassifyBones(rig.palette.data(), bones, bind, chains, kArmClassTolerance, cls, kArmFingerReach);
+    CHECK(cls[Rig::kBones].part == ArmPart::Hand && cls[Rig::kBones].side == 0);
+    CHECK(cls[7].part == ArmPart::Hand && cls[14].part == ArmPart::Hand); // the straighter fingers too
+    CHECK(cls[0].part == ArmPart::None && cls[15].part == ArmPart::None && cls[16].part == ArmPart::None &&
+          cls[17].part == ArmPart::None);
+    CHECK(TurnsAboutNear(hand, curled.data(), bind.wrist[0], 0.18f) && !TurnsAboutNear(hand, curled.data(), bind.wrist[0], 0.05f));
+    // Moving the hand moves it alike: the curled finger keeps its place on the hand.
+    ArmSolveInput in;
+    in.chains[0] = chains[0];
+    in.chains[1] = chains[1];
+    in.headFromPass = Translation({0, -1.9f, 0});
+    in.body = Identity4();
+    in.wristTarget[0] = TransformPoint(in.headFromPass, rig.w[0]) + math::Vec3{-0.3f, -0.1f, 0.1f};
+    in.hasWristTarget[0] = true;
+    std::vector<float> moved = rig.palette;
+    ApplyArmCorrections(moved.data(), bones, cls, in.headFromPass, SolveArms(in));
+    const math::Vec3 tip = knuckle + math::Vec3{0.03f, 0, 0};
+    const math::Vec3 before = Map(rig.palette, Rig::kBones, tip) - Map(rig.palette, 6, bind.wrist[0]);
+    const math::Vec3 after = Map(moved, Rig::kBones, tip) - Map(moved, 6, bind.wrist[0]);
+    CHECK(NearV(before, after, 1e-4f));
+}
+
 TEST_CASE(ArmIkSlidesTheShoulderWhenTheGunIsOutOfReach) {
     const ArmBindJoints bind = Bf4ArmBindJoints();
     Rig rig = MakeRig();
@@ -328,4 +367,45 @@ TEST_CASE(ArmIkSlidesTheShoulderWhenTheGunIsOutOfReach) {
         CHECK(fvrtest::Near(math::Length(w - s), (lu + lf) * 0.999f, 1e-3f));
         CHECK(NearV(TransformPoint(in.headFromPass, Map(rig.palette, b + 0, bind.shoulder[side])), s));
     }
+}
+
+TEST_CASE(ArmIkTellsBf4sOwnBodyMesh) {
+    // BF4's body mesh in the first-person pass: its root upright (0.86 deg live) under the
+    // shoulders, its spare slots past its own bones possibly holding a stale copy of the arms.
+    const ArmBindJoints bind = Bf4ArmBindJoints();
+    const Rig rig = MakeRig();
+    ArmChain chains[2];
+    FindArmChains(rig.palette.data(), Rig::kBones, bind, chains);
+    const math::Vec3 neckBind = (bind.shoulder[0] + bind.shoulder[1]) * 0.5f;
+    const math::Vec3 neck = (rig.s[0] + rig.s[1]) * 0.5f;
+    auto body = [&](const Mat4& root) {
+        std::vector<float> p;
+        Put(p, root);
+        for (int k = 1; k < 17; ++k) Put(p, Mul(root, About({0, 0.9f, 0}, {0, 0.9f, 0}, Rotation({1, 0, 0}, 0.05f * k))));
+        p.insert(p.end(), rig.palette.begin(), rig.palette.begin() + 15 * 12); // spare slots: the arms, stale
+        return p;
+    };
+    const Mat4 upright = Mul(Translation(neck - neckBind + math::Vec3{0.04f, -0.08f, 0.06f}), Rotation({1, 0, 0}, 0.015f));
+    std::vector<float> p = body(upright);
+    const int bones = static_cast<int>(p.size() / 12);
+    CHECK(IsBodyPalette(p.data(), bones, bind, chains, kArmClassTolerance));
+    // The arms' own mesh (a spine first, upright by the neck, then the clavicles) is not.
+    CHECK(!IsBodyPalette(rig.palette.data(), Rig::kBones, bind, chains, kArmClassTolerance));
+    // A stale arm among its own bones, a tilted root (as the gun's parts with the aim), a root
+    // whose neck is 40 cm off, a scaled root, or no arms to measure against: not the body.
+    std::vector<float> armed = p;
+    std::copy(rig.palette.begin() + 2 * 12, rig.palette.begin() + 3 * 12, armed.begin() + 5 * 12);
+    CHECK(!IsBodyPalette(armed.data(), bones, bind, chains, kArmClassTolerance));
+    p = body(Mul(upright, Rotation({1, 0, 0}, 0.06f)));
+    CHECK(!IsBodyPalette(p.data(), bones, bind, chains, kArmClassTolerance));
+    p = body(Mul(Translation({0.4f, 0, 0}), upright));
+    CHECK(!IsBodyPalette(p.data(), bones, bind, chains, kArmClassTolerance));
+    Mat4 scaled = upright;
+    for (int r = 0; r < 3; ++r)
+        for (int c = 0; c < 3; ++c) scaled[r * 4 + c] *= 0.5f;
+    p = body(scaled);
+    CHECK(!IsBodyPalette(p.data(), bones, bind, chains, kArmClassTolerance));
+    p = body(upright);
+    ArmChain one[2] = {chains[0], ArmChain{}};
+    CHECK(!IsBodyPalette(p.data(), bones, bind, one, kArmClassTolerance));
 }

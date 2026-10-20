@@ -18,7 +18,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   three sessions (09:16-10:19; rotation was inverted and the gun oversized, both fixed in
   0.4.16); everything built since 0.4.17 is unseen in a headset.
 
-## At a glance (installed: 0.4.122-local)
+## At a glance (installed: 0.4.124-local; the body hiding below is built, not installed)
 
 | Feature | State | Evidence |
 | --- | --- | --- |
@@ -41,6 +41,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
 | 3D: alternate eyes (each frame from one eye, true parallax) | off (option) | live sim: gun and walls at their depths, labels 327/327, 52 pairs/s |
 | BF4 split stereo (developer) | unsupported (retired) | live sim: crashes BF4's one-view world renderer |
 | Arms from the body (arm IK by palette rewrite: shoulders at the body, hands on the gun; "Free left hand" option) | on (default, "Arms") | live sim: both arms solved every pass, all arm draws agree < 0.5 mm, turned 60 deg no sleeve across the view, left hand at its controller and back on the gun two-handed, reload/ADS; no frame-rate cost (116/116 presents/s) |
+| BF4's own body mesh hidden with the gun in the hand (drawn collapsed) | on (gun in the hand) | stock captures: the rule picks the body mesh 88/90 times (misses: a broken arm reference), no other of 12 meshes in 800+ draws; emulated; not yet seen live |
 
 ## Works on the real game (actual-game checks)
 
@@ -72,7 +73,12 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   shader layout, bound constant buffers read back, targets, camera position, bone palettes near
   the camera, whole `viewConstants` on each camera change; shared context hooks
   `Bf4ContextHooks`) and `fpview <0-3>` (the experiment that proved the gun route: the
-  first-person pass with the render's projection, then moved 10 cm down / right).
+  first-person pass with the render's projection, then moved 10 cm down / right). Added
+  2026-10-20 (gun in the hand only; our bindings, nothing written): `fphide <indexcount>` draws
+  the first-person draws with that index count collapsed, `fpmask <indexcount> <lo> <hi>` zeroes
+  palette entries lo..hi-1 for them (which bones a mesh's parts use); 0 turns either off. Each
+  binds b0 for that one draw; the binding the draw had is put back before the next draw unless
+  BF4 binds b0 again first (not yet run live).
   Fixed 2026-10-19: a session used to replay every command already in `cmd.txt` at start
   (old menu clicks, keys, settings); one replayed click landed on the home screen's
   multiplayer quick-match tile ("Failed to join game session", nothing joined). The channel
@@ -326,7 +332,12 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   gun and the free hand, 2026-10-20) the left hand stays only while its grip steadies the gun
   (two-handed aim), else it goes to its controller (the wrist 6 cm behind the grip, the hand
   keeping its grip shape), moving there or back over 0.15 s; bones that map none of the chain's
-  joints but the wrist within 10 cm are its fingers and go along. The free hand turns about the
+  joints but only turn relative to that hand's bone about an axis within 18 cm of the wrist are
+  its fingers and go along (a finger joint; live, every finger pivots 2-13 cm from the wrist,
+  curled up to 170 deg). The first rule (the wrist mapped within 10 cm) missed curled fingers,
+  which carry the wrist point 15-24 cm away: they stayed on the handguard, stretched to the free
+  hand (seen by the player, 2026-10-20; session 81 capture); session 82 (simulated headset, low,
+  in front, rolled, two-handed) showed no stretching with the new rule. The free hand turns about the
   wrist as its controller turns from the gun: while two-handed the controller's turn relative to
   the gun is kept (until then: the controller along the gun), so letting go in place changes
   nothing and turning the controller turns the hand.
@@ -355,11 +366,43 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   rolling the controller 90 deg laid the hand flat, pitching it turned the hand again. Session 71:
   quick knife and grenade with the arms on (grenade thrown, nothing torn; the throw's hands
   still spread where BF4 animates them).
-- Gaps: the free left hand leaves some geometry stretched back to the gun (seen by the player on
-  the desktop mirror, 2026-10-20; which bones are missed is not known yet: the option is off by
-  default); the forearm does not share the free hand's twist (the wrist skin twists instead); the
+- Gaps: "Free left hand" stays off by default until seen in a headset after the finger fix; the
+  forearm does not share the free hand's twist (the wrist skin twists instead); the
   skeleton's joints are the prologue rig's (another rig finds no chains and stays as
   BF4 draws it); aiming steeply up still shows the near upper arm large; not seen in a headset.
+
+## BF4's own body hidden with the gun in the hand (2026-10-20, built; not live)
+
+- Problem (the player, 2026-10-20, desktop mirror of a simulated-headset session: "the legs are
+  all jacked up"): BF4 draws the player's whole body in the first-person pass, where it stays
+  out of view; the gun in the hand moves that pass with the controller, so the body came along
+  into view (legs and vest in front of the camera when looking down). The arms' fix never
+  touched it: its palette holds no arm bones.
+- Finding (stock draw-probe palettes, sessions 58-63; scratch `fp_bodymesh.py`,
+  `fp_bodypitch.py`, `fp_bodyrule.py`): the 7416-index mesh (prologue) is the body. Its first
+  palette entry is the body's root: upright (0.86 deg off the pass world's +y in every capture,
+  whatever the aim's pitch) at the feet under the shoulders (it maps the bind shoulders'
+  midpoint 9-29 cm from the arms'); its own bones fill entries 0-16, and the spare slots from 17
+  on sometimes hold a stale copy of the arms. The arms' meshes (19431, 14217) start with a
+  clavicle; the gun's skinned parts (34695, 6369 and the sight/launcher meshes 717, 2370, 22461,
+  23178, 14958, 15762) tilt with the aim or map that point 35 cm to 3.5 m away.
+- Rule (`IsBodyPalette`, pure, core test): the first entry rigid, within 2.5 deg of upright and
+  mapping the bind shoulders' midpoint within 30 cm of the reference arms', and none of the first
+  8 entries mapping a reference joint (5 mm). Over every capture it picks the body mesh 88 of 90
+  times (both misses in one capture whose arm reference was a stale copy the adapter's own
+  camera gate rejects) and no other mesh (0 of 800+ draws of 12 meshes, palettes with or
+  without the arms' rewrite).
+- Route (`Bf4FirstPersonView`, with the gun in the hand, either Arms setting): such a palette's
+  bind proceeds with an all-zero palette of ours (every vertex at one point: nothing drawn), as
+  out of view as BF4 keeps it. Nothing in BF4's memory is written. Frame flag `hideBody`
+  (default on). Log: `first_person_view ... body_hidden=N`. Emulated (WARP): the body bind is
+  rebound to zeros in the pass, with the arms on the gun too, and passes through with the flag
+  off.
+- Gaps: not seen live yet (BF4 was still open from the previous session; installing needs it
+  closed); prone, vehicles and other missions' bodies unchecked (a body whose root tilts, e.g.
+  prone, would show as before); the 14217-index mesh (clavicles, a neck/spine bone shared with
+  the body, the left hand) keeps that spine bone with the gun; whether that shows is unknown
+  (research `fpmask` can tell).
 
 ## No crosshair in the head-tracked view (2026-10-20, built; live sim)
 
@@ -1049,6 +1092,11 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
   dead "Screen distance" entry is gone (the host has no way to receive it yet). Unit
   test: every item on the panel, none overlapping; a GDI render of the developer menu was
   checked by eye.
+- Build.ps1 after the body hiding and the curled-finger rule (2026-10-20): x64 284/284, x86
+  283/283; Bf4CoreTests 112 cases, 3777 checks (new: the body mesh told from the arms, the
+  gun's tilted parts and stale arm copies; curled fingers go with a free hand; `fphide`/
+  `fpmask` parsing); Bf4Emulated: the body bind rebound to zeros in the pass, with the arms on
+  the gun too, and passed through with the flag off.
 - Build.ps1 after the gun in the hand (sessions 19-28): x64 284/284, x86 283/283;
   Bf4CoreTests 93 cases, 3480 checks (new: recoil at two frames of delay; research verbs
   `shadernames`/`shaderdump`/`drawprobe`/`fpview`; the "In the hand" request carries the hand
@@ -1072,10 +1120,11 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
   launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
   `-World -FrameChannels 2` 5/5 (76-237 pairs, machine-dependent); `-World` with one
   channel 4/4 (47 pairs).
-- Installed locally: runtime/bf4 0.4.122-local (the source at this commit: gun in the hand held by
-  BF4's right hand's grip, arms from the body by default (free left hand an option), recoil
-  pulses, no crosshair (centre mask), controller scan with its cache, 3D option; rollback
-  0.4.121-local); launcher settings
+- Installed locally: runtime/bf4 0.4.124-local (gun in the hand held by BF4's right hand's grip,
+  arms from the body by default (free left hand an option, curled-finger fix), recoil pulses,
+  no crosshair (centre mask), controller scan with its cache, 3D option, research `fphide`;
+  rollback 0.4.123-local). This commit adds the body hiding and `fpmask`: built and tested, not
+  installed (BF4 from the last session was still running); launcher settings
   restored to the player's after the developer sessions. Developer sessions still run the
   read-only probes and the firing census.
 - Build: VS 18, x64 RelWithDebInfo, `build/x64`. Math types: `fvr/math/Vec.h` extends the

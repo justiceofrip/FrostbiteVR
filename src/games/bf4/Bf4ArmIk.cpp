@@ -94,9 +94,32 @@ int FindArmChains(const float* palette, int bones, const ArmBindJoints& bind, Ar
     return found;
 }
 
+bool TurnsAboutNear(const float* hand, const float* bone, math::Vec3 pivotNear, float reach) {
+    // T = hand^-1 x bone, in bind space: a screw motion (turn about an axis, slide along it).
+    const Mat4 t = Mul(InverseRigid(FromRows(hand)), FromRows(bone));
+    const math::Vec3 move{t[3], t[7], t[11]};
+    const float c = std::clamp((t[0] + t[5] + t[10] - 1.0f) * 0.5f, -1.0f, 1.0f);
+    const float angle = std::acos(c);
+    if (angle < 1e-3f) return math::Length(move) < 0.01f; // no turn: it must move with the hand
+    math::Vec3 axis{t[9] - t[6], t[2] - t[8], t[4] - t[1]};
+    const float len = math::Length(axis);
+    if (len < 1e-6f) return false; // half a turn: the axis is not recoverable this way
+    axis = axis * (1.0f / len);
+    const float slide = math::Dot(move, axis);
+    if (std::fabs(slide) > 0.01f) return false;
+    // The axis' point: (t_perp + cot(angle/2) axis x t_perp) / 2.
+    const math::Vec3 across = move - axis * slide;
+    const math::Vec3 point = (across + math::Cross(axis, across) * (1.0f / std::tan(angle * 0.5f))) * 0.5f;
+    const math::Vec3 v = pivotNear - point;
+    return math::Length(v - axis * math::Dot(v, axis)) < reach;
+}
+
 void ClassifyBones(const float* palette, int bones, const ArmBindJoints& bind, const ArmChain chains[2], float tolerance,
                    BoneClass* out, float fingerReach) {
     bones = std::min(bones, kArmMaxBones);
+    int hand[2] = {-1, -1};
+    if (fingerReach > 0)
+        for (int side = 0; side < 2; ++side) hand[side] = FindHandBone(palette, bones, bind, chains[side], side, tolerance);
     for (int i = 0; i < bones; ++i) {
         out[i] = BoneClass{};
         const float* b = palette + i * kArmBoneFloats;
@@ -118,27 +141,53 @@ void ClassifyBones(const float* palette, int bones, const ArmBindJoints& bind, c
             }
         }
         if (out[i].part != ArmPart::None || fingerReach <= 0) continue;
-        // A finger: no joint of the chain, but the wrist within reach (nearest arm).
-        float best = fingerReach;
-        for (int side = 0; side < 2; ++side) {
+        // A finger: it turns relative to its hand about a pivot near the wrist (or, with no hand
+        // bone in this palette, maps the wrist within reach).
+        for (int side = 0; side < 2 && out[i].part == ArmPart::None; ++side) {
             if (!chains[side].found) continue;
-            const float d = math::Length(MapPoint(b, bind.wrist[side]) - chains[side].wrist);
-            if (d < best) {
-                best = d;
-                out[i] = {ArmPart::Hand, static_cast<std::uint8_t>(side)};
-            }
+            const bool finger =
+                hand[side] >= 0
+                    ? TurnsAboutNear(palette + hand[side] * kArmBoneFloats, b, bind.wrist[side], fingerReach)
+                    : math::Length(MapPoint(b, bind.wrist[side]) - chains[side].wrist) < fingerReach * 0.5f;
+            if (finger) out[i] = {ArmPart::Hand, static_cast<std::uint8_t>(side)};
         }
     }
 }
 
-int FindHandBone(const float* palette, int bones, const ArmBindJoints& bind, const ArmChain& chain, int side) {
+bool IsBodyPalette(const float* palette, int bones, const ArmBindJoints& bind, const ArmChain chains[2], float tolerance) {
+    if (!palette || bones < 1 || !chains[0].found || !chains[1].found) return false;
+    const float* r = palette;
+    if (!Usable(r)) return false;
+    // Rigid: unit, orthogonal axes (columns: the bind axes in the pass world).
+    const math::Vec3 ax{r[0], r[4], r[8]}, ay{r[1], r[5], r[9]}, az{r[2], r[6], r[10]};
+    for (const math::Vec3& a : {ax, ay, az})
+        if (std::fabs(math::Length(a) - 1.0f) > 0.02f) return false;
+    if (std::fabs(math::Dot(ax, ay)) > 0.02f || std::fabs(math::Dot(ay, az)) > 0.02f || std::fabs(math::Dot(az, ax)) > 0.02f)
+        return false;
+    for (int i = 0; i < std::min(bones, kBodyLeadBones); ++i) {
+        const float* b = palette + i * kArmBoneFloats;
+        if (!Usable(b)) continue;
+        for (int side = 0; side < 2; ++side)
+            if (Near(MapPoint(b, bind.shoulder[side]), chains[side].shoulder, tolerance) ||
+                Near(MapPoint(b, bind.elbow[side]), chains[side].elbow, tolerance) ||
+                Near(MapPoint(b, bind.wrist[side]), chains[side].wrist, tolerance))
+                return false; // a mesh with an arm's part
+    }
+    if (ay.y < std::cos(kBodyMaxTiltDeg * 0.017453293f)) return false;
+    const math::Vec3 neckBind = (bind.shoulder[0] + bind.shoulder[1]) * 0.5f;
+    const math::Vec3 neck = (chains[0].shoulder + chains[1].shoulder) * 0.5f;
+    return Near(MapPoint(r, neckBind), neck, kBodyNeckReach);
+}
+
+int FindHandBone(const float* palette, int bones, const ArmBindJoints& bind, const ArmChain& chain, int side,
+                 float tolerance) {
     if (!chain.found || side < 0 || side > 1) return -1;
     bones = std::min(bones, kArmMaxBones);
     int best = -1;
-    float bestDistance = kArmChainTolerance;
+    float bestDistance = tolerance;
     for (int i = 0; i < bones; ++i) {
         const float* b = palette + i * kArmBoneFloats;
-        if (!Usable(b) || Near(MapPoint(b, bind.elbow[side]), chain.elbow, kArmChainTolerance)) continue;
+        if (!Usable(b) || Near(MapPoint(b, bind.elbow[side]), chain.elbow, tolerance)) continue;
         const float d = math::Length(MapPoint(b, bind.wrist[side]) - chain.wrist);
         if (d < bestDistance) {
             bestDistance = d;

@@ -1692,4 +1692,9 @@ TEST_CASE(ResearchCommandsForLiveFlatSessions) {
     const auto fp = ParseResearchCommands("1 fpview 2\n2 fpview 0\n3 fpview 4\n", 0);
     CHECK(fp.size() == 3 && fp[0].kind == ResearchCommand::Kind::FirstPersonView && fp[0].x == 2 &&
           fp[1].kind == ResearchCommand::Kind::FirstPersonView && fp[1].x == 0 && fp[2].kind == ResearchCommand::Kind::Unknown);
+    const auto mesh = ParseResearchCommands("1 fphide 7416\n2 fphide 0\n3 fpmask 14217 2 16\n4 fpmask 14217 9 3\n5 fpmask 1 2\n", 0);
+    CHECK(mesh.size() == 5 && mesh[0].kind == ResearchCommand::Kind::FirstPersonHide && mesh[0].x == 7416 &&
+          mesh[1].kind == ResearchCommand::Kind::FirstPersonHide && mesh[1].x == 0 &&
+          mesh[2].kind == ResearchCommand::Kind::FirstPersonMask && mesh[2].x == 14217 && mesh[2].y == 2 && mesh[2].length == 16 &&
+          mesh[3].kind == ResearchCommand::Kind::Unknown && mesh[4].kind == ResearchCommand::Kind::Unknown);
 }

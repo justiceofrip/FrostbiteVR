@@ -10,6 +10,7 @@
 #include <d3dcompiler.h>
 #include <wrl/client.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <string>
@@ -438,7 +439,7 @@ bool CheckFirstPersonArms(ID3D11Device* device, const char*& why) {
     ComPtr<ID3D11DeviceContext1> context1;
     if (FAILED(context.As(&context1))) return why = "no ID3D11DeviceContext1", false;
     D3D11_BUFFER_DESC bd{};
-    bd.ByteWidth = 4096;
+    bd.ByteWidth = 8192; // the arms palette at 2048, the body at 4096
     bd.Usage = D3D11_USAGE_DYNAMIC;
     bd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
     bd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
@@ -467,6 +468,16 @@ bool CheckFirstPersonArms(ID3D11Device* device, const char*& why) {
         put(About(bind.wrist[side], w[side], RotationAbout({1, 0.3f, 0}, 0.6f)));
     }
     for (int k = 0; palette.size() < 24 * 12; ++k) put(Translation({0.01f * k, 5.0f, 0}));
+    // BF4's own body mesh: its root upright under the shoulders (IsBodyPalette), then its bones.
+    std::vector<float> body;
+    {
+        const Vec3 neckBind = (bind.shoulder[0] + bind.shoulder[1]) * 0.5f, neck = (s[0] + s[1]) * 0.5f;
+        const Mat4 root = Translation(neck - neckBind + Vec3{0, -0.1f, 0.05f});
+        for (int k = 0; k < 21; ++k) {
+            const Mat4 b = k == 0 ? root : Mul(root, About({0, 0.9f, 0}, {0, 0.9f, 0}, RotationAbout({1, 0, 0}, 0.05f * k)));
+            body.insert(body.end(), b.begin(), b.begin() + 12);
+        }
+    }
     FirstPersonView view;
     if (!view.Install(context.Get())) return why = "install", false;
     FirstPersonView::Frame frame;
@@ -490,9 +501,11 @@ bool CheckFirstPersonArms(ID3D11Device* device, const char*& why) {
     if (FAILED(context->Map(ring.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &m))) return why = "map the ring", false;
     MakeViewBlock(static_cast<std::uint8_t*>(m.pData) + 256, gameKy / aspect, gameKy, fpCam);
     std::memcpy(static_cast<std::uint8_t*>(m.pData) + 2048, palette.data(), palette.size() * sizeof(float));
+    std::memcpy(static_cast<std::uint8_t*>(m.pData) + 4096, body.data(), body.size() * sizeof(float));
     context->Unmap(ring.Get(), 0);
     ID3D11Buffer* bind1[1] = {ring.Get()};
     const UINT fpFirst[1] = {16}, count[1] = {32}, paletteFirst[1] = {128}, paletteCount[1] = {80};
+    const UINT bodyFirst[1] = {256}, bodyCount[1] = {64};
     bool ok = true;
     context1->VSSetConstantBuffers1(2, 1, bind1, fpFirst, count); // the pass begins
     context1->VSSetConstantBuffers1(0, 1, bind1, paletteFirst, paletteCount);
@@ -529,6 +542,19 @@ bool CheckFirstPersonArms(ID3D11Device* device, const char*& why) {
     const auto st = view.GetStats();
     if (ok && (st.armPalettes != 1 || st.armRewritten != 1 || st.armBones != 8))
         ok = (why = "arms: palette counts", false);
+    // BF4's body mesh, bound next in the pass: drawn with the all-zero palette.
+    if (ok) {
+        context1->VSSetConstantBuffers1(0, 1, bind1, bodyFirst, bodyCount);
+        bound = nullptr;
+        context1->VSGetConstantBuffers1(0, 1, &bound, &boundFirst, &boundCount);
+        std::vector<std::uint8_t> zero;
+        if (!bound || bound == ring.Get() || boundFirst != 0 || boundCount != 64) ok = (why = "body palette not rebound", false);
+        else if (!ReadBuffer(device, context.Get(), bound, zero)) ok = (why = "read the body palette back", false);
+        else if (std::any_of(zero.begin(), zero.begin() + 1024, [](std::uint8_t c) { return c != 0; }))
+            ok = (why = "body palette not all zero", false);
+        if (bound) bound->Release();
+        if (ok && view.GetStats().bodyHidden != 1) ok = (why = "body: hidden count", false);
+    }
     // A small b0 bind (a rigid mesh's world matrix) passes through.
     if (ok) {
         const UINT rigidFirst[1] = {96}, sixteen[1] = {16};
@@ -545,12 +571,28 @@ bool CheckFirstPersonArms(ID3D11Device* device, const char*& why) {
         if (FAILED(context->Map(ring.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &m))) return why = "map the ring again", false;
         MakeViewBlock(static_cast<std::uint8_t*>(m.pData) + 256, gameKy / aspect, gameKy, fpCam);
         std::memcpy(static_cast<std::uint8_t*>(m.pData) + 2048, palette.data(), palette.size() * sizeof(float));
+        std::memcpy(static_cast<std::uint8_t*>(m.pData) + 4096, body.data(), body.size() * sizeof(float));
         context->Unmap(ring.Get(), 0);
         context1->VSSetConstantBuffers1(2, 1, bind1, fpFirst, count);
         context1->VSSetConstantBuffers1(0, 1, bind1, paletteFirst, paletteCount);
         bound = nullptr;
         context1->VSGetConstantBuffers1(0, 1, &bound, &boundFirst, &boundCount);
         if (bound != ring.Get() || boundFirst != 128) ok = (why = "palette rebound with the option off", false);
+        if (bound) bound->Release();
+        // The body is hidden with the arms on the gun too (any gun in the hand)...
+        context1->VSSetConstantBuffers1(0, 1, bind1, bodyFirst, bodyCount);
+        bound = nullptr;
+        context1->VSGetConstantBuffers1(0, 1, &bound, &boundFirst, &boundCount);
+        if (ok && (bound == ring.Get() || view.GetStats().bodyHidden != 2)) ok = (why = "body not hidden with the arms on the gun", false);
+        if (bound) bound->Release();
+        // ...and passes through when not to be hidden.
+        frame.hideBody = false;
+        view.SetFrame(frame);
+        context1->VSSetConstantBuffers1(2, 1, bind1, fpFirst, count);
+        context1->VSSetConstantBuffers1(0, 1, bind1, bodyFirst, bodyCount);
+        bound = nullptr;
+        context1->VSGetConstantBuffers1(0, 1, &bound, &boundFirst, &boundCount);
+        if (ok && (bound != ring.Get() || boundFirst != 256)) ok = (why = "body hidden with hideBody off", false);
         if (bound) bound->Release();
     }
     // The body from the head's axes: level, the head's heading.

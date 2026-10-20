@@ -47,3 +47,11 @@
   bone's bind space). Chosen because BF4 moves the gun in camera space by state (launcher 28
   deg, sprint 62 deg, reloads, aiming down sights) and per weapon, while the hand always holds
   the grip; so the barrel stays on the aim everywhere without per-weapon calibration.
+- BF4's own body mesh (drawn in the first-person pass, out of view) is hidden with the gun in
+  the hand rather than placed: the gun in the hand had carried it into view. Hidden, the view
+  matches stock BF4 (no body) without depending on how BF4 poses legs it never shows (unknown in
+  prone, sprint, vehicles). It is found by its palette's root (upright at the feet under the
+  shoulders), not by index count, which differs per character.
+- A free hand's fingers are found by how they move relative to the hand bone (a turn about a
+  joint near the wrist), not by where they put the wrist: curled fingers put it up to 24 cm away
+  and were left on the gun.

@@ -100,6 +100,10 @@ public:
         // Gun in the hand: hold the grip BF4's right hand holds (GripInRightHandBind, from the
         // arms' palettes, smoothed) instead of the rifle's grip at rest.
         bool handAnchor = true;
+        // Gun in the hand: BF4's own body mesh in this pass (IsBodyPalette) is drawn collapsed.
+        // BF4 puts it out of view; moved with the gun it came into view (legs in front of the
+        // player, seen 2026-10-20).
+        bool hideBody = true;
     };
     struct Stats {
         std::uint64_t binds = 0;     // slot-2 binds seen
@@ -129,6 +133,7 @@ public:
         // (live, session 75: idle and walking never reached 4 mm a pass at ~120 passes/s; ten
         // single shots made 17 such passes, a 2.5 s burst 50), at most one per kKickGap.
         std::uint64_t kicks = 0;
+        std::uint64_t bodyHidden = 0; // BF4's body mesh binds drawn collapsed (hideBody)
         // Diagnostics: the last kicks' backward step (mm), sideways step (mm) and pass gap (ms).
         float kickLog[4][3]{};
         float anchorCm = 0, anchorDeg = 0;
@@ -200,6 +205,17 @@ public:
     // from (-1: none moved), read before OnPresent; OnPresent then turns to the other eye.
     int FrameEye() const;
     void OnPresent();
+    // Developer research: first-person draws with this index count are drawn with an all-zero
+    // palette (collapsed, unseen), to tell the pass's meshes apart. 0: none.
+    void SetHideIndexCount(UINT count) { hideCount_.store(count); }
+    // Developer research: in first-person draws with this index count (gun in the hand), the
+    // palette entries [lo, hi) are zeroed (vertices using them collapse toward the origin), to
+    // tell which bones a mesh's parts use. 0: none.
+    void SetMaskIndexCount(UINT count, int lo, int hi) {
+        maskLo_.store(lo);
+        maskHi_.store(hi);
+        maskCount_.store(count);
+    }
 
 private:
     // The block (rewritten) bound in place of BF4's, in slot i: false when ours could not be filled.
@@ -241,6 +257,20 @@ private:
     int hipPasses_ = 0;      // passes at hip FOV in a row
     // Arms from the body (render thread only).
     Microsoft::WRL::ComPtr<ID3D11Buffer> oursPalette_;
+    Microsoft::WRL::ComPtr<ID3D11Buffer> zeroPalette_; // all zero: a skinned draw bound with it collapses
+    bool hideBodyPass_ = false;
+    std::atomic<UINT> hideCount_{0};
+    std::atomic<UINT> maskCount_{0};
+    std::atomic<int> maskLo_{0}, maskHi_{0};
+    Microsoft::WRL::ComPtr<ID3D11Buffer> maskPalette_;
+    std::array<std::uint8_t, 4096> lastPalette_{}; // research: the palette last bound in the pass
+    std::uint32_t lastPaletteBytes_ = 0;
+    // Research overrides bind b0 for one draw; BF4's binding (recorded at its bind) is put back
+    // before the next draw unless BF4 binds b0 again first.
+    void ResearchBind(ID3D11DeviceContext* context, ID3D11Buffer* buffer);
+    Microsoft::WRL::ComPtr<ID3D11Buffer> gameB0_;
+    UINT gameB0First_ = 0, gameB0Count_ = 0;
+    bool gameB0Ranged_ = false, researchB0_ = false, researchBinding_ = false;
     ArmBindJoints armBind_ = Bf4ArmBindJoints();
     bool palettePass_ = false; // this pass reads palettes (gun in the hand)
     bool armPass_ = false;     // ...and rewrites them (arms from the body)
