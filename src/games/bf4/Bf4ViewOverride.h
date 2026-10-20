@@ -44,6 +44,9 @@ inline constexpr std::size_t kViewNearOffset = 0xBC;
 inline constexpr std::size_t kViewFarOffset = 0xC0;
 inline constexpr std::size_t kViewHorizontalFovOffset = 0x250;
 inline constexpr std::uint32_t kViewFovDirtyBits = 0xF;  // what the FOV setter ORs in
+// A submitted view block: three 0x4E0-byte views (+0x000 main, +0x4E0, +0x9C0 secondary with
+// an enable byte at +0xEA0) and trailing fields (the per-frame pipeline `+0x828090`).
+inline constexpr std::size_t kViewBlockBytes = 0x1020;
 
 using RendererSubmitFn = void (*)(void* renderer, float a, float b, std::uint32_t viewCount, std::uint8_t* views,
                                   void* sync, void* extra);
@@ -136,6 +139,10 @@ public:
     void SetCopyMask(std::uint32_t mask) { copyMask_.store(mask & 3u); }
     void SetGunAim(const GunAimSettings& settings);
     std::uint32_t CopyMask() const { return copyMask_.load(); }
+    // Developer research (read-only): the next submit copies block 0 as the game submitted it
+    // (before the override writes anything); TakeBlockDump hands the copy over once.
+    void RequestBlockDump();
+    bool TakeBlockDump(std::array<std::uint8_t, kViewBlockBytes>& out, std::uint32_t& viewCount);
 
     static constexpr std::chrono::milliseconds kMaxAge{100};
 
@@ -156,6 +163,9 @@ private:
     std::uint64_t poseId_ = 0;
     float fovY_ = 0;
     float parentYaw_ = std::numeric_limits<float>::quiet_NaN();
+    bool dumpRequested_ = false, dumpReady_ = false; // RequestBlockDump
+    std::uint32_t dumpViewCount_ = 0;
+    std::array<std::uint8_t, kViewBlockBytes> dump_{};
     std::chrono::steady_clock::time_point poseTime_{};
     Stats stats_{};
 };

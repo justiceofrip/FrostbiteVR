@@ -64,8 +64,16 @@ derived by the view update `+0xB8C910`, stored at `+0xB8C991`):
   whose object has a vtable of at least 75 slots (`call [rax+0x250]`) and arrays of
   64-byte entries, pointers at `+0x28/+0x30/+0x38`; it reads like an entity spawning
   something at a bone with a scale, not a view or a render pass.
-Next: widen the scan to SIB-addressed and integer accesses of `+0x258`, or start from the
-weapon side (`ClientWeaponLagEntity`'s bindings, live, read-only).
+- No separate first-person view (live, session 14, research `viewdump`, read-only): the
+  submitted 0x1020-byte block holds three views; only view 0 is a camera (`+0x00`
+  soldier-relative and `+0x40` world copies) and only it reacts to aiming down sights
+  (FOV 0.785 -> 0.698, `+0x250` with it). Views `+0x4E0` and `+0x9C0` carry identity
+  transforms and FOV 1.2217 (70 deg) in hip and ADS alike, with stack leftovers around
+  them; the secondary view's enable byte `+0xEA0` is 0. The submitted aspect is 1.333 and
+  default FOV 0.9599 (55 deg); the setup replaces the aspect. So the gun cannot be moved by
+  a view of its own: its camera-space pose comes from the animation side.
+Next: the animation side (`ClientWeaponLagEntity`'s bindings, live, read-only), or a
+SIB/integer-access scan of `+0x258`.
 
 ## Next steps
 

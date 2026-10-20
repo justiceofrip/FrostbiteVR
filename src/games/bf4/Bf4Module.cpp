@@ -987,8 +987,9 @@ struct Adapter {
     std::deque<TimedPointerEvent> researchPointer;
     std::uint32_t researchWait = 0;
     unsigned researchKeyUp = 0, researchKeyFrames = 0;
-    std::uint32_t depthProbeFrames = 0, mouseProbeFrames = 0, sendKeyFrames = 0;
-    std::uint64_t depthProbeId = 0, mouseProbeId = 0;
+    std::uint32_t depthProbeFrames = 0, mouseProbeFrames = 0, sendKeyFrames = 0, viewDumpFrames = 0;
+    std::uint64_t depthProbeId = 0, mouseProbeId = 0, viewDumpId = 0;
+    std::string viewDumpName;
     std::int32_t mouseProbeX = 0, mouseProbeY = 0;
     AimAngle mouseBefore{};
     std::uint16_t sendKeyScan = 0;
@@ -1673,6 +1674,26 @@ void ResearchTick(Adapter& a) {
         a.log.Write("research %s", msg);
         ResearchAck(a, a.mouseProbeId, msg);
     }
+    if (a.viewDumpFrames) { // research viewdump: the copy is taken by the next submit
+        std::array<std::uint8_t, kViewBlockBytes> block{};
+        std::uint32_t count = 0;
+        if (a.platform.viewOverride.TakeBlockDump(block, count)) {
+            a.viewDumpFrames = 0;
+            const std::string path = a.session.researchDumpDir + "\\" + a.viewDumpName + ".bin";
+            bool ok = false;
+            if (std::FILE* f = std::fopen(path.c_str(), "wb")) {
+                ok = std::fwrite(block.data(), 1, block.size(), f) == block.size();
+                std::fclose(f);
+            }
+            char msg[160];
+            std::snprintf(msg, sizeof(msg), "viewdump %s: %s (%u views submitted, block 0x%zx bytes)", a.viewDumpName.c_str(),
+                          ok ? "written" : "write failed", count, block.size());
+            a.log.Write("research %s", msg);
+            ResearchAck(a, a.viewDumpId, msg);
+        } else if (--a.viewDumpFrames == 0) {
+            ResearchAck(a, a.viewDumpId, "viewdump: no view submit through the override (is it installed?)");
+        }
+    }
     if (a.depthProbeFrames && --a.depthProbeFrames == 0) {
         AimAngle unused{};
         float n = 0, f = 0;
@@ -1735,6 +1756,13 @@ void ResearchTick(Adapter& a) {
     case ResearchCommand::Kind::Snap: {
         const bool ok = a.platform.WriteBackbufferBmp(a.session.researchDumpDir + "\\" + c.arg + ".bmp");
         ResearchAck(a, c.id, ok ? ("snap " + c.arg).c_str() : "snap failed");
+        break;
+    }
+    case ResearchCommand::Kind::ViewDump: {
+        a.platform.viewOverride.RequestBlockDump();
+        a.viewDumpFrames = 120;
+        a.viewDumpId = c.id;
+        a.viewDumpName = c.arg;
         break;
     }
     case ResearchCommand::Kind::Click:

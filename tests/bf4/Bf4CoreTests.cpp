@@ -1385,4 +1385,7 @@ TEST_CASE(ResearchCommandsForLiveFlatSessions) {
     const auto v = ParseResearchCommands("1 viewcopies 2\n2 viewcopies 4\n", 0);
     CHECK(v.size() == 2 && v[0].kind == ResearchCommand::Kind::ViewCopies && v[0].x == 2 &&
           v[1].kind == ResearchCommand::Kind::Unknown);
+    const auto dumps = ParseResearchCommands("1 viewdump block_a\n2 viewdump ../x\n3 viewdump\n", 0);
+    CHECK(dumps.size() == 3 && dumps[0].kind == ResearchCommand::Kind::ViewDump && dumps[0].arg == "block_a" &&
+          dumps[1].kind == ResearchCommand::Kind::Unknown && dumps[2].kind == ResearchCommand::Kind::Unknown);
 }

@@ -129,6 +129,17 @@ TEST_CASE(ViewOverrideAppliesRestoresAndDetachesExactly) {
     CHECK(s.submits == 2 && s.applied == 1 && s.restored == 1 && s.foreign == 0);
     CHECK(s.copiesDiffer == 0.0f); // the game submitted the same camera twice
 
+    // Research dump: the block exactly as the game submitted it, taken once.
+    std::array<std::uint8_t, kViewBlockBytes> dump{};
+    std::uint32_t dumpCount = 0;
+    CHECK(!vo.TakeBlockDump(dump, dumpCount));
+    vo.RequestBlockDump();
+    vo.SetLocal(Yawed(30, {}), false);
+    r.SubmitThroughVtable(v.bytes);
+    CHECK(vo.TakeBlockDump(dump, dumpCount) && dumpCount == 1);
+    CHECK(std::memcmp(dump.data(), pristine.bytes, kViewBlockBytes) == 0); // not the override's pose
+    CHECK(!vo.TakeBlockDump(dump, dumpCount));
+
     vo.SetCopyMask(2); // research: only the +0x40 copy gets the head pose
     vo.SetLocal(Yawed(30, {}), false);
     r.SubmitThroughVtable(v.bytes);

@@ -160,6 +160,21 @@ void ViewOverride::SetGunAim(const GunAimSettings& settings) {
     gunAim_ = settings;
 }
 
+void ViewOverride::RequestBlockDump() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    dumpRequested_ = true;
+    dumpReady_ = false;
+}
+
+bool ViewOverride::TakeBlockDump(std::array<std::uint8_t, kViewBlockBytes>& out, std::uint32_t& viewCount) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!dumpReady_) return false;
+    out = dump_;
+    viewCount = dumpViewCount_;
+    dumpReady_ = false;
+    return true;
+}
+
 void ViewOverride::Clear() {
     std::lock_guard<std::mutex> lock(mutex_);
     havePose_ = false;
@@ -196,6 +211,12 @@ void ViewOverride::Submit(void* renderer, float a, float b, std::uint32_t viewCo
         fovY = self->fovY_;
         parentYaw = self->parentYaw_;
         if (!fresh) self->stats_.poseRun = 0; // this frame shows the stock view
+        if (self->dumpRequested_) { // research: block 0 as the game submitted it
+            std::memcpy(self->dump_.data(), views, kViewBlockBytes);
+            self->dumpViewCount_ = viewCount;
+            self->dumpRequested_ = false;
+            self->dumpReady_ = true;
+        }
     }
     Matrix4f game;
     std::memcpy(game.m.data(), views, sizeof(game.m));

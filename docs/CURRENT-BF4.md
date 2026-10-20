@@ -55,7 +55,10 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   block transform copies get the head pose; research only), `depthprobe` (installs the depth
   capture, reports it and writes `vr-snapshot-depth.bmp`), `mouse dx dy` (SendInput counts,
   camera yaw/pitch before and 20 frames after), `sendkey <scan>` (a key as the holsters
-  press it) and `setting <id> <n>` (a mod menu item as if chosen in the headset).
+  press it) and `setting <id> <n>` (a mod menu item as if chosen in the headset). Added
+  later: `viewdump <name>` (the next submitted view block, 0x1020 bytes as the game
+  submitted it, to `<research>/<name>.bin`; `build/scratch/pytools/viewblock.py` lists its
+  transforms, FOVs and differences between dumps).
   Fixed 2026-10-19: a session used to replay every command already in `cmd.txt` at start
   (old menu clicks, keys, settings); one replayed click landed on the home screen's
   multiplayer quick-match tile ("Failed to join game session", nothing joined). The channel

@@ -24,6 +24,8 @@
 //   <id> setting <id> <n>   sets a mod menu item to choice n (as if clicked in the headset)
 //   <id> viewcopies <0..3>  which of the view block's transform copies get the head pose
 //                           (bit 0: +0x00, bit 1: +0x40; 3 = both, the default)
+//   <id> viewdump <name>    the next submitted view block (0x1020 bytes, as the game
+//                           submitted it, before any override) -> <research>/<name>.bin
 
 #include "Bf4PointerInjector.h"
 
@@ -37,7 +39,7 @@ namespace fvr::bf4 {
 struct ResearchCommand {
     enum class Kind : std::uint8_t {
         Snap, Click, Move, Key, DumpImage, ScanQ, Peek, Type, Census, DepthProbe, Mouse, SendKey, Setting, ViewCopies,
-        Unknown
+        ViewDump, Unknown
     };
     std::uint64_t id = 0;
     Kind kind = Kind::Unknown;
