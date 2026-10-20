@@ -10,13 +10,14 @@ struct MenuBindingCandidates {
     std::uint32_t inputEnabled=0,inputBlocked=0,targetGlobal=0;
     unsigned logicalWidth=0,logicalHeight=0;
     std::uint32_t mousePumpCaller=0,mousePumpReturn=0,inputNodeGlobal=0;
+    std::uint32_t coordinateMapper=0,displayGlobal=0;
     bool operator==(const MenuBindingCandidates&)const=default;
 };
 std::optional<MenuBindingCandidates> DiscoverMenuBinding(std::span<const std::byte>,const engine::PeImage&);
 struct MenuBindingCodeSpan {std::uint32_t rva=0,size=0;};
 // Complete functions relied on for dispatch, derived from the verified call
 // graph. Compare these bytes against the loaded image before installing hooks.
-std::optional<std::array<MenuBindingCodeSpan,11>> MenuBindingCodeSpans(
+std::optional<std::array<MenuBindingCodeSpan,33>> MenuBindingCodeSpans(
     std::span<const std::byte>,const engine::PeImage&,const MenuBindingCandidates&);
 
 struct MenuMemory {
@@ -59,6 +60,8 @@ struct MenuNativeCalls {
     // A true result means invoked, NOT that APT activated a menu item.
     bool (*cursor)(void*,std::uint32_t function,std::uint32_t manager,std::int32_t x,std::int32_t y)=nullptr;
     bool (*event)(void*,std::uint32_t function,std::uint32_t manager,const std::array<std::uint32_t,3>&)=nullptr;
+    // Original cdecl(out float[2], input pixel float[2]); no APT writes.
+    bool (*mapPixels)(void*,std::uint32_t function,std::array<float,2>& logical,const std::array<float,2>& pixels)=nullptr;
 };
 enum class MenuDispatchResult : std::uint8_t {Rejected,TargetChanged,QueueFull,CallFailed,Invoked,Retired};
 // Minted only by a successful down. Non-copyable so a caller cannot replay a
@@ -88,6 +91,16 @@ private:
 // The interaction/channel owner supplies once-only edges and neutral rearming.
 MenuDispatchResult DispatchMenuPointer(const MenuMemory&,const MenuBindingCandidates&,std::uint32_t imageBase,
     const MenuTargetSnapshot&,const MenuPointerCommand&,const MenuDispatchGuard&,const MenuNativeCalls&,MenuOwnedPress&);
+// Host coordinates cover the complete captured raster. Only the verified native
+// UI callback may convert them with the current display/viewport and dispatch.
+// Mapper failure or changing display identity/dimensions emits no cursor/down.
+struct MenuRasterDiagnostic {
+    std::uint32_t display=0,vtable=0,width=0,height=0;
+    std::array<float,2> uv{},pixels{},logical{};
+};
+MenuDispatchResult DispatchMenuRasterPointer(const MenuMemory&,const MenuBindingCandidates&,std::uint32_t imageBase,
+    const MenuTargetSnapshot&,float rasterU,float rasterV,MenuPointerKind,std::uint64_t generation,
+    std::int64_t deadlineNs,const MenuDispatchGuard&,const MenuNativeCalls&,MenuOwnedPress&,MenuRasterDiagnostic* =nullptr);
 // Cleanup only: originalEpoch is the epoch of the successful down, even if the
 // current menu has closed. Current focus/tracking/menu-owned are irrelevant.
 // No cursor call or new down. Retains ownership on failure for a bounded caller

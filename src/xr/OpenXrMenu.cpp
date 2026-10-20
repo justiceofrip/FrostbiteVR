@@ -140,13 +140,9 @@ bool OpenXrMenu::Frame(const interaction::InputFrame& input){
         const auto result=channel_->SurfaceConsumed(feedback_,feedbackConsumed_);if(result!=ipc::ChannelResult::Busy)feedbackPending_=false;
     }
     if(hasImage_&&GetTickCount64()-lastImageWall_>250)hasImage_=false;
-    // The native BC2 logical mapping is verified for a 16:9 raster only.
-    // Keep an unsupported-aspect menu visible, but suppress pointing/clicks
-    // until its actual viewport/letterbox conversion has its own evidence.
-    auto pointerInput=input;
-    if(hasImage_&&(state.logicalWidth!=1280||state.logicalHeight!=720||
-       std::uint64_t(panel_.width)*720!=std::uint64_t(panel_.height)*1280))pointerInput.hands[1].aimTracked=false;
-    current_=pointer_.Update(pointerInput,known?&state:nullptr,hasImage_?panel_.width:0,hasImage_?panel_.height:0);
+    // Pointing stays in complete-raster UV. The engine adapter converts pixels
+    // with its original current-viewport mapper on the native UI thread.
+    current_=pointer_.Update(input,known?&state:nullptr,hasImage_?panel_.width:0,hasImage_?panel_.height:0);
     LARGE_INTEGER sampled{};const auto sampledNs=QueryPerformanceCounter(&sampled)?MonotonicNanos(sampled.QuadPart,frequency_):0;
     currentOwnership_=ownership_.Update(input,current_,known?&state:nullptr,
         known?MonotonicNanos(state.deadlineQpc,frequency_):0,sampledNs);

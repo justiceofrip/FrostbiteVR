@@ -18,6 +18,8 @@ MenuBindingCandidates binding{};MenuStateCandidates states{};unsigned base=0;
 std::atomic<bool> enabled=false,stopping=false;std::atomic<unsigned> callbacks=0,uiThread=0;
 std::atomic<MenuDisplayState> displayState=MenuDisplayState::Unknown;
 std::atomic<ULONGLONG> displayObservedAt=0;
+std::atomic<std::uint64_t> connectionInputs=0,connectionPublished=0,connectionGraphicsFailures=0;
+std::atomic<std::int64_t> connectionInputDeadline=0;
 std::atomic<unsigned> pumps=0,stateReads=0,stateMisses=0,visibilityRequests=0,visibilityAcks=0,visibilityTimeouts=0,moves=0,downs=0,ups=0,rejected=0,releaseFailures=0;
 std::atomic_flag pumping=ATOMIC_FLAG_INIT;
 std::atomic<unsigned> foreignBoundary=0,concurrentBoundary=0,threadChanges=0;
@@ -41,6 +43,8 @@ struct ControlEvidence {
 std::array<ControlEvidence,64> controlEvidence{};unsigned controlEvidenceCount=0;
 bool buttonArmed=false,pendingVisible=false,releasePending=false;
 std::uint64_t pendingUntil=0;float lastU=0,lastV=0;
+// Written only by the serialized UI pump; read only after callbacks drain.
+MenuRasterDiagnostic lastMapping{};
 bool Copy(unsigned address,void* dst,std::size_t n)noexcept {
     if(address<0x10000||!dst||!n||n>65536||n>UINT32_MAX-address)return false;
     __try {std::memcpy(dst,reinterpret_cast<const void*>(address),n);return true;}__except(EXCEPTION_EXECUTE_HANDLER){return false;}
@@ -52,11 +56,15 @@ std::int64_t NowQpc(){LARGE_INTEGER n{};return QueryPerformanceCounter(&n)?n.Qua
 std::int64_t Now(){return Nanos(NowQpc());}
 const MenuNativeCalls calls{nullptr,
     [](void*,unsigned fn,unsigned owner,std::int32_t x,std::int32_t y){reinterpret_cast<void(__thiscall*)(void*,int,int)>(fn)(reinterpret_cast<void*>(owner),x,y);return true;},
-    [](void*,unsigned fn,unsigned owner,const std::array<unsigned,3>& event){reinterpret_cast<void(__thiscall*)(void*,const unsigned*)>(fn)(reinterpret_cast<void*>(owner),event.data());return true;}};
+    [](void*,unsigned fn,unsigned owner,const std::array<unsigned,3>& event){reinterpret_cast<void(__thiscall*)(void*,const unsigned*)>(fn)(reinterpret_cast<void*>(owner),event.data());return true;},
+    [](void*,unsigned fn,std::array<float,2>& logical,const std::array<float,2>& pixels){
+        __try {reinterpret_cast<void(__cdecl*)(float*,const float*)>(fn)(logical.data(),pixels.data());return true;}
+        __except(EXCEPTION_EXECUTE_HANDLER){return false;}}};
 const MenuVisibilityCalls visibilityCalls{nullptr,[](void*,unsigned fn,unsigned owner,const std::array<unsigned,4>& args){
     reinterpret_cast<void(__thiscall*)(void*,unsigned,unsigned,unsigned,unsigned)>(fn)(reinterpret_cast<void*>(owner),args[0],args[1],args[2],args[3]);return true;},
     [](void*,unsigned fn,unsigned owner,unsigned action){reinterpret_cast<void(__thiscall*)(void*,unsigned)>(fn)(reinterpret_cast<void*>(owner),action);return true;}};
 void RetireInputEpoch()noexcept {
+    connectionInputDeadline.store(0,std::memory_order_release);
     ++menuEpoch;buttonArmed=false;lastPointerSequence=0;
     controlSequence={};pendingUntil=0;
 }
@@ -87,7 +95,7 @@ void __fastcall Pump(void* self,void*,void* input){
     original(self,input);
     if(!enabled.load(std::memory_order_acquire)&&!stopping.load(std::memory_order_acquire))return;
     const auto state=ReadMenuState(memory,states,base);
-    if(!state){displayState.store(MenuDisplayState::Unknown,std::memory_order_release);++stateMisses;return;}
+    if(!state){connectionInputDeadline.store(0);displayState.store(MenuDisplayState::Unknown,std::memory_order_release);++stateMisses;return;}
     if(!IsMenuPumpBoundary(memory,binding,base,caller,reinterpret_cast<unsigned>(self),reinterpret_cast<unsigned>(input),state->inputController)){++foreignBoundary;return;}
     if(pumping.test_and_set(std::memory_order_acquire)){++concurrentBoundary;return;}
     struct Boundary {Boundary(){nativeBoundary=true;}~Boundary(){nativeBoundary=false;pumping.clear(std::memory_order_release);}} boundary;
@@ -102,11 +110,14 @@ void __fastcall Pump(void* self,void*,void* input){
     // eventual up is rejected forever against the replacement target.
     if(press.Active()){
         const auto current=ReadMenuTarget(memory,binding,base);
-        if(current&&!SameMenuTargetOwner(*current,press.Target()))ReleaseOwned();
+        if(current&&!SameMenuTargetOwner(*current,press.Target())){
+            connectionInputDeadline.store(0,std::memory_order_release);ReleaseOwned();
+        }
     }
     if(releasePending){ReleaseOwned();if(press.Active())return;}
     ++stateReads;
     if(!lastState||lastState->owner!=state->owner||lastState->manager!=state->manager||lastState->entered!=state->entered){
+        connectionInputDeadline.store(0,std::memory_order_release);
         ReleaseOwned();if(press.Active())return;
         if(lastState&&(lastState->owner!=state->owner||lastState->manager!=state->manager))RetireInputEpoch();
         else {++menuEpoch;buttonArmed=false;lastPointerSequence=0;}
@@ -124,6 +135,12 @@ void __fastcall Pump(void* self,void*,void* input){
     if(unsigned(controlResult)<controlReadResults.size())++controlReadResults[unsigned(controlResult)];
     const auto controlNow=NowQpc();
     const auto edge=controlSequence.Observe(controlResult,control,controlNow);
+    // A returned current-epoch menu packet proves the independent host/native
+    // handshake even before a soldier or a world render callback exists.
+    if((edge.read==MenuControlRead::Ready||edge.read==MenuControlRead::Rearmed)&&
+       state->entered&&target&&control.menuEpoch==menuEpoch){
+        ++connectionInputs;connectionInputDeadline.store(control.deadlineQpc,std::memory_order_release);
+    }else if(edge.read!=MenuControlRead::Busy)connectionInputDeadline.store(0,std::memory_order_release);
     if(edge.read==MenuControlRead::Busy){
         // A briefly busy channel is not a release gesture. Preserve only the
         // existing press under its original unexpired input lease. No cursor
@@ -171,14 +188,16 @@ void __fastcall Pump(void* self,void*,void* input){
     // event-only path here lets the desktop cursor decide which button clicks.
     const auto kind=!down&&press.Active()?MenuPointerKind::PrimaryUp:
         down&&buttonArmed&&!press.Active()?MenuPointerKind::PrimaryDown:MenuPointerKind::Move;
-    const auto command=MakeMenuPointerCommand(binding,lastU,lastV,kind,control.sequence,menuEpoch,Nanos(control.deadlineQpc));
     const MenuDispatchGuard guard{menuEpoch,Now(),true,true,true,true};
-    if(command){const auto result=DispatchMenuPointer(memory,binding,base,*target,*command,guard,calls,press);
+    MenuRasterDiagnostic mapping;
+    {const auto result=DispatchMenuRasterPointer(memory,binding,base,*target,lastU,lastV,kind,
+        control.sequence,Nanos(control.deadlineQpc),guard,calls,press,&mapping);
         if(result==MenuDispatchResult::Invoked){
+            lastMapping=mapping;
             if(kind==MenuPointerKind::PrimaryDown){++downs;buttonArmed=false;}
             else if(kind==MenuPointerKind::PrimaryUp){++ups;buttonArmed=true;}
             else ++moves;
-        }else ++rejected;
+        }else {++rejected;ReleaseOwned();buttonArmed=false;}
     }
     pressActive.store(press.Active(),std::memory_order_release);
 }
@@ -209,6 +228,7 @@ bool Install(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uin
 }
 void Start()noexcept {if(hook){enabled.store(true,std::memory_order_release);startup::Start();}}
 bool Stop()noexcept {
+    connectionInputDeadline.store(0,std::memory_order_release);
     displayState.store(MenuDisplayState::Unknown,std::memory_order_release);displayObservedAt.store(0,std::memory_order_release);
     enabled.store(false,std::memory_order_release);stopping.store(true,std::memory_order_release);
     const bool startupStopped=startup::Stop();
@@ -219,7 +239,24 @@ bool Stop()noexcept {
     for(unsigned n=0;n<100&&callbacks.load();++n)Sleep(1);
     stopping.store(false,std::memory_order_release);return startupStopped&&okay&&!pressActive.load()&&!cancelActive.load()&&!callbacks.load();
 }
-void Present(IDXGISwapChain* chain)noexcept {if(enabled.load(std::memory_order_acquire))raster.Pump(chain,channel);}
+void Present(IDXGISwapChain* chain)noexcept {
+    if(enabled.load(std::memory_order_acquire)){
+        raster.Pump(chain,channel);
+        // The producer counters belong to the graphics thread. Mirror them
+        // atomically instead of reading its mutable state on the trace worker.
+        connectionPublished.store(raster.Published(),std::memory_order_release);
+        connectionGraphicsFailures.store(raster.Failed(),std::memory_order_release);
+    }
+}
+MenuConnectionTelemetry ReadConnectionTelemetry()noexcept {
+    MenuConnectionTelemetry out;out.inputSamples=connectionInputs.load(std::memory_order_acquire);
+    out.published=connectionPublished.load(std::memory_order_acquire);
+    out.graphicsFailures=connectionGraphicsFailures.load(std::memory_order_acquire);
+    const auto now=NowQpc(),deadline=connectionInputDeadline.load(std::memory_order_acquire);
+    out.ready=enabled.load(std::memory_order_acquire)&&CurrentDisplayState()==MenuDisplayState::Menu&&
+        now>0&&deadline>now&&out.inputSamples&&out.published&&!out.graphicsFailures;
+    return out;
+}
 bool CompletedMenuPresentation()noexcept {
     return stateReads.load()>=3&&raster.Captured()>=3&&raster.Published()>=3&&!raster.Failed()&&
         !pressActive.load()&&!cancelActive.load()&&!callbacks.load()&&!releaseFailures.load()&&!cancelReleaseFailures.load();
@@ -230,6 +267,11 @@ void Report(std::ostream& out){
        <<",\"moves\":"<<moves.load()<<",\"downs\":"<<downs.load()<<",\"ups\":"<<ups.load()<<",\"rejected\":"<<rejected.load()<<",\"release_failures\":"<<releaseFailures.load()
        <<",\"pointer_owner_retirements\":"<<pointerRetirements.load()<<",\"cancel_owner_retirements\":"<<cancelRetirements.load()
        <<",\"foreign_boundary\":"<<foreignBoundary.load()<<",\"concurrent_boundary\":"<<concurrentBoundary.load()<<",\"worker_thread_changes\":"<<threadChanges.load()
+       <<",\"last_mapping\":{\"display\":"<<lastMapping.display<<",\"vtable\":"<<lastMapping.vtable
+       <<",\"width\":"<<lastMapping.width<<",\"height\":"<<lastMapping.height
+       <<",\"u\":"<<lastMapping.uv[0]<<",\"v\":"<<lastMapping.uv[1]
+       <<",\"pixel_x\":"<<lastMapping.pixels[0]<<",\"pixel_y\":"<<lastMapping.pixels[1]
+       <<",\"logical_x\":"<<lastMapping.logical[0]<<",\"logical_y\":"<<lastMapping.logical[1]<<'}'
        <<",\"button_still_owned\":"<<(pressActive.load()?"true":"false")<<",\"captured\":"<<raster.Captured()<<",\"published\":"<<raster.Published()<<",\"discarded_rasters\":"<<raster.Discarded()<<",\"graphics_failures\":"<<raster.Failed()<<",\"cancel_ups\":"<<cancelUps.load()<<",\"cancel_release_failures\":"<<cancelReleaseFailures.load()<<",\"cancel_still_owned\":"<<cancelActive.load()<<",\"cancel_evidence\":[";
     const auto observation=[&](const MenuCancelObservation& o){out<<"{\"target_valid\":"<<o.targetValid<<",\"queue\":"<<o.target.queue<<",\"count\":"<<o.target.count<<",\"last_word_valid\":"<<o.lastWordValid<<",\"last_word\":"<<o.lastWord<<",\"press_disabled_valid\":"<<o.pressDisabledValid<<",\"press_disabled\":"<<unsigned(o.pressDisabled)<<",\"modal_valid\":"<<o.modalValid<<",\"modal_selected\":"<<o.modalSelected<<",\"modal_vtable\":"<<o.modalVtable<<",\"modal_predicate\":"<<o.modalPredicate<<'}';};
     for(unsigned n=0;n<cancelEvidenceCount;++n){if(n)out<<',';const auto& e=cancelEvidence[n];out<<"{\"action\":"<<unsigned(e.action)<<",\"release\":"<<e.release<<",\"invoked\":"<<e.invoked<<",\"before\":";observation(e.before);out<<",\"after\":";observation(e.after);out<<'}';}

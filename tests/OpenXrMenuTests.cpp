@@ -274,14 +274,29 @@ int BusyStatePreservesMenuUntilOriginalExpiry(FakeRuntime& runtime){
     f.producerChannel.Close();CHECK(!frameOnly());CHECK(f.Layers().empty()); // Closed invalidates even fresh cached state.
     return 0;
 }
+int RasterAspects(FakeRuntime& runtime){
+    // Exercise the actual presenter, not just pointer math: the old Frame()
+    // suppression made a valid 4:3 raster visible but removed its laser/input.
+    for(const auto size:{std::array{1024u,768u},std::array{1280u,800u},
+                         std::array{1920u,1080u},std::array{2560u,1080u}}){
+        Fixture f(runtime);f.ResetImages(size[0],size[1],DXGI_FORMAT_R8G8B8A8_UNORM,2);
+        f.input.hands[1].aim.position={.22f,1.72f,0};
+        CHECK(f.Step(true));auto layers=f.Layers();
+        CHECK(layers.size()==3&&(f.control.flags&ipc::MenuPoint)&&!(f.control.flags&ipc::MenuDown));
+        CHECK(f.control.u>.5f&&f.control.u<1&&f.control.v>0&&f.control.v<.5f);
+        const auto panel=Quad(layers[0]);
+        CHECK(panel.subImage.imageRect.extent.width==int(size[0])&&panel.subImage.imageRect.extent.height==int(size[1]));
+        CHECK(Near(panel.size.height/panel.size.width,float(size[1])/float(size[0])));
+        f.input.hands[1].trigger=.8f;CHECK(f.Step());CHECK(f.control.flags&ipc::MenuDown);
+        f.input.focused=false;CHECK(f.Step());CHECK(f.Layers().empty()&&f.control.flags==0);
+        f.input.focused=true;CHECK(f.Step(true));CHECK(f.Layers().size()==3&&!(f.control.flags&ipc::MenuDown));
+        f.input.hands[1].trigger=0;CHECK(f.Step());
+        f.input.hands[1].trigger=.8f;CHECK(f.Step());CHECK(f.control.flags&ipc::MenuDown);
+        CHECK(f.presenter.Errors()==0);
+    }
+    return 0;
+}
 int Failures(FakeRuntime& runtime){
-    // An unproven 4:3 native raster remains visible, with no guessed cursor UV.
-    {Fixture f(runtime);f.ResetImages(40,30,DXGI_FORMAT_R8G8B8A8_UNORM,2);CHECK(f.Step(true));
-        CHECK(f.Layers().size()==1&&!(f.control.flags&(ipc::MenuPoint|ipc::MenuDown)));
-        f.input.hands[1].trigger=.8f;CHECK(f.Step());CHECK(!(f.control.flags&ipc::MenuDown));
-        f.ResetImages(32,18,DXGI_FORMAT_R8G8B8A8_UNORM,3);CHECK(f.Step(true));CHECK(f.Layers().size()==3&&!(f.control.flags&ipc::MenuDown));
-        f.input.hands[1].trigger=0;CHECK(f.Step());f.input.hands[1].trigger=.8f;CHECK(f.Step());CHECK(f.control.flags&ipc::MenuDown);}
-
     {Fixture f(runtime);runtime.failAcquire=true;CHECK(f.Step(true));CHECK(f.Layers().empty()&&f.presenter.Errors()==1);
         CHECK(f.Step(true));CHECK(f.Layers().size()==3&&f.presenter.Frames()==1);}
     {Fixture f(runtime);f.ResetImages(32,18,DXGI_FORMAT_B8G8R8A8_UNORM,2);CHECK(f.Step(true));CHECK(f.Layers().empty()&&f.presenter.Errors()==1);}
@@ -296,7 +311,7 @@ int main(){
     try{ComPtr<ID3D11Device> device;ComPtr<ID3D11DeviceContext> context;D3D_FEATURE_LEVEL level{};
         CHECK(SUCCEEDED(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_HARDWARE,nullptr,0,nullptr,0,D3D11_SDK_VERSION,&device,&level,&context)));
         FakeRuntime runtime;runtime.device=device.Get();FakeRuntime::current=&runtime;
-        CHECK(PixelsAndLayers(runtime)==0);CHECK(Lifecycle(runtime)==0);CHECK(FormatNegotiation(runtime)==0);CHECK(ChordGameplayFilter(runtime)==0);CHECK(TypelessPointerImages(runtime)==0);CHECK(PointerFailureDoesNotChurn(runtime)==0);CHECK(BusyStatePreservesMenuUntilOriginalExpiry(runtime)==0);CHECK(Failures(runtime)==0);
+        CHECK(PixelsAndLayers(runtime)==0);CHECK(Lifecycle(runtime)==0);CHECK(FormatNegotiation(runtime)==0);CHECK(ChordGameplayFilter(runtime)==0);CHECK(TypelessPointerImages(runtime)==0);CHECK(PointerFailureDoesNotChurn(runtime)==0);CHECK(BusyStatePreservesMenuUntilOriginalExpiry(runtime)==0);CHECK(RasterAspects(runtime)==0);CHECK(Failures(runtime)==0);
         CHECK(runtime.errors==0&&runtime.chains.empty()&&runtime.created==runtime.destroyed);
         CHECK(runtime.acquired==runtime.released+runtime.retired&&runtime.waited==runtime.released);
         std::cout<<"OpenXrMenu actual GPU pixels, quad/cursor/laser, ownership releases, stale raster and swapchain failures passed; chains="<<runtime.created<<" releases="<<runtime.released<<" retired="<<runtime.retired<<'\n';return 0;

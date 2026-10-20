@@ -6,6 +6,27 @@
 #include <limits>
 namespace fvr::bc2 {
 namespace {
+// Complete original mapper, its five read-only display getters for each native
+// display class, and every referenced numeric constant. Derived from the same
+// inspected image as the mouse pump; these are also compared to the live image.
+struct MappingEvidence {std::uint32_t rva,size;std::uint64_t hash;};
+constexpr std::array<MappingEvidence,22> mappingEvidence{{
+    {0x509060,0x230,0x5cfa1d3c3afd91edull},
+    {0x5d8180,4,0x1d394ef6ff61ced8ull},{0x5d8190,4,0x1d4566f6ff6acefcull},
+    {0x5d8290,0x37,0x23cd99f6a68ef458ull},{0x5f4050,7,0xe6a21f0c4d48e508ull},{0x5f4060,7,0x8a0abd0481432f01ull},
+    {0x5d7270,4,0x1d394ef6ff61ced8ull},{0x5d7280,4,0x1d4566f6ff6acefcull},
+    {0x5d7370,0x37,0x514a7b4ff3d0c17cull},{0x5f2dc0,7,0xef3463c54f5b74a9ull},{0x5f2dd0,7,0xe8b96c116596b46full},
+    {0x5d60a0,4,0x1d7d46f6ff9b8e0cull},{0x5d60b0,4,0x1d1d9ef6ff49dc10ull},
+    {0x5d6060,7,0x1ac04886b4bd94e9ull},{0x5fa2c0,7,0x1bb3ec6478523ed8ull},{0x5fa2d0,7,0xb819c8520ae97805ull},
+    {0x103bb60,8,0xaa37403229527bd1ull},{0x103bb58,8,0xfbcb6c349aa1c7b3ull},
+    {0x102a7c8,8,0x9ebd38b308d3cfecull},{0x10d94f0,4,0x4b72477f9c5c2f98ull},
+    {0x10d9488,8,0xaae7e93229e886a8ull},{0x10d95f8,4,0x4b72b77f9c5cede8ull}}};
+struct DisplayProfile {std::uint32_t vtable,width,height,aspect,rectangle,overridden;unsigned evidence;bool floatAspect;};
+constexpr std::array<DisplayProfile,3> displays{{
+    {0x10497a0,0x18,0x1c,0xcc,0xf0,0xec,1,false},
+    {0x10496c8,0x18,0x1c,0xd8,0x170,0x165,6,false},
+    {0x1049970,0x0c,0x10,0x124,0xc0,0xb0,11,true}}};
+constexpr std::array<std::uint32_t,5> displaySlots{0x28,0x2c,0x98,0x9c,0xa0};
 std::optional<std::size_t> Offset(std::span<const std::byte> b,const engine::PeImage& pe,std::uint32_t rva,std::size_t size){
     for(const auto& s:pe.sections)if(rva>=s.rva){const auto d=std::uint64_t(rva)-s.rva,at=std::uint64_t(s.rawOffset)+d;
         if(d<=s.rawSize&&size<=s.rawSize-d&&at<=b.size()&&size<=b.size()-at)return std::size_t(at);}
@@ -36,6 +57,46 @@ bool Match(std::span<const std::byte> b,const engine::PeImage& pe,std::uint32_t 
 bool Read(const MenuMemory& m,std::uint64_t at,void* dst,std::size_t size){return m.read&&at>=0x10000&&size&&size<=65536&&at<=UINT32_MAX&&size<=UINT32_MAX-at&&m.read(m.context,std::uint32_t(at),dst,size);}
 bool ReadWord(const MenuMemory& m,std::uint64_t at,std::uint32_t& value){return Read(m,at,&value,4);}
 bool SameOwner(const MenuTargetSnapshot& a,const MenuTargetSnapshot& b){return a.manager==b.manager&&a.ui==b.ui&&a.target==b.target&&a.queue==b.queue&&a.buffer==b.buffer&&a.capacity==b.capacity;}
+struct DisplaySnapshot {
+    std::uint32_t object=0,vtable=0,width=0,height=0;
+    std::array<std::uint32_t,2> aspect{};
+    std::array<std::uint32_t,4> rectangle{};
+    std::uint8_t overridden=0;
+    bool operator==(const DisplaySnapshot&)const=default;
+};
+std::optional<DisplaySnapshot> ReadDisplay(const MenuMemory& memory,const MenuBindingCandidates& binding,std::uint32_t base){
+    if(binding.coordinateMapper!=0x509060||binding.displayGlobal!=0x1172a60||base<0x10000||
+       std::uint64_t(base)+0x1172a64>UINT32_MAX)return {};
+    const auto read=[&]()->std::optional<DisplaySnapshot>{
+        DisplaySnapshot out;
+        if(!ReadWord(memory,std::uint64_t(base)+binding.displayGlobal,out.object)||!ReadWord(memory,out.object,out.vtable))return {};
+        const auto profile=std::find_if(displays.begin(),displays.end(),[&](const auto& p){return std::uint64_t(base)+p.vtable==out.vtable;});
+        if(profile==displays.end())return {};
+        for(unsigned i=0;i<displaySlots.size();++i){std::uint32_t fn=0;
+            if(!ReadWord(memory,std::uint64_t(out.vtable)+displaySlots[i],fn)||std::uint64_t(base)+mappingEvidence[profile->evidence+i].rva!=fn)return {};}
+        if(!ReadWord(memory,std::uint64_t(out.object)+profile->width,out.width)||
+           !ReadWord(memory,std::uint64_t(out.object)+profile->height,out.height)||
+           !out.width||!out.height||out.width>32768||out.height>32768||
+           !Read(memory,std::uint64_t(out.object)+profile->overridden,&out.overridden,1)||out.overridden>1)return {};
+        if(out.overridden){
+            for(unsigned i=0;i<4;++i)if(!ReadWord(memory,std::uint64_t(out.object)+profile->rectangle+4*i,out.rectangle[i]))return {};
+            const auto& r=out.rectangle;
+            if(!r[2]||!r[3]||std::uint64_t(r[0])+r[2]>out.width||std::uint64_t(r[1])+r[3]>out.height)return {};
+        }else{
+            if(!ReadWord(memory,std::uint64_t(out.object)+profile->aspect,out.aspect[0]))return {};
+            float aspect=0;
+            if(profile->floatAspect)std::memcpy(&aspect,out.aspect.data(),4);
+            else {
+                if(!ReadWord(memory,std::uint64_t(out.object)+profile->aspect+4,out.aspect[1])||
+                   !out.aspect[0]||!out.aspect[1]||out.aspect[0]>32768||out.aspect[1]>32768)return {};
+                aspect=float(out.aspect[0])/float(out.aspect[1]);
+            }
+            if(!std::isfinite(aspect)||aspect<.1f||aspect>10)return {};
+        }
+        return out;
+    };
+    const auto first=read(),second=read();if(!first||!second||*first!=*second)return {};return first;
+}
 }
 bool SameMenuTargetOwner(const MenuTargetSnapshot& a,const MenuTargetSnapshot& b) noexcept {
     return a.manager==b.manager&&a.ui==b.ui&&a.target==b.target;
@@ -58,6 +119,17 @@ std::optional<MenuBindingCandidates> DiscoverMenuBinding(std::span<const std::by
     for(const auto pair:{std::pair{0u,0x73u},std::pair{1u,0x89u},std::pair{2u,0x7cu},std::pair{3u,0x92u}})
         if(std::uint64_t(base)+*pump+pair.second!=Word(b,*jump+4*pair.first))return {};
     const auto convert=Call(b,pe,*pump+0x10c);if(!convert)return {};
+    if(base!=0x400000||*convert!=mappingEvidence[0].rva)return {};
+    for(const auto& evidence:mappingEvidence){
+        const auto at=Offset(b,pe,evidence.rva,evidence.size);if(!at)return {};
+        std::uint64_t hash=14695981039346656037ull;
+        for(const auto byte:b.subspan(*at,evidence.size)){hash^=std::to_integer<unsigned char>(byte);hash*=1099511628211ull;}
+        if(hash!=evidence.hash)return {};
+    }
+    for(const auto& profile:displays)for(unsigned i=0;i<displaySlots.size();++i){
+        const auto at=Offset(b,pe,profile.vtable+displaySlots[i],4);
+        if(!at||Word(b,*at)!=base+mappingEvidence[profile.evidence+i].rva)return {};
+    }
     if(!Match(b,pe,*convert+0x212,"D9 44 24 14 5E DC 0D ?? ?? ?? ?? D9 18 D9 44 24 14 DC 0D ?? ?? ?? ?? D9 58 04 83 C4 18 C3",30))return {};
     const auto co=Offset(b,pe,*convert+0x212,30);const auto wx=Word(b,*co+7),hy=Word(b,*co+19);if(wx<base||hy<base)return {};
     const auto w=Offset(b,pe,wx-base,8),h=Offset(b,pe,hy-base,8);if(!w||!h)return {};double width=0,height=0;std::memcpy(&width,b.data()+*w,8);std::memcpy(&height,b.data()+*h,8);
@@ -92,9 +164,9 @@ std::optional<MenuBindingCandidates> DiscoverMenuBinding(std::span<const std::by
     const auto getterAt=Offset(b,pe,*inputGetter,6);if(!getterAt)return {};
     const auto inputGlobal=Word(b,*getterAt+1);if(inputGlobal<base||std::uint64_t(inputGlobal-base)+4>pe.imageSize)return {};
     return MenuBindingCandidates{*pump,*cursor,*event,manager-base,enabled-base,blocked-base,target-base,1280,720,
-        *caller,*caller+0x1ab,inputGlobal-base};
+        *caller,*caller+0x1ab,inputGlobal-base,*convert,0x1172a60};
 }
-std::optional<std::array<MenuBindingCodeSpan,11>> MenuBindingCodeSpans(
+std::optional<std::array<MenuBindingCodeSpan,33>> MenuBindingCodeSpans(
     std::span<const std::byte> bytes,const engine::PeImage& pe,const MenuBindingCandidates& binding){
     const auto verified=DiscoverMenuBinding(bytes,pe);if(!verified||*verified!=binding)return {};
     const auto cursorWrapper=Call(bytes,pe,binding.setCursor+0x15),eventWrapper=Call(bytes,pe,binding.sendEvent+0x1a);
@@ -103,9 +175,10 @@ std::optional<std::array<MenuBindingCodeSpan,11>> MenuBindingCodeSpans(
     if(!cursorSink||!eventSink)return {};
     const auto add=Call(bytes,pe,*cursorSink+0x35),pack=Call(bytes,pe,*eventSink+0x2d);if(!add||!pack)return {};
     const auto inputGetter=Call(bytes,pe,binding.mousePumpCaller+0x37);if(!inputGetter)return {};
-    const std::array<MenuBindingCodeSpan,11> spans{{
+    std::array<MenuBindingCodeSpan,33> spans{{
         {binding.mousePump,0x25c},{binding.setCursor,0x20},{binding.sendEvent,0x25},
         {*cursorWrapper,0x35},{*eventWrapper,0x3a},{*cursorSink,0x3b},{*eventSink,0x33},{*add,0x67},{*pack,0x4b},{binding.mousePumpCaller,0x1bd},{*inputGetter,6}}};
+    for(unsigned i=0;i<mappingEvidence.size();++i)spans[11+i]={mappingEvidence[i].rva,mappingEvidence[i].size};
     for(const auto& span:spans)if(!Offset(bytes,pe,span.rva,span.size))return {};
     return spans;
 }
@@ -161,6 +234,30 @@ MenuDispatchResult DispatchMenuPointer(const MenuMemory& memory,const MenuBindin
         }else owned.Forget();
     }
     return MenuDispatchResult::Invoked;
+}
+MenuDispatchResult DispatchMenuRasterPointer(const MenuMemory& memory,const MenuBindingCandidates& b,std::uint32_t base,
+    const MenuTargetSnapshot& expected,float u,float v,MenuPointerKind kind,std::uint64_t generation,std::int64_t deadline,
+    const MenuDispatchGuard& guard,const MenuNativeCalls& calls,MenuOwnedPress& owned,MenuRasterDiagnostic* diagnostic){
+    if(diagnostic)*diagnostic={};
+    auto command=MakeMenuPointerCommand(b,u,v,kind,generation,guard.menuEpoch,deadline);
+    if(!command||!guard.nativeUiThread||!guard.menuOwned||!guard.focused||!guard.tracked||
+       guard.nowNs<=0||deadline<=guard.nowNs||!calls.mapPixels||!calls.cursor||
+       (kind!=MenuPointerKind::Move&&!calls.event))return MenuDispatchResult::Rejected;
+    const auto target=ReadMenuTarget(memory,b,base);
+    if(!target||!SameOwner(*target,expected))return MenuDispatchResult::TargetChanged;
+    const auto display=ReadDisplay(memory,b,base);if(!display)return MenuDispatchResult::Rejected;
+    const std::array<float,2> pixels{u*float(display->width),v*float(display->height)};
+    std::array<float,2> logical{std::numeric_limits<float>::quiet_NaN(),std::numeric_limits<float>::quiet_NaN()};
+    if(!calls.mapPixels(calls.context,base+b.coordinateMapper,logical,pixels))return MenuDispatchResult::CallFailed;
+    const auto after=ReadDisplay(memory,b,base);
+    if(!after||*after!=*display)return MenuDispatchResult::TargetChanged;
+    if(!std::isfinite(logical[0])||!std::isfinite(logical[1])||
+       logical[0]<0||logical[0]>1280||logical[1]<0||logical[1]>720)return MenuDispatchResult::Rejected;
+    // Native pump uses cvttss2si after this exact mapper: truncate, never clamp
+    // the letterbox/viewport exterior onto a clickable canvas edge.
+    command->x=std::int32_t(logical[0]);command->y=std::int32_t(logical[1]);
+    if(diagnostic)*diagnostic={display->object,display->vtable,display->width,display->height,{u,v},pixels,logical};
+    return DispatchMenuPointer(memory,b,base,expected,*command,guard,calls,owned);
 }
 MenuDispatchResult ReleaseMenuPointer(const MenuMemory& memory,const MenuBindingCandidates& b,std::uint32_t base,
     const MenuTargetSnapshot& expected,std::uint64_t epoch,const MenuDispatchGuard& guard,const MenuNativeCalls& calls,MenuOwnedPress& owned){

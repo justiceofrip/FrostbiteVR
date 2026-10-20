@@ -45,6 +45,29 @@ function Get-Bc2Session([string]$StateRoot) {
     $active.folder=$folder
     return $active
 }
+function Get-Bc2ExistingGame([string]$Exe,[bool]$Fresh) {
+    $games=@(Get-Process BFBC2Game -ErrorAction SilentlyContinue)
+    if($games.Count -gt 1){throw 'Multiple BC2 games are running; no process was selected.'}
+    if(-not $games.Count){return $null}
+    $game=$games[0]
+    if($game.Path -ne $Exe){throw 'Another BC2 installation is running.'}
+    if(-not $Fresh){throw 'BC2 is still open. Enable Restart BC2 before launch, or close BC2 normally and launch again. A fresh game is required for VR and its audio settings; reinstalling BC2VR is unnecessary.'}
+    return $game
+}
+function Get-Bc2SessionRecord($Active) {
+    if(-not $Active){return $null}
+    $path=Get-FvrChild $Active.folder 'session.json'
+    try {
+        Assert-FvrNoLinks $path
+        if(-not(Test-Path -LiteralPath $path -PathType Leaf) -or (Get-Item -LiteralPath $path).Length -gt 32768){return $null}
+        $record=Read-FvrJson $path
+        if($record.schema -cne 'bc2vr.session.v1' -or $record.version -cne $Active.version -or
+           $record.supervisor.pid -ne $Active.supervisor.pid -or
+           $record.supervisor.start_utc -cne $Active.supervisor.start_utc -or
+           $record.supervisor.path -ine $Active.supervisor.path){return $null}
+        return $record
+    } catch {return $null}
+}
 function Assert-Bc2RuntimeSpace([string]$StateRoot) {
     Assert-FvrNoLinks $StateRoot
     Assert-FvrFreeSpace $StateRoot 768MB

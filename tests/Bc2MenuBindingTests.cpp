@@ -14,21 +14,96 @@ struct Fixture {
     bc2::MenuBindingCandidates binding{0x1000,0x2000,0x2100,0x100,0x104,0x108,0x10c,1280,720};
     std::unordered_map<std::uint32_t,std::uint32_t> words;
     unsigned reads=0,cursorCalls=0,eventCalls=0;bool failCursor=false,failEvent=false,changeOnCursor=false,fillOnCursor=false,unstable=false;
+    unsigned mapCalls=0;bool failMap=false,changeOnMap=false;
+    std::array<float,2> mapped{351.75f,191.9f},pixels{};
+    static constexpr std::uint32_t display=0x80000;
+    std::uint32_t displayWidthOffset=0;
     std::array<std::uint32_t,3> event{};std::int32_t x=0,y=0,eventX=0,eventY=0;
     Fixture(){words={{base+0x100,manager},{base+0x104,1},{base+0x108,0},{manager+0x14,ui},{ui+4,target},{target+0x18,queue},{queue+8,8},{queue+0x28,0},{queue+0x2c,buffer},{buffer,0},{buffer+28,0}};}
     bc2::MenuMemory Memory(){return {this,[](void* ctx,std::uint32_t at,void* out,std::size_t n){
-        auto& f=*static_cast<Fixture*>(ctx);if(n!=4)return false;
+        auto& f=*static_cast<Fixture*>(ctx);if(n!=4&&n!=1)return false;
         if(at==base+0x100&&f.unstable&&++f.reads>1)return false;
         const auto found=f.words.find(at);if(found==f.words.end())return false;
-        std::memcpy(out,&found->second,4);return true;}};}
+        std::memcpy(out,&found->second,n);return true;}};}
+    void Display(unsigned width,unsigned height,unsigned profile=2){
+        binding.coordinateMapper=0x509060;binding.displayGlobal=0x1172a60;
+        const std::array<std::uint32_t,3> tables{0x10497a0,0x10496c8,0x1049970};
+        const std::array<std::array<std::uint32_t,5>,3> getters{{
+            {0x5d8180,0x5d8190,0x5d8290,0x5f4050,0x5f4060},
+            {0x5d7270,0x5d7280,0x5d7370,0x5f2dc0,0x5f2dd0},
+            {0x5d60a0,0x5d60b0,0x5d6060,0x5fa2c0,0x5fa2d0}}};
+        const std::array<unsigned,5> slots{0x28,0x2c,0x98,0x9c,0xa0};
+        const auto table=base+tables[profile];
+        words[base+binding.displayGlobal]=display;words[display]=table;
+        for(unsigned i=0;i<5;++i)words[table+slots[i]]=base+getters[profile][i];
+        displayWidthOffset=profile==2?0x0c:0x18;
+        words[display+displayWidthOffset]=width;words[display+displayWidthOffset+4]=height;
+        const unsigned flag=profile==0?0xec:profile==1?0x165:0xb0;words[display+flag]=0;
+        if(profile==2){const float aspect=float(width)/float(height);std::memcpy(&words[display+0x124],&aspect,4);}
+        else {const unsigned aspect=profile==0?0xcc:0xd8;words[display+aspect]=width;words[display+aspect+4]=height;}
+    }
     bc2::MenuNativeCalls Calls(){return {this,
         [](void* ctx,std::uint32_t fn,std::uint32_t self,std::int32_t x,std::int32_t y){auto& f=*static_cast<Fixture*>(ctx);
             ++f.cursorCalls;if(fn!=base+f.binding.setCursor||self!=manager)return false;f.x=x;f.y=y;
             if(f.changeOnCursor)f.words[ui+4]=target+4;if(f.fillOnCursor)f.words[queue+0x28]=8;
             return !f.failCursor;},
         [](void* ctx,std::uint32_t fn,std::uint32_t self,const std::array<std::uint32_t,3>& event){auto& f=*static_cast<Fixture*>(ctx);
-            ++f.eventCalls;f.event=event;f.eventX=f.x;f.eventY=f.y;return fn==base+f.binding.sendEvent&&self==manager&&!f.failEvent;}};}
+            ++f.eventCalls;f.event=event;f.eventX=f.x;f.eventY=f.y;return fn==base+f.binding.sendEvent&&self==manager&&!f.failEvent;},
+        [](void* ctx,std::uint32_t fn,std::array<float,2>& out,const std::array<float,2>& pixels){auto& f=*static_cast<Fixture*>(ctx);
+            ++f.mapCalls;f.pixels=pixels;out=f.mapped;
+            if(f.changeOnMap)++f.words[display+f.displayWidthOffset];
+            return fn==base+0x509060&&!f.failMap;}};}
 };
+int RasterMapping(){
+    using enum bc2::MenuDispatchResult;
+    const bc2::MenuDispatchGuard guard{2,900,true,true,true,true};
+    const auto dispatch=[&](Fixture& f,const bc2::MenuDispatchGuard& g,bc2::MenuPointerKind kind=bc2::MenuPointerKind::PrimaryDown){
+        const auto target=bc2::ReadMenuTarget(f.Memory(),f.binding,f.base);if(!target)return TargetChanged;
+        return bc2::DispatchMenuRasterPointer(f.Memory(),f.binding,f.base,*target,.5f,.25f,kind,1,1000,g,f.Calls(),f.owned);
+    };
+    for(const auto dimensions:{std::array{1024u,768u},std::array{1280u,800u},std::array{1920u,1080u},std::array{2560u,1080u}}){
+        for(unsigned profile=0;profile<3;++profile){
+            Fixture f;f.Display(dimensions[0],dimensions[1],profile);
+            CHECK(dispatch(f,guard)==Invoked&&f.mapCalls==1&&f.cursorCalls==1&&f.eventCalls==1);
+            CHECK(f.pixels[0]==float(dimensions[0])*.5f&&f.pixels[1]==float(dimensions[1])*.25f);
+            // Cursor/event use the original mapper's output, not UV*1280/720.
+            CHECK(f.x==351&&f.y==191&&f.eventX==351&&f.eventY==191);
+            f.mapped={710.8f,510.2f};
+            CHECK(dispatch(f,guard,bc2::MenuPointerKind::PrimaryUp)==Invoked&&!f.owned.Active());
+            CHECK(f.eventX==710&&f.eventY==510);
+        }
+    }
+    for(unsigned bad=0;bad<6;++bad){Fixture f;f.Display(1024,768);auto denied=guard;
+        if(bad==0)denied.nativeUiThread=false;if(bad==1)denied.menuOwned=false;if(bad==2)denied.focused=false;
+        if(bad==3)denied.tracked=false;if(bad==4)denied.nowNs=1000;if(bad==5)denied.menuEpoch=0;
+        CHECK(dispatch(f,denied)==Rejected&&!f.mapCalls&&!f.cursorCalls&&!f.eventCalls);
+    }
+    for(unsigned bad=0;bad<12;++bad){Fixture f;f.Display(1024,768);
+        if(bad==0)f.words[f.display]=0x99999;
+        if(bad==1)f.words[f.base+0x1049970+0x98]+=4;
+        if(bad==2)f.words[f.display+0x0c]=0;
+        if(bad==3)f.words[f.display+0x10]=32769;
+        if(bad==4)f.words.erase(f.display+0x124);
+        if(bad==5)f.words[f.display+0x124]=0x7fc00000;
+        if(bad==6)f.failMap=true;
+        if(bad==7)f.changeOnMap=true;
+        if(bad==8)f.mapped[0]=std::numeric_limits<float>::quiet_NaN();
+        if(bad==9)f.mapped[1]=-1;
+        if(bad==10)f.mapped[0]=1280.5f;
+        if(bad==11)f.binding.coordinateMapper+=1;
+        CHECK(dispatch(f,guard)!=Invoked&&!f.cursorCalls&&!f.eventCalls&&!f.owned.Active());
+        CHECK(f.mapCalls==(bad>=6&&bad<=10?1u:0u));
+    }
+    // Current native viewport is consumed by the original mapper. Reject bad
+    // rectangles without calling it; do not silently clamp to a menu button.
+    Fixture viewport;viewport.Display(1280,800);viewport.words[viewport.display+0xb0]=1;
+    for(unsigned i=0;i<4;++i)viewport.words[viewport.display+0xc0+4*i]=std::array<unsigned,4>{0,40,1280,720}[i];
+    CHECK(dispatch(viewport,guard)==Invoked);
+    const auto maps=viewport.mapCalls;viewport.words[viewport.display+0xcc]=800;
+    CHECK(dispatch(viewport,guard,bc2::MenuPointerKind::PrimaryUp)==Rejected&&viewport.mapCalls==maps&&viewport.owned.Active());
+    CHECK(bc2::ReleaseMenuPointer(viewport.Memory(),viewport.binding,viewport.base,viewport.owned.Target(),2,guard,viewport.Calls(),viewport.owned)==Invoked);
+    return 0;
+}
 int TargetAndBounds(){
     Fixture f;const auto original=f.words;const auto target=bc2::ReadMenuTarget(f.Memory(),f.binding,f.base);
     CHECK(target&&target->manager==f.manager&&target->target==f.target&&target->capacity==8&&f.words==original);
@@ -213,7 +288,8 @@ int StaticEvidence(const char* path){
     CHECK(binding->inputEnabled==0x17ea910&&binding->inputBlocked==0x17ea704&&binding->targetGlobal==0x17e9c5c);
     CHECK(binding->logicalWidth==1280&&binding->logicalHeight==720);
     CHECK(binding->mousePumpCaller==0x541c90&&binding->mousePumpReturn==0x541e3b&&binding->inputNodeGlobal==0x1170e90);
-    const auto spans=bc2::MenuBindingCodeSpans(bytes,pe.image,*binding);CHECK(spans&&spans->size()==11);
+    CHECK(binding->coordinateMapper==0x509060&&binding->displayGlobal==0x1172a60);
+    const auto spans=bc2::MenuBindingCodeSpans(bytes,pe.image,*binding);CHECK(spans&&spans->size()==33);
     CHECK((*spans)[0].rva==binding->mousePump&&(*spans)[0].size==0x25c);
     auto wrong=*binding;++wrong.sendEvent;CHECK(!bc2::MenuBindingCodeSpans(bytes,pe.image,wrong));
     // Every native function relied on for cursor/button dispatch has a verified
@@ -223,6 +299,8 @@ int StaticEvidence(const char* path){
             const auto delta=span.rva-section.rva;CHECK(span.size<=section.rawSize-delta);offset=std::size_t(section.rawOffset)+delta;break;}
         CHECK(offset&&span.size&&*offset+span.size<=bytes.size());auto mutated=bytes;mutated[*offset]^=std::byte{0xff};
         CHECK(!bc2::DiscoverMenuBinding(mutated,pe.image));CHECK(!bc2::MenuBindingCodeSpans(mutated,pe.image,*binding));
+        if(span.rva==binding->coordinateMapper){mutated=bytes;mutated[*offset+0x188]^=std::byte{1};
+            CHECK(!bc2::DiscoverMenuBinding(mutated,pe.image));}
     }
 
     for(const auto relative:{0x3du,0x1a3u,0x1a5u,0x1a7u}){
@@ -237,7 +315,7 @@ int StaticEvidence(const char* path){
 }
 }
 int main(int argc,char** argv){
-    CHECK(TargetAndBounds()==0);CHECK(CoordinatesAndDispatch()==0);CHECK(OwnedRelease()==0);CHECK(TrackedReleaseAfterDesktopMove()==0);CHECK(LeaseLifetime()==0);CHECK(ExactPumpBoundary()==0);
+    CHECK(RasterMapping()==0);CHECK(TargetAndBounds()==0);CHECK(CoordinatesAndDispatch()==0);CHECK(OwnedRelease()==0);CHECK(TrackedReleaseAfterDesktopMove()==0);CHECK(LeaseLifetime()==0);CHECK(ExactPumpBoundary()==0);
     if(argc>1)CHECK(StaticEvidence(argv[1])==0);
     return 0;
 }

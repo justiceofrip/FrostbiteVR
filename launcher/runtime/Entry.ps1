@@ -36,20 +36,25 @@ if($Action -eq 'Validate'){
     $null=Get-Bc2PreparationFfmpeg $StateRoot (Join-Path $PSScriptRoot 'config/ffmpeg-download.json') $cached Validate
     @{validated=$true;version=$config.version;source_sha256=$config.source_sha256;assets_ready=$cached;openxr_runtime=$xr.label;headset_checked=$false;game_started=$false}|ConvertTo-Json;return
 }
-if($active -and (Find-Bc2OwnedProcess $active.supervisor)){Write-Output 'BC2 VR is already running.';return}
+if($active -and (Find-Bc2OwnedProcess $active.supervisor)){
+    $prior=Get-Bc2SessionRecord $active
+    if($prior -and $prior.state -in @('failed','stopped','ended')){
+        throw 'The previous VR session is finishing cleanup. Wait for it to finish, then enable Restart BC2 before launch or close BC2 normally. Reinstalling BC2VR is unnecessary.'
+    }
+    Write-Output 'BC2 VR is already running.';return
+}
 if($StartAt -ne 'MainMenu'){throw 'The public launcher starts at the VR main menu. Select Resume Game there.'}
 if(Get-Process BC2XrHost,BC2NativeTrace,BC2NativeIpcProbe -ErrorAction SilentlyContinue){throw 'Another BC2 VR session is active. Stop it before launching.'}
+# Reject an unchanged live game before opening another headset session. Repeat
+# the exact selection after preparation, which may take minutes on first use.
+$null=Get-Bc2ExistingGame $exe ([bool]$Fresh)
 $null=Invoke-Bc2OpenXrPreflight $PSScriptRoot $StateRoot $xr
 Write-Information 'BC2VR: Preparing local equipment and audio caches…' -InformationAction Continue
 $ffmpeg=Get-Bc2PreparationFfmpeg $StateRoot (Join-Path $PSScriptRoot 'config/ffmpeg-download.json') $cached Launch
 # A first download can take minutes; acquire process identities only afterward.
 if(Get-Process BC2XrHost,BC2NativeTrace,BC2NativeIpcProbe -ErrorAction SilentlyContinue){throw 'Another BC2 VR session became active during preparation. Stop it before launching.'}
-$games=@(Get-Process BFBC2Game -ErrorAction SilentlyContinue)
-if($games.Count -gt 1){throw 'Multiple BC2 games are running; no process was selected.'}
-$game=if($games.Count){$games[0]}else{$null}
+$game=Get-Bc2ExistingGame $exe ([bool]$Fresh)
 if($game){
-    if($game.Path -ne $exe){throw 'Another BC2 installation is running.'}
-    if(-not $Fresh){throw 'Enable Restart BC2 before launch. A fresh game must inherit the physical reload audio settings.'}
     if(-not $game.CloseMainWindow() -or -not $game.WaitForExit(8000)){throw 'BC2 did not exit normally. Close it yourself, then launch again.'}
 }
 if(-not $cached){

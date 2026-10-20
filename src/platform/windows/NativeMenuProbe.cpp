@@ -11,8 +11,8 @@
 #include <cstring>
 using Microsoft::WRL::ComPtr;
 int wmain(int argc,wchar_t** argv){try{
-    if(argc<3||std::wstring(argv[1])!=L"--output")throw std::runtime_error("Usage: BC2NativeMenuProbe --output NEW_FOLDER [--resume-existing] [--click-close] [--front-end-observe]");
-    bool resumeExisting=false,clickClose=false,frontEndObserve=false;for(int i=3;i<argc;++i){if(std::wstring(argv[i])==L"--resume-existing")resumeExisting=true;else if(std::wstring(argv[i])==L"--click-close")clickClose=true;else if(std::wstring(argv[i])==L"--front-end-observe")frontEndObserve=true;else throw std::runtime_error("Unknown menu fixture option");}
+    if(argc<3||std::wstring(argv[1])!=L"--output")throw std::runtime_error("Usage: BC2NativeMenuProbe --output NEW_FOLDER [--resume-existing] [--click-close] [--front-end-observe | --front-end-observe-long]");
+    bool resumeExisting=false,clickClose=false,frontEndObserve=false,frontEndLong=false;for(int i=3;i<argc;++i){if(std::wstring(argv[i])==L"--resume-existing")resumeExisting=true;else if(std::wstring(argv[i])==L"--click-close")clickClose=true;else if(std::wstring(argv[i])==L"--front-end-observe")frontEndObserve=true;else if(std::wstring(argv[i])==L"--front-end-observe-long")frontEndObserve=frontEndLong=true;else throw std::runtime_error("Unknown menu fixture option");}
     if(frontEndObserve&&(resumeExisting||clickClose))throw std::runtime_error("Front-end observation does not click or toggle menus");
     const auto folder=std::filesystem::absolute(argv[2]);if(std::filesystem::exists(folder))throw std::runtime_error("New report folder required");std::filesystem::create_directories(folder);
     fvr::ipc::RemoteFrameProvider frames;fvr::ipc::MenuChannel menu;
@@ -35,10 +35,14 @@ int wmain(int argc,wchar_t** argv){try{
     bool openedMenu=false,closedMenu=false,saved=false,invalidInitial=false;unsigned frontEndReadySamples=0;
     std::uint64_t savedAtMs=0;
     constexpr std::uint64_t FrontEndCaptureDelayMs=6000;
+    // Hold the front end beyond the launcher's former 35-second false timeout.
+    // Keep one capture; the off-centre point detects aspect-conversion mistakes
+    // which a centre-only hover would hide. This mode sends no button input.
+    const std::uint64_t frontEndObserveMs=frontEndLong?45000:FrontEndCaptureDelayMs;
     fvr::ipc::MenuMode previous=fvr::ipc::MenuMode::Unknown;
     fvr::ipc::MenuControl control;control.space=1;control.flags=fvr::ipc::MenuFocused;
     fvr::graphics::PairTicket pending{};bool feedback=false,consumed=false;
-    while(GetTickCount64()-start<20000){
+    while(GetTickCount64()-start<(frontEndLong?60000u:20000u)){
         const auto now=GetTickCount64();fvr::ipc::MenuState state;
         // Match a connected, neutral VR player even while the menu owns input.
         // The current body/vehicle camera requires fresh tracking input; this
@@ -62,7 +66,7 @@ int wmain(int argc,wchar_t** argv){try{
                 if(state.inputReady)++frontEndReadySamples;
                 // Exercise only the native laser-hover route. No button/toggle,
                 // level selection, keyboard or desktop cursor input is sent.
-                control.u=.5f;control.v=.5f;control.flags=fvr::ipc::MenuFocused|fvr::ipc::MenuPoint;
+                control.u=frontEndLong?.25f:.5f;control.v=frontEndLong?.25f:.5f;control.flags=fvr::ipc::MenuFocused|fvr::ipc::MenuPoint;
                 frames.Suspend();
             }
             if(!frontEndObserve&&!resumeDone){
@@ -114,15 +118,16 @@ int wmain(int argc,wchar_t** argv){try{
             }}else ++errors;
             const auto r=menu.SurfaceConsumed(pending,consumed);if(r!=fvr::ipc::ChannelResult::Busy)feedback=false;
         }
-        if(frontEndObserve&&images>=60&&frontEndReadySamples>=60&&saved&&connectedAt&&now-connectedAt>=FrontEndCaptureDelayMs)break;
+        if(frontEndObserve&&images>=60&&frontEndReadySamples>=60&&saved&&connectedAt&&now-connectedAt>=frontEndObserveMs)break;
         if(closedMenu&&resumedPairs>=8&&now-closeAt>=500)break;
         // Bound open failure and close the menu through the same original path.
-        if(connectedAt&&now-connectedAt>13000){if(openedMenu&&!closeAt){control.toggle=2;closeAt=now;}if(!openedMenu||now-connectedAt>15000)break;}
+        if(!frontEndObserve&&connectedAt&&now-connectedAt>13000){if(openedMenu&&!closeAt){control.toggle=2;closeAt=now;}if(!openedMenu||now-connectedAt>15000)break;}
         Sleep(10);
     }
     control.sequence=++sequence;control.flags=0;menu.PublishControl(control);
-    const bool sequenceOkay=frontEndObserve?(images>=60&&frontEndReadySamples>=60):(resumeDone&&worldPairs>=8&&resumedPairs>=8&&openedMenu&&closedMenu);
+    const auto observedMs=connectedAt?GetTickCount64()-connectedAt:0;
+    const bool sequenceOkay=frontEndObserve?(images>=60&&frontEndReadySamples>=60&&observedMs>=frontEndObserveMs):(resumeDone&&worldPairs>=8&&resumedPairs>=8&&openedMenu&&closedMenu);
     const bool okay=sequenceOkay&&images&&saved&&!errors&&!invalidInitial;
-    std::ofstream(folder/L"result.json")<<"{\"opened\":"<<(openedMenu?"true":"false")<<",\"closed\":"<<(closedMenu?"true":"false")<<",\"images\":"<<images<<",\"errors\":"<<errors<<",\"saved\":"<<(saved?"true":"false")<<",\"invalid_initial\":"<<(invalidInitial?"true":"false")<<",\"passed\":"<<(okay?"true":"false")<<",\"world_pairs\":"<<worldPairs<<",\"resumed_pairs\":"<<resumedPairs<<",\"neutral_input_samples\":"<<worldGeneration<<",\"resume_existing\":"<<resumeExisting<<",\"click_close\":"<<clickClose<<",\"front_end_observe\":"<<frontEndObserve<<",\"front_end_ready_samples\":"<<frontEndReadySamples<<",\"headset_tested\":false}";
+    std::ofstream(folder/L"result.json")<<"{\"opened\":"<<(openedMenu?"true":"false")<<",\"closed\":"<<(closedMenu?"true":"false")<<",\"images\":"<<images<<",\"errors\":"<<errors<<",\"saved\":"<<(saved?"true":"false")<<",\"invalid_initial\":"<<(invalidInitial?"true":"false")<<",\"passed\":"<<(okay?"true":"false")<<",\"world_pairs\":"<<worldPairs<<",\"resumed_pairs\":"<<resumedPairs<<",\"neutral_input_samples\":"<<worldGeneration<<",\"resume_existing\":"<<resumeExisting<<",\"click_close\":"<<clickClose<<",\"front_end_observe\":"<<frontEndObserve<<",\"front_end_ready_samples\":"<<frontEndReadySamples<<",\"observed_ms\":"<<observedMs<<",\"off_center_hover\":"<<frontEndLong<<",\"headset_tested\":false}";
     return okay?0:2;
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

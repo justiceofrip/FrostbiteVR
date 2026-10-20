@@ -59,7 +59,22 @@ function Get-Bc2NativeStartupSample([string]$Path) {
             try {$row=$lines[$i] | ConvertFrom-Json -AsHashtable -ErrorAction Stop}catch{continue}
             if($row -isnot [hashtable] -or -not $row.ContainsKey('input_samples') -or -not $row.ContainsKey('gpu_failure_stage') -or -not $row.ContainsKey('camera_restore_failures')){continue}
             if($row.gpu_failure_stage -ne 0 -or $row.camera_restore_failures -ne 0){throw 'The native VR graphics bridge reported a startup error. Use Report feedback to save its logs.'}
-            if($row.input_samples -gt 0){return $row}
+            $menu=if($row.ContainsKey('menu_connection')){$row.menu_connection}else{$null}
+            $menuComplete=$menu -is [hashtable] -and $menu.ContainsKey('ready') -and
+                $menu.ContainsKey('input_samples') -and $menu.ContainsKey('published') -and $menu.ContainsKey('graphics_failures')
+            if($menu -is [hashtable] -and $menu.ContainsKey('graphics_failures') -and $menu.graphics_failures -ne 0){throw 'The native VR menu bridge reported a startup error. Use Report feedback to save its logs.'}
+            if($row.ContainsKey('utc_filetime_100ns')){
+                $age=[DateTime]::UtcNow.ToFileTimeUtc()-[long]$row.utc_filetime_100ns
+                if($age -lt 0 -or $age -gt 30000000){return $null}
+            }
+            if($row.input_samples -gt 0 -or
+               ($menuComplete -and $menu.ready -is [bool] -and $menu.ready -and
+                $menu.input_samples -gt 0 -and $menu.published -gt 0 -and
+                $menu.ContainsKey('graphics_failures') -and $menu.graphics_failures -eq 0)){return $row}
+            # Only the newest complete sample may establish current readiness.
+            # A partial trailing write is skipped; an older ready sample cannot
+            # override a newer loss of focus/menu ownership.
+            return $null
         }
     } finally {$file.Dispose()}
     return $null

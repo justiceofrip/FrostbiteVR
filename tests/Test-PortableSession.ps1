@@ -6,7 +6,7 @@ $repo=Split-Path $PSScriptRoot -Parent
 . (Join-Path $repo 'launcher/Launcher.Core.ps1')
 $root=Join-Path $repo ('test-temp/session-start-'+[guid]::NewGuid().ToString('N'))
 $saved=@{};foreach($key in @('TEMP','TMP','TMPDIR','PYTHONDONTWRITEBYTECODE')){$saved[$key]=[Environment]::GetEnvironmentVariable($key,'Process')}
-$script:checks=0
+$script:checks=0;$passed=$false
 function Check([bool]$Good,[string]$Name){if(-not $Good){throw "FAILED: $Name"};$script:checks++;Write-Host "PASS $Name"}
 try {
     $null=Set-FvrLauncherStorage $root
@@ -100,14 +100,20 @@ function Write-FvrJson($Path,$Value){
         }elseif($scenario -like 'native_exception_*'){
             Check ($code -ne 0 -and $state.state -eq 'failed' -and $state.native_exit_code -eq 2 -and 'running' -in $history) ($scenario+' reports failure after readiness')
             Check ($state.error.Contains('3221225477') -and $state.error.Contains('Report feedback')) ($scenario+' retains the actual probe exception and feedback guidance')
+            if($scenario -eq 'native_exception_game_live'){
+                Check ($state.restart_required -eq $true -and $state.error.Contains('Restart BC2 before launch') -and $state.error.Contains('reinstalling BC2VR is unnecessary',[StringComparison]::OrdinalIgnoreCase)) 'failed session with retained live game gives precise retry guidance'
+            }else{
+                Check (-not $state.ContainsKey('restart_required') -and -not $state.error.Contains('BC2 remains open')) 'game already closed does not receive a false restart requirement'
+            }
         }else{
             Check ($code -ne 0 -and $state.state -eq 'failed' -and 'running' -notin $history) ($scenario+' never reports running')
             if($scenario -eq 'native_failure'){Check ($state.error.Contains('Fixture native profile mismatch')) 'actual native attach error survives into launcher state'}
             if($scenario -eq 'wrong_renderer'){Check ($state.error.Contains('DxVersion=11')) 'renderer error has actionable detail in launcher state'}
         }
     }
+    $passed=$true
     Write-Host "Portable session checks passed: $script:checks"
 } finally {
     foreach($key in $saved.Keys){[Environment]::SetEnvironmentVariable($key,$saved[$key],'Process')}
-    Remove-FvrOwnedTree (Split-Path $root -Parent) (Split-Path $root -Leaf)
+    if($passed){Remove-FvrOwnedTree (Split-Path $root -Parent) (Split-Path $root -Leaf)}
 }

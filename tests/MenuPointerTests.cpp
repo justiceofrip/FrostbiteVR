@@ -58,6 +58,17 @@ int main(){
  interaction::MenuPointer p;interaction::InputFrame i;i.generation=i.spaceGeneration=1;i.predictedNs=1000000000;i.focused=i.headValid=true;i.head.position.y=1.6f;
  i.hands[0].active=interaction::MenuClick;i.hands[1].active=interaction::Trigger|interaction::Secondary;i.hands[1].aimTracked=true;i.hands[1].aim.position={0,1.6f,0};
  ipc::MenuState menu{1,1,1,ipc::MenuMode::Menu,1280,720,1};
+ // The host describes the complete captured raster at every aspect. Native
+ // mapping/rejection is independent of presentation; no engine letterboxing
+ // or logical-canvas coordinates are guessed in the XR pointer.
+ for(const auto size:{std::array{1024u,768u},std::array{1280u,800u},std::array{2560u,1080u}}){
+  interaction::MenuPointer aspect;auto input=i;
+  auto frame=aspect.Update(input,&menu,size[0],size[1]);
+  CHECK(frame.visible&&frame.pointing&&std::abs(frame.control.u-.5f)<.00001f&&std::abs(frame.control.v-.5f)<.00001f);
+  CHECK(std::abs(frame.height/frame.width-float(size[1])/float(size[0]))<.00001f);
+  input.hands[1].aimTracked=false;frame=aspect.Update(input,&menu,size[0],size[1]);
+  CHECK(frame.visible&&!frame.pointing&&!(frame.control.flags&ipc::MenuDown));
+ }
  auto r=p.Update(i,&menu,1920,1080);CHECK(r.visible&&r.pointing);CHECK(std::abs(r.control.u-.5f)<.00001f&&std::abs(r.control.v-.5f)<.00001f);
  CHECK(!(r.control.flags&ipc::MenuDown));++i.generation;i.predictedNs+=11000000;i.hands[1].trigger=.8f;r=p.Update(i,&menu,1920,1080);CHECK(r.control.flags&ipc::MenuDown);
  // Tracking loss releases and requires neutral, even if the trigger stays held.

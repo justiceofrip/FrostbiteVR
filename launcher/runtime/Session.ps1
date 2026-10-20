@@ -103,6 +103,10 @@ finally {
     # Native bootstrap must drain its hooks after the host exits. Do not kill a
     # bootstrap attached to a live game; retain exact ownership on a slow exit.
     if($trace -and -not $trace.HasExited){$state.native_drained=$trace.WaitForExit(15000);if(-not $state.native_drained){$state.error='Native cleanup is still pending. Close BC2 before another launch.';$state.state='failed'}}
+    if($state.state -eq 'failed' -and $game -and -not $game.HasExited -and $state.game -and (Find-Bc2OwnedProcess $state.game)){
+        $state.restart_required=$true
+        $state.error+=' BC2 remains open. Enable Restart BC2 before launch, or close BC2 normally and launch again. Reinstalling BC2VR is unnecessary.'
+    }
     $state.ended_utc=[DateTime]::UtcNow.ToString('o');Save-State
 }
 if($state.state -eq 'failed'){exit 1}

@@ -1,4 +1,43 @@
-# Current state: checkpoint428 physical knife hit / public launcher 0.1.9
+# Current state: checkpoint 429 menu startup / launcher 0.1.10
+
+## Tester startup correction — October 20
+
+The supplied 0.1.9 EA/VirtualDesktopXR log establishes two local software bugs:
+the host disabled pointing for the tester's 1024×768 raster, and the launcher
+stopped a healthy main-menu-only session after 35 seconds because its readiness
+check required world-render input telemetry. The supplied archive does not
+contain the later failed retries. See [the diagnosis and implementation](MENU-STARTUP-HOTFIX429.md).
+
+The candidate uses the original verified native pixel-to-APT mapper, supports
+full-raster pointing at different aspects, and publishes a separate expiring
+menu connection handshake. Explicit restart guidance replaces misleading
+retry status; it does not force-close games or delete installation data.
+The previous 0.1.9 knife and 0.1.8 selected-drive corrections remain included.
+
+Native source is frozen as
+`bc035d08a511df6d0d57cbf7bb78689a8d7842977cbc6bee953ac5940621c133`.
+Both full normal builds passed 293/293 C++ suites each. The runtime receipt is
+`6d6184ebad27f567f40d3051d8b79825e1e04dbf35e316f97980be82dca9b093`.
+The 45-second actual-game menu check passed with world input zero, fresh menu
+readiness beyond 35 seconds, correct off-center native mapping and clean hook
+drain. The owned game was closed normally afterward. Package validation passed
+21 checks covering all 87 payload files, fresh install, 0.1.9 update, installed
+validation and rollback. Private evidence is in `bc2vr-recovery/startup429`.
+
+The local launcher now uses packaged 0.1.10, with 0.1.9 retained for rollback.
+Settings are byte-for-byte unchanged and installed validation reports the
+existing asset cache ready. Installation started no game or headset session.
+Keep **Use local checkpoint** unchecked to run the installed package; the
+optional older local profile remains preserved.
+
+The new actual OpenXR-menu presenter regression passed across four raster sizes,
+off-center input, panel/cursor/beam layers, trigger and focus recovery. Native
+mapper/getter instruction emulation passed 72 cases. Changing this workstation's
+window to 1024×768 did not change the internal 1920×1080 renderer, so that resize
+is explicitly inconclusive for actual-game 4:3 acceptance. The bounded live check
+used the actual 1920×1080 renderer; it sent hover only, without clicks or OS input.
+Actual Virtual Desktop headset acceptance and death/reload crash recovery remain
+unresolved.
 
 ## Knife hotfix published — October 19, 16:57 UTC
 

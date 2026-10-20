@@ -3369,9 +3369,13 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
                     const auto pump=fvr::bc2::rigPublication::ReadPumpPackCounters();
                     const auto magazine=fvr::bc2::rigPublication::ReadMagazinePackCounters();
                     const auto knife=fvr::bc2::selectedKnife::ReadTelemetry();
+                    const auto menuConnection=fvr::bc2::menu::ReadConnectionTelemetry();
                     telemetry<<"{\"elapsed_ms\":"<<(now-sessionStarted)<<",\"utc_filetime_100ns\":"<<utc<<",\"world_calls\":"<<worldCalls.load()
                         <<",\"published\":"<<frameBridge.Published()<<",\"consumed\":"<<frameBridge.Consumed()<<",\"discarded\":"<<frameBridge.Discarded()
                         <<",\"input_samples\":"<<inputSamples.load()<<",\"tracked_input_samples\":"<<inputTrackedSamples.load()<<",\"gpu_failure_stage\":"<<frameBridge.FailureStage()<<",\"camera_restore_failures\":"<<tracked.restoreFailures.load()
+                        <<",\"menu_connection\":{\"ready\":"<<(menuConnection.ready?"true":"false")
+                        <<",\"input_samples\":"<<menuConnection.inputSamples<<",\"published\":"<<menuConnection.published
+                        <<",\"graphics_failures\":"<<menuConnection.graphicsFailures<<'}'
                         <<",\"stereo_frame_admission\":";
                     stereoFrameAdmissionEvidence.Write(telemetry);
                     telemetry<<",\"magazine_empty_gate\":{\"requested\":["<<emptyGate.requested[0]<<','<<emptyGate.requested[1]<<','<<emptyGate.requested[2]

@@ -49,7 +49,30 @@ try {
     [IO.File]::WriteAllText($sample,"{`"input_samples`":0,`"gpu_failure_stage`":0,`"camera_restore_failures`":0}`n")
     Check ($null -eq (Get-Bc2NativeStartupSample $sample)) 'native adapter with no XR input stays pending'
     [IO.File]::AppendAllText($sample,"{`"input_samples`":5,`"gpu_failure_stage`":0,`"camera_restore_failures`":0,`"published`":0}`n{`"partial`":")
-    Check ((Get-Bc2NativeStartupSample $sample).input_samples -eq 5) 'menu-native input succeeds with zero world pairs and partial trailing log row'
+    Check ((Get-Bc2NativeStartupSample $sample).input_samples -eq 5) 'world-native input succeeds with zero completed world pairs and partial trailing log row'
+    $menuSample=@{input_samples=0;gpu_failure_stage=0;camera_restore_failures=0;utc_filetime_100ns=[DateTime]::UtcNow.ToFileTimeUtc();menu_connection=@{ready=$true;input_samples=12;published=4;graphics_failures=0}}
+    [IO.File]::WriteAllText($sample,($menuSample|ConvertTo-Json -Compress -Depth 4)+"`n")
+    Check ((Get-Bc2NativeStartupSample $sample).menu_connection.ready) 'menu input handshake succeeds without any gameplay callback or world pairs'
+    $menuSample.menu_connection.input_samples=0
+    [IO.File]::WriteAllText($sample,($menuSample|ConvertTo-Json -Compress -Depth 4)+"`n")
+    Check ($null -eq (Get-Bc2NativeStartupSample $sample)) 'a visible menu alone is not an input connection'
+    $menuSample.menu_connection.input_samples=12;$menuSample.menu_connection.published=0
+    [IO.File]::WriteAllText($sample,($menuSample|ConvertTo-Json -Compress -Depth 4)+"`n")
+    Check ($null -eq (Get-Bc2NativeStartupSample $sample)) 'menu control alone is not a presented native menu'
+    $menuSample.menu_connection.published=4;$menuSample.utc_filetime_100ns=[DateTime]::UtcNow.AddSeconds(-10).ToFileTimeUtc()
+    [IO.File]::WriteAllText($sample,($menuSample|ConvertTo-Json -Compress -Depth 4)+"`n")
+    Check ($null -eq (Get-Bc2NativeStartupSample $sample)) 'expired menu startup evidence stays pending'
+    $menuSample.utc_filetime_100ns=[DateTime]::UtcNow.ToFileTimeUtc()
+    [IO.File]::WriteAllText($sample,($menuSample|ConvertTo-Json -Compress -Depth 4)+"`n")
+    $menuSample.menu_connection.ready=$false
+    [IO.File]::AppendAllText($sample,($menuSample|ConvertTo-Json -Compress -Depth 4)+"`n{`"partial`":")
+    Check ($null -eq (Get-Bc2NativeStartupSample $sample)) 'latest loss of menu readiness wins over an older ready sample'
+    $menuSample.menu_connection=@{ready=$true}
+    [IO.File]::WriteAllText($sample,($menuSample|ConvertTo-Json -Compress -Depth 4)+"`n")
+    Check ($null -eq (Get-Bc2NativeStartupSample $sample)) 'incomplete menu telemetry is ignored under strict mode'
+    $menuSample.menu_connection=@{ready=$true;input_samples=12;published=4;graphics_failures=1}
+    [IO.File]::WriteAllText($sample,($menuSample|ConvertTo-Json -Compress -Depth 4)+"`n")
+    Reject {Get-Bc2NativeStartupSample $sample} 'menu bridge' 'menu GPU failure never reports running'
     [IO.File]::WriteAllText($sample,"{`"input_samples`":5,`"gpu_failure_stage`":2,`"camera_restore_failures`":0}`n")
     Reject {Get-Bc2NativeStartupSample $sample} 'graphics bridge' 'native GPU failure never reports running'
     [IO.File]::WriteAllText($sample,"{`"input_samples`":5,`"gpu_failure_stage`":0,`"camera_restore_failures`":1}`n")
