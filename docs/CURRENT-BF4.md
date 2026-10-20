@@ -653,8 +653,19 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
   holster positions on a real body, the laser on "Resume".
 - Gun at the hand: the gun now points along the aim but sits where BF4 puts it relative to
   the eye (not in the controller's hand), and follows only part of the way when the head
-  looks far from where it points (FOV budget). Moving it into the hand needs the
-  first-person transform or IK (BF4-HOLSTER-IK-RE.md).
+  looks far from where it points (FOV budget). Leads (static, 2026-10-19): the offset from
+  the camera lives in weapon data assets (`WeaponOffsetData` / `WeaponAnimationSettingsData`
+  `WeaponOffsetX/Y/Z`, `FirstPersonCameraData` `Offset`/`WeaponBaseOffset`/
+  `WeaponLagRotationOffset`), shared with AI soldiers, so not to be written; the per-player
+  runtime side is the weapon lag (`ClientWeaponLagEntity`, `WeaponLagBinding`,
+  `WeaponLagSceneOp`) in the animation system, which needs live RE. Rendering from a camera
+  moved to the hand and reprojecting the world by depth was rejected (a 20-30 cm baseline
+  smears every near edge).
+- Update rate: ~45 pairs/s at frame sync 2; the game allows ~59 there (2 Presents per
+  pair). A third frame channel would close most of the gap (host + adapter + composite
+  provider); frame sync 1 (label-checked clean at 118 fps) could double the game's limit
+  but BF4's main thread may run a frame ahead when GPU-bound, so 2 stays the default until
+  a headset session shows otherwise.
 - 3D: BF4's split route is unsupported (above); 3D from depth is the stereo route. The
   NVAPI route (sequential eye passes, emulated) needs a Steam launch option to test live.
 - Laser click on "Resume": fixed on the game side. Live on the simulated headset
@@ -670,7 +681,8 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
 - The census holder chain matched nothing live (27 firing objects, 0 holders): redo the
   walk from the live firing vtable `+0x1D53F18`.
 - Mod menu in VR: opens with the menu button, drawn by the adapter (VrPanel + GDI) on the
-  theater lane (emulated core tests, GDI render checked); not yet seen in a headset.
+  theater lane; live on the simulated headset it opened in a level and a laser click
+  toggled an item. Not yet seen in a headset.
 - Corner HUD outside the eyes (frame shape, above): insets are a workaround; the real fix
   needs the UI pass rendered separately (native RE).
 - Gun at the hand / arm IK: needs the player's first-person binding and IK scene op
