@@ -18,7 +18,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   three sessions (09:16-10:19; rotation was inverted and the gun oversized, both fixed in
   0.4.16); everything built since 0.4.17 is unseen in a headset.
 
-## At a glance (installed: 0.4.55-local)
+## At a glance (installed: 0.4.56-local)
 
 | Feature | State | Evidence |
 | --- | --- | --- |
@@ -638,7 +638,8 @@ framework `MenuPointer` is the pointer), and `BF4-ADAPTER.md`. Originals archive
   launcher 19/19; session summary 2/2; `Run-Bf4TheaterXr.ps1` 5/5 and
   `-World -FrameChannels 2` 5/5 (76-237 pairs, machine-dependent); `-World` with one
   channel 4/4 (47 pairs).
-- Installed locally: runtime/bf4 0.4.55-local (three frame channels; rollback 0.4.54-local);
+- Installed locally: runtime/bf4 0.4.56-local (same build as 0.4.55, installed by the RE
+  session; rollback 0.4.55-local);
   launcher settings
   restored to the player's after the developer sessions. Developer sessions still run the
   read-only probes and the firing census.
@@ -674,7 +675,11 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
   `WeaponOffsetX/Y/Z`, `FirstPersonCameraData` `Offset`/`WeaponBaseOffset`/
   `WeaponLagRotationOffset`), shared with AI soldiers, so not to be written; the per-player
   runtime side is the weapon lag (`ClientWeaponLagEntity`, `WeaponLagBinding`,
-  `WeaponLagSceneOp`) in the animation system, which needs live RE. Rendering from a camera
+  `WeaponLagSceneOp`) in the animation system. Live (read-only, 2026-10-19): the entity's
+  vtable is `+0x1E6F030` (type getter `+0xFFF750`, type object `+0x2C85030`, 0x68-byte
+  objects); the player's instance holds only pointers (data, owner, bindings; a second
+  interface vtable at `+0x30`), so the lag offset itself lives in the animation graph's
+  parameters behind them: the next RE step. Rendering from a camera
   moved to the hand and reprojecting the world by depth was rejected (a 20-30 cm baseline
   smears every near edge).
 - Update rate: 52.9 pairs/s with three frame channels at frame sync 2 (the game allows ~59
