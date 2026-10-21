@@ -2032,7 +2032,14 @@ void OnPresent(Adapter& a, IDXGISwapChain* sc) {
     if (inFront) { // Win32 state only, no game memory
         CURSORINFO cursor{};
         cursor.cbSize = sizeof(cursor);
-        f.gameCursor = GetCursorInfo(&cursor) && (cursor.flags & CURSOR_SHOWING) && cursor.hCursor;
+        // Only a cursor over the game counts as BF4's own (its menus): with another monitor the
+        // pointer parked beside the game shows there and is not a menu (live: (-249, 0) held a
+        // level on the theater screen).
+        POINT corner{0, 0};
+        ClientToScreen(a.platform.window, &corner);
+        f.gameCursor = GetCursorInfo(&cursor) && (cursor.flags & CURSOR_SHOWING) && cursor.hCursor &&
+                       cursor.ptScreenPos.x >= corner.x && cursor.ptScreenPos.y >= corner.y &&
+                       cursor.ptScreenPos.x < corner.x + f.clientWidth && cursor.ptScreenPos.y < corner.y + f.clientHeight;
     }
     if (a.platform.window && inFront != a.gameInFront) { // focus changes explain stalls and lost input
         a.gameInFront = inFront;

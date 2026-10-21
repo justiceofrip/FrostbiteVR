@@ -117,6 +117,7 @@ public:
         float weapon[3]{};                      // the receiver in camera space (last pass)
         float weaponShift = 0;                  // how far the hold moved it back (m)
         std::uint64_t shiftedViews = 0, shiftedFrames = 0; // alternate eyes: main views moved to the eye, frames
+        std::uint64_t shiftedPasses = 0; // native eyes, gun at BF4's place: first-person passes moved to the eye
         float lastKy = 0;            // the matched pass's projection scale
         float cameraPos[3]{};        // the matched pass's first-person camera position
         // Arms from the body: palettes read in the pass, rewritten (bound as ours), bones moved,

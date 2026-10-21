@@ -18,7 +18,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   three sessions (09:16-10:19; rotation was inverted and the gun oversized, both fixed in
   0.4.16); everything built since 0.4.17 is unseen in a headset.
 
-## At a glance (installed: 0.4.161-local)
+## At a glance (installed: 0.4.163-local)
 
 | Feature | State | Evidence |
 | --- | --- | --- |
@@ -447,12 +447,17 @@ the world's **draw** (render thread) runs once per eye.
   stand-ins (3D from depth, alternate eyes) are no longer offered (code kept, unreachable from
   the menu); a saved `depth_stereo 2` is skipped (default applies). "Gun follows aim" (a turned
   render) needs one camera: with native eyes the gun is not turned and the aim is not limited.
-- Installed: 0.4.161-local.
+- With "Gun: BF4's place" (not the default) BF4's own first-person pass is moved to each draw's eye
+  too, its projection kept (`eye_passes=`; WARP check; live session 121).
+- BF4's menus in a level are recognised by its cursor; only a cursor over the game window counts now
+  (live, session 120: the pointer parked on a second monitor at (-249, 0) held a level on the theater
+  screen for minutes).
+- Installed: 0.4.163-local.
 - Gaps: not seen in a headset (comfort, scale, cost at the headset's rate; whether 2 m suits the
   HUD); one level checked
   (prologue): another scene may use up a field not on the verified list (logged; the second eye
   could then miss something or fault); BF4's world markers (objectives) are drawn by its HUD at
-  the head's camera, so they sit at the HUD's 2 m, not at their own depth; with "Gun: BF4's place" (not the default) BF4's first-person pass is not moved to the eyes (the gun at infinity); only a checkpoint restart checked as a level change (a new mission
+  the head's camera, so they sit at the HUD's 2 m, not at their own depth; only a checkpoint restart checked as a level change (a new mission
   not yet); the second draw re-runs the whole world
   draw (shadows and other view-independent passes included), so the cost could come down.
 - Earlier tries, retired (kept as developer research `secondview 1-4`): the world render's build

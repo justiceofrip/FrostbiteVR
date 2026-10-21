@@ -460,7 +460,7 @@ std::string FirstPersonView::Describe() const {
     const Stats s = GetStats();
     char line[760];
     int n = std::snprintf(line, sizeof(line),
-                  "first_person_view installed=%d binds=%llu matched=%llu replaced=%llu unreadable=%llu ky=%.4f fp_cam=(%.2f %.2f %.2f) hand=%llu/%llu/%llu by_render=%llu by_game=%llu diff=%.4f passes=%llu weapon=%llu (%.3f %.3f %.3f) zoom_held=%llu shift=%.3f eye_views=%llu eye_frames=%llu",
+                  "first_person_view installed=%d binds=%llu matched=%llu replaced=%llu unreadable=%llu ky=%.4f fp_cam=(%.2f %.2f %.2f) hand=%llu/%llu/%llu by_render=%llu by_game=%llu diff=%.4f passes=%llu weapon=%llu (%.3f %.3f %.3f) zoom_held=%llu shift=%.3f eye_views=%llu eye_frames=%llu eye_passes=%llu",
                   static_cast<int>(installed_), static_cast<unsigned long long>(s.binds),
                   static_cast<unsigned long long>(s.matched), static_cast<unsigned long long>(s.replaced),
                   static_cast<unsigned long long>(s.unreadable), s.lastKy, s.cameraPos[0], s.cameraPos[1], s.cameraPos[2],
@@ -469,7 +469,7 @@ std::string FirstPersonView::Describe() const {
                   static_cast<unsigned long long>(s.byGame), s.nearestDiff, static_cast<unsigned long long>(s.passes),
                   static_cast<unsigned long long>(s.weaponFound), s.weapon[0], s.weapon[1], s.weapon[2],
                   static_cast<unsigned long long>(s.zoomHeld), s.weaponShift, static_cast<unsigned long long>(s.shiftedViews),
-                  static_cast<unsigned long long>(s.shiftedFrames));
+                  static_cast<unsigned long long>(s.shiftedFrames), static_cast<unsigned long long>(s.shiftedPasses));
     if (n > 0 && n < static_cast<int>(sizeof(line)))
         std::snprintf(line + n, sizeof(line) - n,
                       " arms=%llu/%llu bones=%llu solved=%llu switches=%llu slide=(%.3f %.3f) arm_us_per_pass=read %.0f%s work %.0f upload %.0f anchor=%llu/%llu/jumps %llu grip_from_rest=(%.1f cm %.1f deg) kicks=%llu last=[%.1f/%.1f/%.0f %.1f/%.1f/%.0f %.1f/%.1f/%.0f %.1f/%.1f/%.0f] body_hidden=%llu",
@@ -767,7 +767,23 @@ void FirstPersonView::OnBindConstants(ID3D11DeviceContext* context, ContextHooks
         }
         return;
     }
-    if (shift && !frame.handMode) return; // the first-person pass is left as BF4 draws it
+    if (shift && !frame.handMode) {
+        // Native eyes with the gun at BF4's place: BF4's own first-person pass, its projection
+        // kept, seen from this draw's eye like the world (else the gun sits at infinity). With
+        // alternate eyes it is left as BF4 draws it.
+        if (callEye >= 0 && IsFirstPersonBlock(block.data(), frame.gameFovY, frame.renderKy)) {
+            if (stage == ContextHooks::Stage::Vertex && inPass_) EndPass();
+            float kx = 0, ky = 0;
+            std::memcpy(&kx, block.data() + L::kProjMatrix + 0 * 4, 4);
+            std::memcpy(&ky, block.data() + L::kProjMatrix + 5 * 4, 4);
+            Rewrite(block.data(), kx, ky, eyeMove);
+            if (Upload(context, block.data(), buffers, i, first, count)) {
+                std::lock_guard<std::mutex> lock(mutex_);
+                ++stats_.shiftedPasses;
+            }
+        }
+        return;
+    }
     bool exactHand = false, shaped = false;
     const Frame::Hand* passHand = frame.handMode ? FirstPersonHand(block.data(), frame, &exactHand, &shaped) : nullptr;
     if (frame.handMode && shaped && !passHand) {

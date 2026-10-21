@@ -397,6 +397,44 @@ bool CheckFirstPersonView(ID3D11Device* device, const char*& why) {
         if (ok && (es.shiftedViews < 2 || es.shiftedFrames < 2)) ok = (why = "alternate eyes: counts", false);
         if (ok && (FPV::EyeShift(1, 0.03f)[3] != -0.03f || FPV::EyeShift(0, 0.03f)[3] != 0.03f))
             ok = (why = "alternate eyes: eye shift", false);
+        // Native eyes with the gun at BF4's place (no hand): each world draw's eye moves BF4's own
+        // first-person pass too, its projection kept; outside the eye draws the frame handles it.
+        if (ok) {
+            FPV::Frame native = eyes;
+            native.alternateEyes = false;
+            view.SetFrame(native);
+            float x[2]{};
+            for (int e = 0; e < 2 && ok; ++e) {
+                view.SetCallEye(e, /*mainViews=*/true);
+                if (FAILED(context->Map(ring.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &m))) return why = "map the ring (native)", false;
+                MakeViewBlock(static_cast<std::uint8_t*>(m.pData) + 256, gameKy / aspect, gameKy, fpCam);
+                context->Unmap(ring.Get(), 0);
+                context1->VSSetConstantBuffers1(2, 1, bind, fpFirst, count);
+                ID3D11Buffer* b = nullptr;
+                UINT f = 0, c = 0;
+                context1->VSGetConstantBuffers1(2, 1, &b, &f, &c);
+                if (!b || b == ring.Get() || !ReadBuffer(device, context.Get(), b, got) ||
+                    std::fabs(FloatAt(got, L::kProjMatrix + 5 * 4) - gameKy) > 1e-6f)
+                    ok = (why = "native eyes: BF4's first-person pass not moved (or its projection changed)", false);
+                else
+                    x[e] = FloatAt(got, L::kViewMatrix + 3 * 4);
+                if (b) b->Release();
+            }
+            if (ok && std::fabs((x[0] - x[1]) - 0.064f) > 1e-5f) ok = (why = "native eyes: first-person pass eye offsets", false);
+            view.SetCallEye(-1);
+            if (ok) {
+                context1->VSSetConstantBuffers1(2, 1, bind, fpFirst, count);
+                ID3D11Buffer* b = nullptr;
+                UINT f = 0, c = 0;
+                context1->VSGetConstantBuffers1(2, 1, &b, &f, &c);
+                // Outside the eye draws: the frame's own handling (the render's projection), no eye.
+                if (!b || b == ring.Get() || !ReadBuffer(device, context.Get(), b, got) ||
+                    std::fabs(FloatAt(got, L::kProjMatrix + 5 * 4) - renderKy) > 1e-6f)
+                    ok = (why = "native eyes: the first-person pass outside the eye draws", false);
+                if (b) b->Release();
+            }
+            if (ok && view.GetStats().shiftedPasses < 2) ok = (why = "native eyes: first-person pass count", false);
+        }
     }
     view.Remove();
     ID3D11Buffer* none[1]{};
