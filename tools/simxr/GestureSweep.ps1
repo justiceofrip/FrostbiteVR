@@ -9,7 +9,7 @@
 #   GestureSweep.ps1 -Name g1                          # every step
 #   GestureSweep.ps1 -Name g2 -Steps reload, tactical  # some
 param([string]$Root = 'G:\FrostbiteVR\runtime\bf4', [string]$Name = 'sweep',
-      [string[]]$Steps = @('fire', 'reload', 'drop', 'tactical', 'hold', 'holsters', 'sidearm', 'knife', 'ads', 'crouch', 'grenade'))
+      [string[]]$Steps = @('fire', 'reload', 'drop', 'tactical', 'hold', 'holsters', 'sidearm', 'knife', 'ads', 'crouch', 'twohanded', 'snapturn', 'recenter', 'grenade'))
 $ErrorActionPreference = 'Stop'
 $dir = Join-Path $Root 'research'
 $log = Join-Path $Root 'logs\bf4-adapter.log'
@@ -39,6 +39,18 @@ function Gestures {
     if ($l) { $x = $l.Line; $x.Substring(0, 13) + ' ' + $x.Substring($x.IndexOf('gestures ') + 9) } else { '(no gestures line)' }
 }
 function Report([string]$what) { "== $what"; Gestures }
+# The aim line is logged every ~600 frames: wait for one newer than the step.
+function AimReport([string]$what) {
+    $n0 = @(Get-Content $log).Count
+    $deadline = (Get-Date).AddSeconds(15)
+    $l = $null
+    while ((Get-Date) -lt $deadline -and -not $l) {
+        $l = Get-Content $log | Select-Object -Skip $n0 | Select-String 'controller_aim=' | Select-Object -Last 1
+        if (-not $l) { Wait 1000 }
+    }
+    "== $what"
+    if ($l) { $x = $l.Line; $x.Substring(0, 13) + ' ' + $x.Substring($x.IndexOf('controller_aim=')) } else { '(no aim line)' }
+}
 function Snap([string]$tag) { (& $sim -Dir $dir -Snap "$Name-$tag" | Select-Object -Last 1) }
 
 Set-Sim (@('sway 0', 'flip off', 'head 0 0 0 0 1.7 0', $rightRest, $leftRest) + $noInput)
@@ -155,6 +167,24 @@ foreach ($step in $Steps) {
             Set-Sim $leftRest; Wait 3000
             Report 'grenade: grab at the left hip, release in front'
             Snap 'grenade'
+        }
+        'twohanded' { # left grip 30 cm ahead of the right on the barrel line, then 12 cm right: the line steers
+            Set-Sim 'left 0.15 1.45 -0.65 0 0 0'; Wait 500
+            Set-Sim 'left input 0 1 0 0 0 0 0 0'; Wait 1500
+            Set-Sim 'left 0.27 1.45 -0.65 0 0 0'; Wait 2500
+            Snap 'twohanded'
+            Set-Sim 'left input 0 0 0 0 0 0 0 0', $leftRest; Wait 1000
+            AimReport 'two-handed: front grip 12 cm right (two_handed +1 expected)'
+        }
+        'snapturn' { # right stick pushed right a moment: one snap turn (in a snap mode)
+            Set-Sim 'right input 0 0 1 0 0 0 0 0'; Wait 300
+            Set-Sim 'right input 0 0 0 0 0 0 0 0'; Wait 1000
+            AimReport 'right stick right (snaps +1 expected in a snap mode)'
+        }
+        'recenter' { # both stick clicks held over a second: the recenter gesture, nothing to the game
+            Set-Sim 'left input 0 0 0 0 0 0 1 0', 'right input 0 0 0 0 0 0 1 0'; Wait 1500
+            Set-Sim $noInput; Wait 1000
+            AimReport 'both stick clicks held 1.5 s (recenters and recenter_gestures +1 expected)'
         }
         default { throw "unknown step '$step'" }
     }

@@ -782,6 +782,10 @@ the theater screen. Pieces (all on the analysed build only):
   markers are now drawn last (WARP check: a ring inside the inset's area stays visible).
   Limit seen: key 2 with no sidearm in the loadout leaves BF4 on the rifle while the gesture
   state believes the sidearm is out (its magazine is tracked separately) until key 1 or 3.
+- Aiming in the same sweep (session 125, native 3D): the left grip 30 cm ahead of the right on
+  the barrel line engaged two-handed aim and moving it 12 cm right steered the aim; the right
+  stick snapped the body exactly 30 degrees; both stick clicks held 1.5 s recentered and did
+  not reach the game. No faults.
 
 ## Controller aiming (2026-10-19, built; emulated only)
 
