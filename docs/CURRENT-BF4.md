@@ -18,7 +18,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   three sessions (09:16-10:19; rotation was inverted and the gun oversized, both fixed in
   0.4.16); everything built since 0.4.17 is unseen in a headset.
 
-## At a glance (installed: 0.4.163-local)
+## At a glance (installed: 0.4.164-local)
 
 | Feature | State | Evidence |
 | --- | --- | --- |
@@ -452,7 +452,7 @@ the world's **draw** (render thread) runs once per eye.
 - BF4's menus in a level are recognised by its cursor; only a cursor over the game window counts now
   (live, session 120: the pointer parked on a second monitor at (-249, 0) held a level on the theater
   screen for minutes).
-- Installed: 0.4.163-local.
+- Installed: 0.4.164-local.
 - Gaps: not seen in a headset (comfort, scale, cost at the headset's rate; whether 2 m suits the
   HUD); one level checked
   (prologue): another scene may use up a field not on the verified list (logged; the second eye
@@ -1254,10 +1254,11 @@ single-player signals, client/server weapon copies, next ownership link); unit-t
   not to be written; `WeaponLagBinding` outputs only pitch/yaw/roll results (the lag is a
   rotation, no offset); skinning palettes reach the GPU as bone x inverse-bind matrices (b0
   `boneVectors`, 60 bones of 3 rows), so joint positions need the bind poses.
-- Update rate: 52.9 pairs/s with three frame channels at frame sync 2 (the game allows ~59
-  there: 2 Presents per pair). Frame sync 1 (label-checked clean at 118 fps) could double
-  the game's limit, but BF4's main thread may run a frame ahead when GPU-bound, so 2 stays
-  the default until a headset session shows otherwise.
+- Update rate: frame sync 1 is the default since 0.4.164 (one Present per pair). Live with
+  native eyes (session 122, 86 game fps, GPU-bound by the second draw): 40 pairs/s at frame
+  sync 2, 81 at 1; the pose-label flip check (head 0/90 deg every frame) 5,701 of 5,701 pairs
+  matched, none mislabelled, across both settings (mono earlier: 396/396 at 1, 118 fps). Not
+  yet seen in a headset; "Frame sync (developer)" goes back to 2 if the world swims.
 - 3D: native each-eye drawing is the stereo route (above); BF4's split route is unsupported. The
   NVAPI route (sequential eye passes, emulated) needs a Steam launch option to test live.
 - Laser click on "Resume": fixed on the game side. Live on the simulated headset

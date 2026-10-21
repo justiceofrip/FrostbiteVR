@@ -243,7 +243,7 @@ TEST_CASE(EmuMonoWorldLaneCameraOnlyForHostLeases) {
     CHECK(core.Stereo() == StereoMode::Mono);
     // No eye-pair request from the host yet: the camera stays the game's, frames ask for the world lane.
     CHECK(platform.cameraLog.empty());
-    CHECK(!platform.frames.empty() && platform.frames.back().world && platform.frames.back().worldSettle == 2);
+    CHECK(!platform.frames.empty() && platform.frames.back().world && platform.frames.back().worldSettle == 1);
 
     auto in = Input(0.1);
     in.world.valid = true;

@@ -15,7 +15,7 @@ struct ModMenuState {
     int turnSpeed = 1;        // smooth turning: 0 slow (90 deg/s), 1 normal (150), 2 fast (240)
     int theaterDistance = 1; // 0 near, 1 medium, 2 far
     bool headTracking = true; // campaign levels: head-tracked view instead of the screen
-    int worldSettle = 2;      // developer: submits before a frame counts as head-tracked
+    int worldSettle = 1;      // developer: submits before a frame counts as head-tracked (1: label-checked clean with native eyes, 2026-10-20)
     bool worldStereo = false; // BF4's own split two-eye render: unsupported, always false
     bool controllerAim = true; // campaign: the gun follows the right controller
     bool holsters = true;      // campaign: body holster gestures (Bf4BodyGestures.h)
