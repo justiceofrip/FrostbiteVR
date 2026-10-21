@@ -54,7 +54,7 @@ std::vector<ResearchCommand> ParseResearchCommands(std::string_view text, std::u
             c.kind = verb == "click" ? ResearchCommand::Kind::Click : ResearchCommand::Kind::Move;
         else if (verb == "key" && ResearchKeyCode(a1) != 0) { c.kind = ResearchCommand::Kind::Key; c.arg = std::string(a1); }
         else if (verb == "dumpimage") c.kind = ResearchCommand::Kind::DumpImage;
-        else if (verb == "census") c.kind = ResearchCommand::Kind::Census;
+        else if (verb == "census") { c.kind = ResearchCommand::Kind::Census; c.arg = std::string(a1); } // "holders": the slow walk
         else if (verb == "scanq" && ParseHex(a1, c.value) && c.value > 0 && c.value < 0x40000000u)
             c.kind = ResearchCommand::Kind::ScanQ;
         else if (verb == "peek" && ParseHex(a1, c.value) && c.value >= 0x10000) {

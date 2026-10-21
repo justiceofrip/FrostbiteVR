@@ -10,7 +10,7 @@ prove plumbing only; headset/gameplay claims need a real session.
 | M2 | Stereo | **3D Vision route (no RE)**, else R2 native or R3 alternate-eye | probe verdict "working"; correct per-eye depth on one mission; comfort check; frame pacing numbers |
 | M3 | Controller aim + button reload | virtual XInput pad (no R6; implemented, emulated), R8 weapon transform | locomotion/fire/reload from controllers via the pad; shots land where the controller points on two weapon types; reload on button press, no repeat on hold |
 | M4 | Holsters | M3 + inventory slot mapping; native first-person hide signal found (BF4-HOLSTER-IK-RE.md) | draw/stow primary, secondary, grenade from body slots; state survives frames, resets on death |
-| M5 | Manual reload | M4 + magazine metadata; research and pipeline in BF4-MANUAL-RELOAD.md (classifier built) | one rifle: remove mag, insert from pouch, chamber; ButtonPress fallback still selectable; then every family in BF4-MANUAL-RELOAD.md section 5 |
+| M5 | Manual reload | M4 + magazine metadata; research and pipeline in BF4-MANUAL-RELOAD.md (classifier built) | one rifle: remove mag, insert from pouch, chamber; ButtonPress fallback still selectable; then every family by the weapon roadmap (BF4-MANUAL-RELOAD.md section 0: W0 live weapon identity -> W6 optics) |
 | M6 | Arm IK, then body | rig bone mapping per build, or the game's own hand IK inputs (BF4-HOLSTER-IK-RE.md) | arms follow controllers without breaking stock animation elsewhere |
 | M7 | Vehicles | seat/aim bindings | one ground vehicle and one turret |
 

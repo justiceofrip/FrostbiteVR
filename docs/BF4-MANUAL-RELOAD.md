@@ -1,4 +1,69 @@
-# BF4 manual reload for every gun: research and pipeline
+# BF4 weapons: roadmap, pipeline and manual reload for every gun
+
+## 0. Roadmap for every weapon type (2026-10-21)
+
+The BC2 lesson (WEAPON-PROFILE-PIPELINE.md, WEAPON-SYSTEM-PIPELINE.md): the next gun should be
+a data review, not new code. Feed (magazine, tube, belt, single, cylinder) and action
+(charging handle, bolt, pump) compose independently in the framework
+(`WeaponMechanismDescriptor`, ManualReload, PhysicalWeaponCycle, custody); a gun is admitted
+per family on evidence, never by guessing, and anything unplaced stays on button reload.
+
+**Live facts this rests on (session 126, Baku, read-only census):** BF4's firing objects are
+found in a level with the static layout of section 2.1 (vtable `+0x1D53F18`). Each of the
+player's weapons has three firing objects sharing one FiringFunctionData: one among the other
+soldiers' weapons and two allocated side by side, 0x220 apart (the client pair of 2.3; the
+squad's guns have only the single one). All three follow the HUD (rifle 20/105 -> 11/105 after
+a burst). The data classifies each gun directly: the rifle `reloadType 2, fireLogic 2 (auto),
+capacity 21` (20 + a chambered round), the underbarrel M320 `reloadType 1, fireLogic 0,
+capacity 1`, hand grenades `fireLogic 4 (hold and release)`; nearby: a burst rifle, a semi-auto
+DMR (21/63), a belt-fed LMG (200/200, reload 6.2 s). State 3 means deployed: selecting the
+underbarrel launcher put it in 3 and left the rifle in 3, the grenades stayed 0.
+
+**W0 built and live (0.4.167, sessions 127-128; developer sessions):** the census names the
+player's weapons (`PlayerWeapons`: a client pair, or three or more limited-ammo copies; the
+grenades' copies are not side by side) and their data-only family (`FamilyFromData`: magazine,
+tube, single-load, throwable, detonated, plus bolt/pump and "large: belt?"). A tracker re-reads
+each weapon's first firing object every 10 Presents and logs the weapon in hand (`weapon in
+hand: magazine, auto fire, capacity 21, 11/105`), deployed meaning state 3 or later (a burst
+leaves 3 for the firing states). Live: rifle, M320 and grenades named; rifle -> launcher (and its
+shot) -> rifle followed; a grenade throw is too quick for the sampling. The census no longer runs
+its ownership walk unless asked (`census holders`, ~4 min). Limits: the weapon class is not read
+yet, so `ClassifyReload` (which needs it) is not used live; players' sessions do not run the
+census.
+
+**W2 finding (session 127):** the ownership walk still finds no holder, also with our own target
+list excluded: every object's first "holders" are the same four low addresses (the census
+thread's stack), then 68-2,862 other copies per object, and none sits at the static client
+(+0x8) or server (+0xA0) weapon slots. Pointer search from the firing objects up is the wrong
+tool here; W2 starts from the player's soldier down instead (the session probe's client game
+context, `+0x2670D80`).
+
+| Stage | Work | Writes? | Exit evidence |
+| --- | --- | --- | --- |
+| W0 | **Live weapon identity**: the player's weapons from the census (the client-pair pattern), their data classified (`ClassifyReload`), the deployed one tracked cheaply between censuses; family, capacity, rounds in the status line | none | live: rifle, UGL, grenade, then a picked-up gun, named right on switch |
+| W1 | **Gestures per family, input only**: the magazine gesture only for magazine guns; single-load guns (launchers) loaded by one insertion; grenades as now; tube guns press reload per shell while BF4 loops; owed strokes shown as markers | none | GestureSweep per family in the sim; one headset session |
+| W2 | **Ownership chain (R8)**: the holder walk fixed (exclude our own buffers; walk from the client weapon entity) to the player's soldier, server copy confirmed authoritative | none | the chain resolves to the census triple in two levels |
+| W3 | **Physically paced reload and owed strokes** (section 4 option 2): hold state 11 until the VR magazine/shell/belt is seated, gate states 7/8 on the VR bolt/pump stroke; player's objects only, exact-write restore on every outcome | yes, verified per family | live per family: no double reload, no lost round, AI untouched |
+| W4 | **Stock reload/cycle animation kept out of the player's view** (AnimatedWeaponBinding signals, first-person presentation only) | presentation only | headset review per family |
+| W5 | **Per-family holding**: one-hand pistols, LMG bipod and heavy carry, launcher on the shoulder, two-hand rules per family; grip at rest measured per family, not per gun | none | live per family |
+| W6 | **Optics**: magnified scopes as a per-eye scope picture (OPTICS-ADS-ROADMAP.md), holo/red dot as now | presentation | headset |
+
+| Family (BF4 data) | VR interaction | Today | Next |
+| --- | --- | --- | --- |
+| Detachable magazine (`reloadType 1/2`, capacity > 1): assault rifles, carbines, PDWs, DMRs, box LMGs, pistols, magazine shotguns | B eject, belt pouch, magazine well; charging handle / slide when empty | works for any of them: the seat presses BF4's reload (live: rifle, tactical, drop, B hold) | W1: no stroke yet when empty; pistol unseen (no sidearm in Baku) |
+| Belt-fed LMG (capacity 100-200, long reload; authored) | cover open, belt seat, cover close, charge (BELT-FED-RELOAD-PLAN.md) | button / generic magazine gesture | W1 authored Belt profile, then W3 |
+| Tube shotgun (`reloadType 0`) | one shell per insertion at the loading port | generic gesture loads the whole tube | W1 per-shell presses, W3 per-shell gate |
+| Pump / bolt action (`fireLogic 1`, PumpAction signal) | pump or bolt stroke after each shot, owed across frames | BF4 cycles by itself | W3 states 7/8 gate on the stroke |
+| Single-shot launchers (`capacity 1`): UGL, RPG/SMAW, others | insert one round (UGL: under the barrel; tube launchers: at the rear) | UGL selectable by gesture (left shoulder), reloads by B hold | W1 single-load gesture |
+| Throwables (`fireLogic 4`): grenades | grab at the hip, throw | works (live) | aim the throw by the hand's motion |
+| Knife | chest grab | works (live) | melee by swing |
+| Cylinder revolvers (authored) | swing out, speedloader, close | button | W1 authored Cylinder |
+| Gadgets (C4, binoculars, repair tool) | per gadget | key 3/4 by gesture | per gadget, after W0 names them |
+
+Order: W0 now (read-only, unblocks everything), then W1 by family in the order of what the
+campaign hands the player (magazine guns, launchers, shotguns, LMGs, snipers), W2 before any
+W3 write, W4-W6 alongside.
+
 
 Evidence level: **static analysis only** (reflection tables and code) of the decrypted
 research image of bf4.exe build 179547, 2026-10-19. Nothing here has run in the game.
@@ -178,7 +243,7 @@ first-person presentation only, never the gameplay signal.
 
 | Phase | Work | Exit evidence |
 | --- | --- | --- |
-| P0 (done) | Button reload through the virtual XInput pad | in-game check pending |
+| P0 (done) | Button reload through the virtual XInput pad | live (sim): B hold reloads |
 | P1 | Read-only weapon probe. **Built 2026-10-19:** the firing census (`Bf4FiringCensus.h`, `RunFiringCensus`) copies the game's heap with ReadProcessMemory on a low-priority thread, keeps objects whose `+0x130` is exactly their own FiringFunctionData + 0x220 and whose local fields are in range, and logs them with limited-ammo objects first and client/server pair candidates (same data, same counts). Runs ~30 s into developer sessions, then every ~2 min, and on the research command `census`; stops at any lockdown. It then finds every pointer to each limited-ammo firing object, classifies the holder as client weapon (`+0x8`, client vtable) or server weapon (`+0xA0`, server vtable), and finds who holds those weapons (nearest vtable-looking object start and field offset): the next links of the player -> weapon chain. Emulated: finds a planted pair, marks an unlimited AI copy, tells planted client/server owners apart and follows the client owner to a holder object at field +0x40, among hundreds of stale pointer copies. Still live: run it during normal empty, tactical, tube-shotgun and bolt reloads | layout and states match 2.1/2.2; client/server answer |
 | P2 | Pure classifier (section 3), **done 2026-10-19**: `Bf4ReloadClassifier` emits the framework's WeaponMechanismDescriptor, checked against its validator and plan selection (ReloadClassifierTests). Also done: the input-only reload driver `Bf4ReloadDriver` (section 4 option 1) and the emulated firing state machine `tests/bf4/FakeFiringMachine.h` (states 3/10/11/12, threshold transfer, partial-reload math, single-bullet loop, bolt states). ReloadDriverTests cover tactical and empty magazine changes, owed charging/bolt strokes persisting across frames, no-reserve reseat, a declined reload, refusal of a second concurrent request, weapon switch, single-shot launchers, unsupported tube guns, and the framework coordinator completing a whole plan; a mutation (never block fire) is caught | tests |
 | P3 | Magazine guns (largest family), option 1 or 2 per P1 | one rifle, then one pistol, in a mission |

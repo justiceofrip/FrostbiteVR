@@ -18,7 +18,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   three sessions (09:16-10:19; rotation was inverted and the gun oversized, both fixed in
   0.4.16); everything built since 0.4.17 is unseen in a headset.
 
-## At a glance (installed: 0.4.165-local)
+## At a glance (installed: 0.4.167-local)
 
 | Feature | State | Evidence |
 | --- | --- | --- |
@@ -452,7 +452,7 @@ the world's **draw** (render thread) runs once per eye.
 - BF4's menus in a level are recognised by its cursor; only a cursor over the game window counts now
   (live, session 120: the pointer parked on a second monitor at (-249, 0) held a level on the theater
   screen for minutes).
-- Installed: 0.4.165-local.
+- Installed: 0.4.167-local.
 - Gaps: not seen in a headset (comfort, scale, cost at the headset's rate; whether 2 m suits the
   HUD); one level checked
   (prologue): another scene may use up a field not on the verified list (logged; the second eye
@@ -1157,8 +1157,10 @@ using the frame's depth buffer (depth-image-based rendering; no simulation or re
   B (`+0x1D467E0`), both owned by one client weapon entity (`+0x1D46540`: B at +0xA0, A at
   +0xA8, active at +0x98). The census classifies holders, finds the entity and its active
   class, and logs who holds the entity (emulated end to end).
-- Open: the live census result; the rest of the ownership chain to the player (R8)
-  before any write.
+- Live (sessions 126-128): the census finds the player's weapons in a level and the layout holds
+  (rounds follow the HUD); W0 names the weapon in hand from it (BF4-MANUAL-RELOAD.md section 0).
+  Open: the ownership chain to the player (R8): the pointer walk from the firing objects finds
+  no holder (section 0, W2 finding).
 
 ## CI and release pipeline (2026-10-19)
 

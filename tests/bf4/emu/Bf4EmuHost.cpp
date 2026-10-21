@@ -543,6 +543,10 @@ int wmain() {
             put(objs[i], 0x1C0, std::int32_t{-1});
         }
         objs[2][0x208] = 0x10; // AI copy: unlimited ammo
+        // The player's client pair (live, session 126): two more copies of the same gun 0x220
+        // apart in one block make it the player's weapon.
+        std::uint8_t* pairBlock = alloc(0x440);
+        for (int i = 0; i < 2; ++i) std::memcpy(pairBlock + 0x220 * i, objs[0], 0x210);
         // Owners as the census expects them: the client weapon holds its firing object at
         // +0x8, the server weapon at +0xA0, each starting with its class's vtable (only the
         // value is compared). A real polymorphic object holds the client weapon at +0x40.
@@ -567,9 +571,9 @@ int wmain() {
         auto* holder = new Holder;
         holder->weapon = weaponEntity; // the next owner up holds the entity at +0x40
         CreateDirectoryW((dir + L"\\research-emu").c_str(), nullptr);
-        std::ofstream(dir + L"\\research-emu\\cmd.txt") << "1 census\n";
+        std::ofstream(dir + L"\\research-emu\\cmd.txt") << "1 census holders\n"; // with the ownership walk
         std::string census;
-        for (int frame = 0; frame < 2000 && census.find("firing census (research): done") == std::string::npos; ++frame) {
+        for (int frame = 0; frame < 2000 && census.find("firing census (holders): done") == std::string::npos; ++frame) {
             stereoFrame();
             Sleep(5);
             if (frame % 50 == 0) {
@@ -587,8 +591,12 @@ int wmain() {
         std::snprintf(pair, sizeof(pair), "pair candidate: %llx", static_cast<unsigned long long>(first));
         std::snprintf(ai, sizeof(ai), "firing %llx", static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(objs[2])));
         const auto aiLine = census.find(ai);
-        Check(census.find("firing census (research)") != std::string::npos && census.find(pair) != std::string::npos,
+        Check(census.find("firing census (holders)") != std::string::npos && census.find(pair) != std::string::npos,
               "firing census finds the planted client/server-shaped pair");
+        char playerLine[80];
+        std::snprintf(playerLine, sizeof(playerLine), "player weapon %llx: magazine, auto fire, capacity 31, 27/93",
+                      static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(firingData)));
+        Check(census.find(playerLine) != std::string::npos, "firing census names the weapon with a client pair as the player's");
         Check(aiLine != std::string::npos && census.find(" unlimited", aiLine) < census.find('\n', aiLine),
               "firing census marks the unlimited-ammo copy");
         char clientLine[64], serverLine[64], holderLine[96];
@@ -614,6 +622,7 @@ int wmain() {
         _aligned_free(clientWeapon);
         _aligned_free(serverWeapon);
         for (auto* o : objs) _aligned_free(o);
+        _aligned_free(pairBlock);
         _aligned_free(firingData);
         _aligned_free(weaponData);
     }

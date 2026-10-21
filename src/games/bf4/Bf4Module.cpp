@@ -647,6 +647,87 @@ public:
     HudSplit hudSplit;               // BF4's crosshair out of the head-tracked view (Bf4HudSplit.h)
     bool hudInstallTried = false;
     std::uint64_t presentCount = 0, gunInHandFrame = 0, laneFrame = 0, alternateFrame = 0;
+    // Weapon identity (W0, docs/BF4-MANUAL-RELOAD.md section 0; developer sessions): the player's
+    // weapons from the last census, each re-read from its first firing object (state, rounds)
+    // a few times a second; the weapon in hand is the one that last became deployed (state 3
+    // or later) or whose rounds changed. Read-only.
+    struct TrackedWeapon {
+        PlayerWeapon weapon;
+        WeaponFamily family;
+        std::int32_t state = -1, loaded = -1, reserve = -1;
+        std::uint64_t activeAt = 0; // present count when it last became deployed or fired
+        bool alive = true;
+    };
+    std::mutex weaponMutex;
+    std::vector<TrackedWeapon> weapons;   // guarded by weaponMutex (the census thread sets it)
+    std::uint64_t weaponsCensus = 0;      // census results taken
+    int heldWeapon = -1;
+    std::uint64_t heldData = 0;
+    void SetWeapons(const std::vector<PlayerWeapon>& found) {
+        std::lock_guard<std::mutex> lock(weaponMutex);
+        std::vector<TrackedWeapon> next;
+        for (const PlayerWeapon& w : found) {
+            TrackedWeapon t;
+            t.weapon = w;
+            t.family = FamilyFromData(w.d);
+            t.state = w.o.state;
+            t.loaded = w.o.loaded;
+            t.reserve = w.o.reserve;
+            for (const TrackedWeapon& old : weapons) // keep what was learned about the same weapon
+                if (old.weapon.data == w.data) t.activeAt = old.activeAt;
+            next.push_back(t);
+        }
+        weapons.swap(next);
+        ++weaponsCensus;
+    }
+    static std::string DescribeWeapon(const TrackedWeapon& t) {
+        char line[200];
+        std::snprintf(line, sizeof(line), "%s%s%s, %s fire, capacity %d, %d/%d (data %llx)", FiringFeedName(t.family.feed),
+                      t.family.boltOrPump ? " + bolt/pump" : "", t.family.largeMagazine ? " (large: belt?)" : "",
+                      FireLogicName(t.weapon.d.fireLogic), t.weapon.d.capacity, t.loaded, t.reserve,
+                      static_cast<unsigned long long>(t.weapon.data));
+        return line;
+    }
+    // Every 10 Presents: re-read each weapon's first firing object (still the same weapon: its
+    // ammo pointer still leads to the same data), note deploys and shots, name the one in hand.
+    void WeaponTick() {
+        if (presentCount % 10 != 0) return;
+        std::lock_guard<std::mutex> lock(weaponMutex);
+        if (weapons.empty()) return;
+        for (TrackedWeapon& t : weapons) {
+            if (!t.alive) continue;
+            const std::uintptr_t object = static_cast<std::uintptr_t>(t.weapon.objects[0]);
+            std::uint64_t ammo = 0;
+            std::int32_t state = 0, rounds[2]{};
+            if (!ReadChecked(object + 0x130, &ammo, 8) || ammo != t.weapon.data + kAmmoConfigInFiringData ||
+                !ReadChecked(object + 0x148, &state, 4) || !ReadChecked(object + 0x1A0, rounds, 8) || state < 0 || state > 15) {
+                t.alive = false; // freed or reused (level change, weapon dropped): the next census finds it again
+                log_.Write("weapon: %s no longer readable", DescribeWeapon(t).c_str());
+                continue;
+            }
+            // Deployed: ready (3) or anything after it (firing 5/6, bolt or pump 7/8, reload
+            // 10-12); live, a burst left state 3 and the other gun looked held for a moment.
+            const bool deployed = state >= 3, wasDeployed = t.state >= 3;
+            if ((deployed && !wasDeployed) || (rounds[0] != t.loaded && t.loaded >= 0)) t.activeAt = presentCount;
+            t.state = state;
+            t.loaded = rounds[0];
+            t.reserve = rounds[1];
+        }
+        int held = -1;
+        for (int i = 0; i < static_cast<int>(weapons.size()); ++i)
+            if (weapons[i].alive && weapons[i].state >= 3 && (held < 0 || weapons[i].activeAt > weapons[held].activeAt)) held = i;
+        const std::uint64_t data = held >= 0 ? weapons[held].weapon.data : 0;
+        if (data != heldData) {
+            heldData = data;
+            log_.Write("weapon in hand: %s", held >= 0 ? DescribeWeapon(weapons[held]).c_str() : "none known");
+        }
+        heldWeapon = held;
+        if (presentCount % 600 == 0) {
+            std::string all;
+            for (const TrackedWeapon& t : weapons) all += std::string(all.empty() ? "" : "; ") + (t.alive ? "" : "gone: ") + DescribeWeapon(t);
+            log_.Write("weapons (census %llu): %s", static_cast<unsigned long long>(weaponsCensus), all.c_str());
+        }
+    }
     // Native eyes (3D): the frame the core last asked for them; whether the world's draw runs
     // once per eye now; the doubled-draw count a published pair last used; when a world
     // renderer that was not found is looked for again.
@@ -2019,6 +2100,7 @@ void OnPresent(Adapter& a, IDXGISwapChain* sc) {
         SessionProbeTick(a);
         StereoProbeTick(a);
         FiringCensusTick(a);
+        if (a.session.developerFeatures) a.platform.WeaponTick();
     }
     PlatformFrame f;
     f.tickMs = GetTickCount64();
@@ -2663,17 +2745,40 @@ void RunFiringCensus(Adapter& a, const char* why) {
                                 static_cast<unsigned long long>(found[i].address), static_cast<unsigned long long>(found[i].vtable),
                                 static_cast<unsigned long long>(found[k].address), static_cast<unsigned long long>(found[k].vtable),
                                 static_cast<unsigned long long>(found[i].data), found[i].o.loaded, found[i].o.reserve);
-        // Ownership: who holds each limited-ammo firing object (client weapon at +0x8, server
-        // weapon at +0xA0, told apart by their vtables), then who holds those weapons, so one
-        // session yields the next links of the player -> weapon chain (RE task R8).
+        // The player's weapons: the ones with a client pair (Bf4FiringCensus.h, live session 126).
+        {
+            std::vector<CensusObject> objects;
+            for (const auto& e : found) objects.push_back({e.address, e.data, e.o, e.d});
+            const std::vector<PlayerWeapon> mine = PlayerWeapons(objects);
+            for (const PlayerWeapon& w : mine) {
+                const WeaponFamily family = FamilyFromData(w.d);
+                a.log.Write("  player weapon %llx: %s%s%s, %s fire, capacity %d, %d/%d, reload %.1f s, objects %d",
+                            static_cast<unsigned long long>(w.data), FiringFeedName(family.feed),
+                            family.boltOrPump ? " + bolt/pump" : "", family.largeMagazine ? " (large: belt?)" : "",
+                            FireLogicName(w.d.fireLogic), w.d.capacity, w.o.loaded, w.o.reserve, w.d.reloadTime, w.count);
+            }
+            a.platform.SetWeapons(mine);
+        }
+        // Ownership (RE task R8; slow, ~25 s a target: research `census holders` only): who holds
+        // each limited-ammo firing object (client weapon at +0x8, server weapon at +0xA0, told
+        // apart by their vtables), then who holds those weapons.
+        if (j->why != "holders") {
+            a.log.Write("firing census (%s): done in %llums", j->why.c_str(), static_cast<unsigned long long>(GetTickCount64() - t0));
+            g_censusRunning = false;
+            return 0;
+        }
         const ImageRanges image = GameImageRanges();
         std::vector<std::uint64_t> firing;
+        firing.reserve(8);
         for (const auto& e : found)
             if (!e.o.UnlimitedAmmo() && firing.size() < 8) firing.push_back(e.address);
         std::vector<std::uint64_t> owners;
         std::vector<FiringHolder> ownerKinds;
+        // Our own copies of the addresses are no holders (live, session 126: the target list
+        // itself was every target's first "holder").
         const std::vector<AddressRange> own{
-            {reinterpret_cast<std::uintptr_t>(found.data()), reinterpret_cast<std::uintptr_t>(found.data() + found.size())}};
+            {reinterpret_cast<std::uintptr_t>(found.data()), reinterpret_cast<std::uintptr_t>(found.data() + found.size())},
+            {reinterpret_cast<std::uintptr_t>(firing.data()), reinterpret_cast<std::uintptr_t>(firing.data() + firing.capacity())}};
         for (const std::uint64_t target : firing) {
             std::size_t client = 0, server = 0, other = 0;
             std::string others;
@@ -3193,7 +3298,7 @@ void ResearchTick(Adapter& a) {
         break;
     }
     case ResearchCommand::Kind::Census:
-        RunFiringCensus(a, "research");
+        RunFiringCensus(a, c.arg == "holders" ? "holders" : "research");
         ResearchAck(a, c.id, "census started (results in the adapter log)");
         break;
     case ResearchCommand::Kind::Peek: {

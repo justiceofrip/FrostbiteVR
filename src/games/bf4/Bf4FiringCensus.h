@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <cstring>
 #include <optional>
+#include <vector>
 
 namespace fvr::bf4 {
 
@@ -137,6 +138,110 @@ inline FiringHolder ClassifyFiringHolder(std::uint64_t atClientSlot, std::uint64
     if (atClientSlot == imageBase + kClientWeaponBVtableRva) return FiringHolder::ClientWeaponB;
     if (atServerSlot == imageBase + kServerWeaponVtableRva) return FiringHolder::ServerWeapon;
     return FiringHolder::Unknown;
+}
+
+// One firing object the census accepted.
+struct CensusObject {
+    std::uint64_t address = 0, data = 0; // the object, its FiringFunctionData
+    FiringObjectFacts o;
+    FiringDataFacts d;
+};
+
+// The local player's weapons (live, session 126): each of the player's guns has three firing
+// objects sharing its FiringFunctionData, two of them allocated exactly kClientPairStride apart
+// (the locally predicted client copies); the other soldiers' guns have a single one. All of
+// them follow the HUD. A weapon is the player's when its limited-ammo objects include such a
+// pair, or number three or more (the grenades' client copies were not side by side); its
+// objects are listed with the ones outside a pair (the server's) first.
+inline constexpr std::uint64_t kClientPairStride = 0x220;
+inline constexpr int kMaxWeaponObjects = 4;
+
+struct PlayerWeapon {
+    std::uint64_t data = 0;
+    std::uint64_t objects[kMaxWeaponObjects]{};
+    int count = 0;
+    FiringObjectFacts o; // from the first listed object
+    FiringDataFacts d;
+};
+
+inline std::vector<PlayerWeapon> PlayerWeapons(const std::vector<CensusObject>& found) {
+    std::vector<PlayerWeapon> out;
+    for (std::size_t i = 0; i < found.size(); ++i) {
+        const CensusObject& e = found[i];
+        if (e.o.UnlimitedAmmo()) continue;
+        bool seen = false;
+        for (const PlayerWeapon& w : out) seen |= w.data == e.data;
+        if (seen) continue;
+        std::vector<const CensusObject*> group;
+        for (const CensusObject& f : found)
+            if (f.data == e.data && !f.o.UnlimitedAmmo()) group.push_back(&f);
+        bool pair = false;
+        for (const CensusObject* a : group)
+            for (const CensusObject* b : group) pair |= b->address == a->address + kClientPairStride;
+        if (!pair && group.size() < 3) continue;
+        PlayerWeapon w;
+        w.data = e.data;
+        // Outside the pair first (the server copy), then the pair.
+        auto inPair = [&](const CensusObject* x) {
+            for (const CensusObject* y : group)
+                if (y->address == x->address + kClientPairStride || x->address == y->address + kClientPairStride) return true;
+            return false;
+        };
+        for (int pass = 0; pass < 2; ++pass)
+            for (const CensusObject* x : group)
+                if (inPair(x) == (pass == 1) && w.count < kMaxWeaponObjects) w.objects[w.count++] = x->address;
+        const CensusObject* first = group.front();
+        for (const CensusObject* x : group)
+            if (x->address == w.objects[0]) first = x;
+        w.o = first->o;
+        w.d = first->d;
+        out.push_back(w);
+    }
+    return out;
+}
+
+// The feed and action a weapon's own firing data shows, before its weapon class is known (the
+// class lives outside FiringFunctionData; until it is read, ClassifyReload keeps every gun on
+// button reload). Belt-fed guns look like large magazines in the data: `largeMagazine` flags
+// them for an authored Belt profile, nothing more.
+enum class FiringFeed : std::uint8_t { Unknown, Magazine, Tube, Single, Throwable, Detonated };
+struct WeaponFamily {
+    FiringFeed feed = FiringFeed::Unknown;
+    bool boltOrPump = false;     // fire logic 1: a bolt or pump stroke after each shot
+    bool largeMagazine = false;  // 100 rounds or more: likely belt-fed
+};
+inline WeaponFamily FamilyFromData(const FiringDataFacts& d) {
+    WeaponFamily f;
+    if (d.fireLogic == 4) f.feed = FiringFeed::Throwable;
+    else if (d.fireLogic == 5) f.feed = FiringFeed::Detonated;
+    else if (d.reloadType == 0) f.feed = FiringFeed::Tube;
+    else if ((d.reloadType == 1 || d.reloadType == 2) && d.capacity == 1) f.feed = FiringFeed::Single;
+    else if ((d.reloadType == 1 || d.reloadType == 2) && d.capacity > 1) f.feed = FiringFeed::Magazine;
+    f.boltOrPump = d.fireLogic == 1;
+    f.largeMagazine = f.feed == FiringFeed::Magazine && d.capacity >= 100;
+    return f;
+}
+inline const char* FiringFeedName(FiringFeed feed) {
+    switch (feed) {
+    case FiringFeed::Magazine: return "magazine";
+    case FiringFeed::Tube: return "tube";
+    case FiringFeed::Single: return "single-load";
+    case FiringFeed::Throwable: return "throwable";
+    case FiringFeed::Detonated: return "detonated";
+    default: return "unknown";
+    }
+}
+
+inline const char* FireLogicName(std::int32_t fireLogic) {
+    switch (fireLogic) {
+    case 0: return "single";
+    case 1: return "bolt";
+    case 2: return "auto";
+    case 3: return "burst";
+    case 4: return "hold-release";
+    case 5: return "detonated";
+    default: return "?";
+    }
 }
 
 } // namespace fvr::bf4

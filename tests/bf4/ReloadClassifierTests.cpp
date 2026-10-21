@@ -8,6 +8,7 @@
 
 #include <cmath>
 #include <limits>
+#include <string>
 
 using namespace fvr;
 using namespace fvr::bf4;
@@ -164,4 +165,67 @@ TEST_CASE(FiringCensusRulesMatchTheStaticLayout) {
     CHECK(ClientWeaponParent(FiringHolder::ServerWeapon, parent + 0xA8, base, memory) == 0);
     CHECK(ClassifyFiringHolder(0, base + kServerWeaponVtableRva, base) == FiringHolder::ServerWeapon);
     CHECK(ClassifyFiringHolder(base + kServerWeaponVtableRva, base + kClientWeaponVtableRva, base) == FiringHolder::Unknown);
+}
+
+TEST_CASE(PlayerWeaponsAreTheOnesWithAClientPair) {
+    // Session 126's census (Baku): the player's rifle, underbarrel launcher and grenades each
+    // have one object among the soldiers' weapons and two 0x220 apart; the squad's rifle has
+    // one; an AI copy with unlimited ammo never counts.
+    auto obj = [](std::uint64_t address, std::uint64_t data, int loaded, int reserve, int cap, int reloadType, int fireLogic,
+                  bool unlimited = false) {
+        CensusObject c;
+        c.address = address;
+        c.data = data;
+        c.o.loaded = loaded;
+        c.o.reserve = reserve;
+        c.o.state = 3;
+        c.o.flags208 = unlimited ? 0x10 : 0xC4;
+        c.d.capacity = cap;
+        c.d.reloadType = reloadType;
+        c.d.fireLogic = fireLogic;
+        return c;
+    };
+    const std::vector<CensusObject> found{
+        obj(0xed6b87d0, 0xea910b60, 31, 124, 31, 2, 3),          // squad: one object only
+        obj(0xed6bafc0, 0xeeee0c50, 11, 105, 21, 2, 2),          // player's rifle (server copy)
+        obj(0xed6bbe40, 0xef4fc880, 1, 11, 1, 1, 0),             // player's M320
+        obj(0xf3020940, 0xeeee0c50, 11, 105, 21, 2, 2),          // rifle, client pair
+        obj(0xf3020b60, 0xeeee0c50, 11, 105, 21, 2, 2),
+        obj(0xf3388830, 0xef4fc880, 1, 11, 1, 1, 0),             // M320, client pair
+        obj(0xf3388a50, 0xef4fc880, 1, 11, 1, 1, 0),
+        obj(0xeae57bd0, 0xed2412e0, 1, 2, 1, 1, 4),              // grenades: three copies, none side by side
+        obj(0xed6bc900, 0xed2412e0, 1, 2, 1, 1, 4),
+        obj(0xf16e8f00, 0xed2412e0, 1, 2, 1, 1, 4),
+        obj(0xf4000000, 0xea910b60, 31, 124, 31, 2, 3, true),    // AI copies: unlimited
+        obj(0xf4000220, 0xea910b60, 31, 124, 31, 2, 3, true),
+    };
+    const auto weapons = PlayerWeapons(found);
+    CHECK(weapons.size() == 3);
+    CHECK(weapons.size() == 3 && weapons[2].data == 0xed2412e0 && weapons[2].count == 3);
+    if (weapons.size() >= 2) {
+        CHECK(weapons[0].data == 0xeeee0c50 && weapons[0].count == 3 && weapons[0].objects[0] == 0xed6bafc0);
+        CHECK(weapons[0].d.capacity == 21 && weapons[0].o.loaded == 11 && weapons[0].o.reserve == 105);
+        CHECK(weapons[1].data == 0xef4fc880 && weapons[1].count == 3 && weapons[1].objects[0] == 0xed6bbe40);
+        // From the data alone: the rifle feeds from a magazine, the launcher is single-load.
+        CHECK(FamilyFromData(weapons[0].d).feed == FiringFeed::Magazine && !FamilyFromData(weapons[0].d).boltOrPump);
+        CHECK(FamilyFromData(weapons[1].d).feed == FiringFeed::Single);
+        // Without the weapon class the classifier never guesses: button reload.
+        Bf4WeaponReloadData rifle;
+        rifle.reloadType = weapons[0].d.reloadType;
+        rifle.fireLogic = weapons[0].d.fireLogic;
+        rifle.magazineCapacity = weapons[0].d.capacity;
+        CHECK(ClassifyReload(weapons[0].data, rifle).archetype == Bf4ReloadArchetype::ButtonOnly);
+    }
+    // Grenades (hold and release), the belt-fed LMG seen nearby (200 rounds), a tube and a bolt gun.
+    FiringDataFacts grenade, belt, tube, bolt;
+    grenade.fireLogic = 4; grenade.reloadType = 1; grenade.capacity = 1;
+    belt.fireLogic = 2; belt.reloadType = 1; belt.capacity = 200;
+    tube.fireLogic = 1; tube.reloadType = 0; tube.capacity = 7;
+    bolt.fireLogic = 1; bolt.reloadType = 1; bolt.capacity = 5;
+    CHECK(FamilyFromData(grenade).feed == FiringFeed::Throwable);
+    CHECK(FamilyFromData(belt).feed == FiringFeed::Magazine && FamilyFromData(belt).largeMagazine);
+    CHECK(FamilyFromData(tube).feed == FiringFeed::Tube && FamilyFromData(tube).boltOrPump);
+    CHECK(FamilyFromData(bolt).feed == FiringFeed::Magazine && FamilyFromData(bolt).boltOrPump);
+    CHECK(std::string(FiringFeedName(FiringFeed::Single)) == "single-load");
+    CHECK(std::string(FireLogicName(2)) == "auto" && std::string(FireLogicName(4)) == "hold-release");
 }
