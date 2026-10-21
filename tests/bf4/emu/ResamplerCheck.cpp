@@ -100,6 +100,31 @@ bool CheckEyeResamplerReticle(ID3D11Device* device, const char*& why) {
     if (!Amber(eye[32 * width + 16 + 10]) && !Amber(eye[32 * width + 16 + 9])) return why = "marker ring", false;
     if (!Grey(eye[32 * width + 16]) || !Grey(eye[32 * width + 48]) || Green(eye[32 * width + 32]))
         return why = "marker only at its place, no reticle", false;
+    // A marker where the ammo inset is drawn (the magazine well under the gun, live: the left
+    // eye) stays on top of the inset. 512 px over tangents +-1 (256 px per unit): the marker
+    // at tangents (0.6, -0.78), its ring 0.03 * 256 = 7.7 px to the right.
+    {
+        fvr::bf4::EyeOverlay inset[2];
+        for (auto& o : inset) {
+            o.spanX = o.spanY = 2.0f;
+            o.fov = {-1, 1, 1, -1};
+            o.hudInsets = true;
+            o.markers[0].show = true;
+            o.markers[0].u = (0.6f + 1.0f) / 2.0f;
+            o.markers[0].v = (1.0f + 0.78f) / 2.0f;
+        }
+        fvr::bf4::EyeCrop wide[2];
+        if (!resampler.Render(context.Get(), frame.Get(), wide, 512, 512, DXGI_FORMAT_R8G8B8A8_UNORM, {}, inset))
+            return why = "marker over an inset: resample", false;
+        std::vector<std::uint32_t> big;
+        UINT bigWidth = 0;
+        if (!ReadPixels(device, context.Get(), resampler.Eye(0), big, bigWidth)) return why = "marker over an inset: read back", false;
+        bool ring = false;
+        for (UINT x = 414; x <= 420; ++x)
+            for (UINT y = 454; y <= 457; ++y) ring |= Amber(big[y * bigWidth + x]);
+        if (!ring) return why = "marker over an inset: the ring is hidden by the HUD corner", false;
+        resampler.Reset(); // back to the 64 px eyes below
+    }
     // Comfort vignette at full strength over a +-1.6 tangent eye: centre clear, corners dark.
     for (auto& o : overlays) {
         o.markers[0].show = false;

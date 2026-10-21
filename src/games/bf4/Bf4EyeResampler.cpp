@@ -123,8 +123,6 @@ float4 ps(V v) : SV_Target {
         c = lerp(c, c * 0.35, shade * 0.6);
         c = lerp(c, float3(0.25, 1.0, 0.35), max(ring, centre) * 0.9);
     }
-    c = Marker(c, v.uv, marker0);
-    c = Marker(c, v.uv, marker1);
     if (comfort.x > 0.001) { // comfort vignette: clear to ~35 deg off centre, dark by ~50 deg
         c *= 1 - comfort.x * 0.9 * smoothstep(0.70, 1.19, length(t));
     }
@@ -132,6 +130,10 @@ float4 ps(V v) : SV_Target {
         c = Inset(c, t, insetSrc[0], insetTan[0]);
         c = Inset(c, t, insetSrc[1], insetTan[1]);
     }
+    // Gesture markers last: the magazine well under the gun can fall where the ammo inset is
+    // drawn (live: one eye lost its ring behind it).
+    c = Marker(c, v.uv, marker0);
+    c = Marker(c, v.uv, marker1);
     return float4(c, 1);
 }
 )";

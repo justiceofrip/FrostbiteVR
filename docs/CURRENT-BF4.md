@@ -18,7 +18,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
   three sessions (09:16-10:19; rotation was inverted and the gun oversized, both fixed in
   0.4.16); everything built since 0.4.17 is unseen in a headset.
 
-## At a glance (installed: 0.4.164-local)
+## At a glance (installed: 0.4.165-local)
 
 | Feature | State | Evidence |
 | --- | --- | --- |
@@ -34,7 +34,7 @@ The only BF4 state document; overwrite it when the state changes. BC2 state stay
 | Recenter: both stick clicks 1 s (or mod menu) | on | live sim: recentered twice, no stick click reached the game |
 | Comfort vignette, walk toward body/gun | on / body | live sim (vignette seen while walking) |
 | Holsters (keys 1/2/3, G, F) with pulses | on | live sim: 1, 3, grenade, knife work; 2 not seen (no sidearm) |
-| Manual reload (magazine gesture; B tap/hold) with markers | on (player setting) | live sim: B, belt, magwell -> BF4 reloads |
+| Manual reload (magazine gesture; B tap/hold) with markers | on (player setting) | live sim with native 3D (session 124, `tools/simxr/GestureSweep.ps1`): eject, belt, well -> BF4 reloads (6/105 -> 21/90), dropped magazine, tactical reload, B hold; well marker in both eyes |
 | HUD corners (ammo, minimap insets) | on | live sim (eye snapshots) |
 | Physical crouch | off | live sim: pulses both ways, view lower |
 | 3D: native, each eye drawn by BF4 every frame | on (default, menu "3D") | live sim: 5,100 doubled frames through a head sweep, no fault; eye pairs with parallax and the HUD in both; 86 fps (115 mono); not seen in a headset |
@@ -452,7 +452,7 @@ the world's **draw** (render thread) runs once per eye.
 - BF4's menus in a level are recognised by its cursor; only a cursor over the game window counts now
   (live, session 120: the pointer parked on a second monitor at (-249, 0) held a level on the theater
   screen for minutes).
-- Installed: 0.4.164-local.
+- Installed: 0.4.165-local.
 - Gaps: not seen in a headset (comfort, scale, cost at the headset's rate; whether 2 m suits the
   HUD); one level checked
   (prologue): another scene may use up a field not on the verified list (logged; the second eye
@@ -719,7 +719,7 @@ the theater screen. Pieces (all on the analysed build only):
   so this measures the transport, not the settle frames). Live on the simulated headset:
   both channels used, 0.24 % of requests timed out, rates above.
 
-## Holsters and magazine reload as gestures (2026-10-19, built; emulated only)
+## Holsters and magazine reload as gestures (2026-10-19, built; live sim)
 
 - `Bf4BodyGestures.h`: input-only (no game memory). Body-relative holsters (the
   framework's `BodyFrameEstimator` + BF4 layout): over the right shoulder = primary (key
@@ -768,6 +768,20 @@ the theater screen. Pieces (all on the analysed build only):
   grenade (grab, release away) threw one (HUD 3 -> 2) and the left-hand chest grab drew the
   knife (HUD melee). Not seen: key 2 (no sidearm in the prologue), holster positions on a
   real body.
+- Gesture sweep with native 3D (2026-10-21, sessions 123-124, `tools/simxr/GestureSweep.ps1`:
+  drives the simulated controllers through every gesture in a running level and prints the
+  gesture line and eye snapshots): fire 20 -> 6; B tap ejects, belt grab, seat at the well ->
+  BF4's own reload (6/105 -> 21/90); a magazine let go before the well is dropped and the gun
+  stays empty until a second one is seated; a tactical reload (gun not empty); B held -> BF4's
+  reload; left shoulder -> underbarrel launcher (1/11 SINGLE); right shoulder -> rifle; chest ->
+  knife; left hip grab and release -> grenade thrown (3 -> 2; it landed near the wall ahead and
+  took the player to 15 health); left trigger held -> BF4's ADS FOV 0.698 while the render
+  stays 1.878 (no zoom in VR), the gun kept in the hand; physical crouch toggled down and up.
+  No faults. Found and fixed: the magazine-well marker was drawn under the ammo-panel inset,
+  so the eye whose view put the well behind that inset lost its ring (live: the left eye); the
+  markers are now drawn last (WARP check: a ring inside the inset's area stays visible).
+  Limit seen: key 2 with no sidearm in the loadout leaves BF4 on the rifle while the gesture
+  state believes the sidearm is out (its magazine is tracked separately) until key 1 or 3.
 
 ## Controller aiming (2026-10-19, built; emulated only)
 
