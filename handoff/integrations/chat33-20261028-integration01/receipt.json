@@ -1,0 +1,329 @@
+{
+  "schema": "fvr.integration.launcher-source.v1",
+  "run": "chat33-20261028-integration01",
+  "recorded_utc": "2026-10-28T17:15:18.7311714Z",
+  "integration_branch": "checkpoint/436-r56-equipment-rendering",
+  "candidate_branch": "integration/chat33-20261028-launch-r1",
+  "origin": "https://github.com/justiceofrip/FrostbiteVR.git",
+  "accepted_baseline": "a16f75c34d63cd773962730d38b6a6787db4d028",
+  "candidate_merge_commit": "7d3673eb073639a6a92b4b8b2f14de07c3ebf3b0",
+  "validated_source_commit": "03dd44d2f77cd19a613829a5097971b7a0f06b20",
+  "tasks": [
+    {
+      "branch": "tasks/chat33-20261028-steam-launch-r1",
+      "id": "CHAT33",
+      "acceptance": "source diagnostics and placement checks integrated; needs-native-evidence",
+      "commit": "7b48b7c24e7118a358e66cfbc0303eb0252e4f2c",
+      "handoff": "handoff/tasks/CHAT33/20261028-steam-launch-r1/HANDOFF.txt"
+    }
+  ],
+  "exclusive_ownership": {
+    "release_policy": "Verify owned token and idle resources, then release after final status push",
+    "lease_held_when_written": true,
+    "lease_token": "chat33-20261028-integration01-0c206d0a-63b4-4332-8f57-6e7fe0bef326",
+    "prior_relinquishment": "COORDINATION records prior user confirmation; completed CHAT06 receipt, absent lease and idle process inspection"
+  },
+  "merge_conflicts": 0,
+  "validation": [
+    {
+      "suite": "Test-LauncherStartup",
+      "checks_or_tests": 89,
+      "source_commit": "7d3673eb073639a6a92b4b8b2f14de07c3ebf3b0",
+      "log": {
+        "path": "reports/integration-chat33-20261028-01/Test-LauncherStartup.log",
+        "sha256": "c90e3dac8e201d669cf81c417c8f68b0e64a11fc55a152ca11b823424bb702a6",
+        "bytes": 5824
+      },
+      "passed": true
+    },
+    {
+      "suite": "Test-LauncherStorage",
+      "checks_or_tests": 40,
+      "source_commit": "7d3673eb073639a6a92b4b8b2f14de07c3ebf3b0",
+      "log": {
+        "path": "reports/integration-chat33-20261028-01/Test-LauncherStorage.log",
+        "sha256": "d417630598352062fb9e7175f0241b79b285da24517960cf90382ecab6c1f00f",
+        "bytes": 2454
+      },
+      "passed": true
+    },
+    {
+      "suite": "Test-LauncherFeedback",
+      "checks_or_tests": 48,
+      "source_commit": "7d3673eb073639a6a92b4b8b2f14de07c3ebf3b0",
+      "log": {
+        "path": "reports/integration-chat33-20261028-01/Test-LauncherFeedback.log",
+        "sha256": "ccdf2a058bfd607ec445216a9b53bb8d5fdb840d3badfc94de07a65940f8ae36",
+        "bytes": 2454
+      },
+      "passed": true
+    },
+    {
+      "suite": "test_runtime_steam_compatibility",
+      "checks_or_tests": 11,
+      "source_commit": "7d3673eb073639a6a92b4b8b2f14de07c3ebf3b0",
+      "log": {
+        "path": "reports/integration-chat33-20261028-01/test_runtime_steam_compatibility.log",
+        "sha256": "c81e9b2b79f54e47e6a37f9678bf28ac273bfb78ccd6d5d92713f894f09cf275",
+        "bytes": 115
+      },
+      "passed": true
+    },
+    {
+      "suite": "test_runtime_asset_managed_cache",
+      "checks_or_tests": 13,
+      "source_commit": "7d3673eb073639a6a92b4b8b2f14de07c3ebf3b0",
+      "log": {
+        "path": "reports/integration-chat33-20261028-01/test_runtime_asset_managed_cache.log",
+        "sha256": "b57edd214f89903641f43cfa9eabc5c317b27d9c7d17acea5e96f1f6c7b0d4c8",
+        "bytes": 118
+      },
+      "passed": true
+    },
+    {
+      "suite": "Test-LauncherUserSetups",
+      "checks_or_tests": 26,
+      "source_commit": "7d3673eb073639a6a92b4b8b2f14de07c3ebf3b0",
+      "log": {
+        "path": "reports/integration-chat33-20261028-01/Test-LauncherUserSetups.log",
+        "sha256": "97ccf177002d4bbe842510b340b5d27e70e97f268933c6b16d54572d65827155",
+        "bytes": 178
+      },
+      "passed": true
+    },
+    {
+      "initial_result": {
+        "path": "reports/integration-chat33-20261028-01/tests-result.json",
+        "sha256": "bff6f61a9a4349ab1fecd39707adf67930d043a2e53bff777453447c7c2a82e4",
+        "bytes": 836
+      },
+      "checks_or_tests": 30,
+      "passed": true,
+      "source_commit": "03dd44d2f77cd19a613829a5097971b7a0f06b20",
+      "recheck": {
+        "path": "reports/integration-chat33-20261028-01/restart-recheck-result.json",
+        "sha256": "e3607a2df940679ada490fcb1d188cd0cfd4ffd85e0e2d4fdffeab176e22f90a",
+        "bytes": 197
+      },
+      "failed_fixture": "test-temp/portable-restart-8eba6e7de5904eb3aa8a5825b5bbe086",
+      "suite": "Test-PortableRestart",
+      "initial_failure": "Old fixture handle reached Windows process resolver",
+      "log": {
+        "path": "reports/integration-chat33-20261028-01/Test-PortableRestart-recheck.log",
+        "sha256": "65fa6f24fc574c53659ce9369bd6b6b5b30193b24fa45489094a366fbf2cc105",
+        "bytes": 1761
+      }
+    }
+  ],
+  "runtime": {
+    "built_source_commit": "532b75060f9bfe78d013466fa12cf6513a0a9a95",
+    "prior_validation": "CHAT04 normal x86/x64 each305/305; CHAT06 focused each2/2, not rerun or relabeled as CHAT33",
+    "artifacts_reverified": [
+      {
+        "bytes": 9501184,
+        "kind": "binaries",
+        "file": "BC2NativeProbe.dll",
+        "sha256": "b7190f7fc6d214892bb48ab8a8a2d702526a771d240bb6bd1d759fb07135ead6",
+        "role": "probe"
+      },
+      {
+        "bytes": 1415168,
+        "kind": "binaries",
+        "file": "BC2NativeTrace.exe",
+        "sha256": "eea4027ff69f53c49162bbd4cb0c21d59670c87931f9ff98a1fad0d16deb6670",
+        "role": "trace"
+      },
+      {
+        "bytes": 4084224,
+        "kind": "binaries",
+        "file": "BC2NativeIpcProbe.exe",
+        "sha256": "cee821a40e5886a7faa764199060b132957233f811ebf197d44d4dfcbaf25215",
+        "role": "receiver"
+      },
+      {
+        "bytes": 4093952,
+        "kind": "binaries",
+        "file": "BC2XrHost.exe",
+        "sha256": "6aef20fb1a5df8822e7c210208f870dd0dbd451c160df5f84e1883bb72a628cd",
+        "role": "host"
+      },
+      {
+        "bytes": 1477120,
+        "kind": "binaries",
+        "file": "BC2NativeResolution.exe",
+        "sha256": "848a577fd5feb00b6a211f5b151e758df7a247e90d83aac3277698abf9842320",
+        "role": "resolution"
+      },
+      {
+        "bytes": 1513984,
+        "kind": "binaries",
+        "file": "BC2ResolutionBootstrap.dll",
+        "sha256": "285f24a4344fb4a354fe8c0c590e9c7c33e6fa44364453a7816b4b14463ecc2a",
+        "role": "resolution_bootstrap"
+      },
+      {
+        "bytes": 166998016,
+        "kind": "symbols_by_binary",
+        "file": "BC2NativeProbe.pdb",
+        "sha256": "5fb4595c5c67f1d6806e46160b914140a6d0271d57b9e9cbfa061cf3e8c733d9",
+        "role": "probe"
+      },
+      {
+        "bytes": 18911232,
+        "kind": "symbols_by_binary",
+        "file": "BC2NativeTrace.pdb",
+        "sha256": "9c1982cd5ca7a6e35bcba2519ec1a5a5649dc1f074dcb9efed8c4068ee7dc5eb",
+        "role": "trace"
+      },
+      {
+        "bytes": 62705664,
+        "kind": "symbols_by_binary",
+        "file": "BC2NativeIpcProbe.pdb",
+        "sha256": "125b748aa496886da2e606b6bbdc425dc0e31c71ea24540b6073648de701f6b8",
+        "role": "receiver"
+      },
+      {
+        "bytes": 72118272,
+        "kind": "symbols_by_binary",
+        "file": "BC2XrHost.pdb",
+        "sha256": "704852e6ec9a9777615172ad57a5b2ab98613b21fc842d9c6661bc66fb1fe0fa",
+        "role": "host"
+      },
+      {
+        "bytes": 20688896,
+        "kind": "symbols_by_binary",
+        "file": "BC2NativeResolution.pdb",
+        "sha256": "4c20b55b52d39e22059a311020aa5e0f2c6d8a01905f36d64c86e2c0e542d7ff",
+        "role": "resolution"
+      },
+      {
+        "bytes": 21311488,
+        "kind": "symbols_by_binary",
+        "file": "BC2ResolutionBootstrap.pdb",
+        "sha256": "f0987b68eaa4b9dcab7b2c78dc2f2606dca7f897bbe3c658215cbcfec0cff1df",
+        "role": "resolution_bootstrap"
+      }
+    ],
+    "normal_configuration": [
+      {
+        "architecture": "x86",
+        "sha256": "1bbed69774ca289841d905eb310d4563c9c4f4160a8a980d9a7292ff27f9d7ed",
+        "kind": "cache"
+      },
+      {
+        "architecture": "x86",
+        "sha256": "79ff6576ce27b78cb9b1859c148a11ac8d0bc5c497a163830ab02713df14b7d1",
+        "kind": "operation_config"
+      },
+      {
+        "architecture": "x64",
+        "sha256": "17e94040a62d971fcaddf2c2a226182964ad790e245ee0d9eff9a7fac627c87d",
+        "kind": "cache"
+      },
+      {
+        "architecture": "x64",
+        "sha256": "79ff6576ce27b78cb9b1859c148a11ac8d0bc5c497a163830ab02713df14b7d1",
+        "kind": "operation_config"
+      }
+    ],
+    "receipt": {
+      "path": "reports/integration-chat04-20261028-01/normal-runtime/build-receipt.json",
+      "sha256": "f4fdcb64ef2fc1e539db12bf97dee6f338bc66719b92ae7d04e1f50ea0556950",
+      "bytes": 11002
+    },
+    "rebuilt": false,
+    "native_source_files_verified": 576,
+    "reason": "Only interpreted launcher code and tests changed; native closure, operation records, normal caches and all artifact pins match",
+    "audit": {
+      "path": "reports/integration-chat33-20261028-01/native-artifact-audit.json",
+      "sha256": "43c0d5ec3167187c0df80331771a48b737b0444ab61b5700ee4cc8d8fa06f8f0",
+      "bytes": 3678
+    },
+    "source_closure_verified": true,
+    "native_source_sha256": "f9d264cb17dfa88e304e433569e4d0e472adf97017f6fe3f96db2aed198f4b0b"
+  },
+  "source_push": {
+    "verified_remote_ref": "refs/heads/checkpoint/436-r56-equipment-rendering",
+    "tested_source_commit": "03dd44d2f77cd19a613829a5097971b7a0f06b20",
+    "status": "pending"
+  },
+  "installation": {
+    "runtime_label": "SteamVR",
+    "observed_active_version": "0.1.12",
+    "launcher_unchanged": true,
+    "rollback_required": false,
+    "local_inspection": {
+      "path": "reports/integration-chat33-20261028-01/local-install-inspection.json",
+      "sha256": "5aa384d2081c17a9c181fd3688b51f703015c9cb8837cd380b6bd0904f8f1a9c",
+      "bytes": 628
+    },
+    "installed": false,
+    "observed_fallback_version": "0.1.11",
+    "launcher_placement": {
+      "relationship": "separate",
+      "allowed": true,
+      "schema": "bc2vr.launcher-placement.v1",
+      "error": null
+    },
+    "settings_sha256": "be6f984f6bd44dcc62aab0a2ac1a63acaa2d3221d2919f2a44a4aeeef2b1f7cf",
+    "game_started": false,
+    "error": "OpenXR unavailable: Create OpenXR instance XrResult=-2",
+    "observed_game_sha256": "3911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258",
+    "probe_recipe": {
+      "path": "reports/integration-chat33-20261028-01/ProbeRuntime.ps1",
+      "sha256": "a74e5f30fdf6cbdaa614a81c3744317f3210218bdfc290c91002d5ecfa2e469d",
+      "bytes": 14085
+    },
+    "owned_host_stopped": true,
+    "host_exit": 2,
+    "active_sha256": "9b60ff5ce16e3c146a56d5410edbd43b9f91e393ab7851af41d9c6f3b800a8b2",
+    "relation_to_reporter": "Local SteamVR failure is separate from reporter VDXR/Quest3 successful preflight",
+    "preflight": {
+      "path": "reports/integration-chat33-20261028-01/xr-preflight01/preflight-receipt.json",
+      "sha256": "9a7be80c0d29521968ead6ae10141d1c59b641a0226759d3f439cc771e71a438",
+      "bytes": 22268
+    },
+    "status": "not performed; fresh local OpenXR instance preflight failed"
+  },
+  "storage": {
+    "admissions": [
+      {
+        "path": "reports/integration-chat33-20261028-01/tests-storage.json",
+        "sha256": "0ef96477d8c71b0b8c10922b702b04254b5d03c2aff61d43287417fc1e5a4ba9",
+        "bytes": 3167
+      },
+      {
+        "path": "reports/integration-chat33-20261028-01/restart-recheck-storage.json",
+        "sha256": "bb5310068803b35efcdd64f57d18adc5ae3bb6fa018461c80ae0ac048087e7f5",
+        "bytes": 3166
+      },
+      {
+        "path": "reports/integration-chat33-20261028-01/xr-preflight01/storage-admission.json",
+        "sha256": "576b6f40344d94dca8205df70aab028e4788fcc4aeddcf9cbb5e662793fd9ab7",
+        "bytes": 3183
+      }
+    ],
+    "tests_plan_mib": 128,
+    "preflight_plan_mib": 640,
+    "evidence_deleted": false,
+    "default_ceiling_gib": 40,
+    "minimum_free_gib": 15,
+    "restart_plan_mib": 16
+  },
+  "independent_review": {
+    "actionable_findings": 0,
+    "task_diff_reviewed": true,
+    "fixture_followup_reviewed": true
+  },
+  "native_bc2_verified": false,
+  "headset_tested": false,
+  "full_chat33_accepted": false,
+  "public_release": false,
+  "raw_attachments_committed": false,
+  "remaining": [
+    "Steam exact executable signature/discovery and ABI evidence; admission remains closed",
+    "EA retry from fresh separate launcher installation",
+    "Local OpenXR availability before candidate installation",
+    "Actual Play, stereo/input/equipment/shutdown smoke and physical-headset acceptance"
+  ]
+}

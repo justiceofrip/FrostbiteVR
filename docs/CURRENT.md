@@ -5,6 +5,14 @@ Updated October 28, 2026. This replaces old next-step instructions; prior eviden
 
 ## Active work
 
+CHAT33 launch diagnostics and placement checks are integrated: setup/Play reject
+protected game-folder placement early, and Steam reports separate requested opt-in
+from native-profile refusal. Seven canonical suites pass; native source/artifacts
+are unchanged. The [integration receipt](../handoff/integrations/chat33-20261028-integration01/README.md)
+retains the repaired restart-fixture failure and a fresh SteamVR OpenXR instance
+failure (`XrResult=-2`). Launcher0.1.12/settings remain unchanged; installation,
+actual Play and headset checks are pending. Steam native compatibility is unverified.
+
 CHAT06 vehicle-transition retention regressions are integrated: nine ammunition
 cases and four pump/bolt cases pass in both normal configurations (two suites
 per architecture). Runtime source and the CHAT04 artifact receipt are unchanged.

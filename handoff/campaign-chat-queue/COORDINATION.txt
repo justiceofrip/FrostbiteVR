@@ -14,25 +14,30 @@ Worker handoffs: handoff/tasks/CHATnn/<unique-run-id>/HANDOFF.txt in each worktr
 Exclusive integration lease: worktree root\INTEGRATION.lock (atomic CreateNew).
 Shared resource ownership: user confirmed prior chats relinquished shared resources
 on October 28, 2026, before the CHAT02 integration lease was acquired.
-Last workflow integration: CHAT06 regression coverage; native evidence pending.
-Integrated source merge: fcb6d4fa7c9397534aca44b23e1c34e17d7e5625
+Last workflow integration: CHAT33 launch diagnostics/placement checks; live evidence pending.
+Integrated source merge: 7d3673eb073639a6a92b4b8b2f14de07c3ebf3b0
+Validated combined source: 03dd44d2f77cd19a613829a5097971b7a0f06b20
 Built combined source commit: 532b75060f9bfe78d013466fa12cf6513a0a9a95
-Included task commit: b8e7e122804c84ad240bb06a8f79da5af794370a
-Source push: verified at d54cca212ee7a656d1277c2ad44e9462891e1eac.
-The subsequent status-only commit preserves the tested source/runtime identities.
-CHAT06 changes tests/handoffs only; built runtime identity above is unchanged.
-Prior CHAT02/CHAT04/CHAT05 integrations retain their original evidence.
+Included task commit: 7b48b7c24e7118a358e66cfbc0303eb0252e4f2c
+Source push: pending; candidate validated, final status will record verified push.
+CHAT33 changes interpreted launcher code; built native runtime above is unchanged.
+Restart fixture correction is test-only; prior failure remains in the batch evidence.
+Prior CHAT02/CHAT04/CHAT05/CHAT06 integrations retain their original evidence.
 Last workflow local mod update: none; fresh required OpenXR preflight failed.
 Observed launcher target: G:\Unity\VRMMO\BC2VR-Launcher, active0.1.12 unchanged.
 Settings and active version hashes are unchanged; no game/session was started.
 Frozen candidate receipt: reports/integration-chat04-20261028-01/normal-runtime/build-receipt.json
 Receipt SHA256: f4fdcb64ef2fc1e539db12bf97dee6f338bc66719b92ae7d04e1f50ea0556950
-Batch receipt: handoff/integrations/chat06-20261028-integration01/receipt.json
-CHAT06 validation: normal x86/x64 focused tests each2/2; unchanged native closure.
-Prior CHAT04 full normal builds remain305/305 each; not rerun as CHAT06 builds.
+Batch receipt: handoff/integrations/chat33-20261028-integration01/receipt.json
+CHAT33 validation: Startup89, Storage40, Feedback48, Steam11, managed-cache13,
+packaged setup26 and corrected restart30 checks/tests pass; no native rebuild.
+Prior CHAT04 full normal builds remain305/305 each; CHAT06 focused tests each2/2.
 All12 frozen binary/PDB hashes reverified; normal flags/operation records unchanged.
-Storage: default40GiB/free floor15GiB; focused tests256MiB, preflight640MiB plans.
-Pending: install/startup/equipment smoke; OpenXR instance creation XrResult=-2.
+Storage: default40GiB/free floor15GiB; tests128MiB, restart16MiB, preflight640MiB plans.
+Pending: install/startup/equipment smoke; local SteamVR instance creation XrResult=-2.
+This is distinct from the EA reporter's successful VDXR/Quest3 preflight.
+CHAT33 Steam needs exact executable native signature/ABI evidence; admission stays closed.
+EA reporter needs fresh separate launcher placement and actual Play/headset validation.
 CHAT06 remains needs-native-evidence: six permitted vehicle entry/exit episodes,
 equipment/actor lineage, partial reload settlement, owed-cycle recovery, headset.
 CHAT05 remains needs-native-evidence: release/stow, pickups, owed cycles, headset.
