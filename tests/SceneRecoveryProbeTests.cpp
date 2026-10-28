@@ -519,10 +519,10 @@ int main(){
     assert(!NeutralSceneArguments(true,true,false,240,true));
     assert(!NeutralSceneArguments(true,true,true,239,true));
     assert(!NeutralSceneArguments(true,true,true,240,false));
-    for(const auto* option:{L"--selected-knife-neutral",L"--pairs",L"--request-lifetime",L"--static-pose",L"--async",L"--capture-poses"})
+    for(const auto* option:{L"--selected-knife-neutral",L"--pairs",L"--request-lifetime",L"--static-pose",L"--async",L"--capture-poses",L"--no-image-files"})
         assert(SelectedKnifeNeutralOption(option));
     for(const auto* option:{L"--scene-controls-neutral",L"--scene-recovery-probe",L"--controls-observe",L"--trigger-input-smoke",
-        L"--selected-knife-trigger-smoke",L"--selected-knife-motion-smoke",L"--controls-fire",L"--no-image-files",L"--future-action-script"})
+        L"--selected-knife-trigger-smoke",L"--selected-knife-motion-smoke",L"--selected-knife-single-jab",L"--controls-fire",L"--future-action-script"})
         assert(!SelectedKnifeNeutralOption(option));
     assert(!NeutralSceneOption(L"--selected-knife-neutral"));
     assert(SelectedKnifeNeutralArguments(true,true,true,240,true));
@@ -666,6 +666,30 @@ int main(){
     std::ostringstream motionReport;motion.Report(motionReport,8000,true);
     assert(motionReport.str().find("\"stroke_samples\":[12,12]")!=std::string::npos&&
         motionReport.str().find("\"miss_verified\":false")!=std::string::npos);
+    assert(motion.StrokeCount()==2&&motionReport.str().find("\"stroke_count\":2")!=std::string::npos);
+    assert(TriggerInputSmokeOption(L"--selected-knife-single-jab")&&!NeutralSceneOption(L"--selected-knife-single-jab"));
+    TriggerInputSmoke one;assert(!one.SingleJab()&&one.Motion({0,0,-1})&&one.SingleJab()&&!one.SingleJab());
+    assert(!one.Approach(1000,0,.4f)&&one.StrokeCount()==1&&one.Duration()==8000);
+    for(unsigned ms=0;ms<8000;ms+=10){
+        const auto input=one.Input(tracking,ms+1,ms);
+        if(ms>=4200)assert(std::abs(input.hands[1].grip.position.z+.20f)<.00001f&&one.CurrentPhase(ms)==8);
+        motionSample(one,ms);
+    }
+    assert(one.Complete(8000,true)&&!one.Complete(7999,true)&&!one.Complete(8000,false));
+    std::ostringstream oneReport;one.Report(oneReport,8000,true);
+    assert(oneReport.str().find("\"stroke_count\":1")!=std::string::npos&&
+        oneReport.str().find("\"stroke_windows_ms\":[[2000,2120]]")!=std::string::npos&&
+        oneReport.str().find("\"stroke_samples\":[12,0]")!=std::string::npos);
+    TriggerInputSmoke approaching;assert(approaching.Approach(1000,0,.4f)&&approaching.Motion({0,0,-1})&&!approaching.SingleJab());
+    TriggerInputSmoke started;assert(started.Motion({0,0,-1}));motionSample(started,0);assert(!started.SingleJab());
+    for(unsigned fault=0;fault<3;++fault){TriggerInputSmoke incomplete;assert(incomplete.Motion({0,0,-1})&&incomplete.SingleJab());
+        for(unsigned ms=0;ms<8000;ms+=10){
+            const bool lost=fault==0?(ms>=2000&&ms<2120):fault==1?(ms>=4200&&ms<=4250):ms>=7900;
+            if(lost&&fault==2)break;
+            motionSample(incomplete,ms,!lost,lost);
+        }
+        assert(!incomplete.Complete(8000,true));
+    }
     TriggerInputSmoke lostJab;assert(lostJab.Motion({0,0,-1}));
     for(unsigned ms=0;ms<8000;ms+=10)motionSample(lostJab,ms,!(ms>=2000&&ms<2120),ms>=2000&&ms<2120);
     assert(!lostJab.Complete(8000,true)&&!lostJab.Failed());
