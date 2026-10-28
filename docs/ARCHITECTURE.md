@@ -57,6 +57,11 @@ FvrD3D11 now implements independent-process GPU texture transfer. FvrFrameChanne
    No Refractor keycodes, item IDs, native prone toggle or vehicle seat numbers.
 9. Diagnostics are on-demand developer tools. No per-frame logging/scanning,
    startup registry changes or background polling is installed.
+10. Original-magazine tracking suspension invalidates transient pose authority
+    and hand claims while retaining the exact ammunition resource. Recovery
+    requires current same-owner evidence and fresh contact/claims. A tracking
+    gap cannot complete motion, discard the original or reverse a native transfer;
+    explicit release and lifetime transitions remain separate decisions.
 
 Frostbite engine integration and BC2 game rules remain separate so another
 Frostbite game can provide its own bindings without duplicating the VR policies.

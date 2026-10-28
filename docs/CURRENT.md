@@ -5,29 +5,25 @@ Updated October 28, 2026. This replaces old next-step instructions; prior eviden
 
 ## Active work
 
-R56 is now applied on top of the qualified shared normal below: ten production
-files, two existing regression files and two bounded diagnostic readers. Its
-exact source closure is `af13daab2acb73ac73273f1a7719515b7befdbb89d3537db2b25eeba2c6f59e8`;
-freeze `root-custody-normal-r56-prep/build01/source-freeze.json`, SHA
-`ea6e832082030e9ea80ba993858d1496b27a2e89fb40e38fb95ca2fcbd715e32`.
-Both normal architectures passed305/305; both focused custody suites and all
-five reader regressions also passed. The new six-binary runtime is frozen at
-`root-custody-normal-r56-prep/build01/normal-runtime/build-receipt.json`, SHA
-`1bbce04a887c1b9c022d0d4aeb6f58e5df0dd1faa28b4c23fb79db8f2e7db002`,
-version `unreleased-checkpoint436-custody-frame01`. Its independent audit
-`build01/independent-runtime-audit01.json`, SHA
-`9ded26011efb62700a5657aa2513a8839b7b514a5733810518dcbdafadda147a`,
-joins all14 changes, source closure, both validations, actual18/15 consumer
-compilations and all six binary/PDB GUID+age pairs. Normal flags are unchanged.
-M95 five-cycle native confirmation passed as detailed below. The generic Nambu
-diagnostic build completed and restored normal sources/configuration/binaries
-exactly; independent audit `b805e226dd10c6dd5988e26ae6779b54398f93c5f1f65d9c77c3c4f891954305`.
-Scene124 stopped before gameplay input or mod attachment because BC2 did not
-retain foreground ownership. It closed normally and restored all three profile
-files. Nambu acceptance remains pending; this is not a failed native reload test.
-The [436 R56 source handoff](../handoff/checkpoint436-r56/README.md) and portable
-`profiles/checkpoint436-r56` operation records now preserve this checkpoint for
-GitHub review. No new launcher runtime was installed or published.
+CHAT04 original-magazine tracking suspension is applied on R56: lost input drops
+transient pose/hand authority while retaining the exact original and its rounds;
+recovery requires fresh same-owner evidence and a new hand claim. Both normal
+architectures passed305/305 with unchanged normal feature settings and operation
+records. The [integration handoff](../handoff/integrations/chat04-20261028-integration01/README.md)
+pins the source, six binary/symbol pairs and retained failed episodes under
+`reports/integration-chat04-20261028-01`. OpenXR preflight failed at instance
+creation (`XrResult=-2`); installation and startup/equipment smoke remain pending.
+Launcher0.1.12 and settings are unchanged. No native/headset acceptance follows
+from these builds. Continue CHAT04: replacement-magazine tracking loss, M95
+left-root recovery, support/pump and native missing-render checks remain open.
+
+The preceding R56 runtime and symbols remain as a fallback under
+`root-custody-normal-r56-prep/build01`; its [source handoff](../handoff/checkpoint436-r56/README.md)
+and `profiles/checkpoint436-r56` preserve the reviewed operation records.
+M95 five-cycle native confirmation passed as detailed below. Scene124's Nambu
+check stopped before gameplay input or mod attachment because BC2 did not retain
+foreground ownership; it closed and restored all three profiles. Nambu acceptance
+remains pending. No new launcher runtime was installed or publicly released.
 
 The R51 ammo-entry, R52 actor-retirement, R54 continuous GunHold and verified
 edge-projection fixes are applied to the normal checkout: 13 production files
