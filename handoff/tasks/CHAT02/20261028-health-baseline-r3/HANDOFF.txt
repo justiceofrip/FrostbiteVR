@@ -1,0 +1,50 @@
+CHAT02 - Death crashes and black-screen recovery
+Run: 20261028-health-baseline-r3; October 28, 2026
+Status: needs-native-evidence; diagnostic source ready for integration review.
+Branch: tasks/chat02-20261028-health-baseline-r3
+Worktree: G:\Unity\VRMMO\bc2vr-task-worktrees\chat02-20261028-health-baseline-r3
+Base integration ref: checkpoint/436-r56-equipment-rendering
+Base commit: 258715cd36cf75e74f54bf350ba27bc54c142ca9
+Origin verified: https://github.com/justiceofrip/FrostbiteVR.git
+Changed files: this handoff, README.md, diagnostic/CaptureHealthSeries436R3.py,
+  HealthBaselineEvidence436.py (publish_baseline), helper-pins-r3.json,
+  TestHealthBaselineEvidence436.py; unchanged health policy/tests included.
+All changes are beneath this task/run directory. No native production edits.
+Canonical CURRENT, ACTIVE, COORDINATION and other tasks preserved.
+Local evidence root:
+  G:\Unity\VRMMO\bc2vr-recovery\performance436\chat02-death-recovery-prep\run01
+Source/runtime receipt: evidence root\source-runtime-identity.json
+Current normal R56: 576 native files, 110 flags, six frozen/build binaries match.
+Saved death06: seat exit/draw/grenade route preflight completed, but health
+  baseline refused before saving values; zero samples, no grenade/death/restart.
+Change: retain candidate values, owner/raw bytes and failed predicates before
+  the unchanged positive/coherent/bounded gate; rejected data cannot publish ready.
+Reviewed helper rebind: discover/require/chain unchanged from pinned predecessor.
+Tests: 18/18 deterministic tests passed; independent preparation review passed.
+Logs: deterministic-tests02.log (pass); deterministic-tests.log (earlier18 tests,
+  20 filesystem-permission errors) preserved. No gate or test was weakened.
+Storage inventory initially denied access; same guard passed outside sandbox.
+Empty failed-test scratch cleanup recorded; no evidence or runtime removed.
+No new builds: native source/binaries unchanged. Integrator owns normal builds.
+Actual-game checks this run: zero. Headset/tester unavailable per user.
+PENDING: live baseline; current automated controller rebind; named checkpoints;
+  actual death/replacement eyes plus fire/grip/holster/Use; headset acceptance.
+Normal knife/grenades/contextual tools/holster/reload must coexist for acceptance.
+Old death06 disabled knife/contextual tools; its wrapper is not normal acceptance.
+Preserve death03 startup AV, death05 hooked-code refusal, death06 baseline refusal
+  and R48 request184 cancellation; later185 success does not replace failure.
+No proved native fix: black pixels != crash, zero health alone != death,
+  menu checkpoint != death recovery; known-seat Wait remains a hypothesis.
+Diagnostic request: integrator collects one R3 pre-action baseline at a live-named
+  SP01 on-foot checkpoint in a fresh exact-PID/birth normal R56 session, with
+  normal consumers enabled and fresh storage admission, before any grenade.
+Use the bounded request and dependency/flag details in README.md.
+On refusal return candidate/failed_checks; do not relax native/health/deadline gates.
+Planned acceptance: two named checkpoints x idle/grip/unfinished reload once each
+  = six actual deaths, each with both eyes and all four interaction checks (0/6).
+Restoration: normal runtime untouched; no game/profile/native cleanup owed.
+Shared-doc proposal only: R3 preserves rejected baseline evidence; death06 remains
+  no-death, with actual death/recovery and headset acceptance still pending.
+Pending recovery does not gate independent tasks; no other card begun here.
+Integration: read canonical handoff/campaign-chat-queue/INTEGRATE.txt, then use
+  this branch's exact reported final commit and this handoff. No runtime install.
