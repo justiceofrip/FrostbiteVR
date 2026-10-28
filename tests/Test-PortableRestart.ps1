@@ -20,15 +20,27 @@ function Invoke-FixturePython {$global:LASTEXITCODE=0}
 function Test-Bc2AssetCache {return $true}
 function Assert-Bc2RuntimeSpace {}
 function New-ProcessFixture($Id,$Path) {
-    $p=[pscustomobject]@{Id=$Id;Path=$Path;StartTime=[DateTime]'2026-10-20T10:14:31Z';Handle=1;HasExited=$false}
+    $p=[pscustomobject]@{Id=$Id;Path=$Path;StartTime=[DateTimeOffset]::Parse('2026-10-20T10:14:31Z').UtcDateTime;HasExited=$false;RestartFixture=$true}
     $p|Add-Member ScriptMethod CloseMainWindow {Event 'normal_close';return ($script:scenario -ne 'close_refused')}
     $p|Add-Member ScriptMethod WaitForExit {param($Milliseconds) Event 'wait_game_exit';$this.HasExited=$true;return $true}
     $p|Add-Member ScriptMethod Kill {throw 'Fixture forbids forced termination'}
     return $p
 }
+# Replace the OS observation boundary only. The real ownership, path, birth
+# and session-record comparisons below still consume these observed values.
+# Real retained-handle behavior is covered by Test-Bc2ProcessIdentity.ps1.
+function Get-Bc2ProcessIdentity($Process,[bool]$RequireLive=$false) {
+    if($Process -isnot [pscustomobject] -or -not $Process.RestartFixture){throw 'Only restart fixture processes may reach this boundary'}
+    if($RequireLive -and $Process.HasExited){throw 'Fixture process is no longer live'}
+    if(-not [IO.Path]::IsPathFullyQualified($Process.Path)){throw 'Fixture process requires an absolute observed image path'}
+    return @{pid=$Process.Id;start_utc=$Process.StartTime.ToUniversalTime().ToString('o');path=$Process.Path}
+}
 $script:game=New-ProcessFixture 39252 (Join-Path $PSScriptRoot 'game/BFBC2Game.exe')
-$script:supervisor=New-ProcessFixture 39612 'fixture-pwsh.exe'
+$script:supervisor=New-ProcessFixture 39612 (Join-Path $PSScriptRoot 'fixture-pwsh.exe')
 if($script:scenario -eq 'wrong_game'){$script:game.Path='X:\Other\BFBC2Game.exe'}
+if($script:scenario -eq 'active_reused_pid'){$script:supervisor.StartTime=$script:supervisor.StartTime.AddSeconds(1)}
+if($script:scenario -eq 'active_wrong_path'){$script:supervisor.Path=Join-Path $PSScriptRoot 'other-pwsh.exe'}
+if($script:scenario -eq 'active_exited'){$script:supervisor.HasExited=$true}
 function Get-Process {param([string[]]$Name,[int]$Id,$ErrorAction)
     if($Id){
         if($Id -eq $script:supervisor.Id -and $script:scenario -like 'active_*'){return $script:supervisor}
@@ -46,7 +58,7 @@ function Start-Bc2Child($File,$Arguments,$Folder,$LogName,$Environment=@{}) {
     if($LogName -ne 'supervisor'){throw 'Unexpected external helper'}
     Event 'new_supervisor'
     Write-FvrJson (Join-Path $Folder 'session.json') @{state='running';phase='fixture connected'}
-    return (New-ProcessFixture 50000 'fixture-new-supervisor.exe')
+    return (New-ProcessFixture 50000 (Join-Path $PSScriptRoot 'fixture-new-supervisor.exe'))
 }
 '@
 $startup=@'
@@ -68,19 +80,19 @@ try {
     [IO.File]::AppendAllText((Join-Path $runtime 'Runtime.Core.ps1'),"`n"+$boundary)
     [IO.File]::WriteAllText((Join-Path $runtime 'Startup.ps1'),$startup)
     [IO.File]::WriteAllText((Join-Path $runtime 'Dependencies.ps1'),$dependencies)
-    foreach($scenario in @('retained','restart','wrong_game','multiple_games','close_refused','game_appears','stale','active_running','active_failed','active_ended','active_mismatch')){
+    foreach($scenario in @('retained','restart','wrong_game','multiple_games','close_refused','game_appears','stale','active_running','active_failed','active_ended','active_mismatch','active_reused_pid','active_wrong_path','active_exited')){
         [IO.File]::WriteAllText((Join-Path $runtime 'scenario.txt'),$scenario)
         [IO.File]::WriteAllText((Join-Path $runtime 'events.txt'),'')
         $install=Join-Path $root $scenario;$state=Join-Path $install 'data/runtime'
         $old=Join-Path $state 'sessions/prior';[IO.Directory]::CreateDirectory($old)|Out-Null
-        $identity=@{pid=39612;path='fixture-pwsh.exe';start_utc='2026-10-20T10:14:31.0000000Z'}
+        $identity=@{pid=39612;path=(Join-Path $runtime 'fixture-pwsh.exe');start_utc='2026-10-20T10:14:31.0000000Z'}
         Write-FvrJson (Join-Path $state 'active-session.json') @{schema='bc2vr.active-session.v1';version='0.1.9';relative_folder='sessions/prior';supervisor=$identity}
         $previous=@{schema='bc2vr.session.v1';version='0.1.9';state='failed';supervisor=$identity.Clone()}
         if($scenario -eq 'active_running'){$previous.state='running'}
         if($scenario -eq 'active_ended'){$previous.state='ended'}
         if($scenario -eq 'active_mismatch'){$previous.supervisor.start_utc='2026-10-19T10:14:31.0000000Z'}
         Write-FvrJson (Join-Path $old 'session.json') $previous
-        $settings=Join-Path $install 'data/settings.json';Write-FvrJson $settings @{game_path='unused fixture';sentinel='preserved'}
+        $settings=Join-Path $install 'data/settings.json';Write-FvrJson $settings @{game_path=(Join-Path $runtime 'game');sentinel='preserved'}
         $settingsHash=(Get-FileHash -LiteralPath $settings).Hash
         $args=@('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',(Join-Path $runtime 'Entry.ps1'),'-Action','Launch','-SettingsPath',$settings,'-StateRoot',$state)
         if($scenario -in @('restart','wrong_game','close_refused')){$args+='-Fresh'}
@@ -100,6 +112,8 @@ try {
             Check ($code -ne 0 -and 'preflight' -in $events -and 'normal_close' -notin $events -and 'new_supervisor' -notin $events) 'game appearing during preparation is rechecked with unchanged Fresh consent'
         }elseif($scenario -eq 'stale'){
             Check ($code -eq 0 -and 'new_supervisor' -in $events) 'dead prior supervisor and retained record do not require deletion or reinstall'
+        }elseif($scenario -in @('active_reused_pid','active_wrong_path','active_exited')){
+            Check ($code -eq 0 -and 'new_supervisor' -in $events -and 'normal_close' -notin $events -and -not $text.Contains('already running')) ($scenario+' does not grant stale supervisor ownership')
         }elseif($scenario -in @('active_failed','active_ended')){
             Check ($code -ne 0 -and $text.Contains('finishing cleanup') -and 'preflight' -notin $events) ($scenario+' cannot falsely report running while cleanup is finishing')
         }else{
