@@ -28,7 +28,7 @@ The desktop launcher now selects checkpoint 414. The exact 413 profile, binaries
 audio cache and source remain available for rollback. No headset acceptance or
 complete campaign playthrough is claimed.
 
-See [implementation and evidence](../../docs/CHEST-AMMO-414.md).
+See [implementation and evidence](../../docs/archive/CHEST-AMMO-414.md).
 Build using `Build-Checkpoint.ps1` and `profiles/checkpoint414`. Keep 413 source,
 normal binaries and desktop profile for rollback; launcher app-version rollback
 is separate from choosing a local game profile. Private evidence stays on G:

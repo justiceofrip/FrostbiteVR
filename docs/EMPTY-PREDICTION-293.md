@@ -68,5 +68,5 @@ Evidence: `pipeline-runtime-20261005/root-monitor/m95-empty293-01/concurrent-tim
 Trace: `8271f6b4b477e511b139f603d59aa97bafb24dc468205a80b8ba20adb9a196c3`.
 Source: `3e317aa671ebd5c596f33eeb28291651705d0592f8598080e063901d5f7a6071`.
 See [final-shot prediction](EMPTY-PREDICTION-293.md) and
-[last-round bolt/fallback ownership](LAST-ROUND-BOLT-291.md).
+[last-round bolt/fallback ownership](archive/LAST-ROUND-BOLT-291.md).
 

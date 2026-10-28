@@ -13,7 +13,7 @@ read-only Update observation from the existing `Bc2ReloadFlowRuntime.cpp`
 dispatcher. It does not currently change native windup or register a competing
 Step/Update hook.
 
-The historical [336 timing investigation](KNIFE-TIMING-336.md) verified that
+The historical [336 timing investigation](archive/KNIFE-TIMING-336.md) verified that
 native state5 prepares the configured 500 ms windup, and state6 prepares the
 remainder of the authored `60/52` second attack cycle. A private 50 ms windup
 with the other 450 ms paid into recovery retained client and server effects.

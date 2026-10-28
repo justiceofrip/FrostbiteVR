@@ -8,7 +8,7 @@ is claimed.
 
 Candidate413 now supplies an observation-first adapter, verified live map
 identities and private staged PCM playback. Its activation and remaining
-measurements are documented in [MECHANISM-AUDIO-413.md](MECHANISM-AUDIO-413.md).
+measurements are documented in [MECHANISM-AUDIO-413.md](archive/MECHANISM-AUDIO-413.md).
 This does not change the412 findings below.
 
 ## What the checkpoint412 code owned

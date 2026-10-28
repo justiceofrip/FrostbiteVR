@@ -1,0 +1,9 @@
+# Hidden from default ripgrep searches (Claude Code's Grep/Glob, VS Code search)
+# so agents don't pull history, stale copies or bulk data into context.
+# Still tracked by git. Read by path, or search with `rg --no-ignore`.
+docs/history/
+docs/archive/
+handoff/
+third_party/
+profiles/**/*.json
+release/*.json

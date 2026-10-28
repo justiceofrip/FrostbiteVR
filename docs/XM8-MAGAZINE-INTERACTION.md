@@ -1,6 +1,6 @@
 # XM8 detachable-magazine candidate
 
-**Current checkpoint (2026-10-02 05:13 UTC):** actual physical-consumer/native reload monitor passed with both GPU-eye images reviewed. See [XM8-MAGAZINE-MONITOR-CHECKPOINT-20261002.md](XM8-MAGAZINE-MONITOR-CHECKPOINT-20261002.md). Headset acceptance and combined SPAS/XM8/sight/holster regression remain pending; earlier staging-only statements below describe the original candidate stage.
+**Current checkpoint (2026-10-02 05:13 UTC):** actual physical-consumer/native reload monitor passed with both GPU-eye images reviewed. See [XM8-MAGAZINE-MONITOR-CHECKPOINT-20261002.md](archive/XM8-MAGAZINE-MONITOR-CHECKPOINT-20261002.md). Headset acceptance and combined SPAS/XM8/sight/holster regression remain pending; earlier staging-only statements below describe the original candidate stage.
 
 This candidate composes the existing shared hand claims, AmmoSupply, ReloadInsertion and ManualReload policies. It adds no native ammo writes, no game assets, no native animation writes and no SPAS-specific behavior changes. It is disabled unless explicitly constructed with the separately verified magazine API. Native runtime currently chooses one family for an entire installation; switching SPAS/XM8 at runtime requires a separate retired-cycle family boundary.
 

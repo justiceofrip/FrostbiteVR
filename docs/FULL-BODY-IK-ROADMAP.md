@@ -37,7 +37,7 @@ distribute spine bend or plant feet.
 Preserve the user's accepted SPAS/XM8 grip handling, recenter and free-left-hand
 animation. The newest right-index, capacitive-input and reload-grip candidate
 has native/deterministic evidence but still needs its own headset acceptance;
-see [current hand candidate](HAND-INPUT-RELOAD-20261001.md). Sight manipulation
+see [current hand candidate](archive/HAND-INPUT-RELOAD-20261001.md). Sight manipulation
 works mechanically and still needs visual polish. Full-body work must not
 silently change those acceptance scopes.
 
@@ -101,7 +101,7 @@ Perform a bounded, read-only inventory in a later native session:
    bone scale or broad draw suppression.
 
 The known first-person projection correction is scoped to BC2's authored
-viewmodel branch; see [native projection evidence](CONTROLS-20260930.md).
+viewmodel branch; see [native projection evidence](archive/CONTROLS-20260930.md).
 A world-space torso/leg mesh must use its verified world projection and depth
 path. Do not simply inherit the gun's authored FOV classification.
 

@@ -3127,7 +3127,7 @@ a snapped pose from maintaining its own grab. See SIGHT-GRASP-20261001.md for
 
 native evidence, accepted toggle feedback and the pending new headset test.
 
-## October 1 â€” independent hand poses and reload foundation
+## October 1 — independent hand poses and reload foundation
 
 Transferred the modular anatomy/pose principle rather than Refractor rig indices.
 
@@ -3155,7 +3155,7 @@ so no runtime feature is enabled. See HAND-ROLES-20261001.md and
 
 MANUAL-RELOAD-20261001.md.
 
-## October 1 â€” hand input, reload attachment and scalable port plan
+## October 1 — hand input, reload attachment and scalable port plan
 
 The user's free-left-hand animation acceptance is recorded at 105939-315.
 

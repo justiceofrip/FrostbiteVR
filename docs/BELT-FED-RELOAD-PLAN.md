@@ -29,7 +29,7 @@ plan, requires fresh gesture events and exact native acknowledgements, and cance
 intent across actor/item/equip/space changes. It performs no native reload,
 ammunition arithmetic, contact recognition or resource-object ownership.
 
-[BC2 pump/reload research](BC2-PUMP-RELOAD-20261001.md) establishes ordinary reload
+[BC2 pump/reload research](archive/BC2-PUMP-RELOAD-20261001.md) establishes ordinary reload
 input, native phase/timing/transfer code and reflected configuration for
 **SPAS12_sp, XM8_sp_s and the scoped-XM8 40mmgl only**. Both saved
 `reports/reload-config-20261001.json` and
@@ -50,7 +50,7 @@ only gates aim alignment, support grip and translated muzzle. Reload/mechanism
 capabilities need a separate versioned profile and evidence; existing grip
 acceptance does not grant them.
 
-The [hand-input candidate](HAND-INPUT-RELOAD-20261001.md) preserves ordinary
+The [hand-input candidate](archive/HAND-INPUT-RELOAD-20261001.md) preserves ordinary
 support during native reload. A new manual interaction must not reintroduce the
 old blanket rule that pressing Reload forcibly releases support. Its hand transfer
 must be an explicit successful acquisition of the new interaction.
@@ -238,7 +238,7 @@ animation or the accepted gun/shot transform.
 Existing grip/trigger controls can establish discrete intent. Capacitive touch is
 optional finger-pose information, not proof of grasp; optical finger tracking is
 not implemented. Body-pouch ammunition acquisition depends on future physical
-resource inventory. The existing [BodyInventory](BODY-INVENTORY-20261001.md) is a
+resource inventory. The existing [BodyInventory](archive/BODY-INVENTORY-20261001.md) is a
 weapon draw/holster foundation, not a magazine/box reservation or ammunition API.
 Offline fixtures may explicitly supply test resource identities without implying
 that body grabbing is available in BC2.

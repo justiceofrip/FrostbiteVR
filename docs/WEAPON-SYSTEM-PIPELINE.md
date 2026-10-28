@@ -190,7 +190,7 @@ Evidence: `pipeline-runtime-20261005/root-monitor/m95-empty293-01/concurrent-tim
 Trace: `8271f6b4b477e511b139f603d59aa97bafb24dc468205a80b8ba20adb9a196c3`.
 Source: `3e317aa671ebd5c596f33eeb28291651705d0592f8598080e063901d5f7a6071`.
 See [final-shot prediction](EMPTY-PREDICTION-293.md) and
-[last-round bolt/fallback ownership](LAST-ROUND-BOLT-291.md).
+[last-round bolt/fallback ownership](archive/LAST-ROUND-BOLT-291.md).
 
 # Local280: bolt clock overlaps the physical stroke
 
@@ -213,7 +213,7 @@ restart followed by XM8/SPAS use remains the preceding campaign recovery evidenc
 it was not redundantly rerun for280. Last-round M95 behavior, native pistol and
 belt-fed reloading, wider weapon enrollment, sustained campaign/death recovery and
 headset visual acceptance remain incomplete. No GitHub publication.
-See [280 evidence](CONCURRENT-BOLT-280.md).
+See [280 evidence](archive/CONCURRENT-BOLT-280.md).
 
 # Local279: native checkpoint, menu and reload recovery pass
 
@@ -236,7 +236,7 @@ death-recovery proof, headset approval or whole-roster acceptance. Seventeen
 exact magazine prerequisites are enabled; pistols, belt-fed native reloading,
 wider enrollment and last-round bolt handling remain incomplete. M95 has a
 measured roughly2.3-second post-stroke native wait. No GitHub publication.
-See [279 evidence and limits](DIAGNOSTIC-CONTINUITY-279.md).
+See [279 evidence and limits](archive/DIAGNOSTIC-CONTINUITY-279.md).
 
 # Local278: combined reload/pump test passes through an input pause
 
@@ -260,7 +260,7 @@ render target. It did not complete reinsertion; that full check remains failed.
 The renderer missed the target deadline by 3.25 ms, and the diagnostic then
 neutralized input. Next: retain the visual failure while continuing independent
 mechanical checks. No headset, full campaign or whole-roster acceptance claimed.
-No new weapons or GitHub publication. See [278 evidence](INPUT-EQUIPMENT-LIFETIME-278.md).
+No new weapons or GitHub publication. See [278 evidence](archive/INPUT-EQUIPMENT-LIFETIME-278.md).
 
 # Local277: shared timestamp correction; actual M95 cycles pass
 
@@ -277,7 +277,7 @@ bounded campaign recovery check, not a campaign playthrough or headset approval.
 The M95 still waits about2.3seconds for native completion after its physical
 stroke. Native input pauses still share an equipment-generation counter; that
 earlier failure is the next target. No new weapon enrollment or GitHub update.
-See [277 evidence and limits](OWNER-TIMING-277.md).
+See [277 evidence and limits](archive/OWNER-TIMING-277.md).
 
 # Local276: native tracking-origin recovery and physical pump complete
 
@@ -292,7 +292,7 @@ The native menu opened, accepted pointer input, closed and resumed stereo world
 rendering in a separate finite check. Headset laser visibility, animation and
 hand placement remain unverified. Earlier intermittent reload/input-epoch
 failures and startup exits remain open. No new weapon enrollment or publication.
-See [276 evidence and limits](TRACKING-RECOVERY-276.md).
+See [276 evidence and limits](archive/TRACKING-RECOVERY-276.md).
 
 # Local275: pump failure reproduced; expanded game test passes
 
@@ -305,7 +305,7 @@ Both full builds pass all243 suites. Restoring the old rail limits fails the new
 measured-motion and expanded controller regressions. The actual F2000/SPAS test
 now completes three magazine cycles, holsters, an interrupted pump with22cm
 rearward/8cm lateral controller motion, a shell, support return in130ms, and
-rifle firing. See [275 evidence and limits](PUMP-HEADSET-275.md).
+rifle firing. See [275 evidence and limits](archive/PUMP-HEADSET-275.md).
 
 This is a development checkpoint, not headset acceptance. Actual-runtime
 tracking-origin rebase and stock-animation/hand-placement checks remain. Earlier
@@ -320,7 +320,7 @@ reload admission and first-per-cause magazine cancellation records. Actual-game
 emulation verifies two rifle magazine cycles, interrupted pump recovery, one
 shell and prompt support return, then fails on the final rifle warmup after a
 native input pause advances the equipment generation for the unchanged rifle.
-See [274 evidence and next work](CUSTODY-DIAGNOSTICS-274.md).
+See [274 evidence and next work](archive/CUSTODY-DIAGNOSTICS-274.md).
 
 This is a development checkpoint, not a headset-ready promotion. The earlier273
 failures remain unresolved;274 did not reproduce them. Headset272 is unchanged.
@@ -336,7 +336,7 @@ the saved agent payload without replacing later recovery/ownership fixes.
 Measured M9/MP443 removal, original return and replacement pass the shared-policy
 tests with simulated native receipts. This adds geometry support, not native
 pistol enrollment or slide/chamber completion. The normal registry remains
-seventeen exact magazine prerequisites. See [273 integration](SAMPLED-MAGAZINES-273.md).
+seventeen exact magazine prerequisites. See [273 integration](archive/SAMPLED-MAGAZINES-273.md).
 
 Both full normal builds pass243 suites, and101 affected Python tests pass.
 Two native F2000/SPAS emulated runs failed: the first at an idle magazine-view
@@ -358,13 +358,13 @@ The shared resource consumer completed the same actual-game controller sequence
 with F2000/SPAS and SCAR/SPAS, without a new rifle-specific code/geometry change
 between those runs. This includes original magazine return, chest replacement,
 holster switching, interrupted pump recovery, shell insertion and support return.
-See [252's receipts and limits](RECOVERY-252.md). The17 compiled exact magazine
+See [252's receipts and limits](archive/RECOVERY-252.md). The17 compiled exact magazine
 configurations are prerequisites, not17 accepted guns or an all-roster claim.
 
 New supported magazine-fed weapons reuse the consumer after exact configuration,
 component geometry, visibility and resource bindings are joined. Pump, bolt,
 slide and belt-feed need their distinct shared mechanism adapters. Ordinary bolt
-coordination is still under actual-game investigation in [255](RECOVERY-255.md);
+coordination is still under actual-game investigation in [255](archive/RECOVERY-255.md);
 pistol and belt-fed completion, last-round edge cases, scene recovery and headset
 acceptance remain open. Published245 is a separate forkable snapshot.
 

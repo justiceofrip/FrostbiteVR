@@ -47,9 +47,9 @@ promotion. [Compact validation](validation.json) records the exact build hashes.
 Receiver image output was disabled, but each inspected native diagnostic kept
 eight bounded snapshots (66,355,200 bytes); these are private evidence, not source.
 
-See [checkpoint details](../../docs/CHECKPOINT-413.md),
-[audio evidence](../../docs/MECHANISM-AUDIO-413.md), and
-[the preceding failure](../../docs/HEADSET-FAILURE-412.md).
+See [checkpoint details](../../docs/archive/CHECKPOINT-413.md),
+[audio evidence](../../docs/archive/MECHANISM-AUDIO-413.md), and
+[the preceding failure](../../docs/archive/HEADSET-FAILURE-412.md).
 
 ## Build and inspect
 

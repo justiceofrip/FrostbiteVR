@@ -5,7 +5,7 @@ failed 416 session; 417/418 have no headset acceptance. Runtime 414 / launcher
 0.1.2 remains installed. No public release was made.
 
 418 retains [417's completed-cycle recovery](../checkpoint417/README.md) and
-adds the [verified selected-knife input route](../../docs/SELECTED-KNIFE-INPUT-418.md).
+adds the [verified selected-knife input route](../../docs/archive/SELECTED-KNIFE-INPUT-418.md).
 Physical stabbing, enemy damage, death/restart distortion and full campaign
 acceptance are unfinished. Invocation 8748's exact failure cause remains unknown.
 

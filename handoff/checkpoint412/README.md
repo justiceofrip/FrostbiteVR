@@ -53,13 +53,13 @@ payloads remain historical and must not be applied over current source.
 
 | Area | Entry points |
 | --- | --- |
-| Current shell presentation | `Bc2ReloadPreview*`, `Bc2PhysicalReload.cpp`, `Bc2RigPublication.cpp`; [evidence](../../docs/SHELL-PRESENTATION-412.md) |
+| Current shell presentation | `Bc2ReloadPreview*`, `Bc2PhysicalReload.cpp`, `Bc2RigPublication.cpp`; [evidence](../../docs/archive/SHELL-PRESENTATION-412.md) |
 | Shared chest placement | `include/fvr/interaction/BodyAnchors.h`, `tests/Bc2BodyAmmoCacheTests.cpp` |
 | Gun-side counter | `include/fvr/graphics/AmmoCounterPlacement.h`, `src/xr/OpenXrAmmoHud*`, `AmmoCounterHudWarpTests` |
 | Launch overhead and bounds | `tools/StorageBudget.ps1`, `Start-BC2VRSession.ps1`, `Start-NativeTrace.ps1`, `launcher`; [launcher](../../docs/DESKTOP-LAUNCHER.md), [storage](../../docs/STORAGE-BUDGET.md) |
-| Pump, shoulder and tracking recovery since390 | `Bc2PhysicalPump*`, `Bc2BodyHolster*`, `Bc2PumpPosePlan.h`, `Bc2PumpCompanionParts.h`; [408](../../docs/CAMPAIGN-DIAGNOSTICS-408.md) |
-| Stereo damage/death since390 | `Bc2StereoColorScale.h`, `NativeProbe.cpp`; [410](../../docs/CAMPAIGN-DIAGNOSTICS-410.md), [411](../../docs/CAMPAIGN-DIAGNOSTICS-411.md) |
-| Knife/tools and vehicle research | `Bc2ChestKnife*`, `Bc2ContextualTool*`, `Bc2VehicleShot*`; [409](../../docs/CAMPAIGN-DIAGNOSTICS-409.md) |
+| Pump, shoulder and tracking recovery since390 | `Bc2PhysicalPump*`, `Bc2BodyHolster*`, `Bc2PumpPosePlan.h`, `Bc2PumpCompanionParts.h`; [408](../../docs/archive/CAMPAIGN-DIAGNOSTICS-408.md) |
+| Stereo damage/death since390 | `Bc2StereoColorScale.h`, `NativeProbe.cpp`; [410](../../docs/archive/CAMPAIGN-DIAGNOSTICS-410.md), [411](../../docs/archive/CAMPAIGN-DIAGNOSTICS-411.md) |
+| Knife/tools and vehicle research | `Bc2ChestKnife*`, `Bc2ContextualTool*`, `Bc2VehicleShot*`; [409](../../docs/archive/CAMPAIGN-DIAGNOSTICS-409.md) |
 
 ## Limits and next work
 

@@ -11,7 +11,7 @@ Source receipt/header: `profiles/checkpoint417/`. Full x86 and x64:
 `d9c4c6c5891f5957639ac5d4515763299f5181bb856ad3df9856a1cd09e68005`.
 Probe SHA256: `10af105b4d3551a39a04a5c1dfbbe511300e976fe406b1ddd9c084cc680d00b3`.
 
-The [cycle recovery note](../../docs/CYCLE-RECOVERY-417.md) records the exact
+The [cycle recovery note](../../docs/archive/CYCLE-RECOVERY-417.md) records the exact
 policy changes, native evidence, synthetic scheduling and reproducible commands.
 The focused green receipt pins all ten changed service/runtime/test files.
 

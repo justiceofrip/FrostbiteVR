@@ -17,7 +17,7 @@ launcher hand placement still needs polish. Acceptance is feature-specific: the
 new right-index/touch/support-retention candidate needs a headset check, grenade
 muzzle translation remains disabled, and known rendering/lifecycle issues are
 not declared solved. See the [current checkpoint](CURRENT.md),
-[hand-input candidate](HAND-INPUT-RELOAD-20261001.md), and
+[hand-input candidate](archive/HAND-INPUT-RELOAD-20261001.md), and
 [weapon pipeline](WEAPON-PROFILE-PIPELINE.md).
 
 The physical SPAS consumer now has repeated actual native insertion evidence,
@@ -27,8 +27,8 @@ distinct native transfers). Headset feel remains unverified. The run delivered
 all240 pairs with one recovered request timeout; full acceptance stays open. Shared chest
 anchors and dynamic shoulder selection are integrated behind `-BodyInventory`;
 their native/headset acceptance is pending. Reversible weapon hiding and true
-holstering are still being validated. See [reload](MANUAL-RELOAD-20261001.md),
-[body consumer](BODY-INVENTORY-CONSUMER-20261001.md), and the
+holstering are still being validated. See [reload](archive/MANUAL-RELOAD-20261001.md),
+[body consumer](archive/BODY-INVENTORY-CONSUMER-20261001.md), and the
 [current checkpoint](CURRENT.md).
 
 No BF3, BF4, Hardline, BF1, BFV, 2042, or newer native binding is verified in this
@@ -251,8 +251,8 @@ approach with explicit cover/container/belt semantics while preserving native
 ammunition authority. It grants no native LMG capability.
 
 
-Portable implementation follow-up: [feed prerequisites](FEED-MECHANISM-20261001.md)
-and [hand ownership](HAND-INTERACTION-20261001.md) are now tested foundations.
-The [optic evidence tool](OPTIC-INVENTORY-20261001.md) audits existing capture gaps.
+Portable implementation follow-up: [feed prerequisites](archive/FEED-MECHANISM-20261001.md)
+and [hand ownership](archive/HAND-INTERACTION-20261001.md) are now tested foundations.
+The [optic evidence tool](archive/OPTIC-INVENTORY-20261001.md) audits existing capture gaps.
 None supplies a native binding for another Frostbite title. The current product
 priority is the [single-player BC2 release](SINGLEPLAYER-RELEASE-PLAN.md).
