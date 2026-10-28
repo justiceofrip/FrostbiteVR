@@ -314,6 +314,58 @@ int SamePointerReplacementKeepsOriginalResourceIsolated(){
     std::puts("Same-pointer replacement: nine old/new loaded states retain separate resources, exact terminal contexts and conserved counts (mock Updates).");
     return 0;
 }
+int SameActorTransitionCannotRetireAmmunition(){
+    // Synthetic seat-like generation changes, not a claimed native round trip.
+    // A vanished view and a later epoch cannot turn the same soldier into a
+    // replacement actor or discard a loaded weapon, removed original or debt.
+    for(int loaded:{0,22,30})for(unsigned phase=0;phase<3;++phase){
+        Fixture f;f.sample.counts.loaded=loaded;CHECK(f.Select());
+        if(phase==1)CHECK(f.Run(AmmunitionOperation::RemoveMagazine)==0);
+        if(phase==2){
+            const auto request=f.Request(AmmunitionOperation::RemoveMagazine);
+            CHECK(f.service.Accept(request,f.now)&&f.service.Dispatch(f.sample,f.now));
+        }
+        const auto resource=f.binding.context.resource;
+        const auto before=f.service.Inventory().Find(resource);CHECK(before);
+        const auto counts=before->Snapshot().counts;
+        const auto original=before->Original();const auto originalState=before->ResourceState();
+        const auto active=f.service.Active();const auto outcome=f.service.Outcome();
+        CHECK(f.channel.Publish(f.service.View(),outcome));
+        f.service.Cancel(f.now);CHECK(f.channel.Publish({}));
+        f.now+=5000*Ms; // Neither missing publication nor elapsed seat time pays debt.
+        CHECK(!f.channel.Read(f.identity.owner,f.now));
+        Bc2AmmoReserveLease same;same.identity=f.identity;
+        ++same.identity.owner.actorGeneration;++same.identity.owner.equipGeneration;++same.identity.owner.space;
+        same.sequence=100;same.observedNs=f.now;same.deadlineNs=f.now+100*Ms;
+        same.loaded=counts.loaded;same.reserve=counts.reserve;same.capacity=counts.capacity;
+        same.verified=same.allThreeIdle=true;CHECK(AmmoResourceReplacementFresh(same,f.now));
+        CHECK(!f.service.RetireForReplacementActor(same,f.now,ActorDrain(f,same,10)));
+        CHECK(f.service.ActorIdentity()==f.identity&&!f.service.LastActorRetirement());
+        CHECK(f.service.Inventory().Size()==1&&f.service.Active()==active);
+        const auto retained=f.service.Inventory().Find(resource);CHECK(retained);
+        CHECK(retained->Snapshot().counts==counts&&retained->Original()==original);
+        CHECK(retained->ResourceState()==originalState);
+        if(phase==2){
+            CHECK(retained->Phase()==AmmunitionLedgerPhase::NeedsReconciliation);
+            CHECK(!f.service.Outcome()&&f.Select()); // Observation may return; authority may not.
+            CHECK(f.service.View()->requestState==AmmoResourceRequestState::Uncertain);
+            CHECK(!f.service.Accept(f.Request(AmmunitionOperation::RemoveMagazine),f.now));
+            CHECK(f.service.Active()==active&&!f.service.Outcome());
+        }else{
+            CHECK(f.Select()); // Exact original identity plus fresh observations only.
+            CHECK(f.service.View()->snapshot.counts==counts);
+            if(phase==1){
+                CHECK(outcome&&outcome->receipt&&f.service.Outcome()->receipt==outcome->receipt);
+                const auto terminal=f.channel.Outcome(outcome->request.intent.id,outcome->request.intent.context);
+                CHECK(terminal&&terminal->receipt==outcome->receipt);
+                CHECK(f.Run(AmmunitionOperation::ReturnMagazine)==0);
+                CHECK(f.sample.counts.loaded==loaded&&f.sample.counts.reserve==191);
+            }
+        }
+    }
+    std::puts("Same-actor transition: nine ammunition retention cases passed (synthetic generations; no native vehicle acceptance).");
+    return 0;
+}
 int ReadReasonsPreserveAdmission(){
     Fixture f;CHECK(f.Select());const auto good=*f.service.View();
     const auto missing=f.channel.ReadObserved(f.identity.owner,f.now);
@@ -504,5 +556,5 @@ int ConstructionProofCannotRenewInputOrBorrowCurrentAuthority(){
     return 0;
 }
 }
-int main(){if(ActorRetirementKeepsPersistentServiceSafe())return 1;if(NativeEntryDeadlineKeepsUncalledOperationRejectable()||ActualNativeEntryFailureRemainsUncertain()||ConstructionProofCannotRenewInputOrBorrowCurrentAuthority()||RejectedAdmissionCapturesExactCause()||CapturedSeatDeadlineSeparatesNativeViewAndSubmittedSource()||DispatchAndExpiryDiagnosticsDoNotChangeOutcomes()||Transactions()||Rejections()||CancelAndNoAutomaticRetry()||ChannelConcurrency()||TerminalOutcomesSurviveSelection()||SamePointerReplacementKeepsOriginalResourceIsolated()||ReadReasonsPreserveAdmission()||ReadJournalBoundAndDrain()||ConcurrentViewReadStillCoherent()||FailedOperationEvidenceSurvivesShutdownTail())return 1;
+int main(){if(SameActorTransitionCannotRetireAmmunition()||ActorRetirementKeepsPersistentServiceSafe())return 1;if(NativeEntryDeadlineKeepsUncalledOperationRejectable()||ActualNativeEntryFailureRemainsUncertain()||ConstructionProofCannotRenewInputOrBorrowCurrentAuthority()||RejectedAdmissionCapturesExactCause()||CapturedSeatDeadlineSeparatesNativeViewAndSubmittedSource()||DispatchAndExpiryDiagnosticsDoNotChangeOutcomes()||Transactions()||Rejections()||CancelAndNoAutomaticRetry()||ChannelConcurrency()||TerminalOutcomesSurviveSelection()||SamePointerReplacementKeepsOriginalResourceIsolated()||ReadReasonsPreserveAdmission()||ReadJournalBoundAndDrain()||ConcurrentViewReadStillCoherent()||FailedOperationEvidenceSurvivesShutdownTail())return 1;
     std::puts("BC2 ammunition service: native-observer handoff, no-op/original/refill, identity, cancellation and 10000 command handoffs passed (mock Updates).");return 0;}

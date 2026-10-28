@@ -955,6 +955,59 @@ Bc2NativeCycleActorDrain ActorDrain(Fixture& f,const Bc2NativeCycleSelection& se
     const auto old=f.service.View(selected.nowNs);
     return {old.native,old.cycle,old.shot,revision,selected.nowNs,selected.nowNs+Bc2NativeCycleService::ContextFreshNs,true};
 }
+int SameActorSeatEpochCannotRetireCancelledCycleDebt(){
+    // Synthetic service composition only: gameplay changes actor/equip epochs
+    // at seat boundaries, but this does not establish native vehicle behavior.
+    // A newer presentation of the same soldier must not forgive an owed stroke
+    // or turn a submitted, incomplete native tail into a completed transaction.
+    for(bool m95:{false,true})for(bool submitted:{false,true}){
+        Fixture f(m95);CHECK(m95?M95Hold(f):f.Hold());
+        const auto held=*f.service.View(f.clock).held;
+        if(submitted)CHECK(f.Release());
+        const auto debt=f.service.View(f.clock);const auto originalControl=f.control;
+        f.service.Cancel(Bc2NativeCycleFailure::Control);
+        const auto cancelled=f.service.View(f.clock);
+        Bc2NativeCycleSelection returned;
+        for(unsigned boundary=1;boundary<=3;++boundary){
+            f.clock+=10000000;
+            f.service.Cancel(Bc2NativeCycleFailure::Owner);
+            returned=Selection(f,m95?Bc2NativeCycleMode::M95:Bc2NativeCycleMode::Spas,100+boundary);
+            returned.reserve.loaded=debt.loaded;returned.reserve.reserve=debt.reserve;
+            auto& owner=returned.reserve.identity.owner;
+            owner.actorGeneration+=2*boundary;owner.equipGeneration+=2*boundary;owner.space+=boundary;
+            const auto drain=ActorDrain(f,returned,boundary);
+            CHECK(!NativeCycleClientActorReplaced(debt.native.owner,owner));
+            CHECK(!f.service.RetireForReplacementActor(returned.reserve,f.clock,drain));
+            CHECK(!f.service.SelectReplacementActor(returned,drain)&&!f.service.Select(returned));
+            auto control=originalControl;control.nativeOwner=owner;control.release.reset();
+            control.input.owner.actorGeneration=owner.actorGeneration;control.input.owner.space=owner.space;
+            control.input.owner.equipGeneration+=2*boundary;control.item.generation=control.input.owner.equipGeneration;
+            control.mechanism.generation=control.item.generation;control.input.sequence+=boundary;
+            control.input.observedNs=control.input.nowNs=f.clock;control.input.deadlineNs=f.clock+100000000;
+            CHECK(!f.service.Control(control)&&!f.service.RebaseTracking(control,drain));
+            control.release=WeaponCycleRelease{held,1,originalControl.input.sequence,held.observedNs,held.deadlineNs};
+            CHECK(!f.service.Control(control)&&!f.service.YieldForReload());
+            const auto after=f.service.View(f.clock);
+            CHECK(after.phase==Bc2NativeCyclePhase::Cancelled&&after.blocksFire&&!after.held&&!after.ready);
+            CHECK(after.native==debt.native&&after.cycle==debt.cycle&&after.shot==debt.shot&&
+                after.loaded==debt.loaded&&after.reserve==debt.reserve&&after.capacity==debt.capacity);
+            CHECK(after.failure==cancelled.failure&&after.failureInvocation==cancelled.failureInvocation&&
+                !f.service.LastActorRetirement());
+        }
+        // The same fresh/drained proof becomes eligible only after actual
+        // client and server actor replacement, and archives the old outcome.
+        returned.reserve.identity.owner.soldier+=0x1000;returned.reserve.identity.owner.weak+=0x1000;
+        returned.reserve.identity.serverSoldier+=0x1000;
+        const auto retired=f.service.RetireForReplacementActor(returned.reserve,f.clock,ActorDrain(f,returned,4));
+        CHECK(retired&&retired->outcome.native==debt.native&&retired->outcome.blocksFire&&
+            retired->outcome.cycle==debt.cycle&&retired->outcome.shot==debt.shot);
+        CHECK(retired->release.has_value()==submitted);
+        if(submitted)CHECK(retired->release==originalControl.release);
+        CHECK(!f.service.View(f.clock).blocksFire&&!f.service.View(f.clock).ready);
+    }
+    std::puts("CHAT06: 4 synthetic same-actor seat-epoch debt boundaries passed; no native vehicle acceptance.");
+    return 0;
+}
 int ReplacementActorRifleFirstCanYieldWithoutArmingPump(){
     Fixture f;CHECK(f.Hold());const auto before=f.service.View(f.clock);
     f.service.Cancel(Bc2NativeCycleFailure::Owner);
@@ -1750,7 +1803,7 @@ int CompletedCyclePreservesIssuedReadAcrossOtherBranchFinish(){
     return 0;
 }
 
-int main(){if(AcknowledgedClientTailReplayRetainsPaidStroke()||ActualPumpAdapterPaidReplayDoesNotRepeatGestureOrAudio()||PaidTailReplayStillRejectsUnprovenOrIncompleteNativeWork()||PaidReplayCannotForgiveTheNextRealShot()||ServerForwardCompletionStillRequiresClientIdle()||CompletedCyclePreservesIssuedReadAcrossOtherBranchFinish()||CompletedCycleDrainsExactMissingObservation()||MissingCompletedObservationCannotHideContradictions()||ReplacementActorRequiresExactFreshDrainedProof()||ReplacementActorArchivesPendingAndCompletedOutcomes()||ConfirmedReplacementActorDoesNotInheritOldPhysicalPumpDebt()||SelectionReadGapRetainsIdentityOnly()||ReleasedClientTailReplayRetainsOnePhysicalTransaction()||ReleasedClientTailReplayRejectsUnprovenHistory()||PredictedShotReplayPreservesOneDebt()||SpasSnapshotProgressionUsesSharedCyclePolicy()||Actual241SnapshotProgressionEvidence()||SnapshotProgressionRetainsMeasuredPreviousUntilOwnHold()||SnapshotProgressionCannotEraseStartedInterception()||SelectedModePrereadRequiresOriginalQuietRevision()||SelectedModeRequiresExactOriginalIdleProof()||SelectedModeCannotErasePendingDebt()||SelectedModeRoundTripPreservesCycleAuthority()||Actual239ForwardCallbackEvidence()||M95ForwardRestoreRequiresOwnClientAndServerCompletion()||M95ForwardRestoreDoesNotBorrowOrForgeReadiness()||QueuedReleaseDoesNotReclassifyAnAlreadyHeldUpdate()||OriginalSpasRegression()||ExactM95ThreeBranchHoldAndTail()||M95CannotBorrowSpasBoundaryOrWrongConfig()||
+int main(){if(SameActorSeatEpochCannotRetireCancelledCycleDebt()||AcknowledgedClientTailReplayRetainsPaidStroke()||ActualPumpAdapterPaidReplayDoesNotRepeatGestureOrAudio()||PaidTailReplayStillRejectsUnprovenOrIncompleteNativeWork()||PaidReplayCannotForgiveTheNextRealShot()||ServerForwardCompletionStillRequiresClientIdle()||CompletedCyclePreservesIssuedReadAcrossOtherBranchFinish()||CompletedCycleDrainsExactMissingObservation()||MissingCompletedObservationCannotHideContradictions()||ReplacementActorRequiresExactFreshDrainedProof()||ReplacementActorArchivesPendingAndCompletedOutcomes()||ConfirmedReplacementActorDoesNotInheritOldPhysicalPumpDebt()||SelectionReadGapRetainsIdentityOnly()||ReleasedClientTailReplayRetainsOnePhysicalTransaction()||ReleasedClientTailReplayRejectsUnprovenHistory()||PredictedShotReplayPreservesOneDebt()||SpasSnapshotProgressionUsesSharedCyclePolicy()||Actual241SnapshotProgressionEvidence()||SnapshotProgressionRetainsMeasuredPreviousUntilOwnHold()||SnapshotProgressionCannotEraseStartedInterception()||SelectedModePrereadRequiresOriginalQuietRevision()||SelectedModeRequiresExactOriginalIdleProof()||SelectedModeCannotErasePendingDebt()||SelectedModeRoundTripPreservesCycleAuthority()||Actual239ForwardCallbackEvidence()||M95ForwardRestoreRequiresOwnClientAndServerCompletion()||M95ForwardRestoreDoesNotBorrowOrForgeReadiness()||QueuedReleaseDoesNotReclassifyAnAlreadyHeldUpdate()||OriginalSpasRegression()||ExactM95ThreeBranchHoldAndTail()||M95CannotBorrowSpasBoundaryOrWrongConfig()||
     M95LastRoundRequiresSameEmptyDebtAndTail()||M95CompletionCoversOriginalBoltTimer()||ExactOriginalPredictionRewindOnlyBeforeHold()||
     PredictionRewindRequiresExactOriginalSnapshot()||M95TwoChildTailRejectsSpasExtraCommit()||M95SuspensionRequiresRightMechanismNeutral()||PhysicalBoltDiagnosticWireBounds())return 1;
     std::puts("15 M95 operating-class +1 shared queued-release groups passed; exact8/7/1 hold,2-child tail, pre-hold original rewind, right-mechanism neutral and bounded30s wire mode.");return 0;}
