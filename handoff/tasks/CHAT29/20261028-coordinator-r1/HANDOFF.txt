@@ -1,0 +1,14 @@
+CHAT29: no verified/enabled magnified-scope rendering capability; parked.
+Source4055200: Bc2OpticFilterRuntime.cpp is a bounded observer that calls original once.
+Bc2OpticFilterSession.h allows explicit100-15000ms diagnostics; Bc2OpticFilter.h keeps
+ADS acknowledgement, magnified scene, reticle and rendering authority false.
+docs/archive/OPTIC-CONFIGURATION-ROUTES-20261003.md: campaign M95/QBU88/Carl Gustav
+Scope_Mesh routes have null lens filters, so that callback cannot prove their views.
+Offline tube/blur/depth extraction identifies no reticle section; HUD differs by config.
+Next prerequisite: verify current read-only WeaponStateData.MeshZoom1p for ONE exact
+campaign variant. SelectedMeshesSnapshot observes Meshes1p; existing zoom read relies
+on the absent filter callback. Then capture hip/entry/settled/exit with exact owner,
+configuration, view/projection, three scope sections and separate HUD-reticle draws.
+Distinguish an existing magnified target from main-camera zoom before implementation.
+Both-eye movement/occlusion/restoration/performance/headset acceptance remain unproved.
+No source changes, tests, builds or sessions performed; ordinary optics kept separate.

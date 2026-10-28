@@ -1,0 +1,22 @@
+CHAT14: belt-fed native boundaries; needs-native-evidence.
+Source inspected: 4055200b51c2c258d48a33d30d09db9337127f6a.
+New question: does the existing feed policy have an actual BC2 native binding?
+include/fvr/interaction/FeedMechanism.h already defines separate cover, latch,
+container, feed and cycle states plus exact owner/resource identities.
+Its result is a physical candidate/contact target, not native completion or ammo.
+Search of src/ and tests/ finds FeedMechanism consumed by FeedMechanismTests only.
+tests/FeedMechanismTests.cpp covers 27 deterministic cases, explicitly no native binding.
+Reuse the prior normal-build evidence in the CHAT04 integration receipt; no rerun.
+WeaponMechanism.h is also declarative and has no production runtime consumer.
+Bc2BeltPropProfiles.h describes body-ammo presentation; it is not belt-feed admission.
+The older docs/BELT-FED-RELOAD-PLAN.md remains useful for capture requirements;
+its statements that no portable feed policy exists predate current source.
+No exact asset, cover/feed native dispatch, transfer timing or readiness is proved here.
+Contract: gesture and presentation completion cannot acknowledge native transfer;
+retain resource identity and accepted effects across interruption; unknown stays disabled.
+Next: one exact mounted asset, ordinary partial reload, <=30s capture including
+2s settled before/after; correlate native stage/transfer/readiness and authored parts.
+Use the plan's bounded event/pose records and StorageBudget; no synthetic acknowledgement.
+CHAT15 stays blocked until that evidence establishes actual per-stage operations.
+Shared runtime prerequisite: coordinator state records OpenXR XrResult=-2 once.
+No source change, build, game input, native admission or installation performed.

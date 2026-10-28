@@ -27,12 +27,30 @@ inline bool BodyAmmoFresh(const BodyAmmoTracking& t,std::int64_t now)noexcept {
     return source&&*source==t.visual.source;
 }
 inline bool BodyAmmoRetained(const BodyAmmoTracking& old,const BodyAmmoTracking& current,std::int64_t now)noexcept {
-    if(!BodyAmmoFresh(old,now)||!BodyAmmoFresh(current,now)||bool(old.magazine)!=bool(current.magazine)||
-       !interaction::AmmoSupplyVisualRetained(old.visual,current.visual,now))return false;
-    if(old.shell)return SpasBeltAmmoRetained(*old.shell,*current.shell,now);
+    if(!BodyAmmoFresh(old,now)||!BodyAmmoFresh(current,now)||bool(old.magazine)!=bool(current.magazine))return false;
+    if(old.shell)return interaction::AmmoSupplyVisualRetained(old.visual,current.visual,now)&&
+        SpasBeltAmmoRetained(*old.shell,*current.shell,now);
     const auto& a=*old.magazine;const auto& b=*current.magazine;
-    return a.owner==b.owner&&a.family.binding==b.family.binding&&a.cycle==b.cycle&&
-        a.reserve.identity==b.reserve.identity&&a.reserve.loaded==b.reserve.loaded&&a.reserve.capacity==b.reserve.capacity&&
+    const auto& v=old.visual;const auto& w=current.visual;
+    // Both exact typed publications were validated above. A newer loaded count
+    // can change refill cost without changing this reserve prop's geometry or
+    // availability. Only this render comparison permits that change; pickup
+    // source/reservation comparisons remain strict, and no lease is renewed.
+    // Reusing a reserve sequence with different counts/content is corruption,
+    // even when the refill cost happens to stay equal (for example low reserve).
+    return v.source.identity==w.source.identity&&v.gun.token==w.gun.token&&v.frame==w.frame&&
+        v.contact.centerMeters==w.contact.centerMeters&&v.contact.radiusMeters==w.contact.radiusMeters&&
+        v.source.family==w.source.family&&v.source.reserveUnits==w.source.reserveUnits&&
+        v.source.sequence<=w.source.sequence&&v.source.observedNs<=w.source.observedNs&&
+        v.input.sequence<=w.input.sequence&&v.input.observedNs<=w.input.observedNs&&
+        (v.input.sequence!=w.input.sequence||
+         (v.input.observedNs==w.input.observedNs&&v.input.deadlineNs==w.input.deadlineNs))&&
+        (v.source.sequence!=w.source.sequence||
+         (v.source==w.source&&a.reserve.loaded==b.reserve.loaded&&
+          a.reserve.reloadInputReady==b.reserve.reloadInputReady&&a.reserve.allThreeIdle==b.reserve.allThreeIdle&&
+          a.reserve.emptyReloadControlled==b.reserve.emptyReloadControlled))&&
+        a.owner==b.owner&&a.family.binding==b.family.binding&&a.cycle==b.cycle&&
+        a.reserve.identity==b.reserve.identity&&a.reserve.reserve==b.reserve.reserve&&a.reserve.capacity==b.reserve.capacity&&
         a.selected->weaponData==b.selected->weaponData&&a.selected->soleConfiguredArray==b.selected->soleConfiguredArray&&
         a.selected->states==b.selected->states&&a.selected->sequence<=b.selected->sequence&&
         a.selected->observedNs<=b.selected->observedNs&&

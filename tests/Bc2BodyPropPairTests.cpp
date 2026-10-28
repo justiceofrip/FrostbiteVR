@@ -11,7 +11,7 @@ BodyAmmoRenderSource Ammo(magazine_consumer_fixture::Fixture& f,float x=0){
     auto a=std::make_shared<BodyAmmoTracking>();a->magazine=f.result.tracking;
     a->magazine->selected=std::make_shared<const SelectedMeshesSnapshot>(*f.result.tracking.selected);
     auto& v=a->visual;v.enabled=true;const auto map=BindMagazineOwners(f.s.input.owner,f.s.weapon,f.reserve,0,f.now,f.s.family);
-    v.source=*MagazineSupply(*map,f.reserve,f.s.trackingEpoch,f.now);v.input=f.s.input;v.gun=*f.gun;
+    v.source=*MagazineBodySupply(*map,f.reserve,f.s.trackingEpoch,f.now);v.input=f.s.input;v.gun=*f.gun;
     v.contact=*interaction::ChestAmmoSupply().alternateContact;v.frame=interaction::SupplyAnchorFrame::RecenteredBody;
     const auto& g=*Xm8MagazineEquipment().geometry;BodyAmmoRenderSource s;s.asset=g.asset;s.mesh=g.mesh;s.part=g.bones.magazine;s.rigFingerprint=g.rigFingerprint;
     s.geometry=MakeBodyAmmoGeometryKey(s.asset,s.mesh,s.part,s.rigFingerprint);auto pose=interaction::reload_insertion_detail::Identity();pose.values[3][0]=x;
@@ -19,7 +19,10 @@ BodyAmmoRenderSource Ammo(magazine_consumer_fixture::Fixture& f,float x=0){
 }
 struct PairFixture {
     magazine_consumer_fixture::Fixture native;BodyPropSources a,b;BodyCarriedPairKey key{1,2,3,4,5,79,7};
-    PairFixture(){native.Send();a.ammo=Ammo(native);native.Send();b.ammo=Ammo(native,.2f);}
+    PairFixture(int beforeLoaded=27,int currentLoaded=27,int reserveUnits=83){
+        native.reserve.loaded=beforeLoaded;native.reserve.reserve=reserveUnits;native.reserve.allThreeIdle=true;
+        native.Send();a.ammo=Ammo(native);native.reserve.loaded=currentLoaded;native.Send();b.ammo=Ammo(native,.2f);
+    }
     auto Now()const{return native.now;}
 };
 int TypedAmmoPoseAndHud(){PairFixture f;BodyPropPair pair;const auto left=pair.Begin(f.key,0,f.a);CHECK(left);
@@ -29,6 +32,46 @@ int TypedAmmoPoseAndHud(){PairFixture f;BodyPropPair pair;const auto left=pair.B
     CHECK(SameBodyPropSource(a,b)&&a.world.values==b.world.values);CHECK(a.world.values[3][0]==0);
     CHECK(a.deadlineNs<=f.a.ammo->prop.source.input.deadlineNs);CHECK((*result)[0].view.values!=(*result)[1].view.values);
     CHECK((*result)[0].ammo==Eye().ammo&&(*result)[1].ammo==Eye(1).ammo);return 0;
+}
+int CoherentLoadedCountTransitionPair(){
+    // Fixture snapshots only: no native firing or headset acceptance is implied.
+    for(const auto counts:{std::array{30,29,83},std::array{29,28,83},
+                           std::array{1,0,83},std::array{30,29,1}})
+    for(unsigned fault=0;fault<7;++fault){
+        PairFixture f(counts[0],counts[1],counts[2]);BodyPropPair pair;
+        CHECK(BodyAmmoFresh(*f.a.ammo->authority,f.Now())&&BodyAmmoFresh(*f.b.ammo->authority,f.Now()));
+        const auto original=pair.Begin(f.key,0,f.a);CHECK(original);
+        CHECK(!pair.End(original,f.key,0,f.a,f.a,Eye(),f.Now()));
+        auto current=f.b;auto now=f.Now();
+        if(fault==1){ // A different positive reserve is independently valid, but is not the retained source.
+            ++f.native.reserve.reserve;f.native.Send();current.ammo=Ammo(f.native,.2f);now=f.Now();
+            CHECK(BodyAmmoFresh(*current.ammo->authority,now));
+        }
+        if(fault==2){auto authority=std::make_shared<BodyAmmoTracking>(*current.ammo->authority);
+            authority->visual.gun.token.id=0;current.ammo->authority=authority;current.ammo->prop.source=authority->visual;}
+        if(fault==3)current.ammo.reset();
+        if(fault==4)now=f.a.ammo->prop.source.source.deadlineNs;
+        if(fault==5)++current.ammo->prop.source.source.objectUnits; // Prop contradicts its own typed publication.
+        if(fault==6){auto authority=std::make_shared<BodyAmmoTracking>(*current.ammo->authority);
+            auto& m=*authority->magazine;const auto& old=f.a.ammo->authority->magazine->reserve;
+            m.reserve.sequence=old.sequence;m.reserve.observedNs=old.observedNs;m.reserve.deadlineNs=old.deadlineNs;
+            const auto owners=BindMagazineOwners(authority->visual.input.owner,m.family.binding.weapon,m.reserve,m.cycle,now,m.family);CHECK(owners);
+            const auto source=MagazineBodySupply(*owners,m.reserve,authority->visual.input.owner.space,now);CHECK(source);
+            authority->visual.source=*source;current.ammo->authority=authority;current.ammo->prop.source=authority->visual;
+            CHECK(BodyAmmoFresh(*authority,now)); // Same reserve ID cannot carry a different loaded count.
+        }
+        const auto second=pair.Begin(f.key,1,current);CHECK(second==original);
+        const auto result=pair.End(second,f.key,1,current,current,Eye(1),now);CHECK(result);
+        for(unsigned eye=0;eye<2;++eye){const auto& delivered=(*result)[eye];CHECK(delivered.count==(fault?0u:1u));
+            CHECK(delivered.ammo==Eye(eye).ammo);
+            if(!fault){CHECK(delivered.instances[0].world.values==f.a.ammo->prop.partWorld.values);
+                CHECK(delivered.instances[0].deadlineNs<=f.a.ammo->prop.source.source.deadlineNs);
+                CHECK(delivered.instances[0].deadlineNs<=f.a.ammo->prop.source.input.deadlineNs);}
+        }
+        if(!fault)CHECK(SameBodyPropSource((*result)[0].instances[0],(*result)[1].instances[0]));
+        CHECK(f.native.starts==0&&f.native.submits==0&&f.native.cancels==0&&f.native.reserve.loaded==counts[1]);
+    }
+    return 0;
 }
 int MissingAndRevokedSources(){
     for(unsigned variant=0;variant<6;++variant){PairFixture f;BodyPropPair pair;BodyPropSources none;
@@ -95,5 +138,5 @@ int VehicleRayFrozenAndRevoked(){
     CHECK(missing&&!(*missing)[0].count&&!(*missing)[1].count);return 0;
 }
 }
-int main(){for(auto test:{TypedAmmoPoseAndHud,MissingAndRevokedSources,DenseSlotIntersection,ExpiryAndWorldMismatch,KeyResetAndFirstEyeRequired,BeforeLeaseAndInvalidView,VehicleRayFrozenAndRevoked})if(test())return 1;
-    std::cout<<"BodyPropPair: 7 typed-source/stereo-slot/lifetime groups passed; no native/GPU run\n";}
+int main(){for(auto test:{TypedAmmoPoseAndHud,CoherentLoadedCountTransitionPair,MissingAndRevokedSources,DenseSlotIntersection,ExpiryAndWorldMismatch,KeyResetAndFirstEyeRequired,BeforeLeaseAndInvalidView,VehicleRayFrozenAndRevoked})if(test())return 1;
+    std::cout<<"BodyPropPair: 8 typed-source/stereo-slot/lifetime groups passed; no native/GPU run\n";}

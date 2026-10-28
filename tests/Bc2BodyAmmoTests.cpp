@@ -8,8 +8,9 @@ using namespace magazine_consumer_fixture;
 namespace {
 BodyAmmoTracking Source(Fixture& f){
     f.Send();BodyAmmoTracking t;t.magazine=f.result.tracking;
+    t.magazine->selected=std::make_shared<const SelectedMeshesSnapshot>(*t.magazine->selected);
     const auto owners=BindMagazineOwners(f.s.input.owner,f.s.weapon,f.reserve,0,f.now,f.s.family);
-    t.visual.enabled=true;t.visual.source=*MagazineSupply(*owners,f.reserve,f.s.trackingEpoch,f.now);
+    t.visual.enabled=true;t.visual.source=*MagazineBodySupply(*owners,f.reserve,f.s.trackingEpoch,f.now);
     t.visual.input=f.s.input;t.visual.gun=*f.gun;
     const auto supply=ChestAmmoSupply();
     t.visual.contact={supply.pouchCenterMeters,supply.pouchRadiusMeters};t.visual.frame=SupplyAnchorFrame::RecenteredBody;
@@ -207,6 +208,49 @@ int ExactSourceAndOriginalExpiry(){
     ++meshes->deadlineNs;next=source;next.magazine->selected=meshes;CHECK(!BodyAmmoRetained(source,next,f.now));
     return 0;
 }
+int CoherentLoadedCountTransitions(){
+    // These are coherent fixture publications, not evidence of native shots.
+    // Cover full-to-partial, subsequent, last loaded round and capped refill cost.
+    for(const auto counts:{std::array{30,29,83},std::array{29,28,83},
+                           std::array{1,0,83},std::array{30,29,1}}){
+        Fixture f;f.reserve.loaded=counts[0];f.reserve.reserve=counts[2];f.reserve.allThreeIdle=true;
+        const auto before=Source(f);f.reserve.loaded=counts[1];const auto current=Source(f);
+        CHECK(BodyAmmoFresh(before,f.now)&&BodyAmmoFresh(current,f.now));
+        CHECK(BodyAmmoRetained(before,current,f.now));CHECK(!BodyAmmoRetained(current,before,f.now));
+        if(before.visual.source.objectUnits!=current.visual.source.objectUnits)
+            CHECK(!AmmoSupplyVisualRetained(before.visual,current.visual,f.now)); // Pickup remains strict.
+        CHECK(!BodyAmmoRetained(before,current,before.visual.source.deadlineNs));
+        CHECK(!BodyAmmoRetained(before,current,before.visual.input.deadlineNs));
+        for(unsigned fault=0;fault<10;++fault){auto changed=fault==9?before:current;auto& m=*changed.magazine;
+            if(fault==0){ // Reused reserve ID with a different loaded count, including equal refill cost.
+                m.reserve.sequence=before.magazine->reserve.sequence;
+                m.reserve.observedNs=before.magazine->reserve.observedNs;
+                m.reserve.deadlineNs=before.magazine->reserve.deadlineNs;
+            }
+            if(fault==1)m.reserve.sequence=before.magazine->reserve.sequence-1;
+            if(fault==2)m.reserve.observedNs=before.magazine->reserve.observedNs-1;
+            if(fault==3)++m.reserve.reserve;
+            if(fault==4)++m.reserve.capacity;
+            if(fault==5)++m.cycle;
+            if(fault==6)++changed.visual.gun.token.id;
+            if(fault==7)changed.visual.contact.centerMeters[0]+=.01f;
+            if(fault==8)++m.reserve.identity.serverItem;
+            if(fault==9)m.reserve.emptyReloadControlled=!m.reserve.emptyReloadControlled;
+            const auto& reserve=changed.magazine->reserve;
+            const auto owners=BindMagazineOwners(changed.visual.input.owner,changed.magazine->family.binding.weapon,
+                reserve,changed.magazine->cycle,f.now,changed.magazine->family);CHECK(owners);
+            const auto source=MagazineBodySupply(*owners,reserve,changed.visual.input.owner.space,f.now);CHECK(source);
+            changed.visual.source=*source;
+            CHECK(BodyAmmoFresh(changed,f.now));CHECK(!BodyAmmoRetained(before,changed,f.now));
+        }
+        auto contradicted=current;++contradicted.visual.source.objectUnits;
+        CHECK(!BodyAmmoFresh(contradicted,f.now));CHECK(!BodyAmmoRetained(before,contradicted,f.now));
+        auto revoked=current;revoked.visual.input.focused=false;
+        CHECK(!BodyAmmoRetained(before,revoked,f.now));
+        CHECK(f.starts==0&&f.submits==0&&f.cancels==0&&f.reserve.loaded==counts[1]&&f.reserve.reserve==counts[2]);
+    }
+    return 0;
+}
 int NoWrongSpaceOrHeldReplacement(){
     Fixture f;auto source=Source(f);auto input=Input(f);CHECK(BuildBodyAmmoPose(source,input,Pose(),f.now));
     ++input.spaceGeneration;CHECK(!BuildBodyAmmoPose(source,input,Pose(),f.now));input=Input(f);
@@ -217,5 +261,5 @@ int NoWrongSpaceOrHeldReplacement(){
     CHECK(!BodyAmmoFresh(source,f.now));return 0;
 }
 }
-int main(){if(SharedProfileBodyPose()||LowerChestRemainsThePickupContact()||PhysicalPickupThroughNativeStereo()||ExactSourceAndOriginalExpiry()||NoWrongSpaceOrHeldReplacement())return 1;
-    std::cout<<"BodyAmmo: 5 CPU groups passed; no independent native draw or headset acceptance\n";}
+int main(){if(SharedProfileBodyPose()||LowerChestRemainsThePickupContact()||PhysicalPickupThroughNativeStereo()||ExactSourceAndOriginalExpiry()||CoherentLoadedCountTransitions()||NoWrongSpaceOrHeldReplacement())return 1;
+    std::cout<<"BodyAmmo: 6 CPU groups passed; no independent native draw or headset acceptance\n";}

@@ -1,0 +1,16 @@
+CHAT23: render-only chest reserve prop retention correction; native/headset pending.
+Base4055200; four files: Bc2BodyAmmo.h, Bc2BodyAmmoRenderer.cpp and their
+Bc2BodyAmmoTests/Bc2BodyPropPairTests. Independent static review: no findings.
+A coherent loaded-count change changes refill-cost metadata without changing
+reserve ownership/quantity or prop geometry. Old cross-read equality hid the prop.
+Both typed publications still validate independently; only render continuity
+permits newer loaded/refill-cost values. Pickup/custody/native ammo code is unchanged.
+Reused-sequence contradictions, reserve/capacity/cycle/owner/claim/contact/geometry
+changes and original expiry still reject. Both eyes retain the first pose/lease.
+Regressions cover full/partial/last-round/low-reserve transitions and rejection paths;
+the separate ammo-counter sample is preserved. Deterministic execution is pending.
+Coordinator checks: BodyAmmo/BodyPropPair and affected renderer/body/supply suites,
+then both normal builds from latest combined source including finished CHAT25/26.
+Static finding does not prove the user's flicker cause or headset readability.
+Needed native capture: firing and stand/crouch/turn/recenter/holster/reload/vehicle exit,
+exact paired prop/HUD samples with authoritative ammo and ownership; then headset.

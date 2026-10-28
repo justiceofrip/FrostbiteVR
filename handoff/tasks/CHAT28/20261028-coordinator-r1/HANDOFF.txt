@@ -1,0 +1,14 @@
+CHAT28: ordinary floating reticle remains needs-native-evidence; no new patch.
+Source4055200; docs/RETICLE-DRAW-FOLLOWUP-20261003.md records901 exact ACOG-section
+matches over six captures, without submitted-optic producer/constant association.
+The October1 video confirms an off-axis point, not a depth-test diagnosis.
+Bc2ReticleAperture.cpp already classifies each eye in optic bind space.
+NativeProbe.cpp rechecks actual draw/eye/owner/request/frame/equipment identity.
+Bc2ReticleDrawObservation.h preserves missing-proof bit1024; no GPU instance proof.
+Next after shared runtime recovery: <=15s exact scoped-XM8 PassEvidence episode,
+through-optic and lateral/broadside views, independently moved head and weapon.
+Retain exact geometry both eyes, original producer/configuration and unique CB match;
+require native palette-upload/subrange -> selected skin-instance association.
+Matrix equality alone is insufficient. Join paired images for depth/aim/occlusion.
+Headset acceptance remains separate. No blanket ACOG/ADS or CHAT29 change.
+Existing deterministic evidence reused; no tests/builds/capture repeated.

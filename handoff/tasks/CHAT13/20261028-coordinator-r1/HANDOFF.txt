@@ -1,0 +1,12 @@
+CHAT13: campaign magazine-fed LMG unavailable in inspected evidence; parked.
+Read-only source/evidence review at4055200; no native or headset acceptance.
+Lead only: MG36 base variant2, capacity100,
+Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36; definition SHA256
+7d414cefbfcae132226a9c35939fd670e4e33bc9b74ed8482e0f9d01193213f7.
+G:/Unity/VRMMO/bc2vr-recovery/performance436/campaign-magazine-batch-r55-prep/
+lmg-route-review03.json has no live Asset/Data proof or SP_01/SP_02/SP_03 mount.
+MP001 is a catalog lead only; other campaign scenes were not surveyed there.
+Next: one exact campaign mount/resource/SHA/GUID, then current-process asset/config join.
+Give/Equip cannot mount an absent resource. After proof, test the shared magazine
+contracts with normal systems; drum-magazine success grants no belt-feed acceptance.
+No source changes, tests, builds or sessions performed.

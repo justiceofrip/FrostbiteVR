@@ -1,0 +1,13 @@
+CHAT12: reuse CHAT11's Nambu100/SP_01 test; do not create a duplicate experiment.
+Read-only source/evidence review at4055200; no new native or headset acceptance.
+Recovery paths below are under G:/Unity/VRMMO/bc2vr-recovery/performance436/.
+campaign-magazine-batch-r55-prep/selectors/sp01-nambu.json: exact Nambu100 variant22,
+Objects/Weapons/Handheld/Beach/Nambu100/Nambu100, capacity30.
+vanilla-r43/run02/loading-control-result.json joins SP_01; its inventory-state-
+diagnostic.json observes selected Nambu100 and all three native copies at30/300.
+campaign-magazine-batch-r55-prep/nambu-sp01-run-plan04.json retains seed/route.
+Scene124 stopped before attachment/input due to focus, not a failed native reload.
+Next: available runtime/focus, fresh live scene/Asset/Data/configuration/owner join,
+then prepared magazine sequence and normal combined holster/interruption/empty checks.
+Use Observe/variant22 only if provisioning is necessary; preserve named-asset scope.
+No tests, builds, game input or preflight repeated; shared blocker in coordinator state.

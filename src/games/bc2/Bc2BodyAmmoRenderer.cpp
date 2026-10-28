@@ -76,11 +76,13 @@ bool BodyAmmoSourceRetained(const BodyAmmoRenderSource& a,const BodyAmmoRenderSo
             return s.asset==g.asset&&s.mesh==g.mesh&&s.part==g.bones.magazine&&s.rigFingerprint==g.rigFingerprint;}
         return s.asset==SpasReloadAsset&&s.mesh==SpasReloadMesh&&s.part=="jntWpn_7"&&s.rigFingerprint==SpasReloadRig;
     };
+    // Each prop must exactly match its own typed publication. Cross-publication
+    // render continuity is then owned by BodyAmmoRetained, including a coherent
+    // loaded/refill-cost change; do not reapply pickup's strict cost comparison.
     return authorityMatches(a)&&authorityMatches(b)&&BodyAmmoRetained(*a.authority,*b.authority,now)&&
         graphics::ValidRigidPropKey(a.geometry)&&a.geometry==b.geometry&&a.asset==b.asset&&a.mesh==b.mesh&&a.part==b.part&&
         a.rigFingerprint&&a.rigFingerprint==b.rigFingerprint&&a.geometry==MakeBodyAmmoGeometryKey(a.asset,a.mesh,a.part,a.rigFingerprint)&&
-        graphics::RigidPropWorldValid(a.prop.partWorld)&&graphics::RigidPropWorldValid(b.prop.partWorld)&&
-        interaction::AmmoSupplyPropRetained(a.prop,b.prop.source,now);
+        graphics::RigidPropWorldValid(a.prop.partWorld)&&graphics::RigidPropWorldValid(b.prop.partWorld);
 }
 unsigned BodyAmmoBoundaryMissing(const BodyAmmoBoundaryProof& p,BodyAmmoEyeKey key,const BodyAmmoTargetIdentity& t,std::uint64_t context,std::int64_t now)noexcept {
     unsigned missing=0;

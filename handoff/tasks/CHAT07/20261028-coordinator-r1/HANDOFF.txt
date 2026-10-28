@@ -1,0 +1,15 @@
+CHAT07: prepared deterministic coexistence contracts; final native acceptance pending.
+Base4055200; source files: tests/Bc2PlayerGrenadeTests.cpp and
+tests/Bc2NormalPlayerToolsConfigTests.cpp. Independent static review: no findings.
+SharedHandsFixture uses the actual hand arbiter for magazine/pump/bolt custody;
+reload admission and occupied claims reject grenade intent without stealing claims.
+Held input cannot rearm after settlement; fresh neutral plus a new gesture is needed.
+Repeated Commit cannot duplicate the grenade edge. One config admits all three
+normal grenade/knife/contextual-tool opt-ins without diagnostic interaction flags.
+This tests custody and caller admission; it does not instantiate native ammo/debt,
+knife/gadget adapters or prove successful reload/support recovery in the game.
+Checks pending integration: Bc2PlayerGrenade and Bc2NormalPlayerToolsConfig x86/x64,
+then required combined validation with finished CHAT25/26 source.
+Final card still needs representative magazine/pump/bolt + normal interactions,
+actual native ownership/ammunition/fire outcomes and physical headset checks.
+No physical grenade or underbarrel reload implementation added.

@@ -1,0 +1,14 @@
+CHAT27: conditional camera-ownership lead; needs named cinematic capture, no patch.
+Source4055200: Bc2Gameplay.cpp Gather !nativePlaying path retains body anchor;
+AdjustViewBase admits it by actor/on-foot/reference space, without cinematic identity.
+TrackedBodyAnchor.h seeds native yaw on new actor; same-actor return retains yaw.
+This could override scripted heading, but no reported cutscene is joined to that path.
+Inactive Gather plus changed reference space can also reject an old anchor; unobserved.
+Existing relative-head composition preserves free head movement; do not force centering.
+Next: exact mission/checkpoint/cinematic, bounded entry and exit/skip windows with
+known body/head yaw and position; free head motion and one supported recenter.
+Join native producer/transform, actor/permissions, body-anchor yaw/space, XR poses,
+adjusted/delivered eye transforms, input publication and exact-restoration results.
+view_basis_evidence caps192 samples at>=100ms spacing; explicitly cover the event.
+Current backlog names no exact cinematic receipt. Shared runtime prerequisite applies.
+No edits/builds/tests/session or renewed OpenXR attempt.

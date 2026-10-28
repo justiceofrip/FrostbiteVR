@@ -1,4 +1,5 @@
 #include "Bc2PlayerGrenade.h"
+#include "fvr/interaction/HandInteraction.h"
 #include "fvr/interaction/InputMenuOwnership.h"
 #include "Test.h"
 #include <memory>
@@ -84,6 +85,113 @@ int ConflictsAndReconnect(){for(unsigned failure=0;failure<7;++failure){Fixture 
     for(unsigned i=0;i<35;++i){x.Step(true);CHECK(!x.probe->Prepare(x.n,x.f));}x.Step(false);CHECK(!x.probe->Prepare(x.n,x.f));CHECK(x.probe->NativeEdges()==0);
     CHECK(x.Issue());
 }return 0;}
+struct SharedHandsFixture:Fixture {
+    interaction::HandInteraction hands;std::uint64_t intent=0;
+    interaction::HandClaimRequest Claim(interaction::InteractionHand hand,interaction::HandClaimKind kind,
+        interaction::HandInteractionKey item,std::uint64_t parent=0){
+        const auto next=++intent;
+        return {f.hand.owner,hand,kind,item,{{1000+next,1},f.hand.sequence,f.hand.deadlineNs,true},next,parent};
+    }
+    void Publish(){f.left=hands.Current(interaction::InteractionHand::Left);f.right=hands.Current(interaction::InteractionHand::Right);}
+    int Start(){
+        const auto gun=hands.Acquire(f.hand,Claim(interaction::InteractionHand::Right,interaction::HandClaimKind::GunHold,f.handItem));
+        CHECK(gun.accepted&&gun.claim);Publish();return 0;
+    }
+    int StepOwned(bool click,float trigger=0){
+        f.source.input.hands[1].trigger=trigger;Step(click);
+        CHECK(hands.Update(f.hand).inputValid);
+        for(const auto hand:{interaction::InteractionHand::Left,interaction::InteractionHand::Right})if(const auto claim=hands.Current(hand))
+            CHECK(hands.Renew(f.hand,claim->token,{claim->token.contact,f.hand.sequence,f.hand.deadlineNs,true}).accepted);
+        Publish();return 0;
+    }
+    bool Current(const interaction::HandClaimToken& token)const {
+        const auto claim=hands.Current(token.hand);
+        return claim&&claim->token==token&&claim->token.owner==f.hand.owner&&
+            claim->inputSequence==f.hand.sequence&&claim->deadlineNs==f.hand.deadlineNs;
+    }
+};
+int ReloadClaimsRequireNeutralBeforeNewGrenade(){
+    using namespace interaction;
+    enum class Layout {Magazine,Pump,Bolt};
+    for(const auto layout:{Layout::Magazine,Layout::Pump,Layout::Bolt}){
+        SharedHandsFixture x;CHECK(!x.Start());
+        CHECK(!x.StepOwned(false));CHECK(!x.probe->Prepare(x.n,x.f));
+        CHECK(!x.StepOwned(true));CHECK(!x.probe->Prepare(x.n,x.f));
+        const auto originalGun=x.f.right->token;
+        CHECK(!x.StepOwned(true));
+        if(layout==Layout::Bolt){
+            // The real arbiter exchanges the root and creates its right-hand mechanism dependency.
+            const HandGunCustodyTransfer exchange{originalGun,{},
+                {x.Claim(InteractionHand::Left,HandClaimKind::GunHold,x.f.handItem),x.f.hand},
+                HandCustodyTarget{x.Claim(InteractionHand::Right,HandClaimKind::Mechanism,x.f.handItem),x.f.hand}};
+            const auto moved=x.hands.TransferGunCustody(x.f.hand,exchange);
+            CHECK(moved.transaction.accepted&&moved.transaction.claim&&moved.companion);
+        }else{
+            const auto item=layout==Layout::Magazine?HandInteractionKey{700,1}:x.f.handItem;
+            const auto kind=layout==Layout::Magazine?HandClaimKind::AmmoObject:HandClaimKind::Mechanism;
+            const auto held=x.hands.Acquire(x.f.hand,x.Claim(InteractionHand::Left,kind,item,
+                layout==Layout::Magazine?0:originalGun.id));
+            CHECK(held.accepted&&held.claim);
+        }
+        x.Publish();CHECK(x.f.left&&x.f.right);
+        const auto left=x.f.left->token,right=x.f.right->token;
+        CHECK(left.owner==originalGun.owner&&right.owner==originalGun.owner);
+        if(layout==Layout::Magazine)CHECK(right==originalGun&&left.item!=right.item&&!left.prerequisiteClaim);
+        if(layout==Layout::Pump)CHECK(right==originalGun&&left.prerequisiteClaim==right.id);
+        if(layout==Layout::Bolt)CHECK(left.kind==HandClaimKind::GunHold&&right.prerequisiteClaim==left.id);
+        // All settlement flags are still true: current shared custody alone rejects the in-flight gesture.
+        CHECK(!StockSample(x.n,x.f).admission.leftFree);
+        CHECK(StockSample(x.n,x.f).admission.currentGunHold==(layout!=Layout::Bolt));
+        CHECK(!x.probe->Prepare(x.n,x.f));CHECK(x.probe->Current()==PlayerPhase::AwaitNeutral);
+        CHECK(x.Current(left)&&x.Current(right)&&x.probe->NativeEdges()==0);
+        // A competing body/tool claim cannot displace either reload hand.
+        for(const auto hand:{InteractionHand::Left,InteractionHand::Right}){
+            const auto competing=x.hands.Acquire(x.f.hand,x.Claim(hand,HandClaimKind::BodyInventory,{800,1}));
+            CHECK(!competing.accepted&&competing.reason==HandInteractionReason::HandOccupied);
+            CHECK(x.Current(left)&&x.Current(right));
+        }
+        // These are caller admission states, not simulated ammunition transfers or mechanism debt.
+        auto& settled=layout==Layout::Magazine?x.f.source.admission.magazineSettled:
+            layout==Layout::Pump?x.f.source.admission.pumpSettled:x.f.source.admission.boltSettled;
+        settled=false;
+        for(unsigned i=0;i<35;++i){
+            CHECK(!x.StepOwned(true,1));CHECK(!x.probe->Prepare(x.n,x.f));
+            CHECK(x.Current(left)&&x.Current(right)&&x.probe->NativeEdges()==0);
+        }
+        if(layout==Layout::Bolt){
+            const HandGunCustodyTransfer exchange{left,right,
+                {x.Claim(InteractionHand::Right,HandClaimKind::GunHold,x.f.handItem),x.f.hand},{}};
+            const auto returned=x.hands.TransferGunCustody(x.f.hand,exchange);
+            CHECK(returned.transaction.accepted&&returned.transaction.claim&&!returned.companion);
+        }else CHECK(x.hands.Release(x.f.hand,left).accepted);
+        x.Publish();CHECK(!x.f.left&&x.f.right);
+        const auto returnedGun=x.f.right->token;
+        if(layout!=Layout::Bolt)CHECK(returnedGun==originalGun);
+        // Freeing the hands cannot bypass the still-unsettled caller admission.
+        for(unsigned i=0;i<3;++i){
+            CHECK(!x.StepOwned(false));CHECK(!x.probe->Prepare(x.n,x.f));
+            CHECK(x.probe->Current()==PlayerPhase::AwaitNeutral&&x.Current(returnedGun));
+        }
+        settled=true;
+        for(unsigned i=0;i<35;++i){
+            CHECK(!x.StepOwned(true,1));CHECK(!x.probe->Prepare(x.n,x.f));
+            CHECK(x.probe->Current()==PlayerPhase::AwaitNeutral&&x.Current(returnedGun)&&x.probe->NativeEdges()==0);
+        }
+        // Releasing only the trigger leaves the old grenade press held and cannot rearm it.
+        for(unsigned i=0;i<3;++i){CHECK(!x.StepOwned(true));CHECK(!x.probe->Prepare(x.n,x.f));
+            CHECK(x.probe->Current()==PlayerPhase::AwaitNeutral&&x.probe->NativeEdges()==0);}
+        CHECK(!x.StepOwned(false));CHECK(!x.probe->Prepare(x.n,x.f));
+        CHECK(!x.StepOwned(false));CHECK(!x.probe->Prepare(x.n,x.f));
+        CHECK(x.probe->Current()==PlayerPhase::Gesture&&x.Current(returnedGun)&&x.probe->NativeEdges()==0);
+        CHECK(!x.StepOwned(true));CHECK(!x.probe->Prepare(x.n,x.f));
+        for(unsigned i=0;i<27;++i){CHECK(!x.StepOwned(true));CHECK(!x.probe->Prepare(x.n,x.f));}
+        CHECK(!x.StepOwned(false));const auto request=x.probe->Prepare(x.n,x.f);
+        CHECK(request&&x.probe->CanStage(*request,x.n,x.f));
+        x.probe->Commit(*request,x.f,true);CHECK(x.probe->NativeEdges()==1&&x.Current(returnedGun)&&!x.f.left);
+        x.probe->Commit(*request,x.f,true);CHECK(!x.probe->Prepare(x.n,x.f));
+        CHECK(x.probe->NativeEdges()==1&&x.Current(returnedGun)&&!x.f.left);
+    }return 0;
+}
 int QuarantineAndLifetime(){for(unsigned failure=0;failure<11;++failure){Fixture x;const auto q=x.Issue();CHECK(q&&x.probe->CanStage(*q,x.n,x.f));x.probe->Commit(*q,x.f,true);x.SelectGrenade();
     if(failure<6){const unsigned copy=failure%3;auto& g=copy<2?x.n.target.client.branches[copy]:x.n.target.server;g.reserve=failure<3?1:4;}
     if(failure==6)--x.n.original.server.loaded;
@@ -180,5 +288,5 @@ int SourceReceipts(){Fixture x;
 }
 }
 int main(int argc,char** argv){if(argc==2&&std::string(argv[1])=="--death-readiness"){if(DeathReadiness())return 1;std::puts("Death readiness PASS: coherent return, fresh neutral/menu/custody, expiry, gap retained, owner replacement.");return 0;}if(argc==2&&std::string(argv[1])=="--receipts"){if(SourceReceipts())return 1;std::printf("Player grenade source receipt PASS: return, fresh rearm, reconnect, expiry retention and lifetime reset. No native actions.\n");return 0;}
-if(DeathReadiness()||SourceReceipts()||RepeatAndObservationGaps()||MenuEachStage()||ConflictsAndReconnect()||QuarantineAndLifetime()||CompletedObservationEnds()||CommitUnknownAndSuppressed()||ReturnNeedsKnownCustody()||UnappliedRequestAndNewLifetime()||UnobservedSelectionAndSupportedReturn()||ReconnectedPacketNumbers())return 1;
-    std::printf("Player grenade PASS: eleven focused policy groups; sizeof(Controller)=%zu. No native actions.\n",sizeof(player_grenade::Controller));return 0;}
+if(DeathReadiness()||SourceReceipts()||RepeatAndObservationGaps()||MenuEachStage()||ConflictsAndReconnect()||ReloadClaimsRequireNeutralBeforeNewGrenade()||QuarantineAndLifetime()||CompletedObservationEnds()||CommitUnknownAndSuppressed()||ReturnNeedsKnownCustody()||UnappliedRequestAndNewLifetime()||UnobservedSelectionAndSupportedReturn()||ReconnectedPacketNumbers())return 1;
+    std::printf("Player grenade PASS: focused policy groups and shared reload custody/rearm; sizeof(Controller)=%zu. No native actions.\n",sizeof(player_grenade::Controller));return 0;}

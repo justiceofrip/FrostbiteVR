@@ -22,6 +22,14 @@ int IndependentCompileAndRuntimeKnobs(){
  CHECK(!ValidNormalPlayerTools(2,0,flags,123,3,false,true,true));
  CHECK(!ValidNormalPlayerTools(0,2,flags,123,3,false,true,true));return 0;
 }
+int AllThreeNormalCapabilitiesShareOneConfig(){
+ NativeProbeConfig c;c.flags=flags;c.hostPid=123;c.magazineReloadSession=3;
+ c.normalPlayerGrenades=c.normalPlayerKnife=c.normalContextualTools=1;
+ CHECK(ValidNormalPlayerGrenades(c.normalPlayerGrenades,c.flags,c.hostPid,c.magazineReloadSession,false,true)&&
+       ValidNormalPlayerTools(c.normalPlayerKnife,c.normalContextualTools,c.flags,c.hostPid,c.magazineReloadSession,false,true,true));
+ CHECK(c.ordinaryGrenadeInput==0&&c.chestKnifeProbe==0&&c.ordinaryResourceInput==0);
+ return 0;
+}
 int StrictRealHostAndNoFixture(){
  for(unsigned mask:{0x400u,0x800u,0x1000u,0x2000u,0x4000u,0x10000u,0x80000u,0x100000u,0x2000000u,0x10000000u})
   CHECK(!ValidNormalPlayerTools(1,1,flags&~mask,123,3,false,true,true));
@@ -32,5 +40,5 @@ int StrictRealHostAndNoFixture(){
  CHECK(ValidNormalPlayerTools(1,1,flags|0x200u|0x200000u,123,3,false,true,true));return 0;
 }
 }
-int main(){CHECK(!DefaultsAndMatchedAbi());CHECK(!IndependentCompileAndRuntimeKnobs());CHECK(!StrictRealHostAndNoFixture());
- std::puts("Three normal player tool configuration groups PASS.");}
+int main(){CHECK(!DefaultsAndMatchedAbi());CHECK(!IndependentCompileAndRuntimeKnobs());CHECK(!AllThreeNormalCapabilitiesShareOneConfig());CHECK(!StrictRealHostAndNoFixture());
+ std::puts("Four normal player tool configuration groups PASS.");}
