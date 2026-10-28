@@ -1,11 +1,12 @@
 [CmdletBinding()]
 param([ValidateSet('x86','x64')][string]$Architecture='x86',[ValidateRange(1,16)][int]$Jobs=4,
-      [string]$BuildDirectory='')
+      [string]$BuildDirectory='',
+      [ValidateRange(1,[long]::MaxValue)][long]$MaxGeneratedBytes=40GB)
 $ErrorActionPreference='Stop'
 $PSNativeCommandUseErrorActionPreference=$false
 $build=if($BuildDirectory){[IO.Path]::GetFullPath($BuildDirectory,$PSScriptRoot)}else{Join-Path $PSScriptRoot "build\$Architecture"}
 . (Join-Path $PSScriptRoot 'tools/StorageBudget.ps1')
-$storageAdmission=Assert-FvrStorageBudget -RepositoryRoot $PSScriptRoot -OutputPath $build -Operation Build -PlannedBytes 3GB
+$storageAdmission=Assert-FvrStorageBudget -RepositoryRoot $PSScriptRoot -OutputPath $build -Operation Build -PlannedBytes 3GB -MaxGeneratedBytes $MaxGeneratedBytes
 $symbols=Join-Path $build 'symbols'
 $scratch=Join-Path $build 'scratch'
 $previousTemp=$env:TEMP
@@ -33,7 +34,7 @@ function Step([string]$Name,[string]$Exe,[string[]]$Arguments){
 Step 'configure' $cmake @('-S',$PSScriptRoot,'-B',$build,'-G','Ninja','-DCMAKE_BUILD_TYPE=RelWithDebInfo','-DBUILD_TESTING=ON',"-DCMAKE_PDB_OUTPUT_DIRECTORY=$symbols","-DCMAKE_PDB_OUTPUT_DIRECTORY_RELWITHDEBINFO=$symbols")
 Step 'build' $cmake @('--build',$build,'--parallel',"$Jobs")
 Step 'tests' $ctest @('--test-dir',$build,'--output-on-failure','--parallel',"$Jobs")
-[ordered]@{architecture=$Architecture;build_directory=$build;completed_utc=[DateTime]::UtcNow.ToString('o');built=$true;tests_passed=$true;native_bc2_verified=$false;headset_tested=$false} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $logs "$Architecture-build.json")
+[ordered]@{architecture=$Architecture;build_directory=$build;completed_utc=[DateTime]::UtcNow.ToString('o');built=$true;tests_passed=$true;native_bc2_verified=$false;headset_tested=$false;storage=$storageAdmission} | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath (Join-Path $logs "$Architecture-build.json")
 } finally {
     $env:TEMP=$previousTemp
     $env:TMP=$previousTmp
