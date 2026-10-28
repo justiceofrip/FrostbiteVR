@@ -213,8 +213,12 @@
   ],
   "worker_validation": "Both isolated x64 CPU suites passed; handoff/tasks/CHAT06/20261028-vehicle-equipment-r1/EVIDENCE.txt retains prior failed attempts",
   "source_push": {
-    "status": "pending",
-    "tested_source_commit": "fcb6d4fa7c9397534aca44b23e1c34e17d7e5625"
+    "status": "succeeded",
+    "tested_source_commit": "fcb6d4fa7c9397534aca44b23e1c34e17d7e5625",
+    "pushed_tip_at_verification": "d54cca212ee7a656d1277c2ad44e9462891e1eac",
+    "verified_remote_ref": "refs/heads/checkpoint/436-r56-equipment-rendering",
+    "verified_utc": "2026-10-28T16:49:22.3234177Z",
+    "status_only_successor_preserves_source_and_runtime": true
   },
   "installation": {
     "status": "not performed; fresh OpenXR preflight failed, native vehicle/startup validation unavailable",

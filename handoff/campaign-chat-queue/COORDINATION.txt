@@ -18,7 +18,7 @@ Last workflow integration: CHAT06 regression coverage; native evidence pending.
 Integrated source merge: fcb6d4fa7c9397534aca44b23e1c34e17d7e5625
 Built combined source commit: 532b75060f9bfe78d013466fa12cf6513a0a9a95
 Included task commit: b8e7e122804c84ad240bb06a8f79da5af794370a
-Source push: pending candidate review/advance; accepted baseline e09d8acd335997111e13fb929a31ada1cecf41d3.
+Source push: verified at d54cca212ee7a656d1277c2ad44e9462891e1eac.
 The subsequent status-only commit preserves the tested source/runtime identities.
 CHAT06 changes tests/handoffs only; built runtime identity above is unchanged.
 Prior CHAT02/CHAT04/CHAT05 integrations retain their original evidence.

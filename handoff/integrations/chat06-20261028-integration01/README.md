@@ -8,7 +8,9 @@ Included task: `tasks/chat06-20261028-vehicle-equipment-r1` at
 `b8e7e122804c84ad240bb06a8f79da5af794370a`, based on accepted source
 `e09d8acd335997111e13fb929a31ada1cecf41d3`. Candidate merge and tested source:
 `fcb6d4fa7c9397534aca44b23e1c34e17d7e5625`. Target integration branch:
-`checkpoint/436-r56-equipment-rendering`. Source push is pending final review.
+`checkpoint/436-r56-equipment-rendering`. Source push was verified at
+`d54cca212ee7a656d1277c2ad44e9462891e1eac`; the later status-only commit
+preserves the tested source and unchanged runtime identities.
 [receipt.json](receipt.json) separates source integration from installation.
 
 Both canonical normal configurations rebuilt only the two affected test targets
