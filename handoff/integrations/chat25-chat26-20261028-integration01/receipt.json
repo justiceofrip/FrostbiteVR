@@ -1,0 +1,208 @@
+{
+  "schema": "fvr.chat25-chat26.integration.v1",
+  "updated_utc": "2026-10-28T18:46:15.1620412Z",
+  "run": "chat25-chat26-20261028-integration01",
+  "status": "validated-source; native evidence and installation pending",
+  "integration_branch": "checkpoint/436-r56-equipment-rendering",
+  "verified_origin": "https://github.com/justiceofrip/FrostbiteVR.git",
+  "baseline": "4055200b51c2c258d48a33d30d09db9337127f6a",
+  "task_branch": "tasks/chat25-chat26-20261028-knife-r1",
+  "task_commit": "d55b3c6249c9f56e4235f7805a80d334a5dc610f",
+  "merge_commit": "636d7a4b149bc07f43dd13a53a44a6a9862bd563",
+  "built_source_commit": "7a5d8aa7281de90e877b35b8ac73d145191161a6",
+  "source_sha256": "0888a7d8a5b0e91cbe2de6994c87ec74082e6a572dfa8d3e3acfdc59475c03ab",
+  "source_push": {
+    "status": "pending",
+    "commit": null
+  },
+  "lease": {
+    "owner_token": "chat25-chat26-20261028-integration01-12ad90001f4a4986aee8b08654985b14",
+    "status": "held",
+    "released_utc": null
+  },
+  "tasks": [
+    "CHAT25 - Knife single-jab reliability",
+    "CHAT26 - Knife action-matched audio"
+  ],
+  "changes": [
+    "SelectedMeleeAttack regressions at72/90/120Hz and interaction boundaries",
+    "Opt-in original native call sound context with nested scope masking",
+    "Diagnostic single-jab and image-free neutral fixture prerequisite"
+  ],
+  "validation": {
+    "x86": {
+      "focused_passed": 4,
+      "normal_passed": 305,
+      "normal_total": 305
+    },
+    "x64": {
+      "focused_passed": 4,
+      "normal_passed": 305,
+      "normal_total": 305
+    },
+    "binary_pdb_pairs": 6,
+    "independent_audit": {
+      "pinned_files": 69,
+      "native_operation_rows_unchanged": true,
+      "source_hashes": 576,
+      "normal_flags_unchanged": true,
+      "excluded_data_hashes": 4,
+      "all_pairs_guid_age_match": true
+    },
+    "runtime_receipt": {
+      "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\integration-chat25-chat26-20261028-01\\normal-runtime\\build-receipt.json",
+      "bytes": 13283,
+      "sha256": "dd0c8b845b72c1999f337b97b680692d3c74253ec8bb3237dc768f8074509095"
+    }
+  },
+  "native": {
+    "status": "setup blocked before input or attachment",
+    "process_id": 117536,
+    "creation_filetime": "134376863673429341",
+    "knife_episodes": 0,
+    "menu_input_sent": false,
+    "native_attached": false,
+    "foreground_request_succeeded": false,
+    "user_offered_foreground_correction": true,
+    "corrected_foreground_wait_seconds": 30,
+    "foreground_observed": false,
+    "closed_normally": true,
+    "all_three_profiles_restored": true,
+    "emulated_path_requires_openxr": false,
+    "actual_game_knife_verified": false,
+    "headset_verified": false
+  },
+  "installation": {
+    "attempted": false,
+    "reason": "Required OpenXR instance unavailable and startup/equipment smoke not established",
+    "active_version": "0.1.12",
+    "previous_version": "0.1.11",
+    "settings_unchanged": true,
+    "payloads_unchanged": true,
+    "candidate_installed": false,
+    "installed_runtime_receipt": null,
+    "preflight_runtime": "SteamVR",
+    "preflight_error": "OpenXR unavailable: Create OpenXR instance XrResult=-2",
+    "preflight_exit_code": 2,
+    "owned_host_stopped": true,
+    "public_release": false
+  },
+  "storage": {
+    "initial_build_refused": true,
+    "limits_unchanged": true,
+    "max_generated_bytes": 42949672960,
+    "min_free_bytes": 16106127360,
+    "raw_capture_limit_bytes": 536870912,
+    "lossless_compression_reclaimed_bytes": 3101962706,
+    "deleted_files": 0,
+    "plans_local_only": [
+      {
+        "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\handoff\\integrations\\chat25-chat26-20261028-integration01\\storage\\compression-candidates-01.json",
+        "bytes": 268542,
+        "sha256": "700abce690546fb4756779b64dcb391c08cf3be6de570b1b336021024e2ee0b2"
+      },
+      {
+        "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\handoff\\integrations\\chat25-chat26-20261028-integration01\\storage\\compression-candidates-02.json",
+        "bytes": 79051,
+        "sha256": "b66c0a6a86d60988cf7a0105c578ec431310538154ce2906a0f5b119e74dabc7"
+      },
+      {
+        "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\handoff\\integrations\\chat25-chat26-20261028-integration01\\storage\\compression-candidates-03.json",
+        "bytes": 312297,
+        "sha256": "137287c6252dc3b8fedb4ef0e8db5abb81bb5ef7edbaef84449dfffd4d03fbbc"
+      },
+      {
+        "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\handoff\\integrations\\chat25-chat26-20261028-integration01\\storage\\compression-candidates-04.json",
+        "bytes": 83700,
+        "sha256": "bfd8c206e6c3fc2684325491111631a920d6ba766725ce900f2f3aef73611d16"
+      }
+    ],
+    "results": [
+      {
+        "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\integration-chat25-chat26-20261028-01\\storage\\batch01\\compression.json",
+        "bytes": 12642,
+        "sha256": "2f5a59625ec021a503242966c204d7dde3db68eef666f7d9e3b7756531abb827"
+      },
+      {
+        "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\integration-chat25-chat26-20261028-01\\storage\\batch02\\compression.json",
+        "bytes": 247617,
+        "sha256": "289ae045e56e86b82977585a456c048cdffec9dbcb4f0ea4c49fafb1dec8163f"
+      },
+      {
+        "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\integration-chat25-chat26-20261028-01\\storage\\batch03\\compression.json",
+        "bytes": 89987,
+        "sha256": "65d9db860e63cc8af938989bf742c0fb6d0a4d6f568e31dd2377952e10998351"
+      }
+    ]
+  },
+  "evidence": [
+    {
+      "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\integration-chat25-chat26-20261028-01\\source-state.json",
+      "bytes": 13575,
+      "sha256": "7c565c9b62582c78d634ccfc867e4a9f1911363638f15036f69fba2a2aa95776"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\integration-chat25-chat26-20261028-01\\x86-01-result.json",
+      "bytes": 323,
+      "sha256": "a42e2b62e12fec1bff97ed0e5b4df11f967c51accfdc31cc127ec19974e81b93"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\integration-chat25-chat26-20261028-01\\x64-01-result.json",
+      "bytes": 323,
+      "sha256": "322a5e5fb1cfe18b3d51a2701cb8970af7b1cf2ec8d05a66ee41002cc9e2f23f"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\integration-chat25-chat26-20261028-01\\normal-runtime\\build-receipt.json",
+      "bytes": 13283,
+      "sha256": "dd0c8b845b72c1999f337b97b680692d3c74253ec8bb3237dc768f8074509095"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\integration-chat25-chat26-20261028-01\\fallback-verified.json",
+      "bytes": 3986,
+      "sha256": "5313d1d2a1d420d277bd8703c91de7b79feaa690913a6ced6fb75de5b0de9b06"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\integration-chat25-chat26-20261028-01\\native\\scene01\\focus-request.json",
+      "bytes": 146,
+      "sha256": "1da6f96e5ca2d5726c89fbf0547fe1193bbbeafa05a4674f745b86f905ede066"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\integration-chat25-chat26-20261028-01\\native\\scene01\\setup-result.json",
+      "bytes": 868,
+      "sha256": "828c011fd5c8297738aec42f3b1a1791c37083a82f284a70efef8f50ea10abd6"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\integration-chat25-chat26-20261028-01\\native\\scene01\\finish.json",
+      "bytes": 336,
+      "sha256": "88833038ff9b4f6c4a688a20cdfe2027e56c3c82b306463a458f91ec94b2dc72"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\integration-chat25-chat26-20261028-01\\xr-preflight01\\preflight-receipt.json",
+      "bytes": 29586,
+      "sha256": "a3a2bd0209b9504b5a8d1e3206a4c2423b3bc3fd92ac1d851b7994a6dde678e6"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\integration-chat25-chat26-20261028-01\\freeze-storage.json",
+      "bytes": 3188,
+      "sha256": "d93ba62123045720574f67b286ada33ae11bdf10b8926a82ceb733d084b199a4"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\integration-chat25-chat26-20261028-01\\storage\\initial-build-refusal.json",
+      "bytes": 594,
+      "sha256": "1bfc4b1059603632cdf294e5e1fe23c2641eafef41268514cd2d051a79cd4a2a"
+    }
+  ],
+  "remaining": [
+    "Resolve current foreground/window admission before a fresh bounded native scene",
+    "Obtain current neutral calibration and five matched single-jab/hit-air pairs",
+    "Withdrawal/rejab, incidental grip/reload and interruption native matrix",
+    "Action-matched sound Starts, original context, native outcome and physical-headset perception",
+    "Exact-candidate install plus startup/equipment smoke after runtime readiness"
+  ],
+  "limitations": [
+    "Deterministic fixtures do not establish native hits or damage deduplication",
+    "Original sound-call context is not causal ownership or audibility",
+    "Accepted opening knife progression retained; no gameplay/audio fix claimed",
+    "Failed setup and OpenXR episodes remain retained; no automatic retry"
+  ]
+}

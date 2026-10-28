@@ -1,0 +1,47 @@
+Work in G:\Unity\VRMMO\FrostbiteVR.
+
+Selected tasks: CHAT25 - Knife single-jab reliability, and CHAT26 - Knife
+action-matched audio. Continue their integration-owned bounded native validation;
+do not start another card. My selection overrides older next-task suggestions.
+
+Read COMMON and only CHAT25/CHAT26 from:
+G:\Unity\VRMMO\FrostbiteVR\handoff\campaign-chat-queue\CHAT-QUEUE.txt
+Follow the integration role in:
+G:\Unity\VRMMO\FrostbiteVR\handoff\campaign-chat-queue\INTEGRATE.txt
+Read COORDINATION.txt beside it, applicable AGENTS.md, CURRENT.md, and:
+G:\Unity\VRMMO\FrostbiteVR\handoff\integrations\chat25-chat26-20261028-integration01\HANDOFF.txt
+G:\Unity\VRMMO\FrostbiteVR\handoff\integrations\chat25-chat26-20261028-integration01\receipt.json
+G:\Unity\VRMMO\FrostbiteVR\handoff\tasks\CHAT25\20261028-knife-r1\HANDOFF.txt
+G:\Unity\VRMMO\FrostbiteVR\handoff\tasks\CHAT26\20261028-knife-r1\HANDOFF.txt
+Read the linked task DIAGNOSTIC.txt requests when preparing their episodes.
+
+The d55b3c6249c9f56e4235f7805a80d334a5dc610f task is already integrated on
+checkpoint/436-r56-equipment-rendering. Verify its current local/remote tip;
+do not remerge the old task or replace newer source. The exact built source is
+7a5d8aa7281de90e877b35b8ac73d145191161a6. Both normal builds passed305/305,
+plus four focused suites each. The six binary/PDB pairs are frozen in:
+G:\Unity\VRMMO\FrostbiteVR\reports\integration-chat25-chat26-20261028-01\normal-runtime\build-receipt.json
+Receipt SHA256: dd0c8b845b72c1999f337b97b680692d3c74253ec8bb3237dc768f8074509095
+Verify those pins; do not rebuild unchanged binaries for documentation-only edits.
+
+Scene01/game19 stopped at foreground admission before images, menu input or
+native attachment. The game closed normally and all three profiles were restored.
+Preserve that failure. Resolve foreground/window setup before another episode;
+review and rebind native wrappers to a new run/lease/output/process identity.
+Do not run finished-run wrappers unchanged, reuse a historical blade axis, or
+recreate the antivirus-refused historical Continue injector. Use reviewed normal
+menu navigation. Acquire the exclusive integration lease before shared mutations.
+
+The emulated D3D11 receiver does not need OpenXR. Obtain current neutral
+calibration and complete the bounded single-jab/hit-miss, withdrawal/rejab,
+incidental/reload/grip and interruption matrix when admission succeeds. Keep
+recognition, native damage/health, sound Starts/context and headset perception
+separate. Preserve accepted opening knife progression; make no speculative fix.
+The separate exact-candidate SteamVR preflight failed XrResult=-2. Retry it only
+after a relevant readiness change. Launcher0.1.12 and settings are unchanged;
+installation/startup/equipment smoke and physical-headset acceptance are pending.
+
+Update the short integration and task handoffs with actual outcomes, commit/push
+the reviewed FrostbiteVR source/status changes through INTEGRATE.txt, release
+only your own lease after cleanup, and give me the complete next-chat prompt.
+No public release or unrelated task work.
