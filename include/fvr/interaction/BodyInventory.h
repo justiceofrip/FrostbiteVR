@@ -97,6 +97,13 @@ struct BodyInventoryConfig {
 class BodyInventory {
 public:
     explicit BodyInventory(BodyInventoryConfig config={}):config_(config){}
+    // Observation of the existing transaction timeout, not fresh input/pose or
+    // dispatch authority. Polling cannot extend the original request lifetime.
+    std::optional<std::int64_t> AcknowledgementDeadline(std::uint64_t request)const noexcept {
+        if(!pending_||pending_->id!=request||config_.acknowledgementTimeoutNs<=0||startedNs_<0||
+           startedNs_>std::numeric_limits<std::int64_t>::max()-config_.acknowledgementTimeoutNs)return {};
+        return startedNs_+config_.acknowledgementTimeoutNs;
+    }
     BodyInventoryResult Update(const BodyInventorySample& sample) {
         BodyInventoryResult out;
         const auto& s=sample.inventory;

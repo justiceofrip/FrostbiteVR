@@ -104,6 +104,12 @@ struct HandInteractionResult {
     std::optional<HandClaim> claim;
     std::array<std::optional<HandClaimRelease>,2> released{};
 };
+// Keep the ordinary lifecycle result separate: downstream policies inspect
+// its release reasons and must not mistake root renewal for a new acquisition.
+struct HandGunHoldUpdateResult {
+    HandInteractionResult lifecycle{};
+    std::optional<HandClaim> renewed;
+};
 // Each destination retains its own original geometry packet. A custody exchange
 // does not restamp contact, synthesize a grip edge, or transfer gesture progress.
 struct HandCustodyTarget {HandClaimRequest request{};HandInteractionSample evidence{};};
@@ -140,6 +146,13 @@ public:
     HandInteraction(const HandInteraction&)=delete;
     HandInteraction& operator=(const HandInteraction&)=delete;
     HandInteractionResult Update(const HandInteractionSample&)noexcept;
+    // Authoritative current-input update with an explicit semantic equipped-gun
+    // contact. A newer source observed before the old hold's deadline may renew
+    // that exact root GunHold before the expiry sweep. This is not historical
+    // geometry replay: both source clocks remain original, and an already
+    // invalidated token, real source gap or failed proof follows ordinary Update.
+    // Other-hand claims always retain their own evidence and deadlines.
+    HandGunHoldUpdateResult UpdateAndRenewGunHold(const HandInteractionSample&,const HandClaimToken&,const HandContactProof&)noexcept;
     HandInteractionResult Acquire(const HandInteractionSample&,const HandClaimRequest&)noexcept;
     HandInteractionResult Transfer(const HandInteractionSample&,const HandClaimToken&,const HandClaimRequest&)noexcept;
     HandInteractionResult Renew(const HandInteractionSample&,const HandClaimToken&,const HandContactProof&)noexcept;
@@ -193,7 +206,7 @@ private:
     bool Evidence(const HandInteractionSample&,InteractionHand,HandInteractionResult&)const noexcept;
     void Remember(const HandInteractionSample& s)noexcept {history_[historyNext_]=s;historyNext_=(historyNext_+1)%history_.size();}
     bool Exact(const HandClaimToken&)const noexcept;
-    HandInteractionResult UpdateImpl(const HandInteractionSample&,const HandClaimToken* deferredGun=nullptr)noexcept;
+    HandInteractionResult UpdateImpl(const HandInteractionSample&,const HandClaimToken* deferredGun=nullptr,const HandClaim* renewedGun=nullptr)noexcept;
     HandInteractionResult Prepare(const HandInteractionSample&,const HandClaimToken* deferredGun=nullptr)noexcept;
     HandInteractionResult Change(const HandInteractionSample&,const HandClaimToken*,const HandClaimRequest&,const HandInteractionSample* evidence=nullptr)noexcept;
     HandInteractionResult Refresh(const HandInteractionSample&,const HandClaimToken&,const HandContactProof&,const HandInteractionSample* evidence)noexcept;
@@ -235,7 +248,32 @@ inline HandInteractionResult HandInteraction::Reset()noexcept {
     invalidationBarrier_.fill(sample_.sequence);history_={};historyNext_=0;return out;
 }
 inline HandInteractionResult HandInteraction::Update(const HandInteractionSample& s)noexcept {return UpdateImpl(s);}
-inline HandInteractionResult HandInteraction::UpdateImpl(const HandInteractionSample& s,const HandClaimToken* deferredGun)noexcept {
+inline HandGunHoldUpdateResult HandInteraction::UpdateAndRenewGunHold(const HandInteractionSample& s,const HandClaimToken& token,const HandContactProof& proof)noexcept {
+    std::optional<HandClaim> renewed;
+    if(initialized_&&!blocked_&&Exact(token)&&token.kind==HandClaimKind::GunHold&&!token.prerequisiteClaim){
+        const auto h=Index(token.hand);const auto& held=*claims_[h];
+        // Validate continuity before replacing sample_. No time observed by this
+        // arbiter may already have expired this hold. Never renew from the same
+        // packet, a fabricated later deadline, or a differently bound contact.
+        if(s.owner==sample_.owner&&s.owner==token.owner&&s.sequence>sample_.sequence&&
+           s.sequence>held.inputSequence&&s.observedNs>sample_.observedNs&&
+           s.observedNs<held.deadlineNs&&lastNow_<held.deadlineNs&&
+           s.nowNs>=lastNow_&&s.nowNs>=s.observedNs&&s.nowNs<s.deadlineNs&&
+           sample_.focused&&sample_.tracked[h]&&!sample_.released[h]&&
+           s.focused&&s.tracked[h]&&!s.released[h]&&
+           held.inputSequence>invalidationBarrier_[h]&&held.inputSequence>=releaseBarrier_[h]&&
+           ValidKey(proof.key)&&proof.key==token.contact&&proof.eligible&&
+           proof.inputSequence==s.sequence&&proof.deadlineNs==s.deadlineNs){
+            renewed=held;renewed->inputSequence=proof.inputSequence;renewed->deadlineNs=proof.deadlineNs;
+        }
+    }
+    // General clock, owner, input-lifetime, focus and tracking validation still
+    // runs before commit. A failed candidate cannot shield an expired claim.
+    auto out=UpdateImpl(s,nullptr,renewed?&*renewed:nullptr);
+    auto committed=out.claim;out.accepted=false;out.claim.reset();
+    return {out,committed};
+}
+inline HandInteractionResult HandInteraction::UpdateImpl(const HandInteractionSample& s,const HandClaimToken* deferredGun,const HandClaim* renewedGun)noexcept {
     if(dropObserver_.input)dropObserver_.input(dropObserver_.context,s,lastNow_);
     HandInteractionResult out;
     const auto reject=[&](HandInteractionReason reason){
@@ -269,6 +307,12 @@ inline HandInteractionResult HandInteraction::UpdateImpl(const HandInteractionSa
     }else {sample_=s;blocked_=false;Remember(s);}
     out.inputValid=true;
     if(!sample_.focused){out.reason=HandInteractionReason::FocusLost;invalidationBarrier_.fill(sample_.sequence);DropAll(out.reason,out);return out;}
+    if(renewedGun&&Exact(renewedGun->token)){
+        const auto h=Index(renewedGun->token.hand);
+        if(sample_.tracked[h]&&!sample_.released[h]){
+            claims_[h]=*renewedGun;out.accepted=true;out.claim=*renewedGun;
+        }
+    }
     for(std::size_t h=0;h<2;++h){
         if(!sample_.tracked[h]){invalidationBarrier_[h]=sample_.sequence;Drop(h,HandInteractionReason::TrackingLost,out);}
         else if(sample_.released[h]){

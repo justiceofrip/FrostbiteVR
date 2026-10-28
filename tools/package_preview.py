@@ -18,6 +18,7 @@ EXACT = (
     "launcher/Start-Launcher.ps1", "launcher/Install-BC2VRLauncher.ps1",
     "launcher/Install-Package.ps1", "launcher/Install.cmd",
     "launcher/Create-DesktopShortcut.ps1", "tools/Build-DesktopLauncher.ps1",
+    "launcher/runtime/Resolution.ps1",
     "tests/Test-DesktopLauncher.ps1", "docs/DESKTOP-LAUNCHER.md",
     "cmake/ManualEmptyRegistryCoverage.cmake",
     "cmake/Bc2NativeOperationCapability.cmake",
@@ -30,6 +31,7 @@ EXACT = (
     "tools/package_preview.py", "tools/Build-SingleplayerPreview.ps1",
     "tests/test_package_preview.py", "tests/Test-PreviewLaunchers.ps1",
     "tools/bc2_weapon_asset_pipeline.py", "tools/bc2_mesh_geometry.py", "tools/inspect_bc2_mesh_asset.py",
+    "tools/bc2_asset_resource_identity.py",
     "tools/bc2_weapon_config_pipeline.py", "tests/test_bc2_weapon_config_pipeline.py",
     "tools/bc2_visibility_descriptors.py", "tests/test_bc2_visibility_descriptors.py",
     "tests/test_bc2_visibility_configuration_paths.py",
@@ -87,6 +89,8 @@ EXACT = (
     "licenses/MinHook-BSD.txt", "licenses/OpenXR-Apache-2.0.txt", "licenses/JsonCpp-MIT.txt",
 )
 RUNTIME = (
+    'launcher/runtime/Resolution.ps1',
+    'tools/bc2_asset_resource_identity.py',
     'tools/bc2_authored_grip_bindings.py',
     'tools/bc2_authored_archive_set.py',
     'tools/bc2_authored_magazine_geometry.py',
@@ -118,6 +122,8 @@ RUNTIME = (
 BINARIES = {
     "build/x86/BC2NativeProbe.dll": 0x14C,
     "build/x86/BC2NativeTrace.exe": 0x14C,
+    "build/x86/BC2NativeResolution.exe": 0x14C,
+    "build/x86/BC2ResolutionBootstrap.dll": 0x14C,
     "build/x64/BC2XrHost.exe": 0x8664,
     "build/x64/runtime/openxr/win64/openxr_loader.dll": 0x8664,
 }

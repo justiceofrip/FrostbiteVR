@@ -3,6 +3,7 @@
 #include <MinHook.h>
 #include <cstdint>
 #include "../include/fvr/graphics/D3D11PresentationPacing.h"
+#include "../include/fvr/graphics/FrameBridgePresentService.h"
 #include "../src/games/bc2/NativeViewAbi.h"
 #include "../src/games/bc2/Bc2ProjectileLaunch.h"
 using ContextCamera=void(__thiscall*)(void*,void*,void*);
@@ -37,14 +38,42 @@ __declspec(noinline) unsigned __fastcall FakeRelease(void* self,void*){return --
 __declspec(noinline) void __fastcall FakeSetActive(void* self,void*,bool active){static_cast<NativeViewFake*>(self)->active=active;}
 __declspec(noinline) void __fastcall FakeUpdate(void* self,void*,void* req,unsigned frame,float dt,void* extra,void* out1,void* out2){auto& d=*static_cast<Data*>(self);++d.update;d.request=req;d.frame=frame;d.dt=dt;*static_cast<void**>(out1)=req;*static_cast<void**>(out2)=extra;}
 void __fastcall HookUpdate(void* self,void*,void* req,unsigned frame,float dt,void* extra,void* out1,void* out2){++hooks;originalUpdate(self,req,frame,dt,extra,out1,out2);}
-struct PresentCall {UINT interval=0,flags=0;unsigned calls=0;};
+struct PresentCall {
+    UINT interval=0,flags=0;unsigned calls=0;
+    HRESULT result=DXGI_ERROR_DEVICE_REMOVED;DWORD error=0x1234;
+    bool wake=false,nest=false,changeOwner=false,ready=false;unsigned reaped=0;
+};
 fvr::graphics::SwapChainPresentFn originalPresent=nullptr;
 IDXGISwapChain* pacingTarget=nullptr;bool pacingActive=false;
+bool presentServiceActive=false;unsigned beforeServices=0,afterServices=0;
+fvr::graphics::FrameBridgePresentService presentService;
+fvr::graphics::FrameBridgePresentIdentity presentOwner{},presentCurrent{};
 __declspec(noinline) HRESULT STDMETHODCALLTYPE FakePresent(IDXGISwapChain* chain,UINT interval,UINT flags){
-    auto& d=*reinterpret_cast<PresentCall*>(chain);d.interval=interval;d.flags=flags;++d.calls;return DXGI_ERROR_DEVICE_REMOVED;
+    auto& d=*reinterpret_cast<PresentCall*>(chain);d.interval=interval;d.flags=flags;++d.calls;
+    if(presentServiceActive){
+        if(d.nest){d.nest=false;fvr::graphics::SwapChainPresentFn volatile nested=FakePresent; nested(chain,interval,flags);}
+        if(d.wake)d.ready=true;
+        if(d.changeOwner)++presentCurrent.context;
+    }
+    SetLastError(d.error);return d.result;
 }
 HRESULT STDMETHODCALLTYPE HookPresent(IDXGISwapChain* chain,UINT interval,UINT flags){
-    return fvr::graphics::PresentDesktopForVr(originalPresent,chain,interval,flags,pacingActive&&chain==pacingTarget);
+    if(!presentServiceActive)return fvr::graphics::PresentDesktopForVr(originalPresent,chain,interval,flags,pacingActive&&chain==pacingTarget);
+    fvr::graphics::FrameBridgePresentService::Scope scope(presentService,true);
+    const auto expected=presentOwner;
+    const auto boundary=[&]()noexcept {
+        fvr::graphics::FrameBridgePresentBoundary b;b.current=presentCurrent;
+        b.presentedSwapchain=reinterpret_cast<std::uintptr_t>(chain);
+        b.enabled=b.lifetimeHeld=b.bridgeOwnerCurrent=b.connected=b.nativeStateRestored=true;
+        b.test=(flags&DXGI_PRESENT_TEST)!=0;return b;
+    };
+    auto& d=*reinterpret_cast<PresentCall*>(chain);
+    const auto poll=[&]()noexcept {if(d.ready){d.ready=false;++d.reaped;}SetLastError(ERROR_INVALID_DATA);};
+    if(scope.Run(expected,boundary(),poll))++beforeServices;
+    const auto result=fvr::graphics::PresentDesktopForVr(originalPresent,chain,interval,flags,pacingActive&&chain==pacingTarget);
+    const auto error=GetLastError();
+    if(scope.RunAfterPresent(result,expected,boundary(),poll))++afterServices;
+    SetLastError(error);return result;
 }
 using GameplayUpdate=void(__thiscall*)(void*,float);GameplayUpdate originalGameplay;
 __declspec(noinline) void __fastcall FakeGameplay(void* self,void*,float dt){auto& d=*static_cast<Data*>(self);d.dt=dt;++d.frame;}
@@ -150,6 +179,24 @@ int main(){
         pacingActive=false;CHECK(present(pacingTarget,1,0)==DXGI_ERROR_DEVICE_REMOVED);CHECK(desktop.interval==1);
         pacingActive=true;CHECK(present(pacingTarget,5,0)==DXGI_ERROR_DEVICE_REMOVED);CHECK(desktop.interval==5);
     }
+    // Real stdcall detour: original success exposes an ACK; only the outer
+    // post phase reaps it. Return status, arguments and LastError stay native.
+    presentServiceActive=true;pacingActive=true;
+    for(unsigned scenario=0;scenario<6;++scenario){
+        PresentCall sample;sample.wake=true;sample.result=S_OK;sample.error=0xabc123;
+        sample.nest=scenario==1;sample.changeOwner=scenario==2;
+        if(scenario==3)sample.result=DXGI_ERROR_DEVICE_REMOVED;
+        if(scenario==4)sample.result=DXGI_STATUS_OCCLUDED;
+        const UINT flags=scenario==5?DXGI_PRESENT_TEST:DXGI_PRESENT_DO_NOT_WAIT;
+        pacingTarget=reinterpret_cast<IDXGISwapChain*>(&sample);
+        presentOwner={1,2,3,4,reinterpret_cast<std::uintptr_t>(pacingTarget),GetCurrentThreadId()};presentCurrent=presentOwner;
+        beforeServices=afterServices=0;
+        CHECK(present(pacingTarget,1,flags)==sample.result);CHECK(GetLastError()==sample.error);
+        CHECK(sample.interval==(scenario==5?1u:0u)&&sample.flags==flags&&sample.calls==(scenario==1?2u:1u));
+        CHECK(beforeServices==(scenario==5?0u:1u));
+        CHECK(afterServices==(scenario<2?1u:0u)&&sample.reaped==(scenario<2?1u:0u));
+    }
+    presentServiceActive=false;
     World volatile world=reinterpret_cast<World>(FakeWorld);Prepare volatile prepare=reinterpret_cast<Prepare>(FakePrepare);Draw volatile draw=reinterpret_cast<Draw>(FakeDraw);
     Visibility volatile visibility=reinterpret_cast<Visibility>(FakeVisibility);
     Update volatile update=reinterpret_cast<Update>(FakeUpdate);

@@ -1,6 +1,7 @@
 #include "Bc2MechanismAudio.h"
 #include "Bc2AudioCachePath.h"
 #include "Bc2ShellReloadAudio.h"
+#include "Bc2SelectedKnifeNative.h"
 #include <Windows.h>
 #include <mmsystem.h>
 #include <mmddk.h>
@@ -88,6 +89,11 @@ void Dispatch(bool start,void* self,const void* guid,unsigned unused) noexcept {
     Row row;row.ns=Now();row.thread=GetCurrentThreadId();row.self=unsigned(reinterpret_cast<std::uintptr_t>(self));
     row.guidAddress=unsigned(reinterpret_cast<std::uintptr_t>(guid));row.unused=unused;row.start=start;
     if(!Read(row.guidAddress,row.guid.data(),row.guid.size())){original(self,guid,unused);return;}
+#ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
+    // Default-off private observation through this existing verified boundary.
+    // No return/suppression path: knife, NPC and unknown sounds still run stock.
+    if(selectedKnife::SoundObservationEnabled())selectedKnife::ObserveSound(start,row.self,row.guid,unused);
+#endif
     if(shellReloadAudio::Dispatch(start,row.self,row.guid))return;
     const auto cue=Match(row.guid);row.cue=unsigned(cue);
     // All unrelated animation sounds pass through without owner/source reads.

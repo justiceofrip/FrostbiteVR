@@ -17,6 +17,21 @@ struct OwnerScopeDiagnostic {
     const char* stage="none";unsigned address=0,bytes=0,expected=0,observed=0;
     bool readFailed=false,typeFailed=false;
 };
+// Ownership evidence from an unsuccessful state read. Deliberately has no
+// firing observation and cannot substitute for Native or admit an attack.
+struct NativeRecognitionOwner {
+    ReloadStateSnapshot client{};
+    ReloadServerLinks links{};
+    unsigned clientEffects=0;
+    static constexpr bool attackAuthority=false;
+};
+enum class NativeReadFailure:unsigned {None,ScopeBefore,Branch,ScopeAfter,BracketLinks,BracketEffects,FiringIncoherent,Count};
+struct NativeReadDiagnostic {
+    NativeReadFailure failure=NativeReadFailure::None;
+    OwnerScopeDiagnostic scope{};
+    private_knife::detail::BranchDiagnostic branch{};
+    std::optional<NativeRecognitionOwner> recognitionOwner;
+};
 enum class OwnerPhase:unsigned {None,ScopeBefore,ScopeAfter,BracketLinks,BracketEffects,SourceEffects,SourceLinks};
 struct OwnerDiagnostic {
     OwnerPhase phase=OwnerPhase::None;OwnerScopeDiagnostic scope{};
@@ -132,11 +147,30 @@ inline bool Scope(const Reader& r,const ReloadServerBinding& b,const ReloadState
 }
 }
 inline std::optional<Native> ReadNative(const ReloadStateMemory& memory,const ReloadServerBinding& server,
-    const ReloadStateBinding& state,unsigned base,const ReloadStateSnapshot& client)noexcept {
+    const ReloadStateBinding& state,unsigned base,const ReloadStateSnapshot& client,
+    NativeReadDiagnostic* diagnostic=nullptr)noexcept {
+    if(diagnostic)*diagnostic={};
     detail::Reader r{memory};Native out;out.client=client;ReloadServerLinks after{};unsigned effectsAfter=0;
-    if(!detail::Scope(r,server,state,base,client,out.links,out.clientEffects)||
-       !private_knife::detail::Branch(r,state,base,out.links.item,client.config,out.server)||
-       !detail::Scope(r,server,state,base,client,after,effectsAfter)||after!=out.links||effectsAfter!=out.clientEffects)return {};
+    const auto fail=[&](NativeReadFailure reason)->std::optional<Native>{
+        if(diagnostic)diagnostic->failure=reason;return {};
+    };
+    if(!detail::Scope(r,server,state,base,client,out.links,out.clientEffects,true,diagnostic?&diagnostic->scope:nullptr))
+        return fail(NativeReadFailure::ScopeBefore);
+    const bool branch=private_knife::detail::Branch(r,state,base,out.links.item,client.config,out.server,
+        diagnostic?&diagnostic->branch:nullptr);
+    // Without optional classification, keep the existing immediate failure.
+    // Only an incoherent state block receives a second owner bracket. Read,
+    // type, configuration and malformed-state failures are never tolerated.
+    if(!branch&&(!diagnostic||diagnostic->branch.failure!=private_knife::detail::BranchFailure::Incoherent))
+        return fail(NativeReadFailure::Branch);
+    if(!detail::Scope(r,server,state,base,client,after,effectsAfter,true,diagnostic?&diagnostic->scope:nullptr))
+        return fail(NativeReadFailure::ScopeAfter);
+    if(after!=out.links||(!branch&&diagnostic->branch.firing!=out.links.firing))return fail(NativeReadFailure::BracketLinks);
+    if(effectsAfter!=out.clientEffects)return fail(NativeReadFailure::BracketEffects);
+    if(!branch){
+        diagnostic->recognitionOwner=NativeRecognitionOwner{client,out.links,out.clientEffects};
+        return fail(NativeReadFailure::FiringIncoherent);
+    }
     return out;
 }
 namespace detail {

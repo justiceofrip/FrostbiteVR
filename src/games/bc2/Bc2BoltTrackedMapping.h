@@ -9,6 +9,13 @@ struct Bc2BoltControllerContact {
     bool mappingValid=false;float units=1;
     math::Matrix4 nativePartInWeapon{};bool nativePartValid=false;
 };
+// Immutable rig/controller mapping, separately owned by established custody.
+// No rendered weapon/body pose or source lifetime is retained in this type.
+struct Bc2BoltWristMapping {
+    ReloadStateOwner nativeOwner{};interaction::HandInteractionOwner owner{};
+    std::uint64_t rigFingerprint=0;
+    std::array<math::Matrix4,2> wristToGrip{};float units=1;
+};
 struct Bc2BoltPackCounters {unsigned contacts=0,poses=0,copies=0,pairs=0,fallbacks=0;};
 // The caller supplies its CURRENT reference-to-native-world anchor after any
 // snap turn or roomscale compensation. This is not an old renderer anchor
@@ -18,6 +25,8 @@ struct Bc2BoltBodyFrame {
     math::Pose referenceHead{};math::Matrix4 bodyWorldMeters{};float units=1;
 };
 std::optional<std::array<math::Matrix4,2>> MapBoltTrackedWrists(const Bc2BoltControllerContact&,
+    const interaction::InputFrame&,const interaction::HandInteractionSample&,const Bc2BoltBodyFrame&)noexcept;
+std::optional<std::array<math::Matrix4,2>> MapBoltCustodyWrists(const Bc2BoltWristMapping&,
     const interaction::InputFrame&,const interaction::HandInteractionSample&,const Bc2BoltBodyFrame&)noexcept;
 // Preserve the original same-frame contact attachment through an updated
 // world anchor; roomscale/snap turning cannot become a new arbitrary grasp.

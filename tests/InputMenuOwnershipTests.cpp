@@ -47,12 +47,47 @@ int SourceExpiry(){Fixture x;auto menu=x.Step();CHECK(interaction::GameplayOwnsI
     x.state.mode=ipc::MenuMode::Unknown;CHECK(x.Step().owner==interaction::InputMenuOwner::Unknown);
     x.state.mode=ipc::MenuMode::Gameplay;x.deadline=x.now+200000000;
     CHECK(x.Step(0,20000000,true,false).owner==interaction::InputMenuOwner::Unknown);return 0;}
+int WorldPresentationRequiresNativeGameplay(){
+    ipc::MenuState state{1,10,1000,ipc::MenuMode::Gameplay,0,0,0,0};
+    CHECK(interaction::MenuAllowsWorldPresentation(state,900));
+    // Repeated retained (Busy) observations preserve the original boundary.
+    for(const auto now:{950,999})CHECK(interaction::MenuAllowsWorldPresentation(state,now));
+    CHECK(state.deadlineQpc==1000);
+    CHECK(!interaction::MenuAllowsWorldPresentation(state,1000));
+    CHECK(!interaction::MenuAllowsWorldPresentation(state,1001));
+    CHECK(!interaction::MenuAllowsWorldPresentation(state,0));
+    state.logicalWidth=1280;state.logicalHeight=720;
+    for(const auto mode:{ipc::MenuMode::Unknown,ipc::MenuMode::Menu,ipc::MenuMode::Passive}){
+        state.mode=mode;CHECK(!interaction::MenuAllowsWorldPresentation(state,900));
+    }
+    state.mode=ipc::MenuMode::Gameplay;state.epoch=0;
+    CHECK(!interaction::MenuAllowsWorldPresentation(state,900));
+    state.epoch=11;++state.sequence;state.deadlineQpc=1200;
+    CHECK(interaction::MenuAllowsWorldPresentation(state,1100));
+    // Rendering is independent of a hand/chord lease or interactive UI target;
+    // a fresh Gameplay declaration also admits noninteractive world cutscenes.
+    CHECK(!state.inputReady);
+    CHECK(!interaction::MenuAllowsWorldPresentation({},1100));return 0;
+}
 int FocusCannotAcknowledge(){Fixture x;x.Step();CHECK(x.Step(interaction::MenuClick).owner==interaction::InputMenuOwner::Pending);
     x.input.focused=false;x.input.hands={};CHECK(x.Step().owner==interaction::InputMenuOwner::Unknown);
     x.input.focused=true;for(auto& h:x.input.hands){h.active=interaction::Components;h.gripTracked=h.aimTracked=true;}
     ++x.input.spaceGeneration;CHECK(x.Step().owner==interaction::InputMenuOwner::Pending);
     ++x.state.epoch;x.state.mode=ipc::MenuMode::Menu;CHECK(x.Step().owner==interaction::InputMenuOwner::Menu);
     ++x.state.epoch;x.state.mode=ipc::MenuMode::Gameplay;CHECK(x.Step().owner==interaction::InputMenuOwner::Gameplay);return 0;}
+int PassiveOwnsNoGameplay(){Fixture x;CHECK(x.Step().owner==interaction::InputMenuOwner::Gameplay);
+    x.state.mode=ipc::MenuMode::Passive;x.state.inputReady=0;++x.state.epoch;
+    auto owner=x.Step();CHECK(owner.owner==interaction::InputMenuOwner::Pending);
+    CHECK(owner.sequence==x.state.sequence&&owner.epoch==x.state.epoch&&owner.deadlineNs==x.deadline);
+    CHECK(!interaction::GameplayOwnsInput(owner,x.now));
+    const auto deadline=owner.deadlineNs;
+    for(unsigned n=0;n<4;++n){owner=x.Step(0,20000000,true,false);
+        CHECK(owner.owner==interaction::InputMenuOwner::Pending&&owner.deadlineNs==deadline);}
+    CHECK(x.Step(0,20000000,true,false).owner==interaction::InputMenuOwner::Unknown);
+    CHECK(x.Step().owner==interaction::InputMenuOwner::Pending);
+    x.state.inputReady=1;CHECK(x.Step().owner==interaction::InputMenuOwner::Unknown);
+    x.state.mode=ipc::MenuMode::Gameplay;++x.state.epoch;
+    CHECK(x.Step().owner==interaction::InputMenuOwner::Gameplay);return 0;}
 int Protocol(){Fixture x;x.input.menu=x.Step();ipc::InputPacket packet{};interaction::InputFrame decoded;
     CHECK(ipc::EncodeInput(x.input,987654321,packet));CHECK(packet.version==4&&packet.bytes==320);
     CHECK(ipc::DecodeInput(packet,decoded));CHECK(decoded.menu==x.input.menu);
@@ -86,5 +121,5 @@ int LegacyNamespaceRejected(){const std::wstring token=L"11112222333344445555666
     ipc::FrameChannel producer;const bool connected=producer.ConnectProducer(token);CloseHandle(map);CloseHandle(mutex);
     CHECK(!connected);return 0;}
 }
-int main(){if(ChordAndAcknowledgement()||SourceExpiry()||FocusCannotAcknowledge()||Protocol()||SourceCallersKeepControls()||ChannelRoundTrip()||LegacyNamespaceRejected())return 1;
-    std::puts("Seven focused menu/transport groups PASS: raw pending chord and native epoch acknowledgement; original expiry; focus/space loss; v3 metadata validation; Unknown preserves other controls; atomic v7 round trip/disconnect; legacy namespace rejection. No game, XR or graphics.");return 0;}
+int main(){if(ChordAndAcknowledgement()||SourceExpiry()||WorldPresentationRequiresNativeGameplay()||FocusCannotAcknowledge()||PassiveOwnsNoGameplay()||Protocol()||SourceCallersKeepControls()||ChannelRoundTrip()||LegacyNamespaceRejected())return 1;
+    std::puts("Nine focused menu/transport groups PASS: raw pending chord and native epoch acknowledgement; original expiry; explicit Gameplay presentation; focus/space loss; passive input denial; metadata validation; Unknown preserves other controls; atomic round trip/disconnect; legacy namespace rejection. No game, XR or graphics.");return 0;}

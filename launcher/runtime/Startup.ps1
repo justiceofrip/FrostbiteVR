@@ -19,8 +19,94 @@ function Get-Bc2OpenXrSelection {
     $label=if($json.runtime.ContainsKey('name') -and $json.runtime.name){[string]$json.runtime.name}else{[IO.Path]::GetFileNameWithoutExtension($manifest)}
     return @{source=$source;manifest=[IO.Path]::GetFullPath($manifest);library=$library;label=$label}
 }
+function Get-Bc2ExecutablePeLayout([string]$Exe) {
+    # File-only structural evidence. It does not verify native signatures or
+    # authorize a hook. Read at most the headers and 96 section records.
+    $result=@{schema='bc2vr.executable-pe.v1';valid=$false;file_bytes=$null;machine=$null;timestamp=$null;optional_magic=$null;image_base=$null;image_size=$null;entry_rva=$null;characteristics=$null;dll_characteristics=$null;section_count=$null;sections=@();error=$null}
+    $file=$null
+    try {
+        $file=[IO.File]::Open($Exe,'Open','Read',[IO.FileShare]::Read)
+        $result.file_bytes=$file.Length
+        if($file.Length -lt 64 -or $file.Length -gt 512MB){throw 'Executable length is outside the supported inspection limit.'}
+        $readAt={param([long]$Offset,[int]$Count)
+            if($Offset -lt 0 -or $Count -lt 0 -or $Offset -gt $file.Length -or $Count -gt $file.Length-$Offset){throw 'PE structure extends outside the executable.'}
+            $null=$file.Seek($Offset,[IO.SeekOrigin]::Begin);$buffer=[byte[]]::new($Count);$read=0
+            while($read -lt $Count){$n=$file.Read($buffer,$read,$Count-$read);if($n -le 0){throw 'PE structure is truncated.'};$read+=$n}
+            return ,$buffer
+        }
+        $dos=& $readAt 0 64
+        if([BitConverter]::ToUInt16($dos,0) -ne 0x5a4d){throw 'Executable has no MZ header.'}
+        $nt=[long][BitConverter]::ToUInt32($dos,60)
+        if($nt -lt 64){throw 'PE header offset is invalid.'}
+        $coff=& $readAt $nt 24
+        if([BitConverter]::ToUInt32($coff,0) -ne 0x4550){throw 'Executable has no PE signature.'}
+        $result.machine=[int][BitConverter]::ToUInt16($coff,4)
+        $result.timestamp=[long][BitConverter]::ToUInt32($coff,8)
+        $result.characteristics=[int][BitConverter]::ToUInt16($coff,22)
+        $result.section_count=[int][BitConverter]::ToUInt16($coff,6)
+        $optionalBytes=[int][BitConverter]::ToUInt16($coff,20)
+        if($result.section_count -lt 1 -or $result.section_count -gt 96 -or $optionalBytes -lt 224 -or $optionalBytes -gt 4096){throw 'PE section count or optional-header size is invalid.'}
+        $optional=& $readAt ($nt+24) $optionalBytes
+        $result.optional_magic=[int][BitConverter]::ToUInt16($optional,0)
+        $result.image_base=[long][BitConverter]::ToUInt32($optional,28)
+        $result.image_size=[long][BitConverter]::ToUInt32($optional,56)
+        $result.entry_rva=[long][BitConverter]::ToUInt32($optional,16)
+        $result.dll_characteristics=[int][BitConverter]::ToUInt16($optional,70)
+        $headers=[long][BitConverter]::ToUInt32($optional,60)
+        $tableAt=$nt+24+$optionalBytes;$tableBytes=40*$result.section_count
+        if($headers -lt $tableAt+$tableBytes -or $headers -gt $file.Length -or $headers -gt $result.image_size){throw 'PE header extent is invalid.'}
+        $table=& $readAt $tableAt $tableBytes
+        for($i=0;$i -lt $result.section_count;$i++){
+            $at=$i*40
+            $section=@{index=$i;rva=[long][BitConverter]::ToUInt32($table,$at+12);virtual_bytes=[long][BitConverter]::ToUInt32($table,$at+8);raw_offset=[long][BitConverter]::ToUInt32($table,$at+20);raw_bytes=[long][BitConverter]::ToUInt32($table,$at+16);characteristics=[long][BitConverter]::ToUInt32($table,$at+36)}
+            $extent=[Math]::Max($section.virtual_bytes,$section.raw_bytes)
+            $result.sections+=,$section
+            if($section.raw_offset -gt $file.Length -or $section.raw_bytes -gt $file.Length-$section.raw_offset -or
+                $section.rva -gt $result.image_size -or $extent -gt $result.image_size-$section.rva -or
+                ($section.raw_bytes -gt 0 -and $section.raw_offset -lt $headers) -or ($extent -gt 0 -and $section.rva -lt $headers)){throw 'PE section bounds overlap headers or extend outside the file/image.'}
+            for($j=0;$j -lt $i;$j++){
+                $prior=$result.sections[$j];$priorExtent=[Math]::Max($prior.virtual_bytes,$prior.raw_bytes)
+                if(($extent -gt 0 -and $priorExtent -gt 0 -and $section.rva -lt $prior.rva+$priorExtent -and $prior.rva -lt $section.rva+$extent) -or
+                    ($section.raw_bytes -gt 0 -and $prior.raw_bytes -gt 0 -and $section.raw_offset -lt $prior.raw_offset+$prior.raw_bytes -and $prior.raw_offset -lt $section.raw_offset+$section.raw_bytes)){throw 'PE sections overlap.'}
+            }
+        }
+        if($result.machine -ne 0x14c -or $result.optional_magic -ne 0x10b){throw 'Experimental Steam startup requires a PE32/I386 executable.'}
+        if($result.timestamp -ne 1314210909 -or $result.image_base -ne 0x400000 -or $result.image_size -ne 0x1913000){throw 'Experimental Steam executable layout differs from native build 795745.'}
+        $result.valid=$true
+    } catch {
+        # Our fixed validation messages are safe; filesystem exception messages
+        # can contain a player's private installation path and are not exported.
+        $result.error=if($_.Exception -is [System.Management.Automation.MethodInvocationException] -or $_.Exception -is [IO.IOException] -or $_.Exception -is [UnauthorizedAccessException]){'Executable could not be read for PE inspection.'}else{$_.Exception.Message}
+    } finally {if($file){$file.Dispose()}}
+    return $result
+}
+function Test-Bc2ExecutableAdmission {
+    param([string]$Exe,[string]$Hash,[hashtable]$Config,$ExperimentalSteam=$false)
+    $candidate='22e96001382eb847d3ab0a02b59ec7bb79ba47e04146e74c6c49e38465f38c96'
+    if($Hash -cne $candidate -and $Hash -in $Config.game_sha256){
+        return @{experimental_steam=$false;profile='verified_release';game_verified=$true;pe_layout=$null}
+    }
+    $pe=Get-Bc2ExecutablePeLayout $Exe
+    if($Hash -cne $candidate){
+        $message='This BC2 executable has not been verified for this pre-alpha. No VR hook was attached and the game was not changed. Use Report feedback > Save diagnostics to share its build fingerprint. SHA-256: '+$Hash
+    }elseif($ExperimentalSteam -isnot [bool] -or -not $ExperimentalSteam){
+        $message='This Steam executable is an experimental candidate. Enable the experimental Steam option in the launcher to try it. Native compatibility is not verified; no game was started. SHA-256: '+$Hash
+    }elseif(-not $pe.valid){
+        $message='Experimental Steam startup refused: '+$pe.error+' No game was started. Use Report feedback > Save diagnostics.'
+    }else{
+        # Recheck the exact candidate after the bounded file-only inspection.
+        $rechecked=$null
+        try {$rechecked=(Get-FileHash -LiteralPath $Exe -Algorithm SHA256).Hash.ToLowerInvariant()}catch{}
+        if($null -eq $rechecked){
+            $message='BC2 executable could not be rechecked during experimental Steam admission.'
+        }elseif($rechecked -cne $Hash){
+            $message='BC2 executable changed during experimental Steam admission.'
+        }else{return @{experimental_steam=$true;profile='experimental_steam_795745';game_verified=$false;pe_layout=$pe}}
+    }
+    $failure=[InvalidOperationException]::new($message);$failure.Data['bc2_pe_layout']=$pe;throw $failure
+}
 function Test-Bc2GameInstallation([hashtable]$Settings,[hashtable]$Config,[string]$StateRoot) {
-    $report=@{schema='bc2vr.launch-check.v1';utc=[DateTime]::UtcNow.ToString('o');version=$Config.version;game_found=$false;game_supported=$false;game_sha256=$null;file_version=$null;error=$null}
+    $report=@{schema='bc2vr.launch-check.v1';utc=[DateTime]::UtcNow.ToString('o');version=$Config.version;game_found=$false;game_supported=$false;game_verified=$false;experimental_steam=$false;profile=$null;pe_layout=$null;game_sha256=$null;file_version=$null;error=$null}
     try {
         if(-not $Settings.game_path -or -not [IO.Path]::IsPathFullyQualified($Settings.game_path)){throw 'Choose your Battlefield Bad Company 2 installation folder using Choose game folder in the launcher.'}
         $exe=Join-Path $Settings.game_path 'BFBC2Game.exe'
@@ -28,10 +114,16 @@ function Test-Bc2GameInstallation([hashtable]$Settings,[hashtable]$Config,[strin
         $report.game_found=$true
         $report.game_sha256=(Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant()
         $report.file_version=[Diagnostics.FileVersionInfo]::GetVersionInfo($exe).FileVersion
-        $report.game_supported=$report.game_sha256 -in $Config.game_sha256
-        if(-not $report.game_supported){throw ('This BC2 executable has not been verified for this pre-alpha. No VR hook was attached and the game was not changed. Use Report feedback > Save diagnostics to share its build fingerprint. SHA-256: '+$report.game_sha256)}
-        return @{exe=$exe;sha256=$report.game_sha256}
-    } catch {$report.error=$_.Exception.Message;throw}
+        $steam=$Settings.ContainsKey('steam_compatibility') -and $Settings.steam_compatibility -is [bool] -and $Settings.steam_compatibility
+        $admission=Test-Bc2ExecutableAdmission -Exe $exe -Hash $report.game_sha256 -Config $Config -ExperimentalSteam $steam
+        $report.game_supported=$true;$report.game_verified=$admission.game_verified;$report.experimental_steam=$admission.experimental_steam
+        $report.profile=$admission.profile;$report.pe_layout=$admission.pe_layout
+        return @{exe=$exe;sha256=$report.game_sha256;experimental_steam=$admission.experimental_steam;profile=$admission.profile;game_verified=$admission.game_verified;pe_layout=$admission.pe_layout}
+    } catch {
+        $report.error=$_.Exception.Message
+        if($_.Exception.Data.Contains('bc2_pe_layout')){$report.pe_layout=$_.Exception.Data['bc2_pe_layout']}
+        throw
+    }
     finally {Write-FvrJson (Join-Path $StateRoot 'launch-check.json') $report}
 }
 function Invoke-Bc2OpenXrPreflight([string]$RuntimeRoot,[string]$StateRoot,[hashtable]$Selection) {
@@ -98,6 +190,26 @@ function Read-Bc2NativeFailureError([string]$Path) {
     } catch {return $null}
     finally {if($file){$file.Dispose()}}
 }
+function Get-Bc2ActivationProcessOutcome($OriginalProcess) {
+    # Only the retained original Process can distinguish exit from a failed
+    # identity/access check. Never infer exit from a missing lookup result or
+    # read ExitCode while the original process is still live.
+    $result=@{schema='bc2vr.activation-process.v1';ownership_verified=$false;original_process_state='unavailable';exit_observed=$false;exit_code=$null}
+    try {$exited=$OriginalProcess.HasExited}catch{return $result}
+    if($exited -isnot [bool]){return $result}
+    if(-not $exited){$result.original_process_state='live';return $result}
+    $result.original_process_state='exited';$result.exit_observed=$true
+    try {
+        $code=$OriginalProcess.ExitCode
+        if(($code -is [int] -or $code -is [long] -or $code -is [uint32]) -and
+           [long]$code -ge [long][int]::MinValue -and [long]$code -le [long][uint32]::MaxValue){
+            # Process.ExitCode is signed Int32; retain the Windows DWORD value
+            # for comparison with native diagnostics, including a real zero.
+            $result.exit_code=([long]$code -band [long]4294967295)
+        }
+    }catch{} # A proven exit can still have an unavailable exit code.
+    return $result
+}
 function Get-Bc2StartupFailure([string]$Folder,[string]$Component,[string]$Fallback) {
     if($Component -eq 'native'){
         $detail=Read-Bc2NativeFailureError (Join-Path $Folder 'native-trace.json')
@@ -137,4 +249,37 @@ function Save-Bc2AssetPreparationResult([string]$Cache,[string]$StateRoot,[strin
     }
     Write-FvrJson (Get-FvrChild $StateRoot 'asset-preparation.json') $report
     return $report
+}
+
+function Read-Bc2NativeRunOutcome([string]$Path,[uint32]$ExpectedPid) {
+    $file=$null
+    try {
+        Assert-FvrNoLinks $Path
+        if(-not(Test-Path -LiteralPath $Path -PathType Leaf)){return $null}
+        $file=[IO.File]::Open($Path,'Open','Read',([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete))
+        $count=$file.Length;if($count -le 0 -or $count -gt 8192){return $null}
+        $bytes=[byte[]]::new([int]$count);$read=0
+        while($read -lt $count){$n=$file.Read($bytes,$read,[int]$count-$read);if($n -eq 0){return $null};$read+=$n}
+        if($file.Length -ne $count){return $null}
+        $row=[Text.UTF8Encoding]::new($false,$true).GetString($bytes)|ConvertFrom-Json -AsHashtable -Depth 4 -ErrorAction Stop
+        if($row -isnot [hashtable] -or $row.schema -cne 'bc2vr.native-run-outcome.v1'){return $null}
+        foreach($key in @('pid','outcome','remote_thread_exit_observed','probe_exit','game_exit_code','report_bytes','report_nonempty')){
+            if(-not $row.ContainsKey($key)){return $null}
+        }
+        if(($row.pid -isnot [long] -and $row.pid -isnot [int]) -or $row.pid -ne $ExpectedPid -or $row.pid -le 0){return $null}
+        if($row.remote_thread_exit_observed -isnot [bool]){return $null}
+        foreach($key in @('probe_exit','game_exit_code')){
+            $value=$row[$key]
+            if($null -ne $value -and (($value -isnot [long] -and $value -isnot [int]) -or $value -lt 0 -or $value -gt [uint32]::MaxValue)){return $null}
+        }
+        if($row.outcome -ceq 'game_exited'){
+            if($row.remote_thread_exit_observed -or $null -ne $row.probe_exit){return $null}
+        }elseif($row.outcome -ceq 'remote_thread_exited'){
+            if(-not $row.remote_thread_exit_observed -or $null -eq $row.probe_exit -or $null -ne $row.game_exit_code){return $null}
+        }else{return $null}
+        if($null -eq $row.report_bytes){if($null -ne $row.report_nonempty){return $null}}
+        elseif(($row.report_bytes -isnot [long] -and $row.report_bytes -isnot [int]) -or $row.report_bytes -lt 0 -or
+            $row.report_nonempty -isnot [bool] -or $row.report_nonempty -ne ($row.report_bytes -gt 0)){return $null}
+        return $row
+    }catch{return $null}finally{if($file){$file.Dispose()}}
 }

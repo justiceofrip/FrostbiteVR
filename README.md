@@ -1,37 +1,35 @@
 # FrostbiteVR
 
-**Checkpoint 426 — work-in-progress singleplayer VR framework.** This repository
+**Checkpoint 436 R56 — work-in-progress singleplayer VR framework.** This repository
 contains the framework and Bad Company 2 adapter source. The separate
 [BC2VR releases](https://github.com/justiceofrip/BC2VR/releases)
 provide the pre-alpha installer, updates and feedback tracker.
 
-The 0.1.6 launcher hotfix adds visible game-folder selection, settings recovery,
-installation space checks and startup checks for the selected OpenXR runtime.
-It retains checkpoint426's native binaries and gameplay limitations; see
-[hotfix validation](docs/LAUNCHER-HOTFIX016.md) and [current state](docs/CURRENT.md).
+This is a developer source checkpoint, not a new installer release. The public
+BC2VR launcher remains 0.1.15. The checkpoint includes shared weapon ownership
+and ammunition fixes, a correction for detached destruction geometry in stereo,
+and the performance, startup and campaign-transition work described in
+[current state](docs/CURRENT.md).
 
 Start with [current state and known limits](docs/CURRENT.md), the
-[426 handoff](handoff/checkpoint426/README.md), [build instructions](BUILDING.md),
+[436 R56 handoff](handoff/checkpoint436-r56/README.md), [build instructions](BUILDING.md),
 and [weapon coverage](docs/WEAPON-COVERAGE-CURRENT.md).
 
 ## Evidence and limits
 
-The frozen normal-r4 source passed **291/291 C++ suites on x86 and x64**.
-The 0.1.6 package passed 28 installation/package checks and 51 launcher checks.
-Cold asset preparation and runtime cache validation passed using packaged Python
-and a verified local decoder. These checks did not start BC2 or a headset session.
-Its latest native knife run retired the automatic-stow blocker and prepared one
-client attack. Server acquisition, damage and repeat-jab recovery remain unverified.
-Checkpoint 425's opening cloud correction was accepted by the user in a headset.
-426 adds exact opening Nambu100 grip/support and magazine metadata, selected-knife
-motion integration, a recenter correction and bounded shot-origin diagnostics.
-An actual-game Nambu check verified manual magazine operations and firing afterward.
+The frozen normal source passed **305/305 C++ suites on each of x86 and x64**.
+Actual-game tests with emulated controller inputs cover representative rifle and
+pistol magazine operations, two-handed AEK empty firing, a combined SPAS pump /
+shell / holster sequence, and five M95 manual bolt cycles. The handoff records
+the exact source revision and limits of each result; these are not fifty
+independent weapon approvals.
 
-These are bounded results. Selected-knife enemy damage, downstream Nambu launch
-alignment and 426 headset placement remain unverified. The reported crash after deaths/reloads remains unresolved; the
-scene-owner guard is not a proven crash fix. No complete campaign, all-weapons,
-reconnect or extended-session acceptance is claimed. See the handoff for exact
-source hashes, native results and retained failures.
+The reproduced destruction artifact was attached in both eyes in two reviewed
+delivered pairs, 3.781 seconds apart, after the projection correction. Other scenes and physical-headset
+appearance still need validation. Death/checkpoint recovery, full campaign
+vehicle coverage, manual belt-fed LMG loading, and interaction between all
+enabled tools remain unfinished. This checkpoint is for development and review;
+it does not claim a fully playable campaign or sustained native 90 Hz.
 
 ## Build without a game or headset
 

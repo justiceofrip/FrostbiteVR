@@ -3,6 +3,7 @@
 #include "Bc2VehicleRoutes.h"
 #include "Bc2VehicleCommit.h"
 #include "Bc2BoatProfile.h"
+#include "Bc2VehicleCameraPolicy.h"
 #include <vector>
 #include <bit>
 #include <iostream>
@@ -72,6 +73,57 @@ int VehicleCameraDeadlineAndOwnerChanges(){
     auto changed=recentered;++changed.owner.seat;CHECK(PublishVehicleCameraSample(previous,changed));
     auto lostProfile=changed;lostProfile.supported=false;CHECK(PublishVehicleCameraSample(previous,lostProfile));
     CHECK(AdmitVehicleCamera(previous,1,3,5,2,1000000001)==VehicleCameraAdmission::Unsupported);
+    return 0;
+}
+int CampaignSeatDoesNotRequirePblAim(){
+    VehicleCameraSample published;VehicleCameraMode mode=VehicleCameraMode::Unavailable;
+    const VehicleCameraSample campaign{{1,2,30,40},5,true,true,1000000000,1100000000};
+    const VehicleCameraContext live{1,30,40,5,1000000001,true,true};
+    // This is the shipped failure: the global PBL feature is enabled, but a
+    // verified campaign gunner publishes no PBL aim. It still owns a camera.
+    CHECK(PublishVehicleCameraMode(published,mode,campaign,VehicleCameraMode::NativeSeat));
+    CHECK(SelectVehicleCameraPath(published,mode,live,{})==VehicleCameraPath::NativeSeat);
+    auto native=Identity();native.values[3]={10,20,30,1};VehicleCameraAnchor anchor;math::Pose head{},reference{};
+    head.position={.6f,.2f,-.3f};const auto base=anchor.Base(campaign.owner,native,reference,head,campaign.space,1);
+    CHECK(base&&Same(*math::ComposeRuntimeHeadWithLhCamera(*base,reference,head,1),native));
+    // Both camera modes keep the existing deadline, owner, focus and tracking
+    // gates. A profile or live-owner mismatch never falls through to a view.
+    for(const auto selected:{VehicleCameraMode::NativeSeat,VehicleCameraMode::PblHeadAim}){
+        const PblCameraAimProof good{campaign.owner,campaign.space,true};
+        for(unsigned fault=0;fault<10;++fault){auto sample=campaign;auto context=live;
+            if(fault==0)sample.live=false;else if(fault==1)context.nowNs=sample.deadlineNs;
+            else if(fault==2)context.nowNs=sample.observedNs-1;else if(fault==3)context.actor=0;
+            else if(fault==4)++context.vehicle;else if(fault==5)++context.seat;
+            else if(fault==6)++context.space;else if(fault==7)context.focused=false;
+            else if(fault==8)context.headValid=false;else sample.owner.generation=0;
+            CHECK(SelectVehicleCameraPath(sample,selected,context,good)==VehicleCameraPath::Wait);
+        }
+    }
+    CHECK(SelectVehicleCameraPath(campaign,VehicleCameraMode::Unavailable,live,{})==VehicleCameraPath::Wait);
+    // Entering PBL switches policy with the exact publication. Missing or stale
+    // head-aim proof must still block PBL, rather than silently using a fallback.
+    auto pbl=campaign;pbl.owner.vehicle=31;pbl.owner.seat=41;auto pblContext=live;pblContext.vehicle=31;pblContext.seat=41;
+    CHECK(PublishVehicleCameraMode(published,mode,pbl,VehicleCameraMode::PblHeadAim));
+    CHECK(SelectVehicleCameraPath(published,mode,pblContext,{})==VehicleCameraPath::Wait);
+    const PblCameraAimProof pblAim{pbl.owner,pbl.space,true};
+    CHECK(SelectVehicleCameraPath(published,mode,pblContext,pblAim)==VehicleCameraPath::PblHeadAim);
+    for(unsigned fault=0;fault<6;++fault){auto proof=pblAim;
+        if(fault==0)proof.ready=false;else if(fault==1)++proof.owner.actor;
+        else if(fault==2)++proof.owner.generation;else if(fault==3)++proof.owner.vehicle;
+        else if(fault==4)++proof.owner.seat;else ++proof.space;
+        CHECK(SelectVehicleCameraPath(published,mode,pblContext,proof)==VehicleCameraPath::Wait);
+    }
+    CHECK(PublishVehicleCameraMode(published,mode,campaign,VehicleCameraMode::NativeSeat));
+    CHECK(SelectVehicleCameraPath(published,mode,live,pblAim)==VehicleCameraPath::NativeSeat);
+    // Even a policy change on the same seat resets its reference; an invalid
+    // input packet preserves identity only, never its expired camera lease.
+    CHECK(PublishVehicleCameraMode(published,mode,campaign,VehicleCameraMode::PblHeadAim));
+    CHECK(PublishVehicleCameraMode(published,mode,campaign,VehicleCameraMode::NativeSeat));
+    auto absent=campaign;absent.live=false;absent.space=0;absent.observedNs=absent.deadlineNs=0;
+    CHECK(!PublishVehicleCameraMode(published,mode,absent,VehicleCameraMode::NativeSeat));
+    CHECK(published.space==campaign.space&&SelectVehicleCameraPath(published,mode,live,{})==VehicleCameraPath::Wait);
+    CHECK(PublishVehicleCameraMode(published,mode,{},VehicleCameraMode::NativeSeat));
+    CHECK(mode==VehicleCameraMode::Unavailable&&SelectVehicleCameraPath(published,mode,live,{})==VehicleCameraPath::Unsupported);
     return 0;
 }
 InputFrame Frame(){InputFrame f;f.generation=1;f.spaceGeneration=1;f.predictedNs=1000000000;f.focused=f.headValid=true;for(auto& h:f.hands){h.gripTracked=h.aimTracked=true;h.active=Stick|Trigger|Primary;}return f;}
@@ -194,4 +246,4 @@ int ExactBoatProfile(){
     return 0;
 }
 }
-int main(){if(KnownSeatNeverFallsThroughOnInputGap()||TemporaryInputGapPreservesSeatedLean()||VehicleCameraDeadlineAndOwnerChanges()||SeatReferenceAndMotion()||ContinuousAxesAndRecovery()||DuplicateActionValidityLoss()||ExactNativeRouteReader()||ExactOnFootSharedConcept()||CommitExactPermissions()||ExactBoatProfile())return 1;std::cout<<"10 vehicle runtime cases passed\n";}
+int main(){if(KnownSeatNeverFallsThroughOnInputGap()||TemporaryInputGapPreservesSeatedLean()||VehicleCameraDeadlineAndOwnerChanges()||CampaignSeatDoesNotRequirePblAim()||SeatReferenceAndMotion()||ContinuousAxesAndRecovery()||DuplicateActionValidityLoss()||ExactNativeRouteReader()||ExactOnFootSharedConcept()||CommitExactPermissions()||ExactBoatProfile())return 1;std::cout<<"11 vehicle runtime cases passed\n";}

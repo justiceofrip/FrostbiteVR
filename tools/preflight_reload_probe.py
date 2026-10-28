@@ -8,12 +8,13 @@ import argparse, datetime as dt, hashlib, json, math, struct, time
 from pathlib import Path
 
 
-def validate(report, prepare_shots=False, request_probe=False, expected_asset='SPAS12_sp'):
+def validate(report, prepare_shots=False, request_probe=False, expected_asset='SPAS12_sp', campaign_magazine=False):
     def need(ok, why):
         if not ok:
             raise ValueError(why)
     need(isinstance(expected_asset,str) and 0<len(expected_asset)<128 and
          all(32<=ord(c)<=126 for c in expected_asset), 'explicit selected asset required')
+    need(not campaign_magazine or not (prepare_shots or request_probe), 'campaign preflight is a separate recipe')
     need(report.get('read_only') is True and report.get('native_calls') is False and
          report.get('process_writes') is False, 'read-only capture evidence missing')
     samples=report.get('samples', [])
@@ -37,15 +38,17 @@ def validate(report, prepare_shots=False, request_probe=False, expected_asset='S
              'selected weapon must be idle with finite ammunition')
         need(0 <= state['loaded'] <= state['capacity'] <= 1_000_000 and state['capacity']>0 and
              0 < state['reserve'] <= 1_000_000, 'invalid or exhausted native ammunition')
-        need(state['loaded']==state['capacity'] and state['loaded']>=2 if prepare_shots else
+        need(1 <= state['loaded'] <= state['capacity'] and state['capacity'] >= 2 if campaign_magazine else
+             state['loaded']==state['capacity'] and state['loaded']>=2 if prepare_shots else
              state['capacity']-state['loaded']==2 if request_probe else state['loaded']<state['capacity'],
              'full weapon required before two preparation shots' if prepare_shots else
              'request fixture requires exactly two empty slots' if request_probe else 'weapon full; use approved preparation shots')
-        need(state['reserve']>=2 if request_probe else state['reserve']>=1, 'insufficient reserve for fixture')
+        need(state['reserve']>=state['capacity'] if campaign_magazine else
+             state['reserve']>=2 if request_probe else state['reserve']>=1, 'insufficient reserve for fixture')
     need(before['branches']==after['branches'], 'native ammunition changed during preflight')
     b=after['branches'][0]
     return {'asset':after['asset_name'],'loaded':b['loaded'],'reserve':b['reserve'],
-            'capacity':b['capacity'],'prepare_shots':bool(prepare_shots),
+            'capacity':b['capacity'],'prepare_shots':bool(prepare_shots),'campaign_magazine':bool(campaign_magazine),
             'authority_proven':False,'native_reload_verified':False}
 
 
@@ -55,6 +58,7 @@ def main():
     ap.add_argument('--output',type=Path,required=True)
     ap.add_argument('--prepare-shots',action='store_true')
     ap.add_argument('--request-probe',action='store_true')
+    ap.add_argument('--campaign-magazine',action='store_true',help='Single selected magazine, full or partial, reserve at least one capacity; no input')
     ap.add_argument('--expected-asset',default='SPAS12_sp',
                     help='Exact expected native asset; read-only precondition, not native admission')
     args=ap.parse_args()
@@ -63,7 +67,7 @@ def main():
             'input_or_focus_changes':False,'samples':[],'rejected':[],'passed':False}
     process=None
     try:
-        from capture_reload_server import capture, discover, chain
+        from capture_reload_server import capture, discover, chain, require_same_identity
         from capture_reload_state import Image, Inspector
         from read_bc2 import Process
         image=Image();process=Process(args.pid);inspect=Inspector(process,image)
@@ -91,15 +95,17 @@ def main():
                              'reserve':struct.unpack_from('<i',raw,0x80)[0],
                              'capacity':capacity,'finite_ammo':number>=0 and not bool(raw[0xa8]&8)})
             current=chain(inspect,binding)
-            if current!={k:sample[k] for k in current}:
-                raise ValueError('owner changed across all-three read')
+            require_same_identity({k:sample[k] for k in current},current,'three_copy_read',
+                'owner changed across all-three read',sample['monotonic_ns'],time.perf_counter_ns())
             sample['branches']=rows
             # Avoid retaining game object bytes. Identity/count metadata suffices.
             sample['state'].pop('raw_hex',None)
             report['samples'].append(sample)
-        report['summary']=validate(report,args.prepare_shots,args.request_probe,args.expected_asset);report['passed']=True
+        report['summary']=validate(report,args.prepare_shots,args.request_probe,args.expected_asset,args.campaign_magazine);report['passed']=True
     except (OSError,ValueError,KeyError,RuntimeError,OverflowError) as exc:
         report['rejected'].append(str(exc))
+        detail=getattr(exc,'identity_read_failure',None)
+        if detail is not None:report['identity_read_failure']=detail
     finally:
         if process is not None:process.close()
     args.output.parent.mkdir(parents=True,exist_ok=True)

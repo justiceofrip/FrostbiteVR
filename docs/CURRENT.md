@@ -1,200 +1,187 @@
-# Current state: checkpoint 429 menu startup / launcher 0.1.10
+# Current state â€” shared normal integration / public 0.1.15
 
-## Tester startup correction — October 20
+Updated October 28, 2026. This replaces old next-step instructions; prior evidence remains in
+[the archived index](history/2026-10-27-current-through-r55-native.md).
 
-[BC2VR 0.1.10](https://github.com/justiceofrip/BC2VR/releases/tag/v0.1.10)
-was published at 12:37 UTC on October 20. The installer, runtime ZIP and update
-manifest all match the tested asset sizes and SHA-256 digests returned by GitHub.
-Source checkpoint: `aaad4c7` on `checkpoint/427-knife-investigation`.
+## Active work
 
-The supplied 0.1.9 EA/VirtualDesktopXR log establishes two local software bugs:
-the host disabled pointing for the tester's 1024×768 raster, and the launcher
-stopped a healthy main-menu-only session after 35 seconds because its readiness
-check required world-render input telemetry. The supplied archive does not
-contain the later failed retries. See [the diagnosis and implementation](MENU-STARTUP-HOTFIX429.md).
+R56 is now applied on top of the qualified shared normal below: ten production
+files, two existing regression files and two bounded diagnostic readers. Its
+exact source closure is `af13daab2acb73ac73273f1a7719515b7befdbb89d3537db2b25eeba2c6f59e8`;
+freeze `root-custody-normal-r56-prep/build01/source-freeze.json`, SHA
+`ea6e832082030e9ea80ba993858d1496b27a2e89fb40e38fb95ca2fcbd715e32`.
+Both normal architectures passed305/305; both focused custody suites and all
+five reader regressions also passed. The new six-binary runtime is frozen at
+`root-custody-normal-r56-prep/build01/normal-runtime/build-receipt.json`, SHA
+`1bbce04a887c1b9c022d0d4aeb6f58e5df0dd1faa28b4c23fb79db8f2e7db002`,
+version `unreleased-checkpoint436-custody-frame01`. Its independent audit
+`build01/independent-runtime-audit01.json`, SHA
+`9ded26011efb62700a5657aa2513a8839b7b514a5733810518dcbdafadda147a`,
+joins all14 changes, source closure, both validations, actual18/15 consumer
+compilations and all six binary/PDB GUID+age pairs. Normal flags are unchanged.
+M95 five-cycle native confirmation passed as detailed below. The generic Nambu
+diagnostic build completed and restored normal sources/configuration/binaries
+exactly; independent audit `b805e226dd10c6dd5988e26ae6779b54398f93c5f1f65d9c77c3c4f891954305`.
+Scene124 stopped before gameplay input or mod attachment because BC2 did not
+retain foreground ownership. It closed normally and restored all three profile
+files. Nambu acceptance remains pending; this is not a failed native reload test.
+The [436 R56 source handoff](../handoff/checkpoint436-r56/README.md) and portable
+`profiles/checkpoint436-r56` operation records now preserve this checkpoint for
+GitHub review. No new launcher runtime was installed or published.
 
-The candidate uses the original verified native pixel-to-APT mapper, supports
-full-raster pointing at different aspects, and publishes a separate expiring
-menu connection handshake. Explicit restart guidance replaces misleading
-retry status; it does not force-close games or delete installation data.
-The previous 0.1.9 knife and 0.1.8 selected-drive corrections remain included.
+The R51 ammo-entry, R52 actor-retirement, R54 continuous GunHold and verified
+edge-projection fixes are applied to the normal checkout: 13 production files
+and four existing regression files, with other gameplay/launcher code preserved.
+Normal feature flags and the reviewed native operation table are unchanged.
+Private fixture, phase and payload instrumentation is excluded.
 
-Native source is frozen as
-`bc035d08a511df6d0d57cbf7bb78689a8d7842977cbc6bee953ac5940621c133`.
-Both full normal builds passed 293/293 C++ suites each. The runtime receipt is
-`6d6184ebad27f567f40d3051d8b79825e1e04dbf35e316f97980be82dca9b093`.
-The 45-second actual-game menu check passed with world input zero, fresh menu
-readiness beyond 35 seconds, correct off-center native mapping and clean hook
-drain. The owned game was closed normally afterward. Package validation passed
-21 checks covering all 87 payload files, fresh install, 0.1.9 update, installed
-validation and rollback. Private evidence is in `bc2vr-recovery/startup429`.
+The preceding integration is retained under `normal-shared-integration-prep`:
+source preparation `7c027183f6926d276da9e160c1ce6cd634f98f137f2e0b3ddde43d83cb2bb765`,
+native closure `bba525ecb1db39774f245efcf52d0148edba5ef5141b5bbbb999a9484b37abb5`.
+Its six-binary fallback is `build01/normal-runtime/build-receipt.json`,
+SHA `fe86157e3905af017a3be52acf69507e862acb59dbfc1a30817ec0160bbb674b`,
+version `unreleased-checkpoint436-shared-production01`.
+Independent artifact audit `build01/independent-runtime-audit01.json`, SHA
+`498b16bf37761822babdd8a3b993957eabec9aa300fdd6f7a0e24453995180e1`,
+joins all17 source changes, both305/305 validations, five focused checks and all
+six binary/PDB identities. The Probe PDB is retained with its DLL.
+This qualifies the build pair, not additional native/headset behavior.
 
-The local launcher now uses packaged 0.1.10, with 0.1.9 retained for rollback.
-Settings are byte-for-byte unchanged and installed validation reports the
-existing asset cache ready. Installation started no game or headset session.
-Keep **Use local checkpoint** unchecked to run the installed package; the
-optional older local profile remains preserved.
+Root owns builds, game launch/input and native sessions. Scenes120 through124
+are closed; native/provision helpers retired and all three original profiles
+restored. Scene122 MP443 and scene123 M95 passed their scoped native audits.
+Original scene120 M95 failure and scene121 two-hand refused postflight remain
+preserved; the later M95 pass does not rewrite the earlier failure.
+Agents prepare disjoint source/reviews only. Keep BC2 on the left monitor;
+respect input guards and do not touch BF2142.
 
-The new actual OpenXR-menu presenter regression passed across four raster sizes,
-off-center input, panel/cursor/beam layers, trigger and focus recovery. Native
-mapper/getter instruction emulation passed 72 cases. Changing this workstation's
-window to 1024×768 did not change the internal 1920×1080 renderer, so that resize
-is explicitly inconclusive for actual-game 4:3 acceptance. The bounded live check
-used the actual 1920×1080 renderer; it sent hover only, without clicks or OS input.
-Actual Virtual Desktop headset acceptance and death/reload crash recovery remain
-unresolved.
+## New actual-game qualifications
 
-## Knife hotfix published — October 19, 16:57 UTC
+These are emulated-controller mechanical or paired-image results, not new
+physical-headset acceptance, all-weapon coverage or campaign completion.
+All paths below are under `bc2vr-recovery/performance436`.
 
-[BC2VR 0.1.9](https://github.com/justiceofrip/BC2VR/releases/tag/v0.1.9)
-publishes the tested r14 runtime, installer and updater manifest. All three
-uploaded assets match their tested sizes and SHA-256 digests. Source and the
-bounded native-hit checkpoint are at `72166d082e8114f05bf60132544aec73233deac4`.
-The release retains the death/reload-crash, full-campaign and human-headset
-acceptance limits. This is a narrow knife hotfix, not campaign acceptance.
+- **M95_sp:** R56 `m95-custody-r56-prep/run01` passed5/5 ordinary manual bolt
+  cycles through empty on all three native firing paths; final5/40 includes
+  stock magazine refill. Independent audit
+  `5eabaa559f5a1d8f1c7e7798b86adf41e23ff060120bb5d9c5fdbfaed2f47ee7`.
+  All45 accepted current-contact rows join exact custody roots and original
+  100ms input deadlines; release-to-ready12.2824–17.4457ms. All45 had valid raw
+  poses: zero accepted missing-raw rows, so native frame-gap continuation remains
+  unproved.37 record-lock drops and238 receiver timeouts are retained; no full
+  callback, smoothness, manual magazine, all-sniper or headset acceptance.
+- **F2000 + SPAS:** R54 `ammo-retirement-r52-integration-prep/combined-pump03/run01`.
+  Six authority-joined magazine operations across all three firing copies;
+  original return, replacement and post-holster return completed. SPAS fired
+  8->7, completed manual pump on all three native paths, and loaded one shell
+  7/24->8/23. Support returned; both shoulder stow/draws and final rifle firing
+  completed. Audit `a7b65d1551a505830faf759cde871d16f40005ea55f713c226dfbf4f47447cf9`.
+- **SCAR_sp_s:** `campaign-magazine-batch-r55-prep/single-magazine02/run01`.
+  Preparation shot30/210->29/210; four native transfers29/210->0/210->29/210
+  ->0/210->30/180; postfire29/180 in all three copies. Fresh support returned.
+  Audit `e20b4d6bf7e9b1dcfaff7433de099a247335e9806f3b679f24123dee104eb500`.
+  Seventeen record-lock drops are disclosed; not exhaustive callback capture.
+- **MP443_sp:** `campaign-magazine-batch-r55-prep/mp443-single-magazine04/run01`.
+  Exact normal-source, flags-only diagnostic:17/85->16/85 preparation shot,
+  four authority-joined transfers16/85->0/85->16/85->0/85->17/68, then16/68
+  postfire in all three native copies. Fresh support returned;31 client and31
+  server post-detach samples stayed16/68. Independent audit
+  `0a57a521fdfcd8eded71516f0e056efa8ad4a3cbe5fc4d1378d7fb990a800960`.
+  Nine record-lock drops disclosed; all32032 retained rows finished. Native and
+  receiver cleanup confirmed. Hip holster, slide/chamber, empty-fire suppression,
+  other pistols and headset feel are not qualified by this episode.
+- **AEK971_sp empty magazine:** `campaign-magazine-batch-r55-prep/empty-magazine02/run01`.
+  Exactly30 server shots30/210->0/210; all three copies remained0/210 for5.046s;
+  manual empty removal and refill30/180; postfire29/180, stable after detach.
+  Original checker exit1 remains preserved: two native client prediction
+  rollback/replay pairs were mistaken for reloads. The reviewed saved-evidence
+  successor verifies immutable restore inputs, matching server shots, bounded
+  replay and per-shot convergence. It retains all empty-dwell/refill/owner gates.
+  Corrected audit `6fc76bd07f4a84fec9b06a7e8c27926a1a703098b0e649944f9eb01b1c784489`;
+  independent audit `8284ee65319f3581ed45293c2c4700cd3c7aa0a659853f7c0b4cef96e25f76c4`.
+  Twenty record-lock drops; retained dwell gaps <=14.337ms. No native rerun was
+  needed. That episode did not cover two-handed empty firing or last reserve.
+- **Two-handed AEK native evidence:** `campaign-magazine-batch-r55-prep/two-hand-empty03/run01`.
+  Same support3/root2 through30 shots and5.026s at0/210; ordinary support release
+  preceded authority-joined manual refill30/180 and one postfire29/180. All three
+  native copies agree; later31 client and31 server drain samples retain the same
+  owner and29/180. Independent audit `independent-native-audit01.json`, SHA
+  `d3fa6aeda107808df469f42bba159f676e6402aaf1daf011ca01f953342b1b2b`.
+  Original runner/checker exit1 remains: the initial postflight rejected differing
+  client/server chain bookends and saved no samples. The differing field is unknown;
+  no replacement passing receipt is implied. Seventeen record-lock drops; no
+  last-reserve or headset claim. Scene121 closed/restored normally.
+- **Destruction edge rendering:** `diagnostics-r50-edge-correction07-prep/run01`.
+  Baseline phase06 reproduced a detached left-eye brick ring/strip. The exact
+  edge caller0x5D7F28 is now retargeted through existing derived-projection logic,
+  preserving depth and exact restoration. Root/independent review found the
+  bricks attached in both delivered eyes, pair3 and pair239(3.781s apart).
+  Witness pixels equal delivered pixels. Runtime audit
+  `a62794104015d7e761b7851e07a4f6b986736b7ab593866eab28e9c280dda16c`:
+  482 successful scopes,21 added contexts per left scope, zero projection/GPU
+  failures. This covers one matched damaged-house fixture; no exact masonry
+  VB/IB association, all-scene or headset claim.
 
-## Verified opening interaction — October 19
+## Next distinct checks
 
-The main r14 candidate has now delivered an actual physical knife hit in the
-opening mission. In `navigation42803`, emulated tracked-controller stroke input
-449 reached the ordinary native path, acquired target `895084672`, and produced
-one native damage callback with cause 1. The verified native health field changed
-from 12.5 to 12.375. The later distinct stroke, input 602, completed a clean miss
-and rearmed; the final pending count was zero. Native and receiver helpers exited
-zero, and retained hook/reference/view cleanup passed. This is native damage
-evidence beyond the earlier client animations and targetless attacks.
+1. M95's prior2/5 failure remains at `m95-shared-validation-prep/run02`:
+   expired rendered contact at input927 preceded mechanism/root loss and timeout.
+   R56 focused suites, normal builds and the distinct5/5 native recheck now pass.
+   Direct native missing-render-frame coverage and manual magazine loading remain
+   unqualified; preserve the failed episode and current scoped success separately.
+2. Diagnose the refused two-hand postflight read from saved evidence without
+   weakening owner/deadline/ammunition gates or replacing the original failure.
+3. Resume the prepared Nambu check when the game can retain focus, then continue
+   representative shared-mechanic coverage using the qualified generic
+   SingleMagazine flags and exact existing selectors. MP443 variant23 is now
+   natively checked above; variant22 remains Nambu100. Verify campaign mounts
+   before choosing the next SMG or magazine-fed LMG. Configured metadata and
+   selector tests alone do not establish a loaded asset or native acceptance.
 
-The independent audit joins the delivered inputs, fresh menu/tracking authority,
-repeated typed owner reads, native acquisition/attack and damage timestamps to
-the same game06 lifetime. No trigger-button attack was synthesized. It also
-measures the native blade axis within 0.517 degrees of body forward. The retained
-post-attack image was independently reviewed and visibly reads “Two down. About
-a thousand to go.” while the player faces wooden stairs with the knife held.
-That is an observed narrative response after the hit. The runtime target has not
-been independently joined to an authored guard GUID; two separate kill events,
-objective completion and a scripted camera turn are not established.
+## Remaining campaign and presentation gaps
 
-Private evidence remains under `overnight426/knife/navigation42803`, with
-`navigation42803-independent-hit-audit.json` beside it. The audit SHA-256 is
-`ab2991d3d0ea31e5a55a0ff70ab3da846d6c8227ac1d76dd94823d013ceb430c`.
-Its native report, input journal, before/after identities and cleanup receipt
-remain pinned; raw game evidence is not distributed with source/packages.
+R47/R48 recovered paired color after actual Last Checkpoint replacement and
+kept controller publication alive, but strict restart qualification still fails
+one first-replacement-request cancellation. R48 retry request184 was cancelled
+before either eye capture, then185 succeeded; do not call it a complete pass.
+Evidence: `restart-fast-run-r48-retry-prep/run01`, independent audit
+`59a3933f63ea5a4cb61962b2bfd2d2d9c576e34f7c6a44af01fe9bffa6e59644`.
+The known-seat camera Wait is a candidate cause, not proven per-request evidence.
+Actual death, full jeep ride and all campaign vehicle coverage remain open.
 
-This was a bounded game test with emulated controller input, not a human headset
-test. Whole-campaign playability, actual headset handling, death/reload recovery
-and long-session stability remain unverified. The older 0.1.8 is unchanged. The local
-0.1.9 candidate is installed and its installed-runtime Validate passed with assets
-ready. Settings remained byte-for-byte unchanged, and 0.1.7 is retained for
-rollback. Installation/validation started no game or headset session. The exact
-installer bundle passed 20 smoke checks covering all 87 payload files. The
-root-owned game06 was closed normally with exit zero after testing. The optional
-old local-checkpoint profile remains in settings; leave **Use local checkpoint**
-unchecked to run packaged 0.1.9. No further session was launched.
+Preserve qualified performance comparisons; no guaranteed90Hz/headset performance
+claim follows from diagnostic pairs. HUD flicker, knife hit/audio polish,
+cutscene orientation, scope/weapon polish and vehicle reticles remain on
+[the backlog](PREALPHA-BACKLOG.md). LMG manual loading, broader bolt/pistol
+chambering and scope coverage remain incomplete. Physical grenade/underbarrel
+reloads are deferred; full body/MP/other Frostbite ports are later scope.
 
-## Built and frozen main candidate
+## Public release and storage
 
-Both r14 full architectures passed **293/293 C++ suites**, following focused
-selected-knife ownership/geometry and receiver-fixture regressions. The shared
-`build/x86` and `build/x64` trees again use this main repository rather than the
-isolated 0.1.8 hotfix worktree. Normal feature flags and input protocol 4 were
-verified from retained configuration and compiled target definitions.
+[Public0.1.15](https://github.com/justiceofrip/BC2VR/releases/tag/v0.1.15) remains
+unchanged. Its launcher fixes missing image-path identity and exposes the narrow
+experimental Steam option. Actual Steam rendering/equipment support remains
+unverified. It retains the checkpoint434 native binaries; this private integration
+is not installed, packaged or published. Public product commit13d7574bd682ae883a935a9adae52a59409b576f.
 
-The frozen runtime is `overnight426/normal-runtime-r14`. Its build receipt is
-`7443155a14404ecf99cf592df7bc36bd7d32ebdcbb70435a3e3293be05780960`;
-the full source snapshot is
-`44f637ccdabb8991665610fd60e4d26b60a0f92e8792a811ec2ae326153aa1fa`.
-Native source remains unchanged from r13:
-`17f0b0647fa09f063d7becb2acff27ea0bc69b50b0f511a9c4dc3fe0edd3ddf7`.
-Frozen r13 and published r4/0.1.8 binaries remain separate.
+Use G: and process-local TEMP/TMP/TMPDIR. Player installs may use their selected
+drive. Keep40GiB allocated/15GiB free,3GiB normal-build reserve and512MiB raw/run.
+Call StorageBudget before builds/captures/sessions; never bypass a failed guard.
+Earlier storage work reclaimed approximately1.217GB, including233,414,656B of
+reviewed superseded raw frames and498,606,875B from67 old JSON reports
+(`storage-r56-old-install-compression01/result02.json`). The latest batch,
+`storage-r56-m95-compression01/run01/compression.json`, losslessly compressed
+eight completed files and reclaimed355,228,926B; all content hashes preserved,
+no deletion in that batch. Earlier receipts remain.
+`storage-shared-normal-review01/root-cleanup-result.json` removes43 reviewed
+redundant/obsolete PDBs, reclaiming651,902,976B; exact canonical or current symbols
+remain. Historical duplicate restoration locations are in its manifest. Protected
+390/407/408, source, logs, screenshots and all user recordings remain preserved.
+Older private wrappers copied stale root PDB names; new normal/M95 recipes use
+actual graph `symbols/` paths. Preserve correct current runtime symbols.
 
-R14 changes only the private receiver's prepared-approach recipe and its tests:
-it rotates the measured wrist before movement, holds that orientation through
-the approach, and schedules the first physical jab after 500 ms of released
-movement. The option requires motion and measured rotation, excludes turn/resume
-combinations, and retains the menu, tracking, lifetime and delivery gates.
-It does not add a production knife mechanism or assign native damage.
-
-The production candidate includes the earlier exact ordinary acquisition caller
-correction (`0x6E1FCA`) and consistent normalization of established transient
-owner context bits. Inventory selection and typed lifetime checks remain exact.
-Those changes previously passed repeated native miss/rearm checks; the new hit
-supplies the missing bounded native damage evidence. Earlier failed runs remain
-failed and retained. See [selected-knife evidence](SELECTED-KNIFE-NATIVE-426.md)
-and [the checkpoint428 record](history/2026-10-19-checkpoint428.md).
-
-## Public startup hotfix
-
-[BC2VR 0.1.8](https://github.com/justiceofrip/BC2VR/releases/tag/v0.1.8) was
-published on October 19 at 15:18 UTC from `hotfix/0.1.8-startup`, implementation
-commit `475dc87f13a94546c0c6f639efedc51ad393a86c`, over published 0.1.7 gameplay.
-It fixes the G:-only native audio-cache check that rejected the EA tester's
-valid X: cache, retains exact content/callback validation, and surfaces bounded
-native startup failures. It does not contain the main branch's knife work.
-The public campaign warning therefore remains applicable to that release.
-
-Both hotfix architectures passed 293/293 suites; focused launcher/setup checks
-passed 135, and exact package validation passed 44 checks plus 51 launcher checks.
-The unchanged asset recipe/cache was validated with the staged runtime. All three
-uploaded assets match their tested sizes and SHA-256 digests. EA/VDXR headset
-rendering is still unverified; runtime initialization is not rendering acceptance.
-The separate hotfix source branch is published for fork review.
-
-The earlier [0.1.7 recovery/resource hotfix](LAUNCHER-HOTFIX017.md) and
-[0.1.6 installer/runtime hotfix](LAUNCHER-HOTFIX016.md) retain their own package,
-settings, update/rollback and cold-cache evidence. Versions 0.1.5–0.1.7 used
-normal-r4 native gameplay, source
-`9196965b6f424cbfa33e98650fc230de273fc444de24c720218dbfa5f703b05b`,
-with 291 tests per architecture. Its preserved profile is
-`profiles/checkpoint426`; those results do not establish the new candidate's
-gameplay. Build instructions remain in [BUILDING.md](../BUILDING.md).
-
-## Other retained functionality and limits
-
-The shared Nambu100 grip/support pipeline accepts its authored absent optional
-persistence record while preserving exact weapon/data/configuration/mesh/rig
-and lifetime checks. An earlier actual-game run verified partial-magazine return,
-replacement from reserve and a subsequent shot, with native copies agreeing
-and counts changing from 30/114 to 29/84. Detached-magazine pixels and headset
-placement remain unverified. See [opening coverage](OPENING-WEAPONS-426.md).
-
-Nambu's earlier pre-spread axis matched the authored barrel, but its stock shot
-origin was displaced from the displayed muzzle. The translated-muzzle descriptor
-and downstream argument observer remain Candidate; final native acceptance and
-impact accuracy are pending. Matching other weapons' configuration fields does
-not enroll them. See [aim evidence](NAMBU-AIM-426.md).
-
-Manual recenter remains both thumbstick clicks held for one second. The vertical
-look/reference-yaw correction and protocol 4 tracking-basis distinction have
-combined support/recenter regression coverage; headset acceptance remains open.
-The checkpoint425 opening-cloud correction was accepted by the user in a headset
-and is retained in [the 425 handoff](../handoff/checkpoint425/README.md).
-
-The reported death/reload access violation is unresolved. Failed session
-`20261019-114521-913-2e4b9243` has an empty final report and an invalid instruction
-target `0xC` in the retained game crash XML. Actor loss precedes the crash, but the
-producer/corruption cause and mod involvement remain unknown. A prior no-VR fault
-does not exonerate the mod. Bounded `checkpoint42701` evidence shows a scene
-replacement, later stereo rendering and clean cleanup despite an incomplete
-wrapper poll. `navigation42705` shows actor loss before its scheduled jabs and
-later checkpoint return, but does not verify post-death controller/stereo recovery.
-Neither result establishes a death/reload-crash fix.
-
-Manual LMG reloads, wider weapon/vehicle coverage, spent-shell ejection, some
-magnified scopes, full-body IK and multiplayer remain unfinished or unverified.
-The next acceptance work is ordinary progression beyond the observed opening
-response, real headset handling and bounded death/reload testing.
-
-## Distribution and storage
-
-The launcher retains manifest-checked updates/rollback and manual sanitized
-feedback; nothing uploads automatically. Python is bundled. First asset
-preparation fetches a pinned upstream FFmpeg decoder and builds private assets
-from the player's own installation; validated warm caches require no download.
-No game executable/assets, saves, raw traces or credentials belong in a package.
-
-The G: rule is local development policy. Public installers/caches use the
-player's selected valid local drive, including C:. All work here stays on G:
-under [the storage budget](STORAGE-BUDGET.md). R14 reused the two existing build
-trees; headroom was recovered by lossless, hash-verified compression of idle
-generated files. Source, runtime symbols and evidence were preserved. Older
-checkpoint results retain their scope in [history](history/2026-10-18-checkpoint425.md).
+Run relevant regressions and both normal architectures for native changes;
+do not repeat passed suites for docs or unchanged binaries. Read
+[architecture](ARCHITECTURE.md), [AGENTS](../AGENTS.md) and
+[storage policy](STORAGE-BUDGET.md). Keep temporary restoration separate from
+persistent magazine, holster and owed cycle state. No second-eye simulation replay.

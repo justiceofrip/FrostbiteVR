@@ -38,6 +38,8 @@ private:
     std::optional<std::array<math::Matrix4,2>> references_,candidate_;
     // Original renderer evidence only; cache reads never renew its bounds.
     std::optional<Bc2BoltControllerContact> lastContact_;
+    std::optional<Bc2BoltWristMapping> wristMapping_;
+    std::optional<interaction::HandClaimToken> mappedCustody_;
     interaction::HandInteractionSample previous_{};
     // Retained original geometry/identity only. Restoring player coordination
     // still requires a new typed idle-debt grant and the SAME live left gun.

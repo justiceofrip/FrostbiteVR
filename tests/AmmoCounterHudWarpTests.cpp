@@ -7,7 +7,8 @@ namespace {
 template<class T>T Handle(std::uintptr_t n){return reinterpret_cast<T>(n);}
 ComPtr<ID3D11Device> device;ComPtr<ID3D11DeviceContext> context;ComPtr<ID3D11Texture2D> texture;
 unsigned acquired=0,released=0,destroyed=0;XrResult waitResult=XR_SUCCESS;
-std::int64_t now=1000000000;std::int64_t Clock()noexcept{return now;}
+std::int64_t now=1000000000,clockAdvanceNs=0;unsigned clockReads=0,clockAdvanceAt=0;
+std::int64_t Clock()noexcept{if(++clockReads==clockAdvanceAt)now+=clockAdvanceNs;return now;}
 XrResult XRAPI_CALL CreateSwapchain(XrSession,const XrSwapchainCreateInfo* info,XrSwapchain* out){
     if(info->width!=256||info->height!=48)return XR_ERROR_VALIDATION_FAILURE;
     D3D11_TEXTURE2D_DESC d{};d.Width=info->width;d.Height=info->height;d.MipLevels=d.ArraySize=d.SampleDesc.Count=1;
@@ -61,8 +62,8 @@ int Run(){
         --frame.eyes[1].ammo.equipmentGeneration;
         for(auto& e:frame.eyes){++e.ammo.sequence;e.ammo.loaded=1;}
         hud.Receive(&frame,ticket,now);waitResult=XR_TIMEOUT_EXPIRED;
-        CHECK(!hud.Layer(Handle<XrSpace>(4),input,Clock,true));CHECK(acquired==released+1);
-        CHECK(!hud.Layer(Handle<XrSpace>(4),input,Clock,true));CHECK(acquired==released+1); // No double acquire.
+        CHECK(hud.Layer(Handle<XrSpace>(4),input,Clock,true));CHECK(acquired==released+1);CHECK(PixelsMatch(0,0)==0);
+        CHECK(hud.Layer(Handle<XrSpace>(4),input,Clock,true));CHECK(acquired==released+1); // Same released image, no double acquire.
         waitResult=XR_SUCCESS;CHECK(hud.Layer(Handle<XrSpace>(4),input,Clock,true));CHECK(acquired==released);CHECK(PixelsMatch(1,0)==0);
         // Live gun movement relocates the quad without reuploading its unchanged digits.
         const auto uploads=hud.Uploads();input.hands[1].grip.position.x+=.2f;
@@ -73,6 +74,23 @@ int Run(){
         ++input.spaceGeneration;CHECK(!hud.Layer(Handle<XrSpace>(4),input,Clock,true));--input.spaceGeneration;
         hud.Receive(nullptr,ticket,now);CHECK(!hud.Layer(Handle<XrSpace>(4),input,Clock,true));CHECK(hud.Errors()==0);
         CHECK(hud.ValidSamples()==5&&hud.InvalidSamples()==2);
+        // Count changes during a stereo pair choose one newest sample for both
+        // eyes. A delayed upload can retain old digits only until THEIR expiry.
+        for(auto& e:frame.eyes){++e.ammo.sequence;e.ammo.observedNs=now;e.ammo.deadlineNs=now+100000000;e.ammo.loaded=5;}
+        hud.Receive(&frame,ticket,now);CHECK(hud.Layer(Handle<XrSpace>(4),input,Clock,true));CHECK(PixelsMatch(5,0)==0);
+        now+=90000000;
+        for(auto& e:frame.eyes){++e.ammo.sequence;e.ammo.observedNs=now;e.ammo.deadlineNs=now+100000000;}
+        ++frame.eyes[1].ammo.sequence;frame.eyes[1].ammo.loaded=4;
+        hud.Receive(&frame,ticket,now);waitResult=XR_TIMEOUT_EXPIRED;
+        CHECK(hud.Layer(Handle<XrSpace>(4),input,Clock,true));CHECK(PixelsMatch(5,0)==0);
+        now+=9999999;clockReads=0;clockAdvanceAt=3;clockAdvanceNs=1;
+        CHECK(!hud.Layer(Handle<XrSpace>(4),input,Clock,true)); // Old image expires INSIDE Layer; newer count remains fresh.
+        clockAdvanceAt=0;
+        waitResult=XR_SUCCESS;CHECK(hud.Layer(Handle<XrSpace>(4),input,Clock,true));CHECK(PixelsMatch(4,0)==0);
+        for(auto& e:frame.eyes){++e.ammo.equipmentGeneration;++e.ammo.sequence;e.ammo.loaded=3;}
+        hud.Receive(&frame,ticket,now);waitResult=XR_TIMEOUT_EXPIRED;
+        CHECK(!hud.Layer(Handle<XrSpace>(4),input,Clock,true)); // Cannot display another weapon's count.
+        waitResult=XR_SUCCESS;CHECK(hud.Layer(Handle<XrSpace>(4),input,Clock,true));CHECK(PixelsMatch(3,0)==0);
     }
     CHECK(destroyed==1);return 0;
 }

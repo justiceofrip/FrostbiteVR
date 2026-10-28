@@ -89,7 +89,7 @@ int PairAndFreshness(){const auto a=Sample();CHECK(AmmoCounterPair(a,a,30,Now));
         if(fault==3)--b.loaded;if(fault==4)--b.reserve;if(fault==5)++b.capacity;if(fault==6)++b.observedNs;if(fault==7)b.sequence=0;
         CHECK(!AmmoCounterPair(a,b,30,Now+1));}
     auto newer=a;++newer.sequence;newer.observedNs+=1000000;newer.deadlineNs+=1000000;
-    auto pair=AmmoCounterPair(a,newer,30,Now+1000000);CHECK(pair);CHECK(pair->observedNs==a.observedNs&&pair->deadlineNs==a.deadlineNs);
+    auto pair=AmmoCounterPair(a,newer,30,Now+1000000);CHECK(pair);CHECK(pair->observedNs==newer.observedNs&&pair->deadlineNs==a.deadlineNs);
     AmmoCounterPresentation p;CHECK(p.Receive(a,a,30,Now));CHECK(p.Select(30,Now));CHECK(!p.Select(31,Now));
     CHECK(!p.Select(30,a.deadlineNs));CHECK(!p.Select(30,Now-1));
     auto shorter=a;shorter.deadlineNs=Now+10000000;CHECK(p.Receive(shorter,shorter,30,Now));
@@ -99,6 +99,32 @@ int PairAndFreshness(){const auto a=Sample();CHECK(AmmoCounterPair(a,a,30,Now));
     p.Reset();CHECK(p.Receive(a,a,30,Now));auto changed=a;--changed.loaded;
     CHECK(!p.Receive(changed,changed,30,Now));CHECK(!p.Select(30,Now));
     CHECK(p.Receive(a,a,30,Now));CHECK(!p.Receive({},{},30,Now));CHECK(!p.Select(30,Now));
+    return 0;
+}
+int CountsChangingBetweenEyes(){
+    AmmoCounterPresentation hud;auto left=Sample();
+    for(int loaded=left.loaded-1;loaded>=0;--loaded){
+        auto right=left;++right.sequence;right.observedNs+=1000000;
+        right.deadlineNs=right.observedNs+AmmoCounterMaxAgeNs;right.loaded=loaded;
+        CHECK(hud.Receive(left,right,30,right.observedNs));
+        CHECK(hud.Select(30,right.observedNs)->loaded==loaded);
+        auto reverse=AmmoCounterPair(right,left,30,right.observedNs);
+        CHECK(reverse&&reverse->sequence==right.sequence&&reverse->loaded==loaded);
+        CHECK(reverse->deadlineNs==left.deadlineNs); // Never prolong the pair's lease.
+        left=right;
+    }
+    auto reload=left;++reload.sequence;reload.observedNs+=1000000;
+    reload.deadlineNs=reload.observedNs+AmmoCounterMaxAgeNs;
+    reload.loaded=reload.capacity;reload.reserve-=reload.capacity;
+    CHECK(hud.Receive(left,reload,30,reload.observedNs));
+    CHECK(hud.Select(30,reload.observedNs)->loaded==reload.capacity);
+    auto switched=reload;++switched.equipmentGeneration;
+    CHECK(!hud.Receive(reload,switched,30,reload.observedNs));CHECK(!hud.Select(30,reload.observedNs));
+    auto impossible=reload;impossible.sequence=left.sequence;impossible.observedNs=left.observedNs;
+    CHECK(!AmmoCounterPair(left,impossible,30,reload.observedNs));
+    auto reordered=reload;reordered.observedNs=left.observedNs-1;
+    CHECK(!AmmoCounterPair(left,reordered,30,reload.observedNs));
+    CHECK(!AmmoCounterPair(left,reload,30,left.deadlineNs));
     return 0;
 }
 int WeaponSidePlacement(){
@@ -143,6 +169,6 @@ int BitmapContents(){
     return 0;
 }
 }
-int main(){if(NativeReadOnlyAdmission()||NativeReadClockOrdering()||PublishedReserveIsPassiveAndBounded()||PairAndFreshness()||WeaponSidePlacement()||BitmapContents())return 1;
+int main(){if(NativeReadOnlyAdmission()||NativeReadClockOrdering()||PublishedReserveIsPassiveAndBounded()||PairAndFreshness()||CountsChangingBetweenEyes()||WeaponSidePlacement()||BitmapContents())return 1;
     std::cout<<"AmmoCounter: native identity/freshness, paired telemetry and bitmap checks passed; no native acceptance\n";
 }

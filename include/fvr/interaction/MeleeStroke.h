@@ -3,9 +3,9 @@
 #include <cmath>
 
 namespace fvr::interaction {
-// Body-relative metres in a fixed reference-space epoch. The adapter derives
-// the tip and blade direction from measured equipment geometry. Head turns and
-// actor locomotion must not manufacture a hand stroke.
+// Metres in one fixed tracking-space epoch. Its origin is arbitrary; the
+// adapter validates current physical reach and measured equipment geometry.
+// Head turns and actor locomotion must not manufacture a hand stroke.
 struct MeleePoint {
     float x=0,y=0,z=0;
     bool operator==(const MeleePoint&)const=default;
@@ -100,11 +100,15 @@ public:
             phase_=MeleeStrokePhase::Travelling;
         }
         if(phase_==MeleeStrokePhase::Travelling){
-            if(now-strokeNs_>config_.maximumStrokeNs||speed<config_.minimumSpeed||
+            // Minimum speed starts a deliberate stroke. Requiring it again at
+            // every packet rejects an ordinary jab that decelerates near the
+            // target, even when its forward travel is sufficient. Once started,
+            // retain travel until reversal/rotation, interruption or timeout.
+            if(now-strokeNs_>config_.maximumStrokeNs||
                Dot(axis_,s.direction)<config_.minimumAlignment||
                Dot(step,axis_)<distance*config_.minimumAlignment){
                 const auto reason=now-strokeNs_>config_.maximumStrokeNs?MeleeStrokeDecision::StrokeLimit:
-                    speed<config_.minimumSpeed?MeleeStrokeDecision::Slow:MeleeStrokeDecision::Direction;
+                    MeleeStrokeDecision::Direction;
                 Start(s);return finish(reason);}
             const auto displacement=Sub(s.tip,start_);
             if(observation)observation->travel=Dot(displacement,axis_);
@@ -149,7 +153,10 @@ private:
         if(!s.source.focused)return fail(6);
         if(s.source.observedNs<0||s.source.nowNs<s.source.observedNs)return fail(7);
         if(s.source.deadlineNs<=s.source.nowNs||s.source.deadlineNs-s.source.observedNs>150000000)return fail(8);
-        if(!Finite(s.tip)||Length(s.tip)>3.f)return fail(9);
+        // An absolute radius would reject valid hands after room-scale walking
+        // or a translated tracking origin. Delta/time/speed bounds below remain
+        // independent of that origin; physical reach belongs to the adapter.
+        if(!Finite(s.tip))return fail(9);
         if(!Finite(s.direction)||std::abs(Length(s.direction)-1.f)>.001f)return fail(10);
         if(!hands.HasRecordedEvidence(s.source,s.hold.hand))return fail(11);
         const auto current=hands.Current(s.hold.hand);

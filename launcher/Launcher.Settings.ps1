@@ -1,11 +1,13 @@
 #requires -Version 7.5
 # Requires Launcher.Core.ps1. Settings changes never start or inspect a game.
 function New-FvrLauncherSettings {
-    return @{schema='fvr.desktop.settings.v1';game_path='';local_backend=$null}
+    return @{schema='fvr.desktop.settings.v1';game_path='';local_backend=$null;steam_compatibility=$false}
 }
 function ConvertFrom-FvrSettingsText([string]$Text) {
     $value=ConvertFrom-Json -InputObject $Text -AsHashtable -DateKind String
     if($value -isnot [Collections.IDictionary]){throw 'Settings must be a JSON object.'}
+    if(-not $value.Contains('steam_compatibility')){$value.steam_compatibility=$false}
+    elseif($value.steam_compatibility -isnot [bool]){throw 'Steam compatibility must be a JSON boolean (true or false).'}
     foreach($key in @('game_path','local_backend')){if(-not $value.Contains($key)){$value[$key]=$(if($key -eq 'game_path'){''}else{$null})}}
     if(-not $value.Contains('schema')){$value.schema='fvr.desktop.settings.v1'}
     return $value
@@ -34,7 +36,7 @@ function Backup-FvrLauncherSettings([string]$Path,[byte[]]$Bytes) {
     }
     return $backup
 }
-function Read-FvrLauncherSettingsLocked([string]$InstallRoot) {
+function Read-FvrLauncherSettingsLocked([string]$InstallRoot,[switch]$RefuseRepair) {
     $path=Get-FvrChild $InstallRoot 'data/settings.json';Assert-FvrNoLinks $path
     $state=@{settings=(New-FvrLauncherSettings);notice='';backup=$null;needs_reset=$false;read_only=$false;repaired=$false}
     if(-not(Test-Path -LiteralPath $path)){return $state}
@@ -42,6 +44,7 @@ function Read-FvrLauncherSettingsLocked([string]$InstallRoot) {
     $bytes=[IO.File]::ReadAllBytes($path)
     $text=[IO.File]::ReadAllText($path)
     try{$state.settings=ConvertFrom-FvrSettingsText $text;return $state}catch{}
+    if($RefuseRepair){throw 'Settings are damaged. Reopen the launcher to recover them before changing Steam compatibility. The original file was left unchanged.'}
     # Never globally escape backslashes: that could alter a valid local-backend
     # profile or conceal a second syntax error. Repair only one raw Windows
     # game_path value, and require the entire remaining document to parse.
@@ -70,11 +73,11 @@ function Read-FvrLauncherSettingsLocked([string]$InstallRoot) {
     }
     return $state
 }
-function Read-FvrLauncherSettings([string]$InstallRoot,[switch]$LockHeld) {
+function Read-FvrLauncherSettings([string]$InstallRoot,[switch]$LockHeld,[switch]$RefuseRepair) {
     $lock=$null
     try{
         if(-not $LockHeld){$lock=Enter-FvrLock $InstallRoot}
-        return Read-FvrLauncherSettingsLocked $InstallRoot
+        return Read-FvrLauncherSettingsLocked $InstallRoot -RefuseRepair:$RefuseRepair
     }catch{
         return @{settings=(New-FvrLauncherSettings);notice=$_.Exception.Message;backup=$null;needs_reset=$false;read_only=$true;repaired=$false}
     }finally{if($lock){$lock.Dispose()}}
@@ -107,6 +110,20 @@ function Save-FvrGameFolder([string]$InstallRoot,[string]$Selection,[switch]$Res
         if($state.needs_reset){$state.notice="Settings reset. Original settings, including any local-checkpoint profile, are saved at $($state.backup)."}
         elseif(-not $state.notice){$state.notice='Game folder saved.'}
         $state.needs_reset=$false;return $state
+    }finally{$lock.Dispose()}
+}
+function Save-FvrSteamCompatibility([string]$InstallRoot,[bool]$Enabled) {
+    $lock=Enter-FvrLock $InstallRoot
+    try{
+        # Keep installer/backend updates made since the window opened. A click
+        # is not permission to repair or reset malformed settings.
+        $state=Read-FvrLauncherSettingsLocked $InstallRoot -RefuseRepair
+        $state.settings.steam_compatibility=$Enabled
+        $path=Get-FvrChild $InstallRoot 'data/settings.json'
+        $null=[IO.Directory]::CreateDirectory((Split-Path $path -Parent))
+        Write-FvrLauncherSettings $path $state.settings
+        $state.notice='Steam compatibility saved.'
+        return $state
     }finally{$lock.Dispose()}
 }
 function Read-FvrBoundedSessionJson([string]$Path) {

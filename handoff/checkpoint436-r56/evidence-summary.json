@@ -1,0 +1,549 @@
+{
+  "schema": "fvr.checkpoint436-r56.portable-evidence-summary.v1",
+  "prepared_date": "2026-10-28",
+  "checkpoint": 436,
+  "scope": "Curated source-checkpoint evidence. Original audits and binaries remain local; this file contains identifiers, hashes, results and limits only.",
+  "evidence_id_base": "bc2vr-recovery/performance436",
+  "repository_path_base": "FrostbiteVR checkout",
+  "normal_build": {
+    "version": "unreleased-checkpoint436-custody-frame01",
+    "native_source_sha256": "af13daab2acb73ac73273f1a7719515b7befdbb89d3537db2b25eeba2c6f59e8",
+    "original_build_receipt": {
+      "evidence_id": "root-custody-normal-r56-prep/build01/normal-runtime/build-receipt.json",
+      "sha256": "1bbce04a887c1b9c022d0d4aeb6f58e5df0dd1faa28b4c23fb79db8f2e7db002",
+      "bytes": 7982
+    },
+    "independent_runtime_audit": {
+      "evidence_id": "root-custody-normal-r56-prep/build01/independent-runtime-audit01.json",
+      "sha256": "9ded26011efb62700a5657aa2513a8839b7b514a5733810518dcbdafadda147a",
+      "bytes": 11002
+    },
+    "source_freeze": {
+      "evidence_id": "root-custody-normal-r56-prep/build01/source-freeze.json",
+      "sha256": "ea6e832082030e9ea80ba993858d1496b27a2e89fb40e38fb95ca2fcbd715e32",
+      "bytes": 18760
+    },
+    "operation_profile": {
+      "header": {
+        "repository_path": "profiles/checkpoint436-r56/Bc2NativeOperationCapabilities.generated.h",
+        "sha256": "0c83dd120b2de468ba9cc2d5114bd2ddd94ae738907820159d575f8f6b21d11d",
+        "bytes": 748
+      },
+      "source_receipt": {
+        "repository_path": "profiles/checkpoint436-r56/source-with-header.json",
+        "sha256": "62fd58d126cfcc06888202a4abcc8fac2b0242373a5a7ed87ab0d7a41bbfbb93",
+        "bytes": 91509
+      },
+      "exported_byte_for_byte": true,
+      "dependency_files": 576,
+      "separately_hashed_metadata_headers": 4,
+      "operation_records_unchanged": true
+    },
+    "validation": [
+      {
+        "architecture": "x86",
+        "built": true,
+        "cpp_suites_passed": 305,
+        "cpp_suites_total": 305,
+        "actual_consumer_objects": 18,
+        "artifact": {
+          "evidence_id": "root-custody-normal-r56-prep/build01/x86/validation.json",
+          "sha256": "995785ceae713d58d7900bc20fefa69f60467474cd4f4487f43e340aa20107a4",
+          "bytes": 10429
+        }
+      },
+      {
+        "architecture": "x64",
+        "built": true,
+        "cpp_suites_passed": 305,
+        "cpp_suites_total": 305,
+        "actual_consumer_objects": 15,
+        "artifact": {
+          "evidence_id": "root-custody-normal-r56-prep/build01/x64/validation.json",
+          "sha256": "6d8e4bd4b34076b150384fc3831f5babcabd6012e333591509518c34d99f3895",
+          "bytes": 9222
+        }
+      }
+    ],
+    "binaries": [
+      {
+        "role": "host",
+        "name": "BC2XrHost.exe",
+        "architecture": "x64",
+        "evidence_id": "root-custody-normal-r56-prep/build01/normal-runtime/BC2XrHost.exe",
+        "sha256": "66a09bc044802d0b9201d03c9ae30f92e72275bd680a4c81a20450ee80f6d9ff",
+        "bytes": 4093952
+      },
+      {
+        "role": "probe",
+        "name": "BC2NativeProbe.dll",
+        "architecture": "x86",
+        "evidence_id": "root-custody-normal-r56-prep/build01/normal-runtime/BC2NativeProbe.dll",
+        "sha256": "4d606c95b3db533580b2eede7e35f0d432e8a3c886bc504e3345bc60eb308649",
+        "bytes": 9482752
+      },
+      {
+        "role": "receiver",
+        "name": "BC2NativeIpcProbe.exe",
+        "architecture": "x64",
+        "evidence_id": "root-custody-normal-r56-prep/build01/normal-runtime/BC2NativeIpcProbe.exe",
+        "sha256": "75b530dccf7467aed291f136c7a8649a5e45a2982747af94889fe991a8babfd2",
+        "bytes": 4084224
+      },
+      {
+        "role": "resolution",
+        "name": "BC2NativeResolution.exe",
+        "architecture": "x86",
+        "evidence_id": "root-custody-normal-r56-prep/build01/normal-runtime/BC2NativeResolution.exe",
+        "sha256": "e4b5541bb26aa8ad2e97e414df284f8aeb7c64c7e9f305840e4d49bfc8e5002c",
+        "bytes": 1477120
+      },
+      {
+        "role": "resolution_bootstrap",
+        "name": "BC2ResolutionBootstrap.dll",
+        "architecture": "x86",
+        "evidence_id": "root-custody-normal-r56-prep/build01/normal-runtime/BC2ResolutionBootstrap.dll",
+        "sha256": "36411ea34003ef964eee5855204848205d61a02b2d96694f5f26cb25abe2b69c",
+        "bytes": 1513984
+      },
+      {
+        "role": "trace",
+        "name": "BC2NativeTrace.exe",
+        "architecture": "x86",
+        "evidence_id": "root-custody-normal-r56-prep/build01/normal-runtime/BC2NativeTrace.exe",
+        "sha256": "0be5bffa575acdb005d7fdf08e00f4bcb3aff8953c3ff46f36064df2eaeb17a2",
+        "bytes": 1415168
+      }
+    ],
+    "focused_validation": {
+      "artifact": {
+        "repository_path": "build/x64/scratch/bolt-frame-gap-r56/run02/validation.json",
+        "sha256": "210bc2806e97e388210d69f8126c19fe6d2f58c1115ebe25c69602f59fa4f6ac",
+        "bytes": 16738
+      },
+      "passed": true,
+      "tests": [
+        {
+          "name": "BoltWeaponCustodyTests",
+          "exit_code": 0
+        },
+        {
+          "name": "Bc2BoltPlayerCustodyTests",
+          "exit_code": 0
+        }
+      ],
+      "native_qualified": false
+    },
+    "diagnostic_reader_validation": {
+      "artifact": {
+        "evidence_id": "root-custody-normal-r56-prep/build01/torn-read-validation.json",
+        "sha256": "263cb8a811e4d1a67c112b92e697b4f2afeaafb5a1b23880c5909b2f2ac8e8a4",
+        "bytes": 598
+      },
+      "passed": true,
+      "tests_passed": 5,
+      "exit_code": 0,
+      "native_execution": false
+    },
+    "normal_enabled_flags": [
+      "BC2_BODY_SCENE_DEPTH",
+      "BC2_NATIVE_CYCLE_RECOVERY",
+      "BC2_ORDINARY_MANUAL_CYCLES",
+      "BC2_PLAYER_CHEST_KNIFE",
+      "BC2_PLAYER_CONTEXTUAL_TOOLS",
+      "BC2_PLAYER_GRENADES",
+      "BC2_PREHOLD_CLEANUP",
+      "BC2_RESOURCE_MAGAZINES"
+    ],
+    "limits": [
+      "Build results qualify source and compiled artifacts; native episodes below have separate receipts.",
+      "The runtime remains unreleased and was not installed or published by this source export.",
+      "Binary hashes identify the frozen build; another compiler may produce different bytes.",
+      "No complete campaign, physical-headset or sustained 90 Hz qualification."
+    ]
+  },
+  "native_episodes": [
+    {
+      "id": "m95-r56-five-bolt-cycles",
+      "weapon": "M95_sp",
+      "audit": {
+        "evidence_id": "m95-custody-r56-prep/run01/independent-native-audit01.json",
+        "sha256": "5eabaa559f5a1d8f1c7e7798b86adf41e23ff060120bb5d9c5fdbfaed2f47ee7",
+        "bytes": 16332
+      },
+      "status": "scoped_native_pass",
+      "diagnostic_source_sha256": "7e6583608ce8ae33c0ba0a57d98e12375afa28d8b858fc83f8dad0d78d1a4bf1",
+      "normal_runtime_receipt_sha256": "1bbce04a887c1b9c022d0d4aeb6f58e5df0dd1faa28b4c23fb79db8f2e7db002",
+      "result": {
+        "requested_cycles": 5,
+        "completed_cycles": 5,
+        "native_firing_paths": 3,
+        "initial_loaded_reserve": [
+          5,
+          45
+        ],
+        "final_loaded_reserve": [
+          5,
+          40
+        ],
+        "final_refill": "stock_native_magazine_fallback",
+        "accepted_current_contact_rows": 45,
+        "accepted_rows_with_raw_pose": 45,
+        "accepted_rows_without_raw_pose": 0,
+        "release_to_ready_ms_range": [
+          12.2824,
+          17.4457
+        ],
+        "cleanup_verified": true
+      },
+      "record_lock_drops": 37,
+      "receiver_async_timeouts": 238,
+      "limits": [
+        "Physical and hand journals report no drops, but37 native record-lock drops prevent full callback coverage.",
+        "238 receiver async timeouts remain; this is not smoothness/performance acceptance.",
+        "The final magazine refill is stock native fallback, not manual magazine-reload validation.",
+        "No all-sniper, physical-headset, visual-feel or campaign-completion claim.",
+        "Original raw_valid absence is preserved; current-contact success never upgrades it.",
+        "No accepted missing-raw-pose row occurred; native rendered-frame-gap continuation remains unproved.",
+        "The preceding 2/5 M95 failure remains preserved separately."
+      ]
+    },
+    {
+      "id": "f2000-spas-combined",
+      "weapons": [
+        "F2000_sp",
+        "SPAS12_sp"
+      ],
+      "audit": {
+        "evidence_id": "ammo-retirement-r52-integration-prep/combined-pump03/run01/independent-audit02.json",
+        "sha256": "a7b65d1551a505830faf759cde871d16f40005ea55f713c226dfbf4f47447cf9",
+        "bytes": 96151
+      },
+      "status": "scoped_native_pass",
+      "diagnostic_source_sha256": "3396c1adf7fb371df27b98338881e0dd441b4c134ff75caeeaf436c245321b64",
+      "result": {
+        "authority_joined_magazine_operations": 6,
+        "native_firing_paths": 3,
+        "manual_pump_cycles": 1,
+        "shotgun_shot_loaded": [
+          8,
+          7
+        ],
+        "manual_shell_loaded_reserve": [
+          [
+            7,
+            24
+          ],
+          [
+            8,
+            23
+          ]
+        ],
+        "support_reacquired_after_shell": true,
+        "shoulder_stow_draws_verified": true,
+        "final_rifle_loaded_reserve": [
+          28,
+          180
+        ]
+      },
+      "limits": [
+        "One fixed tracked-input episode and exact F2000/SPAS loadout; not all weapons or a headset playtest",
+        "Native presentation role-pair counters verified, not image quality, sound or comfort",
+        "No disconnect/death/restart or enemy combat scenario; public runtime unchanged",
+        "Per-copy observations bracket receipt within150ms and retain exact firing/owner; no atomic multi-copy external read claim",
+        "This episode predates the R56 normal runtime; its audit is retained as shared-mechanic evidence.",
+        "Audit02 corrects an invalid client/server-field requirement in Audit01; the original audit remains preserved."
+      ]
+    },
+    {
+      "id": "scar-partial-magazine",
+      "weapon": "SCAR_sp_s",
+      "audit": {
+        "evidence_id": "campaign-magazine-batch-r55-prep/single-magazine02/run01/independent-audit01.json",
+        "sha256": "e20b4d6bf7e9b1dcfaff7433de099a247335e9806f3b679f24123dee104eb500",
+        "bytes": 76451
+      },
+      "status": "scoped_native_pass",
+      "result": {
+        "authority_joined_magazine_operations": 4,
+        "native_firing_paths": 3,
+        "loaded_reserve_sequence": [
+          [
+            30,
+            210
+          ],
+          [
+            29,
+            210
+          ],
+          [
+            0,
+            210
+          ],
+          [
+            29,
+            210
+          ],
+          [
+            0,
+            210
+          ],
+          [
+            30,
+            180
+          ],
+          [
+            29,
+            180
+          ]
+        ],
+        "final_loaded_reserve": [
+          29,
+          180
+        ],
+        "retained_rows": 31954,
+        "unfinished_retained_rows": 0,
+        "post_detach_client_samples": 31,
+        "post_detach_server_samples": 31
+      },
+      "record_lock_drops": 17,
+      "limits": [
+        "Exactly one SCAR_sp_s tracked-input episode; not all weapons, headset feel, images, sights or sound.",
+        "Four native commands are individually joined to authority and three firing copies.17 record-lock drops remain explicit, including12 dropped begins; no exhaustive callback coverage claim.5 dropped ends were recovered and all retained rows are finished.",
+        "Per-copy observations retain exact identity and bracket each command within150ms; no simultaneous atomic external snapshot claim.",
+        "Observed ammo changes match preparation shot, four operations and postfire. Post-detach31 client and31 server samples are stable; no universal future stock-behavior claim.",
+        "R55 did not fire to empty, repeat pump/shell mechanics or test cross-weapon holsters."
+      ]
+    },
+    {
+      "id": "mp443-partial-magazine",
+      "weapon": "MP443_sp",
+      "audit": {
+        "evidence_id": "campaign-magazine-batch-r55-prep/mp443-single-magazine04/run01/independent-audit01.json",
+        "sha256": "0a57a521fdfcd8eded71516f0e056efa8ad4a3cbe5fc4d1378d7fb990a800960",
+        "bytes": 77407
+      },
+      "status": "scoped_native_pass",
+      "result": {
+        "authority_joined_magazine_operations": 4,
+        "native_firing_paths": 3,
+        "loaded_reserve_sequence": [
+          [
+            17,
+            85
+          ],
+          [
+            16,
+            85
+          ],
+          [
+            0,
+            85
+          ],
+          [
+            16,
+            85
+          ],
+          [
+            0,
+            85
+          ],
+          [
+            17,
+            68
+          ],
+          [
+            16,
+            68
+          ]
+        ],
+        "final_loaded_reserve": [
+          16,
+          68
+        ],
+        "retained_rows": 32032,
+        "unfinished_retained_rows": 0,
+        "post_detach_client_samples": 31,
+        "post_detach_server_samples": 31
+      },
+      "record_lock_drops": 9,
+      "limits": [
+        "Exactly one MP443_sp tracked-input episode; not all weapons, headset feel, images, sights or sound.",
+        "Four native commands are individually joined to authority and three firing copies. Exact record-lock loss is disclosed in record_coverage; no exhaustive callback coverage claim.",
+        "Per-copy observations retain exact identity and bracket each command within150ms; no simultaneous atomic external snapshot claim.",
+        "Observed ammo changes match preparation shot, four operations and postfire. Post-detach31 client and31 server samples are stable; no universal future stock-behavior claim.",
+        "This episode does not cover empty auto-reload suppression, hip holstering, slide/chamber manipulation, other pistols or pump/shell mechanics."
+      ]
+    },
+    {
+      "id": "aek-one-hand-empty",
+      "weapon": "AEK971_sp",
+      "audit": {
+        "evidence_id": "campaign-magazine-batch-r55-prep/empty-magazine02/run01/independent-audit02.json",
+        "sha256": "8284ee65319f3581ed45293c2c4700cd3c7aa0a659853f7c0b4cef96e25f76c4",
+        "bytes": 9373
+      },
+      "corrected_checker_audit": {
+        "evidence_id": "campaign-magazine-batch-r55-prep/empty-magazine02/run01/corrected-runtime-status02.json",
+        "sha256": "6fc76bd07f4a84fec9b06a7e8c27926a1a703098b0e649944f9eb01b1c784489",
+        "bytes": 17828
+      },
+      "status": "mechanical_pass_with_original_checker_failure_preserved",
+      "original_runtime_status_exit": 1,
+      "original_failure": "Unexplained change while firing to empty",
+      "result": {
+        "rounds_fired_to_empty": 30,
+        "native_firing_paths": 3,
+        "loaded_reserve_sequence": [
+          [
+            30,
+            210
+          ],
+          [
+            0,
+            210
+          ],
+          [
+            30,
+            180
+          ],
+          [
+            29,
+            180
+          ]
+        ],
+        "empty_dwell_ns": 5045910900,
+        "maximum_retained_dwell_gap_ns": 14336500,
+        "final_loaded_reserve": [
+          29,
+          180
+        ]
+      },
+      "record_lock_drops": 20,
+      "correction": "Original checker incorrectly required monotonically decreasing Update events in each client copy. Two actual matched Restore callbacks roll back a predicted round then replay it; the server remains strictly monotonic. This is native prediction reconciliation, not an automatic magazine refill.",
+      "limits": [
+        "One AEK one-handed empty-fire episode; no fleet/headset/pump/audio/two-hand empty-fire acceptance.",
+        "Retained record-lock drops20 (11 begin,9 end); no claim of every instant. Each authoritative shot has stable observations in every copy within12.012ms; dwell has no retained gap over14.337ms.",
+        "Counter changes prove native count/identity continuity; they do not identify each actual projectile or bullet impact.",
+        "Receiver cleanup records retained-process exit but receiver_identity_verified=false; no new independent PID/birth assertion added.",
+        "Original completion/runtime-status remain failed; only this exact preserved episode has a separate corrected evidence verdict."
+      ]
+    },
+    {
+      "id": "aek-two-hand-empty",
+      "weapon": "AEK971_sp",
+      "audit": {
+        "evidence_id": "campaign-magazine-batch-r55-prep/two-hand-empty03/run01/independent-native-audit01.json",
+        "sha256": "d3fa6aeda107808df469f42bba159f676e6402aaf1daf011ca01f953342b1b2b",
+        "bytes": 14284
+      },
+      "status": "native_and_drain_checks_pass_original_runner_failed",
+      "overall_runner_accepted": false,
+      "original_runtime_status_exit": 1,
+      "original_postflight_exit": 1,
+      "postflight_samples": 0,
+      "original_failure": "Pre/post process identity differs",
+      "result": {
+        "rounds_fired_to_empty": 30,
+        "native_firing_paths": 3,
+        "empty_dwell_ns": 5025565300,
+        "support_claim": 3,
+        "support_root": 2,
+        "refill_loaded_reserve": [
+          30,
+          180
+        ],
+        "postfire_loaded_reserve": [
+          29,
+          180
+        ],
+        "client_drain_samples": 31,
+        "server_drain_samples": 31
+      },
+      "record_lock_drops": 17,
+      "failure_classification": "Single postflight read refused differing client/server chain bookends; it saved no field-level before/after differences. Exact changed field and persistent/transient cause unknown. Native requested mechanics completed, and later original drain reads show coherent unchanged owner and final29/180. Original failure remains preserved.",
+      "limits": [
+        "Not a replacement passing runtime-status or proof of every omitted callback;17 record-lock drops disclosed.",
+        "External client/server drain streams are separate read-only observations, not atomic authority or a fabricated replacement for the failed postflight.",
+        "Cannot identify which chain field differed during the refused postflight because failed before/after values were not retained.",
+        "No physical-headset, fleet, last-reserve or M95 acceptance."
+      ]
+    },
+    {
+      "id": "destruction-edge-projection",
+      "numeric_audit": {
+        "evidence_id": "diagnostics-r50-edge-correction07-prep/run01/independent-correction-runtime-audit01.json",
+        "sha256": "a62794104015d7e761b7851e07a4f6b986736b7ab593866eab28e9c280dda16c",
+        "bytes": 18446
+      },
+      "visual_audit": {
+        "evidence_id": "diagnostics-r50-edge-correction07-prep/run01/independent-visual-audit01.json",
+        "sha256": "df6f07bd10ae1c29f3d8824628641544d9fb77c9e80dc11d73d9567e12f0b9ef",
+        "bytes": 16170
+      },
+      "status": "numeric_correction_and_two_sample_visual_improvement",
+      "result": {
+        "patched_scopes": 482,
+        "patch_failures": 0,
+        "restore_failures": 0,
+        "camera_restore_failures": 0,
+        "additional_edge_contexts_per_left_scope": 21,
+        "reviewed_delivered_pairs": [
+          3,
+          239
+        ],
+        "reviewed_pair_separation_ms": 3781,
+        "baseline_artifacts_absent_in_both_reviewed_pairs": true,
+        "strict_full_witness_acceptance": false,
+        "exact_geometry_association_proven": false
+      },
+      "limits": [
+        "One matched damaged-house fixture, reviewed at two separated delivered pairs only; intervening images were not visually reviewed.",
+        "The numeric audit alone does not claim visual acceptance; the separate visual audit supplies the sampled observation.",
+        "Phase and image frames differ; selected payload capture failed and proves no exact masonry vertex/index buffer or material association.",
+        "Bounded witness omissions and one final discarded stop ticket remain disclosed in the original audits.",
+        "No all-scene, physical-headset or performance acceptance."
+      ]
+    },
+    {
+      "id": "nambu100-r56",
+      "weapon": "Nambu100",
+      "status": "setup_refused_native_test_not_run",
+      "result": {
+        "escape_or_resume_inputs": 0,
+        "three_original_profile_files_restored": true,
+        "owned_game_closed_normally": true,
+        "startup_refusals": 2,
+        "native_test_started": false,
+        "diagnostic_build_completed": true,
+        "normal_sources_configuration_outputs_restored": true,
+        "native_hooks": 0
+      },
+      "limits": [
+        "BC2 did not retain foreground ownership; startup guards sent no input and attached no mod.",
+        "No new Nambu native reload or headset acceptance.",
+        "Prepared diagnostic remains available for a later focused campaign check."
+      ],
+      "evidence": [
+        {
+          "id": "generic-magazine-r56-prep/build01/run01/build-receipt.json",
+          "sha256": "681ff9d0b45cd99322988e1c9597e1ee90905755fd58d9ece4f8e7842007e817"
+        },
+        {
+          "id": "generic-magazine-r56-prep/build01/run01/independent-build-restoration-audit02.json",
+          "sha256": "b805e226dd10c6dd5988e26ae6779b54398f93c5f1f65d9c77c3c4f891954305"
+        },
+        {
+          "id": "generic-magazine-r56-prep/scene124/independent-setup-not-run-audit01.json",
+          "sha256": "61e615731769b8c0f0bba5a035474a60a94c6837581e58bad21b984e0886adc6"
+        }
+      ]
+    }
+  ],
+  "shared_limits": [
+    "Native mechanical episodes use emulated controller inputs and bounded observations; they do not establish physical-headset feel or complete callback coverage.",
+    "Finite reload fixtures disable normal knife, grenade and contextual-tool consumers; combined normal-consumer interaction remains unqualified.",
+    "Original failed runners, superseded audits and raw evidence remain local and are not replaced by this summary.",
+    "No game executable, game asset payload, raw trace, screenshot, recording, cache or compiler output is included."
+  ]
+}

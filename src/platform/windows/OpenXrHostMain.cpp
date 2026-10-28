@@ -13,6 +13,17 @@
 #include <fstream>
 namespace {
 std::string Json(const std::string& input){std::string out="\"";const char* hex="0123456789abcdef";for(unsigned char c:input){if(c=='"'||c=='\\'){out+='\\';out+=char(c);}else if(c<32){out+="\\u00";out+=hex[c>>4];out+=hex[c&15];}else out+=char(c);}return out+'"';}
+bool ThreeSourceSlots(){
+    wchar_t value[4]{};SetLastError(ERROR_SUCCESS);
+    const auto size=GetEnvironmentVariableW(L"FVR_PRIVATE_THREE_SOURCE_SLOTS",value,4);
+    // PowerShell/.NET may preserve an explicitly cleared variable as an empty
+    // value. It disables this opt-in just like an absent variable; neither can
+    // accidentally select the experimental three-source protocol.
+    if(!size&&(GetLastError()==ERROR_ENVVAR_NOT_FOUND||GetLastError()==ERROR_SUCCESS))return false;
+    if(size==1&&value[0]==L'0')return false;
+    if(size==1&&value[0]==L'1')return true;
+    throw std::runtime_error("Private three source slots must be absent, empty, 0 or 1");
+}
 }
 int wmain(int argc,wchar_t** argv){
     try {
@@ -44,8 +55,17 @@ int wmain(int argc,wchar_t** argv){
         }
         if((options.eyeWidth==0)!=(options.eyeHeight==0))throw std::runtime_error("Set both eye dimensions");
         if(!channelFile.empty()&&(!ipcMode||std::filesystem::exists(channelFile)))throw std::runtime_error("Channel output requires IPC mode and a new file");
+        const bool thirdSource=ThreeSourceSlots();
+        if(thirdSource&&!ipcMode)throw std::runtime_error("Private three source slots require IPC mode");
         if(ipcMode){if(testScene||options.probeOnly)throw std::runtime_error("IPC mode cannot be combined with probe/test-scene");
-            if(!remote.Create())throw std::runtime_error("Cannot create frame channel");if(!menu.CreateHost(remote.Token()))throw std::runtime_error("Cannot create menu channel");options.menu=&menu;std::wcerr<<L"frame_channel="<<remote.Token()<<L'\n';if(!channelFile.empty()){std::wofstream output(channelFile);output<<remote.Token();output.close();if(!output)throw std::runtime_error("Cannot write channel token");}}
+            wchar_t slots[4]{};const auto slotSize=GetEnvironmentVariableW(L"FVR_PRIVATE_TWO_SOURCE_SLOTS",slots,4);
+            const bool twoSourceSlots=slotSize==1&&slots[0]==L'1';
+            wchar_t ahead[4]{};const bool lookahead=GetEnvironmentVariableW(L"FVR_PRIVATE_SOURCE_LOOKAHEAD",ahead,4)==1&&ahead[0]==L'1';
+            if(lookahead&&!twoSourceSlots)throw std::runtime_error("Private source lookahead requires two source slots");
+            wchar_t overlap[4]{};const bool exportOverlap=GetEnvironmentVariableW(L"FVR_PRIVATE_EXPORT_OVERLAP",overlap,4)==1&&overlap[0]==L'1';
+            if(exportOverlap&&!lookahead)throw std::runtime_error("Private export overlap requires source lookahead");
+            if(thirdSource&&(!twoSourceSlots||!lookahead||!exportOverlap))throw std::runtime_error("Private three source slots require two-source, lookahead and export-overlap options");
+            if(!remote.Create(twoSourceSlots,lookahead,exportOverlap,thirdSource))throw std::runtime_error("Cannot create frame channel");if(!menu.CreateHost(remote.Token()))throw std::runtime_error("Cannot create menu channel");options.menu=&menu;std::wcerr<<L"frame_channel="<<remote.Token()<<L'\n';if(!channelFile.empty()){std::wofstream output(channelFile);output<<remote.Token();output.close();if(!output)throw std::runtime_error("Cannot write channel token");}}
         if(!bodyPropsMaterials.empty()&&(!ipcMode||bodyPropsCache.empty()))throw std::runtime_error("Body materials require IPC and a body geometry cache");
         fvr::bc2::BodyAmmoCacheResult propCache;fvr::graphics::BodyPropMaterialResult propMaterials;
         if(ipcMode&&!bodyPropsCache.empty()){
@@ -68,6 +88,12 @@ int wmain(int argc,wchar_t** argv){
             <<" uploads="<<report.ammoCounterUploads<<" errors="<<report.ammoCounterErrors
             <<" valid_samples="<<report.ammoCounterValidSamples<<" invalid_samples="<<report.ammoCounterInvalidSamples<<'\n';
         std::cout<<std::boolalpha<<"{\n  \"state\":"<<Json(report.okay?(options.probeOnly?"runtime_ready":"session_observed"):"runtime_unavailable")
+            <<",\n  \"private_source_lookahead\":{\"enabled\":"<<remote.LookaheadEnabled()<<",\"services\":"<<delivery.lookaheadServices
+            <<",\"requests\":"<<delivery.lookaheadRequests<<",\"max_pending\":"<<delivery.maxPendingRequests<<'}'
+            <<",\n  \"private_export_overlap\":{\"enabled\":"<<remote.ExportOverlapEnabled()<<'}'
+            <<",\n  \"private_three_source_slots\":{\"enabled\":"<<(ipcMode&&remote.SourceSlotCount()==3)
+            <<",\"source_slots\":"<<(ipcMode?remote.SourceSlotCount():0)
+            <<",\"max_undelivered_requests\":"<<(ipcMode?(remote.LookaheadEnabled()?2:1):0)<<'}'
             <<",\n  \"runtime\":"<<Json(report.runtimeName)<<",\n  \"system\":"<<Json(report.systemName)<<",\n  \"error\":"<<Json(report.error)
             <<",\n  \"instance_created\":"<<report.instanceCreated<<",\n  \"system_available\":"<<report.systemAvailable<<",\n  \"session_created\":"<<report.sessionCreated
             <<",\n  \"adapter_luid_low\":"<<report.requirements.adapterLow<<",\n  \"adapter_luid_high\":"<<report.requirements.adapterHigh
@@ -80,6 +106,8 @@ int wmain(int argc,wchar_t** argv){
             <<",\"uploads\":"<<report.ammoCounterUploads<<",\"errors\":"<<report.ammoCounterErrors
             <<",\"valid_samples\":"<<report.ammoCounterValidSamples<<",\"invalid_samples\":"<<report.ammoCounterInvalidSamples<<'}'
             <<",\n  \"minimum_feature_level\":"<<report.minimumFeatureLevel<<",\n  \"eye_width\":"<<report.requirements.width<<",\n  \"eye_height\":"<<report.requirements.height
+            <<",\n  \"recommended_eye_width\":"<<report.recommendedEyeWidth<<",\n  \"recommended_eye_height\":"<<report.recommendedEyeHeight
+            <<",\n  \"max_eye_width\":"<<report.maxEyeWidth<<",\n  \"max_eye_height\":"<<report.maxEyeHeight
             <<",\n  \"format\":"<<report.requirements.format<<",\n  \"waited_frames\":"<<report.waitedFrames<<",\n  \"ended_frames\":"<<report.endedFrames
             <<",\n  \"valid_tracking_frames\":"<<report.validTrackingFrames<<",\n  \"submitted_pairs\":"<<report.submittedPairs<<",\n  \"rejected_pairs\":"<<report.rejectedPairs
             <<",\n  \"presented_frames\":"<<report.presentedFrames<<",\n  \"reused_frames\":"<<report.reusedFrames<<",\n  \"blank_frames\":"<<report.blankFrames
@@ -97,7 +125,13 @@ int wmain(int argc,wchar_t** argv){
             <<",\"both_held_without_hand_pose\":"<<report.recenterInput.bothHeldWithoutHandPose<<",\"starts\":"<<report.recenterInput.starts
             <<",\"completed\":"<<report.recenterInput.completed<<",\"interruptions\":"<<report.recenterInput.interruptions<<",\"max_hold_ns\":"<<report.recenterInput.maxHoldNs<<'}'
             <<",\n  \"roomscale_reference\":"<<options.roomscale<<",\n  \"floor_relative\":"<<report.floorRelative<<",\n  \"world_units_per_meter\":"<<options.worldUnitsPerMeter
-            <<",\n  \"last_session_state\":"<<report.lastSessionState<<",\n  \"diagnostic_scene\":"<<testScene<<",\n  \"diagnostic_error\":"<<Json(diagnostic.Error())<<",\n  \"ipc_mode\":"<<ipcMode<<",\n  \"ipc_pairs_received\":"<<(ipcMode&&report.submittedPairs>0)<<",\n  \"headset_visuals_verified\":false,\n  \"frame_diagnostics\":";report.frameDiagnostics.Write(std::cout);std::cout<<"\n}\n";
+            <<",\n  \"last_session_state\":"<<report.lastSessionState<<",\n  \"diagnostic_scene\":"<<testScene<<",\n  \"diagnostic_error\":"<<Json(diagnostic.Error())<<",\n  \"ipc_mode\":"<<ipcMode<<",\n  \"ipc_pairs_received\":"<<(ipcMode&&report.submittedPairs>0)<<",\n  \"headset_visuals_verified\":false,\n  \"private_host_copy_service\":";
+        report.privateHostCopyService.Write(std::cout);
+        std::cout<<",\n  \"private_gpu_ordered_present\":";report.privateGpuOrderedPresent.Write(std::cout);
+        std::cout<<",\n  \"first_menu_failure\":";report.firstMenuFailure.Write(std::cout);
+        std::cout<<",\n  \"first_async_timeout\":";delivery.firstTimeout.Write(std::cout);
+        std::cout<<",\n  \"async_timeout_history\":";delivery.WriteTimeoutHistory(std::cout);
+        std::cout<<",\n  \"frame_diagnostics\":";report.frameDiagnostics.Write(std::cout);std::cout<<"\n}\n";
         return report.okay?0:2;
     }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}
 }

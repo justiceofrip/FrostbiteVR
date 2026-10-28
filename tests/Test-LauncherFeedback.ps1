@@ -51,6 +51,8 @@ frames=245 errors=0
     [IO.File]::WriteAllText((Join-Path $run 'native.stderr.log'),'native errors=0')
     [IO.File]::WriteAllText((Join-Path $run 'supervisor.stdout.log'),'supervisor ready')
     [IO.File]::WriteAllText((Join-Path $run 'supervisor.stderr.log'),'supervisor no errors')
+    Write-FvrJson (Join-Path $run 'activation.json') @{passed=$false;outcome='foreground_request_not_observed';activation_attempts=1;path='F:\Private Person\Game\BFBC2Game.exe'}
+    [IO.File]::WriteAllText((Join-Path $run 'activation.log'),('OLD-ACTIVATION-NOT-AT-TAIL'+'x'*32KB+"`nactivation failed: target identity unavailable`nF:\Private Person\Game\BFBC2Game.exe"))
     [IO.File]::WriteAllText((Join-Path $run 'memory.dmp'),'MUST-NOT-LEAK-DUMP')
     [IO.File]::WriteAllText((Join-Path $run 'native-trace.json'),'MUST-NOT-LEAK-LARGE-REPORT')
     Write-FvrJson (Join-Path $runtime 'active-session.json') @{relative_folder='sessions/test-one'}
@@ -58,6 +60,8 @@ frames=245 errors=0
     $text=[IO.File]::ReadAllText($bundle.report)
     Check ($bundle.uploaded -eq $false -and $bundle.bytes -lt 512KB) 'bundle is bounded and remains local'
     Check ($text.Contains('runtime frames=90') -and $text.Contains('native errors=0')) 'only launcher-owned session text logs included'
+    Check ($text.Contains('--- activation.json') -and $text.Contains('foreground_request_not_observed') -and $text.Contains('--- activation.log') -and $text.Contains('target identity unavailable')) 'activation failure evidence is included before host/native startup'
+    Check (-not $text.Contains('OLD-ACTIVATION-NOT-AT-TAIL') -and -not $text.Contains('Private Person')) 'activation tails are bounded and redact personal paths'
     Check (-not $text.Contains('old-secret-not-at-tail') -and -not $text.Contains('MUST-NOT-LEAK')) 'log tails bounded and dumps/reports excluded'
     Check ($text.Contains('[binary content omitted]') -and -not $text.Contains('Private Person')) 'binary logs omitted and personal paths removed'
     $zip=[IO.Compression.ZipFile]::OpenRead($bundle.zip)

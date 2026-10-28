@@ -52,7 +52,7 @@ bool OpenXrAmmoHud::Upload(const graphics::AmmoCounterSample* sample)noexcept {
     XrSwapchainImageReleaseInfo release{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
     const auto released=ReleaseSwapchainImage(chain_,&release);pending_=false;
     if(XR_FAILED(released)){++errors_;failed_=true;hasImage_=false;return false;}
-    if(copied){loaded_=sample->loaded;reserve_=sample->reserve;hasImage_=true;++uploads_;}
+    if(copied){loaded_=sample->loaded;reserve_=sample->reserve;imageSample_=*sample;hasImage_=true;++uploads_;}
     else hasImage_=false;
     return copied;
 }
@@ -66,8 +66,23 @@ const XrCompositionLayerQuad* OpenXrAmmoHud::Layer(XrSpace localSpace,const inte
     const auto placement=tracked?graphics::AmmoCounterBesideGun(input.head,right.grip,right.aim):std::nullopt;
     const auto* sample=placement?presentation_.Select(input.spaceGeneration,clockNs()):nullptr;
     if(!sample){if(pending_)Upload(nullptr);return nullptr;}
-    if(pending_||!hasImage_||loaded_!=sample->loaded||reserve_!=sample->reserve)if(!Upload(sample))return nullptr;
-    if(!presentation_.Select(input.spaceGeneration,clockNs()))return nullptr;
+    // Unchanged digits can use the released image with CURRENT evidence. A
+    // changed count may need another zero-wait swapchain poll; keep the last
+    // released quad only while its original same-owner sample is still fresh.
+    // Do not hide a valid label merely because the runtime has not made the
+    // next image available. Never hold across owner/space loss or extend expiry.
+    if(hasImage_&&graphics::SameAmmoCounterOwner(imageSample_,*sample)&&
+       graphics::SameAmmoCounterCounts(imageSample_,*sample))imageSample_=*sample;
+    if(pending_||!hasImage_||!graphics::SameAmmoCounterOwner(imageSample_,*sample)||
+       loaded_!=sample->loaded||reserve_!=sample->reserve){
+        if(!Upload(sample)&&(!pending_||failed_||!hasImage_||
+           !graphics::SameAmmoCounterOwner(imageSample_,*sample)||
+           !graphics::AmmoCounterFresh(imageSample_,clockNs())))return nullptr;
+    }
+    const auto finalNow=clockNs();
+    const auto* current=presentation_.Select(input.spaceGeneration,finalNow);
+    if(!current||!graphics::SameAmmoCounterOwner(imageSample_,*current)||
+       !graphics::AmmoCounterFresh(imageSample_,finalNow))return nullptr;
     layer_={XR_TYPE_COMPOSITION_LAYER_QUAD};layer_.space=localSpace;
     layer_.layerFlags=XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
     layer_.eyeVisibility=XR_EYE_VISIBILITY_BOTH;

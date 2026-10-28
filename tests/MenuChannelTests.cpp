@@ -33,5 +33,27 @@ int main(){
     CHECK(host.TakeSurface(taken)==ipc::ChannelResult::Timeout);CHECK(producer.PollOutcome()==ipc::Outcome::Discarded);
     CHECK(producer.PublishSurface(surface)==ipc::ChannelResult::Timeout);
     surface.state.reserved=1;CHECK(producer.PublishSurface(surface)==ipc::ChannelResult::Invalid);
+    // A passive loading raster carries no interactive input authority. A mode
+    // replacement invalidates an offered image even if an epoch is reused.
+    CHECK(host.ReadState(state)==ipc::ChannelResult::Ok);
+    surface.state=state;++t.sequence;++t.frameId;
+    CHECK(producer.PublishSurface(surface)==ipc::ChannelResult::Ok);
+    ++state.sequence;state.mode=ipc::MenuMode::Passive;state.inputReady=0;
+    CHECK(producer.PublishState(state)==ipc::ChannelResult::Ok);
+    CHECK(host.TakeSurface(taken)==ipc::ChannelResult::Timeout);
+    CHECK(producer.PollOutcome()==ipc::Outcome::Discarded);
+    CHECK(host.ReadState(state)==ipc::ChannelResult::Ok);
+    auto bad=state;bad.inputReady=1;CHECK(!ipc::ValidMenuState(bad));
+    bad=state;bad.logicalWidth=0;CHECK(!ipc::ValidMenuState(bad));
+    bad=state;bad.mode=ipc::MenuMode(4);CHECK(!ipc::ValidMenuState(bad));
+    surface.state=state;++t.sequence;++t.frameId;CHECK(ipc::ValidMenuSurface(surface));
+    CHECK(producer.PublishSurface(surface)==ipc::ChannelResult::Ok);
+    CHECK(host.TakeSurface(taken)==ipc::ChannelResult::Ok&&taken.state.mode==ipc::MenuMode::Passive);
+    ++state.sequence;state.mode=ipc::MenuMode::Menu;state.inputReady=1;
+    CHECK(producer.PublishState(state)==ipc::ChannelResult::Ok);
+    CHECK(producer.PollOutcome()==ipc::Outcome::Pending); // Delivered GPU ownership remains exact.
+    CHECK(host.SurfaceConsumed(t,true)==ipc::ChannelResult::Ok);
+    CHECK(producer.PollOutcome()==ipc::Outcome::Consumed);
+    CHECK(producer.PublishSurface(surface)==ipc::ChannelResult::Timeout);
     host.Close();CHECK(producer.ReadControl(control)==ipc::ChannelResult::Closed);producer.Close();return 0;
 }

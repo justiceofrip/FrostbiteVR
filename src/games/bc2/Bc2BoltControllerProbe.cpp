@@ -170,9 +170,11 @@ void Bc2BoltControllerProbe::Observe(const Bc2PhysicalBoltResult& physical,const
     if(armed_){
         const auto* previous=physicalRowCount_?&physicalRows_[physicalRowCount_-1]:nullptr;
         if(!previous||previous->phase!=phase_||previous->mechanism!=t.mechanismPhase||
-           previous->failure!=t.mechanismFailure||previous->custody!=t.custody||previous->ownsMechanism!=physical.ownsMechanism){
+           previous->failure!=t.mechanismFailure||previous->custody!=t.custody||previous->ownsMechanism!=physical.ownsMechanism||
+           previous->currentContactRoot!=(t.currentContactGun?t.currentContactGun->id:0)){
             if(physicalRowCount_<physicalRows_.size())physicalRows_[physicalRowCount_++]={phase_,t.mechanismPhase,t.mechanismFailure,
-                t.custody,t.input.sequence,t.rawInputSequence,now,t.rawContactDistance,t.rawContactValid,physical.ownsMechanism};
+                t.custody,t.input.sequence,t.rawInputSequence,now,t.rawContactDistance,t.rawContactValid,physical.ownsMechanism,
+                t.currentContactInput,t.currentContactGun?t.currentContactGun->id:0,t.currentContactObserved,t.currentContactDeadline};
             else ++physicalRowDrops_;
         }
     }
@@ -201,6 +203,9 @@ void Bc2BoltControllerProbe::Report(std::ostream& out)const {
     for(unsigned n=0;n<physicalRowCount_;++n){const auto& r=physicalRows_[n];if(n)out<<',';
         out<<"{\"phase\":"<<unsigned(r.phase)<<",\"mechanism\":"<<unsigned(r.mechanism)<<",\"failure\":"<<unsigned(r.failure)
            <<",\"custody\":"<<unsigned(r.custody)<<",\"input\":"<<r.input<<",\"raw\":"<<r.raw<<",\"now_ns\":"<<r.now
+           <<",\"current_contact_accepted\":"<<(r.currentContactRoot?"true":"false")
+           <<",\"current_contact_input_sequence\":"<<r.currentContactInput<<",\"current_contact_root_id\":"<<r.currentContactRoot
+           <<",\"current_contact_observed_ns\":"<<r.currentContactObserved<<",\"current_contact_deadline_ns\":"<<r.currentContactDeadline
            <<",\"contact_distance\":"<<r.distance<<",\"raw_valid\":"<<(r.rawValid?"true":"false")
            <<",\"owns_mechanism\":"<<(r.ownsMechanism?"true":"false")<<'}';}
     out<<"],\"phase\":"<<unsigned(phase_)<<",\"failure\":"<<failure_<<",\"requested\":"<<requested_<<",\"completed\":"<<completed_

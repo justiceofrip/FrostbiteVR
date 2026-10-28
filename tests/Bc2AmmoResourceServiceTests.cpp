@@ -42,6 +42,177 @@ struct Fixture {
         CHECK(view->phase==AmmunitionLedgerPhase::Ready&&view->requestState==AmmoResourceRequestState::Completed);return 0;
     }
 };
+int NativeEntryDeadlineKeepsUncalledOperationRejectable(){
+    // Source-level reproduction of the retired two-clock boundary: Dispatch
+    // happened before expiry, but the second clock refused entry afterwards.
+    Fixture old;CHECK(old.Select());const auto oldRequest=old.Request(AmmunitionOperation::RemoveMagazine);
+    const auto oldCommand=old.service.Accept(oldRequest,old.now);CHECK(oldCommand);
+    CHECK(old.service.Dispatch(old.sample,oldCommand->admissionDeadlineNs-1));
+    old.service.Cancel(oldCommand->admissionDeadlineNs);
+    CHECK(old.service.Active()&&old.service.View()->requestState==AmmoResourceRequestState::Uncertain);
+    CHECK(!old.service.Outcome());
+
+    // Capacity is data, not family permission. Exercise the same native-entry
+    // helper for all magazine mutations, including an empty-magazine no-op.
+    for(int capacity:{17,30,100})for(bool empty:{false,true})
+    for(auto operation:{AmmunitionOperation::RemoveMagazine,AmmunitionOperation::ReturnMagazine,AmmunitionOperation::RefillMagazine}){
+        Fixture f;f.sample.counts={empty?0:capacity-1,191,capacity};
+        if(operation!=AmmunitionOperation::RemoveMagazine){
+            CHECK(f.Run(AmmunitionOperation::RemoveMagazine)==0);
+            if(operation==AmmunitionOperation::RefillMagazine){
+                const auto discard=f.Request(AmmunitionOperation::RemoveMagazine,true);
+                CHECK(!f.service.Accept(discard,f.now));
+                CHECK(f.service.Outcome()&&f.service.Outcome()->state==AmmoResourceRequestState::Completed);
+            }
+        }
+        CHECK(f.Select());const auto request=f.Request(operation);
+        const auto command=f.service.Accept(request,f.now);CHECK(command);
+        const auto before=command->before;unsigned clocks=0,calls=0;
+        f.now=command->admissionDeadlineNs;
+        CHECK(!f.service.InvokeNative(f.sample,[&]()noexcept{++clocks;return f.now;},[&](std::int64_t began)noexcept{
+            ++calls;return AmmoResourceNativeCall{f.identity,command->id,++f.invocation,began,began+1,command->before,command->after,true,true,true};
+        }));
+        CHECK(clocks==1&&calls==0&&!f.service.Active());
+        CHECK(f.service.Outcome()&&f.service.Outcome()->request==request);
+        CHECK(f.service.Outcome()->state==AmmoResourceRequestState::Rejected&&!f.service.Outcome()->nativeDispatched&&!f.service.Outcome()->receipt);
+        const auto ledger=f.service.Inventory().Find(f.binding.context.resource);CHECK(ledger);
+        CHECK(ledger->Phase()==AmmunitionLedgerPhase::Ready&&ledger->Snapshot().counts==before);
+        CHECK(!f.service.Accept(request,f.now)); // never renew or replay this edge
+
+        f.now+=Ms;CHECK(f.Select());const auto next=f.Request(operation);
+        const auto nextCommand=f.service.Accept(next,f.now);CHECK(nextCommand);
+        AmmoResourceNativeCall actual;
+        CHECK(f.service.InvokeNative(f.sample,[&]()noexcept{return f.now;},[&](std::int64_t began)noexcept{
+            ++calls;actual={f.identity,nextCommand->id,(f.invocation+=10),began,began+1,nextCommand->before,nextCommand->after,true,true,true};return actual;
+        }));
+        CHECK(calls==1&&f.service.Active());
+        CHECK(!f.service.Observe(f.Row(0,actual),f.now+100));
+        CHECK(!f.service.Observe(f.Row(1,actual),f.now+100));
+        CHECK(f.service.Observe(f.Row(2,actual),f.now+100));
+        CHECK(!f.service.Active()&&f.service.Outcome()->request==next&&f.service.Outcome()->nativeDispatched);
+        CHECK(f.service.Outcome()->receipt&&f.service.Outcome()->receipt->after==nextCommand->after);
+        CHECK(f.service.Inventory().Find(f.binding.context.resource)->Snapshot().counts==nextCommand->after);
+    }
+    return 0;
+}
+int ActualNativeEntryFailureRemainsUncertain(){
+    Fixture f;CHECK(f.Select());const auto request=f.Request(AmmunitionOperation::RemoveMagazine);
+    const auto command=f.service.Accept(request,f.now);CHECK(command);unsigned calls=0;
+    CHECK(!f.service.InvokeNative(f.sample,[&]()noexcept{return f.now;},[&](std::int64_t began)noexcept{
+        ++calls;return AmmoResourceNativeCall{f.identity,command->id,++f.invocation,began,began+1,command->before,command->after,true,false,true};
+    }));
+    CHECK(calls==1&&f.service.Active()&&!f.service.Outcome());
+    CHECK(f.service.View()->requestState==AmmoResourceRequestState::Uncertain);
+    CHECK(f.service.Inventory().Find(f.binding.context.resource)->Phase()==AmmunitionLedgerPhase::NeedsReconciliation);
+    f.service.Cancel(f.now+Ms);CHECK(f.service.Active());
+    CHECK(!f.service.Accept(f.Request(AmmunitionOperation::RemoveMagazine),f.now));
+    CHECK(calls==1&&!f.service.Outcome());
+    return 0;
+}
+Bc2AmmoReserveLease ReplacementReserve(const ReloadHoldIdentity& old,std::int64_t now,std::uint64_t sequence){
+    auto next=old;++next.owner.actorGeneration;
+    // Reuse two address sets over many real lifetime generations. Pointer
+    // novelty is not our capacity or stale-completion protection.
+    const auto shift=(next.owner.actorGeneration%2)?0u:0x100000u;
+    next.owner.soldier=0x20000+shift;next.owner.weak=0x30000+shift;
+    next.serverSoldier=0x90000+shift;next.serverItem=0xa0000+shift;
+    next.firing={0x50000+shift,0x60000+shift,0x70000+shift};
+    Bc2AmmoReserveLease r;r.identity=next;r.sequence=sequence;r.observedNs=now;r.deadlineNs=now+100*Ms;
+    r.loaded=22;r.reserve=191;r.capacity=30;r.verified=r.allThreeIdle=true;return r;
+}
+AmmoResourceActorDrain ActorDrain(const Fixture& f,const Bc2AmmoReserveLease& replacement,std::uint64_t serial){
+    return {*f.service.ActorIdentity(),f.service.Active(),serial,serial,f.now,replacement.deadlineNs,true};
+}
+void AdoptReplacement(Fixture& f,const Bc2AmmoReserveLease& r){
+    f.identity=r.identity;f.binding.owner=f.identity.owner;
+    f.binding.context.resource.actor=f.identity.owner.soldier;
+    f.binding.context.resource.actorGeneration=f.identity.owner.actorGeneration;
+    f.sample.context=f.binding.context;f.sample.counts={r.loaded,r.reserve,r.capacity};
+}
+int ActorRetirementKeepsPersistentServiceSafe(){
+    // The actual persistent service reproduces the old problem: once a real
+    // native call is entered, losing completion is not an ordinary rejection.
+    Fixture f;CHECK(f.Select());const auto request=f.Request(AmmunitionOperation::RemoveMagazine);
+    const auto command=f.service.Accept(request,f.now);CHECK(command);unsigned callbacks=0;
+    AmmoResourceNativeCall oldCall;
+    CHECK(f.service.InvokeNative(f.sample,[&]()noexcept{return f.now;},[&](std::int64_t began)noexcept{
+        ++callbacks;oldCall={f.identity,command->id,++f.invocation,began,began+1,command->before,command->after,true,true,true};return oldCall;
+    }));
+    f.service.Cancel(f.now+Ms);CHECK(f.service.Active());
+    CHECK(f.service.View()->requestState==AmmoResourceRequestState::Uncertain);
+    f.now+=10*Ms;const auto replacement=ReplacementReserve(f.identity,f.now,100);
+    const auto good=ActorDrain(f,replacement,10);
+    for(unsigned bad=0;bad<14;++bad){auto r=replacement;auto d=good;
+        switch(bad){
+        case 0:r.identity=f.identity;++r.identity.owner.actorGeneration;break; // boat/recenter only
+        case 1:r.identity.serverSoldier=f.identity.serverSoldier;break;
+        case 2:r.identity.owner.actorGeneration=f.identity.owner.actorGeneration;break;
+        case 3:d.callbacksDrained=false;break;
+        case 4:d.callbackRevision=0;break;
+        case 5:d.lifetimeEndEpoch=0;break;
+        case 6:++d.expected.owner.weak;break;
+        case 7:d.pending.reset();break;
+        case 8:++d.pending->id;break;
+        case 9:r.deadlineNs=f.now;break;
+        case 10:r.allThreeIdle=false;break;
+        case 11:r.identity.firing[2]=r.identity.firing[0];break;
+        case 12:d.deadlineNs=f.now;break;
+        case 13:r.verified=false;break;
+        }
+        CHECK(!f.service.RetireForReplacementActor(r,f.now,d));
+        CHECK(f.service.Active()==command&&f.service.Inventory().Size()==1&&!f.service.LastActorRetirement());
+    }
+    // New selection alone cannot clear the old native obligation.
+    auto binding=f.binding;binding.owner=replacement.identity.owner;
+    binding.context.resource.actor=binding.owner.soldier;binding.context.resource.actorGeneration=binding.owner.actorGeneration;
+    binding.observedNs=f.now;binding.deadlineNs=f.now+100*Ms;
+    auto sample=f.sample;sample.context=binding.context;sample.observedNs=f.now;sample.deadlineNs=f.now+100*Ms;++sample.sequence;
+    CHECK(!f.service.Select(binding,replacement.identity,sample,f.now)&&f.service.Active()==command);
+    CHECK(f.service.RetireForReplacementActor(replacement,f.now,good));
+    CHECK(!f.service.Active()&&f.service.Inventory().Size()==0&&callbacks==1);
+    CHECK(f.service.Outcome()&&f.service.Outcome()->request==request&&!f.service.Outcome()->receipt);
+    CHECK(f.service.Outcome()->state==AmmoResourceRequestState::ActorRetired&&f.service.Outcome()->nativeDispatched);
+    CHECK(f.service.Outcome()->actorRetirement&&f.service.Outcome()->actorRetirement->pending==command);
+    CHECK(!f.service.Observe(f.Row(2,oldCall),f.now));
+    CHECK(!f.service.RetireForReplacementActor(replacement,f.now,good));
+    AdoptReplacement(f,replacement);CHECK(f.Select());
+    CHECK(!f.service.Accept(request,f.now)); // old request high-water survived
+    CHECK(f.Run(AmmunitionOperation::RemoveMagazine)==0);
+    CHECK(f.sample.counts.loaded==0&&f.sample.counts.reserve==191); // no old reserve credit
+
+    // Keep the SAME service (including native request high-water marks) through
+    // 130 further actor replacements. The historical 64-slot capacity is not
+    // papered over by reconstructing the service for each lifetime.
+    for(unsigned lifetime=0;lifetime<130;++lifetime){
+        const auto completed=f.service.Outcome();
+        if(lifetime%2){CHECK(f.Select());const auto next=f.Request(AmmunitionOperation::RefillMagazine);
+            // An old removed original remains owned until explicit retirement;
+            // a rejected refill is not permission to clear that actor.
+            f.service.Accept(next,f.now);f.service.Cancel(f.now);
+        }
+        f.now+=20*Ms;const auto fresh=ReplacementReserve(*f.service.ActorIdentity(),f.now,200+lifetime);
+        const auto drain=ActorDrain(f,fresh,20+lifetime);
+        CHECK(f.service.RetireForReplacementActor(fresh,f.now,drain));
+        CHECK(f.service.Inventory().Size()==0&&!f.service.Active());
+        // A prior completed native transfer remains completed, not rolled back.
+        if(!(lifetime%2)&&completed){CHECK(f.service.Outcome()->request==completed->request);
+            CHECK(f.service.Outcome()->state==completed->state&&f.service.Outcome()->receipt==completed->receipt);}
+        AdoptReplacement(f,fresh);CHECK(f.Select());CHECK(f.service.Inventory().Size()==1);
+        CHECK(f.Run(AmmunitionOperation::RemoveMagazine)==0);
+        CHECK(f.sample.counts.reserve==191);
+    }
+    // An intermediate replacement can itself disappear before its first item
+    // publication. Empty-domain retirement must not create another permanent
+    // barrier or fabricate requirements/counts.
+    f.now+=20*Ms;auto r=ReplacementReserve(*f.service.ActorIdentity(),f.now,1000);
+    CHECK(f.service.RetireForReplacementActor(r,f.now,ActorDrain(f,r,1000)));
+    f.now+=20*Ms;r=ReplacementReserve(*f.service.ActorIdentity(),f.now,1001);
+    CHECK(f.service.RetireForReplacementActor(r,f.now,ActorDrain(f,r,1001)));
+    AdoptReplacement(f,r);CHECK(f.Select());CHECK(f.Run(AmmunitionOperation::RemoveMagazine)==0);
+    std::puts("Persistent ammo actor retirement: exact drain/replacement, stale command rejection, completed transfer preservation, 132 lifetimes.");
+    return 0;
+}
+
 int Transactions(){for(int loaded:{0,22,30}){
     Fixture f;f.sample.counts.loaded=loaded;CHECK(f.Run(AmmunitionOperation::RemoveMagazine)==0);
     CHECK(f.service.View()->wellEmpty&&f.service.View()->original->rounds==loaded);
@@ -285,5 +456,5 @@ int ConstructionProofCannotRenewInputOrBorrowCurrentAuthority(){
     return 0;
 }
 }
-int main(){if(ConstructionProofCannotRenewInputOrBorrowCurrentAuthority()||RejectedAdmissionCapturesExactCause()||CapturedSeatDeadlineSeparatesNativeViewAndSubmittedSource()||DispatchAndExpiryDiagnosticsDoNotChangeOutcomes()||Transactions()||Rejections()||CancelAndNoAutomaticRetry()||ChannelConcurrency()||TerminalOutcomesSurviveSelection()||ReadReasonsPreserveAdmission()||ReadJournalBoundAndDrain()||ConcurrentViewReadStillCoherent()||FailedOperationEvidenceSurvivesShutdownTail())return 1;
+int main(){if(ActorRetirementKeepsPersistentServiceSafe())return 1;if(NativeEntryDeadlineKeepsUncalledOperationRejectable()||ActualNativeEntryFailureRemainsUncertain()||ConstructionProofCannotRenewInputOrBorrowCurrentAuthority()||RejectedAdmissionCapturesExactCause()||CapturedSeatDeadlineSeparatesNativeViewAndSubmittedSource()||DispatchAndExpiryDiagnosticsDoNotChangeOutcomes()||Transactions()||Rejections()||CancelAndNoAutomaticRetry()||ChannelConcurrency()||TerminalOutcomesSurviveSelection()||ReadReasonsPreserveAdmission()||ReadJournalBoundAndDrain()||ConcurrentViewReadStillCoherent()||FailedOperationEvidenceSurvivesShutdownTail())return 1;
     std::puts("BC2 ammunition service: native-observer handoff, no-op/original/refill, identity, cancellation and 10000 command handoffs passed (mock Updates).");return 0;}

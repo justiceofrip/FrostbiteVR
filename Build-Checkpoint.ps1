@@ -5,7 +5,7 @@ param([ValidateSet('x86','x64')][string]$Architecture='x86',
       [switch]$OrdinaryResourceInputProbe, [switch]$NativeCycleRecovery,
       [switch]$OrdinaryResourceInterruptionProbe, [switch]$OrdinaryResourceSceneProbe,
       [switch]$BodySceneDepth, [switch]$PlayerGrenades, [switch]$PlayerKnife, [switch]$ContextualTools,
-      [ValidatePattern('^[a-zA-Z0-9][a-zA-Z0-9_-]*$')][string]$OperationProfile='checkpoint426')
+      [ValidatePattern('^[a-zA-Z0-9][a-zA-Z0-9_-]*$')][string]$OperationProfile='checkpoint436-r56')
 $ErrorActionPreference='Stop'
 $PSNativeCommandUseErrorActionPreference=$false
 $build=if($BuildDirectory){[IO.Path]::GetFullPath($BuildDirectory,$PSScriptRoot)}else{Join-Path $PSScriptRoot "build/$Architecture"}

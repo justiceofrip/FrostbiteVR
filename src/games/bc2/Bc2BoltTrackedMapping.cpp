@@ -14,22 +14,29 @@ bool SamePose(const math::Pose& a,const math::Pose& b)noexcept {
 std::optional<std::array<math::Matrix4,2>> MapBoltTrackedWrists(const Bc2BoltControllerContact& raw,
     const interaction::InputFrame& input,const interaction::HandInteractionSample& safety,const Bc2BoltBodyFrame& frame)noexcept {
     using namespace interaction;using namespace reload_insertion_detail;
-    if(!raw.raw.valid||!raw.mappingValid||!ValidInput(input)||!input.focused||!input.headValid||
+    if(!raw.raw.valid||!raw.mappingValid||raw.raw.input.sequence>safety.sequence||
+       raw.raw.input.observedNs>safety.observedNs||
+       !weapon_cycle_detail::Window(raw.raw.input.observedNs,raw.raw.input.deadlineNs,safety.nowNs))return {};
+    return MapBoltCustodyWrists({raw.raw.nativeOwner,raw.raw.input.owner,raw.raw.rigFingerprint,raw.wristToGrip,raw.units},
+        input,safety,frame);
+}
+std::optional<std::array<math::Matrix4,2>> MapBoltCustodyWrists(const Bc2BoltWristMapping& mapping,
+    const InputFrame& input,const HandInteractionSample& safety,const Bc2BoltBodyFrame& frame)noexcept {
+    using namespace interaction;using namespace reload_insertion_detail;
+    if(!mapping.rigFingerprint||!ValidInput(input)||!input.focused||!input.headValid||
        !input.hands[0].gripTracked||!input.hands[1].gripTracked||!safety.focused||!safety.tracked[0]||!safety.tracked[1]||
        input.generation!=safety.sequence||input.spaceGeneration!=safety.owner.space||
-       raw.raw.input.owner!=safety.owner||raw.raw.nativeOwner!=frame.owner||frame.owner.space!=input.spaceGeneration||
+       mapping.owner!=safety.owner||mapping.nativeOwner!=frame.owner||frame.owner.space!=input.spaceGeneration||
        !SameSample(safety,frame.input)||!SamePose(input.referenceHead,frame.referenceHead)||
-       !std::isfinite(frame.units)||frame.units<=0||frame.units!=input.worldUnitsPerMeter||frame.units!=raw.units||
-       !Rigid(frame.bodyWorldMeters)||raw.raw.input.sequence>safety.sequence||raw.raw.input.observedNs>safety.observedNs||
-       !weapon_cycle_detail::Window(raw.raw.input.observedNs,raw.raw.input.deadlineNs,safety.nowNs)||
-       !weapon_cycle_detail::Window(safety.observedNs,safety.deadlineNs,safety.nowNs))return {};
+       !std::isfinite(frame.units)||frame.units<=0||frame.units!=input.worldUnitsPerMeter||frame.units!=mapping.units||
+       !Rigid(frame.bodyWorldMeters)||!weapon_cycle_detail::Window(safety.observedNs,safety.deadlineNs,safety.nowNs))return {};
     std::array<math::Matrix4,2> result;
     for(unsigned n=0;n<2;++n){
         const auto relative=math::MakeRelativePose(input.referenceHead,input.hands[n].grip);
         const auto view=relative?math::MakeLhViewFromOpenXRPose(*relative):std::nullopt;
         const auto grip=view?InverseRigid(*view):std::nullopt;
-        if(!grip||!Rigid(raw.wristToGrip[n])||Distance(raw.wristToGrip[n],Identity())>.0001f)return {};
-        result[n]=Multiply(Multiply(raw.wristToGrip[n],*grip),frame.bodyWorldMeters);
+        if(!grip||!Rigid(mapping.wristToGrip[n])||Distance(mapping.wristToGrip[n],Identity())>.0001f)return {};
+        result[n]=Multiply(Multiply(mapping.wristToGrip[n],*grip),frame.bodyWorldMeters);
         if(!Rigid(result[n]))return {};
     }return result;
 }

@@ -3,6 +3,7 @@
 #include "Bc2ChestKnifeRendering.h"
 #include "Bc2SelectedKnifeNativeReader.h"
 #include "Bc2SelectedKnifeMotion.h"
+#include "Bc2SelectedKnifeAvailability.h"
 #include "Bc2SelectedKnifeCode.h"
 #include "fvr/interaction/TrackedRig.h"
 #include <iostream>
@@ -415,8 +416,525 @@ int PublishedContinuityDelayedMissAndNextJab(){
     CHECK(policy.Resolve(intent->serial,intent->identity,SelectedMeleeOutcome::Completed));
     return 0;
 }
+int RepeatedGatherKeepsMeasuredStroke(){
+    using namespace interaction;constexpr std::int64_t ms=1000000;
+    for(const float controllerYaw:{.23f,.71f,1.13f}){
+        Fixture f;const auto binding=f.Bind();CHECK(binding);
+        InputFrame input;input.generation=1;input.spaceGeneration=14;input.predictedNs=1000*ms;
+        input.focused=input.headValid=true;
+        for(auto& hand:input.hands){hand.gripTracked=hand.aimTracked=true;hand.active=Components;}
+        input.hands[0].grip.position={-.2f,-.3f,-.4f};input.hands[1].grip.position={.2f,-.3f,-.4f};
+        input.hands[1].grip.orientation={0,std::sin(controllerYaw*.5f),0,std::cos(controllerYaw*.5f)};
+        TrackedRig rig;const TrackedRigOwner rigOwner{10,12,15,22,13};
+        const std::array<ArmAnchor,2> anchors{ArmAnchor{{-.2f,-.1f,0},{-.1f,-.2f,.1f}},
+            ArmAnchor{{.2f,-.1f,0},{.1f,-.2f,.1f}}};
+        SelectedMeleeAttack policy;HandInteraction hands;SelectedMeleeSample sample;
+        sample.motion.source={{1,2,3,14},1,1000*ms,1100*ms,1000*ms,true,{true,true},{false,false}};
+        sample.identity={sample.motion.source.owner,{42,1},{53,1},7};
+        sample.selected=sample.geometryCurrent=sample.motion.attackAvailable=true;
+        unsigned emitted=0,derivedChanges=0;MeleePoint axis{};std::optional<SelectedMeleeIntent> intent;
+        for(unsigned frame=0;frame<28;++frame){
+            if(frame>=20){
+                // OpenXR +Z is reflected in the LH tracked geometry.
+                input.hands[1].grip.position.x+=axis.x*.012f;
+                input.hands[1].grip.position.y+=axis.y*.012f;
+                input.hands[1].grip.position.z-=axis.z*.012f;
+            }
+            ++input.generation;input.predictedNs+=10*ms;
+            auto& source=sample.motion.source;source.sequence=input.generation;
+            source.observedNs=source.nowNs=input.predictedNs;source.deadlineNs=source.nowNs+100*ms;
+            hands.Update(source);const HandContactProof contact{{11,1},source.sequence,source.deadlineNs,true};
+            const auto held=hands.Current(InteractionHand::Right);
+            const auto claim=held?hands.Renew(source,held->token,contact):
+                hands.Acquire(source,{source.owner,InteractionHand::Right,HandClaimKind::GunHold,sample.identity.item,contact,1,0});
+            CHECK(claim.claim);sample.motion.hold=claim.claim->token;
+            MeleePoint firstTip{},firstDirection{};
+            // Real renderer path: TrackedRig -> measured wrist calibration ->
+            // selected receipt -> MapGeometry. Body rotation can change between
+            // gathers while the complete OpenXR packet stays unchanged.
+            for(unsigned gather=0;gather<3;++gather){
+                math::Pose bodyPose;const float yaw=.31f+.017f*float(frame*3+gather);
+                bodyPose.orientation={0,std::sin(yaw*.5f),0,std::cos(yaw*.5f)};
+                const auto bodyView=math::MakeLhViewFromOpenXRPose(bodyPose);CHECK(bodyView);
+                const auto body=InverseRigid(*bodyView);CHECK(body);
+                const auto targets=rig.Update(rigOwner,input,*body,At(-.2f,-.3f,.4f),At(.2f,-.3f,.4f),
+                    At(.2f,-.3f,.7f),anchors,{}, {}, {},AuthoredGripAttachment{private_knife::RightHandInKnife});
+                CHECK(targets&&targets->tracked[1]);
+                const auto calibration=private_knife::KnifeWristCalibration(input,*body,targets->right);CHECK(calibration);
+                const auto receipt=MakeSelectedKnifeRenderReceipt(*binding,*calibration);CHECK(receipt);
+                const auto geometry=selectedKnife::MapGeometry(input,*receipt,*body);CHECK(geometry);
+                sample.motion.tip=geometry->motion.tip;sample.motion.direction=geometry->motion.direction;
+                if(!gather){firstTip=sample.motion.tip;firstDirection=sample.motion.direction;axis=firstDirection;}
+                else if(sample.motion.tip!=firstTip||sample.motion.direction!=firstDirection)++derivedChanges;
+                source.nowNs=source.observedNs+gather*ms;
+                const auto result=policy.Update(sample,hands);
+                if(result.intent){++emitted;intent=result.intent;CHECK(gather==0);}
+                if(gather)CHECK(!result.intent&&result.reason==SelectedMeleeReason::Duplicate);
+            }
+        }
+        CHECK(derivedChanges>0&&emitted==1&&intent&&intent->cause==SelectedMeleeCause::Stroke);
+        CHECK(policy.Pending()->serial==intent->serial&&policy.Pending()->deadlineNs==intent->deadlineNs);
+        std::cout<<"Measured repeated gather yaw "<<controllerYaw<<": "<<derivedChanges<<" geometry changes, one stroke\n";
+    }
+    return 0;
 }
-int main(){if(ExactSelectedGeometry()||RejectLookalikesAndMissingEvidence()||LifetimeCannotRenewOldCalibration()||CalibratedBladeUsesOriginalGrip()||
+int PublishedInputSurvivesGatherUntilConsumed(){
+    using namespace interaction;constexpr std::int64_t ms=1000000;
+    SelectedMeleeAttack policy;HandInteraction hands;SelectedMeleeSample sample{};
+    sample.motion.source={{1,2,3,4},1,1000*ms,1100*ms,1000*ms,true,{true,true},{false,false}};
+    sample.identity={sample.motion.source.owner,{42,1},{53,1},7};
+    sample.selected=sample.geometryCurrent=sample.motion.attackAvailable=true;
+    const auto next=[&](float dz=0){
+        auto& s=sample.motion.source;++s.sequence;s.observedNs+=10*ms;s.nowNs=s.observedNs;s.deadlineNs=s.nowNs+100*ms;
+        sample.motion.tip.z+=dz;hands.Update(s);const HandContactProof contact{{11,1},s.sequence,s.deadlineNs,true};
+        const auto held=hands.Current(InteractionHand::Right);
+        const auto claim=held?hands.Renew(s,held->token,contact):
+            hands.Acquire(s,{s.owner,InteractionHand::Right,HandClaimKind::GunHold,sample.identity.item,contact,1,0});
+        if(claim.claim)sample.motion.hold=claim.claim->token;
+        return policy.Update(sample,hands);
+    };
+    for(unsigned n=0;n<20;++n)CHECK(!next().intent);
+    std::optional<SelectedMeleeIntent> intent;
+    for(unsigned n=0;n<8&&!intent;++n)intent=next(.012f).intent;
+    CHECK(intent&&intent->cause==SelectedMeleeCause::Stroke);
+    const auto original=*intent;const auto firstSource=sample.motion.source;
+    selectedKnife::InputDelivery delivery;
+    selectedKnife::InputDeliveryAuthority authority{true,true,true,true};
+    auto continuation=SelectedMeleeReason::Duplicate;
+    const auto repeat=[&]{return delivery.CanRepeat(original,policy.PendingState(),continuation,sample.motion.source,
+        sample.motion.hold,7,authority,sample.motion.source.nowNs);};
+    std::array<std::byte,InputBytes> cache{};
+    const auto gather=[&](bool fire){
+        // Real native cache adapter after a fresh original Gather. A delayed
+        // consumer reads only the LAST Gather, not the earlier transient bit.
+        cache={};const unsigned unrelated=0x80000000u;std::memcpy(cache.data()+0x9c,&unrelated,4);
+        ActionOutput out;out.active=true;out.owner=2;if(fire)out.held=out.pressed=Fire;
+        InputOverride patch;
+        if(!patch.Apply(cache,out,{},{},{},false,EntryAction::MeleeAttack))return false;
+        patch.Commit();unsigned flags=0;std::memcpy(&flags,cache.data()+0x9c,4);
+        return flags==(unrelated|(fire?(1u<<5):0u));
+    };
+    const auto fireInCache=[&]{unsigned flags=0;std::memcpy(&flags,cache.data()+0x9c,4);return (flags&(1u<<5))!=0;};
+    CHECK(!repeat());delivery.Consumed(firstSource.nowNs);CHECK(!delivery.consumedNs);
+    CHECK(gather(true));delivery.Published(firstSource.nowNs);
+    // Reproduce the old loss using the actual policy's duplicate result.
+    ++sample.motion.source.nowNs;
+    const auto duplicate=policy.Update(sample,hands);CHECK(!duplicate.intent&&duplicate.reason==SelectedMeleeReason::Duplicate);
+    CHECK(gather(bool(duplicate.intent))&&!fireInCache());
+    // The correction republishes the SAME immutable command, with no new edge.
+    for(unsigned n=0;n<3;++n){
+        ++sample.motion.source.nowNs;CHECK(!policy.Update(sample,hands).intent);
+        CHECK(repeat()&&gather(repeat())&&fireInCache());delivery.Published(sample.motion.source.nowNs);
+    }
+    CHECK(delivery.publications==4&&delivery.firstPublishedNs==firstSource.nowNs);
+    // One predicted firing copy can leave idle before the server consumes its
+    // queued input. Current native readiness cannot erase admitted delivery.
+    sample.motion.attackAvailable=false;const auto advanced=next();CHECK(!advanced.intent);
+    continuation=advanced.reason;CHECK(repeat()&&gather(repeat()));
+    delivery.Published(sample.motion.source.nowNs);
+    ++sample.motion.source.nowNs;const auto predicted=policy.Update(sample,hands);
+    CHECK(!predicted.intent&&predicted.reason==SelectedMeleeReason::NativeUnavailable);
+    continuation=predicted.reason;CHECK(repeat());
+    CHECK(policy.Pending()->serial==original.serial&&policy.Pending()->sourceSequence==original.sourceSequence&&
+        policy.Pending()->observedNs==original.observedNs&&policy.Pending()->deadlineNs==original.deadlineNs);
+    const auto continuous=sample.motion.source;const auto held=sample.motion.hold;
+    for(unsigned fault=0;fault<17;++fault){
+        auto bad=continuous;auto token=held;auto auth=authority;auto epoch=std::uint64_t(7);
+        auto now=bad.nowNs;auto pending=SelectedMeleePending::Staged;
+        switch(fault){
+        case 0:auth.actionsAvailable=false;break;
+        case 1:auth.gameplayOwned=false;break;
+        case 2:auth.ownerCurrent=false;break;
+        case 3:auth.admissionCurrent=false;break;
+        case 4:bad.focused=false;break;
+        case 5:bad.tracked[1]=false;break;
+        case 6:bad.released[1]=true;break;
+        case 7:++bad.owner.equipGeneration;break;
+        case 8:++bad.owner.space;break;
+        case 9:bad.sequence=original.sourceSequence-1;break;
+        case 10:++epoch;break;
+        case 11:++token.id;break;
+        case 12:now=original.deadlineNs;break;
+        case 13:bad.deadlineNs=now;break;
+        case 14:pending=SelectedMeleePending::Submitted;break;
+        case 15:pending=SelectedMeleePending::Unknown;break;
+        case 16:now=delivery.lastPublishedNs-1;break;
+        }
+        CHECK(!delivery.CanRepeat(original,pending,continuation,bad,token,epoch,auth,now));
+    }
+    // Newer source leases never renew the original deadline.
+    auto later=continuous;later.observedNs=later.nowNs=original.deadlineNs;
+    later.deadlineNs=later.nowNs+100*ms;++later.sequence;
+    CHECK(selectedKnife::PublishedSourceContinues(original,later,7));
+    CHECK(!delivery.CanRepeat(original,policy.PendingState(),continuation,later,held,7,authority,later.nowNs));
+    for(const auto reason:{SelectedMeleeReason::Invalid,SelectedMeleeReason::Order,
+        SelectedMeleeReason::IdentityChanged,SelectedMeleeReason::NeutralRequired,SelectedMeleeReason::Ready,
+        SelectedMeleeReason::Intent,SelectedMeleeReason::SerialLimit})
+        CHECK(!delivery.CanRepeat(original,policy.PendingState(),reason,continuous,held,7,authority,continuous.nowNs));
+    // Policy validity is independently required even when continuity, identity
+    // and the native ownership booleans still look valid.
+    auto malformed=sample;malformed.trigger=std::numeric_limits<float>::quiet_NaN();
+    const auto invalid=policy.Update(malformed,hands);
+    CHECK(invalid.reason==SelectedMeleeReason::Invalid&&policy.PendingState()==SelectedMeleePending::Staged);
+    CHECK(!delivery.CanRepeat(original,policy.PendingState(),invalid.reason,continuous,held,7,authority,continuous.nowNs));
+    auto released=sample.motion.source;++released.sequence;++released.observedNs;++released.nowNs;released.released[1]=true;
+    hands.Update(released);const auto lostHold=policy.Update(sample,hands);
+    CHECK(lostHold.reason==SelectedMeleeReason::Invalid);
+    CHECK(!delivery.CanRepeat(original,policy.PendingState(),lostHold.reason,continuous,held,7,authority,continuous.nowNs));
+    delivery.Consumed(delivery.firstPublishedNs-1);CHECK(!delivery.consumedNs);
+    CHECK(fireInCache());delivery.Consumed(continuous.nowNs+1);
+    CHECK(delivery.consumedNs==continuous.nowNs+1&&!repeat());
+    CHECK(gather(repeat())&&!fireInCache());
+    CHECK(policy.PendingState()==SelectedMeleePending::Staged); // Consumption is not completion.
+    delivery.Consumed(continuous.nowNs+2);CHECK(delivery.consumedNs==continuous.nowNs+1);
+    // Once any cache publication succeeded, a later failed publication leaves
+    // an ambiguous native outcome, not a claimed no-effect rejection.
+    CHECK(policy.Resolve(original.serial,original.identity,SelectedMeleeOutcome::Unknown));
+    CHECK(!policy.Resolve(original.serial,original.identity,SelectedMeleeOutcome::RejectedNoEffect));
+    CHECK(!repeat());
+    CHECK(policy.Resolve(original.serial,original.identity,SelectedMeleeOutcome::Completed));
+    CHECK(!repeat());
+    std::cout<<"Retained delivery: old duplicate Gather erases Fire; same-lease repeated Gather preserves it until consumption\n";
+    return 0;
+}
+namespace gap_test {
+using namespace fvr::interaction;
+using namespace fvr::bc2::selectedKnife;
+constexpr std::int64_t gapMs=1000000;
+struct IncoherentFixture {
+    NativeFixture native;
+    unsigned fullReads=0,changeAddress=NativeFixture::firing+0x50,changeValue=0x3a83126f;
+    bool racing=false;
+    ReloadStateMemory Memory(){
+        return {this,[](void* p,unsigned at,void* out,std::size_t size){
+            auto& f=*static_cast<IncoherentFixture*>(p);
+            if(f.racing&&at==NativeFixture::firing&&size==0xb0&&++f.fullReads==2)
+                f.native.Put(f.changeAddress,f.changeValue);
+            const auto raw=f.native.Memory();return raw.read(raw.context,at,out,size);
+        },[](void* p,unsigned at,const char* name){
+            auto& f=*static_cast<IncoherentFixture*>(p);const auto raw=f.native.Memory();return raw.type(raw.context,at,name);
+        }};
+    }
+    std::optional<Native> Read(NativeReadDiagnostic* diagnostic=nullptr){
+        fullReads=0;if(racing)native.Put(NativeFixture::firing+0x50,0.f);
+        return ReadNative(Memory(),native.binding,native.state,native.base,native.client,diagnostic);
+    }
+};
+int ClassifiedReadFailures(){
+    IncoherentFixture f;CHECK(f.Read());f.racing=true;
+    CHECK(!f.Read()); // Default API remains unavailable.
+    NativeReadDiagnostic d;CHECK(!f.Read(&d));
+    CHECK(d.failure==NativeReadFailure::FiringIncoherent&&d.recognitionOwner&&d.branch.readyPair);
+    CHECK(d.branch.failure==private_knife::detail::BranchFailure::Incoherent&&d.branch.differenceOffset==0x50);
+    CHECK(d.branch.before==0&&d.branch.after==f.changeValue);
+    CHECK(!NativeRecognitionOwner::attackAuthority);
+    for(unsigned at:{NativeFixture::firing,NativeFixture::firing+8,NativeFixture::firing+12}){
+        IncoherentFixture bad;bad.racing=true;bad.changeAddress=at;bad.changeValue=0;
+        CHECK(!bad.Read(&d)&&d.failure==NativeReadFailure::Branch&&!d.recognitionOwner);
+        CHECK(d.branch.failure==private_knife::detail::BranchFailure::Identity);
+    }
+    IncoherentFixture malformed;malformed.racing=true;malformed.changeAddress=NativeFixture::firing+0x3c;malformed.changeValue=99;
+    CHECK(!malformed.Read(&d)&&d.branch.failure==private_knife::detail::BranchFailure::Malformed&&!d.recognitionOwner);
+    IncoherentFixture busy;busy.racing=true;busy.changeAddress=NativeFixture::firing+0x3c;busy.changeValue=5;
+    CHECK(!busy.Read(&d)&&d.failure==NativeReadFailure::FiringIncoherent&&!d.branch.readyPair);
+    for(unsigned at:{NativeFixture::effects+0x128,NativeFixture::primary+0x4c,NativeFixture::cw+0x40}){
+        IncoherentFixture changed;changed.racing=true;changed.changeAddress=at;changed.changeValue=0;
+        CHECK(!changed.Read(&d)&&d.failure==NativeReadFailure::ScopeAfter&&!d.recognitionOwner);
+    }
+    IncoherentFixture type;type.native.failType=NativeFixture::effects;
+    CHECK(!type.Read(&d)&&d.failure==NativeReadFailure::ScopeBefore&&d.scope.typeFailed&&!d.recognitionOwner);
+    IncoherentFixture unreadable;unreadable.native.failRead=NativeFixture::firing;
+    CHECK(!unreadable.Read(&d)&&d.failure==NativeReadFailure::ScopeBefore&&d.scope.readFailed&&!d.recognitionOwner);
+    // Optional classification must not change the result for coherent snapshots.
+    IncoherentFixture coherent;const auto plain=coherent.Read();const auto diagnosed=coherent.Read(&d);
+    CHECK(plain&&diagnosed&&d.failure==NativeReadFailure::None&&!d.recognitionOwner&&plain->links==diagnosed->links);
+    return 0;
+}
+struct GapFixture {
+    IncoherentFixture memory;
+    SelectedMeleeAttack policy;
+    HandInteraction hands;
+    RecognitionGap gap;
+    SelectedMeleeSample sample{};
+    unsigned emitted=0,claims=0,held=0,repeated=0,recovered=0,rejected=0,policyCalls=0;
+    bool oldReset=false,available=true;
+    NativeReadDiagnostic diagnostic{};
+    SelectedMeleeObservation observation{};
+    std::optional<SelectedMeleeIntent> last;
+    GapFixture(bool old=false):oldReset(old){
+        const auto& n=memory.native.client;
+        sample.motion.source={{(std::uint64_t(n.owner.weak)<<32)|n.owner.soldier,1,7,3},1,1000*gapMs,1100*gapMs,1000*gapMs,true,{true,true},{false,false}};
+        sample.identity={sample.motion.source.owner,{n.owner.weapon,2},{n.config.weaponData,2},8};
+        sample.selected=sample.geometryCurrent=sample.motion.attackAvailable=true;
+        Refresh();Evaluate();
+    }
+    void Refresh(){
+        const auto& s=sample.motion.source;
+        memory.native.client.sequence=s.sequence;memory.native.client.observedNs=s.observedNs;
+        hands.Update(s);const HandContactProof contact{{11,1},s.sequence,s.deadlineNs,true};
+        const auto current=hands.Current(InteractionHand::Right);
+        if(current){const auto r=hands.Renew(s,current->token,contact);if(r.claim)sample.motion.hold=r.claim->token;}
+        else {const auto r=hands.Acquire(s,{s.owner,InteractionHand::Right,HandClaimKind::GunHold,sample.identity.item,contact,++claims,0});
+            if(r.claim)sample.motion.hold=r.claim->token;}
+    }
+    bool Evaluate(){
+        if(!gap.SourceContinues(sample.motion.source,sample.identity.inputEpoch)){gap.Reset();policy.InvalidateMotion();}
+        const auto native=memory.Read(&diagnostic);
+        sample.motion.attackAvailable=available&&native&&Ready(*native);
+        if(!native){
+            if(oldReset){gap.Reset();policy.InvalidateMotion();return false;}
+            const auto result=gap.Skip(diagnostic,sample,hands,available,policy.PendingState());
+            if(result==RecognitionGapResult::Held){++held;return false;}
+            if(result==RecognitionGapResult::Repeated){++repeated;return false;}
+            ++rejected;policy.InvalidateMotion();return false;
+        }
+        const auto recovery=gap.BeforeVerified(*native,sample,hands,available,policy.PendingState());
+        if(recovery==RecognitionGapResult::Recovered)++recovered;
+        if(recovery==RecognitionGapResult::Rejected){++rejected;policy.InvalidateMotion();}
+        const auto result=policy.Update(sample,hands,&observation);++policyCalls;
+        gap.Remember(*native,sample,hands,result,observation);
+        if(result.intent){++emitted;last=result.intent;}
+        return bool(result.intent);
+    }
+    bool Step(std::int64_t ms,float z,bool fail=false){
+        ++sample.motion.source.sequence;sample.motion.source.observedNs+=ms*gapMs;
+        sample.motion.source.nowNs=sample.motion.source.observedNs;
+        sample.motion.source.deadlineNs=sample.motion.source.nowNs+100*gapMs;
+        sample.motion.tip.z=z;memory.racing=fail;Refresh();return Evaluate();
+    }
+    void Rest(){for(unsigned n=0;n<20;++n)Step(10,0);}
+};
+int DeliveredStrokeWithOneIncoherentPacket(){
+    // Exact second-stroke displacements/timing delivered in approach43107,
+    // plus the stationary sample immediately before motion. The old read-gap
+    // reset loses the entire gesture. No pose is fabricated in the skipped call.
+    for(bool old:{true,false}){
+        GapFixture f(old);f.Rest();CHECK(f.emitted==0);
+        CHECK(!f.Step(19,.019f));
+        const auto before=f.policyCalls;
+        CHECK(!f.Step(15,.034f,true));
+        const auto failedSource=f.sample.motion.source;
+        CHECK(f.policyCalls==before&&!f.last);
+        for(unsigned n=0;n<5;++n){f.sample.motion.source.nowNs+=gapMs;CHECK(!f.Evaluate());}
+        CHECK(f.policyCalls==before&&!f.last); // Repeated Gathers add no samples.
+        f.Step(16,.050f);f.Step(31,.081f);f.Step(16,.097f);f.Step(31,.120f);
+        if(old){CHECK(f.emitted==0);continue;}
+        CHECK(f.held==1&&f.repeated==5&&f.recovered==1&&f.rejected==0);
+        CHECK(f.emitted==1&&f.last&&f.last->cause==SelectedMeleeCause::Stroke&&f.last->stroke);
+        CHECK(f.last->sourceSequence>failedSource.sequence&&f.last->observedNs>failedSource.observedNs);
+        CHECK(f.last->deadlineNs==f.last->observedNs+100*gapMs);
+        CHECK(f.policy.PendingState()==SelectedMeleePending::Staged&&!f.gap.Active());
+        // Recovery still requires the real fully current native owner check.
+        const auto current=f.memory.Read();CHECK(current);
+        CHECK(OwnerCurrent(f.memory.Memory(),f.memory.native.binding,f.memory.native.state,f.memory.native.base,*current));
+        f.memory.native.Put(NativeFixture::effects+0x128,0u);
+        CHECK(!OwnerCurrent(f.memory.Memory(),f.memory.native.binding,f.memory.native.state,f.memory.native.base,*current));
+    }
+    std::cout<<"Delivered 43107 stroke: old gap reset emits zero; classified one-packet gap emits exactly one after current native recovery\n";
+    return 0;
+}
+int GapsCannotExtendAuthority(){
+    for(unsigned fault=0;fault<15;++fault){
+        GapFixture f;f.Rest();CHECK(!f.Step(19,.019f));CHECK(!f.Step(15,.034f,true)&&f.gap.Active());
+        switch(fault){
+        case 0: f.Step(16,.050f,true);break; // second distinct failed packet
+        case 1: f.sample.motion.source.nowNs+=76*gapMs;f.Evaluate();break;
+        case 2: f.sample.motion.source.deadlineNs=f.sample.motion.source.nowNs;f.Evaluate();break;
+        case 3: f.sample.motion.source.focused=false;f.Evaluate();break;
+        case 4: f.sample.motion.source.tracked[1]=false;f.Evaluate();break;
+        case 5: f.sample.motion.source.released[1]=true;f.Evaluate();break;
+        case 6: ++f.sample.identity.inputEpoch;f.Evaluate();break;
+        case 7: f.available=false;f.Evaluate();break; // caller's menu/action gate
+        case 8: f.sample.trigger=1;f.Evaluate();break; // no trigger edge queued across a gap
+        case 9: f.sample.trigger=std::numeric_limits<float>::quiet_NaN();f.Evaluate();break;
+        case 10: f.hands.Release(f.sample.motion.source,f.sample.motion.hold);f.Evaluate();break;
+        case 11: f.memory.changeAddress=NativeFixture::firing+0x3c;f.memory.changeValue=5;f.Evaluate();break;
+        case 12: f.memory.native.Put(NativeFixture::effects+0x128,0u);f.Evaluate();break;
+        case 13: ++f.sample.motion.source.observedNs;f.Evaluate();break; // mutated duplicate packet
+        case 14: f.sample.motion.source.nowNs+=2*gapMs;f.Evaluate();f.sample.motion.source.nowNs-=gapMs;f.Evaluate();break;
+        }
+        CHECK(!f.gap.Active()&&f.emitted==0&&f.policy.PendingState()==SelectedMeleePending::None);
+    }
+    // A fully read replacement firing cohort and a new native actor cannot
+    // reconnect a pre-gap gesture even when both snapshots independently pass.
+    for(unsigned fault=0;fault<6;++fault){
+        GapFixture f;f.Rest();f.Step(19,.019f);f.Step(15,.034f,true);
+        CHECK(f.gap.Active());
+        if(fault==0){f.memory.native.client.branches[0].address=NativeFixture::cf1;
+            f.memory.native.client.branches[1].address=NativeFixture::cf0;
+            f.memory.native.Put(NativeFixture::cw+0x3c,NativeFixture::cf1);f.memory.native.Put(NativeFixture::cw+0x40,NativeFixture::cf0);}
+        if(fault==1)++f.memory.native.client.owner.actorGeneration;
+        if(fault==2)++f.memory.native.client.owner.equipGeneration;
+        if(fault==3)f.sample.geometryCurrent=false;
+        if(fault==4)f.memory.native.Put(NativeFixture::firing+0x3c,5u);
+        if(fault==5)f.sample.motion.source.nowNs+=76*gapMs;
+        f.memory.racing=false;
+        if(fault!=5){++f.sample.motion.source.sequence;f.sample.motion.source.observedNs+=16*gapMs;
+            f.sample.motion.source.nowNs=f.sample.motion.source.observedNs;f.sample.motion.source.deadlineNs=f.sample.motion.source.nowNs+100*gapMs;f.Refresh();}
+        f.sample.motion.tip.z=.050f;CHECK(!f.Evaluate());
+        CHECK(f.recovered==0&&!f.gap.Active()&&f.emitted==0);
+    }
+    return 0;
+}
+int PendingAndDuplicateLeasesStayOriginal(){
+    GapFixture cached;cached.Rest();cached.sample.motion.source.nowNs+=2*gapMs;
+    cached.Step(10,0);cached.sample.motion.source.nowNs+=2*gapMs;
+    // A fresh sample can be processed by Prepare later than its cached
+    // SourceAdvanced timestamp. Repeating that cache is not clock reversal.
+    ++cached.sample.motion.source.sequence;cached.sample.motion.source.observedNs+=10*gapMs;
+    cached.sample.motion.source.nowNs=cached.sample.motion.source.observedNs+2*gapMs;
+    cached.sample.motion.source.deadlineNs=cached.sample.motion.source.observedNs+100*gapMs;
+    cached.Refresh();cached.Evaluate();
+    auto sourceAdvanced=cached.sample.motion.source;sourceAdvanced.nowNs=sourceAdvanced.observedNs;
+    CHECK(cached.gap.SourceContinues(sourceAdvanced,cached.sample.identity.inputEpoch));
+    GapFixture f;f.Rest();f.Step(19,.019f);f.Step(15,.034f,true);
+    const auto anchor=f.gap.AnchorObservedNs();
+    for(unsigned n=0;n<35;++n){f.sample.motion.source.nowNs+=gapMs;CHECK(!f.Evaluate());}
+    CHECK(f.gap.Active()&&f.gap.AnchorObservedNs()==anchor);
+    f.sample.motion.source.nowNs=anchor+76*gapMs;CHECK(!f.Evaluate()&&!f.gap.Active());
+    GapFixture pending;pending.Rest();
+    for(unsigned n=1;n<=8;++n)pending.Step(10,.012f*n);
+    CHECK(pending.emitted==1&&pending.last);
+    const auto intent=*pending.last;
+    pending.Step(10,.11f,true);
+    CHECK(!pending.gap.Active()&&pending.policy.PendingState()==SelectedMeleePending::Staged);
+    CHECK(pending.policy.Pending()->serial==intent.serial&&pending.policy.Pending()->deadlineNs==intent.deadlineNs);
+    // No restoration or completion is inferred from a later coherent read.
+    pending.Step(10,.12f);CHECK(pending.emitted==1&&pending.policy.Pending()->serial==intent.serial);
+    return 0;
+}
+}
+
+}
+namespace local434_test {
+using namespace interaction;
+constexpr std::int64_t ms=1000000;
+struct MotionFixture {
+    Fixture geometry;
+    std::optional<SelectedKnifeRenderReceipt> receipt;
+    InputFrame input{};
+    SelectedMeleeSample sample{};
+    HandInteraction hands;
+    SelectedMeleeAttack policy;
+    std::optional<selectedKnife::Geometry> mapped;
+    std::optional<SelectedMeleeIntent> intent;
+    SelectedMeleeObservation observation{};
+    unsigned emitted=0;
+    std::uint64_t claims=0;
+    explicit MotionFixture(math::Vec3 origin={}){
+        if(const auto binding=geometry.Bind())receipt=MakeSelectedKnifeRenderReceipt(*binding,At());
+        input.generation=1;input.spaceGeneration=14;input.predictedNs=1000*ms;
+        input.focused=input.headValid=true;input.referenceHead.position=input.head.position=origin;
+        auto& right=input.hands[1];right.gripTracked=right.aimTracked=true;right.active=Components;
+        right.grip.position={origin.x+.2f,origin.y-.3f,origin.z-.4f};right.aim=right.grip;
+        sample.motion.source={{1,2,3,14},1,1000*ms,1100*ms,1000*ms,true,{true,true},{false,false}};
+        sample.identity={sample.motion.source.owner,{42,1},{53,1},7};
+        sample.selected=sample.geometryCurrent=sample.motion.attackAvailable=true;
+    }
+    bool Step(){
+        ++input.generation;input.predictedNs+=10*ms;
+        auto& source=sample.motion.source;source.sequence=input.generation;
+        source.observedNs=source.nowNs=input.predictedNs;source.deadlineNs=source.nowNs+100*ms;
+        hands.Update(source);const HandContactProof contact{{11,1},source.sequence,source.deadlineNs,true};
+        const auto held=hands.Current(InteractionHand::Right);
+        const auto claim=held?hands.Renew(source,held->token,contact):
+            hands.Acquire(source,{source.owner,InteractionHand::Right,HandClaimKind::GunHold,sample.identity.item,contact,++claims,0});
+        if(!claim.claim||!receipt)return false;sample.motion.hold=claim.claim->token;
+        mapped=selectedKnife::MapGeometry(input,*receipt,At(100,20,-30));
+        if(!mapped)return false;
+        sample.motion.tip=mapped->motion.tip;sample.motion.direction=mapped->motion.direction;
+        const auto result=policy.Update(sample,hands,&observation);
+        if(result.intent){++emitted;intent=result.intent;}
+        return true;
+    }
+    void Move(math::Vec3 movement,bool head){
+        auto& grip=input.hands[1].grip.position;
+        grip.x+=movement.x;grip.y+=movement.y;grip.z+=movement.z;
+        if(head){input.head.position.x+=movement.x;input.head.position.y+=movement.y;input.head.position.z+=movement.z;}
+    }
+};
+int TranslatedOriginsKeepSameJab(){
+    std::optional<SelectedMeleeIntent> baseline;
+    std::optional<math::Matrix4> native;
+    for(const auto origin:{math::Vec3{},math::Vec3{4,2,-6},math::Vec3{-7,-3,5}}){
+        MotionFixture f(origin);for(unsigned n=0;n<20;++n)CHECK(f.Step());
+        CHECK(!f.emitted&&f.mapped);
+        const auto axis=f.mapped->motion.direction;
+        for(unsigned n=0;n<8;++n){f.Move({axis.x*.013f,axis.y*.013f,-axis.z*.013f},false);CHECK(f.Step());}
+        CHECK(f.emitted==1&&f.intent&&f.intent->cause==SelectedMeleeCause::Stroke&&f.intent->stroke);
+        if(!baseline){baseline=f.intent;native=f.mapped->nativeAcquisition;}
+        else {
+            CHECK(f.intent->sourceSequence==baseline->sourceSequence&&f.intent->observedNs==baseline->observedNs);
+            CHECK(f.intent->deadlineNs==baseline->deadlineNs&&Near(f.mapped->nativeAcquisition,*native));
+            const auto& a=*f.intent->stroke;const auto& b=*baseline->stroke;
+            CHECK(std::abs((a.end.x-a.start.x)-(b.end.x-b.start.x))<.00001f);
+            CHECK(std::abs((a.end.y-a.start.y)-(b.end.y-b.start.y))<.00001f);
+            CHECK(std::abs((a.end.z-a.start.z)-(b.end.z-b.start.z))<.00001f);
+            CHECK(a.direction==b.direction);
+        }
+    }
+    std::cout<<"434 origin: same physical jab/lease/native aim at three LOCAL origins\n";return 0;
+}
+int PhysicalWalkAndMovingHeadKeepFixedFrame(){
+    MotionFixture f;for(unsigned n=0;n<20;++n)CHECK(f.Step());
+    const auto reference=f.input.referenceHead;
+    // Four metres of real head+hand translation after reference capture. The
+    // .5m/s walk is below jab speed, and the hand stays beside the current head.
+    for(unsigned n=0;n<800;++n){f.Move({.005f,0,0},true);CHECK(f.Step());CHECK(!f.emitted);}
+    CHECK(f.input.referenceHead.position.x==reference.position.x&&f.input.head.position.x>3.9f);
+    for(unsigned n=0;n<20;++n)CHECK(f.Step());
+    const auto still=f.mapped->motion.tip;
+    // Head motion alone must not create a reverse hand stroke. Recognition
+    // retains raw LOCAL coordinates, not current-head-relative coordinates.
+    const auto axis=f.mapped->motion.direction;
+    for(unsigned n=0;n<8;++n){
+        f.input.head.position.x-=axis.x*.012f;f.input.head.position.y-=axis.y*.012f;
+        f.input.head.position.z+=axis.z*.012f;CHECK(f.Step());
+        CHECK(f.mapped->motion.tip==still&&!f.emitted);
+    }
+    for(unsigned n=0;n<8;++n){f.Move({axis.x*.013f,axis.y*.013f,-axis.z*.013f},false);CHECK(f.Step());}
+    CHECK(f.emitted==1&&f.intent&&f.intent->stroke);
+    std::cout<<"434 walk: 4m after capture, moving head silent, subsequent jab accepted\n";return 0;
+}
+int CurrentReachGeometryAndFreshnessStillGate(){
+    for(const auto origin:{math::Vec3{},math::Vec3{4,2,-6}}){
+        MotionFixture f(origin);CHECK(f.Step()&&f.receipt);
+        // Same helper is consumed by chest custody before it can set native
+        // attack readiness; raw geometry alone cannot supply a reach proof.
+        CHECK(private_knife::KnifeMotionFromTrackedGrip(f.input,f.receipt->wristInGrip));
+        for(unsigned fault=0;fault<7;++fault){auto input=f.input;auto body=At();auto receipt=*f.receipt;
+            if(fault==0)input.hands[1].grip.position={origin.x+1.51f,origin.y,origin.z};
+            if(fault==1)input.hands[1].grip.position.x=std::numeric_limits<float>::quiet_NaN();
+            if(fault==2)input.head.position.z=std::numeric_limits<float>::infinity();
+            if(fault==3)input.hands[1].gripTracked=false;
+            if(fault==4)input.headValid=false;
+            if(fault==5)body.values[0][0]=2;
+            if(fault==6)receipt.wristInGrip.values[3][0]=.1f;
+            CHECK(!selectedKnife::MapGeometry(input,receipt,body));
+            if(fault!=5)CHECK(!private_knife::KnifeMotionFromTrackedGrip(input,receipt.wristInGrip));
+        }
+        CHECK(!SelectedKnifeRenderCurrent(*f.receipt,f.geometry.source,f.geometry.mesh.get(),f.geometry.rig,
+            Fixture::fingerprint,f.geometry.source.input.deadlineNs));
+        ChestKnifeRenderSource chest{f.geometry.source.native.owner,f.geometry.source.input,{15,1},1};
+        CHECK(ChestKnifeRenderCurrent(chest,chest.owner,chest.input,Fixture::now));
+        CHECK(!ChestKnifeRenderCurrent(chest,chest.owner,chest.input,chest.input.deadlineNs));
+        for(unsigned n=0;n<20;++n)CHECK(f.Step());
+        f.sample.motion.source.nowNs=f.sample.motion.source.deadlineNs;
+        CHECK(f.policy.Update(f.sample,f.hands).reason==SelectedMeleeReason::Invalid&&!f.emitted);
+        f.input.predictedNs=f.sample.motion.source.nowNs;
+        // Expired input destroyed history; a moving packet cannot restore it.
+        const auto axis=f.mapped->motion.direction;
+        for(unsigned n=0;n<8;++n){f.Move({axis.x*.012f,axis.y*.012f,-axis.z*.012f},false);CHECK(f.Step());}
+        CHECK(!f.emitted);
+    }
+    std::cout<<"434 limits: reach/pose/calibration/render expiry/input expiry still reject\n";return 0;
+}
+}
+int main(){if(local434_test::TranslatedOriginsKeepSameJab()||local434_test::PhysicalWalkAndMovingHeadKeepFixedFrame()||
+    local434_test::CurrentReachGeometryAndFreshnessStillGate()||
+    ExactSelectedGeometry()||RejectLookalikesAndMissingEvidence()||LifetimeCannotRenewOldCalibration()||CalibratedBladeUsesOriginalGrip()||
     BladeWorldAndNativeForward()||AcquisitionCopyKeepsSourcesPaddingAndRange()||SelectedNativeOwnsMeleeWithoutFirearmAnchor()||
-    SelectedNativeRejectsLookalikesAndChangedOwners()||SelectedOwnerDiagnosticsPreserveAdmission()||SelectedOwnerContextBracket()||SelectedTargetRetainsExactWeakIdentity()||OrdinarySelectedAcquisitionBoundary()||PublishedContinuityDelayedMissAndNextJab())return 1;
-    std::cout<<"Thirteen selected-knife geometry, ownership and native-argument groups passed; mocked native memory, no game hit claim\n";}
+    SelectedNativeRejectsLookalikesAndChangedOwners()||SelectedOwnerDiagnosticsPreserveAdmission()||SelectedOwnerContextBracket()||SelectedTargetRetainsExactWeakIdentity()||OrdinarySelectedAcquisitionBoundary()||PublishedContinuityDelayedMissAndNextJab()||RepeatedGatherKeepsMeasuredStroke()||PublishedInputSurvivesGatherUntilConsumed()||
+    gap_test::ClassifiedReadFailures()||gap_test::DeliveredStrokeWithOneIncoherentPacket()||
+    gap_test::GapsCannotExtendAuthority()||gap_test::PendingAndDuplicateLeasesStayOriginal())return 1;
+    std::cout<<"Twenty-two selected-knife geometry, ownership, delivery, native-argument, classified-gap and LOCAL-origin groups passed; mocked native memory, no game hit claim\n";}

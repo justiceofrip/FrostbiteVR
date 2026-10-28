@@ -1,6 +1,6 @@
 #pragma once
 #include "Bc2ReloadState.h"
-#include "Bc2NativeOperationCapability.h"
+#include "Bc2NativeOperationBinding.h"
 #include <span>
 #include <string_view>
 

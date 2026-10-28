@@ -19,7 +19,7 @@ try {
     $game=Join-Path $root 'Test Game é (2)';$null=[IO.Directory]::CreateDirectory($game)
     $exe=Join-Path $game 'BFBC2Game.exe';[IO.File]::WriteAllText($exe,'test fixture, never executed')
     Check ((Resolve-FvrGameFolder $game) -ceq $game -and (Resolve-FvrGameFolder $exe) -ceq $game) 'folder and executable selections resolve spaces and Unicode safely'
-    $initial=[ordered]@{schema='fvr.desktop.settings.v1';game_path='G:\Previous';local_backend=[ordered]@{label='Local checkpoint';launch='G:\Tools\launch.ps1';pins=@(@{path='G:\Tools\launch.ps1';sha256='abc'})};custom=[ordered]@{theme='blue';number=42;enabled=$false}}
+    $initial=[ordered]@{schema='fvr.desktop.settings.v1';game_path='G:\Previous';steam_compatibility=$false;local_backend=[ordered]@{label='Local checkpoint';launch='G:\Tools\launch.ps1';pins=@(@{path='G:\Tools\launch.ps1';sha256='abc'})};custom=[ordered]@{theme='blue';number=42;enabled=$false}}
     Write-FvrLauncherSettings $path $initial
     $initial.local_backend.label='Changed by installer after UI opened';Write-FvrLauncherSettings $path $initial
     $result=Save-FvrGameFolder $root $exe
@@ -144,7 +144,7 @@ try {
         [xml]$xml=$block.Groups[1].Value
         $window=[Windows.Markup.XamlReader]::Load([Xml.XmlNodeReader]::new($xml))
         try{
-            $controls=@{};foreach($name in @('BuildLabel','GameFolder','ChooseGame','SettingsNotice','Launch','Fresh','Local','Stop','Validate','Logs','Feedback','Status','Progress','Check','Update','Rollback','Prerelease')){$controls[$name]=$window.FindName($name)}
+            $controls=@{};foreach($name in @('BuildLabel','GameFolder','ChooseGame','SettingsNotice','Launch','Fresh','Local','SteamCompatibility','Stop','Validate','Logs','Feedback','Status','Progress','Check','Update','Rollback','Prerelease')){$controls[$name]=$window.FindName($name)}
             $package=@{runtime_entry='runtime/Entry.ps1'};$packageState=@{verified=$true;error=$null};$active=@{current='0.1.6'};$script:reopenRequired=$false
             $actions=@('Launch','Stop','Validate','Check','Update','Rollback','Feedback')
             $script:settingsState=$broken

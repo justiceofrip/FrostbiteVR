@@ -1,6 +1,7 @@
 #include <Windows.h>
 #include <tlhelp32.h>
 #include "NativeProbeConfig.h"
+#include "Bc2ProbeOutcome.h"
 #include "Bc2MagazineReloadSession.h"
 #include "Bc2OpticFilterSession.h"
 #include "Bc2BodyInventorySession.h"
@@ -29,13 +30,23 @@ std::uintptr_t RemoteFunction(DWORD pid,FARPROC function){
     if(Module32FirstW(snapshot.h,&item))do{if(!_wcsicmp(item.szExePath,path)&&rva<item.modBaseSize)return reinterpret_cast<std::uintptr_t>(item.modBaseAddr)+rva;}while(Module32NextW(snapshot.h,&item));
     throw std::runtime_error("Matching 32-bit bootstrap module not found");
 }
-DWORD Run(HANDLE process,std::uintptr_t function,Allocation& memory,DWORD timeout){
+DWORD Run(HANDLE process,std::uintptr_t function,Allocation& memory,DWORD timeout,fvr::bc2::NativeProbeRunOutcome* outcome=nullptr){
     Handle thread{CreateRemoteThread(process,nullptr,0,reinterpret_cast<LPTHREAD_START_ROUTINE>(function),memory.pointer,0,nullptr)};Require(thread.h!=nullptr,"Start bounded probe entry");
     // If the remote operation times out, its argument must remain valid until
     // the game exits. Never terminate a game thread or free memory under it.
     memory.release=false;Require(WaitForSingleObject(thread.h,timeout)==WAIT_OBJECT_0,"Probe operation did not finish within its budget");memory.release=true;
-    if(WaitForSingleObject(process,0)==WAIT_OBJECT_0)return 0; // User closed the game.
-    DWORD result=0;Require(GetExitCodeThread(thread.h,&result)!=0,"Read probe result");return result;
+    if(WaitForSingleObject(process,0)==WAIT_OBJECT_0){
+        if(outcome){
+            outcome->gameExited=true;DWORD exitCode=0;
+            outcome->gameExitCodeKnown=GetExitCodeProcess(process,&exitCode)!=0;
+            if(outcome->gameExitCodeKnown)outcome->gameExitCode=exitCode;
+        }
+        // Preserve expected game-close exit behavior, but do not manufacture a
+        // remote result. The final bootstrap JSON describes this branch.
+        return 0;
+    }
+    DWORD result=0;Require(GetExitCodeThread(thread.h,&result)!=0,"Read probe result");
+    if(outcome)outcome->remoteThreadExitCode=result;return result;
 }
 }
 int wmain(int argc,wchar_t** argv){try {
@@ -185,6 +196,9 @@ int wmain(int argc,wchar_t** argv){try {
     fvr::bc2::NativeProbeConfig config{};config.chestKnifeProbe=chestKnifeProbe;config.normalPlayerGrenades=normalPlayerGrenades;config.normalPlayerKnife=normalPlayerKnife;config.normalContextualTools=normalContextualTools;config.ordinaryGrenadeInput=ordinaryGrenadeInput;config.ordinaryResourceInput=ordinaryResourceInput;config.m95OrdinaryBoltInputCycles=ordinaryBoltInputCycles;config.m95PhysicalBoltCycles=physicalBoltCycles;config.m95StockShot=unsigned(m95StockShot);config.bodyHolsterDiagnostic=bodyDiagnostic;config.magazineReloadSession=magazineSession;config.boatHeadAim=boatMode;config.flags=configFlags;config.pumpHoldDiagnostic=pumpMode;if(hostPid)config.hostPid=hostPid;else config.durationMs=duration;Require(channel.size()<std::size(config.frameChannel),"Channel token too long");std::copy(channel.begin(),channel.end(),config.frameChannel);const auto output=report.wstring();Require(output.size()<std::size(config.reportPath),"Report path too long");std::copy(output.begin(),output.end(),config.reportPath);
     // The requested input interval excludes startup, hook retirement and final
     // report/image writes. Keep their wait bounded without extending the input.
-    Allocation request(process.h,sizeof(config));Write(process.h,request.pointer,&config,sizeof(config));const auto result=Run(process.h,std::uintptr_t(module)+entryRva,request,hostPid?INFINITE:config.durationMs+30000);
-    std::cout<<"{\"pid\":"<<pid<<",\"probe_exit\":"<<result<<",\"module_retained_until_game_exit\":true,\"game_files_modified\":false}\n";return result?2:0;
+    fvr::bc2::NativeProbeRunOutcome outcome;
+    Allocation request(process.h,sizeof(config));Write(process.h,request.pointer,&config,sizeof(config));const auto result=Run(process.h,std::uintptr_t(module)+entryRva,request,hostPid?INFINITE:config.durationMs+30000,&outcome);
+    std::error_code reportError;const auto reportBytes=fs::file_size(report,reportError);
+    outcome.reportBytesKnown=!reportError;if(!reportError)outcome.reportBytes=reportBytes;
+    fvr::bc2::WriteNativeProbeRunOutcomeJson(std::cout,pid,outcome);return result?2:0;
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}}

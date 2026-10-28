@@ -33,6 +33,7 @@ private:
     std::vector<XrSwapchainImageD3D11KHR> images_;
     Microsoft::WRL::ComPtr<ID3D11DeviceContext> context_;
     graphics::AmmoCounterPresentation presentation_;
+    graphics::AmmoCounterSample imageSample_{};
     graphics::AmmoCounterBitmap bitmap_;
     XrCompositionLayerQuad layer_{XR_TYPE_COMPOSITION_LAYER_QUAD};
     std::int32_t loaded_=-1,reserve_=-1;

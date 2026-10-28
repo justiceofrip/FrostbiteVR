@@ -36,6 +36,11 @@ struct Bc2BoltTracking {
     interaction::BoltCustodyPhase custody=interaction::BoltCustodyPhase::Idle;
     interaction::WeaponCyclePhase mechanismPhase=interaction::WeaponCyclePhase::Idle;
     interaction::WeaponCycleFailure mechanismFailure=interaction::WeaponCycleFailure::None;
+    // Separate current-source acceptance; absent raw stays absent. Exact root
+    // joins the existing custody event; clocks are the unmodified input lease.
+    std::optional<interaction::HandClaimToken> currentContactGun;
+    std::uint64_t currentContactInput=0;
+    std::int64_t currentContactObserved=0,currentContactDeadline=0;
     bool rawContactValid=false;
     std::uint64_t rawInputSequence=0;
     float rawContactDistance=0;
@@ -60,6 +65,9 @@ struct Bc2PhysicalBoltSample {
     // Current real controller poses, in canonical world metres. This is not
     // renderer N-1 mechanism contact and must belong to input.sequence.
     std::array<math::Matrix4,2> wristWorld{};
+    // Exact established attachment for current mapped controllers. The raw
+    // rendered contact keeps its own provenance/deadline (and may be absent).
+    std::optional<interaction::HandClaimToken> controllerCustody;
     math::Matrix4 weaponWorld{};
     interaction::HandContactProof gunContact{};
     std::array<interaction::HandContactProof,2> gunContacts{};
@@ -84,6 +92,10 @@ class Bc2PhysicalBolt {
 public:
     Bc2PhysicalBolt(std::shared_ptr<const Bc2BoltCalibration>,Bc2PhysicalBoltApi)noexcept;
     Bc2PhysicalBoltResult Tick(const Bc2PhysicalBoltSample&,interaction::HandInteraction&,std::uint64_t& intent)noexcept;
+    // No native callback: current semantic custody proof before generic hand
+    // expiry. Null means no root is owned here; failed owned proof runs Update.
+    std::optional<interaction::HandInteractionResult> UpdateGunHold(const Bc2PhysicalBoltSample&,
+        interaction::HandInteraction&)noexcept;
     bool BlocksFire()const noexcept{return blocks_;}
     void Cancel(const interaction::HandInteractionSample&,interaction::HandInteraction&)noexcept;
 private:

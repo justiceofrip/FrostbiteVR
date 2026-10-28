@@ -68,7 +68,7 @@ void Bc2ChestKnifeCoordinator::Tick(const WeaponModeMemory& memory,const BodyDra
         // Raw original grip in one fixed tracking epoch, never rendered/head
         // motion. Native and shared hand admission are checked again at Stage.
         if(sample.trackedKnifeOwned&&s.input.hands[1].gripTracked)
-        if(const auto motion=private_knife::KnifeMotionFromGrip(s.input.hands[1].grip,rendered->wristInGrip)){
+        if(const auto motion=private_knife::KnifeMotionFromTrackedGrip(s.input,rendered->wristInGrip)){
             sample.tip=motion->tip;sample.direction=motion->direction;
             sample.nativeAttackReady=native->motionEnabled&&sample.trackedKnifeOwned&&sample.mechanicsSettled;
         }

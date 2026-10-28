@@ -3,6 +3,8 @@
 #include "fvr/engine/BindingValidation.h"
 #include <vector>
 #include <algorithm>
+#include <fstream>
+#include <iostream>
 using namespace fvr;
 void Put16(std::vector<std::byte>& b,std::size_t at,unsigned v){b[at]=std::byte(v&255);b[at+1]=std::byte((v>>8)&255);}
 void Put32(std::vector<std::byte>& b,std::size_t at,unsigned v){Put16(b,at,v&65535);Put16(b,at+2,v>>16);}
@@ -50,10 +52,16 @@ std::vector<std::byte> CacheFixture(){
     Pattern(b,0x700,"56 8B F1 F6 06 01 74 05 E8 00 00 00 00 8D 86 20 02 00 00 5E C3");
     Pattern(b,0x720,"56 8B F1 F6 06 02 74 05 E8 00 00 00 00 8D 86 E0 02 00 00 5E C3");
     Pattern(b,0x740,"56 8B F1 F6 06 08 74 05 E8 00 00 00 00 8D 86 90 00 00 00 5E C3");
+    Pattern(b,0x760,"56 8B F1 F6 06 04 74 05 E8 00 00 00 00 D9 86 18 02 00 00 5E C3");
+    Pattern(b,0x780,"56 8B F1 F6 06 04 74 05 E8 00 00 00 00 D9 86 1C 02 00 00 5E C3");
     Put32(b,0x709,0x1600-(0x1500+13));Put32(b,0x729,0x1800-(0x1520+13));Put32(b,0x749,0x1a00-(0x1540+13));
+    Put32(b,0x769,0x1b00-(0x1560+13));Put32(b,0x789,0x1b00-(0x1580+13));
     Pattern(b,0x800,"55 8B EC 83 E4 F0 81 EC 94 00 00 00 53 56 8B F1 57 8D 46 50 50 8D 4C 24 64 51 E8 00 00 00 00 0F 10 08 0F 57 C0");
     Pattern(b,0xa00,"55 8B EC 83 E4 F0 83 EC 44 53 56 8B F1 83 7E 04 01 57 75 3B 0F B6");
     Pattern(b,0xc00,"51 56 8B F1 83 7E 04 01 D9 46 20 75 35 0F B6 46 08 50 8D 4E");
+    Pattern(b,0xd00,"83 EC 18 56 8B F1 D9 46 10 D8 4E 0C DC 0D 00 00 00 00 D9 5C 24 04");
+    Pattern(b,0xdc4,"D9 9E 10 02 00 00");
+    Pattern(b,0xe85,"83 26 FB D9 96 14 02 00 00 D8 74 24 10 D9 5C 24 10 D9 44 24 10 D9 96 18 02 00 00 DC C8 D9 9E 1C 02 00 00 5E 83 C4 18 C3");
     Pattern(b,0x9d5,"83 26 FE 5F 5E 5B 8B E5 5D C3");Pattern(b,0xbc1,"83 26 FD 5F 5E 5B 8B E5 5D C3");Pattern(b,0xc7c,"83 26 F7 5E 59 C3");return b;
 }
 std::optional<bc2::CameraCacheCandidates> Caches(const std::vector<std::byte>& b){const auto pe=engine::InspectPe(b);if(!pe.valid)return {};return bc2::DiscoverCameraCaches(b,pe.image);}
@@ -104,15 +112,23 @@ std::vector<std::byte> ProjectionFixture(){auto b=Fixture();
     Pattern(b,0x963,"89 46 20 5E 8B E5 5D C2 04 00");
     Pattern(b,0xa00,"F6 84 24 90 00 00 00 02 74 0C 8D 8C 24 90 00 00 00 E8 00 00 00 00 8D 8C 24 70 03 00 00 51 8B CE E8 00 00 00 00 80 7D 34 00");
     Pattern(b,0xb00,"F6 84 24 C0 00 00 00 02 8B D8 74 0C 8D 8C 24 C0 00 00 00 E8 00 00 00 00 8D 8C 24 A0 03 00 00 51 8B CB E8 00 00 00 00 8B 54 24 20");
-    for(unsigned at:{0x8a4u,0xa20u,0xb22u}){b[at]=std::byte{0xe8};Put32(b,at+1,0x900u-(at+5));}return b;
+    Pattern(b,0xd00,"F6 44 24 40 02 8B D8 74 09 8D 4C 24 40 E8 00 00 00 00 8D 84 24 20 03 00 00 50 8B CB E8 00 00 00 00");
+    for(unsigned at:{0x8a4u,0xa20u,0xb22u,0xd1cu}){b[at]=std::byte{0xe8};Put32(b,at+1,0x900u-(at+5));}return b;
 }
 std::optional<bc2::ProjectionOverrideCandidates> Overrides(const std::vector<std::byte>& b){auto pe=engine::InspectPe(b);if(!pe.valid)return {};return bc2::DiscoverProjectionOverrides(b,pe.image);}
-int main(){
-    {auto b=ProjectionFixture();const auto p=Overrides(b);CHECK(p&&p->setter==0x1700&&p->meshCaller==0x1825&&p->terrainCaller==0x1927);
+int main(int argc,char** argv){
+    CHECK(argc<=2);
+    {auto b=ProjectionFixture();const auto p=Overrides(b);CHECK(p&&p->setter==0x1700&&p->meshCaller==0x1825&&p->terrainCaller==0x1927&&p->edgeCaller==0x1b21);
     b[0x96b]=std::byte{8};CHECK(!Overrides(b));b=ProjectionFixture();Put32(b,0xa21,0);CHECK(!Overrides(b));
     b=ProjectionFixture();Put32(b,0xb23,0);CHECK(!Overrides(b));b=ProjectionFixture();Put32(b,0x8a5,0);CHECK(!Overrides(b));
     b=ProjectionFixture();std::copy_n(b.begin()+0x900,0x6d,b.begin()+0xc00);CHECK(!Overrides(b));
-    b=ProjectionFixture();std::copy_n(b.begin()+0xa00,41,b.begin()+0xc00);CHECK(!Overrides(b));}
+    b=ProjectionFixture();std::copy_n(b.begin()+0xa00,41,b.begin()+0xc00);CHECK(!Overrides(b));
+    // The destruction-edge enrollment requires its own unique caller and exact setter ABI.
+    b=ProjectionFixture();b[0xd00]=std::byte{};CHECK(!Overrides(b));
+    b=ProjectionFixture();std::copy_n(b.begin()+0xd00,33,b.begin()+0xe00);CHECK(!Overrides(b));
+    b=ProjectionFixture();Put32(b,0xd1d,0);CHECK(!Overrides(b));
+    b=ProjectionFixture();b[0xd14]=std::byte{0x30};CHECK(!Overrides(b));
+    b=ProjectionFixture();b[0xd1b]=std::byte{0xce};CHECK(!Overrides(b));}
 
     {auto b=Fixture();Pattern(b,0x800,"55 8B EC 83 E4 F0 83 EC 18 56 57 8B 7D 08 8A 47 08 8B F1 8B 4E 0C 81 4E 08 00 10 00 00 81 4E 08 00 08 00 00 80 46 07 02");
     Pattern(b,0x857,"89 46 24");Pattern(b,0x88c,"89 46 1C");Pattern(b,0x8c6,"5F 5E 8B E5 5D C2 08 00");
@@ -139,8 +155,16 @@ int main(){
     views=ViewFixture();Put32(views,0xd1b,0x402084);CHECK(!ViewLayout(views));
     views=ViewFixture();std::copy_n(views.begin()+0xd00,43,views.begin()+0xf00);CHECK(!ViewLayout(views));
     auto cache=CacheFixture();const auto cacheProfile=Caches(cache);CHECK(cacheProfile&&cacheProfile->updateView==0x1600&&cacheProfile->updateProjection==0x1800&&cacheProfile->updateFrustum==0x1a00);
+    CHECK(cacheProfile->getScale==0x1560&&cacheProfile->getScaleSquared==0x1580&&cacheProfile->updateScale==0x1b00);
     Put32(cache,0x729,0);CHECK(!Caches(cache));cache=CacheFixture();cache[0xc7e]=std::byte{0xfe};CHECK(!Caches(cache));
     cache=CacheFixture();std::copy_n(cache.begin()+0xa00,22,cache.begin()+0xd00);CHECK(!Caches(cache));
+    cache=CacheFixture();Put32(cache,0x769,0);CHECK(!Caches(cache));
+    cache=CacheFixture();Put32(cache,0x789,0);CHECK(!Caches(cache));
+    cache=CacheFixture();cache[0xdc6]=std::byte{0x14};CHECK(!Caches(cache));
+    cache=CacheFixture();cache[0xe87]=std::byte{0xf7};CHECK(!Caches(cache));
+    cache=CacheFixture();cache[0xe85+32]=std::byte{3};CHECK(!Caches(cache));
+    cache=CacheFixture();std::copy_n(cache.begin()+0x760,21,cache.begin()+0xf00);CHECK(!Caches(cache));
+    cache=CacheFixture();std::copy_n(cache.begin()+0xd00,22,cache.begin()+0xf00);CHECK(!Caches(cache));
     auto visibility=VisibilityFixture();const auto vis=Visibility(visibility);CHECK(vis&&vis->worldUpdate==0x2600&&vis->prepareVisibility==0x2e00);
     Put32(visibility,0x1b84,0);CHECK(!Visibility(visibility));visibility=VisibilityFixture();visibility[0x4ea1]=std::byte{0x10};CHECK(!Visibility(visibility));
     visibility=VisibilityFixture();Put32(visibility,0x528c,0x402610);CHECK(!Visibility(visibility));
@@ -154,5 +178,20 @@ int main(){
     init[0x37b5]=std::byte{0x88};CHECK(!Initialization(init));init=InitializationFixture();Put32(init,0x5298,0x403e10);CHECK(!Initialization(init));
     init=InitializationFixture();init[0x3a25]=std::byte{0xc2};CHECK(!Initialization(init));
     init=InitializationFixture();init[0x3d62]=std::byte{8};CHECK(!Initialization(init));
+    if(argc==2){
+        // Optional installed-image validation: parse bytes only. Never load the
+        // executable as a module, attach to a process, or call native functions.
+        std::ifstream input(argv[1],std::ios::binary|std::ios::ate);CHECK(input);
+        const auto size=input.tellg();CHECK(size>0&&size<=64*1024*1024);
+        std::vector<std::byte> installed(static_cast<std::size_t>(size));input.seekg(0);
+        CHECK(input.read(reinterpret_cast<char*>(installed.data()),static_cast<std::streamsize>(installed.size())));
+        const auto verified=Caches(installed);CHECK(verified);
+        const auto projection=Overrides(installed);CHECK(projection);
+        std::cout<<"Installed projection callers verified (no native execution): edge caller RVA="<<std::hex
+            <<projection->edgeCaller<<" setter RVA="<<projection->setter<<std::dec<<'\n';
+        std::cout<<"Installed camera caches verified (no native execution): scale getter RVA="<<std::hex
+            <<verified->getScale<<" squared getter RVA="<<verified->getScaleSquared
+            <<" updater RVA="<<verified->updateScale<<std::dec<<'\n';
+    }
     return 0;
 }

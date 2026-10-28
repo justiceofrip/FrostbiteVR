@@ -4,7 +4,7 @@
 #include <ostream>
 #include <string>
 namespace fvr::bc2::menu {
-enum class MenuDisplayState : unsigned {Unknown,Gameplay,Menu};
+enum class MenuDisplayState : unsigned {Unknown,Gameplay,Menu,Passive};
 // Thread-safe, short-lived observation for presentation only; never input or
 // native write authority. A stalled UI source returns Unknown.
 MenuDisplayState CurrentDisplayState()noexcept;
@@ -21,6 +21,8 @@ MenuConnectionTelemetry ReadConnectionTelemetry()noexcept;
 bool Install(std::span<const std::byte>,const engine::PeImage&,std::uintptr_t,const std::wstring&);
 void Start()noexcept;
 bool Stop()noexcept;
-void Present(IDXGISwapChain*)noexcept;
+// Returns this Present's observation, not a cached UI-thread state. Unknown
+// leaves the native backbuffer intact at a contended/loading transition.
+MenuDisplayState Present(IDXGISwapChain*)noexcept;
 void Report(std::ostream&);
 }

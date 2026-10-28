@@ -1,5 +1,6 @@
 #pragma once
 #include "Bc2AmmoResourceBinding.h"
+#include "Bc2AmmoActorRetirement.h"
 #include "Bc2AmmoResourceEvidence.h"
 #include "Bc2AmmoResourceReadEvidence.h"
 #include "fvr/interaction/AmmunitionInventory.h"
@@ -33,7 +34,7 @@ inline bool AmmoResourceConstructionValid(const AmmoResourceRequest& r,std::int6
         p.snapshotDeadlineNs-p.snapshotObservedNs<=100000000&&
         AmmoResourceBindingFresh(r.binding,r.binding.owner,p.constructedNs);
 }
-enum class AmmoResourceRequestState:unsigned {None,Queued,Dispatched,Completed,Rejected,Uncertain};
+enum class AmmoResourceRequestState:unsigned {None,Queued,Dispatched,Completed,Rejected,Uncertain,ActorRetired};
 enum class AmmoResourceRejectionReason:unsigned {
     Busy,NoView,ViewTime,ViewInvalid,SourceBindingTime,SourceBindingInvalid,
     ContextBindingMismatch,IntentTime,Discard,LedgerSubmit,CompletionBegin,
@@ -66,6 +67,7 @@ struct AmmoResourceOutcome {
     std::optional<interaction::AmmunitionReceipt> receipt;
     std::int64_t resolvedNs=0;
     bool nativeDispatched=false;
+    std::optional<AmmoResourceActorRetirement> actorRetirement;
 };
 struct AmmoResourceView {
     AmmoResourceBinding binding{};
@@ -146,6 +148,20 @@ public:
     std::optional<AmmoResourceView> Read(const ReloadStateOwner& owner,std::int64_t now,std::int64_t processingNow=0)noexcept {
         return ReadObserved(owner,now,processingNow).view;
     }
+    // Serialize exact queued-but-not-taken work with explicit actor retirement.
+    // A failed commit leaves the queue unchanged. Other actors are untouched;
+    // the channel request high-water mark is never reset.
+    template<class Commit>
+    bool RetireQueuedForActor(const ReloadHoldIdentity& old,Commit&& commit)noexcept {
+        Guard g(requestGate_);if(!g.held)return false;
+        std::optional<AmmoResourceRequest> queued;
+        if(request_){const auto& o=request_->binding.owner;
+            if(o.player==old.owner.player&&o.soldier==old.owner.soldier&&o.weak==old.owner.weak&&
+                o.actorGeneration<=old.owner.actorGeneration)queued=request_;}
+        if(!commit(queued))return false;
+        if(queued)request_.reset();
+        return true;
+    }
     void ReportReadEvidence(std::ostream& out,bool drained)const {readEvidence_.Report(out,drained);}
     std::optional<AmmoResourceOutcome> Outcome(std::uint64_t request,const interaction::AmmoResourceContext& context)noexcept {
         Guard g(viewGate_);
@@ -172,6 +188,8 @@ public:
                 const interaction::AmmunitionSnapshot& snapshot,std::int64_t now)noexcept {
         AmmoResourceView next;next.binding=binding;next.identity=identity;next.snapshot=snapshot;
         if(!AmmoResourceViewFresh(next,now)){view_.reset();return false;}
+        if(actorIdentity_&&(!AmmoResourceSameNativeActor(*actorIdentity_,identity)||
+            identity.owner.actorGeneration<actorIdentity_->owner.actorGeneration)){view_.reset();return false;}
         // A completed helper can precede the next coherent native count sample.
         // Retain the prior bounded in-flight publication instead of rebinding
         // the completed ledger to an older count snapshot.
@@ -182,7 +200,7 @@ public:
                 Cancel(now);view_.reset();return false;
             }
         }else if(!inventory_.Select(snapshot,now)){view_.reset();return false;}
-        view_=next;
+        actorIdentity_=identity;view_=next;
         if(awaitingPublication_&&receipt_&&receipt_->command.context!=snapshot.context)awaitingPublication_=false;
         Refresh();return true;
     }
@@ -230,6 +248,20 @@ public:
             active_.reset();state_=AmmoResourceRequestState::Rejected;Finish(now);Refresh();return false;}
         nativeDispatched_=true;state_=AmmoResourceRequestState::Dispatched;Refresh();return true;
     }
+    // Own the final admission clock and native entry together. Dispatch means
+    // the callback is entered; no later deadline check may reject a call that
+    // never happened while leaving the ledger marked as possibly mutated.
+    // All code/owner/context preflight stays with the caller before this seam.
+    // The callback is synchronous and noexcept, and returns the actual helper
+    // postchecks. Failure after entry retains the existing uncertain operation.
+    template<class Clock,class NativeCall>
+    bool InvokeNative(const interaction::AmmunitionSnapshot& adjacent,Clock&& clock,NativeCall&& nativeCall)noexcept {
+        static_assert(noexcept(clock()));
+        static_assert(noexcept(nativeCall(std::int64_t{})));
+        const auto began=clock();
+        if(!Dispatch(adjacent,began))return false;
+        return Call(nativeCall(began));
+    }
     bool Call(const AmmoResourceNativeCall& call)noexcept {
         if(!active_||state_!=AmmoResourceRequestState::Dispatched)return false;
         if(!completion_.Call(call)){Cancel(call.endNs);return false;}return true;
@@ -259,6 +291,52 @@ public:
                 AmmoResourceRejectionReason::DispatchedExpired,*submitted_,now);
             Cancel(now);
         }
+    }
+    const auto& ActorIdentity()const noexcept{return actorIdentity_;}
+    const auto& LastActorRetirement()const noexcept{return actorRetirement_;}
+    bool RetireForReplacementActor(const Bc2AmmoReserveLease& replacement,std::int64_t now,
+                                  const AmmoResourceActorDrain& drain,
+                                  const std::optional<AmmoResourceRequest>& queued={})noexcept {
+        if(!actorIdentity_||drain.expected!=*actorIdentity_||drain.pending!=active_||
+            !drain.callbacksDrained||!drain.callbackRevision||!drain.lifetimeEndEpoch||
+            !AmmoResourceReplacementFresh(replacement,now)||
+            !AmmoResourceActorReplacement(*actorIdentity_,replacement.identity)||
+            drain.observedNs<replacement.observedNs||drain.observedNs>now||
+            drain.deadlineNs<=now||drain.deadlineNs>replacement.deadlineNs||
+            drain.deadlineNs-drain.observedNs>100000000||
+            (actorRetirement_&&(actorRetirement_->event==UINT64_MAX||
+                drain.callbackRevision<=actorRetirement_->callbackRevision||
+                drain.lifetimeEndEpoch<=actorRetirement_->lifetimeEndEpoch||
+                drain.observedNs<actorRetirement_->observedNs)))return false;
+        const auto& previous=*actorIdentity_;
+        // Queued work has never been taken/accepted by this service. Retire
+        // only its exact old actor request as no-call Rejected, never Completed
+        // or uncertain native work. Caller holds the channel request gate.
+        if(queued){const auto& q=*queued;const auto& o=q.binding.owner;
+            if(active_||!q.intent.id||o.player!=previous.owner.player||o.soldier!=previous.owner.soldier||
+                o.weak!=previous.owner.weak||!o.actorGeneration||o.actorGeneration>previous.owner.actorGeneration||
+                q.intent.context!=q.binding.context||q.intent.context.resource.actor!=o.soldier||
+                q.intent.context.resource.actorGeneration!=o.actorGeneration||q.intent.observedNs<=0||
+                q.intent.observedNs>now||q.intent.deadlineNs<=q.intent.observedNs||
+                q.intent.deadlineNs-q.intent.observedNs>100000000)return false;}
+        if(active_&&(!submitted_||active_->context.resource.actor!=previous.owner.soldier||
+            active_->context.resource.actorGeneration>previous.owner.actorGeneration))return false;
+        const auto count=inventory_.RetireActor(previous.owner.soldier,previous.owner.actorGeneration);
+        if(!count&&(active_||inventory_.Size()))return false;
+        AmmoResourceActorRetirement retired{actorRetirement_?actorRetirement_->event+1:1,
+            drain.callbackRevision,drain.lifetimeEndEpoch,drain.observedNs,previous,replacement.identity,
+            active_,count,nativeDispatched_};
+        // Retired is deliberately neither Rejected nor Completed. The old
+        // native effect stays unknown; no old count is copied into replacement.
+        if(active_)outcome_=AmmoResourceOutcome{*submitted_,AmmoResourceRequestState::ActorRetired,{},
+            retired.observedNs,nativeDispatched_,retired};
+        else if(queued){outcome_=AmmoResourceOutcome{*queued,AmmoResourceRequestState::Rejected,{},retired.observedNs,false};
+            lastRequest_=std::max(lastRequest_,queued->intent.id);}
+        actorRetirement_=retired;actorIdentity_=replacement.identity;
+        active_.reset();submitted_.reset();receipt_.reset();view_.reset();
+        completion_={};identity_={};request_=0;state_=AmmoResourceRequestState::None;
+        nativeDispatched_=awaitingPublication_=false;
+        return true;
     }
     const auto& View()const noexcept{return view_;}
     const auto& Active()const noexcept{return active_;}
@@ -308,6 +386,8 @@ private:
     bool nativeDispatched_=false,awaitingPublication_=false;
     AmmoResourceCompletion completion_;
     ReloadHoldIdentity identity_{};
+    std::optional<ReloadHoldIdentity> actorIdentity_;
+    std::optional<AmmoResourceActorRetirement> actorRetirement_;
     std::uint64_t lastRequest_=0,request_=0;
     AmmoResourceRequestState state_=AmmoResourceRequestState::None;
 };

@@ -18,7 +18,7 @@ struct Setup {
         input.focused=input.headValid=true;
         for(unsigned n=0;n<2;++n){auto& hand=input.hands[n];hand.active=Components;hand.gripTracked=hand.aimTracked=true;hand.squeeze=1;
             hand.grip.position={n?.1f:-.2f,-.2f,-.5f};raw.wristToGrip[n]=Pose();}
-        raw.raw={owner,{},17,safety,Pose(),true};raw.mappingValid=true;raw.weaponWorldMeters=Pose();raw.bodyWorldMeters=Pose();
+        raw.raw={owner,{},17,safety,Pose(),true};raw.raw.rig.soldier=owner.soldier;raw.raw.rig.weak=owner.weak;raw.mappingValid=true;raw.weaponWorldMeters=Pose();raw.bodyWorldMeters=Pose();
         frame={owner,safety,input.referenceHead,Pose(),1};
         const auto wrists=MapBoltTrackedWrists(raw,input,safety,frame);if(wrists)raw.rawWristWorldMeters=*wrists;
         raw.nativeWristInWeapon=raw.rawWristWorldMeters;raw.nativePartValid=true;raw.nativePartInWeapon=Pose();
@@ -26,6 +26,142 @@ struct Setup {
     void Next(){++safety.sequence;safety.observedNs+=10000000;safety.nowNs=safety.observedNs;safety.deadlineNs=safety.observedNs+100000000;
         input.generation=safety.sequence;input.predictedNs=safety.observedNs;frame.input=safety;}
 };
+// Same row-vector LH -> OpenXR conversion used by the existing controller
+// fixture. The round trip below proves actual mapper input, not a raw bypass.
+std::optional<math::Pose> GapControllerPose(const math::Matrix4& row){
+    if(!Rigid(row))return {};
+    float m[3][3];for(unsigned r=0;r<3;++r)for(unsigned c=0;c<3;++c)m[r][c]=row.values[c][r];
+    math::Quaternion q;const float tr=m[0][0]+m[1][1]+m[2][2];
+    if(tr>0){const float s=std::sqrt(tr+1)*2;q.w=.25f*s;q.x=(m[2][1]-m[1][2])/s;q.y=(m[0][2]-m[2][0])/s;q.z=(m[1][0]-m[0][1])/s;}
+    else if(m[0][0]>m[1][1]&&m[0][0]>m[2][2]){const float s=std::sqrt(1+m[0][0]-m[1][1]-m[2][2])*2;q.w=(m[2][1]-m[1][2])/s;q.x=.25f*s;q.y=(m[0][1]+m[1][0])/s;q.z=(m[0][2]+m[2][0])/s;}
+    else if(m[1][1]>m[2][2]){const float s=std::sqrt(1+m[1][1]-m[0][0]-m[2][2])*2;q.w=(m[0][2]-m[2][0])/s;q.x=(m[0][1]+m[1][0])/s;q.y=.25f*s;q.z=(m[1][2]+m[2][1])/s;}
+    else{const float s=std::sqrt(1+m[2][2]-m[0][0]-m[1][1])*2;q.w=(m[1][0]-m[0][1])/s;q.x=(m[0][2]+m[2][0])/s;q.y=(m[1][2]+m[2][1])/s;q.z=.25f*s;}
+    const float n=std::sqrt(q.x*q.x+q.y*q.y+q.z*q.z+q.w*q.w);if(!std::isfinite(n)||n<.5f)return {};
+    math::Pose pose;pose.orientation={-q.x/n,-q.y/n,q.z/n,q.w/n};pose.position={row.values[3][0],row.values[3][1],-row.values[3][2]};
+    const auto view=math::MakeLhViewFromOpenXRPose(pose);const auto round=view?InverseRigid(*view):std::nullopt;
+    if(!round||Distance(*round,row)>.0005f||Angle(*round,row)>.005f)return {};return pose;
+}
+int PlayerMappedCustodyRenderGap(){
+    // Same real player mapper + physical adapter as Gameplay, with a render
+    // gap much longer than the last raw deadline and consecutive fresh input.
+    for(unsigned mutation=0;mutation<16;++mutation){
+        Fixture f;Bc2BoltPlayerCustody player(f.calibration);InputFrame controls;
+        controls.focused=controls.headValid=true;controls.spaceGeneration=f.sample.input.owner.space;
+        for(auto& h:controls.hands){h.active=Components;h.gripTracked=h.aimTracked=true;h.squeeze=1;}
+        const auto originalWeapon=f.sample.weaponWorld;
+        const auto originalWrist=f.sample.wristWorld[0];
+        const auto attachment=Multiply(originalWeapon,*InverseRigid(originalWrist));
+        Bc2BoltControllerContact cached;
+        const auto prepare=[&](const math::Matrix4& part,bool held,bool missing,unsigned fault=0)->std::optional<Bc2PhysicalBoltSample>{
+            auto s=f.sample.input;s.released[1]=!held;
+            auto wrists=f.sample.wristWorld;
+            const auto weapon=Multiply(attachment,wrists[0]);
+            wrists[1]=Multiply(M95BoltWristFromPart(part),weapon);
+            for(unsigned h=0;h<2;++h){const auto pose=GapControllerPose(wrists[h]);if(!pose)return {};controls.hands[h].grip=*pose;}
+            controls.generation=s.sequence;controls.predictedNs=s.observedNs;controls.hands[1].squeeze=held?1.f:0.f;
+            Bc2BoltControllerContact raw;
+            raw.raw={f.sample.nativeOwner,f.rig.identity,f.calibration->rigFingerprint,s,M95BoltWristFromPart(part),true};
+            raw.mappingValid=true;raw.units=1;raw.weaponWorldMeters=weapon;raw.bodyWorldMeters=Pose();
+            raw.rawWristWorldMeters=wrists;raw.wristToGrip={Pose(),Pose()};
+            raw.nativeWristInWeapon={Multiply(wrists[0],*InverseRigid(weapon)),Multiply(wrists[1],*InverseRigid(weapon))};
+            raw.nativePartValid=true;raw.nativePartInWeapon=f.calibration->profile.closedContact;
+            if(!missing)cached=raw;
+            Bc2BoltPlayerInput in{f.sample.nativeOwner,f.sample.item,f.sample.asset,f.sample.mesh,&controls,s,
+                {f.sample.nativeOwner,s,controls.referenceHead,Pose(),1},missing?Bc2BoltControllerContact{}:raw,f.native.view,{}};
+            switch(fault){
+            case 1:++in.owner.weapon;break;
+            case 2:++in.safety.owner.space;++controls.spaceGeneration;in.body.input=in.safety;break;
+            case 3:controls.hands[0].gripTracked=false;in.safety.tracked[0]=false;in.body.input=in.safety;break;
+            case 4:controls.hands[1].gripTracked=false;in.safety.tracked[1]=false;in.body.input=in.safety;break;
+            case 5:controls.focused=false;in.safety.focused=false;in.body.input=in.safety;break;
+            case 6:in.safety.nowNs=in.safety.deadlineNs;in.body.input=in.safety;break;
+            case 7:in.contact=raw;++in.contact.raw.nativeOwner.weapon;break;
+            case 8:in.body.bodyWorldMeters.values[0][0]=2;break;
+            case 9:++in.body.input.sequence;break;
+            case 10:controls.worldUnitsPerMeter=2;break;
+            case 11:controls.hands[0].squeeze=0;in.safety.released[0]=true;in.body.input=in.safety;break;
+            case 14:in.contact=raw;++in.contact.raw.rig.soldier;break;
+            case 15:in.contact=raw;++in.contact.raw.rig.weak;break;
+            }
+            return player.Prepare(in,f.hands,f.intent);
+        };
+        // Establish the ordinary idle identity before the first native shot,
+        // as production does. Starting with Held would correctly mark unknown
+        // prior-actor debt for retirement instead of inventing initial custody.
+        const auto heldView=f.native.view;
+        f.native.view.phase=Bc2NativeCyclePhase::Watching;f.native.view.blocksFire=false;f.native.view.held.reset();
+        const auto initial=prepare(f.calibration->profile.closedContact,true,false);
+        CHECK(initial&&!initial->cancel&&!player.NeedsOwnerRetirement());
+        f.native.view=heldView;
+        CHECK(f.Enter()==0);player.Observe(f.last);
+        const auto root=f.hands.Current(left)->token;
+        const auto tick=[&](const math::Matrix4& part,bool held,bool missing)->bool{
+            f.Next();auto s=prepare(part,held,missing);if(!s)return false;
+            const auto before=f.native.controls;const auto life=f.bolt->UpdateGunHold(*s,f.hands);
+            if(!life||!life->inputValid||f.native.controls!=before)return false;
+            f.hands.Update(s->input);f.last=f.bolt->Tick(*s,f.hands,f.intent);player.Observe(f.last);
+            return bool(f.last.tracking.weapon)&&f.last.blocksFire;
+        };
+        CHECK(tick(f.calibration->profile.closedContact,false,false));
+        CHECK(tick(f.calibration->profile.closedContact,true,false));
+        CHECK(f.last.ownsMechanism&&f.last.tracking.target);
+        const auto mechanism=f.hands.Current(right)->token;
+        const auto originalDeadline=cached.raw.input.deadlineNs;
+        // Missing raw never becomes a new stamped raw. Stationary fresh hands
+        // retain the same claims without advancing a bolt stroke or calling it.
+        for(unsigned n=0;n<24;++n){
+            CHECK(tick(f.calibration->profile.closedContact,true,true));
+            CHECK(f.hands.Current(left)->token==root&&f.hands.Current(right)->token==mechanism);
+            CHECK(!f.last.tracking.rawContactValid&&f.last.tracking.rawInputSequence==0);
+            CHECK(f.last.tracking.currentContactGun&&*f.last.tracking.currentContactGun==root&&
+                  f.last.tracking.currentContactInput==f.sample.input.sequence&&
+                  f.last.tracking.currentContactObserved==f.sample.input.observedNs&&
+                  f.last.tracking.currentContactDeadline==f.sample.input.deadlineNs);
+            CHECK(f.last.tracking.mechanismPhase==WeaponCyclePhase::Unlock);
+            CHECK(!f.native.releases&&!f.native.acks&&!f.native.cancels);
+        }
+        CHECK(f.sample.input.nowNs>originalDeadline&&cached.raw.input.deadlineNs==originalDeadline);
+        const auto heldBefore=f.native.view.held;
+        const auto duplicate=prepare(f.calibration->profile.closedContact,true,true);CHECK(duplicate);
+        const auto deadlineBefore=f.hands.Current(left)->deadlineNs;
+        f.last=f.bolt->Tick(*duplicate,f.hands,f.intent);player.Observe(f.last);
+        CHECK(f.last.ownsMechanism&&f.last.tracking.mechanismPhase==WeaponCyclePhase::Unlock);
+        CHECK(f.hands.Current(left)->deadlineNs==deadlineBefore&&f.native.view.held==heldBefore);
+        auto strict=cached;CHECK(!MapBoltTrackedWrists(strict,controls,f.sample.input,
+            {f.sample.nativeOwner,f.sample.input,controls.referenceHead,Pose(),1}));
+        if(mutation){
+            f.Next();
+            if(mutation==12){auto stale=f.sample.input;stale.nowNs=f.hands.Current(left)->deadlineNs;f.hands.Update(stale);}
+            auto s=prepare(f.calibration->profile.closedContact,true,true,mutation);
+            if(mutation==11||mutation==13){CHECK(s);
+                if(mutation==13){CHECK(s->controllerCustody);++s->controllerCustody->id;}
+                f.bolt->UpdateGunHold(*s,f.hands);f.last=f.bolt->Tick(*s,f.hands,f.intent);
+                CHECK(!f.last.ownsMechanism&&!f.hands.Current(right));}
+            else CHECK(!s);
+            CHECK(!f.native.releases&&!f.native.acks&&player.BlocksFire());continue;
+        }
+        // A resumed publication does not rewind the current contact source.
+        CHECK(tick(f.calibration->profile.closedContact,true,false));
+        CHECK(f.hands.Current(right)->token==mechanism);
+        const auto& p=f.calibration->profile;
+        const auto step=[&](float travel,float angle){return tick(weapon_cycle_detail::Target(p,travel,angle),true,true);};
+        for(unsigned n=1;n<=4;++n)CHECK(step(0,p.unlockRadians*float(n)/4));
+        for(unsigned n=0;n<5;++n)CHECK(step(0,p.unlockRadians));
+        for(unsigned n=1;n<=8;++n)CHECK(step(p.stroke*float(n)/8,p.unlockRadians));
+        for(unsigned n=0;n<5;++n)CHECK(step(p.stroke,p.unlockRadians));
+        for(unsigned n=1;n<=8;++n)CHECK(step(p.stroke*(1.f-float(n)/8),p.unlockRadians));
+        for(unsigned n=0;n<5;++n)CHECK(step(0,p.unlockRadians));
+        for(unsigned n=1;n<=4;++n)CHECK(step(0,p.unlockRadians*(1.f-float(n)/4)));
+        for(unsigned n=0;n<5;++n)CHECK(step(0,0));
+        CHECK(f.native.releases==1&&!f.native.acks&&f.last.blocksFire&&f.hands.Current(left)->token==root);
+        CHECK(f.last.tracking.mechanismPhase==WeaponCyclePhase::AwaitingNative);
+        // No actual ready receipt means no invented completion or new Fire.
+        CHECK(tick(p.closedContact,false,true));CHECK(!f.native.acks&&player.BlocksFire());
+        CHECK(tick(p.closedContact,true,true));CHECK(!f.last.custodyChange&&!f.native.acks&&player.BlocksFire());
+    }
+    return 0;
+}
+
 int RebasedHeadAndCurrentBodyAnchor(){
     Setup f;auto expected=MapBoltTrackedWrists(f.raw,f.input,f.safety,f.frame);CHECK(expected);
     // Moving the complete reference-space origin leaves relative wrists fixed.
@@ -110,7 +246,9 @@ int PlayerReleaseUsesActualAdapterAndImmutableControls(bool expireGap=false){
         raw.nativePartValid=true;raw.nativePartInWeapon=f.calibration->profile.closedContact;
         f.Next();f.sample.input.released[1]=release;controls.generation=f.sample.input.sequence;controls.predictedNs=f.sample.input.observedNs;
         controls.hands[1].squeeze=release?0.f:1.f;
-        for(unsigned n=0;n<2;++n)controls.hands[n].grip.position={f.sample.wristWorld[n].values[3][0],f.sample.wristWorld[n].values[3][1],-f.sample.wristWorld[n].values[3][2]};
+        auto currentWrists=f.sample.wristWorld;
+        if(player.OwnsGunCustody())currentWrists[1]=Multiply(M95BoltWristFromPart(f.calibration->profile.closedContact),originalWeapon);
+        for(unsigned n=0;n<2;++n){const auto pose=GapControllerPose(currentWrists[n]);if(!pose)return {};controls.hands[n].grip=*pose;}
         if(!release){
             f.hands.Renew(f.sample.input,f.originalGun,{f.originalGun.contact,f.sample.input.sequence,f.sample.input.deadlineNs,true});
             f.hands.Renew(f.sample.input,f.originalSupport,{f.originalSupport.contact,f.sample.input.sequence,f.sample.input.deadlineNs,true});
@@ -170,17 +308,18 @@ int PlayerReleaseUsesActualAdapterAndImmutableControls(bool expireGap=false){
     // and mechanism claims stayed live. Empty publication is not a new owner.
     // Continue only using the previous original contact's remaining lifetime.
     const auto originalRaw=f.last.tracking.rawInputSequence;
-    const auto gap=prepare(false,1);CHECK(gap&&gap->raw.input.sequence==originalRaw);
+    const auto gap=prepare(false,1);CHECK(gap&&!gap->raw.valid&&gap->controllerCustody);
     const auto originalDeadline=gap->raw.input.deadlineNs;
     f.last=f.bolt->Tick(*gap,f.hands,f.intent);player.Observe(f.last);
     CHECK(f.last.ownsMechanism&&f.last.tracking.weapon&&player.ReferencesReady());
-    CHECK(f.last.tracking.rawInputSequence==originalRaw&&f.native.releases==1&&f.native.acks==1);
+    CHECK(!f.last.tracking.rawContactValid&&f.last.tracking.rawInputSequence==0&&f.native.releases==1&&f.native.acks==1);
     const auto repeatedGap=prepare(false,1);CHECK(repeatedGap);
-    CHECK(repeatedGap->raw.input.sequence==originalRaw&&repeatedGap->raw.input.deadlineNs==originalDeadline);
+    CHECK(!repeatedGap->raw.valid&&repeatedGap->raw.input.deadlineNs==originalDeadline&&repeatedGap->controllerCustody);
     f.last=f.bolt->Tick(*repeatedGap,f.hands,f.intent);player.Observe(f.last);
     CHECK(f.last.ownsMechanism&&f.last.tracking.weapon);
     if(expireGap){
         for(unsigned n=0;n<20;++n)f.Next();
+        f.hands.Update(f.sample.input);
         CHECK(!prepare(false,1)); // Repeated reads never renew cached evidence.
     }else{
         const auto resumed=prepare(false);CHECK(resumed&&resumed->raw.input.sequence>originalRaw);
@@ -248,6 +387,57 @@ int SameLeftCustodyRecoveryRequiresTypedAuthority(){
         else CHECK(prepared->cancel&&player.NeedsOwnerRetirement()&&player.BlocksFire());
     }return 0;
 }
+int PlayerCurrentCustodyOverlap(){
+    // Exercise the real player mapper's gunContacts, then the adapter's exact
+    // held root before the same generic Update used by Gameplay.
+    for(unsigned mutation=0;mutation<9;++mutation){
+        Fixture f;Bc2BoltPlayerCustody player(f.calibration);InputFrame controls;
+        controls.focused=controls.headValid=true;controls.spaceGeneration=f.sample.input.owner.space;
+        for(auto& hand:controls.hands){hand.active=Components;hand.gripTracked=hand.aimTracked=true;hand.squeeze=1;}
+        const auto inverse=InverseRigid(f.sample.weaponWorld);CHECK(inverse);
+        const std::array<math::Matrix4,2> refs={Multiply(f.sample.wristWorld[0],*inverse),Multiply(f.sample.wristWorld[1],*inverse)};
+        const auto prepare=[&](const HandInteractionSample& s,bool idle)->std::optional<Bc2PhysicalBoltSample>{
+            controls.generation=s.sequence;controls.predictedNs=s.observedNs;
+            controls.hands[1].squeeze=s.released[1]?0.f:1.f;
+            for(unsigned n=0;n<2;++n)controls.hands[n].grip.position={f.sample.wristWorld[n].values[3][0],f.sample.wristWorld[n].values[3][1],-f.sample.wristWorld[n].values[3][2]};
+            Bc2BoltControllerContact raw;raw.raw={f.sample.nativeOwner,f.rig.identity,f.calibration->rigFingerprint,s,Pose(),true};
+            raw.raw.mechanismWristInWeapon=M95BoltWristFromPart(f.calibration->profile.closedContact);
+            raw.mappingValid=true;raw.bodyWorldMeters=Pose();raw.weaponWorldMeters=f.sample.weaponWorld;
+            raw.rawWristWorldMeters=f.sample.wristWorld;raw.wristToGrip={Pose(),Pose()};raw.nativeWristInWeapon=refs;
+            raw.nativePartValid=true;raw.nativePartInWeapon=f.calibration->profile.closedContact;
+            auto native=f.native.view;if(idle){native.phase=Bc2NativeCyclePhase::Watching;native.blocksFire=false;native.held.reset();}
+            Bc2BoltPlayerInput input{f.sample.nativeOwner,f.sample.item,f.sample.asset,f.sample.mesh,&controls,s,
+                {f.sample.nativeOwner,s,controls.referenceHead,Pose(),1},raw,native,{}};
+            return player.Prepare(input,f.hands,f.intent);
+        };
+        CHECK(prepare(f.sample.input,true));CHECK(f.Enter()==0);player.Observe(f.last);
+        const auto held=f.hands.Current(left);CHECK(held);const auto token=held->token;
+        auto current=f.sample.input;++current.sequence;
+        current.observedNs=held->deadlineNs-19889800;current.nowNs=held->deadlineNs+1889900;current.deadlineNs=current.observedNs+100*ms;
+        auto prepared=prepare(current,false);CHECK(prepared&&!prepared->cancel&&!prepared->custodyTransfer);
+        CHECK(prepared->gunContacts[0].key==token.contact&&prepared->gunContacts[0].inputSequence==current.sequence&&
+              prepared->gunContacts[0].deadlineNs==current.deadlineNs&&prepared->gunContacts[0].eligible);
+        const auto controlsBefore=f.native.controls,releases=f.native.releases,acks=f.native.acks,cancels=f.native.cancels;
+        switch(mutation){
+        case 1:f.hands.Update(current);break; // Historical caller order cannot be repaired afterward.
+        case 2:prepared->cancel=true;break;
+        case 3:prepared->custodyTransfer=HandGunCustodyTransfer{};break;
+        case 4:++prepared->gunContacts[0].key.id;break;
+        case 5:--prepared->gunContacts[0].inputSequence;break;
+        case 6:++prepared->gunContacts[0].deadlineNs;break;
+        case 7:++prepared->nativeOwner.weapon;break;
+        case 8:prepared->wristWorld[0].values[0][0]=2;break;
+        }
+        const auto lifecycle=f.bolt->UpdateGunHold(*prepared,f.hands);CHECK(lifecycle);
+        CHECK(f.native.controls==controlsBefore&&f.native.releases==releases&&f.native.acks==acks&&f.native.cancels==cancels);
+        if(!mutation){CHECK(lifecycle->inputValid&&f.hands.Current(left)&&f.hands.Current(left)->token==token);
+            CHECK(f.hands.Current(left)->inputSequence==current.sequence&&f.hands.Current(left)->deadlineNs==current.deadlineNs);
+            CHECK(f.hands.Update(current).inputValid&&f.hands.Current(left)->token==token&&!f.hands.Current(right));}
+        else CHECK(!f.hands.Current(left)&&!f.hands.Current(right));
+    }
+    return 0;
 }
-int main(){if(SameLeftCustodyRecoveryRequiresTypedAuthority())return 1;CHECK(!OrdinaryBoltCompiled);if(RendererAndPlayerShareCurrentBodyBase()||StartupBlockDoesNotInventOwedAction()||RebasedHeadAndCurrentBodyAnchor()||MappingRejectsStaleOrMismatchedFrame()||StableReferencesFreezeAndRecenterInvalidates()||PlayerReleaseUsesActualAdapterAndImmutableControls()||PlayerReleaseUsesActualAdapterAndImmutableControls(true))return 1;
+
+}
+int main(){if(PlayerMappedCustodyRenderGap())return 1;if(PlayerCurrentCustodyOverlap())return 1;if(SameLeftCustodyRecoveryRequiresTypedAuthority())return 1;CHECK(!OrdinaryBoltCompiled);if(RendererAndPlayerShareCurrentBodyBase()||StartupBlockDoesNotInventOwedAction()||RebasedHeadAndCurrentBodyAnchor()||MappingRejectsStaleOrMismatchedFrame()||StableReferencesFreezeAndRecenterInvalidates()||PlayerReleaseUsesActualAdapterAndImmutableControls()||PlayerReleaseUsesActualAdapterAndImmutableControls(true))return 1;
     std::puts("7 ordinary bolt mapping/reference/recovery/real-adapter groups passed; default OFF, original packets immutable.");return 0;}

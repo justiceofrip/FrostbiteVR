@@ -5,6 +5,34 @@ import json
 import math
 from pathlib import Path
 
+def check_campaign_magazine(trace):
+    """Driver/cleanup status only; independent native transaction audit remains required."""
+    result = dict(schema='fvr.bc2.campaign_magazine_status.v1', runtime_completed=False,
+                  native_reload_accepted=False, independent_receipt_audit_required=True,
+                  callback_evidence_verified=False, headset_verified=False)
+    try:
+        game=trace['gameplay']; probe=game['resource_inventory_probe']; flow=game['reload_flow']
+        first=probe['first_magazine']; native=flow['ammo_resource_hands']
+        checks=dict(
+            exact_mode=probe['campaign_magazine'] is True and probe['magazine_only'] is True
+                and probe['magazine_postfire'] is True and probe['support_only'] is False
+                and probe['manual_pump'] is False,
+            ordinary_input=probe['input_only'] is True and probe['persistent_consumers'] is True,
+            driver_completed=probe['phase']==11 and probe['failure']==0 and probe['completed'] is True,
+            partial_ready=probe['partial_magazine_ready'] is True and probe['partial_loaded']>0,
+            two_cycles=first['actual_consumer_completed'] is True and first['phase']==12
+                and first['failure']==0 and first['completed_cycles']==2,
+            fresh_support=probe['support_reacquired'] is True and probe['rifle_support_required'] is True
+                and probe['rifle_support_claim']>probe['initial_support_claim']>0,
+            one_post_reload_shot=probe['rifle_shot_count']==1 and probe['rifle_shot_sequence']>0,
+            four_operations=native['ordinary_input_build'] is True
+                and native['calls']==native['completed']==4 and native['rejected']==native['pending']==0,
+            detached=trace['hooks_disabled'] is True and flow['drained'] is True and flow['in_flight']==0)
+        result.update(checks=checks,runtime_completed=all(checks.values()))
+    except (KeyError,TypeError,ValueError) as error:
+        result.update(checks={'well_formed_status':False},error=str(error))
+    return result
+
 
 def check(trace, manual_pump, interrupted_pump=False, empty_pump=False, three_pump_two_shell=False,
           expired_control=False, pump_unreachable_hand=False, pump_extended_hand=False, pump_receiver_gap=False, receiver_gap=None, shell_focus_loss=False, shell_focus_receipt=None):
@@ -314,6 +342,7 @@ def main():
     ap.add_argument('--trace', type=Path, required=True)
     ap.add_argument('--output', type=Path, required=True)
     ap.add_argument('--manual-pump', action='store_true')
+    ap.add_argument('--campaign-magazine', action='store_true')
     ap.add_argument('--interrupted-pump', action='store_true')
     ap.add_argument('--empty-pump', action='store_true')
     ap.add_argument('--three-pump-two-shell', action='store_true')
@@ -325,6 +354,10 @@ def main():
     ap.add_argument('--shell-focus-loss', action='store_true')
     ap.add_argument('--shell-focus-receipt', type=Path)
     args = ap.parse_args()
+    if args.campaign_magazine and any((args.manual_pump,args.interrupted_pump,args.empty_pump,
+            args.three_pump_two_shell,args.expired_control,args.pump_unreachable_hand,
+            args.pump_extended_hand,args.pump_receiver_gap,args.shell_focus_loss)):
+        ap.error('Single-weapon campaign episode cannot combine other fixtures')
     if args.output.exists() or args.output.resolve() == args.trace.resolve():
         ap.error('Preserve existing evidence; select a new output')
     if args.pump_receiver_gap != bool(args.receiver_gap):
@@ -334,7 +367,7 @@ def main():
     focus_raw = args.shell_focus_receipt.read_bytes() if args.shell_focus_receipt else None
     gap_raw = args.receiver_gap.read_bytes() if args.receiver_gap else None
     raw = args.trace.read_bytes()
-    result = check(json.loads(raw.decode('utf-8-sig')), args.manual_pump, args.interrupted_pump, args.empty_pump, args.three_pump_two_shell,
+    result = check_campaign_magazine(json.loads(raw.decode('utf-8-sig'))) if args.campaign_magazine else check(json.loads(raw.decode('utf-8-sig')), args.manual_pump, args.interrupted_pump, args.empty_pump, args.three_pump_two_shell,
                    args.expired_control, args.pump_unreachable_hand, args.pump_extended_hand, args.pump_receiver_gap,
                    json.loads(gap_raw.decode('utf-8-sig')) if gap_raw else None, args.shell_focus_loss,
                    json.loads(focus_raw.decode('utf-8-sig')) if focus_raw else None)

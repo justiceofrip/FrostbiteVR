@@ -11,10 +11,43 @@ import time
 
 sys.dont_write_bytecode = True
 
-# Exact supported image only. Derived using Bc2Profile::DiscoverProfile's
+# Verified image and explicit Steam candidate. Derived using Bc2Profile::DiscoverProfile's
 # Present/vtable/getter relationships; ObserveBc2 reads these same dimensions.
 # This is read-only startup evidence, never native hook admission.
 SUPPORTED_GAME_SHA = '3911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258'
+STEAM_GAME_SHA = '22e96001382eb847d3ab0a02b59ec7bb79ba47e04146e74c6c49e38465f38c96'
+
+
+def validate_executable(raw, expected_sha, experimental_steam=False):
+    """Bind the selected file; Steam opt-in retains native layout admission."""
+    if hashlib.sha256(raw).hexdigest() != expected_sha:
+        raise ValueError('Installed BC2 build changed')
+    if expected_sha == SUPPORTED_GAME_SHA:
+        return
+    if expected_sha != STEAM_GAME_SHA or experimental_steam is not True:
+        raise ValueError('This executable requires its supported compatibility option.')
+    if len(raw) < 64 or len(raw) > 128 * 1024 * 1024 or raw[:2] != b'MZ':
+        raise ValueError('Steam compatibility: invalid executable image')
+    nt = struct.unpack_from('<I', raw, 0x3c)[0]
+    if nt < 64 or nt + 24 > len(raw) or raw[nt:nt+4] != b'PE\0\0':
+        raise ValueError('Steam compatibility: invalid PE header')
+    machine, count, stamp = struct.unpack_from('<HHI', raw, nt + 4)
+    opt_size = struct.unpack_from('<H', raw, nt + 20)[0]
+    opt = nt + 24
+    if not 1 <= count <= 96 or opt_size < 224 or opt + opt_size + 40 * count > len(raw):
+        raise ValueError('Steam compatibility: truncated section table')
+    magic = struct.unpack_from('<H', raw, opt)[0]
+    base = struct.unpack_from('<I', raw, opt + 28)[0]
+    size = struct.unpack_from('<I', raw, opt + 56)[0]
+    if (machine, magic, stamp, base, size) != (0x14c, 0x10b, 1314210909, 0x400000, 0x1913000):
+        raise ValueError('Steam compatibility: this image does not match the native BC2 build layout')
+    for index in range(count):
+        section = opt + opt_size + index * 40
+        virtual_size, rva, raw_size, pointer = struct.unpack_from('<IIII', raw, section + 8)
+        if pointer + raw_size > len(raw) or rva + max(virtual_size, raw_size) > size:
+            raise ValueError('Steam compatibility: invalid section bounds')
+
+
 RENDERER_VTABLE = 0x14497a0
 RENDERER_PRESENT = 0x9eea30
 WIDTH_GETTER = 0x9d8180
@@ -70,15 +103,13 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--exe', type=Path, required=True)
     parser.add_argument('--expected-sha256', required=True)
+    parser.add_argument('--experimental-steam', action='store_true')
     args = parser.parse_args()
     if args.output.exists():
         raise ValueError('Preserve existing menu readiness evidence')
     exe = args.exe.resolve()
     raw = exe.read_bytes()
-    if args.expected_sha256 != SUPPORTED_GAME_SHA:
-        raise ValueError('This read-only menu profile has not been verified for the supplied executable hash.')
-    if hashlib.sha256(raw).hexdigest() != args.expected_sha256:
-        raise ValueError('Installed BC2 build changed')
+    validate_executable(raw, args.expected_sha256, args.experimental_steam)
 
     def field(pattern, offset):
         matches = list(re.finditer(pattern, raw, re.S))

@@ -38,6 +38,12 @@ struct SelectedMeleeResult {
     SelectedMeleeReason reason=SelectedMeleeReason::Invalid;
     std::optional<SelectedMeleeIntent> intent;
 };
+struct SelectedMeleeObservation {
+    bool motionUpdated=false;
+    bool armedBefore=false,armedAfter=false,triggerDownBefore=false,triggerDownAfter=false;
+    SelectedMeleePending pendingBefore=SelectedMeleePending::None,pendingAfter=SelectedMeleePending::None;
+    MeleeStrokeObservation motion{};
+};
 // Recognition and one outstanding intent only. No native calls, hand ownership
 // changes, weapon suppression, holster/vehicle gates or hit/damage authority.
 // Update emits once; adapter validates the original intent at its boundary and
@@ -45,8 +51,20 @@ struct SelectedMeleeResult {
 class SelectedMeleeAttack {
 public:
     explicit SelectedMeleeAttack(MeleeStrokeConfig config={}):motion_(config){}
-    SelectedMeleeResult Update(const SelectedMeleeSample& s,const HandInteraction& hands)noexcept {
-        if(!Valid(s,hands)){InvalidateMotion();return {SelectedMeleeReason::Invalid,{}};}
+    SelectedMeleeResult Update(const SelectedMeleeSample& s,const HandInteraction& hands,
+        SelectedMeleeObservation* observation=nullptr)noexcept {
+        if(observation){*observation={};observation->armedBefore=armed_;observation->triggerDownBefore=triggerDown_;
+            observation->pendingBefore=pendingState_;}
+        const auto finish=[&](SelectedMeleeReason reason,std::optional<SelectedMeleeIntent> intent=std::nullopt){
+            if(observation){observation->armedAfter=armed_;observation->triggerDownAfter=triggerDown_;
+                observation->pendingAfter=pendingState_;}
+            return SelectedMeleeResult{reason,intent};
+        };
+        const auto motion=[&](const MeleeStrokeSample& sample){
+            if(observation)observation->motionUpdated=true;
+            return motion_.Update(sample,hands,observation?&observation->motion:nullptr);
+        };
+        if(!Valid(s,hands)){InvalidateMotion();return finish(SelectedMeleeReason::Invalid);}
         const auto& f=s.motion.source;
         const bool identityChanged=!previous_||s.identity!=previous_->identity||s.motion.hold!=previous_->motion.hold;
         if(identityChanged){
@@ -54,35 +72,44 @@ public:
             // First packet establishes ownership only; neither draw/regrip nor
             // an already-held trigger is an attack edge.
             if(!pending_&&s.motion.attackAvailable&&s.geometryCurrent&&s.trigger<=.1f)
-                (void)motion_.Update(s.motion,hands);
-            return {pending_?SelectedMeleeReason::Pending:SelectedMeleeReason::IdentityChanged,{}};
+                (void)motion(s.motion);
+            return finish(pending_?SelectedMeleeReason::Pending:SelectedMeleeReason::IdentityChanged);
         }
         const auto& old=previous_->motion.source;
         if(f.sequence<old.sequence||f.observedNs<old.observedNs||f.nowNs<old.nowNs||
            (f.sequence>old.sequence&&f.observedNs==old.observedNs)){
-            InvalidateMotion();return {SelectedMeleeReason::Order,{}};
+            InvalidateMotion();return finish(SelectedMeleeReason::Order);
         }
         if(f.sequence==old.sequence){
             const bool same=SamePacket(s,*previous_);
-            if(!same)InvalidateMotion();else previous_->motion.source.nowNs=f.nowNs;
-            return {same?SelectedMeleeReason::Duplicate:SelectedMeleeReason::Invalid,{}};
+            if(!same){InvalidateMotion();return finish(SelectedMeleeReason::Invalid);}
+            previous_->motion.source.nowNs=f.nowNs;
+            // Geometry is re-derived from an independently produced render
+            // receipt; native readiness is also a current observation, not a
+            // controller-packet field. A repeat cannot advance or replace the
+            // first geometry sampled for this packet. Current authority loss
+            // still revokes recognition, and recovery needs a fresh packet.
+            if(!s.motion.attackAvailable){motion_.Invalidate();armed_=false;triggerDown_=s.trigger>.1f;
+                return finish(SelectedMeleeReason::NativeUnavailable);}
+            if(!s.geometryCurrent)motion_.Invalidate();
+            return finish(SelectedMeleeReason::Duplicate);
         }
         previous_=s;
-        if(pending_){motion_.Invalidate();armed_=false;triggerDown_=s.trigger>.1f;return {SelectedMeleeReason::Pending,{}};}
-        if(!s.motion.attackAvailable){motion_.Invalidate();armed_=false;triggerDown_=s.trigger>.1f;return {SelectedMeleeReason::NativeUnavailable,{}};}
+        if(pending_){motion_.Invalidate();armed_=false;triggerDown_=s.trigger>.1f;return finish(SelectedMeleeReason::Pending);}
+        if(!s.motion.attackAvailable){motion_.Invalidate();armed_=false;triggerDown_=s.trigger>.1f;return finish(SelectedMeleeReason::NativeUnavailable);}
         const bool press=s.trigger>=.75f&&!triggerDown_;
         if(s.trigger<=.1f)triggerDown_=false;else if(s.trigger>=.75f)triggerDown_=true;
         if(s.trigger<=.1f)armed_=true; // Fresh neutral after identity/readiness recovery.
         auto stroke=s.motion;stroke.attackAvailable=s.geometryCurrent&&!triggerDown_&&armed_;
-        const auto gesture=motion_.Update(stroke,hands);
-        if(!(press&&armed_)&&!gesture.intent)return {armed_?SelectedMeleeReason::Ready:SelectedMeleeReason::NeutralRequired,{}};
-        if(serial_==UINT64_MAX){InvalidateMotion();return {SelectedMeleeReason::SerialLimit,{}};}
+        const auto gesture=motion(stroke);
+        if(!(press&&armed_)&&!gesture.intent)return finish(armed_?SelectedMeleeReason::Ready:SelectedMeleeReason::NeutralRequired);
+        if(serial_==UINT64_MAX){InvalidateMotion();return finish(SelectedMeleeReason::SerialLimit);}
         SelectedMeleeIntent command{++serial_,s.identity,s.motion.hold,f.sequence,f.observedNs,f.deadlineNs,
             press&&armed_?SelectedMeleeCause::Trigger:SelectedMeleeCause::Stroke,{}};
         if(command.cause==SelectedMeleeCause::Stroke)command.stroke=gesture.intent;
         pending_=command;pendingState_=SelectedMeleePending::Staged;
         motion_.Invalidate();armed_=false;
-        return {SelectedMeleeReason::Intent,command};
+        return finish(SelectedMeleeReason::Intent,command);
     }
     bool Resolve(std::uint64_t serial,const SelectedMeleeIdentity& identity,SelectedMeleeOutcome outcome)noexcept {
         if(!pending_||pending_->serial!=serial||pending_->identity!=identity)return false;
@@ -124,9 +151,7 @@ private:
     static bool SamePacket(const SelectedMeleeSample& a,const SelectedMeleeSample& b)noexcept {
         const auto& x=a.motion.source;const auto& y=b.motion.source;
         return a.identity==b.identity&&a.motion.hold==b.motion.hold&&a.trigger==b.trigger&&
-            a.selected==b.selected&&a.geometryCurrent==b.geometryCurrent&&
-            a.motion.tip==b.motion.tip&&a.motion.direction==b.motion.direction&&
-            a.motion.attackAvailable==b.motion.attackAvailable&&x.owner==y.owner&&
+            a.selected==b.selected&&x.owner==y.owner&&
             x.sequence==y.sequence&&x.observedNs==y.observedNs&&x.deadlineNs==y.deadlineNs&&
             x.focused==y.focused&&x.tracked==y.tracked&&x.released==y.released;
     }

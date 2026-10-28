@@ -60,8 +60,8 @@ function Read-FvrFeedbackTail([string]$Path) {
     if(-not (Test-Path -LiteralPath $Path -PathType Leaf)){return $null}
     $file=[IO.File]::Open($Path,'Open','Read',([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete))
     try {
-        # Seventeen permitted sources must fit together under the report cap.
-        $count=[int][Math]::Min(24576,$file.Length)
+        # Each permitted tail is bounded; the combined report is checked below.
+        $count=[int][Math]::Min(20480,$file.Length)
         $null=$file.Seek(-$count,[IO.SeekOrigin]::End)
         $bytes=[byte[]]::new($count);$read=0
         while($read -lt $count){$n=$file.Read($bytes,$read,$count-$read);if($n -eq 0){break};$read+=$n}
@@ -121,7 +121,7 @@ function New-FvrFeedbackBundle([string]$InstallRoot, $Package, $Settings) {
                 if(-not $relative.StartsWith('sessions/',[StringComparison]::Ordinal)){throw 'Session log path is outside launcher runtime sessions.'}
                 $run=Get-FvrChild $runtime $relative
                 Assert-FvrNoLinks $run
-                foreach($name in @('session.json','menu-ready.json','menu-ready.log','supervisor.stdout.log','supervisor.stderr.log','host.stdout.log','host.stderr.log','native.stdout.log','native.stderr.log','session-telemetry.jsonl')) {
+                foreach($name in @('session.json','menu-ready.json','menu-ready.log','activation.json','activation.log','resolution-native.json','resolution.stdout.log','resolution.stderr.log','resolution-lease.json','resolution-release.json','resolution-release.stdout.log','resolution-release.stderr.log','menu-resized.json','menu-resized.log','supervisor.stdout.log','supervisor.stderr.log','host.stdout.log','host.stderr.log','native.stdout.log','native.stderr.log','session-telemetry.jsonl')) {
                     $sources.Add(@{name=$name;path=(Get-FvrChild $run $name)})
                 }
                 $nativeFailure=Read-FvrNativeFailureFeedback (Get-FvrChild $run 'native-trace.json')
@@ -130,7 +130,7 @@ function New-FvrFeedbackBundle([string]$InstallRoot, $Package, $Settings) {
         } catch {$parts.Add('Session logs unavailable or outside the permitted diagnostics folder; omitted.')}
     }
     foreach($source in $sources) {
-        try{$tail=Read-FvrFeedbackTail $source.path;if($null -ne $tail){$parts.Add("--- $($source.name) (last 24 KiB, sanitized) ---`n"+$tail)}}
+        try{$tail=Read-FvrFeedbackTail $source.path;if($null -ne $tail){$parts.Add("--- $($source.name) (last 20 KiB, sanitized) ---`n"+$tail)}}
         catch{$parts.Add('--- '+$source.name+' unavailable; omitted ---')}
     }
     $report=$parts -join "`r`n`r`n"

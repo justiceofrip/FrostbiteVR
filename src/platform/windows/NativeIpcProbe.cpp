@@ -529,7 +529,7 @@ int wmain(int argc,wchar_t** argv){try{
     Require(!(noImageFiles||triggerSmokeState.ReviewImagesRequested())||!nativeImageWriter,"Bounded knife images cannot include native/composed image capture");
     ipc::RemoteFrameProvider host;Require(host.Create()&&host.SetBudget(50)&&host.SetRequestLifetime(requestLifetimeMs),"Create native receiver channel");
     ipc::MenuChannel playerMenu;LARGE_INTEGER playerMenuFrequency{};
-    if(selectedKnifeMenu||normalKnifeClose||contextualToolProbe||playerGrenadeProbe||twoGrenadeFade||chestKnifeProbe)Require(playerMenu.CreateHost(host.Token())&&QueryPerformanceFrequency(&playerMenuFrequency)&&
+    if(selectedKnifeMenu||normalKnifeClose||contextualToolProbe||playerGrenadeProbe||twoGrenadeFade||chestKnifeProbe||controlsButtons)Require(playerMenu.CreateHost(host.Token())&&QueryPerformanceFrequency(&playerMenuFrequency)&&
         playerMenuFrequency.QuadPart>0&&playerMenuFrequency.QuadPart<=1000000000,"Create actual player menu observation lane");
     {std::wofstream token(folder/L"channel.txt");token<<host.Token();Require(bool(token),"Write channel token");}
     const auto start=GetTickCount64();Require(ipc::WaitForConnection([&]{return host.Connected();},
@@ -849,7 +849,8 @@ int wmain(int argc,wchar_t** argv){try{
                 if(elapsed>=400&&elapsed<1100)controls.hands[0].trigger=1;
                 if(elapsed>=1600&&elapsed<1900)controls.hands[1].held=interaction::Secondary;
                 if(elapsed>=3200&&elapsed<3500)controls.hands[1].held=interaction::Primary;
-                if((elapsed>=4800&&elapsed<5100)||(elapsed>=6400&&elapsed<6700))controls.hands[0].held=interaction::Secondary;
+                // Completed left-only clicks toggle crouch on, then off.
+                if((elapsed>=4800&&elapsed<5100)||(elapsed>=6400&&elapsed<6700))controls.hands[0].held=interaction::StickClick;
             }
             if(deathProbe){
                 // Diagnostic only: native grenade action with downward aim.
@@ -862,7 +863,7 @@ int wmain(int argc,wchar_t** argv){try{
             // Synthetic poses use one known coordinate basis until an explicit
             // origin/receiver replacement. Never infer continuity from poses.
             controls.trackingBasisGeneration=1u+(originChanged?1u:0u)+(receiverGap.Returned()?1u:0u);
-            if(selectedKnifeNeutral){
+            if(selectedKnifeNeutral||controlsButtons){
                 ipc::MenuState state{};const auto read=playerMenu.ReadState(state);LARGE_INTEGER q{};QueryPerformanceCounter(&q);
                 selectedKnifeMenuReceiver.Decorate(controls,0,read,state,q.QuadPart,playerMenuFrequency.QuadPart);
             }

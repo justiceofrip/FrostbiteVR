@@ -1,0 +1,4 @@
+LIBRARY BC2ResolutionBootstrap
+EXPORTS
+    FvrConfigureResolution=_FvrConfigureResolution@4
+    FvrReleaseResolution=_FvrReleaseResolution@4

@@ -191,5 +191,7 @@ std::optional<MagazineDetachPairReceipt> ReadMagazineDetachPair(const ReloadStat
 void PublishM95ShotCapturePhase(unsigned)noexcept;
 void Start()noexcept;
 bool Stop()noexcept;
+// Independent scalar atomic counters only; not a coherent pose/pair snapshot.
+void ReportLiveCounters(std::ostream&);
 void Report(std::ostream&);
 }

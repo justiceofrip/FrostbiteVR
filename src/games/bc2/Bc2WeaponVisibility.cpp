@@ -109,10 +109,15 @@ bool WeaponVisibilityCurrent(const WeaponVisibilityPlan& p,const WeaponVisibilit
         !r.input.tracked[0]||!r.input.tracked[1]||r.input.owner.actor!=((std::uint64_t(p.nativeOwner.weak)<<32)|p.nativeOwner.soldier)||
         r.input.owner.actorGeneration!=p.nativeOwner.actorGeneration||r.input.owner.equipGeneration!=p.physicalEquipGeneration||
         r.input.owner.space!=p.nativeOwner.space||!p.selected||!r.selected||r.selected->sequence<p.meshSequence||
-        r.selected->owner!=p.nativeOwner||r.selected->weaponData!=p.selected->weaponData||
+        r.selected->owner!=p.nativeOwner||
+        // The publisher shares an immutable snapshot between refreshes. These
+        // integer/character metadata fields are reflexively equal on the same
+        // object; avoid walking all 64 mesh paths again in that common case.
+        // Owner, sequence, leases and coverage are still checked on every call.
+        (r.selected.get()!=p.selected.get()&&(r.selected->weaponData!=p.selected->weaponData||
         r.selected->weaponName!=p.selected->weaponName||r.selected->stateTypeInfo!=p.selected->stateTypeInfo||
         r.selected->meshTypeInfo!=p.selected->meshTypeInfo||
-        r.selected->soleConfiguredArray!=p.selected->soleConfiguredArray||r.selected->states!=p.selected->states||
+        r.selected->soleConfiguredArray!=p.selected->soleConfiguredArray||r.selected->states!=p.selected->states))||
         ResolveWeaponVisibilityNames(*r.selected,p.nativeOwner,now,r.authorizationDeadlineNs>now&&r.authorizationDeadlineNs-now<=15000000000ll).empty())return false;
     return true;
 }

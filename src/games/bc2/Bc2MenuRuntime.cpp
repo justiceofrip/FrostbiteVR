@@ -1,6 +1,7 @@
 #include "Bc2MenuRuntime.h"
 #include "Bc2MenuBinding.h"
 #include "Bc2MenuState.h"
+#include "Bc2MenuLoading.h"
 #include "Bc2MenuControl.h"
 #include "Bc2MenuStartupRuntime.h"
 #include "fvr/graphics/D3D11MenuProducer.h"
@@ -15,6 +16,11 @@ namespace {
 using PumpFn=void(__thiscall*)(void*,void*);PumpFn original=nullptr;void* hook=nullptr;
 ipc::MenuChannel channel;graphics::D3D11MenuProducer raster;
 MenuBindingCandidates binding{};MenuStateCandidates states{};unsigned base=0;
+MenuLoadingCandidates loadingBinding{};bool loadingVerified=false;
+std::optional<MenuLoadingSnapshot> lastLoading;
+bool loadingUnknown=false;
+std::atomic<ULONGLONG> passiveObservedAt=0;
+std::atomic<unsigned> loadingReads=0,loadingMisses=0,loadingEntries=0,loadingRetirements=0;
 std::atomic<bool> enabled=false,stopping=false;std::atomic<unsigned> callbacks=0,uiThread=0;
 std::atomic<MenuDisplayState> displayState=MenuDisplayState::Unknown;
 std::atomic<ULONGLONG> displayObservedAt=0;
@@ -68,6 +74,48 @@ void RetireInputEpoch()noexcept {
     ++menuEpoch;buttonArmed=false;lastPointerSequence=0;
     controlSequence={};pendingUntil=0;
 }
+enum class LoadingDisplay {Inactive,Active,Unknown};
+// Serialized with the native UI pump by pumping. Present only reads the
+// verified loading-screen owner; it never dispatches native UI input.
+LoadingDisplay RefreshLoadingDisplay()noexcept {
+    if(!loadingVerified)return LoadingDisplay::Inactive;
+    ++loadingReads;
+    const auto loading=ReadMenuLoading(memory,loadingBinding,base);
+    if(!loading){
+        ++loadingMisses;
+        if(lastLoading){lastLoading.reset();++loadingRetirements;}
+        if(!loadingUnknown)RetireInputEpoch();
+        loadingUnknown=true;
+        connectionInputDeadline.store(0,std::memory_order_release);
+        passiveObservedAt.store(0,std::memory_order_release);
+        displayState.store(MenuDisplayState::Unknown,std::memory_order_release);
+        displayObservedAt.store(0,std::memory_order_release);
+        channel.PublishState({++stateSequence,menuEpoch,0,ipc::MenuMode::Unknown,0,0,0});
+        return LoadingDisplay::Unknown;
+    }
+    loadingUnknown=false;
+    if(loading&&loading->active){
+        if(!lastLoading||*lastLoading!=*loading){
+            RetireInputEpoch();lastLoading=loading;++loadingEntries;
+        }
+        connectionInputDeadline.store(0,std::memory_order_release);
+        passiveObservedAt.store(GetTickCount64(),std::memory_order_release);
+        channel.PublishState({++stateSequence,menuEpoch,0,ipc::MenuMode::Passive,
+            binding.logicalWidth,binding.logicalHeight,0});
+        return LoadingDisplay::Active;
+    }
+    if(lastLoading){
+        // Losing this owner retires its image immediately. Absence is not
+        // evidence of gameplay: a verified UI callback establishes the next
+        // interactive state independently.
+        lastLoading.reset();RetireInputEpoch();++loadingRetirements;
+        passiveObservedAt.store(0,std::memory_order_release);
+        displayState.store(MenuDisplayState::Unknown,std::memory_order_release);
+        displayObservedAt.store(0,std::memory_order_release);
+        channel.PublishState({++stateSequence,menuEpoch,0,ipc::MenuMode::Unknown,0,0,0});
+    }
+    return LoadingDisplay::Inactive;
+}
 void ReleaseOwned()noexcept {
     if(!press.Active()){releasePending=false;return;}
     releasePending=true;
@@ -101,9 +149,13 @@ void __fastcall Pump(void* self,void*,void* input){
     struct Boundary {Boundary(){nativeBoundary=true;}~Boundary(){nativeBoundary=false;pumping.clear(std::memory_order_release);}} boundary;
     const auto thread=GetCurrentThreadId();const auto prior=uiThread.exchange(thread);if(prior&&prior!=thread)++threadChanges;
     ++pumps;
+    if(stopping.load(std::memory_order_acquire)){ReleaseOwned();ReleaseCancel(true);return;}
+    if(RefreshLoadingDisplay()!=LoadingDisplay::Inactive){
+        connectionInputDeadline.store(0,std::memory_order_release);
+        ReleaseOwned();ReleaseCancel(true);buttonArmed=false;return;
+    }
     displayState.store(state->entered?MenuDisplayState::Menu:MenuDisplayState::Gameplay,std::memory_order_release);
     displayObservedAt.store(GetTickCount64(),std::memory_order_release);
-    if(stopping.load(std::memory_order_acquire)){ReleaseOwned();ReleaseCancel(true);return;}
     ReleaseCancel();
     // The APT routing target can change without entered/owner changing. Check
     // an active lease even while the controller is still down; otherwise its
@@ -211,6 +263,8 @@ bool Same(std::span<const std::byte> bytes,const engine::PeImage& pe,unsigned rv
 MenuDisplayState CurrentDisplayState()noexcept {
     if(!enabled.load(std::memory_order_acquire))return MenuDisplayState::Unknown;
     const auto observed=displayObservedAt.load(std::memory_order_acquire),now=GetTickCount64();
+    const auto passive=passiveObservedAt.load(std::memory_order_acquire);
+    if(passive&&now>=passive&&now-passive<=250)return MenuDisplayState::Passive;
     return observed&&now>=observed&&now-observed<=250?displayState.load(std::memory_order_acquire):MenuDisplayState::Unknown;
 }
 bool Install(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uintptr_t image,const std::wstring& token){
@@ -221,6 +275,14 @@ bool Install(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uin
     for(const auto& span:MenuStateCodeSpans())if(!Same(bytes,pe,span.rva,span.size)){channel.Close();return false;}
     const auto spans=MenuBindingCodeSpans(bytes,pe,binding);if(!spans){channel.Close();return false;}
     for(const auto& span:*spans)if(!Same(bytes,pe,span.rva,span.size)){channel.Close();return false;}
+    // Loading presentation is optional on an unrecognized executable. Its
+    // absence does not disable the independently verified interactive menu.
+    if(const auto loading=DiscoverMenuLoading(bytes,pe)){
+        loadingVerified=true;
+        for(const auto& span:MenuLoadingCodeSpans())
+            if(!Same(bytes,pe,span.rva,span.size)){loadingVerified=false;break;}
+        if(loadingVerified)loadingBinding=*loading;
+    }
     if(!startup::Prepare(bytes,pe,image)){channel.Close();return false;}
     auto* at=reinterpret_cast<void*>(image+binding.mousePump);
     if(MH_CreateHook(at,Pump,reinterpret_cast<void**>(&original))!=MH_OK){channel.Close();return false;}
@@ -229,6 +291,7 @@ bool Install(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uin
 void Start()noexcept {if(hook){enabled.store(true,std::memory_order_release);startup::Start();}}
 bool Stop()noexcept {
     connectionInputDeadline.store(0,std::memory_order_release);
+    passiveObservedAt.store(0,std::memory_order_release);
     displayState.store(MenuDisplayState::Unknown,std::memory_order_release);displayObservedAt.store(0,std::memory_order_release);
     enabled.store(false,std::memory_order_release);stopping.store(true,std::memory_order_release);
     const bool startupStopped=startup::Stop();
@@ -239,14 +302,26 @@ bool Stop()noexcept {
     for(unsigned n=0;n<100&&callbacks.load();++n)Sleep(1);
     stopping.store(false,std::memory_order_release);return startupStopped&&okay&&!pressActive.load()&&!cancelActive.load()&&!callbacks.load();
 }
-void Present(IDXGISwapChain* chain)noexcept {
+MenuDisplayState Present(IDXGISwapChain* chain)noexcept {
+    struct Callback{Callback(){++callbacks;}~Callback(){--callbacks;}} callback;
+    auto display=MenuDisplayState::Unknown;
     if(enabled.load(std::memory_order_acquire)){
-        raster.Pump(chain,channel);
+        // Loading has no MainMenu/Pause input controller, so its native mouse
+        // pump is absent. Observe at the existing verified Present boundary,
+        // before the desktop mirror can replace BC2's original loading raster.
+        if(!pumping.test_and_set(std::memory_order_acquire)){
+            if(enabled.load(std::memory_order_acquire)&&
+               RefreshLoadingDisplay()!=LoadingDisplay::Unknown)
+                display=CurrentDisplayState();
+            pumping.clear(std::memory_order_release);
+        }
+        if(display!=MenuDisplayState::Unknown)raster.Pump(chain,channel);
         // The producer counters belong to the graphics thread. Mirror them
         // atomically instead of reading its mutable state on the trace worker.
         connectionPublished.store(raster.Published(),std::memory_order_release);
         connectionGraphicsFailures.store(raster.Failed(),std::memory_order_release);
     }
+    return display;
 }
 MenuConnectionTelemetry ReadConnectionTelemetry()noexcept {
     MenuConnectionTelemetry out;out.inputSamples=connectionInputs.load(std::memory_order_acquire);
@@ -284,6 +359,9 @@ void Report(std::ostream& out){
         out<<"{\"sequence\":"<<e.sequence<<",\"space\":"<<e.space<<",\"toggle\":"<<e.toggle<<",\"cancel\":"<<e.cancel
            <<",\"read\":"<<unsigned(e.read)<<",\"toggle_edge\":"<<e.toggleEdge<<",\"cancel_edge\":"<<e.cancelEdge
            <<",\"entered\":"<<e.entered<<",\"pending\":"<<e.pending<<'}';}
-    out<<"],\"startup\":";startup::Report(out);out<<",\"headset_verified\":false}";
+    out<<"],\"loading\":{\"verified\":"<<loadingVerified<<",\"reads\":"<<loadingReads.load()
+       <<",\"misses\":"<<loadingMisses.load()<<",\"entries\":"<<loadingEntries.load()
+       <<",\"retirements\":"<<loadingRetirements.load()<<",\"input_dispatch_enabled\":false},\"startup\":";
+    startup::Report(out);out<<",\"headset_verified\":false}";
 }
 }

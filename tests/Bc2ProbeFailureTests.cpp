@@ -1,5 +1,6 @@
 #include "Test.h"
 #include "Bc2ProbeFailure.h"
+#include "Bc2ProbeOutcome.h"
 #include <array>
 #include <iostream>
 #include <sstream>
@@ -17,6 +18,24 @@ std::string Expected(std::string_view escaped,bool disabled=true,bool truncated=
     return "{\"state\":\"failed\",\"error\":\""+std::string(escaped)+"\",\"hooks_disabled\":"+
         (disabled?"true":"false")+",\"error_truncated\":"+(truncated?"true":"false")+
         ",\"error_utf8_replaced\":"+(replaced?"true":"false")+"}\n";
+}
+int BootstrapOutcome() {
+    const auto render=[](const NativeProbeRunOutcome& value){std::ostringstream out;WriteNativeProbeRunOutcomeJson(out,100,value);return out.str();};
+    NativeProbeRunOutcome value;value.reportBytesKnown=true;value.reportBytes=123;
+    auto row=render(value);
+    CHECK(row.find("\"outcome\":\"remote_thread_exited\"")!=std::string::npos);
+    CHECK(row.find("\"probe_exit\":0,\"game_exit_code\":null")!=std::string::npos);
+    CHECK(row.find("\"report_bytes\":123,\"report_nonempty\":true")!=std::string::npos);
+    value.remoteThreadExitCode=3221225477u;row=render(value);
+    CHECK(row.find("\"probe_exit\":3221225477")!=std::string::npos);
+    value.gameExited=true;value.gameExitCodeKnown=true;value.reportBytes=0;row=render(value);
+    CHECK(row.find("\"remote_thread_exit_observed\":false,\"probe_exit\":null,\"game_exit_code\":0")!=std::string::npos);
+    CHECK(row.find("\"report_bytes\":0,\"report_nonempty\":false")!=std::string::npos);
+    value.gameExitCode=3221225477u;row=render(value);
+    CHECK(row.find("\"probe_exit\":null,\"game_exit_code\":3221225477")!=std::string::npos);
+    value.gameExitCodeKnown=false;value.reportBytesKnown=false;row=render(value);
+    CHECK(row.find("\"game_exit_code\":null,\"report_bytes\":null,\"report_nonempty\":null")!=std::string::npos);
+    CHECK(row.size()<1024);return 0;
 }
 int JsonEscaping() {
     CHECK(Render("Native gameplay binding unverified")==Expected("Native gameplay binding unverified"));
@@ -78,7 +97,7 @@ int Bounds() {
 }
 }
 int main(int argc,char** argv) {
-    CHECK(JsonEscaping()==0);CHECK(Utf8()==0);CHECK(Bounds()==0);
+    CHECK(BootstrapOutcome()==0);CHECK(JsonEscaping()==0);CHECK(Utf8()==0);CHECK(Bounds()==0);
     // Optional independent JSON-parser validation without adding a runtime or
     // parser dependency to the native target; default CTest does no file IO.
     if(argc==2&&std::string_view(argv[1])=="--json-lines") {

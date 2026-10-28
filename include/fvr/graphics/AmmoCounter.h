@@ -35,10 +35,14 @@ inline bool SameAmmoCounterCounts(const AmmoCounterSample& a,const AmmoCounterSa
 inline std::optional<AmmoCounterSample> AmmoCounterPair(const AmmoCounterSample& a,const AmmoCounterSample& b,
     std::uint64_t space,std::int64_t now)noexcept {
     if(!space||a.spaceGeneration!=space||!AmmoCounterFresh(a,now)||!AmmoCounterFresh(b,now)||
-        !SameAmmoCounterOwner(a,b)||!SameAmmoCounterCounts(a,b))return {};
-    if((a.sequence==b.sequence&&a.observedNs!=b.observedNs)||
+        !SameAmmoCounterOwner(a,b)||a.capacity!=b.capacity)return {};
+    if((a.sequence==b.sequence&&(a.observedNs!=b.observedNs||!SameAmmoCounterCounts(a,b)))||
        (a.sequence<b.sequence&&a.observedNs>b.observedNs)||(b.sequence<a.sequence&&b.observedNs>a.observedNs))return {};
-    auto out=a.sequence<=b.sequence?a:b;
+    // Read-only HUD observations can advance between the two native draws.
+    // One shared quad uses the latest exact-owner observation for BOTH eyes;
+    // a shot/reload between draws must not blank the counter. Equal sequence
+    // with conflicting counts is still corruption, not a newer observation.
+    auto out=a.sequence>=b.sequence?a:b;
     out.deadlineNs=(std::min)(a.deadlineNs,b.deadlineNs);
     return AmmoCounterFresh(out,now)?std::optional{out}:std::nullopt;
 }

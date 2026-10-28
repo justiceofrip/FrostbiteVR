@@ -35,7 +35,7 @@ AssertNoLinks $repo
 $relativeSources=@('launcher/Install-BC2VRLauncher.ps1','launcher/Start-Launcher.ps1',
     'launcher/Launcher.ps1','launcher/Worker.ps1','launcher/Launcher.Core.ps1',
     'launcher/Launcher.Feedback.ps1','launcher/Launcher.Storage.ps1','launcher/Launcher.Settings.ps1',
-    'launcher/runtime/Entry.ps1','launcher/runtime/Runtime.Core.ps1','launcher/runtime/Startup.ps1',
+    'launcher/runtime/Entry.ps1','launcher/runtime/Runtime.Core.ps1','launcher/runtime/Startup.ps1','launcher/runtime/Resolution.ps1',
     'launcher/runtime/Dependencies.ps1','config/ffmpeg-download.json','tools/StorageBudget.ps1')
 $sourceFiles=@(foreach($relative in $relativeSources){
     $path=Join-Path $repo $relative;AssertNoLinks $path
@@ -106,7 +106,7 @@ function Get-Process {
     param([string[]]$Name,[int]$Id,$ErrorAction)
     Write-CompatibilityBoundary 'process_query' @{names=$Name;id=$Id}
     if(@($Name|Where-Object {$_ -match 'steam|vrserver'}).Count){throw 'PACKAGED ROUTE MUST NOT REQUIRE STEAM'}
-    return $null # Empty fixture process table, not a claim about this workstation.
+    return # Match Get-Process's empty pipeline; an emitted $null is one item in @(...).
 }
 function Get-ItemProperty {throw 'PACKAGED ROUTE MUST NOT QUERY STEAM REGISTRY'}
 function Start-Process {throw 'Actual OS process launch is forbidden inside fixture policy'}
@@ -158,7 +158,7 @@ function Package([string]$Version) {
     foreach($name in 'Launcher.ps1','Worker.ps1','Launcher.Core.ps1','Launcher.Feedback.ps1','Launcher.Storage.ps1','Launcher.Settings.ps1'){
         CopySource ('launcher/'+$name) (Join-Path $folder ('app/'+$name))
     }
-    foreach($name in 'Entry.ps1','Runtime.Core.ps1','Startup.ps1','Dependencies.ps1'){
+    foreach($name in 'Entry.ps1','Runtime.Core.ps1','Startup.ps1','Dependencies.ps1','Resolution.ps1'){
         CopySource ('launcher/runtime/'+$name) (Join-Path $folder ('runtime/'+$name))
     }
     [IO.File]::AppendAllText((Join-Path $folder 'app/Launcher.Core.ps1'),"`n"+$boundaries)

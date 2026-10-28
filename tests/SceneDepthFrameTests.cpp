@@ -1,4 +1,6 @@
+#include "fvr/graphics/SceneDepthImportPolicy.h"
 #include "fvr/graphics/SceneDepthFrame.h"
+#include "fvr/graphics/DeferredDepthAdmission.h"
 #include "fvr/ipc/RemoteFrameProvider.h"
 #include "Test.h"
 #include <iostream>
@@ -45,4 +47,105 @@ int Delivery(){ipc::RemoteFrameProvider host;CHECK(host.Create());ipc::FrameChan
     CHECK(producer.Publish(descriptor,ticket,nullptr,&depth)==ipc::ChannelResult::Ok);CHECK(host.TryGetCompletedPair(req,input,rendered,gotDescriptor,got));CHECK(host.ReadSceneDepth(gotDescriptor,got,observed));
     producer.Close();CHECK(!host.ReadSceneDepth(gotDescriptor,got,observed));return 0;
 }
-int main(){if(Shape()||Delivery())return 1;std::cout<<"SceneDepthFrame: exact legacy color attachment, validation and delivered ownership passed; no GPU/native proof\n";}
+int DepthImportCacheCases(){
+    SceneDepthImportPolicy cache;SceneDepthImportPolicy::Selection selected;
+    auto a=Descriptor();auto ta=Ticket(a);auto da=MakeDepth(a,ta);da.samples=1;
+    auto b=a;b.resourceEpoch=3;const std::array<std::uint64_t,2> ids{21,22};std::memcpy(b.session.data(),ids.data(),16);
+    auto tb=Ticket(b);auto db=MakeDepth(b,tb);db.samples=1;db.resources={{{201,202},{203,204}}};
+    CHECK(cache.Select(da,a,ta,0,2,selected)&&selected.openSources&&selected.createLocal&&selected.resetImports);
+    CHECK(cache.Commit(selected));
+    CHECK(!cache.Select(da,a,ta,0,2,selected)); // Duplicate does not queue a second depth copy.
+    CHECK(cache.Select(db,b,tb,1,2,selected)&&selected.openSources&&!selected.createLocal&&!selected.resetImports);
+    CHECK(cache.Commit(selected));
+    ++ta.sequence;++ta.frameId;da.color=ta;
+    CHECK(cache.Select(da,a,ta,0,2,selected)&&!selected.openSources&&!selected.createLocal);
+    const auto stale=selected;CHECK(cache.Commit(selected));CHECK(!cache.Commit(stale));
+    // The two identities retain their own anti-replay watermark after A/B/A.
+    CHECK(!cache.Select(db,b,tb,1,2,selected));
+    ++tb.sequence;++tb.frameId;db.color=tb;
+    auto wrong=db;wrong.color=ta;CHECK(!cache.Select(wrong,b,tb,1,2,selected));
+    wrong=db;wrong.samples=8;CHECK(!cache.Select(wrong,b,tb,1,2,selected));
+    wrong=db;wrong.quality=1;CHECK(!cache.Select(wrong,b,tb,1,2,selected));
+    wrong=db;wrong.resources[0][0]=da.resources[0][0];CHECK(!cache.Select(wrong,b,tb,1,2,selected));
+    wrong=db;wrong.resources[0][0]=LegacyResourceIds(a)[0];CHECK(!cache.Select(wrong,b,tb,1,2,selected));
+    wrong=db;--wrong.resourceGeneration;CHECK(!cache.Select(wrong,b,tb,1,2,selected));
+    wrong=db;wrong.resources[0][0]=999;CHECK(!cache.Select(wrong,b,tb,1,2,selected));
+    // Resource recreation refreshes only the imported sources, not local images.
+    ++db.resourceGeneration;db.resources={{{301,302},{303,304}}};
+    CHECK(cache.Select(db,b,tb,1,2,selected)&&selected.openSources&&!selected.createLocal&&cache.Commit(selected));
+    cache.Reset();CHECK(cache.Select(da,a,ta,0,2,selected)&&selected.createLocal&&selected.resetImports);
+    // v8 keeps its existing reallocation-on-import-change behavior and MSAA support.
+    SceneDepthImportPolicy legacy;da.samples=8;
+    CHECK(legacy.Select(da,a,ta,0,1,selected)&&selected.openSources&&selected.createLocal&&legacy.Commit(selected));
+    ++ta.sequence;da.color=ta;++da.resourceGeneration;
+    CHECK(legacy.Select(da,a,ta,0,1,selected)&&selected.openSources&&selected.createLocal);
+    CHECK(!legacy.Select(da,a,ta,1,1,selected));
+    return 0;
+}
+
+int DeferredDepthAdmissionCases(){
+    using Result=DepthAdmissionResult;
+    for(unsigned slots:{2u,3u})for(unsigned slot=0;slot<slots;++slot){
+        const DepthAdmissionKey key{7,11,19,23,29,31,37,1000000000,slot,slots};
+        // Model the real destructive-clear boundary: first clear selects the
+        // source, native world draw writes it, second clear will erase it.
+        // A transient entry Busy must retain observation until that boundary.
+        DeferredDepthAdmission admission;unsigned attempts=0,phase=0,copies=0,draws=0;
+        float source=0,world=0,viewmodel=0;
+        const auto attempt=[&]()noexcept{
+            ++attempts;
+            if(attempts==1)return phase==0?Result::Busy:Result::Rejected;
+            return phase==2?Result::Ready:Result::Rejected;
+        };
+        CHECK(admission.Start(key,attempt)&&attempts==1);
+        phase=1;source=1; // first native clear still executes
+        ++draws;source=.75f;phase=2; // world draw, immediately before second clear
+        CHECK(admission.BeforeWorldCopy(key,attempt)&&attempts==2);
+        world=source;++copies;source=1; // preserve world BEFORE the destructive clear
+        ++draws;source=.25f;viewmodel=source;++copies;
+        CHECK(world==.75f&&viewmodel==.25f&&copies==2&&draws==2);
+        CHECK(!admission.BeforeWorldCopy(key,attempt)&&!admission.Start(key,attempt)&&attempts==2);
+
+        // Still busy at the required snapshot: absent optional depth, no later
+        // stage retry using the viewmodel source as if it were world depth.
+        DeferredDepthAdmission blocked;attempts=0;copies=0;draws=0;
+        const auto busy=[&]()noexcept{++attempts;return Result::Busy;};
+        CHECK(blocked.Start(key,busy));
+        ++draws;source=.75f;
+        if(blocked.BeforeWorldCopy(key,busy)){world=source;++copies;}
+        source=1;++draws;source=.25f;
+        CHECK(!blocked.BeforeWorldCopy(key,attempt)&&attempts==2&&copies==0&&draws==2);
+        SceneDepthFrame absent{};CHECK(SceneDepthAbsent(absent));
+
+        // Ready initially never repeats Begin (which would reset/reject an
+        // already-active depth producer); rejected/foreign owner never retries.
+        DeferredDepthAdmission immediate;attempts=0;
+        const auto ready=[&]()noexcept{++attempts;return Result::Ready;};
+        CHECK(immediate.Start(key,ready)&&immediate.BeforeWorldCopy(key,ready)&&attempts==1);
+        {
+            DeferredDepthAdmission rejected;attempts=0;
+            const auto reject=[&]()noexcept{++attempts;return Result::Rejected;};
+            CHECK(!rejected.Start(key,reject)&&!rejected.BeforeWorldCopy(key,ready)&&attempts==1);
+        }
+        // Every retained lifetime field matters, including slot/count and
+        // original prediction. A successor cannot inherit the pending retry.
+        for(unsigned field=0;field<10;++field){
+            auto changed=key;
+            if(field==0)++changed.channel;if(field==1)++changed.request;
+            if(field==2)++changed.owner;if(field==3)++changed.frame;
+            if(field==4)++changed.device;if(field==5)++changed.tracking;
+            if(field==6)++changed.space;if(field==7)++changed.predicted;
+            if(field==8)changed.slot=(slot+1)%slots;if(field==9)changed.slots=slots==2?3:2;
+            DeferredDepthAdmission stale;attempts=0;
+            CHECK(stale.Start(key,busy)&&!stale.BeforeWorldCopy(changed,ready)&&attempts==1);
+            CHECK(!stale.BeforeWorldCopy(key,ready)&&attempts==1);
+        }
+        DeferredDepthAdmission lost;attempts=0;
+        CHECK(lost.Start(key,busy)&&!lost.BeforeWorldCopy({},ready)&&attempts==1);
+        DeferredDepthAdmission invalid;attempts=0;
+        CHECK(!invalid.Start({},ready)&&!invalid.BeforeWorldCopy(key,ready)&&attempts==0);
+    }
+    return 0;
+}
+
+int main(){if(DeferredDepthAdmissionCases()||DepthImportCacheCases())return 1;if(Shape()||Delivery())return 1;std::cout<<"SceneDepthFrame: exact attachment and bounded pre-world-copy admission passed; no GPU/native proof\n";}

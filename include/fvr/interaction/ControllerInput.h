@@ -1,6 +1,7 @@
 #pragma once
 #include "fvr/math/StereoMath.h"
 #include "fvr/interaction/ActionPolicy.h"
+#include "fvr/interaction/CrouchToggle.h"
 #include "fvr/interaction/InputMenuOwnership.h"
 #include <array>
 namespace fvr::interaction {
@@ -34,13 +35,21 @@ bool ValidInput(const InputFrame&) noexcept;
 struct InputOwner {
     std::uint64_t owner=0,generation=0;
     bool playing=false,bindingsVerified=false;
+    // Optional durable actor lifetime, separate from button/input rearming.
+    // Adapters without a separate lifetime retain the generation convention.
+    std::uint64_t actorGeneration=0;
 };
 // Emits semantic requests only; engine adapters own native dispatch and aiming.
 class ControllerActions {
 public:
-    ActionOutput Update(const InputFrame&,const InputOwner&,std::int64_t nowNs) noexcept;
+    // Pose/action timing uses nowNs. Supply menuNowNs when the menu lease uses
+    // another clock (for example QPC leases alongside OpenXR predicted time).
+    // Zero retains the common-clock convention for existing portable callers.
+    ActionOutput Update(const InputFrame&,const InputOwner&,std::int64_t nowNs,std::int64_t menuNowNs=0) noexcept;
 private:
     std::array<ActionPolicy,2> policies_;
+    CrouchToggle crouch_;
+    bool leftActionsActive_=false,sprintChordBlocked_=false;
     std::uint64_t ownerGeneration_=0,spaceGeneration_=0;
     float heading_=0;
 };

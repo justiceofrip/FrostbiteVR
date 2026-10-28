@@ -238,6 +238,22 @@ AmmoSupplyResolution AmmoSupply::SettleTerminal(const HandInteractionSample& saf
     terminalCutoffNs_=std::max(terminalCutoffNs_,r.completedNs);
     return out;
 }
+AmmoSupplyResolution AmmoSupply::RetireActor(const HandInteractionSample& safety,HandInteraction& hands,
+    const AmmoSupplyActorRetirement& r)noexcept {
+    AmmoSupplyResolution out;
+    if(!pending_||r.reservation!=*pending_||r.retiredOwner!=pending_->identity.owner||
+        !r.nativeActorRetired||!r.event||r.observedNs<pending_->startedNs||
+        r.observedNs>safety.nowNs||safety.nowNs<lastNow_)return out;
+    out.accepted=true;out.releasedReservation=pending_; // no consumed/reserve event
+    const auto old=pending_->identity;
+    pending_.reset();lastNow_=safety.nowNs;terminalCutoffNs_=std::max(terminalCutoffNs_,r.observedNs);
+    if(held_&&held_->identity==old)Drop(safety,hands,AmmoSupplyReason::SourceChanged);
+    if(source_.identity==old)source_={};
+    if(settled_.identity==old)settled_={};
+    for(auto& entry:history_)if(entry&&entry->item.identity==old)entry.reset();
+    armed_=false;blocked_=true; // IDs and unrelated custody are not reset.
+    return out;
+}
 AmmoSupplyResolution AmmoSupply::Rebaseline(const HandInteractionSample& safety,HandInteraction& hands,
     const AmmoSupplyRebaseline& evidence)noexcept {
     AmmoSupplyResolution out;

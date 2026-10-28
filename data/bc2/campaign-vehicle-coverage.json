@@ -1,0 +1,626 @@
+{
+  "schema": "fvr.bc2.campaign-vehicle-catalog.v1",
+  "complete_campaign_inventory": false,
+  "native_admission_granted": false,
+  "human_force_entry_count": 14,
+  "scope": "Typed human force-entry scan plus separately reviewed SP_01 jeep; optional seats and all script reachability are not exhaustively inventoried.",
+  "sources": [
+    {
+      "path": "campaign-human-evidence.json",
+      "sha256": "f563869b841d0748dc0f10fbc0051897b510a2bafa89ccf7332cd97d523dcd63"
+    },
+    {
+      "path": "selected-seat-hierarchies.json",
+      "sha256": "2b6b68ca341679901f5951e79f41e44e0bc6ae21b500e5a003095cc125060027"
+    },
+    {
+      "path": "support-selected.json",
+      "sha256": "6cdaa97a42ff3ab2738197d3ad69b7f519fedbc7aa5d22bfd4982c514b3f9417"
+    },
+    {
+      "path": "REVIEW.txt",
+      "sha256": "f93c487a53fda6d65c0dad71178539bf302935883c5044da868664c6acc7fcfb"
+    }
+  ],
+  "cases": [
+    {
+      "id": "sp_01-kurogane-1",
+      "level": "Levels/SP_01",
+      "asset": "objects/vehicles/beach/kurogane/kurogane.dbx",
+      "authored_forced_seat": 1,
+      "human_trigger_guids": [],
+      "authored_entries": [],
+      "runtime_slot_verified": false,
+      "adapter": "generic_native_seat",
+      "restrictions": [
+        "Player jeep initially EVRRestrictAll. Five enemy kills disable it; seat-specific1 entry follows.",
+        "jeepRideStart / SAVE_4163368501; during ride exit/seat change restricted while aim/fire remain available."
+      ],
+      "required_checks": [
+        "exact_native_identity",
+        "stereo_camera",
+        "mission_permissions",
+        "controls",
+        "tracking_recovery",
+        "menu_return",
+        "exit_or_scripted_handoff",
+        "death_checkpoint_return",
+        "infantry_return",
+        "native_aim_fire",
+        "vehicle_reticle"
+      ],
+      "missing_native_evidence": [
+        "exact_jeep_asset_and_jeepRideStart_identity",
+        "current_frozen_runtime_full_ride_and_restart"
+      ],
+      "campaign_accepted": false,
+      "headset_accepted": false,
+      "provenance": "docs/JEEP-TURRET-436.md; SP_01 authored graph is separate from the fourteen-row human forced-entry scan."
+    },
+    {
+      "id": "sp_005-uav_sp-0",
+      "level": "Levels/SP_005",
+      "asset": "objects/vehicles/air/uav/uav_sp.dbx",
+      "authored_forced_seat": 0,
+      "human_trigger_guids": [
+        "19216103-60d2-4851-a2ce-1d2159cff840"
+      ],
+      "authored_entries": [
+        {
+          "guid": "34c2f817-6962-4fb4-885e-ea09c5606cc1",
+          "type": "GameSharedResources.PlayerEntryComponentData",
+          "authored_order": 1,
+          "mapping": "input/inputmappings/bfbc2uavinputmapping/6b83c4bc-ab3f-4219-ad58-986b84dbcdd4"
+        }
+      ],
+      "runtime_slot_verified": false,
+      "adapter": "uav_pending",
+      "restrictions": [
+        "UAV root/camera and alternate-fire dispatch are not yet admitted."
+      ],
+      "required_checks": [
+        "exact_native_identity",
+        "stereo_camera",
+        "mission_permissions",
+        "controls",
+        "tracking_recovery",
+        "menu_return",
+        "exit_or_scripted_handoff",
+        "death_checkpoint_return",
+        "infantry_return",
+        "native_aim_fire",
+        "vehicle_reticle"
+      ],
+      "missing_native_evidence": [
+        "exact_current_seat_blueprint_and_slot",
+        "current_frozen_runtime_transition_acceptance",
+        "root_prediction_physics_consumer",
+        "camera_yaw_and_pitch_ownership",
+        "native_action12_altfire_consumer_and_permissions",
+        "production_uav_adapter"
+      ],
+      "campaign_accepted": false,
+      "headset_accepted": false
+    },
+    {
+      "id": "sp_005-m1a2_sp05-0",
+      "level": "Levels/SP_005",
+      "asset": "objects/vehicles/land/m1a2/m1a2_sp05.dbx",
+      "authored_forced_seat": 0,
+      "human_trigger_guids": [
+        "f9037b6c-a63e-4a62-85ab-5301bcb4588b",
+        "3e307a6a-587e-455f-a0df-e5fab92f37a8"
+      ],
+      "authored_entries": [
+        {
+          "guid": "ec569a2c-bed2-4ae7-9f4d-cbb471ae4bfd",
+          "type": "GameSharedResources.PlayerEntryComponentData",
+          "authored_order": 1,
+          "mapping": "input/inputmappings/bfbc2gunnerinputmapping/330b0df6-c990-44a2-8a91-61ee6aff294c"
+        },
+        {
+          "guid": "922bace2-855d-4da3-abd5-e2e55d978ada",
+          "type": "GameSharedResources.PlayerEntryComponentData",
+          "authored_order": 2,
+          "mapping": "input/inputmappings/bfbc2vehicleinputmapping/b37cb2d9-4357-48b6-a31f-9eeff349ea62"
+        },
+        {
+          "guid": "a587e48a-140b-4cd7-932f-a69a6064879b",
+          "type": "GameSharedResources.PlayerEntryComponentData",
+          "authored_order": 3,
+          "mapping": "input/inputmappings/bfbc2vehicleinputmapping/b37cb2d9-4357-48b6-a31f-9eeff349ea62"
+        },
+        {
+          "guid": "71f06cf2-31e0-4a2d-9c7c-2f4f0c15036e",
+          "type": "GameSharedResources.PlayerEntryComponentData",
+          "authored_order": 1,
+          "mapping": "input/inputmappings/bfbc2vehicleinputmapping/b37cb2d9-4357-48b6-a31f-9eeff349ea62"
+        }
+      ],
+      "runtime_slot_verified": false,
+      "adapter": "generic_native_seat",
+      "restrictions": [
+        "Forced tank seat0 is not proof that authored EntryOrderNumber0 exists or identifies the native slot."
+      ],
+      "required_checks": [
+        "exact_native_identity",
+        "stereo_camera",
+        "mission_permissions",
+        "controls",
+        "tracking_recovery",
+        "menu_return",
+        "exit_or_scripted_handoff",
+        "death_checkpoint_return",
+        "infantry_return",
+        "native_aim_fire",
+        "vehicle_reticle"
+      ],
+      "missing_native_evidence": [
+        "exact_current_seat_blueprint_and_slot",
+        "current_frozen_runtime_transition_acceptance"
+      ],
+      "campaign_accepted": false,
+      "headset_accepted": false
+    },
+    {
+      "id": "sp_007-ah60_flynn-1",
+      "level": "Levels/SP_007",
+      "asset": "objects/vehicles/air/ah60/ah60_flynn.dbx",
+      "authored_forced_seat": 1,
+      "human_trigger_guids": [
+        "9153a003-3183-40df-9957-7a469ff7f861",
+        "964333b1-35ea-4d1a-85c9-eefe9969ea09",
+        "effcafd2-a82c-446c-baff-c9c8a6633e48"
+      ],
+      "authored_entries": [
+        {
+          "guid": "dc81f1da-bb51-4565-aea2-cd96000d80fa",
+          "type": "GameSharedResources.PlayerEntryComponentData",
+          "authored_order": 0,
+          "mapping": "input/inputmappings/bfbc2airinputmapping/a67cdf7a-94e4-435d-b072-85a622ddb7ed"
+        },
+        {
+          "guid": "a863e134-4b6b-4ca0-ba3c-98c17c58888c",
+          "type": "GameSharedResources.SoldierEntryComponentData",
+          "authored_order": 3,
+          "mapping": "input/inputmappings/bfbc2soldierinputmapping/ea5c6c02-95a6-44d3-9c9c-3338661d2075"
+        },
+        {
+          "guid": "a23a9bf3-8e48-4991-9451-8a1c3b178987",
+          "type": "GameSharedResources.SoldierEntryComponentData",
+          "authored_order": 4,
+          "mapping": "input/inputmappings/bfbc2soldierinputmapping/ea5c6c02-95a6-44d3-9c9c-3338661d2075"
+        },
+        {
+          "guid": "715e1dca-c8e2-47a4-91eb-2e8e38bf8711",
+          "type": "GameSharedResources.PlayerEntryComponentData",
+          "authored_order": 2,
+          "mapping": "input/inputmappings/bfbc2gunnerinputmapping/330b0df6-c990-44a2-8a91-61ee6aff294c"
+        },
+        {
+          "guid": "c43d1ed2-88aa-405f-ab79-8af88ed28768",
+          "type": "GameSharedResources.PlayerEntryComponentData",
+          "authored_order": 1,
+          "mapping": "input/inputmappings/bfbc2gunnerinputmapping/330b0df6-c990-44a2-8a91-61ee6aff294c"
+        }
+      ],
+      "runtime_slot_verified": false,
+      "adapter": "generic_native_seat",
+      "restrictions": [
+        "Human gunner seat1; Flynn pilot seat0 is not human flight coverage."
+      ],
+      "required_checks": [
+        "exact_native_identity",
+        "stereo_camera",
+        "mission_permissions",
+        "controls",
+        "tracking_recovery",
+        "menu_return",
+        "exit_or_scripted_handoff",
+        "death_checkpoint_return",
+        "infantry_return",
+        "native_aim_fire",
+        "vehicle_reticle"
+      ],
+      "missing_native_evidence": [
+        "exact_current_seat_blueprint_and_slot",
+        "current_frozen_runtime_transition_acceptance"
+      ],
+      "campaign_accepted": false,
+      "headset_accepted": false
+    },
+    {
+      "id": "sp_009-golfcart_invisible-2",
+      "level": "Levels/SP_009",
+      "asset": "objects/vehicles/land/golfcart/golfcart_invisible.dbx",
+      "authored_forced_seat": 2,
+      "human_trigger_guids": [
+        "e8c5ba0f-6027-4d37-9a39-7d075263680b"
+      ],
+      "authored_entries": [
+        {
+          "guid": "1f864477-32b1-4a98-af2a-99adb7ca1980",
+          "type": "GameSharedResources.PlayerEntryComponentData",
+          "authored_order": 0,
+          "mapping": "null"
+        },
+        {
+          "guid": "aae2a860-12f7-4ac1-bed1-b9f39bf21e00",
+          "type": "GameSharedResources.SoldierEntryComponentData",
+          "authored_order": 1,
+          "mapping": "input/inputmappings/bfbc2soldierinputmapping/ea5c6c02-95a6-44d3-9c9c-3338661d2075"
+        },
+        {
+          "guid": "5f974019-c2ff-4c5e-8074-3991e0b3fc0e",
+          "type": "GameSharedResources.SoldierEntryComponentData",
+          "authored_order": 2,
+          "mapping": "input/inputmappings/bfbc2soldierinputmapping/ea5c6c02-95a6-44d3-9c9c-3338661d2075"
+        }
+      ],
+      "runtime_slot_verified": false,
+      "adapter": "attached_soldier_pending",
+      "restrictions": [
+        "Scripted free fall uses the soldier weapon; never enable cart driving or on-foot locomotion."
+      ],
+      "required_checks": [
+        "exact_native_identity",
+        "stereo_camera",
+        "mission_permissions",
+        "controls",
+        "tracking_recovery",
+        "menu_return",
+        "exit_or_scripted_handoff",
+        "death_checkpoint_return",
+        "infantry_return",
+        "native_aim_fire",
+        "vehicle_reticle"
+      ],
+      "missing_native_evidence": [
+        "exact_current_seat_blueprint_and_slot",
+        "current_frozen_runtime_transition_acceptance",
+        "attached_constraint_equipment_camera_joins",
+        "native_personal_weapon_callback_owners",
+        "production_attached_soldier_adapter"
+      ],
+      "campaign_accepted": false,
+      "headset_accepted": false
+    },
+    {
+      "id": "sp_02-truck_chase-3",
+      "level": "Levels/SP_02",
+      "asset": "objects/vehicles/land/truck/truck_chase.dbx",
+      "authored_forced_seat": 3,
+      "human_trigger_guids": [
+        "2494f58d-2533-4760-8104-857960c77674"
+      ],
+      "authored_entries": [
+        {
+          "guid": "2154b680-798d-4dd4-82e9-f22352bcebb7",
+          "type": "GameSharedResources.PlayerEntryComponentData",
+          "authored_order": 0,
+          "mapping": "input/inputmappings/bfbc2vehicleinputmapping/b37cb2d9-4357-48b6-a31f-9eeff349ea62"
+        },
+        {
+          "guid": "8966cc21-ea37-4679-af02-f995b883d139",
+          "type": "GameSharedResources.SoldierEntryComponentData",
+          "authored_order": 1,
+          "mapping": "input/inputmappings/bfbc2soldierinputmapping/ea5c6c02-95a6-44d3-9c9c-3338661d2075"
+        },
+        {
+          "guid": "c9875593-1bcf-426f-8d1f-00612efce933",
+          "type": "GameSharedResources.SoldierEntryComponentData",
+          "authored_order": 2,
+          "mapping": "input/inputmappings/bfbc2soldierinputmapping/ea5c6c02-95a6-44d3-9c9c-3338661d2075"
+        },
+        {
+          "guid": "f3be1eef-b6be-40b7-a98c-47918a9e324e",
+          "type": "GameSharedResources.PlayerEntryComponentData",
+          "authored_order": 4,
+          "mapping": "input/inputmappings/bfbc2soldierinputmapping/ea5c6c02-95a6-44d3-9c9c-3338661d2075"
+        },
+        {
+          "guid": "125b7d5d-a2e1-46d8-a8c4-86fa94a34c0a",
+          "type": "GameSharedResources.PlayerEntryComponentData",
+          "authored_order": 5,
+          "mapping": "input/inputmappings/bfbc2soldierinputmapping/ea5c6c02-95a6-44d3-9c9c-3338661d2075"
+        },
+        {
+          "guid": "97d88fe3-eb16-4086-9481-9b2f30415162",
+          "type": "GameSharedResources.PlayerEntryComponentData",
+          "authored_order": 6,
+          "mapping": "input/inputmappings/bfbc2soldierinputmapping/ea5c6c02-95a6-44d3-9c9c-3338661d2075"
+        },
+        {
+          "guid": "b5f8bab0-4e6d-469c-bf38-a9efeac301c2",
+          "type": "GameSharedResources.PlayerEntryComponentData",
+          "authored_order": 7,
+          "mapping": "input/inputmappings/bfbc2soldierinputmapping/ea5c6c02-95a6-44d3-9c9c-3338661d2075"
+        },
+        {
+          "guid": "b320b9bb-c41c-4865-9e30-0b91b0f9c44d",
+          "type": "GameSharedResources.SoldierEntryComponentData",
+          "authored_order": 3,
+          "mapping": "input/inputmappings/bfbc2soldierinputmapping/ea5c6c02-95a6-44d3-9c9c-3338661d2075"
+        }
+      ],
+      "runtime_slot_verified": false,
+      "adapter": "attached_soldier_pending",
+      "restrictions": [
+        "Controlled soldier remains attached; preserve mission movement and native aim limits."
+      ],
+      "required_checks": [
+        "exact_native_identity",
+        "stereo_camera",
+        "mission_permissions",
+        "controls",
+        "tracking_recovery",
+        "menu_return",
+        "exit_or_scripted_handoff",
+        "death_checkpoint_return",
+        "infantry_return",
+        "native_aim_fire",
+        "vehicle_reticle"
+      ],
+      "missing_native_evidence": [
+        "exact_current_seat_blueprint_and_slot",
+        "current_frozen_runtime_transition_acceptance",
+        "attached_constraint_equipment_camera_joins",
+        "native_personal_weapon_callback_owners",
+        "production_attached_soldier_adapter"
+      ],
+      "campaign_accepted": false,
+      "headset_accepted": false
+    },
+    {
+      "id": "sp_03-rowing_boat-0",
+      "level": "Levels/SP_03",
+      "asset": "objects/vehicles/sea/lcrs/rowing_boat.dbx",
+      "authored_forced_seat": 0,
+      "human_trigger_guids": [
+        "3b4a5e46-b73b-49e0-bc53-8f0d676da4b4",
+        "7c23e460-f1f4-48e5-b6ea-fc516d5f2805"
+      ],
+      "authored_entries": [],
+      "runtime_slot_verified": false,
+      "adapter": "unclassified",
+      "restrictions": [
+        "Do not borrow the armed PBL profile for rowing."
+      ],
+      "required_checks": [
+        "exact_native_identity",
+        "stereo_camera",
+        "mission_permissions",
+        "controls",
+        "tracking_recovery",
+        "menu_return",
+        "exit_or_scripted_handoff",
+        "death_checkpoint_return",
+        "infantry_return"
+      ],
+      "missing_native_evidence": [
+        "exact_current_seat_blueprint_and_slot",
+        "current_frozen_runtime_transition_acceptance",
+        "native_role_and_control_consumers"
+      ],
+      "campaign_accepted": false,
+      "headset_accepted": false
+    },
+    {
+      "id": "sp_03-pbl_weapon-0",
+      "level": "Levels/SP_03",
+      "asset": "objects/vehicles/sea/pbl/pbl_weapon.dbx",
+      "authored_forced_seat": 0,
+      "human_trigger_guids": [
+        "c11c7af8-db38-4269-97a6-edfe4e8e8887"
+      ],
+      "authored_entries": [],
+      "runtime_slot_verified": false,
+      "adapter": "pbl_exact",
+      "restrictions": [
+        "PBL identity and actual firing line required; head direction alone is not a reticle."
+      ],
+      "required_checks": [
+        "exact_native_identity",
+        "stereo_camera",
+        "mission_permissions",
+        "controls",
+        "tracking_recovery",
+        "menu_return",
+        "exit_or_scripted_handoff",
+        "death_checkpoint_return",
+        "infantry_return",
+        "native_aim_fire",
+        "vehicle_reticle"
+      ],
+      "missing_native_evidence": [
+        "exact_current_seat_blueprint_and_slot",
+        "current_frozen_runtime_transition_acceptance"
+      ],
+      "campaign_accepted": false,
+      "headset_accepted": false
+    },
+    {
+      "id": "sp_04-ah60_adv_sp04-1",
+      "level": "Levels/SP_04",
+      "asset": "objects/vehicles/air/ah60/ah60_adv_sp04.dbx",
+      "authored_forced_seat": 1,
+      "human_trigger_guids": [
+        "4beb95d7-fb77-4385-b9c8-10259ece9432"
+      ],
+      "authored_entries": [
+        {
+          "guid": "09cba310-bdcc-47b5-94af-a1d77bbcb8b2",
+          "type": "GameSharedResources.PlayerEntryComponentData",
+          "authored_order": 0,
+          "mapping": "input/inputmappings/bfbc2airinputmapping/a67cdf7a-94e4-435d-b072-85a622ddb7ed"
+        },
+        {
+          "guid": "715e1dca-c8e2-47a4-91eb-2e8e38bf8711",
+          "type": "GameSharedResources.PlayerEntryComponentData",
+          "authored_order": 2,
+          "mapping": "input/inputmappings/bfbc2gunnerinputmapping/330b0df6-c990-44a2-8a91-61ee6aff294c"
+        },
+        {
+          "guid": "c43d1ed2-88aa-405f-ab79-8af88ed28768",
+          "type": "GameSharedResources.PlayerEntryComponentData",
+          "authored_order": 1,
+          "mapping": "input/inputmappings/bfbc2gunnerinputmapping/330b0df6-c990-44a2-8a91-61ee6aff294c"
+        },
+        {
+          "guid": "a863e134-4b6b-4ca0-ba3c-98c17c58888c",
+          "type": "GameSharedResources.SoldierEntryComponentData",
+          "authored_order": 3,
+          "mapping": "input/inputmappings/bfbc2soldierinputmapping/ea5c6c02-95a6-44d3-9c9c-3338661d2075"
+        },
+        {
+          "guid": "a23a9bf3-8e48-4991-9451-8a1c3b178987",
+          "type": "GameSharedResources.SoldierEntryComponentData",
+          "authored_order": 4,
+          "mapping": "input/inputmappings/bfbc2soldierinputmapping/ea5c6c02-95a6-44d3-9c9c-3338661d2075"
+        }
+      ],
+      "runtime_slot_verified": false,
+      "adapter": "generic_native_seat",
+      "restrictions": [
+        "Scripted gunner; retain native aim, exit and seat-change restrictions."
+      ],
+      "required_checks": [
+        "exact_native_identity",
+        "stereo_camera",
+        "mission_permissions",
+        "controls",
+        "tracking_recovery",
+        "menu_return",
+        "exit_or_scripted_handoff",
+        "death_checkpoint_return",
+        "infantry_return",
+        "native_aim_fire",
+        "vehicle_reticle"
+      ],
+      "missing_native_evidence": [
+        "exact_current_seat_blueprint_and_slot",
+        "current_frozen_runtime_transition_acceptance"
+      ],
+      "campaign_accepted": false,
+      "headset_accepted": false
+    },
+    {
+      "id": "sp_04-cav_downhill-2",
+      "level": "Levels/SP_04",
+      "asset": "objects/vehicles/land/cav/cav_downhill.dbx",
+      "authored_forced_seat": 2,
+      "human_trigger_guids": [
+        "73d0e553-ff1a-43b4-a283-6f896619b900"
+      ],
+      "authored_entries": [
+        {
+          "guid": "49ef5a5b-47e1-4694-bb3a-5df56e4f100a",
+          "type": "GameSharedResources.PlayerEntryComponentData",
+          "authored_order": 2,
+          "mapping": "input/inputmappings/bfbc2gunnerinputmapping/330b0df6-c990-44a2-8a91-61ee6aff294c"
+        },
+        {
+          "guid": "85c443c5-1f0e-454f-8f8f-f0e431fe8180",
+          "type": "GameSharedResources.PlayerEntryComponentData",
+          "authored_order": 1,
+          "mapping": "input/inputmappings/bfbc2vehicleinputmapping/b37cb2d9-4357-48b6-a31f-9eeff349ea62"
+        },
+        {
+          "guid": "92d560cf-ace2-41f6-92b6-70697e45052d",
+          "type": "GameSharedResources.PlayerEntryComponentData",
+          "authored_order": 3,
+          "mapping": "input/inputmappings/bfbc2soldierinputmapping/ea5c6c02-95a6-44d3-9c9c-3338661d2075"
+        },
+        {
+          "guid": "8a2e105d-bd37-48d4-bfa5-62ddc44a2221",
+          "type": "GameSharedResources.PlayerEntryComponentData",
+          "authored_order": 2,
+          "mapping": "input/inputmappings/bfbc2gunnerinputmapping/330b0df6-c990-44a2-8a91-61ee6aff294c"
+        }
+      ],
+      "runtime_slot_verified": false,
+      "adapter": "generic_native_seat",
+      "restrictions": [
+        "Scripted seat2 to seat0 handoff must invalidate old input/camera owners."
+      ],
+      "required_checks": [
+        "exact_native_identity",
+        "stereo_camera",
+        "mission_permissions",
+        "controls",
+        "tracking_recovery",
+        "menu_return",
+        "exit_or_scripted_handoff",
+        "death_checkpoint_return",
+        "infantry_return",
+        "native_aim_fire",
+        "vehicle_reticle"
+      ],
+      "missing_native_evidence": [
+        "exact_current_seat_blueprint_and_slot",
+        "current_frozen_runtime_transition_acceptance"
+      ],
+      "campaign_accepted": false,
+      "headset_accepted": false
+    },
+    {
+      "id": "sp_04-cav_downhill-0",
+      "level": "Levels/SP_04",
+      "asset": "objects/vehicles/land/cav/cav_downhill.dbx",
+      "authored_forced_seat": 0,
+      "human_trigger_guids": [
+        "422b8d38-ad82-4866-9075-645392a812e6"
+      ],
+      "authored_entries": [
+        {
+          "guid": "49ef5a5b-47e1-4694-bb3a-5df56e4f100a",
+          "type": "GameSharedResources.PlayerEntryComponentData",
+          "authored_order": 2,
+          "mapping": "input/inputmappings/bfbc2gunnerinputmapping/330b0df6-c990-44a2-8a91-61ee6aff294c"
+        },
+        {
+          "guid": "85c443c5-1f0e-454f-8f8f-f0e431fe8180",
+          "type": "GameSharedResources.PlayerEntryComponentData",
+          "authored_order": 1,
+          "mapping": "input/inputmappings/bfbc2vehicleinputmapping/b37cb2d9-4357-48b6-a31f-9eeff349ea62"
+        },
+        {
+          "guid": "92d560cf-ace2-41f6-92b6-70697e45052d",
+          "type": "GameSharedResources.PlayerEntryComponentData",
+          "authored_order": 3,
+          "mapping": "input/inputmappings/bfbc2soldierinputmapping/ea5c6c02-95a6-44d3-9c9c-3338661d2075"
+        },
+        {
+          "guid": "8a2e105d-bd37-48d4-bfa5-62ddc44a2221",
+          "type": "GameSharedResources.PlayerEntryComponentData",
+          "authored_order": 2,
+          "mapping": "input/inputmappings/bfbc2gunnerinputmapping/330b0df6-c990-44a2-8a91-61ee6aff294c"
+        }
+      ],
+      "runtime_slot_verified": false,
+      "adapter": "generic_native_seat",
+      "restrictions": [
+        "Scripted seat2 to seat0 handoff must invalidate old input/camera owners."
+      ],
+      "required_checks": [
+        "exact_native_identity",
+        "stereo_camera",
+        "mission_permissions",
+        "controls",
+        "tracking_recovery",
+        "menu_return",
+        "exit_or_scripted_handoff",
+        "death_checkpoint_return",
+        "infantry_return",
+        "native_aim_fire",
+        "vehicle_reticle"
+      ],
+      "missing_native_evidence": [
+        "exact_current_seat_blueprint_and_slot",
+        "current_frozen_runtime_transition_acceptance"
+      ],
+      "campaign_accepted": false,
+      "headset_accepted": false
+    }
+  ]
+}

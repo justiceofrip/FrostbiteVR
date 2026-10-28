@@ -115,6 +115,16 @@ public:
         const BodyFreeRightEvidence&,const interaction::HandClaimToken&,
         const interaction::HandInteraction&)noexcept;
     bool Pending()const noexcept{return pending_.has_value();}
+    // Called only after the ordinary selector edge was committed to the native
+    // input cache. This records issue, never selection success or presentation.
+    bool OrdinaryDrawDispatchCurrent(const WeaponModeCommand&,const BodyDrawSample&)const noexcept;
+    bool ObserveOrdinaryDrawIssued(const WeaponModeCommand&,const BodyDrawSample&)noexcept;
+    // A verified native selection rearms ControllerActions. Preserve only that
+    // issued draw through neutral failed Apply, under its ORIGINAL policy ack
+    // deadline. Every new read/pose still needs its own fresh input lease.
+    // No policy tick, claim, receipt, command or native write occurs here.
+    bool RetainOrdinaryDrawRearm(const WeaponModeMemory&,const BodyDrawSample&,
+        const interaction::ActionOutput&,bool onlySemanticRearm)noexcept;
     // Same lifetime domain as shoulders; equip and reference-space changes do
     // not mint a new physical weapon. Available during interaction suspension.
     std::optional<AmmoResourceBinding> ResourceBinding(const ReloadStateOwner&,std::int64_t now)const noexcept;
@@ -178,6 +188,15 @@ private:
     std::int64_t lastNow_=0,nativeProofNs_=0;
     ReloadStateOwner nativeOwner_{};
     std::optional<interaction::BodyInventoryRequest> pending_;
+    struct OrdinaryDrawIssue {
+        std::uint64_t request=0;ReloadStateOwner from{},selected{};
+        WeaponModeCommand command{};BodyCarriedIdentity carried{};
+        std::uint64_t input=0;std::int64_t observed=0,inputDeadline=0,ackDeadline=0,lastNow=0;bool issued=false;
+        interaction::HandInteractionOwner fromHand{},selectedHand{};
+        interaction::HandInteractionKey fromGun{},selectedGun{};
+    };
+    std::optional<OrdinaryDrawIssue> ordinaryDrawIssue_;
+    std::uint64_t drawRearmRetained_=0,drawRearmRejected_=0;
     std::uint64_t requests_=0,commits_=0,cancels_=0,blocked_=0,unavailable_=0,metadataPauses_=0;
     struct Event {unsigned kind=0;std::uint64_t request=0,input=0;std::int64_t now=0;unsigned from=0,to=0,action=0;};
     std::array<Event,128> events_{};unsigned eventCount_=0,eventDropped_=0;

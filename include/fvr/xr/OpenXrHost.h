@@ -1,6 +1,9 @@
 #pragma once
 #include "fvr/runtime/FrameProvider.h"
 #include "fvr/xr/HostFrameDiagnostics.h"
+#include "fvr/xr/PrivateHostCopyService.h"
+#include "fvr/xr/PrivateGpuOrderedPresent.h"
+#include "fvr/xr/MenuFailureDiagnostics.h"
 #include "fvr/graphics/D3D11BodyPropCompositor.h"
 #include "fvr/interaction/ControllerInput.h"
 #include <filesystem>
@@ -26,6 +29,7 @@ struct HostReport {
     bool instanceCreated=false,systemAvailable=false,sessionCreated=false,okay=false;
     std::string runtimeName,systemName,error;
     runtime::PresentationRequirements requirements{};
+    std::uint32_t recommendedEyeWidth=0,recommendedEyeHeight=0,maxEyeWidth=0,maxEyeHeight=0;
     std::uint32_t minimumFeatureLevel=0;
     std::uint64_t waitedFrames=0,endedFrames=0,validTrackingFrames=0,submittedPairs=0,rejectedPairs=0;
     std::uint64_t presentedFrames=0,reusedFrames=0,blankFrames=0,providerMisses=0,maxProviderWaitUs=0,maxRetainedAgeNs=0;
@@ -35,6 +39,7 @@ struct HostReport {
     std::uint64_t inputFrames=0,trackedHandFrames=0,recenters=0,automaticRecenters=0;
     interaction::RecenterEvidence recenterInput{};
     std::uint64_t menuFrames=0,menuErrors=0;
+    OpenXrMenuFailure firstMenuFailure{};
     graphics::BodyPropComposeStats bodyProps{};bool bodyPropsReady=false;
     std::uint64_t sceneDepthReceived=0,sceneDepthCopied=0,sceneDepthOmitted=0;
     bool ammoCounterReady=false;
@@ -43,6 +48,8 @@ struct HostReport {
     std::uint64_t captureFeedbackApplied=0,receiptFeedbackApplied=0,lastFeedbackEvent=0;
     std::int32_t lastSessionState=0;
     HostFrameDiagnostics frameDiagnostics{};
+    PrivateHostCopyServiceReport privateHostCopyService{};
+    PrivateGpuOrderedPresentReport privateGpuOrderedPresent{};
 };
 // Uses the installed active runtime; never changes the registry or game settings.
 HostReport RunOpenXrHost(const HostOptions&) noexcept;

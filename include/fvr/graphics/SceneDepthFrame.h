@@ -17,6 +17,12 @@ struct alignas(8) SceneDepthFrame {
 inline constexpr std::uint32_t SceneDepthCanonicalClip=1,SceneDepthReversed=2;
 static_assert(sizeof(SceneDepthFrame)==184&&offsetof(SceneDepthFrame,resources)==144);
 static_assert(std::is_trivially_copyable_v<SceneDepthFrame>);
+// The optional wire attachment has one canonical absent value. In particular,
+// flags==0 with retained handles/ticket fields is not an absent attachment.
+inline bool SceneDepthAbsent(const SceneDepthFrame& depth)noexcept {
+    const SceneDepthFrame empty{};
+    return std::memcmp(&depth,&empty,sizeof(depth))==0;
+}
 inline bool SceneDepthMatches(const SceneDepthFrame& depth,const TextureDescriptor& descriptor,const PairTicket& color)noexcept {
     if(!Valid(color,descriptor)||descriptor.sharing!=TextureSharing::LegacyFenced||
        depth.version!=1||depth.bytes!=sizeof(depth)||depth.reserved||depth.reserved1||

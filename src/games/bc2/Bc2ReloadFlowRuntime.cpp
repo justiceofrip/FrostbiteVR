@@ -4,6 +4,7 @@
 #include "Bc2ReloadFlowRuntime.h"
 #ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
 #include "Bc2SelectedKnifeNative.h"
+#include "Bc2KnifeTimingObservation.h"
 #endif
 #include "Bc2OriginalFiringObserver.h"
 #include "Bc2NativeCycleRuntime.h"
@@ -264,6 +265,9 @@ using UpdateFn=void(__thiscall*)(void*,void*,unsigned);
 using StepFn=void(__thiscall*)(void*,void*,float);
 using CommitFn=void(__thiscall*)(void*,void*);
 using TransferFn=void(__thiscall*)(void*,unsigned);
+using KnifeExportFn=void*(__thiscall*)(void*,void*);
+KnifeExportFn originalKnifeExport=nullptr;
+bool knifeExportObservationInstalled=false;
 using AbortFn=void(__thiscall*)(void*,unsigned); // inspected ECX self, stack bool, ret4
 #ifdef FVR_BC2_PREHOLD_CLEANUP
 PreholdCleanupLedger preholdMonitor;
@@ -405,7 +409,7 @@ void __fastcall Transfer(void* self,void*,unsigned rawArgument);
 #endif
 UpdateFn originalUpdate=nullptr;CommitFn originalCommit=nullptr,originalRestore=nullptr;TransferFn originalTransfer=nullptr;
 ReloadFlowBinding binding{};std::optional<ReloadServerBinding> serverBinding;ReloadStateMemory memory{};unsigned base=0;
-std::array<void*,5> hooks{};ReloadFlowRecords records;ReloadDeferredCompletions recordCompletions;
+std::array<void*,6> hooks{};ReloadFlowRecords records;ReloadDeferredCompletions recordCompletions;
 std::atomic_flag recordGate=ATOMIC_FLAG_INIT,ownerGate=ATOMIC_FLAG_INIT;
 std::atomic<bool> enabled=false;std::atomic<unsigned> active=0;
 std::atomic<std::uint64_t> ownerRevision=1;
@@ -1139,20 +1143,19 @@ void TryAmmoResourceHands(const Observation& observation,const ReloadHoldInput& 
        Word<unsigned>(before.data(),8)!=in.config.firingData||Word<unsigned>(before.data(),12)!=in.config.ammoAddress||
        Word<int>(before.data(),0x7c)!=b.loaded||Word<int>(before.data(),0x80)!=b.reserve||
        !Context(unsigned(context),ctx)||ctx!=observation.entry.copiedContext){reject();return;}
-    if(!ammoPlayerService.Dispatch(snapshot,Now())){reject();return;}
-    const auto began=Now();
-    if(began>=command->admissionDeadlineNs){reject();return;}
-    // Empty-mag removal/return is an owned no-op. Its exact original server
-    // Update and both client Updates are still mandatory for completion.
-    const bool returned=!command->mutationRequired||
-        (refill?CallAmmoRefill(originalTransfer,self):CallAmmoMove(reinterpret_cast<AmmoMoveFn>(code->function),
-            reinterpret_cast<void*>(unsigned(self)+4),move->delta));
-    const bool contextExact=Context(unsigned(context),ctxAfter)&&ctxAfter==ctx;
-    const bool exact=returned&&Context(unsigned(self),after)&&contextExact&&
-        (!command->mutationRequired?before==after:refill?NativeAmmoRefillMatched(*refill,before,after):MagazineAmmoMoveMatched(*move,before,after));
-    const auto invocation=observation.frame.invocation.Record().id;++ammoPlayerCalls;
-    if(!ammoPlayerService.Call({in.identity,command->id,invocation,began,Now(),command->before,command->after,true,exact,contextExact})||
-       !ammoResourceHandoff.Arm(invocation)){reject();return;}
+    const auto invocation=observation.frame.invocation.Record().id;
+    if(!ammoPlayerService.InvokeNative(snapshot,[]()noexcept{return Now();},[&](std::int64_t began)noexcept {
+        // Empty-mag removal/return is an owned no-op. Its exact original server
+        // Update and both client Updates are still mandatory for completion.
+        const bool returned=!command->mutationRequired||
+            (refill?CallAmmoRefill(originalTransfer,self):CallAmmoMove(reinterpret_cast<AmmoMoveFn>(code->function),
+                reinterpret_cast<void*>(unsigned(self)+4),move->delta));
+        const bool contextExact=Context(unsigned(context),ctxAfter)&&ctxAfter==ctx;
+        const bool exact=returned&&Context(unsigned(self),after)&&contextExact&&
+            (!command->mutationRequired?before==after:refill?NativeAmmoRefillMatched(*refill,before,after):MagazineAmmoMoveMatched(*move,before,after));
+        ++ammoPlayerCalls;
+        return AmmoResourceNativeCall{in.identity,command->id,invocation,began,Now(),command->before,command->after,true,exact,contextExact};
+    })||!ammoResourceHandoff.Arm(invocation)){reject();return;}
     ammoPlayerChannel.Publish(ammoPlayerService.View(),ammoPlayerService.Outcome());
 }
 #endif
@@ -1420,6 +1423,9 @@ bool NativeInputCompare(void* context,unsigned index,unsigned expected,unsigned 
 }
 void __fastcall Step(void* self,void*,void* context,float delta){
     Active activeScope;const auto firing=unsigned(self),caller=unsigned(_ReturnAddress());
+#ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
+    selectedKnife::KnifeTimingObservationScope knifeTiming(selectedKnife::KnifeTimingCall::Step,firing,unsigned(context),caller,0,delta);
+#endif
     if(currentFrame&&currentFrame->cleanupOnly){originalStep(self,context,delta);return;}
     const auto stepRoute=SelectNativeCycleStepRoute(nativeGuardFrame!=nullptr,
         nativeGuardFrame&&nativeGuardFrame->held,nativeGuardFrame&&nativeGuardFrame->held&&nativeGuardFrame->held->hold);
@@ -1592,8 +1598,10 @@ void __fastcall Step(void* self,void*,void* context,float delta){
 void __fastcall Update(void* self,void*,void* context,unsigned extra){
     Active activeScope;const auto firing=unsigned(self),caller=unsigned(_ReturnAddress());
 #ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
-    // Read-only selected-melee diagnostics share this original dispatcher;
-    // they never claim its optional observer/input-copy slot or invoke native code.
+    selectedKnife::KnifeTimingObservationScope knifeTiming(selectedKnife::KnifeTimingCall::Update,firing,unsigned(context),caller,extra);
+    // Selected-melee observation shares this original dispatcher. Exact server
+    // Fire can retire its retained Gather level, never complete an attack.
+    // It never claims the observer/input-copy slot or invokes/writes native code.
     selectedKnife::ObserveUpdate({firing,unsigned(context),caller,extra});
 #endif
     OriginalFiringScope independentObservation(independentFiringObserver,{firing,unsigned(context),caller,extra});
@@ -1872,8 +1880,24 @@ void __fastcall Transfer(void* self,void*,unsigned rawArgument){
     if(diagnosticRound)RoundTransfer(observation,observation.Finish());
     if(requestMode)RequestTransfer(observation,observation.Finish());
 }
+void* __fastcall KnifeSnapshotExport(void* self,void*,void* snapshot){
+    Active activeScope;
+#ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
+    selectedKnife::KnifeTimingObservationScope knifeTiming(selectedKnife::KnifeTimingCall::Export,unsigned(self),unsigned(snapshot),unsigned(_ReturnAddress()));
+#endif
+    // Verified code[7]: thiscall(firing, snapshot), ret4, returns snapshot.
+    // Keep the actual native return value; this hook never supplies a payload.
+    const auto result=originalKnifeExport(self,snapshot);
+#ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
+    knifeTiming.ReturnedPointer(unsigned(result));
+#endif
+    return result;
+}
 void __fastcall Restore(void* self,void*,void* snapshot){
     Active activeScope;NativeCycleCallback cycleCallback(NativeCycleCallbackKind::Restore,unsigned(self),unsigned(snapshot));
+#ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
+    selectedKnife::KnifeTimingObservationScope knifeTiming(selectedKnife::KnifeTimingCall::Restore,unsigned(self),unsigned(snapshot),unsigned(_ReturnAddress()));
+#endif
     Observation observation(ReloadFlowEvent::Restore,unsigned(self),unsigned(_ReturnAddress()),unsigned(snapshot),0);
     const auto cycleInvocation=observation.frame.invocation.Record().id;cycleCallback.scope.BindInvocation(cycleInvocation);
     originalRestore(self,snapshot);
@@ -2507,11 +2531,16 @@ bool Install(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uin
         if(enableMagazineRequests&&!requestCycle.ConfigureMagazine())return false;
         if(requestMode){abortCode=*proof;nativeAbort=reinterpret_cast<AbortFn>(base+(*proof)[1].rva);}
     }
-    const std::array<unsigned,5> rvas{binding.code[0].rva,binding.state.code[3].rva,binding.state.code[4].rva,binding.code[6].rva,binding.state.code[1].rva};
-    const std::array<void*,5> callbacks{reinterpret_cast<void*>(Update),reinterpret_cast<void*>(Commit),reinterpret_cast<void*>(Transfer),reinterpret_cast<void*>(Restore),reinterpret_cast<void*>(Step)};
-    const std::array<void**,5> originals{reinterpret_cast<void**>(&originalUpdate),reinterpret_cast<void**>(&originalCommit),reinterpret_cast<void**>(&originalTransfer),reinterpret_cast<void**>(&originalRestore),reinterpret_cast<void**>(&originalStep)};
-    for(unsigned n=0;n<hooks.size();++n){void* at=reinterpret_cast<void*>(base+rvas[n]);
+    const std::array<unsigned,6> rvas{binding.code[0].rva,binding.state.code[3].rva,binding.state.code[4].rva,binding.code[6].rva,binding.state.code[1].rva,binding.code[7].rva};
+    const std::array<void*,6> callbacks{reinterpret_cast<void*>(Update),reinterpret_cast<void*>(Commit),reinterpret_cast<void*>(Transfer),reinterpret_cast<void*>(Restore),reinterpret_cast<void*>(Step),reinterpret_cast<void*>(KnifeSnapshotExport)};
+    const std::array<void**,6> originals{reinterpret_cast<void**>(&originalUpdate),reinterpret_cast<void**>(&originalCommit),reinterpret_cast<void**>(&originalTransfer),reinterpret_cast<void**>(&originalRestore),reinterpret_cast<void**>(&originalStep),reinterpret_cast<void**>(&originalKnifeExport)};
+    unsigned hookCount=5;
+#ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
+    if(selectedKnife::TimingObservationRequested())hookCount=6;
+#endif
+    for(unsigned n=0;n<hookCount;++n){void* at=reinterpret_cast<void*>(base+rvas[n]);
         if(MH_CreateHook(at,callbacks[n],originals[n])!=MH_OK){for(auto& hook:hooks)if(hook){MH_RemoveHook(hook);hook=nullptr;}return false;}hooks[n]=at;}
+    knifeExportObservationInstalled=hookCount==6;
     installed=true;return true;
 }
 std::optional<ReloadPreholdEntryObservation> ReadPreholdEntry(const ReloadHoldIdentity& identity,std::uint64_t cycle,std::int64_t now)noexcept {
@@ -2612,6 +2641,44 @@ std::optional<AmmoResourceOutcome> ReadAmmoResourceOutcome(std::uint64_t request
     return ammoPlayerChannel.Outcome(request,context);
 #else
     (void)request;(void)context;return {};
+#endif
+}
+bool RetireAmmoForReplacementActor(const ReloadStateOwner& owner)noexcept {
+#ifdef FVR_BC2_AMMO_RESOURCE_HANDS
+    if(!requestMode||!enabled.load(std::memory_order_acquire))return false;
+    std::optional<ReloadHoldIdentity> previous;
+    {Gate gate(ammoMoveProbeGate);if(!gate.held)return false;previous=ammoPlayerService.ActorIdentity();}
+    if(!previous)return true;
+    // Ordinary weapon/vehicle/recenter transitions must keep live actor debt.
+    if(previous->owner.soldier==owner.soldier&&previous->owner.weak==owner.weak)return true;
+    if(owner.actorGeneration<=previous->owner.actorGeneration)return false;
+    std::optional<Lease> lease;
+    {OwnerCopyGate gate;if(gate.held&&IsCurrent(published,Now())&&published.server&&published.snapshot.owner==owner)lease=published;}
+    if(!lease||!DiagnosticFireReserveConfig(memory,lease->snapshot.config))return false;
+    std::uint64_t proofRevision=0;
+    const auto evidence=ReadReserveObservedFor(true,false,&proofRevision);
+    if(!evidence.lease||!evidence.lease->verified||!evidence.lease->allThreeIdle||
+        evidence.lease->identity!=RoundIdentity(*lease)||proofRevision>UINT64_MAX-2)return false;
+    Active scope;ReloadInvocationExclusion entry(requestEntryGate,active,callbackRevision);
+    if(!scope.requestEntryAllowed||!entry.Quiet()||
+        !NativeCycleSelectionReadCurrent(proofRevision,callbackRevision.load(std::memory_order_acquire)))return false;
+    Gate resource(ammoMoveProbeGate);if(!resource.held||!entry.Quiet()||ammoPlayerService.ActorIdentity()!=previous)return false;
+    OwnerCopyGate ownerGate;
+    if(!ownerGate.held||published.revision!=lease->revision||published.snapshot.owner!=owner||
+        published.snapshot.config!=lease->snapshot.config||!IsCurrent(published,Now())||!entry.Quiet())return false;
+    const auto epoch=cleanupOwnerEpoch.load(std::memory_order_acquire);const auto now=Now();
+    const AmmoResourceActorDrain drain{*previous,ammoPlayerService.Active(),callbackRevision.load(std::memory_order_acquire),
+        epoch,now,std::min(evidence.lease->deadlineNs,now+100000000),entry.Quiet()};
+    if(!epoch||cleanupOwnerEpoch.load(std::memory_order_acquire)!=epoch||!entry.Quiet())return false;
+    const bool committed=ammoPlayerChannel.RetireQueuedForActor(*previous,[&](const auto& queued)noexcept{
+        return cleanupOwnerEpoch.load(std::memory_order_acquire)==epoch&&entry.Quiet()&&
+            ammoPlayerService.RetireForReplacementActor(*evidence.lease,now,drain,queued);
+    });
+    if(!committed)return false;
+    ammoPlayerChannel.Publish({},ammoPlayerService.Outcome());
+    return true;
+#else
+    (void)owner;return false;
 #endif
 }
 void ClearOwner(ReloadOwnerLoss loss)noexcept{
@@ -2982,7 +3049,7 @@ void Report(std::ostream& out){
         out<<"{\"drained\":true,\"records_unavailable_until_drain\":true,\"completion_report_lock_busy\":true}";return;}
         recordCompletions.Drain(records);
     }
-    out<<"{\"reserve_read_evidence\":";reserveReadEvidence.Report(out,drained);
+    out<<"{\"knife_export_observation_hook\":"<<knifeExportObservationInstalled<<",\"reserve_read_evidence\":";reserveReadEvidence.Report(out,drained);
     out<<",\"magazine_start_attempts\":";magazineStartJournal.Report(out,drained);
     out<<",\"shell_start_attempts\":[";
     constexpr const char* shellStartStages[]{"disabled","identity","preread","entry","routing","yield","lock","cohort","cycle","callback_arrival","monitor","accepted"};
@@ -3539,6 +3606,7 @@ void CancelRequestCycle()noexcept{}
 std::optional<ReloadPreholdEntryObservation> ReadPreholdEntry(const ReloadHoldIdentity&,std::uint64_t,std::int64_t)noexcept{return {};}
 OwnerPublicationResult PublishOwnerObserved(const ReloadStateSnapshot&,std::int64_t)noexcept{return {};}
 bool PublishOwner(const ReloadStateSnapshot&,std::int64_t)noexcept{return false;}
+bool RetireAmmoForReplacementActor(const ReloadStateOwner&)noexcept{return false;}
 void ClearOwner(ReloadOwnerLoss)noexcept{}void Start()noexcept{}bool Stop()noexcept{return true;}
 void PublishAmmoResourceBinding(const std::optional<AmmoResourceBinding>&)noexcept{}
 bool ResourceHandsEnabled()noexcept{return false;}

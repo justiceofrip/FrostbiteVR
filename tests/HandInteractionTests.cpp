@@ -166,6 +166,148 @@ int LeasesRenewalAndContactIdentity(){
     CHECK(!expiry.arbiter.Renew(expiry.sample,g.claim->token,expiry.Proof(1)).accepted);
     return 0;
 }
+HandInteractionSample RenewalOld(){
+    return {{10,1,1,1},603,143335931712800,143336031712800,143335959038200,true,{true,true}};
+}
+HandInteractionSample RenewalNext(){
+    return {{10,1,1,1},604,143336011823000,143336111823000,143336033602700,true,{true,true}};
+}
+HandContactProof RenewalProof(const HandInteractionSample& s){return {{1,1},s.sequence,s.deadlineNs,true};}
+HandClaimRequest RenewalRequest(const HandInteractionSample& s){
+    return {s.owner,right,HandClaimKind::GunHold,rifle,RenewalProof(s),1,0};
+}
+int OverlappingGunInputRenewsBeforeExpiry(){
+    // Reproduce the exact recorded source/processing clocks using the real
+    // arbiter. This models call order, not native packet queue arrival.
+    for(unsigned atomic=0;atomic<2;++atomic){
+        HandInteraction h;const auto old=RenewalOld(),next=RenewalNext();
+        const auto held=h.Acquire(old,RenewalRequest(old));CHECK(held.claim);
+        const auto token=held.claim->token;
+        CHECK(next.observedNs<held.claim->deadlineNs&&next.nowNs>held.claim->deadlineNs);
+        CHECK(next.nowNs<next.deadlineNs);
+        if(!atomic){
+            const auto update=h.Update(next);
+            CHECK(Released(update,token,HandInteractionReason::LeaseExpired));
+            CHECK(!h.Renew(next,token,RenewalProof(next)).accepted&&!h.Current(right));
+        }else{
+            const auto update=h.UpdateAndRenewGunHold(next,token,RenewalProof(next));
+            CHECK(update.lifecycle.inputValid&&update.renewed&&Releases(update.lifecycle)==0);
+            CHECK(!update.lifecycle.accepted&&!update.lifecycle.claim&&update.lifecycle.reason==HandInteractionReason::None);
+            CHECK(update.renewed->token==token&&update.renewed->inputSequence==next.sequence);
+            CHECK(update.renewed->deadlineNs==next.deadlineNs&&h.Current(right)->token==token);
+            CHECK(h.Renew(next,token,RenewalProof(next)).accepted);
+            // Repeating the original new packet never adds processing time.
+            auto duplicate=next;duplicate.nowNs=next.deadlineNs-1;
+            CHECK(!h.UpdateAndRenewGunHold(duplicate,token,RenewalProof(duplicate)).renewed);
+            CHECK(h.Current(right)->deadlineNs==next.deadlineNs);
+            duplicate.nowNs=next.deadlineNs;
+            CHECK(!h.UpdateAndRenewGunHold(duplicate,token,RenewalProof(duplicate)).renewed);
+            CHECK(!h.Current(right));
+        }
+    }
+    return 0;
+}
+int GunRenewalNeverExtendsDependentEvidence(){
+    for(unsigned leftState=0;leftState<3;++leftState){
+        Fixture f;auto request=f.Request(right,HandClaimKind::GunHold);
+        request.contact.deadlineNs=f.sample.observedNs+100*ms;
+        const auto gun=f.arbiter.Acquire(f.sample,request);CHECK(gun.claim);
+        auto support=f.Request(left,HandClaimKind::WeaponSupport,rifle,2,gun.claim->token.id);
+        support.contact.deadlineNs=f.sample.observedNs+(leftState==1?100:120)*ms;
+        const auto held=f.arbiter.Acquire(f.sample,support);CHECK(held.claim);
+        auto next=f.sample;++next.sequence;next.observedNs+=80*ms;
+        next.deadlineNs=next.observedNs+100*ms;next.nowNs=f.sample.observedNs+102*ms;
+        if(leftState==2)next.released[0]=true;
+        const auto out=f.arbiter.UpdateAndRenewGunHold(next,gun.claim->token,RenewalProof(next));
+        CHECK(out.renewed&&f.arbiter.Current(right)->token==gun.claim->token);
+        // Preserve the plain lifecycle contract consumed by sight recovery.
+        CHECK(out.lifecycle.inputValid&&!out.lifecycle.accepted&&!out.lifecycle.claim&&out.lifecycle.reason==HandInteractionReason::None);
+        if(leftState==0){
+            CHECK(f.arbiter.Current(left)->token==held.claim->token);
+            CHECK(f.arbiter.Current(left)->deadlineNs==support.contact.deadlineNs);
+            CHECK(f.arbiter.Current(left)->inputSequence==f.sample.sequence);
+        }else{
+            CHECK(!f.arbiter.Current(left));
+            CHECK(Released(out.lifecycle,held.claim->token,leftState==1?HandInteractionReason::LeaseExpired:HandInteractionReason::Released));
+        }
+    }
+    return 0;
+}
+int GunRenewalRejectsInvalidContinuity(){
+    for(unsigned bad=0;bad<31;++bad){
+        HandInteraction h;const auto old=RenewalOld();auto next=RenewalNext();
+        auto request=RenewalRequest(old);
+        if(bad==30)request.kind=HandClaimKind::Mechanism;
+        const auto held=h.Acquire(old,request);CHECK(held.claim);
+        auto token=held.claim->token;auto proof=RenewalProof(next);
+        switch(bad){
+        case 0: next.observedNs=old.deadlineNs;break; // exact boundary is a real gap
+        case 1: next.observedNs=old.deadlineNs+1;break;
+        case 2: next.nowNs=next.deadlineNs;break; // current packet itself expired
+        case 3: next.sequence=old.sequence;next.observedNs=old.observedNs;next.deadlineNs=old.deadlineNs;break;
+        case 4: next.sequence=old.sequence-1;break;
+        case 5: next.observedNs=old.observedNs-1;break;
+        case 6: next.observedNs=old.observedNs;break;
+        case 7: next.observedNs=next.nowNs+1;break; // future source
+        case 8: next.nowNs=old.nowNs-1;break; // reversed processing clock
+        case 9: next.deadlineNs=next.observedNs+151*ms;break;
+        case 10: ++next.owner.actor;break;
+        case 11: ++next.owner.actorGeneration;break;
+        case 12: ++next.owner.equipGeneration;break;
+        case 13: ++next.owner.space;break;
+        case 14: next.focused=false;break;
+        case 15: next.tracked[1]=false;break;
+        case 16: next.released[1]=true;break;
+        case 17: proof.eligible=false;break;
+        case 18: ++proof.key.id;break;
+        case 19: ++proof.key.generation;break;
+        case 20: --proof.inputSequence;break;
+        case 21: ++proof.deadlineNs;break;
+        case 22: --proof.deadlineNs;break; // semantic proof must keep original source bound
+        case 23: ++token.id;break;
+        case 24: ++token.owner.equipGeneration;break;
+        case 25: ++token.item.id;break;
+        case 26: ++token.item.generation;break;
+        case 27: ++token.contact.id;break;
+        case 28: token.prerequisiteClaim=7;break;
+        case 29: next.sequence=old.sequence;++next.deadlineNs;break; // duplicate restamp
+        default: break;
+        }
+        if(bad<17||bad==29)proof=RenewalProof(next);
+        const auto out=h.UpdateAndRenewGunHold(next,token,proof);
+        CHECK(!out.renewed&&!h.Current(right));
+        // No failed proof can hide expiry of the real held claim. A later
+        // correctly formed packet does not resurrect its already-lost token.
+        const auto fresh=RenewalNext();
+        CHECK(!h.UpdateAndRenewGunHold(fresh,held.claim->token,RenewalProof(fresh)).renewed);
+        CHECK(!h.Current(right));
+    }
+    // Invalid contact before expiry preserves only the old still-valid lease.
+    HandInteraction h;const auto old=RenewalOld();const auto held=h.Acquire(old,RenewalRequest(old));CHECK(held.claim);
+    auto early=RenewalNext();early.nowNs=old.deadlineNs-1;auto proof=RenewalProof(early);proof.eligible=false;
+    CHECK(!h.UpdateAndRenewGunHold(early,held.claim->token,proof).renewed);
+    CHECK(h.Current(right)->deadlineNs==old.deadlineNs&&h.Current(right)->inputSequence==old.sequence);
+    early.nowNs=old.deadlineNs;
+    CHECK(!h.UpdateAndRenewGunHold(early,held.claim->token,RenewalProof(early)).renewed&&!h.Current(right));
+    return 0;
+}
+int GunRenewalCannotResurrect(){
+    for(unsigned invalidation=0;invalidation<6;++invalidation){
+        HandInteraction h;const auto old=RenewalOld(),next=RenewalNext();
+        const auto held=h.Acquire(old,RenewalRequest(old));CHECK(held.claim);
+        auto loss=old;loss.nowNs+=ms;
+        if(invalidation==0){loss.nowNs=old.deadlineNs;h.Update(loss);}
+        if(invalidation==1)h.Reset();
+        if(invalidation==2){loss.focused=false;h.Update(loss);}
+        if(invalidation==3){loss.tracked[1]=false;h.Update(loss);}
+        if(invalidation==4){loss.released[1]=true;h.Update(loss);}
+        if(invalidation==5){++loss.sequence;++loss.observedNs;++loss.owner.actorGeneration;h.Update(loss);}
+        CHECK(!h.Current(right));
+        CHECK(!h.UpdateAndRenewGunHold(next,held.claim->token,RenewalProof(next)).renewed&&!h.Current(right));
+    }
+    return 0;
+}
+
 int MalformedAndImmutableInput(){
     for(unsigned bad=0;bad<10;++bad){
         Fixture f;auto gun=f.Gun();CHECK(gun.claim);const auto token=gun.claim->token;
@@ -491,7 +633,7 @@ int FailedIntentCannotLaterWin(){
 static_assert(!std::is_copy_constructible_v<HandInteraction>);
 static_assert(sizeof(HandInteraction)<8192,"Diagnostic history must stay outside the shared controller");
 int main(){
-    if(ClaimDropPreservesInnerFailureEvidence()||QueuedOwnershipAfterConsumerAdoption()||FailedAndSuccessfulTransfers()||ExplicitSharingAndCrossHandTransfer()||DependencyAndPerHandTracking()||
+    if(OverlappingGunInputRenewsBeforeExpiry()||GunRenewalNeverExtendsDependentEvidence()||GunRenewalRejectsInvalidContinuity()||GunRenewalCannotResurrect()||ClaimDropPreservesInnerFailureEvidence()||QueuedOwnershipAfterConsumerAdoption()||FailedAndSuccessfulTransfers()||ExplicitSharingAndCrossHandTransfer()||DependencyAndPerHandTracking()||
        IdentityFocusResetAndFreshIntent()||LeasesRenewalAndContactIdentity()||MalformedAndImmutableInput()||
         UnavailableIntentCannotReplay()||HistoricalTransferAndExactSource()||HistoricalReleaseAndTrackingBarriers()||
         DelayedGeometryWithinOneNeutralRun()||NewReleaseRunRejectsEarlierNeutralGeometry()||

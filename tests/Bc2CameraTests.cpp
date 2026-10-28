@@ -5,12 +5,50 @@
 using namespace fvr;
 namespace {
 float F(const bc2::RenderViewCopy& c,unsigned offset){float f=0;std::memcpy(&f,c.bytes.data()+offset,4);return f;}
+unsigned Dirty(const void* p){unsigned value=0;std::memcpy(&value,p,4);return value;}
+void Clear(void* p,unsigned mask){const auto value=Dirty(p)&~mask;std::memcpy(p,&value,4);}
+unsigned scaleCalls=0,projectionCalls=0;
+void View(void* p){Clear(p,1);}
+void Projection(void* p){++projectionCalls;Clear(p,2);}
+void Frustum(void* p){Clear(p,8);}
+void Scale(void* p){
+    ++scaleCalls;
+    // Observed native secondary-camera output from idle02. The native getter
+    // model deliberately writes every scalar and clears only dirty bit4.
+    const std::array<float,4> values{.9578142166f,2.107218981f,2.200028896f,4.840126991f};
+    std::memcpy(static_cast<std::byte*>(p)+0x210,values.data(),sizeof(values));Clear(p,4);
+}
+void LazyScaleGetter(void* p){if(Dirty(p)&4)Scale(p);}
 }
 int main(){
     bc2::RenderViewCopy prototype{};prototype.bytes.fill(std::byte{0x5a});
     math::Matrix4 world{};world.values={{{1,0,0,0},{0,1,0,0},{0,0,1,0},{12,4,8,1}}};
     const math::FovTangents fov{-.7f,1.2f,.8f,-.6f};
     const auto copy=bc2::BuildRenderViewCopy(prototype,world,fov,.04f,2000);CHECK(copy);
+    {
+        auto prior=*copy;View(prior.bytes.data());Projection(prior.bytes.data());Frustum(prior.bytes.data());
+        const auto written=prior;LazyScaleGetter(prior.bytes.data());
+        CHECK(prior.bytes!=written.bytes); // Reproduces the omitted fourth cache.
+        for(unsigned camera=0;camera<4;++camera){
+            auto prepared=*copy;prepared.bytes[0x200]=std::byte(camera);
+            bc2::PrecomputeCameraCaches(prepared,View,Projection,Frustum,Scale);
+            CHECK(!(Dirty(prepared.bytes.data())&15));
+            const auto exact=prepared;const auto calls=scaleCalls;
+            LazyScaleGetter(prepared.bytes.data());CHECK(scaleCalls==calls);
+            CHECK(prepared.bytes==exact.bytes); // Exact full-value restore remains valid.
+            CHECK(F(prepared,0x218)==2.200028896f&&F(prepared,0x21c)==4.840126991f);
+            // No masked comparison: an unrelated camera write still rejects.
+            prepared.bytes[0x200]^=std::byte{1};CHECK(prepared.bytes!=exact.bytes);
+        }
+        auto pose=*copy;bc2::PrecomputeCameraCaches(pose,View,Projection,Frustum,Scale);
+        const auto exact=pose;const auto calls=scaleCalls,projections=projectionCalls;
+        bc2::PrecomputeCameraCaches(pose,View,Projection,Frustum,Scale,false);
+        CHECK(pose.bytes==exact.bytes&&scaleCalls==calls&&projectionCalls==projections);
+        auto inherited=*copy;Clear(inherited.bytes.data(),2);
+        bc2::PrecomputeCameraCaches(inherited,View,Projection,Frustum,Scale,false);
+        CHECK(!(Dirty(inherited.bytes.data())&15)&&scaleCalls==calls+1&&projectionCalls==projections);
+        CHECK(copy->bytes==bc2::BuildRenderViewCopy(prototype,world,fov,.04f,2000)->bytes);
+    }
     CHECK(copy->bytes[8]==std::byte{1});CHECK(Near(F(*copy,0x50+0x38),-8));CHECK(Near(F(*copy,0x50+0x3c),0));
     // Reconstruct the boundaries implied by the parameters, then project the
     // original frustum edges. Native-engine verification is a separate probe.

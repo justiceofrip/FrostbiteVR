@@ -82,13 +82,16 @@ ChannelResult MenuChannel::PublishSurface(const MenuSurface& v)noexcept {
     if(!state_||state_->host)return ChannelResult::Closed;auto& s=*state_;State::Lock lock(s);if(!lock)return s.Unlocked();if(!s.Peer())return ChannelResult::Closed;
     if(s.data->phase)return ChannelResult::Busy;
     if(!ValidMenuSurface(v))return ChannelResult::Invalid;
-    if(v.state.deadlineQpc<=Now()||s.data->status.mode!=MenuMode::Menu||v.state.epoch!=s.data->status.epoch)return ChannelResult::Timeout;
+    if(v.state.deadlineQpc<=Now()||s.data->status.deadlineQpc<=Now()||
+       v.state.mode!=s.data->status.mode||v.state.epoch!=s.data->status.epoch)return ChannelResult::Timeout;
     s.data->surface=v;s.data->phase=1;s.data->consumed=0;return ChannelResult::Ok;
 }
 ChannelResult MenuChannel::TakeSurface(MenuSurface& v)noexcept {
     v={};if(!state_||!state_->host)return ChannelResult::Closed;auto& s=*state_;State::Lock lock(s);if(!lock)return s.Unlocked();if(!s.Peer())return ChannelResult::Closed;
     if(s.data->phase!=1)return ChannelResult::Busy;
-    if(!ValidMenuSurface(s.data->surface)||s.data->surface.state.deadlineQpc<=Now()||s.data->status.mode!=MenuMode::Menu||s.data->status.deadlineQpc<=Now()||s.data->surface.state.epoch!=s.data->status.epoch){s.data->phase=3;s.data->consumed=0;return ChannelResult::Timeout;}
+    if(!ValidMenuSurface(s.data->surface)||s.data->surface.state.deadlineQpc<=Now()||
+       s.data->surface.state.mode!=s.data->status.mode||s.data->status.deadlineQpc<=Now()||
+       s.data->surface.state.epoch!=s.data->status.epoch){s.data->phase=3;s.data->consumed=0;return ChannelResult::Timeout;}
     v=s.data->surface;s.data->phase=2;return ChannelResult::Ok;
 }
 ChannelResult MenuChannel::SurfaceConsumed(const graphics::PairTicket& t,bool consumed)noexcept {
@@ -98,7 +101,9 @@ ChannelResult MenuChannel::SurfaceConsumed(const graphics::PairTicket& t,bool co
 }
 Outcome MenuChannel::PollOutcome()noexcept {
     if(!state_||state_->host)return Outcome::Discarded;auto& s=*state_;State::Lock lock(s);if(!lock)return s.fault?Outcome::Discarded:Outcome::Pending;if(!s.Peer())return Outcome::Discarded;
-    if(s.data->phase==1&&(s.data->surface.state.deadlineQpc<=Now()||s.data->status.mode!=MenuMode::Menu||s.data->status.epoch!=s.data->surface.state.epoch)){s.data->phase=3;s.data->consumed=0;}
+    if(s.data->phase==1&&(s.data->surface.state.deadlineQpc<=Now()||
+       s.data->status.mode!=s.data->surface.state.mode||s.data->status.deadlineQpc<=Now()||
+       s.data->status.epoch!=s.data->surface.state.epoch)){s.data->phase=3;s.data->consumed=0;}
     if(s.data->phase!=3)return Outcome::Pending;const auto out=s.data->consumed?Outcome::Consumed:Outcome::Discarded;s.data->phase=0;s.data->consumed=0;return out;
 }
 }

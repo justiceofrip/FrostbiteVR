@@ -62,7 +62,9 @@ private:
     std::array<CustodyReceipt,10> custodyReceipts_{};unsigned custodyReceiptCount_=0,custodyDrops_=0;
     struct Row {Phase phase;unsigned failure;std::int64_t now;};std::array<Row,128> rows_{};unsigned rowCount_=0,eventDrops_=0;
     struct PhysicalRow {Phase phase;interaction::WeaponCyclePhase mechanism;interaction::WeaponCycleFailure failure;
-        interaction::BoltCustodyPhase custody;std::uint64_t input,raw;std::int64_t now;float distance;bool rawValid,ownsMechanism;};
+        interaction::BoltCustodyPhase custody;std::uint64_t input,raw;std::int64_t now;float distance;bool rawValid,ownsMechanism;
+        std::uint64_t currentContactInput=0,currentContactRoot=0;
+        std::int64_t currentContactObserved=0,currentContactDeadline=0;};
     std::array<PhysicalRow,160> physicalRows_{};unsigned physicalRowCount_=0,physicalRowDrops_=0;
 };
 }

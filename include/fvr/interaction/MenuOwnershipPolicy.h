@@ -2,6 +2,13 @@
 #include "fvr/interaction/MenuPointer.h"
 
 namespace fvr::interaction {
+// Presentation admission is separate from pointer/input ownership. A missing
+// menu raster (including Unknown or an expired source) does not establish a
+// world. Busy readers may pass their retained state, never a renewed deadline.
+inline bool MenuAllowsWorldPresentation(const ipc::MenuState& state,std::int64_t nowQpc)noexcept {
+    return nowQpc>0&&ipc::ValidMenuState(state)&&state.mode==ipc::MenuMode::Gameplay&&
+        state.deadlineQpc>nowQpc;
+}
 // Host policy, evaluated on raw controls before the menu filters gameplay.
 // A toggle is acknowledged only by an observed native menu epoch transition.
 // Losing the channel or focus cannot manufacture that acknowledgement.
@@ -20,7 +27,8 @@ public:
         if(!known||!ValidInput(raw)||!raw.focused||!raw.headValid)return {};
         const bool rawMenu=(raw.hands[0].held&MenuClick)!=0;
         const auto owner=state->mode==ipc::MenuMode::Menu?InputMenuOwner::Menu:
-            pending_||pointer.suppressLeftFaceButtons||rawMenu?InputMenuOwner::Pending:InputMenuOwner::Gameplay;
+            state->mode==ipc::MenuMode::Passive||pending_||pointer.suppressLeftFaceButtons||rawMenu?
+                InputMenuOwner::Pending:InputMenuOwner::Gameplay;
         return {owner,state->sequence,state->epoch,sourceDeadlineNs};
     }
 private:

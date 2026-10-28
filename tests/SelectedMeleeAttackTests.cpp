@@ -1,5 +1,7 @@
 #include "Test.h"
 #include "fvr/interaction/SelectedMeleeAttack.h"
+#include "fvr/interaction/MeleeResponseTiming.h"
+#include <limits>
 using namespace fvr::interaction;
 namespace {
 constexpr std::int64_t ms=1000000;
@@ -81,6 +83,152 @@ int NativeReadinessNeverCompletesAnAttack(){
     unavailable.s.motion.attackAvailable=true;unavailable.Step(0,1);CHECK(!unavailable.emitted);
     unavailable.Step();unavailable.Step(0,1);CHECK(unavailable.emitted==1);return 0;
 }
+int RepeatedPacketUsesItsFirstGeometry(){
+    Fixture f;
+    const auto repeatedGather=[&](){
+        // The native gather can run again before OpenXR publishes a new
+        // generation. Its render receipt is produced independently: re-derived
+        // wrist rotation changes the tip/axis without another controller sample.
+        const auto original=f.s;
+        f.s.motion.tip.x+=.00001f;f.s.motion.direction={.00001f,0,1};
+        f.s.motion.source.nowNs+=ms;
+        const auto repeated=f.policy.Update(f.s,f.hands);
+        f.s=original;
+        return repeated;
+    };
+    for(unsigned n=0;n<20;++n){f.Step();const auto repeated=repeatedGather();
+        CHECK(repeated.reason==SelectedMeleeReason::Duplicate&&!repeated.intent);}
+    for(unsigned n=0;n<8;++n){f.Step(.012f);CHECK(!repeatedGather().intent);}
+    CHECK(f.emitted==1&&f.last->cause==SelectedMeleeCause::Stroke);
+    const auto originalIntent=*f.policy.Pending();
+    for(unsigned n=0;n<20;++n)CHECK(!repeatedGather().intent);
+    CHECK(f.policy.Pending()->serial==originalIntent.serial&&
+        f.policy.Pending()->sourceSequence==originalIntent.sourceSequence&&
+        f.policy.Pending()->deadlineNs==originalIntent.deadlineNs);
+    return 0;
+}
+int DuplicateAuthorityLossRequiresFreshRecovery(){
+    Fixture native;native.Rest();native.s.motion.attackAvailable=false;
+    SelectedMeleeObservation observation;
+    CHECK(native.policy.Update(native.s,native.hands,&observation).reason==SelectedMeleeReason::NativeUnavailable);
+    CHECK(observation.armedBefore&&!observation.armedAfter&&!observation.motionUpdated);
+    native.s.motion.attackAvailable=true;
+    CHECK(native.policy.Update(native.s,native.hands,&observation).reason==SelectedMeleeReason::Duplicate);
+    CHECK(!observation.armedAfter&&!observation.motionUpdated);
+    native.Step(0,1);CHECK(!native.emitted);native.Step();native.Step(0,1);CHECK(native.emitted==1);
+    const auto intent=*native.policy.Pending();native.s.motion.attackAvailable=false;
+    CHECK(!native.policy.Update(native.s,native.hands,&observation).intent);
+    CHECK(native.policy.Pending()->serial==intent.serial&&
+        native.policy.PendingState()==SelectedMeleePending::Staged);
+
+    Fixture geometry;geometry.Rest();geometry.s.geometryCurrent=false;
+    CHECK(geometry.policy.Update(geometry.s,geometry.hands,&observation).reason==SelectedMeleeReason::Duplicate);
+    CHECK(observation.armedAfter&&!observation.motionUpdated);
+    geometry.s.geometryCurrent=true;CHECK(!geometry.policy.Update(geometry.s,geometry.hands).intent);
+    geometry.Stab();CHECK(!geometry.emitted); // Lost geometry cannot retain old settled motion.
+    geometry.Rest();geometry.Stab();CHECK(geometry.emitted==1);
+    Fixture fallback;fallback.Rest();fallback.s.geometryCurrent=false;
+    CHECK(!fallback.policy.Update(fallback.s,fallback.hands).intent);
+    fallback.Step(0,1);CHECK(fallback.emitted==1&&fallback.last->cause==SelectedMeleeCause::Trigger);
+    return 0;
+}
+int ObservationReportsOnlyEvaluatedMotion(){
+    Fixture f;f.Rest();SelectedMeleeObservation observation;
+    observation.motionUpdated=true;observation.motion.decision=MeleeStrokeDecision::Intent;
+    CHECK(f.policy.Update(f.s,f.hands,&observation).reason==SelectedMeleeReason::Duplicate);
+    CHECK(!observation.motionUpdated&&observation.motion.decision==MeleeStrokeDecision::None&&
+        observation.armedBefore&&observation.armedAfter&&observation.pendingAfter==SelectedMeleePending::None);
+    ++f.s.motion.source.sequence;f.s.motion.source.observedNs+=10*ms;
+    f.s.motion.source.nowNs=f.s.motion.source.observedNs;f.s.motion.source.deadlineNs=f.s.motion.source.nowNs+100*ms;
+    f.s.motion.tip.z+=.012f;f.Refresh();
+    const auto result=f.policy.Update(f.s,f.hands,&observation);
+    CHECK(!result.intent&&observation.motionUpdated&&observation.motion.metrics&&
+        observation.motion.decision==MeleeStrokeDecision::Travel&&observation.motion.travel>.011f);
+    f.s.trigger=1;CHECK(f.policy.Update(f.s,f.hands,&observation).reason==SelectedMeleeReason::Invalid);
+    CHECK(!observation.motionUpdated&&!observation.armedAfter&&!f.policy.Pending());
+    return 0;
+}
+struct TimingFixture {
+    MeleeResponseTiming timing;std::int64_t now=1000*ms;std::uint64_t invocation=0;
+    MeleeTimingIntent intent{{1,2,3,4,5,{11,12,13}},1,1000*ms,1100*ms,{.5f,.05f,60.f/52.f}};
+    TimingFixture(){(void)timing.Begin(intent,now);}
+    MeleeTimingBoundary Boundary(unsigned branch,MeleeTimingPhase phase=MeleeTimingPhase::WindupPrepared){
+        return {intent.owner,intent.serial,++invocation,timing.Revision(branch),branch,now,now+100*ms,
+            phase,phase==MeleeTimingPhase::WindupPrepared?.5f:intent.contract.totalCycleSeconds-.5f,.011f,true,true};
+    }
+    std::optional<MeleeTimingPlan> Advance(unsigned branch){return timing.Prepare(Boundary(branch),now);}
+    bool Applied(const MeleeTimingPlan& p){return timing.Resolve(p,MeleeTimingWrite::Applied,p.replacementSeconds,now);}
+};
+int TimingThreeCopiesPreserveRecoveryAfterGestureEnds(){
+    TimingFixture f;
+    for(unsigned n=0;n<3;++n){const auto p=f.Advance(n);CHECK(p&&p->expectedSeconds==.5f&&p->replacementSeconds==.05f);
+        CHECK(f.Applied(*p)&&f.timing.Stage(n)==MeleeTimingStage::Advanced);
+        CHECK(!f.timing.Resolve(*p,MeleeTimingWrite::Applied,p->replacementSeconds,f.now));}
+    CHECK(!f.timing.Complete());f.timing.RevokeAdmission();f.now+=2000*ms;
+    // Gesture completion, tracking loss and its old 150 ms deadline cannot
+    // erase an already applied native timing obligation.
+    for(unsigned n=0;n<3;++n){auto b=f.Boundary(n,MeleeTimingPhase::RecoveryPrepared);
+        const auto p=f.timing.Prepare(b,f.now);CHECK(p);
+        CHECK(std::abs(p->replacementSeconds+.05f-f.intent.contract.totalCycleSeconds)<.000001f);
+        CHECK(f.Applied(*p));CHECK(!f.timing.Prepare(b,f.now));
+        CHECK(!f.timing.Prepare(f.Boundary(n,MeleeTimingPhase::RecoveryPrepared),f.now));}
+    CHECK(f.timing.Complete());CHECK(!f.timing.Begin(f.intent,f.now));
+    ++f.intent.serial;f.intent.observedNs=f.now;f.intent.deadlineNs=f.now+100*ms;
+    CHECK(f.timing.Begin(f.intent,f.now));return 0;
+}
+int TimingHitchesAndInvalidBoundariesStayStock(){
+    for(float delta:{.05f,.1f,.25f,1.f}){TimingFixture f;auto b=f.Boundary(0);b.deltaSeconds=delta;
+        CHECK(!f.timing.Prepare(b,f.now)&&f.timing.Stage(0)==MeleeTimingStage::Stock);
+        CHECK(!f.Advance(0));}
+    for(unsigned fault=0;fault<10;++fault){TimingFixture f;auto b=f.Boundary(0);
+        if(fault==0)++b.owner.actorGeneration;if(fault==1)++b.owner.itemGeneration;
+        if(fault==2)++b.owner.branches[0];if(fault==3)++b.owner.cohortGeneration;
+        if(fault==4)b.originalBoundaryVerified=false;if(fault==5)b.ownerRetained=false;
+        if(fault==6)b.deadlineNs=f.now;if(fault==7)b.timerSeconds=std::numeric_limits<float>::quiet_NaN();
+        if(fault==8)++b.revision;if(fault==9)b.deltaSeconds=0;
+        CHECK(!f.timing.Prepare(b,f.now)&&f.timing.Stage(0)==MeleeTimingStage::Native);}
+    TimingFixture zero;zero.intent.contract.retainedWindupSeconds=0;
+    CHECK(zero.timing.Retire(zero.intent.owner,true));++zero.intent.serial;
+    CHECK(!zero.timing.Begin(zero.intent,zero.now));return 0;
+}
+int TimingUncertainWritesRetainDebtAndNeedExactRetirement(){
+    TimingFixture f;const auto p=f.Advance(0);CHECK(p);auto wrong=*p;++wrong.invocation;
+    CHECK(!f.timing.Resolve(wrong,MeleeTimingWrite::Applied,wrong.replacementSeconds,f.now));
+    CHECK(!f.Advance(0));CHECK(!f.timing.Resolve(*p,MeleeTimingWrite::Applied,p->replacementSeconds,p->deadlineNs));
+    CHECK(f.timing.Stage(0)==MeleeTimingStage::Unknown&&!f.timing.Complete());
+    f.timing.RevokeAdmission();f.now+=10000*ms;
+    CHECK(!f.timing.Prepare(f.Boundary(0,MeleeTimingPhase::RecoveryPrepared),f.now));
+    auto wrongOwner=f.intent.owner;++wrongOwner.actorGeneration;
+    CHECK(!f.timing.Retire(wrongOwner,true));CHECK(!f.timing.Retire(f.intent.owner,false));
+    CHECK(f.timing.Retire(f.intent.owner,true));CHECK(!f.timing.Resolve(*p,MeleeTimingWrite::Applied,p->replacementSeconds,f.now));
+    TimingFixture failed;const auto attempt=failed.Advance(1);CHECK(attempt);
+    CHECK(failed.timing.Resolve(*attempt,MeleeTimingWrite::NotApplied,attempt->expectedSeconds,failed.now));
+    CHECK(failed.timing.Stage(1)==MeleeTimingStage::Native);return 0;
+}
+int TimingPredictionCopyCarriesExactDebtWithoutDoublePay(){
+    TimingFixture f;const auto advance=f.Advance(1);CHECK(advance&&f.Applied(*advance));
+    std::array<std::uint32_t,16> payload{};payload[3]=0x3d23d70a;payload[7]=42;
+    auto exported=f.Boundary(1);exported.timerSeconds=.04f;
+    const auto snapshot=f.timing.Capture(exported,444,payload,f.now);CHECK(snapshot);
+    CHECK(!f.timing.Capture(exported,444,payload,f.now));
+    auto restored=f.Boundary(0);restored.timerSeconds=.04f;auto changed=payload;++changed[15];
+    CHECK(!f.timing.Restored(restored,*snapshot,444,changed,f.now));
+    CHECK(!f.timing.Restored(restored,*snapshot,445,payload,f.now));
+    CHECK(f.timing.Restored(restored,*snapshot,444,payload,f.now));
+    CHECK(f.timing.Revision(0)==2&&f.timing.Stage(0)==MeleeTimingStage::Advanced);
+    CHECK(!f.timing.Restored(restored,*snapshot,444,payload,f.now));
+    const auto paid=f.timing.Prepare(f.Boundary(0,MeleeTimingPhase::RecoveryPrepared),f.now);CHECK(paid&&f.Applied(*paid));
+    // A real prediction rewind can restore earlier, unpaid native state. Only
+    // the exact retained copy receipt permits a new revision to pay it again.
+    restored=f.Boundary(0);restored.timerSeconds=.04f;
+    CHECK(f.timing.Restored(restored,*snapshot,444,payload,f.now)&&f.timing.Revision(0)==3);
+    CHECK(!f.timing.Resolve(*paid,MeleeTimingWrite::Applied,paid->replacementSeconds,f.now));
+    const auto replay=f.timing.Prepare(f.Boundary(0,MeleeTimingPhase::RecoveryPrepared),f.now);
+    CHECK(replay&&f.Applied(*replay)&&replay->replacementSeconds==paid->replacementSeconds);
+    // No pointer-only provenance when a ring slot has been overwritten.
+    for(unsigned n=0;n<8;++n){auto b=f.Boundary(1);b.timerSeconds=.03f;CHECK(f.timing.Capture(b,444,payload,f.now));}
+    CHECK(!f.timing.Restored(f.Boundary(2),*snapshot,444,payload,f.now));return 0;
+}
 int SharedHoldAndIdentityRequired(){
     for(unsigned fault=0;fault<5;++fault){Fixture f;f.Rest();
         if(fault==0)++f.s.motion.hold.id;
@@ -105,4 +253,7 @@ int SharedHoldAndIdentityRequired(){
 }
 int main(){return OneMotionIntentAndExactOutcome()||TriggerAndMotionShareOneLatch()||TriggerFallbackWithoutGeometry()||
     DrawRegripReconnectCannotAttack()||PendingSurvivesInvalidationAndNeverOwnsHands()||DuplicateStaleAndChangedInputCannotRepeat()||
-    NativeReadinessNeverCompletesAnAttack()||SharedHoldAndIdentityRequired();}
+    NativeReadinessNeverCompletesAnAttack()||RepeatedPacketUsesItsFirstGeometry()||DuplicateAuthorityLossRequiresFreshRecovery()||
+    ObservationReportsOnlyEvaluatedMotion()||SharedHoldAndIdentityRequired()||
+    TimingThreeCopiesPreserveRecoveryAfterGestureEnds()||TimingHitchesAndInvalidBoundariesStayStock()||
+    TimingUncertainWritesRetainDebtAndNeedExactRetirement()||TimingPredictionCopyCarriesExactDebtWithoutDoublePay();}

@@ -1,4 +1,5 @@
 #include "Bc2TrackedBodyBase.h"
+#include "fvr/diagnostics/PrivateCpuAttribution.h"
 #include <Windows.h>
 #include <intrin.h>
 #include <MinHook.h>
@@ -30,6 +31,8 @@
 #endif
 #include "Bc2Rig.h"
 #include "Bc2RigPaletteCopy.h"
+#include "Bc2RigPublicationCommit.h"
+#include "Bc2RigPoseHandoff.h"
 #include "Bc2HandPose.h"
 #include "fvr/interaction/GripAttachment.h"
 #include "fvr/interaction/HandTouch.h"
@@ -54,7 +57,10 @@ Getter getterA=nullptr,getterB=nullptr;Pack packOriginal=nullptr;
 RigConsumerCandidates profile{};std::uintptr_t base=0;ResolveOwner resolveOwner=nullptr;
 std::array<void*,3> hooks{};std::atomic<bool> enabled=false;std::atomic<unsigned> inFlight=0;
 bool pulse=false,hands=false;ULONGLONG started=0;
-std::mutex frameMutex;Tracking tracking;interaction::TrackedRig calibratedRig;WeaponCapture weaponCapture;PumpPartCapture pumpPartCapture;ULONGLONG captureTime=0;
+// Only RetargetWeapon uses this nonblocking scratch lock. Input publication
+// never acquires it; calibration/capture/history remain serialized here.
+std::mutex poseMutex;std::atomic<std::shared_ptr<const Tracking>> renderTracking;
+interaction::TrackedRig calibratedRig;WeaponCapture weaponCapture;PumpPartCapture pumpPartCapture;ULONGLONG captureTime=0;
 #ifdef FVR_BC2_ORDINARY_RESOURCE_INSPECTION_PROBE
 PumpVisualJournal<> pumpVisualJournal;
 struct PumpVisualObservation {
@@ -99,8 +105,8 @@ struct PublishedPose {std::optional<AuthoredGripBinding> authoredGrip;std::optio
 std::shared_ptr<const PumpVisualSource> pumpVisual;
 #endif
 };
-std::shared_ptr<const PublishedPose> published;
-struct ShotGuard {unsigned soldier=0,weak=0,weapon=0;std::uint64_t owner=0,space=0,generation=0;std::int64_t deadline=0;bool valid=false,leftTracked=false;std::uint64_t previewToken=0;bool weaponActionsBlocked=false;std::uint64_t equipmentGeneration=0;WeaponEquipmentIdentity equipment{};};
+std::atomic<std::shared_ptr<const PublishedPose>> published;
+struct ShotGuard {unsigned soldier=0,weak=0,weapon=0;std::uint64_t owner=0,space=0,generation=0;std::int64_t deadline=0;bool valid=false,leftTracked=false;std::uint64_t previewToken=0;bool weaponActionsBlocked=false;std::uint64_t equipmentGeneration=0;WeaponEquipmentIdentity equipment{};std::int64_t previewDeadline=0;};
 struct ShotPublication {WeaponShotFrame frame;ShotGuard identity;std::optional<AuthoredGripBinding> authoredGrip;std::optional<AuthoredSupportBinding> authoredSupport;};
 std::atomic<std::shared_ptr<const ShotGuard>> shotGuard;
 std::atomic<std::shared_ptr<const ShotPublication>> shotPublication;
@@ -342,23 +348,31 @@ std::uintptr_t __cdecl PackHook(const void* source,void* destination,unsigned co
     unsigned weak=0;if(!resolveOwner||!resolveOwner(scope.soldier,weak)||weak!=scope.weak){++rejected;scope={};return packOriginal(source,destination,count);}
     ++copies;const auto elapsed=GetTickCount64()-started;
     if(first&&hands){
-        std::shared_ptr<const PublishedPose> pose;bool previewAllowed=false;
-        {std::unique_lock lock(frameMutex,std::try_to_lock);if(lock.owns_lock()&&Fresh(tracking.deadline)&&published&&published->weapon==tracking.weapon&&published->space==tracking.input.spaceGeneration&&published->ownerGeneration==tracking.ownerGeneration&&published->equipmentGeneration==tracking.equipmentGeneration){
-            pose=published;previewAllowed=tracking.sightPreview.valid&&tracking.sightPreview.token==pose->previewToken&&
-                Fresh(tracking.sightPreview.deadline)&&tracking.input.focused&&tracking.input.headValid&&
-                tracking.input.hands[0].gripTracked&&tracking.input.hands[1].gripTracked&&tracking.input.hands[0].squeeze>.35f;
-        }}
+        // Root/shot were committed with this immutable pose. A producer's
+        // scratch mutex cannot make only the hand palette fall back to native.
+        // The current atomic guard still rejects expiry/owner/space changes.
+        std::shared_ptr<const ShotGuard> currentGuard;
+        RigPaletteCopyObservation admission{};
+        const auto pose=ReadRigPoseForCopy(published,[](const PublishedPose& p){
+            return RigPaletteCopyState{{p.identity.soldier,p.identity.weak,p.weapon,
+                p.ownerGeneration,p.equipmentGeneration,p.space},p.generation,p.deadline,true};
+        },[&](){
+            currentGuard=shotGuard.load(std::memory_order_acquire);
+            if(currentGuard)admission.state={{currentGuard->soldier,currentGuard->weak,currentGuard->weapon,
+                currentGuard->owner,currentGuard->equipmentGeneration,currentGuard->space},
+                currentGuard->generation,currentGuard->deadline,currentGuard->valid};
+            LARGE_INTEGER now{};if(QueryPerformanceCounter(&now))admission.now=now.QuadPart;
+            return admission;
+        });
 #ifdef FVR_BC2_ORDINARY_RESOURCE_INSPECTION_PROBE
         if(pose)scope.pumpVisual=pose->pumpVisual;
 #endif
-        // PublishTracking always updates this guard, even if frameMutex was
-        // busy. A release/recenter/item change must invalidate a latched preview
-        // without waiting for another successful pose publication.
-        const auto currentGuard=shotGuard.load(std::memory_order_acquire);
-        previewAllowed=previewAllowed&&currentGuard&&currentGuard->valid&&currentGuard->leftTracked&&pose&&
-            currentGuard->previewToken==pose->previewToken&&currentGuard->weapon==pose->weapon&&
-            currentGuard->soldier==scope.soldier&&currentGuard->weak==scope.weak&&
-            currentGuard->owner==pose->ownerGeneration&&currentGuard->space==pose->space&&currentGuard->equipmentGeneration==pose->equipmentGeneration&&Fresh(currentGuard->deadline);
+        const bool previewAllowed=pose&&currentGuard&&currentGuard->valid&&
+            RigSightPreviewForCopy(pose->previewToken,currentGuard->previewToken,currentGuard->leftTracked,
+                currentGuard->previewDeadline,admission.now)&&
+            currentGuard->weapon==pose->weapon&&currentGuard->soldier==scope.soldier&&currentGuard->weak==scope.weak&&
+            currentGuard->owner==pose->ownerGeneration&&currentGuard->space==pose->space&&
+            currentGuard->equipmentGeneration==pose->equipmentGeneration&&Fresh(currentGuard->deadline);
         if(pose&&currentGuard&&currentGuard->valid&&currentGuard->weapon==pose->weapon&&currentGuard->owner==pose->ownerGeneration&&currentGuard->space==pose->space&&currentGuard->equipmentGeneration==pose->equipmentGeneration&&currentGuard->equipment==pose->equipment&&EquipmentStillCurrent(pose->equipment)&&pose->identity.soldier==scope.soldier&&pose->identity.weak==scope.weak&&pose->identity.evaluatedMatrices==scope.sourceA&&scope.sourceA==scope.sourceB&&pose->identity.count==count&&Fresh(pose->deadline)&&AuthoredCurrent(pose->authoredGrip)&&SupportCurrent(pose->authoredSupport)&&(!pose->freeRight||FreeRightCurrent(*pose->freeRight))){
             std::vector<std::array<std::byte,64>> current(count);
             if(Read(scope.sourceA,current.data(),count*64)&&current==pose->before){
@@ -986,14 +1000,20 @@ void PublishTracking(const Tracking& source)noexcept {
     // Always publish invalidation, including while the pose mutex is occupied.
     reloadGuard.store(next.reload.enabled?std::make_shared<const ReloadTracking>(next.reload):std::shared_ptr<const ReloadTracking>{},std::memory_order_release);
     if(const auto currentEye=BuildCurrentEyeBase(next)){next.eyeBase=*currentEye;next.eyeBaseValid=true;}
-    eyeTracking.store(next.eyeBaseValid?std::make_shared<const Tracking>(next):std::shared_ptr<const Tracking>{},std::memory_order_release);
+    // Reuse the same complete allocation for existing body consumers and the
+    // render input. Their independent validity rules and deadlines are unchanged.
+    const auto immutableTracking=next.eyeBaseValid||hands?std::make_shared<const Tracking>(next):std::shared_ptr<const Tracking>{};
+    eyeTracking.store(next.eyeBaseValid?immutableTracking:std::shared_ptr<const Tracking>{},std::memory_order_release);
     if(!hands)return;
     const bool valid=next.deadline&&next.input.focused&&next.input.headValid&&next.input.hands[1].gripTracked&&next.input.hands[1].aimTracked&&interaction::ValidInput(next.input);
-    shotGuard.store(std::make_shared<const ShotGuard>(ShotGuard{next.soldier,next.weak,next.weapon,next.ownerGeneration,next.input.spaceGeneration,next.input.generation,next.deadline,valid,next.input.hands[0].gripTracked,
-        valid&&next.sightPreview.valid&&next.input.hands[0].gripTracked&&next.input.hands[0].squeeze>.35f&&Fresh(next.sightPreview.deadline)?next.sightPreview.token:0,next.weaponActionsBlocked,next.equipmentGeneration,next.nativeEquipment}),std::memory_order_release);
-    if(!valid){shotPublication.store({},std::memory_order_release);PublishOrdinaryEquipment({});}
-    std::unique_lock lock(frameMutex,std::try_to_lock);if(!lock.owns_lock())return;
-    tracking=next;if(!next.deadline)published.reset();
+    // The shared helper publishes invalidation too and cannot drop a packet
+    // because pose preparation owns its separate scratch mutex.
+    PublishRigInputAfterGuard(renderTracking,immutableTracking,[&](){
+        shotGuard.store(std::make_shared<const ShotGuard>(ShotGuard{next.soldier,next.weak,next.weapon,next.ownerGeneration,next.input.spaceGeneration,next.input.generation,next.deadline,valid,next.input.hands[0].gripTracked,
+            valid&&next.sightPreview.valid&&next.input.hands[0].gripTracked&&next.input.hands[0].squeeze>.35f&&Fresh(next.sightPreview.deadline)?next.sightPreview.token:0,next.weaponActionsBlocked,next.equipmentGeneration,next.nativeEquipment,next.sightPreview.deadline}),std::memory_order_release);
+        if(!valid){shotPublication.store({},std::memory_order_release);PublishOrdinaryEquipment({});}
+    });
+    if(!next.deadline)published.store({},std::memory_order_release);
 }
 std::optional<WeaponShotFrame> ReadWeaponFrame(unsigned soldier,unsigned weak,unsigned weapon,WeaponFrameUse use)noexcept {
     if(!hands||!enabled.load(std::memory_order_acquire))return {};
@@ -1121,10 +1141,13 @@ WeaponSightContact ReadSightContact(unsigned soldier,unsigned weak,unsigned weap
 }
 void RetargetWeapon(unsigned animation,void* destination)noexcept {
     if(!hands||!enabled.load(std::memory_order_acquire))return;Callback callback;
-    Tracking input;
-    {std::unique_lock lock(frameMutex,std::try_to_lock);if(!lock.owns_lock()||!Fresh(tracking.deadline))return;input=tracking;
-        if(!input.input.focused||!input.input.headValid||(!input.input.hands[0].gripTracked&&!input.input.hands[1].gripTracked)){++trackingUnavailable;published.reset();return;}
-    }
+    fvr::diagnostics::privateCpu::Scope cpuTotal(fvr::diagnostics::privateCpu::Stage::RigTotal);
+    const auto sourceInput=ReadRigInputForPose(renderTracking,[](std::int64_t deadline){return Fresh(deadline);});
+    if(!sourceInput)return;
+    // Retain the same private value copy used by preparation before this change.
+    // Its ownership/deadline come from one complete immutable producer packet.
+    Tracking input=*sourceInput;
+    if(!input.input.focused||!input.input.headValid||(!input.input.hands[0].gripTracked&&!input.input.hands[1].gripTracked)){++trackingUnavailable;published.store({},std::memory_order_release);return;}
 #ifdef FVR_BC2_ORDINARY_RESOURCE_INSPECTION_PROBE
     PumpVisualObservation pumpVisualObservation;auto& pv=pumpVisualObservation.value;
     pv.generation=input.input.generation;pv.space=input.input.spaceGeneration;
@@ -1151,11 +1174,13 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
         [](void* context,unsigned at,const char*){return static_cast<const WeaponEquipmentIdentity*>(context)->data==at;}};
     const auto currentEquipment=ReadWeaponEquipmentIdentity(equipmentMemory,input.weapon);
     if(!currentEquipment||*currentEquipment!=input.nativeEquipment){RejectTracking(0);return;}
+    fvr::diagnostics::privateCpu::recorder.StartFromVerifiedNativeOwner();
     const RigMemory memory{nullptr,[](void*,unsigned at,void* out,std::size_t n){return Read(at,out,n);}};
     const auto m95Phase=m95ShotCapturePhase.load(std::memory_order_acquire);
     const auto m95Before=m95Phase>=1&&m95Phase<=3?reloadFlowRuntime::ReadM95ShotPartDiagnosticSnapshot():std::nullopt;
     const auto pumpBefore=reloadFlowRuntime::ReadPumpPartDiagnosticSnapshot();
-    const auto rig=ReadFirstPersonRig(memory,input.soldier,input.weak);
+    const auto rig=[&]{fvr::diagnostics::privateCpu::Scope cpuRead(fvr::diagnostics::privateCpu::Stage::RigRead);
+        return ReadFirstPersonRig(memory,input.soldier,input.weak);}();
     const auto m95After=m95Before?reloadFlowRuntime::ReadM95ShotPartDiagnosticSnapshot():std::nullopt;
     const auto pumpAfter=pumpBefore?reloadFlowRuntime::ReadPumpPartDiagnosticSnapshot():std::nullopt;
 #ifdef FVR_BC2_ORDINARY_RESOURCE_INSPECTION_PROBE
@@ -1170,8 +1195,9 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
     // compensated reference origin used by HMD views.
     auto body=input.eyeBaseValid?std::optional<math::Matrix4>{input.eyeBase}:std::nullopt;
     if(!body){RejectTracking(3);return;}
-    std::unique_lock lock(frameMutex,std::try_to_lock);
-    if(!lock.owns_lock()||!Fresh(input.deadline)||tracking.soldier!=input.soldier||tracking.weak!=input.weak||tracking.weapon!=input.weapon||tracking.ownerGeneration!=input.ownerGeneration||tracking.equipmentGeneration!=input.equipmentGeneration||tracking.nativeEquipment!=input.nativeEquipment||tracking.input.spaceGeneration!=input.input.spaceGeneration)return;
+    std::unique_lock lock(poseMutex,std::try_to_lock);
+    const auto currentInput=renderTracking.load(std::memory_order_acquire);
+    if(!lock.owns_lock()||!currentInput||!Fresh(input.deadline)||currentInput->soldier!=input.soldier||currentInput->weak!=input.weak||currentInput->weapon!=input.weapon||currentInput->ownerGeneration!=input.ownerGeneration||currentInput->equipmentGeneration!=input.equipmentGeneration||currentInput->nativeEquipment!=input.nativeEquipment||currentInput->input.spaceGeneration!=input.input.spaceGeneration)return;
 #ifdef FVR_BC2_ORDINARY_RESOURCE_INSPECTION_PROBE
     pv.stage=3;
 #endif
@@ -1195,6 +1221,7 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
     }
     const auto captureNow=GetTickCount64();
     if(input.assetName[0]&&m95Phase<4&&captureNow-captureTime>=100){
+        fvr::diagnostics::privateCpu::Scope cpuCapture(fvr::diagnostics::privateCpu::Stage::ProfileCapture);
         captureTime=captureNow;
         WeaponCaptureSample sample;sample.assetName=input.assetName.data();
         sample.provenance=WeaponCaptureProvenance{input.equipmentGeneration,input.nativeEquipment.data,input.nativeEquipment.persistence,rig->identity};
@@ -1247,7 +1274,7 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
     // Physical heading rotates anatomy only. Hands/weapon/aim retain the shared
     // tracking base, independent of HMD yaw (no double rotation).
     const auto torso=interaction::PhysicalTorsoFrame(input.input,*body);
-    if(!torso){RejectTracking(4);published.reset();return;}const auto& anatomy=*torso;
+    if(!torso){RejectTracking(4);published.store({},std::memory_order_release);return;}const auto& anatomy=*torso;
     // Stabilize the shared torso parent as well as arm branches. Otherwise the
     // native gun animation still drags clavicle/shoulder vertices between arms.
     unsigned torsoRoot=rig->parents.size();
@@ -1303,7 +1330,7 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
 #ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
     if(input.chestKnife){
         if(!ChestKnifeRenderCurrent(*input.chestKnife,input.controllerOwner,input.controllerEvidence,authoredNow)){
-            published.reset();shotPublication.store({},std::memory_order_release);return;
+            published.store({},std::memory_order_release);shotPublication.store({},std::memory_order_release);return;
         }
         authored=BindAuthoredGrip(ChestKnifeGripProfiles(),gameplay::ReadCurrentSelectedMeshes(authoredNow),
             input.nativeEquipment,{input.soldier,input.weak,input.ownerGeneration,input.equipmentGeneration,
@@ -1312,7 +1339,7 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
     else if(input.selectedKnife){
         selectedKnifeBinding=BindSelectedKnifeGrip(*input.selectedKnife,gameplay::ReadCurrentSelectedMeshes(authoredNow),
             rig->identity,rigFingerprint,authoredNow);
-        if(!selectedKnifeBinding){published.reset();shotPublication.store({},std::memory_order_release);return;}
+        if(!selectedKnifeBinding){published.store({},std::memory_order_release);shotPublication.store({},std::memory_order_release);return;}
         authored={AuthoredGripStatus::Bound,selectedKnifeBinding->grip};
     }
 #endif
@@ -1320,13 +1347,13 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
     if(authored.status!=AuthoredGripStatus::NoProfile&&authored.status!=AuthoredGripStatus::PreservedBaseline&&!authored.binding){
         // A known generated entry with missing/expired identity restores the
         // current ordinary output/palette. Never reuse a previous static pose.
-        published.reset();shotPublication.store({},std::memory_order_release);return;
+        published.store({},std::memory_order_release);shotPublication.store({},std::memory_order_release);return;
     }
     if(authored.binding&&!authored.binding->profile->authoredAxisEvidence.empty()&&
        input.input.hands[1].gripTracked&&input.input.hands[1].aimTracked){
         const auto aim=interaction::TrackedAimFrame(input.input,*body);
         weaponOrientation=aim?AuthoredWeaponAimFrame(*authored.binding,*aim):std::nullopt;
-        if(!weaponOrientation){RejectTracking(11);published.reset();shotPublication.store({},std::memory_order_release);return;}
+        if(!weaponOrientation){RejectTracking(11);published.store({},std::memory_order_release);shotPublication.store({},std::memory_order_release);return;}
     }
     const auto explicitGrip=authored.binding?std::optional<interaction::AuthoredGripAttachment>{{authored.binding->profile->rightInWeapon}}:std::nullopt;
     const auto targets=calibratedRig.Update(owner,input.input,*body,native[rig->left.wrist],native[rig->right.wrist],weapon,{*leftAnchor,*rightAnchor},anatomy,restTorso,weaponOrientation,explicitGrip);
@@ -1334,7 +1361,7 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
     if(targets){pv.stage=4;if(targets->weaponAttachmentPending)pv.flags|=PvAttachmentPending;
         if(targets->tracked[0])pv.flags|=PvLeftTracked;if(targets->tracked[1])pv.flags|=PvRightTracked;}
 #endif
-    if(!targets){RejectTracking(11);published.reset();return;}
+    if(!targets){RejectTracking(11);published.store({},std::memory_order_release);return;}
     if(rigFingerprint!=handBindingFingerprint||input.input.worldUnitsPerMeter!=handBindingUnits){
         handBinding=BindLeftHandPose(rig->names,rig->parents,rig->inverseBind,input.input.worldUnitsPerMeter);
         rightHandBinding=BindRightHandPose(rig->names,rig->parents,rig->inverseBind,input.input.worldUnitsPerMeter);
@@ -1378,7 +1405,7 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
                 }
             }
         }
-        if(!freeRightReady){RejectTracking(13);published.reset();return;}
+        if(!freeRightReady){RejectTracking(13);published.store({},std::memory_order_release);return;}
     }
     if(boltCustody&&input.bolt.custody==interaction::BoltCustodyPhase::Manipulating)rightTarget=rawRight;
     // Native aiming rotates BOTH shoulders with the gun. Keeping those origins
@@ -1397,7 +1424,7 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
     auto solved=interaction::SolveTrackedArms(rig->parents,armNative,rig->left,rig->right,
         {freeLeft,targets->arms[0].poleDirection,targets->arms[0].shoulder,targets->tracked[0],trackedReach},
         {rightTarget,targets->arms[1].poleDirection,targets->arms[1].shoulder,targets->tracked[1],trackedReach});
-    if(!solved){RejectTracking(13);published.reset();return;}
+    if(!solved){RejectTracking(13);published.store({},std::memory_order_release);return;}
     auto placed=targets->weapon;
     // If a wrist hits arm reach, move the gun with that resolved wrist too.
     if(!boltCustody)for(const auto& write:solved->writes)if(write.index==rig->right.wrist){const auto inverse=interaction::InverseAnimatedTransform(targets->right);if(!inverse)return;placed=interaction::Multiply(interaction::Multiply(placed,*inverse),write.transform);break;}
@@ -1408,7 +1435,7 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
             ++boltCustodyReachRejects;std::uint64_t unset=0;
             if(boltCustodyReachFirstInput.compare_exchange_strong(unset,input.input.generation))
                 boltCustodyReachFirstErrorMeters=solved->targetError[0]/input.input.worldUnitsPerMeter;
-            boltCustodyReachLastInput=input.input.generation;published.reset();return;}
+            boltCustodyReachLastInput=input.input.generation;published.store({},std::memory_order_release);return;}
     }
     Bc2BoltControllerContact boltContact;
     if(boltRightReady&&handRoleReady&&rightHandBinding&&handBinding){
@@ -1469,7 +1496,7 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
         solved=interaction::SolveTrackedArms(rig->parents,armNative,rig->left,rig->right,
             {leftTarget,targets->arms[0].poleDirection,targets->arms[0].shoulder,true,trackedReach},
             {rightTarget,targets->arms[1].poleDirection,targets->arms[1].shoulder,true,trackedReach});
-        if(!solved){RejectTracking(13);published.reset();return;}
+        if(!solved){RejectTracking(13);published.store({},std::memory_order_release);return;}
         supportAttached=true;
     }
     // The first-person gun geometry shares this rig's skin palette; changing
@@ -1495,7 +1522,7 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
     else if(handRoleReady)handPosed=poseHand(handRole,solved->writes);
     if(targets->tracked[1]){
         const auto weaponWrites=interaction::RetargetRigSubtree(rig->parents,native,rig->weaponBone,placed,rig->nativeHiddenLeaves);
-        if(!weaponWrites){RejectTracking(14);published.reset();return;}
+        if(!weaponWrites){RejectTracking(14);published.store({},std::memory_order_release);return;}
         merge(*weaponWrites);
     }
     std::optional<TriggerEvidence> triggerEvidence;
@@ -1529,21 +1556,21 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
         const auto freePose=PoseHolsteredRight(*input.freeRight,ReloadNanos(),*rightHandBinding,rig->parents,current,wrist->transform,input.input.hands[1]);
         if(!freePose){RejectTracking(15);return;}merge(freePose->writes);++freeRightPoses;
     }else if(!poseTrigger()){RejectTracking(15);return;}
-    auto plan=BuildRigPosePlan(*rig,writes);if(!plan){RejectTracking(15);published.reset();return;}
+    auto plan=BuildRigPosePlan(*rig,writes);if(!plan){RejectTracking(15);published.store({},std::memory_order_release);return;}
     if(boltCustody&&(input.bolt.target||input.bolt.recoveryTarget)){
         const auto presentation=BuildBoltPresentation(input.bolt,*rig,placed,input.input.worldUnitsPerMeter,ReloadNanos());
-        if(!presentation){published.reset();return;}
+        if(!presentation){published.store({},std::memory_order_release);return;}
         const auto boltSolved=interaction::SolveTrackedArms(rig->parents,armNative,rig->left,rig->right,
             {{},{},{},false},{presentation->mechanismWrist,targets->arms[1].poleDirection,targets->arms[1].shoulder,true,trackedReach});
-        if(!boltSolved||boltSolved->reachClamped[1]||boltSolved->targetError[1]>.001f*input.input.worldUnitsPerMeter){published.reset();return;}
+        if(!boltSolved||boltSolved->reachClamped[1]||boltSolved->targetError[1]>.001f*input.input.worldUnitsPerMeter){published.store({},std::memory_order_release);return;}
         merge(boltSolved->writes);const std::array<interaction::BoneWrite,1> part{presentation->part};merge(part);
         for(const auto& finger:M95BoltFingers){
             const auto bone=std::find(rig->names.begin(),rig->names.end(),finger.name);
-            if(bone==rig->names.end()||std::find(bone+1,rig->names.end(),finger.name)!=rig->names.end()){published.reset();return;}
+            if(bone==rig->names.end()||std::find(bone+1,rig->names.end(),finger.name)!=rig->names.end()){published.store({},std::memory_order_release);return;}
             auto local=finger.wristFromFinger;for(unsigned n=0;n<3;++n)local.values[3][n]*=input.input.worldUnitsPerMeter;
             const std::array<interaction::BoneWrite,1> write{{{unsigned(bone-rig->names.begin()),interaction::Multiply(local,presentation->mechanismWrist)}}};merge(write);
         }
-        plan=BuildRigPosePlan(*rig,writes);if(!plan){published.reset();return;}
+        plan=BuildRigPosePlan(*rig,writes);if(!plan){published.store({},std::memory_order_release);return;}
         ++boltPoses;
     }
 #ifdef FVR_BC2_ORDINARY_RESOURCE_INSPECTION_PROBE
@@ -1787,7 +1814,7 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
     if(magazineAttached){
         if(magazineHidden){
             const auto hidden=HideMagazinePackedPalette(*rig,*magazineBinding,pose->posed);
-            if(!hidden){RejectTracking(15);published.reset();return;}pose->posed=*hidden;
+            if(!hidden){RejectTracking(15);published.store({},std::memory_order_release);return;}pose->posed=*hidden;
         }
         pose->magazine=std::make_shared<const MagazineTracking>(input.magazine);pose->magazineBase=std::move(magazineBase);
     }
@@ -1797,7 +1824,7 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
     if(sightAttached){pose->previewToken=preview.token;pose->previewBase=std::move(previewBase);}
     if(reloadAttached){pose->reloadPreview=input.reload.preview;pose->reloadBase=std::move(reloadBase);pose->reloadDeadlineNs=reloadDeadline;}
     for(auto leaf:rig->nativeHiddenLeaves)if(pose->posed[leaf]!=pose->before[leaf]&&
-        !(reloadAttached&&reloadVisibleShell&&leaf==*reloadVisibleShell)){++fallbackFailures;published.reset();return;}
+        !(reloadAttached&&reloadVisibleShell&&leaf==*reloadVisibleShell)){++fallbackFailures;published.store({},std::memory_order_release);return;}
     // Independently unavailable arms must remain byte-for-byte native, including
     // their fingers/twists. Also leave the weapon chain native without right grip.
     const auto unchangedBranch=[&](unsigned root){for(unsigned n=0;n<rig->parents.size();++n){
@@ -1806,7 +1833,7 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
     }return true;};
     if((!targets->tracked[0]&&!unchangedBranch(rig->left.shoulder))||
        (!targets->tracked[1]&&(!unchangedBranch(rig->right.shoulder)||!unchangedBranch(rig->weaponBone)))){
-        ++fallbackFailures;published.reset();return;
+        ++fallbackFailures;published.store({},std::memory_order_release);return;
     }
     // This attachment is observed by its native name and validated ancestry,
     // never an inherited or hard-coded bone index. The firing consumer binds its own event.
@@ -1990,12 +2017,8 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
     }
     const auto canonicalPlaced=placed;
     for(unsigned n=0;n<4;++n){placed.values[2][n]=-placed.values[2][n];placed.values[n][2]=-placed.values[n][2];}
-    std::array<std::byte,64> current{};if(!Read(at,current.data(),64)||current!=original||!Fresh(input.deadline)||!EquipmentStillCurrent(input.nativeEquipment)||!AuthoredCurrent(authored.binding)||!SupportCurrent(measuredSupport)){if(authored.binding)++authoredGripExpired;RejectTracking(16);return;}
-    // Only the verified weapon getter's caller-owned output is replaced. Bone
-    // animation buffers remain untouched; native root/effect consumers run once.
-    if(targets->tracked[1]){for(unsigned row=0;row<4;++row)std::memcpy(reinterpret_cast<std::byte*>(destination)+row*16,placed.values[row].data(),12);++weaponOutputs;}
 #ifdef FVR_BC2_CONTEXTUAL_TOOLS
-    toolAttachmentPublication.store({},std::memory_order_release);
+    std::shared_ptr<const ToolAttachmentPublication> preparedToolAttachment;
     // Observe only the generic settled attachment and the actually solved wrist.
     // This is neither a native action permission nor a synthetic muzzle frame.
     if(targets->tracked[1]&&!targets->weaponAttachmentPending&&!input.freeRight&&
@@ -2013,15 +2036,16 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
             const ShotGuard identity{input.soldier,input.weak,input.weapon,input.ownerGeneration,input.input.spaceGeneration,
                 input.input.generation,input.deadline,true,targets->tracked[0],0,input.weaponActionsBlocked,
                 input.equipmentGeneration,input.nativeEquipment};
-            toolAttachmentPublication.store(std::make_shared<const ToolAttachmentPublication>(
-                ToolAttachmentPublication{attachment,identity,authored.binding,measuredSupport}),std::memory_order_release);
+            preparedToolAttachment=std::make_shared<const ToolAttachmentPublication>(
+                ToolAttachmentPublication{attachment,identity,authored.binding,measuredSupport});
         }
     }
 #endif
+    std::shared_ptr<const ShotPublication> preparedShot;
     if(pose->shot){
         const ShotGuard identity{input.soldier,input.weak,input.weapon,input.ownerGeneration,input.input.spaceGeneration,input.input.generation,input.deadline,true,targets->tracked[0],0,input.weaponActionsBlocked,input.equipmentGeneration,input.nativeEquipment};
-        shotPublication.store(std::make_shared<const ShotPublication>(ShotPublication{*pose->shot,identity,authored.binding,measuredSupport}),std::memory_order_release);
-    }else shotPublication.store({},std::memory_order_release);
+        preparedShot=std::make_shared<const ShotPublication>(ShotPublication{*pose->shot,identity,authored.binding,measuredSupport});
+    }
     if(const auto requested=visibilityGuard.load(std::memory_order_acquire);requested&&requested->enabled&&
         requested->input.sequence==input.input.generation&&requested->nativeOwner.soldier==input.soldier&&requested->nativeOwner.weak==input.weak&&
         requested->nativeOwner.weapon==input.weapon&&requested->nativeOwner.actorGeneration==input.ownerGeneration&&
@@ -2045,7 +2069,13 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
             pose->belt=std::make_shared<const BeltAmmoPalette>(std::move(*belt));++beltPlans;
         }
     }
-    if(pose->freeRight&&(!pose->visibility||!pose->visibility->hidden)){RejectTracking(15);published.reset();return;}
+    if(pose->freeRight&&(!pose->visibility||!pose->visibility->hidden)){
+        RejectTracking(15);published.store({},std::memory_order_release);shotPublication.store({},std::memory_order_release);
+#ifdef FVR_BC2_CONTEXTUAL_TOOLS
+        toolAttachmentPublication.store({},std::memory_order_release);
+#endif
+        return;
+    }
     if(const auto request=ordinaryEquipmentGuard.load(std::memory_order_acquire);request&&
         OrdinaryGuardCurrent(*request)&&request->input.sequence==input.input.generation&&
         request->equipment==input.nativeEquipment&&request->input.owner.equipGeneration==input.equipmentGeneration&&
@@ -2058,7 +2088,63 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
             part.finalKnown=true;part.finalSkin=PumpVisualBits(pose->posed[part.index].data());}
         pose->pumpVisual=std::make_shared<const PumpVisualSource>(pv);}
 #endif
-    published=std::move(pose);
+    // All fallible preparation is complete. PublishTracking deliberately updates
+    // shotGuard even while this pose mutex is held, including for calibrated
+    // weapons with no optional authored binding. Recheck that guard at the final
+    // boundary, not only those optional bindings, before changing ANY output.
+    const RigPaletteCopyState commitState{{input.soldier,input.weak,input.weapon,
+        input.ownerGeneration,input.equipmentGeneration,input.input.spaceGeneration},
+        input.input.generation,input.deadline,true};
+    const auto observeCommit=[&](){
+        RigPaletteCopyObservation observation{};
+        const auto current=shotGuard.load(std::memory_order_acquire);
+        if(current){
+            const bool modes=current->equipment==input.nativeEquipment&&
+                current->leftTracked==input.input.hands[0].gripTracked&&
+                current->weaponActionsBlocked==input.weaponActionsBlocked;
+            observation.state={{current->soldier,current->weak,current->weapon,current->owner,
+                current->equipmentGeneration,current->space},current->generation,current->deadline,
+                current->valid&&modes};
+        }
+        LARGE_INTEGER now{};if(QueryPerformanceCounter(&now))observation.now=now.QuadPart;
+        return observation;
+    };
+    const bool committed=TryCommitRigPublication(commitState,observeCommit,[&](){
+        // Identity-only reread is bounded; the actual pack boundary separately
+        // rechecks the full source bytes before each copy. Never retain or write
+        // this caller-owned destination after the verified getter returns.
+        const auto currentRig=ReadFirstPersonRigIdentity(memory,input.soldier,input.weak);
+        std::array<std::byte,64> current{};
+        if(!currentRig||*currentRig!=rig->identity||!Read(at,current.data(),64)||current!=original||
+           !EquipmentStillCurrent(input.nativeEquipment)||!AuthoredCurrent(authored.binding)||
+           !SupportCurrent(measuredSupport))return false;
+        if(pose->freeRight&&!FreeRightCurrent(*pose->freeRight))return false;
+        if(pose->visibility){const auto requested=visibilityGuard.load(std::memory_order_acquire);
+            if(!requested||!WeaponVisibilityCurrent(*pose->visibility,*requested,ReloadNanos()))return false;
+        }
+        return true;
+    },[&]()noexcept {
+        // Only the verified getter's caller-owned output changes; native bone
+        // buffers stay untouched. All pointers here were allocated above.
+        if(targets->tracked[1]){
+            for(unsigned row=0;row<4;++row)
+                std::memcpy(reinterpret_cast<std::byte*>(destination)+row*16,placed.values[row].data(),12);
+            ++weaponOutputs;
+        }
+        published.store(std::move(pose),std::memory_order_release);
+        shotPublication.store(std::move(preparedShot),std::memory_order_release);
+#ifdef FVR_BC2_CONTEXTUAL_TOOLS
+        toolAttachmentPublication.store(std::move(preparedToolAttachment),std::memory_order_release);
+#endif
+    });
+    if(!committed){
+        if(authored.binding)++authoredGripExpired;
+        RejectTracking(16);published.store({},std::memory_order_release);shotPublication.store({},std::memory_order_release);
+#ifdef FVR_BC2_CONTEXTUAL_TOOLS
+        toolAttachmentPublication.store({},std::memory_order_release);
+#endif
+        return;
+    }
     if(reloadVisibleShell)++reloadOwnedShellVisibilityPoses;
     const auto now=GetTickCount64();if(now-handRecordTime>=100){auto& record=handRecords[handRecordNext];handRecordNext=(handRecordNext+1)%unsigned(handRecords.size());handRecordCount=(std::min)(handRecordCount+1,unsigned(handRecords.size()));record={};record.attachmentPending=targets->weaponAttachmentPending;record.authoredGrip=targets->weaponAttachmentAuthored;record.supportAttached=supportAttached;record.sightAttached=sightAttached;record.nativeRight=native[rig->right.wrist];record.nativeLeft=native[rig->left.wrist];record.generation=input.input.generation;record.space=input.input.spaceGeneration;record.eyeBase=*body;
         for(unsigned side=0;side<2;++side)if(input.input.hands[side].gripTracked)if(const auto local=math::MakeRelativePose(input.input.referenceHead,input.input.hands[side].grip))record.localGrips[side]=local->position;
@@ -2132,6 +2218,30 @@ BodyHolsterPackCounters ReadBodyHolsterPackCounters()noexcept {
 }
 bool Stop()noexcept {enabled.store(false,std::memory_order_release);pumpGuard.store({},std::memory_order_release);PublishOrdinaryEquipment({});freeRightGuard.store({},std::memory_order_release);visibilityGuard.store({},std::memory_order_release);visibilityReceipt.store({},std::memory_order_release);bool okay=true;for(auto entry:hooks)if(entry){auto r=MH_DisableHook(entry);okay&=r==MH_OK||r==MH_ERROR_DISABLED;}const auto until=GetTickCount64()+2000;while(inFlight.load()&&GetTickCount64()<until)Sleep(1);return okay&&!inFlight.load();}
 void PublishM95ShotCapturePhase(unsigned phase)noexcept {if(phase<=5)m95ShotCapturePhase.store(phase,std::memory_order_release);}
+void ReportLiveCounters(std::ostream& out){
+    // Runs on the existing session-telemetry cadence. Read no mutable rig,
+    // Tracking, pose, native memory or evidence arrays while callbacks run.
+    out<<R"({"schema":"bc2vr.rig-live-counters.v1","snapshot":"independent_atomic_scalars")";
+    out<<",\"tracked_poses\":"<<trackedPoses.load(std::memory_order_relaxed);
+    out<<",\"weapon_outputs\":"<<weaponOutputs.load(std::memory_order_relaxed);
+    out<<",\"pose_misses\":"<<poseMisses.load(std::memory_order_relaxed);
+    out<<",\"copies\":"<<copies.load(std::memory_order_relaxed);
+    out<<",\"changed_copies\":"<<changedCopies.load(std::memory_order_relaxed);
+    out<<",\"paired_copies\":"<<pairedCopies.load(std::memory_order_relaxed);
+    out<<",\"owners\":"<<owners.load(std::memory_order_relaxed);
+    out<<",\"source_changes\":"<<sourceChanges.load(std::memory_order_relaxed);
+    out<<",\"packing_failures\":"<<packingFailures.load(std::memory_order_relaxed);
+    out<<",\"fallback_failures\":"<<fallbackFailures.load(std::memory_order_relaxed);
+    out<<",\"copy_boundary_rejected\":"<<copyBoundaryRejected.load(std::memory_order_relaxed);
+    out<<",\"tracking_rejected\":"<<trackingRejected.load(std::memory_order_relaxed);
+    out<<",\"tracking_unavailable\":"<<trackingUnavailable.load(std::memory_order_relaxed);
+    out<<",\"partial_poses\":"<<partialPoses.load(std::memory_order_relaxed);
+    out<<",\"tracking_rejection_reasons\":{";
+    for(unsigned n=0;n<rejectionCounts.size();++n){
+        if(n)out<<',';out<<'"'<<rejectionNames[n]<<"\":"<<rejectionCounts[n].load(std::memory_order_relaxed);
+    }
+    out<<"}}";
+}
 void Report(std::ostream& out){out<<std::setprecision(9);out<<'{';out<<"\"copy_boundary_rejected\":"<<copyBoundaryRejected.load()<<',';weaponCapture.Report(out);out<<',';pumpPartCapture.Report(out);out<<',';m95ShotPartCapture.Report(out);out<<",\"free_right_poses\":"<<freeRightPoses<<",\"free_right_fallbacks\":"<<freeRightFallbacks<<",\"free_right_packed_copies\":"<<freeRightPackedCopies<<",\"free_right_paired_copies\":"<<freeRightPairedCopies;
     out<<",\"bolt_presentation\":{\"contacts\":"<<boltContacts.load()<<",\"poses\":"<<boltPoses.load()
        <<",\"custody_reach_rejects\":"<<boltCustodyReachRejects.load()

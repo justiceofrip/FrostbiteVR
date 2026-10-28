@@ -15,15 +15,89 @@ function Resolve-Bc2Tool([string]$Override,[string[]]$Names,[string]$Label) {
     foreach($name in $Names){$cmd=Get-Command $name -CommandType Application -ErrorAction SilentlyContinue|Select-Object -First 1;if($cmd -and $cmd.Source -notmatch '[\\/]WindowsApps[\\/]'){return $cmd.Source}}
     throw "$Label is required for first-time local asset preparation. Install it on your data drive and add it to PATH (or set FVR_PYTHON/FVR_FFMPEG)."
 }
-function Get-Bc2ProcessIdentity($Process) {
-    $null=$Process.Handle
-    return @{pid=$Process.Id;start_utc=$Process.StartTime.ToUniversalTime().ToString('o');path=$Process.Path}
+function Initialize-Bc2ProcessIdentityNative {
+    if('Bc2Vr.ProcessImageIdentity' -as [type]){return}
+    Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+using System.Text;
+namespace Bc2Vr {
+    public static class ProcessImageIdentity {
+        [DllImport("kernel32.dll", SetLastError=true)]
+        static extern uint GetProcessId(IntPtr process);
+        [DllImport("kernel32.dll", SetLastError=true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        static extern bool GetProcessTimes(IntPtr process, out long creation, out long exit, out long kernel, out long user);
+        [DllImport("kernel32.dll", SetLastError=true)]
+        static extern uint WaitForSingleObject(IntPtr handle, uint milliseconds);
+        [DllImport("kernel32.dll", EntryPoint="QueryFullProcessImageNameW", CharSet=CharSet.Unicode, ExactSpelling=true, SetLastError=true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        static extern bool QueryFullProcessImageName(IntPtr process, uint flags, StringBuilder path, ref uint length);
+        static void RequireLive(IntPtr handle) {
+            uint state=WaitForSingleObject(handle,0);
+            if(state==0xffffffff)throw new Win32Exception(Marshal.GetLastWin32Error(),"Cannot check retained process lifetime");
+            if(state!=258)throw new InvalidOperationException("Retained process is no longer live");
+        }
+        public static string Resolve(IntPtr handle, uint expectedPid, long expectedCreation, string reportedPath, bool requireLive) {
+            if(handle==IntPtr.Zero || handle==new IntPtr(-1))throw new InvalidOperationException("Retained process handle is unavailable");
+            uint actualPid=GetProcessId(handle);
+            if(actualPid==0)throw new Win32Exception(Marshal.GetLastWin32Error(),"Cannot identify retained process handle");
+            if(expectedPid==0 || actualPid!=expectedPid)throw new InvalidOperationException("Retained process PID differs");
+            long creation,exit,kernel,user;
+            if(!GetProcessTimes(handle,out creation,out exit,out kernel,out user))
+                throw new Win32Exception(Marshal.GetLastWin32Error(),"Cannot read retained process creation time");
+            if(creation!=expectedCreation)throw new InvalidOperationException("Retained process creation time differs");
+            if(requireLive)RequireLive(handle);
+            string path=reportedPath;
+            if(String.IsNullOrEmpty(path)) {
+                var buffer=new StringBuilder(32768);uint length=32768;
+                if(!QueryFullProcessImageName(handle,0,buffer,ref length)) {
+                    int error=Marshal.GetLastWin32Error();
+                    // An exited helper can lose its queryable image path even
+                    // while its retained handle still proves PID and birth.
+                    // This is diagnostic identity only, never action authority.
+                    if(!requireLive && WaitForSingleObject(handle,0)==0)return null;
+                    throw new Win32Exception(error,"Cannot query retained process image path");
+                }
+                if(length==0 || length>=32768)throw new InvalidOperationException("Retained process image path is empty or truncated");
+                path=buffer.ToString();
+            }
+            if(String.IsNullOrWhiteSpace(path) || !System.IO.Path.IsPathFullyQualified(path))
+                throw new InvalidOperationException("Retained process image path is unavailable or invalid");
+            if(requireLive)RequireLive(handle);
+            return path;
+        }
+    }
+}
+'@
+}
+function Get-Bc2ProcessIdentity($Process,[bool]$RequireLive=$false) {
+    # Acquire the real retained handle before reading metadata. A missing Path
+    # can occur when a 64-bit launcher observes a 32-bit game; never substitute
+    # the configured executable or a guessed path for the actual process image.
+    $handle=[IntPtr]$Process.Handle;$id=[uint32]$Process.Id
+    $start=$Process.StartTime.ToUniversalTime();$path=$Process.Path
+    Initialize-Bc2ProcessIdentityNative
+    # Recording a just-exited helper must preserve its identity/exit result.
+    # Only a proven exited helper may record a missing path. Action lookup opts
+    # into liveness and always requires the actual nonempty image path.
+    $resolved=[Bc2Vr.ProcessImageIdentity]::Resolve($handle,$id,$start.ToFileTimeUtc(),$path,$RequireLive)
+    return @{pid=$id;start_utc=$start.ToString('o');path=$resolved}
 }
 function Find-Bc2OwnedProcess($Identity) {
     if(-not $Identity){return $null}
-    $p=Get-Process -Id $Identity.pid -ErrorAction SilentlyContinue
-    if(-not $p){return $null}
-    try {if($p.StartTime.ToUniversalTime() -ne [DateTimeOffset]::Parse($Identity.start_utc).UtcDateTime -or $p.Path -ne $Identity.path){return $null};$null=$p.Handle;return $p}catch{return $null}
+    $p=$null;$matched=$false
+    try {
+        if($Identity.path -isnot [string] -or [string]::IsNullOrWhiteSpace($Identity.path) -or -not [IO.Path]::IsPathFullyQualified($Identity.path)){return $null}
+        $p=Get-Process -Id $Identity.pid -ErrorAction SilentlyContinue
+        if(-not $p){return $null}
+        $observed=Get-Bc2ProcessIdentity $p -RequireLive $true
+        if($observed.pid -ne $Identity.pid -or [DateTimeOffset]::Parse($observed.start_utc).UtcDateTime -ne [DateTimeOffset]::Parse($Identity.start_utc).UtcDateTime -or
+            -not [string]::Equals($observed.path,$Identity.path,[StringComparison]::OrdinalIgnoreCase)){return $null}
+        $matched=$true;return $p
+    }catch{return $null}
+    finally {if(-not $matched -and $p -is [Diagnostics.Process]){$p.Dispose()}}
 }
 function ConvertTo-Bc2CommandArgument([string]$Value) {
     if($Value.Contains([char]0)){throw 'NUL in process argument.'}
@@ -50,7 +124,8 @@ function Get-Bc2ExistingGame([string]$Exe,[bool]$Fresh) {
     if($games.Count -gt 1){throw 'Multiple BC2 games are running; no process was selected.'}
     if(-not $games.Count){return $null}
     $game=$games[0]
-    if($game.Path -ne $Exe){throw 'Another BC2 installation is running.'}
+    $identity=Get-Bc2ProcessIdentity $game -RequireLive $true
+    if(-not [string]::Equals($identity.path,$Exe,[StringComparison]::OrdinalIgnoreCase)){throw 'Another BC2 installation is running.'}
     if(-not $Fresh){throw 'BC2 is still open. Enable Restart BC2 before launch, or close BC2 normally and launch again. A fresh game is required for VR and its audio settings; reinstalling BC2VR is unnecessary.'}
     return $game
 }

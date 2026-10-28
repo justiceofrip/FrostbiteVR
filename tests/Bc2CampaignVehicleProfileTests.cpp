@@ -137,6 +137,61 @@ int FixedGunnerUsesExistingPlanAndPermissions(){
     controls.active=false;command=CampaignVehicleCommand(m.seat.identity,controls);CHECK(BuildVehicleInputPlan(s->profile,{m.seat.identity,m.seat.fingerprint,true,true},command,cache).status==VehicleInputPlanStatus::Inactive);
     return 0;
 }
+int CrossRoleControllerAndOwnerTransitions(){
+    // Exercise the same real reader -> controller policy -> byte plan -> scoped
+    // commit for ground driver, mounted gunner and combined seats. This is a
+    // synthetic ownership graph, not eleven named campaign vehicle passes.
+    for(unsigned role=0;role<3;++role)for(unsigned transition=0;transition<6;++transition){
+        Memory m(role!=1,role!=0);const auto snapshot=ReadCampaignVehicleProfile(m.Access(),m.binding,m.seat);CHECK(snapshot);
+        interaction::VehicleControllerActions policy;interaction::InputFrame f;
+        f.generation=1;f.spaceGeneration=1;f.predictedNs=1000000000;f.focused=f.headValid=true;
+        for(auto& h:f.hands){h.gripTracked=h.aimTracked=true;h.active=interaction::Stick|interaction::Trigger|interaction::Primary;}
+        interaction::VehicleControlOwner owner{{m.seat.identity.actor,m.seat.identity.actorGeneration,m.seat.identity.controlled,m.seat.identity.entry},1};
+        policy.Update(f,owner,true,true); // Original neutral sample arms both hands.
+        ++f.generation;f.hands[0].stickY=.8f;f.hands[1].stickX=.7f;f.hands[1].trigger=.9f;
+        const auto moving=policy.Update(f,owner,true,true);CHECK(moving.active);
+        std::array<std::byte,InputBytes> cache{};const unsigned allowed=0x771;std::memcpy(cache.data()+0x98,&allowed,4);
+        auto makePlan=[&](const auto& controls){return BuildVehicleInputPlan(snapshot->profile,{m.seat.identity,m.seat.fingerprint,true,true},CampaignVehicleCommand(m.seat.identity,controls),cache);};
+        const auto plan=makePlan(moving);CHECK(plan.status==VehicleInputPlanStatus::Ready);
+        {const auto before=cache;VehicleInputOverride edit;CHECK(edit.Apply(cache,plan));CHECK(edit.Restore()&&cache==before);}
+        // Menu/deadline loss, death/new actor, seat handoff, recenter and losing
+        // both controllers must all reject an inherited held fire/move input.
+        ++f.generation;
+        if(transition==0)f.focused=false;
+        if(transition==2)++owner.seat.generation;
+        if(transition==3)++owner.seat.seat;
+        if(transition==4){++owner.space;f.spaceGeneration=owner.space;}
+        if(transition==5)for(auto& h:f.hands)h.gripTracked=false;
+        const auto lost=policy.Update(f,owner,true,transition!=1);
+        CHECK(!lost.active&&lost.axes.fire==0&&lost.axes.throttle==0);
+        CHECK(makePlan(lost).status==VehicleInputPlanStatus::Inactive);
+        f.focused=true;for(auto& h:f.hands)h.gripTracked=true;
+        ++f.generation;const auto held=policy.Update(f,owner,true,true);CHECK(!held.active&&held.axes.fire==0);
+        ++f.generation;for(auto& h:f.hands){h.stickX=h.stickY=h.trigger=0;h.held=0;}
+        const auto neutral=policy.Update(f,owner,true,true);CHECK(neutral.armedLeft&&neutral.armedRight);
+        ++f.generation;f.hands[0].stickY=.8f;f.hands[1].stickX=.7f;f.hands[1].trigger=.9f;
+        CHECK(makePlan(policy.Update(f,owner,true,true)).status==VehicleInputPlanStatus::Ready);
+        // No native float permission can be re-enabled by any role's command.
+        const unsigned blocked=0;std::memcpy(cache.data()+0x98,&blocked,4);
+        const auto restricted=makePlan(moving);CHECK(restricted.status==VehicleInputPlanStatus::Ready);
+        for(unsigned n=0;n<restricted.count;++n)CHECK(restricted.edits[n].offset==0x98);
+    }
+    return 0;
+}
+int UnsupportedCampaignSeamsStayExplicit(){
+    // UAV authored mappings do not establish ground physics or paired joints.
+    Memory uav(true,false);
+    uav.seat.count=0;
+    for(auto r:{VehicleRoute{0,15},VehicleRoute{1,0},VehicleRoute{2,26},VehicleRoute{4,8},VehicleRoute{5,7},VehicleRoute{6,6},VehicleRoute{8,9},VehicleRoute{12,10},VehicleRoute{16,36}})
+        uav.seat.routes[uav.seat.count++]=r;
+    uav.Map();CHECK(!ReadCampaignVehicleProfile(uav.Access(),uav.binding,uav.seat));
+    // AltFire is boolean action12, not camera-pitch float9 or primary fire8.
+    Memory alternate(false,true);alternate.Put(alternate.primary+0x4c,12);
+    CHECK(!ReadCampaignVehicleProfile(alternate.Access(),alternate.binding,alternate.seat));
+    Memory passenger(false,true);passenger.types[passenger.nodes[1]]="ClientSoldierEntryComponent";
+    CHECK(!ReadCampaignVehicleProfile(passenger.Access(),passenger.binding,passenger.seat));
+    return 0;
+}
 int ActualNativeCameraSelection(){
     Memory m;const auto entry=m.nodes[1],oldRows=m.Word(entry+0x19c),rows=m.Alloc(24);
     // Old +d8 selects zero. The actual native state selects one. Row zero is
@@ -178,4 +233,4 @@ int ExactCodeBinding(){
     m.bytes[m.binding.image+0x3c77c0]^=std::byte{1};CHECK(!VerifyCampaignVehicleCode(m.Access(),m.binding.image).verified);return 0;
 }
 }
-int main(){if(SharedConsumerRoles()||CurrentConsumerRejections()||CachedJoinsCannotGrantNewAuthority()||FixedGunnerUsesExistingPlanAndPermissions()||ActualNativeCameraSelection()||ExactCodeBinding())return 1;std::cout<<"6 campaign vehicle groups passed (synthetic layouts, active native camera ownership included)\n";}
+int main(){if(SharedConsumerRoles()||CurrentConsumerRejections()||CachedJoinsCannotGrantNewAuthority()||FixedGunnerUsesExistingPlanAndPermissions()||CrossRoleControllerAndOwnerTransitions()||UnsupportedCampaignSeamsStayExplicit()||ActualNativeCameraSelection()||ExactCodeBinding())return 1;std::cout<<"8 campaign vehicle groups passed (synthetic layouts and 18 cross-role transitions; no campaign acceptance)\n";}

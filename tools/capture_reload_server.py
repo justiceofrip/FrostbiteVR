@@ -102,7 +102,57 @@ def chain(inspect, binding):
             'weapon_data': data, 'firing_data': weapon['firing_data'], 'ammo_address': weapon['ammo_address'],
             'asset_name': weapon['asset_name'], 'asset_path': weapon['asset_path']}
 
+# Only metadata already returned by the two original chain reads is retained.
+# No object bytes, extra native reads, retries or replacement samples are added.
+_CHAIN_INTS = ('player_id', 'server_manager', 'server_player_array', 'server_player_capacity',
+    'server_player', 'server_soldier', 'server_inventory', 'server_items_begin',
+    'server_items_end', 'selected_slot', 'server_item', 'server_effects', 'server_firing',
+    'weapon_data', 'firing_data', 'ammo_address')
+_CLIENT_INTS = ('actor', 'player', 'weak', 'flags', 'inventory', 'selected_slot', 'selected_weapon')
+
+
+def _bounded_chain_identity(identity):
+    def integers(source, keys):
+        return {key: source[key] for key in keys
+                if type(source.get(key)) is int and 0 <= source[key] <= 0xffffffff}
+    def items(value):
+        return value[:] if isinstance(value, list) and len(value) <= 64 and all(
+            type(v) is int and 0 <= v <= 0xffffffff for v in value) else None
+    out=integers(identity, _CHAIN_INTS)
+    client=identity.get('client_owner', {})
+    out['client_owner']=integers(client, _CLIENT_INTS)
+    for source, key, target in ((client, 'items', out['client_owner']), (identity, 'server_items', out)):
+        value=items(source.get(key))
+        if value is not None:target[key]=value
+    for key in ('asset_name', 'asset_path'):
+        value=identity.get(key)
+        if isinstance(value,str) and len(value)<=192:out[key]=value
+    return out
+
+
+class IdentityReadMismatch(ValueError):
+    def __init__(self, message, before, after, stage, started_ns, finished_ns):
+        super().__init__(message)
+        left,right=_bounded_chain_identity(before),_bounded_chain_identity(after)
+        changed=[]
+        for key in _CHAIN_INTS+('server_items','asset_name','asset_path'):
+            if before.get(key)!=after.get(key):changed.append(key)
+        for key in _CLIENT_INTS+('items',):
+            if before.get('client_owner',{}).get(key)!=after.get('client_owner',{}).get(key):
+                changed.append('client_owner.'+key)
+        self.identity_read_failure=dict(schema='fvr.bc2.identity_read_failure.v1',
+            stage=stage, observations_started_ns=started_ns, observations_finished_ns=finished_ns,
+            before=left, after=right, changed_fields=changed, identity_coherent=False,
+            atomic_native_snapshot=False, replacement_sample=False, extra_native_reads=0)
+
+
+def require_same_identity(before, after, stage, message, started_ns, finished_ns):
+    if before != after:
+        raise IdentityReadMismatch(message,before,after,stage,started_ns,finished_ns)
+
+
 def capture(inspect, binding):
+    started_ns = time.perf_counter_ns()
     before = chain(inspect, binding)
     raw = inspect.p.read(before['server_firing'], 0xb0)
     current, previous, following = struct.unpack_from('<III', raw, 0x3c)
@@ -110,7 +160,8 @@ def capture(inspect, binding):
     loaded, reserve = struct.unpack_from('<ii', raw, 0x7c)
     require(max(current, previous, following) <= 15 and math.isfinite(timer) and abs(timer) <= 1000000 and all(-1 <= v <= 1000000 for v in (loaded, reserve)), 'server state malformed')
     after = chain(inspect, binding)
-    require(before == after, 'server/client ownership changed during read')
+    require_same_identity(before, after, 'server_state_read',
+        'server/client ownership changed during read', started_ns, time.perf_counter_ns())
     return {**before, 'state': {'current': current, 'previous': previous, 'next': following, 'timer': timer,
                               'loaded': loaded, 'reserve': reserve, 'raw_hex': raw.hex()},
             'identity_coherent': True, 'atomic_native_snapshot': False, 'authority_proven': False}
@@ -134,7 +185,10 @@ def main():
         deadline = time.perf_counter()+args.seconds
         while True:
             try:report['samples'].append({'monotonic_ns': time.perf_counter_ns(), **capture(inspect, binding)})
-            except (OSError, ValueError, KeyError) as exc:report['rejected'].append(str(exc))
+            except (OSError, ValueError, KeyError) as exc:
+                report['rejected'].append(str(exc))
+                if isinstance(exc,IdentityReadMismatch) and 'identity_read_failure' not in report:
+                    report['identity_read_failure']=exc.identity_read_failure
             if time.perf_counter() >= deadline:break
             time.sleep(min(args.interval_ms/1000, max(0, deadline-time.perf_counter())))
     except (OSError, ValueError, KeyError, RuntimeError) as exc:report['rejected'].append(str(exc))

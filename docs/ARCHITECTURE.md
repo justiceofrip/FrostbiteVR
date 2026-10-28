@@ -1,5 +1,226 @@
 # Engine boundaries
 
+## Bolt custody during rendered-pose gaps — candidate 436 R56
+
+An already-owned bolt interaction retains its exact root attachment using the
+current tracked wrists before the generic hand-expiry pass. During a missing
+rendered-pose publication, that attachment and fresh controller geometry can
+provide mechanism contact. The old rendered contact remains invalid, with its
+original sequence and deadline unchanged. Current-contact telemetry names its
+own input and exact root claim separately.
+
+The player must retain the same native owner, item, reference space and wrist
+mapping. A present rendered frame must also match the soldier and weak identity.
+Acquisition and ownership transfer still require fresh rendered evidence; real
+tracking, ownership or deadline loss cancels normally. No waiting period or
+stationary controller can complete a stroke, and the native Ready result remains
+necessary. This rule is shared by the bolt adapter, not a per-rifle timing patch.
+Actual integration and validation limits are recorded in CURRENT.
+
+## Shared equipment continuity and edge projection — candidate 436 R55
+
+Magazine transfer admission, its final deadline check and entry into the verified
+native operation form one serialized operation. An expired request that never
+entered remains a definitive rejection; an entered operation keeps its actual
+completion evidence. A verified replacement actor may retire old local resource
+debt only after the old callbacks are excluded and drained, without granting
+ammunition credit. These rules are shared by configured magazine weapons.
+
+A fresh tracked packet can renew the same continuous root GunHold before expiry
+processing only when its observed time overlaps the old original deadline and
+its owner/token still match. This handles processing latency without extending
+an old packet, reviving an expired claim or transferring another hand's ownership.
+
+Destruction edge geometry uses an additional native derived-projection caller.
+An exact signature, call-target relationship and loaded-code check enroll it in
+the existing left-eye projection retarget. Native depth terms remain unchanged,
+and each temporary override uses the existing exact restoration path. No second
+simulation step or geometry/culling rewrite is introduced. The matched damaged
+house comparison and remaining visual coverage limits are recorded in CURRENT.
+
+Emulated ammunition audits distinguish authoritative server count changes from
+native client prediction Restore callbacks. A client rollback is accepted only
+with its captured immutable snapshot, exact bounded predecessor/replay, matching
+server shot and stable convergence. It cannot license an empty-gun refill or
+reserve credit. Mechanical native evidence and headset presentation remain
+separate qualifications.
+
+## Explicit world presentation admission — candidate 436 R48
+
+An inactive menu raster does not prove that a native world is available. The
+OpenXR host with a menu channel now admits world requests and retained world
+images only under a valid, unexpired native Gameplay declaration. Unknown,
+Menu, Passive and expired observations use the existing suspension and pending
+copy cancellation paths. A contended read can retain only the original state's
+deadline; it cannot extend availability. Input publication, feedback and real
+GPU retirement continue while presentation is suspended. Providers without a
+menu channel keep their existing route. This policy does not require hands or
+interactive UI readiness, so an explicit Gameplay state can render cutscenes.
+It does not establish native world readiness beyond that declaration. Current
+build and actual-game evidence, including remaining timeouts, live in CURRENT.
+
+## Verified world changes in the source pipeline — candidate 436 R47
+
+A checkpoint's native world/request replacement is an explicit lifetime
+transition. After native graph retirement and verified new-view initialization,
+the update owner publishes an immutable old/new owner request and stops camera
+admission. Only the original graphics thread services it. It waits for local
+and wire source ownership to retire normally; unclaimed host request metadata
+may remain with its original tracking and deadline. It neither closes/reconnects
+IPC nor clears a fault. Controller input remains independent and available.
+
+On success, the staged owner changes with presentation requirements and request
+generations preserved. Native frame serial history resets because a new world
+can restart its counter or reuse an older address pair. The bridge retires only
+fully drained source sets and recreates them lazily with fresh resource epochs,
+retaining capture textures and the connection. A never-admitted empty pipeline
+has no resources or requirements to rebind. Unexpected owner/device/size changes
+still fail. Shutdown native graph retirement remains possible even if transport
+transition fails. Implementation and validation status are separate in CURRENT.
+
+## Ordinary shoulder-draw acknowledgement — candidate 436 R45
+
+An accepted weapon-selection intent and a hand pose have different lifetimes.
+The queued ordinary selector must still satisfy its original contact/input
+deadline before the native edge is staged. Only an actual committed input cache
+marks that exact command as issued. Its later acknowledgement uses the portable
+inventory policy's original request deadline (currently 1.5 seconds), never a
+renewed pose lease. The policy exposes that deadline read-only; the adapter does
+not invent a separate timeout.
+
+BC2's successful weapon selection advances the native input epoch and briefly
+rearms ControllerActions. During that inactive interval the adapter may retain
+only the already-issued draw for the exact expected target, next native epoch,
+same actor/reference/container and complete carried-item identity. Physical hand
+epochs are checked independently of native equipment epochs. Fresh coherent
+native observations update metadata owner and observation time together; they
+cannot make the old source owner's resource binding fresh. Movement/turn stick
+values do not cancel the pending intent, but the inactive semantic output grants
+no native action, pose, hand claim or acknowledgement.
+
+The next active sample must still prove fresh target presentation before the
+existing policy can acknowledge the request. Completion records the actual drawn
+slot so releasing the original draw grip does not immediately stow it. Wrong
+targets, replacements, menu/focus/tracking loss, conflicting actions, stale
+presentation and the original transaction timeout retain their cancellation
+behavior. The offline composition covers both shoulders, independent epoch
+counters, moving/turning and delayed confirmation. Native acceptance is tracked
+separately in CURRENT.md.
+
+## Native hidden weapon leaves — candidate 436 R44
+
+BC2 can hide a detached weapon leaf by collapsing its transform to a finite
+1e-4 diagonal. Rejecting that whole skeleton stops otherwise valid tracked hand
+publication. The BC2 adapter accepts the exact matching collapse across all three
+observed palettes only for a non-root jntWpn_ leaf directly under the weapon root,
+outside the arm branches, with no descendants and a valid inverse bind. It
+preserves the original native bytes. This is not permission to move or unhide
+that attachment, nor a generic exception for arbitrary degenerate matrices.
+
+## Shared weapon and hand publication — candidate 436 R40
+
+The first-person getter prepares the complete private pose, optional visibility,
+ammo presentation, shot frame and tool attachment before replacing any native
+getter output. Its final commit checks the independent latest tracking guard
+before and after native identity/output checks. Actor, equipment and reference
+space must still match; a newer packet may confirm ownership but cannot renew
+the prepared pose's original deadline. Generic bindings take the same gate as
+authored bindings. The no-throw commit contains no allocation or fallible native
+read. A rejected preparation leaves the caller-owned getter bytes unchanged and
+clears its unpublished private outputs.
+
+This is presentation coherence, not an ammunition or grip authority. Native
+animation buffers remain untouched. Each later Pack copy still verifies the
+original source bytes and current lifetime, so an invalidation after root commit
+may reject a later copy. Full-frame atomicity across separate engine callbacks
+is not claimed. Optional support-profile freshness must not be weakened merely
+to conceal a visible mismatch. R40 build/native status is recorded in CURRENT.
+
+### Immutable hand-pose handoff — candidate 436 R41
+
+Pack acquires the prepared immutable pose through an atomic shared pointer.
+It does not read mutable Tracking or try to acquire the producer's scratch
+mutex. Contention on that mutex therefore cannot revert only the hand palette
+after the root/shot commit. Shared ownership protects storage, not authority:
+the current guard, exact actor/equipment/space, original pose expiry and both
+native source-copy checks remain mandatory. Sight previews retain their own
+original expiry. No new allocation is added to Pack. Later native invalidation
+can still reject a copy; this change does not claim full-frame atomicity.
+
+### Complete input handoff — candidate 436 R43
+
+Input publication and pose scratch ownership are independent. PublishTracking
+reuses one immutable complete Tracking allocation for body/eye consumers and
+render input, publishing the independent current guard before the render
+snapshot. Invalid latest input replaces previous input too. It cannot be
+silently dropped because RetargetWeapon owns its calibration/capture scratch
+mutex. RetargetWeapon retains one complete snapshot and its original deadline;
+current owner/equipment/space/mode and native source checks still gate commit.
+The pose-only scratch lock remains nonblocking; simultaneous pose preparation
+and exact native root-to-Pack correspondence remain separate boundaries.
+
+## Explicit three-source delivery — candidate 436 R37
+
+Private v10 allocates three independent color/depth source sets while retaining
+two undelivered immutable requests, one unassigned request, one host copy and
+one unreleased camera render. The host may refill a newly vacated request entry
+after successful FIFO delivery using the current, previously unused tracking
+sample. Timeouts do not refill; deadlines and original rendered poses never
+change. Real GPU completion, exact feedback and graphics-owner retirement still
+govern physical source reuse. The v10 namespace/layout is distinct; v8/v9 defaults
+and the v9 6888-byte layout remain unchanged.
+
+Three-source allocation has an explicit 768 MiB logical cap and the same available
+adapter-budget check plus 64 MiB headroom. The two-source cap remains 512 MiB.
+At 2784x3024 and 1x depth, the additional source costs 202,051,584 logical bytes.
+Host imports expand to three identities, but local color-copy/presentation and
+depth targets remain single sets. This is private experimental source; validation
+and measured performance are tracked in CURRENT.md.
+
+## Private capture/export overlap — candidate 436 R35
+
+In the separately negotiated export-overlap mode, the bridge may release camera
+admission before the previous source's export fence completes. The exact source
+must still be Exporting, native restoration must have completed, and both color
+reads plus the desktop mirror read must have been queued on the same immediate
+context before any successor capture overwrites those inputs. Depth copies are
+already queued into per-slot resources. A read-queued marker is never a GPU
+completion, source retirement, host delivery or ACK.
+
+The v9 mapping retains its size and stores two exact released request IDs in
+formerly reserved words. The known capability requires lookahead; old endpoints
+reject it. At most one unreleased camera and two physical sources exist. A stale
+marker cannot authorize reuse, and cancelled work blocks new admission until
+normal exact retirement. Logical marker lifetime extends through physical
+retirement, including peer close. The staged owner serializes its local mark
+with the wire commit; contention leaves ordinary publication available.
+
+Default behavior remains as below. The feature is not enabled for installed
+builds; validation and measurement gaps live in CURRENT.md.
+
+## Private stereo request lookahead — candidate 436 R33
+
+The XR host may submit request metadata after current input and all known
+menu/focus/reference cancellation, independently from delivery of GPU pixels.
+The opt-in v9 capability retains two immutable undelivered request/pose records,
+with at most one unassigned queued request and two physical source sets. A
+Delivered source, a rendering successor and one metadata-only successor can
+coexist; this does not allocate a third source or grant another host copy lease.
+
+The portable policy and Windows channel preserve FIFO terminal outcomes and
+original deadlines. The provider returns the original tracking sample for the
+exact delivered ticket. Only ordinary native Update admission starts a camera
+render, and it still waits for actual predecessor publication. Source reuse
+requires real GPU completion, exact ACK and graphics-owner retirement commit.
+Cancellation precedes deferred ACK; it never revokes a consumer's physical
+ownership early. Default v8/v9 operation remains separate from this private
+capability. Validation and measurement status live in CURRENT.md.
+
+The R34 experiment refilled immediately after delivery. It did not materially
+improve cadence and produced older retained prediction timestamps, so it was
+rejected and these source files restored exactly to R33. Its bounded source,
+test and measurement evidence remain archived; it is not current behavior.
+
 ## Persistent interaction state versus temporary native overrides —244
 
 The restoration rule in AGENTS.md applies to temporary camera matrices, private

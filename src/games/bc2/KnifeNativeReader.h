@@ -109,19 +109,55 @@ inline bool Actor(const Reader& r,const ReloadServerBinding& binding,unsigned ba
 template<class T>T Word(const std::array<std::byte,0xb0>& bytes,unsigned at)noexcept {
     T out{};std::memcpy(&out,bytes.data()+at,sizeof(out));return out;
 }
+enum class BranchFailure:unsigned {None,ItemRead,StateRead,Identity,Malformed,Incoherent,Count};
+struct BranchDiagnostic {
+    BranchFailure failure=BranchFailure::None;
+    unsigned firing=0,differenceOffset=UINT32_MAX,before=0,after=0;
+    bool readyPair=false;
+};
 inline bool Branch(const Reader& r,const ReloadStateBinding& binding,unsigned base,
-    unsigned item,const ReloadObservedConfig& config,ReloadFiringObservation& out)noexcept {
-    unsigned firing=0;if(!r.Get(std::uint64_t(item)+0x10,firing))return false;
+    unsigned item,const ReloadObservedConfig& config,ReloadFiringObservation& out,
+    BranchDiagnostic* diagnostic=nullptr)noexcept {
+    if(diagnostic)*diagnostic={};
+    const auto fail=[&](BranchFailure reason){if(diagnostic)diagnostic->failure=reason;return false;};
+    unsigned firing=0;if(!r.Get(std::uint64_t(item)+0x10,firing))return fail(BranchFailure::ItemRead);
+    if(diagnostic)diagnostic->firing=firing;
     std::array<std::byte,0xb0> before{},after{};
-    if(!r.Read(firing,before.data(),before.size())||!r.Read(firing,after.data(),after.size())||before!=after||
-       Word<unsigned>(before,0)!=base+binding.firingVtableRva||Word<unsigned>(before,8)!=config.firingData||
-       Word<unsigned>(before,12)!=config.ammoAddress)return false;
+    if(!r.Read(firing,before.data(),before.size())||!r.Read(firing,after.data(),after.size()))return fail(BranchFailure::StateRead);
+    // Preserve the original default result and memory-read order. Classified
+    // failure is optional evidence, never an accepted firing observation.
+    if(before!=after){
+        if(!diagnostic)return false;
+        for(unsigned offset=0;offset<before.size();offset+=4)
+            if(Word<unsigned>(before,offset)!=Word<unsigned>(after,offset)){
+                diagnostic->differenceOffset=offset;diagnostic->before=Word<unsigned>(before,offset);
+                diagnostic->after=Word<unsigned>(after,offset);break;
+            }
+        for(const auto* bytes:{&before,&after}){
+            if(Word<unsigned>(*bytes,0)!=base+binding.firingVtableRva||Word<unsigned>(*bytes,8)!=config.firingData||
+               Word<unsigned>(*bytes,12)!=config.ammoAddress)return fail(BranchFailure::Identity);
+            const auto timer=Word<float>(*bytes,0x50);
+            if(Word<unsigned>(*bytes,0x3c)>15||Word<unsigned>(*bytes,0x40)>15||Word<unsigned>(*bytes,0x44)>15||
+               !std::isfinite(timer)||std::abs(timer)>1000000||Word<int>(*bytes,0x7c)<-1||Word<int>(*bytes,0x80)<-1||
+               Word<int>(*bytes,0x7c)>1000000||Word<int>(*bytes,0x80)>1000000)return fail(BranchFailure::Malformed);
+        }
+        const auto ready=[](const auto& bytes){
+            return Word<unsigned>(bytes,0x3c)==2&&Word<unsigned>(bytes,0x44)==2&&Word<float>(bytes,0x50)>=0&&
+                Word<int>(bytes,0x7c)==-1&&Word<int>(bytes,0x80)==-1&&!(Word<std::uint8_t>(bytes,0xa8)&8);
+        };
+        diagnostic->readyPair=ready(before)&&ready(after);
+        return fail(BranchFailure::Incoherent);
+    }
+    if(Word<unsigned>(before,0)!=base+binding.firingVtableRva||Word<unsigned>(before,8)!=config.firingData||
+       Word<unsigned>(before,12)!=config.ammoAddress)return fail(BranchFailure::Identity);
     out.address=firing;out.wrapperOffset=0x10;out.currentState=Word<unsigned>(before,0x3c);
     out.previousState=Word<unsigned>(before,0x40);out.nextState=Word<unsigned>(before,0x44);
     out.phaseTimer=Word<float>(before,0x50);out.loaded=Word<int>(before,0x7c);out.reserve=Word<int>(before,0x80);
     out.flagsA8=Word<std::uint8_t>(before,0xa8);
-    return out.currentState<=15&&out.previousState<=15&&out.nextState<=15&&std::isfinite(out.phaseTimer)&&
-        std::abs(out.phaseTimer)<=1000000&&out.loaded>=-1&&out.reserve>=-1&&out.loaded<=1000000&&out.reserve<=1000000;
+    if(out.currentState>15||out.previousState>15||out.nextState>15||!std::isfinite(out.phaseTimer)||
+       std::abs(out.phaseTimer)>1000000||out.loaded<-1||out.reserve<-1||out.loaded>1000000||out.reserve>1000000)
+        return fail(BranchFailure::Malformed);
+    return true;
 }
 inline bool SameState(const ReloadFiringObservation& a,const ReloadFiringObservation& b)noexcept {
     return a.address==b.address&&a.currentState==b.currentState&&a.previousState==b.previousState&&

@@ -36,7 +36,7 @@ try {
     }
 } finally {$env:_CL_=$previousCl}
 $hashes=[ordered]@{}
-foreach($relative in @('build/x86/BC2NativeProbe.dll','build/x86/BC2NativeTrace.exe','build/x64/BC2XrHost.exe','build/x64/runtime/openxr/win64/openxr_loader.dll')){
+foreach($relative in @('build/x86/BC2NativeProbe.dll','build/x86/BC2NativeTrace.exe','build/x86/BC2NativeResolution.exe','build/x86/BC2ResolutionBootstrap.dll','build/x64/BC2XrHost.exe','build/x64/runtime/openxr/win64/openxr_loader.dll')){
     $hashes[$relative]=(Get-FileHash -LiteralPath (Join-Path $snapshot $relative) -Algorithm SHA256).Hash.ToLowerInvariant()
 }
 $evidence=[ordered]@{schema=1;source_manifest_sha256=(Get-FileHash -LiteralPath (Join-Path $snapshot 'source-manifest.json') -Algorithm SHA256).Hash.ToLowerInvariant();test_counts=$counts;binary_sha256=$hashes}

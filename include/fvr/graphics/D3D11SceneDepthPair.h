@@ -32,9 +32,16 @@ class D3D11SceneDepthConsumer final {
 public:
     D3D11SceneDepthConsumer();~D3D11SceneDepthConsumer();
     bool Initialize(ID3D11Device*);
-    // Queue local copies BEFORE calling legacy D3D11PairConsumer::Copy. Its
-    // completion fence then covers every read from these shared resources.
-    bool CopyBeforeColor(const SceneDepthFrame&,const TextureDescriptor&,const PairTicket&);
+    // Queue local copies once BEFORE legacy D3D11PairConsumer::Copy or
+    // SubmitCopy. Copy/PollCopy success then fences every shared-depth read.
+    // Keep these local views/resources unchanged while the color copy is pending;
+    // pending or cancelled work must never receive a positive consumption ACK.
+    // Explicit source counts 1/2/3 select separate shared imports only. Every
+    // count retains the same single local quartet and exact-ticket Views gate.
+    bool CopyBeforeColor(const SceneDepthFrame&,const TextureDescriptor&,const PairTicket&,
+        unsigned sourceSlot=0,unsigned sourceSlots=1);
+    struct ImportStats {std::uint64_t sourceOpens=0,localCreates=0;};
+    ImportStats ImportStatistics()const noexcept;
     bool Views(const PairTicket&,SceneDepthViews&)const;
     void Reset();
 private:struct Impl;std::unique_ptr<Impl> impl_;

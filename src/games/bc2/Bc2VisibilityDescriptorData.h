@@ -197,12 +197,24 @@ inline constexpr std::array<VisibilityDescriptor,1> Opening426VisibilityDescript
 }};
 }
 
+#pragma once
+#include "Bc2VisibilityProfiles.h"
+#include <array>
+namespace fvr::bc2 {
+inline constexpr std::array<std::string_view,1> Type5VisibilityMeshes0{"Objects/Weapons/Handheld/Beach/Jap_Type5/Jap_Type5_Mesh"};
+inline constexpr std::array<std::string_view,8> Type5VisibilityBones0{"jntWpn_12","jntWpn_13","jntWpn_3","jntWpn_1","jntWpn_7","jntWpn_6","jntWpn_5","jntWpn_4"};
+inline constexpr std::array<VisibilityDescriptor,1> Type5VisibilityDescriptors{{
+{"Garand",Type5VisibilityMeshes0,Type5VisibilityBones0,0xa7f219a1426216abull,false,"Objects/Weapons/Handheld/Beach/Jap_Type5/Type5",false,false,true},
+}};
+}
+
 namespace fvr::bc2 {
 inline constexpr auto VisibilityDescriptors=[] {
- std::array<VisibilityDescriptor,BaselineVisibilityDescriptors.size()+ResourceVisibilityDescriptors.size()+Opening426VisibilityDescriptors.size()> out{};
+ std::array<VisibilityDescriptor,BaselineVisibilityDescriptors.size()+ResourceVisibilityDescriptors.size()+Opening426VisibilityDescriptors.size()+Type5VisibilityDescriptors.size()> out{};
  std::size_t n=0;for(const auto& p:BaselineVisibilityDescriptors)out[n++]=p;
  for(const auto& p:ResourceVisibilityDescriptors)out[n++]=p;
  for(const auto& p:Opening426VisibilityDescriptors)out[n++]=p;
+ for(const auto& p:Type5VisibilityDescriptors)out[n++]=p;
  return out;
 }();
 }

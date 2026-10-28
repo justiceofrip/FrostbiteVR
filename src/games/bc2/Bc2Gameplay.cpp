@@ -34,6 +34,7 @@
 #include "Bc2VehicleRoutes.h"
 #include "Bc2BoatProfile.h"
 #include "Bc2CampaignVehicleProfile.h"
+#include "Bc2VehicleCameraPolicy.h"
 #include "Bc2VehicleShotObserver.h"
 #include "Bc2BoatReticle.h"
 #ifdef FVR_BC2_VEHICLE_MOUNTED_PROBE
@@ -516,7 +517,9 @@ VehicleGatherRecord previousVehicleGather{};bool havePreviousVehicleGather=false
 std::mutex vehicleViewMutex;
 using VehicleViewState=interaction::VehicleCameraSample;
 VehicleViewState vehicleView{};interaction::VehicleCameraAnchor vehicleCameraAnchor;
+VehicleCameraMode vehicleCameraMode=VehicleCameraMode::Unavailable;
 bool boatHeadAim=false,boatHeadFire=false,boatAimReady=false;
+std::uint64_t boatAimSpace=0;
 BoatAimBinding boatAimBinding{};VehicleRouteSnapshot boatAimSeat{};
 interaction::VehicleHeadAim boatHeadPolicy;math::Pose boatAimReference{};
 std::atomic<unsigned> boatAimSamples=0,boatAimRejects=0,boatAimCommits=0,boatAimFireCommits=0,boatAimCameraViews=0;
@@ -533,9 +536,9 @@ bool CameraEvidenceMatrix(const RenderViewCopy& copy,math::Matrix4& matrix)noexc
     std::memcpy(&source.nearPlane,copy.bytes.data()+0x1c,4);std::memcpy(&source.farPlane,copy.bytes.data()+0x20,4);source.worldUnitsPerMeter=1;
     const auto result=engine::CanonicalCamera(source);if(!result)return false;matrix=result->camera;return true;
 }
-void PublishVehicleView(const VehicleViewState& next)noexcept {
+void PublishVehicleView(const VehicleViewState& next,VehicleCameraMode mode=VehicleCameraMode::Unavailable)noexcept {
     std::lock_guard lock(vehicleViewMutex);
-    if(interaction::PublishVehicleCameraSample(vehicleView,next))vehicleCameraAnchor.Reset();
+    if(PublishVehicleCameraMode(vehicleView,vehicleCameraMode,next,mode))vehicleCameraAnchor.Reset();
 }
 std::optional<VehicleSeatProfile> cachedVehicleProfile;
 CampaignVehicleBinding campaignVehicleBinding{};
@@ -978,15 +981,27 @@ void ObserveHandOwnership(const Owner& owner,const interaction::InputFrame& inpu
 #endif
     PrepareOrdinaryBoltBeforeHands(owner,input,cancelling);
     handPreviousLeft=handOwnership.Current(interaction::InteractionHand::Left);
-    handLifecycle=handOwnership.Update(handSample);
+    const bool nativeGunHeld=!knifeHands&&handSample.focused&&handSample.tracked[1]&&(!boltHands||
+        (physicalBoltCustody!=interaction::BoltCustodyPhase::Manipulating&&!handSample.released[1]));
+    const interaction::HandContactProof grip{{1,handEquip},handSample.sequence,handSample.deadlineNs,true};
+    const auto previousRight=handOwnership.Current(interaction::InteractionHand::Right);
+    // Renew only the exact currently equipped root hold while incorporating a
+    // newer overlapping input. Expiring first would discard continuous custody
+    // before the same call supplies this original fresh semantic contact.
+    // The custody adapter may own either hand. Its current mapped proof must
+    // reach the same atomic root continuation before the ordinary expiry pass.
+    const auto custodyLifecycle=ordinaryBoltSample&&physicalBolt&&!ordinaryBoltEarlyTick?
+        physicalBolt->UpdateGunHold(*ordinaryBoltSample,handOwnership):std::nullopt;
+    handLifecycle=custodyLifecycle?*custodyLifecycle:
+        nativeGunHeld&&previousRight&&previousRight->token.kind==interaction::HandClaimKind::GunHold&&
+        previousRight->token.item==handItem?
+        handOwnership.UpdateAndRenewGunHold(handSample,previousRight->token,grip).lifecycle:handOwnership.Update(handSample);
     if(!handLifecycle.inputValid)return;
     sightLeaseContinuation=interaction::SightLeaseContinuationEligible(
         handPreviousLeft,handLifecycle,handSample,handItem,cancelling,input.hands[0].squeeze);
     // BC2 still owns an equipped gun; right grip is not a physical draw gesture.
     // This claim only supplies ownership for the dependent off-hand interaction.
-    if(!knifeHands&&handSample.focused&&handSample.tracked[1]&&(!boltHands||
-       (physicalBoltCustody!=interaction::BoltCustodyPhase::Manipulating&&!handSample.released[1]))){
-        const interaction::HandContactProof grip{{1,handEquip},handSample.sequence,handSample.deadlineNs,true};
+    if(nativeGunHeld){
         const auto right=handOwnership.Current(interaction::InteractionHand::Right);
         if(right)handOwnership.Renew(handSample,right->token,grip);
         else if(!bodyHolster||!bodyHolster->BlocksActions()){
@@ -1506,16 +1521,18 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         interaction::VehicleAimOutput headAim;std::optional<BoatAimSnapshot> nativeBoatAim;
         if(boatHeadAim&&!cachedCampaignVehicle&&cachedVehicleProfile&&viewValid)nativeBoatAim=ReadPblDriverAim(memory,boatAimBinding,seat);
         {
-            std::lock_guard lock(vehicleViewMutex);boatAimReady=false;
+            std::lock_guard lock(vehicleViewMutex);boatAimReady=false;boatAimSpace=0;
             if(nativeBoatAim){
                 ++boatAimSamples;const interaction::VehicleAimObservation observation{seatOwner,input.spaceGeneration,nativeBoatAim->hull,nativeBoatAim->cameraWorld,nativeBoatAim->neutralCameraLocal,
                     HandNanos(inputDeadline-handFrequency/10),HandNanos(inputDeadline),true};
                 headAim=boatHeadPolicy.Update(observation,input,HandNanos(clock.QuadPart),PblDriverAimLimits());
-                if(headAim.ready){boatAimReady=true;boatAimSeat=seat;boatAimReference=boatHeadPolicy.Reference();}
+                if(headAim.ready){boatAimReady=true;boatAimSpace=input.spaceGeneration;boatAimSeat=seat;boatAimReference=boatHeadPolicy.Reference();}
             }else if(boatHeadAim&&!cachedCampaignVehicle&&cachedVehicleProfile&&viewValid)++boatAimRejects;
         }
         PublishVehicleView({seatOwner,input.spaceGeneration,bool(cachedVehicleProfile),viewValid,
-            HandNanos(inputDeadline-handFrequency/10),HandNanos(inputDeadline)});
+            HandNanos(inputDeadline-handFrequency/10),HandNanos(inputDeadline)},
+            !cachedVehicleProfile?VehicleCameraMode::Unavailable:
+            boatHeadAim&&!cachedCampaignVehicle?VehicleCameraMode::PblHeadAim:VehicleCameraMode::NativeSeat);
         // The native component/config checks must not extend the original XR lease.
         if(cachedCampaignVehicle&&!RevalidateCampaignVehicleProfile(memory,*cachedCampaignVehicle,seat))return;
         QueryPerformanceCounter(&clock);
@@ -1641,7 +1658,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     const bool pumpFireFixture=physicalPumpFixture&&physicalPump;
     const bool deferActions=(holsterFireFixture||pumpFireFixture||physicalBoltFixture.has_value()||ordinaryBoltInputFixture.has_value()||resourceInventoryFixture.has_value())&&fresh&&nativePlaying&&
         interaction::ValidInput(input)&&input.focused&&input.headValid;
-    auto out=deferActions?interaction::ActionOutput{}:actions.Update(actionInput,{owner.soldier,inputEpoch,nativePlaying,true},input.predictedNs);
+    auto out=deferActions?interaction::ActionOutput{}:actions.Update(actionInput,{owner.soldier,inputEpoch,nativePlaying,true,rigEpoch},input.predictedNs,HandNanos(clock.QuadPart));
     if(m95StockShotFixture&&actionInput.hands[1].trigger<.75f){out.held&=~interaction::Fire;out.pressed&=~interaction::Fire;}
     if(!fresh||!nativePlaying||!interaction::ValidInput(input)||!input.focused||!input.headValid){ClearReloadOwner(ReloadOwnerLoss::PresentationUnavailable);CancelSight();weaponModeHeld=true;ResetSupportGrip(!fresh?"stale_input":!nativePlaying?"native_inactive":!interaction::ValidInput(input)?"invalid_input":!input.focused?"focus_loss":"head_untracked");ResetHandOwnership("input_unavailable"); {std::lock_guard lock(shotPoseMutex);shotHistory.Reset();} rigPublication::PublishTracking({});roomscale.Suspend();
 #ifdef FVR_BC2_SHELL_FOCUS_LOSS_PROBE
@@ -1730,7 +1747,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         ordinaryBoltInputFixture->Prepare(input,current,asset,raw,native,reserve,
             HandNanos(inputDeadline-handFrequency/10),HandNanos(inputDeadline),now);
         actionInput=input;if(reloadRequestMode)actionInput.hands[0].trigger=0;
-        out=actions.Update(actionInput,{owner.soldier,inputEpoch,nativePlaying&&!ordinaryBoltInputFixture->Failed(),true},input.predictedNs);
+        out=actions.Update(actionInput,{owner.soldier,inputEpoch,nativePlaying&&!ordinaryBoltInputFixture->Failed(),true,rigEpoch},input.predictedNs,HandNanos(clock.QuadPart));
         if(ordinaryBoltInputFixture->NeedsNeutralFire(now)){out.held&=~interaction::Fire;out.pressed&=~interaction::Fire;}
         if(!out.active||out.owner!=owner.soldier){out={};out.owner=owner.soldier;}
     }
@@ -1741,7 +1758,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         physicalBoltFixture->Prepare(input,current,asset,raw,reloadFlowRuntime::ReadNativeCycleView(now),reserve,
             HandNanos(inputDeadline-handFrequency/10),HandNanos(inputDeadline),now);
         actionInput=input;if(reloadRequestMode)actionInput.hands[0].trigger=0;
-        out=actions.Update(actionInput,{owner.soldier,inputEpoch,nativePlaying&&!physicalBoltFixture->Failed(),true},input.predictedNs);
+        out=actions.Update(actionInput,{owner.soldier,inputEpoch,nativePlaying&&!physicalBoltFixture->Failed(),true,rigEpoch},input.predictedNs,HandNanos(clock.QuadPart));
         if(!out.active||out.owner!=owner.soldier){out={};out.owner=owner.soldier;}
     }
     if(physicalPumpFixture&&physicalPump){
@@ -1751,7 +1768,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         physicalPumpFixture->Prepare(input,current,asset,raw,reloadFlowRuntime::ReadNativeCycleView(now),
             HandNanos(inputDeadline-handFrequency/10),HandNanos(inputDeadline),now);
         actionInput=input;if(reloadRequestMode)actionInput.hands[0].trigger=0;
-        out=actions.Update(actionInput,{owner.soldier,inputEpoch,nativePlaying&&!physicalPumpFixture->Failed(),true},input.predictedNs);
+        out=actions.Update(actionInput,{owner.soldier,inputEpoch,nativePlaying&&!physicalPumpFixture->Failed(),true,rigEpoch},input.predictedNs,HandNanos(clock.QuadPart));
         if(!out.active||out.owner!=owner.soldier){out={};out.owner=owner.soldier;}
     }
     if(magazineResourceFixture&&magazinePhysical){
@@ -1782,7 +1799,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         if(resourceInventoryFixture->Recording())reloadFlowRuntime::BeginInventoryReloadRecords();
         // First and only mapping for this generation, after fixture Prepare.
         actionInput=input;if(reloadRequestMode)actionInput.hands[0].trigger=0;
-        out=actions.Update(actionInput,{owner.soldier,inputEpoch,nativePlaying&&!resourceInventoryFixture->CancelConsumer(),true},input.predictedNs);
+        out=actions.Update(actionInput,{owner.soldier,inputEpoch,nativePlaying&&!resourceInventoryFixture->CancelConsumer(),true,rigEpoch},input.predictedNs,HandNanos(clock.QuadPart));
         if(!out.active||out.owner!=owner.soldier){out={};out.owner=owner.soldier;}
     }
     if(inventoryReloadFixture&&magazinePhysical&&bodyInventory){
@@ -1819,7 +1836,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         bodyHolsterFixture->Prepare(input,current,asset,ReadBodyHolsterProbe(ns),HandNanos(inputDeadline-handFrequency/10),HandNanos(inputDeadline),ns,diagnosticAmmo);
         if(bodyHolsterFixture->Failed())InvalidateBodyHolster(false,BodyHolsterLifecycleReason::DiagnosticFailed);
         if(holsterFireFixture){actionInput=input;if(reloadRequestMode)actionInput.hands[0].trigger=0;
-            out=actions.Update(actionInput,{owner.soldier,inputEpoch,nativePlaying&&!bodyHolsterFixture->Failed(),true},input.predictedNs);
+            out=actions.Update(actionInput,{owner.soldier,inputEpoch,nativePlaying&&!bodyHolsterFixture->Failed(),true,rigEpoch},input.predictedNs,HandNanos(clock.QuadPart));
             if(!out.active||out.owner!=owner.soldier){out={};out.owner=owner.soldier;}
             if(bodyHolsterFixture->NeedsNeutralFire()){out.held&=~interaction::Fire;out.pressed&=~interaction::Fire;}}
     }
@@ -1862,6 +1879,10 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     const ReloadStateOwner magazineOwner{owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,input.spaceGeneration};
     const auto magazineProfileId=magazinePhysical?reloadFlowRuntime::ReadMagazineRequestProfile(magazineOwner):std::nullopt;
     const auto magazineProfile=magazineProfileId?FindMagazineEquipment(*magazineProfileId):nullptr;
+    // An old actor's pending magazine can itself block family selection below.
+    // Retirement is separate: exact native replacement + callback drain only.
+    if(magazinePhysical){const ReloadStateOwner current{owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,input.spaceGeneration};
+        reloadFlowRuntime::RetireAmmoForReplacementActor(current);}
     if(magazinePhysical&&!pumpDebt&&!(physicalReload&&physicalReload->BlocksEquipment())&&!magazinePhysical->BlocksEquipment()&&!(magazineDetached&&magazineDetached->BlocksActions())){
         const ReloadStateOwner current{owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,input.spaceGeneration};
         if(magazineProfile&&magazineProfile->Ready())reloadFlowRuntime::SelectMagazineRequestProfile(magazineProfile->nativeId,current);
@@ -2448,7 +2469,14 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         Owner nowOwner{};const ReloadStateOwner bodyOwner{owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,input.spaceGeneration};
         const auto inventory=ReadBodyInventory(memory,bodyOwner,true);
         const auto command=inventory.snapshot?ResolveBodyDraw(*inventory.snapshot,bodyDraw.command->targetWeapon):std::nullopt;
-        if(!weaponMode&&!pendingMode&&Resolve(nowOwner)&&nowOwner==owner&&command&&
+        bool ordinaryDispatchCurrent=true;
+        if(bodyHolster&&bodyHolster->Phase()==BodyHolsterPhase::Held){
+            LARGE_INTEGER dispatchNow{};
+            ordinaryDispatchCurrent=holsterBodySample&&QueryPerformanceCounter(&dispatchNow)!=FALSE;
+            if(ordinaryDispatchCurrent){holsterBodySample->hand.nowNs=HandNanos(dispatchNow.QuadPart);
+                ordinaryDispatchCurrent=bodyInventory->OrdinaryDrawDispatchCurrent(*bodyDraw.command,*holsterBodySample);}
+        }
+        if(ordinaryDispatchCurrent&&!weaponMode&&!pendingMode&&Resolve(nowOwner)&&nowOwner==owner&&command&&
             command->action==bodyDraw.command->action&&command->targetSlot==bodyDraw.command->targetSlot&&command->inventory==bodyDraw.command->inventory){
             if(bodyHolster&&bodyHolster->BlocksActions())holsterEquipment=static_cast<EntryAction>(command->action);
             else if(command->action==7)cycle=true;else weaponMode=static_cast<EntryAction>(command->action);
@@ -2649,6 +2677,13 @@ void __fastcall GatherHook(void* self,void*,void* cache){
             LARGE_INTEGER stamp{};QueryPerformanceCounter(&stamp);detachedCommittedNs=HandNanos(stamp.QuadPart);
         }}
         scope->patch.Commit();++committed;interact.committed=true;
+        // An ordinary shoulder request is issued only after the exact routed
+        // edge reached the committed cache. Pending creation is not dispatch.
+        if(bodyInventory&&bodyHolster&&bodyHolster->Phase()==BodyHolsterPhase::Held&&holsterBodySample&&
+           bodyDraw.command&&!holsterReceipt&&!detachedDemanded&&!holsterEquipment&&
+           ((bodyDraw.command->action==7&&cycle.value_or(false))||
+            (weaponMode&&unsigned(*weaponMode)==bodyDraw.command->action)))
+            bodyInventory->ObserveOrdinaryDrawIssued(*bodyDraw.command,*holsterBodySample);
 #ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
         // Input publication alone never settles this intent. The exact native
         // acquisition and matching original attack callback own its outcome.
@@ -2851,8 +2886,18 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         // commit, pose or old receipt is accepted on this failed input Apply.
         const bool rearm=bodyHolster&&BodyHolsterInputRearm(*bodyHolster,current,out,
             grenade.value_or(false)||cycle.value_or(false)||bool(weaponMode)||bool(pendingMode)||bool(bodyDraw.command));
+        bool selectionRearm=false;
+        if(bodyInventory&&bodyHolster&&holsterBodySample&&bodyHolster->Phase()==BodyHolsterPhase::Held){
+            LARGE_INTEGER stamp{};const bool clockOkay=QueryPerformanceCounter(&stamp)!=FALSE;
+            if(clockOkay)holsterBodySample->hand.nowNs=HandNanos(stamp.QuadPart);
+            const bool onlySemanticRearm=clockOkay&&nativePlaying&&aimValid&&sightPhase==interaction::SightFlipPhase::Idle&&
+                !grenade.value_or(false)&&!cycle.value_or(false)&&!weaponMode&&!pendingMode&&!bodyDraw.command&&!holsterEquipment;
+            const WeaponModeMemory memory{nullptr,[](void*,unsigned at,void* dst,std::size_t n){return Read(at,dst,n);},
+                [](void*,unsigned at,const char* name){return Type(at,name);}};
+            selectionRearm=bodyInventory->RetainOrdinaryDrawRearm(memory,*holsterBodySample,out,onlySemanticRearm);
+        }
         CancelPhysicalReload();InvalidateBodyHolster(rearm,rearm?BodyHolsterLifecycleReason::InputRearm:BodyHolsterLifecycleReason::InputApplyRejected);
-        if(bodyInventory)bodyInventory->SuspendInteraction();if(weaponMode&&pendingMode){modeRecords[*pendingMode].cancelled=true;pendingMode.reset();--modeRequests;++modeRejections;}
+        if(bodyInventory&&!selectionRearm)bodyInventory->SuspendInteraction();if(weaponMode&&pendingMode){modeRecords[*pendingMode].cancelled=true;pendingMode.reset();--modeRequests;++modeRejections;}
     }
 }
 void __fastcall UpdateHook(void* self,void*,float dt){
@@ -3582,15 +3627,16 @@ bool AdjustViewBase(std::array<RenderViewCopy,2>& copies,const runtime::Tracking
         std::lock_guard lock(vehicleViewMutex);
         const auto actor=(std::uint64_t(viewOwner.weak)<<32)|viewOwner.soldier;
         LARGE_INTEGER now{};if(!QueryPerformanceCounter(&now))return false;
-        const auto admission=interaction::AdmitVehicleCamera(vehicleView,actor,viewOwner.controlled,viewOwner.entry,space,HandNanos(now.QuadPart));
-        if(admission==interaction::VehicleCameraAdmission::Unsupported){++vehicleCameraUnsupportedFrames;return true;}
+        const PblCameraAimProof aim{{boatAimSeat.identity.actor,boatAimSeat.identity.actorGeneration,boatAimSeat.identity.controlled,boatAimSeat.identity.entry},boatAimSpace,boatAimReady};
+        const auto path=SelectVehicleCameraPath(vehicleView,vehicleCameraMode,
+            {actor,viewOwner.controlled,viewOwner.entry,space,HandNanos(now.QuadPart),tracking.focused,tracking.headValid},aim);
+        if(path==VehicleCameraPath::Unsupported){++vehicleCameraUnsupportedFrames;return true;}
         // A known seat must wait for current input instead of composing its
         // camera with the old on-foot reference for a single bad frame.
-        if(admission!=interaction::VehicleCameraAdmission::Ready||!tracking.focused||!tracking.headValid){++vehicleCameraWaits;return false;}
+        if(path==VehicleCameraPath::Wait){++vehicleCameraWaits;return false;}
         std::optional<BoatAimSnapshot> renderAim;
-        if(boatHeadAim){
+        if(path==VehicleCameraPath::PblHeadAim){
             const VehicleRouteMemory memory{nullptr,[](void*,unsigned at,void* dst,std::size_t n){return Read(at,dst,n);},[](void*,unsigned at,const char* name){return Type(at,name);}};
-            if(!boatAimReady||boatAimSeat.identity.actor!=actor||boatAimSeat.identity.actorGeneration!=vehicleView.owner.generation||boatAimSeat.identity.controlled!=viewOwner.controlled||boatAimSeat.identity.entry!=viewOwner.entry)return false;
             renderAim=ReadPblDriverAim(memory,boatAimBinding,boatAimSeat);if(!renderAim)return false;
         }
         auto changed=copies;

@@ -167,8 +167,62 @@ int SustainedMeasuredCyclesAndLateExactCompletion(){
         }
     }return 0;
 }
+int CurrentRootOverlapContract(){
+    // R53 recorded original-source overlap, not packet arrival time.
+    constexpr std::int64_t oldObserved=143335931712800ll,oldDeadline=143336031712800ll;
+    constexpr std::int64_t previousNow=143335959038200ll,newObserved=143336011823000ll;
+    constexpr std::int64_t processed=143336033602700ll,newDeadline=143336111823000ll;
+    for(const auto hand:{left,right})for(bool oldOrder:{true,false}){
+        HandInteraction hands;
+        HandInteractionSample old{{10,1,1,1},603,oldObserved,oldDeadline,previousNow,true,{true,true},{false,false}};
+        HandClaimRequest request{old.owner,hand,HandClaimKind::GunHold,{100,1},{{4,1},603,oldDeadline,true},1,0};
+        const auto acquired=hands.Acquire(old,request);CHECK(acquired.accepted&&acquired.claim);
+        const auto token=acquired.claim->token;
+        auto current=old;current.sequence=604;current.observedNs=newObserved;current.deadlineNs=newDeadline;current.nowNs=processed;
+        const HandContactProof proof{token.contact,604,newDeadline,true};
+        if(oldOrder){CHECK(!hands.Renew(current,token,proof).accepted);CHECK(!hands.Current(hand));}
+        else {const auto update=hands.UpdateAndRenewGunHold(current,token,proof);
+            CHECK(update.lifecycle.inputValid&&update.renewed&&update.renewed->token==token);
+            CHECK(hands.Current(hand)->deadlineNs==newDeadline&&hands.Current(hand)->inputSequence==604);}
+    }
+    for(bool oldOrder:{true,false}){
+        Fixture f(bolt_custody_fixture::M24);CHECK(f.Enter());
+        CHECK(f.Step(f.measured.initial,false).weapon);
+        CHECK(f.Step(f.measured.initial,true).physical.ownsMechanism);
+        const auto held=f.hands.Current(left);CHECK(held&&f.hands.Current(right));
+        const auto token=held->token;
+        auto s=f.source;++s.sequence;s.observedNs=held->deadlineNs-19889800;s.nowNs=held->deadlineNs+1889900;s.deadlineNs=s.observedNs+100*ms;
+        const HandContactProof proof{token.contact,s.sequence,s.deadlineNs,true};
+        if(oldOrder)f.hands.Update(s);
+        const auto retained=f.custody.RetainCustody(s,f.leftWrist,proof,f.hands);
+        if(oldOrder){CHECK(!retained.weapon&&!f.hands.Current(left));}
+        else {CHECK(retained.weapon&&f.hands.Current(left)->token==token);
+            CHECK(f.hands.Current(left)->deadlineNs==s.deadlineNs);
+            CHECK(!f.hands.Current(right)); // Root renewal cannot lend time to the mechanism.
+            CHECK(!retained.physical.release&&f.requests==0);}
+    }
+    for(unsigned mutation=0;mutation<13;++mutation){
+        Fixture f(bolt_custody_fixture::SV98);CHECK(f.Enter());
+        const auto held=f.hands.Current(left);CHECK(held);
+        auto s=f.source;++s.sequence;s.observedNs=held->deadlineNs-19889800;s.nowNs=held->deadlineNs+1889900;s.deadlineNs=s.observedNs+100*ms;
+        HandContactProof proof{held->token.contact,s.sequence,s.deadlineNs,true};auto wrist=f.leftWrist;
+        switch(mutation){
+        case 0:proof.eligible=false;break;case 1:++proof.key.id;break;
+        case 2:--proof.inputSequence;break;case 3:++proof.deadlineNs;break;
+        case 4:s.observedNs=held->deadlineNs;break;case 5:s.deadlineNs=s.nowNs;proof.deadlineNs=s.deadlineNs;break;
+        case 6:s.sequence=held->inputSequence;proof.inputSequence=s.sequence;break;
+        case 7:++s.owner.actorGeneration;break;case 8:s.released[0]=true;break;
+        case 9:s.focused=false;break;case 10:s.tracked[0]=false;break;
+        case 11:wrist.values[0][0]=2;break;case 12:f.hands.Update(s);break;
+        }
+        const auto retained=f.custody.RetainCustody(s,wrist,proof,f.hands);
+        CHECK(!retained.weapon&&!f.hands.Current(left)&&!retained.physical.release&&f.requests==0);
+    }
+    return 0;
 }
-int main(){
+
+}
+int main(){if(CurrentRootOverlapContract())return 1;
     if(MeasuredM24AndSv98CustodyStrokeAndReturn()||HandAssignmentAndRendererValidation()||WrongOrderReleaseAndRegripCannotBypassStroke()||
        MovingMechanismNeverDragsWeaponAndSafetyLossBlocks()||RepeatedPacketCannotAccrueDwellOrReturnOutcome()||RightHandHistoricalContactUsesOriginalPacket()||
        FailedHandoffAndWrongReturnCannotSteal()||SustainedMeasuredCyclesAndLateExactCompletion())return 1;

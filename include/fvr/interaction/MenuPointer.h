@@ -25,24 +25,32 @@ public:
         const bool safe=ValidInput(input)&&input.focused&&input.headValid;
         if(!safe||space_!=input.spaceGeneration){
             anchor_={};menuArmed_=cancelArmed_=pressArmed_=chordArmed_=false;chordSince_=lastChordNs_=0;
-            space_=input.spaceGeneration;epoch_=0;
+            space_=input.spaceGeneration;epoch_=0;mode_=ipc::MenuMode::Unknown;
             if(!safe)return out;
         }
         c.flags=ipc::MenuFocused;
         const auto& l=input.hands[0];const auto& r=input.hands[1];
-        const bool menuAvailable=(l.active&MenuClick)!=0;
-        const bool menuHeld=menuAvailable&&(l.held&MenuClick);
-        bool toggle=UpdateChord(input);
-        out.suppressLeftFaceButtons=chordSuppress_;
-        if(!menuAvailable)menuArmed_=false;
-        else if(!menuHeld)menuArmed_=true;
-        else if(menuArmed_){toggle=true;menuArmed_=false;}
-        if(toggle)++toggle_;
-        c.toggle=toggle_;
-        if(!menu||menu->mode!=ipc::MenuMode::Menu||!menu->inputReady||!rasterWidth||!rasterHeight){
-            anchor_={};epoch_=0;cancelArmed_=pressArmed_=false;return out;
+        const bool passive=menu&&menu->mode==ipc::MenuMode::Passive;
+        if(passive){
+            // A passive raster is not an interactive owner. Held buttons do
+            // not queue an edge for the next interactive/gameplay state.
+            menuArmed_=cancelArmed_=pressArmed_=chordArmed_=false;chordSince_=lastChordNs_=0;
+            if(!(l.held&std::uint32_t(Primary|Secondary)))chordSuppress_=false;
+        }else{
+            const bool menuAvailable=(l.active&MenuClick)!=0;
+            const bool menuHeld=menuAvailable&&(l.held&MenuClick);
+            bool toggle=UpdateChord(input);
+            if(!menuAvailable)menuArmed_=false;
+            else if(!menuHeld)menuArmed_=true;
+            else if(menuArmed_){toggle=true;menuArmed_=false;}
+            if(toggle)++toggle_;
         }
-        if(epoch_!=menu->epoch){anchor_={};epoch_=menu->epoch;cancelArmed_=pressArmed_=false;}
+        out.suppressLeftFaceButtons=chordSuppress_;
+        c.toggle=toggle_;
+        if(!menu||!ipc::DisplaysMenuRaster(menu->mode)||(!passive&&!menu->inputReady)||!rasterWidth||!rasterHeight){
+            anchor_={};epoch_=0;mode_=ipc::MenuMode::Unknown;cancelArmed_=pressArmed_=false;return out;
+        }
+        if(epoch_!=menu->epoch||mode_!=menu->mode){anchor_={};epoch_=menu->epoch;mode_=menu->mode;cancelArmed_=pressArmed_=false;}
         if(!math::UpdateUiMenuAnchor(anchor_,input.head,input.predictedNs,1.1f,.5f))return out;
         out.visible=true;out.height=out.width*float(rasterHeight)/float(rasterWidth);
         if(!std::isfinite(out.height)||out.height<=0||out.height>8){out.visible=false;return out;}
@@ -54,6 +62,7 @@ public:
         const auto ahead=rotate(out.panel.orientation,{0,0,-1.5f});
         out.panel.position.x+=ahead.x;out.panel.position.y+=ahead.y;out.panel.position.z+=ahead.z;
         c.menuEpoch=menu->epoch;
+        if(passive)return out;
         const bool cancelAvailable=(r.active&Secondary)!=0;
         const bool cancelHeld=cancelAvailable&&(r.held&Secondary);
         if(!cancelAvailable)cancelArmed_=false;
@@ -95,6 +104,7 @@ private:
         chordArmed_=false;chordSince_=0;return true;
     }
     math::UiMenuAnchorTracker anchor_{};
+    ipc::MenuMode mode_=ipc::MenuMode::Unknown;
     std::uint64_t space_=0,epoch_=0,toggle_=0,cancel_=0;
     bool menuArmed_=false,cancelArmed_=false,pressArmed_=false,chordArmed_=false,chordSuppress_=false;
     std::int64_t chordSince_=0,lastChordNs_=0;

@@ -12,6 +12,20 @@ try {
     $null=Set-FvrLauncherStorage $root
     $runtime=Join-Path $root 'data/runtime';$run=Join-Path $runtime 'sessions/test-one'
     $null=[IO.Directory]::CreateDirectory($run)
+    $outcomePath=Join-Path $run 'native-outcome.json'
+    $outcome=@{schema='bc2vr.native-run-outcome.v1';pid=32580;outcome='game_exited';remote_thread_exit_observed=$false;probe_exit=$null;game_exit_code=0;report_bytes=0;report_nonempty=$false}
+    Write-FvrJson $outcomePath $outcome
+    $read=Read-Bc2NativeRunOutcome $outcomePath 32580
+    Check ($read.outcome -eq 'game_exited' -and $null -eq $read.probe_exit -and -not $read.remote_thread_exit_observed) 'actual native outcome distinguishes game exit from a remote probe return'
+    Check ($null -eq (Read-Bc2NativeRunOutcome $outcomePath 32581)) 'native outcome binds the held original process identity'
+    foreach($change in @(@{probe_exit=0},@{remote_thread_exit_observed=$true},@{game_exit_code='0'},@{game_exit_code=-1},@{report_nonempty=$true},@{report_bytes='0'},@{schema='unknown'})){
+        $bad=$outcome.Clone();foreach($key in $change.Keys){$bad[$key]=$change[$key]};Write-FvrJson $outcomePath $bad
+        Check ($null -eq (Read-Bc2NativeRunOutcome $outcomePath 32580)) 'contradictory or untyped native outcome cannot confirm a clean return'
+    }
+    foreach($badText in @('', '{"schema":"bc2vr.native-run-outcome.v1"', ('x'*8193))){
+        [IO.File]::WriteAllText($outcomePath,$badText)
+        Check ($null -eq (Read-Bc2NativeRunOutcome $outcomePath 32580)) 'missing partial or oversized outcome is unavailable rather than success'
+    }
     $report=Join-Path $run 'native-trace.json';$stderr=Join-Path $run 'native.stderr.log'
     $fallback='The native VR adapter exited during startup.'
     # The tester's 0.1.7 stdout first exercises missing-report fallback, then

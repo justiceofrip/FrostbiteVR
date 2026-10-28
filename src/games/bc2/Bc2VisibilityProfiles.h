@@ -1,5 +1,6 @@
 #pragma once
 #include "Bc2SelectedMeshes1p.h"
+#include "Bc2NativeOperationCapability.h"
 #include <algorithm>
 #include <string_view>
 #include <span>
@@ -23,7 +24,7 @@ inline bool VisibilityProductionAdmission(const SelectedMeshesSnapshot& s,
  const VisibilityDescriptor& d)noexcept {
     const bool legacyReviewed=d.nativeAdmitted&&d.hideShowVerified&&d.inputSuppressionVerified;
     const bool operationReviewed=d.weightedSectionDataVerified&&
-        NativeOperationAdmitted(s.operationBinding,d.rigFingerprint,NativeOperationCapabilities);
+        CompiledNativeOperationAdmitted(s.operationBinding,d.rigFingerprint);
     if((!legacyReviewed&&!operationReviewed)||d.rigFingerprint!=VisibilityNativeRig||d.configurationPath.empty()||
        d.configurationPath.find('\0')!=std::string_view::npos||!s.configurationPathVerified)return false;
     const auto end=std::find(s.configurationPath.begin(),s.configurationPath.end(),'\0');

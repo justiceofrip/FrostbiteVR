@@ -16,6 +16,41 @@ inline bool PublishedSourceContinues(const interaction::SelectedMeleeIntent& int
         (source.sequence==intent.sourceSequence?
             (source.observedNs==intent.observedNs&&source.deadlineNs==intent.deadlineNs):source.observedNs>intent.observedNs);
 }
+// A Gather publication can precede several more Gathers before native firing
+// consumes the cache. Retain that one input level, never its admission lease.
+// Native readiness admits a NEW intent; client prediction may leave idle before
+// the same published level reaches the server and is not another admission.
+struct InputDeliveryAuthority {
+    bool actionsAvailable=false,gameplayOwned=false,ownerCurrent=false,admissionCurrent=false;
+};
+struct InputDelivery {
+    std::uint64_t publications=0;
+    std::int64_t firstPublishedNs=0,lastPublishedNs=0,consumedNs=0;
+    void Published(std::int64_t now)noexcept {
+        if(now<=0||now<lastPublishedNs)return;
+        if(!publications)firstPublishedNs=now;
+        if(publications!=UINT64_MAX)++publications;
+        lastPublishedNs=now;
+    }
+    // This acknowledges only native consumption. It never resolves the policy
+    // or claims acquisition, attack return, target damage or campaign progress.
+    void Consumed(std::int64_t now)noexcept {
+        if(publications&&!consumedNs&&now>=firstPublishedNs)consumedNs=now;
+    }
+    bool CanRepeat(const interaction::SelectedMeleeIntent& intent,
+        interaction::SelectedMeleePending pending,interaction::SelectedMeleeReason continuation,
+        const interaction::HandInteractionSample& source,
+        const interaction::HandClaimToken& hold,std::uint64_t inputEpoch,
+        const InputDeliveryAuthority& authority,std::int64_t now)const noexcept {
+        const bool validContinuation=continuation==interaction::SelectedMeleeReason::Pending||
+            continuation==interaction::SelectedMeleeReason::Duplicate||
+            continuation==interaction::SelectedMeleeReason::NativeUnavailable;
+        return publications&&!consumedNs&&pending==interaction::SelectedMeleePending::Staged&&validContinuation&&
+            authority.actionsAvailable&&authority.gameplayOwned&&authority.ownerCurrent&&authority.admissionCurrent&&
+            hold==intent.hold&&now>=lastPublishedNs&&now>=source.nowNs&&now<intent.deadlineNs&&now<source.deadlineNs&&
+            PublishedSourceContinues(intent,source,inputEpoch);
+    }
+};
 // The local stroke and native aim intentionally use separate frames: a fixed
 // tracking frame recognizes motion, while current body mapping positions it.
 struct Geometry {private_knife::KnifeMotionGeometry motion{};math::Matrix4 nativeAcquisition{};};
@@ -23,11 +58,9 @@ inline std::optional<Geometry> MapGeometry(const interaction::InputFrame& input,
     const SelectedKnifeRenderReceipt& rendered,const math::Matrix4& currentBody)noexcept {
     if(!interaction::ValidInput(input)||!input.focused||!input.headValid||!input.hands[1].gripTracked||
        !interaction::InverseRigid(currentBody)||rendered.binding.grip.profile!=&SelectedKnifeGripProfiles()[0])return {};
-    const auto motion=private_knife::KnifeMotionFromGrip(input.hands[1].grip,rendered.wristInGrip);
+    const auto motion=private_knife::KnifeMotionFromTrackedGrip(input,rendered.wristInGrip);
     auto relative=math::MakeRelativePose(input.referenceHead,input.hands[1].grip);
-    const auto head=math::MakeRelativePose(input.referenceHead,input.head);
-    if(!motion||!relative||!head||std::hypot(relative->position.x-head->position.x,
-       relative->position.y-head->position.y,relative->position.z-head->position.z)>1.5f)return {};
+    if(!motion||!relative)return {};
     relative->position.x*=input.worldUnitsPerMeter;relative->position.y*=input.worldUnitsPerMeter;
     relative->position.z*=input.worldUnitsPerMeter;
     const auto view=math::MakeLhViewFromOpenXRPose(*relative);if(!view)return {};

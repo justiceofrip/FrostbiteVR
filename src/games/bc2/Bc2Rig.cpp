@@ -9,6 +9,15 @@ class Reader {
 public:
     explicit Reader(const RigMemory& m):memory(m){}
     bool Read(std::uint32_t at,void* out,std::size_t n)const {return memory.read&&at>=0x10000&&n&&n<=1024*1024&&std::uint64_t(at)+n<=UINT32_MAX&&memory.read(memory.context,at,out,n);}
+    bool Blocks(std::uint32_t at,void* out,std::size_t n)const {
+        if(at<0x10000||!n||n>1024*1024||std::uint64_t(at)+n>UINT32_MAX)return false;
+        // The native RigMemory callback accepts at most 64 KiB per request.
+        // Read fresh bytes every invocation; this is not a topology cache.
+        for(std::size_t done=0;done<n;){const auto count=std::min<std::size_t>(n-done,65536);
+            if(!Read(at+std::uint32_t(done),static_cast<std::byte*>(out)+done,count))return false;
+            done+=count;
+        }return true;
+    }
     std::uint32_t U32(std::uint32_t at)const {std::uint32_t value=0;Read(at,&value,4);return value;}
     bool Identity(std::uint32_t soldier,std::uint32_t weak,RigIdentity& i)const {
         if(soldier<0x10000||soldier>UINT32_MAX-0x500||U32(weak)!=soldier+4)return false;
@@ -25,7 +34,23 @@ public:
         for(auto at:{i.worldMatrices,i.skinMatrices,i.evaluatedMatrices})if(at<0x10000||std::uint64_t(at)+i.count*64ull>UINT32_MAX)return false;return true;
     }
     std::optional<std::string> Name(std::uint32_t at)const {
-        std::string out;for(unsigned n=0;n<64;++n){unsigned char c=0;if(at>UINT32_MAX-n||!Read(at+n,&c,1))return {};if(!c)return out.empty()?std::nullopt:std::optional(out);if(c<32||c>126)return {};out.push_back(char(c));}return {};
+        std::string out;std::array<unsigned char,64> bytes{};
+        for(unsigned n=0;n<bytes.size();){
+            if(at>UINT32_MAX-n)return {};const auto address=at+n;
+            // BC2's x86 pages are 4 KiB. Never speculate into the next page
+            // just to find a terminator that may already be in this one.
+            const auto count=std::min({unsigned(bytes.size())-n,4096u-(address&4095u),UINT32_MAX-address});
+            if(!count)return {};
+            const bool block=Read(address,bytes.data(),count);
+            for(unsigned i=0;i<count;++i){
+                unsigned char c=bytes[i];
+                // Some readers expose only the string's actual bytes. A failed
+                // wider read must not reject a valid short, terminated name.
+                if(!block&&!Read(address+i,&c,1))return {};
+                if(!c)return out.empty()?std::nullopt:std::optional(out);
+                if(c<32||c>126)return {};out.push_back(char(c));
+            }n+=count;
+        }return {};
     }
 };
 }
@@ -40,10 +65,23 @@ std::optional<RigSnapshot> ReadFirstPersonRig(const RigMemory& memory,std::uint3
     if(names<0x10000||std::uint64_t(names)+id.count*4ull!=namesEnd||definition<0x10000||definition>UINT32_MAX-12||read.U32(definition+4)!=id.count||read.U32(id.pose+0x10)!=definition)return {};
     const auto bones=read.U32(definition+8);constexpr unsigned boneStride=0x98;
     if(bones<0x10000||std::uint64_t(bones)+id.count*std::uint64_t(boneStride)>UINT32_MAX)return {};
+    std::vector<std::uint32_t> nameAddresses(id.count);
+    std::vector<std::array<std::byte,boneStride>> records(id.count);
+    if(!read.Blocks(names,nameAddresses.data(),id.count*4))return {};
+    if(!read.Blocks(bones,records.data(),id.count*boneStride)){
+        // Preserve the former reader's acceptance when unused record padding
+        // is inaccessible. Discard partial blocks and reread every used field.
+        for(unsigned n=0;n<id.count;++n){const auto record=bones+n*boneStride;
+            if(!read.Read(record,records[n].data(),4)||!read.Read(record+4,records[n].data()+4,4)||
+               !read.Read(record+0x4c,records[n].data()+0x4c,64))return {};
+        }
+    }
     result.names.reserve(id.count);result.parents.reserve(id.count);
     for(unsigned n=0;n<id.count;++n){
-        const auto record=bones+n*boneStride,name=read.U32(record);if(!name||name!=read.U32(names+n*4))return {};
-        const auto text=read.Name(name);std::int32_t parent=0;if(!text||!read.Read(record+4,&parent,4)||parent< -1||parent>=std::int32_t(id.count))return {};
+        std::uint32_t name=0;std::int32_t parent=0;
+        std::memcpy(&name,records[n].data(),4);std::memcpy(&parent,records[n].data()+4,4);
+        if(!name||name!=nameAddresses[n])return {};
+        const auto text=read.Name(name);if(!text||parent< -1||parent>=std::int32_t(id.count))return {};
         if(std::find(result.names.begin(),result.names.end(),*text)!=result.names.end())return {};
         result.names.push_back(*text);result.parents.push_back(parent);
     }
@@ -52,6 +90,14 @@ std::optional<RigSnapshot> ReadFirstPersonRig(const RigMemory& memory,std::uint3
     if(!ls||!le||!lw||!rs||!re||!rw)return {};result.left={*ls,*le,*lw};result.right={*rs,*re,*rw};
     if(!interaction::ValidateArms(result.parents,result.left,result.right))return {};
     result.weaponBone=read.U32(id.animation+0x938);if(result.weaponBone>=id.count||result.names[result.weaponBone].rfind("jntWpn_",0)!=0)return {};
+    const auto armBranch=[&](unsigned n){
+        // ValidateArms already checked the complete parent graph. Even a
+        // weapon-named descendant must not relax an arm/hand pose requirement.
+        for(auto at=std::int32_t(n);at!=-1;at=result.parents[at])
+            if(at==std::int32_t(*ls)||at==std::int32_t(*le)||at==std::int32_t(*lw)||
+               at==std::int32_t(*rs)||at==std::int32_t(*re)||at==std::int32_t(*rw))return true;
+        return false;
+    };
     result.nativeWorld.resize(id.count);result.world.reserve(id.count);
     result.nativeEvaluated.resize(id.count);result.inverseBind.reserve(id.count);result.evaluatedWorld.reserve(id.count);
     if(!read.Read(id.worldMatrices,result.nativeWorld.data(),id.count*64))return {};
@@ -63,19 +109,20 @@ std::optional<RigSnapshot> ReadFirstPersonRig(const RigMemory& memory,std::uint3
     std::vector<std::array<std::byte,64>> baseSkin(id.count);if(!read.Read(id.skinMatrices,baseSkin.data(),id.count*64))return {};
     for(unsigned n=0;n<id.count;++n){
         const auto world=canonical(result.nativeWorld[n]);result.world.push_back(world);
-        std::array<std::byte,64> bytes{};if(!read.Read(bones+n*boneStride+0x4c,bytes.data(),64))return {};
+        std::array<std::byte,64> bytes{};std::memcpy(bytes.data(),records[n].data()+0x4c,64);
         const auto inverseBind=canonical(bytes);const auto bind=interaction::InverseAnimatedTransform(inverseBind);if(!bind)return {};result.inverseBind.push_back(inverseBind);
         const auto skin=canonical(baseSkin[n]),expected=interaction::Multiply(inverseBind,world);
-        // Observed SPAS reload hides this leaf with a 1e-4 diagonal basis in
-        // all three native palettes. Its translation no longer obeys bind*world.
-        // Preserve its exact native bytes; it is never an IK/attachment frame.
+        // Native weapon animation hides direct leaves with a 1e-4 diagonal in
+        // all three palettes (observed on SPAS jntWpn_7 and Garand jntWpn_6).
+        // Their translations no longer obey bind*world. This is structural
+        // preservation, not an attachment binding or permission to unhide them.
         const auto collapsed=[](const math::Matrix4& m){
             for(const auto& row:m.values)for(float x:row)if(!std::isfinite(x))return false;
             for(unsigned r=0;r<3;++r)for(unsigned c=0;c<3;++c)
                 if(std::abs(m.values[r][c]-(r==c?.0001f:0.f))>1e-7f)return false;
             return true;
         };
-        if(result.names[n]=="jntWpn_7"&&n!=result.weaponBone&&result.parents[n]==std::int32_t(result.weaponBone)&&
+        if(result.names[n].rfind("jntWpn_",0)==0&&n!=result.weaponBone&&result.parents[n]==std::int32_t(result.weaponBone)&&!armBranch(n)&&
            std::find(result.parents.begin(),result.parents.end(),std::int32_t(n))==result.parents.end()&&
            collapsed(world)&&collapsed(skin)&&collapsed(canonical(result.nativeEvaluated[n]))){
             result.nativeHiddenLeaves.push_back(n);

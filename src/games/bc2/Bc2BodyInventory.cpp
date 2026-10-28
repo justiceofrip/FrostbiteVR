@@ -205,6 +205,7 @@ void Bc2BodyInventory::ObserveAutomaticSelection(const BodyNativeItem& item)noex
     else automaticItem_=item;
 }
 void Bc2BodyInventory::Cancel()noexcept {
+    ordinaryDrawIssue_.reset();
     display_.reset();
     heldApproach_.Reset();heldRelease_.Reset();deferredDraw_.reset();
     if(pending_)++cancels_;pending_.reset();armed_=false;lastInput_=0;automaticNeutral_=false;
@@ -214,6 +215,7 @@ void Bc2BodyInventory::Cancel()noexcept {
     life_.clear();items_.clear();slots_.clear();owner_={};inventory_=switching_=0;nativeProofNs_=0;
 }
 void Bc2BodyInventory::SuspendInteraction()noexcept {
+    ordinaryDrawIssue_.reset();
     display_.reset();heldApproach_.Reset();heldRelease_.Reset();deferredDraw_.reset();
     if(pending_)++cancels_;pending_.reset();armed_=false;automaticNeutral_=false;
     // Retire portable pending selection/ack authority while keeping exact item
@@ -224,6 +226,68 @@ void Bc2BodyInventory::SuspendInteraction()noexcept {
         neutral.nowNs=lastNow_;neutral.focused=false;neutral.handTracked=false;
         slots_=policy_.Update(neutral).slots;
     }
+}
+bool Bc2BodyInventory::OrdinaryDrawDispatchCurrent(const WeaponModeCommand& command,const BodyDrawSample& s)const noexcept {
+    if(!pending_||!ordinaryDrawIssue_||ordinaryDrawIssue_->issued)return false;
+    const auto& issue=*ordinaryDrawIssue_;
+    if(issue.request!=pending_->id||s.owner!=issue.from||s.hand.nowNs<issue.observed||s.hand.nowNs>=issue.inputDeadline||
+       command.action!=issue.command.action||command.targetWeapon!=issue.command.targetWeapon||
+       command.targetSlot!=issue.command.targetSlot||command.inventory!=issue.command.inventory||
+       command.persistent!=issue.command.persistent||command.family!=issue.command.family||
+       command.selectedSecondary!=issue.command.selectedSecondary)return false;
+    return true;
+}
+bool Bc2BodyInventory::ObserveOrdinaryDrawIssued(const WeaponModeCommand& command,const BodyDrawSample& s)noexcept {
+    if(!OrdinaryDrawDispatchCurrent(command,s))return false;
+    ordinaryDrawIssue_->issued=true;return true;
+}
+bool Bc2BodyInventory::RetainOrdinaryDrawRearm(const WeaponModeMemory& memory,const BodyDrawSample& s,
+    const ActionOutput& action,bool onlySemanticRearm)noexcept {
+    const auto reject=[&](){if(ordinaryDrawIssue_)++drawRearmRejected_;ordinaryDrawIssue_.reset();return false;};
+    if(!enabled_||!pending_||!ordinaryDrawIssue_||!ordinaryDrawIssue_->issued||!onlySemanticRearm)return reject();
+    auto& issue=*ordinaryDrawIssue_;
+    if(pending_->id!=issue.request||pending_->operation!=BodyInventoryOperation::Draw||pending_->revision!=revision_||
+       pending_->owner!=owner_||pending_->item.id!=issue.command.targetWeapon||issue.from.equipGeneration==UINT64_MAX||
+       !issue.fromHand.equipGeneration||issue.fromHand.equipGeneration==UINT64_MAX)return reject();
+    if(policy_.AcknowledgementDeadline(pending_->id)!=std::optional(issue.ackDeadline))return reject();
+    auto expected=issue.from;expected.weapon=issue.command.targetWeapon;++expected.equipGeneration;
+    if(s.owner!=expected||(issue.selected.weapon&&issue.selected!=s.owner)||action.active||action.owner!=s.owner.soldier||
+       action.held||action.pressed||action.released||action.forward||action.strafe||action.turnDegrees||s.cancel||s.reloadBusy||
+       !ValidInput(s.input)||!s.input.focused||!s.input.headValid||!s.hand.focused||!s.hand.tracked[0]||!s.hand.tracked[1]||
+       s.input.spaceGeneration!=expected.space||s.hand.owner.actor!=Owner(expected).actor||
+       s.hand.owner.actorGeneration!=expected.actorGeneration||s.hand.owner.equipGeneration!=issue.fromHand.equipGeneration+1||
+       s.gun.generation!=s.hand.owner.equipGeneration||s.gun.id==issue.fromGun.id||
+       (issue.selectedHand.actor&&(issue.selectedHand!=s.hand.owner||issue.selectedGun!=s.gun))||
+       s.hand.owner.space!=expected.space||s.hand.sequence!=s.input.generation||s.hand.sequence<issue.input||
+       s.hand.observedNs<issue.observed||s.hand.observedNs>s.hand.nowNs||s.hand.nowNs<issue.lastNow||
+       s.hand.nowNs>=issue.ackDeadline||s.hand.deadlineNs<=s.hand.nowNs||s.hand.deadlineNs-s.hand.observedNs>150000000)return reject();
+    // Unknown menu metadata is not authority: the caller must also prove the
+    // existing native playing flags. Any supplied menu ownership must be fresh.
+    if(s.input.menu.owner!=InputMenuOwner::Unknown&&!GameplayOwnsInput(s.input.menu,s.hand.nowNs))return reject();
+    // Raw movement/turn axes do not cancel an already issued selection. The
+    // inactive semantic output above must remain entirely zero; its controller
+    // still owns neutral rearming before any movement can be dispatched again.
+    for(const auto& hand:s.input.hands)if(hand.held||!(hand.active&Trigger)||hand.trigger>.1f)return reject();
+    const auto read=ReadBodyInventory(memory,s.owner,true);
+    if(!read.snapshot)return reject();const auto& native=*read.snapshot;
+    if(native.inventory!=issue.carried.inventory||native.switching!=issue.carried.switching||
+       native.count!=issue.carried.count||native.items!=issue.carried.items||
+       native.selected!=issue.command.targetSlot||native.items[native.selected].weapon!=issue.command.targetWeapon)return reject();
+    auto physical=std::uint64_t(expected.weapon);
+    if(s.verifiedFamily){
+        if(!s.verifiedFamily->persistent||s.verifiedFamily->inventory!=native.inventory||
+           s.verifiedFamily->persistent!=native.items[native.selected].persistence)return reject();
+        physical=s.verifiedFamily->persistent;
+    }
+    if(s.gun.id!=physical)return reject();
+    // The read proves the CURRENT target and complete carried identity; update
+    // both metadata owner and time together. Never freshen the old source owner
+    // or extend either the source input lease or policy transaction deadline.
+    nativeOwner_=native.owner;nativeProofNs_=s.hand.nowNs;
+    // Only the expected target/equipment epoch can be observed. Even returning
+    // to this pointer with a later equipment/physical epoch fails.
+    issue.selected=s.owner;issue.selectedHand=s.hand.owner;issue.selectedGun=s.gun;issue.lastNow=s.hand.nowNs;display_.reset();
+    heldApproach_.Reset();heldRelease_.Reset();deferredDraw_.reset();++drawRearmRetained_;return true;
 }
 BodyDrawResult Bc2BodyInventory::ObserveSuspended(const WeaponModeMemory& memory,const BodyDrawSample& s)noexcept {
     BodyDrawResult out;out.cancelled=pending_?pending_->id:0;out.blockFire=true;
@@ -286,6 +350,9 @@ BodyDrawResult Bc2BodyInventory::TickDraw(const WeaponModeMemory& memory,const B
         s.hand.sequence==s.input.generation&&s.hand.observedNs>0&&s.hand.observedNs<=s.hand.nowNs&&s.hand.deadlineNs>s.hand.nowNs&&
         s.hand.deadlineNs-s.hand.observedNs<=150000000&&s.hand.nowNs>=lastNow_&&s.hand.focused&&s.hand.tracked[1]&&s.input.focused&&s.input.headValid;
     if(!fresh||s.cancel||s.reloadBusy||s.interaction==BodyInteractionState::Suspended)return ObserveSuspended(memory,s);
+    if(ordinaryDrawIssue_&&ordinaryDrawIssue_->selected.weapon&&
+       (s.owner!=ordinaryDrawIssue_->selected||s.hand.owner!=ordinaryDrawIssue_->selectedHand||
+        s.gun!=ordinaryDrawIssue_->selectedGun||s.hand.nowNs>=ordinaryDrawIssue_->ackDeadline))return ObserveSuspended(memory,s);
     lastNow_=s.hand.nowNs;
     if(s.input.generation==lastInput_){out.pending=bool(pending_);out.blockFire=out.pending;return out;}
     lastInput_=s.input.generation;
@@ -352,14 +419,21 @@ BodyDrawResult Bc2BodyInventory::TickDraw(const WeaponModeMemory& memory,const B
         }
     }
     const auto result=policy_.Update(sample);slots_=result.slots;
-    if(result.cancelledRequest){out.cancelled=result.cancelledRequest;EventRow(3,s,result.cancelledRequest);pending_.reset();++cancels_;}
+    if(result.cancelledRequest){out.cancelled=result.cancelledRequest;EventRow(3,s,result.cancelledRequest);pending_.reset();ordinaryDrawIssue_.reset();++cancels_;}
     if(result.committedRequest){
-        out.committed=result.committedRequest;EventRow(2,s,result.committedRequest,unsigned(selected->key.id));pending_.reset();++commits_;
+        out.committed=result.committedRequest;EventRow(2,s,result.committedRequest,unsigned(selected->key.id));pending_.reset();ordinaryDrawIssue_.reset();++commits_;
         // Direct shoulder swaps acknowledge through the ordinary selector,
         // without the hide/show phase transition used by an empty-hand draw.
         if(const auto drawn=AssignedSlot(physicalSelected))heldRelease_.DrawnAt(s.hand.owner,s.gun,revision_,*drawn);
     }
-    if(result.request&&proposed){pending_=result.request;out.command=proposed;EventRow(1,s,result.request->id,proposed->targetWeapon,proposed->action);++requests_;}
+    if(result.request&&proposed){pending_=result.request;out.command=proposed;
+        const auto deadline=policy_.AcknowledgementDeadline(result.request->id);
+        if(deadline){ordinaryDrawIssue_=OrdinaryDrawIssue{result.request->id,s.owner,{},*proposed,
+            {native.inventory,native.switching,native.count,native.items},s.hand.sequence,s.hand.observedNs,
+            s.hand.deadlineNs,*deadline,s.hand.nowNs,false};
+            ordinaryDrawIssue_->fromHand=s.hand.owner;ordinaryDrawIssue_->fromGun=s.gun;
+        }else ordinaryDrawIssue_.reset();
+        EventRow(1,s,result.request->id,proposed->targetWeapon,proposed->action);++requests_;}
     out.pending=bool(pending_);out.blockFire=out.pending;
     if(!out.pending)PublishDisplay(native,s,selected->key);else display_.reset();return out;
 }
@@ -613,7 +687,8 @@ void Bc2BodyInventory::EventRow(unsigned kind,const BodyDrawSample& s,std::uint6
 }
 void Bc2BodyInventory::Report(std::ostream& out)const {
     out<<",\"body_inventory\":{\"enabled\":"<<(enabled_?"true":"false")<<",\"requests\":"<<requests_<<",\"committed\":"<<commits_
-       <<",\"cancelled\":"<<cancels_<<",\"blocked\":"<<blocked_<<",\"unavailable\":"<<unavailable_<<",\"metadata_pauses\":"<<metadataPauses_<<",\"empty_hands_enabled\":false"
+       <<",\"cancelled\":"<<cancels_<<",\"blocked\":"<<blocked_<<",\"unavailable\":"<<unavailable_<<",\"metadata_pauses\":"<<metadataPauses_
+       <<",\"ordinary_draw_rearm\":{\"retained\":"<<drawRearmRetained_<<",\"rejected\":"<<drawRearmRejected_<<"},\"empty_hands_enabled\":false"
        <<",\"automatic_stow\":{\"enabled\":"<<(automaticEnabled_?"true":"false")<<",\"pending\":"<<(automaticPending_?"true":"false")
        <<",\"entries\":"<<automaticEntries_<<",\"requests\":"<<automaticRequests_<<",\"unsupported\":"<<automaticUnsupported_<<",\"superseded\":"<<automaticSuperseded_<<"},\"read_status\":[";
     for(unsigned n=0;n<readStatuses_.size();++n){if(n)out<<',';out<<readStatuses_[n];}

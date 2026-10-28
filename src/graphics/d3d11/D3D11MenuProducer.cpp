@@ -1,10 +1,14 @@
 #include "fvr/graphics/D3D11MenuProducer.h"
+#include "fvr/graphics/D3D11CallProvenance.h"
+#include <intrin.h>
 namespace fvr::graphics {
 void D3D11MenuProducer::Reset()noexcept {
+    callProvenance::Scope provenance(callProvenance::Kind::MenuReset,device_.Get(),context_.Get(),nullptr,reinterpret_cast<std::uintptr_t>(_ReturnAddress()));
     producer_.Reset();for(auto& s:scratch_)s.Reset();context_.Reset();device_.Reset();
     exporting_=publishing_=awaiting_=false;width_=height_=format_=0;pending_={};
 }
 void D3D11MenuProducer::Pump(IDXGISwapChain* chain,ipc::MenuChannel& channel)noexcept {
+    callProvenance::Scope provenance(callProvenance::Kind::MenuPump,device_.Get(),context_.Get(),chain,reinterpret_cast<std::uintptr_t>(_ReturnAddress()));
     if(!chain||!channel.Connected())return;
     if(awaiting_){
         const auto result=channel.PollOutcome();if(result==ipc::Outcome::Pending)return;
@@ -23,7 +27,7 @@ void D3D11MenuProducer::Pump(IDXGISwapChain* chain,ipc::MenuChannel& channel)noe
         publishing_=false;if(result==ipc::ChannelResult::Ok){++published_;awaiting_=true;}else{if(result==ipc::ChannelResult::Timeout||result==ipc::ChannelResult::Closed)++discarded_;else ++failed_;producer_.Reset();}
         return;
     }
-    ipc::MenuState status;if(channel.ReadState(status)!=ipc::ChannelResult::Ok||status.mode!=ipc::MenuMode::Menu)return;
+    ipc::MenuState status;if(channel.ReadState(status)!=ipc::ChannelResult::Ok||!ipc::DisplaysMenuRaster(status.mode))return;
     Microsoft::WRL::ComPtr<ID3D11Texture2D> source;if(FAILED(chain->GetBuffer(0,IID_PPV_ARGS(&source)))){++failed_;return;}
     D3D11_TEXTURE2D_DESC d{};source->GetDesc(&d);
     if(!d.Width||!d.Height||d.Width>16384||d.Height>16384||d.SampleDesc.Count!=1||d.ArraySize!=1||d.MipLevels!=1||!CopyCompatibleFormats(d.Format,d.Format)){++failed_;return;}

@@ -21,7 +21,7 @@ bool ValidInput(const InputFrame& f) noexcept {
     }
     return true;
 }
-ActionOutput ControllerActions::Update(const InputFrame& f,const InputOwner& owner,std::int64_t now) noexcept {
+ActionOutput ControllerActions::Update(const InputFrame& f,const InputOwner& owner,std::int64_t now,std::int64_t menuNowNs) noexcept {
     ActionSample left{};left.owner=owner.owner;left.generation=f.generation;left.frameNs=now;left.timeNs=f.predictedNs;
     left.playing=owner.playing;left.bindingsVerified=owner.bindingsVerified;
     const auto& l=f.hands[0];const auto& r=f.hands[1];
@@ -31,6 +31,13 @@ ActionOutput ControllerActions::Update(const InputFrame& f,const InputOwner& own
     ownerGeneration_=owner.generation;spaceGeneration_=f.spaceGeneration;
     left.focused=f.focused&&fresh&&ValidInput(f)&&owner.generation&&!transition;
     auto right=left;left.tracked=f.headValid&&l.gripTracked;right.tracked=f.headValid&&r.aimTracked;
+    if((l.held&StickClick)&&(r.held&StickClick))sprintChordBlocked_=true;
+    else if(!((l.held|r.held)&StickClick))sprintChordBlocked_=false;
+    const bool crouched=crouch_.Update({owner.owner,owner.actorGeneration?owner.actorGeneration:owner.generation,
+        f.spaceGeneration,f.menu.epoch,
+        f.generation,f.predictedNs,now,leftActionsActive_&&left.focused&&left.tracked&&owner.playing&&
+        owner.bindingsVerified&&GameplayOwnsInput(f.menu,menuNowNs?menuNowNs:now)&&(l.active&Secondary)&&(r.active&StickClick),
+        (l.held&Secondary)!=0,((l.held&Primary)||(r.held&StickClick))});
     if(left.focused&&left.tracked){
         const float length=std::hypot(l.stickX,l.stickY);
         if(length>.18f){const float strength=((std::min)(length,1.f)-.18f)/.82f;left.forward=l.stickY/length*strength;left.strafe=l.stickX/length*strength;}
@@ -44,8 +51,8 @@ ActionOutput ControllerActions::Update(const InputFrame& f,const InputOwner& own
         // Left trigger drives finger posing only. Optic-specific proximity ADS,
         // when verified, must request its own semantic/native aiming state.
         if(l.held&Primary)left.held|=Use;
-        if(l.held&Secondary)left.held|=Crouch;
-        if((l.held&StickClick)&&!(r.held&StickClick))left.held|=Sprint;
+        if(crouched)left.held|=Crouch;
+        if((l.held&StickClick)&&!(r.held&StickClick)&&!sprintChordBlocked_)left.held|=Sprint;
         if(l.held&MenuClick)left.held|=Menu;
     }
     if(right.focused&&right.tracked){
@@ -59,6 +66,7 @@ ActionOutput ControllerActions::Update(const InputFrame& f,const InputOwner& own
     // Each controller releases and requires neutral independently. Losing the
     // off-hand must neither cancel gun input nor re-arm a held trigger on return.
     const auto a=policies_[0].Update(left),b=policies_[1].Update(right);
+    leftActionsActive_=a.active;
     ActionOutput out;out.owner=a.active?a.owner:(b.active?b.owner:(a.owner?a.owner:b.owner));
     for(const auto& part:{a,b})if(part.owner==out.owner){
         out.active|=part.active;out.forward+=part.forward;out.strafe+=part.strafe;out.turnDegrees+=part.turnDegrees;

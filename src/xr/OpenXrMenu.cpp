@@ -28,7 +28,7 @@ std::optional<math::Pose> Beam(math::Vec3 a,math::Vec3 b,math::Vec3 eye,float& l
     return math::MakeRelativePose(math::Pose{},out)?std::optional<math::Pose>{out}:std::nullopt;
 }
 }
-OpenXrMenu::~OpenXrMenu(){Drop(panel_);Drop(white_);}
+OpenXrMenu::~OpenXrMenu(){if(surfacePending_)FinishSurface(false);FlushFeedback();Drop(panel_);Drop(white_);}
 void OpenXrMenu::Drop(Chain& c){if(c.handle&&DestroySwapchain)DestroySwapchain(c.handle);c={};}
 void OpenXrMenu::Initialize(XrInstance instance,XrSession session,PFN_xrGetInstanceProcAddr get,ID3D11Device* device,ipc::MenuChannel* channel){
     session_=session;channel_=channel;device_=device;device_->GetImmediateContext(&context_);
@@ -42,6 +42,9 @@ void OpenXrMenu::Initialize(XrInstance instance,XrSession session,PFN_xrGetInsta
     std::cerr<<"menu_supported_formats=";for(const auto format:formats_)std::cerr<<format<<",";std::cerr<<'\n';
 }
 bool OpenXrMenu::Allocate(Chain& c,unsigned width,unsigned height,std::int64_t format){
+    StartStage();
+    if(!firstFailure_.available){failureContext_.width=width;failureContext_.height=height;failureContext_.format=format;}
+    const bool pointer=&c==&white_;
     const auto sourceFormat=format;
     if(std::find(formats_.begin(),formats_.end(),format)==formats_.end()){
         // XR may offer only the SRGB view of BC2's UNORM backbuffer format.
@@ -51,20 +54,46 @@ bool OpenXrMenu::Allocate(Chain& c,unsigned width,unsigned height,std::int64_t f
             return candidate>=0&&candidate<=UINT32_MAX&&
                 (candidate==28||candidate==29||candidate==87||candidate==91)&&
                 graphics::CopyCompatibleFormats(std::uint32_t(sourceFormat),std::uint32_t(candidate));});
-        if(compatible==formats_.end())return false;format=*compatible;
+        if(compatible==formats_.end()){
+            RetainFailure(pointer?"pointer_format":"panel_format","XrResult",XR_ERROR_SWAPCHAIN_FORMAT_UNSUPPORTED,c);return false;
+        }format=*compatible;
     }
+    if(!firstFailure_.available)failureContext_.format=format;
     if(c.handle&&c.width==width&&c.height==height&&c.format==format)return true;
     Drop(c);
     XrSwapchainCreateInfo info{XR_TYPE_SWAPCHAIN_CREATE_INFO};info.usageFlags=XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT|XR_SWAPCHAIN_USAGE_TRANSFER_DST_BIT;
     info.format=format;info.sampleCount=info.faceCount=info.arraySize=info.mipCount=1;info.width=width;info.height=height;
-    if(XR_FAILED(CreateSwapchain(session_,&info,&c.handle)))return false;
-    std::uint32_t n=0;if(XR_FAILED(EnumerateSwapchainImages(c.handle,0,&n,nullptr))||!n||n>64){Drop(c);return false;}
+    const auto created=CreateSwapchain(session_,&info,&c.handle);
+    if(XR_FAILED(created)){RetainFailure(pointer?"pointer_create":"panel_create","XrResult",created,c);return false;}
+    std::uint32_t n=0;const auto count=EnumerateSwapchainImages(c.handle,0,&n,nullptr);
+    if(XR_FAILED(count)||!n||n>64){
+        RetainFailure(pointer?"pointer_image_count":"panel_image_count",XR_FAILED(count)?"XrResult":"image_count",XR_FAILED(count)?std::int64_t(count):std::int64_t(n),c);
+        Drop(c);return false;
+    }
     c.images.assign(n,{XR_TYPE_SWAPCHAIN_IMAGE_D3D11_KHR});
-    if(XR_FAILED(EnumerateSwapchainImages(c.handle,n,&n,reinterpret_cast<XrSwapchainImageBaseHeader*>(c.images.data())))){Drop(c);return false;}
+    const auto images=EnumerateSwapchainImages(c.handle,n,&n,reinterpret_cast<XrSwapchainImageBaseHeader*>(c.images.data()));
+    if(XR_FAILED(images)){RetainFailure(pointer?"pointer_images":"panel_images","XrResult",images,c);Drop(c);return false;}
     c.width=width;c.height=height;c.format=format;
     std::cerr<<"menu_swapchain source_format="<<sourceFormat<<" target_format="<<format<<" width="<<width<<" height="<<height<<'\n';return true;
 }
+void OpenXrMenu::StartStage()noexcept {
+    if(firstFailure_.available)return;
+    LARGE_INTEGER qpc{};failureContext_.stageStartedQpc=QueryPerformanceCounter(&qpc)?qpc.QuadPart:0;
+}
+void OpenXrMenu::RetainFailure(const char* stage,const char* domain,std::int64_t code,const Chain& chain,
+                              ID3D11Texture2D* image,std::int64_t transfer,bool counted)noexcept {
+    if(firstFailure_.available)return;
+    firstFailure_=failureContext_;firstFailure_.available=true;firstFailure_.errorCounted=counted;
+    firstFailure_.stage=stage;firstFailure_.resultDomain=domain;firstFailure_.result=code;firstFailure_.transferResult=transfer;
+    LARGE_INTEGER qpc{};firstFailure_.qpc=QueryPerformanceCounter(&qpc)?qpc.QuadPart:0;firstFailure_.qpcFrequency=frequency_;
+    static_assert(sizeof(chain.handle)<=sizeof(firstFailure_.swapchain));
+    std::memcpy(&firstFailure_.swapchain,&chain.handle,sizeof(chain.handle));
+    D3D11_TEXTURE2D_DESC desc{};if(image)image->GetDesc(&desc);firstFailure_.textureFormat=unsigned(desc.Format);
+}
 void OpenXrMenu::Failure(const char* stage,std::int64_t code,const Chain& chain,ID3D11Texture2D* image){
+    const bool wait=std::strstr(stage,"_wait")!=nullptr;
+    const auto* domain=std::strstr(stage,"_image_index")?"image_index":std::strcmp(stage,"pointer_rtv")==0?"HRESULT":"XrResult";
+    RetainFailure(stage,domain,code,chain,image,-1,!wait);
     // Retain the first instance of a repeated failure instead of flooding each
     // frame. Include the actual runtime texture format to distinguish typeless
     // storage from the typed format negotiated with OpenXR.
@@ -74,6 +103,8 @@ void OpenXrMenu::Failure(const char* stage,std::int64_t code,const Chain& chain,
         <<" texture_format="<<unsigned(desc.Format)<<" width="<<chain.width<<" height="<<chain.height<<'\n';
 }
 bool OpenXrMenu::Upload(Chain& chain,ID3D11Texture2D* source){
+    StartStage();
+    if(!firstFailure_.available){failureContext_.width=chain.width;failureContext_.height=chain.height;failureContext_.format=chain.format;}
     std::uint32_t index=0;XrSwapchainImageAcquireInfo a{XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO};
     const auto acquire=AcquireSwapchainImage(chain.handle,&a,&index);
     if(XR_FAILED(acquire)){Failure(source?"panel_acquire":"pointer_acquire",acquire,chain);return false;}
@@ -96,6 +127,81 @@ bool OpenXrMenu::Upload(Chain& chain,ID3D11Texture2D* source){
     if(XR_FAILED(result))Failure(source?"panel_release":"pointer_release",result,chain);
     return XR_SUCCEEDED(result)&&okay;
 }
+void OpenXrMenu::FlushFeedback()noexcept {
+    if(feedbackPending_&&channel_){const auto result=channel_->SurfaceConsumed(feedback_,feedbackConsumed_);
+        if(result!=ipc::ChannelResult::Busy)feedbackPending_=false;}
+}
+void OpenXrMenu::FinishSurface(bool consumed)noexcept {
+    if(!surfacePending_)return;
+    if(!consumed){
+        if(consumer_.HasPendingCopy())consumer_.CancelCopy(pendingSurface_.ticket);
+        // Cancellation does not cancel GPU commands. They retain the old
+        // resources; never queue another copy into that scratch generation.
+        consumer_.Reset();opened_={};for(auto& image:scratch_)image.Reset();
+    }
+    feedback_=pendingSurface_.ticket;feedbackConsumed_=consumed;feedbackPending_=true;
+    surfacePending_=false;pendingSurface_={};pendingSpace_=0;
+}
+void OpenXrMenu::AdvanceSurface(const interaction::InputFrame& input,const ipc::MenuState& state,bool active){
+    if(!surfacePending_)return;
+    const auto& surface=pendingSurface_;const auto& d=surface.descriptor;
+    if(!firstFailure_.available){failureContext_.surface=surface;failureContext_.hasSurface=true;
+        failureContext_.width=d.width;failureContext_.height=d.height;failureContext_.format=d.format;}
+    const auto sourceDeadline=surface.state.deadlineQpc;
+    const auto expired=[&]{RetainFailure("panel_copy_deadline","HRESULT",HRESULT(WAIT_TIMEOUT),panel_,nullptr,
+        std::int64_t(graphics::TransferResult::Busy));++errors_;hasImage_=false;FinishSurface(false);};
+    LARGE_INTEGER started{};
+    if(!QueryPerformanceCounter(&started)||started.QuadPart>=sourceDeadline){expired();return;}
+    // The ticket's space is the native menu epoch, NOT the XR reference space.
+    // Capture the host space separately and reject any change during this copy.
+    if(!active||!input.focused||!input.headValid||!input.spaceGeneration||input.spaceGeneration!=pendingSpace_||
+       state.epoch!=surface.state.epoch||state.mode!=surface.state.mode){FinishSurface(false);return;}
+    const auto fresh=[&]{LARGE_INTEGER now{};return QueryPerformanceCounter(&now)&&
+        now.QuadPart<sourceDeadline&&now.QuadPart<state.deadlineQpc;};
+    if(!fresh()){expired();return;}
+    if(std::memcmp(&opened_,&d,sizeof(d))){
+        opened_={};consumer_.Reset();for(auto& image:scratch_)image.Reset();
+        const auto result=consumer_.Open(device_.Get(),d);
+        if(result!=graphics::TransferResult::Ok){
+            RetainFailure("panel_open","HRESULT",consumer_.LastError(),panel_,nullptr,std::int64_t(result));
+            ++errors_;hasImage_=false;FinishSurface(false);return;
+        }
+        D3D11_TEXTURE2D_DESC desc{};desc.Width=d.width;desc.Height=d.height;desc.Format=DXGI_FORMAT(d.format);
+        desc.MipLevels=desc.ArraySize=desc.SampleDesc.Count=1;desc.Usage=D3D11_USAGE_DEFAULT;
+        for(auto& image:scratch_){const auto hr=device_->CreateTexture2D(&desc,nullptr,&image);
+            if(FAILED(hr)){RetainFailure("panel_scratch","HRESULT",hr,panel_);++errors_;hasImage_=false;FinishSurface(false);return;}}
+        opened_=d;
+    }
+    if(!fresh()){expired();return;}
+    const std::array<graphics::TextureSlice,2> slices{{{scratch_[0].Get(),0},{scratch_[1].Get(),0}}};
+    StartStage();const auto copied=consumer_.HasPendingCopy()?consumer_.PollCopy(surface.ticket):consumer_.SubmitCopy(surface.ticket,slices);
+    if(copied==graphics::TransferResult::Busy){
+        // One zero-wait poll per XR frame. No ACK, new source, XR acquire or
+        // image-age renewal while the exact source copy is outstanding.
+        if(!fresh())expired();return;
+    }
+    if(copied!=graphics::TransferResult::Ok){
+        RetainFailure("panel_copy","HRESULT",consumer_.LastError(),panel_,nullptr,std::int64_t(copied));
+        ++errors_;hasImage_=false;FinishSurface(false);return;
+    }
+    if(!fresh()){expired();return;}
+    const auto completed=surface;
+    if(!Allocate(panel_,d.width,d.height,d.format)){FinishSurface(true);hasImage_=false;++errors_;return;}
+    if(!fresh()){expired();return;}
+    // GPU completion grants source consumption even if XR upload fails.
+    // Establish feedback before Upload, whose wait failure throws.
+    FinishSurface(true);
+    if(Upload(panel_,scratch_[0].Get())){
+        if(!fresh()){expired();return;}
+        hasImage_=true;imageEpoch_=state.epoch;imageMode_=state.mode;imageSpace_=input.spaceGeneration;
+        lastImageWall_=GetTickCount64();++frames_;imageSurface_=completed;
+    }else{hasImage_=false;++errors_;}
+}
+bool OpenXrMenu::WorldAvailable()const noexcept {
+    LARGE_INTEGER now{};
+    return QueryPerformanceCounter(&now)&&
+        interaction::MenuAllowsWorldPresentation(retainedState_,now.QuadPart);
+}
 bool OpenXrMenu::Frame(const interaction::InputFrame& input){
     const unsigned menuInputState=(input.focused?1u:0u)|(input.headValid?2u:0u)|
         ((input.hands[0].active&interaction::MenuClick)?4u:0u)|((input.hands[0].held&interaction::MenuClick)?8u:0u);
@@ -114,31 +220,23 @@ bool OpenXrMenu::Frame(const interaction::InputFrame& input){
     // menu close: keep the last state only until its ORIGINAL source deadline.
     // Busy never renews it; expiry, Closed and an actual Gameplay state win.
     if(!known){retainedState_={};state={};}
-    const bool active=known&&state.mode==ipc::MenuMode::Menu;
-    if(feedbackPending_){const auto result=channel_->SurfaceConsumed(feedback_,feedbackConsumed_);if(result!=ipc::ChannelResult::Busy)feedbackPending_=false;}
-    if(!active||!input.focused||!input.headValid||imageEpoch_!=state.epoch)hasImage_=false;
-    ipc::MenuSurface surface;
-    if(channel_&&!feedbackPending_&&channel_->TakeSurface(surface)==ipc::ChannelResult::Ok){
-        feedback_=surface.ticket;feedbackPending_=true;feedbackConsumed_=false;
-        const auto& d=surface.descriptor;
-        if(active&&surface.state.epoch==state.epoch&&input.focused&&input.headValid){
-            if(std::memcmp(&opened_,&d,sizeof(d))){
-                opened_={};consumer_.Reset();hasImage_=false;
-                if(consumer_.Open(device_.Get(),d)==graphics::TransferResult::Ok){
-                    D3D11_TEXTURE2D_DESC desc{};desc.Width=d.width;desc.Height=d.height;desc.Format=DXGI_FORMAT(d.format);desc.MipLevels=desc.ArraySize=desc.SampleDesc.Count=1;desc.Usage=D3D11_USAGE_DEFAULT;
-                    bool okay=true;for(auto& s:scratch_){s.Reset();okay&=SUCCEEDED(device_->CreateTexture2D(&desc,nullptr,&s));}if(okay)opened_=d;
-                }
-            }
-            if(graphics::Valid(opened_)){
-                const std::array<graphics::TextureSlice,2> slices{{{scratch_[0].Get(),0},{scratch_[1].Get(),0}}};
-                feedbackConsumed_=consumer_.Copy(surface.ticket,slices)==graphics::TransferResult::Ok;
-                if(feedbackConsumed_&&Allocate(panel_,d.width,d.height,d.format)&&Upload(panel_,scratch_[0].Get())){
-                    hasImage_=true;imageEpoch_=state.epoch;lastImageWall_=GetTickCount64();++frames_;
-                }else{hasImage_=false;++errors_;}
-            }
-        }
-        const auto result=channel_->SurfaceConsumed(feedback_,feedbackConsumed_);if(result!=ipc::ChannelResult::Busy)feedbackPending_=false;
+    const bool active=known&&ipc::DisplaysMenuRaster(state.mode);
+    if(!firstFailure_.available){
+        failureContext_={};failureContext_.inputGeneration=input.generation;failureContext_.inputSpace=input.spaceGeneration;
+        failureContext_.inputPredictedNs=input.predictedNs;failureContext_.focused=input.focused;failureContext_.headValid=input.headValid;
+        failureContext_.stateRead=read;failureContext_.stateKnown=known;failureContext_.active=active;failureContext_.state=state;
     }
+    FlushFeedback();
+    if(!active||!input.focused||!input.headValid||imageEpoch_!=state.epoch||imageMode_!=state.mode||
+       imageSpace_!=input.spaceGeneration)hasImage_=false;
+    if(channel_&&!feedbackPending_&&!surfacePending_){
+        ipc::MenuSurface surface{};
+        if(channel_->TakeSurface(surface)==ipc::ChannelResult::Ok){
+            pendingSurface_=surface;pendingSpace_=input.spaceGeneration;surfacePending_=true;
+        }
+    }
+    AdvanceSurface(input,state,active);
+    FlushFeedback();
     if(hasImage_&&GetTickCount64()-lastImageWall_>250)hasImage_=false;
     // Pointing stays in complete-raster UV. The engine adapter converts pixels
     // with its original current-viewport mapper on the native UI thread.
@@ -155,6 +253,7 @@ bool OpenXrMenu::Frame(const interaction::InputFrame& input){
         // Separate tiny texture, so pointer updates never overwrite native UI.
         // A failed initialization must neither submit uninitialized pixels nor
         // destroy/recreate its swapchain on every XR frame.
+        if(!firstFailure_.available){failureContext_.surface=imageSurface_;failureContext_.hasSurface=graphics::Valid(imageSurface_.ticket,imageSurface_.descriptor);}
         pointerReady_=Allocate(white_,2,2,panel_.format)&&Upload(white_,nullptr);
         if(!pointerReady_){pointerRetryWall_=now+500;++errors_;}
     }

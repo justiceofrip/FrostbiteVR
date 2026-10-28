@@ -327,6 +327,9 @@ std::optional<ReloadCycleRetirement> RetireRequestCycle(const ReloadHoldIdentity
 // QPC-derived nanoseconds (same epoch as QueryPerformanceCounter), max250ms.
 OwnerPublicationResult PublishOwnerObserved(const ReloadStateSnapshot&,std::int64_t deadlineNs)noexcept;
 bool PublishOwner(const ReloadStateSnapshot&,std::int64_t deadlineNs)noexcept;
+// Only a proved replacement native actor plus excluded/drained callbacks may
+// retire an old resource domain. Same-actor changes and input loss do nothing.
+bool RetireAmmoForReplacementActor(const ReloadStateOwner&)noexcept;
 void ClearOwner(ReloadOwnerLoss loss=ReloadOwnerLoss::LifetimeEnded)noexcept;
 // Private resource backend consumes the body's native lifetime, independently
 // of rendering or active hand claims. Normal builds do not dispatch from it.

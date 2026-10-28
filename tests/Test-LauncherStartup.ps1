@@ -1,9 +1,12 @@
 #requires -Version 7.5
+param([string]$PayloadRoot)
 $ErrorActionPreference='Stop'
 $repo=Split-Path $PSScriptRoot -Parent
-. (Join-Path $repo 'launcher/Launcher.Core.ps1')
-. (Join-Path $repo 'launcher/runtime/Runtime.Core.ps1')
-. (Join-Path $repo 'launcher/runtime/Startup.ps1')
+$app=if($PayloadRoot){Join-Path $PayloadRoot 'app'}else{Join-Path $repo 'launcher'}
+$runtime=if($PayloadRoot){Join-Path $PayloadRoot 'runtime'}else{Join-Path $repo 'launcher/runtime'}
+. (Join-Path $app 'Launcher.Core.ps1')
+. (Join-Path $runtime 'Runtime.Core.ps1')
+. (Join-Path $runtime 'Startup.ps1')
 $root=Join-Path $repo ('test-temp/startup-'+[guid]::NewGuid().ToString('N'))
 $saved=@{};foreach($key in @('TEMP','TMP','TMPDIR','PYTHONDONTWRITEBYTECODE','XR_RUNTIME_JSON')){$saved[$key]=[Environment]::GetEnvironmentVariable($key,'Process')}
 $script:checks=0
@@ -11,6 +14,33 @@ function Check([bool]$Good,[string]$Name){if(-not $Good){throw "FAILED: $Name"};
 function Reject([scriptblock]$Work,[string]$Message,[string]$Name){$errorText='';try{& $Work|Out-Null}catch{$errorText=$_.Exception.Message};Check ($errorText -like ('*'+$Message+'*')) $Name}
 try {
     $null=Set-FvrLauncherStorage $root
+    $activation=Get-Bc2ActivationProcessOutcome ([pscustomobject]@{HasExited=$true;ExitCode=[int]-1073741819})
+    Check ($activation.schema -ceq 'bc2vr.activation-process.v1' -and -not $activation.ownership_verified -and
+        $activation.original_process_state -ceq 'exited' -and $activation.exit_observed -and
+        $activation.exit_code -is [long] -and $activation.exit_code -eq 3221225477) 'retained original exit preserves typed Windows process code without claiming verified ownership'
+    $activation=Get-Bc2ActivationProcessOutcome ([pscustomobject]@{HasExited=$true;ExitCode=0})
+    Check ($activation.exit_observed -and $activation.exit_code -is [long] -and $activation.exit_code -eq 0) 'observed original zero-code exit remains distinct from unavailable exit code'
+    $script:activationExitReads=0
+    $liveOriginal=[pscustomobject]@{HasExited=$false}
+    $liveOriginal|Add-Member ScriptProperty ExitCode {$script:activationExitReads++;throw 'private fixture path must not be retained'}
+    $activation=Get-Bc2ActivationProcessOutcome $liveOriginal
+    Check ($activation.original_process_state -ceq 'live' -and -not $activation.exit_observed -and
+        $null -eq $activation.exit_code -and $script:activationExitReads -eq 0) 'live original with failed ownership does not read an invalid ExitCode or claim exit'
+    $unavailableOriginal=[pscustomobject]@{}
+    $unavailableOriginal|Add-Member ScriptProperty HasExited {throw 'private fixture path must not be retained'}
+    $activation=Get-Bc2ActivationProcessOutcome $unavailableOriginal
+    Check ($activation.original_process_state -ceq 'unavailable' -and -not $activation.exit_observed -and
+        $null -eq $activation.exit_code -and ($activation|ConvertTo-Json -Compress) -notmatch 'private fixture') 'unavailable original observation is bounded and contains no accessor exception details'
+    $exitedOriginal=[pscustomobject]@{HasExited=$true}
+    $exitedOriginal|Add-Member ScriptProperty ExitCode {throw 'private fixture path must not be retained'}
+    $activation=Get-Bc2ActivationProcessOutcome $exitedOriginal
+    Check ($activation.original_process_state -ceq 'exited' -and $activation.exit_observed -and $null -eq $activation.exit_code) 'unreadable exit code does not erase the observed exit or fabricate success'
+    foreach($invalidCode in @($null,'0',0.5,$false,[long]4294967296)){
+        $activation=Get-Bc2ActivationProcessOutcome ([pscustomobject]@{HasExited=$true;ExitCode=$invalidCode})
+        Check ($activation.exit_observed -and $null -eq $activation.exit_code) 'malformed original exit code is not converted into a process result'
+    }
+    $activation=Get-Bc2ActivationProcessOutcome ([pscustomobject]@{HasExited='false';ExitCode=0})
+    Check ($activation.original_process_state -ceq 'unavailable' -and -not $activation.exit_observed -and $null -eq $activation.exit_code) 'nonboolean original exit observation cannot claim exit'
     $script:registered='';$script:registryReads=0
     function Get-Bc2RegisteredOpenXrRuntime {$script:registryReads++;return $script:registered}
     $env:XR_RUNTIME_JSON=$null
@@ -44,6 +74,75 @@ try {
     Check ($report.game_found -and -not $report.game_supported -and $report.game_sha256 -eq $hash -and -not $report.ContainsKey('game_path')) 'unverified executable fingerprint retained without personal path'
     $config.game_sha256=@($hash)
     Check ((Test-Bc2GameInstallation @{game_path=$game} $config $root).sha256 -eq $hash) 'exact admitted fingerprint passes preflight'
+    # Synthetic PE bytes plus a narrowly mocked file hash exercise admission
+    # policy only. They are not an inspected or accepted Steam game executable.
+    $steamDir=Join-Path $root 'steam-fixture';$null=[IO.Directory]::CreateDirectory($steamDir)
+    $script:steamExe=Join-Path $steamDir 'BFBC2Game.exe'
+    $candidateHash='22e96001382eb847d3ab0a02b59ec7bb79ba47e04146e74c6c49e38465f38c96'
+    function New-SteamPeFixture {
+        $b=[byte[]]::new(1024)
+        function Put16([int]$At,[uint16]$Value){[BitConverter]::GetBytes($Value).CopyTo($b,$At)}
+        function Put32([int]$At,[uint32]$Value){[BitConverter]::GetBytes($Value).CopyTo($b,$At)}
+        Put16 0 0x5a4d;Put32 60 128;Put32 128 0x4550;Put16 132 0x14c;Put16 134 1
+        Put32 136 1314210909;Put16 148 224;Put16 150 0x123;Put16 152 0x10b
+        Put32 168 0x1000;Put32 180 0x400000;Put32 208 0x1913000;Put32 212 512
+        Put32 384 512;Put32 388 0x1000;Put32 392 512;Put32 396 512;Put32 412 0x60000020
+        return ,$b
+    }
+    $peBytes=New-SteamPeFixture;[IO.File]::WriteAllBytes($script:steamExe,$peBytes)
+    $layout=Get-Bc2ExecutablePeLayout $script:steamExe
+    Check ($layout.valid -and $layout.machine -eq 0x14c -and $layout.timestamp -eq 1314210909 -and
+        $layout.image_base -eq 0x400000 -and $layout.sections.Count -eq 1 -and $layout.file_bytes -eq 1024) 'bounded file-only parser retains typed PE evidence'
+    $script:steamMockHash=$candidateHash;$script:steamHashReads=0
+    function Get-FileHash {
+        param([string]$LiteralPath,[string]$Algorithm='SHA256')
+        if($LiteralPath -ceq $script:steamExe){$script:steamHashReads++;return [pscustomobject]@{Hash=$script:steamMockHash}}
+        Microsoft.PowerShell.Utility\Get-FileHash -LiteralPath $LiteralPath -Algorithm $Algorithm
+    }
+    try {
+        Reject {Test-Bc2ExecutableAdmission -Exe $script:steamExe -Hash $candidateHash -Config $config} 'Enable the experimental Steam option' 'exact candidate remains opt-in by default'
+        foreach($flag in @($null,'true',1,$false)){
+            Reject {Test-Bc2ExecutableAdmission -Exe $script:steamExe -Hash $candidateHash -Config $config -ExperimentalSteam $flag} 'Enable the experimental Steam option' 'nonboolean or false opt-in cannot admit candidate'
+        }
+        Reject {Test-Bc2ExecutableAdmission -Exe $script:steamExe -Hash ('d'*64) -Config $config -ExperimentalSteam $true} 'not been verified' 'experimental Steam option cannot admit an unknown fingerprint'
+        Reject {Test-Bc2ExecutableAdmission -Exe $script:steamExe -Hash $candidateHash -Config @{game_sha256=@($candidateHash)}} 'Enable the experimental Steam option' 'candidate cannot silently become verified through config allowlist'
+        $admission=Test-Bc2ExecutableAdmission -Exe $script:steamExe -Hash $candidateHash -Config $config -ExperimentalSteam $true
+        Check ($admission.experimental_steam -and -not $admission.game_verified -and $admission.profile -ceq 'experimental_steam_795745' -and
+            $admission.pe_layout.valid -and $script:steamHashReads -eq 1) 'opted-in exact candidate is explicitly experimental and rechecks current file hash'
+        $installation=Test-Bc2GameInstallation @{game_path=$steamDir;steam_compatibility=$true} $config $root
+        $report=Read-FvrJson (Join-Path $root 'launch-check.json')
+        Check ($installation.sha256 -ceq $candidateHash -and $installation.experimental_steam -and $report.game_supported -and
+            -not $report.game_verified -and $report.experimental_steam -and $report.pe_layout.valid) 'candidate report retains observed hash and separates startup admission from verification'
+        Reject {Test-Bc2GameInstallation @{game_path=$steamDir;steam_compatibility='true'} $config $root} 'Enable the experimental Steam option' 'settings requires a JSON boolean true, not a truthy string'
+        $report=Read-FvrJson (Join-Path $root 'launch-check.json')
+        Check (-not $report.game_supported -and -not $report.game_verified -and $report.pe_layout.valid -and
+            $report.pe_layout.timestamp -eq 1314210909 -and ($report|ConvertTo-Json -Depth 6) -notlike ('*'+$steamDir+'*')) 'rejection still reports structured PE evidence without private paths'
+        $script:steamMockHash='f'*64
+        Reject {Test-Bc2ExecutableAdmission -Exe $script:steamExe -Hash $candidateHash -Config $config -ExperimentalSteam $true} 'changed during' 'candidate replacement between inspection and admission is rejected'
+        $script:steamMockHash=$candidateHash
+        foreach($change in @(
+            @{at=0;size=2;value=0;name='missing MZ'},@{at=60;size=4;value=32;name='bad PE offset'},
+            @{at=132;size=2;value=0x8664;name='wrong architecture'},@{at=136;size=4;value=1;name='different timestamp'},
+            @{at=152;size=2;value=0x20b;name='PE32 plus'},@{at=180;size=4;value=0x500000;name='relocated preferred base'},
+            @{at=208;size=4;value=0x1914000;name='different image size'},@{at=134;size=2;value=97;name='unbounded section count'},
+            @{at=148;size=2;value=223;name='short optional header'},@{at=396;size=4;value=1000;name='raw file overflow'},
+            @{at=388;size=4;value=[long]4294967280;name='virtual image overflow'},@{at=396;size=4;value=64;name='raw header overlap'}
+        )){
+            $mutated=[byte[]]$peBytes.Clone()
+            $replacement=if($change.size -eq 2){[BitConverter]::GetBytes([uint16]$change.value)}else{[BitConverter]::GetBytes([uint32]$change.value)}
+            $replacement.CopyTo($mutated,$change.at);[IO.File]::WriteAllBytes($script:steamExe,$mutated)
+            Reject {Test-Bc2GameInstallation @{game_path=$steamDir;steam_compatibility=$true} $config $root} 'Experimental Steam startup refused' ('candidate rejects '+$change.name)
+            $report=Read-FvrJson (Join-Path $root 'launch-check.json')
+            Check (-not $report.game_supported -and -not $report.pe_layout.valid -and $report.pe_layout.error) ('rejected '+$change.name+' retains bounded PE failure detail')
+        }
+        $overlap=[byte[]]$peBytes.Clone();[BitConverter]::GetBytes([uint16]2).CopyTo($overlap,134)
+        [Array]::Copy($overlap,376,$overlap,416,40)
+        [IO.File]::WriteAllBytes($script:steamExe,$overlap)
+        Reject {Test-Bc2ExecutableAdmission -Exe $script:steamExe -Hash $candidateHash -Config $config -ExperimentalSteam $true} 'sections overlap' 'candidate cannot alias two section ranges'
+        [IO.File]::WriteAllBytes($script:steamExe,$peBytes)
+        $known=Test-Bc2GameInstallation @{game_path=$game;steam_compatibility=$true} $config $root
+        Check ($known.sha256 -ceq $hash -and -not $known.experimental_steam -and $known.game_verified) 'known configured build keeps original admission behavior even with Steam option enabled'
+    } finally {Remove-Item Function:\Get-FileHash}
     $sample=Join-Path $root 'session-telemetry.jsonl'
     Check ($null -eq (Get-Bc2NativeStartupSample $sample)) 'process existence alone does not mark VR started'
     [IO.File]::WriteAllText($sample,"{`"input_samples`":0,`"gpu_failure_stage`":0,`"camera_restore_failures`":0}`n")

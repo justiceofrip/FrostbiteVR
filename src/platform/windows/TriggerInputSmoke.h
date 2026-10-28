@@ -229,6 +229,16 @@ public:
         crouch_=true;return true;
     }
     bool CrouchDuringApproach()const noexcept{return crouch_;}
+    static constexpr std::uint64_t CrouchClickMs=80;
+    // Two bounded left Y clicks: release the first as movement begins and
+    // the second after movement ends. Neither window is extended or retried.
+    bool CrouchClickHeld(std::uint64_t recipeMs)const noexcept {
+        return crouch_&&((recipeMs>=MovementStartMs()-CrouchClickMs&&recipeMs<MovementStartMs())||
+            (recipeMs>=MovementStartMs()+approachMs_&&recipeMs<MovementReleaseMs()));
+    }
+    std::uint64_t MovementReleaseMs()const noexcept {
+        return MovementStartMs()+approachMs_+(crouch_?CrouchClickMs:0);
+    }
     bool ApproachTurn(int snaps)noexcept {
         if(!IsApproach()||attempts_||turnSnaps_||resumeEnabled_||prepared_||!snaps||snaps<-6||snaps>6)return false;
         turnSnaps_=snaps;return true;
@@ -303,7 +313,7 @@ public:
     unsigned ReviewPair(std::uint64_t sourceInput,std::uint64_t space)noexcept {
         if(!reviewImages_||Failed()||reviewPairs_>=2||space!=space_||!sourceInput||
            sourceInput>lastInput_||sourceInput<=lastReviewInput_)return 0;
-        const auto threshold=reviewPairs_?reviewFinalInput_:releaseInput_;
+        const auto threshold=reviewPairs_?reviewFinalInput_:(crouch_?crouchReleaseInput_[1]:releaseInput_);
         if(!threshold||sourceInput<threshold)return 0;
         lastReviewInput_=sourceInput;return ++reviewPairs_;
     }
@@ -314,7 +324,7 @@ public:
     std::uint64_t ApproachMs()const noexcept{return approachMs_;}
     float Strafe()const noexcept{return strafe_;}
     float Forward()const noexcept{return forward_;}
-    std::uint64_t AttackStartMs()const noexcept{return IsApproach()?MovementStartMs()+approachMs_+ApproachNeutralMs:0;}
+    std::uint64_t AttackStartMs()const noexcept{return IsApproach()?MovementReleaseMs()+ApproachNeutralMs:0;}
     std::uint64_t RecipeDurationMs()const noexcept{return AttackStartMs()+Sequence::Duration()-SequenceOffsetMs();}
     std::uint64_t Duration()const noexcept{return RecipeDurationMs()+pauseDurationMs_;}
     bool ContinueInput(std::uint64_t ms)const noexcept {
@@ -345,24 +355,27 @@ public:
             return input;
         }
         auto input=NeutralSceneInput(t,sequence);
-        if(Failed()||paused_)return input;
+        if(Failed())return input;
+        if(paused_)return input;
         if(ms<AttackStartMs()){
             if(prepared_)input=Sequence::Input(t,sequence,(std::min)(ms,PreparedMovementStartMs));
             if(Turning(ms)&&neutralInput_&&menuEpoch_&&t.focused&&t.headValid&&t.spaceGeneration==space_)
                 input.hands[1].stickX=turnSnaps_<0?-.9f:.9f;
             if(Moving(ms)&&neutralInput_&&menuEpoch_&&t.focused&&t.headValid&&t.spaceGeneration==space_){
                 input.hands[0].stickX=strafe_;input.hands[0].stickY=forward_;
-                if(crouch_)input.hands[0].held|=interaction::Secondary;
             }
+            if(CrouchClickHeld(ms)&&neutralInput_&&menuEpoch_&&t.focused&&t.headValid&&t.spaceGeneration==space_)
+                input.hands[0].held=interaction::Secondary;
             return input;
         }
         if(prepared_)input=Sequence::Input(t,sequence,PreparedMovementStartMs);
-        if(!releaseInput_||ms<releaseMs_+ApproachNeutralMs)return input;
+        if(!releaseInput_||(crouch_&&!crouchReleaseInput_[1])||
+           ms<(std::max)(releaseMs_,crouchReleaseMs_)+ApproachNeutralMs)return input;
         return Sequence::Input(t,sequence,ms-AttackStartMs()+SequenceOffsetMs());
     }
     // Called after the ordinary real-menu decorator, before journaling and IPC.
-    // Default loss is terminal. The opt-in straight movement recipe may pause
-    // once on an expired lease; it never repairs or extends menu authority.
+    // Default loss is terminal. The opt-in straight approach may pause once
+    // during initial neutral or movement; it never extends menu authority.
     void GateMenu(interaction::InputFrame& input,std::uint64_t wall,std::int64_t now,
         ipc::ChannelResult read=ipc::ChannelResult::Ok)noexcept {
         if(!IsApproach()&&!HasMotionRotation())return;
@@ -382,7 +395,11 @@ public:
         }else if(menuEpoch_||ms>=ApproachNeutralMs){
             const bool expired=(read==ipc::ChannelResult::Timeout||read==ipc::ChannelResult::Busy)&&
                 input.menu.owner==interaction::InputMenuOwner::Unknown&&lastMenuDeadlineNs_>0&&now>=lastMenuDeadlineNs_;
-            if(resumeEnabled_&&!Failed()&&expired&&(paused_||(!pauseCount_&&Moving(ms)&&movementSamples_&&!releaseInput_))){
+            // A startup hitch may expire the first lease before any action.
+            // Use the same bounded neutral rearm; never restart a begun click.
+            const bool startup=ms<ApproachNeutralMs&&neutralInput_&&!crouchPressInput_[0];
+            if(resumeEnabled_&&!Failed()&&expired&&(paused_||(!pauseCount_&&
+               (startup||(Moving(ms)&&movementSamples_&&!releaseInput_))))){
                 if(!paused_){paused_=true;++pauseCount_;pauseStartMs_=wall;pauseRecipeMs_=ms;pauseStartNs_=now;}
             }else Fail(Failure::Menu);
         }
@@ -395,6 +412,9 @@ public:
         if(IsApproach()&&ms>=AttackStartMs()&&(!releaseInput_||!MovementCovered()))Fail(Failure::Approach);
         if(Failed()||!gameplay||paused_)for(auto& hand:input.hands){hand.held=hand.touched=hand.touchActive=0;
             hand.stickX=hand.stickY=hand.trigger=hand.squeeze=0;}
+        // Cancelling this synthetic recipe also suspends its posture output.
+        // Withholding authority is not a fabricated native menu transition.
+        if(Failed())input.menu={};
         // A cancelled rotated recipe must not snap a still-tracked wrist back
         // to identity and accidentally create another physical gesture.
         if(Failed()&&HasMotionRotation())input.hands[1].gripTracked=input.hands[1].aimTracked=false;
@@ -416,15 +436,32 @@ public:
         if(!IsApproach())return Failed()?Receipt::None:Sequence::Published(input,ms,before,after,delivered,busy);
         if(!delivered){if(!busy)Fail(Failure::Publication);return Receipt::None;}
         if(Failed())return Receipt::None;
+        auto checked=input;
+        if(crouch_){
+            const bool click=CrouchClickHeld(ms);
+            if(input.hands[0].held!=(click?unsigned(interaction::Secondary):0u))Fail(Failure::UnexpectedInput);
+            checked.hands[0].held=0;
+            const unsigned index=ms<MovementStartMs()?0:1;
+            if(click&&!crouchPressInput_[index])crouchPressInput_[index]=input.generation;
+            for(unsigned n=0;n<2;++n)if(ms>=(n?MovementReleaseMs():MovementStartMs())&&!crouchReleaseInput_[n]){
+                if(!crouchPressInput_[n]||click||ms>(n?MovementReleaseMs():MovementStartMs())+100)
+                    Fail(Failure::Approach);
+                else {
+                    crouchReleaseInput_[n]=input.generation;
+                    if(n==1){crouchReleaseMs_=ms;crouchReleaseNs_=after;}
+                }
+            }
+            if(Failed())return Receipt::None;
+        }
         if(prepared_&&ms<MovementStartMs()){
-            if(!NeutralSceneActions(input))Fail(Failure::UnexpectedInput);
+            if(!NeutralSceneActions(checked))Fail(Failure::UnexpectedInput);
             const unsigned phase=ms<500?0:ms<1500?1:2;
             if(!preparedSamples_[phase])preparedFirstMs_[phase]=ms;
             preparedLastMs_[phase]=ms;++preparedSamples_[phase];
             if(preparedLastNs_)preparedGapNs_=(std::max)(preparedGapNs_,after-preparedLastNs_);
             preparedLastNs_=after;
             if(ms<ApproachNeutralMs&&!neutralInput_)neutralInput_=input.generation;
-            return Failed()?Receipt::None:Sequence::Published(input,ms,before,after,delivered,busy);
+            return Failed()?Receipt::None:Sequence::Published(checked,ms,before,after,delivered,busy);
         }
         if(prepared_&&ms<AttackStartMs()){
             if(!PreparationCovered())Fail(Failure::Approach);
@@ -439,10 +476,10 @@ public:
         if(reviewImages_&&!reviewFinalInput_&&ms>=ReviewFinalMs())reviewFinalInput_=input.generation;
         if(ms>=AttackStartMs()){
             if(!MovementCovered()||!releaseInput_){Fail(Failure::Approach);return Receipt::None;}
-            if(before-releaseNs_<std::int64_t(ApproachNeutralMs)*1000000)return Receipt::None;
+            if(before-(std::max)(releaseNs_,crouchReleaseNs_)<std::int64_t(ApproachNeutralMs)*1000000)return Receipt::None;
             return Sequence::Published(input,ms-AttackStartMs()+SequenceOffsetMs(),before,after,delivered,busy);
         }
-        auto neutral=input;
+        auto neutral=checked;
         if(TurnWindow(ms)&&neutralInput_&&gameplay){
             const unsigned index=unsigned((ms-ApproachNeutralMs)/TurnCycleMs);
             if(Turning(ms)){
@@ -459,17 +496,15 @@ public:
             if(!TurnsCovered())Fail(Failure::Approach);
             if(input.hands[0].stickX!=strafe_||input.hands[0].stickY!=forward_)Fail(Failure::UnexpectedInput);
             neutral.hands[0].stickX=neutral.hands[0].stickY=0;
-            if(crouch_){
-                if(!(input.hands[0].held&interaction::Secondary))Fail(Failure::UnexpectedInput);
-                neutral.hands[0].held&=~interaction::Secondary;
-            }
             if(!movementSamples_)firstMoveMs_=ms;
             if(lastMoveNs_)movementGapNs_=(std::max)(movementGapNs_,after-lastMoveNs_);
             if(movementSegmentLastNs_)movementSegmentGapNs_=(std::max)(movementSegmentGapNs_,after-movementSegmentLastNs_);
             movementSegmentLastNs_=after;
             lastMoveNs_=after;lastMoveMs_=ms;++movementSamples_;
         }else if(ms<ApproachNeutralMs&&gameplay&&!neutralInput_)neutralInput_=input.generation;
-        else if(ms>=MovementStartMs()+approachMs_&&!releaseInput_){
+        // Stop the movement clock on the first delivered neutral axes. The
+        // intentional uncrouch click has its own release proof and neutral tail.
+        else if(ms>=MovementStartMs()+approachMs_&&!releaseInput_&&NeutralSceneActions(neutral)){
             releaseInput_=input.generation;releaseMs_=ms;releaseNs_=after;
             if(lastMoveNs_)movementGapNs_=(std::max)(movementGapNs_,after-lastMoveNs_);
             if(movementSegmentLastNs_)movementSegmentGapNs_=(std::max)(movementSegmentGapNs_,after-movementSegmentLastNs_);
@@ -480,7 +515,8 @@ public:
     bool Complete(std::uint64_t elapsed,bool ended)const noexcept {
         elapsed=RecipeMs(elapsed);
         if(!IsApproach())return (!HasMotionRotation()||(!Failed()&&menuEpoch_&&basis_))&&Sequence::Complete(elapsed,ended);
-        return !Failed()&&!paused_&&TurnsCovered()&&(!prepared_||PreparationCovered())&&MovementCovered()&&releaseInput_&&elapsed>=AttackStartMs()&&
+        return !Failed()&&!paused_&&TurnsCovered()&&(!prepared_||PreparationCovered())&&MovementCovered()&&releaseInput_&&
+            (!crouch_||crouchReleaseInput_[1])&&elapsed>=AttackStartMs()&&
             Sequence::Complete(elapsed-AttackStartMs()+SequenceOffsetMs(),ended);
     }
     void Report(std::ostream& out,std::uint64_t elapsed,bool ended)const {
@@ -491,7 +527,10 @@ public:
             <<",\"movement_samples\":"<<movementSamples_<<",\"first_move_ms\":"<<firstMoveMs_<<",\"last_move_ms\":"<<lastMoveMs_
             <<",\"max_movement_gap_ns\":"<<movementGapNs_<<",\"movement_release_input\":"<<releaseInput_<<",\"movement_release_ms\":"<<releaseMs_
             <<",\"menu_epoch\":"<<menuEpoch_<<",\"failure\":"<<unsigned(Reason());
-        if(crouch_)out<<",\"approach_crouch\":true";
+        if(crouch_)out<<",\"approach_crouch\":true,\"crouch_binding\":\"left_y_click_release\""
+            <<",\"crouch_press_inputs\":["<<crouchPressInput_[0]<<','<<crouchPressInput_[1]<<']'
+            <<",\"crouch_release_inputs\":["<<crouchReleaseInput_[0]<<','<<crouchReleaseInput_[1]<<']'
+            <<",\"crouch_release_ms\":"<<crouchReleaseMs_<<",\"crouch_release_ns\":"<<crouchReleaseNs_;
         ReportTurn(out);
         ReportReview(out);
         ReportResume(out,elapsed);
@@ -544,9 +583,9 @@ private:
         rearmLastNs_=after;++rearmSamples_;
         if(after-rearmFirstNs_>=std::int64_t(RearmNeutralMs)*1000000){
             paused_=false;pauseEndMs_=wall;pauseEndNs_=after;pauseDurationMs_=wall-pauseStartMs_;
-            // The next movement packet must follow this actually delivered
-            // neutral sample without concealing a new publication gap.
-            movementSegmentLastNs_=after;
+            // Resumed movement must follow this delivered neutral sample.
+            // Startup still has its remaining neutral prefix before movement.
+            movementSegmentLastNs_=movementSamples_?after:0;
         }
         return Receipt::None;
     }
@@ -570,6 +609,8 @@ private:
     }
     void Fail(Failure failure)noexcept{if(failure_==Failure::None)failure_=failure;}
     Failure failure_=Failure::None;float strafe_=0,forward_=0;bool crouch_=false;
+    std::array<std::uint64_t,2> crouchPressInput_{},crouchReleaseInput_{};
+    std::uint64_t crouchReleaseMs_=0;std::int64_t crouchReleaseNs_=0;
     int turnSnaps_=0;std::array<unsigned,6> turnSamples_{};
     bool reviewImages_=false;unsigned reviewPairs_=0;std::uint64_t reviewFinalInput_=0,lastReviewInput_=0;
     std::array<std::uint64_t,6> turnFirstMs_{},turnLastMs_{},turnReleaseInput_{},turnReleaseMs_{};

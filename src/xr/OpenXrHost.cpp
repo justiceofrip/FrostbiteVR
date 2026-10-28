@@ -1,4 +1,7 @@
 #include "fvr/xr/OpenXrHost.h"
+#include "fvr/xr/HostCopyLease.h"
+#include "fvr/xr/HostSourceImportCache.h"
+#include "fvr/xr/HostComposedCopyService.h"
 #include "fvr/runtime/RetainedPresentation.h"
 #include "fvr/graphics/D3D11SharedPair.h"
 #include "fvr/graphics/D3D11SceneDepthPair.h"
@@ -57,6 +60,31 @@ void Require(bool okay,const char* message){if(!okay)throw std::runtime_error(me
 math::Pose Pose(const XrPosef& pose){return {{pose.position.x,pose.position.y,pose.position.z},{pose.orientation.x,pose.orientation.y,pose.orientation.z,pose.orientation.w}};}
 std::int64_t BodyPropClockNs()noexcept {LARGE_INTEGER q{},f{};if(!QueryPerformanceCounter(&q)||!QueryPerformanceFrequency(&f)||f.QuadPart<=0)return 0;
     return (q.QuadPart/f.QuadPart)*1000000000+(q.QuadPart%f.QuadPart)*1000000000/f.QuadPart;}
+struct HostCopyTimerBackend {
+    HANDLE timer=nullptr;DWORD error=0;
+    bool Create()noexcept {
+        // Omitting MANUAL_RESET creates an auto-reset timer. Unsupported high
+        // resolution timers disable the private experiment; there is no fallback.
+        timer=CreateWaitableTimerExW(nullptr,nullptr,CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,TIMER_MODIFY_STATE|SYNCHRONIZE);
+        if(!timer)error=GetLastError();return timer!=nullptr;
+    }
+    bool Arm()noexcept {
+        // SetWaitableTimerEx cancels an active due time and resets the signal.
+        // This also clears a late signal after WAIT_TIMEOUT; no APC is installed
+        // and no cancel/drain loop or second timer is needed between episodes.
+        LARGE_INTEGER due{};due.QuadPart=-10000; // One relative millisecond.
+        if(SetWaitableTimerEx(timer,&due,0,nullptr,nullptr,nullptr,0))return true;
+        error=GetLastError();return false;
+    }
+    HostCopyWaitResult Wait()noexcept {
+        const auto result=WaitForSingleObject(timer,2);
+        if(result==WAIT_OBJECT_0)return HostCopyWaitResult::Signaled;
+        if(result==WAIT_TIMEOUT)return HostCopyWaitResult::TimedOut;
+        error=result==WAIT_FAILED?GetLastError():result;return HostCopyWaitResult::Failed;
+    }
+    DWORD Error()const noexcept{return error;}
+    void Close()noexcept {CloseHandle(timer);timer=nullptr;}
+};
 struct Host {
     Api api;
     HMODULE loader=nullptr;
@@ -82,32 +110,138 @@ struct Host {
     std::array<bool,2> acquired{},waited{};
     ComPtr<ID3D11Device> device;
     ComPtr<ID3D11DeviceContext> context;
-    graphics::D3D11PairConsumer consumer;
+    std::array<graphics::D3D11PairConsumer,HostSourceImportCache::Capacity> consumers;
+    HostSourceImportCache sourceImports;
     graphics::D3D11SceneDepthConsumer sceneDepth;bool sceneDepthSeen=false;
-    graphics::TextureDescriptor openedDescriptor{};
+
     runtime::RetainedPresentation retained;
+    // Own the exact delivered pair until ALL shared color/depth reads finish.
+    // XR input, menus and frame submission keep running while the GPU is busy.
+    struct PendingCopy : HostCopyLease {
+        runtime::RetainedPresentation presentation;
+        graphics::SceneDepthViews depth{};
+        graphics::BodyPropFrame props{};
+        std::int64_t startedNs=0,submittedNs=0,completedNs=0;
+        bool depthCopied=false,propsRead=false,gpuOrdered=false;
+        std::int64_t composedNs=0;
+        HostSourceImportCache& imports;
+        graphics::TextureDescriptor descriptor{};
+        unsigned importIndex=HostSourceImportCache::Capacity,sourceCount=1;
+        PendingCopy(IFrameProvider& p,const graphics::PairTicket& t,HostSourceImportCache& cache):HostCopyLease(p,t),imports(cache){}
+        ~PendingCopy(){if(importIndex<HostSourceImportCache::Capacity)(void)imports.Release(ticket,Copying());}
+        bool Bind(const HostSourceImportCache::Selection& selected)noexcept {
+            if(importIndex<HostSourceImportCache::Capacity||!imports.Bind(selected))return false;
+            importIndex=selected.index;sourceCount=selected.count;descriptor=selected.descriptor;return true;
+        }
+    };
+    std::unique_ptr<PendingCopy> pendingCopy;
     std::array<ComPtr<ID3D11Texture2D>,2> scratch;
     graphics::D3D11StereoComfort stereoComfort;
     std::unique_ptr<graphics::D3D11BodyPropCompositor> bodyProps;
     HostReport& report;
+    PrivateHostCopyWait<HostCopyTimerBackend> copyServiceWait;
     bool running=false,exit=false,frameOpen=false,referenceValid=false;
     XrTime frameTime=0;
     std::vector<XrTime> spaceChanges;
     math::Pose referenceHead{};
     std::uint64_t trackingGeneration=0,spaceGeneration=1;
     std::uint32_t trackingBasisGeneration=1;
+    DWORD copyServiceThread=0;
+    ComPtr<ID3D11Query> shutdownCompletion;
+    // Used only at teardown; the source-copy event precedes composition and
+    // therefore cannot prove that commands referencing XR images are finished.
+    bool DrainFinalGraphics()noexcept {
+        auto& r=report.privateGpuOrderedPresent;
+        if(!r.configured||!session)return true;
+        r.drainAttempted=true;
+        if(!context||!shutdownCompletion){r.drainError=E_UNEXPECTED;return false;}
+        context->End(shutdownCompletion.Get());context->Flush();
+        const auto start=BodyPropClockNs();
+        if(start<=0){r.drainError=ERROR_INVALID_TIME;return false;}
+        for(unsigned poll=0;poll<2000;++poll){
+            BOOL done=FALSE;++r.drainPolls;
+            const auto result=context->GetData(shutdownCompletion.Get(),&done,sizeof(done),D3D11_ASYNC_GETDATA_DONOTFLUSH);
+            const auto now=BodyPropClockNs();
+            if(now>=start)r.drainElapsedNs=std::uint64_t(now-start);
+            if(result==S_OK&&done){r.drained=true;return true;}
+            if(FAILED(result)){r.drainError=std::uint32_t(result);return false;}
+            if(result!=S_OK&&result!=S_FALSE){r.drainError=E_UNEXPECTED;return false;}
+            if(now<start||now<=0){r.drainError=ERROR_INVALID_TIME;return false;}
+            if(r.drainElapsedNs>=2000000000){r.drainError=WAIT_TIMEOUT;return false;}
+            Sleep(1); // Shutdown only; no per-frame waiting or timer policy.
+        }
+        r.drainError=WAIT_TIMEOUT;return false;
+    }
+    void RetainUndrainedRuntime()noexcept {
+        // Bounded failure: do not call xrDestroySwapchain on outstanding GPU
+        // writes. Retain the runtime/device graph until this host process exits.
+        // Menu/HUD destructors themselves destroy swapchains, so retain those
+        // owners too. Already queued D3D commands retain their resource refs.
+        report.privateGpuOrderedPresent.retainedUntilProcessExit=true;
+        report.okay=false;
+        try {report.error="Final XR graphics drain failed; runtime retained until process exit";}catch(...){}
+        controls.release();menu.release();ammoHud.release();
+        shutdownCompletion.Detach();context.Detach();device.Detach();
+        // Raw XR handles and loader HMODULE deliberately remain undisposed.
+    }
+    void CancelPendingPresentation()noexcept {
+        if(pendingCopy){
+            if(pendingCopy->Composed())retained.Reset();
+            pendingCopy->CancelPresentation();pendingCopy->presentation.Reset();
+        }
+    }
+    void RetirePendingCopy()noexcept {
+        if(!pendingCopy)return;
+        // Negative feedback retires the source generation; it does not authorize
+        // overwriting resources still referenced by the immediate-context queue.
+        if(pendingCopy->Copying()){
+            if(pendingCopy->importIndex<HostSourceImportCache::Capacity){auto& consumer=consumers[pendingCopy->importIndex];
+                if(consumer.HasPendingCopy())consumer.CancelCopy(pendingCopy->ticket);}
+            // The containing lease poisons this exact import generation only.
+        }
+        // Ready owns only local images: no CancelCopy or second acknowledgement.
+        pendingCopy.reset();
+    }
     void AdvanceReference(interaction::TrackingReferenceChange change){
+        CancelPendingPresentation();
         if(!interaction::AdvanceTrackingReference(spaceGeneration,trackingBasisGeneration,change))
             throw std::runtime_error("Tracking reference epoch exhausted");
     }
-    explicit Host(HostReport& r):report(r){}
+    explicit Host(HostReport& r):report(r),copyServiceWait(r.privateHostCopyService){
+        const auto error=GetLastError();wchar_t raw[8]{};
+        const auto size=GetEnvironmentVariableW(L"FVR_PRIVATE_HOST_COPY_SERVICE_MS",raw,unsigned(std::size(raw)));
+        if(size&&size<std::size(raw))report.privateHostCopyService.budgetMs=ParseHostCopyBudget({raw,size});
+        if(report.privateHostCopyService.budgetMs){
+            LARGE_INTEGER f{};
+            if(QueryPerformanceFrequency(&f)&&f.QuadPart>=1000){
+                report.privateHostCopyService.frequency=std::uint64_t(f.QuadPart);
+                if(copyServiceWait.Initialize())copyServiceThread=GetCurrentThreadId();
+            }else ++report.privateHostCopyService.clockFailed;
+        }
+        wchar_t ordered[4]{};
+        const auto orderedSize=GetEnvironmentVariableW(L"FVR_PRIVATE_GPU_ORDERED_PRESENT",ordered,unsigned(std::size(ordered)));
+        report.privateGpuOrderedPresent.configured=orderedSize==1&&ordered[0]==L'1';
+        SetLastError(error);
+        Require(!report.privateGpuOrderedPresent.configured||!report.privateHostCopyService.budgetMs,
+            "GPU-ordered presentation requires the private CPU copy-wait service disabled");
+    }
     ~Host(){
+        if(menu)report.firstMenuFailure=menu->FirstFailure();
         AbortFrame();
+        const bool graphicsDrained=DrainFinalGraphics();
+        RetirePendingCopy();
         // One bounded shutdown snapshot in the existing event stream. Frame
         // diagnostics never perform per-frame file I/O or change XR scheduling.
         if(eventLog){eventLog<<"{\"event\":\"host_frame_diagnostics\",\"wall_ms\":"<<GetTickCount64()<<",\"diagnostics\":";
             report.frameDiagnostics.Write(eventLog);eventLog<<"}\n";eventLog.flush();}
-        consumer.Reset();controls.reset();menu.reset();ammoHud.reset();bodyProps.reset();
+        if(eventLog){const auto& imports=sourceImports.Stats();const auto depth=sceneDepth.ImportStatistics();
+            eventLog<<"{\"event\":\"host_source_imports\",\"source_slots\":"<<sourceImports.SourceCount()<<",\"color_open_attempts\":"<<imports.opens
+                <<",\"color_cache_hits\":"<<imports.hits<<",\"lifetime_resets\":"<<imports.resets
+                <<",\"rejected\":"<<imports.rejected<<",\"poisoned\":"<<imports.poisoned
+                <<",\"depth_source_opens\":"<<depth.sourceOpens<<",\"depth_local_creates\":"<<depth.localCreates<<"}\n";eventLog.flush();}
+        for(auto& consumer:consumers)consumer.Reset();
+        if(!graphicsDrained){RetainUndrainedRuntime();return;}
+        controls.reset();menu.reset();ammoHud.reset();bodyProps.reset();
         for(auto& targets:imageTargets)targets.clear();
         for(auto chain:swapchains)if(chain&&api.DestroySwapchain)api.DestroySwapchain(chain);
         if(headSpace&&api.DestroySpace)api.DestroySpace(headSpace);
@@ -167,6 +301,9 @@ struct Host {
         Require(count==2,"Runtime must expose two primary stereo views");
         auto& req=report.requirements;req.width=(std::max)(viewInfo[0].recommendedImageRectWidth,viewInfo[1].recommendedImageRectWidth);
         req.height=(std::max)(viewInfo[0].recommendedImageRectHeight,viewInfo[1].recommendedImageRectHeight);
+        report.recommendedEyeWidth=req.width;report.recommendedEyeHeight=req.height;
+        report.maxEyeWidth=(std::min)(viewInfo[0].maxImageRectWidth,viewInfo[1].maxImageRectWidth);
+        report.maxEyeHeight=(std::min)(viewInfo[0].maxImageRectHeight,viewInfo[1].maxImageRectHeight);
         Require((options.eyeWidth==0)==(options.eyeHeight==0),"Both eye dimensions are required for an override");
         if(options.eyeWidth){req.width=options.eyeWidth;req.height=options.eyeHeight;}
         for(const auto& view:viewInfo)Require(req.width&&req.height&&req.width<=view.maxImageRectWidth&&req.height<=view.maxImageRectHeight,"Incompatible per-eye image sizes");
@@ -183,6 +320,11 @@ struct Host {
         std::vector<D3D_FEATURE_LEVEL> levels;for(auto level:{D3D_FEATURE_LEVEL_11_1,D3D_FEATURE_LEVEL_11_0})if(level>=graphics.minFeatureLevel)levels.push_back(level);
         Require(!levels.empty(),"Runtime requires an unsupported D3D11 feature level");D3D_FEATURE_LEVEL level{};
         Hr(D3D11CreateDevice(selected.Get(),D3D_DRIVER_TYPE_UNKNOWN,nullptr,D3D11_CREATE_DEVICE_BGRA_SUPPORT,levels.data(),UINT(levels.size()),D3D11_SDK_VERSION,&device,&level,&context),"Create XR graphics device");
+        if(report.privateGpuOrderedPresent.configured){
+            D3D11_QUERY_DESC query{D3D11_QUERY_EVENT,0};
+            Hr(device->CreateQuery(&query,&shutdownCompletion),"Create final XR graphics drain query");
+            report.privateGpuOrderedPresent.available=true;
+        }
         XrGraphicsBindingD3D11KHR binding{XR_TYPE_GRAPHICS_BINDING_D3D11_KHR};binding.device=device.Get();
         XrSessionCreateInfo sessionInfo{XR_TYPE_SESSION_CREATE_INFO};sessionInfo.next=&binding;sessionInfo.systemId=system;
         Check(api.CreateSession(instance,&sessionInfo,&session),"Create OpenXR session");report.sessionCreated=true;
@@ -229,7 +371,10 @@ struct Host {
         Require(sceneDepth.Initialize(device.Get()),"Initialize local scene-depth consumer");
         if(!options.readyPath.empty()){
             Require(options.readyPath.is_absolute()&&!std::filesystem::exists(options.readyPath),"Readiness report requires a new absolute path");
-            std::ofstream ready(options.readyPath);ready<<"{\"session_created\":true,\"width\":"<<req.width<<",\"height\":"<<req.height<<",\"format\":"<<req.format<<",\"user_presence_supported\":"<<(report.userPresenceSupported?"true":"false")<<"}\n";
+            std::ofstream ready(options.readyPath);ready<<"{\"session_created\":true,\"width\":"<<req.width<<",\"height\":"<<req.height<<",\"format\":"<<req.format
+                <<",\"recommended_eye_width\":"<<report.recommendedEyeWidth<<",\"recommended_eye_height\":"<<report.recommendedEyeHeight
+                <<",\"max_eye_width\":"<<report.maxEyeWidth<<",\"max_eye_height\":"<<report.maxEyeHeight
+                <<",\"user_presence_supported\":"<<(report.userPresenceSupported?"true":"false")<<"}\n";
             ready.close();Require(bool(ready),"Cannot write XR readiness report");
         }
     }
@@ -274,7 +419,7 @@ struct Host {
                 if(presence.session==session){
                     const bool wasAbsent=presenceKnown&&!userPresent;
                     presenceKnown=true;userPresent=presence.isUserPresent==XR_TRUE;++report.userPresenceEvents;
-                    if(!userPresent){if(referenceValid)recoveryPending=true;presenceReturnAt=0;retained.Reset();if(controls)controls->StopFeedback();}
+                    if(!userPresent){if(referenceValid)recoveryPending=true;presenceReturnAt=0;retained.Reset();CancelPendingPresentation();if(controls)controls->StopFeedback();}
                     else if(wasAbsent)presenceReturnAt=GetTickCount64();
                     Log("presence");
                 }
@@ -282,14 +427,17 @@ struct Host {
             if(event.type!=XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED)continue;
             const auto& change=reinterpret_cast<const XrEventDataSessionStateChanged&>(event);if(change.session!=session)continue;
             sessionState=change.state;report.lastSessionState=std::int32_t(sessionState);Log("session_state");
-            if(sessionState!=XR_SESSION_STATE_FOCUSED){retained.Reset();if(controls)controls->StopFeedback();}
+            if(sessionState!=XR_SESSION_STATE_FOCUSED){retained.Reset();CancelPendingPresentation();if(controls)controls->StopFeedback();}
             if(sessionState==XR_SESSION_STATE_READY&&!running){XrSessionBeginInfo begin{XR_TYPE_SESSION_BEGIN_INFO};begin.primaryViewConfigurationType=XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
                 Check(api.BeginSession(session,&begin),"Begin OpenXR session");running=true;referenceValid=false;AdvanceReference(interaction::TrackingReferenceChange::SessionRestart);}
-            if(sessionState==XR_SESSION_STATE_STOPPING&&running){Check(api.EndSession(session),"End OpenXR session");running=false;}
+            if(sessionState==XR_SESSION_STATE_STOPPING&&running){
+                // No further Frame calls are guaranteed before a new session.
+                RetirePendingCopy();Check(api.EndSession(session),"End OpenXR session");running=false;
+            }
             if(sessionState==XR_SESSION_STATE_EXITING||sessionState==XR_SESSION_STATE_LOSS_PENDING)exit=true;
         }
     }
-    void Frame(IFrameProvider* provider){
+    void Frame(IFrameProvider* provider,bool stopping){
         static_assert(runtime::RetainedPresentation::MaxAgeNs==250000000);
         HostFrameObservation diagnostic;diagnostic.frame=report.waitedFrames+1;
         diagnostic.wallMs=GetTickCount64();diagnostic.startedNs=BodyPropClockNs();
@@ -301,6 +449,67 @@ struct Host {
         const auto timed=[&](HostStage stage,auto&& operation)->decltype(auto){
             HostStageTimer timer(diagnostic,stage,BodyPropClockNs);return operation();
         };
+        // An uncomposed carried image still needs this frame's presentation slot.
+        // A composed image owns only source-query retirement: once that exact
+        // query completes, a successor may be fetched later in this frame.
+        bool carriedCopy=pendingCopy&&!pendingCopy->Composed();
+        const bool carriedComposed=pendingCopy&&pendingCopy->Composed();
+        const auto observeCopy=[&]{
+            if(!pendingCopy)return;
+            const auto& pending=*pendingCopy;diagnostic.SetCopyTicket(pending.ticket);
+            diagnostic.copyCancelled=pending.Cancelled();
+            diagnostic.copyComposed=pending.Composed();diagnostic.copyComposedNs=pending.composedNs;
+            diagnostic.copyPending=pending.Copying();
+            diagnostic.copySubmittedNs=pending.submittedNs;diagnostic.copyCompletedNs=pending.completedNs;
+            const auto now=pending.Ready()?pending.completedNs:BodyPropClockNs();
+            diagnostic.copyPendingAgeNs=pending.startedNs>0&&now>=pending.startedNs?std::uint64_t(now-pending.startedNs):0;
+        };
+        const auto completeCopy=[&](bool beforeWait){
+            auto& pending=*pendingCopy;
+            // Timestamp observed completion before IPC acknowledgement work.
+            pending.completedNs=BodyPropClockNs();
+            diagnostic.copyCompleted=pending.Complete();
+            diagnostic.copyPreWaitCompleted=beforeWait&&diagnostic.copyCompleted;
+            observeCopy();
+        };
+        const auto pollCopy=[&](bool beforeWait){
+            if(!pendingCopy||!pendingCopy->Copying())return;
+            Require(pendingCopy->importIndex<HostSourceImportCache::Capacity&&sourceImports.ActiveEntry(pendingCopy->ticket)==pendingCopy->importIndex,
+                "Pending copy lost its exact imported source entry");
+            auto& consumer=consumers[pendingCopy->importIndex];
+            observeCopy();diagnostic.copyPreWaitPolled|=beforeWait;
+            const auto copied=timed(HostStage::ColorPoll,[&]{return consumer.PollCopy(pendingCopy->ticket);});
+            diagnostic.copyResult=std::uint32_t(copied);diagnostic.copyError=consumer.LastError();
+            if(copied==graphics::TransferResult::Ok){completeCopy(beforeWait);return;}
+            // Single zero-wait poll. Busy retains images and still permits this
+            // frame's input/menu work; it never spins or extends the pose age.
+            constexpr std::uint64_t CopyRetirementNs=2000000000;
+            const bool expired=diagnostic.copyPendingAgeNs>=CopyRetirementNs;
+            if(copied!=graphics::TransferResult::Busy||!consumer.HasPendingCopy()||expired){
+                if(expired)diagnostic.copyError=WAIT_TIMEOUT;
+                if(pendingCopy->Composed())retained.Reset();
+                RetirePendingCopy();++report.rejectedPairs;
+                diagnostic.copyPending=false;
+                diagnostic.pairRejected=diagnostic.copyRetired=true;
+            }
+        };
+        // Events and known stop/focus loss precede source release. A reference
+        // change announced for a future frame also cancels the queued successor,
+        // while the already delivered image keeps its original effective-space
+        // validation below. No new request is made by this service point.
+        if(stopping||sessionState!=XR_SESSION_STATE_FOCUSED||!userPresent){
+            CancelPendingPresentation();if(provider)provider->Suspend();
+        }else if(!spaceChanges.empty()&&provider)provider->Suspend();
+        pollCopy(true);
+        // A fault retired the old generation, not a normal completion. Keep
+        // this frame's only copy observation and retry delivery next frame.
+        if(carriedComposed&&!pendingCopy)carriedCopy=true;
+        if(pendingCopy&&pendingCopy->Composed()&&pendingCopy->Ready()){
+            // Fixed second diagnostic slot, never an ownership/ACK authority.
+            (void)diagnostic.PreserveCompletedCopy();
+            pendingCopy.reset();++report.privateGpuOrderedPresent.preWaitRetirements;
+        }
+        if(provider)timed(HostStage::Feedback,[&]{provider->ServiceFeedback();});
         const auto publishInput=[&](const interaction::InputFrame& input){
             if(!provider)return;
             diagnostic.priorInputSuccessGeneration=report.frameDiagnostics.lastInputSuccessGeneration;
@@ -371,69 +580,6 @@ struct Host {
                 hudInput=input;
                 publishInput(input);timed(HostStage::Feedback,[&]{DispatchFeedback(provider,input);});inputSent=true;++report.inputFrames;
                 if(input.hands[0].gripTracked&&input.hands[1].aimTracked)++report.trackedHandFrames;
-                graphics::TextureDescriptor descriptor{};graphics::PairTicket ticket{};runtime::TrackingFrame renderedTracking{};
-                const auto requestStart=std::chrono::steady_clock::now();
-                diagnostic.providerQueried=!menuActive&&valid&&tracking.focused&&provider;
-                const bool available=!menuActive&&valid&&tracking.focused&&provider&&timed(HostStage::Provider,[&]{return provider->TryGetCompletedPair(report.requirements,tracking,renderedTracking,descriptor,ticket);});
-                diagnostic.newPair=available;
-                const auto requestUs=std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-requestStart).count();
-                report.maxProviderWaitUs=(std::max)(report.maxProviderWaitUs,std::uint64_t(requestUs));
-                if(!menuActive&&valid&&tracking.focused&&provider&&!available)++report.providerMisses;
-                if(available){
-                    struct Feedback {IFrameProvider& provider;const graphics::PairTicket& ticket;bool consumed=false;~Feedback(){provider.PairConsumed(ticket,consumed);}} feedback{*provider,ticket};
-                    runtime::RetainedPresentation candidate;
-                    // Validate metadata before replacing either released image. If
-                    // Commit failed after release, old poses could label new pixels.
-                    if(candidate.Commit(report.requirements,renderedTracking,descriptor,ticket)&&
-                       renderedTracking.spaceGeneration==tracking.spaceGeneration&&renderedTracking.predictedNs<=tracking.predictedNs&&
-                       tracking.predictedNs-renderedTracking.predictedNs<=runtime::RetainedPresentation::MaxAgeNs){
-                        if(!graphics::Valid(openedDescriptor)||std::memcmp(&descriptor,&openedDescriptor,sizeof(descriptor))!=0){
-                            retained.Reset();sceneDepth.Reset();sceneDepthSeen=false;if(ammoHud)ammoHud->Reset();
-                            if(timed(HostStage::SharedOpen,[&]{return consumer.Open(device.Get(),descriptor);})==graphics::TransferResult::Ok)openedDescriptor=descriptor;else openedDescriptor={};
-                        }
-                        if(graphics::Valid(openedDescriptor)){
-                            const std::array<graphics::TextureSlice,2> destinations{{{scratch[0].Get(),0},{scratch[1].Get(),0}}};
-                            graphics::SceneDepthFrame depthFrame;graphics::SceneDepthViews depthViews;
-                            const bool hasDepth=provider->ReadSceneDepth(descriptor,ticket,depthFrame);
-                            sceneDepthSeen|=hasDepth;
-                            // The following color Copy fences the same context,
-                            // including every queued shared-depth source read.
-                            const bool depthCopied=hasDepth&&timed(HostStage::DepthCopy,[&]{return sceneDepth.CopyBeforeColor(depthFrame,descriptor,ticket)&&sceneDepth.Views(ticket,depthViews);});
-                            if(hasDepth)++report.sceneDepthReceived;if(depthCopied)++report.sceneDepthCopied;
-                            if(sceneDepthSeen&&!depthCopied)++report.sceneDepthOmitted;
-                            const bool copied=timed(HostStage::ColorCopy,[&]{return consumer.Copy(ticket,destinations);})==graphics::TransferResult::Ok;
-                            feedback.consumed=copied;
-                            if(copied){
-                                // Classify the native pair before optional props. One GPU
-                                // flag must govern both eyes, without a readback or a wait.
-                                {HostStageTimer propsTimer(diagnostic,HostStage::Props,BodyPropClockNs);
-                                Require(stereoComfort.Prepare(destinations),"Prepare paired eye comfort safeguard");
-                                graphics::BodyPropFrame props;
-                                const bool propsRead=provider->ReadBodyProps(ticket,props);
-                                if(ammoHud)ammoHud->Receive(propsRead?&props:nullptr,ticket,BodyPropClockNs());
-                                if(bodyProps){
-                                    if(propsRead)bodyProps->Compose(props,ticket,{scratch[0].Get(),scratch[1].Get()},BodyPropClockNs,depthCopied?&depthViews:nullptr,
-                                        sceneDepthSeen?graphics::BodyPropMissingDepthPolicy::VehicleReticleOnly:graphics::BodyPropMissingDepthPolicy::AllowBodyProps);
-                                    report.bodyProps=bodyProps->Statistics();
-                                }
-                                }
-                                std::array<ID3D11RenderTargetView*,2> outputTargets{};
-                                for(unsigned eye=0;eye<2;++eye){uint32_t index=0;XrSwapchainImageAcquireInfo acquire{XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO};
-                                    Check(timed(HostStage::SwapchainAcquire,[&]{return api.AcquireSwapchainImage(swapchains[eye],&acquire,&index);}),"Acquire eye image");acquired[eye]=true;
-                                    XrSwapchainImageWaitInfo imageWait{XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO};imageWait.timeout=50000000;
-                                    const auto ready=timed(HostStage::SwapchainWait,[&]{return api.WaitSwapchainImage(swapchains[eye],&imageWait);});Check(ready,"Wait eye image");Require(ready!=XR_TIMEOUT_EXPIRED,"OpenXR eye image wait timed out");waited[eye]=true;
-                                    Require(index<images[eye].size(),"Invalid acquired eye index");
-                                    outputTargets[eye]=imageTargets[eye][index].Get();
-                                }
-                                Require(timed(HostStage::Present,[&]{return stereoComfort.Present(outputTargets);}),"Present paired eye comfort safeguard");
-                                for(unsigned eye=0;eye<2;++eye){XrSwapchainImageReleaseInfo release{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
-                                    Check(timed(HostStage::SwapchainRelease,[&]{return api.ReleaseSwapchainImage(swapchains[eye],&release);}),"Release eye image");waited[eye]=acquired[eye]=false;}
-                                retained=candidate;fresh=true;
-                            }
-                        }
-                    }
-                    if(!fresh){++report.rejectedPairs;diagnostic.pairRejected=true;}
-                }
             }
         }
         if(!inputSent){
@@ -448,13 +594,186 @@ struct Host {
         // feedback. Repeat the zero-wait suspension while menu-owned so a busy
         // IPC gate cannot carry a pre-menu pair through to the resumed world.
         if(menuActive)retained.Reset();
-        if(provider&&(menuActive||!frame.shouldRender||!tracking.focused||!tracking.headValid))provider->Suspend();
+        // A menu channel must explicitly admit Gameplay with its original
+        // native lease. Unknown/expired loading ownership is not a menu close.
+        // Providers without a menu channel retain their existing world route.
+        const bool worldAllowed=!stopping&&frame.shouldRender&&!menuActive&&
+            (!menu||menu->WorldAvailable())&&tracking.focused&&tracking.headValid;
+        if(!worldAllowed){CancelPendingPresentation();if(provider)provider->Suspend();}
+        // A previously composed source may finish while WaitFrame/input ran.
+        // Retire it before provider admission, after current cancellation. This
+        // is one zero-wait poll of the held ticket, never another delivery.
+        const auto postInput=ServiceComposedCopyAfterInput(pendingCopy,[&]{
+            diagnostic.copyPostInputPolled=true;++report.privateGpuOrderedPresent.postInputPolls;
+            pollCopy(false);
+        },[&](const PendingCopy&){
+            diagnostic.copyPostInputCompleted=true;++report.privateGpuOrderedPresent.postInputRetirements;
+            return diagnostic.PreserveCompletedCopy();
+        });
+        // A fault or diagnostic overflow must not be overwritten by admission
+        // of a new image in this frame. Busy keeps ordinary input/presentation.
+        if(postInput==ComposedCopyServiceResult::Retired||postInput==ComposedCopyServiceResult::ArchiveFailed)carriedCopy=true;
+        // Current menu/recenter/tracking cancellation precedes a retry of an
+        // early completion receipt that encountered a contended IPC mutex.
+        if(provider)timed(HostStage::Feedback,[&]{provider->ServiceFeedback();});
+        bool submittedCopy=false;
+        // Request metadata can lead pixel delivery by one immutable pose. This
+        // service remains after current input/cancellation and real old-copy
+        // retirement; it cannot overwrite or release the held source images.
+        if(worldAllowed&&provider)timed(HostStage::Provider,[&]{provider->ServiceRequests(report.requirements,tracking);});
+        if(!carriedCopy&&!pendingCopy&&worldAllowed&&provider){
+            graphics::TextureDescriptor descriptor{};graphics::PairTicket ticket{};runtime::TrackingFrame renderedTracking{};
+            diagnostic.providerQueried=true;
+            const auto requestStart=std::chrono::steady_clock::now();
+            const bool available=timed(HostStage::Provider,[&]{return provider->TryGetCompletedPair(report.requirements,tracking,renderedTracking,descriptor,ticket);});
+            diagnostic.newPair=available;
+            const auto requestUs=std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-requestStart).count();
+            report.maxProviderWaitUs=(std::max)(report.maxProviderWaitUs,std::uint64_t(requestUs));
+            if(!available)++report.providerMisses;
+            if(available){
+                struct DeliveryGuard {IFrameProvider& provider;const graphics::PairTicket& ticket;bool transferred=false;
+                    ~DeliveryGuard(){if(!transferred)provider.PairConsumed(ticket,false);}} delivered{*provider,ticket};
+                pendingCopy=std::make_unique<PendingCopy>(*provider,ticket,sourceImports);
+                delivered.transferred=true;
+                auto& pending=*pendingCopy;
+                diagnostic.SetCopyTicket(ticket);
+                // Validate original poses before changing presenter-owned pixels.
+                bool accepted=pending.presentation.Commit(report.requirements,renderedTracking,descriptor,ticket)&&
+                    pending.presentation.Select(report.requirements,tracking,worldAllowed);
+                HostSourceImportCache::Selection import;runtime::SourceSlotIdentity source;
+                if(accepted){
+                    const unsigned count=provider->SourceSlotCount();
+                    // v8 is unchanged. A negotiated v9 pair must have explicit,
+                    // exact delivered-slot evidence; failure is never fallback.
+                    accepted=(count==1||((count==2||count==3)&&provider->ReadSourceSlot(ticket,source)))&&
+                        sourceImports.Select(count,source,descriptor,ticket,import);
+                    if(accepted){
+                        if(import.resetPresentation){retained.Reset();sceneDepth.Reset();sceneDepthSeen=false;if(ammoHud)ammoHud->Reset();}
+                        if(import.resetAll)for(auto& entry:consumers)entry.Reset();
+                        auto& consumer=consumers[import.index];
+                        if(import.open){const auto opened=timed(HostStage::SharedOpen,[&]{return consumer.Open(device.Get(),descriptor);});
+                            diagnostic.copyResult=std::uint32_t(opened);diagnostic.copyError=consumer.LastError();
+                            accepted=opened==graphics::TransferResult::Ok;
+                            if(!accepted)sourceImports.OpenFailed(import);}
+                        if(accepted)accepted=pending.Bind(import);
+                    }
+                }
+                if(accepted){
+                    auto& consumer=consumers[pending.importIndex];
+                    graphics::SceneDepthFrame depthFrame;
+                    const bool hasDepth=provider->ReadSceneDepth(descriptor,ticket,depthFrame);
+                    sceneDepthSeen|=hasDepth;
+                    // Submit color AFTER every depth read on the same context.
+                    // Keep sources owned until a later zero-wait poll completes.
+                    // A v9 delivery explicitly distinguishes canonical absence
+                    // from a missing/malformed advertised attachment. Do not copy
+                    // unexpected depth or borrow the previous pair's local views.
+                    const bool depthConsistent=pending.sourceCount==1||source.depthPresent==hasDepth;
+                    pending.depthCopied=depthConsistent&&hasDepth&&timed(HostStage::DepthCopy,[&]{return sceneDepth.CopyBeforeColor(depthFrame,descriptor,ticket,pending.importIndex,pending.sourceCount)&&sceneDepth.Views(ticket,pending.depth);});
+                    if(hasDepth)++report.sceneDepthReceived;if(pending.depthCopied)++report.sceneDepthCopied;
+                    if(sceneDepthSeen&&!pending.depthCopied)++report.sceneDepthOmitted;
+                    pending.propsRead=provider->ReadBodyProps(ticket,pending.props);
+                    if(pending.sourceCount>1&&(!depthConsistent||(hasDepth&&!pending.depthCopied))){
+                        RetirePendingCopy();++report.rejectedPairs;diagnostic.pairRejected=diagnostic.copyRetired=true;
+                    }else {
+                    const std::array<graphics::TextureSlice,2> destinations{{{scratch[0].Get(),0},{scratch[1].Get(),0}}};
+                    pending.startedNs=BodyPropClockNs();submittedCopy=diagnostic.copySubmitted=true;
+                    const auto copied=timed(HostStage::ColorCopy,[&]{return consumer.SubmitCopy(ticket,destinations);});
+                    pending.submittedNs=BodyPropClockNs();diagnostic.copySubmittedNs=pending.submittedNs;
+                    diagnostic.copyResult=std::uint32_t(copied);diagnostic.copyError=consumer.LastError();
+                    if(copied==graphics::TransferResult::Ok)completeCopy(false);
+                    accepted=pending.Ready()||(copied==graphics::TransferResult::Busy&&consumer.HasPendingCopy());
+                    pending.gpuOrdered=accepted&&report.privateGpuOrderedPresent.available&&
+                        descriptor.sharing==graphics::TextureSharing::LegacyFenced;
+                    }
+                }
+                if(!accepted&&!diagnostic.copyRetired){RetirePendingCopy();++report.rejectedPairs;diagnostic.pairRejected=diagnostic.copyRetired=true;}
+            }
+        }
+        // A short, opt-in opportunity to release THIS source set before the
+        // next xrWaitFrame. The current frame already published input/menu
+        // state. Expiry keeps the ordinary asynchronous copy path unchanged.
+        if(report.privateHostCopyService.budgetMs&&report.privateHostCopyService.available&&
+           submittedCopy&&!carriedCopy&&worldAllowed&&pendingCopy&&pendingCopy->Copying()&&
+           pendingCopy->importIndex<HostSourceImportCache::Capacity&&pendingCopy->descriptor.sharing==graphics::TextureSharing::LegacyFenced&&
+           consumers[pendingCopy->importIndex].HasPendingCopy()){
+            auto& consumer=consumers[pendingCopy->importIndex];
+            const auto* const expected=pendingCopy.get();const auto ticket=expected->ticket;
+            auto* const expectedContext=context.Get();auto* const expectedDevice=device.Get();
+            const auto expectedSpace=spaceGeneration;
+            const auto admitted=[&]()noexcept {
+                return report.privateHostCopyService.available&&GetCurrentThreadId()==copyServiceThread&&expectedContext&&expectedDevice&&
+                    context.Get()==expectedContext&&device.Get()==expectedDevice&&running&&frameOpen&&!exit&&
+                    sessionState==XR_SESSION_STATE_FOCUSED&&userPresent&&referenceValid&&worldAllowed&&
+                    spaceGeneration==expectedSpace&&tracking.spaceGeneration==expectedSpace&&
+                    pendingCopy&&pendingCopy.get()==expected&&!pendingCopy->Cancelled()&&
+                    std::memcmp(&pendingCopy->ticket,&ticket,sizeof(ticket))==0&&
+                    sourceImports.ActiveEntry(ticket)==expected->importIndex&&
+                    expected->descriptor.sharing==graphics::TextureSharing::LegacyFenced&&graphics::Valid(ticket,expected->descriptor)&&
+                    (pendingCopy->Ready()||consumer.HasPendingCopy());
+            };
+            const auto pending=[&]()noexcept {return pendingCopy&&pendingCopy->Copying();};
+            const auto pump=[&]()noexcept {pollCopy(false);};
+            const auto clock=[]()noexcept {LARGE_INTEGER q{};return QueryPerformanceCounter(&q)&&q.QuadPart>0?std::uint64_t(q.QuadPart):0;};
+            const auto pause=[&]()noexcept {return copyServiceWait.Pause();};
+            const auto serviced=ServiceBoundedHostCopy(report.privateHostCopyService.BudgetTicks(),admitted,pending,pump,clock,pause);
+            report.privateHostCopyService.Observe(serviced);
+            // Complete() owns the sole positive ACK. A busy IPC mutex may have
+            // deferred it; this is a zero-wait flush, never another delivery.
+            if(provider)timed(HostStage::Feedback,[&]{provider->ServiceFeedback();});
+        }
+        if(pendingCopy){
+            // Ready was acknowledged before WaitFrame and must not be polled or
+            // cancelled as a GPU operation again. Busy may receive one normal
+            // post-input poll, preserving existing input responsiveness.
+            if(!submittedCopy&&!pendingCopy->Composed())pollCopy(false);
+            observeCopy();
+            if(pendingCopy&&!pendingCopy->Composed()&&(pendingCopy->Ready()||
+               (pendingCopy->gpuOrdered&&pendingCopy->Copying()&&pendingCopy->importIndex<HostSourceImportCache::Capacity&&consumers[pendingCopy->importIndex].HasPendingCopy()))){
+                auto& pending=*pendingCopy;
+                if(!pending.Cancelled()&&pending.presentation.Select(report.requirements,tracking,worldAllowed)){
+                    const std::array<graphics::TextureSlice,2> destinations{{{scratch[0].Get(),0},{scratch[1].Get(),0}}};
+                    {HostStageTimer propsTimer(diagnostic,HostStage::Props,BodyPropClockNs);
+                    Require(stereoComfort.Prepare(destinations),"Prepare paired eye comfort safeguard");
+                    if(ammoHud)ammoHud->Receive(pending.propsRead?&pending.props:nullptr,pending.ticket,BodyPropClockNs());
+                    if(bodyProps){
+                        if(pending.propsRead)bodyProps->Compose(pending.props,pending.ticket,{scratch[0].Get(),scratch[1].Get()},BodyPropClockNs,pending.depthCopied?&pending.depth:nullptr,
+                            sceneDepthSeen?graphics::BodyPropMissingDepthPolicy::VehicleReticleOnly:graphics::BodyPropMissingDepthPolicy::AllowBodyProps);
+                        report.bodyProps=bodyProps->Statistics();
+                    }
+                    }
+                    std::array<ID3D11RenderTargetView*,2> outputTargets{};
+                    for(unsigned eye=0;eye<2;++eye){uint32_t index=0;XrSwapchainImageAcquireInfo acquire{XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO};
+                        Check(timed(HostStage::SwapchainAcquire,[&]{return api.AcquireSwapchainImage(swapchains[eye],&acquire,&index);}),"Acquire eye image");acquired[eye]=true;
+                        XrSwapchainImageWaitInfo imageWait{XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO};imageWait.timeout=50000000;
+                        const auto ready=timed(HostStage::SwapchainWait,[&]{return api.WaitSwapchainImage(swapchains[eye],&imageWait);});Check(ready,"Wait eye image");Require(ready!=XR_TIMEOUT_EXPIRED,"OpenXR eye image wait timed out");waited[eye]=true;
+                        Require(index<images[eye].size(),"Invalid acquired eye index");
+                        outputTargets[eye]=imageTargets[eye][index].Get();
+                    }
+                    Require(timed(HostStage::Present,[&]{return stereoComfort.Present(outputTargets);}),"Present paired eye comfort safeguard");
+                    for(unsigned eye=0;eye<2;++eye){XrSwapchainImageReleaseInfo release{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
+                        Check(timed(HostStage::SwapchainRelease,[&]{return api.ReleaseSwapchainImage(swapchains[eye],&release);}),"Release eye image");waited[eye]=acquired[eye]=false;}
+                    if(pending.gpuOrdered){
+                        Require(pending.MarkComposed(),"Mark one GPU-ordered image composition");
+                        pending.composedNs=BodyPropClockNs();++report.privateGpuOrderedPresent.composed;
+                        observeCopy();
+                    }
+                    retained=pending.presentation;fresh=true;
+                }else if(pending.Copying()){
+                    // Cancellation/staleness may suppress presentation but must
+                    // not fabricate query completion or recycle the source.
+                    pending.CancelPresentation();pending.presentation.Reset();
+                }else {++report.rejectedPairs;diagnostic.pairRejected=true;}
+                if(pending.Ready())pendingCopy.reset();
+            }
+            diagnostic.copyPending=pendingCopy&&pendingCopy->Copying();
+        }
         diagnostic.space=spaceGeneration;diagnostic.menu=menuActive;
         diagnostic.trackingValid=tracking.headValid;
         if(const auto* old=retained.SavedTracking()){diagnostic.retained=true;
             diagnostic.retainedGeneration=old->generation;diagnostic.retainedSpace=old->spaceGeneration;
             diagnostic.retainedPredictedNs=old->predictedNs;diagnostic.retainedAgeNs=frameTime-old->predictedNs;}
-        if(const auto* rendered=retained.Select(report.requirements,tracking,frame.shouldRender&&!menuActive)){
+        if(const auto* rendered=retained.Select(report.requirements,tracking,worldAllowed)){
             for(unsigned eye=0;eye<2;++eye){auto& projection=projectionViews[eye];const auto& pose=rendered->eyes[eye];const auto& fov=rendered->fov[eye];
                 projection.pose={{pose.orientation.x,pose.orientation.y,pose.orientation.z,pose.orientation.w},{pose.position.x,pose.position.y,pose.position.z}};
                 projection.fov={std::atan(fov.left),std::atan(fov.right),std::atan(fov.up),std::atan(fov.down)};
@@ -480,16 +799,30 @@ struct Host {
         frameOpen=false;Check(result,"End frame");++report.endedFrames;
         if(submit){++report.presentedFrames;if(fresh)++report.submittedPairs;else ++report.reusedFrames;}
         else ++report.blankFrames;
+        // This is an existing source lease, not the discarded successor-fetch
+        // idea: EndFrame gives composition/runtime useful work before one real
+        // zero-wait completion observation. No second presentation or delivery.
+        if(pendingCopy&&pendingCopy->Composed()){
+            diagnostic.copyAfterEndPolled=true;++report.privateGpuOrderedPresent.postEndPolls;
+            pollCopy(false);
+            if(pendingCopy&&pendingCopy->Ready()){
+                diagnostic.copyAfterEndCompleted=true;++report.privateGpuOrderedPresent.postEndCompletions;
+                pendingCopy.reset();
+            }
+            if(provider)timed(HostStage::Feedback,[&]{return provider->ServiceFeedback();});
+            diagnostic.copyPending=pendingCopy&&pendingCopy->Copying();
+        }
     }
     void Run(const HostOptions& options){
         if(options.menu){menu=std::make_unique<OpenXrMenu>();menu->Initialize(instance,session,api.get,device.Get(),options.menu);}
         const auto start=std::chrono::steady_clock::now();bool requested=false;auto shutdown=start;
         while(!exit){Events();if(exit)break;const auto now=std::chrono::steady_clock::now();
             if(!requested&&((options.seconds&&now-start>=std::chrono::seconds(options.seconds))||(options.stopRequested&&options.stopRequested()))){
+                CancelPendingPresentation();if(options.provider)options.provider->Suspend();
                 if(!running)break;Check(api.RequestExitSession(session),"Request session exit");requested=true;shutdown=now;
             }
             if(requested&&(!running||now-shutdown>=std::chrono::seconds(2)))break;
-            if(running)Frame(options.provider);else Sleep(10);
+            if(running)Frame(options.provider,requested);else Sleep(10);
         }
     }
 };
@@ -497,7 +830,7 @@ struct Host {
 HostReport RunOpenXrHost(const HostOptions& options)noexcept {
     HostReport report;
     try {Require(options.probeOnly||options.seconds||bool(options.stopRequested),"Continuous session requires a stop source");Host host(report);
-        struct ReleaseInput {Host& host;IFrameProvider* provider;~ReleaseInput(){if(provider){interaction::InputFrame f{};f.generation=++host.inputGeneration;f.spaceGeneration=host.spaceGeneration;f.trackingBasisGeneration=host.trackingBasisGeneration;f.predictedNs=host.frameTime>0?host.frameTime:1;provider->UpdateInput(f);provider->Suspend();}}} release{host,options.provider};
+        struct ReleaseInput {Host& host;IFrameProvider* provider;~ReleaseInput(){if(provider){interaction::InputFrame f{};f.generation=++host.inputGeneration;f.spaceGeneration=host.spaceGeneration;f.trackingBasisGeneration=host.trackingBasisGeneration;f.predictedNs=host.frameTime>0?host.frameTime:1;provider->UpdateInput(f);provider->Suspend();host.RetirePendingCopy();provider->ServiceFeedback();}}} release{host,options.provider};
         host.Initialize(options);if(!options.probeOnly)host.Run(options);report.okay=true;}
     catch(const std::exception& error){report.error=error.what();}
     catch(...){report.error="Unknown OpenXR host failure";}

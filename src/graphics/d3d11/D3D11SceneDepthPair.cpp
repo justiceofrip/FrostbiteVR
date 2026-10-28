@@ -1,4 +1,5 @@
 #include "fvr/graphics/D3D11SceneDepthPair.h"
+#include "fvr/graphics/SceneDepthImportPolicy.h"
 #include <Windows.h>
 #include <d3d11.h>
 #include <dxgi.h>
@@ -17,7 +18,7 @@ bool Shape(const D3D11_TEXTURE2D_DESC& d){return d.Width&&d.Width<=16384&&d.Heig
     d.MipLevels==1&&d.ArraySize==1&&d.Usage==D3D11_USAGE_DEFAULT&&!d.CPUAccessFlags&&d.SampleDesc.Count&&d.SampleDesc.Count<=32&&!(d.SampleDesc.Count&(d.SampleDesc.Count-1));}
 bool SameShape(const D3D11_TEXTURE2D_DESC& a,const D3D11_TEXTURE2D_DESC& b){return a.Width==b.Width&&a.Height==b.Height&&a.Format==b.Format&&a.SampleDesc.Count==b.SampleDesc.Count&&a.SampleDesc.Quality==b.SampleDesc.Quality;}
 bool SameTicket(const PairTicket& a,const PairTicket& b){return std::memcmp(&a,&b,sizeof(a))==0;}
-bool SameResourceSet(SceneDepthFrame a,SceneDepthFrame b){a.color={};b.color={};return std::memcmp(&a,&b,sizeof(a))==0;}
+
 }
 struct D3D11SceneDepthProducer::Impl {
     DWORD thread=GetCurrentThreadId();ComPtr<ID3D11Device> device;ComPtr<ID3D11DeviceContext> context;
@@ -77,8 +78,10 @@ void D3D11SceneDepthProducer::Retire(){if(impl_&&impl_->thread==GetCurrentThread
 void D3D11SceneDepthProducer::Close(){assert(!impl_||impl_->thread==GetCurrentThreadId());impl_.reset();}
 struct D3D11SceneDepthConsumer::Impl {
     DWORD thread=GetCurrentThreadId();ComPtr<ID3D11Device> device;ComPtr<ID3D11DeviceContext> context;
-    std::array<ComPtr<ID3D11Texture2D>,4> sources,local;std::array<ComPtr<ID3D11ShaderResourceView>,4> views;
-    SceneDepthFrame opened{},copied{};bool haveCopy=false;
+    std::array<std::array<ComPtr<ID3D11Texture2D>,4>,SceneDepthImportPolicy::Capacity> sources;
+    std::array<ComPtr<ID3D11Texture2D>,4> local;std::array<ComPtr<ID3D11ShaderResourceView>,4> views;
+    SceneDepthImportPolicy imports;ImportStats stats;
+    SceneDepthFrame copied{};bool haveCopy=false;
 };
 D3D11SceneDepthConsumer::D3D11SceneDepthConsumer()=default;
 D3D11SceneDepthConsumer::~D3D11SceneDepthConsumer(){assert(!impl_||impl_->thread==GetCurrentThreadId());}
@@ -86,29 +89,45 @@ bool D3D11SceneDepthConsumer::Initialize(ID3D11Device* device){
     if(impl_||!device)return false;auto next=std::make_unique<Impl>();next->device=device;device->GetImmediateContext(&next->context);impl_=std::move(next);return true;
 }
 void D3D11SceneDepthConsumer::Reset(){if(!impl_||impl_->thread!=GetCurrentThreadId())return;auto& p=*impl_;
-    for(auto& t:p.sources)t.Reset();for(auto& t:p.local)t.Reset();for(auto& v:p.views)v.Reset();p.opened={};p.copied={};p.haveCopy=false;}
-bool D3D11SceneDepthConsumer::CopyBeforeColor(const SceneDepthFrame& frame,const TextureDescriptor& descriptor,const PairTicket& ticket){
+    for(auto& set:p.sources)for(auto& t:set)t.Reset();for(auto& t:p.local)t.Reset();for(auto& v:p.views)v.Reset();
+    p.imports.Reset();p.copied={};p.haveCopy=false;}
+D3D11SceneDepthConsumer::ImportStats D3D11SceneDepthConsumer::ImportStatistics()const noexcept {
+    return impl_?impl_->stats:ImportStats{};
+}
+bool D3D11SceneDepthConsumer::CopyBeforeColor(const SceneDepthFrame& frame,const TextureDescriptor& descriptor,const PairTicket& ticket,
+    unsigned sourceSlot,unsigned sourceSlots){
     if(!impl_||impl_->thread!=GetCurrentThreadId())return false;auto& p=*impl_;
-    if(!SceneDepthMatches(frame,descriptor,ticket))return false;
-    if(p.haveCopy&&p.copied.color.session==ticket.session&&p.copied.color.resourceEpoch==ticket.resourceEpoch&&
-       ticket.sequence<=p.copied.color.sequence)return false;
+    SceneDepthImportPolicy::Selection selected;
+    if(!p.imports.Select(frame,descriptor,ticket,sourceSlot,sourceSlots,selected))return false;
     std::uint32_t low=0;std::int32_t high=0;if(!Adapter(p.device.Get(),low,high)||low!=frame.adapterLow||high!=frame.adapterHigh)return false;
-    if(!SameResourceSet(frame,p.opened)||frame.color.session!=p.opened.color.session||frame.color.resourceEpoch!=p.opened.color.resourceEpoch){
-        std::array<ComPtr<ID3D11Texture2D>,4> sources,local;std::array<ComPtr<ID3D11ShaderResourceView>,4> views;
+    std::array<ComPtr<ID3D11Texture2D>,4> sources,local;std::array<ComPtr<ID3D11ShaderResourceView>,4> views;
+    if(selected.openSources){
         for(unsigned i=0;i<4;++i){const auto id=frame.resources[i/2][i%2];if(id>std::numeric_limits<std::uintptr_t>::max())return false;
             if(FAILED(p.device->OpenSharedResource(reinterpret_cast<HANDLE>(std::uintptr_t(id)),IID_PPV_ARGS(&sources[i]))))return false;
+            ++p.stats.sourceOpens;
             D3D11_TEXTURE2D_DESC d{};sources[i]->GetDesc(&d);
             if(!Shape(d)||d.Width!=frame.width||d.Height!=frame.height||d.SampleDesc.Count!=frame.samples||d.SampleDesc.Quality!=frame.quality||
                !(d.MiscFlags&D3D11_RESOURCE_MISC_SHARED)||(d.MiscFlags&(D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX|D3D11_RESOURCE_MISC_SHARED_NTHANDLE)))return false;
             for(unsigned j=0;j<i;++j)if(sources[i]==sources[j])return false;
-            d.MiscFlags=0;d.BindFlags=D3D11_BIND_SHADER_RESOURCE;if(FAILED(p.device->CreateTexture2D(&d,nullptr,&local[i])))return false;
-            D3D11_SHADER_RESOURCE_VIEW_DESC s{};s.Format=DXGI_FORMAT_R24_UNORM_X8_TYPELESS;s.ViewDimension=frame.samples==1?D3D11_SRV_DIMENSION_TEXTURE2D:D3D11_SRV_DIMENSION_TEXTURE2DMS;
-            if(frame.samples==1)s.Texture2D.MipLevels=1;
-            if(FAILED(p.device->CreateShaderResourceView(local[i].Get(),&s,&views[i])))return false;
         }
-        p.sources=std::move(sources);p.local=std::move(local);p.views=std::move(views);p.opened=frame;
     }
-    for(unsigned i=0;i<4;++i)p.context->CopyResource(p.local[i].Get(),p.sources[i].Get());p.copied=frame;p.haveCopy=true;return true;
+    if(selected.createLocal){
+        for(unsigned i=0;i<4;++i){D3D11_TEXTURE2D_DESC d{};
+            auto* source=selected.openSources?sources[i].Get():p.sources[sourceSlot][i].Get();if(!source)return false;source->GetDesc(&d);
+            d.MiscFlags=0;d.BindFlags=D3D11_BIND_SHADER_RESOURCE;if(FAILED(p.device->CreateTexture2D(&d,nullptr,&local[i])))return false;
+            ++p.stats.localCreates;
+            D3D11_SHADER_RESOURCE_VIEW_DESC view{};view.Format=DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
+            view.ViewDimension=frame.samples==1?D3D11_SRV_DIMENSION_TEXTURE2D:D3D11_SRV_DIMENSION_TEXTURE2DMS;
+            if(frame.samples==1)view.Texture2D.MipLevels=1;
+            if(FAILED(p.device->CreateShaderResourceView(local[i].Get(),&view,&views[i])))return false;
+        }
+    }
+    if(!p.imports.Commit(selected))return false;
+    if(selected.resetImports)for(auto& set:p.sources)for(auto& t:set)t.Reset();
+    if(selected.openSources)p.sources[sourceSlot]=std::move(sources);
+    if(selected.createLocal){p.local=std::move(local);p.views=std::move(views);}
+    for(unsigned i=0;i<4;++i)p.context->CopyResource(p.local[i].Get(),p.sources[sourceSlot][i].Get());
+    p.copied=frame;p.haveCopy=true;return true;
 }
 bool D3D11SceneDepthConsumer::Views(const PairTicket& ticket,SceneDepthViews& out)const {
     out={};if(!impl_||impl_->thread!=GetCurrentThreadId()||!impl_->haveCopy||!SameTicket(impl_->copied.color,ticket))return false;

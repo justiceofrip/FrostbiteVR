@@ -1,5 +1,6 @@
 #pragma once
 #include "fvr/runtime/PresentationPolicy.h"
+#include "fvr/runtime/FrameSourceSlot.h"
 #include "fvr/interaction/ControllerInput.h"
 #include "fvr/interaction/Feedback.h"
 #include "fvr/graphics/BodyPropFrame.h"
@@ -21,6 +22,10 @@ public:
         TrackingFrame& rendered,graphics::TextureDescriptor& d,graphics::PairTicket& t) noexcept {
         rendered=current;return TryGetPair(r,current,d,t);
     }
+    // Explicit negotiated delivery layout. Count2 never falls back to count1
+    // when the exact delivered metadata is absent or stale.
+    virtual unsigned SourceSlotCount()const noexcept{return 1;}
+    virtual bool ReadSourceSlot(const graphics::PairTicket&,SourceSlotIdentity& out)noexcept {out={};return false;}
     // Optional render-only metadata for the EXACT delivered image pair.
     virtual bool ReadBodyProps(const graphics::PairTicket&,graphics::BodyPropFrame& out)noexcept {out={};return false;}
     virtual bool ReadSceneDepth(const graphics::TextureDescriptor&,const graphics::PairTicket&,graphics::SceneDepthFrame& out)noexcept {out={};return false;}
@@ -32,6 +37,13 @@ public:
     }
     virtual bool TakeFeedback(interaction::FeedbackEvent& event)noexcept {event={};return false;}
     virtual void Suspend() noexcept {}
+    // Retry deferred exact-ticket feedback without admitting a successor. The
+    // caller must process known cancellation first. Local contract, not wire ABI.
+    virtual void ServiceFeedback() noexcept {}
+    // Optional nonblocking request admission on the frame thread, AFTER this
+    // frame's input and all known cancellation, including while a source copy
+    // is held. It never delivers pixels or acknowledges a GPU operation.
+    virtual void ServiceRequests(const PresentationRequirements&,const TrackingFrame&) noexcept {}
     // False means the pair was not consumed; reset/reclaim that texture stream.
     // True reports GPU consumption, not that xrEndFrame succeeded or was seen.
     virtual void PairConsumed(const graphics::PairTicket&,bool consumed) noexcept=0;

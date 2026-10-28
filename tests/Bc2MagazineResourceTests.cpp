@@ -608,6 +608,85 @@ int LivePhysicalIntentOutlivesItsConstructionPublication(){
     return 0;
 }
 }
+int RetiredNativeActorReleasesOnlyOldPhysicalCustody(){
+    {
+        Fixture f;CHECK(f.Eject());f.deferDrain=true;f.Insert();
+        CHECK(f.calls==1&&!f.service.Active()&&f.adapter->BlocksEquipment());
+        const auto counts=f.counts;
+        f.adapter->Cancel(f.s.input,f.hands);CHECK(f.adapter->BlocksEquipment());
+        f.now+=Ms;f.s.input.nowNs=f.now;
+        Bc2AmmoReserveLease r;r.identity=f.native;++r.identity.owner.actorGeneration;
+        r.identity.owner.soldier+=0x100000;r.identity.owner.weak+=0x100000;r.identity.serverSoldier+=0x100000;
+        r.sequence=1000;r.observedNs=f.now;r.deadlineNs=f.now+100*Ms;r.loaded=9;r.reserve=42;r.capacity=30;
+        r.verified=r.allThreeIdle=true;
+        const auto previous=*f.service.ActorIdentity();
+        const AmmoResourceActorDrain drain{previous,{},100,2,f.now,r.deadlineNs,true};
+        unsigned seen=0;std::optional<AmmoResourceRequest> queued;
+        CHECK(!f.channel.RetireQueuedForActor(previous,[&](const auto& q)noexcept{queued=q;++seen;return false;}));
+        CHECK(queued&&!f.service.Active()&&f.adapter->BlocksEquipment());
+        CHECK(f.channel.RetireQueuedForActor(previous,[&](const auto& q)noexcept{
+            ++seen;return q==queued&&f.service.RetireForReplacementActor(r,f.now,drain,q);
+        }));
+        CHECK(seen==2&&!f.channel.Take()&&!f.service.Active());
+        const auto terminal=f.service.Outcome();CHECK(terminal&&terminal->request==*queued);
+        CHECK(terminal->state==AmmoResourceRequestState::Rejected&&!terminal->nativeDispatched&&!terminal->receipt);
+        CHECK(!f.channel.Submit(*queued)); // consumed request cannot re-enter
+        CHECK(f.channel.Publish({},terminal));
+        // New native actor may be holding another family. Durable no-call
+        // recovery cannot depend on SelectMagazineRequestProfile first, since
+        // this exact physical pending reservation was blocking that selection.
+        f.s.nativeOwner=r.identity.owner;f.s.asset="SPAS12_sp";
+        f.s.input.owner.actor=(std::uint64_t(r.identity.owner.weak)<<32)|r.identity.owner.soldier;
+        f.s.input.owner.actorGeneration=r.identity.owner.actorGeneration;
+        for(unsigned n=0;n<3;++n)f.adapter->Cancel(f.s.input,f.hands);
+        CHECK(!f.adapter->BlocksEquipment()&&f.calls==1&&f.counts==counts);
+        // Retirement is not a channel-wide flush. Preserve an unrelated
+        // replacement request even if its source will later fail admission.
+        AmmoResourceChannel other;auto fresh=*queued;++fresh.intent.id;fresh.binding.owner=r.identity.owner;
+        CHECK(other.Submit(fresh));bool absent=false;
+        CHECK(other.RetireQueuedForActor(previous,[&](const auto& q)noexcept{absent=!q;return true;}));
+        CHECK(absent&&other.Take()==fresh&&!other.Submit(fresh));
+    }
+    for(unsigned fault=0;fault<7;++fault){
+        Fixture f;CHECK(f.Eject());f.completeNative=false;f.Insert();
+        CHECK(f.calls==2&&f.outstanding&&f.service.Active()&&f.adapter->BlocksEquipment());
+        const auto before=f.counts;const auto calls=f.calls;const auto command=*f.service.Active();
+        // A real callback changed native counts, but its exact three-copy
+        // completion is absent. Ordinary Cancel must retain the obligation.
+        f.adapter->Cancel(f.s.input,f.hands);CHECK(f.adapter->BlocksEquipment());
+        f.service.Cancel(f.now);CHECK(f.service.Active());
+        f.now+=Ms;f.s.input.nowNs=f.now;
+        Bc2AmmoReserveLease r;r.identity=f.native;++r.identity.owner.actorGeneration;
+        r.identity.owner.soldier+=0x100000;r.identity.owner.weak+=0x100000;r.identity.serverSoldier+=0x100000;
+        r.sequence=1000;r.observedNs=f.now;r.deadlineNs=f.now+100*Ms;r.loaded=9;r.reserve=42;r.capacity=30;
+        r.verified=r.allThreeIdle=true;
+        const AmmoResourceActorDrain drain{*f.service.ActorIdentity(),f.service.Active(),100,2,f.now,r.deadlineNs,true};
+        CHECK(f.service.RetireForReplacementActor(r,f.now,drain));
+        auto terminal=*f.service.Outcome();CHECK(terminal.state==AmmoResourceRequestState::ActorRetired);
+        if(fault==1)terminal.actorRetirement->event=0;
+        if(fault==2)++terminal.actorRetirement->pending->context.resource.actor;
+        if(fault==3)++terminal.actorRetirement->previous.owner.weak;
+        if(fault==4)terminal.actorRetirement->replacement.serverSoldier=terminal.actorRetirement->previous.serverSoldier;
+        if(fault==5)terminal.actorRetirement.reset();
+        if(fault==6)terminal.nativeDispatched=false;
+        CHECK(f.channel.Publish({},terminal));
+        f.adapter->Cancel(f.s.input,f.hands);
+        CHECK(f.adapter->BlocksEquipment()==bool(fault));
+        CHECK(f.calls==calls&&f.counts==before&&!f.service.Active());
+        CHECK(!f.service.Observe(f.Row(2,*f.outstanding),f.now));
+        if(!fault){
+            // Repeating the durable terminal result cannot spend/refund or
+            // consume another object. No fresh new-actor resource is required
+            // to stop quarantining a proven retired actor's old reservation.
+            f.adapter->Cancel(f.s.input,f.hands);CHECK(!f.adapter->BlocksEquipment());
+            CHECK(f.calls==calls&&f.counts==before);
+            CHECK(terminal.actorRetirement->pending==command&&!terminal.receipt);
+        }
+    }
+    std::puts("Physical ammo custody: only exact native-retirement terminal releases; six corrupt receipts stay blocked; no native transfer/rollback.");
+    return 0;
+}
+
 int SupportContactDoesNotUnseatMagazine(){
  Fixture f;f.Send();const auto before=f.counts;
  f.s.raw.supportContactDistanceMeters=0;
@@ -670,5 +749,5 @@ int HeldRemovalSurvivesRejectedExpiredAdmission(){
   }
  }CHECK(profiles>0);std::printf("Expired removal admission: held grab recovery and seven cancellation cases across %u enrolled profiles.\n",profiles);return 0;
 }
-int main(){if(HeldRemovalSurvivesRejectedExpiredAdmission()||SupportContactDoesNotUnseatMagazine())return 1;if(IdleViewFailureSurvivesStartupCancellation()||LivePhysicalIntentOutlivesItsConstructionPublication()||ReplacementAndSeatActualPublicationExpiry()||ReplacementCustodyAcrossPublicationGaps()||ReplacementGapReleaseAndSafety()||RenderAdmissionDoesNotRenewAmmunition()||OriginalCustodySurvivesTypedPublicationGap()||PendingOriginalAndReleasedMagazineGaps()||ReturnOriginalAfterActualExpiry()||PendingDiscardAcrossExpiredPublication()||ActiveGapStillRejectsLifetimeAndTimeout()||IdleResourceGapBlocksAdmission()||IdleResourceGapRejectsLifetimeLoss()||CompletionBetweenInputPackets()||DeferredCompletionCannotRenewOrChangeOwner()||NamespaceProof()||SharedHandAdapter()||ReturnOriginal()||RestoreEmptyAfterSwitch()||SeatPublicationBoundary()||CancelledSeatSurvivesContextChanges()||TerminalDoesNotRequireNewMagazineSelection())return 1;
+int main(){if(RetiredNativeActorReleasesOnlyOldPhysicalCustody())return 1;if(HeldRemovalSurvivesRejectedExpiredAdmission()||SupportContactDoesNotUnseatMagazine())return 1;if(IdleViewFailureSurvivesStartupCancellation()||LivePhysicalIntentOutlivesItsConstructionPublication()||ReplacementAndSeatActualPublicationExpiry()||ReplacementCustodyAcrossPublicationGaps()||ReplacementGapReleaseAndSafety()||RenderAdmissionDoesNotRenewAmmunition()||OriginalCustodySurvivesTypedPublicationGap()||PendingOriginalAndReleasedMagazineGaps()||ReturnOriginalAfterActualExpiry()||PendingDiscardAcrossExpiredPublication()||ActiveGapStillRejectsLifetimeAndTimeout()||IdleResourceGapBlocksAdmission()||IdleResourceGapRejectsLifetimeLoss()||CompletionBetweenInputPackets()||DeferredCompletionCannotRenewOrChangeOwner()||NamespaceProof()||SharedHandAdapter()||ReturnOriginal()||RestoreEmptyAfterSwitch()||SeatPublicationBoundary()||CancelledSeatSurvivesContextChanges()||TerminalDoesNotRequireNewMagazineSelection())return 1;
     std::puts("BC2 resource hand adapter: measured XM8 rail, unequal native/physical identities, chest display, original return, refill and equip restoration passed (mock native Updates).");return 0;}

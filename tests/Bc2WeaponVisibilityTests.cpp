@@ -58,6 +58,20 @@ int OriginalGuardCannotBeRenewedOrReassigned(){
     r.input.owner={(std::uint64_t(p.nativeOwner.weak)<<32)|p.nativeOwner.soldier,5,17,7};r.input.sequence=20;
     r.input.observedNs=p.observedNs;r.input.deadlineNs=p.inputDeadlineNs;r.input.focused=true;r.input.tracked={true,true};
     CHECK(WeaponVisibilityCurrent(p,r,1010000000));
+    // Reused immutable snapshots must still undergo every dynamic guard.
+    --selected->sequence;CHECK(!WeaponVisibilityCurrent(p,r,1010000000));++selected->sequence;
+    ++selected->owner.equipGeneration;CHECK(!WeaponVisibilityCurrent(p,r,1010000000));--selected->owner.equipGeneration;
+    selected->deadlineNs=1010000000;CHECK(!WeaponVisibilityCurrent(p,r,1010000000));selected->deadlineNs=1200000000;
+    selected->weaponName[0]='?';CHECK(!WeaponVisibilityCurrent(p,r,1010000000));selected->weaponName[0]='S';
+    // A separately published equal snapshot is valid, but every metadata byte
+    // remains part of the comparison, including unused bounded array entries.
+    auto separate=std::make_shared<SelectedMeshesSnapshot>(*selected);r.selected=separate;
+    CHECK(WeaponVisibilityCurrent(p,r,1010000000));
+    separate->states[7].meshes[7].assetPath[511]='x';CHECK(!WeaponVisibilityCurrent(p,r,1010000000));
+    separate->states[7].meshes[7].assetPath[511]=0;
+    ++separate->sequence;separate->observedNs=1090000000;separate->deadlineNs=1190000000;
+    CHECK(!WeaponVisibilityCurrent(p,r,1100000000)); // new snapshot cannot renew old palette
+    r.selected=selected;
     r.authorizationDeadlineNs=1050000000;CHECK(!WeaponVisibilityCurrent(p,r,1010000000)); // unclamped old plan cannot inherit tighter trial
     const auto originalDeadline=p.inputDeadlineNs;p.deadlineNs=1050000000;
     CHECK(WeaponVisibilityCurrent(p,r,1010000000));CHECK(p.inputDeadlineNs==originalDeadline&&r.input.deadlineNs==originalDeadline);

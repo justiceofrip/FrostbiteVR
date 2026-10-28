@@ -5,6 +5,7 @@
 #include "Bc2KnifeAcceptedOwnership.h"
 #include "Bc2ChestKnifeRendering.h"
 #include "Bc2ChestKnifeMissing.h"
+#include "Bc2KnifeSoundObservation.h"
 #include <cstdio>
 #include <map>
 #include <memory>
@@ -192,6 +193,37 @@ int RecognitionObservationCases(){
     std::ostringstream full;bounded->Report(full);CHECK(full.str().find("\"deadline_ns\":"+std::to_string(source.deadlineNs))!=std::string::npos);
     std::puts("Knife recognition diagnostics PASS: exact current readiness, native/recognizer reset distinction, actual metrics/intent, bounded immutable rows.");return 0;
 }
+int KnifeAudioObservationCases(){
+    using namespace fvr::bc2::selectedKnife;
+    CHECK(MatchKnifeSound(KnifeFireSoundGuid)==KnifeSoundKind::Attack);
+    CHECK(MatchKnifeSound(KnifeFireKillSoundGuid)==KnifeSoundKind::AttackKill);
+    for(unsigned i=0;i<16;++i){auto wrong=KnifeFireSoundGuid;wrong[i]^=1;
+        CHECK(MatchKnifeSound(wrong)==KnifeSoundKind::Unknown);}
+    CHECK(KnifeSoundLocalBoundary(true,0x12000,0x12000,1,1,true));
+    CHECK(!KnifeSoundLocalBoundary(true,0x13000,0x12000,1,1,true));
+    CHECK(!KnifeSoundLocalBoundary(true,0x12000,0x12000,0,1,true));
+    CHECK(!KnifeSoundLocalBoundary(true,0x12000,0x12000,1,0,true));
+    CHECK(!KnifeSoundLocalBoundary(true,0x12000,0x12000,1,1,false));
+    CHECK(!KnifeSoundLocalBoundary(false,0x12000,0x12000,1,1,true));
+    KnifeSoundObservation row;row.kind=KnifeSoundKind::AttackKill;row.ownerVerified=true;row.observedNs=2000000000;
+    KnifeSoundCandidate recent{1,2,3,1000000000,1100000000,1200000000,1600000000,0,true};
+    CHECK(AddKnifeSoundCandidate(row,recent));CHECK(!AddKnifeSoundCandidate(row,recent));
+    auto newer=recent;newer.serial=2;newer.completed=false;newer.publishedNs=1900000000;
+    CHECK(AddKnifeSoundCandidate(row,newer)&&row.candidateCount==2); // ambiguity retained
+    CHECK(row.candidates[0].damageCalls==0); // FireKill cannot invent a native hit.
+    auto third=newer;third.serial=3;CHECK(!AddKnifeSoundCandidate(row,third));
+    auto stale=row;stale.candidateCount=0;stale.observedNs=recent.publishedNs+2000000001;
+    CHECK(!AddKnifeSoundCandidate(stale,recent));stale.observedNs=recent.publishedNs-1;
+    CHECK(!AddKnifeSoundCandidate(stale,recent));stale=row;stale.candidateCount=0;stale.ownerVerified=false;
+    CHECK(!AddKnifeSoundCandidate(stale,recent));
+    KnifeSoundJournal<4> journal;CHECK(journal.Observe(row));row.start=true;
+    for(unsigned n=0;n<20;++n){++row.observedNs;CHECK(journal.Observe(row));}
+    CHECK(journal.Total()==21&&journal.Rows()[0].ordinal==1&&journal.Rows()[1].ordinal==2);
+    CHECK(journal.Rows()[2].ordinal==21&&journal.Rows()[3].ordinal==20);
+    row.ownerVerified=false;CHECK(!journal.Observe(row)&&journal.Total()==21);
+    row.ownerVerified=true;row.kind=KnifeSoundKind::Unknown;CHECK(!journal.Observe(row));
+    return 0;
+}
 int main(int argc,char** argv){
     if(argc==2&&std::string_view(argv[1])=="--recognition-observation")return RecognitionObservationCases();
     if(argc==2&&std::string_view(argv[1])=="--prediction")return PredictionRoleCases();
@@ -273,5 +305,6 @@ int main(int argc,char** argv){
         CHECK(gate.Complete(c.serial,true,true,true));
     }
     CHECK(!RecognitionObservationCases());
+    CHECK(!KnifeAudioObservationCases());
     std::puts("Ten focused knife motion/boundary/accepted-ownership/display groups PASS.");
 }

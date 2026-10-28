@@ -3,7 +3,7 @@ namespace fvr::bc2 {
 using namespace interaction;
 void Bc2BoltPlayerCustody::Invalidate()noexcept {
     if(debt_&&references_)recoveryReferences_=references_;
-    references_.reset();candidate_.reset();lastContact_.reset();stableAt_=0;lastRaw_=0;previous_={};returnPress_=0;neutral_=0;rightArmed_=rightHeld_=false;
+    references_.reset();candidate_.reset();lastContact_.reset();wristMapping_.reset();mappedCustody_.reset();stableAt_=0;lastRaw_=0;previous_={};returnPress_=0;neutral_=0;rightArmed_=rightHeld_=false;
     if(debt_)retirementRequired_=true;
 }
 void Bc2BoltPlayerCustody::Capture(const Bc2BoltPlayerInput& in)noexcept {
@@ -39,16 +39,23 @@ std::optional<Bc2PhysicalBoltSample> Bc2BoltPlayerCustody::Prepare(const Bc2Bolt
     if(in.native&&in.native->blocksFire)debt_=true;
     const bool identity=owner_==in.owner&&item_==in.item&&units_==controls->worldUnitsPerMeter;
     if(!identity){Invalidate();recoveryReferences_.reset();leftCustody_.reset();owner_=in.owner;item_=in.item;units_=controls->worldUnitsPerMeter;selectedAt_=s.nowNs;}
-    // An unavailable render publication is not evidence of a different gun.
-    // Use only previously validated, still-live original contact. Explicit
-    // mismatches remain authoritative, and current controls/body/owner still
-    // pass every mapping check below. No timestamp or grip edge is invented.
+    // Missing render publication is not a different gun. Established custody
+    // can map CURRENT controllers through its immutable wrist mapping; it does
+    // not reuse the old rendered pose. Before custody, cached raw remains bound
+    // to its original lifetime. Explicit raw mismatches always reject.
     const bool missing=!in.contact.raw.valid&&!in.contact.mappingValid&&
         in.contact.raw.nativeOwner==ReloadStateOwner{}&&!in.contact.raw.input.sequence&&!in.contact.raw.rigFingerprint;
-    if(missing&&lastContact_&&weapon_cycle_detail::Window(lastContact_->raw.input.observedNs,lastContact_->raw.input.deadlineNs,s.nowNs))
-        in.contact=*lastContact_;
+    const auto mappedGun=mappedCustody_?hands.Current(mappedCustody_->hand):std::nullopt;
+    const bool established=wristMapping_&&mappedCustody_&&mappedGun&&mappedGun->token==*mappedCustody_&&
+        mappedCustody_->kind==HandClaimKind::GunHold&&!mappedCustody_->prerequisiteClaim&&
+        mappedCustody_->owner==s.owner&&mappedCustody_->item==in.item&&
+        wristMapping_->nativeOwner==in.owner&&wristMapping_->owner==s.owner&&
+        wristMapping_->rigFingerprint==calibration_->rigFingerprint&&wristMapping_->units==controls->worldUnitsPerMeter;
+    if(missing&&!established&&lastContact_&&
+       weapon_cycle_detail::Window(lastContact_->raw.input.observedNs,lastContact_->raw.input.deadlineNs,s.nowNs))in.contact=*lastContact_;
     const bool exact=in.asset==calibration_->asset&&in.mesh==calibration_->mesh&&
-        in.contact.raw.nativeOwner==in.owner&&in.contact.raw.rigFingerprint==calibration_->rigFingerprint&&
+        ((missing&&established)||(in.contact.raw.nativeOwner==in.owner&&in.contact.raw.rigFingerprint==calibration_->rigFingerprint&&
+          in.contact.raw.rig.soldier==in.owner.soldier&&in.contact.raw.rig.weak==in.owner.weak))&&
         in.owner.actorGeneration==s.owner.actorGeneration&&in.owner.space==s.owner.space&&
         s.owner.actor==((std::uint64_t(in.owner.weak)<<32)|in.owner.soldier)&&
         in.item.id==in.owner.weapon&&in.item.generation==s.owner.equipGeneration;
@@ -73,10 +80,15 @@ std::optional<Bc2PhysicalBoltSample> Bc2BoltPlayerCustody::Prepare(const Bc2Bolt
         references_=recoveryReferences_;retirementRequired_=false;custody_=BoltCustodyPhase::Manipulating;
         submitted_=neutral_=returnPress_=0;
     }
-    const auto wrists=MapBoltTrackedWrists(in.contact,*controls,s,in.body);
+    const auto wrists=missing&&established?MapBoltCustodyWrists(*wristMapping_,*controls,s,in.body):
+        MapBoltTrackedWrists(in.contact,*controls,s,in.body);
     if(!wrists)return {};
-    lastContact_=in.contact;
-    Capture(in);
+    if(!(missing&&established)){
+        lastContact_=in.contact;
+        wristMapping_=Bc2BoltWristMapping{in.contact.raw.nativeOwner,in.contact.raw.input.owner,
+            in.contact.raw.rigFingerprint,in.contact.wristToGrip,in.contact.units};
+        Capture(in);
+    }
     const bool fresh=s.sequence>previous_.sequence;
     const bool release=fresh&&previous_.sequence&&previous_.owner==s.owner&&!previous_.released[1]&&s.released[1];
     const bool press=fresh&&rightArmed_&&controls->hands[1].squeeze>=.7f;
@@ -88,11 +100,12 @@ std::optional<Bc2PhysicalBoltSample> Bc2BoltPlayerCustody::Prepare(const Bc2Bolt
     if(neutral_&&press&&s.sequence>neutral_)returnPress_=s.sequence;
     Bc2PhysicalBoltSample out;out.nativeOwner=in.owner;out.input=s;out.item=in.item;out.asset=in.asset;out.mesh=in.mesh;
     out.raw=in.contact.raw;out.wristWorld=*wrists;out.grip=rightHeld_;
+    if(established)out.controllerCustody=mappedCustody_;
     const bool held=in.native&&in.native->held&&in.native->native.owner==in.owner&&
         in.native->held->owner==s.owner&&in.native->held->item==in.item&&
         in.native->held->mechanism==HandInteractionKey{calibration_->profile.id,in.item.generation}&&
         weapon_cycle_detail::Lease(*in.native->held,s.nowNs);
-    if(references_&&!retirementRequired_){
+    if(references_&&!retirementRequired_&&!(missing&&established)){
         const bool enter=release&&held&&custody_!=BoltCustodyPhase::Manipulating;
         const bool back=custody_==BoltCustodyPhase::Manipulating&&returnPress_&&!s.released[1]&&
             in.contact.raw.input.sequence>=returnPress_&&!in.contact.raw.input.released[1];
@@ -117,6 +130,10 @@ std::optional<Bc2PhysicalBoltSample> Bc2BoltPlayerCustody::Prepare(const Bc2Bolt
 void Bc2BoltPlayerCustody::Observe(const Bc2PhysicalBoltResult& result)noexcept {
     // Startup admission/backpressure can block Fire before a shot exists.
     // Only actual held/gesture/custody evidence may create physical debt.
+    if(result.tracking.weapon&&result.tracking.gun&&wristMapping_&&
+       result.tracking.nativeOwner==owner_&&result.tracking.input.owner==wristMapping_->owner&&
+       CurrentBoltCustodyWeaponTarget(*result.tracking.weapon,result.tracking.input,*result.tracking.gun))
+        mappedCustody_=result.tracking.gun->token;
     if(result.tracking.held)debtLease_=result.tracking.held;
     if(result.tracking.gun&&result.tracking.gun->token.hand==InteractionHand::Left&&
        result.tracking.gun->token.kind==HandClaimKind::GunHold)leftCustody_=result.tracking.gun->token;

@@ -18,7 +18,9 @@ public:
     bool SourceWritable()const noexcept{return writable_.load(std::memory_order_acquire);}
     ID3D11Device* Device()const noexcept{return relayDevice_.Get();}
     std::array<TextureSlice,2> Sources()const noexcept{return {TextureSlice{opened_[0].Get(),0},TextureSlice{opened_[1].Get(),0}};}
-    // Borrowed only on the original game graphics thread, before SealGameCopies.
+    // Borrowed for read-only use on the game graphics thread, including after
+    // SealGameCopies. Queue reads before the next Capture or Reset; the relay
+    // keeps its separate GPU read fenced before allowing another Capture.
     ID3D11Texture2D* GameEye(unsigned eye)const noexcept{return eye<2?gameEyes_[eye].Get():nullptr;}
     unsigned LastOperation()const noexcept{return operation_;}
     HRESULT LastError()const noexcept{return error_;}

@@ -32,6 +32,23 @@ int OneIntentAndNativeBusy(){
     f.s.attackAvailable=true;f.Stab();CHECK(f.emitted==1);f.Rest();f.Stab();CHECK(f.emitted==2);return 0;
 }
 int DrawMotionCannotStab(){Fixture f;f.Stab();CHECK(!f.emitted);f.Rest();f.Stab();CHECK(f.emitted==1);return 0;}
+int DeceleratingJabAndAbortedStroke(){
+    // A purposeful start followed by a soft contact should still be one jab.
+    // Exercise common controller sampling rates without changing thresholds.
+    for(const auto hz:{72,90,120}){
+        Fixture f;f.Rest();const auto dt=1000000000ll/hz;
+        f.Step({0,0,.025f},dt);f.Step({0,0,.045f},dt);
+        for(unsigned n=1;n<=5;++n)f.Step({0,0,.045f+.004f*n},dt);
+        CHECK(f.emitted==1&&f.gesture.Phase()==MeleeStrokePhase::Spent);
+        f.Rest(5);f.Stab();CHECK(f.emitted==1); // No repeat while held forward.
+    }
+    Fixture stopped;stopped.Rest();stopped.Step({0,0,.025f});
+    stopped.Rest(36);stopped.Step({0,0,.07f});CHECK(!stopped.emitted); // Timeout cannot accumulate travel.
+    Fixture reversed;reversed.Rest();reversed.Step({0,0,.04f});reversed.Step({0,0,.03f});
+    reversed.Step({0,0,.08f});CHECK(!reversed.emitted);
+    Fixture drift;drift.Rest();for(unsigned n=1;n<30;++n)drift.Step({0,0,n*.003f});CHECK(!drift.emitted);
+    return 0;
+}
 int RestAndDirection(){
     Fixture slow;slow.Rest();for(unsigned i=0;i<30;++i)slow.Step({0,0,slow.s.tip.z+.003f});CHECK(!slow.emitted);
     Fixture side;side.Rest();for(unsigned i=0;i<20;++i)side.Step({side.s.tip.x+.015f,0,0});CHECK(!side.emitted);
@@ -86,5 +103,5 @@ int EitherHandAndFreshCustody(){
     f.Rest();f.Stab();CHECK(f.emitted==2);return 0;
 }
 }
-int main(){return OneIntentAndNativeBusy()||DrawMotionCannotStab()||RestAndDirection()||PacketAndPoseBoundaries()||
+int main(){return OneIntentAndNativeBusy()||DrawMotionCannotStab()||DeceleratingJabAndAbortedStroke()||RestAndDirection()||PacketAndPoseBoundaries()||
     DuplicatesAndNoForgedCustody()||IntentProvenance()||InvalidConfiguration()||EitherHandAndFreshCustody();}

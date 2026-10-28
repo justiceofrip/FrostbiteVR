@@ -63,7 +63,29 @@ bool Bc2MagazineResourceReload::RecoverTerminal(const AmmoResourceOutcome& outco
             r.before==c.before&&r.after==c.after&&r.authorityVerified&&r.copiesVerified&&r.authorityInvocation&&
             r.beganNs>=c.requestedNs&&r.completedNs>=r.beganNs&&r.completedNs<c.deadlineNs&&r.completedNs==outcome.resolvedNs;
     }
-    if(!rejected&&!discarded&&!applied)return false;
+    bool retired=false;
+    if(outcome.state==AmmoResourceRequestState::ActorRetired&&!outcome.receipt&&outcome.actorRetirement){
+        const auto& r=*outcome.actorRetirement;
+        // Native binding and physical owner have different representations.
+        // Match the exact old request; never infer retirement from new input.
+        retired=AmmoResourceRetirementValid(r)&&r.observedNs==outcome.resolvedNs&&
+            r.nativeDispatched==outcome.nativeDispatched&&r.pending&&
+            r.pending->context==request.intent.context&&r.pending->operation==request.intent.operation&&
+            r.pending->original==request.intent.original&&r.pending->requestedNs>=request.intent.observedNs&&
+            r.pending->admissionDeadlineNs<=request.intent.deadlineNs&&
+            r.previous.owner.soldier==request.intent.context.resource.actor&&
+            r.previous.owner.actorGeneration>=request.intent.context.resource.actorGeneration&&
+            r.previous.owner.player==request.binding.owner.player&&r.previous.owner.weak==request.binding.owner.weak;
+    }
+    if(!rejected&&!discarded&&!applied&&!retired)return false;
+    if(reservation_&&retired){
+        const auto& r=*outcome.actorRetirement;
+        const auto& owner=reservation_->identity.owner;
+        if(owner.actor!=((std::uint64_t(r.previous.owner.weak)<<32)|r.previous.owner.soldier)||
+            owner.actorGeneration!=request.intent.context.resource.actorGeneration||
+            !supply_.RetireActor(in,hands,{*reservation_,owner,r.event,r.observedNs,true}).accepted)return false;
+        reservation_.reset();
+    }
     if(reservation_){
         if(!physical_||request.intent.operation!=AmmunitionOperation::RefillMagazine||discarded)return false;
         const auto before=applied?outcome.receipt->before.reserve:int(reservation_->reserveBefore);
@@ -75,7 +97,7 @@ bool Bc2MagazineResourceReload::RecoverTerminal(const AmmoResourceOutcome& outco
             unsigned(before),unsigned(after),true}).accepted)return false;
         reservation_.reset();
     }
-    if(rejected)++rejected_;else ++completed_;
+    if(rejected)++rejected_;else if(!retired)++completed_;
     pending_=false;pendingRequest_.reset();physical_.reset();submittedSeat_.reset();return true;
 }
 MagazinePhysicalResult Bc2MagazineResourceReload::TickImpl(const MagazinePhysicalSample& s,HandInteraction& hands,std::uint64_t& intent)noexcept {

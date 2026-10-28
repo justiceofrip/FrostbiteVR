@@ -31,18 +31,22 @@ Use a virtual environment if you keep other projects' Python dependencies separa
 <a id="checkpoint413-player-composition"></a>
 <a id="checkpoint414-player-composition"></a>
 <a id="checkpoint426-player-composition"></a>
+<a id="checkpoint436-r56-player-composition"></a>
 
-## Checkpoint426 player composition
+## Checkpoint436 R56 player composition
 
 Use the existing build directories and run the architectures sequentially:
 
 ```powershell
-.\Build-Checkpoint.ps1 -Architecture x86 -Jobs 2 -OrdinaryManualCycles -NativeCycleRecovery -BodySceneDepth -PlayerGrenades -PlayerKnife -ContextualTools
-.\Build-Checkpoint.ps1 -Architecture x64 -Jobs 2 -OrdinaryManualCycles -NativeCycleRecovery -BodySceneDepth -PlayerGrenades -PlayerKnife -ContextualTools
+.\Build-Checkpoint.ps1 -Architecture x86 -Jobs 2 -OperationProfile checkpoint436-r56 -OrdinaryManualCycles -NativeCycleRecovery -BodySceneDepth -PlayerGrenades -PlayerKnife -ContextualTools
+.\Build-Checkpoint.ps1 -Architecture x64 -Jobs 2 -OperationProfile checkpoint436-r56 -OrdinaryManualCycles -NativeCycleRecovery -BodySceneDepth -PlayerGrenades -PlayerKnife -ContextualTools
 ```
 
 The script selects the exact source-bound operation header and receipt in
-`profiles/checkpoint426`. Opening426 supplies the authored grip, support,
+`profiles/checkpoint436-r56`, which is also the default operation profile.
+The reviewed header and receipt are byte-for-byte exports of the qualified R56
+normal build; their 576 source paths are repository-relative. Opening426 still
+supplies the authored grip, support,
 magazine geometry/registration and exact candidate Nambu muzzle enrollment,
 while preserving the prior profile entries. Finite synthetic input drivers
 remain OFF. The switches above match the normal player feature composition;
@@ -51,18 +55,24 @@ selected by the portable launcher; compiling a capability is not gameplay or
 headset acceptance.
 
 The frozen normal build uses native source
-`9196965b6f424cbfa33e98650fc230de273fc444de24c720218dbfa5f703b05b`
-and passed 291/291 C++ suites on each architecture. The latest native knife check
-prepared one client attack but did not establish server acquisition/damage or
-repeat-jab completion. Its 544-file native
-dependency receipt is preserved byte for byte. The handoff's separate build
-source manifest omits ignored generated test outputs and contains only
-repository-relative paths. See the [426 handoff](handoff/checkpoint426/README.md)
-for exact results and limitations. A new build on another compiler may differ
-in binary bytes; it must pass source verification and relevant tests.
+`af13daab2acb73ac73273f1a7719515b7befdbb89d3537db2b25eeba2c6f59e8`
+and passed 305/305 C++ suites on each architecture. R56's focused custody suites
+and five diagnostic-reader regressions also passed. The later M95 native check
+completed five manual bolt cycles through empty across all three firing copies;
+missing-render-frame continuation and physical-headset acceptance remain open.
+See [current state](docs/CURRENT.md) for the separate scoped native results and
+preserved failures, and the [profile provenance](profiles/checkpoint436-r56/README.md)
+for exact exported input hashes. A new build on another compiler may differ in
+binary bytes; it must pass source verification and relevant tests.
+
+Verify the exported source closure without compiling or touching build caches:
+
+```powershell
+python -B tools/bc2_native_operation_receipts.py verify-source --root . --reviewed-header profiles/checkpoint436-r56/Bc2NativeOperationCapabilities.generated.h --receipt profiles/checkpoint436-r56/source-with-header.json --expected af13daab2acb73ac73273f1a7719515b7befdbb89d3537db2b25eeba2c6f59e8
+```
 
 The Nambu muzzle descriptor remains Candidate. A passing build does not promote
-it to NativeVerified, prove projectile impacts, or settle the death/reload crash.
+it to NativeVerified, prove projectile impacts, or settle all restart failures.
 Older checkpoint profiles retain historical evidence; their receipts are not
 substitutes for the current source. Do not change a receipt hash to bypass the
 source guard.
@@ -143,5 +153,7 @@ game reload can produce the same count after cancellation. See
 [checkpoint 202](docs/SIMULATED-PLAYER-202.md) and the source tests for the evidence
 required. These tools are development diagnostics, not an unattended campaign bot.
 
-No player release archive is published with this source snapshot. Publishing a
-player build requires separate clean-package and headset acceptance.
+This source checkpoint does not replace the separately published
+[BC2VR 0.1.15](https://github.com/justiceofrip/BC2VR/releases/tag/v0.1.15) player
+release, which retains checkpoint434 native binaries. The R56 runtime remains
+unreleased; publishing it requires separate package and native/headset validation.

@@ -12,6 +12,13 @@ import shutil
 
 LOADER_SHA='a69729a3348bc4dcb9be126a49d594074e477be7312f65180b0d082bf100fa5f'
 GAME_SHA='3911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258'
+RECEIPT_BINARIES={
+    'probe':'BC2NativeProbe.dll',
+    'trace':'BC2NativeTrace.exe',
+    'host':'BC2XrHost.exe',
+    'resolution':'BC2NativeResolution.exe',
+    'resolution_bootstrap':'BC2ResolutionBootstrap.dll',
+}
 AUDIO_GUARD="    if output.drive.upper()!='G:' or output==Path(__file__).resolve().parents[1] or Path(__file__).resolve().parents[1] in output.parents:\n        raise ValueError('Private audio cache must be outside the source repository on G:')"
 SHELL_GUARD="    if output.drive.upper() != 'G:' or output == source or source in output.parents:\n        raise ValueError('Private audio cache must be outside the source repository on G:')"
 
@@ -62,20 +69,28 @@ def stage(repo, receipt_path, expected_receipt_sha, output, version, dependencie
     if any(receipt.get(name) for name in receipt if name.endswith('_probe')):
         raise ValueError('Diagnostic fixture flag in normal receipt')
     if output.exists(): raise ValueError('Preserve existing staged runtime; use a new output folder')
+    frozen=[]
+    for key,name in RECEIPT_BINARIES.items():
+        entry=receipt.get('binaries',{}).get(key)
+        if not isinstance(entry,dict) or not entry.get('path') or not entry.get('sha256'):
+            raise ValueError('Frozen build receipt is missing required binary: '+key)
+        source=Path(entry['path'])
+        if source.name.casefold()!=name.casefold(): raise ValueError('Unexpected frozen binary name: '+key)
+        if sha(source)!=entry['sha256']: raise ValueError('Frozen binary changed: '+key)
+        frozen.append((source,'bin/'+name,entry['sha256']))
     output.mkdir(parents=True)
     files=[]; transforms=[]
     def copy(source,name):
         safe_relative(name)
         if source.is_symlink(): raise ValueError('Linked input refused')
         target=output/name;target.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(source,target);files.append(name)
-    for key in ('probe','trace','host'):
-        entry=receipt['binaries'][key]; source=Path(entry['path'])
-        if sha(source)!=entry['sha256']: raise ValueError('Frozen binary changed: '+key)
-        copy(source,'bin/'+source.name)
+    for source,name,expected in frozen:
+        copy(source,name)
+        if sha(output/name)!=expected: raise ValueError('Frozen binary changed during staging: '+source.name)
     loader=repo/'build/x64/runtime/openxr/win64/openxr_loader.dll'
     if sha(loader)!=LOADER_SHA: raise ValueError('OpenXR loader changed')
     copy(loader,'bin/openxr_loader.dll')
-    for name in ('Entry.ps1','Runtime.Core.ps1','Dependencies.ps1','Session.ps1','Startup.ps1'):
+    for name in ('Entry.ps1','Runtime.Core.ps1','Dependencies.ps1','Session.ps1','Startup.ps1','Resolution.ps1'):
         copy(repo/'launcher/runtime'/name,name)
     for name in ('prepare_runtime_assets.py','wait_main_menu.py','activate_game_once.py','runtime_process.py'):
         copy(repo/'launcher/runtime'/name,'tools/'+name)

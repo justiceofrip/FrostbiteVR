@@ -61,7 +61,8 @@ void MeasuredRotationAndRealGesture(bool approach,bool prepared=false){
         if(prepared){
             const bool moving=ms>=fixture.MovementStartMs()&&ms<fixture.MovementStartMs()+fixture.ApproachMs();
             const auto mapped=actions.Update(input,{700,1,true,true},now);
-            assert((mapped.forward>0)==moving&&bool(mapped.held&Crouch)==moving&&!mapped.turnDegrees&&
+            const bool crouched=ms>=fixture.MovementStartMs()&&ms<fixture.MovementReleaseMs();
+            assert((mapped.forward>0)==moving&&bool(mapped.held&Crouch)==crouched&&!mapped.turnDegrees&&
                 !(mapped.held&(Fire|Use|Menu|Reload|Jump|Sprint|NextWeapon|PreviousWeapon)));
             if(ms>=2000&&ms<fixture.AttackStartMs())assert(input.hands[1].grip.position.z==-.20f);
         }
@@ -111,8 +112,8 @@ void MeasuredRotationAndRealGesture(bool approach,bool prepared=false){
         maximumPreparationSpeed<MeleeStrokeConfig{}.minimumSpeed&&fixture.Complete(fixture.Duration(),true));
     std::ostringstream report;fixture.Report(report,fixture.Duration(),true);
     assert(report.str().find("\"rotation_window_ms\":[500,1500]")!=std::string::npos&&report.str().find("\"damage_verified\":false")!=std::string::npos);
-    if(prepared)assert(fixture.MovementStartMs()==2000&&fixture.AttackStartMs()==3500&&fixture.Duration()==9500&&
-        report.str().find("\"scheduled_stroke_windows_ms\":[[3500,3620],[6700,6820]]")!=std::string::npos&&
+    if(prepared)assert(fixture.MovementStartMs()==2000&&fixture.AttackStartMs()==3580&&fixture.Duration()==9580&&
+        report.str().find("\"scheduled_stroke_windows_ms\":[[3580,3700],[6780,6900]]")!=std::string::npos&&
         report.str().find("\"preparation_samples\":[100,200,100]")!=std::string::npos);
     // Starting with the final quaternion makes the actual TrackedRig learn its
     // inverse. This negative control would catch an always-rotated fixture.
@@ -156,6 +157,46 @@ void RotationBoundsAndCancellation(){
     assert(!old.MotionRotation(ForwardKnifeRotation));std::ostringstream report;old.Report(report,0,false);
     assert(report.str().find("motion_rotation_xyzw")==std::string::npos);
 }
+void CrouchMovementReleaseBoundary(){
+    using namespace interaction;using probe::TriggerInputSmoke;
+    // Delivery gaps of99/100ms remain admissible;101ms still fails. The later
+    //80ms posture click is deliberately excluded from the movement-gap clock.
+    for(const unsigned gap:{99u,100u,101u}){
+        TriggerInputSmoke fixture;assert(fixture.Approach(1000,0,.4f)&&fixture.ApproachCrouch());
+        probe::PlayerGrenadeReceiver menu;ControllerActions actions;unsigned fire=0;
+        assert(fixture.MovementReleaseMs()==1580&&fixture.AttackStartMs()==2080);
+        for(unsigned ms=0;ms<fixture.Duration();++ms){
+            auto input=RotationInput(fixture,menu,ms);const auto now=input.predictedNs;
+            const bool delivered=ms<=1500-gap||ms>=1500;
+            if(ms==1500)assert(input.hands[0].stickY==0&&input.hands[0].held==Secondary);
+            if(ms==1580)assert(input.hands[0].stickY==0&&input.hands[0].held==0);
+            if(delivered)fire+=bool(actions.Update(input,{700,1,true,true},now).pressed&Fire);
+            fixture.Published(input,ms,now,now+1000,delivered,!delivered);
+        }
+        assert(fixture.Complete(fixture.Duration(),true)==(gap<=100)&&fire==(gap<=100?1u:0u));
+        if(gap>100)assert(fixture.Reason()==TriggerInputSmoke::Failure::Approach);
+        std::ostringstream report;fixture.Report(report,fixture.Duration(),true);
+        assert(report.str().find("\"movement_release_ms\":1500")!=std::string::npos&&
+            report.str().find("\"crouch_release_ms\":1580")!=std::string::npos&&
+            report.str().find("\"max_movement_gap_ns\":"+std::to_string(gap*1000000))!=std::string::npos);
+    }
+    // A late but accepted uncrouch release retains the full500ms neutral tail,
+    // even though movement already stopped and the scheduled attack time passed.
+    TriggerInputSmoke late;assert(late.Motion({0,0,-1})&&late.MotionRotation(ForwardKnifeRotation)&&
+        late.Approach(1000,0,.4f)&&late.ApproachCrouch()&&late.ApproachPrepared());
+    probe::PlayerGrenadeReceiver menu;
+    for(unsigned ms=0;ms<=3661;++ms){
+        auto input=RotationInput(late,menu,ms);const auto now=input.predictedNs;
+        const bool delivered=ms<3080||ms>=3160;
+        if(ms>late.AttackStartMs()&&ms<3660)assert(input.hands[1].grip.position.z==-.20f);
+        if(ms==3661)assert(input.hands[1].grip.position.z<-.28f);
+        late.Published(input,ms,now,now+1000,delivered,!delivered);
+        assert(!late.Failed());
+    }
+    std::ostringstream report;late.Report(report,3661,false);
+    assert(report.str().find("\"movement_release_ms\":3000")!=std::string::npos&&
+        report.str().find("\"crouch_release_ms\":3160")!=std::string::npos);
+}
 void TurnPrefixAndReviewImages(){
     using namespace interaction;using probe::TriggerInputSmoke;
     assert(probe::TriggerInputSmokeOption(L"--selected-knife-approach-turn")&&
@@ -184,7 +225,7 @@ void TurnPrefixAndReviewImages(){
             if((fault==6||fault==7)&&ms>=movement)assert(fixture.Failed()&&probe::NeutralSceneActions(input));
             const bool turning=input.hands[1].stickX!=0,moving=input.hands[0].stickY!=0;
             assert(!(turning&&moving)&&!((turning||moving)&&input.hands[1].trigger));
-            assert(!(input.hands[0].held&(Primary|MenuClick|StickClick))&&input.hands[1].held==0);
+            assert(input.hands[0].held==(!fixture.Failed()&&fixture.CrouchClickHeld(ms)?unsigned(Secondary):0u)&&input.hands[1].held==0);
             if(ms<attack)assert(input.hands[1].trigger==0&&SameRotation(input.hands[1].grip.orientation,{}));
             if(delivered){const auto mapped=actions.Update(input,owner,now);
                 assert(!(mapped.held&(Use|Menu|Reload|Jump|Sprint|NextWeapon|PreviousWeapon)));
@@ -198,11 +239,11 @@ void TurnPrefixAndReviewImages(){
             // wrong-space stereo generation cannot become a review image.
             assert(fixture.ReviewPair(input.generation+1,input.spaceGeneration)==0);
             assert(fixture.ReviewPair(input.generation,input.spaceGeneration+1)==0);
-            if(ms==movement+1000||ms==fixture.ReviewFinalMs())
+            if(ms==fixture.MovementReleaseMs()||ms==fixture.ReviewFinalMs())
                 assert(fixture.ReviewPair(input.generation-1,input.spaceGeneration)==0);
             const auto stage=fixture.ReviewPair(input.generation,input.spaceGeneration);
             if(stage){++reviews;assert(stage==reviews&&reviews<=2);
-                assert(ms==(stage==1?movement+1000:fixture.ReviewFinalMs()));
+                assert(ms==(stage==1?fixture.MovementReleaseMs():fixture.ReviewFinalMs()));
                 assert(fixture.ReviewPair(input.generation,input.spaceGeneration)==0);}
         }
         if(!fault){assert(fixture.Complete(fixture.Duration(),true)&&turns==unsigned(std::abs(count))&&
@@ -259,12 +300,15 @@ void ApproachResumeRegressions(){
             ipc::MenuState state{wall+1,5,now+100000000,ipc::MenuMode::Gameplay,1280,720,1,0};
             // Reproduce a live pump gap using the real decorator: Busy
             // retains the original lease; Timeout never invents a fresh one.
-            const bool firstGap=fault!=13&&fault!=14&&fault!=20;
+            const bool firstGap=fault!=13&&fault!=14&&fault!=20&&fault!=21;
             if(firstGap&&wall>=700&&wall<1100)read=wall<890?ipc::ChannelResult::Busy:ipc::ChannelResult::Timeout;
             if(fault==3&&wall>=700)read=wall<790?ipc::ChannelResult::Busy:ipc::ChannelResult::Timeout;
             if(fault==11&&wall>=1900&&wall<2200)read=ipc::ChannelResult::Busy;
             if(fault==13&&wall>=2200&&wall<2500)read=ipc::ChannelResult::Busy;
             if(fault==14&&wall>=200&&wall<500)read=ipc::ChannelResult::Busy;
+            // A click already delivered at420ms cannot be restarted when its
+            // original lease expires at450ms, before movement begins.
+            if(fault==21&&wall>=360&&wall<650)read=ipc::ChannelResult::Busy;
             if(wall==1200){
                 if(fault==4)state.mode=ipc::MenuMode::Menu;
                 if(fault==5)++state.epoch;
@@ -292,10 +336,12 @@ void ApproachResumeRegressions(){
                 const auto mapped=actions.Update(input,owner,now);
                 assert(!mapped.turnDegrees&&!(mapped.held&(Use|Menu|Reload|Jump|Sprint|NextWeapon|PreviousWeapon)));
                 const bool moving=mapped.forward!=0||mapped.strafe!=0;
-                assert(bool(mapped.held&Crouch)==moving);
+                if(moving)assert(mapped.held&Crouch);
+                if((mapped.held&Crouch)&&!moving)assert(fixture.Paused()||
+                    (recipe>=fixture.MovementStartMs()+fixture.ApproachMs()&&recipe<fixture.MovementReleaseMs()));
                 if(moving&&!previousMovement)++movementSegments;previousMovement=moving;
                 const bool fire=bool(mapped.held&Fire);if(fire&&!previousFire)++fireEdges;previousFire=fire;
-                if(fixture.Paused())assert(!moving&&!mapped.held);
+                if(fixture.Paused())assert(!moving&&!(mapped.held&~Crouch));
             }
             // Join actual geometry and the physical stroke detector in the
             // successful rotated case. Readiness is a fixture input only.
@@ -318,26 +364,97 @@ void ApproachResumeRegressions(){
             if(review){++reviews;assert(review==reviews);assert(recipe>=(review==1?1500:fixture.ReviewFinalMs()));}
             assert(!fixture.ApproachResume());
         }
-        const bool expected=fault<=2||fault==12;
+        const bool expected=fault<=2||fault==12||fault==14;
         assert(fixture.Complete(wall,fixture.DurationEnded(wall))==expected);
-        if(expected){assert(movementSegments==2&&reviews==2&&fireEdges==(motion?0u:1u));
+        if(expected){assert(movementSegments==(fault==14?1u:2u)&&reviews==2&&fireEdges==(motion?0u:1u));
             assert(wall==fixture.Duration()&&fixture.RecipeMs(wall)==fixture.AttackStartMs()+(motion?8000:5000));
             if(motion)assert(intents==2);
         }else assert(fixture.Failed()&&fireEdges==0&&intents==0);
         std::ostringstream out;fixture.Report(out,wall,fixture.DurationEnded(wall));const auto report=out.str();
         if(fault!=16){
             assert(number(report,"maximum_pause_ms")==2500&&number(report,"pause_count")<=1);
-            if(expected){assert(number(report,"pause_duration_ms")==unsigned(fault==12?1020:fault?1120:810));
-                assert(number(report,"max_movement_gap_ns")>800000000&&number(report,"max_movement_segment_gap_ns")<=100000000);
+            if(expected){assert(number(report,"pause_duration_ms")==unsigned(fault==14?710:fault==12?1020:fault?1120:810));
+                assert((fault==14?number(report,"max_movement_gap_ns")<=100000000:
+                    number(report,"max_movement_gap_ns")>800000000)&&number(report,"max_movement_segment_gap_ns")<=100000000);
                 assert(number(report,"rearm_last_ns")-number(report,"rearm_first_ns")>=500000000);
-                if(fault)assert(number(report,"rearm_resets")>=1);
+                if(fault&&fault!=14)assert(number(report,"rearm_resets")>=1);
             }
             if(fault==3)assert(wall>=3290&&wall<=3300&&number(report,"pause_count")==1);
-            if(fault==13||fault==14||fault==20)assert(number(report,"pause_count")==0);
+            if(fault==13||fault==20||fault==21)assert(number(report,"pause_count")==0);
         }else assert(report.find("approach_resume")==std::string::npos);
     };
     run(0,false);run(0,true);run(1,false);run(2,false);
-    for(unsigned fault=3;fault<=20;++fault)run(fault,false);
+    for(unsigned fault=3;fault<=21;++fault)run(fault,false);
+}
+void ApproachStartupRecordedGap(){
+    using namespace interaction;using probe::TriggerInputSmoke;
+    // progress43303: consecutive native frames, in QPC nanoseconds. The last
+    // actual menu lease expires inside this162.357ms gap.
+    constexpr std::int64_t priorFrame=378083873762600,resumedFrame=378084036119600;
+    static_assert(resumedFrame-priorFrame==162357000);
+    struct Packet {unsigned wall;std::int64_t now;std::uint64_t sequence;std::int64_t deadline;};
+    const Packet packets[]{
+        {0,378083857392900,3,378083946740000},
+        {31,378083884172500,7,378083973139400},
+        {62,378083915009000,7,378083973139400},
+        {78,378083930946300,7,378083973139400},
+        {93,378083947030900,7,378083973139400},
+        {109,378083962185600,7,378083973139400},
+        {125,378083977619400,0,0}};
+    for(unsigned fault=0;fault<4;++fault){
+        TriggerInputSmoke fixture;assert(fixture.Approach(1000,.1f,.48f)&&fixture.ApproachResume());
+        probe::PlayerGrenadeReceiver menu;ControllerActions actions;
+        unsigned generation=0,fireEdges=0,firstMovement=0;bool paused=false,resumed=false;
+        std::int64_t firstFresh=0;
+        const auto step=[&](unsigned wall,std::int64_t now,const ipc::MenuState& state,ipc::ChannelResult read){
+            runtime::TrackingFrame tracking{};tracking.spaceGeneration=8589934593;
+            tracking.predictedNs=10000000000ll+std::int64_t(++generation)*11000000;
+            tracking.focused=tracking.headValid=true;
+            auto input=fixture.Input(tracking,generation,wall);input.trackingBasisGeneration=1;
+            menu.Decorate(input,0,read,state,now,1000000000);
+            fixture.GateMenu(input,wall,now,read);
+            const auto out=actions.Update(input,{700,1,true,true,1},tracking.predictedNs,now);
+            if(fixture.Paused()&&!fixture.Failed()){
+                paused=true;assert(probe::NeutralSceneActions(input)&&!out.held&&!out.forward&&!out.strafe);
+                if(!GameplayOwnsInput(input.menu,now))assert(input.menu.owner==InputMenuOwner::Unknown);
+            }
+            if(out.forward||out.strafe){
+                assert(!fault&&resumed&&firstFresh&&now-firstFresh>=500000000);
+                assert(fixture.RecipeMs(wall)>=500);if(!firstMovement)firstMovement=wall;
+            }
+            fireEdges+=bool(out.pressed&Fire);
+            const bool wasPaused=fixture.Paused();
+            fixture.Published(input,wall,now,now+1000,true,false);
+            if(wasPaused&&!fixture.Paused()){
+                assert(firstFresh&&now-firstFresh>=500000000);resumed=true;
+            }
+        };
+        for(const auto& row:packets){
+            const auto read=row.sequence?ipc::ChannelResult::Ok:ipc::ChannelResult::Timeout;
+            step(row.wall,row.now,{row.sequence,2,row.deadline,ipc::MenuMode::Gameplay,1280,720,1,0},read);
+        }
+        assert(paused&&!fixture.Failed()&&fixture.Paused()&&fixture.RecipeMs(125)==125&&!firstMovement&&!fireEdges);
+        // The original first lease is never renewed while the native pump is
+        // absent. Only the verified resumed observation can start neutral rearm.
+        step(140,378083991650700,{},ipc::ChannelResult::Timeout);
+        assert(fixture.Paused()&&!fixture.Failed());
+        unsigned wall=188;
+        for(;fixture.ContinueInput(wall);wall+=10){
+            const auto now=resumedFrame+std::int64_t(wall-188)*1000000;
+            const auto read=fault==1?ipc::ChannelResult::Timeout:ipc::ChannelResult::Ok;
+            const auto deadline=now+(fault==3?500:100000000);
+            ipc::MenuState state{std::uint64_t(wall)+8,fault==2?3u:2u,deadline,ipc::MenuMode::Gameplay,1280,720,1,0};
+            if(!firstFresh&&read==ipc::ChannelResult::Ok&&fault!=3)firstFresh=now;
+            step(wall,now,state,read);
+        }
+        if(!fault){
+            assert(resumed&&firstMovement>=1063&&fireEdges==1);
+            assert(fixture.Complete(wall,fixture.DurationEnded(wall)));
+        }else{
+            assert(fixture.Failed()&&fixture.Reason()==TriggerInputSmoke::Failure::Menu&&!resumed&&!firstMovement&&!fireEdges);
+            assert(wall<=2638);
+        }
+    }
 }
 void PreparedApproachGuards(){
     using namespace interaction;using probe::TriggerInputSmoke;
@@ -600,13 +717,14 @@ int main(){
             if(ms<fixture.AttackStartMs())assert(input.hands[1].trigger==0&&input.hands[1].grip.position.z==-.20f);
             if(ms>=1500)assert(input.hands[0].stickX==0&&input.hands[0].stickY==0);
             const auto mapped=actions.Update(input,owner,now);
-            const bool movingCrouched=crouch&&ms>=500&&ms<1500&&!(fault>=1&&fault<=7&&ms>=800);
-            assert(input.hands[0].held==(movingCrouched?interaction::Secondary:0u));
+            const bool movingCrouched=crouch&&ms>=500&&ms<fixture.MovementReleaseMs()&&!fixture.Failed();
+            assert(input.hands[0].held==(!fixture.Failed()&&fixture.CrouchClickHeld(ms)?unsigned(interaction::Secondary):0u));
             assert(!(mapped.held&(interaction::Menu|interaction::Use)));
             const bool isCrouched=(mapped.held&interaction::Crouch)!=0;
             assert(isCrouched==movingCrouched);
             if(isCrouched&&!wasCrouch)++crouchEdges;
-            if(!isCrouched&&wasCrouch){++crouchReleases;assert(ms==((fault>=1&&fault<=7)?800u:1500u));}
+            if(!isCrouched&&wasCrouch){++crouchReleases;
+                if(!fixture.Failed())assert(ms==fixture.MovementReleaseMs());}
             wasCrouch=isCrouched;
             if(ms>=500&&ms<1500&&(!fault||fault==10)){
                 assert(mapped.forward>0&&mapped.strafe>0&&!(mapped.held&interaction::Fire));++movementActions;
@@ -623,8 +741,9 @@ int main(){
         assert(crouchEdges==(crouch?1u:0u)&&crouchReleases==(crouch?1u:0u));
         std::ostringstream result;fixture.Report(result,fixture.Duration(),true);
         assert(result.str().find("\"native_movement_verified\":false")!=std::string::npos&&
-            result.str().find("\"attack_start_ms\":2000")!=std::string::npos);
+            result.str().find("\"attack_start_ms\":"+std::to_string(fixture.AttackStartMs()))!=std::string::npos);
         assert((result.str().find("\"approach_crouch\":true")!=std::string::npos)==crouch);
+        assert((result.str().find("\"crouch_binding\":\"left_y_click_release\"")!=std::string::npos)==crouch);
     };
     approachRun(false,0);approachRun(true,0);
     for(unsigned fault=1;fault<=10;++fault)approachRun(false,fault);
@@ -640,18 +759,33 @@ int main(){
     for(unsigned fault=0;fault<4;++fault){
         TriggerInputSmoke fixture;assert(fixture.Approach(1000,0,.4f)&&fixture.ApproachCrouch());probe::PlayerGrenadeReceiver menu;
         auto first=RotationInput(fixture,menu,0);fixture.Published(first,0,1000000000,1000001000,true,false);
-        const unsigned ms=fault==3?1500:500;auto changed=RotationInput(fixture,menu,ms);
+        const unsigned ms=fault==3?1580:420;auto changed=RotationInput(fixture,menu,ms);
         if(fault==0)changed.hands[0].held=0;
         if(fault==1)changed.hands[0].held|=interaction::Primary;
         if(fault==2)changed.hands[0].held|=interaction::MenuClick;
-        if(fault==3)changed.hands[0].held|=interaction::Secondary;
+        if(fault==3)changed.hands[0].held|=interaction::StickClick;
         fixture.Published(changed,ms,changed.predictedNs,changed.predictedNs+1000,true,false);
         assert(fixture.Reason()==TriggerInputSmoke::Failure::UnexpectedInput);
         auto cancelled=RotationInput(fixture,menu,ms+10);assert(NeutralSceneActions(cancelled));
     }
+    // Neither a missed posture-on click nor a missed posture-off click may
+    // authorize the later attack. The fixed windows are never retried.
+    for(unsigned missedClick=0;missedClick<2;++missedClick){
+        TriggerInputSmoke fixture;assert(fixture.Approach(1000,0,.4f)&&fixture.ApproachCrouch());
+        probe::PlayerGrenadeReceiver menu;interaction::ControllerActions actions;unsigned fire=0;
+        for(unsigned ms=0;ms<fixture.Duration();ms+=10){
+            auto input=RotationInput(fixture,menu,ms);const auto now=input.predictedNs;
+            const auto begin=missedClick?1500u:420u,end=missedClick?1580u:500u;
+            const bool delivered=ms<begin||ms>=end;
+            if(delivered)fire+=bool(actions.Update(input,{700,1,true,true},now).pressed&interaction::Fire);
+            fixture.Published(input,ms,now,now+1000,delivered,!delivered);
+        }
+        assert(fixture.Failed()&&fixture.Reason()==TriggerInputSmoke::Failure::Approach&&
+            !fixture.Complete(fixture.Duration(),true)&&fire==0);
+    }
     MeasuredRotationAndRealGesture(false);MeasuredRotationAndRealGesture(true);RotationBoundsAndCancellation();
     MeasuredRotationAndRealGesture(true,true);PreparedApproachGuards();
-    TurnPrefixAndReviewImages();
-    ApproachResumeRegressions();
+    CrouchMovementReleaseBoundary();TurnPrefixAndReviewImages();
+    ApproachStartupRecordedGap();ApproachResumeRegressions();
     std::cout<<"8 scene/body groups, trigger/two-jab, menu-aware approach/crouch/turn, two review pairs and measured forward rotation regressions PASS\n";
 }

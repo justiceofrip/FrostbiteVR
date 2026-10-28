@@ -4,6 +4,9 @@
 
 namespace fvr::interaction {
 enum class BoltCustodyPhase:unsigned {Idle,AwaitingCustody,Manipulating,Returned};
+// Current tracked mechanism wrist, under this coordinator's exact retained
+// root attachment. It is not a replacement timestamp for a rendered contact.
+struct BoltCustodyCurrentContact {HandClaimToken gun{};math::Matrix4 wristInWorld{};};
 template<class Authority> struct BoltCustodySampleT {
     HandInteractionSample source{};
     Authority lease{};
@@ -14,6 +17,7 @@ template<class Authority> struct BoltCustodySampleT {
     bool mechanismGrip=false;
     std::uint64_t acquireIntent=0;
     std::optional<HandInteractionSample> contactSource;
+    std::optional<BoltCustodyCurrentContact> currentContact;
 };
 struct BoltCustodyWeaponTarget {
     HandClaimToken gun{};
@@ -36,7 +40,7 @@ template<class Authority> struct BoltCustodyResultT {
     BoltCustodyPhase custody=BoltCustodyPhase::Idle;
     PhysicalWeaponCycleResultT<Authority> physical{};
     std::optional<BoltCustodyWeaponTarget> weapon;
-    bool blocksFire=false;
+    bool blocksFire=false,currentContactAccepted=false;
 };
 
 // Portable custody/gesture coordinator, not native admission or a rig writer.
@@ -103,6 +107,20 @@ public:
             gun_=out.transaction.claim->token;attachment_=attachment;phase_=BoltCustodyPhase::Manipulating;
         }return out;
     }
+    // Retain only this coordinator's exact root using current controller proof.
+    // This must precede any generic expiry sweep; it creates no cycle/contact
+    // evidence, transfers no claim and never renews the other hand's lease.
+    HandInteractionResult UpdateGunHold(const HandInteractionSample& source,
+        const math::Matrix4& wrist,const HandContactProof& contact,HandInteraction& hands)noexcept {
+        const auto current=gun_?hands.Current(gun_->hand):std::nullopt;
+        if((phase_!=BoltCustodyPhase::Manipulating&&phase_!=BoltCustodyPhase::Returned)||!gun_||
+           source.owner!=identity_.owner||!current||current->token!=*gun_||
+           gun_->kind!=HandClaimKind::GunHold||gun_->prerequisiteClaim||gun_->item!=identity_.item||
+           !feed_mechanism_detail::Pose(wrist)||contact.key!=gun_->contact||!contact.eligible||
+           contact.inputSequence!=source.sequence||contact.deadlineNs!=source.deadlineNs)
+            return hands.Update(source);
+        return hands.UpdateAndRenewGunHold(source,*gun_,contact).lifecycle;
+    }
     BoltCustodyResult Update(const BoltCustodySample& sample,HandInteraction& hands)noexcept {
         BoltCustodyResult out;out.custody=phase_;
         if(phase_==BoltCustodyPhase::Idle)return out;
@@ -111,7 +129,8 @@ public:
             hands.Update(source);out.physical.cycle={cycle_.Phase(),WeaponCycleFailure::None,true};out.blocksFire=true;return out;
         }
         const bool poseOkay=feed_mechanism_detail::Pose(sample.gunWristInWorld);
-        const auto renewed=gun_&&poseOkay?hands.Renew(source,*gun_,sample.gunContact):hands.Update(source);
+        const auto lifecycle=UpdateGunHold(source,sample.gunWristInWorld,sample.gunContact,hands);
+        const auto renewed=gun_&&poseOkay&&lifecycle.inputValid?hands.Renew(source,*gun_,sample.gunContact):lifecycle;
         const auto currentGun=gun_?hands.Current(gun_->hand):std::nullopt;
         const bool gunOkay=renewed.accepted&&gun_&&currentGun&&currentGun->token==*gun_&&
             currentGun->inputSequence==source.sequence&&currentGun->deadlineNs>source.nowNs&&
@@ -120,9 +139,23 @@ public:
         physical.source=source;physical.lease=sample.lease;physical.grip=sample.mechanismGrip;
         physical.contact=sample.mechanismContact;physical.acquireIntent=sample.acquireIntent;physical.contactSource=sample.contactSource;
         const auto inverse=InverseRigid(contactFromWrist_);
-        if(inverse&&feed_mechanism_detail::Pose(sample.mechanismWristInWeapon))physical.rawContact=Multiply(*inverse,sample.mechanismWristInWeapon);
+        if(sample.currentContact){
+            // Only an already-owned attachment can turn CURRENT real wrist
+            // poses into mechanism geometry. Never borrow the old renderer
+            // weapon pose, renew its deadline, or fall back after bad proof.
+            physical.contact={};physical.contactSource=source;
+            const auto weapon=gunOkay?InverseRigid(Multiply(attachment_,sample.gunWristInWorld)):std::nullopt;
+            if(gunOkay&&sample.currentContact->gun==*gun_&&weapon&&inverse&&
+               feed_mechanism_detail::Pose(sample.currentContact->wristInWorld)){
+                physical.rawContact=Multiply(*inverse,Multiply(sample.currentContact->wristInWorld,*weapon));
+                physical.contact={identity_.mechanism,source.sequence,source.deadlineNs,true};
+            }
+        }else if(inverse&&feed_mechanism_detail::Pose(sample.mechanismWristInWeapon))
+            physical.rawContact=Multiply(*inverse,sample.mechanismWristInWeapon);
         if(gunOkay)physical.gun=*gun_;
         out.physical=cycle_.Update(physical,hands);
+        out.currentContactAccepted=sample.currentContact&&physical.contact.eligible&&
+            (bool(out.physical.target)||bool(out.physical.release));
         out.blocksFire=phase_!=BoltCustodyPhase::Returned||out.physical.cycle.blocksFire||!gunOkay;
         if(out.physical.release)submitted_=out.physical.release;
         // Right/left return admission requires a real neutral packet after
@@ -154,7 +187,8 @@ public:
     BoltCustodyResult RetainCustody(const HandInteractionSample& source,
         const math::Matrix4& wrist,const HandContactProof& contact,HandInteraction& hands)noexcept {
         BoltCustodyResult out;out.custody=phase_;out.blocksFire=true;
-        if((phase_!=BoltCustodyPhase::Manipulating&&phase_!=BoltCustodyPhase::Returned)||!gun_||
+        const auto lifecycle=UpdateGunHold(source,wrist,contact,hands);
+        if(!lifecycle.inputValid||(phase_!=BoltCustodyPhase::Manipulating&&phase_!=BoltCustodyPhase::Returned)||!gun_||
            source.owner!=identity_.owner||!feed_mechanism_detail::Pose(wrist)||contact.key!=gun_->contact||
            !contact.eligible||!hands.Renew(source,*gun_,contact).accepted)return out;
         const auto gun=hands.Current(gun_->hand);if(!gun||gun->token!=*gun_)return out;

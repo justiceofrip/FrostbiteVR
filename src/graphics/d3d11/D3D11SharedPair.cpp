@@ -1,4 +1,6 @@
 #include "fvr/graphics/D3D11SharedPair.h"
+#include "fvr/diagnostics/PrivateCpuAttribution.h"
+#include "fvr/diagnostics/PrivateGpuAttribution.h"
 #include <d3d11_1.h>
 #include <dxgi1_2.h>
 #include <wrl/client.h>
@@ -83,9 +85,24 @@ TransferResult DeviceStatus(PairState& s,HRESULT& error) noexcept {
     if(error!=S_OK){s.faulted=true;return TransferResult::Faulted;}
     return TransferResult::Ok;
 }
+bool SameTicket(const PairTicket& a,const PairTicket& b) noexcept {
+    return a.magic==b.magic&&a.version==b.version&&a.bytes==b.bytes&&a.reserved0==b.reserved0&&
+        a.resourceEpoch==b.resourceEpoch&&a.sequence==b.sequence&&a.frameId==b.frameId&&
+        a.spaceGeneration==b.spaceGeneration&&a.trackingGeneration==b.trackingGeneration&&
+        a.predictedNs==b.predictedNs&&a.session==b.session&&a.reserved==b.reserved;
+}
 }
 struct D3D11PairProducer::State:PairState{};
-struct D3D11PairConsumer::State:PairState{};
+struct D3D11PairConsumer::State:PairState{
+    bool copyPending=false;
+    PairTicket copyTicket{};
+    std::array<ComPtr<ID3D11Texture2D>,2> destinations;
+    std::array<UINT,2> destinationSubresources{};
+    void ClearCopy() noexcept {
+        copyPending=false;copyTicket={};destinationSubresources={};
+        for(auto& destination:destinations)destination.Reset();
+    }
+};
 D3D11PairProducer::D3D11PairProducer()=default;
 D3D11PairProducer::~D3D11PairProducer()=default;
 void D3D11PairProducer::Reset() noexcept{state_.reset();error_=S_OK;}
@@ -123,6 +140,7 @@ TransferResult D3D11PairProducer::Create(ID3D11Device* device,UINT width,UINT he
     }catch(...){error_=E_OUTOFMEMORY;return TransferResult::Unavailable;}
 }
 TransferResult D3D11PairProducer::Publish(const std::array<TextureSlice,2>& sources,const FrameMetadata& frame,PairTicket& ticket) noexcept {
+    fvr::diagnostics::privateCpu::Scope cpuPublish(fvr::diagnostics::privateCpu::Stage::ProducerPublish);
     ticket={};
     if(!state_){error_=E_UNEXPECTED;return TransferResult::Unavailable;}
     auto& s=*state_;if(s.faulted)return TransferResult::Faulted;
@@ -133,7 +151,13 @@ TransferResult D3D11PairProducer::Publish(const std::array<TextureSlice,2>& sour
     if(DeviceStatus(s,error_)!=TransferResult::Ok)return TransferResult::Faulted;
     if(s.descriptor.sharing==TextureSharing::LegacyFenced){
         if(s.awaitingAck)return TransferResult::Busy;
-        if(!s.publishing){for(unsigned eye=0;eye<2;++eye)s.context->CopySubresourceRegion(s.eyes[eye].texture.Get(),0,0,0,0,sources[eye].texture,sources[eye].subresource,nullptr);
+        if(!s.publishing){
+            const fvr::diagnostics::privateGpu::Key gpuKey{0,frame.frameId,0,0,0,
+                frame.trackingGeneration,frame.spaceGeneration,frame.predictedNs,s.descriptor.resourceEpoch};
+            const auto gpuCopy=fvr::diagnostics::privateGpu::recorder.Begin(
+                fvr::diagnostics::privateGpu::Kind::ExportCopy,gpuKey,0,0,s.context.Get());
+            for(unsigned eye=0;eye<2;++eye)s.context->CopySubresourceRegion(s.eyes[eye].texture.Get(),0,0,0,0,sources[eye].texture,sources[eye].subresource,nullptr);
+            fvr::diagnostics::privateGpu::recorder.End(gpuCopy);
             s.context->End(s.completion.Get());s.context->Flush();s.pending=frame;s.publishing=true;}
         if(frame.frameId!=s.pending.frameId||frame.trackingGeneration!=s.pending.trackingGeneration||frame.spaceGeneration!=s.pending.spaceGeneration||frame.predictedNs!=s.pending.predictedNs){error_=E_INVALIDARG;return TransferResult::Invalid;}
         BOOL done=FALSE;error_=s.context->GetData(s.completion.Get(),&done,sizeof(done),D3D11_ASYNC_GETDATA_DONOTFLUSH);
@@ -156,6 +180,13 @@ TransferResult D3D11PairProducer::Publish(const std::array<TextureSlice,2>& sour
     ticket.predictedNs=frame.predictedNs;ticket.session=s.descriptor.session;
     return TransferResult::Ok;
 }
+bool D3D11PairProducer::ExportReadsQueued(ID3D11Device* device,ID3D11DeviceContext* context,const FrameMetadata& frame)const noexcept {
+    if(!state_)return false;const auto& s=*state_;
+    return device&&context&&s.device.Get()==device&&s.context.Get()==context&&!s.faulted&&
+        s.descriptor.sharing==TextureSharing::LegacyFenced&&(s.publishing||s.awaitingAck)&&
+        frame.frameId&&frame.frameId==s.pending.frameId&&frame.spaceGeneration==s.pending.spaceGeneration&&
+        frame.trackingGeneration==s.pending.trackingGeneration&&frame.predictedNs==s.pending.predictedNs;
+}
 void D3D11PairProducer::Acknowledge(const PairTicket& ticket,bool consumed)noexcept {
     if(!state_||state_->descriptor.sharing!=TextureSharing::LegacyFenced)return;
     if(!consumed){Reset();return;}
@@ -166,6 +197,7 @@ D3D11PairConsumer::~D3D11PairConsumer()=default;
 void D3D11PairConsumer::Reset()noexcept{state_.reset();error_=S_OK;}
 HRESULT D3D11PairConsumer::LastError()const noexcept{return error_;}
 TransferResult D3D11PairConsumer::Open(ID3D11Device* device,const TextureDescriptor& descriptor) noexcept {
+    if(HasPendingCopy()){error_=S_FALSE;return TransferResult::Busy;}
     Reset();if(!device||!Valid(descriptor)){error_=E_INVALIDARG;return TransferResult::Invalid;}
     try {
         auto next=std::make_unique<State>();next->device=device;next->descriptor=descriptor;device->GetImmediateContext(&next->context);
@@ -191,6 +223,7 @@ TransferResult D3D11PairConsumer::Open(ID3D11Device* device,const TextureDescrip
 }
 TransferResult D3D11PairConsumer::Copy(const PairTicket& ticket,const std::array<TextureSlice,2>& destinations) noexcept {
     if(!state_){error_=E_UNEXPECTED;return TransferResult::Unavailable;}
+    if(HasPendingCopy()){error_=S_FALSE;return TransferResult::Busy;}
     auto& s=*state_;if(s.faulted)return TransferResult::Faulted;
     if(!Valid(ticket,s.descriptor)||ticket.sequence<=s.sequence||ticket.frameId<=s.frameId||!SlicesValid(s,destinations)){
         error_=E_INVALIDARG;return TransferResult::Invalid;
@@ -213,5 +246,50 @@ TransferResult D3D11PairConsumer::Copy(const PairTicket& ticket,const std::array
     const auto unlocked=UnlockPair(s,ticket.sequence*2,error_);
     if(deviceResult!=TransferResult::Ok||unlocked!=TransferResult::Ok)return TransferResult::Faulted;
     s.sequence=ticket.sequence;s.frameId=ticket.frameId;return TransferResult::Ok;
+}
+bool D3D11PairConsumer::HasPendingCopy() const noexcept {return state_&&state_->copyPending;}
+TransferResult D3D11PairConsumer::SubmitCopy(const PairTicket& ticket,const std::array<TextureSlice,2>& destinations) noexcept {
+    if(!state_){error_=E_UNEXPECTED;return TransferResult::Unavailable;}
+    auto& s=*state_;if(s.faulted)return TransferResult::Faulted;
+    if(s.copyPending){
+        bool same=SameTicket(ticket,s.copyTicket);
+        for(unsigned eye=0;eye<2;++eye)same&=destinations[eye].texture==s.destinations[eye].Get()&&
+            destinations[eye].subresource==s.destinationSubresources[eye];
+        error_=same?S_FALSE:E_INVALIDARG;return same?TransferResult::Busy:TransferResult::Invalid;
+    }
+    if(s.descriptor.sharing!=TextureSharing::LegacyFenced)return Copy(ticket,destinations);
+    if(!Valid(ticket,s.descriptor)||ticket.sequence<=s.sequence||ticket.frameId<=s.frameId||!SlicesValid(s,destinations)){
+        error_=E_INVALIDARG;return TransferResult::Invalid;
+    }
+    if(DeviceStatus(s,error_)!=TransferResult::Ok)return TransferResult::Faulted;
+    // Retain both destinations as well as the source set until this exact copy
+    // completes or the caller explicitly retires it. A repeated Submit never
+    // queues another copy or replaces the completion event.
+    s.copyTicket=ticket;s.copyPending=true;
+    for(unsigned eye=0;eye<2;++eye){
+        s.destinations[eye]=destinations[eye].texture;s.destinationSubresources[eye]=destinations[eye].subresource;
+        s.context->CopySubresourceRegion(s.destinations[eye].Get(),s.destinationSubresources[eye],0,0,0,s.eyes[eye].texture.Get(),0,nullptr);
+    }
+    s.context->End(s.completion.Get());s.context->Flush();error_=S_FALSE;return TransferResult::Busy;
+}
+TransferResult D3D11PairConsumer::PollCopy(const PairTicket& ticket) noexcept {
+    if(!state_){error_=E_UNEXPECTED;return TransferResult::Unavailable;}
+    auto& s=*state_;
+    if(!s.copyPending||!SameTicket(ticket,s.copyTicket)){error_=E_INVALIDARG;return TransferResult::Invalid;}
+    if(s.faulted)return TransferResult::Faulted;
+    if(DeviceStatus(s,error_)!=TransferResult::Ok)return TransferResult::Faulted;
+    BOOL done=FALSE;error_=s.context->GetData(s.completion.Get(),&done,sizeof(done),D3D11_ASYNC_GETDATA_DONOTFLUSH);
+    if(error_==S_FALSE||(error_==S_OK&&!done)){error_=S_FALSE;return TransferResult::Busy;}
+    if(FAILED(error_)){s.faulted=true;return TransferResult::Faulted;}
+    if(error_!=S_OK){s.faulted=true;error_=E_UNEXPECTED;return TransferResult::Faulted;}
+    s.sequence=ticket.sequence;s.frameId=ticket.frameId;s.ClearCopy();return TransferResult::Ok;
+}
+TransferResult D3D11PairConsumer::CancelCopy(const PairTicket& ticket) noexcept {
+    if(!state_){error_=E_UNEXPECTED;return TransferResult::Unavailable;}
+    auto& s=*state_;
+    if(!s.copyPending||!SameTicket(ticket,s.copyTicket)){error_=E_INVALIDARG;return TransferResult::Invalid;}
+    // GPU commands retain their referenced resources. Negative feedback retires
+    // the producer set instead of allowing it to overwrite those sources.
+    s.faulted=true;s.ClearCopy();error_=E_ABORT;return TransferResult::Ok;
 }
 }

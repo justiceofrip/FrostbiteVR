@@ -400,7 +400,12 @@ class Packaging(unittest.TestCase):
         try:
             output=self.temp_dir/'full';result=p.stage(self.root,output,'preview')
             self.assertFalse(result['build_verified']);self.assertFalse((output/'preview/build/x64/FvrTestOpenXr.dll').exists())
-            self.assertEqual(len(json.loads((output/'preview/binary-manifest.json').read_text())['files']),4)
+            binary_files=json.loads((output/'preview/binary-manifest.json').read_text())['files']
+            self.assertEqual(len(binary_files),6)
+            for name in ('build/x86/BC2NativeResolution.exe','build/x86/BC2ResolutionBootstrap.dll'):
+                record=next(entry for entry in binary_files if entry['path']==name)
+                self.assertEqual(record['machine'],'0x14c')
+                self.assertEqual(record['sha256'],p.sha((self.root/name).read_bytes()))
             with zipfile.ZipFile(output/'preview-source.zip') as source_zip:
                 self.assertEqual(source_zip.read('ARCHITECTURE.md'),source_zip.read('release/ARCHITECTURE.md'))
                 for name in ('HEADSET-TEST-CARD.md','PRERELEASE-DRAFT.md'):
@@ -409,6 +414,9 @@ class Packaging(unittest.TestCase):
                 for name in ('.github/workflows/build.yml','.github/ISSUE_TEMPLATE/bug_report.yml'):
                     self.assertEqual(source_zip.read(name),(self.root/name).read_bytes())
             with zipfile.ZipFile(output/'preview-singleplayer-preview.zip') as runtime_zip:
+                self.assertIn('launcher/runtime/Resolution.ps1',runtime_zip.namelist())
+                self.assertIn('build/x86/BC2NativeResolution.exe',runtime_zip.namelist())
+                self.assertIn('build/x86/BC2ResolutionBootstrap.dll',runtime_zip.namelist())
                 self.assertEqual(runtime_zip.read('HEADSET-TEST-CARD.md'),(self.root/'release/HEADSET-TEST-CARD.md').read_bytes())
                 self.assertNotIn('PRERELEASE-DRAFT.md',runtime_zip.namelist())
                 self.assertNotIn('release/PRERELEASE-DRAFT.md',runtime_zip.namelist())

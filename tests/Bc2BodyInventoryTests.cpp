@@ -9,6 +9,7 @@
 #include "fvr/interaction/ControllerInput.h"
 #include "Bc2InputBinding.h"
 #include "Bc2BodyInventorySession.h"
+#include "Bc2BodyInteractionInput.h"
 #include "../src/platform/windows/BodyCrossDrawProbe.h"
 #include <array>
 #include <cstring>
@@ -236,7 +237,9 @@ int HeldFireSlotContinuity(){
     }
     return 0;
 }
+#include "BodyDrawRearmFixture.inc"
 int GameplayInputRearmComposition(){
+    if(OrdinaryDrawSelectionRearmComposition()||OrdinaryDrawRearmBoundaries()||OrdinaryDrawExpiredQueuedDispatch())return 1;
     // Compare historical unconditional invalidation, registered input rearm,
     // and current failed-Apply recovery using REAL action/cache/holster policies.
     for(unsigned repaired=0;repaired<3;++repaired){HolsterRun h;CHECK(h.Empty());

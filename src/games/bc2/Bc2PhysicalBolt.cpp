@@ -33,6 +33,21 @@ bool BoltCalibrationValid(const Bc2BoltCalibration& c)noexcept {
 }
 Bc2PhysicalBolt::Bc2PhysicalBolt(std::shared_ptr<const Bc2BoltCalibration> c,Bc2PhysicalBoltApi api)noexcept:
     calibration_(std::move(c)),api_(api){}
+std::optional<HandInteractionResult> Bc2PhysicalBolt::UpdateGunHold(
+    const Bc2PhysicalBoltSample& s,HandInteraction& hands)noexcept {
+    const auto gun=custody_?custody_->Gun():std::nullopt;
+    const auto recovery=recoveryCustody_?recoveryCustody_->Gun():std::nullopt;
+    if(!gun&&!recovery)return {};
+    if((gun&&recovery)||!calibration_||!BoltCalibrationValid(*calibration_)||s.cancel||s.custodyTransfer||
+       s.asset!=calibration_->asset||s.mesh!=calibration_->mesh||s.nativeOwner!=owner_||
+       !Mapped(s.nativeOwner,s.input,s.item))return hands.Update(s.input);
+    const auto token=recovery?*recovery:*gun;
+    const auto hand=weapon_cycle_detail::HandIndex(token.hand);
+    // Player Prepare produced these proofs from the current mapped wrists and
+    // the actual held token. Do not substitute the ordinary right-hand grip.
+    return recovery?recoveryCustody_->UpdateGunHold(s.input,s.wristWorld[hand],s.gunContacts[hand],hands):
+        custody_->UpdateGunHold(s.input,s.wristWorld[hand],s.gunContacts[hand],hands);
+}
 void Bc2PhysicalBolt::Cancel(const HandInteractionSample& input,HandInteraction& hands)noexcept {
     if(deferredControl_&&pending_&&custody_->RejectUndispatched(*pending_)){pending_.reset();deferredControl_.reset();}
     if(deferredRecovery_&&recoveryPending_&&recoveryCustody_&&recoveryCustody_->RejectUndispatched(*recoveryPending_)){
@@ -218,10 +233,16 @@ Bc2PhysicalBoltResult Bc2PhysicalBolt::Tick(const Bc2PhysicalBoltSample& s,HandI
     if(currentGun&&s.gunContacts[weapon_cycle_detail::HandIndex(currentGun->hand)].eligible)
         sample.gunContact=s.gunContacts[weapon_cycle_detail::HandIndex(currentGun->hand)];
     sample.gunWristInWorld=s.wristWorld[weapon_cycle_detail::HandIndex(currentGun?currentGun->hand:p.hands.mechanism)];
-    if(rawOkay){sample.contactSource=raw.input;sample.mechanismWristInWeapon=raw.mechanismWristInWeapon;
+    if(s.controllerCustody&&!s.custodyTransfer)
+        sample.currentContact=BoltCustodyCurrentContact{*s.controllerCustody,s.wristWorld[weapon_cycle_detail::HandIndex(p.hands.mechanism)]};
+    else if(rawOkay){sample.contactSource=raw.input;sample.mechanismWristInWeapon=raw.mechanismWristInWeapon;
         sample.mechanismContact={sample.lease.mechanism,raw.input.sequence,raw.input.deadlineNs,true};}
     if(intent!=UINT64_MAX)sample.acquireIntent=++intent;
     const auto result=custody_->Update(sample,hands);
+    if(result.currentContactAccepted&&s.controllerCustody){
+        out.tracking.currentContactGun=s.controllerCustody;out.tracking.currentContactInput=s.input.sequence;
+        out.tracking.currentContactObserved=s.input.observedNs;out.tracking.currentContactDeadline=s.input.deadlineNs;
+    }
     out.audio=PhysicalCycleAudio(sample.lease,result.physical,p,s.input);
     out.tracking.held=sample.lease;out.tracking.target=result.physical.target;out.tracking.weapon=result.weapon;
     out.tracking.custody=result.custody;
@@ -339,11 +360,17 @@ Bc2PhysicalBoltResult Bc2PhysicalBolt::TickRecovery(const Bc2PhysicalBoltSample&
     const auto currentGun=recoveryCustody_->Gun();
     const auto h=weapon_cycle_detail::HandIndex(currentGun?currentGun->hand:p.hands.mechanism);
     if(s.gunContacts[h].eligible)sample.gunContact=s.gunContacts[h];sample.gunWristInWorld=s.wristWorld[h];
-    if(rawOkay){sample.contactSource=raw.input;sample.mechanismWristInWeapon=raw.mechanismWristInWeapon;
+    if(s.controllerCustody&&!s.custodyTransfer)
+        sample.currentContact=BoltCustodyCurrentContact{*s.controllerCustody,s.wristWorld[weapon_cycle_detail::HandIndex(p.hands.mechanism)]};
+    else if(rawOkay){sample.contactSource=raw.input;sample.mechanismWristInWeapon=raw.mechanismWristInWeapon;
         sample.mechanismContact={sample.lease.mechanism,raw.input.sequence,raw.input.deadlineNs,true};}
     if(intent!=UINT64_MAX)sample.acquireIntent=++intent;
     const auto prior=recoveryCustody_->CyclePhase();
     const auto result=recoveryCustody_->Update(sample,hands);
+    if(result.currentContactAccepted&&s.controllerCustody){
+        out.tracking.currentContactGun=s.controllerCustody;out.tracking.currentContactInput=s.input.sequence;
+        out.tracking.currentContactObserved=s.input.observedNs;out.tracking.currentContactDeadline=s.input.deadlineNs;
+    }
     out.audio=PhysicalCycleAudio(sample.lease,result.physical,p,s.input);
     if(prior!=WeaponCyclePhase::Cancelled&&result.physical.cycle.phase==WeaponCyclePhase::Cancelled&&!recoveryPending_)
         api_.cancel(api_.context);

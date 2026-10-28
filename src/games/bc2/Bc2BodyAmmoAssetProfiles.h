@@ -227,7 +227,10 @@ inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections46{{
 inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections47{{
 {"Nambu100","Objects/Weapons/Handheld/Beach/Nambu100/Nambu100_Mesh","body_holstered_b39952d7067af68c","closed_configuration",{14124,20,1,0,graphics::RigidPropPosition::Float3,0x03bb64bf6499bc17ull,0xa21c33c6c47c9c47ull,4708}},
 }};
-inline constexpr std::array<BodyAmmoAssetProfile,48> BodyAmmoAssetProfiles{{
+inline constexpr std::array<BeltPropSectionProfile,1> BodyAmmoAssetSections48{{
+{"Garand","Objects/Weapons/Handheld/Beach/Jap_Type5/Jap_Type5_Mesh","body_holstered_42f20447f5130950","closed_configuration",{14250,20,1,0,graphics::RigidPropPosition::Float3,0x7786b79b621c5df1ull,0xf9f810aefad07c49ull,4750}},
+}};
+inline constexpr std::array<BodyAmmoAssetProfile,49> BodyAmmoAssetProfiles{{
 {"XM8_sp_s","Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Mesh","jntWpn_6",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections0},
 {"SPAS12_sp","Objects/Weapons/Handheld/UL_shg_SPAS12/UL_shg_SPAS-12_Mesh","jntWpn_7",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections1},
 {"AEK971_sp","Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Mesh","jntWpn_6",0xa7f219a1426216abull,{{{{1.f,-6.85506856e-15f,1.73336975e-14f,0.f},{6.85506856e-15f,1.f,-1.38777889e-15f,0.f},{-1.73336975e-14f,1.38777889e-15f,1.f,-0.f},{-2.10726093e-14f,-1.09683251f,-0.0956423283f,1.f}}}},BodyAmmoAssetSections2},
@@ -276,5 +279,6 @@ inline constexpr std::array<BodyAmmoAssetProfile,48> BodyAmmoAssetProfiles{{
 {"MP443_sp","Objects/Weapons/Handheld/RU_hg_MP443Grach/RU_hg_MP443Grach_Mesh","body_holstered_2cd4097fb88a8a37",0xa7f219a1426216abull,{{{{1.f,0.f,0.f,0.f},{0.f,1.f,0.f,0.f},{0.f,0.f,1.f,0.f},{0.f,0.f,0.f,1.f}}}},BodyAmmoAssetSections45},
 {"Nambu100","Objects/Weapons/Handheld/Beach/Nambu100/Nambu100_Mesh","jntWpn_12",0xa7f219a1426216abull,{{{{1.f,0.f,0.f,0.f},{0.f,1.f,0.f,0.f},{0.f,0.f,1.f,0.f},{0.f,0.f,0.f,1.f}}}},BodyAmmoAssetSections46},
 {"Nambu100","Objects/Weapons/Handheld/Beach/Nambu100/Nambu100_Mesh","body_holstered_b39952d7067af68c",0xa7f219a1426216abull,{{{{1.f,0.f,0.f,0.f},{0.f,1.f,0.f,0.f},{0.f,0.f,1.f,0.f},{0.f,0.f,0.f,1.f}}}},BodyAmmoAssetSections47},
+{"Garand","Objects/Weapons/Handheld/Beach/Jap_Type5/Jap_Type5_Mesh","body_holstered_42f20447f5130950",0xa7f219a1426216abull,{{{{1.f,0.f,0.f,0.f},{0.f,1.f,0.f,0.f},{0.f,0.f,1.f,0.f},{0.f,0.f,0.f,1.f}}}},BodyAmmoAssetSections48},
 }};
 }

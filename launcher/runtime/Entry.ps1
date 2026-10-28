@@ -8,6 +8,7 @@ $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'Runtime.Core.ps1')
 . (Join-Path $PSScriptRoot 'Dependencies.ps1')
 . (Join-Path $PSScriptRoot 'Startup.ps1')
+. (Join-Path $PSScriptRoot 'Resolution.ps1')
 $StateRoot=[IO.Path]::GetFullPath($StateRoot)
 $null=Set-FvrLauncherStorage (Split-Path (Split-Path $StateRoot -Parent) -Parent)
 $null=New-Item -ItemType Directory -Path $StateRoot -Force
@@ -29,7 +30,8 @@ $bundledPython=Join-Path $PSScriptRoot 'python/python.exe'
 $python=if(Test-Path -LiteralPath $bundledPython){$bundledPython}else{Resolve-Bc2Tool $env:FVR_PYTHON @('python.exe','python3.exe') 'Python 3.11+'}
 & $python -B -c 'import sys; sys.exit(0 if sys.version_info >= (3,11) else 1)'
 if($LASTEXITCODE){throw 'Python 3.11 or newer is required.'}
-$cache=Get-FvrChild $StateRoot ('cache/'+$config.asset_recipe_sha256)
+$cacheRoot=Get-FvrChild $StateRoot 'cache'
+$cache=Get-FvrChild $cacheRoot $config.asset_recipe_sha256
 $cached=Test-Bc2AssetCache $cache $config.asset_recipe_sha256 $gameHash
 Assert-Bc2RuntimeSpace $StateRoot
 if($Action -eq 'Validate'){
@@ -48,7 +50,8 @@ if(Get-Process BC2XrHost,BC2NativeTrace,BC2NativeIpcProbe -ErrorAction SilentlyC
 # Reject an unchanged live game before opening another headset session. Repeat
 # the exact selection after preparation, which may take minutes on first use.
 $null=Get-Bc2ExistingGame $exe ([bool]$Fresh)
-$null=Invoke-Bc2OpenXrPreflight $PSScriptRoot $StateRoot $xr
+$preflight=Invoke-Bc2OpenXrPreflight $PSScriptRoot $StateRoot $xr
+$renderPlan=Get-Bc2ResolutionPlan $preflight
 Write-Information 'BC2VR: Preparing local equipment and audio caches…' -InformationAction Continue
 $ffmpeg=Get-Bc2PreparationFfmpeg $StateRoot (Join-Path $PSScriptRoot 'config/ffmpeg-download.json') $cached Launch
 # A first download can take minutes; acquire process identities only afterward.
@@ -64,14 +67,14 @@ if(-not $cached){
     $preparationReport=Get-FvrChild $cache 'preparation.json'
     Assert-FvrNoLinks $preparationReport
     if(Test-Path -LiteralPath $preparationReport){Remove-Item -LiteralPath $preparationReport -Force}
-    & $python -B (Join-Path $PSScriptRoot 'tools/prepare_runtime_assets.py') --game $settings.game_path --output $cache --ffmpeg $ffmpeg --recipe $config.asset_recipe_sha256 --game-sha256 $gameHash
+    & $python -B (Join-Path $PSScriptRoot 'tools/prepare_runtime_assets.py') --game $settings.game_path --output $cache --managed-cache-root $cacheRoot --ffmpeg $ffmpeg --recipe $config.asset_recipe_sha256 --game-sha256 $gameHash
     $preparationExit=$LASTEXITCODE
     $preparation=Save-Bc2AssetPreparationResult $cache $StateRoot $config.asset_recipe_sha256 $gameHash $preparationExit (Test-Bc2AssetCache $cache $config.asset_recipe_sha256 $gameHash)
     if($preparation.state -ne 'complete'){throw ('Local asset preparation failed at '+$preparation.stage+': '+$preparation.error+' No game was started. Use Report feedback > Save diagnostics to share the details.')}
 }
 $relative='sessions/'+[DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss-fff')+'-'+[guid]::NewGuid().ToString('N').Substring(0,8)
 $folder=Get-FvrChild $StateRoot $relative;$null=New-Item -ItemType Directory -Path $folder
-$options=@{schema='bc2vr.session-options.v1';state_root=$StateRoot;relative_folder=$relative;game_path=$settings.game_path;game_sha256=$gameHash;cache=$cache;python=$python;activate_window=[bool]$ActivateGameWindow;version=$config.version;source_sha256=$config.source_sha256;xr_manifest=$xr.manifest;xr_label=$xr.label}
+$options=@{schema='bc2vr.session-options.v1';state_root=$StateRoot;relative_folder=$relative;game_path=$settings.game_path;game_sha256=$gameHash;steam_compatibility=($installation.ContainsKey('experimental_steam') -and $installation.experimental_steam);cache=$cache;python=$python;activate_window=[bool]$ActivateGameWindow;version=$config.version;source_sha256=$config.source_sha256;xr_manifest=$xr.manifest;xr_label=$xr.label;render_plan=$renderPlan}
 $optionsFile=Join-Path $folder 'options.json';Write-FvrJson $optionsFile $options
 $supervisor=Start-Bc2Child (Join-Path $PSHOME 'pwsh.exe') @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',(Join-Path $PSScriptRoot 'Session.ps1'),'-OptionsPath',$optionsFile) $folder 'supervisor'
 Write-FvrJson (Join-Path $StateRoot 'active-session.json') @{schema='bc2vr.active-session.v1';relative_folder=$relative;supervisor=(Get-Bc2ProcessIdentity $supervisor);version=$config.version}

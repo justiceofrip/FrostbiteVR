@@ -1,0 +1,42 @@
+{
+  "schema": "fvr.bc2.campaign_bench_config.v1",
+  "enrollment_documents": [
+    "profiles/resource-enrollment233/enrollment.json",
+    "profiles/resource-enrollment235-scar/enrollment.json",
+    "profiles/resource-enrollment240-f2000/enrollment.json",
+    "profiles/opening426/resource-enrollment.json"
+  ],
+  "body_asset_documents": ["config/body-ammo-assets.json"],
+  "support_binding_documents": [
+    "profiles/support312/support-bindings.json",
+    "profiles/bounded-support372/support-bindings.json",
+    "profiles/opening426/support-bindings.json"
+  ],
+  "known_configurations": [
+    {"resource":"objects/weapons/handheld/us_rgl_xm8/sp_rgl_xm8_scoped.dbx","instance_guid":"6a066a2d-ab87-4356-afa4-567741c395bf","resource_sha256":"23a7261d6cbaffe7c642af167edfca1a8ac818ebef551538b01a5784ef8f472f","mechanism":"magazine","source":"src/games/bc2/Bc2MagazineNativeProfile.h","historical_evidence":"docs/WEAPON-SYSTEM-PIPELINE.md"},
+    {"resource":"objects/weapons/handheld/ru_rgl_aek971/sp_rgl_aek971.dbx","instance_guid":"c0088cee-fb7f-4fc2-a69c-2c59372f4f81","resource_sha256":"eef52077b1721323a66be8875c1bb4c7df1a2755b1264a36d9004534a91bfbc1","mechanism":"magazine","source":"src/games/bc2/Bc2MagazineNativeProfile.h","historical_evidence":"docs/WEAPON-COVERAGE-CURRENT.md"},
+    {"resource":"objects/weapons/handheld/ru_hg_mp443grach/sp_hg_mp443grach.dbx","instance_guid":"58098858-821b-4406-a19c-ae62e5d38bdf","resource_sha256":"e16f5713854ca38ab58d61bd3c568e2f87533c0e82032d71d61f27449d5484cc","mechanism":"magazine","source":"profiles/resource-enrollment295-pistol/PistolRegistry.h","historical_evidence":"docs/WEAPON-SYSTEM-PIPELINE.md"},
+    {"resource":"objects/weapons/handheld/ul_shg_spas12/sp_shg_spas12.dbx","instance_guid":"cd43bc40-bbd7-4bab-b3d6-8ae934374944","resource_sha256":"800b46aead4e2704cb771176e5d7ae58f72838beb89fe4cb3f9d7192089f2113","mechanism":"pump","source":"src/games/bc2/Bc2PumpCalibration225.h","historical_evidence":"docs/WEAPON-COVERAGE-CURRENT.md"},
+    {"resource":"objects/weapons/handheld/bu_sni_m95/sp_sni_m95.dbx","instance_guid":"7717ea86-49ed-4aa8-b401-7e62d8ade339","resource_sha256":"8f8494c4d007bb3955485d740372bd521ff6fb4fa437f1df81602c29023ec298","mechanism":"bolt","source":"src/games/bc2/Bc2M95BoltCalibration.h","historical_evidence":"docs/EMPTY-PREDICTION-293.md"}
+  ],
+  "limits": {"loadout_items": 2, "body_cache_bytes": 16777216, "body_cache_records": 64, "plan_bytes": 8388608},
+  "mechanisms": {
+    "magazine": ["remove_partial", "return_same_magazine", "remove_full", "discard", "chest_replacement", "support_reacquire", "holster_round_trip", "fire"],
+    "pump": ["fire", "rear_stroke", "forward_stroke", "shell_insert", "support_reacquire", "holster_round_trip", "fire"],
+    "bolt": ["fire", "unlock", "rear_stroke", "forward_stroke", "lock", "holster_round_trip", "fire"]
+  },
+  "emulation_episodes": {
+    "SingleMagazine": {"companion_required": false, "configured_mechanism": "magazine", "native_acceptance_from_completion": false,
+      "sequence": ["draw_selected_if_stowed", "support", "prepare_one_partial_shot_if_full", "remove_partial", "return_same_magazine", "remove_again", "discard", "chest_replacement", "support_reacquire", "fire_once"],
+      "excluded_claims": ["other_shoulder_round_trip", "world_pickup", "bolt", "pump", "belt_fed", "headset_alignment"]},
+    "CombinedPump": {"companion_required": "SPAS12_sp", "native_acceptance_from_completion": false}
+  },
+  "limitations": [
+    "Enrollment metadata is not a claim that the current binary enables a weapon.",
+    "Native classes and names do not determine physical reload mechanisms.",
+    "Provisioning replaces a native inventory item; it does not spawn a world pickup.",
+    "Use existing campaign maps and already loaded exact resources; do not mount additional common bundles.",
+    "Pump/bolt, pistol chambering, belt-fed LMGs and underbarrels require their own exact bindings.",
+    "Select a bounded per-loadout body cache; this tool does not increase runtime asset limits."
+  ]
+}

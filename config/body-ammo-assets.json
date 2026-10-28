@@ -8739,6 +8739,111 @@
       "configuration_archive_index_sha256": "9693feb53337f1a83c49d725eab25d146e91469394c3b93e7bf62214ecc8a44f",
       "closed_archive": "Dist/win32/async/weapon/nambu100-00.fbrb",
       "closed_archive_index_sha256": "65a555ac47ca347684359e3db5c260abae35f181c97e451d03b3de63d814d3bb"
+    },
+    {
+      "asset": "Garand",
+      "mesh": "Objects/Weapons/Handheld/Beach/Jap_Type5/Jap_Type5_Mesh",
+      "part": "body_holstered_42f20447f5130950",
+      "rig_fingerprint": 12101763329092097707,
+      "inverse_bind": [
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "sections": [
+        {
+          "section": "closed_configuration",
+          "count": 14250,
+          "stride": 20,
+          "palette_size": 1,
+          "part_palette_index": 0,
+          "position": "Float3",
+          "vertex_skin_hash": "7786b79b621c5df1",
+          "position_hash": "f9f810aefad07c49",
+          "part_triangles": 4750
+        }
+      ],
+      "display_only": true,
+      "configuration_path": "Objects/Weapons/Handheld/Beach/Jap_Type5/Type5",
+      "configured_meshes": [
+        "Objects/Weapons/Handheld/Beach/Jap_Type5/Jap_Type5_Mesh"
+      ],
+      "authored_configuration": {
+        "resource": "Objects/Weapons/Handheld/Beach/Jap_Type5/Type5.dbx",
+        "sha256": "e314479c35ea6819e5c662f35c4fca5af56cab3a1c1fe0a3b373efa05e153bd2",
+        "instance_guid": "E66520C7-7B62-4D35-9274-72A762F0C35D",
+        "mesh_references": [
+          {
+            "reference": "objects/weapons/handheld/beach/jap_type5/jap_type5_mesh/eb95b279-a4f7-11dd-817c-9a13d9954241",
+            "resource": "Objects/Weapons/Handheld/Beach/Jap_Type5/Jap_Type5_Mesh.dbx",
+            "sha256": "d202292abe8e18c9a89f95eb9ee14cff7c8b6119e6c8eaebbc5a7173cf7b29c0",
+            "instance_guid": "eb95b279-a4f7-11dd-817c-9a13d9954241"
+          }
+        ]
+      },
+      "closed_clip": "Animations/Weapons/Handheld/Beach/Jap_Type5/1p/HandsIkPose.res",
+      "closed_clip_sha256": "7e994888f010a2e729cfc5fc3153e954cac0aab51289963a841b4445d3312cc7",
+      "closed_pose": "static_authored_pose",
+      "sources": [
+        {
+          "archive": "Dist/win32/levels/sp_01/level-00.fbrb",
+          "archive_index_sha256": "9693feb53337f1a83c49d725eab25d146e91469394c3b93e7bf62214ecc8a44f",
+          "mesh": "Objects/Weapons/Handheld/Beach/Jap_Type5/Jap_Type5_Mesh",
+          "mesh_sha256": "959d6b9ffdd542616c0fa1e2df389eae11aec4223ed0e72d3e157133b03dbe3b",
+          "lod_sha256": "3a28d8d0b0b64571ecaffc28278c98a6eaa66af4c71d39425f9743df24c2452f"
+        }
+      ],
+      "display_anchor_evaluation": {
+        "RightHand": "decoded_spline_candidate",
+        "jntWpn_Flash": "decoded_spline_candidate"
+      },
+      "display_anchor_time_seconds": 0,
+      "display_anchor_not_native_grip_calibration": true,
+      "holster_from_weapon": [
+        -4.336808689942019e-19,
+        0.04999611222260514,
+        -0.9987494123966355,
+        0.0,
+        0.9973821709472837,
+        0.07222004636218807,
+        0.003615242720374955,
+        0.0,
+        0.07231047694825295,
+        -0.9961348571684799,
+        -0.049865230947505924,
+        0.0,
+        0.0005564994229470335,
+        -0.2335394200851907,
+        -0.07072143703940725,
+        1.0
+      ],
+      "grip": [
+        -0.05895693063197233,
+        0.01656686030379234,
+        -0.2362035383993754
+      ],
+      "muzzle": [
+        3.135368933661329e-08,
+        0.10173097284558913,
+        -1.410876573878341
+      ],
+      "configuration_archive": "Dist/win32/levels/sp_01/level-00.fbrb",
+      "configuration_archive_index_sha256": "9693feb53337f1a83c49d725eab25d146e91469394c3b93e7bf62214ecc8a44f",
+      "closed_archive": "Dist/win32/async/weapon/type5-00.fbrb",
+      "closed_archive_index_sha256": "3e6520e476e604e4aef06c23ba2814ed9cd8639f007a98595aa605d8dc58d5cb"
     }
   ]
 }

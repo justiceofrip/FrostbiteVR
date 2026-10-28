@@ -1,4 +1,6 @@
 #include "Bc2TrackedViews.h"
+#include "fvr/diagnostics/PrivateCpuAttribution.h"
+#include "fvr/diagnostics/PrivateGpuAttribution.h"
 #include "Bc2WeatherObservation.h"
 #include "Bc2WeatherTranslation.h"
 #include "Bc2StereoColorScale.h"
@@ -26,6 +28,7 @@
 #include "Bc2MenuRuntime.h"
 #include "Bc2MenuState.h"
 #include "Bc2ReloadDrawCapture.h"
+#include "fvr/graphics/D3D11SceneDrawWitness.h"
 #include "Bc2ReloadProducerBinding.h"
 #include "Bc2RigWorkerRuntime.h"
 #include "Bc2OpticFilterRuntime.h"
@@ -36,6 +39,12 @@
 #include "fvr/runtime/ExactWriteBatch.h"
 #include "fvr/runtime/FrameObservationFailures.h"
 #include "fvr/graphics/D3D11FrameBridge.h"
+#include "fvr/graphics/FrameBridgeDiagnosticsJson.h"
+#include "fvr/graphics/DepthEyeDiagnostics.h"
+#include "fvr/graphics/DeferredDepthAdmission.h"
+#include "fvr/graphics/FrameBridgePresentService.h"
+#include "fvr/graphics/PrivatePresentationExperiment.h"
+#include "fvr/graphics/BoundedFrameProgress.h"
 #include "fvr/graphics/D3D11PresentationPacing.h"
 #include "fvr/graphics/DesktopImageEvidence.h"
 #include "fvr/graphics/DiagnosticImageLifetime.h"
@@ -44,6 +53,8 @@
 #include "NativeWorkPool.h"
 #include <Windows.h>
 #include <d3d11.h>
+#include <d3d11_4.h>
+#include "fvr/graphics/D3D11CallProvenance.h"
 #include <wrl/client.h>
 #include "Bc2Profile.h"
 #include "Bc2Camera.h"
@@ -87,7 +98,7 @@ LONG started=0;unsigned cameraPulseMode=0;bool lifecycleMode=false,stereoMode=fa
 fvr::bc2::ViewLifecycleCandidates lifecycle{};fvr::bc2::ViewCallbackCandidates viewCallbacks{};
 struct LifecycleResult {unsigned borrowedRedirects=0,borrowedRestores=0,allBefore=0,allAfter=0,requestRefsBefore=0,requestRefsAfter=0;bool allRestored=false,callbacksRestored=false;bool claimed=false,created=false,registered=false,inactive=false,restored=false,ownerUnchanged=false;unsigned view=0,refsBefore=0,refsOwned=0,refsReleased=0,countBefore=0,countDuring=0,countAfter=0,thread=0;std::atomic<bool> complete=false;} lifecycleResult;
 using CacheFn=void(__thiscall*)(void*);
-CacheFn updateView=nullptr,updateProjection=nullptr,updateFrustum=nullptr;
+CacheFn updateView=nullptr,updateProjection=nullptr,updateFrustum=nullptr,updateScale=nullptr;
 struct CameraVariant {fvr::math::Matrix4 projection{};std::uint64_t frustumHash=0;};
 struct MappedCameraResult {bool complete=false;float viewError=-1,projectionError=-1,viewProjectionRelativeError=-1;};
 struct CullCameraResult {bool passed=false;double maxDistance=-1,maxRoundoffAllowance=0,maxExcess=0;float normalError=-1;};
@@ -144,7 +155,7 @@ struct BodyHolsterEyeRow {
     std::int64_t nowNs=0,receiptDeadlineNs=0;bool hidden=false,paired=false,free=false,suppressed=false;
 };
 std::array<BodyHolsterEyeRow,512> bodyHolsterEyes{};unsigned bodyHolsterEyeCount=0;
-std::array<void*,16> hookEntries{};std::atomic<bool> deferredCleanup=false;
+std::array<void*,20> hookEntries{};std::atomic<bool> deferredCleanup=false;
 struct WorkPoolExperiment {
     std::atomic<unsigned> stage=0; // 0 idle, 1 leased, 2 restored, 3 rejected
     unsigned owner=0,vtable=0,global=0,reset=0,thread=0,frame=0,peak=0;
@@ -273,7 +284,7 @@ void SampleCameraCopies(std::uintptr_t address)noexcept {
         }
         // These verified math methods touch only this owned RenderView copy.
         // No live view, frame arena or game callback is passed to them.
-        updateView(copy.bytes.data());updateProjection(copy.bytes.data());updateFrustum(copy.bytes.data());
+        fvr::bc2::PrecomputeCameraCaches(copy,updateView,updateProjection,updateFrustum,updateScale);
         auto& result=cameraExperiment.variants[variant];std::memcpy(&result.projection,copy.bytes.data()+0x2e0,64);
         result.frustumHash=Hash(reinterpret_cast<std::uintptr_t>(copy.bytes.data()+0x90),0x180);
         if(!variant){
@@ -295,7 +306,7 @@ void SampleCameraCopies(std::uintptr_t address)noexcept {
         auto copy=fvr::bc2::BuildRenderViewCopy(original,*world,fov,nearPlane,farPlane);if(!copy)continue;
         const auto projection=fvr::math::MakeLhProjectionFromFovTangents(fov,nearPlane,farPlane);if(!projection)continue;
         const auto native=fvr::engine::NativeEye({*world,*projection});if(!native)continue;
-        updateView(copy->bytes.data());updateProjection(copy->bytes.data());updateFrustum(copy->bytes.data());
+        fvr::bc2::PrecomputeCameraCaches(*copy,updateView,updateProjection,updateFrustum,updateScale);
         const auto error=[&](unsigned offset,const fvr::math::Matrix4& expected,bool relative){
             fvr::math::Matrix4 actual{};std::memcpy(&actual,copy->bytes.data()+offset,64);float difference=0;
             for(unsigned r=0;r<4;++r)for(unsigned c=0;c<4;++c){const float a=actual.values[r][c],b=expected.values[r][c];if(!std::isfinite(a)||!std::isfinite(b))return -1.f;
@@ -313,7 +324,7 @@ void SampleCameraCopies(std::uintptr_t address)noexcept {
         const float nearPlane=i<4?.04f:.1f,farPlane=i<4?100.f:2000.f;
         const auto envelope=fvr::math::EncloseStereoFrusta(*center,{*eye0,*eye1},{left,right},nearPlane,farPlane);if(!envelope)continue;
         auto copy=fvr::bc2::BuildRenderViewCopy(original,envelope->world,envelope->fov,envelope->nearPlane,envelope->farPlane);if(!copy)continue;
-        updateView(copy->bytes.data());updateProjection(copy->bytes.data());updateFrustum(copy->bytes.data());
+        fvr::bc2::PrecomputeCameraCaches(*copy,updateView,updateProjection,updateFrustum,updateScale);
         std::array<fvr::math::Vec4,6> planes{};std::memcpy(planes.data(),copy->bytes.data()+0x180,sizeof(planes));
         auto& result=cameraExperiment.culling[i];result.normalError=0;result.maxDistance=-farPlane;
         for(const auto& plane:planes){const float length=std::sqrt(plane.x*plane.x+plane.y*plane.y+plane.z*plane.z);if(!std::isfinite(length)||!std::isfinite(plane.w)){result.normalError=1;break;}result.normalError=(std::max)(result.normalError,std::abs(length-1));}
@@ -353,7 +364,7 @@ public:
             fvr::math::Pose origin{},moved{};moved.position.x=.25f;moved.orientation={0,std::sin(.015f),0,std::cos(.015f)};
             const auto world=fvr::math::ComposeRuntimeHeadWithLhCamera(camera->camera,origin,moved,1);if(!world)return;
             auto copy=fvr::bc2::BuildTransformCopy(saved_[i],*world);if(!copy)return;
-            updateView(copy->bytes.data());updateFrustum(copy->bytes.data());written_[i]=*copy;
+            fvr::bc2::PrecomputeCameraCaches(*copy,updateView,updateProjection,updateFrustum,updateScale,false);written_[i]=*copy;
         }
         if(!Owns())return;
         for(unsigned i=0;i<2;++i)if(Hash(view_+(i?layout.secondaryOffset:layout.primaryOffset),0x460)!=Hash(reinterpret_cast<std::uintptr_t>(saved_[i].bytes.data()),0x460))return;
@@ -407,6 +418,94 @@ bool RestoreBorrowed(const ListSnapshot& callbacks,const std::array<CallbackSnap
 }
 std::atomic<unsigned> inputSamples=0,inputTrackedSamples=0;std::uint64_t lastInputGeneration=0;
 bool opticEvidenceEnabled=false;bool passEvidenceEnabled=false,uncapMirror=false;bool streamMode=false;std::wstring streamToken;fvr::graphics::D3D11FrameBridge frameBridge;
+fvr::graphics::PrivatePresentationExperiment privatePresentationExperiment;
+struct PrivatePresentProgress {
+    unsigned budgetMs=0;
+    std::uint64_t frequency=0,attempts=0,completed=0,admissionLost=0,budgetExpired=0,clockFailed=0,pollLimit=0;
+    std::uint64_t pumps=0,sleeps=0,totalTicks=0,maxTicks=0;
+    void Configure()noexcept {
+        const auto error=GetLastError();wchar_t text[4]{};
+        const auto length=GetEnvironmentVariableW(L"FVR_PRIVATE_PRESENT_PROGRESS_MS",text,4);
+        if(length&&length<4)budgetMs=fvr::graphics::ParseFrameProgressBudget({text,length});
+        LARGE_INTEGER value{};
+        if(QueryPerformanceFrequency(&value)&&value.QuadPart>0)frequency=std::uint64_t(value.QuadPart);
+        if(!frequency||frequency>UINT64_MAX/16)budgetMs=0;
+        SetLastError(error);
+    }
+    void Record(const fvr::graphics::FrameProgressResult& result)noexcept {
+        ++attempts;pumps+=result.pumps;sleeps+=result.sleeps;totalTicks+=result.ticks;
+        maxTicks=(std::max)(maxTicks,result.ticks);
+        using Stop=fvr::graphics::FrameProgressStop;
+        switch(result.stop){case Stop::Completed:++completed;break;case Stop::AdmissionLost:++admissionLost;break;
+            case Stop::BudgetExpired:++budgetExpired;break;case Stop::ClockFailed:++clockFailed;break;
+            case Stop::PollLimit:++pollLimit;break;}
+    }
+    void Write(std::ostream& out,bool quiescent)const {
+        out<<"{\"quiescent\":"<<(quiescent?"true":"false");
+        // Counters belong to the graphics owner; never race live callbacks.
+        if(quiescent)out<<",\"budget_ms\":"<<budgetMs<<",\"qpc_frequency\":"<<frequency
+            <<",\"attempts\":"<<attempts<<",\"completed\":"<<completed<<",\"admission_lost\":"<<admissionLost
+            <<",\"budget_expired\":"<<budgetExpired<<",\"clock_failed\":"<<clockFailed<<",\"poll_limit\":"<<pollLimit
+            <<",\"pumps\":"<<pumps<<",\"sleeps\":"<<sleeps<<",\"total_ticks\":"<<totalTicks<<",\"max_ticks\":"<<maxTicks;
+        out<<'}';
+    }
+} privatePresentProgress;
+void ClosePrivatePresentationExperiment()noexcept;
+// Private performance evidence only. Observe the camera copy already used by
+// ApplyTrackedView, before VR/body adjustments; never read additional native
+// memory or use this record to authorize a frame or a native operation.
+struct PrivatePresentationCameras {
+    struct Row {
+        std::uint64_t count=0,invalid=0,firstFrame=0,lastFrame=0,owner=0,space=0;
+        std::int64_t firstQpc=0,lastQpc=0;
+        bool ownerChanged=false,spaceChanged=false;
+        std::array<float,16> first{},last{};
+        std::array<float,3> minimum{},maximum{};
+        double maxTranslation=0,maxBasisDelta=0;
+    };
+    std::array<Row,4> rows{};std::atomic_flag gate=ATOMIC_FLAG_INIT;
+    std::atomic<std::uint64_t> dropped=0;
+    void Observe(unsigned phase,const fvr::bc2::RenderViewCopy& camera,const fvr::ipc::FrameLease& lease)noexcept {
+        if(phase<1||phase>4)return;
+        if(gate.test_and_set(std::memory_order_acquire)){dropped.fetch_add(1,std::memory_order_relaxed);return;}
+        auto& r=rows[phase-1];std::array<float,16> transform{};
+        std::memcpy(transform.data(),camera.bytes.data()+0x50,sizeof(transform));
+        bool finite=true;for(unsigned i=0;i<16;++i)if(i%4!=3)finite&=std::isfinite(transform[i]);
+        if(!finite){++r.invalid;gate.clear(std::memory_order_release);return;}
+        for(unsigned i=3;i<16;i+=4)transform[i]=0; // Native padding is not homogeneous W.
+        const auto now=Qpc();
+        if(!r.count){
+            r.first=transform;r.firstQpc=now;r.firstFrame=lease.native.frameId;
+            r.owner=lease.native.owner;r.space=lease.tracking.spaceGeneration;
+            for(unsigned i=0;i<3;++i)r.minimum[i]=r.maximum[i]=transform[12+i];
+        }
+        ++r.count;r.last=transform;r.lastQpc=now;r.lastFrame=lease.native.frameId;
+        r.ownerChanged|=r.owner!=lease.native.owner;r.spaceChanged|=r.space!=lease.tracking.spaceGeneration;
+        double distance=0;
+        for(unsigned i=0;i<3;++i){
+            const auto value=transform[12+i];r.minimum[i]=std::min(r.minimum[i],value);r.maximum[i]=std::max(r.maximum[i],value);
+            const double delta=double(value)-r.first[12+i];distance+=delta*delta;
+        }
+        r.maxTranslation=std::max(r.maxTranslation,std::sqrt(distance));
+        for(unsigned i=0;i<12;++i)if(i%4!=3)r.maxBasisDelta=std::max(r.maxBasisDelta,std::abs(double(transform[i])-r.first[i]));
+        gate.clear(std::memory_order_release);
+    }
+    void Write(std::ostream& out,bool available,bool enabled)const {
+        out<<"{\"available\":"<<(available?"true":"false")<<",\"enabled\":"<<(enabled?"true":"false");
+        if(!available){out<<'}';return;}
+        const auto values=[&](const auto& array){out<<'[';bool first=true;for(auto value:array){if(!first)out<<',';first=false;out<<value;}out<<']';};
+        out<<",\"dropped\":"<<dropped.load()<<",\"rows\":[";
+        for(unsigned i=0;i<rows.size();++i){const auto& r=rows[i];if(i)out<<',';
+            out<<"{\"phase\":"<<i+1<<",\"count\":"<<r.count<<",\"invalid\":"<<r.invalid
+               <<",\"first_qpc\":"<<r.firstQpc<<",\"last_qpc\":"<<r.lastQpc<<",\"first_frame\":"<<r.firstFrame<<",\"last_frame\":"<<r.lastFrame
+               <<",\"owner\":"<<r.owner<<",\"owner_changed\":"<<(r.ownerChanged?"true":"false")
+               <<",\"space_generation\":"<<r.space<<",\"space_changed\":"<<(r.spaceChanged?"true":"false")
+               <<",\"first_transform\":";values(r.first);out<<",\"last_transform\":";values(r.last);
+            out<<",\"min_position\":";values(r.minimum);out<<",\"max_position\":";values(r.maximum);
+            out<<",\"max_translation\":"<<r.maxTranslation<<",\"max_basis_delta\":"<<r.maxBasisDelta<<'}';
+        }out<<"]}";
+    }
+} privatePresentationCameras;
 fvr::bc2::Bc2BodyAmmoRenderer bodyAmmoRenderer;bool bodyAmmoObservationEnabled=false;
 fvr::bc2::BodyAmmoCacheResult bodyAmmoCache;
 struct TrackedTransaction {
@@ -417,6 +516,48 @@ struct TrackedTransaction {
     fvr::bc2::BodyPropPair bodyPropPair;
     std::array<float,16> savedAnchor{},writtenAnchor{};bool anchorWritten=false;
 } tracked;
+enum class TrackedFinishCallsite {RightEyeDraw,WorldReturn,UnwrittenCancellation};
+unsigned GraphicsBootstrapThreadForDiagnostics()noexcept;
+struct FirstTrackedFinishFailure {
+    // Single assignment, no waiting. A callback publishes only a complete row;
+    // final serialization additionally requires the existing callback drain.
+    std::atomic<unsigned> state=0;
+    fvr::graphics::FrameBridgeTimingKey key{};
+    std::int64_t qpc=0;unsigned evaluated=0,passed=0,trackedState=0,visibilityMask=0;
+    unsigned thread=0,expectedThread=0;
+    TrackedFinishCallsite callsite=TrackedFinishCallsite::RightEyeDraw;
+    fvr::graphics::RestoredPublicationResult publication=fvr::graphics::RestoredPublicationResult::NotAttempted;
+    void Observe(const fvr::ipc::FrameLease& lease,TrackedFinishCallsite site,unsigned nativeState,
+        unsigned evaluatedMask,unsigned passedMask,unsigned visibility,
+        fvr::graphics::RestoredPublicationResult result,unsigned graphicsThread)noexcept {
+        unsigned empty=0;if(!state.compare_exchange_strong(empty,1,std::memory_order_acq_rel))return;
+        const auto error=GetLastError();qpc=Qpc();thread=GetCurrentThreadId();expectedThread=graphicsThread;
+        key={lease.channelGeneration,lease.requestId,lease.native.owner,lease.native.frameId,lease.native.deviceEpoch,
+            lease.tracking.generation,lease.tracking.spaceGeneration,lease.tracking.predictedNs};
+        callsite=site;trackedState=nativeState;evaluated=evaluatedMask;passed=passedMask;visibilityMask=visibility;publication=result;
+        state.store(2,std::memory_order_release);SetLastError(error);
+    }
+    void Write(std::ostream& out,bool drained)const {
+        const auto status=state.load(std::memory_order_acquire);
+        out<<"{\"available\":"<<(drained&&status!=1?"true":"false");
+        if(!drained||status==1){out<<'}';return;}
+        out<<",\"observed\":"<<(status==2?"true":"false");if(status!=2){out<<'}';return;}
+        constexpr const char* sites[]{"right_eye_draw","world_return","unwritten_cancellation"};
+        constexpr const char* predicates[]{"complete_pair","restored","captures_okay","color_ready",
+            "effect_ready","postprocess_ready","visibility_pair","publication_accepted"};
+        unsigned failed=0;while(failed<8&&(!(evaluated&(1u<<failed))||(passed&(1u<<failed))))++failed;
+        out<<",\"callsite\":\""<<sites[unsigned(callsite)]<<"\",\"reason\":\""<<(failed<8?predicates[failed]:"unknown")
+           <<"\",\"qpc\":"<<qpc<<",\"clock\":\"qpc_ticks\",\"tracked_state\":"<<trackedState
+           <<",\"evaluated_mask\":"<<evaluated<<",\"passed_mask\":"<<passed<<",\"predicate_names\":[";
+        for(unsigned i=0;i<8;++i){if(i)out<<',';out<<'"'<<predicates[i]<<'"';}
+        out<<"],\"visibility_mask\":"<<visibilityMask<<",\"visibility_evaluated\":"<<((evaluated&64)?"true":"false")
+           <<",\"publication_result\":\""<<fvr::graphics::RestoredPublicationResultName(publication)<<"\""
+           <<",\"thread\":"<<thread<<",\"expected_graphics_thread\":"<<expectedThread
+           <<",\"lease\":{\"channel\":"<<key.channel<<",\"request\":"<<key.request<<",\"owner\":"<<key.owner
+           <<",\"frame\":"<<key.frame<<",\"device\":"<<key.device<<",\"tracking\":"<<key.tracking
+           <<",\"space\":"<<key.space<<",\"predicted_ns\":"<<key.predictedNs<<"}}";
+    }
+} firstTrackedFinishFailure;
 fvr::bc2::stereoColorScale::Pair stereoColorScalePair;
 fvr::bc2::stereoColorScale::EffectPair stereoEffectPair;
 fvr::bc2::stereoColorScale::PostProcessPair stereoPostProcessPair;
@@ -445,6 +586,8 @@ struct StereoRecoveryNative {
     std::array<Code,26> code{};
     unsigned worldType=0,subsystemType=0,requestAddRef=0,requestRelease=0,retiredCacheResize=0;
     fvr::runtime::RenderOwnerRecovery policy;
+    fvr::runtime::RenderOwnerTransition sourceTransition;
+    std::atomic<unsigned> sourceTransitions=0,sourceTransitionWaits=0,sourceTransitionFailures=0;
     std::atomic<unsigned> callbacks=0,attempts=0,completed=0,rejected=0,failure=0,retirementStep=0;
     std::atomic<unsigned> cacheClearCalls=0,cacheClearReceipts=0;
     std::atomic<unsigned> oldWorld=0,oldRequest=0,oldEye=0,newWorld=0,newRequest=0,retiredViews=0,retiredPendingReferences=0;
@@ -536,7 +679,7 @@ bool DiagnosticCameras(unsigned main,std::array<fvr::bc2::RenderViewCopy,2>& cam
         fvr::engine::FrostbiteCameraInput input{};std::memcpy(&input.transform,original.bytes.data()+0x50,64);std::memcpy(&input.nearPlane,original.bytes.data()+0x1c,4);std::memcpy(&input.farPlane,original.bytes.data()+0x20,4);input.worldUnitsPerMeter=1;
         const auto canonical=fvr::engine::CanonicalCamera(input);if(!canonical)return false;auto shifted=canonical->camera;
         for(unsigned axis=0;axis<3;++axis)shifted.values[3][axis]+=.25f*shifted.values[0][axis];
-        auto copy=fvr::bc2::BuildTransformCopy(original,shifted);if(!copy)return false;updateView(copy->bytes.data());updateFrustum(copy->bytes.data());camera[i]=*copy;
+        auto copy=fvr::bc2::BuildTransformCopy(original,shifted);if(!copy)return false;fvr::bc2::PrecomputeCameraCaches(*copy,updateView,updateProjection,updateFrustum,updateScale,false);camera[i]=*copy;
     }
     return true;
 }
@@ -948,14 +1091,15 @@ void* __fastcall ProjectionContextHook(void* self,void*,const void* matrix){
         w.frame.store(stereoExperiment.frame,std::memory_order_release);
     }
     const auto callsite=reinterpret_cast<unsigned>(_ReturnAddress()),context=reinterpret_cast<unsigned>(self),address=U32(context+0x20);
+    const bool eligibleDerived=callsite==imageBase+projectionOverrides.meshCaller||callsite==imageBase+projectionOverrides.terrainCaller||callsite==imageBase+projectionOverrides.edgeCaller;
     std::array<float,16> values{};if(!Read(address,values.data(),64)){
-        if(callsite==imageBase+projectionOverrides.meshCaller||callsite==imageBase+projectionOverrides.terrainCaller){derivedFrameFailed.store(true,std::memory_order_release);derivedFailures.fetch_add(1);}return result;}
+        if(eligibleDerived){derivedFrameFailed.store(true,std::memory_order_release);derivedFailures.fetch_add(1);}return result;}
     if(trackedCameraEvidence.frame.load(std::memory_order_acquire)==stereoExperiment.frame){
         const auto index=projectionCount.fetch_add(1);if(index<projectionEvidence.size()){
             auto& e=projectionEvidence[index];e.context=context;e.address=address;e.callsite=callsite;e.thread=GetCurrentThreadId();e.frame=stereoExperiment.frame;e.gather=gatheringEvidenceEye;e.values=values;}}
-    // Only the two signature-verified depth-bias paths are eligible. Worker jobs
+    // Only the signature-verified mesh, terrain and edge depth-bias paths are eligible. Worker jobs
     // finish at the native gather/render barrier before Prepare/Draw scopes read.
-    if(drawingNativeView||(callsite!=imageBase+projectionOverrides.meshCaller&&callsite!=imageBase+projectionOverrides.terrainCaller))return result;
+    if(drawingNativeView||!eligibleDerived)return result;
     const auto fail=[](){derivedFrameFailed.store(true,std::memory_order_release);derivedFailures.fetch_add(1);};
     std::array<float,16> left{},right{};std::memcpy(left.data(),tracked.written[0].bytes.data()+0x2e0,64);std::memcpy(right.data(),tracked.right[0].bytes.data()+0x2e0,64);
     const auto replacement=fvr::math::RetargetDepthProjection(values,right,left);
@@ -1067,6 +1211,16 @@ using IndexedDrawFn=void(STDMETHODCALLTYPE*)(ID3D11DeviceContext*,UINT,UINT,INT)
 IndexedDrawFn indexedDrawOriginal=nullptr;ID3D11DeviceContext* observedImmediateContext=nullptr;
 thread_local int drawingEvidenceEye=-1;
 fvr::bc2::Bc2ReloadDrawCapture reloadDrawCapture;
+fvr::graphics::D3D11SceneDrawWitness destructionWitness;
+bool destructionWitnessEnabled=false;
+bool graphicsProvenanceEnabled=false;
+fvr::graphics::SceneWitnessKey DestructionWitnessKey()noexcept {
+    const auto& lease=tracked.lease;
+    return {stereoExperiment.world,lease.requestId,lease.native.frameId,lease.native.deviceEpoch,
+        lease.channelGeneration,lease.tracking.generation,lease.tracking.spaceGeneration,lease.tracking.predictedNs,
+        stereoExperiment.main,stereoExperiment.eye,lease.sourceSlot,lease.requirements.width,lease.requirements.height,
+        lease.native.owner,stereoExperiment.request};
+}
 std::int64_t reloadDrawFrequency=0;
 std::int64_t ReloadDrawNowNs()noexcept {
     if(reloadDrawFrequency<=0)return 0;const auto qpc=Qpc();
@@ -1208,26 +1362,88 @@ struct OpticViewScope {
 struct BodySceneDepthEye {
     fvr::ipc::FrameLease lease{};unsigned eye=0,clears=0;
     bool invalid=false;ComPtr<ID3D11Texture2D> source;
+    bool observing=false;std::optional<fvr::graphics::DepthEyeFailureRow> diagnostic;
+    fvr::graphics::DeferredDepthAdmission admission;
 };
 thread_local BodySceneDepthEye* bodySceneDepthEye=nullptr;
 std::atomic<unsigned> bodyDepthBegins=0,bodyDepthEnds=0,bodyDepthRejected=0;
+fvr::graphics::FirstDepthEyeFailure firstBodyDepthFailure;
 using ClearDepthFn=void(STDMETHODCALLTYPE*)(ID3D11DeviceContext*,ID3D11DepthStencilView*,UINT,FLOAT,UINT8);
 ClearDepthFn clearDepthOriginal=nullptr;
+fvr::graphics::DepthAdmissionKey BodyDepthAdmissionKey(const fvr::ipc::FrameLease& lease)noexcept {
+    return {lease.channelGeneration,lease.requestId,lease.native.owner,lease.native.frameId,lease.native.deviceEpoch,
+        lease.tracking.generation,lease.tracking.spaceGeneration,lease.tracking.predictedNs,lease.sourceSlot,lease.sourceSlotCount};
+}
+fvr::graphics::DepthAdmissionResult BeginBodyDepth(const fvr::ipc::FrameLease& lease)noexcept {
+    using Result=fvr::graphics::DepthAdmissionResult;
+    auto prepared=fvr::graphics::RestoredPublicationResult::NotAttempted;
+    if(frameBridge.BeginDepthCapture(lease,false,&prepared))return Result::Ready;
+    return prepared==fvr::graphics::RestoredPublicationResult::PrepareBusy?Result::Busy:Result::Rejected;
+}
+bool CaptureBodySceneDepth(BodySceneDepthEye& e,unsigned stage,ID3D11Texture2D* source)noexcept {
+    if(e.observing)e.diagnostic->captureAttemptedMask|=1u<<stage;
+    bool admitted=true;
+    if(e.eye==0&&stage==0){
+        const bool current=tracked.state.load(std::memory_order_acquire)==1&&
+            ((std::uint64_t(stereoExperiment.world)<<32)|stereoExperiment.request)==e.lease.native.owner&&
+            U32(stereoExperiment.world+0x88)==e.lease.native.frameId;
+        const auto key=current?BodyDepthAdmissionKey(tracked.lease):fvr::graphics::DepthAdmissionKey{};
+        admitted=e.admission.BeforeWorldCopy(key,[&]()noexcept{return BeginBodyDepth(e.lease);});
+    }
+    const bool captured=admitted&&frameBridge.CaptureDepth(e.eye,stage,source,e.lease);
+    if(e.observing){
+        if(captured)e.diagnostic->captureAcceptedMask|=1u<<stage;
+        else {e.diagnostic->bridgeFailureStage=frameBridge.FailureStage();e.diagnostic->bridgeFailureCode=frameBridge.FailureCode();}
+    }
+    return captured;
+}
 void STDMETHODCALLTYPE ClearBodySceneDepthHook(ID3D11DeviceContext* context,ID3D11DepthStencilView* dsv,UINT flags,FLOAT depth,UINT8 stencil){
-    auto* e=bodySceneDepthEye;
+    fvr::graphics::callProvenance::Scope provenance(fvr::graphics::callProvenance::Kind::ClearDepth,
+        nullptr,context,nullptr,reinterpret_cast<std::uintptr_t>(_ReturnAddress()));
+    auto* e=bodySceneDepthEye;firstBodyDepthFailure.Hook(e!=nullptr);
+    auto* observation=e&&e->observing?&*e->diagnostic:nullptr;
+    fvr::graphics::DepthClearSample sample{};
+    using Filter=fvr::graphics::DepthClearFilter;using Failure=fvr::graphics::DepthClearFailure;
+    if(observation){
+        sample.context=reinterpret_cast<std::uintptr_t>(context);sample.view=reinterpret_cast<std::uintptr_t>(dsv);
+        sample.flags=flags;sample.stencil=stencil;std::memcpy(&sample.depthBits,&depth,sizeof(depth));
+        if(!observation->scopedHooks++)observation->firstHook=sample;
+        if(e->invalid)observation->Filter(Filter::InvalidScope,sample);
+        else if(context!=observedImmediateContext)observation->Filter(Filter::Context,sample);
+        else if(!dsv)observation->Filter(Filter::NullView,sample);
+    }
     if(e&&!e->invalid&&context==observedImmediateContext&&dsv){
         ComPtr<ID3D11Resource> resource;ComPtr<ID3D11Texture2D> source;dsv->GetResource(&resource);
         if(SUCCEEDED(resource.As(&source))){
             D3D11_TEXTURE2D_DESC d{};source->GetDesc(&d);
-            if(d.Width==e->lease.requirements.width&&d.Height==e->lease.requirements.height&&d.Format==DXGI_FORMAT_R24G8_TYPELESS){
-                // Copy world BEFORE the native first-person clear. No target
-                // binding, query, shader dispatch or extra native draw occurs.
-                if(flags!=(D3D11_CLEAR_DEPTH|D3D11_CLEAR_STENCIL)||depth!=1.f||stencil||
-                   ++e->clears>2||(e->source&&e->source.Get()!=source.Get()))e->invalid=true;
-                else if(e->clears==1)e->source=source;
-                else if(!frameBridge.CaptureDepth(e->eye,0,source.Get(),e->lease))e->invalid=true;
+            if(observation){
+                sample.source=reinterpret_cast<std::uintptr_t>(source.Get());sample.hasDescriptor=true;
+                sample.width=d.Width;sample.height=d.Height;sample.format=unsigned(d.Format);
+                sample.samples=d.SampleDesc.Count;sample.quality=d.SampleDesc.Quality;sample.mips=d.MipLevels;sample.array=d.ArraySize;
+                if(!observation->firstTexture.hasDescriptor)observation->firstTexture=sample;
+                if(d.Width!=e->lease.requirements.width||d.Height!=e->lease.requirements.height)observation->Filter(Filter::Dimensions,sample);
+                else if(d.Format!=DXGI_FORMAT_R24G8_TYPELESS)observation->Filter(Filter::Format,sample);
             }
-        }
+            if(d.Width==e->lease.requirements.width&&d.Height==e->lease.requirements.height&&d.Format==DXGI_FORMAT_R24G8_TYPELESS){
+                if(observation)++observation->matchingHooks;
+                // Keep the original short circuit and increment order. The
+                // diagnostic never changes which clear or source is accepted.
+                if(flags!=(D3D11_CLEAR_DEPTH|D3D11_CLEAR_STENCIL)||depth!=1.f||stencil||
+                   ++e->clears>2||(e->source&&e->source.Get()!=source.Get())){
+                    if(observation){
+                        observation->invalidClear=sample;
+                        observation->invalidCause=flags!=(D3D11_CLEAR_DEPTH|D3D11_CLEAR_STENCIL)?Failure::Flags:
+                            depth!=1.f?Failure::DepthValue:stencil?Failure::Stencil:e->clears>2?Failure::TooManyClears:Failure::SourceChanged;
+                    }
+                    e->invalid=true;
+                }
+                else if(e->clears==1)e->source=source;
+                else if(!CaptureBodySceneDepth(*e,0,source.Get())){
+                    if(observation){observation->invalidClear=sample;observation->invalidCause=Failure::WorldCapture;}
+                    e->invalid=true;
+                }
+            }
+        }else if(observation)observation->Filter(Filter::NotTexture,sample);
     }
     clearDepthOriginal(context,dsv,flags,depth,stencil);
 }
@@ -1237,17 +1453,38 @@ struct BodySceneDepthScope {
         bodySceneDepthEye=nullptr;
         if(!owned)return;
         state.lease=tracked.lease;state.eye=eye;
-        if(eye==0&&!frameBridge.BeginDepthCapture(state.lease,false))return;
+        if(eye==0&&!state.admission.Start(BodyDepthAdmissionKey(state.lease),
+            [&]()noexcept{return BeginBodyDepth(state.lease);}))return;
+        state.observing=firstBodyDepthFailure.Pending();
+        if(state.observing){
+            const auto error=GetLastError();auto& d=state.diagnostic.emplace();const auto& lease=state.lease;
+            d.key={lease.channelGeneration,lease.requestId,lease.native.owner,lease.native.frameId,lease.native.deviceEpoch,
+                lease.tracking.generation,lease.tracking.spaceGeneration,lease.tracking.predictedNs};
+            d.slot=lease.sourceSlot;d.slotCount=lease.sourceSlotCount;d.eye=eye;
+            d.width=lease.requirements.width;d.height=lease.requirements.height;
+            d.thread=GetCurrentThreadId();d.expectedThread=GraphicsBootstrapThreadForDiagnostics();
+            d.expectedContext=reinterpret_cast<std::uintptr_t>(observedImmediateContext);d.beginQpc=Qpc();
+            firstBodyDepthFailure.Begin(d);SetLastError(error);
+        }
         active=true;bodySceneDepthEye=&state;++bodyDepthBegins;
     }
     void End()noexcept {
         if(!active)return;active=false;bodySceneDepthEye=previous;
-        if(!state.invalid&&state.clears==2&&state.source&&
-           tracked.state.load(std::memory_order_acquire)==1&&
-           tracked.lease.requestId==state.lease.requestId&&
-           U32(stereoExperiment.world+0x88)==state.lease.native.frameId&&
-           frameBridge.CaptureDepth(state.eye,1,state.source.Get(),state.lease))++bodyDepthEnds;
-        else ++bodyDepthRejected;
+        const auto test=[&](unsigned bit,bool value)noexcept {
+            return state.observing?state.diagnostic->Test(bit,value):value;
+        };
+        if(test(0,!state.invalid)&&test(1,state.clears==2)&&test(2,bool(state.source))&&
+           test(3,tracked.state.load(std::memory_order_acquire)==1)&&
+           test(4,tracked.lease.requestId==state.lease.requestId)&&
+           test(5,U32(stereoExperiment.world+0x88)==state.lease.native.frameId)&&
+           test(6,CaptureBodySceneDepth(state,1,state.source.Get())))++bodyDepthEnds;
+        else {
+            ++bodyDepthRejected;
+            if(state.observing){const auto error=GetLastError();auto& d=*state.diagnostic;
+                d.endQpc=Qpc();d.clears=state.clears;d.retainedSource=reinterpret_cast<std::uintptr_t>(state.source.Get());
+                firstBodyDepthFailure.Observe(d);SetLastError(error);
+            }
+        }
         state.source.Reset();
     }
     ~BodySceneDepthScope(){bodySceneDepthEye=previous;}
@@ -1257,6 +1494,9 @@ struct BodySceneDepthScope {
 void ObserveSceneDepthCandidate(ID3D11DeviceContext* context,unsigned kind)noexcept;
 #endif
 void STDMETHODCALLTYPE NonIndexedDrawHook(ID3D11DeviceContext* context,UINT count,UINT start){
+    fvr::graphics::callProvenance::Scope provenance(fvr::graphics::callProvenance::Kind::Draw,
+        nullptr,context,nullptr,reinterpret_cast<std::uintptr_t>(_ReturnAddress()));
+    if(destructionWitnessEnabled)destructionWitness.Observe(context,{fvr::graphics::SceneWitnessDrawKind::Vertices,count,1,start});
     if(opticEvidenceEnabled)fvr::bc2::opticFilterRuntime::CaptureDraw(context,false,count,start);
     if(context==observedImmediateContext&&drawingEvidenceEye>=0)CapturePassBuffers(context,unsigned(drawingEvidenceEye),count,0);
     nonIndexedDrawOriginal(context,count,start);
@@ -1289,20 +1529,44 @@ void ObserveSceneDepthCandidate(ID3D11DeviceContext* context,unsigned kind)noexc
     auto& c=sceneDepthCandidates[eye][sceneDepthCandidateCounts[eye]++];c.texture=texture;c.resource=id;
     c.viewport=viewport;c.draws=1;c.depthFunction=state.DepthFunc;c.depthWrite=state.DepthWriteMask;
 }
+#endif
 using IndexedInstancedDrawFn=void(STDMETHODCALLTYPE*)(ID3D11DeviceContext*,UINT,UINT,UINT,INT,UINT);
 using InstancedDrawFn=void(STDMETHODCALLTYPE*)(ID3D11DeviceContext*,UINT,UINT,UINT,UINT);
 IndexedInstancedDrawFn indexedInstancedDrawOriginal=nullptr;
 InstancedDrawFn instancedDrawOriginal=nullptr;
 void STDMETHODCALLTYPE IndexedInstancedDrawHook(ID3D11DeviceContext* context,UINT count,UINT instances,UINT start,INT base,UINT firstInstance){
+    if(destructionWitnessEnabled)destructionWitness.Observe(context,{fvr::graphics::SceneWitnessDrawKind::IndexedInstanced,count,instances,start,firstInstance,base});
     indexedInstancedDrawOriginal(context,count,instances,start,base,firstInstance);
+#ifdef FVR_BC2_SCENE_DEPTH_CAPTURE
     ObserveSceneDepthCandidate(context,2);
+#endif
 }
 void STDMETHODCALLTYPE InstancedDrawHook(ID3D11DeviceContext* context,UINT count,UINT instances,UINT start,UINT firstInstance){
+    if(destructionWitnessEnabled)destructionWitness.Observe(context,{fvr::graphics::SceneWitnessDrawKind::Instanced,count,instances,start,firstInstance});
     instancedDrawOriginal(context,count,instances,start,firstInstance);
+#ifdef FVR_BC2_SCENE_DEPTH_CAPTURE
     ObserveSceneDepthCandidate(context,3);
-}
 #endif
+}
+using DrawAutoFn=void(STDMETHODCALLTYPE*)(ID3D11DeviceContext*);
+using DrawIndirectFn=void(STDMETHODCALLTYPE*)(ID3D11DeviceContext*,ID3D11Buffer*,UINT);
+DrawAutoFn drawAutoOriginal=nullptr;
+DrawIndirectFn indexedIndirectOriginal=nullptr,indirectOriginal=nullptr;
+void STDMETHODCALLTYPE DrawAutoHook(ID3D11DeviceContext* context){
+    destructionWitness.Observe(context,{fvr::graphics::SceneWitnessDrawKind::Auto});drawAutoOriginal(context);
+}
+void STDMETHODCALLTYPE IndexedIndirectHook(ID3D11DeviceContext* context,ID3D11Buffer* args,UINT offset){
+    destructionWitness.Observe(context,{fvr::graphics::SceneWitnessDrawKind::IndexedIndirect,0,0,0,0,0,reinterpret_cast<std::uintptr_t>(args),offset});
+    indexedIndirectOriginal(context,args,offset);
+}
+void STDMETHODCALLTYPE IndirectHook(ID3D11DeviceContext* context,ID3D11Buffer* args,UINT offset){
+    destructionWitness.Observe(context,{fvr::graphics::SceneWitnessDrawKind::Indirect,0,0,0,0,0,reinterpret_cast<std::uintptr_t>(args),offset});
+    indirectOriginal(context,args,offset);
+}
 void STDMETHODCALLTYPE IndexedDrawHook(ID3D11DeviceContext* context,UINT count,UINT start,INT base){
+    fvr::graphics::callProvenance::Scope provenance(fvr::graphics::callProvenance::Kind::Indexed,
+        nullptr,context,nullptr,reinterpret_cast<std::uintptr_t>(_ReturnAddress()));
+    if(destructionWitnessEnabled)destructionWitness.Observe(context,{fvr::graphics::SceneWitnessDrawKind::Indexed,count,1,start,0,base});
 #if defined(FVR_BC2_ORDINARY_RESOURCE_SCENE_PROBE)
     fvr::bc2::graphicsThreadObservation::Scope graphicsThread(fvr::bc2::graphicsThreadObservation::Boundary::Indexed,context==observedImmediateContext);
 #endif
@@ -1322,6 +1586,9 @@ void SaveTrackedCameraEvidence(unsigned view,unsigned eye,unsigned step)noexcept
 }
 void BeginTrackedFrame(unsigned incomingFrame)noexcept {
     auto& e=stereoExperiment;
+    // A successful native rebuild does not retire the host's old GPU sources.
+    // Keep input alive while the graphics owner drains those exact leases.
+    if(!stereoRecovery.sourceTransition.Allows({e.world,e.request}))return;
     const auto prior=tracked.state.load(std::memory_order_acquire);
     if(prior==1||prior==3){if(prior==3)stereoRecovery.cancelUnwrittenRequest.store(tracked.lease.requestId,std::memory_order_release);
         RecordStereoProgress(fvr::bc2::StereoProgressReason::BeginActiveTransaction,incomingFrame);return;}
@@ -1358,10 +1625,12 @@ void ApplyTrackedView(unsigned world,unsigned request,unsigned view)noexcept {
        U32(view)!=imageBase+layout.vtable||U32(view+0x70)!=request)return;
     if(view==e.main&&tracked.state.load(std::memory_order_acquire)==3){
         const auto cancel=[&]{reinterpret_cast<fvr::bc2::SetViewActiveFn>(imageBase+lifecycle.setActive)(reinterpret_cast<void*>(e.eye),false);};
+        if(!fvr::runtime::ApplyUnwrittenFrame(stereoRecovery.cancelUnwrittenRequest.load(std::memory_order_acquire),tracked.lease.requestId,[&]()noexcept {
         for(unsigned i=0;i<2;++i)if(!Read(e.main+(i?layout.secondaryOffset:layout.primaryOffset),tracked.saved[i].bytes.data(),0x460)){cancel();return;}
+        if(privatePresentationExperiment.Enabled())privatePresentationCameras.Observe(privatePresentationExperiment.Phase(),tracked.saved[0],tracked.lease);
         auto source=tracked.saved;if(!fvr::bc2::gameplay::AdjustViewBase(source,tracked.lease.tracking)){cancel();return;}
         auto plan=fvr::bc2::BuildTrackedViews(source,tracked.lease.tracking,tracked.lease.tracking.worldUnitsPerMeter);if(!plan){cancel();return;}
-        for(auto& eye:plan->camera)for(auto& camera:eye){updateView(camera.bytes.data());updateProjection(camera.bytes.data());updateFrustum(camera.bytes.data());}
+        for(auto& eye:plan->camera)for(auto& camera:eye)fvr::bc2::PrecomputeCameraCaches(camera,updateView,updateProjection,updateFrustum,updateScale);
         vehicleCameraEvidenceFrame.store(fvr::bc2::gameplay::ObserveVehicleCameraPlan(e.frame,tracked.lease.tracking,tracked.saved[0],source[0],{plan->camera[0][0],plan->camera[1][0]})?e.frame.load():0,std::memory_order_release);
         if(weatherObservationEnabled)weatherGate.Begin(GetTickCount64(),CurrentWeatherKey());
         if(!trackedCameraEvidence.frame.load(std::memory_order_acquire)&&
@@ -1381,6 +1650,7 @@ void ApplyTrackedView(unsigned world,unsigned request,unsigned view)noexcept {
         SaveTrackedCameraEvidence(e.main,0,0);
         tracked.state.store(1,std::memory_order_release);
         BeginWeatherRuntime();
+        }))cancel();
     }else if(view==e.eye&&tracked.state.load(std::memory_order_acquire)==1){
         // Apply the right camera at the same post-clamp boundary. This also
         // preserves the conservative culling extent from the owned stereo plan.
@@ -1389,7 +1659,7 @@ void ApplyTrackedView(unsigned world,unsigned request,unsigned view)noexcept {
     }
 }
 
-void FinishTrackedFrame(bool completePair)noexcept {
+void FinishTrackedFrame(bool completePair,TrackedFinishCallsite callsite)noexcept {
     const auto state=tracked.state.load(std::memory_order_acquire);if(state!=1&&state!=3)return;auto& e=stereoExperiment;bool restored=state==3;
     EndWeatherRuntime();
     const auto milestone=sceneTrace::Native(SceneMilestoneKind::FinishTrackedFrame,SceneMilestoneKind::FinishTrackedFrame,e.world,e.request);
@@ -1407,8 +1677,21 @@ void FinishTrackedFrame(bool completePair)noexcept {
             tracked.anchorWritten=false;
         }
     }
-    const bool published=completePair&&restored&&tracked.capturesOkay&&stereoColorScalePair.Ready(CurrentColorScaleKey(e.world,e.request))&&stereoEffectPair.Ready(CurrentColorScaleKey(e.world,e.request))&&stereoPostProcessPair.Ready(CurrentColorScaleKey(e.world,e.request))&&e.visibilityMask.load(std::memory_order_acquire)==3&&frameBridge.PublishRestored(tracked.lease);
-    if(!published)frameBridge.Cancel(tracked.lease);
+    // Observe the existing short-circuit predicates exactly once and in their
+    // original order. No extra native read is made for a skipped predicate.
+    unsigned evaluated=0,passed=0,visibility=0;
+    const auto check=[&](unsigned bit,bool value)noexcept {evaluated|=1u<<bit;if(value)passed|=1u<<bit;return value;};
+    auto admission=fvr::graphics::RestoredPublicationResult::NotAttempted;
+    const bool published=check(0,completePair)&&check(1,restored)&&check(2,tracked.capturesOkay)&&
+        check(3,stereoColorScalePair.Ready(CurrentColorScaleKey(e.world,e.request)))&&
+        check(4,stereoEffectPair.Ready(CurrentColorScaleKey(e.world,e.request)))&&
+        check(5,stereoPostProcessPair.Ready(CurrentColorScaleKey(e.world,e.request)))&&
+        check(6,(visibility=e.visibilityMask.load(std::memory_order_acquire))==3)&&
+        check(7,frameBridge.PublishRestored(tracked.lease,&admission));
+    if(!published){
+        firstTrackedFinishFailure.Observe(tracked.lease,callsite,state,evaluated,passed,visibility,admission,GraphicsBootstrapThreadForDiagnostics());
+        frameBridge.Cancel(tracked.lease);
+    }
     if(weatherObservationEnabled)weatherGate.Finish(CurrentWeatherKey(),published);
     milestoneResult.outcome|=(restored?2u:0u)|(tracked.capturesOkay?4u:0u)|(published?8u:0u);
     tracked.bodyPropPair.Reset();
@@ -1417,18 +1700,27 @@ void FinishTrackedFrame(bool completePair)noexcept {
 }
 void PumpFrameBridge()noexcept {
     bodyAmmoRenderer.PumpStop();
+    if(destructionWitnessEnabled)destructionWitness.Poll(observedImmediateContext);
     if(!streamMode)return;PollEyeGpuEvidence();PollGeometryBuffers();PollPassBuffers();
     if(weatherObservationEnabled)for(auto& capture:weatherColorCaptures)
         if(capture.step==ColorCapture::Step::Pending)CaptureWorldColor(capture,capture.frame);
-    const auto cancelRequest=stereoRecovery.cancelUnwrittenRequest.exchange(0,std::memory_order_acq_rel);
-    if(fvr::runtime::ShouldCancelUnwritten(cancelRequest,tracked.lease.requestId,
-       tracked.state.load(std::memory_order_acquire)==3))FinishTrackedFrame(false);
+    fvr::runtime::DrainUnwrittenFrameCancellation(stereoRecovery.cancelUnwrittenRequest,tracked.lease.requestId,
+        tracked.state.load(std::memory_order_acquire)==3,[]{FinishTrackedFrame(false,TrackedFinishCallsite::UnwrittenCancellation);});
     if(!frameBridge.Connected()){
         static bool attempted=false;if(attempted)return;attempted=true;
         const auto renderer=U32(imageBase+profile.rendererGlobal);if(U32(renderer)!=imageBase+profile.rendererVtable)return;
         const auto device=U32(renderer+0x7c);frameBridge.ConnectGraphics(reinterpret_cast<ID3D11Device*>(device),streamToken);
     }
     frameBridge.PumpGraphics();
+    stereoRecovery.sourceTransition.Service(frameBridge.OnGraphicsThread(),[](const fvr::runtime::RenderOwnerTransition::Request& request)noexcept {
+        const auto oldOwner=(request.oldOwner.world<<32)|request.oldOwner.request;
+        const auto newOwner=(request.newOwner.world<<32)|request.newOwner.request;
+        const auto result=frameBridge.TransitionWorldOwnerGraphics(
+            {oldOwner,request.frame,request.deviceEpoch},{newOwner,request.frame,request.deviceEpoch});
+        if(result==fvr::ipc::ChannelResult::Busy){++stereoRecovery.sourceTransitionWaits;return fvr::runtime::OwnerTransitionResult::Busy;}
+        if(result==fvr::ipc::ChannelResult::Ok){++stereoRecovery.sourceTransitions;return fvr::runtime::OwnerTransitionResult::Complete;}
+        ++stereoRecovery.sourceTransitionFailures;return fvr::runtime::OwnerTransitionResult::Failed;
+    });
     fvr::interaction::InputFrame controls{};
     const auto controlsResult=frameBridge.ReadInput(controls);
     if(opticEvidenceEnabled&&controlsResult!=fvr::ipc::ChannelResult::Busy)
@@ -1437,19 +1729,45 @@ void PumpFrameBridge()noexcept {
         lastInputGeneration=controls.generation;++inputSamples;
         if(controls.focused&&controls.headValid&&controls.hands[0].gripTracked&&controls.hands[1].aimTracked)++inputTrackedSamples;
     }
-    if(!sampling.load(std::memory_order_acquire)&&stereoExperiment.stage.load(std::memory_order_acquire)==StereoExperiment::Released)frameBridge.CloseGraphics();
+    if(!sampling.load(std::memory_order_acquire)&&stereoExperiment.stage.load(std::memory_order_acquire)==StereoExperiment::Released){
+        ClosePrivatePresentationExperiment();frameBridge.CloseGraphics();
+    }
 }
 fvr::graphics::SwapChainPresentFn desktopPresentOriginal=nullptr;
+fvr::graphics::FrameBridgePresentService desktopFrameService;
+void WriteDesktopGraphicsOwnership(std::ostream& out){
+    const auto omissions=desktopFrameService.Omissions();
+    out<<R"({"foreign_thread_omissions":)"<<omissions.foreignThread
+        <<R"(,"reentrant_omissions":)"<<omissions.reentrant<<R"(,"first":)";
+    if(omissions.firstAvailable)out<<R"({"reason":")"<<(omissions.firstForeignThread?"foreign_thread":"reentrant")
+        <<R"(","actual_thread":)"<<omissions.actualThread<<R"(,"expected_thread":)"<<omissions.expectedThread
+        <<R"(,"presented_swapchain":)"<<omissions.presentedSwapchain<<R"(,"expected_swapchain":)"<<omissions.expectedSwapchain<<'}';
+    else out<<"null";
+    out<<'}';
+}
+std::atomic<std::uint64_t> desktopFrameServiceCalls=0,desktopFrameServiceAfterCalls=0;
 IDXGISwapChain* observedSwapChain=nullptr;unsigned observedRenderer=0;
 struct GraphicsBootstrapSnapshot {
     std::uintptr_t device=0,context=0;
-    std::array<std::uintptr_t,5> entries{}; // Indexed, Draw, two instanced, ClearDepth.
+    std::array<std::uintptr_t,8> entries{}; // Indexed, Draw, instanced, ClearDepth, Auto, two indirect.
     unsigned thread=0,deviceFlags=0;
+    std::uintptr_t createTexture2D=0;
+    HRESULT multithreadQuery=S_FALSE;bool multithreadKnown=false,multithreadProtected=false;
 };
 fvr::graphics::RenderBootstrap<GraphicsBootstrapSnapshot> graphicsBootstrap;
 GraphicsBootstrapSnapshot graphicsBootstrapEvidence;
 std::atomic<bool> graphicsRuntimeReady=false;
+unsigned GraphicsBootstrapThreadForDiagnostics()noexcept {
+    return graphicsRuntimeReady.load(std::memory_order_acquire)?graphicsBootstrapEvidence.thread:0;
+}
 unsigned graphicsBootstrapWorkerThread=0;
+void ClosePrivatePresentationExperiment()noexcept {
+    if(!privatePresentationExperiment.Enabled())return;
+    const auto renderer=U32(imageBase+profile.rendererGlobal);
+    const fvr::graphics::FrameBridgePresentIdentity current{renderer,U32(renderer),U32(renderer+0x7c),
+        reinterpret_cast<std::uintptr_t>(observedImmediateContext),U32(renderer+0x88),GetCurrentThreadId()};
+    privatePresentationExperiment.Close(reinterpret_cast<ID3D11Device*>(current.device),current);
+}
 bool CaptureGraphicsBootstrap(IDXGISwapChain* chain,GraphicsBootstrapSnapshot& out)noexcept {
     // Called only from this chain's native Present. Never transfer owning COM
     // references to the setup worker, including on mismatch or cancellation.
@@ -1457,11 +1775,19 @@ bool CaptureGraphicsBootstrap(IDXGISwapChain* chain,GraphicsBootstrapSnapshot& o
     if(FAILED(chain->GetDevice(IID_PPV_ARGS(&device)))||
        reinterpret_cast<unsigned>(device.Get())!=U32(observedRenderer+0x7c))return false;
     device->GetImmediateContext(&context);if(!context)return false;
-    const unsigned slots[]={12,13,20,21,53};
+    const unsigned slots[]={12,13,20,21,53,38,39,40};
     const auto table=*reinterpret_cast<void***>(context.Get());
-    for(unsigned n=0;n<out.entries.size();++n){out.entries[n]=reinterpret_cast<std::uintptr_t>(table[slots[n]]);if(!out.entries[n])return false;}
+    for(unsigned n=0;n<(destructionWitnessEnabled?out.entries.size():5);++n){out.entries[n]=reinterpret_cast<std::uintptr_t>(table[slots[n]]);if(!out.entries[n])return false;}
     out.device=reinterpret_cast<std::uintptr_t>(device.Get());out.context=reinterpret_cast<std::uintptr_t>(context.Get());
     out.thread=GetCurrentThreadId();out.deviceFlags=device->GetCreationFlags();
+    if(graphicsProvenanceEnabled){
+        const auto error=GetLastError();
+        // SDK ID3D11Device slot5; only borrowed entry metadata leaves this callback.
+        out.createTexture2D=reinterpret_cast<std::uintptr_t>((*reinterpret_cast<void***>(device.Get()))[5]);
+        {ComPtr<ID3D11Multithread> protection;out.multithreadQuery=context.As(&protection);
+            if(SUCCEEDED(out.multithreadQuery)&&protection){out.multithreadKnown=true;out.multithreadProtected=protection->GetMultithreadProtected()!=FALSE;}}
+        SetLastError(error); // Query temporary was released on this owner too.
+    }
     return U32(imageBase+profile.rendererGlobal)==observedRenderer&&
         U32(observedRenderer)==imageBase+profile.rendererVtable&&
         U32(observedRenderer+0x88)==reinterpret_cast<unsigned>(chain)&&U32(observedRenderer+0x7c)==out.device;
@@ -1545,7 +1871,20 @@ unsigned ObserveDesktopBuffer(IDXGISwapChain* chain,UINT flags)noexcept {
     }
     return scheduledMask;
 }
+using CreateTexture2DFn=HRESULT(STDMETHODCALLTYPE*)(ID3D11Device*,const D3D11_TEXTURE2D_DESC*,const D3D11_SUBRESOURCE_DATA*,ID3D11Texture2D**);
+CreateTexture2DFn createTexture2DOriginal=nullptr;
+HRESULT STDMETHODCALLTYPE ObserveCreateTexture2D(ID3D11Device* device,const D3D11_TEXTURE2D_DESC* description,
+    const D3D11_SUBRESOURCE_DATA* initial,ID3D11Texture2D** texture){
+    // No descriptor/output dereference, QueryInterface, allocation or extra
+    // device call. Native arguments, result and last-error propagate unchanged.
+    fvr::graphics::callProvenance::Scope provenance(fvr::graphics::callProvenance::Kind::CreateTexture2D,
+        device,nullptr,nullptr,reinterpret_cast<std::uintptr_t>(_ReturnAddress()));
+    const auto result=createTexture2DOriginal(device,description,initial,texture);
+    provenance.Result(result);return result;
+}
 HRESULT STDMETHODCALLTYPE DesktopPresentHook(IDXGISwapChain* chain,UINT interval,UINT flags){
+    fvr::graphics::callProvenance::Scope provenance(fvr::graphics::callProvenance::Kind::Present,
+        nullptr,nullptr,chain,reinterpret_cast<std::uintptr_t>(_ReturnAddress()));
     if(!graphicsRuntimeReady.load(std::memory_order_acquire)){
         if(chain==observedSwapChain&&!(flags&DXGI_PRESENT_TEST)&&
            U32(imageBase+profile.rendererGlobal)==observedRenderer&&
@@ -1553,6 +1892,13 @@ HRESULT STDMETHODCALLTYPE DesktopPresentHook(IDXGISwapChain* chain,UINT interval
             graphicsBootstrap.Observe([&](GraphicsBootstrapSnapshot& out)noexcept{return CaptureGraphicsBootstrap(chain,out);});
         return desktopPresentOriginal(chain,interval,flags);
     }
+    fvr::graphics::FrameBridgePresentService::Scope serviceBoundary(desktopFrameService,
+        GetCurrentThreadId(),graphicsBootstrapEvidence.thread,
+        reinterpret_cast<std::uintptr_t>(chain),reinterpret_cast<std::uintptr_t>(observedSwapChain));
+    // The native device may be SINGLETHREADED. The owner/nesting guard must
+    // cover menu capture, desktop diagnostics and mirror work too, before any
+    // added D3D/chain calls. Keep the scope held across the original Present.
+    if(!serviceBoundary.Owned())return desktopPresentOriginal(chain,interval,flags);
 #if defined(FVR_BC2_ORDINARY_RESOURCE_SCENE_PROBE)
     fvr::bc2::graphicsThreadObservation::Scope graphicsThread(fvr::bc2::graphicsThreadObservation::Boundary::Present,chain==observedSwapChain);
 #endif
@@ -1562,21 +1908,94 @@ HRESULT STDMETHODCALLTYPE DesktopPresentHook(IDXGISwapChain* chain,UINT interval
         U32(observedRenderer)==imageBase+profile.rendererVtable&&U32(observedRenderer+0x88)==reinterpret_cast<unsigned>(chain);
     const bool active=matching&&uncapMirror&&sampling.load(std::memory_order_acquire)&&frameBridge.Connected()&&!frameBridge.Fatal();
     unsigned scheduled=0;
+    auto presentDisplay=fvr::bc2::menu::MenuDisplayState::Unknown;
     if(matching){++desktopPresentCalls;if(interval==1)++desktopSyncOne;
         if(flags&DXGI_PRESENT_TEST)++desktopPresentTests;
         if(active&&!(flags&DXGI_PRESENT_TEST)&&interval>0&&interval<=4)++desktopSyncBypassed;
         // Capture native menu pixels before replacing the unstable desktop
         // world composition with one completed eye. XR sources stay untouched.
         ObserveDesktopMode(chain,flags);
-        if(!(flags&DXGI_PRESENT_TEST))fvr::bc2::menu::Present(chain);
-        const auto display=fvr::bc2::menu::CurrentDisplayState();
-        frameBridge.PresentDesktop(chain,streamMode&&sampling.load(std::memory_order_acquire)&&
+        const auto display=(flags&DXGI_PRESENT_TEST)?fvr::bc2::menu::MenuDisplayState::Unknown:
+            fvr::bc2::menu::Present(chain);
+        presentDisplay=display;
+        // A contended loading transition must preserve the original raster;
+        // the cached UI observation can still describe the preceding world.
+        if(display!=fvr::bc2::menu::MenuDisplayState::Unknown)
+            frameBridge.PresentDesktop(chain,streamMode&&sampling.load(std::memory_order_acquire)&&
             frameBridge.Connected()&&!frameBridge.Fatal(),
-            display!=fvr::bc2::menu::MenuDisplayState::Unknown,
-            display==fvr::bc2::menu::MenuDisplayState::Menu,(flags&DXGI_PRESENT_TEST)!=0);
+            true,
+            display==fvr::bc2::menu::MenuDisplayState::Menu||
+            display==fvr::bc2::menu::MenuDisplayState::Passive,(flags&DXGI_PRESENT_TEST)!=0);
         scheduled=ObserveDesktopBuffer(chain,flags);
     }
+    // Pin one identity across the original call; re-read current ownership and
+    // restoration before each phase. Present may release GPU/host progress.
+    const fvr::graphics::FrameBridgePresentIdentity expected{observedRenderer,
+        imageBase+profile.rendererVtable,graphicsBootstrapEvidence.device,
+        graphicsBootstrapEvidence.context,reinterpret_cast<std::uintptr_t>(observedSwapChain),
+        graphicsBootstrapEvidence.thread};
+    const auto currentBoundary=[&]()noexcept {
+        const auto renderer=U32(imageBase+profile.rendererGlobal);
+        fvr::graphics::FrameBridgePresentBoundary boundary;
+        boundary.current={renderer,U32(renderer),U32(renderer+0x7c),
+            reinterpret_cast<std::uintptr_t>(observedImmediateContext),U32(renderer+0x88),GetCurrentThreadId()};
+        boundary.presentedSwapchain=reinterpret_cast<std::uintptr_t>(chain);
+        boundary.enabled=streamMode&&sampling.load(std::memory_order_acquire)&&graphicsRuntimeReady.load(std::memory_order_acquire);
+        boundary.lifetimeHeld=imageScope.Active();boundary.connected=frameBridge.Connected();boundary.fatal=frameBridge.Fatal();
+        boundary.bridgeOwnerCurrent=frameBridge.MatchesGraphicsOwner(reinterpret_cast<ID3D11Device*>(expected.device),
+            reinterpret_cast<ID3D11DeviceContext*>(expected.context));
+        boundary.test=(flags&DXGI_PRESENT_TEST)!=0;boundary.drawingNativeView=drawingNativeView;
+        const auto state=tracked.state.load(std::memory_order_acquire);
+        boundary.nativeStateRestored=state!=1&&state!=3&&!tracked.anchorWritten&&!tracked.restoreFailures.load()&&
+            !contextRestoreFailures.load()&&!stereoColorScalePair.counts.restoreFailures&&
+            !stereoEffectPair.counts.restoreFailures&&!stereoPostProcessPair.RestoreFailed();
+        return boundary;
+    };
+    if(serviceBoundary.Owned()&&privatePresentationExperiment.Enabled()){
+        RenderCallbackScope callback;
+        privatePresentationExperiment.Tick(reinterpret_cast<ID3D11Device*>(expected.device),expected,
+            currentBoundary(),frameBridge.RenderQueueSnapshotValue().mode);
+        fvr::diagnostics::privateGpu::recorder.ObserveActivationPhase(privatePresentationExperiment.Phase(),
+            privatePresentationExperiment.AfterEnabled());
+    }
+    const bool allowAfter=privatePresentationExperiment.AfterEnabled();
+    const auto service=[&](bool after,HRESULT originalResult)noexcept {
+        if(!serviceBoundary.Owned())return;
+        RenderCallbackScope callback;
+        // Existing graphics work only. New camera admission remains at Update.
+        const auto boundary=currentBoundary();
+        const auto pump=[&]()noexcept {
+            frameBridge.PumpGraphics();
+            if(!after||!privatePresentProgress.budgetMs||
+               presentDisplay!=fvr::bc2::menu::MenuDisplayState::Gameplay||
+               (privatePresentationExperiment.Enabled()&&privatePresentationExperiment.Phase()!=3))return;
+            fvr::graphics::RestoredPairLease lease;
+            if(!frameBridge.TryGetRestoredPairLease(lease))return;
+            const auto admitted=[&]()noexcept {
+                return fvr::graphics::AdmitsFrameBridgePresent(expected,currentBoundary())&&
+                    fvr::bc2::menu::CurrentDisplayState()==fvr::bc2::menu::MenuDisplayState::Gameplay;
+            };
+            const auto pending=[&]()noexcept {return frameBridge.SameRestoredPairPending(lease);};
+            const auto progress=[]()noexcept {frameBridge.PumpGraphics();};
+            const auto clock=[]()noexcept {const auto value=Qpc();return value>0?std::uint64_t(value):0;};
+            const auto pause=[]()noexcept {Sleep(1);};
+            // No bridge lock spans sleep. This scope and imageScope pin callback
+            // lifetime, and the next native Update alone admits a successor.
+            privatePresentProgress.Record(fvr::graphics::ServiceBoundedFrameProgress(
+                privatePresentProgress.frequency*privatePresentProgress.budgetMs/1000,
+                admitted,pending,progress,clock,pause));
+        };
+        const bool serviced=after?serviceBoundary.RunAfterPresent(originalResult,expected,boundary,pump):
+            serviceBoundary.Run(expected,boundary,pump);
+        if(serviced){
+            if(after)desktopFrameServiceAfterCalls.fetch_add(1,std::memory_order_relaxed);
+            else desktopFrameServiceCalls.fetch_add(1,std::memory_order_relaxed);
+        }
+    };
+    service(false,S_OK);
     const auto result=fvr::graphics::PresentDesktopForVr(desktopPresentOriginal,chain,interval,flags,active);
+    const auto originalError=GetLastError();
+    if(result==S_OK&&allowAfter)service(true,result);
     if(matching){
         desktopPresentLastResult.store(result,std::memory_order_release);
         if(result==S_OK)++desktopPresentOkay;
@@ -1585,6 +2004,7 @@ HRESULT STDMETHODCALLTYPE DesktopPresentHook(IDXGISwapChain* chain,UINT interval
         else {++desktopPresentFailed;long empty=0;desktopPresentFirstFailure.compare_exchange_strong(empty,result);}
         for(unsigned i=0;i<desktopCaptures.size();++i)if(scheduled&(1u<<i))desktopCaptures[i].firstPresentResult=result;
     }
+    SetLastError(originalError);
     return result;
 }
 // No new native hook: verified inline color/effect scalars share the view lifetime.
@@ -1622,8 +2042,36 @@ fvr::bc2::stereoColorScale::Key CurrentColorScaleKey(unsigned world,unsigned req
 // leaf owns no C++ destructors: __finally restores all scalar scopes on that path.
 void OriginalDrawWithColorScope(void* self,void* request,void* view,void* data,
     fvr::bc2::stereoColorScale::Pair::Scope* color,fvr::bc2::stereoColorScale::EffectPair::Scope* effect,fvr::bc2::stereoColorScale::PostProcessPair::Scope* postProcess,bool wasDrawing,WeatherTranslationScope* weather){
+    // Diagnostic-only, owner-validated and trivially destructible for SEH.
+    fvr::diagnostics::privateCpu::Token cpuToken{};
+    fvr::diagnostics::privateGpu::Token gpuToken{};
+    if(fvr::diagnostics::privateCpu::recorder.AllowOwner(fvr::diagnostics::privateCpu::Stage::MainOrdinary)){
+        const auto& e=stereoExperiment;const auto address=reinterpret_cast<unsigned>(view);
+        const bool owned=e.stage.load(std::memory_order_acquire)==StereoExperiment::Armed&&
+            reinterpret_cast<unsigned>(self)==e.world&&reinterpret_cast<unsigned>(request)==e.request&&
+            (address==e.main||address==e.eye)&&U32(address)==imageBase+layout.vtable&&
+            U32(address+0x70)==e.request&&U32(e.request+8)==e.world&&U32(e.world+0x88)==e.frame.load();
+        const bool trackedMain=owned&&tracked.state.load(std::memory_order_acquire)==1&&tracked.lease.native.frameId==e.frame.load();
+        const auto stage=address==e.eye?fvr::diagnostics::privateCpu::Stage::ExtraEye:
+            trackedMain?fvr::diagnostics::privateCpu::Stage::MainTracked:fvr::diagnostics::privateCpu::Stage::MainOrdinary;
+        cpuToken=fvr::diagnostics::privateCpu::recorder.Begin(stage,owned&&(address==e.main||trackedMain));
+        if(owned&&(address==e.main||trackedMain)&&frameBridge.SharingMode()==3){
+            fvr::diagnostics::privateGpu::Key key{};
+            key.owner=(std::uint64_t(e.world)<<32)|e.request;key.frame=e.frame.load();
+            if(trackedMain){
+                key.request=tracked.lease.requestId;key.channel=tracked.lease.channelGeneration;
+                key.deviceEpoch=tracked.lease.native.deviceEpoch;key.tracking=tracked.lease.tracking.generation;
+                key.space=tracked.lease.tracking.spaceGeneration;key.predictedNs=tracked.lease.tracking.predictedNs;
+            }
+            gpuToken=fvr::diagnostics::privateGpu::recorder.Begin(
+                trackedMain?fvr::diagnostics::privateGpu::Kind::TrackedDraw:fvr::diagnostics::privateGpu::Kind::OrdinaryDraw,
+                key,address==e.eye?1u:0u,0,observedImmediateContext);
+        }
+    }
     __try {drawOriginal(self,request,view,data);}
     __finally {
+        fvr::diagnostics::privateGpu::recorder.End(gpuToken,!AbnormalTermination());
+        fvr::diagnostics::privateCpu::recorder.End(cpuToken,!AbnormalTermination());
         if(weather)weather->Finish();
         drawingNativeView=wasDrawing;
         if(AbnormalTermination()){postProcess->Abort();effect->Abort();color->Abort();tracked.capturesOkay=false;}
@@ -1678,7 +2126,12 @@ bool CaptureTrackedEye(unsigned eye)noexcept {
     ComPtr<ID3D11Resource> resource;target->GetResource(&resource);ComPtr<ID3D11Texture2D> texture;if(FAILED(resource.As(&texture)))return false;
     ObserveNativeFade(fvr::bc2::fadeDiagnostic::Phase::CaptureSource,stereoExperiment.world,stereoExperiment.request,
         eye?stereoExperiment.eye:stereoExperiment.main,context.Get(),target.Get(),texture.Get(),&tracked.lease);
-    return frameBridge.CaptureEye(eye,texture.Get(),tracked.lease);
+    // Native minimize/restore can replace the target between admission and
+    // either eye. Reject that pair, then restore/cancel at the normal boundary;
+    // keep the channel and its old GPU acknowledgements alive for the next pair.
+    const bool captured=frameBridge.CaptureEye(eye,texture.Get(),tracked.lease,fvr::graphics::SourceDimensionPolicy::DiscardPair);
+    if(captured&&destructionWitnessEnabled)destructionWitness.CaptureColor(context.Get(),texture.Get(),DestructionWitnessKey(),eye);
+    return captured;
 }
 
 bool SameEntries(const ListSnapshot& a,const ListSnapshot& b)noexcept {
@@ -2034,6 +2487,9 @@ struct RetireStereoCalls {
 };
 bool RecoverStereoOwner(unsigned world,unsigned request,unsigned incomingFrame)noexcept {
     auto& e=stereoExperiment;const auto state=tracked.state.load(std::memory_order_acquire);
+    // Transport failure blocks new rendering, never the final native graph
+    // retirement once the session is stopping.
+    if(!stereoRecovery.sourceTransition.AllowsNativeRetirement(sampling.load(std::memory_order_acquire)))return false;
     const auto ready=stereoRecovery.policy.Observe({e.world,e.request},{world,request},incomingFrame,
         CurrentScene(world,request),state==1||state==3,tracked.restoreFailures.load()||contextRestoreFailures.load());
     if(ready==fvr::runtime::RecoveryReadiness::DrainTransaction){
@@ -2147,7 +2603,15 @@ void AdvanceStereo(std::uintptr_t world,std::uintptr_t request,unsigned incoming
         e.stage.store(StereoExperiment::Failed,std::memory_order_release);return;
     }
     if(initializationOnly){e.retireFrame=incomingFrame+120;e.stage.store(StereoExperiment::Retiring,std::memory_order_release);}
-    else if(streamMode){BeginTrackedFrame(incomingFrame);e.stage.store(StereoExperiment::Armed,std::memory_order_release);}
+    else if(streamMode){
+        if(frameBridge.TwoSourceSlotsEnabled()&&stereoRecovery.completed.load()&&
+           !stereoRecovery.sourceTransition.Arm({{stereoRecovery.oldWorld.load(),stereoRecovery.oldRequest.load()},
+                {e.world,e.request},incomingFrame,1})){
+            stereoRecovery.sourceTransition.Reject();++stereoRecovery.sourceTransitionFailures;
+            e.stage.store(StereoExperiment::Armed,std::memory_order_release);return;
+        }
+        BeginTrackedFrame(incomingFrame);e.stage.store(StereoExperiment::Armed,std::memory_order_release);
+    }
     else {reinterpret_cast<fvr::bc2::SetViewActiveFn>(imageBase+lifecycle.setActive)(fresh,true);e.stage.store(StereoExperiment::Armed,std::memory_order_release);}
 }
 void ProbeViewLifecycle(std::uintptr_t world,std::uintptr_t request)noexcept {
@@ -2307,7 +2771,7 @@ void __fastcall WorldHook(void* self,void*,void* request){
     worldOriginal(self,request); // Exactly one original call; no simulation/render replay.
     ObserveNativeFade(fvr::bc2::fadeDiagnostic::Phase::WorldAfter,reinterpret_cast<std::uintptr_t>(self),reinterpret_cast<std::uintptr_t>(request));
     if(workPool.stage.load(std::memory_order_acquire)==1&&GetCurrentThreadId()==workPool.thread){const auto begin=U32(workPool.owner+0x850),end=U32(workPool.owner+0x854);if(end>=begin&&end-begin<=workPool.storage.size())workPool.peak=(std::max)(workPool.peak,(end-begin)/40);}
-    if(streamMode)FinishTrackedFrame(false);
+    if(streamMode)FinishTrackedFrame(false,TrackedFinishCallsite::WorldReturn);
     current=previous;
     if(record){record->endQpc=Qpc();record->requestAfter=U32(record->request+0xc4);record->arenaAfter=Arena(record->world);record->complete.store(true,std::memory_order_release);}
 }
@@ -2378,6 +2842,12 @@ void __fastcall DrawHook(void* self,void*,void* request,void* view,void* data){
     if(trackedEvidence){ObserveContexts(evidenceEye+2);SaveTrackedCameraEvidence(unsigned(address),evidenceEye,1);BeginEyeGpuEvidence(evidenceEye);}
     if(trackedEvidence){
         fvr::bc2::ReloadDrawFrameEvidence frame{};
+        if(destructionWitnessEnabled&&reinterpret_cast<unsigned>(self)==stereoExperiment.world&&
+            reinterpret_cast<unsigned>(request)==stereoExperiment.request&&U32(stereoExperiment.world+0x88)==stereoExperiment.frame&&
+            U32(address)==imageBase+layout.vtable&&U32(address+0x70)==stereoExperiment.request){
+            const auto& expected=evidenceEye?tracked.right[0]:tracked.written[0];
+            destructionWitness.BeginEye(observedImmediateContext,DestructionWitnessKey(),evidenceEye,address,expected.bytes);
+        }
         frame.world=reinterpret_cast<std::uintptr_t>(self);frame.request=reinterpret_cast<std::uintptr_t>(request);
         frame.view=address;frame.nativeFrame=stereoExperiment.frame;frame.eye=evidenceEye;
         frame.nowNs=ReloadDrawNowNs();frame.tickMs=GetTickCount64();
@@ -2389,9 +2859,11 @@ void __fastcall DrawHook(void* self,void*,void* request,void* view,void* data){
     }
     struct DrawEvidenceEnd {
         bool active=false;
-        void Finish()noexcept {if(active){active=false;reloadDrawCapture.EndEye();reloadDrawCapture.Poll(observedImmediateContext);}}
+        unsigned eye=0;fvr::graphics::SceneWitnessKey key{};
+        void Finish()noexcept {if(active){active=false;reloadDrawCapture.EndEye();reloadDrawCapture.Poll(observedImmediateContext);
+            if(destructionWitnessEnabled)destructionWitness.EndEye(observedImmediateContext,key,eye);}}
         ~DrawEvidenceEnd(){Finish();}
-    } drawEvidenceEnd{trackedEvidence};
+    } drawEvidenceEnd{trackedEvidence,evidenceEye,destructionWitnessEnabled?DestructionWitnessKey():fvr::graphics::SceneWitnessKey{}};
     const auto priorEvidenceEye=drawingEvidenceEye;
     if(trackedEvidence&&trackedCameraEvidence.frame.load(std::memory_order_acquire)==stereoExperiment.frame)drawingEvidenceEye=int(evidenceEye);
 #ifdef FVR_BC2_SCENE_DEPTH_CAPTURE
@@ -2545,7 +3017,7 @@ void __fastcall DrawHook(void* self,void*,void* request,void* view,void* data){
                 const bool colorComplete=colorScope.Complete(CurrentColorScaleKey(e.world,e.request),capturesOkay);
                 const bool effectComplete=effectScope.Complete(CurrentColorScaleKey(e.world,e.request),capturesOkay);
                 const bool postProcessComplete=postProcessScope.Complete(CurrentColorScaleKey(e.world,e.request),capturesOkay);
-                if(!colorComplete||!effectComplete||!postProcessComplete)tracked.capturesOkay=false;}CaptureWorldColor(colorCaptures[2],e.frame);if(stereoExperiment.drawMask.fetch_or(2,std::memory_order_acq_rel)==1)stereoExperiment.framesRendered.fetch_add(1,std::memory_order_release);if(streamMode)FinishTrackedFrame(true);}
+                if(!colorComplete||!effectComplete||!postProcessComplete)tracked.capturesOkay=false;}CaptureWorldColor(colorCaptures[2],e.frame);if(stereoExperiment.drawMask.fetch_or(2,std::memory_order_acq_rel)==1)stereoExperiment.framesRendered.fetch_add(1,std::memory_order_release);if(streamMode)FinishTrackedFrame(true,TrackedFinishCallsite::RightEyeDraw);}
         }
         for(unsigned i=0;i<3;++i)if(colorCaptures[i].step==ColorCapture::Step::Pending||(i==0&&colorCaptures[0].step==ColorCapture::Step::Idle))CaptureWorldColor(colorCaptures[i],U32(reinterpret_cast<unsigned>(self)+0x88));
     }
@@ -2587,21 +3059,25 @@ bool DisableProbeHooks()noexcept {
         if(index==2&&!bodyAmmoRenderer.Quiescent()){allDisabled=false;continue;}
         const auto stage=stereoExperiment.stage.load(std::memory_order_acquire);
         if((((streamMode&&index<3)||index==4)&&(stage==StereoExperiment::Armed||stage==StereoExperiment::Retiring))||(index==5&&workPool.stage.load(std::memory_order_acquire)==1)){allDisabled=false;continue;}
-        const auto result=MH_DisableHook(hookEntries[index]);if(result!=MH_OK&&result!=MH_ERROR_DISABLED){allDisabled=false;if(index>=14)weatherHooksDisabled=false;}
+        const auto result=MH_DisableHook(hookEntries[index]);if(result!=MH_OK&&result!=MH_ERROR_DISABLED){allDisabled=false;if(index==14||index==15)weatherHooksDisabled=false;}
     }
     if(weatherObservationEnabled||weatherTranslationRuntime)for(unsigned attempt=0;attempt<200;++attempt){
         if(weatherCallbackLifetime.TryQuiesce(weatherHooksDisabled))break;Sleep(1);
     }
+    bool provenanceDrained=false;
+    for(unsigned attempt=0;attempt<200;++attempt){if(fvr::graphics::callProvenance::recorder.Stop()){provenanceDrained=true;break;}Sleep(1);}
     bool drawCaptureDrained=false;
     fvr::bc2::ReloadProducerBinding().Enable(false);
     for(unsigned attempt=0;attempt<200;++attempt){if(reloadDrawCapture.Stop()){drawCaptureDrained=true;break;}Sleep(1);}
+    bool destructionDrained=false;
+    for(unsigned attempt=0;attempt<200;++attempt){if(destructionWitness.Stop()){destructionDrained=true;break;}Sleep(1);}
     bool workerDrained=false;
     for(unsigned attempt=0;attempt<200;++attempt){if(fvr::bc2::rigWorkerRuntime::Quiescent()){workerDrained=true;break;}Sleep(1);}
     bool opticDrained=false;
     for(unsigned attempt=0;attempt<200;++attempt){if(fvr::bc2::opticFilterRuntime::Quiescent()){opticDrained=true;break;}Sleep(1);}
     const bool audioDrained=fvr::bc2::mechanismAudio::DrainAndRemove();
     const bool shellAudioDrained=fvr::bc2::shellReloadAudio::Drain();
-    return allDisabled&&(!(weatherObservationEnabled||weatherTranslationRuntime)||weatherCallbackLifetime.Quiescent())&&gameplayDisabled&&menuDisabled&&audioDisabled&&audioDrained&&shellAudioDrained&&drawCaptureDrained&&workerDrained&&opticDrained&&bodyAmmoRenderer.Quiescent();
+    return allDisabled&&(!(weatherObservationEnabled||weatherTranslationRuntime)||weatherCallbackLifetime.Quiescent())&&gameplayDisabled&&menuDisabled&&audioDisabled&&audioDrained&&shellAudioDrained&&provenanceDrained&&drawCaptureDrained&&destructionDrained&&workerDrained&&opticDrained&&bodyAmmoRenderer.Quiescent();
 }
 void Require(bool okay,const char* message){if(!okay)throw std::runtime_error(message);}
 std::size_t Offset(const fvr::engine::PeImage& pe,unsigned rva,std::size_t count){for(const auto& s:pe.sections)if(rva>=s.rva&&rva-s.rva<=s.rawSize&&count<=s.rawSize-(rva-s.rva))return std::size_t(s.rawOffset)+rva-s.rva;throw std::runtime_error("Unbacked profile address");}
@@ -2791,6 +3267,16 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
     bool hooksEnabled=false,disabled=true,workerObservation=false;std::ofstream report;fvr::platform::ProcessLifetime hostLifetime;
     try {
         const auto output=std::filesystem::path(config.reportPath);Require(output.is_absolute()&&!std::filesystem::exists(output),"Report must be a new absolute path");report.open(output);Require(bool(report),"Cannot create report");
+        wchar_t provenanceFlag[4]{};const auto provenanceLength=GetEnvironmentVariableW(L"FVR_BC2_GRAPHICS_PROVENANCE",provenanceFlag,4);
+        Require(!provenanceLength||(provenanceLength==1&&provenanceFlag[0]==L'1'),"Graphics provenance must be 1 or absent");
+        graphicsProvenanceEnabled=provenanceLength==1;
+        Require(!graphicsProvenanceEnabled||(streamMode&&!std::filesystem::exists(output.parent_path()/L"graphics-call-provenance.jsonl")),"Graphics provenance requires a fresh tracked session");
+        wchar_t destructionFlag[4]{};const auto destructionLength=GetEnvironmentVariableW(L"FVR_BC2_DESTRUCTION_WITNESS",destructionFlag,4);
+        Require(!destructionLength||(destructionLength==1&&destructionFlag[0]==L'1'),"Destruction witness must be 1 or absent");
+        destructionWitnessEnabled=destructionLength==1;
+        Require(!destructionWitnessEnabled||(streamMode&&destructionWitness.Enable(true)),"Destruction witness requires tracked stereo");
+        Require(!destructionWitnessEnabled||(!std::filesystem::exists(output.parent_path()/L"destruction-witness")&&
+            !std::filesystem::exists(output.parent_path()/L"destruction-request.txt")),"Destruction witness requires a fresh output directory");
         wchar_t weatherFlag[4]{},weatherDelay[16]{},weatherExperiment[4]{},weatherRuntime[4]{};
         const auto weatherFlagLength=GetEnvironmentVariableW(L"BC2_WEATHER_OBSERVER",weatherFlag,4);
         Require(!weatherFlagLength||(weatherFlagLength==1&&weatherFlag[0]==L'1'),"Weather observer flag must be1 or absent");
@@ -2853,6 +3339,7 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
         Require(same(visibility->worldUpdate,35)&&same(visibility->worldUpdate+0x383,5)&&same(visibility->worldUpdate+0x3e8,9)&&same(visibility->prepareVisibility,37)&&same(visibility->prepareVisibility+0x2e9a,9),"Visibility code changed");
         Require(same(caches->getView,21)&&same(caches->getProjection,21)&&same(caches->getFrustum,21)&&same(caches->updateView,26)&&same(caches->updateProjection,22)&&same(caches->updateFrustum,20),"Camera math code changed");
         Require(same(caches->updateView+0x1d5,10)&&same(caches->updateProjection+0x1c1,10)&&same(caches->updateFrustum+0x7c,6),"Camera math epilogues changed");
+        Require(same(caches->getScale,21)&&same(caches->getScaleSquared,21)&&same(caches->updateScale,0x1ad),"Camera scalar cache code changed");
         if(lifecycleMode||stereoMode){
             for(auto span:{std::pair{lifecycle.requestVtable,20u},std::pair{layout.vtable,240u},std::pair{lifecycle.createView,43u},std::pair{lifecycle.constructor,0x111u},std::pair{lifecycle.addRef,14u},std::pair{lifecycle.release,34u},std::pair{lifecycle.setActive,13u},std::pair{lifecycle.deletingDestructor,30u},std::pair{lifecycle.destructor,0xf3u}})Require(same(span.first,span.second),"Native view lifecycle code changed");
         }
@@ -2947,7 +3434,7 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
             }
         }
         if(stereoMode){const auto vt=Offset(pe.image,layout.vtable+15*4,4);unsigned setter=0;std::memcpy(&setter,bytes.data()+vt,4);Require(setter>=profile.preferredBase&&same(setter-profile.preferredBase,48),"Viewport setter changed");}
-        updateView=reinterpret_cast<CacheFn>(imageBase+caches->updateView);updateProjection=reinterpret_cast<CacheFn>(imageBase+caches->updateProjection);updateFrustum=reinterpret_cast<CacheFn>(imageBase+caches->updateFrustum);
+        updateView=reinterpret_cast<CacheFn>(imageBase+caches->updateView);updateProjection=reinterpret_cast<CacheFn>(imageBase+caches->updateProjection);updateFrustum=reinterpret_cast<CacheFn>(imageBase+caches->updateFrustum);updateScale=reinterpret_cast<CacheFn>(imageBase+caches->updateScale);
         // Full x86 argument cleanup conventions, independently observed in the binary.
         for(auto pair:{std::pair{render->worldRender+0x196,4u},std::pair{render->prepareView+0xf02,8u},std::pair{render->drawView+0x1e2f,12u}}){
             const auto offset=Offset(pe.image,pair.first,3);Require(bytes[offset]==std::byte{0xc2}&&bytes[offset+1]==std::byte(pair.second)&&bytes[offset+2]==std::byte{0}&&same(pair.first,3),"Native callback ABI changed");}
@@ -3140,26 +3627,50 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
                 U32(renderer+0x88)==reinterpret_cast<unsigned>(observedSwapChain),"Graphics bootstrap identity changed");
             graphicsBootstrapEvidence=*captured;
             observedImmediateContext=reinterpret_cast<ID3D11DeviceContext*>(captured->context);
+            if(graphicsProvenanceEnabled){
+                Require(fvr::graphics::callProvenance::Configure({captured->device,captured->context,
+                    reinterpret_cast<std::uintptr_t>(observedSwapChain),captured->thread},
+                    {captured->deviceFlags,captured->multithreadQuery,captured->multithreadKnown,captured->multithreadProtected}),"Configure bounded native device provenance");
+                auto* createEntry=reinterpret_cast<void*>(captured->createTexture2D);HMODULE createOwner=nullptr;
+                Require(createEntry&&GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                    reinterpret_cast<LPCWSTR>(createEntry),&createOwner)&&createOwner==GetModuleHandleW(L"d3d11.dll"),"Unexpected D3D11 CreateTexture2D owner");
+                Require(MH_CreateHook(createEntry,ObserveCreateTexture2D,reinterpret_cast<void**>(&createTexture2DOriginal))==MH_OK,"Create native device provenance hook");
+                hookEntries[19]=createEntry;
+            }
+            fvr::diagnostics::privateCpu::recorder.ConfigureFromEnvironment(captured->thread,L"FVR_BC2_PRIVATE_CPU_ATTRIBUTION");
+            privatePresentationExperiment.ConfigureFromEnvironment();
+            fvr::diagnostics::privateGpu::recorder.ConfigureActivation(fvr::diagnostics::privateGpu::ActivationModeFromEnvironment(),
+                fvr::diagnostics::privateCpu::recorder.Enabled()&&privatePresentationExperiment.Enabled());
+            privatePresentProgress.Configure();
         }
         if(streamMode){auto* entry=reinterpret_cast<void*>(graphicsBootstrapEvidence.entries[0]);
             HMODULE owner=nullptr;Require(GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,reinterpret_cast<LPCWSTR>(entry),&owner)&&owner==GetModuleHandleW(L"d3d11.dll"),"Unexpected D3D11 DrawIndexed owner");
             Require(MH_CreateHook(entry,IndexedDrawHook,reinterpret_cast<void**>(&indexedDrawOriginal))==MH_OK,"Create bounded geometry constant observer");hookEntries[6]=entry;
-            bool observeNonIndexed=passEvidenceEnabled||opticEvidenceEnabled;
+            bool observeNonIndexed=passEvidenceEnabled||opticEvidenceEnabled||destructionWitnessEnabled||graphicsProvenanceEnabled;
 #ifdef FVR_BC2_BODY_SCENE_DEPTH
             auto* clearEntry=reinterpret_cast<void*>(graphicsBootstrapEvidence.entries[4]);HMODULE clearOwner=nullptr;
             Require(GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,reinterpret_cast<LPCWSTR>(clearEntry),&clearOwner)&&clearOwner==GetModuleHandleW(L"d3d11.dll"),"Unexpected D3D11 ClearDepthStencilView owner");
             Require(MH_CreateHook(clearEntry,ClearBodySceneDepthHook,reinterpret_cast<void**>(&clearDepthOriginal))==MH_OK,"Create scoped world/first-person depth copies");hookEntries[13]=clearEntry;
 #endif
 #ifdef FVR_BC2_SCENE_DEPTH_CAPTURE
-            observeNonIndexed=true;
-            const auto addDrawObserver=[&](unsigned slot,void* detour,void** original,unsigned record){
-                auto* entry=reinterpret_cast<void*>(graphicsBootstrapEvidence.entries[slot==20?2:3]);HMODULE owner=nullptr;
+            observeNonIndexed=true;const bool observeInstanced=true;
+#else
+            const bool observeInstanced=destructionWitnessEnabled;
+#endif
+            const auto addDrawObserver=[&](unsigned entryIndex,void* detour,void** original,unsigned record){
+                auto* entry=reinterpret_cast<void*>(graphicsBootstrapEvidence.entries[entryIndex]);HMODULE owner=nullptr;
                 Require(GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,reinterpret_cast<LPCWSTR>(entry),&owner)&&owner==GetModuleHandleW(L"d3d11.dll"),"Unexpected instanced draw owner");
                 Require(MH_CreateHook(entry,detour,original)==MH_OK,"Create diagnostic instanced draw observer");hookEntries[record]=entry;
             };
-            addDrawObserver(20,reinterpret_cast<void*>(IndexedInstancedDrawHook),reinterpret_cast<void**>(&indexedInstancedDrawOriginal),11);
-            addDrawObserver(21,reinterpret_cast<void*>(InstancedDrawHook),reinterpret_cast<void**>(&instancedDrawOriginal),12);
-#endif
+            if(observeInstanced){
+                addDrawObserver(2,reinterpret_cast<void*>(IndexedInstancedDrawHook),reinterpret_cast<void**>(&indexedInstancedDrawOriginal),11);
+                addDrawObserver(3,reinterpret_cast<void*>(InstancedDrawHook),reinterpret_cast<void**>(&instancedDrawOriginal),12);
+            }
+            if(destructionWitnessEnabled){
+                addDrawObserver(5,reinterpret_cast<void*>(DrawAutoHook),reinterpret_cast<void**>(&drawAutoOriginal),16);
+                addDrawObserver(6,reinterpret_cast<void*>(IndexedIndirectHook),reinterpret_cast<void**>(&indexedIndirectOriginal),17);
+                addDrawObserver(7,reinterpret_cast<void*>(IndirectHook),reinterpret_cast<void**>(&indirectOriginal),18);
+            }
             if(observeNonIndexed){auto* nonIndexedEntry=reinterpret_cast<void*>(graphicsBootstrapEvidence.entries[1]);HMODULE nonIndexedOwner=nullptr;
             Require(GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,reinterpret_cast<LPCWSTR>(nonIndexedEntry),&nonIndexedOwner)&&nonIndexedOwner==GetModuleHandleW(L"d3d11.dll"),"Unexpected D3D11 Draw owner");
             Require(MH_CreateHook(nonIndexedEntry,NonIndexedDrawHook,reinterpret_cast<void**>(&nonIndexedDrawOriginal))==MH_OK,"Create bounded pass observer");hookEntries[8]=nonIndexedEntry;}
@@ -3169,7 +3680,7 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
             auto* entry=reinterpret_cast<void*>(imageBase+*contextCamera);
             Require(MH_CreateHook(entry,ContextCameraHook,reinterpret_cast<void**>(&contextCameraOriginal))==MH_OK,"Create native camera context observer");hookEntries[7]=entry;
             const auto overrides=fvr::bc2::DiscoverProjectionOverrides(bytes,pe.image);
-            Require(overrides&&same(overrides->setter,0x6d)&&same(overrides->meshCaller-0x25,41)&&same(overrides->terrainCaller-0x27,43),"Projection override code/ABI mismatch");projectionOverrides=*overrides;
+            Require(overrides&&same(overrides->setter,0x6d)&&same(overrides->meshCaller-0x25,41)&&same(overrides->terrainCaller-0x27,43)&&same(overrides->edgeCaller-0x21,33),"Projection override code/ABI mismatch");projectionOverrides=*overrides;
             auto* projectionEntry=reinterpret_cast<void*>(imageBase+overrides->setter);
             Require(MH_CreateHook(projectionEntry,ProjectionContextHook,reinterpret_cast<void**>(&projectionContextOriginal))==MH_OK,"Create projection override observer");hookEntries[9]=projectionEntry;
         }
@@ -3378,6 +3889,10 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
                         <<",\"graphics_failures\":"<<menuConnection.graphicsFailures<<'}'
                         <<",\"stereo_frame_admission\":";
                     stereoFrameAdmissionEvidence.Write(telemetry);
+                    // CPU-only bounded atomic snapshot on the existing cadence;
+                    // preserve ownership evidence even if no final report runs.
+                    telemetry<<R"(,"desktop_graphics_ownership":)";
+                    WriteDesktopGraphicsOwnership(telemetry);
                     telemetry<<",\"magazine_empty_gate\":{\"requested\":["<<emptyGate.requested[0]<<','<<emptyGate.requested[1]<<','<<emptyGate.requested[2]
                         <<"],\"applied\":["<<emptyGate.applied[0]<<','<<emptyGate.applied[1]<<','<<emptyGate.applied[2]
                         <<"],\"restored\":["<<emptyGate.restored[0]<<','<<emptyGate.restored[1]<<','<<emptyGate.restored[2]
@@ -3388,12 +3903,37 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
                         <<",\"magazine_presentation\":{\"pairs\":"<<magazine.pairs<<",\"fallbacks\":"<<magazine.fallbacks
                         <<",\"role_pairs\":["<<magazine.rolePairs[0]<<','<<magazine.rolePairs[1]<<','<<magazine.rolePairs[2]<<','<<magazine.rolePairs[3]<<"]},\"selected_knife\":";
                     fvr::bc2::selectedKnife::WriteTelemetry(telemetry,knife);
+                    telemetry<<",\"rig_publication\":";
+                    fvr::bc2::rigPublication::ReportLiveCounters(telemetry);
                     telemetry<<"}\n";
                     telemetry.flush();nextSample=now+1000;
                 }
         };
+        unsigned destructionRequested=0,destructionCompleted=0,destructionFailed=0;
+        const auto serviceDestructionRequest=[&]{
+            if(!destructionWitnessEnabled)return;
+            const auto requestPath=output.parent_path()/L"destruction-request.txt";
+            const auto attributes=GetFileAttributesW(requestPath.c_str());
+            // Controller writes "sequence firstDrawOrdinal" and atomically
+            // renames it here. No graphics callback reads files or waits.
+            if(attributes!=INVALID_FILE_ATTRIBUTES&&!(attributes&(FILE_ATTRIBUTE_DIRECTORY|FILE_ATTRIBUTE_REPARSE_POINT))){
+                std::ifstream request(requestPath,std::ios::binary);char data[32]{};request.read(data,32);const auto n=request.gcount();
+                if(n>0&&n<32){
+                    std::istringstream command(std::string(data,std::size_t(n)));unsigned sequence=0,firstDrawOrdinal=0;char extra=0;
+                    if((command>>sequence>>firstDrawOrdinal)&&!(command>>extra)&&sequence>destructionRequested&&
+                        destructionWitness.Request(sequence,firstDrawOrdinal))destructionRequested=sequence;
+                }
+            }
+            const auto completed=destructionWitness.Completed(),failed=destructionWitness.Failed();
+            if(completed!=destructionCompleted||failed!=destructionFailed){
+                destructionCompleted=completed;destructionFailed=failed;
+                std::ofstream status(output.parent_path()/L"destruction-status.json");
+                status<<"{\"schema\":\"fvr.bc2.destruction-witness-status.v1\",\"requested\":"<<destructionRequested<<",\"copied\":"<<completed<<",\"failed\":"<<failed<<"}\n";
+            }
+        };
         if(continuous){
             while(!hostLifetime.Ended()){
+                serviceDestructionRequest();if(graphicsProvenanceEnabled)fvr::graphics::callProvenance::Flush(output.parent_path()/L"graphics-call-provenance.jsonl");
                 persistCycleFailure();sceneWriter.Flush();persistSessionTelemetry();
 #if defined(FVR_BC2_ORDINARY_RESOURCE_SCENE_PROBE)
                 fvr::bc2::graphicsThreadObservation::Flush(output.parent_path()/L"graphics-threads.jsonl");
@@ -3403,6 +3943,7 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
         }else {
             const auto until=GetTickCount64()+config.durationMs;
             for(auto now=GetTickCount64();now<until;now=GetTickCount64()){
+                serviceDestructionRequest();if(graphicsProvenanceEnabled)fvr::graphics::callProvenance::Flush(output.parent_path()/L"graphics-call-provenance.jsonl");
                 persistCycleFailure();persistDeathReadiness();persistKnifeWitness();persistToolWitness();sceneWriter.Flush();persistSessionTelemetry();
 #if defined(FVR_BC2_ORDINARY_RESOURCE_SCENE_PROBE)
                 fvr::bc2::graphicsThreadObservation::Flush(output.parent_path()/L"graphics-threads.jsonl");
@@ -3424,12 +3965,14 @@ Sleep(DWORD(std::min<std::uint64_t>((toolFixture||config.ordinaryGrenadeInput==4
         if(stereoMode){for(unsigned attempt=0;attempt<200;++attempt){const auto state=stereoExperiment.stage.load(std::memory_order_acquire);if(state!=StereoExperiment::Armed&&state!=StereoExperiment::Retiring)break;Sleep(5);}}
         for(unsigned attempt=0;attempt<200&&workPool.stage.load(std::memory_order_acquire)==1;++attempt)Sleep(5);
         disabled=DisableProbeHooks();hooksEnabled=false;
+        if(graphicsProvenanceEnabled)fvr::graphics::callProvenance::Flush(output.parent_path()/L"graphics-call-provenance.jsonl");
         // Both capture-producing hook bodies must have returned. Sealing also
         // makes a delayed callback delegate directly to its native original.
         if(disabled)for(unsigned attempt=0;attempt<200;++attempt){
             if(diagnosticImageLifetime.TryQuiesce(true))break;Sleep(1);
         }
         Sleep(50);sceneWriter.Flush();unsigned complete=0;for(const auto& r:records)if(r.complete.load(std::memory_order_acquire))++complete;
+        if(destructionWitnessEnabled)Require(destructionWitness.Write(output.parent_path()/L"destruction-witness"),"Write bounded destruction witness after callback drain");
 #if defined(FVR_BC2_NATIVE_FADE_DIAGNOSTIC)
         if(nativeFadeObserver.Enabled()){
             std::ofstream fade(output.parent_path()/L"native-fade-observation.jsonl");
@@ -3502,10 +4045,21 @@ Sleep(DWORD(std::min<std::uint64_t>((toolFixture||config.ordinaryGrenadeInput==4
         if(tracked.restoreFailures.load(std::memory_order_acquire))for(unsigned i=0;i<2;++i){
             for(auto item:{std::pair{"saved",&tracked.saved[i]},std::pair{"written",&tracked.written[i]},std::pair{"observed",&tracked.observed[i]}}){std::ofstream bytesOut(output.parent_path()/("tracked-"+std::string(item.first)+"-"+std::to_string(i)+".bin"),std::ios::binary);bytesOut.write(reinterpret_cast<const char*>(item.second->bytes.data()),0x460);}
         }
-        report<<",\"desktop_pacing\":{\"requested\":"<<(uncapMirror?"true":"false")<<",\"calls\":"<<desktopPresentCalls.load()<<",\"native_sync_one\":"<<desktopSyncOne.load()<<",\"bypassed_waits\":"<<desktopSyncBypassed.load()<<"}";
+        report<<",\"desktop_pacing\":{\"requested\":"<<(uncapMirror?"true":"false")<<",\"calls\":"<<desktopPresentCalls.load()<<",\"native_sync_one\":"<<desktopSyncOne.load()<<",\"bypassed_waits\":"<<desktopSyncBypassed.load()<<",\"serviced_calls\":"<<desktopFrameServiceCalls.load()<<",\"serviced_after_calls\":"<<desktopFrameServiceAfterCalls.load()<<"}";
+        report<<R"(,"desktop_graphics_ownership":)";
+        WriteDesktopGraphicsOwnership(report);
         report<<",\"desktop_mirror\":{\"completed_left_commits\":"<<frameBridge.DesktopMirror().Committed()
             <<",\"copies\":"<<frameBridge.DesktopMirror().Copied()<<",\"neutral\":"<<frameBridge.DesktopMirror().Neutral()
             <<",\"failures\":"<<frameBridge.DesktopMirror().Failed()<<"}";
+        report<<",\"private_render_queue\":";
+        fvr::graphics::WriteRenderQueueSnapshot(report,frameBridge.RenderQueueSnapshotValue());
+        report<<",\"private_presentation_experiment\":";privatePresentationExperiment.Write(report,disabled&&diagnosticImageLifetime.Quiescent());
+        report<<",\"private_present_progress\":";privatePresentProgress.Write(report,disabled&&diagnosticImageLifetime.Quiescent());
+        report<<",\"private_early_frame_admission\":{\"enabled\":"<<frameBridge.EarlyFrameAdmissionEnabled()
+              <<",\"acknowledged\":"<<frameBridge.EarlyAcknowledgements()<<",\"graphics_deferrals\":"<<frameBridge.EarlyGraphicsDeferrals()
+              <<",\"prepared_publications\":"<<frameBridge.PreparedPublications()
+              <<",\"prepared_graphics_reuses\":"<<frameBridge.PreparedGraphicsReuses()<<'}';
+        report<<",\"private_presentation_cameras\":";privatePresentationCameras.Write(report,disabled&&diagnosticImageLifetime.Quiescent(),privatePresentationExperiment.Enabled());
         report<<",\"desktop_presentation\":{\"diagnostic_only\":true,\"successful\":"<<desktopPresentOkay.load()
             <<",\"occluded\":"<<desktopPresentOccluded.load()<<",\"other_status\":"<<desktopPresentStatus.load()
             <<",\"failed\":"<<desktopPresentFailed.load()<<",\"test_calls\":"<<desktopPresentTests.load()
@@ -3563,6 +4117,8 @@ Sleep(DWORD(std::min<std::uint64_t>((toolFixture||config.ordinaryGrenadeInput==4
         report<<",\"normal_player_grenades\":"<<(config.normalPlayerGrenades?"true":"false")
             <<",\"normal_player_knife\":"<<(config.normalPlayerKnife?"true":"false")
             <<",\"normal_contextual_tools\":"<<(config.normalContextualTools?"true":"false");
+        report<<",\"private_cpu_attribution\":";fvr::diagnostics::privateCpu::recorder.Report(report,disabled&&diagnosticImageLifetime.Quiescent());
+        report<<",\"private_gpu_attribution\":";fvr::diagnostics::privateGpu::recorder.WriteJson(report,disabled&&diagnosticImageLifetime.Quiescent());
         report<<",\"gameplay\":";fvr::bc2::gameplay::Report(report);
         report<<",\"mechanism_audio\":";fvr::bc2::mechanismAudio::Report(report);
         report<<",\"shell_reload_audio\":";fvr::bc2::shellReloadAudio::Report(report);
@@ -3592,6 +4148,9 @@ Sleep(DWORD(std::min<std::uint64_t>((toolFixture||config.ordinaryGrenadeInput==4
         report<<",\"body_ammo_render\":";bodyAmmoRenderer.Report(report);
 #ifdef FVR_BC2_BODY_SCENE_DEPTH
         report<<",\"body_scene_depth\":{\"begun_eyes\":"<<bodyDepthBegins.load()<<",\"completed_eyes\":"<<bodyDepthEnds.load()<<",\"rejected_eyes\":"<<bodyDepthRejected.load()<<",\"extra_native_draws\":0}";
+        report<<",\"first_body_scene_depth_failure\":";firstBodyDepthFailure.Write(report,
+            disabled&&diagnosticImageLifetime.Quiescent()&&stereoRecovery.callbacks.load(std::memory_order_acquire)==0);
+        report<<R"(,"graphics_call_provenance":)";fvr::graphics::callProvenance::Summary(report);
         report<<R"(,"graphics_bootstrap":{"worker_thread":)"<<graphicsBootstrapWorkerThread
             <<R"(,"started_from_main_menu":)"<<(startedFromMainMenu?"true":"false")
             <<R"(,"main_menu_only":)"<<(mainMenuOnly?"true":"false")
@@ -3625,6 +4184,27 @@ Sleep(DWORD(std::min<std::uint64_t>((toolFixture||config.ordinaryGrenadeInput==4
             <<",\"restores\":"<<color.restores<<",\"rejected\":"<<color.rejected
             <<",\"restore_failures\":"<<color.restoreFailures<<'}';
         report<<",\"native_stream\":{\"published\":"<<frameBridge.Published()<<",\"consumed\":"<<frameBridge.Consumed()<<",\"discarded\":"<<frameBridge.Discarded()<<",\"camera_restore_failures\":"<<tracked.restoreFailures.load()<<",\"captured_eyes\":"<<frameBridge.CapturedEyes()<<",\"sharing_mode\":"<<frameBridge.SharingMode()<<",\"gpu_failure_stage\":"<<frameBridge.FailureStage()<<",\"gpu_failure_code\":"<<frameBridge.FailureCode()<<",\"gpu_failure_operation\":"<<frameBridge.FailureOperation()<<",\"device_flags\":"<<frameBridge.DeviceFlags()<<",\"feature_level\":"<<frameBridge.FeatureLevel()<<",\"sharing_compatibility\":["<<frameBridge.Compatibility(0)<<","<<frameBridge.Compatibility(1)<<","<<frameBridge.Compatibility(2)<<","<<frameBridge.Compatibility(3)<<","<<frameBridge.Compatibility(4)<<","<<frameBridge.Compatibility(5)<<","<<frameBridge.Compatibility(6)<<","<<frameBridge.Compatibility(7)<<","<<frameBridge.Compatibility(8)<<"]"<<"}";
+        auto nativeTiming=std::make_unique<fvr::graphics::FrameBridgeTimingSnapshot>();
+        frameBridge.TimingSnapshot(*nativeTiming);
+        report<<",\"native_frame_timing\":";fvr::graphics::WriteFrameBridgeTiming(report,*nativeTiming);
+        const bool pipelineReportDrained=disabled&&diagnosticImageLifetime.Quiescent()&&
+            stereoRecovery.callbacks.load(std::memory_order_acquire)==0;
+        report<<",\"native_source_slot_count\":"<<frameBridge.SourceSlotCount();
+        report<<",\"world_source_transition\":{\"state\":"<<unsigned(stereoRecovery.sourceTransition.Status())
+              <<",\"completed\":"<<stereoRecovery.sourceTransitions.load()<<",\"waits\":"<<stereoRecovery.sourceTransitionWaits.load()
+              <<",\"failures\":"<<stereoRecovery.sourceTransitionFailures.load()<<'}';
+        report<<(frameBridge.SourceSlotCount()==3?",\"native_three_source_slots\":":",\"native_two_source_slots\":");
+        frameBridge.PipelineSnapshot(pipelineReportDrained).Write(report);
+        report<<",\"native_frame_timing_slots\":[";
+        if(frameBridge.TwoSourceSlotsEnabled())for(unsigned slot=0;slot<frameBridge.SourceSlotCount();++slot){
+            *nativeTiming={}; // Reuse the existing heap snapshot, not another x86 stack journal.
+            if(pipelineReportDrained)frameBridge.SlotTimingSnapshot(slot,*nativeTiming);
+            if(slot)report<<',';report<<"{\"slot\":"<<slot<<",\"timing\":";
+            fvr::graphics::WriteFrameBridgeTiming(report,*nativeTiming);report<<'}';
+        }
+        report<<']';
+        report<<",\"first_tracked_finish_failure\":";firstTrackedFinishFailure.Write(report,
+            disabled&&diagnosticImageLifetime.Quiescent()&&stereoRecovery.callbacks.load(std::memory_order_acquire)==0);
         report<<",\"update_calls\":"<<updateCalls.load();
         report<<",\"world_color_captures\":[";
         for(unsigned captureIndex=0;captureIndex<colorCaptures.size();++captureIndex){if(captureIndex)report<<',';auto& capture=colorCaptures[captureIndex];
@@ -3766,6 +4346,11 @@ Sleep(DWORD(std::min<std::uint64_t>((toolFixture||config.ordinaryGrenadeInput==4
                 const bool shellAudioStopped=fvr::bc2::shellReloadAudio::Drain();
                 disabled=gameplayStopped&&menuStopped&&audioStopped&&shellAudioStopped&&fvr::bc2::rigWorkerRuntime::Quiescent()&&fvr::bc2::opticFilterRuntime::Quiescent();
             }
+        }
+        if(destructionWitnessEnabled){
+            bool drained=false;for(unsigned attempt=0;attempt<200;++attempt){if(destructionWitness.Stop()){drained=true;break;}Sleep(1);}
+            disabled=disabled&&drained;
+            if(drained)destructionWitness.Write(std::filesystem::path(config.reportPath).parent_path()/L"destruction-witness");
         }
         if(report)fvr::bc2::WriteProbeFailureJson(report,e.what(),disabled);return 20;}
 }

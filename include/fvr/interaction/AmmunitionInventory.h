@@ -83,6 +83,20 @@ public:
         if(selected_)if(auto* ledger=FindMutable(selected_->resource))ledger->Cancel();
         selected_.reset();
     }
+    // Adapter-only explicit native actor retirement; caller has excluded old
+    // callbacks and proved replacement. No ammunition transfer or count credit.
+    // Sequence/intent high-water marks survive, including address reuse.
+    std::size_t RetireActor(std::uint64_t actor,std::uint64_t throughGeneration)noexcept {
+        if(!actor||!throughGeneration)return 0;
+        const auto matches=[&](const AmmoResourceIdentity& r){return r.actor==actor&&r.actorGeneration<=throughGeneration;};
+        std::size_t count=0;
+        for(auto& slot:slots_)if(slot.Phase()!=AmmunitionLedgerPhase::Unbound&&matches(slot.Snapshot().context.resource)){
+            slot=AmmunitionLedger{};++count;
+        }
+        if(selected_&&matches(selected_->resource))selected_.reset();
+        if(selectionContext_&&matches(selectionContext_->resource))selectionContext_.reset();
+        return count;
+    }
     void Expire(std::int64_t now)noexcept {for(auto& ledger:slots_)ledger.Expire(now);}
     const AmmunitionLedger* Find(const AmmoResourceIdentity& resource)const noexcept {
         for(const auto& ledger:slots_)if(ledger.Phase()!=AmmunitionLedgerPhase::Unbound&&ledger.Snapshot().context.resource==resource)return &ledger;

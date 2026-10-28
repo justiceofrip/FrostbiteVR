@@ -13,7 +13,8 @@ struct WorldAndMenu final:runtime::IFrameProvider {
     ipc::RemoteFrameProvider remote;ipc::FrameChannel producer;ipc::MenuChannel menuHost,menuProducer;
     graphics::D3D11PairProducer textures;ComPtr<ID3D11Device> device;ComPtr<ID3D11DeviceContext> context;
     std::array<ComPtr<ID3D11Texture2D>,2> images;graphics::PairTicket waitingTicket{};
-    bool waiting=false,publishedMenu=false,expectedMenu=false;unsigned frame=0,errors=0,consumed=0,discarded=0,menuSuspends=0,menuFrames=0,oldPairDelivered=0;
+    bool waiting=false,publishedMenu=false,expectedMenu=false;unsigned frame=0,errors=0,consumed=0,discarded=0,menuSuspends=0,menuFrames=0,passiveFrames=0,oldPairDelivered=0;
+    ipc::MenuMode publishedMode=ipc::MenuMode::Gameplay;
     bool cancelledOpeningPair=false,resumedFresh=false,sourceAttempted=false,sourceReady=false;std::uint64_t epoch=0,stateSequence=0;
     unsigned (*layers)()=nullptr;unsigned previousLayers=0;
     bool Initialize(){return remote.Create()&&producer.ConnectProducer(remote.Token())&&menuHost.CreateHost(remote.Token())&&menuProducer.ConnectProducer(remote.Token());}
@@ -66,9 +67,13 @@ struct WorldAndMenu final:runtime::IFrameProvider {
             // Counter observes EndFrame of the preceding frame. No world image
             // may survive menu entry, even while the menu raster is unavailable.
             const auto nowLayers=layers();if(frame>=11&&frame<=19&&nowLayers!=previousLayers)Failure("world_layer_during_menu");previousLayers=nowLayers;
-            if(expectedMenu){++menuFrames;if(input.focused||input.hands[0].active||input.hands[1].active)Failure("menu_input_not_filtered");}
+            if(expectedMenu){++menuFrames;if(input.focused||input.hands[0].active||input.hands[1].active)Failure("menu_input_not_filtered");
+                if(publishedMode==ipc::MenuMode::Passive){++passiveFrames;
+                    if(input.menu.owner!=interaction::InputMenuOwner::Pending)Failure("passive_input_ownership");}}
             publishedMenu=frame>=9&&frame<=17;
-            const ipc::MenuState state{++stateSequence,publishedMenu?2u:3u,0,publishedMenu?ipc::MenuMode::Menu:ipc::MenuMode::Gameplay,1280,720,1};
+            publishedMode=publishedMenu?(frame>=13?ipc::MenuMode::Passive:ipc::MenuMode::Menu):ipc::MenuMode::Gameplay;
+            const ipc::MenuState state{++stateSequence,publishedMenu?2u:3u,0,publishedMode,1280,720,
+                publishedMode==ipc::MenuMode::Passive?0u:1u};
             const auto published=menuProducer.PublishState(state);if(published!=ipc::ChannelResult::Ok)Failure("publish_menu_state",long(published));
             remote.UpdateInput(input);Pump();
         }catch(...){Failure("input_exception");}
@@ -86,7 +91,7 @@ int wmain(int argc,wchar_t** argv){
         <<" old_pair_delivered="<<provider.oldPairDelivered<<" fresh_resume="<<provider.resumedFresh<<" consumed="<<provider.consumed<<" discarded="<<provider.discarded<<" errors="<<provider.errors+errors()
         <<" provider_errors="<<provider.errors<<" runtime_errors="<<errors()<<" ended="<<report.endedFrames<<" okay="<<report.okay<<'\n';
     CHECK(report.okay&&report.endedFrames==100&&errors()==0&&provider.errors==0);
-    CHECK(provider.menuFrames==9&&provider.menuSuspends>=provider.menuFrames&&provider.cancelledOpeningPair&&!provider.oldPairDelivered&&provider.resumedFresh);
+    CHECK(provider.menuFrames==9&&provider.passiveFrames==5&&provider.menuSuspends>=provider.menuFrames&&provider.cancelledOpeningPair&&!provider.oldPairDelivered&&provider.resumedFresh);
     CHECK(report.submittedPairs>20&&report.submittedPairs==provider.consumed&&!provider.waiting);
     CHECK(report.menuFrames==0&&report.menuErrors==0);FreeLibrary(dll);return 0;
 }

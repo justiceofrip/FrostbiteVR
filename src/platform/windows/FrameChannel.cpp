@@ -1,4 +1,5 @@
 #include "fvr/ipc/FrameChannel.h"
+#include "fvr/ipc/FramePipelineChannel.h"
 #include "fvr/ipc/FeedbackChannel.h"
 #include <Windows.h>
 #include <objbase.h>
@@ -14,7 +15,7 @@ struct Handle {
     void Set(HANDLE value){if(h)CloseHandle(h);h=value;}
 };
 struct alignas(8) Shared {
-    std::uint32_t magic=0x31434646,version=7,bytes=3504,reserved0=0;
+    std::uint32_t magic=0x31434646,version=8,bytes=3752,reserved0=0;
     std::array<std::uint8_t,16> session{};
     std::uint32_t hostPid=0,producerPid=0;
     std::uint64_t hostStarted=0,producerStarted=0;
@@ -22,9 +23,10 @@ struct alignas(8) Shared {
     graphics::BodyPropFrame props{};
     graphics::SceneDepthFrame depth{};
     InputPacket input{};
+    FrameRequest queued{};
     std::array<std::uint64_t,5> reserved{};
 };
-static_assert(sizeof(Shared)==3504 && offsetof(Shared,slot)==56);
+static_assert(sizeof(Shared)==3752 && offsetof(Shared,slot)==56);
 std::int64_t Now(){LARGE_INTEGER n{};return QueryPerformanceCounter(&n)?n.QuadPart:0;}
 std::uint64_t Started(HANDLE process){FILETIME created{},exited{},kernel{},user{};if(!GetProcessTimes(process,&created,&exited,&kernel,&user))return 0;return (std::uint64_t(created.dwHighDateTime)<<32)|created.dwLowDateTime;}
 bool TokenBytes(const std::wstring& token,std::array<std::uint8_t,16>& bytes){
@@ -35,8 +37,8 @@ std::wstring NewToken(){GUID guid{};if(FAILED(CoCreateGuid(&guid)))throw std::ru
 }
 struct FrameChannel::State {
     FeedbackChannel feedback;
-    bool host=false,fault=false,pendingAck=false,ackConsumed=false;
-    std::uint64_t active=0,next=0;
+    bool host=false,fault=false,pendingAck=false,ackConsumed=false,cancelRequested=false;
+    std::uint64_t active=0,next=0,deliveredId=0;
     graphics::PairTicket delivered{};graphics::BodyPropFrame deliveredProps{};
     graphics::SceneDepthFrame deliveredDepth{};
     Handle mapping,mutex,response,peer;
@@ -45,7 +47,7 @@ struct FrameChannel::State {
     std::int64_t frequency=0;
     ~State(){if(shared)UnmapViewOfFile(shared);}
     bool Header()const {
-        if(shared->magic!=0x31434646||shared->version!=7||shared->bytes!=sizeof(Shared)||shared->session!=session||shared->reserved0||!shared->hostPid||!shared->hostStarted)return false;
+        if(shared->magic!=0x31434646||shared->version!=8||shared->bytes!=sizeof(Shared)||shared->session!=session||shared->reserved0||!shared->hostPid||!shared->hostStarted)return false;
         for(auto v:shared->reserved)if(v)return false;
         return std::uint32_t(shared->slot.phase)<=std::uint32_t(Phase::Closed)&&!shared->slot.reserved&&shared->slot.consumed<=1;
     }
@@ -70,18 +72,36 @@ struct FrameChannel::State {
             if(!peer.h||!started||Started(peer.h)!=started){fault=true;shared->slot.phase=Phase::Closed;return false;}}
         if(WaitForSingleObject(peer.h,0)!=WAIT_TIMEOUT){fault=true;shared->slot.phase=Phase::Closed;return false;}return true;
     }
-    void FlushFeedback(){if(pendingAck){ipc::Acknowledge(shared->slot,active,ackConsumed);pendingAck=false;active=0;}}
+    void ApplyCancellation(){
+        if(!cancelRequested)return;
+        // Host-local intent survives a failed zero-wait lock. Apply it in the
+        // same critical section as any later ack, before the producer can
+        // promote a successor from the old tracking/menu ownership.
+        if(active){if(shared->queued.requestId==active)shared->queued={};else ipc::Cancel(shared->slot,active);active=0;}
+        cancelRequested=false;
+    }
+    void FlushFeedback(){ApplyCancellation();if(pendingAck){
+        // active may already identify the NEXT request. Only the exact old
+        // delivered id is allowed to release its GPU resources.
+        if(!ipc::Acknowledge(shared->slot,deliveredId,ackConsumed)){fault=true;shared->slot.phase=Phase::Closed;}
+        pendingAck=false;deliveredId=0;
+    }}
 };
 FrameChannel::FrameChannel()=default;
 FrameChannel::~FrameChannel(){Close();}
 void FrameChannel::Close()noexcept {
+    if(pipeline_){pipeline_->Close();pipeline_.reset();}
     if(state_){auto& s=*state_;{State::Lock lock(s,20);if(lock){s.FlushFeedback();s.shared->slot.phase=Phase::Closed;SetEvent(s.response.h);}}state_.reset();}token_.clear();
 }
 const std::wstring& FrameChannel::Token()const noexcept{return token_;}
-bool FrameChannel::CreateHost()noexcept {
+unsigned FrameChannel::SourceSlotCount()const noexcept{return pipeline_?pipeline_->SourceSlotCount():1u;}
+bool FrameChannel::CreateHost(bool twoSourceSlots,bool lookahead,bool exportOverlap,bool thirdSource)noexcept {
+    if((lookahead&&!twoSourceSlots)||(exportOverlap&&(!twoSourceSlots||!lookahead))||(thirdSource&&(!twoSourceSlots||!lookahead||!exportOverlap))){Close();return false;}
+    if(twoSourceSlots){Close();try{auto next=std::make_unique<FramePipelineChannel>();if(!next->CreateHost(lookahead,exportOverlap,thirdSource))return false;
+        token_=next->Token();pipeline_=std::move(next);return true;}catch(...){Close();return false;}}
     Close();try {
         auto s=std::make_unique<State>();s->host=true;const auto token=NewToken();if(!TokenBytes(token,s->session))return false;
-        const auto prefix=L"Local\\FrostbiteVR.Control.v7."+token;
+        const auto prefix=L"Local\\FrostbiteVR.Control.v8."+token;
         s->mutex.h=CreateMutexW(nullptr,FALSE,(prefix+L".mutex").c_str());if(!s->mutex.h||GetLastError()==ERROR_ALREADY_EXISTS)return false;
         s->response.h=CreateEventW(nullptr,FALSE,FALSE,(prefix+L".response").c_str());if(!s->response.h||GetLastError()==ERROR_ALREADY_EXISTS)return false;
         s->mapping.h=CreateFileMappingW(INVALID_HANDLE_VALUE,nullptr,PAGE_READWRITE,0,sizeof(Shared),(prefix+L".map").c_str());if(!s->mapping.h||GetLastError()==ERROR_ALREADY_EXISTS)return false;
@@ -93,9 +113,12 @@ bool FrameChannel::CreateHost()noexcept {
         token_=token;state_=std::move(s);return true;
     }catch(...){Close();return false;}
 }
-bool FrameChannel::ConnectProducer(const std::wstring& token)noexcept {
+bool FrameChannel::ConnectProducer(const std::wstring& token,bool twoSourceSlots,bool thirdSource)noexcept {
+    if(thirdSource&&!twoSourceSlots){Close();return false;}
+    if(twoSourceSlots){Close();try{auto next=std::make_unique<FramePipelineChannel>();if(!next->ConnectProducer(token,thirdSource))return false;
+        token_=token;pipeline_=std::move(next);return true;}catch(...){Close();return false;}}
     Close();try {
-        auto s=std::make_unique<State>();if(!TokenBytes(token,s->session))return false;const auto prefix=L"Local\\FrostbiteVR.Control.v7."+token;
+        auto s=std::make_unique<State>();if(!TokenBytes(token,s->session))return false;const auto prefix=L"Local\\FrostbiteVR.Control.v8."+token;
         s->mutex.h=OpenMutexW(SYNCHRONIZE|MUTEX_MODIFY_STATE,FALSE,(prefix+L".mutex").c_str());if(!s->mutex.h)return false;
         s->response.h=OpenEventW(EVENT_MODIFY_STATE|SYNCHRONIZE,FALSE,(prefix+L".response").c_str());if(!s->response.h)return false;
         s->mapping.h=OpenFileMappingW(FILE_MAP_READ|FILE_MAP_WRITE,FALSE,(prefix+L".map").c_str());if(!s->mapping.h)return false;
@@ -107,16 +130,23 @@ bool FrameChannel::ConnectProducer(const std::wstring& token)noexcept {
         token_=token;state_=std::move(s);return true;
     }catch(...){Close();return false;}
 }
-bool FrameChannel::Connected()noexcept {if(!state_)return false;auto& s=*state_;State::Lock lock(s);return lock&&s.Peer();}
-bool FrameChannel::PublishFeedback(const interaction::FeedbackEvent& e)noexcept {return state_&&!state_->host&&state_->feedback.Publish(e);}
-bool FrameChannel::TakeFeedback(interaction::FeedbackEvent& e)noexcept {e={};return state_&&state_->host&&state_->feedback.Take(e);}
+bool FrameChannel::Connected()noexcept {
+    if(pipeline_)return pipeline_->Connected();if(!state_)return false;auto& s=*state_;State::Lock lock(s);return lock&&s.Peer();}
+bool FrameChannel::PublishFeedback(const interaction::FeedbackEvent& e)noexcept {
+    if(pipeline_)return pipeline_->PublishFeedback(e);return state_&&!state_->host&&state_->feedback.Publish(e);}
+bool FrameChannel::TakeFeedback(interaction::FeedbackEvent& e)noexcept {
+    if(pipeline_)return pipeline_->TakeFeedback(e);e={};return state_&&state_->host&&state_->feedback.Take(e);}
 ChannelResult FrameChannel::RequestPair(const runtime::PresentationRequirements& requirements,const runtime::TrackingFrame& tracking,unsigned budgetMs,graphics::TextureDescriptor& d,graphics::PairTicket& t)noexcept {
+    if(pipeline_)return ChannelResult::Invalid;
     if(!state_||!state_->host)return ChannelResult::Closed;
     if(!budgetMs||budgetMs>50)return ChannelResult::Invalid;
     auto& s=*state_;std::int64_t deadline=0;
     {State::Lock lock(s);if(!lock)return s.fault?ChannelResult::Closed:ChannelResult::Busy;
         if(!s.Peer())return s.fault||s.shared->slot.phase==Phase::Closed?ChannelResult::Closed:ChannelResult::Busy;
         s.FlushFeedback();
+        if(s.fault)return ChannelResult::Closed;
+        if(s.deliveredId)return ChannelResult::Busy;
+        if(s.shared->queued.requestId==s.active)s.shared->queued={};
         if(s.active){if(s.shared->slot.phase==Phase::Delivered)return ChannelResult::Busy;Cancel(s.shared->slot,s.active);s.active=0;}
         if(s.shared->slot.phase!=Phase::Idle)return ChannelResult::Busy;
         const auto now=Now();const auto ticks=(s.frequency/1000)*budgetMs+(s.frequency%1000)*budgetMs/1000;
@@ -132,7 +162,7 @@ ChannelResult FrameChannel::RequestPair(const runtime::PresentationRequirements&
         // Every producer operation still uses a zero-time try-lock.
         {State::Lock lock(s,1);if(lock){
             if(!s.Peer())return ChannelResult::Closed;
-            if(Deliver(s.shared->slot,s.active,Now(),d,t)){s.delivered=t;s.deliveredProps=s.shared->props;s.deliveredDepth=s.shared->depth;return ChannelResult::Ok;}
+            if(Deliver(s.shared->slot,s.active,Now(),d,t)){s.deliveredId=s.active;s.active=0;s.delivered=t;s.deliveredProps=s.shared->props;s.deliveredDepth=s.shared->depth;return ChannelResult::Ok;}
             const auto phase=s.shared->slot.phase;
             if(phase==Phase::Idle||phase==Phase::Complete||phase==Phase::Cancelled){s.active=0;return ChannelResult::Timeout;}
         }else if(s.fault)return ChannelResult::Closed;else retryLock=true;}
@@ -149,24 +179,58 @@ ChannelResult FrameChannel::RequestPair(const runtime::PresentationRequirements&
     return ChannelResult::Timeout;
 }
 ChannelResult FrameChannel::BeginRequest(const runtime::PresentationRequirements& requirements,const runtime::TrackingFrame& tracking,unsigned lifetimeMs)noexcept {
+    if(pipeline_)return pipeline_->BeginRequest(requirements,tracking,lifetimeMs,false);
     if(!state_||!state_->host)return ChannelResult::Closed;
     if(!lifetimeMs||lifetimeMs>200)return ChannelResult::Invalid;
     auto& s=*state_;State::Lock lock(s);
     if(!lock)return s.fault?ChannelResult::Closed:ChannelResult::Busy;
     if(!s.Peer())return s.fault||s.shared->slot.phase==Phase::Closed?ChannelResult::Closed:ChannelResult::Busy;
-    s.FlushFeedback();if(s.active||s.shared->slot.phase!=Phase::Idle)return ChannelResult::Busy;
+    s.FlushFeedback();if(s.fault)return ChannelResult::Closed;
+    if(s.active||s.deliveredId||s.shared->queued.requestId||s.shared->slot.phase!=Phase::Idle)return ChannelResult::Busy;
     const auto now=Now(),ticks=(s.frequency/1000)*lifetimeMs+(s.frequency%1000)*lifetimeMs/1000;
     if(now<=0||ticks<=0||now>INT64_MAX-ticks||s.next==UINT64_MAX)return ChannelResult::Invalid;
     FrameRequest request{};
     if(!Encode(requirements,tracking,s.next+1,now+ticks,request)||!Begin(s.shared->slot,request,now))return ChannelResult::Invalid;
     s.active=++s.next;ResetEvent(s.response.h);return ChannelResult::Ok;
 }
-ChannelResult FrameChannel::PollRequest(graphics::TextureDescriptor& d,graphics::PairTicket& t)noexcept {
+ChannelResult FrameChannel::QueueRequest(const runtime::PresentationRequirements& requirements,const runtime::TrackingFrame& tracking,unsigned lifetimeMs)noexcept {
+    if(pipeline_)return pipeline_->BeginRequest(requirements,tracking,lifetimeMs,true);
+    if(!state_||!state_->host)return ChannelResult::Closed;
+    if(!lifetimeMs||lifetimeMs>200)return ChannelResult::Invalid;
+    auto& s=*state_;State::Lock lock(s);
+    if(!lock)return s.fault?ChannelResult::Closed:ChannelResult::Busy;
+    if(!s.Peer())return ChannelResult::Closed;
+    s.ApplyCancellation();
+    if(s.active||s.pendingAck||!s.deliveredId||s.shared->queued.requestId||
+       s.shared->slot.phase!=Phase::Delivered||s.shared->slot.request.requestId!=s.deliveredId)return ChannelResult::Busy;
+    const auto now=Now(),ticks=(s.frequency/1000)*lifetimeMs+(s.frequency%1000)*lifetimeMs/1000;
+    if(now<=0||ticks<=0||now>INT64_MAX-ticks||s.next==UINT64_MAX)return ChannelResult::Invalid;
+    FrameRequest request{};
+    if(!Encode(requirements,tracking,s.next+1,now+ticks,request))return ChannelResult::Invalid;
+    s.shared->queued=request;s.active=++s.next;return ChannelResult::Ok;
+}
+ChannelResult FrameChannel::SubmitLookaheadRequest(const runtime::PresentationRequirements& r,const runtime::TrackingFrame& t,unsigned ms)noexcept {
+    return pipeline_?pipeline_->SubmitLookaheadRequest(r,t,ms):ChannelResult::Invalid;
+}
+ChannelResult FrameChannel::PollRequest(graphics::TextureDescriptor& d,graphics::PairTicket& t,FrameTimeoutSnapshot* timeout)noexcept {
+    // v8 has no added wire observation; explicitly leave the local snapshot
+    // unavailable rather than infer an ID/phase after its existing mutations.
+    if(timeout)*timeout={};
+    if(pipeline_)return pipeline_->PollRequest(d,t,timeout);
     if(!state_||!state_->host)return ChannelResult::Closed;auto& s=*state_;
     State::Lock lock(s);if(!lock)return s.fault?ChannelResult::Closed:ChannelResult::Busy;
     if(!s.Peer())return ChannelResult::Closed;
-    if(!s.active)return ChannelResult::Invalid;
-    const auto now=Now();if(Deliver(s.shared->slot,s.active,now,d,t)){s.delivered=t;s.deliveredProps=s.shared->props;s.deliveredDepth=s.shared->depth;return ChannelResult::Ok;}
+    s.ApplyCancellation();
+    if(!s.active)return s.deliveredId?ChannelResult::Busy:ChannelResult::Invalid;
+    const auto now=Now();
+    if(s.shared->queued.requestId==s.active){
+        if(now<=0||now>=s.shared->queued.deadlineQpc){s.shared->queued={};s.active=0;return ChannelResult::Timeout;}
+        return ChannelResult::Busy;
+    }
+    // An expired queued request may have been dropped by TryTake. The old
+    // slot's Complete/Delivered phase and deadline never describe this request.
+    if(s.shared->slot.request.requestId!=s.active){s.active=0;return ChannelResult::Timeout;}
+    if(Deliver(s.shared->slot,s.active,now,d,t)){s.deliveredId=s.active;s.active=0;s.delivered=t;s.deliveredProps=s.shared->props;s.deliveredDepth=s.shared->depth;return ChannelResult::Ok;}
     const auto phase=s.shared->slot.phase;
     // Delivered images belong to the consumer even after their request deadline.
     if(phase==Phase::Delivered)return ChannelResult::Busy;
@@ -176,42 +240,56 @@ ChannelResult FrameChannel::PollRequest(graphics::TextureDescriptor& d,graphics:
     return ChannelResult::Busy;
 }
 ChannelResult FrameChannel::CancelRequest()noexcept {
+    if(pipeline_)return pipeline_->CancelRequest();
     if(!state_||!state_->host)return ChannelResult::Closed;auto& s=*state_;
+    s.cancelRequested=true;
     State::Lock lock(s);if(!lock)return s.fault?ChannelResult::Closed:ChannelResult::Busy;
-    s.FlushFeedback();if(!s.active)return ChannelResult::Ok;
-    if(s.shared->slot.phase==Phase::Delivered)return ChannelResult::Busy;
-    Cancel(s.shared->slot,s.active);s.active=0;return ChannelResult::Ok;
+    // Clear the successor BEFORE acknowledging the old pair, including when
+    // the GPU still owns it. Suspend must not launch a queued stale-space view.
+    s.FlushFeedback();if(s.fault)return ChannelResult::Closed;
+    return s.deliveredId?ChannelResult::Busy:ChannelResult::Ok;
 }
 ChannelResult FrameChannel::Feedback(const graphics::PairTicket& ticket,bool consumed)noexcept {
+    if(pipeline_)return pipeline_->Feedback(ticket,consumed);
     if(!state_||!state_->host)return ChannelResult::Closed;auto& s=*state_;
-    if(!s.active||std::memcmp(&s.delivered,&ticket,sizeof(ticket)))return ChannelResult::Invalid;
+    if(!s.deliveredId||std::memcmp(&s.delivered,&ticket,sizeof(ticket)))return ChannelResult::Invalid;
+    if(s.pendingAck&&s.ackConsumed!=consumed)return ChannelResult::Invalid;
     s.pendingAck=true;s.ackConsumed=consumed;return FlushFeedback();
 }
 ChannelResult FrameChannel::FlushFeedback()noexcept {
+    if(pipeline_)return pipeline_->FlushFeedback();
     if(!state_||!state_->host)return ChannelResult::Closed;auto& s=*state_;
-    if(!s.pendingAck)return ChannelResult::Ok;
+    if(!s.pendingAck&&!s.cancelRequested)return ChannelResult::Ok;
     State::Lock lock(s);if(!lock)return s.fault?ChannelResult::Closed:ChannelResult::Busy;
-    if(!s.Peer())return ChannelResult::Closed;s.FlushFeedback();return ChannelResult::Ok;
+    if(!s.Peer())return ChannelResult::Closed;s.FlushFeedback();return s.fault?ChannelResult::Closed:ChannelResult::Ok;
 }
 ChannelResult FrameChannel::TryTake(FrameRequest& out)noexcept {
+    if(pipeline_)return ChannelResult::Invalid;
     if(!state_||state_->host)return ChannelResult::Closed;auto& s=*state_;if(s.active)return ChannelResult::Busy;
     State::Lock lock(s);if(!lock)return s.fault?ChannelResult::Closed:ChannelResult::Busy;
     if(!s.Peer())return ChannelResult::Closed;
+    if(s.shared->slot.phase==Phase::Idle&&s.shared->queued.requestId){
+        const auto request=s.shared->queued;s.shared->queued={};
+        if(!Begin(s.shared->slot,request,Now()))return ChannelResult::Busy;
+    }
     if(!Take(s.shared->slot,Now(),out))return ChannelResult::Busy;s.active=out.requestId;return ChannelResult::Ok;
 }
 bool FrameChannel::ReadBodyProps(const graphics::PairTicket& ticket,graphics::BodyPropFrame& out)noexcept {
+    if(pipeline_)return pipeline_->ReadBodyProps(ticket,out);
     out={};if(!state_||!state_->host)return false;const auto& s=*state_;
     if(std::memcmp(&ticket,&s.delivered,sizeof(ticket))||!graphics::BodyPropFrameMatches(s.deliveredProps,ticket))return false;
     out=s.deliveredProps;return true;
 }
 bool FrameChannel::ReadSceneDepth(const graphics::TextureDescriptor& descriptor,const graphics::PairTicket& ticket,graphics::SceneDepthFrame& out)noexcept {
+    if(pipeline_)return pipeline_->ReadSceneDepth(descriptor,ticket,out);
     out={};if(!state_||!state_->host)return false;auto& s=*state_;
-    if(!s.active||s.pendingAck||std::memcmp(&ticket,&s.delivered,sizeof(ticket))||
+    if(!s.deliveredId||s.pendingAck||std::memcmp(&ticket,&s.delivered,sizeof(ticket))||
        !graphics::SceneDepthMatches(s.deliveredDepth,descriptor,ticket))return false;
-    State::Lock lock(s);if(!lock||!s.Peer()||s.shared->slot.phase!=Phase::Delivered)return false;
+    State::Lock lock(s);if(!lock||!s.Peer()||s.shared->slot.phase!=Phase::Delivered||s.shared->slot.request.requestId!=s.deliveredId)return false;
     out=s.deliveredDepth;return true;
 }
 ChannelResult FrameChannel::Publish(const graphics::TextureDescriptor& d,const graphics::PairTicket& t,const graphics::BodyPropFrame* props,const graphics::SceneDepthFrame* depth)noexcept {
+    if(pipeline_)return ChannelResult::Invalid;
     if(!state_||state_->host)return ChannelResult::Closed;auto& s=*state_;if(!s.active)return ChannelResult::Invalid;
     State::Lock lock(s);if(!lock)return s.fault?ChannelResult::Closed:ChannelResult::Busy;
     if(!s.Peer())return ChannelResult::Closed;
@@ -223,17 +301,20 @@ ChannelResult FrameChannel::Publish(const graphics::TextureDescriptor& d,const g
     return expired?ChannelResult::Timeout:ChannelResult::Invalid;
 }
 ChannelResult FrameChannel::Skip()noexcept {
+    if(pipeline_)return ChannelResult::Invalid;
     if(!state_||state_->host)return ChannelResult::Closed;auto& s=*state_;
     State::Lock lock(s);if(!lock)return s.fault?ChannelResult::Closed:ChannelResult::Busy;
     ipc::Skip(s.shared->slot,s.active);s.active=0;SetEvent(s.response.h);return ChannelResult::Ok;
 }
 Outcome FrameChannel::PollOutcome()noexcept {
+    if(pipeline_)return Outcome::Pending;
     if(!state_||state_->host)return Outcome::Discarded;auto& s=*state_;
     State::Lock lock(s);if(!lock)return s.fault?Outcome::Discarded:Outcome::Pending;
     if(!s.Peer()){s.active=0;return Outcome::Discarded;}
     const auto outcome=Reap(s.shared->slot,s.active,Now());if(outcome!=Outcome::Pending)s.active=0;return outcome;
 }
 ChannelResult FrameChannel::PublishInput(const interaction::InputFrame& input) noexcept {
+    if(pipeline_)return pipeline_->PublishInput(input);
     if(!state_||!state_->host)return ChannelResult::Invalid;auto& s=*state_;
     State::Lock lock(s);if(!lock)return s.fault?ChannelResult::Closed:ChannelResult::Busy;
     if(s.shared->slot.phase==Phase::Closed)return ChannelResult::Closed;
@@ -244,6 +325,7 @@ ChannelResult FrameChannel::PublishInput(const interaction::InputFrame& input) n
     s.shared->input=packet;return ChannelResult::Ok;
 }
 ChannelResult FrameChannel::ReadInput(interaction::InputFrame& out,std::int64_t* deadlineQpc) noexcept {
+    if(pipeline_)return pipeline_->ReadInput(out,deadlineQpc);
     if(deadlineQpc)*deadlineQpc=0;out={};if(!state_||state_->host)return ChannelResult::Invalid;auto& s=*state_;
     State::Lock lock(s);if(!lock)return s.fault?ChannelResult::Closed:ChannelResult::Busy;
     if(!s.Peer())return ChannelResult::Closed;
@@ -253,5 +335,16 @@ ChannelResult FrameChannel::ReadInput(interaction::InputFrame& out,std::int64_t*
     if(deadlineQpc)*deadlineQpc=s.shared->input.deadlineQpc;
     return ChannelResult::Ok;
 }
+
+bool FrameChannel::ReadSourceSlot(const graphics::PairTicket& t,runtime::SourceSlotIdentity& out)noexcept {out={};return pipeline_&&pipeline_->ReadSourceSlot(t,out);}
+bool FrameChannel::ExportOverlapEnabled()const noexcept {return pipeline_&&pipeline_->ExportOverlapEnabled();}
+ChannelResult FrameChannel::MarkCaptureReleased(const PipelineSlotKey& key)noexcept {return pipeline_?pipeline_->MarkCaptureReleased(key):ChannelResult::Invalid;}
+ChannelResult FrameChannel::TryTakePipeline(FrameRequest& r,PipelineSlotKey& key)noexcept {return pipeline_?pipeline_->TryTake(r,key):ChannelResult::Invalid;}
+ChannelResult FrameChannel::PublishPipeline(const PipelineSlotKey& key,const graphics::TextureDescriptor& d,const graphics::PairTicket& t,const graphics::BodyPropFrame* b,const graphics::SceneDepthFrame* z)noexcept {return pipeline_?pipeline_->Publish(key,d,t,b,z):ChannelResult::Invalid;}
+ChannelResult FrameChannel::SkipPipeline(const PipelineSlotKey& key)noexcept {return pipeline_?pipeline_->Skip(key):ChannelResult::Invalid;}
+ChannelResult FrameChannel::ClaimPipelineRetirement(const PipelineSlotKey& key,PipelineRetirement& out)noexcept {return pipeline_?pipeline_->ClaimRetirement(key,out):ChannelResult::Invalid;}
+ChannelResult FrameChannel::FinishPipelineRetirement(const PipelineRetirement& value)noexcept {return pipeline_?pipeline_->FinishRetirement(value):ChannelResult::Invalid;}
+ChannelResult FrameChannel::StopPipelineAdmission()noexcept {return pipeline_?pipeline_->StopAdmission():ChannelResult::Invalid;}
+ChannelResult FrameChannel::CheckPipelineSourcesDrained()noexcept {return pipeline_?pipeline_->CheckSourcesDrained():ChannelResult::Invalid;}
 
 }

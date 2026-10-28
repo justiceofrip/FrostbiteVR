@@ -41,4 +41,16 @@ inline std::optional<KnifeMotionGeometry> KnifeMotionFromGrip(const math::Pose& 
     direction.x/=length;direction.y/=length;direction.z/=length;
     return KnifeMotionGeometry{tip,direction};
 }
+// Current hand reach is independent of the arbitrary LOCAL origin. Validate
+// it without subtracting the moving head from the recognition coordinates.
+// The raw fixed-space tip/axis below still supplies physical velocity only.
+inline std::optional<KnifeMotionGeometry> KnifeMotionFromTrackedGrip(const interaction::InputFrame& input,
+    const math::Matrix4& measuredWristInGrip)noexcept {
+    if(!interaction::ValidInput(input)||!input.focused||!input.headValid||!input.hands[1].gripTracked)return {};
+    const auto grip=math::MakeRelativePose(input.referenceHead,input.hands[1].grip);
+    const auto head=math::MakeRelativePose(input.referenceHead,input.head);
+    if(!grip||!head||std::hypot(grip->position.x-head->position.x,
+       grip->position.y-head->position.y,grip->position.z-head->position.z)>1.5f)return {};
+    return KnifeMotionFromGrip(input.hands[1].grip,measuredWristInGrip);
+}
 }

@@ -1,4 +1,19 @@
-# Current 416: unchanged weapon coverage; latest human run is 414/source 415
+# Current 436 R56: representative shared-mechanic validation
+
+The October 28, 2026 developer checkpoint includes actual-game emulated checks
+for F2000/SPAS combined magazine/pump/shell/holster handling, SCAR magazine
+handling, MP443 magazine handling, AEK empty-magazine suppression and refill,
+and five M95 manual bolt cycles. These are scoped episodes on the shared
+integration, not approval of every weapon using the same magazine family.
+The final R56 Nambu100 check is tracked in [current state](CURRENT.md).
+
+See the [436 R56 handoff](../handoff/checkpoint436-r56/README.md) for counts,
+build provenance, and important limits. M95 magazine refill is still stock;
+manual belt-fed LMG loading, broader chamber/slide mechanics, combined normal
+tool-consumer validation, and complete campaign coverage remain unfinished.
+No new physical-headset acceptance is claimed by these emulated checks.
+
+# Historical 416: unchanged weapon coverage; latest human run was 414/source 415
 
 The latest headset feedback is the 2026-10-17 run of runtime 414 / source 415:
 holsters were reliable, the SPAS pump felt great, and pump audio was described as

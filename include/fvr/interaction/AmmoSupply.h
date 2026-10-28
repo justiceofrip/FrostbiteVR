@@ -91,6 +91,16 @@ struct AmmoSupplyRebaseline {
 // Durable completion of the original reservation after its hand/context ended.
 // The adapter must prove the exact native terminal outcome. This releases only
 // local custody; it supplies no current reserve and cannot create another item.
+// Exact old reservation after its native actor is explicitly retired/drained.
+// This releases local custody only; it is not an ammo acknowledgement, reserve
+// baseline, consumed event, or authority to create a replacement item.
+struct AmmoSupplyActorRetirement {
+    AmmoSupplyReservation reservation{};
+    HandInteractionOwner retiredOwner{};
+    std::uint64_t event=0;
+    std::int64_t observedNs=0;
+    bool nativeActorRetired=false;
+};
 struct AmmoSupplyTerminalReceipt {
     AmmoSupplyReservation reservation{};
     ManualReloadAck acknowledgement{};
@@ -148,6 +158,8 @@ public:
         const AmmoSupplyRebaseline&)noexcept;
     AmmoSupplyResolution SettleTerminal(const HandInteractionSample&,HandInteraction&,
         const AmmoSupplyTerminalReceipt&)noexcept;
+    AmmoSupplyResolution RetireActor(const HandInteractionSample&,HandInteraction&,
+        const AmmoSupplyActorRetirement&)noexcept;
     // Drops presentation; pending native work stays quarantined indefinitely.
     // Explicit confirmed receipt or verified post-drain baseline is required to
     // clear it. IDs are not reset.

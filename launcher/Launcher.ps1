@@ -47,6 +47,7 @@ if(-not $SmokeTest){
   <StackPanel Grid.Row="2">
    <Button x:Name="Launch" Content="LAUNCH BC2 IN VR" FontWeight="Bold" FontSize="17" Background="#E6A04A" Foreground="#161B1E" Padding="20,17" Margin="0,0,0,15" HorizontalAlignment="Stretch"/>
    <WrapPanel><CheckBox x:Name="Fresh" Content="Restart BC2 before launch"/><CheckBox x:Name="Local" Content="Use local checkpoint"/></WrapPanel>
+   <CheckBox x:Name="SteamCompatibility" Content="Steam compatibility (experimental)" ToolTip="Enable for the Steam edition. Saved for your next launch."/>
    <TextBlock Text="Choose Campaign from the menu in VR. Point with your right controller and select with its trigger. Hold X + Y on the left controller to open the pause menu; B goes back." FontSize="12" Foreground="#99AAA1" TextWrapping="Wrap" Margin="0,0,0,18"/>
   </StackPanel>
   <WrapPanel Grid.Row="3" Margin="0,0,0,10">
@@ -70,7 +71,7 @@ if(-not $SmokeTest){
 '@
 $window=[Windows.Markup.XamlReader]::Load([Xml.XmlNodeReader]::new($markup))
 $controls=@{}
-foreach($name in @('BuildLabel','GameFolder','ChooseGame','SettingsNotice','Launch','Fresh','Local','Stop','Validate','Logs','Feedback','Status','Progress','Check','Update','Rollback','Prerelease')){$controls[$name]=$window.FindName($name)}
+foreach($name in @('BuildLabel','GameFolder','ChooseGame','SettingsNotice','Launch','Fresh','Local','SteamCompatibility','Stop','Validate','Logs','Feedback','Status','Progress','Check','Update','Rollback','Prerelease')){$controls[$name]=$window.FindName($name)}
 $script:job=$null;$script:reopenRequired=$false;$script:jobStarted=$null
 $actions=@('Launch','Stop','Validate','Check','Update','Rollback','Feedback')
 function Show-Settings {
@@ -80,6 +81,7 @@ function Show-Settings {
     $runtimeLabel=if(-not $packageState.verified){'Installation needs repair'}elseif($package.runtime_entry){'Installed VR runtime'}elseif($script:hasLocalBackend){[string]$backend.label}else{'Launcher installed • VR runtime not installed yet'}
     $controls.BuildLabel.Text="$runtimeLabel  •  Launcher $($active.current)"
     $controls.Local.IsChecked=[bool](-not $package.runtime_entry -and $script:hasLocalBackend)
+    $controls.SteamCompatibility.IsChecked=($settings.steam_compatibility -is [bool] -and $settings.steam_compatibility)
     $controls.ChooseGame.Content=if($script:settingsState.needs_reset){'Reset and choose game folder…'}else{'Choose game folder…'}
     $controls.GameFolder.Text=if($settings.game_path -is [string] -and $settings.game_path){$settings.game_path}else{'No game folder selected'}
     $controls.SettingsNotice.Text=$script:settingsState.notice
@@ -97,6 +99,7 @@ function Set-Busy([bool]$Busy){
     $controls.ChooseGame.IsEnabled=-not $Busy -and -not $script:reopenRequired -and -not $script:settingsState.read_only
     $controls.Local.IsEnabled=-not $Busy -and [bool]($package.runtime_entry -and $script:hasLocalBackend)
     $controls.Fresh.IsEnabled=-not $Busy
+    $controls.SteamCompatibility.IsEnabled=-not $Busy -and -not $script:reopenRequired -and -not $script:settingsState.read_only -and -not $script:settingsState.needs_reset
     $controls.Progress.IsIndeterminate=$Busy
 }
 function Begin-Action([string]$Action){
@@ -121,6 +124,17 @@ function Begin-Action([string]$Action){
     }catch{$controls.Status.Text=$_.Exception.Message;Set-Busy $false}
 }
 Show-Settings;Set-Busy $false
+$controls.SteamCompatibility.Add_Click({
+    if(-not $controls.SteamCompatibility.IsEnabled){return}
+    try{
+        $script:settingsState=Save-FvrSteamCompatibility -InstallRoot $InstallRoot -Enabled ([bool]$controls.SteamCompatibility.IsChecked)
+    }catch{
+        $message=$_.Exception.Message
+        $script:settingsState=Read-FvrLauncherSettings -InstallRoot $InstallRoot -RefuseRepair
+        $script:settingsState.notice=$message
+    }
+    Show-Settings;Set-Busy $false
+})
 $controls.ChooseGame.Add_Click({
     try{
         $reset=[bool]$script:settingsState.needs_reset
@@ -162,8 +176,11 @@ $controls.Feedback.Add_Click({
 '@
         $dialog=[Windows.Markup.XamlReader]::Load([Xml.XmlNodeReader]::new($feedbackMarkup));$dialog.Owner=$window
         $dialog.FindName('OpenIssue').Add_Click({Start-Process -FilePath $draft.url}.GetNewClosure())
-        $dialog.FindName('SaveBundle').Add_Click({$dialog.Close();Begin-Action 'Feedback'}.GetNewClosure())
+        $dialog.FindName('SaveBundle').Add_Click({$dialog.Tag='SaveDiagnostics';$dialog.Close()}.GetNewClosure())
         $null=$dialog.ShowDialog()
+        # The modal callback's closure cannot resolve script-local functions.
+        # Dispatch here so worker ownership stays with the main launcher.
+        if($dialog.Tag -eq 'SaveDiagnostics'){Begin-Action 'Feedback'}
     } catch {$controls.Status.Text=$_.Exception.Message}
 })
 $timer=[Windows.Threading.DispatcherTimer]::new();$timer.Interval=[TimeSpan]::FromMilliseconds(400)

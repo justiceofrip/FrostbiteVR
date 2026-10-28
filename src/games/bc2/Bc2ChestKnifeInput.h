@@ -21,7 +21,7 @@ inline bool ChestKnifeControlsNeutral(const interaction::InputFrame& input)noexc
         if(hand.held||hand.trigger>.1f||std::hypot(hand.stickX,hand.stickY)>.1f)return false;
     return true;
 }
-// Left secondary = crouch, left click alone = sprint, right primary = jump.
+// Left secondary = sprint, left-only click/release = crouch, right primary = jump.
 // Axes are locomotion; Gameplay separately rejects an actual weapon flick.
 // Both-click recenter, Use, reload/equip buttons and triggers remain conflicts.
 inline bool ChestKnifeActionInputCurrent(const interaction::InputFrame& input)noexcept {

@@ -51,7 +51,7 @@ class PortablePackageTests(unittest.TestCase):
             root=Path(directory).resolve()
             self.assertIn(scratch.resolve(),root.parents)
             binaries={}
-            for key,name in (('probe','BC2NativeProbe.dll'),('host','BC2XrHost.exe'),('trace','BC2NativeTrace.exe')):
+            for key,name in package.RECEIPT_BINARIES.items():
                 path=root/name;path.write_bytes(('fixture-'+key).encode())
                 binaries[key]={'path':str(path),'sha256':package.sha(path)}
             record={'full_normal_builds':True,'diagnostic_only':False,'diagnostic_kind':'normal',
@@ -66,11 +66,29 @@ class PortablePackageTests(unittest.TestCase):
             self.assertFalse(runtime['game_assets_distributed'])
             self.assertFalse(result['bundled_ffmpeg'])
             self.assertTrue((out/'Dependencies.ps1').is_file())
+            self.assertTrue((out/'Resolution.ps1').is_file())
+            for name in ('BC2NativeResolution.exe','BC2ResolutionBootstrap.dll'):
+                self.assertEqual((out/'bin'/name).read_bytes(),(root/name).read_bytes())
             self.assertTrue((out/'config/ffmpeg-download.json').is_file())
             self.assertNotIn('G:\\',(out/'runtime.json').read_text())
             self.assertFalse(any(p.suffix in ('.fvrprop','.wav','.res','.fbrb') for p in out.rglob('*')))
             for entry in runtime['files']:
                 self.assertEqual(package.sha(out/entry['path']),entry['sha256'])
+            for key in ('resolution','resolution_bootstrap'):
+                entry=record['binaries'].pop(key)
+                receipt.write_text(json.dumps(record),encoding='utf-8')
+                missing=root/('missing-'+key)
+                with self.assertRaisesRegex(ValueError,'missing required binary: '+key):
+                    package.stage(ROOT,receipt,package.sha(receipt),missing,'0.1.4')
+                self.assertFalse(missing.exists())
+                record['binaries'][key]=entry
+                original=Path(entry['path']).read_bytes()
+                Path(entry['path']).write_bytes(b'changed resolution helper')
+                receipt.write_text(json.dumps(record),encoding='utf-8')
+                with self.assertRaisesRegex(ValueError,'Frozen binary changed: '+key):
+                    package.stage(ROOT,receipt,package.sha(receipt),root/('changed-'+key),'0.1.4')
+                Path(entry['path']).write_bytes(original)
+            receipt.write_text(json.dumps(record),encoding='utf-8')
             dependency=root/'dependencies.json'
             dependency.write_text(json.dumps({'files':[{'path':'ffmpeg/ffmpeg.exe','source':binaries['host']['path'],'sha256':binaries['host']['sha256']}]}),encoding='utf-8')
             with self.assertRaisesRegex(ValueError,'Only Python is bundled'):

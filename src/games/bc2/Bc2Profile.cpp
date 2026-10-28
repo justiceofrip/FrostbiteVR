@@ -134,19 +134,30 @@ std::optional<CameraCacheCandidates> DiscoverCameraCaches(std::span<const std::b
     const auto view=Find(b,pe,"56 8B F1 F6 06 01 74 05 E8 ?? ?? ?? ?? 8D 86 20 02 00 00 5E C3");
     const auto projection=Find(b,pe,"56 8B F1 F6 06 02 74 05 E8 ?? ?? ?? ?? 8D 86 E0 02 00 00 5E C3");
     const auto frustum=Find(b,pe,"56 8B F1 F6 06 08 74 05 E8 ?? ?? ?? ?? 8D 86 90 00 00 00 5E C3");
+    const auto scale=Find(b,pe,"56 8B F1 F6 06 04 74 05 E8 ?? ?? ?? ?? D9 86 18 02 00 00 5E C3");
+    const auto scaleSquared=Find(b,pe,"56 8B F1 F6 06 04 74 05 E8 ?? ?? ?? ?? D9 86 1C 02 00 00 5E C3");
     const auto updateView=Find(b,pe,"55 8B EC 83 E4 F0 81 EC 94 00 00 00 53 56 8B F1 57 8D 46 50 50 8D 4C 24 64 51 E8 ?? ?? ?? ?? 0F 10 08 0F 57 C0");
     const auto updateProjection=Find(b,pe,"55 8B EC 83 E4 F0 83 EC 44 53 56 8B F1 83 7E 04 01 57 75 3B 0F B6");
     const auto updateFrustum=Find(b,pe,"51 56 8B F1 83 7E 04 01 D9 46 20 75 35 0F B6 46 08 50 8D 4E");
-    if(!view||!projection||!frustum||!updateView||!updateProjection||!updateFrustum)return {};
-    for(auto pair:{std::pair{*view,*updateView},std::pair{*projection,*updateProjection},std::pair{*frustum,*updateFrustum}}){
+    const auto updateScale=Find(b,pe,"83 EC 18 56 8B F1 D9 46 10 D8 4E 0C DC 0D ?? ?? ?? ?? D9 5C 24 04");
+    if(!view||!projection||!frustum||!scale||!scaleSquared||!updateView||!updateProjection||!updateFrustum||!updateScale)return {};
+    for(auto pair:{std::pair{*view,*updateView},std::pair{*projection,*updateProjection},std::pair{*frustum,*updateFrustum},std::pair{*scale,*updateScale},std::pair{*scaleSquared,*updateScale}}){
         const auto offset=Offset(pe,pair.first,21);if(!offset||std::int64_t(pair.first)+13+std::int32_t(U32(b,*offset+9))!=pair.second)return {};
     }
     const unsigned char viewTail[]={0x83,0x26,0xfe,0x5f,0x5e,0x5b,0x8b,0xe5,0x5d,0xc3};
     const unsigned char projectionTail[]={0x83,0x26,0xfd,0x5f,0x5e,0x5b,0x8b,0xe5,0x5d,0xc3};
     const unsigned char frustumTail[]={0x83,0x26,0xf7,0x5e,0x59,0xc3};
+    // Dirty bit4 belongs to the native scalar cache, separate from view,
+    // projection and frustum. Both getters must reach this exact updater.
+    const unsigned char scaleStore[]={0xd9,0x9e,0x10,0x02,0,0};
+    const unsigned char scaleTail[]={0x83,0x26,0xfb,0xd9,0x96,0x14,0x02,0,0,0xd8,0x74,0x24,0x10,
+        0xd9,0x5c,0x24,0x10,0xd9,0x44,0x24,0x10,0xd9,0x96,0x18,0x02,0,0,0xdc,0xc8,
+        0xd9,0x9e,0x1c,0x02,0,0,0x5e,0x83,0xc4,0x18,0xc3};
     const auto v=Offset(pe,*updateView+0x1d5,sizeof(viewTail)),p=Offset(pe,*updateProjection+0x1c1,sizeof(projectionTail)),f=Offset(pe,*updateFrustum+0x7c,sizeof(frustumTail));
     if(!v||!p||!f||std::memcmp(b.data()+*v,viewTail,sizeof(viewTail))||std::memcmp(b.data()+*p,projectionTail,sizeof(projectionTail))||std::memcmp(b.data()+*f,frustumTail,sizeof(frustumTail)))return {};
-    return CameraCacheCandidates{*view,*projection,*frustum,*updateView,*updateProjection,*updateFrustum};
+    const auto s=Offset(pe,*updateScale+0xc4,sizeof(scaleStore)),st=Offset(pe,*updateScale+0x185,sizeof(scaleTail));
+    if(!s||!st||std::memcmp(b.data()+*s,scaleStore,sizeof(scaleStore))||std::memcmp(b.data()+*st,scaleTail,sizeof(scaleTail)))return {};
+    return CameraCacheCandidates{*view,*projection,*frustum,*updateView,*updateProjection,*updateFrustum,*scale,*scaleSquared,*updateScale};
 }
 }
 
@@ -257,11 +268,12 @@ std::optional<ProjectionOverrideCandidates> DiscoverProjectionOverrides(std::spa
     const auto setter=Find(b,pe,"55 8B EC 83 E4 F0 83 EC 4C 56 8B F1 8B 46 0C 81 4E 08 00 80 00 00 80 46 07 01 89 46 0C");
     const auto mesh=Find(b,pe,"F6 84 24 90 00 00 00 02 74 0C 8D 8C 24 90 00 00 00 E8 ?? ?? ?? ?? 8D 8C 24 70 03 00 00 51 8B CE E8 ?? ?? ?? ?? 80 7D 34 00");
     const auto terrain=Find(b,pe,"F6 84 24 C0 00 00 00 02 8B D8 74 0C 8D 8C 24 C0 00 00 00 E8 ?? ?? ?? ?? 8D 8C 24 A0 03 00 00 51 8B CB E8 ?? ?? ?? ?? 8B 54 24 20");
-    if(!setter||!mesh||!terrain)return {};
+    const auto edge=Find(b,pe,"F6 44 24 40 02 8B D8 74 09 8D 4C 24 40 E8 ?? ?? ?? ?? 8D 84 24 20 03 00 00 50 8B CB E8 ?? ?? ?? ??");
+    if(!setter||!mesh||!terrain||!edge)return {};
     const auto linked=[&](unsigned call){const auto at=Offset(pe,call,5);return at&&b[*at]==std::byte{0xe8}&&std::int64_t(call)+5+std::int32_t(U32(b,*at+1))==*setter;};
     const auto at=Offset(pe,*setter,0x6d);const unsigned char tail[]={0x89,0x46,0x20,0x5e,0x8b,0xe5,0x5d,0xc2,4,0};
-    if(!at||std::memcmp(b.data()+*at+0x63,tail,sizeof(tail))||!linked(*camera+0xa4)||!linked(*mesh+0x20)||!linked(*terrain+0x22))return {};
-    return ProjectionOverrideCandidates{*setter,*mesh+0x25,*terrain+0x27};
+    if(!at||std::memcmp(b.data()+*at+0x63,tail,sizeof(tail))||!linked(*camera+0xa4)||!linked(*mesh+0x20)||!linked(*terrain+0x22)||!linked(*edge+0x1c))return {};
+    return ProjectionOverrideCandidates{*setter,*mesh+0x25,*terrain+0x27,*edge+0x21};
 }
 }
 

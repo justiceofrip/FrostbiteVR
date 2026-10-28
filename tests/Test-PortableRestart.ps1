@@ -52,7 +52,7 @@ function Start-Bc2Child($File,$Arguments,$Folder,$LogName,$Environment=@{}) {
 $startup=@'
 function Test-Bc2GameInstallation {return @{exe=(Join-Path $PSScriptRoot 'game/BFBC2Game.exe');sha256=('c'*64)}}
 function Get-Bc2OpenXrSelection {return @{manifest='fixture-runtime.json';label='fixture only'}}
-function Invoke-Bc2OpenXrPreflight {Event 'preflight';return @{}}
+function Invoke-Bc2OpenXrPreflight {Event 'preflight';return @{instance_created=$true;system_available=$true;eye_width=2784;eye_height=3024;recommended_eye_width=2784;recommended_eye_height=3024;max_eye_width=8192;max_eye_height=8192}}
 '@
 $dependencies=@'
 function Get-Bc2PreparationFfmpeg {Event 'dependency';return 'fixture-decoder-never-executed'}
@@ -64,7 +64,7 @@ try {
     $app=Join-Path $root 'package/app';$runtime=Join-Path $root 'package/runtime'
     foreach($p in @($app,$runtime)){[IO.Directory]::CreateDirectory($p)|Out-Null}
     foreach($name in @('Launcher.Core.ps1','Launcher.Storage.ps1')){Copy-Item -LiteralPath (Join-Path $repo ('launcher/'+$name)) -Destination $app}
-    foreach($name in @('Entry.ps1','Runtime.Core.ps1')){Copy-Item -LiteralPath (Join-Path $repo ('launcher/runtime/'+$name)) -Destination $runtime}
+    foreach($name in @('Entry.ps1','Runtime.Core.ps1','Resolution.ps1')){Copy-Item -LiteralPath (Join-Path $repo ('launcher/runtime/'+$name)) -Destination $runtime}
     [IO.File]::AppendAllText((Join-Path $runtime 'Runtime.Core.ps1'),"`n"+$boundary)
     [IO.File]::WriteAllText((Join-Path $runtime 'Startup.ps1'),$startup)
     [IO.File]::WriteAllText((Join-Path $runtime 'Dependencies.ps1'),$dependencies)
