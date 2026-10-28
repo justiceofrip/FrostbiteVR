@@ -171,6 +171,10 @@ public:
     // loss. An empty well resumes with a seat-only plan; no fake unseat ack or
     // ammunition write. A still-held original must be resolved by its owner.
     bool RestoreResource(const DetachableMagazineSample&,HandInteraction&,std::optional<DetachableMagazineConfig> = {})noexcept;
+    // Same-item tracking interruption only. The adapter retains the durable
+    // original resource; current recorded geometry acquires a NEW hand lease.
+    // No native transfer, old pose, gesture progress or acknowledgement is replayed.
+    bool ResumeOriginalResource(const DetachableMagazineSample&,HandInteraction&)noexcept;
 private:
     DetachableMagazineResult Snapshot()const noexcept;
     DetachableMagazineResult Reject(const HandInteractionSample&,HandInteraction&,DetachableMagazineReason)noexcept;

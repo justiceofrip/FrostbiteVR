@@ -1,0 +1,43 @@
+CHAT04 deterministic validation - October 28, 2026
+Level: deterministic tests using mocked native callbacks; no actual-game/headset evidence.
+Final result: 11/11 passed, MSVC 19.51.36257.0, x64 Release/static CRT.
+Harness: standalone portable libraries, default compiled profile (XM8 only).
+It does not configure/build normal runtime targets or inherit normal feature flags.
+Bc2Gameplay.cpp is reviewed source only; normal x86/x64 compilation is pending.
+
+Reproduce from this worktree:
+pwsh -NoProfile -File handoff/tasks/CHAT04/20261028-tracking-custody-r1/Validate.ps1
+The script admits 512MiB via StorageBudget and inventories canonical generated
+roots as well as its own output. All TEMP/TMP/TMPDIR and compiler output stay on G:.
+Initial sandbox storage scan could not read protected recovery folders; the same
+guard passed with sufficient read access. No inventory failure was bypassed.
+
+Passed suites
+Bc2MagazineResource, DetachableMagazine, Bc2MagazinePhysical,
+Bc2PhysicalPumpRecovery, Bc2PhysicalBoltRecovery, Bc2BoltPlayerCustody,
+M95BoltCustody, SupportOwnershipRecovery, HandInteraction, AmmoSupply,
+Bc2AmmoResourceService.
+New regression cases cover original tracking interruption, repeated packets,
+missing raw/render contact, duplicate suspension, cleared hands/no gun claim,
+stale/wrong raw and resource identity, pending native convergence, partial pull,
+250ms missing input, deliberate release and another removal after recovery.
+Expired helper rows remain rejected; new branch Updates prove convergence.
+Native request intent and command namespaces are deliberately unequal in the test.
+
+Retained local evidence (not copied into Git)
+Under this worktree's test-temp/chat04-portable/:
+baseline-failure.log: original pre-fix reproduction failed its held-resource check.
+expanded-regression-failure.log: new pending fixture initially used expired rows.
+pending-convergence-failure.log: fresh rows exposed pending recovery rejection.
+pending-namespace-failure.log: isolated diagnosis identified request/command ID mix.
+tests.log: final 11/11 success; compile.log/configure.log: standalone build output.
+objects/Testing/Temporary/LastTest.log: final complete individual suite output.
+storage.json: final successful storage admission.
+Earlier failures remain failures; final pass does not replace their evidence.
+
+Review/checks
+Independent source review plus root review; no unresolved blocker for this patch.
+git -c core.whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol diff --check
+passes with the repository's existing CRLF text policy (* -text).
+Native and headset acceptance, replacement custody and bolt-root recovery remain
+open as detailed in HANDOFF.txt and NATIVE-CHECKS.txt.

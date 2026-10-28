@@ -102,6 +102,9 @@ bool Bc2MagazinePhysicalReload::RollbackUnstarted(const HandInteractionSample& i
  unseat_.reset();startupPulse_.reset();lease_.reset();gate_.reset();ack_.reset();originalMagazine_.reset();originalReserve_.reset();last_={};history_={};historyNext_=0;++unstarted_;
  return true;
 }
+void Bc2MagazinePhysicalReload::Suspend(const HandInteractionSample& in,HandInteraction& hands)noexcept {
+ if(resource_)resource_->Suspend(in,hands);else Cancel(in,hands);
+}
 void Bc2MagazinePhysicalReload::Cancel(const HandInteractionSample& in,HandInteraction& hands,MagazineCancelCause cause)noexcept {
  if(resource_){resource_->Cancel(in,hands);return;}
  emittedPresentation_.reset();

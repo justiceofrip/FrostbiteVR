@@ -21,6 +21,7 @@ public:
         interaction::AmmoSupplyConfig=Bc2MagazinePhysicalReload::DefaultPouch())noexcept;
     MagazinePhysicalResult Tick(const MagazinePhysicalSample&,interaction::HandInteraction&,std::uint64_t& sharedIntent)noexcept;
     void Cancel(const interaction::HandInteractionSample&,interaction::HandInteraction&)noexcept;
+    void Suspend(const interaction::HandInteractionSample&,interaction::HandInteraction&)noexcept;
     bool BlocksEquipment()const noexcept{return busy_;}
     void EnableBodyAmmo(bool enabled=true,interaction::SupplyAnchorFrame frame=interaction::SupplyAnchorFrame::HeadYaw)noexcept {bodyAmmo_=enabled;frame_=frame;}
     void Report(std::ostream&)const;
@@ -63,6 +64,8 @@ private:
     std::uint64_t event_=0,cycle_=0,sequence_=0,seatedEvent_=0;
     interaction::AmmunitionOperation operation_{};bool discard_=false,pending_=false,busy_=false,bodyAmmo_=false;
     bool needRestore_=false;
+    bool suspendedOriginal_=false;
+    std::uint64_t suspendedSequence_=0;
     interaction::SupplyAnchorFrame frame_=interaction::SupplyAnchorFrame::HeadYaw;
     unsigned submitted_=0,completed_=0,acquired_=0,rejected_=0;
 };

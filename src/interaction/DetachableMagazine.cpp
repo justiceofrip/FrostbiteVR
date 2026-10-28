@@ -127,7 +127,7 @@ bool DetachableMagazine::CompleteOriginalResourceReturn(const HandInteractionSam
  if(removal_)hands.Release(in,removal_->token);removal_.reset();transaction_.Reset();insertion_.Reset();
  original_.reset();originalInsertion_.reset();originalSeat_.reset();cached_={};
  seen_=neutral_=ejectMode_=pulled_=gateAccepted_=false;pending_.reset();cycle_=cancelledRequest_=lastGeometry_=0;
- history_={};historyNext_=0;resourceOwner_.reset();return true;
+ history_={};historyNext_=0;resourceOwner_.reset();return transaction_.Reconfigure(TransactionConfig(config_));
 }
 bool DetachableMagazine::FinishResourceCycle()noexcept {
  if(config_.backend!=MagazineControlBackend::AmmunitionResource||cached_.phase!=DetachableMagazinePhase::Complete||pending_||removal_)return false;
@@ -157,6 +157,41 @@ bool DetachableMagazine::RestoreResource(const DetachableMagazineSample& s,HandI
  owner_=in.owner;weapon_=s.weapon;epoch_=s.trackingEpoch;resourceOwner_=r.snapshot.context;
  seen_=neutral_=ejectMode_=false;cancelledRequest_=lastGeometry_=0;history_={};historyNext_=0;
  return true;
+}
+bool DetachableMagazine::ResumeOriginalResource(const DetachableMagazineSample& s,HandInteraction& hands)noexcept {
+ const auto& in=s.input;
+ if(config_.backend!=MagazineControlBackend::AmmunitionResource||cached_.phase!=DetachableMagazinePhase::Cancelled||
+    !original_||!s.original||*s.original!=*original_||!s.resource||!s.resource->settled||!s.geometryInput||
+    in.owner!=owner_||s.weapon!=weapon_||s.trackingEpoch!=epoch_||in.sequence<=sequence_||in.nowNs<lastNow_||
+    !in.focused||!in.tracked[0]||!in.tracked[1]||in.released[1]||in.released[static_cast<unsigned>(config_.hand)]||!s.gripPressed||
+    in.observedNs<=0||in.observedNs>in.nowNs||in.deadlineNs<=in.nowNs||in.deadlineNs-in.observedNs>config_.insertion.maxSampleGapNs||
+    !ResourceOwner(*s.resource,in.owner,s.weapon,in.nowNs)||!Rigid(s.weaponFromHandMeters)||!Rigid(itemFromGrip_))return false;
+ const auto& r=*s.resource;const auto& geometry=*s.geometryInput;AmmunitionLedger validation;
+ if(!validation.Bind(r.snapshot,in.nowNs)||!r.wellEmpty||r.snapshot.counts.loaded!=0||
+    r.originalState!=MagazineResourceState::Held||!r.original||r.original->owner!=r.snapshot.context.resource||
+    !s.native.cycle||r.original->id!=s.native.cycle||(cycle_&&cycle_!=r.original->id)||
+    r.original->rounds!=int(original_->rounds)||r.original->capacity!=int(original_->capacity)||
+    (resourceOwner_&&*resourceOwner_!=r.snapshot.context)||geometry.sequence<=sequence_||
+    s.geometrySequence!=geometry.sequence||!hands.HasRecordedEvidence(geometry,config_.hand))return false;
+ // A partial extraction must restart at its real grab contact. A jump during
+ // unobserved tracking cannot become the missing pull stroke.
+ if(!pulled_&&Distance(s.weaponFromHandMeters,grabRaw_)>config_.grabRadiusMeters)return false;
+ const auto other=config_.hand==InteractionHand::Left?InteractionHand::Right:InteractionHand::Left;
+ const auto gun=hands.Current(other);
+ if(!gun||gun->token.kind!=HandClaimKind::GunHold||gun->token.owner!=in.owner||gun->token.item!=weapon_||
+    gun->inputSequence!=in.sequence||gun->deadlineNs<=in.nowNs||hands.Current(config_.hand))return false;
+ auto plan=TransactionConfig(config_);plan.steps[0]={ReloadOperation::SeatMagazine,1};plan.stepCount=1;
+ if(!transaction_.Reconfigure(plan))return false;
+ const auto acquired=hands.AcquireFrom(in,geometry,{in.owner,config_.hand,HandClaimKind::Mechanism,weapon_,
+    {config_.removalContact,geometry.sequence,geometry.deadlineNs,true},s.intent,gun->token.id});
+ if(!acquired.accepted||!acquired.claim)return false;
+ removal_=acquired.claim;previousRaw_=s.weaponFromHandMeters;insertion_.Reset();
+ auto profile=config_.insertion;profile.itemFromHand=itemFromGrip_;originalInsertion_.emplace(profile);originalSeat_.reset();pending_.reset();
+ cycle_=r.original->id;gateAccepted_=true;resourceOwner_=r.snapshot.context;
+ cached_={};cached_.phase=pulled_?DetachableMagazinePhase::RemovedHeld:DetachableMagazinePhase::Pulling;
+ cached_.nativeCycle=cycle_;cached_.original=original_;cached_.removalClaim=removal_;
+ sequence_=in.sequence;observed_=in.observedNs;deadline_=in.deadlineNs;lastNow_=in.nowNs;seen_=true;neutral_=false;
+ lastGeometry_=geometry.sequence;history_={};historyNext_=0;cancelledRequest_=0;return true;
 }
 MagazinePropTarget DetachableMagazine::Target(const DetachableMagazineSample& s,const HandClaim& gun,MagazinePropRole role,
     const math::Matrix4& item,const math::Matrix4& hand,std::optional<HandClaim> claim)const noexcept {

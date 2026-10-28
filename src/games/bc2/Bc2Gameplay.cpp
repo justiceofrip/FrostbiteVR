@@ -212,7 +212,7 @@ void PublishMechanismAudio(const ReloadStateOwner& native,const interaction::Han
     mechanismAudio::Publish(source);
     if(event)mechanismAudio::Emit(*event);
 }
-void CancelPhysicalReload(PhysicalReloadResult* unpublished=nullptr,unsigned sourceFlags=0)noexcept;
+void CancelPhysicalReload(PhysicalReloadResult* unpublished=nullptr,unsigned sourceFlags=0,bool preserveMagazine=false)noexcept;
 void CancelWeaponVisibilityProbe()noexcept;
 std::optional<Bc2EmptyFireProbe> emptyFireFixture;
 #ifdef FVR_BC2_ARMING_EMPTY_PROBE
@@ -233,7 +233,7 @@ void ClearReloadOwner(ReloadOwnerLoss loss=ReloadOwnerLoss::LifetimeEnded)noexce
 #ifdef FVR_BC2_ARMING_EMPTY_PROBE
 if(armingEmptyFixture)armingEmptyFixture->Cancel();
 #endif
-if(emptyFireFixture)emptyFireFixture->Cancel();CancelWeaponVisibilityProbe();CancelPhysicalReload();selectedMeshes.Clear();reloadFlowRuntime::ClearOwner(loss);}
+if(emptyFireFixture)emptyFireFixture->Cancel();CancelWeaponVisibilityProbe();CancelPhysicalReload(nullptr,0,loss==ReloadOwnerLoss::PresentationUnavailable);selectedMeshes.Clear();reloadFlowRuntime::ClearOwner(loss);}
 std::array<ReloadStateSnapshot,128> reloadSnapshots{};
 unsigned reloadSnapshotCount=0;std::array<unsigned,7> reloadStatuses{};
 std::array<unsigned,4> reloadPublicationStatuses{};std::array<unsigned,10> reloadPublicationReasons{};
@@ -690,7 +690,7 @@ void CancelWeaponVisibilityProbe()noexcept {
     rigPublication::PublishWeaponVisibility({});weaponVisibilitySample.store({},std::memory_order_release);
 }
 void SuppressMagazineRecovery()noexcept;
-void CancelPhysicalReload(PhysicalReloadResult* unpublished,unsigned sourceFlags)noexcept {
+void CancelPhysicalReload(PhysicalReloadResult* unpublished,unsigned sourceFlags,bool preserveMagazine)noexcept {
     if(physicalPump&&(!ordinaryManualCycles||handNativeEquipment.Asset()==SpasReloadAsset)){auto current=handSample;LARGE_INTEGER clock{};
         if(QueryPerformanceCounter(&clock))current.nowNs=HandNanos(clock.QuadPart);physicalPump->Cancel(current,handOwnership);}
     if(physicalBolt&&(!ordinaryManualCycles||handNativeEquipment.Asset()=="M95_sp")){auto current=handSample;LARGE_INTEGER clock{};
@@ -701,7 +701,9 @@ void CancelPhysicalReload(PhysicalReloadResult* unpublished,unsigned sourceFlags
     if(unpublished)*unpublished={};
     if(magazineDetached){magazineDetached->Invalidate();SuppressMagazineRecovery();}
     if(magazinePhysical){auto safety=handSample;LARGE_INTEGER now{};
-        if(QueryPerformanceCounter(&now))safety.nowNs=HandNanos(now.QuadPart);magazinePhysical->Cancel(safety,handOwnership);}
+        if(QueryPerformanceCounter(&now))safety.nowNs=HandNanos(now.QuadPart);
+        if(preserveMagazine)magazinePhysical->Suspend(safety,handOwnership);
+        else magazinePhysical->Cancel(safety,handOwnership);}
     if(physicalReload){auto safety=handSample;LARGE_INTEGER now{};if(QueryPerformanceCounter(&now))safety.nowNs=HandNanos(now.QuadPart);
         physicalReload->Cancel(safety,handOwnership,sourceFlags?PhysicalReloadCancelReason::RequestedInput:PhysicalReloadCancelReason::External,sourceFlags);}
 }
@@ -755,11 +757,13 @@ void InvalidateBodyHolster(bool trackingGap=false,BodyHolsterLifecycleReason rea
             else ++holsterSuppressionFailures;}
     }
 }
-void ResetHandOwnership(const char* reason)noexcept {
+void ResetHandOwnership(const char* reason,bool preserveMagazine=false)noexcept {
 #ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
     (void)selectedKnife::Missing();
 #endif
-    CancelPhysicalReload();
+    // Invalidating pose leases must not discard an original magazine merely
+    // because tracking vanished. This can follow ClearReloadOwner in one tick.
+    CancelPhysicalReload(nullptr,0,preserveMagazine||!std::strcmp(reason,"input_unavailable"));
     if(bodyInventory&&std::strcmp(reason,"identity")){
         const auto cause=!std::strcmp(reason,"input_unavailable")?BodyHolsterLifecycleReason::InputUnavailable:
             !std::strcmp(reason,"owner_unavailable")?BodyHolsterLifecycleReason::OwnerUnavailable:
@@ -1678,7 +1682,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     Owner check{};const bool ownerResolved=Resolve(check);
     if(!ownerResolved||check!=owner||!Writable(owner.cache,InputBytes)){
         ClearReloadOwner(ownerResolved&&check!=owner?ReloadOwnerLoss::LifetimeEnded:ReloadOwnerLoss::PresentationUnavailable);
-        CancelSight();ResetSupportGrip("owner_unavailable");ResetHandOwnership("owner_unavailable");rigPublication::PublishTracking({});return;}
+        CancelSight();ResetSupportGrip("owner_unavailable");ResetHandOwnership("owner_unavailable",!ownerResolved||check==owner);rigPublication::PublishTracking({});return;}
     const auto aimer=U32(owner.aim+8);
     float nativeYaw=0;const bool aimValid=owner.aim&&U32(U32(owner.aim)+0x28)==0&&Type(U32(aimer),"HaloAimerData")&&
         Read(aimer+12,&nativeYaw,4)&&std::isfinite(nativeYaw)&&std::abs(nativeYaw)<100&&Writable(aimer+12,8)&&Writable(owner.aim+12,8);
@@ -2896,7 +2900,9 @@ void __fastcall GatherHook(void* self,void*,void* cache){
                 [](void*,unsigned at,const char* name){return Type(at,name);}};
             selectionRearm=bodyInventory->RetainOrdinaryDrawRearm(memory,*holsterBodySample,out,onlySemanticRearm);
         }
-        CancelPhysicalReload();InvalidateBodyHolster(rearm,rearm?BodyHolsterLifecycleReason::InputRearm:BodyHolsterLifecycleReason::InputApplyRejected);
+        const bool magazineRearm=!out.active&&out.owner==owner.soldier&&
+            !grenade.value_or(false)&&!cycle.value_or(false)&&!weaponMode&&!pendingMode&&!bodyDraw.command&&!holsterEquipment;
+        CancelPhysicalReload(nullptr,0,magazineRearm);InvalidateBodyHolster(rearm,rearm?BodyHolsterLifecycleReason::InputRearm:BodyHolsterLifecycleReason::InputApplyRejected);
         if(bodyInventory&&!selectionRearm)bodyInventory->SuspendInteraction();if(weaponMode&&pendingMode){modeRecords[*pendingMode].cancelled=true;pendingMode.reset();--modeRequests;++modeRejections;}
     }
 }

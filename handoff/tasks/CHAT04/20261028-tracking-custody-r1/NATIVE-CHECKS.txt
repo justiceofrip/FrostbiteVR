@@ -1,0 +1,46 @@
+CHAT04 integration checks: tracking gaps and persistent weapon state
+These are requested checks, not completed native or headset evidence.
+
+Integrator preparation
+Read the canonical INTEGRATE.txt and acquire its exclusive integration lease.
+Review this task commit on the recorded base; build normal x86 and x64 there.
+Preserve the existing normal feature flags, operation table and combined tools.
+Use the storage guard, G: scratch and bounded event windows; preserve failures.
+Record exact source/runtime identities, loaded asset and owner generations.
+
+Original magazine reproduction (F2000_sp or another already qualified asset)
+1. Record native loaded/reserve C/R and capacity on all three firing branches.
+2. Grab and remove the original magazine; verify one removal, 0/R and the
+   held original resource with C rounds. Record native and physical owner IDs.
+3. While holding it, interrupt left tracking, right tracking, focus/head validity,
+   and controller publication separately. Use 40ms, 160ms and 400ms gaps.
+   Include duplicate packets within their unchanged deadline and a gap with
+   no intermediate invalid packet. Repeat each case three times.
+4. Check no transfer, discard, renewed input deadline or stale hand target in
+   the gap. Return valid tracking while still gripping; current evidence must
+   create usable custody without resurrecting the old hand token.
+5. Reinsert: exactly one return restores C/R; the next valid shot gives C-1/R.
+   Also interrupt during partial extraction and after unseat submission but
+   before its native receipt. Missing motion cannot complete a pull or seat.
+6. Repeat a deliberate fresh release after recovery: preserve ordinary discard
+   policy and never add those rounds to reserve. Changed-owner evidence must
+   not restore the old magazine to a different weapon.
+
+Missing rendered contact
+Keep controller packets valid while withholding only the relevant rendered
+contact publication for 1, 5 and 20 updates in an isolated diagnostic variant.
+Preserve original packet identities/deadlines; never relabel old geometry.
+No target or transfer may be fabricated; fresh contact restores usable control.
+Retain per-input owner, resource, request, hand-token and branch-ammo joins.
+
+Remaining CHAT04 coverage
+Run replacement-magazine grip/guided/seat gaps, support grip, SPAS owed pump,
+and M95 owed bolt with the same interruption matrix and normal tools enabled.
+Specifically test loss of M95's left GunHold during manipulation: the current
+player mapper requires its previous token for typed recovery; loss of that root
+may leave debt blocked. Resolve this independently if reproduced, retaining debt.
+The original-magazine fix does not qualify replacement custody or this bolt case.
+Physical headset: confirm both hands/gun/props stay coherent, recovery is usable,
+and no double transfer or erased pump/bolt step occurs. Preserve counts/failures.
+Continue CHAT04 until these gaps are resolved; do not infer acceptance from
+the earlier M95 five-cycle run, portable mocks, or final ammunition totals alone.

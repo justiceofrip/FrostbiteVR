@@ -292,6 +292,105 @@ int ReturnOriginal(){for(int loaded:{0,27,30}){Fixture f;f.counts={loaded,0,30};
     auto absent=f.result;absent.tracking.target.reset();CHECK(MagazineBlocksSupport(absent,f.now));
     f.Send();CHECK(f.result.interaction.phase==DetachableMagazinePhase::Attached);
 }return 0;}
+int OriginalMagazineTrackingInterruption(){
+    Fixture f(Xm8MagazineEquipment(),true);f.Send();f.Send(true);
+    for(float p:{.075f,.05f,.025f,0.f,-.025f,-.05f})f.Send(true,false,p);
+    CHECK(f.result.interaction.phase==DetachableMagazinePhase::RemovedHeld);
+    const auto original=f.service.View()->original;const auto oldHand=f.hands.Current(InteractionHand::Left)->token;
+    CHECK(original&&f.calls==1&&f.counts.loaded==0&&f.counts.reserve==83);
+    f.s.input.tracked[0]=false;
+    for(unsigned n=0;n<8;++n){f.Send(true,false,-.05f);CHECK(!f.result.tracking.target&&!f.hands.Current(InteractionHand::Left));}
+    f.s.input.tracked[0]=true;f.Repeat();
+    CHECK(!f.hands.Current(InteractionHand::Left)&&f.service.View()->originalState==MagazineResourceState::Held);
+    f.s.raw.valid=false;
+    for(unsigned n=0;n<8;++n){f.Send(true,false,-.05f);CHECK(!f.result.tracking.target&&!f.hands.Current(InteractionHand::Left));}
+    f.s.raw.valid=true;f.Send(true,false,-.05f);
+    CHECK(f.service.View()->original==original&&f.service.View()->originalState==MagazineResourceState::Held);
+    CHECK(f.calls==1&&f.counts.loaded==0&&f.counts.reserve==83);
+    for(unsigned n=0;n<3;++n)f.Send(true,false,-.05f);
+    CHECK(f.result.interaction.phase==DetachableMagazinePhase::RemovedHeld);
+    CHECK(f.hands.Current(InteractionHand::Left)&&f.hands.Current(InteractionHand::Left)->token!=oldHand);
+    for(float p:{-.025f,0.f,.025f,.05f,.075f,.1f,.1f,.1f,.1f,.1f,.1f,.1f}){
+        f.Send(true,false,p);if(f.calls==2)break;}
+    CHECK(f.calls==2&&f.counts.loaded==27&&f.counts.reserve==83);f.Send();
+    CHECK(f.result.interaction.phase==DetachableMagazinePhase::Attached);
+    f.Send();f.Send(true);CHECK(f.calls==3&&f.counts.loaded==0&&f.counts.reserve==83);
+    return 0;
+}
+int OriginalSuspensionRequiresFreshCustodyAndExactResource(){
+    for(unsigned fault=0;fault<7;++fault){Fixture f(Xm8MagazineEquipment(),true);f.Send();f.Send(true);
+        for(float p:{.075f,.05f,.025f,0.f,-.025f,-.05f})f.Send(true,false,p);
+        CHECK(f.result.interaction.phase==DetachableMagazinePhase::RemovedHeld);
+        const auto original=f.service.View()->original;const auto raw=f.s.raw;
+        f.adapter->Suspend(f.s.input,f.hands);f.adapter->Suspend(f.s.input,f.hands);f.hands.Reset();
+        f.beforeTick=[&](Fixture& q){
+            if(fault==0){q.hands.Reset();q.gun.reset();}
+            if(fault==1){q.s.raw=raw;q.s.originalHandEvidence=raw.inputEvidence;}
+            if(fault==2)++q.s.raw.owner.weapon;
+            if(fault==3)++q.s.raw.rigFingerprint;
+            if(fault==4){q.s.input.deadlineNs=q.now;q.hands.Update(q.s.input);}
+            if(fault==5){auto v=*q.service.View();++v.original->rounds;q.channel.Publish(v);}
+            if(fault==6)++q.s.input.owner.equipGeneration;
+        };
+        f.Send(true,false,-.05f);
+        CHECK(!f.hands.Current(InteractionHand::Left)&&!f.result.tracking.target&&f.calls==1&&f.counts.loaded==0&&f.counts.reserve==83);
+        if(fault<5){
+            f.beforeTick={};f.s.raw.owner=f.s.nativeOwner;f.s.raw.rigFingerprint=f.profile->geometry->rigFingerprint;
+            f.Send(true,false,-.05f);f.Send(true,false,-.05f);
+            CHECK(f.service.View()->original==original&&f.service.View()->originalState==MagazineResourceState::Held);
+            CHECK(f.result.interaction.phase==DetachableMagazinePhase::RemovedHeld&&f.hands.Current(InteractionHand::Left));
+        }
+    }return 0;
+}
+int SuspendedPendingUnseatNeedsExactCompletionAndFreshPull(){
+    Fixture f(Xm8MagazineEquipment(),true);f.completeNative=false;f.Send();f.Send(true);
+    CHECK(f.calls==1&&f.outstanding&&f.result.interaction.phase==DetachableMagazinePhase::PreparingRemoval);
+    f.adapter->Suspend(f.s.input,f.hands);f.hands.Reset();
+    for(unsigned n=0;n<8;++n){f.Send(true);CHECK(f.calls==1&&!f.result.tracking.target&&!f.hands.Current(InteractionHand::Left));}
+    const auto call=*f.outstanding;
+    // Preserve the helper invocation, but only fresh independently completed
+    // branch Updates can prove convergence after this 160ms interruption.
+    CHECK(!f.service.Observe(f.Row(2,call),f.now+100));
+    for(unsigned branch:{0,1,2}){auto row=f.Row(branch,call);
+        row.invocation+=100;row.beginNs=f.now-10;row.endNs=f.now;
+        row.loadedBefore=row.loadedAfter;row.reserveBefore=row.reserveAfter;
+        CHECK(f.service.Observe(row,f.now+100)==(branch==2));
+    }
+    const auto terminal=f.service.Outcome();CHECK(terminal&&terminal->receipt);
+    CHECK(terminal->request.intent.id!=terminal->receipt->command.id);
+    f.outstanding.reset();f.completeNative=true;f.Send(true,false,-.05f);
+    CHECK(f.calls==1&&!f.hands.Current(InteractionHand::Left)&&f.service.View()->originalState==MagazineResourceState::Held);
+    f.Send(true);CHECK(f.result.interaction.phase==DetachableMagazinePhase::Pulling&&f.hands.Current(InteractionHand::Left));
+    for(float p:{.075f,.05f,.025f,0.f,-.025f,-.05f})f.Send(true,false,p);
+    CHECK(f.result.interaction.phase==DetachableMagazinePhase::RemovedHeld&&f.calls==1);
+    for(float p:{-.025f,0.f,.025f,.05f,.075f,.1f,.1f,.1f,.1f,.1f,.1f,.1f}){
+        f.Send(true,false,p);if(f.calls==2)break;}
+    CHECK(f.calls==2&&f.counts.loaded==27&&f.counts.reserve==83);return 0;
+}
+int OriginalMagazineMissingInputInterval(){
+    Fixture f(Xm8MagazineEquipment(),true);f.Send();f.Send(true);
+    for(float p:{.075f,.05f,.025f,0.f,-.025f,-.05f})f.Send(true,false,p);
+    CHECK(f.result.interaction.phase==DetachableMagazinePhase::RemovedHeld);
+    const auto original=f.service.View()->original;const auto oldHand=f.hands.Current(InteractionHand::Left)->token;
+    f.now+=250*Ms;f.Send(true,false,-.05f);
+    CHECK(f.service.View()->original==original&&f.service.View()->originalState==MagazineResourceState::Held);
+    CHECK(!f.result.tracking.target&&!f.hands.Current(InteractionHand::Left)&&f.calls==1);
+    f.Send(true,false,-.05f);f.Send(true,false,-.05f);
+    CHECK(f.result.interaction.phase==DetachableMagazinePhase::RemovedHeld&&f.hands.Current(InteractionHand::Left));
+    CHECK(f.hands.Current(InteractionHand::Left)->token!=oldHand&&f.calls==1&&f.counts.loaded==0&&f.counts.reserve==83);
+    return 0;
+}
+int SuspendedOriginalStillHonorsRealRelease(){
+    Fixture f(Xm8MagazineEquipment(),true);f.Send();f.Send(true);
+    for(float p:{.075f,.05f,.025f,0.f,-.025f,-.05f})f.Send(true,false,p);
+    CHECK(f.result.interaction.phase==DetachableMagazinePhase::RemovedHeld);
+    const auto original=f.service.View()->original;
+    f.adapter->Suspend(f.s.input,f.hands);f.hands.Reset();f.Send(false,false,-.05f);f.Send(false,false,-.05f);
+    CHECK(f.service.View()->original==original&&f.service.View()->originalState==MagazineResourceState::Discarded);
+    CHECK(!f.hands.Current(InteractionHand::Left)&&f.calls==1&&f.counts.loaded==0&&f.counts.reserve==83);
+    f.Insert();f.Send();CHECK(f.calls==2&&f.counts.loaded==30&&f.counts.reserve==53);
+    return 0;
+}
 int RestoreEmptyAfterSwitch(){Fixture f;CHECK(f.Eject());f.adapter->Cancel(f.s.input,f.hands);
     ++f.native.owner.equipGeneration;f.binding.owner=f.native.owner;++f.binding.context.equipGeneration;f.s.nativeOwner=f.native.owner;f.s.family.binding.owner=f.native.owner;f.meshes->owner=f.native.owner;f.s.raw.owner=f.native.owner;
     ++f.s.input.owner.equipGeneration;++f.s.weapon.generation;f.s.family.binding.weapon=f.s.weapon;
@@ -749,5 +848,5 @@ int HeldRemovalSurvivesRejectedExpiredAdmission(){
   }
  }CHECK(profiles>0);std::printf("Expired removal admission: held grab recovery and seven cancellation cases across %u enrolled profiles.\n",profiles);return 0;
 }
-int main(){if(RetiredNativeActorReleasesOnlyOldPhysicalCustody())return 1;if(HeldRemovalSurvivesRejectedExpiredAdmission()||SupportContactDoesNotUnseatMagazine())return 1;if(IdleViewFailureSurvivesStartupCancellation()||LivePhysicalIntentOutlivesItsConstructionPublication()||ReplacementAndSeatActualPublicationExpiry()||ReplacementCustodyAcrossPublicationGaps()||ReplacementGapReleaseAndSafety()||RenderAdmissionDoesNotRenewAmmunition()||OriginalCustodySurvivesTypedPublicationGap()||PendingOriginalAndReleasedMagazineGaps()||ReturnOriginalAfterActualExpiry()||PendingDiscardAcrossExpiredPublication()||ActiveGapStillRejectsLifetimeAndTimeout()||IdleResourceGapBlocksAdmission()||IdleResourceGapRejectsLifetimeLoss()||CompletionBetweenInputPackets()||DeferredCompletionCannotRenewOrChangeOwner()||NamespaceProof()||SharedHandAdapter()||ReturnOriginal()||RestoreEmptyAfterSwitch()||SeatPublicationBoundary()||CancelledSeatSurvivesContextChanges()||TerminalDoesNotRequireNewMagazineSelection())return 1;
+int main(){if(OriginalMagazineTrackingInterruption()||OriginalSuspensionRequiresFreshCustodyAndExactResource()||SuspendedPendingUnseatNeedsExactCompletionAndFreshPull()||OriginalMagazineMissingInputInterval()||SuspendedOriginalStillHonorsRealRelease())return 1;if(RetiredNativeActorReleasesOnlyOldPhysicalCustody())return 1;if(HeldRemovalSurvivesRejectedExpiredAdmission()||SupportContactDoesNotUnseatMagazine())return 1;if(IdleViewFailureSurvivesStartupCancellation()||LivePhysicalIntentOutlivesItsConstructionPublication()||ReplacementAndSeatActualPublicationExpiry()||ReplacementCustodyAcrossPublicationGaps()||ReplacementGapReleaseAndSafety()||RenderAdmissionDoesNotRenewAmmunition()||OriginalCustodySurvivesTypedPublicationGap()||PendingOriginalAndReleasedMagazineGaps()||ReturnOriginalAfterActualExpiry()||PendingDiscardAcrossExpiredPublication()||ActiveGapStillRejectsLifetimeAndTimeout()||IdleResourceGapBlocksAdmission()||IdleResourceGapRejectsLifetimeLoss()||CompletionBetweenInputPackets()||DeferredCompletionCannotRenewOrChangeOwner()||NamespaceProof()||SharedHandAdapter()||ReturnOriginal()||RestoreEmptyAfterSwitch()||SeatPublicationBoundary()||CancelledSeatSurvivesContextChanges()||TerminalDoesNotRequireNewMagazineSelection())return 1;
     std::puts("BC2 resource hand adapter: measured XM8 rail, unequal native/physical identities, chest display, original return, refill and equip restoration passed (mock native Updates).");return 0;}

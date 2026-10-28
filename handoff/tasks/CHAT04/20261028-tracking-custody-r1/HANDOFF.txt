@@ -1,0 +1,52 @@
+CHAT04 - Tracking gaps and persistent weapon state
+Run: 20261028-tracking-custody-r1 (October 28, 2026)
+Status: ready-for-integration for the bounded original-magazine fix below.
+CHAT04 acceptance remains incomplete; continue CHAT04 after integration.
+Branch: tasks/chat04-20261028-tracking-custody-r1
+Worktree: G:\Unity\VRMMO\bc2vr-task-worktrees\chat04-20261028-tracking-custody-r1
+Base branch: checkpoint/436-r56-equipment-rendering
+Pinned base: e013ae21edd5c4f2ab661ac36513ea71ab68a435
+Verified origin: https://github.com/justiceofrip/FrostbiteVR.git
+
+Reproduction and result (deterministic, mocked native callbacks)
+Remove a partly loaded original magazine, interrupt tracking beyond its input
+lease, then restore tracking without releasing. Baseline discarded its resource.
+New suspension retains exact original identity/rounds, drops pose/hand leases,
+and resumes only with current same-owner resource, fresh recorded contact and
+a new hand claim. No gap performs an ammunition transfer or completes motion.
+Pending unseat uses its exact validated native command receipt, not intent ID.
+Partial extraction still requires a real pull; deliberate release still discards.
+Returning the original restores the normal plan for subsequent reloads.
+Gameplay routes presentation loss, cleared hands and semantic rearm to suspension.
+
+Changed production/test files
+include/fvr/interaction/DetachableMagazine.h
+src/interaction/DetachableMagazine.cpp
+src/games/bc2/Bc2Gameplay.cpp
+src/games/bc2/Bc2MagazinePhysicalReload.h and .cpp
+src/games/bc2/Bc2MagazineResourceReload.h and .cpp
+tests/Bc2MagazineResourceTests.cpp
+Task-only notes/scripts: this file, VALIDATION.txt, NATIVE-CHECKS.txt, Validate.ps1.
+
+Checks: 11/11 isolated MSVC x64 portable suites passed; CRLF-aware diff check passed.
+Evidence and exact command: VALIDATION.txt beside this file; baseline failure kept.
+No normal feature-flag build, native gameplay or physical-headset claim.
+Normal x86/x64 builds (including Gameplay) remain the integrator's responsibility.
+No shared integration source, canonical docs, profiles or installed mod updated.
+No runtime files, game assets, binaries or raw traces committed.
+
+Remaining scope/dependencies
+Replacement-magazine tracking-loss custody and M95 lost-left-root recovery still
+need work/qualification; current bolt mapper requires the previous root token.
+Pump/support and missing-render native acceptance remain open. Passing existing
+portable recovery tests and prior M95 five-cycle evidence do not close these gaps.
+No dependency on deferred crash/checkpoint cards; no new native capability enabled.
+Proposed durable contract: tracking suspension invalidates transient pose authority
+while retaining an original magazine resource until a verified real disposition.
+Integrator reconciles shared documentation once after validating the candidate.
+
+Integration request
+Read G:\Unity\VRMMO\FrostbiteVR\handoff\campaign-chat-queue\INTEGRATE.txt.
+Integrate this task branch at the exact pushed commit reported by the worker.
+Follow NATIVE-CHECKS.txt for bounded native/headset requests; retain every failure.
+Do not mark CHAT04 complete or automatically advance to CHAT05.
