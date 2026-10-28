@@ -139,6 +139,15 @@ class ExecutableAdmissionTests(unittest.TestCase):
                     self.assertRaises(ValueError):
                 menu.validate_executable(candidate, digest(candidate), experimental_steam=True)
 
+    def test_reported_steam_tuple_still_requires_native_verification(self):
+        # Reproduce only the observed identity fields in synthetic bytes. Do
+        # not enroll a real executable or relax the second-stage admission.
+        raw = changed(synthetic_pe(), NT + 8, '<I', 1314211375)
+        raw = changed(raw, OPTIONAL + 56, '<I', 0x1970000)
+        with mock.patch.object(menu, 'STEAM_GAME_SHA', digest(raw)), \
+                self.assertRaisesRegex(ValueError, 'layout'):
+            menu.validate_executable(raw, digest(raw), experimental_steam=True)
+
     def test_candidate_section_extents_are_bounded(self):
         raw = synthetic_pe()
         cases = {
@@ -207,10 +216,12 @@ class MenuCliAdmissionTests(unittest.TestCase):
     def test_rejected_candidates_never_open_a_process_or_report_ready(self):
         good = synthetic_pe()
         bad_base = changed(good, OPTIONAL + 28, '<I', 0x500000)
+        reported = changed(changed(good, NT + 8, '<I', 1314211375), OPTIONAL + 56, '<I', 0x1970000)
         for name, raw, opted, expected in (
                 ('opt in absent', good, False, digest(good)),
                 ('file changed', good + b'changed', True, digest(good)),
-                ('wrong base', bad_base, True, digest(bad_base))):
+                ('wrong base', bad_base, True, digest(bad_base)),
+                ('reported Steam tuple', reported, True, digest(reported))):
             with self.subTest(case=name):
                 code, error, result, construct, close, sample = self.run_cli(raw, opted, expected)
                 self.assertIsNone(code)

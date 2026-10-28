@@ -96,6 +96,7 @@ frames=245 errors=0
     $broken='{"game_path": "D:\bad\path", "local_backend": ???}'
     [IO.File]::WriteAllText((Join-Path $data 'settings.json'),$broken)
     Write-FvrJson (Join-Path $runtime 'launch-check.json') @{game_supported=$false;game_sha256=('e'*64)}
+    Write-FvrJson (Join-Path $runtime 'launcher-placement.json') @{schema='bc2vr.launcher-placement.v1';allowed=$false;relationship='game_root';error='Install BC2 VR in a separate launcher folder.'}
     Write-FvrJson (Join-Path $runtime 'xr-selection.json') @{label='Virtual Desktop fixture';manifest='C:\Users\Private Person\runtime.json'}
     Write-FvrJson (Join-Path $runtime 'asset-preparation.json') @{stage='body equipment';error='Required mesh differs';private_path='D:\Private Person\game'}
     Write-FvrJson (Join-Path $data 'package-check.json') @{expected_version='0.1.6';verified=$false;error='Package identity mismatch fixture'}
@@ -105,6 +106,7 @@ frames=245 errors=0
     $report=Get-Content -LiteralPath (Join-Path $data 'feedback/Report.txt') -Raw
     Check ($report.Contains('e'*64) -and $report.Contains('Virtual Desktop fixture') -and -not $report.Contains('Private Person')) 'startup build fingerprint and runtime diagnostics survive path redaction'
     Check ($report.Contains('Required mesh differs') -and $report.Contains('package-check.json') -and $report.Contains('asset-preparation.json')) 'asset failure and package identity evidence included without sharing game files'
+    Check ($report.Contains('launcher-placement.json') -and $report.Contains('game_root')) 'path-free placement failure is included in saved diagnostics'
     Add-Type -AssemblyName PresentationFramework,PresentationCore,WindowsBase
     $uiSource=[IO.File]::ReadAllText((Join-Path $repo 'launcher/Launcher.ps1'))
     $markupBlocks=[regex]::Matches($uiSource,'(?s)\[xml\]\$(?:markup|feedbackMarkup)=@''\r?\n(.*?)\r?\n''@')

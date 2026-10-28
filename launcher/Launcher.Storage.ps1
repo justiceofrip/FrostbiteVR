@@ -40,10 +40,39 @@ function Set-FvrProcessStorage([string]$Root) {
     $env:PYTHONDONTWRITEBYTECODE='1'
     return $scratch
 }
+function Get-FvrLauncherGamePlacement([string]$InstallRoot, [string]$GameRoot) {
+    # Compare complete path components, without disclosing either private path
+    # in the diagnostic. The Python cache writer independently enforces this.
+    $launcher=[IO.Path]::GetFullPath($InstallRoot).Replace('/','\').TrimEnd('\')
+    $game=[IO.Path]::GetFullPath($GameRoot).Replace('/','\').TrimEnd('\')
+    $relationship='separate'
+    if($launcher -eq $game){$relationship='game_root'}
+    elseif($launcher.StartsWith($game+'\',[StringComparison]::OrdinalIgnoreCase)){
+        $first=$launcher.Substring($game.Length+1).Split('\')[0]
+        $relationship=switch($first.ToLowerInvariant()){
+            'dist' {'game_dist';break}
+            'package' {'game_package';break}
+            default {'game_subfolder'}
+        }
+    }
+    $allowed=$relationship -notin @('game_root','game_dist','game_package')
+    $errorText=if($allowed){$null}else{
+        'BC2 VR is installed in the game root or its protected Dist/Package folders. Install BC2 VR into a fresh, separate BC2VR-Launcher folder, then choose your existing game folder. Keep the game files and saves in place.'
+    }
+    return @{schema='bc2vr.launcher-placement.v1';relationship=$relationship;allowed=$allowed;error=$errorText}
+}
 function Get-FvrInstallDestination([string]$Selection) {
     if ($Selection -notmatch '^[A-Za-z]:[\\/]') { throw 'Choose an installation folder on a local fixed drive.' }
     $full=[IO.Path]::GetFullPath($Selection)
-    if ($full.TrimEnd('\','/') -eq [IO.Path]::GetPathRoot($full).TrimEnd('\','/')) { return (Join-Path $full 'BC2VR-Launcher') }
+    if ($full.TrimEnd('\','/') -eq [IO.Path]::GetPathRoot($full).TrimEnd('\','/')) { $full=Join-Path $full 'BC2VR-Launcher' }
+    # Setup does not yet know the selected game setting. Recognize an existing
+    # BC2 install by its executable, before creating scratch or package files.
+    for($ancestor=$full;$ancestor;$ancestor=Split-Path $ancestor -Parent){
+        if(Test-Path -LiteralPath (Join-Path $ancestor 'BFBC2Game.exe') -PathType Leaf){
+            $placement=Get-FvrLauncherGamePlacement $full $ancestor
+            if(-not $placement.allowed){throw $placement.error}
+        }
+    }
     return $full
 }
 function Select-FvrInstallFolder($Picker=$null) {
@@ -53,7 +82,7 @@ function Select-FvrInstallFolder($Picker=$null) {
         $Picker.RootFolder=[Environment+SpecialFolder]::MyComputer
         $Picker.ShowNewFolderButton=$true
     }
-    $Picker.Description='Choose or create the BC2 VR installation folder on any fixed drive, including C:. Selecting a drive creates a BC2VR-Launcher folder there.'
+    $Picker.Description='Choose a dedicated BC2 VR launcher folder, not the game folder or its Dist/Package folders. Selecting a drive creates a BC2VR-Launcher folder there.'
     try {
         if ($Picker.ShowDialog().ToString() -ne 'OK') { return $null }
         return (Get-FvrInstallDestination $Picker.SelectedPath)

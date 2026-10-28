@@ -24,6 +24,11 @@ $config=Get-Bc2RuntimeConfig
 $settings=Read-FvrJson $SettingsPath
 $installation=Test-Bc2GameInstallation $settings $config $StateRoot
 $exe=$installation.exe;$gameHash=$installation.sha256
+$launcherRoot=Split-Path (Split-Path $StateRoot -Parent) -Parent
+$placement=Get-FvrLauncherGamePlacement $launcherRoot $settings.game_path
+$placement.utc=[DateTime]::UtcNow.ToString('o');$placement.version=$config.version
+Write-FvrJson (Join-Path $StateRoot 'launcher-placement.json') $placement
+if(-not $placement.allowed){throw $placement.error}
 $xr=Get-Bc2OpenXrSelection
 Write-FvrJson (Join-Path $StateRoot 'xr-selection.json') $xr
 $bundledPython=Join-Path $PSScriptRoot 'python/python.exe'

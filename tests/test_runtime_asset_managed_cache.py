@@ -213,8 +213,10 @@ class EntryManagedCacheTests(ManagedCacheFixture):
             entry = runtime_dir / 'Entry.ps1'
             shutil.copyfile(entry_source, entry)
             shutil.copyfile(ROOT / 'launcher/runtime/Resolution.ps1', runtime_dir / 'Resolution.ps1')
+            shutil.copyfile(ROOT / 'launcher/Launcher.Storage.ps1', app / 'Launcher.Storage.ps1')
             self.assertEqual(digest(entry), digest(entry_source))
             (app / 'Launcher.Core.ps1').write_text(r'''
+. (Join-Path $PSScriptRoot 'Launcher.Storage.ps1')
 function Read-FvrJson($p){Get-Content -LiteralPath $p -Raw|ConvertFrom-Json -AsHashtable}
 function Write-FvrJson($p,$v){[IO.File]::WriteAllText($p,($v|ConvertTo-Json -Depth 12))}
 function Get-FvrChild($p,$r){Join-Path $p $r}
@@ -270,6 +272,8 @@ def prepare(game, ffmpeg, output):
                 names=['spas-shell-insert.wav', 'shell-reload-audio.json']))
             state = self.launcher / 'data/runtime'
             state.mkdir(parents=True, exist_ok=True)
+            (state / 'launcher-placement.json').write_text(json.dumps({
+                'schema': 'bc2vr.launcher-placement.v1', 'allowed': False, 'error': 'previous failure'}))
             settings = self.launcher / 'data/settings.json'
             settings.write_text(json.dumps({'game_path': str(self.game)}))
             env = dict(os.environ, FVR_PYTHON=sys.executable, PYTHONDONTWRITEBYTECODE='1',
@@ -289,6 +293,10 @@ def prepare(game, ffmpeg, output):
             self.assertEqual(digest(entry), digest(entry_source))
             first = subprocess.run(command, env=env, capture_output=True, text=True, timeout=20)
             self.assertIn('FIXTURE_STOP_BEFORE_SUPERVISOR', first.stderr, first.stdout + first.stderr)
+            placement = json.loads((state / 'launcher-placement.json').read_text())
+            self.assertTrue(placement['allowed'])
+            self.assertIsNone(placement['error'])
+            self.assertEqual(placement['relationship'], 'game_subfolder' if nested else 'separate')
             self.assertEqual(json.loads((self.output / 'preparation.json').read_text())['state'], 'complete')
             before = {path: digest(path) for path in self.output.rglob('*') if path.is_file()}
             # A verified existing cache must bypass all derivation on retry.
@@ -297,6 +305,69 @@ def prepare(game, ffmpeg, output):
             self.assertIn('FIXTURE_STOP_BEFORE_SUPERVISOR', second.stderr, second.stdout + second.stderr)
             self.assertEqual(before, {path: digest(path) for path in self.output.rglob('*') if path.is_file()})
             self.assert_stock_unchanged()
+
+    def test_entry_refuses_unsafe_placement_before_xr_tools_or_existing_game(self):
+        for launcher, relationship in ((self.game, 'game_root'),
+                                       (self.game / 'Dist/Win32/BC2VR-Launcher', 'game_dist'),
+                                       (self.game / 'Package/BC2VR-Launcher', 'game_package')):
+            with self.subTest(relationship=relationship):
+                self.set_launcher(launcher)
+                app = self.package / 'app'
+                app.mkdir()
+                runtime_dir = self.package / 'runtime'
+                entry = runtime_dir / 'Entry.ps1'
+                shutil.copyfile(ROOT / 'launcher/runtime/Entry.ps1', entry)
+                shutil.copyfile(ROOT / 'launcher/Launcher.Storage.ps1', app / 'Launcher.Storage.ps1')
+                (app / 'Launcher.Core.ps1').write_text(r'''
+. (Join-Path $PSScriptRoot 'Launcher.Storage.ps1')
+function Read-FvrJson($p){Get-Content -LiteralPath $p -Raw|ConvertFrom-Json -AsHashtable}
+function Write-FvrJson($p,$v){[IO.File]::WriteAllText($p,($v|ConvertTo-Json -Depth 12))}
+function Set-FvrLauncherStorage($p){}
+''')
+                (runtime_dir / 'Runtime.Core.ps1').write_text(r'''
+function Get-Bc2Session($p){return $null}
+function Get-Bc2RuntimeConfig {return @{version='0.1.15';asset_recipe_sha256=('a'*64);source_sha256=('c'*64)}}
+function Resolve-Bc2Tool {throw 'MUST_NOT_RESOLVE_TOOLS'}
+function Get-Bc2ExistingGame {throw 'MUST_NOT_TOUCH_GAME'}
+function Test-Bc2AssetCache {throw 'MUST_NOT_CHECK_CACHE'}
+''')
+                (runtime_dir / 'Dependencies.ps1').write_text(
+                    "function Get-Bc2PreparationFfmpeg {throw 'MUST_NOT_DOWNLOAD'}")
+                (runtime_dir / 'Resolution.ps1').write_text('')
+                (runtime_dir / 'Startup.ps1').write_text(r'''
+function Test-Bc2GameInstallation($s,$c,$r){return @{exe=(Join-Path $s.game_path 'BFBC2Game.exe');sha256=('b'*64)}}
+function Get-Bc2OpenXrSelection {throw 'MUST_NOT_SELECT_XR'}
+function Invoke-Bc2OpenXrPreflight {throw 'MUST_NOT_PREFLIGHT_XR'}
+''')
+                state = self.launcher / 'data/runtime'
+                state.mkdir(parents=True, exist_ok=True)
+                settings = self.launcher / 'data/settings.json'
+                settings.write_text(json.dumps({'game_path': str(self.game)}))
+                old_settings = settings.read_bytes()
+                prior_cache = self.output / 'assets.json'
+                prior_cache.parent.mkdir(parents=True, exist_ok=True)
+                prior_cache.write_bytes(b'previous cache must survive refusal')
+                env = dict(os.environ, PYTHONDONTWRITEBYTECODE='1',
+                           TEMP=str(self.root), TMP=str(self.root), TMPDIR=str(self.root))
+                for action in ('Validate', 'Launch'):
+                    result = subprocess.run(
+                        [shutil.which('pwsh'), '-NoProfile', '-NonInteractive', '-File', str(entry),
+                         '-Action', action, '-SettingsPath', str(settings), '-StateRoot', str(state)],
+                        env=env, capture_output=True, text=True, timeout=20)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn('BC2VR-Launcher folder', result.stderr)
+                    self.assertNotIn('MUST_NOT_', result.stderr)
+                    report_text = (state / 'launcher-placement.json').read_text()
+                    report = json.loads(report_text)
+                    self.assertEqual(report['schema'], 'bc2vr.launcher-placement.v1')
+                    self.assertEqual(report['relationship'], relationship)
+                    self.assertFalse(report['allowed'])
+                    self.assertIn('fresh, separate BC2VR-Launcher', report['error'])
+                    self.assertNotIn(str(self.root), report_text)
+                    self.assertEqual(settings.read_bytes(), old_settings)
+                    self.assertEqual(prior_cache.read_bytes(), b'previous cache must survive refusal')
+                    self.assertFalse((self.output / 'preparation.json').exists())
+                    self.assert_stock_unchanged()
 
 
 if __name__ == '__main__':
