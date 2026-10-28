@@ -14,7 +14,8 @@ over8.125s with applied_mask3 and matching matrices. Not a qualified jeep ride.
 Missing: live Kurogane blueprint identity, jeepRideStart join, delivered-eye acceptance.
 Next after shared runtime recovery: coordinator enters authorized SP_01 Kurogane,
 retains live asset/vehicle/entry join, then bounded240-pair/6.5s --controls-vehicle
-check with normal boat-head-aim and audit_vehicle_camera.py, under storage admission.
+check with normal boat-head-aim and audit_vehicle_camera.py, under storage admission;
+retain only selected color samples within512MiB, not raw images for every pair.
 Retain paired color after scripted fade, publication/input counters, camera waits,
 exact restoration and nonempty detach report. Full ride/headset remain separate.
 No tests/builds/game/preflight repeated; shared OpenXR blocker is in coordinator state.

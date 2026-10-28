@@ -1,0 +1,98 @@
+{
+  "schema": "fvr.coordinator.integration.v1",
+  "run": "coordinator-20261028-batch01",
+  "status": "validated source; integration push pending; installation blocked",
+  "integration_branch": "checkpoint/436-r56-equipment-rendering",
+  "verified_origin": "https://github.com/justiceofrip/FrostbiteVR.git",
+  "coordinator_worktree": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1",
+  "coordinator_branch": "campaign/coordinator-20261028-r1",
+  "baseline": "4448779e33ad265f572245cff49913983696ce5c",
+  "task_commit": "b19b770be3e005d97b6b32f3563f0abbd187790b",
+  "combined_merge": "a95d868f36d2bc8fce40b0f17e519b639e517aa8",
+  "built_source_commit": "6e5fc12d3b98c5065b2bb8d385d28612e4c1c146",
+  "source_sha256": "d74a6b63c6360d77007c46d1f3c9f8ca342ce1740466688a7ffd6ab43d3b26ed",
+  "source_push": {
+    "status": "pending",
+    "commit": null
+  },
+  "source_tasks": [
+    "CHAT07 actual hand-claim and neutral-rearm regressions",
+    "CHAT23 same-reserve chest prop retention across coherent loaded-count changes"
+  ],
+  "evidence_only_tasks": [
+    "CHAT08",
+    "CHAT12",
+    "CHAT13",
+    "CHAT14",
+    "CHAT27",
+    "CHAT28",
+    "CHAT29"
+  ],
+  "prior_finished_chat25_26_included": true,
+  "external_worktrees_modified": false,
+  "validation": {
+    "x86": {
+      "attempt": "02",
+      "focused_passed": 4,
+      "normal_passed": 305,
+      "normal_total": 305
+    },
+    "x64": {
+      "attempt": "01",
+      "focused_passed": 4,
+      "normal_passed": 305,
+      "normal_total": 305
+    },
+    "normal_flags_unchanged": true,
+    "native_operation_rows_unchanged": true,
+    "independent_audit": {
+      "status": "pass",
+      "binary_pdb_files": 12,
+      "pinned_validation_files": 20,
+      "enabled_normal_flags": 8,
+      "settings_per_architecture": 55,
+      "symbol_guid_age_audit_reused": true,
+      "native_acceptance": false
+    }
+  },
+  "runtime_receipt": {
+    "path": "reports/coordinator-20261028-batch01/normal-runtime/build-receipt.json",
+    "bytes": 12933,
+    "sha256": "a196a0b16622fb85216bad8a9bfdf7598fadea37db20dc050284e0b456004fe4"
+  },
+  "prior_runtime_receipt": "reports/integration-chat25-chat26-20261028-01/normal-runtime/build-receipt.json",
+  "local_evidence": "reports/coordinator-20261028-batch01",
+  "storage": {
+    "max_generated_bytes": 42949672960,
+    "min_free_bytes": 16106127360,
+    "initial_x86_admission_refused": true,
+    "lossless_compressed_files": 45,
+    "reclaimed_bytes": 965171135,
+    "deleted_files": 0,
+    "content_changes": 0,
+    "receipt": "reports/coordinator-20261028-batch01/storage01/compression.json"
+  },
+  "shared_blockers": {
+    "reused_from": "handoff/integrations/chat25-chat26-20261028-integration01/receipt.json",
+    "openxr": "SteamVR instance creation XrResult=-2",
+    "native": "Foreground admission failed before input/attachment; emulated route itself does not require XR",
+    "unchanged_retries": 0
+  },
+  "installation": {
+    "attempted": false,
+    "candidate_installed": false,
+    "active_version": "0.1.12",
+    "previous_version": "0.1.11",
+    "installed_runtime_receipt": null,
+    "settings_unchanged": true,
+    "active_metadata_unchanged": true,
+    "settings_sha256": "be6f984f6bd44dcc62aab0a2ac1a63acaa2d3221d2919f2a44a4aeeef2b1f7cf",
+    "active_sha256": "9b60ff5ce16e3c146a56d5410edbd43b9f91e393ab7851af41d9c6f3b800a8b2",
+    "reason": "Required runtime and startup/equipment smoke evidence remains unavailable"
+  },
+  "game_launched": false,
+  "headset_verified": false,
+  "native_gameplay_verified": false,
+  "public_release": false,
+  "continuation": "Reuse this coordinator branch/state; resume only when a recorded native/asset/runtime/headset prerequisite changes."
+}

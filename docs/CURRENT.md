@@ -5,6 +5,15 @@ Updated October 28, 2026. This replaces old next-step instructions; prior eviden
 
 ## Active work
 
+CHAT07/CHAT23 source is combined with finished CHAT25/26: coherent loaded-count
+changes retain the same chest reserve prop across both eyes; grenade/reload
+regressions protect hand claims and fresh-neutral rearming. Both normal builds
+passed305/305 and four focused suites each. The [batch receipt](../handoff/integrations/coordinator-20261028-batch01/README.md)
+pins the runtime and evidence limits. No new native/headset acceptance or local
+installation; launcher0.1.12 is unchanged. Existing OpenXR instance and foreground
+blockers were reused without another session. Other selected cards are parked
+with bounded native/asset/headset prerequisites in the coordinator state.
+
 CHAT25/CHAT26 knife regressions and optional original-call sound context are
 integrated; gameplay recognition, damage and sound forwarding are unchanged.
 Both normal builds passed305/305 plus four focused suites each. The

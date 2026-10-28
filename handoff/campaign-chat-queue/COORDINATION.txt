@@ -1,52 +1,48 @@
 BC2 VR shared integration coordination
 Updated: October 28, 2026
-Policy: Isolated worker worktrees; one integrator writes combined checkout/mod.
+Policy for this run: one coordinator worktree; coordinator owns shared integration.
 Canonical repository: G:\Unity\VRMMO\FrostbiteVR
 Integration branch: checkpoint/436-r56-equipment-rendering
 Verified source origin: https://github.com/justiceofrip/FrostbiteVR.git
-Worktree root: G:\Unity\VRMMO\bc2vr-task-worktrees
-Worker branches: tasks/chatNN-<unique-run-id>
-Worker handoffs: handoff/tasks/CHATnn/<unique-run-id>/HANDOFF.txt in each worktree.
-Workers resolve the actual integration branch at start; never use a candidate.
-Exclusive integration lease: worktree root\INTEGRATION.lock (atomic CreateNew).
-Shared ownership: user confirmed prior chats relinquished shared resources on
-October 28, 2026; coordinator runbook observed not started for this batch.
+Coordinator worktree: G:\Unity\VRMMO\bc2vr-task-worktrees\campaign-coordinator-20261028-r1
+Coordinator branch: campaign/coordinator-20261028-r1
+Exclusive integration lease: G:\Unity\VRMMO\bc2vr-task-worktrees\INTEGRATION.lock
+Ownership: prior CHAT25/26 close.json confirms lease release, idle helpers and
+exact profile restoration. Coordinator acquired the lease before shared mutations.
+External CHAT25/26/32 worktrees remain untouched; their tasks are not reassigned.
 
-Last selected batch: CHAT25/CHAT26 knife regressions and sound diagnostics.
-Accepted baseline: 4055200b51c2c258d48a33d30d09db9337127f6a
-Candidate: integration/chat25-chat26-20261028-01
-Task commit: d55b3c6249c9f56e4235f7805a80d334a5dc610f
-Integrated source merge: 636d7a4b149bc07f43dd13a53a44a6a9862bd563
-Built combined source: 7a5d8aa7281de90e877b35b8ac73d145191161a6
-Source push: verified at 91b304c49a14320dd6d5e772e8a3d36fb5177868.
-This following status-only commit records the verified push; runtime is unchanged.
-Later status-only commits preserve this exact tested native source/runtime identity.
-Batch receipt: handoff/integrations/chat25-chat26-20261028-integration01/receipt.json
-Short handoff: handoff/integrations/chat25-chat26-20261028-integration01/HANDOFF.txt
-Both normal builds305/305 and four focused suites per architecture passed.
-Frozen candidate: reports/integration-chat25-chat26-20261028-01/normal-runtime/build-receipt.json
-Receipt SHA256: dd0c8b845b72c1999f337b97b680692d3c74253ec8bb3237dc768f8074509095
-Six binary/PDB pairs and unchanged normal flags/operation rows verified.
-Prior CHAT04 frozen runtime remains an identified fallback, not the installed mod.
-Storage limits remain40GiB/free15GiB; verified lossless compression, no deletion.
+Last batch: CHAT07 coexistence regressions and CHAT23 chest reserve prop continuity.
+Accepted prior source: 4448779e33ad265f572245cff49913983696ce5c (finished CHAT25/26).
+Task commit: b19b770be3e005d97b6b32f3563f0abbd187790b
+Combined merge: a95d868f36d2bc8fce40b0f17e519b639e517aa8
+Built source: 6e5fc12d3b98c5065b2bb8d385d28612e4c1c146
+Candidate: integration/campaign-coordinator-20261028-r1
+Source push: pending final integration push.
+Later documentation-only commits preserve this exact tested runtime identity.
+Batch receipt: handoff/integrations/coordinator-20261028-batch01/receipt.json
+Short handoff: handoff/integrations/coordinator-20261028-batch01/README.md
+Both normal builds305/305; four focused suites per architecture passed.
+Normal flags and native operation rows unchanged; no new capability admitted.
+Frozen candidate: reports/coordinator-20261028-batch01/normal-runtime/build-receipt.json
+Receipt SHA256: a196a0b16622fb85216bad8a9bfdf7598fadea37db20dc050284e0b456004fe4
+All six binary/PDB pairs verified; prior CHAT25/26 runtime retained as fallback.
+Storage:40GiB/free15GiB unchanged; lossless compression reclaimed965171135 bytes,
+45 generated files, all hashes preserved, no deletion; original refusals retained.
 
-Last local mod update: none; active0.1.12/previous0.1.11 unchanged.
-Observed target: G:\Unity\VRMMO\BC2VR-Launcher; settings/payload hashes unchanged.
-No new installed-runtime receipt; candidate installation/smoke remains pending.
-Game19/scene01 launched; foreground admission failed before menu input/attachment.
-User-offered focus correction and bounded recheck did not establish foreground.
-Zero knife/audio episodes; normal close and exact three-profile restoration verified.
-Separate exact-candidate SteamVR OpenXR instance creation failed XrResult=-2.
-Owned preflight host exited; no XR session/headset test. Emulated native needs no XR.
-CHAT25/CHAT26 remain needs-native-evidence: jab/hit-miss pairs, withdrawal/rejab,
-incidental/reload/grip, interruptions, sound context/outcomes and physical headset.
-Accepted opening-mission knife progression is preserved; no gameplay/audio fix claimed.
+Local mod update: none. G:\Unity\VRMMO\BC2VR-Launcher stays0.1.12/previous0.1.11.
+Active metadata/settings hashes still match the prior integration; no game launched.
+No installed-runtime receipt, startup/equipment smoke or physical-headset acceptance.
+Shared blockers reused: SteamVR OpenXR instance XrResult=-2; native scene foreground
+admission failed before input/attachment. No unchanged preflight/session repeated.
+Emulated native checks do not require OpenXR but still require foreground admission.
+CHAT07 final native combined acceptance and CHAT23 visual/headset checks remain open.
+Other selected cards' exact wake-up conditions are in COORDINATOR-STATE/task handoffs.
+CHAT02/04/05/06 stay user-completed; native evidence limits remain in their receipts.
+CHAT01/03 stay deferred; CHAT33 diagnostics remain integrated, live acceptance pending.
+Prior CHAT25/26 source is included, without new jab/damage/audio acceptance claims.
 
-Prior CHAT02/04/05/06/33 receipts and unresolved acceptance remain intact.
-CHAT33 still needs Steam native signature/ABI evidence and actual Play/headset checks.
-CHAT04 replacement custody/M95 tracking, CHAT05 pickups/owed cycles and CHAT06
-vehicle transition native/headset coverage remain pending; not selected in this batch.
-Current implementation and evidence limits: docs/CURRENT.md
+Current implementation/evidence: docs/CURRENT.md
+Scheduling/ownership: handoff/campaign-chat-queue/COORDINATOR-STATE.txt
 Integration procedure: handoff/campaign-chat-queue/INTEGRATE.txt
-Integrator alone updates combined source/deployment identities and batch receipt.
-Public BC2VR releases remain separate from FrostbiteVR source updates.
+Coordinator alone updates shared source, builds, sessions and installation.
+Public BC2VR releases remain separate; no release published.

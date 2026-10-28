@@ -8,9 +8,9 @@ permits newer loaded/refill-cost values. Pickup/custody/native ammo code is unch
 Reused-sequence contradictions, reserve/capacity/cycle/owner/claim/contact/geometry
 changes and original expiry still reject. Both eyes retain the first pose/lease.
 Regressions cover full/partial/last-round/low-reserve transitions and rejection paths;
-the separate ammo-counter sample is preserved. Deterministic execution is pending.
-Coordinator checks: BodyAmmo/BodyPropPair and affected renderer/body/supply suites,
-then both normal builds from latest combined source including finished CHAT25/26.
+the separate ammo-counter sample is preserved. BodyAmmo/BodyPropPair pass x86/x64;
+both normal builds pass305/305, including affected renderer/body/supply suites.
+Combined source includes finished CHAT25/26; coordinator batch01 pins all evidence.
 Static finding does not prove the user's flicker cause or headset readability.
 Needed native capture: firing and stand/crouch/turn/recenter/holster/reload/vehicle exit,
 exact paired prop/HUD samples with authoritative ammo and ownership; then headset.

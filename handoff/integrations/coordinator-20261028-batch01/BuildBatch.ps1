@@ -50,7 +50,7 @@ if($Mode -eq 'Prepare'){
     foreach($arch in @('x86','x64')){$cache=Get-Content -LiteralPath (Join-Path $repo "build/$arch/CMakeCache.txt");foreach($entry in $freeze.normal_flags[$arch].GetEnumerator()){
         if($cache -cnotcontains ($entry.Key+':'+$entry.Value.type+'='+$entry.Value.value)){throw "Normal flag changed: $arch $($entry.Key)"}
     }}
-    Save $statePath @{source_commit=$head;source_sha256=$closure.source_sha256;reviewed_header=$header;source_receipt=$source;normal_flags=$freeze.normal_flags;prior_receipt=$priorPath;prior_receipt_sha256=(Sha $priorPath);operation_records_changed=$false;native_acceptance=$false}
+    Save $statePath @{source_commit=$head;task_commit=((& git -C $repo rev-parse b19b770)-join '');merge_commit='a95d868f36d2bc8fce40b0f17e519b639e517aa8';source_sha256=$closure.source_sha256;reviewed_header=$header;source_receipt=$source;normal_flags=$freeze.normal_flags;prior_receipt=$priorPath;prior_receipt_sha256=(Sha $priorPath);operation_records_changed=$false;native_acceptance=$false}
     Write-Output "Prepared $head with unchanged operation rows and twelve verified prior artifacts";return
 }
 $state=Get-Content -LiteralPath $statePath -Raw|ConvertFrom-Json -AsHashtable
@@ -60,6 +60,8 @@ $vs=& $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.
 $arch=if($Mode -eq 'x64'){'amd64'}else{'x86'}
 & (Join-Path $vs 'Common7/Tools/Launch-VsDevShell.ps1') -VsInstallationPath $vs -Arch $arch -HostArch amd64 -SkipAutomaticLocation|Out-Null
 $build=Join-Path $repo "build/$Mode"
+$failure=$null;$focused=$false;$normalStarted=$null;$started=[DateTime]::UtcNow
+try {
 & cmake -S $repo -B $build "-DBC2_NATIVE_OPERATION_CAPABILITIES_HEADER:FILEPATH=$($state.reviewed_header.Replace('\','/'))" "-DBC2_NATIVE_OPERATION_SOURCE_RECEIPT:FILEPATH=$($state.source_receipt.Replace('\','/'))" "-DBC2_NATIVE_OPERATION_SOURCE_SHA256:STRING=$($state.source_sha256)" *> (Join-Path $run "$Mode-$Attempt-configure-binding.log")
 if($LASTEXITCODE){throw 'Binding configure failed'}
 $cache=Get-Content -LiteralPath (Join-Path $build 'CMakeCache.txt')
@@ -67,8 +69,6 @@ foreach($entry in $state.normal_flags[$Mode].GetEnumerator()){
     if($entry.Key -like 'BC2_NATIVE_OPERATION_*'){continue}
     if($cache -cnotcontains ($entry.Key+':'+$entry.Value.type+'='+$entry.Value.value)){throw "Normal flag changed: $($entry.Key)"}
 }
-$failure=$null;$focused=$false;$normalStarted=$null;$started=[DateTime]::UtcNow
-try {
     & cmake --build $build --target Bc2PlayerGrenadeTests Bc2NormalPlayerToolsConfigTests Bc2BodyAmmoTests Bc2BodyPropPairTests --parallel 4 *> (Join-Path $run "$Mode-$Attempt-focused-build.log")
     if($LASTEXITCODE){throw 'Focused compile failed'}
     & ctest --test-dir $build --output-on-failure -R '^(Bc2PlayerGrenade|Bc2NormalPlayerToolsConfig|Bc2BodyAmmo|Bc2BodyPropPair)$' *> (Join-Path $run "$Mode-$Attempt-focused-tests.log")
@@ -76,6 +76,9 @@ try {
     $focused=$true;Save (Join-Path $run "$Mode-$Attempt-focused-result.json") @{source_commit=$head;source_sha256=$state.source_sha256;architecture=$Mode;passed=$true;suite_count=4;completed_utc=[DateTime]::UtcNow.ToString('o')}
     $normalStarted=[DateTime]::UtcNow
     & (Join-Path $repo 'Build.ps1') -Architecture $Mode -Jobs 4 *> (Join-Path $run "$Mode-$Attempt-build-console.log")
+    if((Get-Content -LiteralPath $leasePath -Raw|ConvertFrom-Json).owner_token -ne $token){throw 'Lease changed'}
+    & $python -B $helper verify-source --root $repo --reviewed-header $state.reviewed_header --receipt $state.source_receipt --expected $state.source_sha256
+    if($LASTEXITCODE){throw 'Source changed during build'}
 } catch {$failure=$_}
 if($normalStarted){foreach($name in @('configure.log','build.log','tests.log','build.json')){
     $path=Join-Path $repo "reports/$Mode-$name"
@@ -84,5 +87,3 @@ if($normalStarted){foreach($name in @('configure.log','build.log','tests.log','b
 Save (Join-Path $run "$Mode-$Attempt-result.json") @{source_commit=$head;source_sha256=$state.source_sha256;started_utc=$started.ToString('o');completed_utc=[DateTime]::UtcNow.ToString('o');focused_passed=$focused;passed=($null -eq $failure);failure=if($failure){$failure.ToString()}else{$null}}
 foreach($name in @('focused-build.log','focused-tests.log','build-console.log')){$path=Join-Path $run "$Mode-$Attempt-$name";if(Test-Path -LiteralPath $path){Get-Content -LiteralPath $path -Tail 12}}
 if($failure){throw $failure}
-if((Get-Content -LiteralPath $leasePath -Raw|ConvertFrom-Json).owner_token -ne $token){throw 'Lease changed'}
-& $python -B $helper verify-source --root $repo --reviewed-header $state.reviewed_header --receipt $state.source_receipt --expected $state.source_sha256;if($LASTEXITCODE){throw 'Source changed during build'}

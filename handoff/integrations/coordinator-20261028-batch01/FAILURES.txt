@@ -1,0 +1,9 @@
+Retained setup failures; none is a successful compilation or runtime episode.
+Prepare sandbox: storage accounting denied access to recovery/weapon-visibility-
+audit-candidate/test-temp/tmpx0um3tp0. Same guard passed with filesystem access.
+x86 attempt01: admission refused37.54GiB allocated +3GiB planned >40GiB limit.
+No compiler/test ran in that attempt; no limits or counted roots were changed.
+storage-plan01.json and storage01/compression.json under the batch reports record
+45 exact generated files losslessly compressed;965171135 bytes reclaimed; no deletion.
+Independent recipe review found configuration/final verification outside the failure
+receipt scope. Corrected before the admitted x86 attempt02; no false passing run.

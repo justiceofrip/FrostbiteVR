@@ -8,8 +8,8 @@ Repeated Commit cannot duplicate the grenade edge. One config admits all three
 normal grenade/knife/contextual-tool opt-ins without diagnostic interaction flags.
 This tests custody and caller admission; it does not instantiate native ammo/debt,
 knife/gadget adapters or prove successful reload/support recovery in the game.
-Checks pending integration: Bc2PlayerGrenade and Bc2NormalPlayerToolsConfig x86/x64,
-then required combined validation with finished CHAT25/26 source.
+Combined with finished CHAT25/26; both named suites pass on x86/x64, and both
+normal builds pass305/305. Receipt: handoff/integrations/coordinator-20261028-batch01/.
 Final card still needs representative magazine/pump/bolt + normal interactions,
 actual native ownership/ammunition/fire outcomes and physical headset checks.
 No physical grenade or underbarrel reload implementation added.
