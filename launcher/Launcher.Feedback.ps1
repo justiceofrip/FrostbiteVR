@@ -107,7 +107,7 @@ function New-FvrFeedbackBundle([string]$InstallRoot, $Package, $Settings) {
     # Public runtime reports must remain below this installation's state root.
     # Never enumerate a user's disk, developer captures, assets or memory dumps.
     $runtime=Get-FvrChild $data 'runtime'
-    foreach($name in @('launch-check.json','asset-preparation.json','xr-selection.json','xr-preflight.stdout.log','xr-preflight.stderr.log')) {
+    foreach($name in @('launch-check.json','launcher-placement.json','asset-preparation.json','xr-selection.json','xr-preflight.stdout.log','xr-preflight.stderr.log')) {
         $sources.Add(@{name=$name;path=(Get-FvrChild $runtime $name)})
     }
     $record=Get-FvrChild $runtime 'active-session.json'

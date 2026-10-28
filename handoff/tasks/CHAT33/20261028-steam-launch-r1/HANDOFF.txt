@@ -1,0 +1,60 @@
+CHAT33 - Remaining headset and runtime startup cases: reported Play failures
+Status: needs-native-evidence; bounded diagnostic/placement corrections ready for integration.
+Branch: tasks/chat33-20261028-steam-launch-r1
+Worktree: G:\Unity\VRMMO\bc2vr-task-worktrees\chat33-20261028-steam-launch-r1
+Base: checkpoint/436-r56-equipment-rendering @ a16f75c34d63cd773962730d38b6a6787db4d028
+Origin: https://github.com/justiceofrip/FrostbiteVR.git
+Scope: original Steam Report(1)/launcher-last(6), plus user's added EA Report(2).
+Raw attachments remain private outside Git; only reviewed technical facts follow.
+Versions: both reports show package/runtime0.1.15, native checkpoint434 digest
+2e693ca5bbe9e8e333e582675fc43dd74a001b241b896db42b8f3c672274c738.
+runtime_build/source_revision name that native digest, NOT the launcher's Git commit.
+Retained package: bc2vr-recovery/release015/stage03/verified-payload (workspace sibling).
+Its inspected manifest pins match; admission/cache code matches the worker baseline.
+Current Entry/Session include later resolution/outcome logic; do not equate whole builds.
+Local active launcher is0.1.12; no package, game, settings or shared build was changed.
+Steam evidence: game SHA22e96001382eb847d3ab0a02b59ec7bb79ba47e04146e74c6c49e38465f38c96,
+file1.0.1.0, I386/PE32, timestamp1314211375, image0x1970000, entry0x19142ee,10 sections.
+Play -> Worker verified package -> Entry -> Test-Bc2GameInstallation -> PE gate fails.
+This precedes XR selection, assets, supervisor and game start; no headset data exists.
+Exact candidate hash is recognized, but native profile requires timestamp1314210909
+and image0x1913000. Opt-in WAS enabled; experimental_steam=false was failure default.
+wait_main_menu and native DiscoverMenuStartup/resolution also reject this layout.
+Headers/hash alone cannot validate signatures, ABI or rendering/equipment support.
+Correction: retain gate, report requested opt-in, runtime digest, admission status,
+structural readability and exact expected/observed profile mismatches; clarify error.
+EA evidence: SHA3911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258,
+file1.0.1.0/profile verified_release accepted; VDXR instance/system ready on Quest3.
+Asset tool then rejects launcher==game root OR launcher under game's Dist/Package.
+Redacted report cannot distinguish these placements. No game was started.
+XR elevation warning did not prevent this preflight; no CPU/GPU cause is established.
+Correction: setup rejects recognizable protected placement before install writes;
+Entry checks before XR/tools/download/closing game and exports path-free placement.
+Keep Python guard, settings, game/saves; allow dedicated game/BC2VR-Launcher folder.
+Existing user recovery: install launcher into fresh separate folder, select existing game.
+Changed source: launcher/Launcher.Storage.ps1, Launcher.Feedback.ps1,
+launcher/runtime/Entry.ps1, Startup.ps1. No native code/profile/admission broadening.
+Tests changed: Test-LauncherStartup/Storage/Feedback.ps1,
+test_runtime_steam_compatibility.py, test_runtime_asset_managed_cache.py.
+Deterministic: Startup89, Storage40, Feedback48 checks; Steam Python11 tests;
+managed-cache13 tests (Python3.12); packaged Worker/setup/update/rollback26 checks PASS.
+Reports: reports/chat33-checks/{startup,launcher-storage,feedback,steam-python,
+managed-cache-python312,user-setups}.log; storage.json. Local ignored evidence only.
+Initial managed-cache.log failures retained: console wrapping and embedded-Python
+fixture import isolation; structured assertion corrected, normal Python3.12 passed.
+Storage initially denied reading retained folder in sandbox; identical full inventory
+passed outside sandbox (128MiB plan,41777181628 allocated,40GiB cap/15GiB free floor).
+Independent diff review clean; CRLF-aware whitespace check passed; no live claims.
+Reproduction/acceptance: reported Steam headers stay refused with accurate diagnostics;
+root/Dist/Package setup refuses before writes; real Entry refuses before side effects;
+valid separate/nested cache generation and cache-hit behavior remain covered by fixtures.
+Pending: real Steam file-only signature/discovery/ABI evidence for exact SHA, then
+reviewed profile support before any native writes; do NOT merely allowlist the hash/tuple.
+Integrator must own required canonical x86/x64 checks, package/install and actual Play.
+EA actual-game check: fresh separate install, same accepted game, VDXR/Quest3; record
+exact runtime version, startup/stereo/input/equipment smoke/normal shutdown and headset limits.
+Steam headset/runtime versions absent; record them after executable admission is resolved.
+No normal builds, real launch, installation, headset acceptance or public release performed.
+Dependencies: none beyond base; proposed CURRENT update is diagnosis + pending live status.
+Read canonical handoff/campaign-chat-queue/INTEGRATE.txt; integrate only this exact task
+commit supplied in completion message. Preserve other chats; no automatic public release.

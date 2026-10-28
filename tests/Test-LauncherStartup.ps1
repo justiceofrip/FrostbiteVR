@@ -139,6 +139,51 @@ try {
         [Array]::Copy($overlap,376,$overlap,416,40)
         [IO.File]::WriteAllBytes($script:steamExe,$overlap)
         Reject {Test-Bc2ExecutableAdmission -Exe $script:steamExe -Hash $candidateHash -Config $config -ExperimentalSteam $true} 'sections overlap' 'candidate cannot alias two section ranges'
+        # Incident header metadata only; all code/data bytes are zero. The hash
+        # double above does NOT prove native compatibility of the real game.
+        $reported=[byte[]]::new(19703744)
+        [Array]::Copy($peBytes,$reported,$peBytes.Length)
+        [BitConverter]::GetBytes([uint16]10).CopyTo($reported,134)
+        [BitConverter]::GetBytes([uint32]1314211375).CopyTo($reported,136)
+        [BitConverter]::GetBytes([uint32]26297070).CopyTo($reported,168)
+        [BitConverter]::GetBytes([uint32]26673152).CopyTo($reported,208)
+        [BitConverter]::GetBytes([uint32]4096).CopyTo($reported,212)
+        $sections=@(
+            @(16273915,4096,16277504,4096,1610612768),
+            @(513834,16281600,516096,16281600,1610612768),
+            @(80,16797696,4096,16797696,1610612768),
+            @(960127,16801792,962560,16801792,1073741888),
+            @(7338144,17764352,364544,17764352,3221225536),
+            @(142616,25104384,143360,18128896,3221225536),
+            @(216672,25247744,217088,18272256,3221225536),
+            @(10,25464832,4096,18489344,3221225536),
+            @(826368,25468928,827392,18493440,1073741888),
+            @(376832,26296320,376832,19320832,1610612800)
+        )
+        for($i=0;$i -lt $sections.Count;$i++){
+            $offsets=@(8,12,16,20,36)
+            for($j=0;$j -lt $offsets.Count;$j++){
+                [BitConverter]::GetBytes([uint32]$sections[$i][$j]).CopyTo($reported,(376+$i*40+$offsets[$j]))
+            }
+        }
+        [IO.File]::WriteAllBytes($script:steamExe,$reported)
+        $config.source_sha256='c'*64
+        Reject {Test-Bc2GameInstallation @{game_path=$steamDir;steam_compatibility=$true} $config $root} 'needs native compatibility verification' 'reported Steam layout remains closed pending native evidence'
+        $report=Read-FvrJson (Join-Path $root 'launch-check.json')
+        Check ($report.steam_compatibility_requested -and -not $report.experimental_steam -and
+            $report.admission_status -ceq 'native_profile_unverified' -and -not $report.game_supported -and
+            -not $report.game_verified -and $null -eq $report.profile -and $report.runtime_source_sha256 -ceq ('c'*64)) 'failed admission preserves requested Steam setting and runtime identity separately from outcome'
+        Check ($report.pe_layout.structure_valid -and -not $report.pe_layout.native_profile_match -and
+            -not $report.pe_layout.valid -and $report.pe_layout.section_count -eq 10 -and
+            ($report.pe_layout.profile_mismatches.field -join ',') -ceq 'timestamp,image_size' -and
+            $report.pe_layout.profile_mismatches[0].observed -eq 1314211375 -and
+            $report.pe_layout.profile_mismatches[0].expected -eq 1314210909 -and
+            $report.pe_layout.profile_mismatches[1].observed -eq 26673152 -and
+            $report.pe_layout.profile_mismatches[1].expected -eq 26292224) 'readable reported PE records exact profile mismatches without claiming a corrupt file'
+        Check (($report|ConvertTo-Json -Depth 8) -notlike ('*'+$steamDir+'*')) 'reported-layout diagnostic contains no installation path'
+        Reject {Test-Bc2GameInstallation @{game_path=$steamDir;steam_compatibility=$false} $config $root} 'Enable the experimental Steam option' 'reported layout with opt-in off remains distinguishable'
+        $report=Read-FvrJson (Join-Path $root 'launch-check.json')
+        Check (-not $report.steam_compatibility_requested -and $report.admission_status -ceq 'steam_opt_in_required') 'disabled setting is reported explicitly'
         [IO.File]::WriteAllBytes($script:steamExe,$peBytes)
         $known=Test-Bc2GameInstallation @{game_path=$game;steam_compatibility=$true} $config $root
         Check ($known.sha256 -ceq $hash -and -not $known.experimental_steam -and $known.game_verified) 'known configured build keeps original admission behavior even with Steam option enabled'

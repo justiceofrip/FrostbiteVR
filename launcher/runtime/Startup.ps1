@@ -22,7 +22,10 @@ function Get-Bc2OpenXrSelection {
 function Get-Bc2ExecutablePeLayout([string]$Exe) {
     # File-only structural evidence. It does not verify native signatures or
     # authorize a hook. Read at most the headers and 96 section records.
-    $result=@{schema='bc2vr.executable-pe.v1';valid=$false;file_bytes=$null;machine=$null;timestamp=$null;optional_magic=$null;image_base=$null;image_size=$null;entry_rva=$null;characteristics=$null;dll_characteristics=$null;section_count=$null;sections=@();error=$null}
+    # Keep valid as the existing admission gate. Readable PE headers alone do
+    # not qualify the native profile; report those two facts independently.
+    $required=@{machine=0x14c;optional_magic=0x10b;timestamp=1314210909;image_base=0x400000;image_size=0x1913000}
+    $result=@{schema='bc2vr.executable-pe.v1';valid=$false;structure_valid=$false;native_profile_match=$false;required_native_profile=$required;profile_mismatches=@();file_bytes=$null;machine=$null;timestamp=$null;optional_magic=$null;image_base=$null;image_size=$null;entry_rva=$null;characteristics=$null;dll_characteristics=$null;section_count=$null;sections=@();error=$null}
     $file=$null
     try {
         $file=[IO.File]::Open($Exe,'Open','Read',[IO.FileShare]::Read)
@@ -70,8 +73,13 @@ function Get-Bc2ExecutablePeLayout([string]$Exe) {
                     ($section.raw_bytes -gt 0 -and $prior.raw_bytes -gt 0 -and $section.raw_offset -lt $prior.raw_offset+$prior.raw_bytes -and $prior.raw_offset -lt $section.raw_offset+$section.raw_bytes)){throw 'PE sections overlap.'}
             }
         }
+        $result.structure_valid=$true
+        foreach($field in @('machine','optional_magic','timestamp','image_base','image_size')){
+            if($result[$field] -ne $required[$field]){$result.profile_mismatches+=@{field=$field;expected=$required[$field];observed=$result[$field]}}
+        }
         if($result.machine -ne 0x14c -or $result.optional_magic -ne 0x10b){throw 'Experimental Steam startup requires a PE32/I386 executable.'}
         if($result.timestamp -ne 1314210909 -or $result.image_base -ne 0x400000 -or $result.image_size -ne 0x1913000){throw 'Experimental Steam executable layout differs from native build 795745.'}
+        $result.native_profile_match=$true
         $result.valid=$true
     } catch {
         # Our fixed validation messages are safe; filesystem exception messages
@@ -87,26 +95,34 @@ function Test-Bc2ExecutableAdmission {
         return @{experimental_steam=$false;profile='verified_release';game_verified=$true;pe_layout=$null}
     }
     $pe=Get-Bc2ExecutablePeLayout $Exe
+    $status='unverified_executable'
     if($Hash -cne $candidate){
         $message='This BC2 executable has not been verified for this pre-alpha. No VR hook was attached and the game was not changed. Use Report feedback > Save diagnostics to share its build fingerprint. SHA-256: '+$Hash
     }elseif($ExperimentalSteam -isnot [bool] -or -not $ExperimentalSteam){
+        $status='steam_opt_in_required'
         $message='This Steam executable is an experimental candidate. Enable the experimental Steam option in the launcher to try it. Native compatibility is not verified; no game was started. SHA-256: '+$Hash
     }elseif(-not $pe.valid){
-        $message='Experimental Steam startup refused: '+$pe.error+' No game was started. Use Report feedback > Save diagnostics.'
+        $status=if($pe.structure_valid){'native_profile_unverified'}else{'pe_inspection_failed'}
+        $detail=if($pe.structure_valid){'This Steam executable is recognized, but its layout does not match the supported native profile. Steam compatibility is enabled; this executable needs native compatibility verification.'}else{$pe.error}
+        $message='Experimental Steam startup refused: '+$detail+' No game was started. Use Report feedback > Save diagnostics.'
     }else{
         # Recheck the exact candidate after the bounded file-only inspection.
         $rechecked=$null
         try {$rechecked=(Get-FileHash -LiteralPath $Exe -Algorithm SHA256).Hash.ToLowerInvariant()}catch{}
         if($null -eq $rechecked){
+            $status='executable_recheck_failed'
             $message='BC2 executable could not be rechecked during experimental Steam admission.'
         }elseif($rechecked -cne $Hash){
+            $status='executable_changed'
             $message='BC2 executable changed during experimental Steam admission.'
         }else{return @{experimental_steam=$true;profile='experimental_steam_795745';game_verified=$false;pe_layout=$pe}}
     }
-    $failure=[InvalidOperationException]::new($message);$failure.Data['bc2_pe_layout']=$pe;throw $failure
+    $failure=[InvalidOperationException]::new($message);$failure.Data['bc2_pe_layout']=$pe;$failure.Data['bc2_admission_status']=$status;throw $failure
 }
 function Test-Bc2GameInstallation([hashtable]$Settings,[hashtable]$Config,[string]$StateRoot) {
-    $report=@{schema='bc2vr.launch-check.v1';utc=[DateTime]::UtcNow.ToString('o');version=$Config.version;game_found=$false;game_supported=$false;game_verified=$false;experimental_steam=$false;profile=$null;pe_layout=$null;game_sha256=$null;file_version=$null;error=$null}
+    $steam=$Settings.ContainsKey('steam_compatibility') -and $Settings.steam_compatibility -is [bool] -and $Settings.steam_compatibility
+    $source=if($Config.ContainsKey('source_sha256')){$Config.source_sha256}else{$null}
+    $report=@{schema='bc2vr.launch-check.v1';utc=[DateTime]::UtcNow.ToString('o');version=$Config.version;runtime_source_sha256=$source;steam_compatibility_requested=$steam;admission_status='game_not_checked';game_found=$false;game_supported=$false;game_verified=$false;experimental_steam=$false;profile=$null;pe_layout=$null;game_sha256=$null;file_version=$null;error=$null}
     try {
         if(-not $Settings.game_path -or -not [IO.Path]::IsPathFullyQualified($Settings.game_path)){throw 'Choose your Battlefield Bad Company 2 installation folder using Choose game folder in the launcher.'}
         $exe=Join-Path $Settings.game_path 'BFBC2Game.exe'
@@ -114,14 +130,15 @@ function Test-Bc2GameInstallation([hashtable]$Settings,[hashtable]$Config,[strin
         $report.game_found=$true
         $report.game_sha256=(Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant()
         $report.file_version=[Diagnostics.FileVersionInfo]::GetVersionInfo($exe).FileVersion
-        $steam=$Settings.ContainsKey('steam_compatibility') -and $Settings.steam_compatibility -is [bool] -and $Settings.steam_compatibility
         $admission=Test-Bc2ExecutableAdmission -Exe $exe -Hash $report.game_sha256 -Config $Config -ExperimentalSteam $steam
+        $report.admission_status='admitted'
         $report.game_supported=$true;$report.game_verified=$admission.game_verified;$report.experimental_steam=$admission.experimental_steam
         $report.profile=$admission.profile;$report.pe_layout=$admission.pe_layout
         return @{exe=$exe;sha256=$report.game_sha256;experimental_steam=$admission.experimental_steam;profile=$admission.profile;game_verified=$admission.game_verified;pe_layout=$admission.pe_layout}
     } catch {
         $report.error=$_.Exception.Message
         if($_.Exception.Data.Contains('bc2_pe_layout')){$report.pe_layout=$_.Exception.Data['bc2_pe_layout']}
+        if($_.Exception.Data.Contains('bc2_admission_status')){$report.admission_status=$_.Exception.Data['bc2_admission_status']}
         throw
     }
     finally {Write-FvrJson (Join-Path $StateRoot 'launch-check.json') $report}
