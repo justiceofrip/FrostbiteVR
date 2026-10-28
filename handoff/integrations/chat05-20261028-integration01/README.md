@@ -4,7 +4,9 @@ Integrated `tasks/chat05-20261028-holster-replacement-r1` at
 `107ea10b84b5ffbc116b2837cc4183043db5e868`, from accepted baseline
 `af546c3e76830fdd2d35459ac7f97f83149c5620`. Candidate merge and tested source:
 `f05043df9ab3eb2dbf4e7a0fedeefbe4bebeeb40`; target branch:
-`checkpoint/436-r56-equipment-rendering`. Source publication is pending.
+`checkpoint/436-r56-equipment-rendering`. Source push was verified at
+`13ce0fd0202b4a0fb9e940845d37bfdb0216a145`; the later status-only commit
+preserves the tested source and unchanged runtime identities.
 [receipt.json](receipt.json) records this batch independently from installation.
 
 The change adds nine ammunition-resource replacement combinations and scoped

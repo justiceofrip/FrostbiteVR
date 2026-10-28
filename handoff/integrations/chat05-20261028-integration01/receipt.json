@@ -21,7 +21,8 @@
     "lease_token": "chat05-20261028-integration01-8df7a07d-7b85-4793-b8f8-33296191cdbc",
     "prior_relinquishment": "COORDINATION user confirmation and completed CHAT04 receipt",
     "idle_process_check": true,
-    "lease_released": false
+    "lease_held_when_receipt_written": true,
+    "release_policy": "Release exact owned token after final status push and shared-process idle verification; final chat reports outcome"
   },
   "merge_conflicts": 0,
   "runtime": {
@@ -212,7 +213,12 @@
   ],
   "worker_validation": "Seven isolated CPU suites; handoff/tasks/CHAT05/20261028-holster-replacement-r1/VALIDATION.txt",
   "source_push": {
-    "status": "pending"
+    "verified_remote_ref": "refs/heads/checkpoint/436-r56-equipment-rendering",
+    "status_only_successor_preserves_source_and_runtime": true,
+    "tested_source_commit": "f05043df9ab3eb2dbf4e7a0fedeefbe4bebeeb40",
+    "verified_utc": "2026-10-28T16:21:11.1011938Z",
+    "status": "succeeded",
+    "pushed_tip_at_verification": "13ce0fd0202b4a0fb9e940845d37bfdb0216a145"
   },
   "installation": {
     "observed_active_version": "0.1.12",

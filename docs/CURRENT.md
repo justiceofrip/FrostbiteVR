@@ -23,7 +23,7 @@ pins the source, six binary/symbol pairs and retained failed episodes under
 `reports/integration-chat04-20261028-01`. OpenXR preflight failed at instance
 creation (`XrResult=-2`); installation and startup/equipment smoke remain pending.
 Launcher0.1.12 and settings are unchanged. No native/headset acceptance follows
-from these builds. CHAT04 still needs replacement-magazine tracking loss, M95
+from these builds. CHAT04's replacement-magazine tracking loss, M95
 left-root recovery, support/pump and native missing-render checks remain open.
 
 The preceding R56 runtime and symbols remain as a fallback under

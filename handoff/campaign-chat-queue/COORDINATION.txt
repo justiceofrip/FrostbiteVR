@@ -18,7 +18,8 @@ Last workflow integration: CHAT05 regression coverage; native evidence pending.
 Integrated source merge: f05043df9ab3eb2dbf4e7a0fedeefbe4bebeeb40
 Built combined source commit: 532b75060f9bfe78d013466fa12cf6513a0a9a95
 Included task commit: 107ea10b84b5ffbc116b2837cc4183043db5e868
-Source push: pending final integration publication.
+Source push: verified at 13ce0fd0202b4a0fb9e940845d37bfdb0216a145.
+The subsequent status-only commit preserves the tested source/runtime identities.
 CHAT05 changes tests/handoffs only; built runtime identity above is unchanged.
 Prior CHAT02/CHAT04 integrations remain included with their original evidence.
 Last workflow local mod update: none; fresh required OpenXR preflight failed.
