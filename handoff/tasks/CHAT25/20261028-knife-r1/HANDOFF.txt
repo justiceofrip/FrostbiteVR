@@ -1,0 +1,43 @@
+CHAT25 - Knife single-jab reliability
+Updated: October 28, 2026
+Status: needs-native-evidence (regressions and diagnostic request prepared).
+Paired selected task: CHAT26 - Knife action-matched audio; same source branch.
+Worktree: G:\Unity\VRMMO\bc2vr-task-worktrees\chat25-chat26-20261028-knife-r1
+Branch: tasks/chat25-chat26-20261028-knife-r1
+Pinned base: 4055200b51c2c258d48a33d30d09db9337127f6a
+Integration branch: checkpoint/436-r56-equipment-rendering
+Verified origin: https://github.com/justiceofrip/FrostbiteVR.git
+
+Changed: tests/SelectedMeleeAttackTests.cpp (two new scenario groups).
+At 72/90/120Hz: decelerating jab, duplicate packets, pending original outcome,
+withdrawal, completion and deliberate second jab preserve one intent per action.
+Incidental drift/lateral/reversed motion and AmmoObject/Mechanism/BodyInventory
+claim transfer cannot finish a partial jab; fresh regrip must settle.
+No current production recognition defect was demonstrated. Existing deceleration
+fix, gesture thresholds, native hit timing/damage and accepted opening progression
+are preserved. Mock completion is not native damage/progression evidence.
+
+Validation: see VALIDATION.json for exact isolated checks, hashes and failures.
+Run-IsolatedChecks.ps1 is the bounded G: reproduction, not a normal build wrapper.
+Normal Build.ps1 x86/x64, actual-game and headset acceptance belong to integrator.
+Shared CURRENT/ACTIVE/COORDINATION, profiles, installed mod and public release untouched.
+
+Evidence request: DIAGNOSTIC.txt (five single-jab/air controls, withdrawal/rejab,
+incidental combined interactions, bounded interruptions; recognition versus hit).
+Use exact current process/artifact/calibration; old recipe contains TWO strokes.
+No live test was attempted here. Existing runtime startup failures are not proof
+of knife failure and do not qualify these tasks. All untested cases stay pending.
+
+Dependency: CHAT26's default-off sound-context observation in this same commit.
+Companion handoff: ../../CHAT26/20261028-knife-r1/HANDOFF.txt.
+Proposed CURRENT update after integration: CHAT25 selected-policy regressions and
+CHAT26 sound-dispatch diagnostics integrated; native timing/audio/headset pending.
+No architecture contract change is proposed.
+
+Integration request: Read
+G:\Unity\VRMMO\FrostbiteVR\handoff\campaign-chat-queue\INTEGRATE.txt.
+Integrate the exact final commit reported for tasks/chat25-chat26-20261028-knife-r1
+once, including both task handoffs. Perform normal checks and the bounded linked
+diagnostics under the integration lease. Do not declare either card accepted from
+deterministic tests, callbacks, asset metadata or successful source integration.
+Continue CHAT25/CHAT26 when linked native evidence returns; no automatic next card.

@@ -1,0 +1,44 @@
+CHAT26 - Knife action-matched audio
+Updated: October 28, 2026
+Status: needs-native-evidence (diagnostic source ready for integration).
+Paired selected task: CHAT25 - Knife single-jab reliability; integrate branch once.
+Worktree: G:\Unity\VRMMO\bc2vr-task-worktrees\chat25-chat26-20261028-knife-r1
+Branch: tasks/chat25-chat26-20261028-knife-r1
+Pinned base: 4055200b51c2c258d48a33d30d09db9337127f6a
+Integration branch: checkpoint/436-r56-equipment-rendering
+Verified origin: https://github.com/justiceofrip/FrostbiteVR.git
+
+Changed source: src/games/bc2/Bc2KnifeSoundObservation.h,
+src/games/bc2/Bc2SelectedKnifeNative.cpp; tests/KnifeMotionBoundaryTests.cpp.
+Existing opt-in sound observation now records the innermost original native
+acquisition/attack scope, action serial/input and exact owner generations.
+Unadmitted nested calls mask the outer context; RAII restores it on return.
+Owner match is diagnostic context, not causal sound ownership, damage or audibility
+proof. Existing temporal candidates and ambiguity remain in the report.
+Original calls/arguments/returns, gameplay TLS, hooks, damage, windup and stock
+sound forwarding are unchanged. No suppression/replacement/audio asset changes.
+
+Deterministic coverage: nested/disabled scopes, restoration, foreign/invalid owner,
+unknown phase, retained temporal ambiguity and journal context retention.
+Validation and source hashes: ../../CHAT25/20261028-knife-r1/VALIDATION.json.
+Normal x86/x64 builds/linking and native callback/headset validation remain pending.
+Independent static review found no actionable issue; it is not runtime evidence.
+
+Retained research: knife-audio-route-r45/findings.json under
+G:\Unity\VRMMO\bc2vr-recovery\performance436 (exact SHA in DIAGNOSTIC.txt).
+Whole nonlooping authored cues do not distinguish multiple native Starts from
+one long recording. Static body-impact cues do not prove live impact playback.
+
+Diagnostic request: DIAGNOSTIC.txt plus CHAT25's linked episode matrix. Enable
+the existing SOUND_OBSERVE/TIMING_OBSERVE flags only for the bounded diagnostic.
+Count Starts, join original call context, preserve uncertainty, hear actual actions
+and misses/hits/withdrawal/interruption in a physical headset. Prove replacement
+ownership/cue readiness and existing impact behavior before changing playback.
+No native/headset session was run, installed mod changed or public release made.
+
+Integration request: Read
+G:\Unity\VRMMO\FrostbiteVR\handoff\campaign-chat-queue\INTEGRATE.txt.
+Integrate the exact final commit reported for tasks/chat25-chat26-20261028-knife-r1
+once with CHAT25; perform normal checks and linked diagnostics under its lease.
+Shared current-state proposal is in the CHAT25 handoff; no architecture change.
+Continue CHAT25/CHAT26 after native evidence; audio acceptance is still pending.
