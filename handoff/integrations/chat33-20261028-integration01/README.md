@@ -6,7 +6,9 @@ Integrated task `tasks/chat33-20261028-steam-launch-r1` at
 Candidate merge: `7d3673eb073639a6a92b4b8b2f14de07c3ebf3b0`.
 Validated combined source: `03dd44d2f77cd19a613829a5097971b7a0f06b20`.
 Integration target: `checkpoint/436-r56-equipment-rendering` at the verified
-FrostbiteVR origin. Source push is pending final publication of this receipt.
+FrostbiteVR origin. Source push was verified at
+`8c55ae07d64aef6db7220fff0ecfdbcb23afa68e`; the subsequent status-only commit
+preserves the tested source and unchanged native runtime identities.
 
 The [task handoff](../../tasks/CHAT33/20261028-steam-launch-r1/HANDOFF.txt) explains
 the two separate reported failures. Steam's recognized executable remains refused

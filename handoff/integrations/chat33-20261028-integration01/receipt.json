@@ -245,7 +245,10 @@
   "source_push": {
     "verified_remote_ref": "refs/heads/checkpoint/436-r56-equipment-rendering",
     "tested_source_commit": "03dd44d2f77cd19a613829a5097971b7a0f06b20",
-    "status": "pending"
+    "status": "succeeded",
+    "pushed_tip_at_verification": "8c55ae07d64aef6db7220fff0ecfdbcb23afa68e",
+    "verified_utc": "2026-10-28T17:16:32.9939434Z",
+    "status_only_successor_preserves_source_and_runtime": true
   },
   "installation": {
     "runtime_label": "SteamVR",

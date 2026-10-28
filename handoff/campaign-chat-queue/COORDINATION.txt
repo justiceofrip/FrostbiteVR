@@ -19,7 +19,8 @@ Integrated source merge: 7d3673eb073639a6a92b4b8b2f14de07c3ebf3b0
 Validated combined source: 03dd44d2f77cd19a613829a5097971b7a0f06b20
 Built combined source commit: 532b75060f9bfe78d013466fa12cf6513a0a9a95
 Included task commit: 7b48b7c24e7118a358e66cfbc0303eb0252e4f2c
-Source push: pending; candidate validated, final status will record verified push.
+Source push: verified at 8c55ae07d64aef6db7220fff0ecfdbcb23afa68e.
+The subsequent status-only commit preserves the tested source/runtime identities.
 CHAT33 changes interpreted launcher code; built native runtime above is unchanged.
 Restart fixture correction is test-only; prior failure remains in the batch evidence.
 Prior CHAT02/CHAT04/CHAT05/CHAT06 integrations retain their original evidence.
