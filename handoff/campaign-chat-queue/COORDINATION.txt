@@ -1,0 +1,30 @@
+BC2 VR shared integration coordination
+Updated: October 28, 2026
+Policy: Isolated worker worktrees; one integrator writes the combined checkout/mod.
+Canonical repository: G:\Unity\VRMMO\FrostbiteVR
+Integration branch: checkpoint/436-r56-equipment-rendering
+Verified source origin: https://github.com/justiceofrip/FrostbiteVR.git
+Observed source HEAD when this workflow was prepared:
+258715cd36cf75e74f54bf350ba27bc54c142ca9
+This observed HEAD is not a new integration, build, push or installation receipt.
+Workers: Resolve the integration branch's current commit at start; record it.
+Worktree root: G:\Unity\VRMMO\bc2vr-task-worktrees
+Worker branches: tasks/chatNN-<unique-run-id>
+Worker handoffs: handoff/tasks/CHATnn/<unique-run-id>/HANDOFF.txt in each worktree.
+Exclusive integration lease: worktree root\INTEGRATION.lock (atomic CreateNew).
+Shared resource ownership: user confirmed prior chats relinquished shared resources
+on October 28, 2026, before the CHAT02 integration lease was acquired.
+Last workflow integration: CHAT02 diagnostic source, candidate validated.
+Integrated source commit: 50f718828c54bb6a7e8e02b9492cfdb7208e0e29
+Included task commit: a203b7606241b8c5ee9244f709563cd92e076c77
+Last workflow source push: pending final baseline recheck and normal push.
+Last workflow local mod update: none; diagnostic-only source, no runtime payload.
+Observed launcher target: G:\Unity\VRMMO\BC2VR-Launcher, active0.1.12 unchanged.
+Batch receipt: handoff/integrations/chat02-20261028-integration01/receipt.json
+Validation:18/18 canonical diagnostic tests; normal source/flags/binaries unchanged.
+Pending: bounded live baseline, actual death/recovery and physical-headset checks.
+Current implementation and runtime evidence: docs/CURRENT.md
+Integration procedure: handoff/campaign-chat-queue/INTEGRATE.txt
+Workers must not edit this coordination file or canonical CURRENT/ACTIVE.
+Integrator alone updates shared source/deployment identities and batch receipt.
+Public BC2VR releases remain separate from FrostbiteVR source updates.

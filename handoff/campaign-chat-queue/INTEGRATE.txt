@@ -1,0 +1,115 @@
+BC2 VR integration instructions
+Only this role updates the combined source branch, shared builds and installed mod.
+Canonical checkout: G:\Unity\VRMMO\FrostbiteVR
+Read applicable AGENTS.md, docs/CURRENT.md and COORDINATION.txt beside this file.
+Read only the selected task/run handoffs and evidence relevant to this batch.
+This is not permission to publish a public BC2VR release.
+
+INPUTS AND EXCLUSIVE OWNERSHIP
+Take an explicit list of task branches/commit IDs and their handoff paths from
+worker completion messages. Do not discover and merge every branch automatically.
+Accept needs-native-evidence requests as diagnostic work, not as completed fixes.
+The existing shared-checkout chat must finish before this role edits canonical
+source, builds, controls the game, or installs. Confirm its completion from the
+user or reliable session status; a clean Git status alone is not proof.
+Do not move, reset or automatically stash that chat's unfinished work.
+Confirm all other existing sessions have relinquished shared build trees, game
+input, profiles and installation before using those resources. An isolated
+worktree alone does not prove its chat is no longer running a shared native test.
+
+Only one integration chat may operate at once. Before canonical mutations,
+acquire a persistent exclusive lease at:
+G:\Unity\VRMMO\bc2vr-task-worktrees\INTEGRATION.lock
+Create the parent directory if needed. Atomically create the lock FILE using
+FileMode.CreateNew (never OpenOrCreate, overwrite, or a check-then-write).
+Write a unique owner token, chat/run identity and timestamp; close the file but
+retain it for the full multi-tool integration/deployment transaction.
+If it already exists, do not proceed. Never steal/delete a lock based on age.
+Recover an abandoned lease only after confirming its owner has stopped.
+Release only your own lease, verifying its token before removing that exact file,
+after no integration-owned build/game/install process can still mutate resources.
+
+PREPARE THE LATEST COMBINED SOURCE
+Verify COORDINATION's integration branch and FrostbiteVR origin against Git.
+If either differs, reconcile the real intended target; do not guess main/master
+or a public-release repository. Inspect status and preserve unrelated edits.
+Fetch the relevant source refs. Resolve task refs to the exact reported commits;
+if a branch moved, use the requested commit and report the newer tip separately.
+Verify each task's base, diff, handoff, dependencies and prior integration receipt.
+Skip already-integrated changes. Do not infer cross-task compatibility from tests
+on the workers' separate baselines.
+
+Use a uniquely named integration candidate branch in the CANONICAL checkout,
+starting from the latest intended integration branch and incorporating any newer
+remote integration commits. Keep the integration target ref at its accepted
+baseline while validating the candidate. Do not point the existing CMake build
+trees at a worker source directory.
+Merge the selected task commits one at a time. Resolve overlapping changes
+semantically, retaining both intended behaviors; never accept an entire old file
+or worktree as a replacement for newer combined work. Do not force-push, hard
+reset, clean others' files, or resolve conflicts with blanket ours/theirs.
+If a semantic conflict cannot be resolved from evidence, report the exact conflict
+and preserve candidate work for continuation; do not install it.
+
+VALIDATE THE COMBINATION
+Obey StorageBudget and reuse canonical x86/x64 build trees. Run relevant focused
+regressions and both required normal builds for native changes. Recheck combined
+knife/grenade/gadget/reload behavior and other affected shared contracts.
+For a native diagnostic request, run only its bounded experiment and return
+evidence to the requesting worker; do not turn that into speculative integration.
+Keep actual-game and headset acceptance distinct; schedule required checks against
+the exact combined candidate. Never call a task headset-accepted from unit tests.
+Do not rerun passed suites solely for later doc-only edits or unchanged binaries.
+
+Record candidate source commit/closure, exact artifact/build receipt, included
+task commits and outstanding validation. Reconcile CURRENT/architecture updates
+once, keeping them concise. Save an integration receipt under
+handoff/integrations/<unique-run-id>/ with task identities and evidence links.
+Do not replace task-specific handoffs with a shared catch-all narrative.
+Review and explicitly stage/commit the intended source/shared-doc changes and
+sanitized receipts before the integration push. Include applicable workflow docs
+only after reviewing them; never stage every untracked file indiscriminately.
+Bind the runtime receipt to the exact built source commit/closure. Later doc-only
+commits do not change that runtime identity or require an unchanged binary rebuild.
+
+UPDATE GITHUB AND THE LOCAL MOD
+Before advancing the shared source branch, re-fetch/recheck its local and remote
+tips. If either advanced beyond the baseline, combine the new changes and rerun
+affected validation. Never overwrite a newer tip or bypass a rejected push.
+Advance the intended integration branch by a normal merge/fast-forward that
+preserves all prior commits, then push it to the VERIFIED FrostbiteVR origin.
+Report source-push status independently of runtime installation status.
+
+Deploy only artifacts built from this validated combined source, never a worker's
+older standalone build. Discover the actual current launcher/install target from
+the existing local configuration; do not guess a directory or overwrite game files.
+Ensure the mod/session is safely idle. Preserve user settings and a bounded,
+identified fallback with required matching symbols under the storage policy.
+Stage and verify the complete candidate payload against its receipt before
+switching the installed mod through the established installation/update workflow.
+Run the scoped startup/equipment check on that exact installed payload.
+If installation or smoke validation fails, restore the previous local payload and
+settings, record the failure, and retain the source commit/evidence. Do not claim
+installation succeeded just because source was pushed. Never rewrite Git history
+to hide a failed deployment.
+
+If physical-headset acceptance is still pending, label an installed candidate as
+a test candidate and identify the missing checks; do not advertise it as accepted.
+If no safe update recipe/target or required runtime evidence can be established,
+finish source/validation work and report the specific remaining install gap.
+FrostbiteVR source pushes do not publish BC2VR release binaries. Packaging, release
+tags, player-facing update manifests and public releases require their own scope.
+
+CLOSE
+Update canonical CURRENT with the resulting behavior and evidence limits.
+Update COORDINATION with last integrated source, pushed source, installed runtime
+receipt, batch receipt and any failed/pending step. Distinguish these identities.
+If deployment outcomes change tracked CURRENT/coordination/receipt files after
+the source push, review and commit those specific status changes separately, then
+normally push that docs-only commit too. Preserve a rejected push and reconcile
+remote changes without force. Report a pending status push rather than claiming
+GitHub has the final deployment state. Do not rebuild unchanged binaries for it.
+Give the user included task IDs, combined source commit/GitHub status, exact mod
+installation status, tests, remaining headset checks and a next-task prompt.
+Release the lease after all owned processes finish. Do not launch another batch
+or publish deferred features automatically.

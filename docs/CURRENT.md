@@ -147,7 +147,10 @@ before either eye capture, then185 succeeded; do not call it a complete pass.
 Evidence: `restart-fast-run-r48-retry-prep/run01`, independent audit
 `59a3933f63ea5a4cb61962b2bfd2d2d9c576e34f7c6a44af01fe9bffa6e59644`.
 The known-seat camera Wait is a candidate cause, not proven per-request evidence.
-Actual death, full jeep ride and all campaign vehicle coverage remain open.
+CHAT02's [R3 diagnostic integration](../handoff/integrations/chat02-20261028-integration01/README.md)
+preserves rejected health baselines;18/18 canonical tests pass. No runtime change
+or new actual-death/recovery/headset evidence; the bounded live baseline request,
+full jeep ride and all campaign vehicle coverage remain open.
 
 Preserve qualified performance comparisons; no guaranteed90Hz/headset performance
 claim follows from diagnostic pairs. HUD flicker, knife hit/audio polish,

@@ -1,0 +1,87 @@
+{
+  "schema": "fvr.integration.source-only.v1",
+  "run": "chat02-20261028-integration01",
+  "recorded_utc": "2026-10-28T14:12:28.5404290Z",
+  "integration_branch": "checkpoint/436-r56-equipment-rendering",
+  "candidate_branch": "integration/chat02-20261028-health-baseline-r3",
+  "origin": "https://github.com/justiceofrip/FrostbiteVR.git",
+  "accepted_baseline": "258715cd36cf75e74f54bf350ba27bc54c142ca9",
+  "candidate_source_commit": "50f718828c54bb6a7e8e02b9492cfdb7208e0e29",
+  "tasks": [
+    {
+      "handoff": "handoff/tasks/CHAT02/20261028-health-baseline-r3/HANDOFF.txt",
+      "task_acceptance": "needs-native-evidence",
+      "branch": "tasks/chat02-20261028-health-baseline-r3",
+      "id": "CHAT02",
+      "commit": "a203b7606241b8c5ee9244f709563cd92e076c77"
+    }
+  ],
+  "scope": "Diagnostic source only; no production/native/launcher/build changes",
+  "user_confirmed_other_chats_relinquished_shared_resources": true,
+  "persistent_exclusive_lease_acquired": true,
+  "merge_conflicts": 0,
+  "independent_source_review": "passed; no actionable defect",
+  "canonical_diagnostic_tests": {
+    "purpose": "Verify merged canonical import paths and file publication",
+    "log": {
+      "bytes": 3100,
+      "sha256": "4aa6cc4f37f60119036f57f644538c3d64c0c2c78c3b06afb3e9c7970db38c41",
+      "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\integration-chat02-20261028-01\\canonical-tests.log"
+    },
+    "passed": 18,
+    "failed": 0
+  },
+  "normal_runtime": {
+    "version": "unreleased-checkpoint436-custody-frame01",
+    "normal_flags_verified": 110,
+    "receipt_sha256": "1bbce04a887c1b9c022d0d4aeb6f58e5df0dd1faa28b4c23fb79db8f2e7db002",
+    "mismatches": 0,
+    "current_identity_audit": {
+      "bytes": 3466,
+      "sha256": "3f452729a6429da5c24f15a4f42f8c9a2b4e0fc0e7513317e437e2d4458a7612",
+      "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\integration-chat02-20261028-01\\runtime-unchanged.json"
+    },
+    "frozen_build_binary_pairs_verified": 6,
+    "receipt": "G:\\Unity\\VRMMO\\bc2vr-recovery\\performance436\\root-custody-normal-r56-prep\\build01\\normal-runtime\\build-receipt.json",
+    "native_files_verified": 576,
+    "native_source_sha256": "af13daab2acb73ac73273f1a7719515b7befdbb89d3537db2b25eeba2c6f59e8"
+  },
+  "native_builds": {
+    "x64": "not required: native sources and binaries unchanged",
+    "x86": "not required: native sources and binaries unchanged"
+  },
+  "storage": {
+    "bytes": 2959,
+    "sha256": "c3b6c734919dae3f65b43efb5c9f8fe314f80cc926ea85132c1b641ea74de957",
+    "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\integration-chat02-20261028-01\\storage-admission.json"
+  },
+  "source_push": {
+    "source_commit": "50f718828c54bb6a7e8e02b9492cfdb7208e0e29",
+    "status": "pending"
+  },
+  "installation": {
+    "runtime_changed": false,
+    "observed_fallback_version": "0.1.11",
+    "active_file": {
+      "bytes": 52,
+      "sha256": "9b60ff5ce16e3c146a56d5410edbd43b9f91e393ab7851af41d9c6f3b800a8b2",
+      "path": "G:\\Unity\\VRMMO\\BC2VR-Launcher\\active.json"
+    },
+    "smoke_test_run": false,
+    "launcher_target": "G:\\Unity\\VRMMO\\BC2VR-Launcher",
+    "status": "not performed; no runtime payload in diagnostic-only task",
+    "observed_active_version": "0.1.12"
+  },
+  "native_diagnostic": {
+    "sessions_run": 0,
+    "request": "One R3 pre-action baseline, exact PID/birth, normal consumers and fresh storage admission; no grenade on refusal",
+    "status": "pending",
+    "reason": "Live-named SP01 on-foot checkpoint and current normal-session input/observation binding not established; old R14 wrapper remains unbound"
+  },
+  "headset": {
+    "acceptance": false,
+    "available": false
+  },
+  "actual_death_recovery_accepted": false,
+  "public_release": false
+}
