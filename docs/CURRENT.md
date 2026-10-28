@@ -5,6 +5,15 @@ Updated October 28, 2026. This replaces old next-step instructions; prior eviden
 
 ## Active work
 
+CHAT06 vehicle-transition retention regressions are integrated: nine ammunition
+cases and four pump/bolt cases pass in both normal configurations (two suites
+per architecture). Runtime source and the CHAT04 artifact receipt are unchanged.
+The [integration receipt](../handoff/integrations/chat06-20261028-integration01/README.md)
+records another OpenXR instance-creation failure (`XrResult=-2`); no game/install,
+launcher0.1.12/settings unchanged. Native permitted entry/exit, equipment lineage,
+partial reload and owed-cycle recovery, and headset acceptance remain pending.
+The tests protect retained debt; they do not prove successful return on foot.
+
 CHAT05 regression coverage is integrated: nine pickup resource cases and scoped
 MP443 hip stow/draw preserve the tested ownership boundaries. Both normal
 architectures passed the two affected suites; the runtime source, operation
