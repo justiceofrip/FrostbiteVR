@@ -112,6 +112,7 @@ void RevokeAdmission()noexcept {
 }
 struct Scope {Action action;Scope* previous=nullptr;};
 thread_local Scope* acquiring=nullptr;thread_local Scope* attacking=nullptr;
+thread_local KnifeSoundDispatchContext knifeSoundDispatch;
 struct ScopeRestore {Scope*& slot;Scope* previous;~ScopeRestore(){slot=previous;}};
 bool ShotOffsets(unsigned shot)noexcept {
     std::array<float,3> direction{},position{};detail::Reader r{service.memory};
@@ -155,6 +156,7 @@ unsigned __fastcall RetryHook(void* self,void*,unsigned soldier,const void* tran
 }
 std::uintptr_t __fastcall AcquireHook(void* self,void*) {
     Active active;Scope local;bool admitted=false;const auto caller=reinterpret_cast<unsigned>(_ReturnAddress());
+    KnifeSoundDispatchScope soundScope(knifeSoundDispatch,service.soundObservation.load(std::memory_order_relaxed));
     RawEntry(service.acquire,reinterpret_cast<unsigned>(self),caller);
     HookOutcome outcome=HookOutcome::Disabled;
     if(service.enabled.load(std::memory_order_acquire)&&IsAcquireCaller(caller)){
@@ -187,7 +189,11 @@ std::uintptr_t __fastcall AcquireHook(void* self,void*) {
     Count(service.acquire,outcome);
     if(!admitted)return originalAcquire(self);
     local.previous=acquiring;acquiring=&local;ScopeRestore restore{acquiring,local.previous};
+    soundScope.Bind({KnifeSoundDispatchPhase::Acquisition,local.action.intent.serial,local.action.row.input,
+        local.action.native.client.owner.actorGeneration,local.action.native.client.owner.equipGeneration,
+        local.action.native.client.owner.soldier,local.action.native.client.owner.weapon,local.action.native.links.effects});
     const auto result=originalAcquire(self);
+    soundScope.Clear();
     local.action.target=ReadTarget(service.memory,local.action.native.links.effects);local.action.row.acquisitionReturned=true;
     if(local.action.target){local.action.row.handle=local.action.target->handle;local.action.row.target=local.action.target->soldier;}
     std::lock_guard lock(service.gate);
@@ -226,6 +232,7 @@ std::uintptr_t __fastcall DamageHook(void* self,void*,void* damage,void* player)
 }
 std::uintptr_t __fastcall AttackHook(void* self,void*,float dt,unsigned primary,void* context) {
     Active active;Scope local;bool admitted=false;const auto caller=reinterpret_cast<unsigned>(_ReturnAddress());
+    KnifeSoundDispatchScope soundScope(knifeSoundDispatch,service.soundObservation.load(std::memory_order_relaxed));
     RawEntry(service.attack,reinterpret_cast<unsigned>(self),caller);
     HookOutcome outcome=HookOutcome::Disabled;
     if(service.enabled.load(std::memory_order_acquire)&&caller==0x6dd9e5){
@@ -248,7 +255,11 @@ std::uintptr_t __fastcall AttackHook(void* self,void*,float dt,unsigned primary,
     Count(service.attack,outcome);
     if(!admitted)return originalAttack(self,dt,primary,context);
     local.action.row.attackedNs=Now();local.previous=attacking;attacking=&local;ScopeRestore restore{attacking,local.previous};
+    soundScope.Bind({KnifeSoundDispatchPhase::Attack,local.action.intent.serial,local.action.row.input,
+        local.action.native.client.owner.actorGeneration,local.action.native.client.owner.equipGeneration,
+        local.action.native.client.owner.soldier,local.action.native.client.owner.weapon,local.action.native.links.effects});
     const auto result=originalAttack(self,dt,primary,context);local.action.row.attackReturned=true;
+    soundScope.Clear();
     std::lock_guard lock(service.gate);
     if(Same(local.action)){
         service.action->attackInFlight=false;
@@ -543,6 +554,10 @@ void ObserveSound(bool start,unsigned receiver,const std::array<unsigned char,16
     KnifeSoundObservation row;row.observedNs=Now();row.receiver=receiver;row.owner=owner;
     row.weapon=source->client.owner.weapon;row.thread=GetCurrentThreadId();row.unused=unused;
     row.kind=kind;row.start=start;row.ownerVerified=true;
+    row.originalScope=knifeSoundDispatch;
+    row.originalScopeOwnerMatched=KnifeSoundDispatchOwnerMatches(row.originalScope,owner,
+        source->client.owner.weapon,source->links.effects,source->client.owner.actorGeneration,
+        source->client.owner.equipGeneration);
     const auto add=[&](const Row& action,const Native& native,bool complete){
         // Equip/reference-space changes do not grant a newer action ownership
         // of an older sound. Retain at most two exact-lifetime temporal candidates.
@@ -716,6 +731,7 @@ void Report(std::ostream& out) {
         matrix(r.nativeBefore);out<<",\"blade\":";matrix(r.blade);out<<'}';}
     out<<"],\"sound_observation\":{\"enabled\":"<<service.soundObservation.load()
        <<",\"native_timing_modified\":false,\"sounds_suppressed\":0,\"correlation_is_hit_proof\":false"
+       <<",\"dispatch_context_is_causality_proof\":false,\"observation_is_audibility_proof\":false"
        <<",\"entries\":"<<service.soundEntries.load()<<",\"contention\":"<<service.soundContention.load()
        <<",\"rejected\":"<<service.soundRejected.load()<<",\"total\":"<<service.sounds.Total()<<",\"rows\":[";
     bool soundComma=false;for(const auto& row:service.sounds.Rows()){if(!row.ordinal)continue;
@@ -723,7 +739,11 @@ void Report(std::ostream& out) {
         out<<"{\"ordinal\":"<<row.ordinal<<",\"observed_ns\":"<<row.observedNs<<",\"receiver\":"<<row.receiver
            <<",\"owner\":"<<row.owner<<",\"weapon\":"<<row.weapon<<",\"thread\":"<<row.thread
            <<",\"unused\":"<<row.unused<<",\"kind\":"<<unsigned(row.kind)<<",\"start\":"<<row.start
-           <<",\"owner_verified\":"<<row.ownerVerified<<",\"candidate_count\":"<<row.candidateCount<<",\"candidates\":[";
+           <<",\"owner_verified\":"<<row.ownerVerified<<",\"original_scope\":{\"phase\":"<<unsigned(row.originalScope.phase)
+           <<",\"serial\":"<<row.originalScope.serial<<",\"input\":"<<row.originalScope.input
+           <<",\"actor_generation\":"<<row.originalScope.actorGeneration<<",\"item_generation\":"<<row.originalScope.itemGeneration
+           <<",\"owner\":"<<row.originalScope.owner<<",\"weapon\":"<<row.originalScope.weapon<<",\"effects\":"<<row.originalScope.effects
+           <<",\"owner_matched\":"<<row.originalScopeOwnerMatched<<"},\"candidate_count\":"<<row.candidateCount<<",\"candidates\":[";
         for(unsigned n=0;n<row.candidateCount;++n){if(n)out<<',';const auto& c=row.candidates[n];
             out<<"{\"serial\":"<<c.serial<<",\"actor_generation\":"<<c.actorGeneration<<",\"item_generation\":"<<c.itemGeneration
                <<",\"staged_ns\":"<<c.stagedNs<<",\"published_ns\":"<<c.publishedNs<<",\"acquired_ns\":"<<c.acquiredNs
