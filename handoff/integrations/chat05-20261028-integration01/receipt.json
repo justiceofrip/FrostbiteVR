@@ -1,0 +1,274 @@
+{
+  "schema": "fvr.integration.test-source.v1",
+  "run": "chat05-20261028-integration01",
+  "recorded_utc": "2026-10-28T16:17:43.2974401Z",
+  "integration_branch": "checkpoint/436-r56-equipment-rendering",
+  "candidate_branch": "integration/chat05-20261028-regressions-r1",
+  "origin": "https://github.com/justiceofrip/FrostbiteVR.git",
+  "accepted_baseline": "af546c3e76830fdd2d35459ac7f97f83149c5620",
+  "candidate_merge_commit": "f05043df9ab3eb2dbf4e7a0fedeefbe4bebeeb40",
+  "tasks": [
+    {
+      "id": "CHAT05",
+      "commit": "107ea10b84b5ffbc116b2837cc4183043db5e868",
+      "handoff": "handoff/tasks/CHAT05/20261028-holster-replacement-r1/HANDOFF.txt",
+      "branch": "tasks/chat05-20261028-holster-replacement-r1",
+      "scope": "regression coverage and bounded diagnostic request; no production behavior change",
+      "acceptance": "needs-native-evidence"
+    }
+  ],
+  "exclusive_ownership": {
+    "lease_token": "chat05-20261028-integration01-8df7a07d-7b85-4793-b8f8-33296191cdbc",
+    "prior_relinquishment": "COORDINATION user confirmation and completed CHAT04 receipt",
+    "idle_process_check": true,
+    "lease_released": false
+  },
+  "merge_conflicts": 0,
+  "runtime": {
+    "reason": "Only tests and handoff scripts changed; focused test targets reuse unchanged production source/configuration",
+    "receipt": {
+      "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\integration-chat04-20261028-01\\normal-runtime\\build-receipt.json",
+      "sha256": "f4fdcb64ef2fc1e539db12bf97dee6f338bc66719b92ae7d04e1f50ea0556950",
+      "bytes": 11002
+    },
+    "built_source_commit": "532b75060f9bfe78d013466fa12cf6513a0a9a95",
+    "rebuilt": false,
+    "normal_feature_flags_changed": false,
+    "artifacts_reverified": [
+      {
+        "file": {
+          "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\integration-chat04-20261028-01\\normal-runtime\\BC2NativeProbe.dll",
+          "sha256": "b7190f7fc6d214892bb48ab8a8a2d702526a771d240bb6bd1d759fb07135ead6",
+          "bytes": 9501184
+        },
+        "role": "probe"
+      },
+      {
+        "file": {
+          "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\integration-chat04-20261028-01\\normal-runtime\\BC2NativeTrace.exe",
+          "sha256": "eea4027ff69f53c49162bbd4cb0c21d59670c87931f9ff98a1fad0d16deb6670",
+          "bytes": 1415168
+        },
+        "role": "trace"
+      },
+      {
+        "file": {
+          "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\integration-chat04-20261028-01\\normal-runtime\\BC2NativeIpcProbe.exe",
+          "sha256": "cee821a40e5886a7faa764199060b132957233f811ebf197d44d4dfcbaf25215",
+          "bytes": 4084224
+        },
+        "role": "receiver"
+      },
+      {
+        "file": {
+          "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\integration-chat04-20261028-01\\normal-runtime\\BC2XrHost.exe",
+          "sha256": "6aef20fb1a5df8822e7c210208f870dd0dbd451c160df5f84e1883bb72a628cd",
+          "bytes": 4093952
+        },
+        "role": "host"
+      },
+      {
+        "file": {
+          "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\integration-chat04-20261028-01\\normal-runtime\\BC2NativeResolution.exe",
+          "sha256": "848a577fd5feb00b6a211f5b151e758df7a247e90d83aac3277698abf9842320",
+          "bytes": 1477120
+        },
+        "role": "resolution"
+      },
+      {
+        "file": {
+          "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\integration-chat04-20261028-01\\normal-runtime\\BC2ResolutionBootstrap.dll",
+          "sha256": "285f24a4344fb4a354fe8c0c590e9c7c33e6fa44364453a7816b4b14463ecc2a",
+          "bytes": 1513984
+        },
+        "role": "resolution_bootstrap"
+      },
+      {
+        "file": {
+          "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\integration-chat04-20261028-01\\normal-runtime\\BC2NativeProbe.pdb",
+          "sha256": "5fb4595c5c67f1d6806e46160b914140a6d0271d57b9e9cbfa061cf3e8c733d9",
+          "bytes": 166998016
+        },
+        "role": "probe"
+      },
+      {
+        "file": {
+          "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\integration-chat04-20261028-01\\normal-runtime\\BC2NativeTrace.pdb",
+          "sha256": "9c1982cd5ca7a6e35bcba2519ec1a5a5649dc1f074dcb9efed8c4068ee7dc5eb",
+          "bytes": 18911232
+        },
+        "role": "trace"
+      },
+      {
+        "file": {
+          "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\integration-chat04-20261028-01\\normal-runtime\\BC2NativeIpcProbe.pdb",
+          "sha256": "125b748aa496886da2e606b6bbdc425dc0e31c71ea24540b6073648de701f6b8",
+          "bytes": 62705664
+        },
+        "role": "receiver"
+      },
+      {
+        "file": {
+          "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\integration-chat04-20261028-01\\normal-runtime\\BC2XrHost.pdb",
+          "sha256": "704852e6ec9a9777615172ad57a5b2ab98613b21fc842d9c6661bc66fb1fe0fa",
+          "bytes": 72118272
+        },
+        "role": "host"
+      },
+      {
+        "file": {
+          "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\integration-chat04-20261028-01\\normal-runtime\\BC2NativeResolution.pdb",
+          "sha256": "4c20b55b52d39e22059a311020aa5e0f2c6d8a01905f36d64c86e2c0e542d7ff",
+          "bytes": 20688896
+        },
+        "role": "resolution"
+      },
+      {
+        "file": {
+          "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\integration-chat04-20261028-01\\normal-runtime\\BC2ResolutionBootstrap.pdb",
+          "sha256": "f0987b68eaa4b9dcab7b2c78dc2f2606dca7f897bbe3c658215cbcfec0cff1df",
+          "bytes": 21311488
+        },
+        "role": "resolution_bootstrap"
+      }
+    ],
+    "prior_full_validation": "CHAT04 normal x86/x64 each305/305; not rerun or relabeled as CHAT05 full suites",
+    "native_source_sha256": "f9d264cb17dfa88e304e433569e4d0e472adf97017f6fe3f96db2aed198f4b0b",
+    "operation_records_changed": false
+  },
+  "validation": [
+    {
+      "passed": 2,
+      "storage": {
+        "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\integration-chat05-20261028-01\\x86-storage.json",
+        "sha256": "0de5f53b999cf5a8692879ce418a06c740b86cd1bc778cf26ded217c10596f34",
+        "bytes": 3164
+      },
+      "log": {
+        "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\integration-chat05-20261028-01\\x86-tests.log",
+        "sha256": "7d276d13cbb744d0ae8feeb973f27108f11adab1ee38a8619e00c0965fab0bdd",
+        "bytes": 352
+      },
+      "architecture": "x86",
+      "normal_cache_unchanged": true,
+      "tests": [
+        "Bc2BodyInventoryTests",
+        "Bc2AmmoResourceServiceTests"
+      ],
+      "total": 2,
+      "source_commit": "f05043df9ab3eb2dbf4e7a0fedeefbe4bebeeb40",
+      "result": {
+        "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\integration-chat05-20261028-01\\x86-result.json",
+        "sha256": "635a89698c9d7fa671f7956167609b877e96b395439b2d68de69c9c776bd9624",
+        "bytes": 1721
+      },
+      "build": {
+        "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\integration-chat05-20261028-01\\x86-build.log",
+        "sha256": "003002a10c48471414b966a5d2602ed361fd2d8d11827f4d4022d8e2bbfabaf7",
+        "bytes": 3369
+      },
+      "junit": {
+        "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\integration-chat05-20261028-01\\x86-tests.xml",
+        "sha256": "d3fd6ee9b601a1b6d30cde6c7a19c2d40821d5b5d2543e002a7a252bb7cb8ad4",
+        "bytes": 2088
+      }
+    },
+    {
+      "passed": 2,
+      "storage": {
+        "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\integration-chat05-20261028-01\\x64-storage.json",
+        "sha256": "6e5def5dfe77476a97b7586e9ce980d4488b1198f1dba7a57019c3bcbb4240e0",
+        "bytes": 3164
+      },
+      "log": {
+        "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\integration-chat05-20261028-01\\x64-tests.log",
+        "sha256": "3d5943d7580107e465acde42062830df364b6d7a7a9bce8769331f0a9de060f2",
+        "bytes": 352
+      },
+      "architecture": "x64",
+      "normal_cache_unchanged": true,
+      "tests": [
+        "Bc2BodyInventoryTests",
+        "Bc2AmmoResourceServiceTests"
+      ],
+      "total": 2,
+      "source_commit": "f05043df9ab3eb2dbf4e7a0fedeefbe4bebeeb40",
+      "result": {
+        "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\integration-chat05-20261028-01\\x64-result.json",
+        "sha256": "799b87407e977f270dbf31e06962ef27282fc8d399ec44b870f01b98443ee2ed",
+        "bytes": 1721
+      },
+      "build": {
+        "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\integration-chat05-20261028-01\\x64-build.log",
+        "sha256": "ce40ab3c0904aa1cdd4baee559c381b97d845e79a73ac2ff908bbb07bc1aca31",
+        "bytes": 3369
+      },
+      "junit": {
+        "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\integration-chat05-20261028-01\\x64-tests.xml",
+        "sha256": "d2ddebda20dc9bc472d4a1ed4c7b0f6ca6ddb0034817f72911354c6a4aa04439",
+        "bytes": 2091
+      }
+    }
+  ],
+  "worker_validation": "Seven isolated CPU suites; handoff/tasks/CHAT05/20261028-holster-replacement-r1/VALIDATION.txt",
+  "source_push": {
+    "status": "pending"
+  },
+  "installation": {
+    "observed_active_version": "0.1.12",
+    "error": "OpenXR unavailable: Create OpenXR instance XrResult=-2",
+    "status": "not performed; fresh OpenXR preflight failed, native startup/equipment validation unavailable",
+    "rollback_required": false,
+    "settings_file": {
+      "bytes": 2728,
+      "path": "G:\\Unity\\VRMMO\\BC2VR-Launcher\\data\\settings.json",
+      "sha256": "be6f984f6bd44dcc62aab0a2ac1a63acaa2d3221d2919f2a44a4aeeef2b1f7cf"
+    },
+    "observed_fallback_version": "0.1.11",
+    "active_file": {
+      "bytes": 52,
+      "path": "G:\\Unity\\VRMMO\\BC2VR-Launcher\\active.json",
+      "sha256": "9b60ff5ce16e3c146a56d5410edbd43b9f91e393ab7851af41d9c6f3b800a8b2"
+    },
+    "preflight": {
+      "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\integration-chat05-20261028-01\\xr-preflight01\\preflight-receipt.json",
+      "sha256": "ea57aaa3bfb2251b2853009f54914de7af6a2691e1c35c2c5eb81c212a241dfd",
+      "bytes": 22293
+    },
+    "game_started": false,
+    "runtime_changed": false,
+    "launcher_target": "G:\\Unity\\VRMMO\\BC2VR-Launcher",
+    "host_exit": 2,
+    "settings_changed": false,
+    "source_closure_verified": true,
+    "owned_probe_stopped": true
+  },
+  "storage": {
+    "preflight_plan_mib": 640,
+    "additional_roots": [
+      "G:\\Unity\\VRMMO\\bc2vr-task-worktrees"
+    ],
+    "default_ceiling_gib": 40,
+    "minimum_free_gib": 15,
+    "evidence_deleted": false,
+    "focused_test_plan_mib": 256
+  },
+  "native_bc2_verified": false,
+  "headset_tested": false,
+  "full_chat05_accepted": false,
+  "public_release": false,
+  "remaining": [
+    "Normal-runtime native shoulder/hip loaded and empty transitions",
+    "Held/removed original and replacement magazine stow/release policy evidence",
+    "Native pickup/address reuse and submitted-operation settlement",
+    "Owed pump/bolt transition gates and real scripted replacement case",
+    "Physical-headset acceptance"
+  ],
+  "independent_review": {
+    "focused_results": "Both normal configurations2/2 with matching executable SHA256 and PE architecture",
+    "task_commit_and_files_verified": true,
+    "native_source_files_matched": 576,
+    "mismatches": 0,
+    "normal_cache_and_source_guard_verified": true
+  }
+}

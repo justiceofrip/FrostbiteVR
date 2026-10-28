@@ -14,22 +14,25 @@ Worker handoffs: handoff/tasks/CHATnn/<unique-run-id>/HANDOFF.txt in each worktr
 Exclusive integration lease: worktree root\INTEGRATION.lock (atomic CreateNew).
 Shared resource ownership: user confirmed prior chats relinquished shared resources
 on October 28, 2026, before the CHAT02 integration lease was acquired.
-Last workflow integration: CHAT04 original-magazine suspension, validation passed.
+Last workflow integration: CHAT05 regression coverage; native evidence pending.
+Integrated source merge: f05043df9ab3eb2dbf4e7a0fedeefbe4bebeeb40
 Built combined source commit: 532b75060f9bfe78d013466fa12cf6513a0a9a95
-Included task commit: 19e95afe694c2afc7486d06c020a4b40a1ff8b64
-Source push: verified at 99262e27ea4ff654235c15dd3c6398185a907b83.
-The subsequent status-only commit preserves the exact built source/runtime above.
-Prior CHAT02 integration remains included; its receipt preserves its evidence.
-Last workflow local mod update: none; required OpenXR preflight failed.
+Included task commit: 107ea10b84b5ffbc116b2837cc4183043db5e868
+Source push: pending final integration publication.
+CHAT05 changes tests/handoffs only; built runtime identity above is unchanged.
+Prior CHAT02/CHAT04 integrations remain included with their original evidence.
+Last workflow local mod update: none; fresh required OpenXR preflight failed.
 Observed launcher target: G:\Unity\VRMMO\BC2VR-Launcher, active0.1.12 unchanged.
 Settings and active version hashes are unchanged; no game/session was started.
 Frozen candidate receipt: reports/integration-chat04-20261028-01/normal-runtime/build-receipt.json
 Receipt SHA256: f4fdcb64ef2fc1e539db12bf97dee6f338bc66719b92ae7d04e1f50ea0556950
-Batch receipt: handoff/integrations/chat04-20261028-integration01/receipt.json
-Validation: normal x86 and x64 each305/305; six binary/PDB GUID+age pairs verified.
-Normal feature settings and reviewed operation records unchanged; source rebound.
-Storage: user authorized42GiB for this run; default40GiB and free floor15GiB retained.
+Batch receipt: handoff/integrations/chat05-20261028-integration01/receipt.json
+CHAT05 validation: normal x86/x64 focused tests each2/2; unchanged native closure.
+Prior CHAT04 full normal builds remain305/305 each; not rerun as CHAT05 builds.
+All12 frozen binary/PDB hashes reverified; normal flags/operation records unchanged.
+Storage: default40GiB/free floor15GiB; focused tests256MiB, preflight640MiB plans.
 Pending: install/startup/equipment smoke; OpenXR instance creation XrResult=-2.
+CHAT05 remains needs-native-evidence: release/stow, pickups, owed cycles, headset.
 CHAT04 remains incomplete: replacement custody, M95 left-root recovery, support/pump,
 native tracking/render interruption matrix and physical-headset acceptance.
 Deferred CHAT02 bounded live baseline/death/recovery evidence remains pending.

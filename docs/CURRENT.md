@@ -5,6 +5,15 @@ Updated October 28, 2026. This replaces old next-step instructions; prior eviden
 
 ## Active work
 
+CHAT05 regression coverage is integrated: nine pickup resource cases and scoped
+MP443 hip stow/draw preserve the tested ownership boundaries. Both normal
+architectures passed the two affected suites; the runtime source, operation
+records and prior CHAT04 binary receipt are unchanged. The [integration receipt](../handoff/integrations/chat05-20261028-integration01/README.md)
+records a fresh OpenXR instance-creation failure (`XrResult=-2`), unchanged
+launcher0.1.12/settings and no game/install. CHAT05 still needs native stow/release,
+pickup/replacement, owed-cycle and headset evidence; diagnostic CPU hide/show
+does not qualify real props or firing.
+
 CHAT04 original-magazine tracking suspension is applied on R56: lost input drops
 transient pose/hand authority while retaining the exact original and its rounds;
 recovery requires fresh same-owner evidence and a new hand claim. Both normal
@@ -14,7 +23,7 @@ pins the source, six binary/symbol pairs and retained failed episodes under
 `reports/integration-chat04-20261028-01`. OpenXR preflight failed at instance
 creation (`XrResult=-2`); installation and startup/equipment smoke remain pending.
 Launcher0.1.12 and settings are unchanged. No native/headset acceptance follows
-from these builds. Continue CHAT04: replacement-magazine tracking loss, M95
+from these builds. CHAT04 still needs replacement-magazine tracking loss, M95
 left-root recovery, support/pump and native missing-render checks remain open.
 
 The preceding R56 runtime and symbols remain as a fallback under
