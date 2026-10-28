@@ -11,6 +11,7 @@ ManualReloadOwner PhysicalOwner(const HandInteractionSample& in,HandInteractionK
 Bc2MagazineResourceReload::Bc2MagazineResourceReload(MagazineResourceApi api,AmmoSupplyConfig pouch)noexcept:
  api_(api),pouch_(pouch),supply_(pouch),interaction_(Config(Xm8MagazineEquipment())){}
 void Bc2MagazineResourceReload::Cancel(const HandInteractionSample& in,HandInteraction& hands)noexcept {
+    suspendedOriginal_=false;suspendedSequence_=0;
     last_=interaction_.Cancel(in,hands);supply_.Cancel(in,hands);carry_.reset();submittedSeat_.reset();needRestore_=true;
     boundGun_.reset();viewDeferred_=false;
     removalBefore_.reset();removalBegan_=0;
@@ -22,6 +23,17 @@ void Bc2MagazineResourceReload::Cancel(const HandInteractionSample& in,HandInter
             RecoverTerminal(*terminal,in,hands);
     busy_=pending_||bool(reservation_);
     latestResult_={};latestResult_.interaction=last_;latestResult_.blocksWeaponActions=busy_;
+}
+void Bc2MagazineResourceReload::Suspend(const HandInteractionSample& in,HandInteraction& hands)noexcept {
+    const auto phase=last_.phase;
+    if(!suspendedOriginal_&&(!owner_||!profile_||!original_||reservation_||supply_.Held()||supply_.Pending()||submittedSeat_||discard_||
+       (phase!=DetachableMagazinePhase::PreparingRemoval&&phase!=DetachableMagazinePhase::Pulling&&phase!=DetachableMagazinePhase::RemovedHeld))){
+        Cancel(in,hands);return;
+    }
+    if(!suspendedOriginal_)last_=interaction_.Cancel(in,hands);
+    suspendedOriginal_=true;suspendedSequence_=std::max(suspendedSequence_,in.sequence);
+    carry_.reset();boundGun_.reset();viewDeferred_=true;busy_=true;
+    latestResult_={};latestResult_.interaction=last_;latestResult_.blocksWeaponActions=true;
 }
 MagazineResourceProbeState Bc2MagazineResourceReload::ProbeState(std::int64_t now)const noexcept {
     return {latestResult_,!viewDeferred_&&latestView_&&AmmoResourceViewFresh(*latestView_,now)?latestView_:std::nullopt};
@@ -104,13 +116,27 @@ MagazinePhysicalResult Bc2MagazineResourceReload::TickImpl(const MagazinePhysica
     MagazinePhysicalResult out;const auto now=s.input.nowNs;
     diagnosticReadReason_=~0u;diagnosticSameOwner_=false;
     const auto cancel=[&](CancelCause cause=CancelCause::Other){NoteCancel(cause,s.input);Cancel(s.input,hands);out.interaction=last_;out.blocksWeaponActions=busy_;return out;};
-    if(s.cancel||!s.input.focused||!s.input.tracked[0]||!s.input.tracked[1]||s.input.released[1])return cancel(CancelCause::Input);
+    if(!s.input.focused||!s.input.tracked[0]||!s.input.tracked[1]||!s.input.sequence||s.input.observedNs<=0||
+       s.input.observedNs>now||s.input.deadlineNs<=now||s.input.deadlineNs-s.input.observedNs>100000000){
+        Suspend(s.input,hands);return latestResult_;
+    }
+    if(s.cancel||s.input.released[1])return cancel(CancelCause::Input);
     if(!api_.read||!api_.submit)return cancel(CancelCause::Api);
+    if(!suspendedOriginal_&&owner_&&owner_->physical==s.input.owner&&owner_->weapon==s.weapon&&
+       last_.removalClaim&&s.gripPressed&&!s.input.released[0]){
+        const auto held=hands.Current(InteractionHand::Left);
+        if(!held||held->token!=last_.removalClaim->token||held->deadlineNs<=now){
+            // A skipped input interval can expire the transient hand lease
+            // without ever delivering an explicit untracked packet.
+            Suspend(s.input,hands);return latestResult_;
+        }
+    }
     const auto read=api_.readObserved?api_.readObserved(api_.context,s.nativeOwner,now):
         AmmoResourceRead{AmmoResourceReadReason::NoView,api_.read(api_.context,s.nativeOwner,now)};
     const auto& view=read.view;viewDeferred_=!view;
     diagnosticReadReason_=unsigned(read.reason);
     if(!view){
+        if(suspendedOriginal_&&read.Deferred()){out.blocksWeaponActions=true;out.interaction=last_;return out;}
         const auto gun=hands.Current(InteractionHand::Right);
         const bool sameOwner=!needRestore_&&owner_&&latestView_&&
             latestView_->snapshot.context==owner_->native&&latestView_->identity.owner==s.nativeOwner&&
@@ -165,10 +191,53 @@ MagazinePhysicalResult Bc2MagazineResourceReload::TickImpl(const MagazinePhysica
     latestView_=view;
     const auto& mapping=*observation->ownerBinding;
     const bool same=owner_&&owner_->physical==mapping.physical&&owner_->weapon==mapping.weapon&&owner_->native==mapping.native;
+    if(!same&&owner_)Cancel(s.input,hands);
     const auto gun=hands.Current(InteractionHand::Right);
     if(!gun||gun->token.owner!=s.input.owner||gun->token.item!=s.weapon||gun->token.kind!=HandClaimKind::GunHold||
-        gun->inputSequence!=s.input.sequence||gun->deadlineNs<=now)return cancel(CancelCause::Gun);
-    if(!same&&owner_)Cancel(s.input,hands);
+        gun->inputSequence!=s.input.sequence||gun->deadlineNs<=now){
+        if(suspendedOriginal_){out.blocksWeaponActions=true;out.interaction=last_;return out;}
+        return cancel(CancelCause::Gun);
+    }
+    if(suspendedOriginal_){
+        // No current or repeated packet may discard a retained original merely
+        // because its old hand lease expired. Resolve only the exact submitted
+        // unseat, then require new geometry from this same selected resource.
+        out.blocksWeaponActions=true;out.interaction=last_;
+        if(profile_!=s.family.binding.profile||s.trackingEpoch!=boundEpoch_)return cancel(CancelCause::Owner);
+        if(s.input.sequence<=suspendedSequence_)return out;
+        if(pending_){
+            if(!view->terminal||!RecoverTerminal(*view->terminal,s.input,hands))return out;
+            // Request intents and native ledger commands have separate ID
+            // namespaces. Only the validated applied unseat identifies the
+            // original resource when tracking disappeared before its ack.
+            if(view->terminal->state==AmmoResourceRequestState::Completed&&view->terminal->receipt&&
+               view->terminal->receipt->command.operation==AmmunitionOperation::RemoveMagazine)
+                cycle_=view->terminal->receipt->command.id;
+        }
+        if(view->phase!=AmmunitionLedgerPhase::Ready)return out;
+        if(!view->wellEmpty){suspendedOriginal_=false;needRestore_=true;}
+        else if(!view->original||view->originalState!=MagazineResourceState::Held||!original_||
+                !cycle_||view->original->id!=cycle_||view->original->owner!=mapping.native.resource||
+                view->original->rounds!=int(original_->rounds)||view->original->capacity!=int(original_->capacity))return cancel(CancelCause::Owner);
+        else if(s.input.released[0]||!s.gripPressed){Cancel(s.input,hands);}
+        else {
+            const auto& raw=s.raw;
+            if(!raw.valid||raw.owner!=s.nativeOwner||raw.rigFingerprint!=profile_->geometry->rigFingerprint||
+               !s.originalHandEvidence||!SameInput(raw.inputEvidence,*s.originalHandEvidence)||
+               raw.inputEvidence.sequence<=suspendedSequence_||!Rigid(raw.rawLeftWristWorldMeters)||!Rigid(raw.weaponWorldMeters))return out;
+            DetachableMagazineSample resume;resume.input=s.input;resume.weapon=s.weapon;resume.trackingEpoch=s.trackingEpoch;
+            resume.original=original_;resume.resource=observation;resume.gripPressed=true;
+            resume.native={s.input.owner,s.weapon,view->original->id,reserve->observedNs,reserve->deadlineNs,true,false,false,{}};
+            resume.geometryInput=raw.inputEvidence;resume.geometrySequence=raw.inputEvidence.sequence;
+            resume.weaponFromHandMeters=Multiply(raw.rawLeftWristWorldMeters,*InverseRigid(raw.weaponWorldMeters));
+            if(intent==UINT64_MAX)return cancel(CancelCause::Counter);resume.intent=++intent;
+            if(!interaction_.ResumeOriginalResource(resume,hands))return out;
+            cycle_=view->original->id;suspendedOriginal_=needRestore_=false;
+            boundGun_=gun->token;boundEpoch_=s.trackingEpoch;sequence_=s.input.sequence;
+            last_=interaction_.Update(resume,hands);out.interaction=last_;out.ownsLeftHand=bool(last_.removalClaim);
+            return out;
+        }
+    }
     if((needRestore_||!same)&&pending_){
         if(!view->terminal||!RecoverTerminal(*view->terminal,s.input,hands))return cancel(CancelCause::Terminal);
     }
@@ -335,6 +404,7 @@ void Bc2MagazineResourceReload::NoteCancel(CancelCause cause,const HandInteracti
 void Bc2MagazineResourceReload::Report(std::ostream& out)const {
     out<<"\"magazine_resource_hands\":{\"submitted\":"<<submitted_<<",\"completed\":"<<completed_<<",\"rejected\":"<<rejected_
        <<",\"phase\":"<<unsigned(last_.phase)<<",\"pending\":"<<pending_<<",\"cycle\":"<<cycle_
+       <<",\"suspended_original\":"<<suspendedOriginal_<<",\"suspended_input\":"<<suspendedSequence_
        <<",\"idle_view_waits\":"<<idleViewWaits_<<",\"active_view_waits\":"<<activeViewWaits_
        <<",\"removal_admission_retries\":"<<removalAdmissionRetries_;
     out<<",\"cancel_cause_names\":[\"other\",\"input\",\"api\",\"view\",\"mapping\",\"gun\",\"terminal\",\"reconciliation\",\"restore\",\"owner\",\"receipt\",\"supply\",\"counter\",\"interaction\",\"submit\"],\"cancel_counts\":[";

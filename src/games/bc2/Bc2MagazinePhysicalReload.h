@@ -115,6 +115,7 @@ public:
  ~Bc2MagazinePhysicalReload();
  MagazinePhysicalResult Tick(const MagazinePhysicalSample&,interaction::HandInteraction&,std::uint64_t& sharedIntent)noexcept;
  void Cancel(const interaction::HandInteractionSample&,interaction::HandInteraction&,MagazineCancelCause=MagazineCancelCause::External)noexcept;
+ void Suspend(const interaction::HandInteractionSample&,interaction::HandInteraction&)noexcept;
  bool BlocksEquipment()const noexcept;
  bool ResourceBackend()const noexcept{return bool(resource_);}
  interaction::AmmoSupplyContact BodyAmmoContact()const noexcept {
