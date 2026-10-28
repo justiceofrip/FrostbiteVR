@@ -1,0 +1,45 @@
+CHAT05 - Holstering pickups and replacement
+Status: needs-native-evidence (regression source prepared; no runtime fix claimed).
+Run: 20261028-holster-replacement-r1; October 28, 2026.
+Branch: tasks/chat05-20261028-holster-replacement-r1
+Worktree: G:\Unity\VRMMO\bc2vr-task-worktrees\chat05-20261028-holster-replacement-r1
+Base branch: checkpoint/436-r56-equipment-rendering
+Pinned base: af546c3e76830fdd2d35459ac7f97f83149c5620
+Verified origin: https://github.com/justiceofrip/FrostbiteVR.git
+
+Objective: prove ammunition-resource isolation across native pointer reuse and
+scope the missing shoulder/hip/partial-reload transition evidence without
+inventing native policy. No production implementation/capability was changed.
+Changed source: tests/Bc2AmmoResourceServiceTests.cpp; tests/Bc2HipCarryChecks.inc.
+Task artifacts: this HANDOFF.txt, DIAGNOSTIC.txt, Test-Isolated.ps1, VALIDATION.txt.
+Nine new old/new load combinations exercise reused native address + new item
+generation, exact old terminal lookup, stale/borrowed-original refusal, retained
+old rounds and independent replacement remove/return conservation.
+Hip composition checks unbound production refusal, scoped MP443 diagnostic
+hide/show resource continuity, and fresh resource/show proof after replacement.
+Its visibility/input receipts are CPU fixtures, not actual rendered props.
+
+Validation: see VALIDATION.txt for exact isolated test results, retained failed
+attempts, source hashes and local log paths. No Build.ps1/shared CMake tree used.
+Normal x86/x64 builds, actual-game matrix and physical headset remain pending.
+The earlier normal OpenXR preflight failure is not a new CHAT05 weapon failure.
+
+Native policy finding: active reload and cycle debt refuse voluntary stow/draw.
+Right-hand release can cancel a held original and later discard its rounds;
+the attempted-stow ambiguity needs actual evidence before a policy repair.
+Do not erase debt for same-actor replacement using actor-retirement authority.
+M95 body stow is not established; test supported bolt/pickup gates separately.
+No dependency on completing deferred crash work or the remaining CHAT04 card.
+Dependency: integrator-controlled normal runtime/preflight and named native case.
+
+Integration request: read the canonical
+G:\Unity\VRMMO\FrostbiteVR\handoff\campaign-chat-queue\INTEGRATE.txt.
+Integrate only the exact pushed task commit reported with this handoff. Run the
+normal builds/checks there, then execute DIAGNOSTIC.txt one bounded case at a
+time and return linked receipts. Keep CHAT05 needs-native-evidence until its
+transition matrix and headset checks are actually qualified; do not advance
+to CHAT06 on the strength of these CPU results.
+Proposed CURRENT update: CHAT05 adds resource-lifetime and scoped hip regression
+coverage; native release/stow, pickup/replacement and headset acceptance pending.
+Canonical CURRENT/ACTIVE/COORDINATION, integration branch and installed mod
+were not changed by this worker. No assets/binaries/raw traces are in this commit.

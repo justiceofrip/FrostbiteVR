@@ -1,0 +1,111 @@
+CHAT05 - Holstering pickups and replacement: bounded native evidence request
+Prepared October 28, 2026. This is a test request, not actual-game evidence.
+Worker base: af546c3e76830fdd2d35459ac7f97f83149c5620.
+The integrator owns normal builds, installation, mutable profiles and all input.
+Read HANDOFF.txt beside this file for the exact candidate and deterministic result.
+Admission and evidence
+1. Follow the shared INTEGRATE.txt procedure. Record the integrated commit, normal
+   x86/x64 results, runtime DLL/PDB identity, headset/runtime and exact checkpoint.
+   Resolve the existing OpenXR instance-creation failure before a live attempt;
+   do not classify failed preflight as a weapon-transition failure.
+2. Inherit the current reviewed normal production feature flags and operation
+   records. Keep normal knife/grenade/gadget systems enabled. Record actual flags
+   and hashes with the receipt; no isolated SingleMagazine fixture can pass this
+   combined-interaction matrix. Do not enable an unverified native operation.
+3. Call StorageBudget before each bounded episode; use G: scratch and preserve
+   the default ceiling/free floor. Limit each episode to 90 seconds of gameplay,
+   three repetitions of its selected case, and at most 32 MiB of event logs.
+   Stop on first unexplained transfer, lost owner, duplicate prop or unusable gun.
+   Raw captures default off. If needed, budget actual dimensions first and save
+   at most two delivered-eye color pairs for the failing transition, no extra
+   depth/witness streams; total raw must remain within the admitted 512 MiB cap.
+4. Verify the actual loaded asset, native item/data/persistence and supported
+   visibility/carry descriptor. Use the existing qualified F2000/SPAS shoulder
+   setup and MP443_sp hip configuration where campaign availability permits.
+   A different verified supported representative is acceptable; name it exactly.
+   Do not substitute Nambu/Type5 or a configured selector for a loaded asset.
+5. For every transition retain before/after native actor and item lifetime,
+   physical GunHold/left-hand claims, body slot/request/phase, ammunition resource
+   identity, original state/rounds, pending request/receipt, and cycle debt.
+   Native ammo evidence must join all three firing copies and authoritative
+   transfer receipts; a final count alone cannot establish conservation.
+
+Current source policy to verify
+- Bc2Gameplay.cpp: body sample reloadBusy includes native pump debt and active
+  shell/magazine mechanics. Bc2BodyInventory::TickHolster suspends gestures while
+  retaining independently observed native identity. Active reload is not a draw.
+- Bc2BodyHolster::Tick refuses new holster/draw requests while reloadBusy or a
+  conflicting left claim exists. Completed stow leaves the exact native weapon
+  selected, suppresses actions and releases the right claim after paired hide.
+- Bc2BodyInventory::ResourceBinding keys ammo by actor + physical item lifetime;
+  ordinary stow/draw must retain that resource. Replacing native item metadata
+  creates a fresh lifetime; old slot/receipt/claim authority cannot transfer.
+- Bc2MagazineResourceReload::TickImpl currently cancels on right-hand release;
+  Cancel clears physical custody, and the restore path explicitly discards a
+  retained native original. Test the shoulder-release ambiguity below before
+  deciding that losing the original's rounds is intended policy.
+- Bc2NativeCycleService and ordinary selection retain unpaid pump/bolt debt and
+  refuse unsupported handoffs. M95 has no established supported body stow path;
+  do not add or claim M95 holstering merely to complete this matrix.
+
+Episode A: ordinary loaded/empty shoulder and hip transitions
+For each supported shoulder slot and the MP443_sp hip, perform three stow/draw
+cycles with a loaded gun, then repeat empty after verified firing to zero.
+Use a separate bounded episode for each slot/state; do not batch all into 90s.
+Record any automatic initial stow separately. Approach the assigned slot, use
+the existing normal stow gesture, wait for committed empty hands, then draw by
+fresh contact. Include one other-slot draw and return to the original gun.
+Expected: one carried prop or one held gun, correct slot, fresh hide/show proofs,
+no ammo request/transfer from stow/draw, same resource identity and exact counts.
+Loaded post-draw fire decrements one authoritative round; empty attempts cannot
+fire/refill. A deliberate supported reload must restore normal firing afterward.
+
+Episode B: partially reloaded magazine and refused stow
+Begin with a measured partial magazine; remove it without releasing the left
+grip. Attempt the own shoulder/hip stow gesture while retaining the right grip.
+Expected current gate: no committed stow/draw, no duplicate prop or native
+transfer, original rounds remain owned by the exact original resource.
+Then test the normal gesture's right-hand release with left grip still held.
+Record whether original custody is discarded, retained or recoverable. Do not
+accept an implicit round loss as conservation; any intentional discard policy
+must identify the exact deliberate action and original-round disposition.
+Repeat with an empty removed original, a replacement held at the chest, and
+replacement guided into the well. Return original/reseat replacement and fire
+only after the corresponding single verified transfer. Refused gestures must
+leave a defined recovery route; no old hand claim may attach to the next gun.
+
+Episode C: replacement submitted and native pickup/replacement
+First attempt ordinary pickup/selection with a held original and then a held
+replacement. Record whether normal gates refuse it; a refusal with usable
+recovery is a result, not permission to bypass the gate.
+Using an already available scripted/native replacement case, cover a completed
+unseat and a submitted return/refill awaiting acknowledgement. Do not invent a
+memory write or new debug selector to force replacement. If no such checkpoint
+is available, return this exact case as needing evidence.
+Observe exact old request settlement once, old custody retirement, new resource
+identity/counts and no old hidden/carried prop or stale transfer on the pickup.
+Include native address reuse with changed data/persistence only if it occurs in
+the named real reproduction; portable pointer mutation is not native evidence.
+Test stowed pickup replacement separately: old hide authority must be revoked,
+and the new supported/ordinary weapon must recover through current proofs.
+
+Episode D: owed pump/bolt steps
+With SPAS, fire one shot and attempt shoulder stow/draw and pickup before pumping.
+Expected current policy: blocked transitions retain exact debt and ammunition;
+valid pump completion restores handling/fire, after which ordinary stow works.
+With M95, test currently supported selection/pickup action gates and bolt debt,
+then complete the normal physical bolt and verify one post-cycle shot. Mark
+body stow unsupported. If a real scripted replacement occurs with debt, inspect
+the declared lifetime/retirement boundary; new equipment must not inherit old
+debt or permit a completed old operation to mutate its ammunition.
+
+Acceptance and returned receipt
+List each case/repetition as pass, failed, unavailable or unsupported. Preserve
+the first failure and exact evidence path even if a later recovery succeeds.
+Require conserved loaded/reserve/held-original accounting for each unchanged
+lifetime, single verified transfers, defined retirement of replaced lifetimes,
+no duplicate/stale props and recovered supported handling/fire after completion.
+Return concise owner/count/receipt timelines and selected images, not raw traces
+in Git. Separate deterministic, actual-game and physical-headset conclusions.
+Headset acceptance additionally checks shoulder/hip contact, prop placement and
+post-transition firing with real hands; emulated inputs cannot establish it.

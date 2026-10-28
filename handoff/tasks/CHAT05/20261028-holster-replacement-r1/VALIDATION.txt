@@ -1,0 +1,62 @@
+CHAT05 isolated deterministic validation - October 28, 2026
+Base: af546c3e76830fdd2d35459ac7f97f83149c5620
+Evidence level: CPU tests with synthetic native memory/callback/render receipts.
+Result: all seven selected suites passed across the attempts listed below.
+No normal x86/x64 runtime build, installed-mod update, game or headset run.
+
+Reproduce: run Test-Isolated.ps1 beside this file from this task worktree.
+It uses direct MSVC x64 compilation/static CPU archive, never Build.ps1/CMake.
+Compiler: MSVC 14.51.36231 (VS 18 Community), C++20, /EHsc /O1 /Gy,
+WIN32_LEAN_AND_MEAN, NOMINMAX; no generated reviewed operation-table or
+experimental magazine headers injected. Magazine adapter coverage is the one
+compiled enabled XM8 geometry, not all campaign weapon families.
+Production runtime sources/capabilities and normal feature settings unchanged.
+
+Local log root (untracked, not uploaded):
+G:\Unity\VRMMO\bc2vr-task-worktrees\chat05-20261028-holster-replacement-r1\test-temp\chat05
+Attempt directory timestamps below are UTC. Every result ended Exit code: 0.
+
+attempt-20261028-155550-606:
+  AmmunitionInventory-result.txt: 50 item ledgers, late completions, replacement.
+  SHA256 523bc6b3f90a328a21587410c2e6d5d06adb164d5980705179e2af5c2bcaab68
+  Bc2AmmoResourceService-result.txt: existing service suite + nine new load pairs.
+  SHA256 2a7f7cbac51eed328a074ffe2da21cf0fe6f4637c1f68c36935a6a185044b252
+attempt-20261028-155814-998:
+  Bc2NativeCycleService-result.txt: 52 cycle groups + 15 M95/1 shared group.
+  SHA256 ed20f00329cdd1d5866e311cbd9b3b92883351d1908c15258a9cf5920118ac0a
+attempt-20261028-160056-930:
+  Bc2BodyInventory-result.txt: complete suite including new scoped hip sequence.
+  SHA256 eb7e19da564a497fe076adfa0f4583c9fb45dea77818c49ce71f5a4b1818bdc9
+  Bc2BodyHolster-result.txt: 53 coordinator groups.
+  SHA256 5cb0873c408c5b000aff4a8284fa9b3a3a32734b6059db0561dbda97ea580b97
+attempt-20261028-160422-232:
+  Bc2MagazineResource-result.txt: original/refill/equip restoration and gaps.
+  SHA256 0c5ceec78093da8f2130342d1d7dc7632e0e1ab395e7e15060171ccb50c7dd72
+  Bc2EquipmentIdentity-result.txt: nine identity groups.
+  SHA256 e59a983e36d80ad4ee9a6adc715f6082788fc4515d6d8dda1d5012342472f41a
+
+Retained unsuccessful attempts (not weapon/native failures):
+- Root AmmunitionInventory-build.log: initial standalone object-link closure.
+- 155550-606: cycle link lacked ComfortControls; earlier two suites passed.
+- 155814-998: new hip fixture acquired after identity change on stale input;
+  first GunHold assertion failed. Added a fresh packet before fixture acquisition.
+- 160056-930 and 160243-235: magazine standalone link dependencies incomplete.
+  Completed the CPU source list; existing int-to-float warnings remain in logs.
+No failed native episode was overwritten or turned into a claimed pass.
+
+Storage guard: initial restricted inventory read was denied; unchanged guard
+passed with broader read access. Every build used full canonical retained roots,
+64 MiB planned, 40 GiB ceiling, 15 GiB free floor and G: TEMP/TMP/TMPDIR.
+Final task output: 24,542,395 logical bytes; no copied normal build tree.
+Final admission allocated total: 41,791,722,311 bytes (below 40 GiB with plan).
+git diff check passed with core.whitespace=cr-at-eol (service file is CRLF/-text).
+
+Tested source SHA256:
+tests/Bc2AmmoResourceServiceTests.cpp
+  862550b9686a5901dfed2f68b2e2bb53ff06b25f182b0fbf214349028868efec
+tests/Bc2HipCarryChecks.inc
+  74980e85ae0605cbae840cf7052b101b396b0d4bcd52f46768cf184fbe8e2881
+Hip positive admission is explicitly bounded diagnostic CPU evidence; its
+negative case still rejects an unbound production operation. It verifies
+resource continuity, not native counts, visible prop correctness or headset feel.
+DIAGNOSTIC.txt specifies remaining normal/native/headset evidence and policy gaps.
