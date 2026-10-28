@@ -14,10 +14,11 @@ Worker handoffs: handoff/tasks/CHATnn/<unique-run-id>/HANDOFF.txt in each worktr
 Exclusive integration lease: worktree root\INTEGRATION.lock (atomic CreateNew).
 Shared resource ownership: user confirmed prior chats relinquished shared resources
 on October 28, 2026, before the CHAT02 integration lease was acquired.
-Last workflow integration: CHAT02 diagnostic source, candidate validated.
+Last workflow integration: CHAT02 diagnostic source, accepted and pushed.
 Integrated source commit: 50f718828c54bb6a7e8e02b9492cfdb7208e0e29
 Included task commit: a203b7606241b8c5ee9244f709563cd92e076c77
-Last workflow source push: pending final baseline recheck and normal push.
+Last workflow source push: verified source above included in pushed commit
+7af76712955f1457ba5241cfe8b9fa748a13ac49; later status-only commit preserves runtime.
 Last workflow local mod update: none; diagnostic-only source, no runtime payload.
 Observed launcher target: G:\Unity\VRMMO\BC2VR-Launcher, active0.1.12 unchanged.
 Batch receipt: handoff/integrations/chat02-20261028-integration01/receipt.json

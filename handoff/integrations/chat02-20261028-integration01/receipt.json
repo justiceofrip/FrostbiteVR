@@ -1,7 +1,7 @@
 {
   "schema": "fvr.integration.source-only.v1",
   "run": "chat02-20261028-integration01",
-  "recorded_utc": "2026-10-28T14:12:28.5404290Z",
+  "recorded_utc": "2026-10-28T14:12:28.540429Z",
   "integration_branch": "checkpoint/436-r56-equipment-rendering",
   "candidate_branch": "integration/chat02-20261028-health-baseline-r3",
   "origin": "https://github.com/justiceofrip/FrostbiteVR.git",
@@ -57,7 +57,11 @@
   },
   "source_push": {
     "source_commit": "50f718828c54bb6a7e8e02b9492cfdb7208e0e29",
-    "status": "pending"
+    "status": "succeeded",
+    "pushed_tip_at_verification": "7af76712955f1457ba5241cfe8b9fa748a13ac49",
+    "verified_remote_ref": "refs/heads/checkpoint/436-r56-equipment-rendering",
+    "status_only_successor_preserves_source_and_runtime": true,
+    "verified_utc": "2026-10-28T14:14:43.0016950Z"
   },
   "installation": {
     "runtime_changed": false,
