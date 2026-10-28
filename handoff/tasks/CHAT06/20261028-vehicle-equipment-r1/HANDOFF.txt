@@ -1,0 +1,51 @@
+CHAT06 - Equipment through vehicle transitions
+Status: needs-native-evidence (regression source ready for review; not acceptance).
+Run: 20261028-vehicle-equipment-r1
+Branch: tasks/chat06-20261028-vehicle-equipment-r1
+Worktree: G:\Unity\VRMMO\bc2vr-task-worktrees\chat06-20261028-vehicle-equipment-r1
+Base integration branch: checkpoint/436-r56-equipment-rendering
+Pinned base: e09d8acd335997111e13fb929a31ada1cecf41d3
+Verified origin: https://github.com/justiceofrip/FrostbiteVR.git
+Final source commit and push verification: reported with this handoff in chat.
+
+Objective: protect persistent ammunition/owed-cycle boundaries and define the
+native reproduction needed to resolve supported campaign entry/exit continuity.
+No runtime, feature flag, native operation table, shared doc or installed mod edit.
+Findings: seated gameplay clears lifetime ownership; controlled/entry changes
+advance generations. Cancellation retains pump/bolt debt and blocks fire; newer
+generations of the same native soldier cannot authorize actor retirement.
+Post-exit recovery may therefore remain blocked. This is a source-level risk,
+not a reproduced vehicle failure. Changing cleanup alone would be speculative.
+
+Changed files:
+- tests/Bc2AmmoResourceServiceTests.cpp: nine same-actor ammunition cases across
+  loaded 0/22/30, detached original and dispatched uncertain operation states.
+  Publication loss/cancellation never pays debt or retires resources. Exact old
+  identity observations can return originals; changed-epoch recovery is unproved.
+- tests/Bc2NativeCycleServiceTests.cpp: four SPAS/M95 held/submitted-tail cases,
+  each with three cancellation/generation boundaries. Retains ammo, cycle/shot,
+  pending outcome; rejects false retirement/rebinding. Actual replacement proof
+  is still accepted and archives old debt. All native callbacks are synthetic.
+- This directory: HANDOFF.txt, DIAGNOSTIC.txt, CHECKS.ps1, EVIDENCE.txt.
+
+Checks: EVIDENCE.txt records isolated x64 CPU results and retained failed attempts.
+CHECKS.ps1 runs only in the isolated worker layout, with fresh storage admission,
+256MiB output plan, G: scratch and direct compilation from this worktree.
+No shared build directory or Build.ps1 was used; x86/x64 normal builds remain
+the integrator's checks. Passing CPU fixtures are not actual-game/headset proof.
+Independent review checked test scope and the identity/recovery evidence gap.
+
+Integration request:
+Read G:\Unity\VRMMO\FrostbiteVR\handoff\campaign-chat-queue\INTEGRATE.txt.
+Integrate ONLY the exact task branch commit reported in chat, using this handoff.
+Run affected Bc2AmmoResourceService and Bc2NativeCycleService normal suites under
+the prescribed integration workflow. Runtime source is unchanged by this task.
+Then perform DIAGNOSTIC.txt's six bounded supported entry/exit episodes and return
+linked native evidence. Require verified routes/permissions and exact equipment,
+ammo, callback and hand lineage; retain denied entries and first failed episodes.
+Dependencies: integrator's normal validation/runtime preflight; existing OpenXR
+preflight failure may prevent live work. Seat/render blockers belong to CHAT08-10.
+No CHAT04/05 pending acceptance is imposed as an independent source-work gate.
+Proposed CURRENT update: CHAT06 adds retention regressions; native vehicle
+transition policy/exit recovery and headset acceptance remain unqualified.
+Next: continue CHAT06 when native evidence returns; no next card was started.

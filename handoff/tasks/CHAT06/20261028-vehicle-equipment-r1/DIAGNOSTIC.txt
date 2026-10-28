@@ -1,0 +1,62 @@
+CHAT06 - Equipment through vehicle transitions
+Status: needs-native-evidence; source audit and synthetic CPU coverage only.
+
+Observed source behavior at base e09d8acd335997111e13fb929a31ada1cecf41d3:
+- Bc2Gameplay.cpp:1496-1497 clears reload ownership with default LifetimeEnded,
+  resets support/hand ownership and withdraws on-foot tracking when seated.
+- Bc2Gameplay.cpp:2962-2965 advances rig/render generations for changed controlled
+  entity or entry, even if the native soldier and weak handle remain the same.
+- Bc2ReloadFlowRuntime.cpp:2684 and :2984 pass lifetime-end cancellation to the
+  native cycle service; presentation-loss suspension is a distinct path.
+- Bc2NativeCycleService.cpp:849 retains owed work/ammo while cancelling authority.
+  Its actor-retirement gates require actual client AND server actor replacement.
+- Bc2BodyInventory.cpp:207 Cancel clears item slot/lifetime observations.
+  Existing Bc2BodyInventoryTests.cpp:398 covers fresh show/hide after a synthetic
+  seat exit; this is not native holster/equipment continuity evidence.
+Risk to reproduce: an owed stroke may remain blocked after the same soldier exits.
+Do not change only ClearOwner to PresentationUnavailable: generations, inventory
+identity and native callback continuity also need proof. No runtime fix is claimed.
+
+Integrator request (exclusive game/input/native ownership required):
+1. Follow INTEGRATE.txt, including normal x86/x64 checks and required preflight.
+   Record source commit, build/operation-record identities, runtime, settings,
+   campaign map/checkpoint and exact currently verified seat profile/route.
+   Use an existing supported, permitted entry AND exit. Record refusals; do not
+   force routes, edit ammo or grant an unsupported seat permission for this test.
+2. Run one bounded episode per row below, only where ordinary play permits it.
+   Use the same reachable seat for comparisons. Max 45 seconds per episode after
+   setup: 5s on-foot baseline, <=10s entry, 2s seated dwell, <=10s exit, <=18s
+   post-exit checks. Stop on deadline, identity ambiguity or unexpected transfer.
+   If partial reload blocks entry by current policy, record that exact refusal
+   and its state, then complete/cancel through ordinary supported interaction.
+   Do not reset a consumer or manufacture a receipt to make entry succeed.
+   A: Loaded detachable-magazine weapon; support released; enter/exit then fire once.
+   B: Removed original with known nonzero rounds; enter/exit if permitted, return
+      that exact original, then fire once. Verify original+well+reserve conservation.
+   C: Original discarded and replacement held; enter/exit if permitted, complete
+      insertion once, verify one native transfer and one subsequent shot.
+   D: Loaded weapon with support grip held at entry; exit, release to neutral,
+      reacquire fresh support and fire once. No pre-seat claim may authorize it.
+   E: SPAS after one verified shot with pump owed; enter/exit, try fire before
+      pumping (must not fire), complete one full pump, then fire once.
+   F: M95 after one verified shot with bolt owed; same sequence with full bolt.
+3. Retain bounded original before/entry/seated/exit/after records, not just totals:
+   manager/player/soldier/weak, controlled entity/entry, client+server item and
+   firing identities, rig/equip/space generations, inventory slot/resource key;
+   input sequence/original deadlines, native route/permission/exit readbacks;
+   loaded/reserve/capacity in all three firing copies, original token/rounds,
+   requests/dispatch/helper/completion/retirement records and uncertainty;
+   cycle/shot, pending release, held/ready/fire-block state; hand/support tokens
+   and lifecycle/show/hide receipts. Preserve dropped-row counts and first failure.
+   Use existing bounded diagnostics. If any required field is absent, report the
+   precise missing evidence before adding a narrow observer; infer no success.
+4. Storage guard required before every session/capture; G: scratch, default
+   limits. Prefer text observations; no new raw-frame stream is requested here.
+   End/restore every episode using the established integrator cleanup procedure.
+5. Acceptance needs actual same-equipment lineage, conserved total ammunition,
+   no repeated native transfer, fresh hand claims and valid post-exit firing/
+   reload. Owed work must remain owed until completed once, then permit firing.
+   Separate supported entry refusal from a failed permitted transition. Physical
+   headset check still required for coherent hands/weapons and interaction feel.
+6. Return exact run/receipt paths and failed episodes to this CHAT06 worker.
+   A seat/rendering blocker is a named CHAT08-10 prerequisite; no vehicle overhaul.

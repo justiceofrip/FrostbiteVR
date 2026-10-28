@@ -1,0 +1,44 @@
+CHAT06 deterministic evidence - October 28, 2026
+Worktree: G:\Unity\VRMMO\bc2vr-task-worktrees\chat06-20261028-vehicle-equipment-r1
+Base: e09d8acd335997111e13fb929a31ada1cecf41d3
+Level: isolated x64 CPU checks with synthetic native callbacks; no game/headset.
+Compiler: MSVC 14.51.36231, HostX64/x64/cl.exe, VS18 Community.
+Flags: C++20, EHsc, MT, O1, Gy, NOMINMAX, WIN32_LEAN_AND_MEAN, OPT:REF.
+CHECKS.ps1 records exact arguments/source paths and storage receipt per attempt.
+It compiles worktree sources directly; no shared libraries/build trees are used.
+
+PASS: complete Bc2AmmoResourceServiceTests, exit0, including nine added cases.
+Log: test-temp/chat06/checks01/Bc2AmmoResourceService/test.log
+SHA256: 66f530ca2a2e361d06e32116ab78a59ac9e8662b798136921ccd8ec5dbd81460
+Tests source SHA256: 5b2c1f443e3c45bcd02080e11e3f6a81f2a9e284039557648131beb92759d4a0
+The checks01 overall receipt retains the unrelated cycle-link failure below.
+
+PASS: complete Bc2NativeCycleServiceTests, exit0, including four added cases.
+Log: test-temp/chat06/checks04/Bc2NativeCycleService/test.log
+SHA256: 620337f1f8018f4de6ca64006602daa13358c3f8e60f4f252a08ff7a53b3b48a
+Tests source SHA256: 5b041c0eebbbd09d75ff9366b28ee02a0f9f987f5a24fed0b51496e6268c947f
+Receipt: test-temp/chat06/checks04/results.json
+SHA256: 3d0b0ca37bcd3478969b987b956c2966f8b28b9e68adc63888df78b2791f1691
+Invocation from worktree: & ./handoff/tasks/CHAT06/20261028-vehicle-equipment-r1/CHECKS.ps1 -Run checks04 -Tests Bc2NativeCycleService
+For reruns use a NEW Run name; omit Tests to run both suites.
+
+Retained failed attempts (not native failures):
+- Initial sandbox storage inventory refused inaccessible recovery scratch;
+  no build started. Full inventory outside sandbox then succeeded at same limits.
+- test-temp/chat06/ammo-test01.log, exit1: test incorrectly demanded Select fail
+  for fresh exact-owner observation while uncertain. Corrected to require
+  Uncertain + unchanged active command + rejected new operation. Production unchanged.
+- checks01/Bc2NativeCycleService/build.log: nine missing link dependencies.
+- checks02/Bc2NativeCycleService/build.log: missing ActionPolicy dependency.
+- checks03/Bc2NativeCycleService/build.log: missing SnapTurn dependency.
+  Added actual worktree source dependencies; checks04 linked and passed.
+Each attempted build used the unchanged 40GiB/15GiB storage guard, 256MiB plan;
+latest inventory 42,009,332,457 allocated bytes. Scratch/output remained on G:.
+No failed evidence was overwritten or deleted; generated artifacts stay local.
+
+PASS: PowerShell parser; git diff --check with existing CRLF accepted;
+exact diff review; no changes under src/include/docs or CMakeLists.txt.
+Canonical branch/head and its two preexisting untracked queue files unchanged.
+Pending integrator: normal architecture checks and DIAGNOSTIC.txt native episodes.
+The tests intentionally preserve blocked debt; they do not prove a successful
+vehicle round trip, changed-epoch recovery, visuals, firing or headset acceptance.
