@@ -1,8 +1,8 @@
 {
   "schema": "fvr.chat25-chat26.integration.v1",
-  "updated_utc": "2026-10-28T18:46:15.1620412Z",
+  "updated_utc": "2026-10-28T18:50:42.2331835Z",
   "run": "chat25-chat26-20261028-integration01",
-  "status": "validated-source; native evidence and installation pending",
+  "status": "source integrated and pushed; native evidence and installation pending",
   "integration_branch": "checkpoint/436-r56-equipment-rendering",
   "verified_origin": "https://github.com/justiceofrip/FrostbiteVR.git",
   "baseline": "4055200b51c2c258d48a33d30d09db9337127f6a",
@@ -12,13 +12,14 @@
   "built_source_commit": "7a5d8aa7281de90e877b35b8ac73d145191161a6",
   "source_sha256": "0888a7d8a5b0e91cbe2de6994c87ec74082e6a572dfa8d3e3acfdc59475c03ab",
   "source_push": {
-    "status": "pending",
-    "commit": null
+    "status": "verified",
+    "commit": "91b304c49a14320dd6d5e772e8a3d36fb5177868",
+    "verified_remote_ref": "refs/heads/checkpoint/436-r56-equipment-rendering"
   },
   "lease": {
     "owner_token": "chat25-chat26-20261028-integration01-12ad90001f4a4986aee8b08654985b14",
-    "status": "held",
-    "released_utc": null
+    "status": "exclusive ownership retained through final source/status push; release recorded locally at close",
+    "close_receipt": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\integration-chat25-chat26-20261028-01\\close.json"
   },
   "tasks": [
     "CHAT25 - Knife single-jab reliability",

@@ -18,8 +18,8 @@ Candidate: integration/chat25-chat26-20261028-01
 Task commit: d55b3c6249c9f56e4235f7805a80d334a5dc610f
 Integrated source merge: 636d7a4b149bc07f43dd13a53a44a6a9862bd563
 Built combined source: 7a5d8aa7281de90e877b35b8ac73d145191161a6
-Source push: pending; candidate validation complete, shared advance still pending.
-Prior verified source push remains4055200b51c2c258d48a33d30d09db9337127f6a.
+Source push: verified at 91b304c49a14320dd6d5e772e8a3d36fb5177868.
+This following status-only commit records the verified push; runtime is unchanged.
 Later status-only commits preserve this exact tested native source/runtime identity.
 Batch receipt: handoff/integrations/chat25-chat26-20261028-integration01/receipt.json
 Short handoff: handoff/integrations/chat25-chat26-20261028-integration01/HANDOFF.txt

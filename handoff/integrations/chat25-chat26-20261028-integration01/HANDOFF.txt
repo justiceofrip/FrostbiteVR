@@ -1,5 +1,5 @@
 CHAT25 / CHAT26 integration - October 28, 2026
-Status: source validated; native/headset acceptance and installation pending.
+Status: source integrated and pushed; native/headset and installation pending.
 Canonical: G:\Unity\VRMMO\FrostbiteVR
 Integration branch: checkpoint/436-r56-equipment-rendering
 Candidate branch: integration/chat25-chat26-20261028-01
@@ -9,10 +9,10 @@ Task commit: d55b3c6249c9f56e4235f7805a80d334a5dc610f
 Merge: 636d7a4b149bc07f43dd13a53a44a6a9862bd563
 Built source: 7a5d8aa7281de90e877b35b8ac73d145191161a6
 Native closure: 0888a7d8a5b0e91cbe2de6994c87ec74082e6a572dfa8d3e3acfdc59475c03ab
-Source push: pending; see receipt.json and COORDINATION.txt for final status.
+Source push verified: 91b304c49a14320dd6d5e772e8a3d36fb5177868
 Lease: G:\Unity\VRMMO\bc2vr-task-worktrees\INTEGRATION.lock
 Lease owner: chat25-chat26-20261028-integration01-12ad90001f4a4986aee8b08654985b14
-Lease remains held until integration-owned processes and source update finish.
+Final lease release/idle check: reports/integration-chat25-chat26-20261028-01/close.json.
 
 Source adds jab regressions and default-off original-call sound context.
 Diagnostic prerequisite adds explicit single jab and image-free neutral calibration.
