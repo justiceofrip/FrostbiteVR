@@ -266,6 +266,54 @@ int TerminalOutcomesSurviveSelection(){
     CHECK(f.service.Outcome()->request==rejected.request); // uncertainty is never a rejected/complete terminal result
     return 0;
 }
+int SamePointerReplacementKeepsOriginalResourceIsolated(){
+    for(int oldLoaded:{0,22,30})for(int newLoaded:{0,7,17}){
+        Fixture f;f.sample.counts.loaded=oldLoaded;CHECK(f.Run(AmmunitionOperation::RemoveMagazine)==0);
+        const auto oldBinding=f.binding;const auto oldCounts=f.sample.counts;
+        const auto original=*f.service.View()->original;const auto completed=*f.service.Outcome();
+        const auto staleReturn=f.Request(AmmunitionOperation::ReturnMagazine);
+        // Native pickups can reuse a weapon address. The coherent inventory
+        // binding supplies a new resource generation and equipment metadata;
+        // neither a removed original nor its receipt belongs to that new item.
+        f.now+=Ms;++f.identity.owner.equipGeneration;f.binding.owner=f.identity.owner;
+        ++f.binding.context.resource.weaponGeneration;++f.binding.context.equipGeneration;
+        f.binding.data+=0x1000;f.binding.persistence+=0x1000;
+        f.sample.context=f.binding.context;f.sample.counts={newLoaded,24,17};
+        const auto replacementCounts=f.sample.counts;CHECK(f.Select());
+        CHECK(f.binding.owner.weapon==oldBinding.owner.weapon&&f.service.Inventory().Size()==2);
+        CHECK(f.service.View()->snapshot.counts==replacementCounts&&!f.service.View()->wellEmpty);
+        CHECK(!f.service.View()->original&&!f.service.View()->receipt&&!f.service.View()->command);
+        CHECK(f.service.View()->originalState==MagazineResourceState::None);
+        CHECK(f.service.View()->terminal&&f.service.View()->terminal->request==completed.request);
+        CHECK(f.channel.Publish(f.service.View()));
+        CHECK(!f.channel.Read(oldBinding.owner,f.now));
+        const auto terminal=f.channel.Outcome(completed.request.intent.id,oldBinding.context);
+        CHECK(terminal&&terminal->request==completed.request&&terminal->receipt==completed.receipt);
+        CHECK(!f.channel.Outcome(completed.request.intent.id,f.binding.context));
+        auto wrongResource=oldBinding.context;wrongResource.resource=f.binding.context.resource;
+        CHECK(!f.channel.Outcome(completed.request.intent.id,wrongResource));
+        // The old request is still within its original deadline, so refusal
+        // proves ownership isolation rather than merely waiting for expiry.
+        CHECK(f.now<staleReturn.intent.deadlineNs);
+        CHECK(!f.service.Accept(staleReturn,f.now)&&!f.service.Active());
+        auto borrowed=f.Request(AmmunitionOperation::ReturnMagazine);borrowed.intent.original=original;
+        CHECK(!f.service.Accept(borrowed,f.now)&&!f.service.Active());
+        CHECK(f.service.View()->snapshot.counts==replacementCounts);
+        CHECK(f.service.Inventory().Find(f.binding.context.resource)->Snapshot().counts==replacementCounts);
+        const auto old=f.service.Inventory().Find(oldBinding.context.resource);
+        CHECK(old&&old->Original()==original&&old->ResourceState()==MagazineResourceState::Held);
+        CHECK(old->WellEmpty()&&old->Snapshot().counts==oldCounts);
+        // The replacement remains usable through its own remove/return cycle;
+        // completing it cannot consume or restore the previous item's rounds.
+        CHECK(f.Run(AmmunitionOperation::RemoveMagazine)==0);
+        CHECK(f.service.View()->original->owner==f.binding.context.resource);
+        CHECK(f.Run(AmmunitionOperation::ReturnMagazine)==0);
+        CHECK(f.sample.counts==replacementCounts&&old->Original()==original);
+        CHECK(old->ResourceState()==MagazineResourceState::Held&&old->Snapshot().counts==oldCounts);
+    }
+    std::puts("Same-pointer replacement: nine old/new loaded states retain separate resources, exact terminal contexts and conserved counts (mock Updates).");
+    return 0;
+}
 int ReadReasonsPreserveAdmission(){
     Fixture f;CHECK(f.Select());const auto good=*f.service.View();
     const auto missing=f.channel.ReadObserved(f.identity.owner,f.now);
@@ -456,5 +504,5 @@ int ConstructionProofCannotRenewInputOrBorrowCurrentAuthority(){
     return 0;
 }
 }
-int main(){if(ActorRetirementKeepsPersistentServiceSafe())return 1;if(NativeEntryDeadlineKeepsUncalledOperationRejectable()||ActualNativeEntryFailureRemainsUncertain()||ConstructionProofCannotRenewInputOrBorrowCurrentAuthority()||RejectedAdmissionCapturesExactCause()||CapturedSeatDeadlineSeparatesNativeViewAndSubmittedSource()||DispatchAndExpiryDiagnosticsDoNotChangeOutcomes()||Transactions()||Rejections()||CancelAndNoAutomaticRetry()||ChannelConcurrency()||TerminalOutcomesSurviveSelection()||ReadReasonsPreserveAdmission()||ReadJournalBoundAndDrain()||ConcurrentViewReadStillCoherent()||FailedOperationEvidenceSurvivesShutdownTail())return 1;
+int main(){if(ActorRetirementKeepsPersistentServiceSafe())return 1;if(NativeEntryDeadlineKeepsUncalledOperationRejectable()||ActualNativeEntryFailureRemainsUncertain()||ConstructionProofCannotRenewInputOrBorrowCurrentAuthority()||RejectedAdmissionCapturesExactCause()||CapturedSeatDeadlineSeparatesNativeViewAndSubmittedSource()||DispatchAndExpiryDiagnosticsDoNotChangeOutcomes()||Transactions()||Rejections()||CancelAndNoAutomaticRetry()||ChannelConcurrency()||TerminalOutcomesSurviveSelection()||SamePointerReplacementKeepsOriginalResourceIsolated()||ReadReasonsPreserveAdmission()||ReadJournalBoundAndDrain()||ConcurrentViewReadStillCoherent()||FailedOperationEvidenceSurvivesShutdownTail())return 1;
     std::puts("BC2 ammunition service: native-observer handoff, no-op/original/refill, identity, cancellation and 10000 command handoffs passed (mock Updates).");return 0;}
