@@ -90,11 +90,15 @@ foreach($entry in $state.normal_flags[$Mode].GetEnumerator()){
     if($cache -cnotcontains ($entry.Key+':'+$entry.Value.type+'='+$entry.Value.value)){throw "Normal flag changed: $($entry.Key)"}
 }
 $failure=$null
+$buildStarted=[DateTime]::UtcNow
+$builtCommit=((& git -C $repo rev-parse HEAD)-join '')
 try { & (Join-Path $repo 'Build.ps1') -Architecture $Mode -Jobs 4 -MaxGeneratedBytes $MaxGeneratedBytes *> (Join-Path $run "$Mode-$Attempt-build-console.log") } catch { $failure=$_ }
 foreach($name in @('configure.log','build.log','tests.log','build.json')){
     $source=Join-Path $repo "reports/$Mode-$name"
+    if($name -eq 'build.json' -and ($failure -or (Get-Item -LiteralPath $source).LastWriteTimeUtc -lt $buildStarted)){continue}
     if(Test-Path -LiteralPath $source){Copy-Item -LiteralPath $source -Destination (Join-Path $run "$Mode-$Attempt-$name")}
 }
+Save (Join-Path $run "$Mode-$Attempt-result.json") @{source_commit=$builtCommit;started_utc=$buildStarted.ToString('o');completed_utc=[DateTime]::UtcNow.ToString('o');passed=($null -eq $failure);failure=if($failure){$failure.ToString()}else{$null}}
 Get-Content -LiteralPath (Join-Path $run "$Mode-$Attempt-build-console.log") -Tail 20
 if($failure){throw $failure}
 & $python -B $helper verify-source --root $repo --reviewed-header $state.reviewed_header --receipt $state.source_receipt --expected $state.source_sha256

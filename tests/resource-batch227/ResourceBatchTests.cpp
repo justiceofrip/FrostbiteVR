@@ -247,11 +247,22 @@ int CompletionPublicationBetweenCallbacks(){
 int DiagnosticFirstActiveCause(){Fixture f;
     for(unsigned n=0;n<900&&f.probe.Current()!=Bc2MagazineResourceProbe::Phase::Pull;++n)f.Tick();
     CHECK(f.probe.Current()==Bc2MagazineResourceProbe::Phase::Pull);
-    f.Tick(2);std::ostringstream first;f.adapter->Report(first);
+    const auto original=f.service.View()->original;const auto counts=f.counts;const auto calls=f.calls;
+    for(unsigned n=0;n<10;++n){
+        f.Tick(2);std::ostringstream suspended;f.adapter->Report(suspended);
+        CHECK(suspended.str().find("\"suspended_original\":1")!=std::string::npos);
+        CHECK(suspended.str().find("\"first_active_cancel\":null")!=std::string::npos);
+        CHECK(!f.hands.Current(InteractionHand::Left)&&!f.result.tracking.target);
+        CHECK(f.service.View()->original==original&&f.service.View()->originalState==MagazineResourceState::Held);
+        CHECK(f.calls==calls&&f.counts.loaded==counts.loaded&&f.counts.reserve==counts.reserve);
+    }
+    // Focus loss suspends custody; an explicit cancellation still records its
+    // first active cause and retains that event through later cancellation.
+    f.s.cancel=true;f.Tick();std::ostringstream first;f.adapter->Report(first);
     const auto pos=first.str().find("\"first_active_cancel\":{");CHECK(pos!=std::string::npos);
     CHECK(first.str().find("\"first_active_cancel\":{\"cause\":1")!=std::string::npos);
     const auto event=first.str().substr(pos);
-    for(unsigned n=0;n<10;++n)f.Tick(2);
+    for(unsigned n=0;n<10;++n)f.Tick();
     std::ostringstream later;f.adapter->Report(later);CHECK(later.str().substr(later.str().find("\"first_active_cancel\":"))==event);
     return 0;
 }
