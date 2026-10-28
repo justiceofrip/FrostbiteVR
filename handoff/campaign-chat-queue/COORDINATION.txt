@@ -17,7 +17,7 @@ Task commit: b19b770be3e005d97b6b32f3563f0abbd187790b
 Combined merge: a95d868f36d2bc8fce40b0f17e519b639e517aa8
 Built source: 6e5fc12d3b98c5065b2bb8d385d28612e4c1c146
 Candidate: integration/campaign-coordinator-20261028-r1
-Source push: pending final integration push.
+Source push: verified at b6b6ba6fccd9e686cf36dbc4e2ff0b2fc51a6a56.
 Later documentation-only commits preserve this exact tested runtime identity.
 Batch receipt: handoff/integrations/coordinator-20261028-batch01/receipt.json
 Short handoff: handoff/integrations/coordinator-20261028-batch01/README.md

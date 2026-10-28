@@ -1,7 +1,7 @@
 {
   "schema": "fvr.coordinator.integration.v1",
   "run": "coordinator-20261028-batch01",
-  "status": "validated source; integration push pending; installation blocked",
+  "status": "source integrated and pushed; installation blocked",
   "integration_branch": "checkpoint/436-r56-equipment-rendering",
   "verified_origin": "https://github.com/justiceofrip/FrostbiteVR.git",
   "coordinator_worktree": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1",
@@ -12,8 +12,8 @@
   "built_source_commit": "6e5fc12d3b98c5065b2bb8d385d28612e4c1c146",
   "source_sha256": "d74a6b63c6360d77007c46d1f3c9f8ca342ce1740466688a7ffd6ab43d3b26ed",
   "source_push": {
-    "status": "pending",
-    "commit": null
+    "status": "verified",
+    "commit": "b6b6ba6fccd9e686cf36dbc4e2ff0b2fc51a6a56"
   },
   "source_tasks": [
     "CHAT07 actual hand-claim and neutral-rearm regressions",

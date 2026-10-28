@@ -12,6 +12,8 @@ source `4448779e33ad265f572245cff49913983696ce5c`, without conflicts or external
 worktree edits. Built source is `6e5fc12d3b98c5065b2bb8d385d28612e4c1c146`.
 Both normal architectures pass305/305 and four focused suites each. Static reviews
 found no source issues; the build recipe's failure-recording issue was corrected.
+Source push verified at `b6b6ba6fccd9e686cf36dbc4e2ff0b2fc51a6a56`; subsequent
+status-only commits preserve the tested native source and artifact identities.
 
 [receipt.json](receipt.json) pins six binary/PDB pairs, unchanged normal flags and
 operation rows. Local evidence is `reports/coordinator-20261028-batch01`; the frozen
