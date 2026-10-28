@@ -1,7 +1,7 @@
 # Diagnostic completion retention, October 8
 
 This follow-up changes diagnostic recording. The shared gameplay correction is
-documented in [201](SIMULATED-PLAYER-201.md).
+documented in [201](archive/SIMULATED-PLAYER-201.md).
 
 The completed native 201 sequence exposed missing journal completions: Commit
 2107 returned within completed Update 2103, but its diagnostic End was discarded

@@ -10,7 +10,7 @@ binary, game asset, recording, or raw live trace is included.
 - [Build the normal390 composition](../../BUILDING.md#checkpoint390-player-composition).
   Use the manual-cycle, native-recovery and body-depth switches. Input-emulation
   switches belong only in explicitly selected diagnostics.
-- [Latest defect, correction and actual-game evidence](../../docs/NATIVE-HANDOFF-390.md).
+- [Latest defect, correction and actual-game evidence](../../docs/archive/NATIVE-HANDOFF-390.md).
 - [Weapon coverage and gaps](../../docs/WEAPON-COVERAGE-CURRENT.md).
 - [Shared weapon system](../../docs/WEAPON-SYSTEM-PIPELINE.md),
   [architecture](../../docs/ARCHITECTURE.md), and
@@ -21,9 +21,9 @@ binary, game asset, recording, or raw live trace is included.
 | Area | Main source / notes |
 | --- | --- |
 | Shared hand ownership, holsters and interruption recovery | `include/fvr/interaction`, `src/interaction`, `src/games/bc2/Bc2BodyInventory*`, `Bc2BodyHolster*`, `Bc2PhysicalPump*`, `Bc2PhysicalBolt*` |
-| Ammunition, reload lifetime and native mechanism selection | `Bc2ReloadRequestCycle*`, `Bc2ReloadNativePolicy.h`, `Bc2ReloadFlowRuntime*`, `Bc2NativeCycle*`; [empty-tube correction](../../docs/SHELL-STOP-388.md) and [second-draw reproducer](../../docs/POST-HOLSTER-PUMP-389.md) |
+| Ammunition, reload lifetime and native mechanism selection | `Bc2ReloadRequestCycle*`, `Bc2ReloadNativePolicy.h`, `Bc2ReloadFlowRuntime*`, `Bc2NativeCycle*`; [empty-tube correction](../../docs/archive/SHELL-STOP-388.md) and [second-draw reproducer](../../docs/archive/POST-HOLSTER-PUMP-389.md) |
 | Magazine rendering, body props, support and aiming | `Bc2MagazinePresentation*`, `Bc2BodyAmmoRenderer*`, `Bc2RigPublication*`, `src/graphics`, and the profiles selected by `Build-Checkpoint.ps1` |
-| Asset and weapon-family analysis | `tools/bc2_*`, `profiles`; [authored-action pipeline](../../docs/AUTHORED-ACTION-PIPELINE-379.md) and [partial-data handling](../../docs/PARTIAL-ACTION-DATA-380.md) |
+| Asset and weapon-family analysis | `tools/bc2_*`, `profiles`; [authored-action pipeline](../../docs/archive/AUTHORED-ACTION-PIPELINE-379.md) and [partial-data handling](../../docs/archive/PARTIAL-ACTION-DATA-380.md) |
 | Actual-game synthetic input and evidence | `Bc2ResourceInventoryProbe*`, `Bc2InventoryReloadProbe*`, `Bc2BoltControllerProbe*`, `tools/Run-OrdinaryResourceInputProbe.ps1`, and the related audits/tests |
 
 Use `git diff 761b49a..HEAD` for the full change. The frozen payloads in

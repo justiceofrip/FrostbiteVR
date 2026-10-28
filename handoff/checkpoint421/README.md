@@ -28,7 +28,7 @@ sky/cloud rendering. It is a demonstrated source-level flaw, not a proven
 explanation of the checkpoint416 death/restart distortion. That failed final
 trace is empty, and inspected completed416 checks recorded no such rejection.
 
-See [implementation and graphics limits](../../docs/RENDER-OBSERVATION-RECOVERY-421.md)
+See [implementation and graphics limits](../../docs/archive/RENDER-OBSERVATION-RECOVERY-421.md)
 and [validation.json](validation.json) for exact scope and receipts. Checkpoint420
 cycle ordering and selected-knife foundations remain inherited work; this narrow
 render correction does not establish their headset acceptance.

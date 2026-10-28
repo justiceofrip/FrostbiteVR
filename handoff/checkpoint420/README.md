@@ -22,8 +22,8 @@ Frozen build receipt:
   retains explicit outcomes. **It is not connected to native motion input.**
   Actual tracked-blade acquisition and enemy damage remain unfinished.
 
-See [cycle details](../../docs/CYCLE-RECOVERY-420.md),
-[knife scope](../../docs/SELECTED-KNIFE-RENDERING-420.md) and
+See [cycle details](../../docs/archive/CYCLE-RECOVERY-420.md),
+[knife scope](../../docs/archive/SELECTED-KNIFE-RENDERING-420.md) and
 [current state](../../docs/CURRENT.md).
 
 ## Validation

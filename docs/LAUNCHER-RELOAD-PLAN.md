@@ -75,12 +75,12 @@ Closed-breech firing needs an explicit proven interlock. Decide the semantic ack
 
 Canonical evidence and code, all read-only in this task:
 
-- `<local-workspace>\reports\reload-config-all-weapons-20261001.json` â€” saved live SPAS, scoped XM8 rifle and scoped launcher reflection; the filename is not evidence for every weapon.
-- `<local-workspace>\reports\launcher-{bindings-live,switch-map,reflection,state-fields,mesh-links,asset-links}-20261001.json` â€” exact family/selection/mesh relationships.
-- `<local-workspace>\docs\LAUNCHER-PILOT-20261001.md`, `LAUNCHER-BINDINGS-20261001.md`, `WEAPON-PROFILE-PIPELINE.md` â€” supported mode/sight limits and muzzle exception.
-- `<local-workspace>\reports\reload-native-code-20261001.json`, `<local-workspace>\docs\BC2-PUMP-RELOAD-20261001.md` â€” native state/transfer/caller proof; state 2 empty-ammo entry.
-- `<local-workspace>\reports\native-trace-20261002-040421-018` and `040613-711` â€” positive-loaded rifle cancel and native refill acceptance, not launcher acceptance.
-- `<local-workspace>\src\games\bc2\Bc2ReloadAbort.h`, `Bc2MagazineReloadCycle.{h,cpp}`, `Bc2MagazineReload.h`, `Bc2ReloadFlowRuntime.{h,cpp}` â€” current exact guards and reusable lifecycle.
-- `<local-workspace>\include\fvr\interaction\ManualReload.h` â€” existing semantic operation interface.
+- `<local-workspace>\reports\reload-config-all-weapons-20261001.json` — saved live SPAS, scoped XM8 rifle and scoped launcher reflection; the filename is not evidence for every weapon.
+- `<local-workspace>\reports\launcher-{bindings-live,switch-map,reflection,state-fields,mesh-links,asset-links}-20261001.json` — exact family/selection/mesh relationships.
+- `<local-workspace>\docs\LAUNCHER-PILOT-20261001.md`, `LAUNCHER-BINDINGS-20261001.md`, `WEAPON-PROFILE-PIPELINE.md` — supported mode/sight limits and muzzle exception.
+- `<local-workspace>\reports\reload-native-code-20261001.json`, `<local-workspace>\docs\BC2-PUMP-RELOAD-20261001.md` — native state/transfer/caller proof; state 2 empty-ammo entry.
+- `<local-workspace>\reports\native-trace-20261002-040421-018` and `040613-711` — positive-loaded rifle cancel and native refill acceptance, not launcher acceptance.
+- `<local-workspace>\src\games\bc2\Bc2ReloadAbort.h`, `Bc2MagazineReloadCycle.{h,cpp}`, `Bc2MagazineReload.h`, `Bc2ReloadFlowRuntime.{h,cpp}` — current exact guards and reusable lifecycle.
+- `<local-workspace>\include\fvr\interaction\ManualReload.h` — existing semantic operation interface.
 
 This folder contains only source code and metadata reports: archive index observations, selected asset reference strings, bounded field observations, cross-checks, and hashes. No canonical patch or new launcher native capability is included.

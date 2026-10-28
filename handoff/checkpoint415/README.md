@@ -56,7 +56,7 @@ independent eight-shot pump/reload/holster/rifle sequence. PC endpoint audio and
 final route/driver ownership checks have separate bounded evidence. No Steam
 Link audio-timing or headset acceptance is implied.
 
-The latest human headset result is the [412 SPAS lockout](../../docs/HEADSET-FAILURE-412.md).
+The latest human headset result is the [412 SPAS lockout](../../docs/archive/HEADSET-FAILURE-412.md).
 Those failures remain preserved. Automated corrections do not establish campaign
 reliability. Spent-shell ejection, wider weapon geometry/mechanisms, full-body IK,
 zoom scopes and multiplayer remain unfinished; see [current state](../../docs/CURRENT.md).

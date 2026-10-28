@@ -53,7 +53,7 @@ ADS-triggered symptom must not be conflated with the deferred general LOD report
 
 | Existing evidence | Established fact | Limit for this work |
 | --- | --- | --- |
-| [BC2 input binding](../src/games/bc2/Bc2InputBinding.cpp), [controls evidence](CONTROLS-20260930.md) | Semantic `AlternateFire` maps to verified native `Zoom`; the original physical left-trigger mapping is removed at the user's request | A Zoom request does not prove ADS acknowledgement, optical magnification, reticle ownership, or identical semantics for every item |
+| [BC2 input binding](../src/games/bc2/Bc2InputBinding.cpp), [controls evidence](archive/CONTROLS-20260930.md) | Semantic `AlternateFire` maps to verified native `Zoom`; the original physical left-trigger mapping is removed at the user's request | A Zoom request does not prove ADS acknowledgement, optical magnification, reticle ownership, or identical semantics for every item |
 | [AutoAdsPolicy](../include/fvr/interaction/AutoAdsPolicy.h) | Portable alignment/time hysteresis and lowering-to-rearm after native cancellation | Currently used by its core test, not integrated into BC2 gameplay. It has no eye-relief geometry, weapon/mode identity or optic classifier |
 | [Saved weapon reflection](../reports/launcher-reflection-20261001.json) | `SoldierWeaponData` names `AimingController` (`SoldierAimingSimulationData`), `FirstPersonCamera`, `Hud`, `RenderFov`, `ZoomRenderFov` and `MeshShaderSetNumberOverride` | These are discovery leads. Units, consumers, affected camera/pass and live zoom state are not established. In particular, `ZoomRenderFov` must not be assumed to mean world magnification |
 | [Camera copies](../src/games/bc2/Bc2Camera.cpp) | Verified BC2 view values can be copied with explicit pose/FOV and native cache rebuild requirements | No arbitrary extra scope-view lifecycle, render target or optic culling path is verified |
@@ -260,5 +260,5 @@ preserved analog finger posing. Both architecture suites pass. Native115047-514
 records full left-trigger pressure without an AlternateFire request, while both
 launcher gestures still work. The run delivered240 pairs with2 recovered timeouts;
 visual blur removal is not headset verified. See
-[hand candidate and provenance](HAND-INPUT-RELOAD-20261001.md).
+[hand candidate and provenance](archive/HAND-INPUT-RELOAD-20261001.md).
 No optics rendering or visual-effect suppression was implemented by this correction.

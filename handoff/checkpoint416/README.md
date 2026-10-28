@@ -223,7 +223,7 @@ were zero, hooks drained, and the game subsequently closed normally. This is
 actual-game paired-pixel acceptance, not headset appearance or impact-ballistics
 acceptance. The exact native first-shot witness is still required. No historical
 failed run was relabeled.
-See [native branch evidence](../../docs/VEHICLE-RETICLE-BRANCHES-416.md).
+See [native branch evidence](../../docs/archive/VEHICLE-RETICLE-BRANCHES-416.md).
 
 ## Tested source and handoff
 
@@ -319,8 +319,8 @@ overlay builds have separate receipts; none reuse 415 acceptance. No remote CI
 result is claimed.
 
 See [current state](../../docs/CURRENT.md),
-[shell audio](../../docs/SHELL-RELOAD-AUDIO-416.md) and
-[graphics investigation](../../docs/GRAPHICS-FOLLOWUP-416.md). The culling audit
+[shell audio](../../docs/archive/SHELL-RELOAD-AUDIO-416.md) and
+[graphics investigation](../../docs/archive/GRAPHICS-FOLLOWUP-416.md). The culling audit
 found coherent paired cameras and a verified child-anchor consumer, but no
 boulder-causing mismatch. Third/fourth-view semantics and downstream cache/LOD
 ownership remain unclassified; no scenery fix or forced LOD is included.

@@ -52,12 +52,12 @@ identifiers. No player-facing launcher or isolated alternate-profile range root
 has been tested.
 
 World racks and ground pickups require a separate spawn/exchange adapter. The
-[BC2 ground-pickup capability remains disabled](GROUND-PICKUP-20261003.md);
+[BC2 ground-pickup capability remains disabled](archive/GROUND-PICKUP-20261003.md);
 portable policy tests do not establish native spawning, target ownership,
 ammunition accounting or outgoing drops. Broad common-bundle mounting is also
 not an accepted shortcut: both attempted SP_03 additions crashed while loading,
 including the base-common-only attempt, as recorded in the
-[loading audit](FORK-LOADING-AUDIT-340.md). The catalog's needed-origin lists are
+[loading audit](archive/FORK-LOADING-AUDIT-340.md). The catalog's needed-origin lists are
 research leads, not safe mount instructions.
 
 Fourteen focused planner tests pass, covering exact variants, stale indexes,

@@ -21,3 +21,11 @@ there: for example `CHECKPOINT-412.md` is `../CHECKPOINT-412.md` and
 Only a decision worth keeping gets a new entry: a short dated section at the top
 of the most relevant log. Status changes go in [CURRENT.md](../CURRENT.md),
 which is overwritten rather than appended.
+
+## Cleanup on 2026-10-28
+
+- One-off investigation notes moved from `docs/` to [../archive/](../archive/).
+- The per-candidate design log moved out of `docs/ARCHITECTURE.md` into [2026-10-28-architecture-log.md](2026-10-28-architecture-log.md).
+- `handoff/checkpoint245/` (stale pre-integration source copies) was removed. Recover it with
+  `git log --diff-filter=D --oneline -- handoff/checkpoint245`, then
+  `git checkout <that commit>^ -- handoff/checkpoint245`.

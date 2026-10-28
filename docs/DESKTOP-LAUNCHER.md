@@ -182,5 +182,5 @@ silently close a running game.
 Launch storage inventory now runs once, using restricted one-use handoffs for
 the verified helper, session supervisor and trace stage. The full inventory
 measured27.08s before and7.50s after; child checks took0.64s. End-to-end game/XR
-startup has not been remeasured. See [412 notes](CHECKPOINT-412.md).
+startup has not been remeasured. See [412 notes](archive/CHECKPOINT-412.md).
 

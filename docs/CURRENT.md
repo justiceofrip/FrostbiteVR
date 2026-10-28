@@ -1,7 +1,7 @@
-# Current state â€” shared normal integration / public 0.1.15
+# Current state — shared normal integration / public 0.1.15
 
 Updated October 28, 2026. This replaces old next-step instructions; prior evidence remains in
-[the archived index](history/2026-10-27-current-through-r55-native.md).
+[history/](history/README.md) (search it by run number; never read a log whole).
 
 ## Active work
 

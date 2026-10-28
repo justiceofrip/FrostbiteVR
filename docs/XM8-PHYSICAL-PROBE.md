@@ -1,6 +1,6 @@
 # Bounded XM8 physical-consumer monitor fixture
 
-**Current checkpoint (2026-10-02 05:13 UTC):** actual physical-consumer/native reload monitor passed with both GPU-eye images reviewed. See [XM8-MAGAZINE-MONITOR-CHECKPOINT-20261002.md](XM8-MAGAZINE-MONITOR-CHECKPOINT-20261002.md). Headset acceptance and combined SPAS/XM8/sight/holster regression remain pending; earlier staging-only statements below describe the original candidate stage.
+**Current checkpoint (2026-10-02 05:13 UTC):** actual physical-consumer/native reload monitor passed with both GPU-eye images reviewed. See [XM8-MAGAZINE-MONITOR-CHECKPOINT-20261002.md](archive/XM8-MAGAZINE-MONITOR-CHECKPOINT-20261002.md). Headset acceptance and combined SPAS/XM8/sight/holster regression remain pending; earlier staging-only statements below describe the original candidate stage.
 
 Mode 4 is a separate explicit 30-second static monitor diagnostic. It drives the actual magazine consumer with private synthetic controller input; it does not call native Start/Submit/ack APIs, create a supply reservation, publish fabricated raw contact, edit counts or declare GPU success from an animation.
 
