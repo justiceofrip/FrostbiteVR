@@ -1,7 +1,7 @@
 {
   "schema": "fvr.integration.normal-source.v1",
   "run": "chat04-20261028-integration01",
-  "recorded_utc": "2026-10-28T15:33:05.1293900Z",
+  "recorded_utc": "2026-10-28T15:33:05.12939Z",
   "integration_branch": "checkpoint/436-r56-equipment-rendering",
   "candidate_branch": "integration/chat04-20261028-custody-r1",
   "origin": "https://github.com/justiceofrip/FrostbiteVR.git",
@@ -286,10 +286,12 @@
     "build_reserve_gib": 3
   },
   "source_push": {
-    "status": "pending",
+    "status": "succeeded",
     "verified_remote_ref": "refs/heads/checkpoint/436-r56-equipment-rendering",
     "status_only_successor_preserves_source_and_runtime": true,
-    "source_commit": "532b75060f9bfe78d013466fa12cf6513a0a9a95"
+    "source_commit": "532b75060f9bfe78d013466fa12cf6513a0a9a95",
+    "pushed_tip_at_verification": "99262e27ea4ff654235c15dd3c6398185a907b83",
+    "verified_utc": "2026-10-28T15:35:02.8662375Z"
   },
   "installation": {
     "status": "pending; configured OpenXR runtime could not create an instance, so required startup/equipment smoke unavailable",

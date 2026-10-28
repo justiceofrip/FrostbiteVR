@@ -5,8 +5,9 @@ Integrated task `tasks/chat04-20261028-tracking-custody-r1` at
 `e013ae21edd5c4f2ab661ac36513ea71ab68a435`. Merge commit:
 `4c60f9801ea7bd8ba44774771e98353eea74abfe`; exact built source:
 `532b75060f9bfe78d013466fa12cf6513a0a9a95`. The target branch is
-`checkpoint/436-r56-equipment-rendering`; source-push status is recorded in
-[receipt.json](receipt.json). Later documentation commits preserve this runtime.
+`checkpoint/436-r56-equipment-rendering`; the source push was verified at
+`99262e27ea4ff654235c15dd3c6398185a907b83`. [receipt.json](receipt.json) records
+the result; the subsequent status-only commit preserves this runtime.
 
 The [task handoff](../../tasks/CHAT04/20261028-tracking-custody-r1/HANDOFF.txt)
 describes the bounded fix: input loss suspends an original magazine without

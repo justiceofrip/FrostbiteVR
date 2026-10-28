@@ -17,7 +17,8 @@ on October 28, 2026, before the CHAT02 integration lease was acquired.
 Last workflow integration: CHAT04 original-magazine suspension, validation passed.
 Built combined source commit: 532b75060f9bfe78d013466fa12cf6513a0a9a95
 Included task commit: 19e95afe694c2afc7486d06c020a4b40a1ff8b64
-Source push: pending final candidate documentation commit and remote recheck.
+Source push: verified at 99262e27ea4ff654235c15dd3c6398185a907b83.
+The subsequent status-only commit preserves the exact built source/runtime above.
 Prior CHAT02 integration remains included; its receipt preserves its evidence.
 Last workflow local mod update: none; required OpenXR preflight failed.
 Observed launcher target: G:\Unity\VRMMO\BC2VR-Launcher, active0.1.12 unchanged.
