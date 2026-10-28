@@ -1,0 +1,87 @@
+CHAT25 - Knife single-jab reliability: bounded native evidence request
+Prepared October 28, 2026; NOT RUN. Integrator owns all builds/game/headset work.
+Base: 4055200b51c2c258d48a33d30d09db9337127f6a. Use integrated source/artifact pins.
+
+Question and preserved evidence
+Determine whether a missed short jab fails recognition, input delivery, native
+acquisition, delayed attack, or target acceptance. Existing opening progression
+remains accepted: knife430/approach43404 had a native health 12.5 -> 0 callback
+and subsequent Reach Trenches; the user later reported headset progression.
+Neither result measures repeatable short-jab recognition or current hit timing.
+Do not change gesture thresholds, native windup or damage to prepare this check.
+
+Preparation and limits
+1. Acquire the integration lease. Pin source commit, normal x86/x64 build receipt
+   and hashes, executable/profile, process PID/creation, runtime/headset/settings,
+   normal combined knife/grenade/gadget/reload flags and operation records.
+   Record mission/checkpoint, live target identity/health and actor/equipment/
+   input/reference-space generations. No disabled competing systems for acceptance.
+2. Use G: output/scratch and process-local TEMP/TMP/TMPDIR. Call StorageBudget
+   before each session/capture; retain the admission. No build or game in workers.
+   The current standard native probe requires 512 MiB for eight bounded raw
+   snapshots; use its 640 MiB session reservation, with receiver images disabled.
+   Extra audio/video is opt-in, separately budgeted; never weaken a failed guard.
+3. Set FVR_BC2_PRIVATE_KNIFE_TIMING_OBSERVE=1 and
+   FVR_BC2_PRIVATE_KNIFE_SOUND_OBSERVE=1 before launching the actual game process;
+   restore caller environment afterward. Injector-only environment is insufficient.
+   Verify both enabled and reload_flow.knife_export_observation_hook=true in report.
+4. Retained recipe reference (prepared, not new acceptance):
+   G:\Unity\VRMMO\bc2vr-recovery\performance436\knife-response-prep\GUARD-RECIPE.md
+   SHA256 a58e640e43cde64201f10af555d7f56b606ab8785ed7a7ca2a79dbcc161518fa.
+   Rebind/review its wrappers against current integrated sources and process pins;
+   do not execute the historical staged-v3 wrapper unchanged. Its Motion route
+   sends TWO 12 cm strokes at 2.0/5.2 s, not a single-jab test. For single-jab
+   episodes prepare a reviewed one-stroke fixture or use one recorded human jab.
+   Obtain current neutral calibration; never copy another process's blade axis.
+   Existing --selected-knife-motion-smoke requires measured LOCAL unit x/y/z;
+   optional --selected-knife-motion-rotation requires measured quaternion x/y/z/w.
+
+Episode matrix (separate numbered folders; no automatic retries)
+5. Five matched pairs: one intended single jab at a verified living target and
+   one air miss control with matching pose/travel/settings away from all targets.
+   Use a reproducible mission setup through ordinary campaign start/load only;
+   never revive/edit/teleport a target or treat a dead target as a hit trial.
+   Per episode: <=8 s active input, <=11 s native observation, one jab, withdrawal,
+   neutral tail. Record actual attempted motions independently of emitted intents.
+6. Two separate episodes: jab, withdraw, fresh neutral, deliberate second jab.
+   Existing two-stroke Motion recipe above can supply the emulated version.
+   Same <=8 s input/11 s native observation; two actions maximum per report.
+7. Negative episodes, same bounds: slow/lateral incidental hand motion; nearby
+   reload/support-grip/regrip with the normal systems enabled; tracking interruption
+   before intent; interruption after publication. Record which boundary was reached.
+   No partial movement may become a new jab on recovery. Already submitted native
+   work retains its outcome; interruption alone does not prove cancellation.
+
+Separate joins and acceptance
+8. Preserve receiver original input sequence/pose/timestamps/publication evidence,
+   session-telemetry.jsonl selected_knife.preparation gates/policy/stroke counters,
+   and final selected_knife_native.records. The 1 Hz telemetry is sampled evidence,
+   not a complete per-jab trace; retain a bounded gesture recording when needed.
+   For every attempt report recognition intent/cause (1=Stroke, 0=Trigger), serial,
+   input, source observed/deadline, staged/published/input-consumed/acquired/attacked
+   timestamps, target, damage_calls and health_known/before/after separately.
+   Calculate stage latencies only with compatible verified clocks and exact joins.
+   A consumed input, attack return, sound Start or callback count is not a hit.
+   Require matching native target damage plus verified later target health/state;
+   callback-local health alone does not establish death or mission progression.
+9. Inspect original Update/Step parentage and state/timer changes in all three
+   firing copies and exact export/restore payload provenance. Keep missing,
+   ambiguous and conflicting records. Timing capacity is4096 rows/2 s intent age;
+   sound journal retains64 rows. Report contention, capacity/end drops, rejected
+   rows and overwritten rows; incomplete evidence cannot prove no duplicate damage.
+   CHAT26 consumes this same run's sound rows; sound names never assign hit outcome.
+10. Intended single jabs: exactly one accepted gesture and no second damaging
+    action attributable to it; air misses and incidental/reload/grip motions must
+    show no target damage; incidental/reload/grip motion must emit no knife action.
+    A deliberate air jab may emit one miss intent. Each new jab needs a distinct intent.
+    Report all5 attempts and controls, latency distribution, failures and unknowns.
+    Physical-headset timing/handling remains separate from emulated native checks.
+
+Cleanup and stop rules
+Stop on unknown ownership/outcome, input lease failure, full diagnostic journal,
+or failed cleanup; retain the episode and diagnose before another attempt.
+Independently verify retained-probe-cleanup.json and exact hook/reference/temporary
+write restoration, no pending/unknown action, coherent hands/fire/reload/Use and
+normal control return. Do not kill BC2/native threads to manufacture cleanup.
+No public release, unrelated shared profile edits or recovery investigation follows
+from this request. Pending live evidence remains explicit if the runtime cannot start.

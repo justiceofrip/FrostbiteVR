@@ -271,6 +271,9 @@ int wmain(int argc,wchar_t** argv){try{
             const float x=number(),y=number(),z=number();Require(triggerSmokeState.Motion({x,y,z}),"Unit blade direction required");
             selectedKnifeMenu=triggerSmoke=controlsObserve=true;continue;
         }
+        if(option==L"--selected-knife-single-jab"){
+            Require(selectedKnifeMenu&&triggerSmokeState.SingleJab(),"Single jab requires prior knife motion and no approach; select once");continue;
+        }
         if(option==L"--selected-knife-motion-rotation"){
             Require(selectedKnifeMenu&&triggerSmokeState.IsMotion()&&i+4<argc,"Rotation must follow selected knife motion and provide quaternion xyzw");
             const auto number=[&](){const std::wstring text=argv[++i];std::size_t used=0;const float n=std::stof(text,&used);
@@ -429,7 +432,7 @@ int wmain(int argc,wchar_t** argv){try{
         "Trigger smoke requires isolated static async input; no other gesture/capture modes");
     Require(!selectedKnifeNeutral||probe::SelectedKnifeNeutralArguments(selectedKnifeNeutral,staticPose,async,targetPairs,selectedKnifeNeutralOptionsOnly),
         "Selected knife neutral requires isolated static async240; no sidecar or other input modes");
-    Require(!noImageFiles||normalKnifeClose||resourceInventoryProbe||triggerSmokeState.IsMotion()||triggerSmokeState.IsApproach(),"Image-file opt-out requires an isolated supported recipe");
+    Require(!noImageFiles||selectedKnifeNeutral||normalKnifeClose||resourceInventoryProbe||triggerSmokeState.IsMotion()||triggerSmokeState.IsApproach(),"Image-file opt-out requires an isolated supported recipe");
     Require(!triggerSmokeState.ReviewImagesRequested()||(triggerSmoke&&selectedKnifeMenu&&triggerSmokeState.IsApproach()&&!noImageFiles&&!capturePoses),"Knife review images require isolated approach without other image options");
     Require(!normalKnifeClose||(normalKnifeOptionsOnly&&!contextualToolProbe&&!chestKnifeProbe&&!playerGrenadeProbe&&!ordinaryGrenadeProbe&&
         !twoGrenadeFade&&staticPose&&async&&targetPairs==240&&requestLifetimeMs==150),"Normal held-close requires isolated static async240");

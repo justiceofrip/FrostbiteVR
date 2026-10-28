@@ -1,0 +1,55 @@
+CHAT26 - Knife action-matched audio
+Updated: October 28, 2026
+Status: needs-native-evidence (diagnostics integrated; normal builds passed).
+Paired selected task: CHAT25 - Knife single-jab reliability.
+Task branch: tasks/chat25-chat26-20261028-knife-r1
+Task base: 4055200b51c2c258d48a33d30d09db9337127f6a
+Task commit: d55b3c6249c9f56e4235f7805a80d334a5dc610f
+Integration branch: checkpoint/436-r56-equipment-rendering
+Built source: 7a5d8aa7281de90e877b35b8ac73d145191161a6
+Native source closure:
+0888a7d8a5b0e91cbe2de6994c87ec74082e6a572dfa8d3e3acfdc59475c03ab
+Source push status: consult handoff/integrations/chat25-chat26-20261028-integration01/receipt.json;
+no push completion is asserted by this handoff.
+
+Existing opt-in sound observation records the innermost original native
+acquisition/attack scope, action serial/input and exact owner generations.
+Unadmitted nested calls mask the outer context; RAII restores it on return.
+Owner match is diagnostic context, not causal sound ownership, damage or
+audibility proof. Existing temporal candidates and ambiguity remain.
+Original calls/arguments/returns, gameplay TLS, hooks, damage, windup and stock
+sound forwarding are unchanged. No suppression/replacement or audio asset
+changes were made; no audio fix or acceptance is claimed.
+
+Deterministic coverage includes nested/disabled scopes, restoration,
+foreign/invalid owner, unknown phase, retained temporal ambiguity and
+journal context retention.
+Validation: normal Build.ps1 x86 and x64 passed all 305 suites each;
+four focused suites also passed on each architecture.
+Frozen runtime receipt:
+G:\Unity\VRMMO\FrostbiteVR\reports\integration-chat25-chat26-20261028-01\normal-runtime\build-receipt.json
+Receipt SHA256:
+dd0c8b845b72c1999f337b97b680692d3c74253ec8bb3237dc768f8074509095
+Original isolated evidence: ../../CHAT25/20261028-knife-r1/VALIDATION.json.
+
+Retained research: knife-audio-route-r45/findings.json under
+G:\Unity\VRMMO\bc2vr-recovery\performance436 (SHA in DIAGNOSTIC.txt).
+Whole nonlooping authored cues do not distinguish multiple native Starts
+from one long recording. Static impact cues do not prove live playback.
+
+Native setup launched game19, PID 117536, birth 134376863673429341,
+with the reviewed normal flags and SOUND_OBSERVE/TIMING_OBSERVE enabled.
+The single focus request returned false; foreground focus was never observed
+during a further 30-second check after the user offered to correct it.
+No image capture, Resume input, native attachment or audio/knife episode occurred.
+Scene evidence: reports/integration-chat25-chat26-20261028-01/native/scene01.
+Cleanup receipt: reports/integration-chat25-chat26-20261028-01/native/scene01/finish.json;
+normal close and exact restoration of all three profiles verified.
+
+Continue DIAGNOSTIC.txt and CHAT25's linked episode matrix. Count Starts,
+join original call context and preserve uncertainty. Hear actual actions,
+misses/hits, withdrawal and interruptions in a physical headset.
+Prove replacement ownership/cue readiness and existing impact behavior
+before changing playback. Builds and source integration do not qualify
+native timing, sound behavior or headset acceptance.
+Continue CHAT25/CHAT26 only; no automatic next card or architecture change.

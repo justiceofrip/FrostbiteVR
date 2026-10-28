@@ -1,0 +1,51 @@
+CHAT25 / CHAT26 integration - October 28, 2026
+Status: source integrated and pushed; native/headset and installation pending.
+Canonical: G:\Unity\VRMMO\FrostbiteVR
+Integration branch: checkpoint/436-r56-equipment-rendering
+Candidate branch: integration/chat25-chat26-20261028-01
+Accepted baseline: 4055200b51c2c258d48a33d30d09db9337127f6a
+Task branch: tasks/chat25-chat26-20261028-knife-r1
+Task commit: d55b3c6249c9f56e4235f7805a80d334a5dc610f
+Merge: 636d7a4b149bc07f43dd13a53a44a6a9862bd563
+Built source: 7a5d8aa7281de90e877b35b8ac73d145191161a6
+Native closure: 0888a7d8a5b0e91cbe2de6994c87ec74082e6a572dfa8d3e3acfdc59475c03ab
+Source push verified: 91b304c49a14320dd6d5e772e8a3d36fb5177868
+Lease: G:\Unity\VRMMO\bc2vr-task-worktrees\INTEGRATION.lock
+Lease owner: chat25-chat26-20261028-integration01-12ad90001f4a4986aee8b08654985b14
+Final lease release/idle check: reports/integration-chat25-chat26-20261028-01/close.json.
+
+Source adds jab regressions and default-off original-call sound context.
+Diagnostic prerequisite adds explicit single jab and image-free neutral calibration.
+Default two-jab fixture, gameplay rules, normal flags and operation rows remain.
+No knife reliability, native damage, audio playback or headset fix is claimed.
+Accepted opening-mission knife progression remains accepted.
+
+Reports: G:\Unity\VRMMO\FrostbiteVR\reports\integration-chat25-chat26-20261028-01
+Normal Build.ps1 x86 and x64 each passed305/305; focused suites each passed4/4.
+Frozen runtime: normal-runtime/build-receipt.json under the reports directory.
+Receipt SHA256: dd0c8b845b72c1999f337b97b680692d3c74253ec8bb3237dc768f8074509095
+Six binary/PDB pairs verified; source/flags/operation provenance independently audited.
+Initial storage refusal retained. Lossless compression reclaimed3,101,962,706 bytes;
+all content verified, no deletion, unchanged40GiB/15GiB storage limits.
+
+Native scene01/game19 launched with both observer flags, PID117536.
+Foreground request failed; two capture guards and a bounded recheck stopped
+before images, Resume input or attachment. Zero knife/audio episodes ran.
+The user's offered focus correction did not establish observed foreground.
+finish.json confirms normal close, zero attached probes and exact3profile restore.
+These are setup results, not evidence of a knife failure.
+The emulated D3D11 recipe does not depend on OpenXR. A separate exact-candidate
+OpenXR preflight failed instance creation XrResult=-2; owned host exited normally.
+Launcher0.1.12/previous0.1.11 payloads and settings remain verified unchanged.
+No installation, startup/equipment smoke, headset acceptance or public release.
+
+Continue selected CHAT25/CHAT26 only. Read INTEGRATE.txt and both task handoffs.
+Resolve foreground/window admission before another bounded session; preserve
+scene01 failures and use fresh output names, process identity and calibration.
+native/ scripts are pinned to this finished run/lease and need reviewed rebinding.
+Do not blindly retry old wrappers, reuse an axis, or resurrect the unavailable
+historical Continue injector. Use ordinary reviewed menu navigation.
+Run the linked DIAGNOSTIC.txt matrix when admitted; physical-headset audio
+timing remains separate. No speculative gesture/damage/audio changes.
+Do not rerun passed builds for documentation-only changes or unchanged binaries.
+Preserve unrelated untracked queue/coordinator files; do not start another card.

@@ -1,0 +1,53 @@
+CHAT25 - Knife single-jab reliability
+Updated: October 28, 2026
+Status: needs-native-evidence (integrated; normal builds passed).
+Paired selected task: CHAT26 - Knife action-matched audio.
+Task branch: tasks/chat25-chat26-20261028-knife-r1
+Task base: 4055200b51c2c258d48a33d30d09db9337127f6a
+Task commit: d55b3c6249c9f56e4235f7805a80d334a5dc610f
+Integration branch: checkpoint/436-r56-equipment-rendering
+Built source: 7a5d8aa7281de90e877b35b8ac73d145191161a6
+Native source closure:
+0888a7d8a5b0e91cbe2de6994c87ec74082e6a572dfa8d3e3acfdc59475c03ab
+Source push status: consult handoff/integrations/chat25-chat26-20261028-integration01/receipt.json;
+no push completion is asserted by this handoff.
+
+SelectedMeleeAttack regressions cover decelerating jab, duplicate packets,
+pending original outcome, withdrawal, completion and deliberate second jab
+at 72/90/120Hz. Incidental drift/lateral/reversed motion and ownership
+transfer cannot finish a partial jab; fresh regrip must settle.
+No current production recognition defect was demonstrated. Existing gesture
+thresholds, native hit timing/damage and accepted opening progression remain.
+Mock completion is not native damage/progression evidence.
+
+Integration prerequisite adds diagnostic-only no-image neutral capture and
+an explicit single-jab fixture. Default two-jab behavior remains unchanged.
+The fixture schedules withdrawal; completion requires first-stroke delivery
+and a timely neutral tail, not recognition, a native hit or campaign progression.
+
+Validation: normal Build.ps1 x86 and x64 passed all 305 suites each;
+four focused suites also passed on each architecture.
+Frozen runtime receipt:
+G:\Unity\VRMMO\FrostbiteVR\reports\integration-chat25-chat26-20261028-01\normal-runtime\build-receipt.json
+Receipt SHA256:
+dd0c8b845b72c1999f337b97b680692d3c74253ec8bb3237dc768f8074509095
+Original isolated evidence remains in VALIDATION.json.
+
+Native setup launched game19, PID 117536, birth 134376863673429341,
+with the reviewed normal flags and both knife observation flags enabled.
+The single focus request returned false; foreground focus was never observed
+during a further 30-second check after the user offered to correct it.
+No image capture, Resume input, native attachment or knife episode occurred.
+This is a setup focus block, not evidence of knife failure.
+Scene evidence: reports/integration-chat25-chat26-20261028-01/native/scene01.
+Cleanup receipt: reports/integration-chat25-chat26-20261028-01/native/scene01/finish.json;
+normal close and exact restoration of all three profiles verified.
+
+Continue the bounded DIAGNOSTIC.txt episode matrix with exact current
+process/build/calibration receipts and reviewed native wrappers. Preserve
+recognition, stock hit/damage, progression and headset results separately.
+The emulated receiver does not require an OpenXR session; headset evidence
+still requires the physical headset. Do not accept this task from build,
+fixture, callback or integration success. No gameplay fix is claimed.
+Companion: ../../CHAT26/20261028-knife-r1/HANDOFF.txt.
+Continue CHAT25/CHAT26 only; no automatic next card or architecture change.

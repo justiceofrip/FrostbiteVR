@@ -5,6 +5,15 @@ Updated October 28, 2026. This replaces old next-step instructions; prior eviden
 
 ## Active work
 
+CHAT25/CHAT26 knife regressions and optional original-call sound context are
+integrated; gameplay recognition, damage and sound forwarding are unchanged.
+Both normal builds passed305/305 plus four focused suites each. The
+[integration handoff](../handoff/integrations/chat25-chat26-20261028-integration01/HANDOFF.txt)
+pins six binary/PDB pairs and preserves the foreground-blocked game setup and
+OpenXR instance failure (`XrResult=-2`). No knife episode or headset check ran;
+the game closed normally, all three profiles were restored, and launcher0.1.12
+remains unchanged. Native single-jab/audio acceptance and installation are pending.
+
 CHAT33 launch diagnostics and placement checks are integrated: setup/Play reject
 protected game-folder placement early, and Steam reports separate requested opt-in
 from native-profile refusal. Seven canonical suites pass; native source/artifacts

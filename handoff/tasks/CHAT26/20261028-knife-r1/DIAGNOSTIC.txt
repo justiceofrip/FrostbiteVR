@@ -1,0 +1,57 @@
+CHAT26 - Knife action-matched audio: bounded native/headset request
+Prepared October 28, 2026; NOT RUN. Status: needs-native-evidence.
+
+Use the CHAT25 matrix in ../../CHAT25/20261028-knife-r1/DIAGNOSTIC.txt.
+Share those episodes; do not repeat accepted gesture checks just for audio.
+Both private SOUND_OBSERVE and TIMING_OBSERVE flags must reach the actual game.
+Normal combined interaction flags, existing hooks and stock sound calls remain.
+
+Retained research (static assets/source; not new native or headset acceptance):
+G:\Unity\VRMMO\bc2vr-recovery\performance436\knife-audio-route-r45\findings.json
+SHA256 1a6faf3f670d80e3ca5d9c5dc71620e0097a2b3d2ab4646e3ece1147a0a4b499.
+The authored ordinary (~1.033s) and kill (~1.553s) cues are whole nonlooping
+recordings. Separate body-impact cues exist. Neither establishes live triggering,
+multiple starts, perceived timing, or whether impact already plays after damage.
+Do not repeat the asset decode, guess waveform trims or add an impact sound yet.
+
+New diagnostic rows
+selected_knife_native.sound_observation retains Start/Stop, GUID kind, timestamp,
+receiver/owner/weapon/thread, up to two temporal candidates and loss counters.
+Each row now also retains original_scope:
+  phase: 0 none, 1 original acquisition, 2 original attack;
+  serial/input, actor_generation/item_generation, owner/weapon/effects;
+  owner_matched: exact match to the already verified local owner for this row.
+Unadmitted nested native calls mask the outer scope, and returns restore it.
+Scope absent/foreign is unbound. Same-thread dispatch context is not proof that
+the action caused the sound, damaged a target, or played an audible cue. A
+scope match does not remove the two-candidate ambiguity or authorize suppression.
+The report explicitly retains these limits. Default-off flags stay default-off.
+
+For each single jab, air miss, withdrawal, second jab and interrupted episode:
+1. Join exact input/gesture and original acquisition/attack/damage evidence from
+   CHAT25. Separate intent, original return and actual target health outcome.
+2. Count distinct actual native Starts/Stops by owner/kind, retaining all ordinals
+   and relative times. Distinguish one long recording from repeated Starts.
+   Sort journal rows by ordinal; storage order is not chronological after wrap.
+3. Report dispatch phase/serial and both temporal candidates without promoting
+   proximity to causality. Keep unmatched, ambiguous, contention/rejected/dropped
+   and overwritten evidence. Missing callbacks cannot prove silent playback.
+4. Listen in a physical headset and annotate jab, miss, impact, withdrawal and
+   interruption against the performed action. Record exact runtime/audio route,
+   settings and tester results. If a recording is needed, it is opt-in and bounded
+   to one <=11s episode; add its byte plan before capture. No raw game media in Git.
+5. Check unrelated local gunfire/reload, NPC/third-person and ambient audio in the
+   same scene. Scope this to the sounds actually heard; no all-audio claim.
+
+Decision after evidence
+One long Start needs an appropriate short action cue and verified replacement
+route; repeated Starts need their actual admission/dispatch cause diagnosed.
+Before suppression, prove exact local action ownership and replacement readiness.
+Before a body-hit cue, prove native material/impact does not already play it.
+Keep unknown/unrelated playback stock. Never change gesture/damage to hide audio.
+Acceptance is appropriate cues once at performed actions, no unperformed stock
+sequence, preserved unrelated audio and headset timing on the exact candidate.
+This patch gathers evidence only and does not meet that acceptance by itself.
+
+Use CHAT25 storage/stop/cleanup rules. Require exact hook/reference restoration,
+no pending unknown action and normal controls. Preserve every failure and gap.

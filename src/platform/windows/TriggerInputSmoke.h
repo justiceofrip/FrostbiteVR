@@ -11,7 +11,7 @@
 namespace fvr::probe {
 constexpr bool TriggerInputSmokeOption(std::wstring_view option)noexcept {
     return option==L"--trigger-input-smoke"||option==L"--selected-knife-trigger-smoke"||
-        option==L"--selected-knife-motion-smoke"||option==L"--selected-knife-motion-rotation"||option==L"--selected-knife-approach"||
+        option==L"--selected-knife-motion-smoke"||option==L"--selected-knife-single-jab"||option==L"--selected-knife-motion-rotation"||option==L"--selected-knife-approach"||
         option==L"--selected-knife-approach-crouch"||option==L"--selected-knife-approach-turn"||
         option==L"--selected-knife-approach-resume"||option==L"--selected-knife-approach-prepared"||
         option==L"--selected-knife-review-images"||
@@ -42,6 +42,11 @@ public:
         direction_={direction.x/length,direction.y/length,direction.z/length};motion_=true;return true;
     }
     bool IsMotion()const noexcept{return motion_;}
+    bool SingleJab()noexcept {
+        if(!motion_||attempts_||singleJab_)return false;
+        singleJab_=true;return true;
+    }
+    unsigned StrokeCount()const noexcept{return singleJab_?1u:2u;}
     static constexpr std::uint64_t RotationBeginMs=500,RotationEndMs=1500;
     bool MotionRotation(math::Quaternion q)noexcept {
         const float length=std::sqrt(q.x*q.x+q.y*q.y+q.z*q.z+q.w*q.w);
@@ -71,6 +76,7 @@ public:
     bool ContinueInput(std::uint64_t ms)const noexcept{return ms<Duration();}
     unsigned CurrentPhase(std::uint64_t ms)const noexcept {
         if(!motion_)return Phase(ms);
+        if(singleJab_&&ms>=4200)return ms<8000?8:9;
         return ms<2000?0:ms<2120?1:ms<3200?2:ms<4200?3:ms<5200?4:
             ms<5320?5:ms<6500?6:ms<7500?7:ms<8000?8:9;
     }
@@ -82,9 +88,9 @@ public:
         if(ms>=2000&&ms<2120)travel=.12f*float(ms-2000)/120;
         else if(ms>=2120&&ms<3200)travel=.12f;
         else if(ms>=3200&&ms<4200)travel=.12f*(1-float(ms-3200)/1000);
-        else if(ms>=5200&&ms<5320)travel=.12f*float(ms-5200)/120;
-        else if(ms>=5320&&ms<6500)travel=.12f;
-        else if(ms>=6500&&ms<7500)travel=.12f*(1-float(ms-6500)/1000);
+        else if(!singleJab_&&ms>=5200&&ms<5320)travel=.12f*float(ms-5200)/120;
+        else if(!singleJab_&&ms>=5320&&ms<6500)travel=.12f;
+        else if(!singleJab_&&ms>=6500&&ms<7500)travel=.12f*(1-float(ms-6500)/1000);
         return {.15f+direction_.x*travel,-.10f+direction_.y*travel,-.20f+direction_.z*travel};
     }
     interaction::InputFrame Input(const runtime::TrackingFrame& tracking,std::uint64_t sequence,
@@ -157,8 +163,9 @@ public:
     }
     bool Complete(std::uint64_t elapsed,bool durationEnded)const noexcept {
         if(motion_)return durationEnded&&elapsed>=Duration()&&!Failed()&&neutralInput_&&neutralMs_<=1800&&
-            motionSamples_[0]>=4&&motionSamples_[1]>=4&&motionTravel_[0]>=.06f&&motionTravel_[1]>=.06f&&
-            motionGapNs_<=75000000&&tailInput_&&tailMs_<=7550&&lastMs_>=7900&&lastAfter_-tailNs_>=400000000;
+            motionSamples_[0]>=4&&motionTravel_[0]>=.06f&&
+            (singleJab_||(motionSamples_[1]>=4&&motionTravel_[1]>=.06f))&&
+            motionGapNs_<=75000000&&tailInput_&&tailMs_<=(singleJab_?4250:7550)&&lastMs_>=7900&&lastAfter_-tailNs_>=400000000;
         return durationEnded&&elapsed>=DurationMs&&!Failed()&&neutralInput_&&pressInput_&&releaseInput_&&tailInput_&&postReleaseSamples_>=2;
     }
     bool Failed()const noexcept{return failure_!=Failure::None;}
@@ -168,7 +175,9 @@ public:
         const auto reportedFailure=Failed()?failure_:additional;
         if(motion_){out<<"{\"schema\":\"fvr.selected_knife_motion_smoke.v1\",\"duration_ms\":"<<Duration()
             <<",\"elapsed_ms\":"<<elapsed<<",\"publication_complete\":"<<(Complete(elapsed,durationEnded)?"true":"false")
-            <<",\"stroke_windows_ms\":[[2000,2120],[5200,5320]],\"travel_metres\":0.12,\"axis_xr\":["<<direction_.x<<','<<direction_.y<<','<<direction_.z<<']';
+            <<",\"stroke_count\":"<<StrokeCount()<<",\"stroke_windows_ms\":[[2000,2120]";
+            if(!singleJab_)out<<",[5200,5320]";
+            out<<"],\"travel_metres\":0.12,\"axis_xr\":["<<direction_.x<<','<<direction_.y<<','<<direction_.z<<']';
             ReportRotation(out);out<<",\"attempts\":"<<attempts_<<",\"published\":"<<published_<<",\"missed\":"<<missed_<<",\"busy\":"<<busy_
             <<",\"stroke_samples\":["<<motionSamples_[0]<<','<<motionSamples_[1]<<"],\"delivered_stroke_travel\":["<<motionTravel_[0]<<','<<motionTravel_[1]<<']'
             <<",\"max_stroke_gap_ns\":"<<motionGapNs_<<",\"neutral_input\":"<<neutralInput_<<",\"neutral_tail_input\":"<<tailInput_
@@ -204,7 +213,7 @@ private:
     std::uint64_t lastMs_=0,lastInput_=0,space_=0,neutralInput_=0,pressInput_=0,releaseInput_=0,tailInput_=0,pressMs_=0,releaseMs_=0;
     std::int64_t lastBefore_=0,lastAfter_=0,maxGapNs_=0,pressBeforeNs_=0,pressAfterNs_=0,releaseBeforeNs_=0,releaseAfterNs_=0;
     unsigned attempts_=0,published_=0,missed_=0,busy_=0,postReleaseSamples_=0;
-    bool motion_=false,rotation_=false;math::Quaternion rotationTarget_{};math::Vec3 direction_{};unsigned motionPhase_=0;
+    bool motion_=false,rotation_=false,singleJab_=false;math::Quaternion rotationTarget_{};math::Vec3 direction_{};unsigned motionPhase_=0;
     std::array<unsigned,2> motionSamples_{};std::array<float,2> motionStartTravel_{},motionTravel_{};
     std::array<std::int64_t,2> motionLastNs_{};std::int64_t motionGapNs_=0,tailNs_=0;
     std::uint64_t neutralMs_=0,tailMs_=0;
@@ -219,11 +228,12 @@ public:
     static constexpr std::uint64_t ApproachNeutralMs=500,MaximumApproachMs=10000;
     static constexpr std::uint64_t TurnCycleMs=500,TurnPulseMs=150;
     bool Approach(std::uint64_t ms,float strafe,float forward)noexcept {
-        if(approachMs_||attempts_||!ms||ms>MaximumApproachMs||!std::isfinite(strafe)||!std::isfinite(forward)||
+        if(StrokeCount()==1||approachMs_||attempts_||!ms||ms>MaximumApproachMs||!std::isfinite(strafe)||!std::isfinite(forward)||
            forward<0||std::hypot(strafe,forward)>.5f||(strafe==0&&forward==0))return false;
         approachMs_=ms;strafe_=strafe;forward_=forward;return true;
     }
     bool IsApproach()const noexcept{return approachMs_!=0;}
+    bool SingleJab()noexcept{return !IsApproach()&&Sequence::SingleJab();}
     bool ApproachCrouch()noexcept {
         if(!IsApproach()||attempts_||crouch_)return false;
         crouch_=true;return true;

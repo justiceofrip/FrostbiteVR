@@ -19,8 +19,8 @@ struct Fixture {
         else {auto r=hands.Acquire(s.motion.source,{s.identity.owner,InteractionHand::Right,HandClaimKind::GunHold,
             s.identity.item,contact,++claims,0});if(r.claim)s.motion.hold=r.claim->token;}
     }
-    SelectedMeleeResult Step(float dz=0,float trigger=0){
-        ++s.motion.source.sequence;s.motion.source.observedNs+=10*ms;s.motion.source.nowNs=s.motion.source.observedNs;
+    SelectedMeleeResult Step(float dz=0,float trigger=0,std::int64_t dt=10*ms){
+        ++s.motion.source.sequence;s.motion.source.observedNs+=dt;s.motion.source.nowNs=s.motion.source.observedNs;
         s.motion.source.deadlineNs=s.motion.source.nowNs+100*ms;s.motion.tip.z+=dz;s.trigger=trigger;Refresh();
         auto r=policy.Update(s,hands);if(r.intent){++emitted;last=r.intent;}return r;
     }
@@ -36,6 +36,59 @@ int OneMotionIntentAndExactOutcome(){
     CHECK(!f.Outcome(SelectedMeleeOutcome::Completed));CHECK(f.Outcome(SelectedMeleeOutcome::Submitted));
     CHECK(!f.Outcome(SelectedMeleeOutcome::RejectedNoEffect));CHECK(f.Outcome(SelectedMeleeOutcome::Completed));
     f.Stab();CHECK(f.emitted==1);f.Rest();f.Stab();CHECK(f.emitted==2);return 0;
+}
+int SingleJabWithdrawalAndRejab(){
+    for(const auto hz:{72,90,120}){
+        Fixture f;f.Rest();const auto dt=1000000000ll/hz;
+        const auto jab=[&](){
+            f.Step(.025f,0,dt);f.Step(.020f,0,dt);
+            for(unsigned n=0;n<5;++n)f.Step(.004f,0,dt);
+        };
+        jab();CHECK(f.emitted==1&&f.last->cause==SelectedMeleeCause::Stroke&&f.last->stroke);
+        const auto first=*f.last;
+        for(unsigned n=0;n<100;++n)CHECK(!f.policy.Update(f.s,f.hands).intent);
+        CHECK(f.Outcome(SelectedMeleeOutcome::Submitted));
+        // Forward motion and withdrawal cannot make a second action while the
+        // adapter still owes this one's outcome. These are mock completions,
+        // not evidence that a native target was struck or damaged.
+        f.Stab();for(unsigned n=0;n<8;++n)f.Step(-.012f,0,dt);
+        f.Rest();CHECK(f.emitted==1&&f.policy.PendingState()==SelectedMeleePending::Submitted);
+        CHECK(f.policy.Pending()->serial==first.serial&&
+            f.policy.Pending()->sourceSequence==first.sourceSequence&&
+            f.policy.Pending()->deadlineNs==first.deadlineNs&&f.policy.Pending()->hold==first.hold);
+        CHECK(f.Outcome(SelectedMeleeOutcome::Completed));
+        for(unsigned n=0;n<8;++n)f.Step(-.012f,0,dt);
+        CHECK(f.emitted==1&&!f.policy.Pending());
+        f.Rest();jab();CHECK(f.emitted==2&&f.last->serial==first.serial+1&&
+            f.last->cause==SelectedMeleeCause::Stroke&&f.last->hold==first.hold);
+    }
+    return 0;
+}
+int IncidentalMotionAndReloadClaimsCannotFinishAJab(){
+    Fixture drift;drift.Rest();
+    for(unsigned n=0;n<30;++n)drift.Step(.003f);
+    CHECK(!drift.emitted&&!drift.policy.Pending());
+    Fixture lateral;lateral.Rest();
+    for(unsigned n=0;n<20;++n){lateral.s.motion.tip.x+=.012f;lateral.Step();}
+    CHECK(!lateral.emitted&&!lateral.policy.Pending());
+    Fixture reversed;reversed.Rest();reversed.Step(.025f);reversed.Step(-.012f);reversed.Step(.05f);
+    CHECK(!reversed.emitted);reversed.Rest();reversed.Stab();CHECK(reversed.emitted==1);
+    for(const auto kind:{HandClaimKind::AmmoObject,HandClaimKind::Mechanism,HandClaimKind::BodyInventory}){
+        Fixture f;f.Rest();f.Step(.025f);const auto knifeHold=f.s.motion.hold;
+        HandContactProof contact{{11,1},f.s.motion.source.sequence,f.s.motion.source.deadlineNs,true};
+        const auto activity=f.hands.Transfer(f.s.motion.source,knifeHold,
+            {f.s.identity.owner,InteractionHand::Right,kind,{99,1},contact,++f.claims,0});
+        CHECK(activity.claim);f.s.motion.hold=activity.claim->token;
+        f.Step(.05f);CHECK(!f.emitted&&!f.policy.Pending());
+        CHECK(f.hands.Current(InteractionHand::Right)->token==activity.claim->token);
+        contact.inputSequence=f.s.motion.source.sequence;contact.deadlineNs=f.s.motion.source.deadlineNs;
+        const auto regrip=f.hands.Transfer(f.s.motion.source,activity.claim->token,
+            {f.s.identity.owner,InteractionHand::Right,HandClaimKind::GunHold,f.s.identity.item,contact,++f.claims,0});
+        CHECK(regrip.claim&&regrip.claim->token.id!=knifeHold.id);f.s.motion.hold=regrip.claim->token;
+        f.Step(.04f);f.Step(.04f);CHECK(!f.emitted); // Regrip cannot inherit partial travel.
+        f.Rest();f.Stab();CHECK(f.emitted==1&&f.last->hold==regrip.claim->token);
+    }
+    return 0;
 }
 int TriggerAndMotionShareOneLatch(){
     Fixture f;f.Rest();for(unsigned i=0;i<4;++i)f.Step(.012f);
@@ -251,7 +304,8 @@ int SharedHoldAndIdentityRequired(){
     CHECK(!clock.policy.Pending());return 0;
 }
 }
-int main(){return OneMotionIntentAndExactOutcome()||TriggerAndMotionShareOneLatch()||TriggerFallbackWithoutGeometry()||
+int main(){return OneMotionIntentAndExactOutcome()||SingleJabWithdrawalAndRejab()||
+    IncidentalMotionAndReloadClaimsCannotFinishAJab()||TriggerAndMotionShareOneLatch()||TriggerFallbackWithoutGeometry()||
     DrawRegripReconnectCannotAttack()||PendingSurvivesInvalidationAndNeverOwnsHands()||DuplicateStaleAndChangedInputCannotRepeat()||
     NativeReadinessNeverCompletesAnAttack()||RepeatedPacketUsesItsFirstGeometry()||DuplicateAuthorityLossRequiresFreshRecovery()||
     ObservationReportsOnlyEvaluatedMotion()||SharedHoldAndIdentityRequired()||

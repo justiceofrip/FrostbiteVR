@@ -195,6 +195,27 @@ int RecognitionObservationCases(){
 }
 int KnifeAudioObservationCases(){
     using namespace fvr::bc2::selectedKnife;
+    KnifeSoundDispatchContext dispatch;
+    const KnifeSoundDispatchContext acquisition{KnifeSoundDispatchPhase::Acquisition,1,8,2,3,0x12000,0x13000,0x14000};
+    auto attack=acquisition;attack.phase=KnifeSoundDispatchPhase::Attack;attack.serial=2;
+    const auto matches=[&](const KnifeSoundDispatchContext& context){
+        return KnifeSoundDispatchOwnerMatches(context,0x12000,0x13000,0x14000,2,3);};
+    CHECK(!matches(dispatch));
+    {KnifeSoundDispatchScope outer(dispatch,true);outer.Bind(acquisition);CHECK(matches(dispatch));
+        {KnifeSoundDispatchScope unadmitted(dispatch,true);CHECK(dispatch.phase==KnifeSoundDispatchPhase::None&&!matches(dispatch));}
+        CHECK(dispatch==acquisition);
+        {KnifeSoundDispatchScope nested(dispatch,true);nested.Bind(attack);CHECK(dispatch==attack&&matches(dispatch));
+            nested.Clear();CHECK(!matches(dispatch));}
+        CHECK(dispatch==acquisition);
+        {KnifeSoundDispatchScope disabled(dispatch,false);disabled.Bind(attack);disabled.Clear();CHECK(dispatch==acquisition);}
+        CHECK(dispatch==acquisition);outer.Clear();CHECK(!matches(dispatch));}
+    CHECK(dispatch==KnifeSoundDispatchContext{});
+    for(unsigned fault=0;fault<10;++fault){auto invalid=attack;
+        if(fault==0)invalid.phase=KnifeSoundDispatchPhase::None;if(fault==1)invalid.serial=0;
+        if(fault==2)invalid.input=0;if(fault==3)++invalid.actorGeneration;if(fault==4)++invalid.itemGeneration;
+        if(fault==5)++invalid.owner;if(fault==6)++invalid.weapon;if(fault==7)++invalid.effects;
+        if(fault==8)invalid.phase=static_cast<KnifeSoundDispatchPhase>(99);if(fault==9)invalid.owner=0;
+        CHECK(!matches(invalid));}
     CHECK(MatchKnifeSound(KnifeFireSoundGuid)==KnifeSoundKind::Attack);
     CHECK(MatchKnifeSound(KnifeFireKillSoundGuid)==KnifeSoundKind::AttackKill);
     for(unsigned i=0;i<16;++i){auto wrong=KnifeFireSoundGuid;wrong[i]^=1;
@@ -210,6 +231,8 @@ int KnifeAudioObservationCases(){
     CHECK(AddKnifeSoundCandidate(row,recent));CHECK(!AddKnifeSoundCandidate(row,recent));
     auto newer=recent;newer.serial=2;newer.completed=false;newer.publishedNs=1900000000;
     CHECK(AddKnifeSoundCandidate(row,newer)&&row.candidateCount==2); // ambiguity retained
+    row.originalScope=attack;row.originalScopeOwnerMatched=matches(attack);
+    CHECK(row.originalScopeOwnerMatched&&row.candidateCount==2); // A scope does not erase temporal ambiguity.
     CHECK(row.candidates[0].damageCalls==0); // FireKill cannot invent a native hit.
     auto third=newer;third.serial=3;CHECK(!AddKnifeSoundCandidate(row,third));
     auto stale=row;stale.candidateCount=0;stale.observedNs=recent.publishedNs+2000000001;
@@ -217,6 +240,7 @@ int KnifeAudioObservationCases(){
     CHECK(!AddKnifeSoundCandidate(stale,recent));stale=row;stale.candidateCount=0;stale.ownerVerified=false;
     CHECK(!AddKnifeSoundCandidate(stale,recent));
     KnifeSoundJournal<4> journal;CHECK(journal.Observe(row));row.start=true;
+    CHECK(journal.Rows()[0].originalScope==attack&&journal.Rows()[0].originalScopeOwnerMatched);
     for(unsigned n=0;n<20;++n){++row.observedNs;CHECK(journal.Observe(row));}
     CHECK(journal.Total()==21&&journal.Rows()[0].ordinal==1&&journal.Rows()[1].ordinal==2);
     CHECK(journal.Rows()[2].ordinal==21&&journal.Rows()[3].ordinal==20);

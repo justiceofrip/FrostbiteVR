@@ -22,7 +22,7 @@ constexpr bool NeutralSceneArguments(bool scene,bool staticPose,bool async,
 constexpr bool SelectedKnifeNeutralOption(std::wstring_view option)noexcept {
     return option==L"--selected-knife-neutral"||option==L"--pairs"||
         option==L"--request-lifetime"||option==L"--static-pose"||
-        option==L"--async"||option==L"--capture-poses";
+        option==L"--async"||option==L"--capture-poses"||option==L"--no-image-files";
 }
 constexpr bool SelectedKnifeNeutralArguments(bool selected,bool staticPose,bool async,
     unsigned pairs,bool optionsOnly)noexcept {

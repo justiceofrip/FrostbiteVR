@@ -1,0 +1,236 @@
+{
+  "schema": "fvr.chat25-chat26.isolated-validation.v1",
+  "date": "2026-10-28",
+  "base": "4055200b51c2c258d48a33d30d09db9337127f6a",
+  "branch": "tasks/chat25-chat26-20261028-knife-r1",
+  "status": "needs-native-evidence",
+  "evidence": "isolated deterministic tests and compile checks only",
+  "accepted_checks": "MeleeStroke, SelectedMeleeAttack, KnifeMotionBoundary passed on x86 and x64; enabled x86 native TU and x64 stub compile passed",
+  "initial_refusal": "Sandbox storage inventory denied access to bc2vr-recovery/weapon-visibility-audit-candidate/test-temp/tmpx0um3tp0 before any compilation. Same guard/limits passed after access escalation; no paths excluded or limits raised.",
+  "failed_episodes_retained": [
+    "x86-final01 missing isolated-link dependency",
+    "x86-final02 missing transitive isolated-link dependencies"
+  ],
+  "production_logic": "No gesture/damage/native timer/audio playback changes; existing default-off observation extended",
+  "review": "Independent static review: no actionable findings; original native calls/returns and gameplay TLS preserved",
+  "not_qualified": [
+    "normal x86/x64 Build.ps1 and final native linking",
+    "actual-game single-jab hit timing and no duplicate damage",
+    "actual sound dispatch/Start count/body-impact route",
+    "headset perceived action/audio timing",
+    "installation or release"
+  ],
+  "source_hashes": [
+    {
+      "path": "include/fvr/interaction/MeleeStroke.h",
+      "sha256": "53b1c35e560caf84967c355eb758eec7994332a470c70643f497c022dc93adb9"
+    },
+    {
+      "path": "include/fvr/interaction/SelectedMeleeAttack.h",
+      "sha256": "3a736514bcd8fbd8f20524e1b04fbbb0d1abae5e69e35d12f211a171c5a982c4"
+    },
+    {
+      "path": "src/games/bc2/Bc2KnifeSoundObservation.h",
+      "sha256": "bed8eff1bc398be53844c3c061212e78962c161fc6f653f8b854c401be2f88ac"
+    },
+    {
+      "path": "src/games/bc2/Bc2SelectedKnifeNative.cpp",
+      "sha256": "be007bf3b358aa6227b255713df99ab501c846bce36704ffe235e4c75d298fcc"
+    },
+    {
+      "path": "tests/MeleeStrokeTests.cpp",
+      "sha256": "20066a27c2523b79e222a487925a541276fa475e996e8851907344aeab0f26bc"
+    },
+    {
+      "path": "tests/SelectedMeleeAttackTests.cpp",
+      "sha256": "502e77f1cafacbe1b6ddefbfd3ab2c1acce84e385ba7830e44cfb3484da59292"
+    },
+    {
+      "path": "tests/KnifeMotionBoundaryTests.cpp",
+      "sha256": "9f94ec4eb12594611382f5913c37c49aa7830cf5f31cf8df10bd451aa0c59607"
+    }
+  ],
+  "runs": [
+    {
+      "run": "x86-final01",
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\chat25-chat26-20261028-knife-r1\\reports\\chat25-chat26-20261028-knife-r1\\x86-final01",
+      "outcome": "MeleeStroke and SelectedMeleeAttack passed; KnifeMotionBoundary link failed (missing DecodeReloadUpdateContext dependency); native compile not reached",
+      "architecture": "x86",
+      "compiler": "C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.51.36231\\bin\\HostX64\\x86\\cl.exe",
+      "checks": [
+        {
+          "test": "MeleeStroke",
+          "build_exit": 0,
+          "test_exit": 0
+        },
+        {
+          "test": "SelectedMeleeAttack",
+          "build_exit": 0,
+          "test_exit": 0
+        }
+      ],
+      "results_sha256": "f6de7ef6c9b0e2e6c8ddecae6d71cfc885cbe9e39583f87e0355c7543f8eb584",
+      "storage": {
+        "allocated_bytes": 41777372934,
+        "planned_bytes": 134217728,
+        "max_generated_bytes": 42949672960,
+        "min_free_bytes": 16106127360
+      },
+      "logs": [
+        {
+          "file": "KnifeMotionBoundary-build.log",
+          "sha256": "4c00572e4fa5b4a2f86a2b9d7ee31b87fa511ef0e576ae8e5f9d4a776e34598b"
+        },
+        {
+          "file": "MeleeStroke-build.log",
+          "sha256": "0dd2fd47da65cab220b12330f237949013c12bcc9d3525a0ef7c806a3af08d80"
+        },
+        {
+          "file": "MeleeStroke-test.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "file": "SelectedMeleeAttack-build.log",
+          "sha256": "9a4a96a55ee45b6e8b2c0a760ee45edce3f79b83f7072cf4a0ec36da0cb68e3c"
+        },
+        {
+          "file": "SelectedMeleeAttack-test.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ]
+    },
+    {
+      "run": "x86-final02",
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\chat25-chat26-20261028-knife-r1\\reports\\chat25-chat26-20261028-knife-r1\\x86-final02",
+      "outcome": "KnifeMotionBoundary link failed (missing DiscoverReloadState/ValidateReloadStateLive dependencies); native compile not reached",
+      "architecture": "x86",
+      "compiler": "C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.51.36231\\bin\\HostX64\\x86\\cl.exe",
+      "checks": [
+        {
+          "test": "KnifeMotionBoundary",
+          "build_exit": 2,
+          "test_exit": null
+        }
+      ],
+      "results_sha256": "352c7a65b1689625e9f1b0aac37fa6362b7806ad5842a7252e8feca0a1219e18",
+      "storage": {
+        "allocated_bytes": 41778812233,
+        "planned_bytes": 134217728,
+        "max_generated_bytes": 42949672960,
+        "min_free_bytes": 16106127360
+      },
+      "logs": [
+        {
+          "file": "KnifeMotionBoundary-build.log",
+          "sha256": "4219284fa3b8b2bf2a4b88df7a39074b18db62046387d4fb2e186a926c1e3134"
+        }
+      ]
+    },
+    {
+      "run": "x86-final03",
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\chat25-chat26-20261028-knife-r1\\reports\\chat25-chat26-20261028-knife-r1\\x86-final03",
+      "outcome": "KnifeMotionBoundary passed; enabled x86 native implementation compiled; prior passed suites not repeated",
+      "architecture": "x86",
+      "compiler": "C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.51.36231\\bin\\HostX64\\x86\\cl.exe",
+      "checks": [
+        {
+          "test": "KnifeMotionBoundary",
+          "build_exit": 0,
+          "test_exit": 0
+        },
+        {
+          "test": "Bc2SelectedKnifeNative compile only",
+          "build_exit": 0,
+          "test_exit": null
+        }
+      ],
+      "results_sha256": "f5088ae60c4174ec55a123ed58084f56578d52e0925f1b80da4500241d472438",
+      "storage": {
+        "allocated_bytes": 41779576631,
+        "planned_bytes": 134217728,
+        "max_generated_bytes": 42949672960,
+        "min_free_bytes": 16106127360
+      },
+      "logs": [
+        {
+          "file": "KnifeMotionBoundary-build.log",
+          "sha256": "e12129e662ec5be4a683b25bd14122fa3d01be5c324b54c8da2ac7c36c87866e"
+        },
+        {
+          "file": "KnifeMotionBoundary-test.log",
+          "sha256": "b7db9e1ce156a8e745ecd4a52de384917e07656bc30aac21784ae271267c8b70"
+        },
+        {
+          "file": "native-compile.log",
+          "sha256": "c8e2a98c38315b1a5fc4e26277b9eba4e26c8be0fbd4789aba6f6bf6bde02017"
+        }
+      ]
+    },
+    {
+      "run": "x64-final01",
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\chat25-chat26-20261028-knife-r1\\reports\\chat25-chat26-20261028-knife-r1\\x64-final01",
+      "outcome": "All three focused suites passed; x64 native translation unit stub compiled",
+      "architecture": "x64",
+      "compiler": "C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.51.36231\\bin\\HostX64\\x64\\cl.exe",
+      "checks": [
+        {
+          "test": "MeleeStroke",
+          "build_exit": 0,
+          "test_exit": 0
+        },
+        {
+          "test": "SelectedMeleeAttack",
+          "build_exit": 0,
+          "test_exit": 0
+        },
+        {
+          "test": "KnifeMotionBoundary",
+          "build_exit": 0,
+          "test_exit": 0
+        },
+        {
+          "test": "Bc2SelectedKnifeNative compile only",
+          "build_exit": 0,
+          "test_exit": null
+        }
+      ],
+      "results_sha256": "ac9063f03b2b93947fe93684af1db5cad5496ea1b1c11bca751bcd3a392b8f51",
+      "storage": {
+        "allocated_bytes": 41781487262,
+        "planned_bytes": 134217728,
+        "max_generated_bytes": 42949672960,
+        "min_free_bytes": 16106127360
+      },
+      "logs": [
+        {
+          "file": "KnifeMotionBoundary-build.log",
+          "sha256": "e12129e662ec5be4a683b25bd14122fa3d01be5c324b54c8da2ac7c36c87866e"
+        },
+        {
+          "file": "KnifeMotionBoundary-test.log",
+          "sha256": "b7db9e1ce156a8e745ecd4a52de384917e07656bc30aac21784ae271267c8b70"
+        },
+        {
+          "file": "MeleeStroke-build.log",
+          "sha256": "0dd2fd47da65cab220b12330f237949013c12bcc9d3525a0ef7c806a3af08d80"
+        },
+        {
+          "file": "MeleeStroke-test.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "file": "native-compile.log",
+          "sha256": "c8e2a98c38315b1a5fc4e26277b9eba4e26c8be0fbd4789aba6f6bf6bde02017"
+        },
+        {
+          "file": "SelectedMeleeAttack-build.log",
+          "sha256": "9a4a96a55ee45b6e8b2c0a760ee45edce3f79b83f7072cf4a0ec36da0cb68e3c"
+        },
+        {
+          "file": "SelectedMeleeAttack-test.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ]
+    }
+  ]
+}
