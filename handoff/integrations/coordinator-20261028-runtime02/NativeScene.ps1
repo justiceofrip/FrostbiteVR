@@ -7,8 +7,10 @@ param([Parameter(Mandatory)][ValidateSet('Start','Activate','Capture','Resume','
       [ValidatePattern('^[a-f0-9]{64}$')][string]$ReviewedImageSha256,
       [ValidateRange(0,1)][double]$U,[ValidateRange(0,1)][double]$V,
       [switch]$ReviewedExitPrompt,
+      [switch]$OriginalGraphics,
       [string]$NativeRunDirectory)
 $ErrorActionPreference='Stop'
+if($OriginalGraphics -and $Operation -ne 'Start'){throw 'OriginalGraphics applies only to a fresh stock Start'}
 $repo='G:\Unity\VRMMO\FrostbiteVR'
 $run=Join-Path $repo ('reports/coordinator-20261028-runtime02/'+$SceneName)
 $profile='C:\Users\outca\Documents\BFBC2'
@@ -35,7 +37,27 @@ function CurrentGame($identity){
  $games=@(Get-Process BFBC2Game -ErrorAction SilentlyContinue)
  if($games.Count -ne 1){throw 'Expected exactly one original game'}
  $game=$games[0]
- if($game.Id -ne $identity.pid -or $game.Path -cne $exe -or [string]$game.StartTime.ToUniversalTime().ToFileTimeUtc() -cne [string]$identity.creation_filetime){throw 'Original game lifetime differs'}
+ $field='pid';$expected=$identity.pid;$actual=$null;$getterCompleted=$false
+ try{
+  $actual=$game.Id;$getterCompleted=$true
+  if($actual -ne $expected){throw 'Original game lifetime differs'}
+  $field='path';$expected=$exe;$actual=$null;$getterCompleted=$false
+  $actual=$game.Path;$getterCompleted=$true
+  if($actual -cne $expected){throw 'Original game lifetime differs'}
+  $field='creation_filetime';$expected=[string]$identity.creation_filetime;$actual=$null;$getterCompleted=$false
+  $actual=[string]$game.StartTime.ToUniversalTime().ToFileTimeUtc();$getterCompleted=$true
+  if($actual -cne $expected){throw 'Original game lifetime differs'}
+ }catch{
+  $failure=$_
+  try{Save ('identity-refusal-'+[Guid]::NewGuid().ToString('N')+'.json') @{
+   schema='fvr.runtime03.identity-refusal.v1';operation=$Operation;field=$field
+   expected=$expected;actual=$actual;expected_type=$(if($null -ne $expected){$expected.GetType().FullName}else{$null})
+   actual_type=$(if($null -ne $actual){$actual.GetType().FullName}else{$null});actual_is_null=($null -eq $actual)
+   getter_completed=$getterCompleted;error=$failure.Exception.Message;utc=[DateTime]::UtcNow.ToString('o')
+   guard_relaxed=$false;retry_performed=$false
+  }}catch{Write-Warning ('Could not preserve identity refusal: '+$_.Exception.Message) -WarningAction Continue}
+  throw $failure
+ }
  return $game
 }
 function NativeAttachments($identity){
@@ -143,13 +165,22 @@ if($Operation -eq 'Start'){
  [IO.File]::WriteAllBytes((Join-Path $profile 'GameSettings.bin'),[IO.File]::ReadAllBytes($seed))
  if((Sha (Join-Path $profile 'GameSettings.bin')) -cne $seedHash){throw 'Installed checkpoint differs'}
  $settings=Join-Path $profile 'settings.ini';$content=[IO.File]::ReadAllText($settings)
+ if(-not $OriginalGraphics){
  foreach($pair in @(@('Width','1920'),@('Height','1080'),@('Fullscreen','false'),@('MSAA','0'))){
   $pattern='(?m)^'+$pair[0]+'=[^\r\n]*'
   if([regex]::Matches($content,$pattern).Count -ne 1){throw 'One existing graphics setting required'}
   $content=[regex]::Replace($content,$pattern,$pair[0]+'='+$pair[1])
  }
  [IO.File]::WriteAllText($settings,$content,[Text.UTF8Encoding]::new($false))
- Save 'temporary-profile.json' @{seed=$seed;seed_sha256=$seedHash;installed_seed_sha256=(Sha (Join-Path $profile 'GameSettings.bin'));settings_sha256=(Sha $settings);width=1920;height=1080;msaa=0;fullscreen=$false;loaded_map_verified=$false}
+ }
+ $graphics=@{}
+ foreach($key in 'Width','Height','MSAA','Fullscreen'){
+  $matches=[regex]::Matches($content,('(?m)^'+$key+'=([^\r\n]*)'))
+  if($matches.Count -ne 1){throw 'One original graphics value required'}
+  $graphics[$key]=$matches[0].Groups[1].Value
+ }
+ if($OriginalGraphics -and (Sha $settings) -cne (@($files|Where-Object {$_.name -ceq 'settings.ini'})[0].sha256)){throw 'Original graphics file changed before launch'}
+ Save 'temporary-profile.json' @{seed=$seed;seed_sha256=$seedHash;installed_seed_sha256=(Sha (Join-Path $profile 'GameSettings.bin'));settings_sha256=(Sha $settings);width=[int]$graphics.Width;height=[int]$graphics.Height;msaa=[int]$graphics.MSAA;fullscreen=[bool]::Parse($graphics.Fullscreen);original_graphics_preserved=[bool]$OriginalGraphics;loaded_map_verified=$false;native_attachment_admitted=$false}
  $childEnvironment=Get-Bc2AudioEnvironment $cache
  $childEnvironment['FVR_PRIVATE_PRESENT_PROGRESS_MS']='0';$childEnvironment['FVR_PRIVATE_RENDER_QUEUE436']='1';$childEnvironment['FVR_PRIVATE_EXPORT_OVERLAP']='0'
  Lease;IdleHelpers;IdleInput

@@ -6,7 +6,8 @@ Updated October 29, 2026. This replaces old next-step instructions; prior eviden
 ## Active work
 
 Runtime03 staged and verified a private0.1.16 package from the tested combined
-runtime; it is not installed or published. [Next startup check](../handoff/integrations/coordinator-20261029-runtime03/README.md) needs witnessed display/menu evidence.
+runtime; it is not installed or published. Scene03 proved a physically black menu
+despite stable D3D11 readiness; [next comparison](../handoff/integrations/coordinator-20261029-runtime03/README.md) preserves original graphics settings.
 
 Runtime02 adds read-only Windows desktop diagnosis and rejects window operations
 from an unverified input desktop;33window tests and3package checks pass. Stock

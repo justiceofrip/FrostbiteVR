@@ -14,8 +14,9 @@ External CHAT25/26/32 worktrees remain untouched; their tasks are not reassigned
 Runtime03: private0.1.16 combined candidate staged and clean-extraction verified;
 no native rebuild, installation or publication. Installed0.1.12 remains unchanged.
 Handoff: handoff/integrations/coordinator-20261029-runtime03/README.md.
-Black capture versus physical presentation needs a witnessed menu/renderer check;
-weapon preflight before a mission is not startup evidence. Await agreed PC window.
+Scene03 confirmed physical black output despite stable menu/D3D11 readiness;
+borderless placement did not fix it. Closed with exit0 and profiles restored.
+Next stock comparison preserves original graphics settings; needs a new PC window.
 
 Runtime02 continuation: desktop-context diagnostic and early window admission;
 33window/3package tests pass; independent review passes. Source push verified:
