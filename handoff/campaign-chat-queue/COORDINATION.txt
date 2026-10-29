@@ -11,6 +11,12 @@ Ownership: prior CHAT25/26 close.json confirms lease release, idle helpers and
 exact profile restoration. Coordinator acquired the lease before shared mutations.
 External CHAT25/26/32 worktrees remain untouched; their tasks are not reassigned.
 
+Runtime03: private0.1.16 combined candidate staged and clean-extraction verified;
+no native rebuild, installation or publication. Installed0.1.12 remains unchanged.
+Handoff: handoff/integrations/coordinator-20261029-runtime03/README.md.
+Black capture versus physical presentation needs a witnessed menu/renderer check;
+weapon preflight before a mission is not startup evidence. Await agreed PC window.
+
 Runtime02 continuation: desktop-context diagnostic and early window admission;
 33window/3package tests pass; independent review passes. Source push verified:
 522cc8745595ca57803fbc861b8f6000d0689557; later status-only commits retain runtime.
