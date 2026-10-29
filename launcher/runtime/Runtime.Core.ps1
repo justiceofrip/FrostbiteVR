@@ -39,7 +39,7 @@ namespace Bc2Vr {
             if(state==0xffffffff)throw new Win32Exception(Marshal.GetLastWin32Error(),"Cannot check retained process lifetime");
             if(state!=258)throw new InvalidOperationException("Retained process is no longer live");
         }
-        public static string Resolve(IntPtr handle, uint expectedPid, long expectedCreation, string reportedPath, bool requireLive) {
+        public static string Resolve(IntPtr handle, uint expectedPid, long expectedCreation, bool requireLive) {
             if(handle==IntPtr.Zero || handle==new IntPtr(-1))throw new InvalidOperationException("Retained process handle is unavailable");
             uint actualPid=GetProcessId(handle);
             if(actualPid==0)throw new Win32Exception(Marshal.GetLastWin32Error(),"Cannot identify retained process handle");
@@ -49,20 +49,17 @@ namespace Bc2Vr {
                 throw new Win32Exception(Marshal.GetLastWin32Error(),"Cannot read retained process creation time");
             if(creation!=expectedCreation)throw new InvalidOperationException("Retained process creation time differs");
             if(requireLive)RequireLive(handle);
-            string path=reportedPath;
-            if(String.IsNullOrEmpty(path)) {
-                var buffer=new StringBuilder(32768);uint length=32768;
-                if(!QueryFullProcessImageName(handle,0,buffer,ref length)) {
-                    int error=Marshal.GetLastWin32Error();
-                    // An exited helper can lose its queryable image path even
-                    // while its retained handle still proves PID and birth.
-                    // This is diagnostic identity only, never action authority.
-                    if(!requireLive && WaitForSingleObject(handle,0)==0)return null;
-                    throw new Win32Exception(error,"Cannot query retained process image path");
-                }
-                if(length==0 || length>=32768)throw new InvalidOperationException("Retained process image path is empty or truncated");
-                path=buffer.ToString();
+            var buffer=new StringBuilder(32768);uint length=32768;
+            if(!QueryFullProcessImageName(handle,0,buffer,ref length)) {
+                int error=Marshal.GetLastWin32Error();
+                // An exited helper can lose its queryable image path even
+                // while its retained handle still proves PID and birth.
+                // This is diagnostic identity only, never action authority.
+                if(!requireLive && WaitForSingleObject(handle,0)==0)return null;
+                throw new Win32Exception(error,"Cannot query retained process image path");
             }
+            if(length==0 || length>=32768)throw new InvalidOperationException("Retained process image path is empty or truncated");
+            string path=buffer.ToString();
             if(String.IsNullOrWhiteSpace(path) || !System.IO.Path.IsPathFullyQualified(path))
                 throw new InvalidOperationException("Retained process image path is unavailable or invalid");
             if(requireLive)RequireLive(handle);
@@ -73,16 +70,16 @@ namespace Bc2Vr {
 '@
 }
 function Get-Bc2ProcessIdentity($Process,[bool]$RequireLive=$false) {
-    # Acquire the real retained handle before reading metadata. A missing Path
-    # can occur when a 64-bit launcher observes a 32-bit game; never substitute
-    # the configured executable or a guessed path for the actual process image.
+    # Acquire the real retained handle before reading metadata. Managed Path
+    # can be missing or name a loader DLL during startup; query the executable
+    # from that handle without reading Path or substituting a configured path.
     $handle=[IntPtr]$Process.Handle;$id=[uint32]$Process.Id
-    $start=$Process.StartTime.ToUniversalTime();$path=$Process.Path
+    $start=$Process.StartTime.ToUniversalTime()
     Initialize-Bc2ProcessIdentityNative
     # Recording a just-exited helper must preserve its identity/exit result.
     # Only a proven exited helper may record a missing path. Action lookup opts
     # into liveness and always requires the actual nonempty image path.
-    $resolved=[Bc2Vr.ProcessImageIdentity]::Resolve($handle,$id,$start.ToFileTimeUtc(),$path,$RequireLive)
+    $resolved=[Bc2Vr.ProcessImageIdentity]::Resolve($handle,$id,$start.ToFileTimeUtc(),$RequireLive)
     return @{pid=$id;start_utc=$start.ToString('o');path=$resolved}
 }
 function Find-Bc2OwnedProcess($Identity) {

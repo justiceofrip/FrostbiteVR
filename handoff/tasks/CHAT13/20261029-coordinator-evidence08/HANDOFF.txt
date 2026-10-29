@@ -1,0 +1,16 @@
+CHAT13: bounded offline MG36 campaign resource review completed; parked.
+11 newly authorized directories, 43 archive attempts, 42 parsed negatives, 1 rejection.
+Exact target: objects/weapons/handheld/bu_lmg_mg36/bu_lmg_mg36.dbx
+Expected MG36 base variant2, capacity100, definition SHA256
+7d414cefbfcae132226a9c35939fd670e4e33bc9b74ed8482e0f9d01193213f7.
+Expected GUID b5101354-a431-45c0-b640-2f2339ac9e86; resource SHA in JSON.
+archive-index-review.json retains all 43 archive paths and decompressed index hashes.
+sp_009/ingame-00.fbrb rejected: Entry count/record bounds.
+Its bounded raw index is 17 bytes and declares 0 entries; raw-only, not parsed-negative.
+Existing inspect_bc2_mesh_asset.Archive via py -B -; no parser or source changes.
+Prior lmg-route-review03.json was metadata_only=true, archive_parsing=false.
+No SP01-03/MP resurvey, extracted assets, builds, Git, game, input, or native actions.
+No live mount, Asset/Data join, native mechanics, or headset acceptance is established.
+Wake on new exact campaign resource/GUID/hash evidence, then separately authorized
+live mounted-resource and current-process Asset/Data/configuration corroboration.
+Only this HANDOFF and sibling JSON were written from saved tool output; no archive reread.

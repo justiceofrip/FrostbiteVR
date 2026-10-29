@@ -56,6 +56,16 @@ try {
         [string]::Equals($recovered.path,$actual.path,[StringComparison]::OrdinalIgnoreCase)) 'null Process.Path reproducer resolves the same retained live image through Win32'
     $wrapper.Path='';$empty=Get-Bc2ProcessIdentity $wrapper;$wrapper.Path=$null
     Check ([string]::Equals($empty.path,$actual.path,[StringComparison]::OrdinalIgnoreCase)) 'empty Process.Path uses the same bounded Win32 fallback'
+    # Preserve the real child's handle/PID/birth while reproducing the observed
+    # startup Path value. A nonempty loader-module path is not its executable.
+    $misleadingPath=Join-Path $env:WINDIR 'System32/ntdll.dll'
+    $misleading=$wrapper.PSObject.Copy();$misleading.Path=$misleadingPath
+    $captured=Get-Bc2ProcessIdentity $misleading
+    Check ($captured.pid -eq $actual.pid -and $captured.start_utc -ceq $actual.start_utc -and
+        [string]::Equals($captured.path,$childRecord.path,[StringComparison]::OrdinalIgnoreCase)) 'nonempty loader Path cannot poison ordinary retained-process identity'
+    $live=Get-Bc2ProcessIdentity $misleading -RequireLive $true
+    Check ($live.pid -eq $actual.pid -and $live.start_utc -ceq $actual.start_utc -and
+        [string]::Equals($live.path,$childRecord.path,[StringComparison]::OrdinalIgnoreCase)) 'required-live identity queries the actual executable despite nonempty loader Path'
     $found=Find-Bc2OwnedProcess $recovered
     Check ($null -ne $found -and $found.Id -eq $child.Id) 'fresh Get-Process lookup matches the recovered actual identity'
     if($found){$found.Dispose()}
@@ -75,9 +85,10 @@ try {
         $different=$wrapper.PSObject.Copy();$different.Handle=$bad
         Reject {Get-Bc2ProcessIdentity $different} 'retained process' 'unavailable or invalid process handle cannot supply a path'
     }
-    $throwing=$wrapper.PSObject.Copy();$throwing|Add-Member ScriptProperty Path {throw 'fixture Path getter failed'} -Force
-    # PowerShell converts a ScriptProperty getter exception into a null value.
-    # The production fallback must still prove the same actual kernel image.
+    $script:managedPathReads=0
+    $throwing=$wrapper.PSObject.Copy();$throwing|Add-Member ScriptProperty Path {$script:managedPathReads++;throw 'fixture Path getter failed'} -Force
+    # Image resolution must not depend on the managed Path getter, even when
+    # PowerShell would convert its exception into a null value.
     $getterFallback=Get-Bc2ProcessIdentity $throwing
     Check ($getterFallback.pid -eq $actual.pid -and $getterFallback.start_utc -ceq $actual.start_utc -and
         [string]::Equals($getterFallback.path,$actual.path,[StringComparison]::OrdinalIgnoreCase)) 'failed managed Path getter resolves only the same retained-handle identity'
@@ -99,9 +110,14 @@ try {
     Check ([object]::ReferenceEquals((Get-Bc2ExistingGame $actual.path $true),$wrapper)) 'existing-game restart admission resolves null Path from the same retained live handle'
     Reject {Get-Bc2ExistingGame (Join-Path $root 'wrong-executable.exe') $true} 'Another BC2 installation' 'existing-game fallback still rejects a different installation'
     Reject {Get-Bc2ExistingGame $actual.path $false} 'BC2 is still open' 'null-Path fallback never bypasses the explicit restart option'
+    $script:identityLookupProcess=$misleading
+    Check ([object]::ReferenceEquals((Find-Bc2OwnedProcess $captured),$misleading)) 'fresh lookup with loader Path accepts the correctly captured executable identity'
+    $poisoned=$captured.Clone();$poisoned.path=$misleadingPath
+    Check ($null -eq (Find-Bc2OwnedProcess $poisoned)) 'matching saved and fresh loader Paths cannot authorize the wrong executable identity'
     $script:identityLookupProcess=$throwing
     $getterLookup=Find-Bc2OwnedProcess $recovered
     Check ($null -ne $getterLookup -and $getterLookup.Id -eq $actual.pid -and $getterLookup.Handle -eq $handle) 'fresh lookup after managed Path getter failure still proves the same live kernel identity'
+    Check ($script:managedPathReads -eq 0) 'capture and fresh lookup do not invoke the managed Path getter'
     Remove-Item Function:\Get-Process;$lookupMock=$false
     [IO.File]::WriteAllText($stop,'fixture complete')
     Check ($child.WaitForExit(5000) -and $child.ExitCode -eq 0) '32-bit fixture observes stop and exits cleanly without termination'
