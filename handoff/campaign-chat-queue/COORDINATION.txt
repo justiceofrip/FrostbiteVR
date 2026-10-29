@@ -11,6 +11,15 @@ Ownership: prior CHAT25/26 close.json confirms lease release, idle helpers and
 exact profile restoration. Coordinator acquired the lease before shared mutations.
 External CHAT25/26/32 worktrees remain untouched; their tasks are not reassigned.
 
+Prep07: private0.1.16 asset generation completed through unchanged frozen generators
+in a separate preparation installation. Six files/16,854,370bytes verified, then
+copied and reverified in the primary launcher's fresh recipe cache. Active0.1.12,
+previous0.1.11/settings unchanged; no game/XR session, native build or activation.
+Both owned Python children exited normally. Source baseline5fd2e29; this commit
+adds the reviewed preparation/staging recipes and result. No generated assets in Git.
+Handoff: handoff/integrations/coordinator-20261029-prep07/README.md.
+Push/lease close receipt: reports/coordinator-20261029-prep07/close.json.
+
 Runtime05: stock launch without checkpoint/environment overrides, then documented
 DX10 comparison, both captured black. Separate HWND-specific WGC also shows black
 game content; one callback/helper exit verified. Scenes07-09 exit0/profiles restored.
@@ -85,7 +94,8 @@ All six binary/PDB pairs verified; prior CHAT25/26 runtime retained as fallback.
 Storage:40GiB/free15GiB unchanged; lossless compression reclaimed965171135 bytes,
 45 generated files, all hashes preserved, no deletion; original refusals retained.
 
-Local mod update: none. G:\Unity\VRMMO\BC2VR-Launcher stays0.1.12/previous0.1.11.
+Local runtime update: none. G:\Unity\VRMMO\BC2VR-Launcher stays0.1.12/previous0.1.11.
+Candidate recipe cache is staged and verified; activation/installed smoke remain pending.
 Active metadata/settings hashes match the prior integration; runtime02 stock-only
 scene01 closed and restored profiles without attaching the mod.
 No installed-runtime receipt, startup/equipment smoke or physical-headset acceptance.

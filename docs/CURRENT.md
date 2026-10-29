@@ -5,12 +5,13 @@ Updated October 29, 2026. This replaces old next-step instructions; prior eviden
 
 ## Active work
 
-Runtime03 staged and verified a private0.1.16 package from the tested combined
-runtime; it is not installed or published. Runtime05 stock/no-override and DX10
-comparisons stayed black; a separate HWND-specific Windows Graphics Capture also
-shows black game content. All three sessions closed normally and restored profiles.
-[Diagnostics and identity fix](../handoff/integrations/coordinator-20261029-runtime05/README.md)
-retain the failures; no raw-backbuffer, gameplay or headset acceptance is claimed.
+Private0.1.16's package and equipment/audio cache are verified. The cache is staged
+in the primary launcher's managed recipe folder; active0.1.12/settings are unchanged.
+[Headset-independent preparation](../handoff/integrations/coordinator-20261029-prep07/README.md)
+used a separate private preparation launcher, with no game/XR session or native
+rebuild. No candidate activation, installed smoke pass or headset acceptance.
+Runtime05's stock black captures and cleanup remain in its
+[diagnostic handoff](../handoff/integrations/coordinator-20261029-runtime05/README.md).
 
 Runtime02 adds read-only Windows desktop diagnosis and rejects window operations
 from an unverified input desktop;33window tests and3package checks pass. Stock
