@@ -14,9 +14,13 @@ External CHAT25/26/32 worktrees remain untouched; their tasks are not reassigned
 Runtime03: private0.1.16 combined candidate staged and clean-extraction verified;
 no native rebuild, installation or publication. Installed0.1.12 remains unchanged.
 Handoff: handoff/integrations/coordinator-20261029-runtime03/README.md.
-Scene03 confirmed physical black output despite stable menu/D3D11 readiness;
-borderless placement did not fix it. Closed with exit0 and profiles restored.
-Next stock comparison preserves original graphics settings; needs a new PC window.
+Stock scenes03/04 confirmed physical black output despite stable menu/D3D11 objects;
+borderless placement and original graphics settings did not resolve it. Both closed
+with exit0 and profiles restored. Scene04 completed within its agreed3minute window.
+No named mod/overlay in scene04's module snapshot establishes an interference cause.
+Frame submission/presentation remains unmeasured; further live checks need a new window.
+PresentCheck.ps1 is prepared: pinned standalone CLI,10s exact-PID output, owned-session
+cleanup and loss reporting; offline help/enumeration checks and focused review passed.
 
 Runtime02 continuation: desktop-context diagnostic and early window admission;
 33window/3package tests pass; independent review passes. Source push verified:
@@ -30,8 +34,8 @@ preparation, then request one uninterrupted game-input window when ready.
 Shared Windows focus spans both monitors; do not repeatedly reactivate the game.
 Later authorized scene02 held foreground; two captures black and read-only weapon
 preflight rejected Read out of bounds. No gameplay input or native attachment.
-Close accepted/exit observed, exit code unknown; profiles restored. User not watching,
-so capture versus startup cause remains open. That five-minute window has ended.
+Close accepted/exit observed, exit code unknown; profiles restored. User did not watch
+scene02; subsequent scenes03/04 established physical black output. That window ended.
 Saved XR logs identify no connected HMD; prior successful driver was Steam Link.
 No registration/VirtualDesktop setting change or unchanged XR retry is justified.
 Scoped Nambu flags-only build/binding passed; normal outputs/config restored exactly.

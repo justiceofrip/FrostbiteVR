@@ -14,15 +14,36 @@ remove black output. No gameplay input or attachment occurred; close exited0 and
 all profiles were restored. Cleanup exceeded the promised window by24seconds.
 No matching crash/display log or conventional game-root graphics proxy was found.
 
-Next: one witnessed stock launch using `NativeScene.ps1 -Operation Start
--OriginalGraphics -SceneName scene04`, preserving settings.ini verbatim rather than
-forcing1920x1080/MSAA0. Original settings were1024x768/MSAA3. This is a comparison,
-not a fix or native attachment admission. Use the same read-only menu reader and
-module snapshot, then close/restore. Obtain a new agreed window first. No driver,
-registry, graphics or native feature change is justified by the present evidence.
+Scene04 preserved settings.ini verbatim at1024x768/MSAA3; the user again reported
+physical black output. Three stable D3D11/menu samples passed at those dimensions.
+No mod attachment or gameplay input occurred. Close exited0 and all three profiles
+were restored within the agreed3minute window. The116module snapshot contains no
+named FrostbiteVR, ReShade, RTSS, Steam overlay or game-local DirectX proxy. Signed
+AMD graphics/host modules and PunkBuster are present; their presence proves no cause.
+This rules out restoration of the original graphics settings as a sufficient fix,
+not all possible graphics issues. Menu objects do not prove frame presentation.
+Next missing evidence is a bounded process-specific Present event trace. The
+reviewed `PresentCheck.ps1 -SceneName scene05` is prepared for a fresh stock scene
+started with `-OriginalGraphics`; obtain a new agreed window before either runs.
+No driver, registry or native feature change is justified by the present evidence.
 The helper also records the first failed identity operand/getter without retry or
 guard relaxation; both prior startup refusals lacked that information. Six identity
 comparison cases and three corrected receipt/preservation cases pass offline.
+
+PresentMon2.6.0 standalone CLI was downloaded from the official GitHub release;
+its SHA256 matches GitHub's digest and its Intel Authenticode signature is valid:
+`b2a706bc6ad475749e3b7e3409263aa1e6906d45bdcf993f6dbc0f660188f1af`.
+`present-tool/provenance.json` and `offline-check02/result.json` under runtime03
+retain acquisition and help-only/session-enumeration checks. Initial help exit-code
+expectation failed; both original logs remain. No trace/game ran during preparation.
+The helper binds the original PID/path/birth, filters CSV to that PID, records10s,
+retains display and dropped outcomes plus ETW loss counters, and disables input/GPU
+timing. Providers collect broader events for correlation; no ETL is saved. It uses
+a unique session, a25s collector watchdog,8MiB monitored output threshold within
+16MiB reserved storage, and verifies collector exit before final session absence.
+Review corrected cleanup races and final-flush accounting. Exit0 alone is neither
+loss-free measurement nor proof of visible pixels. See the official
+[versioned CLI documentation](https://github.com/GameTechDev/PresentMon/blob/v2.6.0/README-ConsoleApplication.md).
 
 A private0.1.16 package was staged from batch01's frozen combined normal runtime,
 including finished CHAT25/26 source and CHAT07/23 work. All90 package files and
@@ -30,7 +51,7 @@ including finished CHAT25/26 source and CHAT07/23 work. All90 package files and
 expanded43,615,228bytes. No native rebuild, installation or publication occurred.
 The installed mod remains0.1.12, previous0.1.11. Native/headset acceptance is pending.
 
-Evidence: `reports/coordinator-20261029-runtime03/{offline-findings,package-verification,witnessed-check}.json`.
+Evidence: `reports/coordinator-20261029-runtime03/{offline-findings,package-verification,witnessed-check,original-graphics-check}.json`.
 Candidate: `package/BC2VR-0.1.16-win64.zip` under that evidence folder, SHA256
 `043f27944f151ad9c226dcd384080a424df1906ff0b7226f576c19111e939076`.
 Normal receipt SHA `a196a0b16622fb85216bad8a9bfdf7598fadea37db20dc050284e0b456004fe4`.
