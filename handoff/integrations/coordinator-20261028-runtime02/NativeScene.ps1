@@ -8,9 +8,13 @@ param([Parameter(Mandatory)][ValidateSet('Start','Activate','Capture','ObserveWi
       [ValidateRange(0,1)][double]$U,[ValidateRange(0,1)][double]$V,
       [switch]$ReviewedExitPrompt,
       [switch]$OriginalGraphics,
+      [switch]$StockLaunch,
+      [ValidateSet('auto','9','10','11')][string]$StockDxVersion,
       [string]$NativeRunDirectory)
 $ErrorActionPreference='Stop'
 if($OriginalGraphics -and $Operation -ne 'Start'){throw 'OriginalGraphics applies only to a fresh stock Start'}
+if($StockLaunch -and ($Operation -ne 'Start' -or -not $OriginalGraphics)){throw 'StockLaunch requires Start with OriginalGraphics'}
+if($StockDxVersion -and -not $StockLaunch){throw 'StockDxVersion requires the separate StockLaunch comparison'}
 $repo='G:\Unity\VRMMO\FrostbiteVR'
 $run=Join-Path $repo ('reports/coordinator-20261028-runtime02/'+$SceneName)
 $profile='C:\Users\outca\Documents\BFBC2'
@@ -212,6 +216,29 @@ function Place-OriginalGraphicsFully($identity,[long]$expectedHwnd){
   throw $failure
  }finally{$null=[CoordinatorSceneUi]::SetThreadDpiAwarenessContext($dpi)}
 }
+function Restore-UnlaunchedProfiles($files){
+ Lease;IdleHelpers
+ if(Get-Process BFBC2Game -ErrorAction SilentlyContinue){throw 'Game exists after launch failure; do not restore live profiles'}
+ foreach($file in $files){
+  if((Sha (Join-Path $run ('profile-before/'+$file.name))) -cne $file.sha256){throw 'Original prelaunch backup changed'}
+ }
+ $after=Join-Path $run 'prelaunch-profile-after'
+ if(Test-Path -LiteralPath $after){throw 'Preserve earlier prelaunch after-images'}
+ [IO.Directory]::CreateDirectory($after)|Out-Null
+ foreach($file in $files){
+  $target=Join-Path $profile $file.name;$item=Get-Item -LiteralPath $target
+  if($item.Length -gt 4MB -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)){throw 'Unexpected prelaunch profile'}
+  Copy-Item -LiteralPath $target -Destination (Join-Path $after $file.name)
+  if((Sha $target) -cne (Sha (Join-Path $after $file.name))){throw 'Prelaunch after-image changed'}
+ }
+ foreach($file in $files){
+  Lease;IdleHelpers
+  if(Get-Process BFBC2Game -ErrorAction SilentlyContinue){throw 'Game acquired profile during prelaunch restoration'}
+  $target=Join-Path $profile $file.name
+  [IO.File]::WriteAllBytes($target,[IO.File]::ReadAllBytes((Join-Path $run ('profile-before/'+$file.name))))
+  if((Sha $target) -cne $file.sha256){throw 'Exact prelaunch restoration failed'}
+ }
+}
 if($Operation -eq 'Start'){
  IdleInput
  if((Test-Path -LiteralPath $run) -or (Get-Process BFBC2Game -ErrorAction SilentlyContinue)){throw 'Fresh scene and no existing game required'}
@@ -236,9 +263,12 @@ if($Operation -eq 'Start'){
   @{name=$name;bytes=$item.Length;sha256=$hash}
  })
  Save 'profile-before.json' @{profile_path=$profile;files=$files}
+ try{
  Lease
- [IO.File]::WriteAllBytes((Join-Path $profile 'GameSettings.bin'),[IO.File]::ReadAllBytes($seed))
- if((Sha (Join-Path $profile 'GameSettings.bin')) -cne $seedHash){throw 'Installed checkpoint differs'}
+ if(-not $StockLaunch){
+  [IO.File]::WriteAllBytes((Join-Path $profile 'GameSettings.bin'),[IO.File]::ReadAllBytes($seed))
+  if((Sha (Join-Path $profile 'GameSettings.bin')) -cne $seedHash){throw 'Installed checkpoint differs'}
+ }
  $settings=Join-Path $profile 'settings.ini';$content=[IO.File]::ReadAllText($settings)
  if(-not $OriginalGraphics){
  foreach($pair in @(@('Width','1920'),@('Height','1080'),@('Fullscreen','false'),@('MSAA','0'))){
@@ -248,19 +278,43 @@ if($Operation -eq 'Start'){
  }
  [IO.File]::WriteAllText($settings,$content,[Text.UTF8Encoding]::new($false))
  }
+ if($StockDxVersion){
+  $dxPattern='(?m)^DxVersion=[^\r\n]*'
+  if([regex]::Matches($content,$dxPattern).Count -ne 1){throw 'One existing DxVersion setting required'}
+  $content=[regex]::Replace($content,$dxPattern,('DxVersion='+$StockDxVersion))
+  [IO.File]::WriteAllText($settings,$content,[Text.UTF8Encoding]::new($false))
+ }
  $graphics=@{}
  foreach($key in 'Width','Height','MSAA','Fullscreen'){
   $matches=[regex]::Matches($content,('(?m)^'+$key+'=([^\r\n]*)'))
   if($matches.Count -ne 1){throw 'One original graphics value required'}
   $graphics[$key]=$matches[0].Groups[1].Value
  }
- if($OriginalGraphics -and (Sha $settings) -cne (@($files|Where-Object {$_.name -ceq 'settings.ini'})[0].sha256)){throw 'Original graphics file changed before launch'}
- Save 'temporary-profile.json' @{seed=$seed;seed_sha256=$seedHash;installed_seed_sha256=(Sha (Join-Path $profile 'GameSettings.bin'));settings_sha256=(Sha $settings);width=[int]$graphics.Width;height=[int]$graphics.Height;msaa=[int]$graphics.MSAA;fullscreen=[bool]::Parse($graphics.Fullscreen);original_graphics_preserved=[bool]$OriginalGraphics;loaded_map_verified=$false;native_attachment_admitted=$false}
+ if($OriginalGraphics -and -not $StockDxVersion -and (Sha $settings) -cne (@($files|Where-Object {$_.name -ceq 'settings.ini'})[0].sha256)){throw 'Original graphics file changed before launch'}
+ if($StockLaunch){
+  foreach($file in $files){
+   if($file.name -ceq 'settings.ini' -and $StockDxVersion){continue}
+   if((Sha (Join-Path $profile $file.name)) -cne $file.sha256){throw 'Stock launch profile changed before launch'}
+  }
+ }
+ Save 'temporary-profile.json' @{seed=$seed;seed_sha256=$seedHash;seed_applied=(-not $StockLaunch);installed_seed_sha256=(Sha (Join-Path $profile 'GameSettings.bin'));settings_sha256=(Sha $settings);width=[int]$graphics.Width;height=[int]$graphics.Height;msaa=[int]$graphics.MSAA;fullscreen=[bool]::Parse($graphics.Fullscreen);original_graphics_preserved=([bool]$OriginalGraphics -and -not $StockDxVersion);stock_dx_override=$StockDxVersion;loaded_map_verified=$false;native_attachment_admitted=$false}
  $childEnvironment=Get-Bc2AudioEnvironment $cache
  $childEnvironment['FVR_PRIVATE_PRESENT_PROGRESS_MS']='0';$childEnvironment['FVR_PRIVATE_RENDER_QUEUE436']='1';$childEnvironment['FVR_PRIVATE_EXPORT_OVERLAP']='0'
+ $launch=@{FilePath=$exe;WorkingDirectory=(Split-Path $exe);WindowStyle='Normal';PassThru=$true}
+ if($StockLaunch){
+  foreach($key in $childEnvironment.Keys){if([Environment]::GetEnvironmentVariable($key,'Process')){throw ('Stock launch inherited a diagnostic override: '+$key)}}
+  $childEnvironment=@{}
+ }else{$launch.Environment=$childEnvironment}
  Lease;IdleHelpers;IdleInput
- $game=Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -WindowStyle Normal -Environment $childEnvironment -PassThru
- $identity=[ordered]@{pid=$game.Id;creation_filetime=[string]$game.StartTime.ToUniversalTime().ToFileTimeUtc();path=$exe;sha256=$exeHash;root_launched=$true;mod_injected=$false;asset_cache=$cache;recipe=$config.asset_recipe_sha256;environment=$childEnvironment;utc=[DateTime]::UtcNow.ToString('o')}
+ $game=Start-Process @launch
+ }catch{
+  $failure=$_;$restored=$false;$restoreError=$null
+  try{Restore-UnlaunchedProfiles $files;$restored=$true}catch{$restoreError=$_.Exception.Message}
+  Save 'prelaunch-refusal.json' @{schema='fvr.runtime05.prelaunch-refusal.v1';failure=$failure.Exception.Message;exact_profiles_restored=$restored;restoration_error=$restoreError;process_identity_saved=$false;normal_close_claimed=$false;utc=[DateTime]::UtcNow.ToString('o')}
+  if($restoreError){Write-Warning ('Prelaunch restoration unconfirmed: '+$restoreError) -WarningAction Continue}
+  throw $failure
+ }
+ $identity=[ordered]@{pid=$game.Id;creation_filetime=[string]$game.StartTime.ToUniversalTime().ToFileTimeUtc();path=$exe;sha256=$exeHash;root_launched=$true;mod_injected=$false;stock_launch=[bool]$StockLaunch;environment_overrides_applied=(-not $StockLaunch);asset_cache=$cache;recipe=$config.asset_recipe_sha256;environment=$childEnvironment;utc=[DateTime]::UtcNow.ToString('o')}
  Save 'process.json' $identity
  $clock=[Diagnostics.Stopwatch]::StartNew()
  do{$game=CurrentGame $identity;if($game.MainWindowHandle -ne [IntPtr]::Zero){break};Start-Sleep -Milliseconds 200}while($clock.ElapsedMilliseconds -lt 15000)
