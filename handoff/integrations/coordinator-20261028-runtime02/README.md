@@ -28,6 +28,18 @@ Windows has one foreground window across monitors. The user is using the other
 monitor; continue offline work and request a short uninterrupted test window only
 when the diagnostic is ready. Do not repeatedly activate BC2 while the user works.
 
+The user subsequently authorized one five-minute window. Scene02 ran from05:07:55
+to05:11UTC: startup's initial identity guard refused, then an independent read
+matched the recorded PID/path/birth. The activation helper found BC2 already in
+foreground; two bounded captures remained black. Read-only Nambu preflight rejected
+`Read out of bounds`, with no weapon samples. No menu click, gameplay input or
+diagnostic attachment occurred. The user was not watching, so these captures do
+not distinguish game startup from capture failure. A close request was accepted,
+exit observed, and all profiles restored; exit code was unavailable, so the receipt
+does not qualify a normal-close success. The future helper now retains the process
+handle; six offline cases protect explicit-null versus missing/invalid close data.
+The agreed window ended; further game interaction needs another agreed window.
+
 Saved SteamVR logs join the prior `XrResult=-2` episode to no connected HMD. Prior
 successful sessions used Steam Link/vrlink. VirtualDesktop was already blocked during
 those successful sessions, so no driver or OpenXR registration change is justified.

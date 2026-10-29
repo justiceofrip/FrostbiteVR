@@ -373,13 +373,18 @@ if($NativeRunDirectory){
 $closePath=Join-Path $run 'normal-close.json'
 if(Test-Path -LiteralPath $closePath){
  $close=Load $closePath
+ if($null -eq $close.PSObject.Properties['exit_code']){throw 'Close receipt lacks an explicit exit-code observation'}
  if($close.pid -ne $identity.pid -or [string]$close.creation_filetime -cne [string]$identity.creation_filetime -or $close.forced_termination -ne $false){throw 'Original close evidence differs'}
  foreach($field in 'normal_close_observed','original_already_absent','forced_termination','close_request_accepted','exit_observed'){
   if($close.$field -isnot [bool]){throw 'Close receipt requires typed booleans'}
  }
  if($close.original_already_absent){
   if($close.normal_close_observed -or $close.close_request_accepted -or $close.exit_observed -or $null -ne $close.exit_code){throw 'Absent original cannot qualify normal close'}
- }elseif(-not $close.close_request_accepted -or -not $close.exit_observed -or ($close.exit_code -isnot [int] -and $close.exit_code -isnot [long]) -or $close.normal_close_observed -ne ($close.exit_code -eq 0)){throw 'Inconsistent original close outcome'}
+ }else{
+  if(-not $close.close_request_accepted -or -not $close.exit_observed){throw 'Inconsistent original close outcome'}
+  if($null -eq $close.exit_code){if($close.normal_close_observed){throw 'Unknown exit code cannot qualify normal close'}}
+  elseif(($close.exit_code -isnot [int] -and $close.exit_code -isnot [long]) -or $close.normal_close_observed -ne ($close.exit_code -eq 0)){throw 'Inconsistent original close exit code'}
+ }
  if(Get-Process BFBC2Game -ErrorAction SilentlyContinue){throw 'A game is present after recorded close; preserve profiles'}
 }else{
 $normalClose=$false;$alreadyAbsent=$true;$closeAccepted=$false;$exitObserved=$false;$exitCode=$null
@@ -390,7 +395,7 @@ if(Get-Process BFBC2Game -ErrorAction SilentlyContinue){
   if(-not $nativeBinding.live_modules_verified -or ((@($game.Modules.FileName|Sort-Object)-join "`n") -ine (@($nativeBinding.module_paths|Sort-Object)-join "`n"))){throw 'Native module set changed after cleanup binding'}
  }elseif(@($game.Modules|Where-Object {$_.ModuleName -like 'BC2*.dll' -or $_.ModuleName -like '*NativeProbe*' -or $_.ModuleName -like '*PreWorldMsaa*' -or $_.ModuleName -like '*TestRange*'}).Count){throw 'Native module observed; exact native retirement proof required before close'}
  if(Test-Path -LiteralPath (Join-Path $run 'close-request.json')){throw 'Prior close request retained; inspect live process before another request'}
- Lease;IdleHelpers;$null=CurrentGame $identity;$closeAccepted=$game.CloseMainWindow()
+ Lease;IdleHelpers;$null=CurrentGame $identity;$null=$game.Handle;$closeAccepted=$game.CloseMainWindow()
  Save 'close-request.json' @{pid=$identity.pid;creation_filetime=$identity.creation_filetime;accepted=$closeAccepted;observed_utc=[DateTime]::UtcNow.ToString('o');forced_termination=$false}
  if(-not $closeAccepted){throw 'Original game refused normal close; preserve profiles'}
  if(-not $game.WaitForExit(10000)){throw 'Original game did not close normally; no force termination/restoration'}

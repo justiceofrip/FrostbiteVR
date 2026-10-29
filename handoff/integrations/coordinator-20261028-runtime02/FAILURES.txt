@@ -25,3 +25,11 @@ Preserve these episodes; later checks do not replace them.
 - First synthetic cleanup fixture refused a valid singleton stock-module array
   because PowerShell unwrapped it on return. Value now preserves JSON array types;
   the corrected seven cases pass. Both fixture results remain on G: scratch.
+- Authorized scene02 initially refused its startup lifetime guard; a later read
+  matched original PID/path/birth. The failed field was not captured; cause unknown.
+- Scene02 held foreground but two captures were black; read-only weapon preflight
+  rejected Read out of bounds with no samples. User was not watching. No input or
+  diagnostic attachment; capture versus game-startup cause remains unresolved.
+- Scene02 accepted its close request and exited, but ExitCode was null; preserve
+  the unqualified close receipt. Profiles restored exactly. Future close retains
+  the process handle; six offline cases cover explicit unknown/invalid exit data.

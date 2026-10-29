@@ -21,6 +21,10 @@ No gameplay input, mod attachment or equipment acceptance from that session.
 User confirms headset unavailable and is using the other monitor; continue offline
 preparation, then request one uninterrupted game-input window when ready.
 Shared Windows focus spans both monitors; do not repeatedly reactivate the game.
+Later authorized scene02 held foreground; two captures black and read-only weapon
+preflight rejected Read out of bounds. No gameplay input or native attachment.
+Close accepted/exit observed, exit code unknown; profiles restored. User not watching,
+so capture versus startup cause remains open. That five-minute window has ended.
 Saved XR logs identify no connected HMD; prior successful driver was Steam Link.
 No registration/VirtualDesktop setting change or unchanged XR retry is justified.
 Scoped Nambu flags-only build/binding passed; normal outputs/config restored exactly.

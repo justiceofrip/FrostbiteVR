@@ -77,10 +77,11 @@
     "future_runner": "magazine/RunMetadata.ps1"
   },
   "runtime_blockers": {
-    "foreground": "Validated activation route; uninterrupted game foreground still required for native input",
+    "foreground": "Scene02 held foreground during agreed window; window has ended",
     "openxr": "Prior SteamVR failure reports no connected HMD; prior working route Steam Link/vrlink",
     "headset": "User confirms unavailable; no new XR preflight",
-    "user_desktop": "User is working on the other monitor; offline work only until a test window is agreed"
+    "user_desktop": "No further game actions until another uninterrupted window is agreed",
+    "native_startup_or_capture": "Scene02 captures black and read-only weapon preflight rejected; game versus capture cause unknown"
   },
   "installation": {
     "attempted": false,
@@ -94,5 +95,38 @@
     "sha256": "352fdc221c6654cf3ed1bae89e921bbffd196deba64c964106a2ccfe66ebddb2",
     "bytes": 2663,
     "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\coordinator-20261028-runtime02\\offline-validation.json"
+  },
+  "stock_scene02": {
+    "gameplay_input_sent": false,
+    "window_started_utc": "2026-10-29T05:07:55Z",
+    "forced_termination": false,
+    "close_observed_utc": "2026-10-29T05:11:01.6396634Z",
+    "game_remaining": false,
+    "captures_black": true,
+    "authorized_window_minutes": 5,
+    "evidence": "reports/coordinator-20261028-runtime02/scene02",
+    "creation_filetime": "134377240960560040",
+    "normal_close_success_claimed": false,
+    "subsequent_exact_lifetime_match": true,
+    "initial_startup_guard_refused": true,
+    "bounded_captures": 2,
+    "activation_attempts": 0,
+    "user_visual_observation": "not watching",
+    "exit_observed": true,
+    "exact_three_profiles_restored": true,
+    "pid": 26824,
+    "close_request_accepted": true,
+    "native_attached": false,
+    "already_foreground": true,
+    "preflight_rejection": "Read out of bounds",
+    "exit_code": null,
+    "preflight_passed": false
+  },
+  "scene_close_validation": {
+    "passed": 6,
+    "native_acceptance": false,
+    "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\coordinator-20261028-runtime02\\scene-close-validation.json",
+    "sha256": "93ae3c7b5ad5b41fe28e9cc48e2265aecab3d45831942ab85c049f0693ddc78d",
+    "total": 6
   }
 }

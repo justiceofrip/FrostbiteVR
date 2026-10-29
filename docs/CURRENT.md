@@ -6,9 +6,9 @@ Updated October 29, 2026. This replaces old next-step instructions; prior eviden
 ## Active work
 
 Runtime02 adds read-only Windows desktop diagnosis and rejects window operations
-from an unverified input desktop;33window tests and3package checks pass. A stock
-scene verified the existing one-shot activation helper and exact profile restore;
-later window/foreground capture checks refused before gameplay input/attachment.
+from an unverified input desktop;33window tests and3package checks pass. Stock
+scene02 held foreground during an agreed test but produced black captures; the
+game exited without attachment/gameplay input, and all profiles were restored.
 The [continuation handoff](../handoff/integrations/coordinator-20261028-runtime02/README.md)
 retains those failures. Nambu diagnostic build/binding passed, separate from normal
 interaction acceptance. The user confirms no headset; continue offline work until
