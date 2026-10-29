@@ -1,0 +1,126 @@
+{
+  "schema": "fvr.runtime02.magazine.document-review.v1",
+  "documentary_only": true,
+  "original_plan_preserved": true,
+  "native_admission_granted": false,
+  "scope": "Only the three exact documentary plan pins are adapted to explicitly reviewed current files. Every other metadata, source, build, registry, provisioning, geometry and live-admission predicate remains unchanged.",
+  "documents": [
+    {
+      "name": "WEAPON-SYSTEM-PIPELINE.md",
+      "original": {
+        "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\docs\\WEAPON-SYSTEM-PIPELINE.md",
+        "bytes": 42336,
+        "sha256": "98ace2f1f93cf12148e694cb88f7693ccca23c31224d5b170ea89e4b28454470"
+      },
+      "current": {
+        "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\docs\\WEAPON-SYSTEM-PIPELINE.md",
+        "bytes": 42424,
+        "sha256": "4f633e68ae77d850d82fa0b58f5ea423bf3a3edc2cf11f69f61e82448cafb5a9"
+      },
+      "semantic_review": {
+        "reviewer": "root coordinator",
+        "comparison": "Replacing every byte sequence (archive/ with ( in the current pinned document reproduces the exact original byte count and SHA256.",
+        "limited_changes": [
+          "Archive-relative links"
+        ],
+        "selected_nambu_capability_or_prerequisite_change": false
+      }
+    },
+    {
+      "name": "WEAPON-COVERAGE-CURRENT.md",
+      "original": {
+        "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\docs\\WEAPON-COVERAGE-CURRENT.md",
+        "bytes": 72400,
+        "sha256": "9dcb580a96d94455e4ec6df319d8021c71fcd12c37105d12288cc3eb1c04bccc"
+      },
+      "current": {
+        "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\docs\\WEAPON-COVERAGE-CURRENT.md",
+        "bytes": 73643,
+        "sha256": "158d211c2e5f4e2b5bd97fe09c89ddb894082551a1fb3fd71ba6cd66e1b6e657"
+      },
+      "semantic_review": {
+        "reviewer": "root coordinator",
+        "comparison": "Root compared historical Git blob7c745ad6941f87712105ab8cf3e024b563767124 (matching original SHA256) against the current pinned file.",
+        "limited_changes": [
+          "15-line R56 representative-evidence introduction",
+          "Historical416 heading",
+          "Archive-relative links"
+        ],
+        "historical_git_blob": "7c745ad6941f87712105ab8cf3e024b563767124",
+        "selected_nambu_capability_or_prerequisite_change": false
+      }
+    },
+    {
+      "name": "EMPTY-PREDICTION-293.md",
+      "original": {
+        "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\docs\\EMPTY-PREDICTION-293.md",
+        "bytes": 4651,
+        "sha256": "83b39573b3b6f66c34c56b1467af269e8844606331330282f0fdca5b2fb5469f"
+      },
+      "current": {
+        "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\docs\\EMPTY-PREDICTION-293.md",
+        "bytes": 4659,
+        "sha256": "016cf5a88ee4010cdbe69988a3785f8760aecaa2300729e95a729e8cf036b10c"
+      },
+      "semantic_review": {
+        "reviewer": "root coordinator",
+        "comparison": "Replacing every byte sequence (archive/ with ( in the current pinned document reproduces the exact original byte count and SHA256.",
+        "limited_changes": [
+          "Archive-relative links"
+        ],
+        "selected_nambu_capability_or_prerequisite_change": false
+      }
+    }
+  ],
+  "pins": {
+    "original_admission": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\integrations\\coordinator-20261028-runtime02\\magazine\\Admission.py",
+      "bytes": 827,
+      "sha256": "013db57a27871290566c303f4fccfab1b6e0de29762d179ee52d2c4672461ad5"
+    },
+    "original_runner": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\integrations\\coordinator-20261028-runtime02\\magazine\\RunReady.ps1",
+      "bytes": 26555,
+      "sha256": "e65a5717017fc59ce5d75e00d11e16390c5a8512da5cb96afeaa10b36f087167"
+    },
+    "build": {
+      "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\coordinator-20261028-runtime02\\magazine\\build01\\run01\\build-receipt.json",
+      "bytes": 233171,
+      "sha256": "273b0504dfa002ead9a5ee7b92edc2ff7867875cf84e95857cb255cbec17625c"
+    },
+    "runtime_binding": {
+      "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\coordinator-20261028-runtime02\\magazine\\runtime-binding.json",
+      "bytes": 1656,
+      "sha256": "ccfe3148c2fa26a91bb0c7c7017a04ac23c0f0273a435c68ec8acbda96fad1b4"
+    },
+    "admission_inputs": {
+      "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\coordinator-20261028-runtime02\\magazine\\admission-inputs.json",
+      "bytes": 3284,
+      "sha256": "d4476b4001b8cf82c0fe8fabd0be41bd268138e6d20bb2860801fdb13d6c0e18"
+    },
+    "plan": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\performance436\\campaign-magazine-batch-r55-prep\\plans\\sp01-nambu.json",
+      "bytes": 751783,
+      "sha256": "0e1df14474dc91bee67da6d9c78996ca0e432863061efacce8c19b17567ba3ea"
+    },
+    "reviewed_admission": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\integrations\\coordinator-20261028-runtime02\\magazine\\AdmissionReviewed.py",
+      "bytes": 7683,
+      "sha256": "569c200c6ce5e413619a3666b865611eb448ed0683be058bdb24a8bfdfd0289d"
+    },
+    "reviewed_runner": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\integrations\\coordinator-20261028-runtime02\\magazine\\RunMetadata.ps1",
+      "bytes": 26563,
+      "sha256": "bd4be160b3081bb1fcb2063a1e64f0f55bd3fa7abd61f82f6f31fce404c5c5bb"
+    }
+  },
+  "hash_policy": "This receipt pins both successor scripts and all unchanged inputs. It deliberately does not contain its own hash; successful metadata output supplies the receipt hash for downstream binding.",
+  "execution_claims": {
+    "metadata_admission_executed": false,
+    "tests_run": false,
+    "builds_run": false,
+    "game_actions": 0,
+    "native_acceptance": false,
+    "headset_acceptance": false
+  }
+}

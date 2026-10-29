@@ -16,3 +16,12 @@ Preserve these episodes; later checks do not replace them.
 - Next capture refused on combined before/after window/foreground guard; read-only
   observation found Discord foreground, exact game HWND/geometry unchanged.
 - Scene01 finished normally; exact original three-profile restore verified.
+- Initial completed-build binding rejected the diagnostic generated header's
+  different capability-header path. The reviewed successor permits exactly that
+  path substitution with identical capability bytes/source macro; no rebuild.
+- The retained Nambu plan has three stale documentary pins. Two differ only in
+  archive links; coverage also adds the scoped R56 evidence/limits introduction.
+  Preserve the old plan and require an explicit reviewed metadata successor.
+- First synthetic cleanup fixture refused a valid singleton stock-module array
+  because PowerShell unwrapped it on return. Value now preserves JSON array types;
+  the corrected seven cases pass. Both fixture results remain on G: scratch.

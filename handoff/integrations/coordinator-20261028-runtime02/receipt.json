@@ -3,7 +3,9 @@
   "run": "coordinator-20261028-runtime02",
   "baseline": "7ae7ee3f25537766f3cdac53172050e7f8cb2d47",
   "integration_branch": "checkpoint/436-r56-equipment-rendering",
-  "source_push": {"status": "pending"},
+  "source_push": {
+    "status": "pending"
+  },
   "native_source_changed": false,
   "normal_build_reused": {
     "built_source_commit": "6e5fc12d3b98c5065b2bb8d385d28612e4c1c146",
@@ -47,12 +49,27 @@
     "receipt": "reports/coordinator-20261028-runtime02/storage01/compression.json"
   },
   "nambu_diagnostic": {
-    "status": "preparation validated; scoped diagnostic build pending",
+    "status": "built; normal configuration/outputs restored exactly; reviewed build binding passed",
     "native_overlays": 0,
     "enabled_probe_flags": 3,
     "temporarily_disabled_normal_opt_ins": 3,
     "chat07_combined_acceptance": false,
-    "native_magazine_acceptance": false
+    "native_magazine_acceptance": false,
+    "build_receipt": {
+      "sha256": "273b0504dfa002ead9a5ee7b92edc2ff7867875cf84e95857cb255cbec17625c",
+      "path": "reports/coordinator-20261028-runtime02/magazine/build01/run01/build-receipt.json"
+    },
+    "runtime_binding": {
+      "sha256": "ccfe3148c2fa26a91bb0c7c7017a04ac23c0f0273a435c68ec8acbda96fad1b4",
+      "path": "reports/coordinator-20261028-runtime02/magazine/runtime-binding.json"
+    },
+    "native_source_sha256": "d74a6b63c6360d77007c46d1f3c9f8ca342ce1740466688a7ffd6ab43d3b26ed",
+    "normal_configuration_restored": true,
+    "normal_outputs_exactly_restored": true,
+    "generated_header_review": "Only capability-header path differs; capability bytes and source macro identical; original rejected binding retained",
+    "metadata_admission": "Reviewed documentary successor passed actual offline metadata/geometry admission; no process opened",
+    "cleanup_validation": "7/7 synthetic cases passed; independent review; no native acceptance",
+    "future_runner": "magazine/RunMetadata.ps1"
   },
   "runtime_blockers": {
     "foreground": "Validated activation route; uninterrupted game foreground still required for native input",
@@ -67,5 +84,10 @@
     "settings_sha256": "be6f984f6bd44dcc62aab0a2ac1a63acaa2d3221d2919f2a44a4aeeef2b1f7cf",
     "headset_accepted": false,
     "public_release": false
+  },
+  "offline_validation": {
+    "sha256": "352fdc221c6654cf3ed1bae89e921bbffd196deba64c964106a2ccfe66ebddb2",
+    "bytes": 2663,
+    "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\coordinator-20261028-runtime02\\offline-validation.json"
   }
 }

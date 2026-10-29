@@ -39,7 +39,33 @@ unchanged40GiB/15GiB limits. The Nambu preparation passed actual batch01 validat
 
 Local evidence: `reports/coordinator-20261028-runtime02`. Scene recipes bind the
 current integration lease, exact game lifetime, fresh names, bounded captures and
-profile restoration. The scoped Nambu diagnostic build is pending;
-its existing fixture needs three compile-time probes and excludes grenade/knife/
-contextual opt-ins. Its result cannot qualify CHAT07 combined normal interactions.
+profile restoration. The scoped Nambu diagnostic build passed and restored the
+normal build's exact configuration and outputs. Its fixture enables three probes
+and excludes grenade/knife/contextual opt-ins, so its result cannot qualify CHAT07
+combined normal interactions. Build receipt SHA256:
+`273b0504dfa002ead9a5ee7b92edc2ff7867875cf84e95857cb255cbec17625c`.
+
+The first binding check rejected the generated capability-header path. An
+append-only validator verifies that the one path substitution leaves every
+capability byte and source macro unchanged; the original failure is retained.
+The reviewed binding passed without another build. The original build recipes
+and `magazine/README.txt` remain frozen historical inputs.
+
+Three old documentary pins also required review: archive links and the R56
+coverage introduction changed, while selected Nambu admission remained unchanged.
+`AdmissionReviewed.py` substitutes only those exact reviewed document pins; the
+original plan and all other admission predicates remain intact. Actual offline
+metadata/geometry admission passed, with runtime authority still false.
+
+Before a future agreed game session, use `magazine/RunMetadata.ps1`,
+take `NativeScene.ps1 -Operation SnapshotModules` after stock setup and before
+attachment, and preserve the exact process identity. `Finish -NativeRunDirectory`
+requires independent remote-thread exit, disabled/drained hooks, original receiver
+exit and the known module set. CLI success alone is insufficient. Cleanup records
+normal close separately and can resume profile restoration after an observed exit;
+an already absent process is never labeled a successful normal close. Seven
+synthetic cleanup cases pass, including refusal of missing/undrained/wrong-lifetime
+evidence. The first fixture failure exposed singleton-array unwrapping and is
+retained alongside the corrected result in `offline-validation.json`. This is
+offline validation, not proof of actual native retirement.
 No new installation, native equipment acceptance or headset acceptance is claimed.

@@ -10,7 +10,7 @@ from an unverified input desktop;33window tests and3package checks pass. A stock
 scene verified the existing one-shot activation helper and exact profile restore;
 later window/foreground capture checks refused before gameplay input/attachment.
 The [continuation handoff](../handoff/integrations/coordinator-20261028-runtime02/README.md)
-retains those failures. Nambu diagnostic preparation remains separate from normal
+retains those failures. Nambu diagnostic build/binding passed, separate from normal
 interaction acceptance. The user confirms no headset; continue offline work until
 an uninterrupted game-input window is available. Launcher0.1.12 remains unchanged.
 

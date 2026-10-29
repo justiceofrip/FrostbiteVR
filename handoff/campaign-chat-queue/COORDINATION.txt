@@ -22,7 +22,10 @@ preparation, then request one uninterrupted game-input window when ready.
 Shared Windows focus spans both monitors; do not repeatedly reactivate the game.
 Saved XR logs identify no connected HMD; prior successful driver was Steam Link.
 No registration/VirtualDesktop setting change or unchanged XR retry is justified.
-Scoped Nambu flags-only build preparation is separate from CHAT07 normal acceptance.
+Scoped Nambu flags-only build/binding passed; normal outputs/config restored exactly.
+Generated-header correction retains the failed check; no additional build required.
+Reviewed metadata admission and7synthetic cleanup checks pass; failures retained.
+Its magazine-only scope remains separate from CHAT07 normal combined acceptance.
 
 Last batch: CHAT07 coexistence regressions and CHAT23 chest reserve prop continuity.
 Accepted prior source: 4448779e33ad265f572245cff49913983696ce5c (finished CHAT25/26).
@@ -43,10 +46,11 @@ Storage:40GiB/free15GiB unchanged; lossless compression reclaimed965171135 bytes
 45 generated files, all hashes preserved, no deletion; original refusals retained.
 
 Local mod update: none. G:\Unity\VRMMO\BC2VR-Launcher stays0.1.12/previous0.1.11.
-Active metadata/settings hashes still match the prior integration; no game launched.
+Active metadata/settings hashes match the prior integration; runtime02 stock-only
+scene01 closed and restored profiles without attaching the mod.
 No installed-runtime receipt, startup/equipment smoke or physical-headset acceptance.
-Shared blockers reused: SteamVR OpenXR instance XrResult=-2; native scene foreground
-admission failed before input/attachment. No unchanged preflight/session repeated.
+Shared XR blocker: no connected HMD during the prior XrResult=-2 episode.
+Native testing needs an agreed uninterrupted input window; no unchanged XR retry.
 Emulated native checks do not require OpenXR but still require foreground admission.
 CHAT07 final native combined acceptance and CHAT23 visual/headset checks remain open.
 Other selected cards' exact wake-up conditions are in COORDINATOR-STATE/task handoffs.

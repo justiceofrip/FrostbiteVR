@@ -1,0 +1,80 @@
+{
+  "schema": "fvr.runtime02.magazine.operation-header-review.v1",
+  "scope": "Validator-only successor for completed Nambu SingleMagazine diagnostic; no runtime/native acceptance.",
+  "build": {
+    "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\coordinator-20261028-runtime02\\magazine\\build01\\run01\\build-receipt.json",
+    "bytes": 233171,
+    "sha256": "273b0504dfa002ead9a5ee7b92edc2ff7867875cf84e95857cb255cbec17625c"
+  },
+  "original_workflow": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\integrations\\coordinator-20261028-runtime02\\magazine\\workflow-preparation.json",
+    "bytes": 8843,
+    "sha256": "ba1a7904dfc38a2665954d86dc0077b0910a2d5c4d14a93368fb516ad522779e"
+  },
+  "original_common": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\integrations\\coordinator-20261028-runtime02\\magazine\\Common.ps1",
+    "bytes": 11155,
+    "sha256": "18a1c11ffd9bb058c6ab4e35c3751a9fa3c0a71e8d3e63a64bd70f2b2a82cb47"
+  },
+  "original_run": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\integrations\\coordinator-20261028-runtime02\\magazine\\RunBuilt.ps1",
+    "bytes": 26547,
+    "sha256": "290662a6813c0d8211c15055a10e001e294cd6f09c4a54e7ee77149ea5dc6c2b"
+  },
+  "original_bind_failure": {
+    "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\coordinator-20261028-runtime02\\magazine-bind01.txt",
+    "bytes": 431,
+    "sha256": "b63a468b03efd1a1c2d264103eaaedf34d9078a9377a4c42948cf5c507cc5957"
+  },
+  "successors": [
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\integrations\\coordinator-20261028-runtime02\\magazine\\CommonReviewed.ps1",
+      "bytes": 6216,
+      "sha256": "856a156cc481e943388da08ee022a974b68f844b1872699674ff90312ba87134"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\integrations\\coordinator-20261028-runtime02\\magazine\\BindReady.ps1",
+      "bytes": 1453,
+      "sha256": "965c5021463da57b3f89af00917acc0b27d8d8505d5e846898226d004026ca47"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\integrations\\coordinator-20261028-runtime02\\magazine\\RunReady.ps1",
+      "bytes": 26555,
+      "sha256": "e65a5717017fc59ce5d75e00d11e16390c5a8512da5cb96afeaa10b36f087167"
+    }
+  ],
+  "generated_operation_header": {
+    "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\coordinator-20261028-runtime02\\magazine\\build01\\run01\\Bc2NativeOperationBuild.generated.h",
+    "bytes": 376,
+    "sha256": "3ef7981f675e5886125e8550c50eeb23c7b4f0e58a6d0ee90e67671a00737718"
+  },
+  "normal_generated_operation_header": {
+    "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\build\\x86\\generated\\bc2-operation\\Bc2NativeOperationBuild.generated.h",
+    "bytes": 351,
+    "sha256": "241a7716b6f090eaa8abbff031f32a593b26aacfc125c550b6e18707284ab5cb"
+  },
+  "native_source_sha256": "d74a6b63c6360d77007c46d1f3c9f8ca342ce1740466688a7ffd6ab43d3b26ed",
+  "reviewed_capability_header_sha256": "d9c6d366ab8d18033dd396c7fad29b7c276cb9601829f2b4216a3bb0efe4f539",
+  "corrected_predicate": {
+    "before": "Check $b.generated_operation_header.path $n.normal_cache.x86.operation_config.sha256",
+    "after": "Assert-ReviewedOperationHeader $b $n $path $sha",
+    "replacement_count": 1,
+    "condition": "Exact actual header bytes equal validated normal generated-header bytes with exactly one reviewed capability-header path substitution; source-hash macro, reviewed capability bytes, and actual collected provenance pins remain unchanged.",
+    "original_function_preserved_except_one_predicate": true
+  },
+  "run_recipe_delta": {
+    "before": ". (Join-Path $PSScriptRoot 'Common.ps1')",
+    "after": ". (Join-Path $PSScriptRoot 'CommonReviewed.ps1')",
+    "replacements": 1,
+    "authored_exact_text_comparison_passed": true,
+    "newline_bytes_preserved": true
+  },
+  "original_failure_replaced": false,
+  "original_recipes_modified": false,
+  "compiled_artifacts_modified": false,
+  "native_rebuild_required": false,
+  "tests_run": false,
+  "builds_run": false,
+  "game_actions": 0,
+  "successor_executed": false
+}

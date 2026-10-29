@@ -1,12 +1,13 @@
 #requires -Version 7.5
 [CmdletBinding()]
-param([Parameter(Mandatory)][ValidateSet('Start','Activate','Capture','Resume','ExitSeat','Finish')][string]$Operation,
+param([Parameter(Mandatory)][ValidateSet('Start','Activate','Capture','Resume','ExitSeat','SnapshotModules','Finish')][string]$Operation,
       [ValidatePattern('^scene[0-9]{2}$')][string]$SceneName='scene01',
       [ValidatePattern('^[a-z][a-z0-9-]{0,31}$')][string]$CaptureName='menu',
       [ValidateRange(0,45)][int]$WaitForegroundSeconds=0,
       [ValidatePattern('^[a-f0-9]{64}$')][string]$ReviewedImageSha256,
       [ValidateRange(0,1)][double]$U,[ValidateRange(0,1)][double]$V,
-      [switch]$ReviewedExitPrompt)
+      [switch]$ReviewedExitPrompt,
+      [string]$NativeRunDirectory)
 $ErrorActionPreference='Stop'
 $repo='G:\Unity\VRMMO\FrostbiteVR'
 $run=Join-Path $repo ('reports/coordinator-20261028-runtime02/'+$SceneName)
@@ -36,6 +37,20 @@ function CurrentGame($identity){
  $game=$games[0]
  if($game.Id -ne $identity.pid -or $game.Path -cne $exe -or [string]$game.StartTime.ToUniversalTime().ToFileTimeUtc() -cne [string]$identity.creation_filetime){throw 'Original game lifetime differs'}
  return $game
+}
+function NativeAttachments($identity){
+ $root=Join-Path $repo 'reports/coordinator-20261028-runtime02/magazine'
+ foreach($attempt in @(Get-ChildItem -LiteralPath $root -Directory -ErrorAction Stop|Where-Object {$_.Name -cmatch '^run[0-9]{2}$'})){
+  foreach($name in 'trace-invocation.json','trace-invocation.json.pending'){
+   $path=Join-Path $attempt.FullName $name
+   if(Test-Path -LiteralPath $path){
+    if((Get-Item -LiteralPath $path).Length -gt 64KB){throw 'Unbounded native invocation evidence; inspect before cleanup'}
+    $invocation=Load $path
+    if(-not $invocation.original_game.pid -or -not $invocation.original_game.creation_filetime){throw 'Incomplete native invocation identity; inspect before cleanup'}
+    if($invocation.original_game.pid -eq $identity.pid -and [string]$invocation.original_game.creation_filetime -ceq [string]$identity.creation_filetime){$attempt.FullName}
+   }
+  }
+ }
 }
 Lease;IdleHelpers
 . (Join-Path $repo 'tools/StorageBudget.ps1')
@@ -153,6 +168,20 @@ if($Operation -eq 'Start'){
  return
 }
 if(Test-Path -LiteralPath (Join-Path $run 'finish.json')){throw 'Scene already finished'}
+if($Operation -eq 'SnapshotModules'){
+ $identity=Load (Join-Path $run 'process.json');$game=CurrentGame $identity
+ if(@(NativeAttachments $identity).Count){throw 'Stock snapshot must precede every native attachment'}
+ if(Test-Path -LiteralPath (Join-Path $run 'stock-modules.json')){throw 'Preserve original stock module snapshot'}
+ $budget=Assert-FvrStorageBudget -RepositoryRoot $repo -OutputPath $run -Operation Session -PlannedBytes 1MB -RawCaptureBytes 0 -AdditionalRoots @('G:\Unity\VRMMO\BC2VR-Hotfix018','G:\Unity\VRMMO\bc2vr-task-worktrees')
+ Save 'storage-stock-modules.json' $budget
+ $modules=@($game.Modules|ForEach-Object {@{ModuleName=$_.ModuleName;FileName=$_.FileName}})
+ if(-not $modules.Count -or $modules.Count -gt 1024 -or @($modules|Where-Object {$_.ModuleName -like 'BC2*.dll' -or $_.ModuleName -like '*NativeProbe*' -or $_.ModuleName -like '*PreWorldMsaa*' -or $_.ModuleName -like '*TestRange*'}).Count){throw 'Expected bounded stock-only modules before attachment'}
+ Lease;IdleHelpers;$null=CurrentGame $identity
+ Save 'stock-modules.json' @{schema='fvr.runtime02.stock-modules.v1';original_game=$identity;observed_utc=[DateTime]::UtcNow.ToString('o');modules=$modules}
+ $stockPath=Join-Path $run 'stock-modules.json'
+ Save 'stock-modules-pin.json' @{path=$stockPath;bytes=(Get-Item -LiteralPath $stockPath).Length;sha256=(Sha $stockPath)}
+ Write-Output (Join-Path $run 'stock-modules.json');return
+}
 if($Operation -eq 'Activate'){
  $identity=Load (Join-Path $run 'process.json');$window=Observe $identity
  $helper=Join-Path $repo 'launcher/runtime/activate_game_once.py'
@@ -319,17 +348,56 @@ if($Operation -in @('Resume','ExitSeat')){
  }finally{$null=[CoordinatorSceneUi]::SetThreadDpiAwarenessContext($dpi)}
  Write-Output (Join-Path $run ($action+'-outcome.json'));return
 }
-# This initial scene recipe permits stock-only cleanup. Native attachment must
-# gain its own reviewed retirement binding before this guard can ever change.
+# Native cleanup requires the original invocation, independent remote-thread and
+# hook retirement evidence, original receiver exit and exact live module set.
 $before=Load (Join-Path $run 'profile-before.json');$names=@('GameSettings.bin','GameSettings.ini','settings.ini')
 if($before.profile_path -cne $profile -or @($before.files).Count -ne 3 -or ((@($before.files.name|Sort-Object)-join '|') -cne (($names|Sort-Object)-join '|'))){throw 'Exact profile set required'}
 foreach($file in $before.files){if((Sha (Join-Path $run ('profile-before/'+$file.name))) -cne $file.sha256){throw 'Original backup changed'}}
+$identity=Load (Join-Path $run 'process.json')
+$attachments=@(NativeAttachments $identity|Sort-Object -Unique)
+if($attachments.Count -and -not $NativeRunDirectory){throw 'This original game has native invocation evidence; specify its NativeRunDirectory before cleanup'}
+$nativeBinding=$null;$nativeBindingPath=$null
+if($NativeRunDirectory){
+ . (Join-Path $PSScriptRoot 'AssertNativeCleanup.ps1')
+ $stockPath=Join-Path $run 'stock-modules.json'
+ $stockPin=Load (Join-Path $run 'stock-modules-pin.json')
+ if($stockPin.path -cne $stockPath -or $stockPin.bytes -ne (Get-Item -LiteralPath $stockPath).Length -or $stockPin.sha256 -cne (Sha $stockPath)){throw 'Original pre-attachment module snapshot changed'}
+ $bindingText=Assert-Runtime02NativeCleanup -SceneIdentity $identity -NativeRunDirectory $NativeRunDirectory -RuntimeBinding (Join-Path $repo 'reports/coordinator-20261028-runtime02/magazine/runtime-binding.json') -StockModuleSnapshotPin $stockPin
+ $nativeBinding=$bindingText|ConvertFrom-Json -DateKind String
+ $bindingAttempt=1+@(Get-ChildItem -LiteralPath $run -Filter 'native-cleanup-binding*.json').Count
+ if($bindingAttempt -gt 3){throw 'Three native cleanup bindings retained; inspect before another attempt'}
+ $bindingName=if($bindingAttempt -eq 1){'native-cleanup-binding.json'}else{'native-cleanup-binding-'+$bindingAttempt+'.json'}
+ Save $bindingName $nativeBinding
+ $nativeBindingPath=Join-Path $run $bindingName
+}
+$closePath=Join-Path $run 'normal-close.json'
+if(Test-Path -LiteralPath $closePath){
+ $close=Load $closePath
+ if($close.pid -ne $identity.pid -or [string]$close.creation_filetime -cne [string]$identity.creation_filetime -or $close.forced_termination -ne $false){throw 'Original close evidence differs'}
+ foreach($field in 'normal_close_observed','original_already_absent','forced_termination','close_request_accepted','exit_observed'){
+  if($close.$field -isnot [bool]){throw 'Close receipt requires typed booleans'}
+ }
+ if($close.original_already_absent){
+  if($close.normal_close_observed -or $close.close_request_accepted -or $close.exit_observed -or $null -ne $close.exit_code){throw 'Absent original cannot qualify normal close'}
+ }elseif(-not $close.close_request_accepted -or -not $close.exit_observed -or ($close.exit_code -isnot [int] -and $close.exit_code -isnot [long]) -or $close.normal_close_observed -ne ($close.exit_code -eq 0)){throw 'Inconsistent original close outcome'}
+ if(Get-Process BFBC2Game -ErrorAction SilentlyContinue){throw 'A game is present after recorded close; preserve profiles'}
+}else{
+$normalClose=$false;$alreadyAbsent=$true;$closeAccepted=$false;$exitObserved=$false;$exitCode=$null
 if(Get-Process BFBC2Game -ErrorAction SilentlyContinue){
  if(-not $interactive){throw 'Use the active input desktop to close the original game; no profiles restored'}
- $identity=Load (Join-Path $run 'process.json');$game=CurrentGame $identity
- if(@($game.Modules|Where-Object {$_.ModuleName -like 'BC2*.dll' -or $_.ModuleName -like '*NativeProbe*' -or $_.ModuleName -like '*PreWorldMsaa*' -or $_.ModuleName -like '*TestRange*'}).Count){throw 'Native module observed; exact native retirement proof required before close'}
- Lease;$null=$game.CloseMainWindow()
+ $game=CurrentGame $identity;$alreadyAbsent=$false
+ if($nativeBinding){
+  if(-not $nativeBinding.live_modules_verified -or ((@($game.Modules.FileName|Sort-Object)-join "`n") -ine (@($nativeBinding.module_paths|Sort-Object)-join "`n"))){throw 'Native module set changed after cleanup binding'}
+ }elseif(@($game.Modules|Where-Object {$_.ModuleName -like 'BC2*.dll' -or $_.ModuleName -like '*NativeProbe*' -or $_.ModuleName -like '*PreWorldMsaa*' -or $_.ModuleName -like '*TestRange*'}).Count){throw 'Native module observed; exact native retirement proof required before close'}
+ if(Test-Path -LiteralPath (Join-Path $run 'close-request.json')){throw 'Prior close request retained; inspect live process before another request'}
+ Lease;IdleHelpers;$null=CurrentGame $identity;$closeAccepted=$game.CloseMainWindow()
+ Save 'close-request.json' @{pid=$identity.pid;creation_filetime=$identity.creation_filetime;accepted=$closeAccepted;observed_utc=[DateTime]::UtcNow.ToString('o');forced_termination=$false}
+ if(-not $closeAccepted){throw 'Original game refused normal close; preserve profiles'}
  if(-not $game.WaitForExit(10000)){throw 'Original game did not close normally; no force termination/restoration'}
+ $exitObserved=$true;$exitCode=$game.ExitCode;$normalClose=$exitCode -eq 0
+}
+$close=@{pid=$identity.pid;creation_filetime=$identity.creation_filetime;normal_close_observed=$normalClose;original_already_absent=$alreadyAbsent;close_request_accepted=$closeAccepted;exit_observed=$exitObserved;exit_code=$exitCode;forced_termination=$false;native_cleanup_binding=$nativeBindingPath;observed_utc=[DateTime]::UtcNow.ToString('o')}
+Save 'normal-close.json' $close
 }
 IdleHelpers
 if(Get-Process BFBC2Game -ErrorAction SilentlyContinue){throw 'Game still owns profiles'}
@@ -362,4 +430,4 @@ foreach($file in $before.files){
  [IO.File]::WriteAllBytes($target,[IO.File]::ReadAllBytes((Join-Path $run ('profile-before/'+$file.name))))
  if((Sha $target) -cne $file.sha256){throw 'Exact profile restoration failed'}
 }
-Save 'finish.json' @{closed_normally=$true;forced=$false;exact_three_profiles_restored=$true;native_attached=$false;headset_verified=$false}
+Save 'finish.json' @{closed_normally=[bool]$close.normal_close_observed;original_already_absent=[bool]$close.original_already_absent;forced=$false;exact_three_profiles_restored=$true;native_attached=[bool]$nativeBinding;native_retirement_bound=[bool]$nativeBinding;native_cleanup_binding=$nativeBindingPath;native_reload_accepted=$false;headset_verified=$false}
