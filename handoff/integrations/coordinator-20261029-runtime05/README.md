@@ -35,7 +35,7 @@ or physical visibility. RenderDoc was researched but not provisioned/run because
 its referenced-resource capture size was not established within the raw budget.
 No existing stock-only backbuffer readback was admitted: the current probe's desktop
 capture runs after mod mirror/menu presentation, so it cannot isolate stock pixels.
-The existing Nambu diagnostic remains frozen and reusable after visible stock gameplay;
+The existing visually guided Nambu recipe remains frozen until its scene is verified;
 do not rebuild it for scene-helper changes or attach it to an alternate renderer.
 
 Scene09 exercised that WGC path on stock/auto graphics: exactly one1026x795 frame,
@@ -56,7 +56,15 @@ This correction was not tested through another unchanged game launch.
 
 Normal native source/build receipt remains the batch01 result. No new knife
 recognition/damage/audio behavior, task acceptance, installation or release is claimed.
-Installed0.1.12/previous0.1.11/settings remain unchanged; private0.1.16 awaits usable
-stock gameplay and its required installed smoke check. All writers are stopped.
+Installed0.1.12/previous0.1.11/settings remain unchanged; private0.1.16 awaits its
+required installed startup/equipment check. All writers are stopped.
 Remaining task wake-up conditions stay in the compact coordinator state. No unchanged
 startup/XR loop is warranted; the stock black-content cause remains unresolved.
+
+User clarification: monitor black output is acceptable if the headset works.
+The stock screenshots do not prove VR failure. Launcher `Entry.ps1` preflights a
+connected headset; `Session.ps1` checks native menu/render objects, resolution,
+XR session and native connection, without a desktop pixel-brightness gate.
+Therefore desktop repair is not a prerequisite for a direct VR check. The current
+Nambu recipe still needs its actual scene/weapon verified, and installation still
+needs its scoped smoke check. No new headset result or runtime change is implied.

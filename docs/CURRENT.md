@@ -18,9 +18,10 @@ scene02 held foreground during an agreed test but produced black captures; the
 game exited without attachment/gameplay input, and all profiles were restored.
 The [continuation handoff](../handoff/integrations/coordinator-20261028-runtime02/README.md)
 retains those failures. Nambu diagnostic build/binding passed, separate from normal
-interaction acceptance. The user confirms no headset; continue offline work until
-visible stock gameplay is established. PC access is authorized while the user is
-away; launcher0.1.12 remains unchanged.
+interaction acceptance. The last confirmed headset state is unavailable. Desktop
+black output limits visually guided stock diagnostics; it does not establish VR
+failure or require a desktop fix before a direct headset check. PC access is
+authorized while the user is away; launcher0.1.12 remains unchanged.
 
 CHAT07/CHAT23 source is combined with finished CHAT25/26: coherent loaded-count
 changes retain the same chest reserve prop across both eyes; grenade/reload
@@ -28,7 +29,7 @@ regressions protect hand claims and fresh-neutral rearming. Both normal builds
 passed305/305 and four focused suites each. The [batch receipt](../handoff/integrations/coordinator-20261028-batch01/README.md)
 pins the runtime and evidence limits. No new native/headset acceptance or local
 installation; launcher0.1.12 is unchanged. The shared headset blocker remains;
-stock black output now blocks native scene checks. Other selected cards are parked
+stock black output blocks the current visually guided native recipe. Other cards are parked
 with bounded native/asset/headset prerequisites in the coordinator state.
 
 CHAT25/CHAT26 knife regressions and optional original-call sound context are

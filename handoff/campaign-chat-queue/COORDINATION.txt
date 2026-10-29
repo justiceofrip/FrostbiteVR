@@ -21,6 +21,11 @@ independent review pass; six stock fixtures/eight encoder checks remain applicab
 No native rebuild/install/XR retry. Source baseline5f01a066fc984760f85d1844bb7351b9fe4fed3c;
 the identity/status successor is this commit. Final push/lease close: local runtime05
 reports/close.json. Handoff: handoff/integrations/coordinator-20261029-runtime05/README.md.
+User clarification: desktop black output is acceptable if VR works. It blocks the
+current visually guided stock recipe, not direct VR startup. Launcher checks native
+menu/renderer readiness, resolution, XR session and native connection, not desktop
+pixel brightness. Next headset check may proceed without fixing the monitor image;
+last confirmed headset state is unavailable. Retain actual runtime/install checks.
 
 Runtime03: private0.1.16 combined candidate staged and clean-extraction verified;
 no native rebuild, installation or publication. Installed0.1.12 remains unchanged.
@@ -85,7 +90,8 @@ Active metadata/settings hashes match the prior integration; runtime02 stock-onl
 scene01 closed and restored profiles without attaching the mod.
 No installed-runtime receipt, startup/equipment smoke or physical-headset acceptance.
 Shared XR blocker: no connected HMD during the prior XrResult=-2 episode.
-Native testing needs visible verified stock gameplay; no unchanged startup/XR retry.
+The current stock recipe needs visual scene verification; direct VR needs a connected
+headset and existing native admission. No unchanged startup/XR retry.
 Emulated native checks do not require OpenXR but still require foreground admission.
 CHAT07 final native combined acceptance and CHAT23 visual/headset checks remain open.
 Other selected cards' exact wake-up conditions are in COORDINATOR-STATE/task handoffs.
