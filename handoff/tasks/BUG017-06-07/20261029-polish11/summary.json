@@ -1,0 +1,310 @@
+{
+  "schema": "bc2vr.bug017-06-07.polish11.v1",
+  "evidence_level": "saved actual-game/headset-session counters; no new run or headset acceptance",
+  "session": "G:\\Unity\\VRMMO\\BC2VR-Launcher\\data\\runtime\\sessions\\20261029-174056-341-41f3c366",
+  "version": "0.1.17",
+  "state": "ended",
+  "started_utc": "2026-10-29T17:40:56.7217860Z",
+  "ended_utc": "2026-10-29T17:57:12.9818867Z",
+  "settings": {
+    "runtime": "SteamVR/OpenXR in Meta compatibility mode",
+    "system": "SteamVR/OpenXR : oculus",
+    "steam_compatibility": false,
+    "native_resolution_verified": true,
+    "eye_size": [
+      2084,
+      2228
+    ],
+    "recommended_eye_size": [
+      2084,
+      2228
+    ],
+    "pixels_per_eye": 4643152,
+    "xr_color_format": 29,
+    "retained_native_color_targets": [
+      [
+        2084,
+        2228,
+        28,
+        1
+      ]
+    ],
+    "retained_native_depth_samples_quality_format": [
+      [
+        8,
+        0,
+        44
+      ]
+    ],
+    "native_source_slots": 1,
+    "desktop_pacing": {
+      "requested": true,
+      "calls": 172593,
+      "native_sync_one": 172593,
+      "bypassed_waits": 169504,
+      "serviced_calls": 169504,
+      "serviced_after_calls": 169504
+    },
+    "private_host_modes": {
+      "private_source_lookahead": {
+        "enabled": false,
+        "services": 0,
+        "requests": 0,
+        "max_pending": 0
+      },
+      "private_export_overlap": {
+        "enabled": false
+      },
+      "private_three_source_slots": {
+        "enabled": false,
+        "source_slots": 1,
+        "max_undelivered_requests": 1
+      }
+    },
+    "cpu_attribution_enabled": false,
+    "gpu_attribution_enabled": false,
+    "uncaptured": "Game graphics preset, sharpening value, compositor reprojection/motion smoothing and physical display/streaming timing are not recorded here; depth sample count is a retained-tail observation, not a full-session setting snapshot."
+  },
+  "host": {
+    "waited_frames": 60350,
+    "submitted_pairs": 15310,
+    "rejected_pairs": 5,
+    "presented_frames": 50517,
+    "reused_frames": 35207,
+    "blank_frames": 9833,
+    "menu_frames": 2316,
+    "async_requests": 15327,
+    "async_completed": 15315,
+    "async_timeouts": 6,
+    "async_mean_latency_us": 36687,
+    "async_max_latency_us": 133666,
+    "async_completed_after_50ms": 157,
+    "reuse_fraction_of_world_presentations": 0.696934,
+    "all_context_stage_mean_ms": {
+      "wait_frame": 6.185276,
+      "begin_frame": 0.003815,
+      "locate_views": 0.017396,
+      "locate_head": 0.003825,
+      "controls": 0.100838,
+      "menu": 0.010521,
+      "input_publication": 0.001792,
+      "feedback": 0.003921,
+      "provider": 0.001842,
+      "shared_open": 0.80992,
+      "depth_copy": 0.008185,
+      "color_copy": 0.067715,
+      "props": 0.027415,
+      "swapchain_acquire": 0.002229,
+      "swapchain_wait": 0.002154,
+      "present": 0.004689,
+      "swapchain_release": 0.001663,
+      "end_frame": 9.500541,
+      "color_poll": 0.003407
+    },
+    "all_context_max_frame_ms": 217.655,
+    "all_context_max_input_success_gap_ms": 227.9753,
+    "ring_rows": 256,
+    "recorded": 47932,
+    "overwritten": 47676,
+    "retained_context_counts": {
+      "focused": 0,
+      "present": 0,
+      "world_layer": 0
+    },
+    "tail_after_presence_loss_seconds": 313.391,
+    "first_input_gap_ms": 101.0764,
+    "first_input_gap_context": {
+      "frame": 58325,
+      "focused": true,
+      "present": true,
+      "world_layer": true,
+      "input_hands_tracked": false,
+      "slow_stage_ns": [
+        100239100,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        106830100,
+        0
+      ]
+    },
+    "limit": "Whole-session aggregates mix play/menu/absence. All retained ring rows are idle-tail rows. First 100 ms input gap had no tracked hands and occurred near later presence loss; no causal join to automatic fire."
+  },
+  "telemetry": {
+    "samples": 956,
+    "elapsed_seconds": 960.281,
+    "selection": "Consecutive ~1 s telemetry intervals with positive published-pair and tracked-input deltas; not gameplay classification or physical headset FPS.",
+    "selected_intervals": 526,
+    "selected_seconds": 528.875,
+    "selected_published": 14334,
+    "selected_published_per_second": 27.102813,
+    "interval_published_per_second": {
+      "count": 526,
+      "mean": 27.103369,
+      "min": 1.0,
+      "p50": 28.0,
+      "p95_nearest_rank": 30.0,
+      "max": 34.0
+    },
+    "interval_input_samples_per_second": {
+      "count": 526,
+      "mean": 89.581944,
+      "min": 74.80315,
+      "p50": 90.0,
+      "p95_nearest_rank": 91.0,
+      "max": 92.0
+    },
+    "selected_elapsed_range_ms": [
+      49281,
+      636469
+    ],
+    "final_native_stream": {
+      "published": 15326,
+      "consumed": 15311,
+      "discarded": 15,
+      "camera_restore_failures": 0,
+      "captured_eyes": 30652,
+      "sharing_mode": 3,
+      "gpu_failure_stage": 0,
+      "gpu_failure_code": 0,
+      "gpu_failure_operation": 0,
+      "device_flags": 1,
+      "feature_level": 45056,
+      "sharing_compatibility": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  },
+  "native_timing": {
+    "semantics": "cpu_observed_boundaries_not_gpu_execution",
+    "retained": 256,
+    "completed": 15327,
+    "overwritten": 15071,
+    "ends": {
+      "consumed": 246,
+      "discarded": 10
+    },
+    "retained_begin_span_seconds": 10.145967,
+    "begin_to_publish_ms": {
+      "count": 256,
+      "mean": 13.732257,
+      "min": 12.3563,
+      "p50": 13.29445,
+      "p95_nearest_rank": 15.9008,
+      "max": 25.1176
+    },
+    "begin_to_restore_ms": {
+      "count": 256,
+      "mean": 6.452871,
+      "min": 5.6068,
+      "p50": 6.1805,
+      "p95_nearest_rank": 8.0009,
+      "max": 11.2133
+    },
+    "export_to_fence_observed_ms": {
+      "count": 256,
+      "mean": 7.27033,
+      "min": 5.7235,
+      "p50": 6.9834,
+      "p95_nearest_rank": 7.9396,
+      "max": 16.8328
+    },
+    "published_to_release_ms": {
+      "count": 256,
+      "mean": 19.967571,
+      "min": 11.3269,
+      "p50": 16.5508,
+      "p95_nearest_rank": 23.9443,
+      "max": 197.352
+    },
+    "limit": "Tail only; CPU-observed boundaries do not isolate GPU execution, queue delay, compositor work or presentation cadence."
+  },
+  "automatic_fire_gap": {
+    "projectile_calls": 252,
+    "retained": 64,
+    "dropped": 188,
+    "retained_assets": {
+      "Garand": 8,
+      "Nambu100": 56
+    },
+    "retained_projectile_qpc_range": [
+      271543376097,
+      271994524797
+    ],
+    "fire_origin_retained": 32,
+    "fire_origin_assets": {
+      "Garand": 32
+    },
+    "reload_flow_records": 0,
+    "reload_flow_window_seconds": 20,
+    "gap": "No retained identified m8/XM8 episode with continuous trigger and native commit/block reasons joined to authoritative server shot/ammo timestamps and host frames. Existing retained fire events are Garand/Nambu100 only. Aggregate stale/suppression counts cannot establish missed shots."
+  },
+  "conclusion": "Evidence confirms frequent reuse and low fresh-pair delivery in selected tracked intervals; it does not establish whether resolution/quality, native CPU/GPU work, IPC scheduling or XR/compositor causes that cadence, or whether automatic native shots are interrupted.",
+  "source_correction": {
+    "kind": "bounded diagnostic attribution/retention only",
+    "files": [
+      "include/fvr/xr/HostFrameDiagnostics.h",
+      "tests/HostFrameDiagnosticsTests.cpp"
+    ],
+    "behavior": "Preserve focused && present && should_render && !menu stage histograms/maxima plus one worst elapsed frame independently of the general ring; include missing-world/failed frames; retain unfiltered existing counters.",
+    "performance_fixed": false,
+    "fire_fixed": false,
+    "integration": "User approval pending; root owns isolated checks and builds."
+  },
+  "validation": {
+    "evidence_consistency_assertions": "passed",
+    "new_cpp_tests": "root pending",
+    "prior_checks_reused": "handoff/integrations/coordinator-20261028-batch01/README.md: both normal architectures 305/305 plus four focused suites; unchanged runtime baseline only, not validation of this new header."
+  },
+  "inputs": {
+    "session.json": {
+      "bytes": 2890,
+      "sha256": "a257725421e0a9aeb81b071b0c8bc0bf431ba8c578efddb80a1fe5b89242102f"
+    },
+    "options.json": {
+      "bytes": 1148,
+      "sha256": "32db6d0ce7b8b44d0600cd0747de7f55e3db3acb59c0ece2616ea35b69bccc66"
+    },
+    "session-telemetry.jsonl": {
+      "bytes": 7590228,
+      "sha256": "4d8d6d3f566c68a0500fcb68c2544956b0034b6685d48e9d3dd1902d954bc125"
+    },
+    "host.stdout.log": {
+      "bytes": 427149,
+      "sha256": "4a39a4116f25721ccaa580fd67450172b9c420521814987b620762502f554cb2"
+    },
+    "native-trace.json": {
+      "bytes": 24907763,
+      "sha256": "ebd7eda14ddc81ddb66918ef09065d24bc50e82395d1573a7040cb56e5e9673d"
+    },
+    "stereo-progress.jsonl": {
+      "bytes": 11196,
+      "sha256": "03d7a80ddf5c609d6dc42b8e3993839fb450aaa37e987c51d1f73a2a1762ebc0"
+    },
+    "xr-events.jsonl": {
+      "bytes": 388197,
+      "sha256": "a148ba98329536416b15d4eba2df796beb3ee00f55c016ee1db05f7cdf3b3fa4"
+    }
+  }
+}

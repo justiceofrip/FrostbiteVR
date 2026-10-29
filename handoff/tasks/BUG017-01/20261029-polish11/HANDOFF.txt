@@ -1,0 +1,12 @@
+BUG017-01 destruction — Done N; exact affected scene/draw remains unidentified.
+New evidence: ended user0.1.17 session20261029-174056-341-41f3c366.
+User reports building destruction rendering still wrong; no exact building,
+event/eye or timestamp supplied. Do not equate it with the earlier scoped edge fix.
+Saved derived-projection-correction.json:405884 writes,0capture failures.
+Saved camera-context-evidence.json:30652 patch scopes,0patch/restore failures.
+These counters neither prove correct pixels nor identify the user's failing draw.
+Existing initial world/desktop captures lack a joined user destruction event.
+No rendering change, raw capture, build, game session or repeated old investigation.
+Next distinct evidence: named mission/building and damaged-vs-intact paired event,
+joined to current eye transforms and draw ownership; use existing bounded witness.
+Prior scoped destruction acceptance remains historical, not an all-scene pass.

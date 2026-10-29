@@ -5,6 +5,7 @@
 #include "Bc2NativeCycleSelectionTracker.h"
 #include "Bc2NativeInputEpochs.h"
 #include "Bc2SceneMilestones.h"
+#include "Bc2ViewBasisEvidence.h"
 #include <Windows.h>
 #include <intrin.h>
 #include <MinHook.h>
@@ -488,8 +489,11 @@ std::atomic<unsigned> poseCalls=0,poseRejected=0;
 struct Anchor {std::atomic<unsigned> sequence=0,soldier=0,weak=0;std::atomic<std::uint64_t> space=0;std::atomic<float> yaw=0,consumedX=0,consumedZ=0,units=1;};Anchor anchor;
 interaction::TrackedBodyAnchor bodyAnchor;float baseYaw=0,lastHandYaw=0,lastHeadYaw=0;
 std::atomic<unsigned> aimSamples=0,baseViews=0;
-struct BaseRecord {float nativeYaw=0,nativePitch=0,sourceYaw=0,viewYaw=0,bodyYaw=0;bool sharedEye=false;math::Vec3 sourcePosition{},eyePosition{};unsigned weapon=0;ULONGLONG ms=0;std::uint64_t space=0;};
-std::array<BaseRecord,192> baseRecords{};std::atomic<unsigned> baseRecordCount=0;ULONGLONG baseRecordTime=0;
+// Request samples and snapshot outcomes, not native charge/throw acknowledgements.
+std::atomic<unsigned> expackReloadRequests=0,expackReloadZoomRoutes=0,expackReloadUnresolved=0;
+std::array<std::atomic<unsigned>,unsigned(ReloadStateStatus::ChangedDuringRead)+1> expackReloadReads{};
+struct BaseRecord {float nativeYaw=0,nativePitch=0,sourceYaw=0,viewYaw=0,bodyYaw=0;bool sharedEye=false,inputMaskRead=false;math::Vec3 sourcePosition{},eyePosition{};unsigned weapon=0,player=0,soldier=0,weak=0,controlled=0,inputMask=0;ULONGLONG ms=0;std::uint64_t space=0;};
+ViewBasisEvidence<BaseRecord> baseRecords;std::mutex baseRecordMutex;ULONGLONG baseRecordTime=0;
 void PublishAnchor(unsigned soldier,unsigned weak,std::uint64_t space,float yaw,float units)noexcept {
     anchor.sequence.fetch_add(1,std::memory_order_acq_rel);
     anchor.soldier.store(soldier);anchor.weak.store(weak);anchor.space.store(space);anchor.yaw.store(yaw);anchor.consumedX.store(consumedOffset.x);anchor.consumedZ.store(consumedOffset.z);anchor.units.store(units);
@@ -2575,6 +2579,43 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         }
     }
 #endif
+    // Opening Expack authors its charge operation as ReloadInputAction=Zoom14.
+    // Route the existing right-secondary Reload request only after all attack
+    // gates: some magazine/cycle gates intentionally leave Reload available.
+    // Fire8 remains the plunger; this creates no trigger or selection request.
+    if(asset=="Expack_US"&&((out.held|out.pressed|out.released)&interaction::Reload)){
+        ++expackReloadRequests;
+        std::optional<EntryAction> route;
+        const bool settled=out.active&&aimValid&&nativePlaying&&!weaponVisibilityProbe&&!deathProbe&&!equipProbe&&
+            !sightOwnsHand&&sightPhase==interaction::SightFlipPhase::Idle&&!sightGrasp&&!physicalMode&&!pendingMode&&
+            !bodyDraw.pending&&!bodyDraw.blockFire&&!bodyDraw.command&&!holsterQueuedDraw&&!holsterEquipment&&
+            !weaponMode&&!cycle.value_or(false)&&!grenade.value_or(false)&&
+            (!bodyHolster||(!bodyHolster->BlocksActions()&&!bodyHolster->TemporaryToolActive()))&&
+            !pumpDebt&&!pumpResult.blocksFire&&!pumpResult.ownsHand&&(!physicalPump||!physicalPump->BlocksFire())&&
+            !boltResult.blocksFire&&(!physicalBolt||!physicalBolt->BlocksFire())&&
+            (!physicalReload||!physicalReload->BlocksEquipment())&&!physicalResult.ammoOwnsHand&&
+            (!magazinePhysical||!magazinePhysical->BlocksEquipment())&&!magazineResult.blocksWeaponActions&&
+            (!magazineDetached||!magazineDetached->BlocksActions());
+        const ReloadStateOwner expected{owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,input.spaceGeneration};
+        LARGE_INTEGER before{},after{};
+        if(settled&&reloadStateBinding&&QueryPerformanceCounter(&before)){
+            const ReloadStateMemory memory{nullptr,[](void*,unsigned at,void* dst,std::size_t n){return Read(at,dst,n);},
+                [](void*,unsigned at,const char* name){return Type(at,name);}};
+            const auto selected=ReadReloadState(memory,*reloadStateBinding,unsigned(image),expected,input.generation,HandNanos(before.QuadPart));
+            ++expackReloadReads[unsigned(selected.status)];
+            Owner current{};
+            if(selected.snapshot&&selected.snapshot->config.weaponData==owner.equipment.data&&
+               Resolve(current)&&current==owner&&QueryPerformanceCounter(&after)&&after.QuadPart<inputDeadline){
+                const auto hold=handOwnership.Current(interaction::InteractionHand::Right);
+                if(hold&&hold->token.kind==interaction::HandClaimKind::GunHold&&hold->token.owner==handSample.owner&&
+                   hold->token.item==handItem&&hold->inputSequence==input.generation&&hold->deadlineNs>HandNanos(after.QuadPart))
+                    route=VerifiedSelectedReloadAction(*selected.snapshot,expected,input.generation,HandNanos(after.QuadPart));
+            }
+        }
+        if(route==EntryAction::Zoom)++expackReloadZoomRoutes;
+        else if(!route)++expackReloadUnresolved;
+        ApplySelectedReloadRoute(out,route);
+    }
     // Opening SP_01 equips a distinct KNV-1 whose authored attack is melee37.
     // The shared display name only selects this bounded read; it never grants
     // the route. Preserve stock firearm/ordinary-knife Fire8 and all action gates.
@@ -3689,8 +3730,12 @@ bool AdjustViewBase(std::array<RenderViewCopy,2>& copies,const runtime::Tracking
         }
         const auto changed=BuildTransformCopy(copy,*base);if(!changed)return false;copy=*changed;
     }
-    const auto now=GetTickCount64();const auto count=baseRecordCount.load();
-    if(count<baseRecords.size()&&now-baseRecordTime>=100){baseRecords[count]=record;baseRecordTime=now;baseRecordCount.store(count+1,std::memory_order_release);}
+    const auto now=GetTickCount64();
+    if(now-baseRecordTime>=ViewBasisEvidence<BaseRecord>::MinimumIntervalMs){
+        record.player=owner.player;record.soldier=owner.soldier;record.weak=owner.weak;record.controlled=owner.controlled;
+        record.inputMaskRead=Read(owner.cache+0x98,&record.inputMask,sizeof(record.inputMask));
+        std::lock_guard lock(baseRecordMutex);baseRecords.Observe(record,now);baseRecordTime=now;
+    }
     ++baseViews;return true;
 }
 bool ObserveVehicleCameraPlan(unsigned frame,const runtime::TrackingFrame& tracking,const RenderViewCopy& native,const RenderViewCopy& adjusted,const std::array<RenderViewCopy,2>& planned)noexcept {
@@ -3848,9 +3893,18 @@ void Report(std::ostream& out){out<<"{\"installed\":"<<(hooks[0]&&hooks[1]?"true
     <<",\"vehicle_interact_samples\":"<<vehicleInteractions.load()<<",\"next_weapon_commands\":"<<nextWeaponCommands.load()<<",\"previous_weapon_commands\":"<<previousWeaponCommands.load()
     <<",\"native_input_inactive\":"<<nativeInactive.load()<<",\"mismatches\":"<<mismatches.load()
     <<",\"motion_aim_requested\":"<<(motionAim?"true":"false")<<",\"motion_aim_samples\":"<<aimSamples.load()<<",\"independent_view_bases\":"<<baseViews.load()
-    <<",\"snap_turns\":"<<turns.load()<<",\"unbound_turn_requests\":"<<turnUnavailable.load()<<",\"independent_weapon_aim\":false,\"body_collision_roomscale\":false,\"view_basis_evidence\":[";
-    for(unsigned i=0;i<baseRecordCount.load(std::memory_order_acquire);++i){const auto& r=baseRecords[i];if(i)out<<',';
-        out<<"{\"weapon\":"<<r.weapon<<",\"ms\":"<<r.ms<<",\"space\":"<<r.space<<",\"native_yaw\":"<<r.nativeYaw<<",\"native_pitch\":"<<r.nativePitch<<",\"source_yaw\":"<<r.sourceYaw<<",\"view_yaw\":"<<r.viewYaw<<",\"body_yaw\":"<<r.bodyYaw<<",\"shared_eye\":"<<(r.sharedEye?"true":"false")<<",\"source_position\":["<<r.sourcePosition.x<<','<<r.sourcePosition.y<<','<<r.sourcePosition.z<<"],\"eye_position\":["<<r.eyePosition.x<<','<<r.eyePosition.y<<','<<r.eyePosition.z<<"]}";}
+    <<",\"snap_turns\":"<<turns.load()<<",\"unbound_turn_requests\":"<<turnUnavailable.load()<<",\"independent_weapon_aim\":false,\"body_collision_roomscale\":false";
+    out<<",\"expack_reload_route\":{\"request_samples\":"<<expackReloadRequests.load()
+       <<",\"zoom_routes\":"<<expackReloadZoomRoutes.load()<<",\"unresolved_routes\":"<<expackReloadUnresolved.load()
+       <<",\"native_throw_acknowledged\":false,\"snapshot_status_order\":[\"Observed\",\"InvalidArguments\",\"ReadFailure\",\"OwnerMismatch\",\"MalformedConfiguration\",\"MalformedState\",\"ChangedDuringRead\"],\"snapshot_status_counts\":[";
+    for(unsigned i=0;i<expackReloadReads.size();++i){if(i)out<<',';out<<expackReloadReads[i].load();}
+    out<<"]}";
+    const auto bases=[] {std::lock_guard lock(baseRecordMutex);return baseRecords;}();
+    out<<",\"view_basis_retention\":{\"policy\":\"bounded_decimation_with_latest\",\"capacity\":"<<bases.MaxRecords
+       <<",\"minimum_interval_ms\":"<<bases.MinimumIntervalMs<<",\"eligible_samples\":"<<bases.Samples()
+       <<",\"stride_samples\":"<<bases.Stride()<<",\"compactions\":"<<bases.Compactions()<<",\"covers_all_frames\":false},\"view_basis_evidence\":[";
+    for(std::size_t i=0;i<bases.Size();++i){const auto& r=bases.At(i);if(i)out<<',';
+        out<<"{\"weapon\":"<<r.weapon<<",\"ms\":"<<r.ms<<",\"space\":"<<r.space<<",\"native_yaw\":"<<r.nativeYaw<<",\"native_pitch\":"<<r.nativePitch<<",\"source_yaw\":"<<r.sourceYaw<<",\"view_yaw\":"<<r.viewYaw<<",\"body_yaw\":"<<r.bodyYaw<<",\"shared_eye\":"<<(r.sharedEye?"true":"false")<<",\"source_position\":["<<r.sourcePosition.x<<','<<r.sourcePosition.y<<','<<r.sourcePosition.z<<"],\"eye_position\":["<<r.eyePosition.x<<','<<r.eyePosition.y<<','<<r.eyePosition.z<<"],\"player\":"<<r.player<<",\"soldier\":"<<r.soldier<<",\"weak\":"<<r.weak<<",\"controlled\":"<<r.controlled<<",\"input_mask_read\":"<<(r.inputMaskRead?"true":"false")<<",\"input_mask\":"<<r.inputMask<<'}';}
 
     out<<"],\"weapon_mode_records\":[";
     for(unsigned n=0;n<modeRecordCount;++n){const auto& r=modeRecords[(modeRecordNext+modeRecords.size()-modeRecordCount+n)%modeRecords.size()];if(n)out<<',';

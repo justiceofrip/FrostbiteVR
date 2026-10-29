@@ -1,0 +1,30 @@
+BUG017-06/07 / CHAT20-22 — polish11 bounded evidence and source candidate
+Base: 7063c0003fa5e41027bf831e3bb9c70093962da8; root granted exactly the two source files below.
+Session: G:\Unity\VRMMO\BC2VR-Launcher\data\runtime\sessions\20261029-174056-341-41f3c366
+Evidence level: saved ended 0.1.17 actual-game/headset-session counters; no new game/XR run.
+Settings: SteamVR/OpenXR in Meta compatibility mode; requested/recommended/native-verified 2084x2228 per eye.
+Retained native color targets: 2084x2228, format28, one sample; XR color format29.
+Retained native timing depth: eight samples, quality0, format44; one native source slot.
+Game graphics preset/sharpening and compositor/streaming settings were not captured; no present profile was substituted.
+Host: 15,310 submitted pairs, 50,517 world presentations, 35,207 reuses (69.69%), 9,833 blank frames.
+Async: mean36.687ms, max133.666ms, 157 completions above50ms; six timeouts.
+526 telemetry intervals with positive published/tracked deltas average27.103 published pairs/s.
+Selection includes transitions and omits inactive intervals; this is diagnostic throughput, NOT physical headset FPS.
+Native timing retains only256/15,327 episodes;15,071 overwritten. CPU-observed timing is not GPU execution.
+Tail begin-to-publish p50=13.294ms/p95=15.901ms; publish-to-release p50=16.551ms/p95=23.944ms.
+Measurement defect: all256 host ring rows are unfocused/absent/no-world tail;47,676 rows overwritten.
+Unfiltered host stage aggregates include313.391s after presence loss; they cannot attribute playing-time stalls.
+First100ms input-gap witness has no tracked hands; it cannot explain the user's automatic-fire symptom.
+Fire gap: projectile observer kept64/252 events (Garand8,Nambu10056), dropped188; no retained identified m8/XM8 episode.
+Fire-origin rows are32 Garand events; reload-flow records are empty. Aggregate suppression/stale counts do not prove missed shots.
+No supported resolution/quality cause, native missed-shot cause or physical headset rate is claimed.
+Source: include/fvr/xr/HostFrameDiagnostics.h adds bounded focused/present/renderable/non-menu stage aggregates and one worst frame.
+Scope retains missing-world/failed frames, keeps existing unfiltered fields, and changes no render/input/fire policy.
+Tests: tests/HostFrameDiagnosticsTests.cpp adds --focused-render plus normal-suite regression for300 idle frames overwriting play.
+Regression checks scope exclusions, observed-zero/subthreshold aggregates, failed-world witness and serialized retention.
+Analysis: reports/coordinator-20261029-polish11/performance/analyze.py; compact input hashes/statistics in adjacent summary.json.
+Checks: structured evidence consistency assertions passed; root owns C++ isolated checks/builds (pending at handoff).
+Reuse: handoff/integrations/coordinator-20261028-batch01/README.md retains305/305 plus four focused suites per architecture.
+Those prior results qualify the unchanged baseline only, not this new diagnostic patch; no repeated old investigation/build.
+Remaining: root isolated C++ check, review/user integration approval; then symptom-window CPU/GPU/compositor plus exact trigger/native-shot join.
+Source evidence-retention job done Y; performance fix N; automatic-fire fix N; headset acceptance N.

@@ -7,6 +7,7 @@
 #include "fvr/interaction/WeaponProfile.h"
 #include "fvr/ipc/InputProtocol.h"
 #include "Bc2RigPaletteCopy.h"
+#include "Bc2ViewBasisEvidence.h"
 #include <limits>
 using namespace fvr;using namespace interaction;
 namespace {
@@ -108,6 +109,40 @@ int EpochBoundsAndActor(){
  Next(input);auto next=anchor.Update(2,input,1.3f,.8f,0);CHECK(next&&Near(next->yaw,1.3f)&&next->referenceChanged&&!next->basisReplaced);
  input.focused=false;input.hands={};CHECK(!anchor.Update(2,input,1.3f,.8f,0));return 0;
 }
+int ViewEvidenceSpansLateScenes(){
+ bc2::ViewBasisEvidence<std::uint64_t> evidence;
+ CHECK(evidence.Size()==0&&evidence.Samples()==0&&evidence.Stride()==1);
+ // Ten minutes includes a scene change beyond the old 192 x 100ms prefix.
+ for(std::uint64_t ms=0;ms<=600000;ms+=100){
+  CHECK(evidence.Observe(ms,ms)&&evidence.Size()<=192);
+  CHECK(evidence.At(0)==0&&evidence.At(evidence.Size()-1)==ms);
+ }
+ CHECK(evidence.Samples()==6001&&evidence.Compactions()>0&&evidence.Stride()>1);
+ bool lateScene=false;
+ for(std::size_t i=1;i<evidence.Size();++i){
+  const auto prior=evidence.At(i-1),current=evidence.At(i);
+  CHECK(current>prior&&current-prior<=evidence.Stride()*100);
+  lateScene|=current>=137000&&current<=147000;
+ }
+ CHECK(lateScene);const auto snapshot=evidence;
+ CHECK(evidence.Observe(600100,600100)&&snapshot.At(snapshot.Size()-1)==600000);
+ return 0;
 }
-int main(){if(SupportAndRecenterUseOneAim()||ReplacedBasisAndReconnect()||EpochBoundsAndActor())return 1;
- std::puts("Tracked body anchor: actual reference delta, support/render/native-angle composition, basis replacement and reconnect passed");}
+int ViewEvidenceCadenceAndCompaction(){
+ bc2::ViewBasisEvidence<std::uint64_t,4> evidence;
+ CHECK(evidence.Observe(1000,1000));
+ CHECK(!evidence.Observe(1099,1099)&&!evidence.Observe(1000,1000)&&!evidence.Observe(900,900));
+ CHECK(evidence.Samples()==1&&evidence.At(0)==1000);
+ CHECK(evidence.Observe(1100,1100)&&evidence.Observe(1200,1200)&&evidence.Observe(1300,1300));
+ CHECK(evidence.Size()==3&&evidence.Compactions()==1&&evidence.Stride()==2);
+ CHECK(evidence.At(0)==1000&&evidence.At(1)==1200&&evidence.At(2)==1300);
+ // Real timestamps and the newest record survive gaps and irregular cadence.
+ CHECK(evidence.Observe(9000,9000)&&evidence.At(evidence.Size()-1)==9000);
+ const auto maximum=(std::numeric_limits<std::uint64_t>::max)();
+ CHECK(evidence.Observe(maximum,maximum)&&evidence.At(evidence.Size()-1)==maximum);
+ CHECK(!evidence.Observe(0,0)&&!evidence.Observe(maximum,maximum));
+ return 0;
+}
+}
+int main(){if(SupportAndRecenterUseOneAim()||ReplacedBasisAndReconnect()||EpochBoundsAndActor()||ViewEvidenceSpansLateScenes()||ViewEvidenceCadenceAndCompaction())return 1;
+ std::puts("Tracked body anchor: reference delta, support/render/native-angle composition, basis recovery and bounded late-session evidence passed");}

@@ -528,6 +528,46 @@ int FirstPublicationGapSurvivesOverwrite(){
 }
 
 }
+int FocusedRenderEvidenceSurvivesIdleTail(){
+    HostFrameDiagnostics d;
+    std::ostringstream empty;d.Write(empty);
+    CHECK(empty.str().find("\"worst_frame\":null")!=std::string::npos);
+    const auto wait=unsigned(HostStage::WaitFrame),controls=unsigned(HostStage::Controls);
+    auto f=Frame();f.endedNs=f.startedNs+40000000;
+    f.stageNs[wait]=30000000;f.stageObservedMask=1u<<controls;d.Observe(f);
+    f=Frame(2);f.endedNs=f.startedNs+60000000;f.stageNs[wait]=40000000;
+    f.stageNs[controls]=500000;f.worldLayer=false;f.layers=0;f.pairRejected=true;d.Observe(f);
+    CHECK(d.focusedRenderFrames==2&&d.focusedRenderWorldFrames==1);
+    CHECK(d.focusedRenderMaxFrameNs==60000000&&d.worstFocusedRenderFrame.frame==2);
+    CHECK(d.focusedRenderStageAggregates[wait].frames==2&&d.focusedRenderStageAggregates[wait].totalNs==70000000);
+    CHECK(d.focusedRenderStageAggregates[controls].frames==2&&d.focusedRenderStageAggregates[controls].totalNs==500000);
+    CHECK(d.focusedRenderStageAggregates[controls].histogram[0]==1); // Observed zero remains a sample.
+    CHECK(d.worstFocusedRenderFrame.stageNs[wait]==40000000&&d.worstFocusedRenderFrame.stageNs[controls]==0);
+    // A longer menu, lost-focus, absent or non-renderable frame must not replace
+    // the focused witness or contaminate its stage distribution.
+    for(unsigned n=3;n<=6;++n){f=Frame(n);f.endedNs=f.startedNs+150000000;f.stageNs[wait]=120000000;
+        if(n==3)f.menu=true;if(n==4)f.focused=false;if(n==5)f.present=false;if(n==6)f.shouldRender=false;
+        d.Observe(f);}
+    std::ostringstream witness;HostFrameDiagnostics::WriteFrame(witness,d.worstFocusedRenderFrame);
+    for(unsigned n=7;n<307;++n){f=Frame(n);f.focused=f.present=f.shouldRender=f.worldLayer=false;
+        f.layers=0;f.endedNs=f.startedNs+210000000;f.stageNs[wait]=110000000;d.Observe(f);}
+    CHECK(d.count==HostFrameDiagnostics::Capacity&&d.dropped>0&&d.Row(0).frame>6);
+    CHECK(!d.Row(0).focused&&!d.Row(0).present&&!d.Row(0).worldLayer);
+    CHECK(d.maxFrameNs==210000000&&d.focusedRenderMaxFrameNs==60000000);
+    CHECK(d.frames==306&&d.focusedRenderFrames==2&&d.focusedRenderWorldFrames==1);
+    CHECK(d.stageAggregates[wait].frames==306&&d.focusedRenderStageAggregates[wait].frames==2);
+    CHECK(d.focusedRenderMaxStageNs[controls]==500000);
+    std::ostringstream report;d.Write(report);
+    CHECK(report.str().find("\"worst_frame\":"+witness.str())!=std::string::npos);
+    CHECK(report.str().find("\"selection\":\"focused && present && should_render && !menu\",\"frames\":2,\"world_frames\":1")!=std::string::npos);
+    // A later focused failure with no world layer can become the new witness.
+    f=Frame(307);f.endedNs=f.startedNs+70000000;f.worldLayer=f.endSucceeded=false;f.layers=0;
+    f.stageNs[wait]=50000000;d.Observe(f);
+    CHECK(d.focusedRenderFrames==3&&d.worstFocusedRenderFrame.frame==307&&!d.worstFocusedRenderFrame.endSucceeded);
+    CHECK(d.focusedRenderMaxFrameNs==70000000&&d.focusedRenderStageAggregates[wait].totalNs==120000000);
+    return 0;
+}
+
 int SourceImportCacheCases(){
     using namespace fvr;
     const auto descriptor=[](std::uint64_t epoch,std::uint64_t first){graphics::TextureDescriptor d;
@@ -657,6 +697,8 @@ int ThreeSourceImportsKeepOneCopyAndDepthQuartet(){
 
 int main(int argc,char** argv){
     if(argc==2&&std::string(argv[1])=="--first-input-gap")return FirstPublicationGapSurvivesOverwrite();
+    if(argc==2&&std::string(argv[1])=="--focused-render")return FocusedRenderEvidenceSurvivesIdleTail();
+    if(FocusedRenderEvidenceSurvivesIdleTail())return 1;
     if(SourceImportCacheCases()||ThreeSourceImportsKeepOneCopyAndDepthQuartet())return 1;
     if(PostInputComposedServicePolicy()||ComposedLeaseKeepsSourceOwnership()||DualTicketCompletionKeepsExactEvidence()||DualTicketFirstFailureSurvivesWrap()||CopyLeaseCompletionAndCancellation()||PreWaitCompletionTimestamps()||CopyTicketOwnsDeliveredIdentity()||UncensoredStageAggregates()||StageHistogramBoundariesAndOverflow()||StageTimerZeroRepeatedAndInvalidClock()||FirstPublicationGapSurvivesOverwrite()||FirstRejectedFrameSurvivesOverwrite()||CopyPhasesBelowSlowThreshold()||LayersAndReasons()||PublicationAndSlowStages()||LegacyProviderContract()||BoundedAndTimer())return 1;
     std::puts("Host diagnostics: menu/zero distinction, loss/recovery reasons, input outcomes, slow stages and bounded overwrite passed");return 0;}

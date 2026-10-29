@@ -1,0 +1,32 @@
+BUG017-02/03/04 polish11: source diagnostic correction complete; symptoms OPEN.
+Base: 7063c0003fa5e41027bf831e3bb9c70093962da8. No integration/install/session.
+Saved actual-game source: launcher session 20261029-174056-341-41f3c366.
+Compact evidence.json pins the trace and summaries; analysis script is under
+reports/coordinator-20261029-polish11/cutscene/Analyze-CutsceneEvidence.ps1.
+The 192 retained view rows span tick27139218..27162484 (23.266s), all space3.
+Second rebuild tick27277390 is114.906s after the last row; no later camera join.
+15001 successful adjusted views therefore cannot be diagnosed from that prefix.
+Only14/156901 gathers were native-inactive; no retained inactive context row.
+30652 camera context scopes report zero patch/restore failures.
+Ammo HUD:6100 valid/9210 invalid samples,17449 visible frames; no cutscene join.
+ClearReloadOwner already clears HUD publication on the !nativePlaying path.
+Optic filter observation was disabled; sight-flip had zero requests/commits.
+Neither counter rules out native ADS or other scoped rendering; keep separate.
+The stale on-foot body-anchor lead remains unproven for a named cinematic.
+Changed Bc2Gameplay.cpp, new Bc2ViewBasisEvidence.h, TrackedBodyAnchorTests.cpp.
+Bounded retention remains <=192 rows: compact alternating history, double stride,
+keep first/newest eligible rows, retain original >=100ms collection cadence.
+Legacy view_basis_evidence fields/tick-ms semantics remain; add retention metadata
+and raw render-time input mask/read-status plus player/soldier/weak/controlled.
+Mutex-protected snapshot avoids reporting while historical entries compact.
+No input routing, camera policy, head composition, native ammo/custody, optic,
+HUD policy, or exact-write restoration changes. Gameplay ownership released.
+Limits: successful adjusted on-foot views only; brief events may be missed or
+compacted away. Raw input mask is not a cinematic identity or cross-phase proof.
+Added regression cases: ten-minute coverage, bound/order/first/newest, cadence,
+compaction, irregular timestamps, copied snapshot isolation, monotonic clock bounds.
+Read-only git diff --check passed. Tests/builds not run under this job's limits.
+Root must run TrackedBodyAnchor on x86/x64 and both normal builds after guard.
+Required headset check: named cutscene entry/exit or skip, head freedom, recenter,
+source/adjusted/delivered eyes and exact restoration, plus distinct HUD/scope checks.
+Remaining blocker: no named cinematic+native state+delivered-eye episode or acceptance.
