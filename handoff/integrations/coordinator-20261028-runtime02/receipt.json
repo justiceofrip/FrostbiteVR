@@ -4,7 +4,12 @@
   "baseline": "7ae7ee3f25537766f3cdac53172050e7f8cb2d47",
   "integration_branch": "checkpoint/436-r56-equipment-rendering",
   "source_push": {
-    "status": "pending"
+    "commit": "522cc8745595ca57803fbc861b8f6000d0689557",
+    "origin": "https://github.com/justiceofrip/FrostbiteVR.git",
+    "status": "verified",
+    "later_status_commit_preserves_runtime_identity": true,
+    "verified_by": "git ls-remote",
+    "branch": "checkpoint/436-r56-equipment-rendering"
   },
   "native_source_changed": false,
   "normal_build_reused": {
