@@ -26,3 +26,15 @@ sp_009's17-byte/count0 index was rejected by the existing parser and retained as
 unadmitted raw-index evidence. No whole-campaign absence or live-mount claim.
 Exact identities and wake condition: `handoff/tasks/CHAT13/20261029-coordinator-evidence08`.
 No game assets were extracted or committed; prior task ownership remains unchanged.
+
+Source correction: `236b284f3421b0a124ef8c495917af67470d716d`.
+Private0.1.17 was staged from batch01's unchanged frozen native binaries and the
+tested launcher source. Clean extraction verifies90 package/82 runtime hashes;
+only `runtime/Runtime.Core.ps1` and `runtime/runtime.json` differ from0.1.16's payload.
+ZIP17,945,306 bytes, SHA256
+`949b8398adb34cac377d346d5369885b7bade249efb85f1997f2895257e5acef`.
+Package/verification: `reports/coordinator-20261029-evidence08/{package,package-verification.json}`.
+The asset recipe remains `f31c3f3c1270f807f41b6947c2ffdb378528d0199c94e74c81212d39cbd09983`;
+its staged cache passes the new package's admission and was reused without regeneration.
+No primary runtime activation, installed startup/equipment smoke or public release;
+active0.1.12/previous0.1.11/settings stay unchanged. Headset remains unavailable.

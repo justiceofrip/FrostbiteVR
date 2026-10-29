@@ -11,6 +11,16 @@ Ownership: prior CHAT25/26 close.json confirms lease release, idle helpers and
 exact profile restoration. Coordinator acquired the lease before shared mutations.
 External CHAT25/26/32 worktrees remain untouched; their tasks are not reassigned.
 
+Evidence08 corrects the shipped retained-handle process image resolver after the
+observed private startup Path/ntdll race.38identity/43portable assertions pass.
+New actual-cache CPU checks pass x86/x64:49parts/279908triangles,7chest profiles.
+CHAT13 adds42 parsed MG36-negative indexes and1retained empty-index rejection;
+no live mount or whole-campaign absence claim. Implementation source236b284.
+Private0.1.17 package90/runtime82 hashes verified; only Runtime.Core.ps1/runtime.json
+change versus0.1.16. Same staged recipe cache; no native rebuild/install/XR retry.
+Latest handoff: handoff/integrations/coordinator-20261029-evidence08/README.md.
+Final source push/lease close: reports/coordinator-20261029-evidence08/close.json.
+
 Prep07: private0.1.16 asset generation completed through unchanged frozen generators
 in a separate preparation installation. Six files/16,854,370bytes verified, then
 copied and reverified in the primary launcher's fresh recipe cache. Active0.1.12,
@@ -76,7 +86,7 @@ Generated-header correction retains the failed check; no additional build requir
 Reviewed metadata admission and7synthetic cleanup checks pass; failures retained.
 Its magazine-only scope remains separate from CHAT07 normal combined acceptance.
 
-Last batch: CHAT07 coexistence regressions and CHAT23 chest reserve prop continuity.
+Last native implementation batch: CHAT07 regressions and CHAT23 chest reserve continuity.
 Accepted prior source: 4448779e33ad265f572245cff49913983696ce5c (finished CHAT25/26).
 Task commit: b19b770be3e005d97b6b32f3563f0abbd187790b
 Combined merge: a95d868f36d2bc8fce40b0f17e519b639e517aa8

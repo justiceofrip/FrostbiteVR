@@ -5,11 +5,11 @@ Updated October 29, 2026. This replaces old next-step instructions; prior eviden
 
 ## Active work
 
-Private0.1.16's package and equipment/audio cache are verified. The cache is staged
-in the primary launcher's managed recipe folder; active0.1.12/settings are unchanged.
-[Headset-independent preparation](../handoff/integrations/coordinator-20261029-prep07/README.md)
-used a separate private preparation launcher, with no game/XR session or native
-rebuild. No candidate activation, installed smoke pass or headset acceptance.
+Private0.1.17 includes the launcher retained-handle image fix;38 identity/43 portable
+checks pass. Its verified package reuses the staged cache, which now passes both
+production CPU consumer tests for all49 parts. [Evidence and package](../handoff/integrations/coordinator-20261029-evidence08/README.md).
+Active0.1.12/settings remain unchanged. No game/XR session or native rebuild;
+no candidate activation, installed smoke pass, rendering or headset acceptance.
 Runtime05's stock black captures and cleanup remain in its
 [diagnostic handoff](../handoff/integrations/coordinator-20261029-runtime05/README.md).
 
