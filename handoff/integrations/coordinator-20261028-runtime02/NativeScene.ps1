@@ -37,6 +37,10 @@ function Lease {
 function IdleHelpers {
  if(Get-Process BC2XrHost,BC2NativeTrace,BC2NativeIpcProbe,BC2NativeMenuProbe,SceneMenuSidecar421,SceneMenuSidecar431,SceneMenuSidecarR46,ExceptionWatch422,ProvisionRunner,cl,link,cmake,ninja,ctest,MSBuild -ErrorAction SilentlyContinue){throw 'Shared helper remains active'}
 }
+function Get-ProcessIdentity([uint32]$ProcessId){
+ # Fixture seam: the production reader queries one limited-access handle only.
+ [CoordinatorSceneUi]::ReadProcessIdentity($ProcessId)
+}
 function CurrentGame($identity){
  $games=@(Get-Process BFBC2Game -ErrorAction SilentlyContinue)
  if($games.Count -ne 1){throw 'Expected exactly one original game'}
@@ -45,12 +49,19 @@ function CurrentGame($identity){
  try{
   $actual=$game.Id;$getterCompleted=$true
   if($actual -ne $expected){throw 'Original game lifetime differs'}
+  $field='process_identity';$expected=@{pid=$identity.pid;path=$exe;creation_filetime=[string]$identity.creation_filetime};$actual=$null;$getterCompleted=$false
+  $actual=Get-ProcessIdentity -ProcessId $game.Id;$getterCompleted=$true
+  if($null -eq $actual){throw 'Original process identity query returned null'}
+  $queried=$actual
+  $field='pid';$expected=$identity.pid;$actual=$null;$getterCompleted=$false
+  $actual=$queried.pid;$getterCompleted=$true
+  if($null -eq $actual -or $actual -ne $expected){throw 'Original game lifetime differs'}
   $field='path';$expected=$exe;$actual=$null;$getterCompleted=$false
-  $actual=$game.Path;$getterCompleted=$true
-  if($actual -cne $expected){throw 'Original game lifetime differs'}
+  $actual=$queried.path;$getterCompleted=$true
+  if($null -eq $actual -or $actual -cne $expected){throw 'Original game lifetime differs'}
   $field='creation_filetime';$expected=[string]$identity.creation_filetime;$actual=$null;$getterCompleted=$false
-  $actual=[string]$game.StartTime.ToUniversalTime().ToFileTimeUtc();$getterCompleted=$true
-  if($actual -cne $expected){throw 'Original game lifetime differs'}
+  $actual=$queried.creation_filetime;$getterCompleted=$true
+  if($null -eq $actual -or $actual -cne $expected){throw 'Original game lifetime differs'}
  }catch{
   $failure=$_
   try{Save ('identity-refusal-'+[Guid]::NewGuid().ToString('N')+'.json') @{
@@ -88,10 +99,35 @@ if((Sha $windowHelper) -cne 'd166488c41d7df6b86c7782ea6178496683e67651dc3726571e
 . $windowHelper
 Add-Type @'
 using System;
+using System.ComponentModel;
+using System.Globalization;
 using System.Runtime.InteropServices;
+using System.Text;
+using Microsoft.Win32.SafeHandles;
 public static class CoordinatorSceneUi {
  [StructLayout(LayoutKind.Sequential)] public struct Last {public uint size,tick;}
  [StructLayout(LayoutKind.Sequential)] public struct Point {public int x,y;}
+ [StructLayout(LayoutKind.Sequential)] private struct FileTime {public uint low,high;}
+ public sealed class ProcessIdentity {public uint pid;public string path;public string creation_filetime;}
+ [DllImport("kernel32.dll",SetLastError=true)] private static extern SafeProcessHandle OpenProcess(uint access,bool inherit,uint pid);
+ [DllImport("kernel32.dll",SetLastError=true)] private static extern uint GetProcessId(SafeProcessHandle process);
+ [DllImport("kernel32.dll",CharSet=CharSet.Unicode,ExactSpelling=true,SetLastError=true)] private static extern bool QueryFullProcessImageNameW(SafeProcessHandle process,uint flags,StringBuilder image,ref uint size);
+ [DllImport("kernel32.dll",SetLastError=true)] private static extern bool GetProcessTimes(SafeProcessHandle process,out FileTime creation,out FileTime exit,out FileTime kernel,out FileTime user);
+ public static ProcessIdentity ReadProcessIdentity(uint pid){
+  if(pid==0){throw new ArgumentOutOfRangeException(nameof(pid));}
+  // PROCESS_QUERY_LIMITED_INFORMATION; no module enumeration, retries or fallback.
+  using(SafeProcessHandle process=OpenProcess(0x1000,false,pid)){
+   if(process.IsInvalid){throw new Win32Exception(Marshal.GetLastWin32Error(),"OpenProcess identity query failed");}
+   uint actualPid=GetProcessId(process);
+   if(actualPid==0){throw new Win32Exception(Marshal.GetLastWin32Error(),"GetProcessId identity query failed");}
+   var image=new StringBuilder(32768);uint size=(uint)image.Capacity;
+   if(!QueryFullProcessImageNameW(process,0,image,ref size)){throw new Win32Exception(Marshal.GetLastWin32Error(),"QueryFullProcessImageNameW identity query failed");}
+   FileTime creation,exit,kernel,user;
+   if(!GetProcessTimes(process,out creation,out exit,out kernel,out user)){throw new Win32Exception(Marshal.GetLastWin32Error(),"GetProcessTimes identity query failed");}
+   ulong birth=((ulong)creation.high<<32)|creation.low;
+   return new ProcessIdentity{pid=actualPid,path=image.ToString(),creation_filetime=birth.ToString(CultureInfo.InvariantCulture)};
+  }
+ }
  [DllImport("user32.dll")] public static extern bool GetLastInputInfo(ref Last value);
  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h,out uint pid);

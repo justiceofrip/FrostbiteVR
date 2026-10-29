@@ -11,6 +11,17 @@ Ownership: prior CHAT25/26 close.json confirms lease release, idle helpers and
 exact profile restoration. Coordinator acquired the lease before shared mutations.
 External CHAT25/26/32 worktrees remain untouched; their tasks are not reassigned.
 
+Runtime05: stock launch without checkpoint/environment overrides, then documented
+DX10 comparison, both captured black. Separate HWND-specific WGC also shows black
+game content; one callback/helper exit verified. Scenes07-09 exit0/profiles restored.
+No physical witness while user away; WGC is not raw swapchain or gameplay evidence.
+Startup identity now queries executable/PID/birth on one limited-query handle,
+avoiding transient main-module loader results.10fixtures/current-host check and
+independent review pass; six stock fixtures/eight encoder checks remain applicable.
+No native rebuild/install/XR retry. Source baseline5f01a066fc984760f85d1844bb7351b9fe4fed3c;
+the identity/status successor is this commit. Final push/lease close: local runtime05
+reports/close.json. Handoff: handoff/integrations/coordinator-20261029-runtime05/README.md.
+
 Runtime03: private0.1.16 combined candidate staged and clean-extraction verified;
 no native rebuild, installation or publication. Installed0.1.12 remains unchanged.
 Handoff: handoff/integrations/coordinator-20261029-runtime03/README.md.
@@ -37,8 +48,8 @@ Handoff: handoff/integrations/coordinator-20261028-runtime02/README.md.
 Stock scene01 passed the existing one-shot foreground helper, then refused later
 window/foreground capture checks; closed normally and restored all3profiles.
 No gameplay input, mod attachment or equipment acceptance from that session.
-User confirms headset unavailable and is using the other monitor; continue offline
-preparation, then request one uninterrupted game-input window when ready.
+User confirms headset unavailable; latest authorization permits PC work while away.
+No need to request another input window under that continuing authorization.
 Shared Windows focus spans both monitors; do not repeatedly reactivate the game.
 Later authorized scene02 held foreground; two captures black and read-only weapon
 preflight rejected Read out of bounds. No gameplay input or native attachment.
@@ -74,7 +85,7 @@ Active metadata/settings hashes match the prior integration; runtime02 stock-onl
 scene01 closed and restored profiles without attaching the mod.
 No installed-runtime receipt, startup/equipment smoke or physical-headset acceptance.
 Shared XR blocker: no connected HMD during the prior XrResult=-2 episode.
-Native testing needs an agreed uninterrupted input window; no unchanged XR retry.
+Native testing needs visible verified stock gameplay; no unchanged startup/XR retry.
 Emulated native checks do not require OpenXR but still require foreground admission.
 CHAT07 final native combined acceptance and CHAT23 visual/headset checks remain open.
 Other selected cards' exact wake-up conditions are in COORDINATOR-STATE/task handoffs.

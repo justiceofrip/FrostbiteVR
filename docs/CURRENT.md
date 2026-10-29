@@ -6,9 +6,11 @@ Updated October 29, 2026. This replaces old next-step instructions; prior eviden
 ## Active work
 
 Runtime03 staged and verified a private0.1.16 package from the tested combined
-runtime; it is not installed or published. Scene06 verified full placement but the
-stock window stayed black despite displayed Present events; closed normally and
-restored profiles. [Result and owned-session cleanup fix](../handoff/integrations/coordinator-20261029-runtime04/README.md).
+runtime; it is not installed or published. Runtime05 stock/no-override and DX10
+comparisons stayed black; a separate HWND-specific Windows Graphics Capture also
+shows black game content. All three sessions closed normally and restored profiles.
+[Diagnostics and identity fix](../handoff/integrations/coordinator-20261029-runtime05/README.md)
+retain the failures; no raw-backbuffer, gameplay or headset acceptance is claimed.
 
 Runtime02 adds read-only Windows desktop diagnosis and rejects window operations
 from an unverified input desktop;33window tests and3package checks pass. Stock
@@ -17,15 +19,16 @@ game exited without attachment/gameplay input, and all profiles were restored.
 The [continuation handoff](../handoff/integrations/coordinator-20261028-runtime02/README.md)
 retains those failures. Nambu diagnostic build/binding passed, separate from normal
 interaction acceptance. The user confirms no headset; continue offline work until
-an uninterrupted game-input window is available. Launcher0.1.12 remains unchanged.
+visible stock gameplay is established. PC access is authorized while the user is
+away; launcher0.1.12 remains unchanged.
 
 CHAT07/CHAT23 source is combined with finished CHAT25/26: coherent loaded-count
 changes retain the same chest reserve prop across both eyes; grenade/reload
 regressions protect hand claims and fresh-neutral rearming. Both normal builds
 passed305/305 and four focused suites each. The [batch receipt](../handoff/integrations/coordinator-20261028-batch01/README.md)
 pins the runtime and evidence limits. No new native/headset acceptance or local
-installation; launcher0.1.12 is unchanged. Existing OpenXR instance and foreground
-blockers were reused without another session. Other selected cards are parked
+installation; launcher0.1.12 is unchanged. The shared headset blocker remains;
+stock black output now blocks native scene checks. Other selected cards are parked
 with bounded native/asset/headset prerequisites in the coordinator state.
 
 CHAT25/CHAT26 knife regressions and optional original-call sound context are

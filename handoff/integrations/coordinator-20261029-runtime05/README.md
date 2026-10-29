@@ -9,8 +9,8 @@ checkpoint copy and supplies no diagnostic environment overrides or game argumen
 It retains process-local project temporary storage; this is not a claim of exact
 Explorer-environment equivalence. Existing full-placement/cleanup guards remain.
 
-If that stays black, a separate fresh stock comparison may set `-StockDxVersion 10`,
-changing only the existing DxVersion line. The installed game's `Support/readme.txt`
+A separate stock comparison set `-StockDxVersion 10`, changing only the existing
+DxVersion line. The installed game's `Support/readme.txt`
 line114 explicitly documents auto/9/10/11; no speculative renderer fix is claimed.
 Failed prelaunch preparation restores original profile bytes when no game exists,
 preserving after-images/refusal evidence. Six focused AST fixtures and review pass;
@@ -37,3 +37,26 @@ No existing stock-only backbuffer readback was admitted: the current probe's des
 capture runs after mod mirror/menu presentation, so it cannot isolate stock pixels.
 The existing Nambu diagnostic remains frozen and reusable after visible stock gameplay;
 do not rebuild it for scene-helper changes or attach it to an alternate renderer.
+
+Scene09 exercised that WGC path on stock/auto graphics: exactly one1026x795 frame,
+3,262,680 raw bytes and14,444 PNG bytes; root reviewed black game content with visible
+window chrome. Capture/thread/watchdog exit passed, with exact process/window identity
+before/during/after. No physical witness, raw-backbuffer proof or input was involved.
+Game exit0 and all three profile hashes restored; no mod attached. Evidence:
+`reports/coordinator-20261028-runtime02/scene09/{wgc01,finish.json,normal-close.json}`.
+
+The original scene09 startup refusal remains: `Process.Path` briefly returned
+`ntdll.dll`; a fresh observation verified the original PID/birth/game path before
+activation/position recovery and capture. The helper now uses
+`QueryFullProcessImageNameW`, PID and creation FILETIME from one limited-query handle.
+It retains strict comparisons, refusal records and no retry/fallback. Ten fixtures,
+C# compilation/current-test-host identity query and independent review pass:
+`reports/coordinator-20261029-runtime05/identity-fixtures01/result.json`.
+This correction was not tested through another unchanged game launch.
+
+Normal native source/build receipt remains the batch01 result. No new knife
+recognition/damage/audio behavior, task acceptance, installation or release is claimed.
+Installed0.1.12/previous0.1.11/settings remain unchanged; private0.1.16 awaits usable
+stock gameplay and its required installed smoke check. All writers are stopped.
+Remaining task wake-up conditions stay in the compact coordinator state. No unchanged
+startup/XR loop is warranted; the stock black-content cause remains unresolved.
