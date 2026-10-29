@@ -29,6 +29,34 @@ function OriginalGame {
     [string]$game.StartTime.ToUniversalTime().ToFileTimeUtc() -cne [string]$identity.creation_filetime){throw 'Original process lifetime differs'}
  return $game
 }
+function Assert-PresentPlacementProof($identity,$placement,$observation,[long]$now){
+ if(-not $placement.fully_contained -or $placement.original_game.pid -ne $identity.pid -or
+  [string]$placement.original_game.creation_filetime -cne [string]$identity.creation_filetime -or
+  $placement.original_game.path -cne $identity.path){throw 'Matching original-graphics full-placement proof required'}
+ $window=$observation.window;$previous=$placement.after
+ $age=$now-[long]$observation.observed_tick_ms
+ if(-not $observation.observation_only -or $age -lt 0 -or $age -gt 60000 -or
+  [long]$placement.observed_tick_ms -le 0 -or [long]$observation.observed_tick_ms -lt [long]$placement.observed_tick_ms){throw 'Window observation is stale or precedes placement'}
+ if($window.pid -ne $identity.pid -or [string]$window.creation_filetime -cne [string]$identity.creation_filetime -or
+  -not $window.read_only -or -not $window.visible -or $window.minimized -or -not $window.foreground_matches){throw 'Original visible foreground window required'}
+ foreach($key in 'hwnd','pid','creation_filetime','style','visible','minimized','foreground','foreground_owner','foreground_thread'){
+  if($window.$key -cne $previous.$key){throw ('Window identity/state differs after placement: '+$key)}
+ }
+ foreach($key in 'rect','client_rect','left_monitor'){
+  foreach($rectangle in @($window.$key,$previous.$key)){
+   foreach($side in 'left','top','right','bottom'){
+    $value=$rectangle.$side
+    if(($value -isnot [int] -and $value -isnot [long]) -or $value -lt [int]::MinValue -or $value -gt [int]::MaxValue){throw 'Window geometry requires bounded integer coordinates'}
+   }
+   if([long]$rectangle.right -le [long]$rectangle.left -or [long]$rectangle.bottom -le [long]$rectangle.top){throw 'Window geometry requires positive extents'}
+  }
+  foreach($side in 'left','top','right','bottom'){
+   if($window.$key.$side -ne $previous.$key.$side){throw ('Window geometry differs after placement: '+$key+'.'+$side)}
+  }
+ }
+ if($window.rect.left -lt $window.left_monitor.left -or $window.rect.top -lt $window.left_monitor.top -or
+  $window.rect.right -gt $window.left_monitor.right -or $window.rect.bottom -gt $window.left_monitor.bottom){throw 'Fully contained original window required'}
+}
 function Sessions {
  $info=[Diagnostics.ProcessStartInfo]::new($logman)
  $info.UseShellExecute=$false;$info.CreateNoWindow=$true
@@ -56,6 +84,9 @@ if(Test-Path -LiteralPath (Join-Path $scene 'finish.json')){throw 'Scene already
 if((Sha $exe) -cne $expectedTool -or (Sha $gamePath) -cne $gameHash){throw 'Reviewed binary differs'}
 $identity=Get-Content -LiteralPath (Join-Path $scene 'process.json') -Raw|ConvertFrom-Json
 if($identity.path -cne $gamePath -or $identity.sha256 -cne $gameHash -or $identity.mod_injected){throw 'Stock launch receipt differs'}
+$placement=Get-Content -LiteralPath (Join-Path $scene 'original-graphics-placement.json') -Raw|ConvertFrom-Json
+$observation=Get-Content -LiteralPath (Join-Path $scene 'window-before-present.json') -Raw|ConvertFrom-Json
+Assert-PresentPlacementProof $identity $placement $observation ([Environment]::TickCount64)
 $game=OriginalGame
 if(@($game.Modules|Where-Object {$_.ModuleName -match 'BC2Native|FrostbiteVR'}).Count){throw 'Stock-only trace refused an attached module'}
 if(@(Get-Process BC2XrHost,BC2NativeTrace,BC2NativeIpcProbe,BC2NativeMenuProbe,'PresentMon*' -ErrorAction SilentlyContinue).Count){throw 'Shared helper active'}
@@ -76,6 +107,7 @@ $arguments=@('--process_id',[string]$identity.pid,'--output_file','presents.csv'
  '--no_track_gpu','--no_track_input','--track_etw_status','--date_time')
 Save 'invocation.json' @{schema='fvr.runtime03.present-check.v1';original_game=$identity;tool_sha256=$expectedTool;session=$session;arguments=$arguments;
  utc=[DateTime]::UtcNow.ToString('o');monitored_output_threshold_bytes=8MB;storage_reservation_bytes=16MB;watchdog_seconds=25;provider_filter='event IDs, not PID';output_filter='original PID';
+ placement_sha256=(Sha (Join-Path $scene 'original-graphics-placement.json'));window_before_sha256=(Sha (Join-Path $scene 'window-before-present.json'));
  etw_memory_pool_max_bytes=64MB;etl_written=$false;input_sent=$false;native_attached=$false;user_window_required=$true}
 $capture=$null;$stop=$null;$failure=$null;$cleanupFailures=[Collections.Generic.List[string]]::new()
 $sameLifetime=$false;$timedOut=$false;$capExceeded=$false;$sessionAbsent=$false

@@ -22,10 +22,24 @@ named FrostbiteVR, ReShade, RTSS, Steam overlay or game-local DirectX proxy. Sig
 AMD graphics/host modules and PunkBuster are present; their presence proves no cause.
 This rules out restoration of the original graphics settings as a sufficient fix,
 not all possible graphics issues. Menu objects do not prove frame presentation.
-Next missing evidence is a bounded process-specific Present event trace. The
-reviewed `PresentCheck.ps1 -SceneName scene05` is prepared for a fresh stock scene
-started with `-OriginalGraphics`; obtain a new agreed window before either runs.
-No driver, registry or native feature change is justified by the present evidence.
+Scene05 recorded1775 DXGI/Composed:Flip rows for the exact original PID and one
+swapchain over9.949s:532 have display timing,1243 have NA display timing. Nine ETW
+samples report zero lost events/buffers/present overflows; collector/session cleanup
+passed. The user saw black; close exited0 and profiles were restored within3minutes.
+These are desktop presentation events, not proof of nonblack pixels or headset speed.
+Its non-admin warning remains; exact PID filtering/lifetime checks succeeded.
+
+Scene04/05 placement receipts expose a separate flaw: the legacy helper accepted
+partial overlap as contained, preserving outer bounds(-2790,0)-(-1760,797) against
+the left monitor(-1920,0)-(0,1080). Only a160pixel outer strip intersected the monitor.
+That limits both observations; it does not explain scene03's corrected black output.
+The original-graphics route now applies position-only full containment, preserving
+size/style/foreground and refusing changed identity. Seventeen offline geometry,
+state and observation cases pass; six Present proof-order/geometry cases also pass
+after focused review. The recovery helper/default route remain unchanged.
+Next: fresh scene06 with `ObserveWindow -CaptureName before-present` and
+`after-present` bracketing `PresentCheck.ps1 -SceneName scene06`. A new agreed PC
+window is required. No driver or native feature change is justified.
 The helper also records the first failed identity operand/getter without retry or
 guard relaxation; both prior startup refusals lacked that information. Six identity
 comparison cases and three corrected receipt/preservation cases pass offline.
@@ -51,7 +65,7 @@ including finished CHAT25/26 source and CHAT07/23 work. All90 package files and
 expanded43,615,228bytes. No native rebuild, installation or publication occurred.
 The installed mod remains0.1.12, previous0.1.11. Native/headset acceptance is pending.
 
-Evidence: `reports/coordinator-20261029-runtime03/{offline-findings,package-verification,witnessed-check,original-graphics-check}.json`.
+Evidence: `reports/coordinator-20261029-runtime03/{offline-findings,package-verification,witnessed-check,original-graphics-check,present-check}.json`.
 Candidate: `package/BC2VR-0.1.16-win64.zip` under that evidence folder, SHA256
 `043f27944f151ad9c226dcd384080a424df1906ff0b7226f576c19111e939076`.
 Normal receipt SHA `a196a0b16622fb85216bad8a9bfdf7598fadea37db20dc050284e0b456004fe4`.

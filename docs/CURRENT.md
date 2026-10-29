@@ -6,9 +6,9 @@ Updated October 29, 2026. This replaces old next-step instructions; prior eviden
 ## Active work
 
 Runtime03 staged and verified a private0.1.16 package from the tested combined
-runtime; it is not installed or published. Stock scenes03/04 were physically black
-with both temporary and original graphics settings despite stable D3D11/menu objects;
-both closed normally and restored profiles. [Evidence and next diagnostic](../handoff/integrations/coordinator-20261029-runtime03/README.md).
+runtime; it is not installed or published. Stock scenes03-05 were physically black;
+scene05 recorded displayed Present events, but scenes04/05 were partly off-screen.
+All closed normally and restored profiles. [Placement correction and evidence](../handoff/integrations/coordinator-20261029-runtime03/README.md).
 
 Runtime02 adds read-only Windows desktop diagnosis and rejects window operations
 from an unverified input desktop;33window tests and3package checks pass. Stock

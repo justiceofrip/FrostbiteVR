@@ -1,6 +1,6 @@
 #requires -Version 7.5
 [CmdletBinding()]
-param([Parameter(Mandatory)][ValidateSet('Start','Activate','Capture','Resume','ExitSeat','SnapshotModules','Finish')][string]$Operation,
+param([Parameter(Mandatory)][ValidateSet('Start','Activate','Capture','ObserveWindow','Resume','ExitSeat','SnapshotModules','Finish')][string]$Operation,
       [ValidatePattern('^scene[0-9]{2}$')][string]$SceneName='scene01',
       [ValidatePattern('^[a-z][a-z0-9-]{0,31}$')][string]$CaptureName='menu',
       [ValidateRange(0,45)][int]$WaitForegroundSeconds=0,
@@ -137,6 +137,81 @@ function UnchangedInput([uint]$tick){
  $last=[CoordinatorSceneUi+Last]::new();$last.size=8
  if(-not [CoordinatorSceneUi]::GetLastInputInfo([ref]$last) -or $last.tick -ne $tick){throw 'User input changed during admission; no navigation'}
 }
+function Get-ContainedOuterPlacement($outer,$monitor){
+ foreach($bounds in @($outer,$monitor)){
+  foreach($side in 'left','top','right','bottom'){
+   $value=$bounds.$side
+   if(($value -isnot [int] -and $value -isnot [long]) -or $value -lt [int]::MinValue -or $value -gt [int]::MaxValue){throw 'Physical rectangle requires bounded integer coordinates'}
+  }
+ }
+ $width=[long]$outer.right-[long]$outer.left;$height=[long]$outer.bottom-[long]$outer.top
+ $monitorWidth=[long]$monitor.right-[long]$monitor.left;$monitorHeight=[long]$monitor.bottom-[long]$monitor.top
+ if($width -le 0 -or $height -le 0 -or $monitorWidth -le 0 -or $monitorHeight -le 0){throw 'Physical rectangle has invalid dimensions'}
+ if($width -gt $monitorWidth -or $height -gt $monitorHeight -or $width -gt [int]::MaxValue -or $height -gt [int]::MaxValue){throw 'Original graphics outer window does not fit the left monitor'}
+ $x=[Math]::Max([long]$monitor.left,[Math]::Min([long]$outer.left,[long]$monitor.right-$width))
+ $y=[Math]::Max([long]$monitor.top,[Math]::Min([long]$outer.top,[long]$monitor.bottom-$height))
+ return @{left=[int]$x;top=[int]$y;width=[int]$width;height=[int]$height;moved=($x -ne $outer.left -or $y -ne $outer.top)}
+}
+function Assert-OriginalGraphicsWindow($expected,$actual,[switch]$AllowPositionChange){
+ if(-not $expected.foreground_matches -or -not $actual.foreground_matches){throw 'Original graphics placement requires exact game foreground'}
+ foreach($key in 'hwnd','pid','creation_filetime','style','visible','minimized','foreground','foreground_owner','foreground_thread'){
+  if($actual[$key] -cne $expected[$key]){throw ('Original graphics window identity/state changed: '+$key)}
+ }
+ foreach($key in 'client_rect','left_monitor'){
+  foreach($side in 'left','top','right','bottom'){
+   if($actual[$key].$side -ne $expected[$key].$side){throw ('Original graphics geometry changed: '+$key+'.'+$side)}
+  }
+ }
+ if(([long]$actual.rect.right-[long]$actual.rect.left) -ne ([long]$expected.rect.right-[long]$expected.rect.left) -or
+    ([long]$actual.rect.bottom-[long]$actual.rect.top) -ne ([long]$expected.rect.bottom-[long]$expected.rect.top)){throw 'Original graphics outer window size changed'}
+ if(-not $AllowPositionChange){
+  foreach($side in 'left','top','right','bottom'){
+   if($actual.rect.$side -ne $expected.rect.$side){throw 'Original graphics window moved before placement'}
+  }
+ }
+}
+function Place-OriginalGraphicsFully($identity,[long]$expectedHwnd){
+ foreach($name in 'original-graphics-placement.json','original-graphics-placement-refused.json'){
+  if(Test-Path -LiteralPath (Join-Path $run $name)){throw ('Preserve existing evidence: '+$name)}
+ }
+ $before=$null;$plan=$null;$admission=$null;$after=$null;$attempted=$false;$succeeded=$false;$stage='dpi-context'
+ $dpi=[CoordinatorSceneUi]::SetThreadDpiAwarenessContext([IntPtr](-4))
+ if($dpi -eq [IntPtr]::Zero){throw 'Physical original graphics coordinates unavailable'}
+ try{
+  $stage='placement-plan';$before=Observe $identity
+  if($before.hwnd -ne $expectedHwnd -or -not $before.foreground_matches){throw 'Original graphics window or foreground differs before placement'}
+  $plan=Get-ContainedOuterPlacement $before.rect $before.left_monitor
+  $stage='placement-admission';Lease;IdleHelpers;$inputTick=IdleInput -ReturnTick
+  $admission=Observe $identity;Assert-OriginalGraphicsWindow $before $admission
+  UnchangedInput $inputTick
+  if($plan.moved){
+   $stage='position-only';$attempted=$true
+   # SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE; preserve original rendering dimensions and style.
+   $succeeded=[CoordinatorSceneUi]::SetWindowPos([IntPtr]$expectedHwnd,[IntPtr]::Zero,$plan.left,$plan.top,0,0,0x15)
+   if(-not $succeeded){throw 'Original graphics position-only placement failed'}
+  }
+  $stage='placement-postcondition';$after=Observe $identity
+  Assert-OriginalGraphicsWindow $before $after -AllowPositionChange
+  $verified=Get-ContainedOuterPlacement $after.rect $after.left_monitor
+  if($verified.moved -or $after.rect.left -ne $plan.left -or $after.rect.top -ne $plan.top){throw 'Original graphics outer window is not fully contained at the planned position'}
+  $stage='placement-receipt'
+  Save 'original-graphics-placement.json' @{
+   schema='fvr.runtime02.original-graphics-placement.v1';scene_name=$SceneName;pid=$identity.pid;creation_filetime=$identity.creation_filetime
+   original_game=@{pid=$identity.pid;path=$exe;creation_filetime=[string]$identity.creation_filetime}
+   before=$before;admission=$admission;planned=$plan;after=$after;flags=0x15;position_change_attempted=$attempted;position_change_succeeded=$succeeded
+   fully_contained=$true;size_unchanged=$true;style_unchanged=$true;foreground_unchanged=$true;input_sent=$false;activation_requested=$false
+   observed_tick_ms=[Environment]::TickCount64;utc=[DateTime]::UtcNow.ToString('o')
+  }
+ }catch{
+  $failure=$_
+  try{Save 'original-graphics-placement-refused.json' @{
+   schema='fvr.runtime02.original-graphics-placement-refusal.v1';scene_name=$SceneName;pid=$identity.pid;creation_filetime=$identity.creation_filetime
+   stage=$stage;failure=$failure.Exception.Message;before=$before;admission=$admission;planned=$plan;after=$after
+   position_change_attempted=$attempted;position_change_succeeded=$succeeded;fully_contained=$false;input_sent=$false;activation_requested=$false;utc=[DateTime]::UtcNow.ToString('o')
+  }}catch{Write-Warning ('Could not preserve original graphics placement refusal: '+$_.Exception.Message) -WarningAction Continue}
+  throw $failure
+ }finally{$null=[CoordinatorSceneUi]::SetThreadDpiAwarenessContext($dpi)}
+}
 if($Operation -eq 'Start'){
  IdleInput
  if((Test-Path -LiteralPath $run) -or (Get-Process BFBC2Game -ErrorAction SilentlyContinue)){throw 'Fresh scene and no existing game required'}
@@ -193,12 +268,25 @@ if($Operation -eq 'Start'){
  Save 'window-before.json' (Observe $identity)
  $null=CurrentGame $identity
  Save 'placement.json' ([FvrWindow436R4.Native]::PlaceLeftOnly($game.MainWindowHandle,[uint]$game.Id,1920))
+ if($OriginalGraphics){Place-OriginalGraphicsFully $identity $game.MainWindowHandle.ToInt64()}
   Lease
   Save 'foreground-observation.json' @{activation_requested=$false;input_sent=$false;desktop=$desktop;window=(Observe $identity)}
  Write-Output (Join-Path $run 'process.json')
  return
 }
 if(Test-Path -LiteralPath (Join-Path $run 'finish.json')){throw 'Scene already finished'}
+if($Operation -eq 'ObserveWindow'){
+ $name='window-'+$CaptureName+'.json'
+ if(Test-Path -LiteralPath (Join-Path $run $name)){throw ('Preserve existing evidence: '+$name)}
+ $identity=Load (Join-Path $run 'process.json');$window=Observe $identity;$observedTick=[Environment]::TickCount64
+ $null=CurrentGame $identity
+ Save $name @{
+  schema='fvr.runtime02.window-observation.v1';scene_name=$SceneName;pid=$identity.pid;creation_filetime=$identity.creation_filetime
+  window=$window;observed_tick_ms=$observedTick;utc=[DateTime]::UtcNow.ToString('o');observation_only=$true
+  input_sent=$false;activation_requested=$false;window_actions=$false
+ }
+ Write-Output (Join-Path $run $name);return
+}
 if($Operation -eq 'SnapshotModules'){
  $identity=Load (Join-Path $run 'process.json');$game=CurrentGame $identity
  if(@(NativeAttachments $identity).Count){throw 'Stock snapshot must precede every native attachment'}

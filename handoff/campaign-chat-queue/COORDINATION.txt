@@ -18,9 +18,12 @@ Stock scenes03/04 confirmed physical black output despite stable menu/D3D11 obje
 borderless placement and original graphics settings did not resolve it. Both closed
 with exit0 and profiles restored. Scene04 completed within its agreed3minute window.
 No named mod/overlay in scene04's module snapshot establishes an interference cause.
-Frame submission/presentation remains unmeasured; further live checks need a new window.
-PresentCheck.ps1 is prepared: pinned standalone CLI,10s exact-PID output, owned-session
-cleanup and loss reporting; offline help/enumeration checks and focused review passed.
+Scene05:1775 exact-PID Present rows,532 with display timing;9loss samples allzero.
+User sawblack; collector/session retired, game exit0, profiles restored within3minutes.
+Scenes04/05 were partly off-screen due to the legacy placement predicate; this limits
+their visual evidence. Original-graphics position-only containment is corrected;
+17placement/observation and6Present proof fixtures pass plus focused review. Next
+agreed check saves geometry before/after. No installed-runtime claim.
 
 Runtime02 continuation: desktop-context diagnostic and early window admission;
 33window/3package tests pass; independent review passes. Source push verified:
