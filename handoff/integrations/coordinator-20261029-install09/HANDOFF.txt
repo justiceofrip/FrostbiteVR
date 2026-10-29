@@ -1,0 +1,24 @@
+Coordinator install09 — October 29, 2026
+User requested installing private0.1.17 with logging for their own upcoming test.
+Source baseline402c02f23306b0af02084c651595ad51b878f14a; no source/runtime changes here.
+Established Install-FvrPackage workflow selected0.1.17, retained verified0.1.12
+rollback, and pruned the superseded0.1.11 through its bounded managed-version cleanup.
+Settings preserved byte-for-byte; no BC2 session, profile mutation or OpenXR retry.
+Frozen ZIP SHA256:949b8398adb34cac377d346d5369885b7bade249efb85f1997f2895257e5acef.
+Package90/runtime82 files and existing six-file recipe cache verified after install.
+Installed Worker Validate passed: version0.1.17/assets_ready=true/SteamVR selected;
+game_started=false/headset_checked=false. No startup/equipment/headset acceptance.
+Evidence: reports/coordinator-20261029-install09/{installation.json,installed-validation.log}.
+Automatic logging requires no debug switch or settings edits. Normal packaged route
+is the default; the preserved legacy local-backend configuration is not selected.
+Session logs: BC2VR-Launcher/data/runtime/sessions/<UTC timestamp>-<ID>/.
+These include session/options/native trace/telemetry and host/native/supervisor logs
+when their startup stages run. Pre-session failures remain in data/runtime's
+launch-check, launcher-placement, xr-selection and xr-preflight files;
+asset-preparation records cache failures. GUI output is data/launcher-last.log.
+Use Stop VR, allow about15 seconds for native drain, then close BC2/save diagnostics.
+Closing only the launcher leaves VR running. No raw video/image capture was enabled.
+Test: Quest menu, campaign head/controllers, reload and grenade-to-weapon return;
+watch chest flicker/duplicate props/stuck hands. Desktop black alone is not failure.
+No new knife jab/damage/audio improvement is claimed. No public release published.
+Final Git state, launcher handoff and lease release: reports/coordinator-20261029-install09/close.json.

@@ -8,8 +8,8 @@ Updated October 29, 2026. This replaces old next-step instructions; prior eviden
 Private0.1.17 includes the launcher retained-handle image fix;38 identity/43 portable
 checks pass. Its verified package reuses the staged cache, which now passes both
 production CPU consumer tests for all49 parts. [Evidence and package](../handoff/integrations/coordinator-20261029-evidence08/README.md).
-Active0.1.12/settings remain unchanged. No game/XR session or native rebuild;
-no candidate activation, installed smoke pass, rendering or headset acceptance.
+Private0.1.17 is installed for the user's test;0.1.12 rollback/settings are preserved.
+Installed setup/assets pass; logging is automatic. [Install receipt](../handoff/integrations/coordinator-20261029-install09/HANDOFF.txt). Startup/equipment/headset acceptance remains pending.
 Runtime05's stock black captures and cleanup remain in its
 [diagnostic handoff](../handoff/integrations/coordinator-20261029-runtime05/README.md).
 
@@ -22,14 +22,14 @@ retains those failures. Nambu diagnostic build/binding passed, separate from nor
 interaction acceptance. The last confirmed headset state is unavailable. Desktop
 black output limits visually guided stock diagnostics; it does not establish VR
 failure or require a desktop fix before a direct headset check. PC access is
-authorized while the user is away; launcher0.1.12 remains unchanged.
+authorized while the user is away; the current test installation is recorded above.
 
 CHAT07/CHAT23 source is combined with finished CHAT25/26: coherent loaded-count
 changes retain the same chest reserve prop across both eyes; grenade/reload
 regressions protect hand claims and fresh-neutral rearming. Both normal builds
 passed305/305 and four focused suites each. The [batch receipt](../handoff/integrations/coordinator-20261028-batch01/README.md)
-pins the runtime and evidence limits. No new native/headset acceptance or local
-installation; launcher0.1.12 is unchanged. The shared headset blocker remains;
+pins the runtime and evidence limits. Install09 deploys this runtime in0.1.17;
+no new native/headset acceptance follows. The shared headset blocker remains;
 stock black output blocks the current visually guided native recipe. Other cards are parked
 with bounded native/asset/headset prerequisites in the coordinator state.
 
@@ -39,16 +39,16 @@ Both normal builds passed305/305 plus four focused suites each. The
 [integration handoff](../handoff/integrations/chat25-chat26-20261028-integration01/HANDOFF.txt)
 pins six binary/PDB pairs and preserves the foreground-blocked game setup and
 OpenXR instance failure (`XrResult=-2`). No knife episode or headset check ran;
-the game closed normally, all three profiles were restored, and launcher0.1.12
-remains unchanged. Native single-jab/audio acceptance and installation are pending.
+the game closed normally and all three profiles were restored. Install09 now
+includes this source in0.1.17; native single-jab/audio acceptance remains pending.
 
 CHAT33 launch diagnostics and placement checks are integrated: setup/Play reject
 protected game-folder placement early, and Steam reports separate requested opt-in
 from native-profile refusal. Seven canonical suites pass; native source/artifacts
 are unchanged. The [integration receipt](../handoff/integrations/chat33-20261028-integration01/README.md)
 retains the repaired restart-fixture failure and a fresh SteamVR OpenXR instance
-failure (`XrResult=-2`). Launcher0.1.12/settings remain unchanged; installation,
-actual Play and headset checks are pending. Steam native compatibility is unverified.
+failure (`XrResult=-2`). Install09 includes these changes while preserving settings;
+actual Play/headset checks remain pending. Steam native compatibility is unverified.
 
 CHAT06 vehicle-transition retention regressions are integrated: nine ammunition
 cases and four pump/bolt cases pass in both normal configurations (two suites
@@ -75,8 +75,8 @@ architectures passed305/305 with unchanged normal feature settings and operation
 records. The [integration handoff](../handoff/integrations/chat04-20261028-integration01/README.md)
 pins the source, six binary/symbol pairs and retained failed episodes under
 `reports/integration-chat04-20261028-01`. OpenXR preflight failed at instance
-creation (`XrResult=-2`); installation and startup/equipment smoke remain pending.
-Launcher0.1.12 and settings are unchanged. No native/headset acceptance follows
+creation (`XrResult=-2`); that run left0.1.12 unchanged. Install09 now deploys0.1.17;
+startup/equipment smoke remains pending. No native/headset acceptance follows
 from these builds. CHAT04's replacement-magazine tracking loss, M95
 left-root recovery, support/pump and native missing-render checks remain open.
 
@@ -86,7 +86,7 @@ and `profiles/checkpoint436-r56` preserve the reviewed operation records.
 M95 five-cycle native confirmation passed as detailed below. Scene124's Nambu
 check stopped before gameplay input or mod attachment because BC2 did not retain
 foreground ownership; it closed and restored all three profiles. Nambu acceptance
-remains pending. No new launcher runtime was installed or publicly released.
+remains pending. That earlier run did not install or publicly release a runtime.
 
 The R51 ammo-entry, R52 actor-retirement, R54 continuous GunHold and verified
 edge-projection fixes are applied to the normal checkout: 13 production files
@@ -223,8 +223,8 @@ reloads are deferred; full body/MP/other Frostbite ports are later scope.
 [Public0.1.15](https://github.com/justiceofrip/BC2VR/releases/tag/v0.1.15) remains
 unchanged. Its launcher fixes missing image-path identity and exposes the narrow
 experimental Steam option. Actual Steam rendering/equipment support remains
-unverified. It retains the checkpoint434 native binaries; this private integration
-is not installed, packaged or published. Public product commit13d7574bd682ae883a935a9adae52a59409b576f.
+unverified. It retains the checkpoint434 native binaries; private0.1.17 is packaged
+and installed locally for testing, not published. Public product commit13d7574bd682ae883a935a9adae52a59409b576f.
 
 Use G: and process-local TEMP/TMP/TMPDIR. Player installs may use their selected
 drive. Keep40GiB allocated/15GiB free,3GiB normal-build reserve and512MiB raw/run.

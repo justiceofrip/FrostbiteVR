@@ -11,6 +11,14 @@ Ownership: prior CHAT25/26 close.json confirms lease release, idle helpers and
 exact profile restoration. Coordinator acquired the lease before shared mutations.
 External CHAT25/26/32 worktrees remain untouched; their tasks are not reassigned.
 
+Install09: user explicitly requested0.1.17 with logging for their own test.
+Installed/selected0.1.17; verified0.1.12 rollback retained, settings byte-identical.
+Installed Worker Validate passes: assets ready, SteamVR selected; no game/HMD check.
+Logging is automatic; session/preflight locations and stop procedure are in
+handoff/integrations/coordinator-20261029-install09/HANDOFF.txt.
+Source baseline402c02f; this docs-only successor records the installation outcome.
+Final source push/lease close: reports/coordinator-20261029-install09/close.json.
+
 Evidence08 corrects the shipped retained-handle process image resolver after the
 observed private startup Path/ntdll race.38identity/43portable assertions pass.
 New actual-cache CPU checks pass x86/x64:49parts/279908triangles,7chest profiles.
@@ -104,11 +112,11 @@ All six binary/PDB pairs verified; prior CHAT25/26 runtime retained as fallback.
 Storage:40GiB/free15GiB unchanged; lossless compression reclaimed965171135 bytes,
 45 generated files, all hashes preserved, no deletion; original refusals retained.
 
-Local runtime update: none. G:\Unity\VRMMO\BC2VR-Launcher stays0.1.12/previous0.1.11.
-Candidate recipe cache is staged and verified; activation/installed smoke remain pending.
-Active metadata/settings hashes match the prior integration; runtime02 stock-only
-scene01 closed and restored profiles without attaching the mod.
-No installed-runtime receipt, startup/equipment smoke or physical-headset acceptance.
+Local runtime: G:\Unity\VRMMO\BC2VR-Launcher active0.1.17/previous0.1.12.
+Package90/runtime82 files and existing recipe cache verified; setup validation passed.
+Install receipt: reports/coordinator-20261029-install09/installation.json.
+Settings preserved; no game/profiles changed. Normal launch enables logging.
+Startup/equipment smoke and physical-headset acceptance await the user's test.
 Shared XR blocker: no connected HMD during the prior XrResult=-2 episode.
 The current stock recipe needs visual scene verification; direct VR needs a connected
 headset and existing native admission. No unchanged startup/XR retry.
