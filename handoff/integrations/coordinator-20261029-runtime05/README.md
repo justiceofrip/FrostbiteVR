@@ -17,6 +17,11 @@ preserving after-images/refusal evidence. Six focused AST fixtures and review pa
 normal native binaries/previous build checks are unchanged.
 
 Preparation evidence: `reports/coordinator-20261029-runtime05/stock-fixtures01/result.json`.
+Scene07 captured a black stock window with no checkpoint/environment overrides;
+no physical witness was available. It closed normally and restored all profiles.
+Its foreground refusal is retained; one established activation then position-only
+recovery permitted capture. Stock launches now request that one activation before
+placement only when required, preserving the helper's duplicate-attempt guard.
 No existing stock-only backbuffer readback was admitted: the current probe's desktop
 capture runs after mod mirror/menu presentation, so it cannot isolate stock pixels.
 The existing Nambu diagnostic remains frozen and reusable after visible stock gameplay;

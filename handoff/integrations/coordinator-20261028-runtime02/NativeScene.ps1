@@ -319,12 +319,19 @@ if($Operation -eq 'Start'){
  $clock=[Diagnostics.Stopwatch]::StartNew()
  do{$game=CurrentGame $identity;if($game.MainWindowHandle -ne [IntPtr]::Zero){break};Start-Sleep -Milliseconds 200}while($clock.ElapsedMilliseconds -lt 15000)
  if($game.MainWindowHandle -eq [IntPtr]::Zero){throw 'No exact visible game window within15s; preserve process and cleanup normally'}
+ # A stock shell launch may leave the caller foreground. Use the existing,
+ # one-attempt explicit activation before the guarded position-only placement.
+ $stockActivationRequested=$false
+ if($StockLaunch -and -not (Observe $identity).foreground_matches){
+  $stockActivationRequested=$true
+  & $PSCommandPath -Operation Activate -SceneName $SceneName|Out-Null
+ }
  Save 'window-before.json' (Observe $identity)
  $null=CurrentGame $identity
  Save 'placement.json' ([FvrWindow436R4.Native]::PlaceLeftOnly($game.MainWindowHandle,[uint]$game.Id,1920))
  if($OriginalGraphics){Place-OriginalGraphicsFully $identity $game.MainWindowHandle.ToInt64()}
   Lease
-  Save 'foreground-observation.json' @{activation_requested=$false;input_sent=$false;desktop=$desktop;window=(Observe $identity)}
+  Save 'foreground-observation.json' @{activation_requested=$stockActivationRequested;input_sent=$false;desktop=$desktop;window=(Observe $identity)}
  Write-Output (Join-Path $run 'process.json')
  return
 }
