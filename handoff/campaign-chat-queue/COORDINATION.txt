@@ -11,6 +11,12 @@ Ownership: prior CHAT25/26 close.json confirms lease release, idle helpers and
 exact profile restoration. Coordinator acquired the lease before shared mutations.
 External CHAT25/26/32 worktrees remain untouched; their tasks are not reassigned.
 
+Feedback10: user reports seven open0.1.17 symptoms, including Mission1 C4 throwing
+blocking progress and severe performance/choppy automatic fire. Interactions improved;
+BC2 is visible with the headset connected. Causes/log correlation remain unverified.
+Bug list: docs/archive/2026-10-29-bc2vr-0.1.17-buglist.md. Documentation only.
+Final source push/lease close: reports/coordinator-20261029-feedback10/close.json.
+
 Install09: user explicitly requested0.1.17 with logging for their own test.
 Installed/selected0.1.17; verified0.1.12 rollback retained, settings byte-identical.
 Installed Worker Validate passes: assets ready, SteamVR selected; no game/HMD check.
@@ -52,7 +58,7 @@ User clarification: desktop black output is acceptable if VR works. It blocks th
 current visually guided stock recipe, not direct VR startup. Launcher checks native
 menu/renderer readiness, resolution, XR session and native connection, not desktop
 pixel brightness. Next headset check may proceed without fixing the monitor image;
-last confirmed headset state is unavailable. Retain actual runtime/install checks.
+latest user feedback reports visible BC2 with the headset connected; acceptance remains open.
 
 Runtime03: private0.1.16 combined candidate staged and clean-extraction verified;
 no native rebuild, installation or publication. Installed0.1.12 remains unchanged.
@@ -116,7 +122,7 @@ Local runtime: G:\Unity\VRMMO\BC2VR-Launcher active0.1.17/previous0.1.12.
 Package90/runtime82 files and existing recipe cache verified; setup validation passed.
 Install receipt: reports/coordinator-20261029-install09/installation.json.
 Settings preserved; no game/profiles changed. Normal launch enables logging.
-Startup/equipment smoke and physical-headset acceptance await the user's test.
+User headset test reports open bugs; startup/equipment acceptance is not complete.
 Shared XR blocker: no connected HMD during the prior XrResult=-2 episode.
 The current stock recipe needs visual scene verification; direct VR needs a connected
 headset and existing native admission. No unchanged startup/XR retry.

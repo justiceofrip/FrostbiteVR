@@ -9,7 +9,7 @@ Private0.1.17 includes the launcher retained-handle image fix;38 identity/43 por
 checks pass. Its verified package reuses the staged cache, which now passes both
 production CPU consumer tests for all49 parts. [Evidence and package](../handoff/integrations/coordinator-20261029-evidence08/README.md).
 Private0.1.17 is installed for the user's test;0.1.12 rollback/settings are preserved.
-Installed setup/assets pass; logging is automatic. [Install receipt](../handoff/integrations/coordinator-20261029-install09/HANDOFF.txt). Startup/equipment/headset acceptance remains pending.
+Installed setup/assets pass; logging is automatic. [User headset feedback](archive/2026-10-29-bc2vr-0.1.17-buglist.md): C4 progression blocker, severe performance/choppy fire, destruction and cutscene bugs; interactions improved. Acceptance remains open.
 Runtime05's stock black captures and cleanup remain in its
 [diagnostic handoff](../handoff/integrations/coordinator-20261029-runtime05/README.md).
 
@@ -19,7 +19,7 @@ scene02 held foreground during an agreed test but produced black captures; the
 game exited without attachment/gameplay input, and all profiles were restored.
 The [continuation handoff](../handoff/integrations/coordinator-20261028-runtime02/README.md)
 retains those failures. Nambu diagnostic build/binding passed, separate from normal
-interaction acceptance. The last confirmed headset state is unavailable. Desktop
+interaction acceptance. The user now reports a connected-headset test with visible BC2. Earlier desktop
 black output limits visually guided stock diagnostics; it does not establish VR
 failure or require a desktop fix before a direct headset check. PC access is
 authorized while the user is away; the current test installation is recorded above.
@@ -29,8 +29,8 @@ changes retain the same chest reserve prop across both eyes; grenade/reload
 regressions protect hand claims and fresh-neutral rearming. Both normal builds
 passed305/305 and four focused suites each. The [batch receipt](../handoff/integrations/coordinator-20261028-batch01/README.md)
 pins the runtime and evidence limits. Install09 deploys this runtime in0.1.17;
-no new native/headset acceptance follows. The shared headset blocker remains;
-stock black output blocks the current visually guided native recipe. Other cards are parked
+the user's new headset report supplies failures and improved interaction feel;
+earlier stock black output limited visually guided native recipes. Other cards are parked
 with bounded native/asset/headset prerequisites in the coordinator state.
 
 CHAT25/CHAT26 knife regressions and optional original-call sound context are
