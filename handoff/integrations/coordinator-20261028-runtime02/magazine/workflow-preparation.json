@@ -1,0 +1,174 @@
+{
+  "schema": "fvr.runtime02.magazine.workflow.v1",
+  "source": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\integrations\\coordinator-20261028-runtime02\\magazine\\source-preparation.json",
+    "bytes": 3751,
+    "sha256": "c7b6831002e3865a01c3f99e3db3f95ebd2d901e29a2b65c2bcf24c5b0b349d0"
+  },
+  "files": [
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\integrations\\coordinator-20261028-runtime02\\magazine\\admission-template.json",
+      "bytes": 3118,
+      "sha256": "3e8dc867e69f5d76563e2bbd636537a6f24b611ab66ef605c3c1310b1b0f928b"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\integrations\\coordinator-20261028-runtime02\\magazine\\Admission.py",
+      "bytes": 827,
+      "sha256": "013db57a27871290566c303f4fccfab1b6e0de29762d179ee52d2c4672461ad5"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\integrations\\coordinator-20261028-runtime02\\magazine\\BindBuild.ps1",
+      "bytes": 1284,
+      "sha256": "74b84342611a765223d8c299c18b7359c0e5271bb82eee073dedac322c645600"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\integrations\\coordinator-20261028-runtime02\\magazine\\Build.ps1",
+      "bytes": 18730,
+      "sha256": "0748f3a1112f1c7a3c1032bad413d983f6d604111053483b5665a9b9af7345bc"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\integrations\\coordinator-20261028-runtime02\\magazine\\CheckResult.py",
+      "bytes": 542,
+      "sha256": "1d0d1be9e7b4431e46dd71f68cf45c6c484af7af3d3bbc0944034ec4e4949976"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\integrations\\coordinator-20261028-runtime02\\magazine\\Common.ps1",
+      "bytes": 11155,
+      "sha256": "18a1c11ffd9bb058c6ab4e35c3751a9fa3c0a71e8d3e63a64bd70f2b2a82cb47"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\integrations\\coordinator-20261028-runtime02\\magazine\\FreshOverlay.ps1",
+      "bytes": 552,
+      "sha256": "89c93b21d1a0adecdd8a2ce8ad07632d99b0a1a37aaf34c65285cae617242ae2"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\integrations\\coordinator-20261028-runtime02\\magazine\\README.txt",
+      "bytes": 2606,
+      "sha256": "11bfcc50b4fa17f28d5efecd2e2c4a2cc600d2e0c283a08b9d5a5b65072a376d"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\integrations\\coordinator-20261028-runtime02\\magazine\\RunBuilt.ps1",
+      "bytes": 26547,
+      "sha256": "290662a6813c0d8211c15055a10e001e294cd6f09c4a54e7ee77149ea5dc6c2b"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\integrations\\coordinator-20261028-runtime02\\magazine\\source-preparation.json",
+      "bytes": 3751,
+      "sha256": "c7b6831002e3865a01c3f99e3db3f95ebd2d901e29a2b65c2bcf24c5b0b349d0"
+    }
+  ],
+  "workflow_sources": [
+    {
+      "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\tools\\Run-OrdinaryResourceInputProbe.ps1",
+      "bytes": 14061,
+      "sha256": "675aec1937a6c6c459060a76807dddd3f6b2db997960674681406b3de6442739"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\tools\\Run-BC2CampaignBench.ps1",
+      "bytes": 16782,
+      "sha256": "fbda9b538630d5ccc9e789ec77ea98eaa7499ed05f8a0e5cb9e4efc40f004bdc"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\tools\\preflight_resource_inventory.py",
+      "bytes": 3749,
+      "sha256": "7ce735cabcbb562943ae01180c334f77bddc69e2098027b059392f8c90eab073"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\tools\\preflight_reload_probe.py",
+      "bytes": 7729,
+      "sha256": "c0f77f8bb812cf529df6f5dc9ec4603ebe84d175257d7be423854124cf817dd4"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\tools\\capture_reload_state.py",
+      "bytes": 24394,
+      "sha256": "94db343a4d568c5c6c784aa70b74a508ab936187f63eb95c778359a15294ca88"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\tools\\check_resource_inventory_status.py",
+      "bytes": 31925,
+      "sha256": "3e15094479211486a8c6ac98dba803d3c59b9c11749f7a0ba234ee31c4dfc3bb"
+    }
+  ],
+  "fresh_helper": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\integrations\\coordinator-20261028-runtime02\\magazine\\FreshOverlay.ps1",
+    "bytes": 552,
+    "sha256": "89c93b21d1a0adecdd8a2ce8ad07632d99b0a1a37aaf34c65285cae617242ae2"
+  },
+  "python_manifest": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight426\\release\\stage-0.1.8-01\\runtime\\runtime.json",
+    "bytes": 12549,
+    "sha256": "834f6f809b8a59212479c69221d682be8466e7f7d746601cff7ed132e2bb9d77"
+  },
+  "prior_workflow": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\performance436\\campaign-magazine-batch-r55-prep\\two-hand-empty03\\workflow-preparation.json",
+    "bytes": 6054,
+    "sha256": "b69aa6fc22347cf3248ea12d911c3a811182779d94ccf15dc300b4ba321a2603"
+  },
+  "prior_single_runner": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\performance436\\campaign-magazine-batch-r55-prep\\single-magazine02\\RunBuilt.ps1",
+    "bytes": 34289,
+    "sha256": "0a500aeb4f7eee826e65cc5b613a6cd900e595e9e230b39b896d2f69f27d93ed"
+  },
+  "build_pending": true,
+  "native_pending": true,
+  "source_mutations": 0,
+  "flags_only": true,
+  "game_actions": 0,
+  "previous_workflow": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\performance436\\generic-magazine-r56-prep\\workflow-preparation.json",
+    "bytes": 7051,
+    "sha256": "b76df0b87ece080832917b950c4b9456d2cad2da9e30169c5100a1664ce5868c"
+  },
+  "future_normal_receipt": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\coordinator-20261028-batch01\\normal-runtime\\build-receipt.json",
+  "frozen_source": {
+    "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\coordinator-20261028-batch01\\normal-runtime\\source-freeze.json",
+    "bytes": 13520,
+    "sha256": "4a3b6729fb9ca0c41d8276e6127957e1a835ea13e39133b993b1539baf9e09ae"
+  },
+  "normal_admission_ancestor": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\performance436\\m95-custody-r56-prep\\source-preparation.json",
+    "bytes": 8510,
+    "sha256": "772d4cca2a52ec5701ddb86b318360dd769309d815c5a11574f8f0c062ebcc91"
+  },
+  "provisioning_builds": [
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\performance436\\campaign-provision-r50\\build\\build-receipt.json",
+      "bytes": 3109,
+      "sha256": "95097a2ee28d897e431e9d0c4a8cb1f63ff70755dfccdfbded02e7e9c151b327"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\performance436\\campaign-provision-r50\\build\\build-receipt.json",
+      "bytes": 3109,
+      "sha256": "95097a2ee28d897e431e9d0c4a8cb1f63ff70755dfccdfbded02e7e9c151b327"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\performance436\\campaign-provision-r50\\build\\build-receipt.json",
+      "bytes": 3109,
+      "sha256": "95097a2ee28d897e431e9d0c4a8cb1f63ff70755dfccdfbded02e7e9c151b327"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\performance436\\campaign-provision-r50\\build\\build-receipt.json",
+      "bytes": 3109,
+      "sha256": "95097a2ee28d897e431e9d0c4a8cb1f63ff70755dfccdfbded02e7e9c151b327"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\performance436\\campaign-magazine-batch-r55-prep\\provisioning-proposal\\build-prep01\\build\\build-receipt.json",
+      "bytes": 3495,
+      "sha256": "08051ff8cb0c3adca8a57b251f6e306049e372170e1ac140d88a1e4e0ea7eaf2"
+    }
+  ],
+  "metadata_change": "Pinned five existing plans; exact shared inventory/variant/provision/geometry predicates unchanged. No runtime receipt fabricated.",
+  "normal": {
+    "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\coordinator-20261028-batch01\\normal-runtime\\build-receipt.json",
+    "bytes": 12933,
+    "sha256": "a196a0b16622fb85216bad8a9bfdf7598fadea37db20dc050284e0b456004fe4"
+  },
+  "parent_native_scene_modified": false,
+  "evidence_root": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\coordinator-20261028-runtime02\\magazine",
+  "integration_lease": "campaign-coordinator-20261028-r1-runtime02-91aa4c54d34a41219b8483ccdd7629cb",
+  "scope": "Nambu magazine only; not CHAT07 combined normal interactions or installed-runtime acceptance",
+  "tests_run": false,
+  "builds_run": false,
+  "processes_launched": false,
+  "build_reservation_bytes": 3221225472
+}

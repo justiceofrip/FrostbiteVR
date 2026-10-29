@@ -9,6 +9,135 @@ import time
 GAME_CLASS = "Battlefield: Bad Company 2"
 
 
+def _desktop_libraries():
+    """Bind lazily so package preflight and mocked contracts need no Win32."""
+    user32 = c.WinDLL("user32", use_last_error=True)
+    kernel32 = c.WinDLL("kernel32", use_last_error=True)
+    for library, name, args, result in (
+        (user32, "GetProcessWindowStation", [], w.HANDLE),
+        (user32, "GetThreadDesktop", [w.DWORD], w.HANDLE),
+        (user32, "OpenInputDesktop", [w.DWORD, w.BOOL, w.DWORD], w.HANDLE),
+        (user32, "CloseDesktop", [w.HANDLE], w.BOOL),
+        (user32, "GetUserObjectInformationW",
+         [w.HANDLE, c.c_int, c.c_void_p, w.DWORD, c.POINTER(w.DWORD)], w.BOOL),
+        (user32, "GetForegroundWindow", [], w.HWND),
+        (user32, "GetWindowThreadProcessId", [w.HWND, c.POINTER(w.DWORD)], w.DWORD),
+        (kernel32, "GetCurrentProcessId", [], w.DWORD),
+        (kernel32, "GetCurrentThreadId", [], w.DWORD),
+        (kernel32, "ProcessIdToSessionId", [w.DWORD, c.POINTER(w.DWORD)], w.BOOL),
+        (kernel32, "WTSGetActiveConsoleSessionId", [], w.DWORD),
+    ):
+        function = getattr(library, name)
+        function.argtypes = args
+        function.restype = result
+    return user32, kernel32
+
+
+def desktop_context(user32=None, kernel32=None, last_error=None):
+    """Take one bounded, read-only caller-desktop snapshot, without a game.
+
+    UOI_IO verifies actual input ownership; desktop names alone are insufficient.
+    This does not switch desktops or grant future foreground/input permission.
+    """
+    result = {"schema": "fvr.bc2.desktop_context", "schema_version": 1,
+              "observed_unix_ns": time.time_ns(), "read_only": True,
+              "process_opened": False, "window_or_input_actions": False,
+              "process_id": None, "thread_id": None, "session_id": None,
+              "active_console_session_id": None, "window_station": None,
+              "thread_desktop": None, "input_desktop": None,
+              "thread_desktop_receives_input": None,
+              "input_desktop_receives_input": None,
+              "active_input_desktop_verified": False,
+              "foreground": {"hwnd": None, "pid": None, "thread_id": None},
+              "errors": []}
+    if user32 is None or kernel32 is None:
+        try:
+            user32, kernel32 = _desktop_libraries()
+        except (AttributeError, OSError) as error:
+            result["errors"].append({"query": "load_win32_libraries", "message": str(error)})
+            return result
+    if last_error is None:
+        last_error = c.get_last_error
+
+    def failed(query):
+        result["errors"].append({"query": query, "win32_error": last_error()})
+
+    def name(handle, label):
+        # Fixed upper bound; a longer/unavailable name fails admission.
+        value = c.create_unicode_buffer(512)
+        needed = w.DWORD()
+        if not user32.GetUserObjectInformationW(handle, 2, value, c.sizeof(value), c.byref(needed)):
+            failed("GetUserObjectInformationW(UOI_NAME):" + label)
+            return None
+        if not value.value:
+            result["errors"].append({"query": "GetUserObjectInformationW(UOI_NAME):" + label,
+                                     "message": "Empty object name"})
+            return None
+        return value.value
+
+    def receives_input(handle, label):
+        value = w.BOOL()
+        needed = w.DWORD()
+        if not user32.GetUserObjectInformationW(handle, 6, c.byref(value), c.sizeof(value), c.byref(needed)):
+            failed("GetUserObjectInformationW(UOI_IO):" + label)
+            return None
+        return bool(value.value)
+
+    result["process_id"] = int(kernel32.GetCurrentProcessId())
+    result["thread_id"] = int(kernel32.GetCurrentThreadId())
+    session = w.DWORD()
+    if kernel32.ProcessIdToSessionId(result["process_id"], c.byref(session)):
+        result["session_id"] = session.value
+    else:
+        failed("ProcessIdToSessionId")
+    console = int(kernel32.WTSGetActiveConsoleSessionId())
+    result["active_console_session_id"] = None if console == 0xffffffff else console
+    station = user32.GetProcessWindowStation()
+    if station:
+        result["window_station"] = name(station, "window_station")
+    else:
+        failed("GetProcessWindowStation")
+    thread_desktop = user32.GetThreadDesktop(result["thread_id"])
+    if thread_desktop:
+        result["thread_desktop"] = name(thread_desktop, "thread_desktop")
+        result["thread_desktop_receives_input"] = receives_input(thread_desktop, "thread_desktop")
+    else:
+        failed("GetThreadDesktop")
+    input_desktop = user32.OpenInputDesktop(0, False, 0x0001)  # DESKTOP_READOBJECTS only.
+    if input_desktop:
+        try:
+            result["input_desktop"] = name(input_desktop, "input_desktop")
+            result["input_desktop_receives_input"] = receives_input(input_desktop, "input_desktop")
+        finally:
+            # GetProcessWindowStation/GetThreadDesktop return borrowed handles.
+            if not user32.CloseDesktop(input_desktop):
+                failed("CloseDesktop")
+    else:
+        failed("OpenInputDesktop")
+    foreground = int(user32.GetForegroundWindow() or 0)
+    result["foreground"]["hwnd"] = foreground
+    if foreground:  # A NULL foreground is an observation, not a GetLastError failure.
+        owner = w.DWORD()
+        thread = user32.GetWindowThreadProcessId(foreground, c.byref(owner))
+        if thread:
+            result["foreground"].update(pid=owner.value, thread_id=int(thread))
+        else:
+            failed("GetWindowThreadProcessId:foreground")
+    result["active_input_desktop_verified"] = bool(
+        not result["errors"] and result["window_station"]
+        and result["thread_desktop"] and result["input_desktop"]
+        and result["thread_desktop"].casefold() == result["input_desktop"].casefold()
+        and result["thread_desktop_receives_input"] is True
+        and result["input_desktop_receives_input"] is True)
+    return result
+
+
+def require_input_desktop(context):
+    if not context["active_input_desktop_verified"]:
+        raise RuntimeError("Caller desktop could not be verified as the active input desktop; "
+                           "inspect --desktop-context. Context: " + json.dumps(context))
+
+
 def capture_window_image(bounds, grab, get_metrics):
     """Crop desktop pixels using the OS virtual origin, including left monitors.
 
@@ -126,6 +255,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--pid", type=int)
     ap.add_argument("--preflight", action="store_true")
+    ap.add_argument("--desktop-context", action="store_true")
     ap.add_argument("--hwnd", type=lambda text: int(text, 0))
     ap.add_argument("--key", choices=["escape", "enter", "e", "r", "1", "2"])
     ap.add_argument("--click", type=int, nargs=2)
@@ -136,10 +266,17 @@ def main():
     ap.add_argument("--left-monitor", action="store_true")
     ap.add_argument("--show", action="store_true")
     a = ap.parse_args()
+    window_arguments = (a.pid is not None, a.hwnd is not None, a.key, a.click, a.capture,
+                        a.report, a.report_root, a.activate, a.left_monitor, a.show)
     if a.preflight:
-        if any((a.pid, a.hwnd, a.key, a.click, a.capture, a.report, a.report_root, a.activate, a.left_monitor, a.show)):
+        if a.desktop_context or any(window_arguments):
             ap.error('--preflight must be used alone')
         print(json.dumps(preflight()))
+        return
+    if a.desktop_context:
+        if any(window_arguments):
+            ap.error('--desktop-context must be used alone')
+        print(json.dumps(desktop_context()))
         return
     if not a.pid:
         ap.error('--pid is required for window operations')
@@ -147,6 +284,8 @@ def main():
         ap.error("Keyboard/mouse control requires explicit --activate")
     output = report_path(a.report, a.report_root) if a.report else None
     capture = report_path(a.capture, a.report_root) if a.capture else None
+    context = desktop_context()
+    require_input_desktop(context)
     from read_bc2 import Process
     p = Process(a.pid)
     try:
@@ -307,6 +446,7 @@ def main():
             captured.save(capture)
         after = owns()
         result = {"schema": "fvr.bc2.window_recovery", "schema_version": 1,
+                  "desktop_context": context,
                   "before": before, "after": after, "actions": actions, "skip": plan["skip"],
                   "foreground_unchanged": before["foreground"] == after["foreground"],
                   "activation_requested": a.activate}

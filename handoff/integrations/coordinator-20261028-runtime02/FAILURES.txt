@@ -1,0 +1,18 @@
+Preserve these episodes; later checks do not replace them.
+
+- Original helper test interpreter:28passed/5Pillow skips. A path-only attempt to
+  add a different Python ABI's Pillow did not resolve that environment mismatch.
+- Same package-embedded interpreter's _pth imports its own tools directory; two
+  package-preflight tests correctly rejected that non-package-local read_bc2.
+  Canonical full Python passes3/3; the available matching Pillow interpreter33/33.
+- scene01 direct SetForegroundWindow false on verified Default desktop.
+- Post-user-reply capture refused: ChatGPT owned foreground; zero image/input.
+- Bounded45s correction wait refused: browser retained foreground; zero input.
+- Established launcher activate_game_once.py then passed; both queue attachments
+  detached, four stable samples, zero generated keyboard/mouse events.
+- Client position changed without resize/style/activation; the first recheck
+  reused an already transformed POINT and falsely rejected alignment. Fixed by
+  resetting the client-origin POINT before ClientToScreen. No image/input saved.
+- Next capture refused on combined before/after window/foreground guard; read-only
+  observation found Discord foreground, exact game HWND/geometry unchanged.
+- Scene01 finished normally; exact original three-profile restore verified.

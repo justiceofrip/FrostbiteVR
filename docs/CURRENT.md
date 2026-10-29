@@ -1,9 +1,18 @@
 # Current state — shared normal integration / public 0.1.15
 
-Updated October 28, 2026. This replaces old next-step instructions; prior evidence remains in
+Updated October 29, 2026. This replaces old next-step instructions; prior evidence remains in
 [history/](history/README.md) (search it by run number; never read a log whole).
 
 ## Active work
+
+Runtime02 adds read-only Windows desktop diagnosis and rejects window operations
+from an unverified input desktop;33window tests and3package checks pass. A stock
+scene verified the existing one-shot activation helper and exact profile restore;
+later window/foreground capture checks refused before gameplay input/attachment.
+The [continuation handoff](../handoff/integrations/coordinator-20261028-runtime02/README.md)
+retains those failures. Nambu diagnostic preparation remains separate from normal
+interaction acceptance. The user confirms no headset; continue offline work until
+an uninterrupted game-input window is available. Launcher0.1.12 remains unchanged.
 
 CHAT07/CHAT23 source is combined with finished CHAT25/26: coherent loaded-count
 changes retain the same chest reserve prop across both eyes; grenade/reload

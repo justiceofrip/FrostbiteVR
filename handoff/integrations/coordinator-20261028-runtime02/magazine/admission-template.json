@@ -1,0 +1,72 @@
+{
+  "schema": "fvr.r55.single-magazine.inputs.v1",
+  "plans": [
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\performance436\\campaign-magazine-batch-r55-prep\\plans\\sp01-nambu.json",
+      "bytes": 751783,
+      "sha256": "0e1df14474dc91bee67da6d9c78996ca0e432863061efacce8c19b17567ba3ea"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\performance436\\campaign-magazine-batch-r55-prep\\plans\\sp03-reference.json",
+      "bytes": 723972,
+      "sha256": "7af4c49e91d675f32cb7232e673fe8961971b6a64f39fb4cd8baf49e5ac8bd52"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\performance436\\campaign-magazine-batch-r55-prep\\plans\\sp03-aek-xm8.json",
+      "bytes": 723877,
+      "sha256": "8cbc3b3e77c309e51e804183e48b8c6a3ff8cd2ddf4e2d3188916aba652d00a8"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\performance436\\campaign-magazine-batch-r55-prep\\plans\\sp03-scar-unscoped.json",
+      "bytes": 720067,
+      "sha256": "d3f6ca60352f1713ad43cebe3fad576dcc8e9cd62d8432b43bc01cc50e670ba1"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\performance436\\campaign-magazine-batch-r55-prep\\provisioning-proposal\\build-prep01\\sp03-mp443-bound-plan.json",
+      "bytes": 702393,
+      "sha256": "e6d8c9d924f7d544ea98769ded30e71aec0ca515d4307d3b03a35ae7c700e97a"
+    }
+  ],
+  "batch": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\performance436\\campaign-magazine-batch-r55-prep\\mp443-single-magazine04\\configured-inventory-with-provisioner.json",
+    "bytes": 65935,
+    "sha256": "e93e2df554bb2e2b6bd8009981397295ff56de60066d11486ef51d02de69c66a"
+  },
+  "body_catalog": {
+    "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\config\\body-ammo-assets.json",
+    "sha256": "0ed0b9df5b7b11bb31f1487e754c0eabd0c692bd121a5517ea8cbce3f6f84dca",
+    "bytes": 318711
+  },
+  "body_header": {
+    "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\src\\games\\bc2\\Bc2BodyAmmoAssetProfiles.h",
+    "sha256": "df154d924a073ec75e66d224fffdadafbcb194f6b7048d3d84273d4139281f91",
+    "bytes": 44149
+  },
+  "compiled_inputs": [
+    {
+      "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\profiles\\opening426\\CombinedRegistry.h",
+      "sha256": "6360b3aa30fd6b760c0569727c5132d2c121792fc35f6b8619ad1e98f3ba7e3e",
+      "bytes": 1306
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\src\\games\\bc2\\Bc2MagazineNativeRegistry.cpp",
+      "sha256": "5c41e5d2592f6d92f0f2cf29ae6c5ac1ff52c8514933dafb633f23a8197fba73",
+      "bytes": 3856
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\src\\games\\bc2\\Bc2MagazineNativeProfile.h",
+      "sha256": "f303830336a95fbef0e51851a6b13c98ae79efabefdf1e13f60dde0c5ba0e972",
+      "bytes": 5639
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\src\\games\\bc2\\Bc2ReloadConfigDescriptor.h",
+      "sha256": "10445a3c10491f0a12d226b6b8cdff2f6d0d1f8a066b393012ecd0021f6c8d81",
+      "bytes": 4365
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\src\\games\\bc2\\Bc2BodyAmmoAssetProfiles.h",
+      "sha256": "df154d924a073ec75e66d224fffdadafbcb194f6b7048d3d84273d4139281f91",
+      "bytes": 44149
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 BC2 VR shared integration coordination
-Updated: October 28, 2026
+Updated: October 29, 2026
 Policy for this run: one coordinator worktree; coordinator owns shared integration.
 Canonical repository: G:\Unity\VRMMO\FrostbiteVR
 Integration branch: checkpoint/436-r56-equipment-rendering
@@ -10,6 +10,19 @@ Exclusive integration lease: G:\Unity\VRMMO\bc2vr-task-worktrees\INTEGRATION.loc
 Ownership: prior CHAT25/26 close.json confirms lease release, idle helpers and
 exact profile restoration. Coordinator acquired the lease before shared mutations.
 External CHAT25/26/32 worktrees remain untouched; their tasks are not reassigned.
+
+Runtime02 continuation: desktop-context diagnostic and early window admission;
+33window/3package tests pass, independent review passes. Source push pending.
+Handoff: handoff/integrations/coordinator-20261028-runtime02/README.md.
+Stock scene01 passed the existing one-shot foreground helper, then refused later
+window/foreground capture checks; closed normally and restored all3profiles.
+No gameplay input, mod attachment or equipment acceptance from that session.
+User confirms headset unavailable and is using the other monitor; continue offline
+preparation, then request one uninterrupted game-input window when ready.
+Shared Windows focus spans both monitors; do not repeatedly reactivate the game.
+Saved XR logs identify no connected HMD; prior successful driver was Steam Link.
+No registration/VirtualDesktop setting change or unchanged XR retry is justified.
+Scoped Nambu flags-only build preparation is separate from CHAT07 normal acceptance.
 
 Last batch: CHAT07 coexistence regressions and CHAT23 chest reserve prop continuity.
 Accepted prior source: 4448779e33ad265f572245cff49913983696ce5c (finished CHAT25/26).

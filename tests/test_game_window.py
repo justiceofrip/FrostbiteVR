@@ -1,6 +1,10 @@
 import importlib.util
+import io
+import json
 from pathlib import Path
+from types import SimpleNamespace
 import unittest
+from unittest import mock
 try:
     from PIL import Image
 except ImportError:
@@ -9,6 +13,174 @@ except ImportError:
 spec = importlib.util.spec_from_file_location("game_window", Path(__file__).parents[1]/"tools"/"game_window.py")
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
+
+
+class DesktopContextTests(unittest.TestCase):
+    def fixture(self, *, desktop="Default", thread_input=True, input_available=True,
+                failed_query=None, close_ok=True, foreground=0x100000099, owner_ok=True):
+        # Only the opened input handle (33) is owned; 11/22 are borrowed.
+        names = {11: "WinSta0", 22: desktop, 33: "Default"}
+
+        def object_info(handle, query, buffer, size, needed):
+            if (handle, query) == failed_query:
+                return False
+            if query == 2:
+                buffer.value = names[handle]
+            elif query == 6:
+                module.c.cast(buffer, module.c.POINTER(module.w.BOOL)).contents.value = (
+                    thread_input if handle == 22 else True)
+            else:
+                self.fail("Unexpected user-object query")
+            return True
+
+        def session(pid, output):
+            module.c.cast(output, module.c.POINTER(module.w.DWORD)).contents.value = 1
+            return True
+
+        def owner(hwnd, output):
+            module.c.cast(output, module.c.POINTER(module.w.DWORD)).contents.value = 53772
+            return 42 if owner_ok else 0
+
+        user32 = SimpleNamespace(
+            GetProcessWindowStation=mock.Mock(return_value=11),
+            GetThreadDesktop=mock.Mock(return_value=22),
+            OpenInputDesktop=mock.Mock(return_value=33 if input_available else 0),
+            CloseDesktop=mock.Mock(return_value=close_ok),
+            GetUserObjectInformationW=mock.Mock(side_effect=object_info),
+            GetForegroundWindow=mock.Mock(return_value=foreground),
+            GetWindowThreadProcessId=mock.Mock(side_effect=owner))
+        kernel32 = SimpleNamespace(
+            GetCurrentProcessId=mock.Mock(return_value=1234),
+            GetCurrentThreadId=mock.Mock(return_value=5678),
+            ProcessIdToSessionId=mock.Mock(side_effect=session),
+            WTSGetActiveConsoleSessionId=mock.Mock(return_value=1))
+        return user32, kernel32
+
+    def observe(self, **changes):
+        user32, kernel32 = self.fixture(**changes)
+        return module.desktop_context(user32, kernel32, lambda: 5), user32
+
+    def test_active_desktop_records_identity_and_closes_only_owned_handle(self):
+        context, user32 = self.observe()
+        module.require_input_desktop(context)
+        self.assertTrue(context["active_input_desktop_verified"])
+        self.assertEqual((context["window_station"], context["thread_desktop"], context["input_desktop"]),
+                         ("WinSta0", "Default", "Default"))
+        self.assertEqual((context["process_id"], context["thread_id"], context["session_id"]),
+                         (1234, 5678, 1))
+        self.assertEqual(context["foreground"], {"hwnd": 0x100000099, "pid": 53772, "thread_id": 42})
+        self.assertEqual(context["errors"], [])
+        user32.OpenInputDesktop.assert_called_once_with(0, False, 0x0001)
+        user32.CloseDesktop.assert_called_once_with(33)
+
+    def test_sandbox_desktop_mismatch_is_distinct_from_null_foreground(self):
+        context, user32 = self.observe(desktop="CodexSandboxDesktop-test", thread_input=False, foreground=0)
+        self.assertEqual(context["foreground"], {"hwnd": 0, "pid": None, "thread_id": None})
+        self.assertEqual(context["errors"], [])
+        self.assertFalse(context["active_input_desktop_verified"])
+        with self.assertRaisesRegex(RuntimeError, "active input desktop"):
+            module.require_input_desktop(context)
+        user32.GetWindowThreadProcessId.assert_not_called()
+        user32.CloseDesktop.assert_called_once_with(33)
+
+    def test_same_desktop_name_does_not_replace_input_ownership(self):
+        context, _ = self.observe(thread_input=False)
+        self.assertEqual(context["thread_desktop"], context["input_desktop"])
+        self.assertFalse(context["active_input_desktop_verified"])
+
+    def test_unavailable_input_desktop_refuses_without_closing_borrowed_handles(self):
+        context, user32 = self.observe(input_available=False)
+        self.assertEqual(context["errors"], [{"query": "OpenInputDesktop", "win32_error": 5}])
+        self.assertIsNone(context["input_desktop"])
+        with self.assertRaisesRegex(RuntimeError, "OpenInputDesktop"):
+            module.require_input_desktop(context)
+        user32.CloseDesktop.assert_not_called()
+
+    def test_failed_name_or_input_query_is_reported_and_owned_handle_closed(self):
+        for handle, query, label in ((22, 2, "UOI_NAME):thread_desktop"),
+                                     (22, 6, "UOI_IO):thread_desktop"),
+                                     (33, 2, "UOI_NAME):input_desktop"),
+                                     (33, 6, "UOI_IO):input_desktop")):
+            with self.subTest(handle=handle, query=query):
+                context, user32 = self.observe(failed_query=(handle, query))
+                self.assertFalse(context["active_input_desktop_verified"])
+                self.assertEqual(context["errors"], [
+                    {"query": "GetUserObjectInformationW(" + label, "win32_error": 5}])
+                user32.CloseDesktop.assert_called_once_with(33)
+
+    def test_close_failure_is_visible_and_blocks_admission(self):
+        context, user32 = self.observe(close_ok=False)
+        self.assertFalse(context["active_input_desktop_verified"])
+        self.assertEqual(context["errors"], [{"query": "CloseDesktop", "win32_error": 5}])
+        user32.CloseDesktop.assert_called_once_with(33)
+
+    def test_foreground_owner_failure_is_not_an_invented_owner(self):
+        context, user32 = self.observe(owner_ok=False)
+        self.assertEqual(context["foreground"], {"hwnd": 0x100000099, "pid": None, "thread_id": None})
+        self.assertEqual(context["errors"], [
+            {"query": "GetWindowThreadProcessId:foreground", "win32_error": 5}])
+        user32.CloseDesktop.assert_called_once_with(33)
+
+    def test_platform_unavailability_is_a_diagnostic_result(self):
+        with mock.patch.object(module, "_desktop_libraries", side_effect=OSError("Win32 unavailable")):
+            context = module.desktop_context()
+        self.assertFalse(context["active_input_desktop_verified"])
+        self.assertEqual(context["errors"], [
+            {"query": "load_win32_libraries", "message": "Win32 unavailable"}])
+
+    def test_diagnostic_cli_needs_no_game_or_capture_dependency(self):
+        user32, kernel32 = self.fixture()
+        original_import = __import__
+
+        def guarded_import(name, *args, **kwargs):
+            if name in ("read_bc2", "PIL", "PIL.ImageGrab"):
+                self.fail("Desktop diagnostic imported a game/capture dependency")
+            return original_import(name, *args, **kwargs)
+
+        with mock.patch("sys.argv", ["game_window.py", "--desktop-context"]), \
+                mock.patch.object(module, "_desktop_libraries", return_value=(user32, kernel32)), \
+                mock.patch.object(module.c, "get_last_error", return_value=5, create=True), \
+                mock.patch("builtins.__import__", side_effect=guarded_import), \
+                mock.patch("sys.stdout", new_callable=io.StringIO) as output:
+            module.main()
+        context = json.loads(output.getvalue())
+        self.assertTrue(context["active_input_desktop_verified"])
+        self.assertFalse(context["process_opened"])
+        self.assertFalse(context["window_or_input_actions"])
+        user32.CloseDesktop.assert_called_once_with(33)
+
+    def test_preflight_does_not_query_desktop_context(self):
+        with mock.patch("sys.argv", ["game_window.py", "--preflight"]), \
+                mock.patch.object(module, "preflight", return_value={"helper_ready": True}), \
+                mock.patch.object(module, "desktop_context", side_effect=AssertionError("OS query")), \
+                mock.patch("sys.stdout", new_callable=io.StringIO) as output:
+            module.main()
+        self.assertEqual(json.loads(output.getvalue()), {"helper_ready": True})
+
+    def test_refused_desktop_stops_every_window_mode_before_opening_process(self):
+        process = mock.Mock(side_effect=AssertionError("Process opened before desktop admission"))
+        for options in ([], ["--show"], ["--left-monitor"], ["--activate"],
+                        ["--activate", "--key", "enter"],
+                        ["--capture", str(Path(__file__).resolve().parents[1]/"reports"/"unused.png")]):
+            for changes in ({"input_available": False}, {"desktop": "Sandbox", "thread_input": False}):
+                with self.subTest(options=options, changes=changes):
+                    context, _ = self.observe(**changes)
+                    with mock.patch("sys.argv", ["game_window.py", "--pid", "4", *options]), \
+                            mock.patch.object(module, "desktop_context", return_value=context), \
+                            mock.patch.dict("sys.modules", {"read_bc2": SimpleNamespace(Process=process)}), \
+                            self.assertRaisesRegex(RuntimeError, "active input desktop"):
+                        module.main()
+        process.assert_not_called()
+
+    def test_verified_desktop_reaches_existing_process_admission(self):
+        context, _ = self.observe()
+        process = mock.Mock(side_effect=RuntimeError("Existing process admission reached"))
+        with mock.patch("sys.argv", ["game_window.py", "--pid", "4"]), \
+                mock.patch.object(module, "desktop_context", return_value=context), \
+                mock.patch.dict("sys.modules", {"read_bc2": SimpleNamespace(Process=process)}), \
+                self.assertRaisesRegex(RuntimeError, "Existing process admission reached"):
+            module.main()
+        process.assert_called_once_with(4)
 
 
 class WindowRecoveryTests(unittest.TestCase):

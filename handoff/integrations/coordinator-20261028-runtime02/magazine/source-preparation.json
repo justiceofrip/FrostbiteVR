@@ -1,0 +1,87 @@
+{
+  "schema": "fvr.runtime02.magazine.source.v1",
+  "source_only": true,
+  "flags_only": true,
+  "files": [],
+  "normal_baseline": {
+    "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\coordinator-20261028-batch01\\normal-runtime\\build-receipt.json",
+    "bytes": 12933,
+    "sha256": "a196a0b16622fb85216bad8a9bfdf7598fadea37db20dc050284e0b456004fe4"
+  },
+  "normal_source_sha256": "d74a6b63c6360d77007c46d1f3c9f8ca342ce1740466688a7ffd6ab43d3b26ed",
+  "source_proof": [
+    {
+      "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\src\\games\\bc2\\Bc2Gameplay.cpp",
+      "bytes": 348411,
+      "sha256": "abeafeb026aa5485b700170f06e83999ba2a10c24bd476c8b0747f7f01136dd7"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\src\\games\\bc2\\Bc2ResourceInventoryProbe.h",
+      "bytes": 12349,
+      "sha256": "d6761b2c8ce0662935a545a1fbc5318c325d78f01e47c549a85cce71a79133d0"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\src\\games\\bc2\\Bc2ResourceInventoryProbe.cpp",
+      "bytes": 66209,
+      "sha256": "61b55e3decb42b0168c37e49483976d504350aa9bda148611638e70675170230"
+    },
+    {
+      "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\CMakeLists.txt",
+      "bytes": 94496,
+      "sha256": "30ea68b3c7c49c7f9075ef94fce14545f8e42173066ad40643828550ef92970f"
+    }
+  ],
+  "required_objects": [
+    {
+      "object": "CMakeFiles\\BC2NativeProbe.dir\\src\\games\\bc2\\NativeProbe.cpp.obj",
+      "source": "src/games/bc2/NativeProbe.cpp"
+    },
+    {
+      "object": "CMakeFiles\\BC2NativeProbe.dir\\src\\games\\bc2\\Bc2Gameplay.cpp.obj",
+      "source": "src/games/bc2/Bc2Gameplay.cpp"
+    },
+    {
+      "object": "CMakeFiles\\BC2NativeTrace.dir\\src\\platform\\windows\\NativeTraceMain.cpp.obj",
+      "source": "src/platform/windows/NativeTraceMain.cpp"
+    }
+  ],
+  "required_object_count": 3,
+  "prior_single_magazine": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\performance436\\campaign-magazine-batch-r55-prep\\single-magazine02\\source-preparation.json",
+    "bytes": 5490,
+    "sha256": "4dc23db011a61c3df513c8d0d9c5123db826a9ae52839ac1567f685dfb59b30c"
+  },
+  "enabled_diagnostic_flags": [
+    "BC2_ORDINARY_RESOURCE_INPUT_PROBE",
+    "BC2_ORDINARY_RESOURCE_MAGAZINE_ONLY_PROBE",
+    "BC2_ORDINARY_RESOURCE_MAGAZINE_POSTFIRE_PROBE"
+  ],
+  "excluded_normal_features": [
+    "BC2_PLAYER_GRENADES",
+    "BC2_PLAYER_CHEST_KNIFE",
+    "BC2_PLAYER_CONTEXTUAL_TOOLS"
+  ],
+  "source_or_operation_records_changed": false,
+  "normal_checkout_modified": false,
+  "tests_run": false,
+  "builds_run": false,
+  "game_actions": 0,
+  "active_branch": "EnableMagazineOnly(false,true,true)",
+  "paired_weapon_required": false,
+  "binary_reuse": false,
+  "binary_reuse_reason": "Normal and two-hand binaries have different finite diagnostic definitions.",
+  "future_normal_receipt": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\coordinator-20261028-batch01\\normal-runtime\\build-receipt.json",
+  "actual_normal_sha_required": true,
+  "frozen_source": {
+    "path": "G:\\Unity\\VRMMO\\FrostbiteVR\\reports\\coordinator-20261028-batch01\\normal-runtime\\source-freeze.json",
+    "bytes": 13520,
+    "sha256": "4a3b6729fb9ca0c41d8276e6127957e1a835ea13e39133b993b1539baf9e09ae"
+  },
+  "predecessor": {
+    "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\performance436\\generic-magazine-r56-prep\\source-preparation.json",
+    "bytes": 3468,
+    "sha256": "945fd0fc595db55a73bfc532a7296b3c2a081b875f542932b4dc0b7a5fd22f00"
+  },
+  "intended_scope": "Nambu magazine only; not CHAT07 combined normal interactions, installed-runtime acceptance, or headset acceptance.",
+  "full_source_manifest_policy": "Snapshot actual canonical source at each validation/build; native closure must equal batch01; no claim that later tools/tests equal historical6e5fc12."
+}

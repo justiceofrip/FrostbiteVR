@@ -1,0 +1,71 @@
+{
+  "schema": "fvr.coordinator.runtime-continuation.v1",
+  "run": "coordinator-20261028-runtime02",
+  "baseline": "7ae7ee3f25537766f3cdac53172050e7f8cb2d47",
+  "integration_branch": "checkpoint/436-r56-equipment-rendering",
+  "source_push": {"status": "pending"},
+  "native_source_changed": false,
+  "normal_build_reused": {
+    "built_source_commit": "6e5fc12d3b98c5065b2bb8d385d28612e4c1c146",
+    "native_source_sha256": "d74a6b63c6360d77007c46d1f3c9f8ca342ce1740466688a7ffd6ab43d3b26ed",
+    "receipt": "reports/coordinator-20261028-batch01/normal-runtime/build-receipt.json",
+    "receipt_sha256": "a196a0b16622fb85216bad8a9bfdf7598fadea37db20dc050284e0b456004fe4",
+    "normal_builds_repeated": false
+  },
+  "helper_validation": {
+    "window_tests_passed": 33,
+    "window_tests_skipped": 0,
+    "targeted_package_tests_passed": 3,
+    "independent_review": "pass",
+    "real_sandbox_desktop_refused": true,
+    "real_active_desktop_verified": true,
+    "initial_interpreter_failures_retained": true
+  },
+  "stock_scene01": {
+    "fresh_game_launched": true,
+    "direct_activation_passed": false,
+    "established_helper_activation_passed": true,
+    "helper_activation_bursts": 1,
+    "stable_foreground_samples": 4,
+    "input_queues_detached": true,
+    "generated_keyboard_or_mouse_events": 0,
+    "menu_images_accepted": 0,
+    "gameplay_input_sent": false,
+    "native_attached": false,
+    "closed_normally": true,
+    "exact_three_profiles_restored": true,
+    "evidence": "reports/coordinator-20261028-runtime02/scene01"
+  },
+  "storage": {
+    "compressed_generated_symbol_files": 66,
+    "reclaimed_bytes": 669319168,
+    "deleted_files": 0,
+    "content_changes": 0,
+    "build_reserve_bytes": 3221225472,
+    "max_generated_bytes": 42949672960,
+    "min_free_bytes": 16106127360,
+    "receipt": "reports/coordinator-20261028-runtime02/storage01/compression.json"
+  },
+  "nambu_diagnostic": {
+    "status": "preparation validated; scoped diagnostic build pending",
+    "native_overlays": 0,
+    "enabled_probe_flags": 3,
+    "temporarily_disabled_normal_opt_ins": 3,
+    "chat07_combined_acceptance": false,
+    "native_magazine_acceptance": false
+  },
+  "runtime_blockers": {
+    "foreground": "Validated activation route; uninterrupted game foreground still required for native input",
+    "openxr": "Prior SteamVR failure reports no connected HMD; prior working route Steam Link/vrlink",
+    "headset": "User confirms unavailable; no new XR preflight",
+    "user_desktop": "User is working on the other monitor; offline work only until a test window is agreed"
+  },
+  "installation": {
+    "attempted": false,
+    "active_version": "0.1.12",
+    "active_sha256": "9b60ff5ce16e3c146a56d5410edbd43b9f91e393ab7851af41d9c6f3b800a8b2",
+    "settings_sha256": "be6f984f6bd44dcc62aab0a2ac1a63acaa2d3221d2919f2a44a4aeeef2b1f7cf",
+    "headset_accepted": false,
+    "public_release": false
+  }
+}
