@@ -22,6 +22,17 @@ no physical witness was available. It closed normally and restored all profiles.
 Its foreground refusal is retained; one established activation then position-only
 recovery permitted capture. Stock launches now request that one activation before
 placement only when required, preserving the helper's duplicate-attempt guard.
+Scene08 changed only DxVersion to10; its capture also remained black, with exit0
+and exact restoration. No physical witness was available for either comparison.
+
+A private HWND-specific Windows Graphics Capture helper now provides one different
+capture path without game-DLL injection. Published wheels were hash-verified into
+an isolated G: directory; no shared Python/system driver was changed. Eight encoder
+checks and independent identity/cleanup review pass. Saved pixels/PNG are bounded,
+with a5s capture deadline and12s owned-helper watchdog; GPU-pool resize before the
+callback remains an explicit limitation. This does not prove raw swapchain pixels
+or physical visibility. RenderDoc was researched but not provisioned/run because
+its referenced-resource capture size was not established within the raw budget.
 No existing stock-only backbuffer readback was admitted: the current probe's desktop
 capture runs after mod mirror/menu presentation, so it cannot isolate stock pixels.
 The existing Nambu diagnostic remains frozen and reusable after visible stock gameplay;
