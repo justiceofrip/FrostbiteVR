@@ -14,6 +14,11 @@ External CHAT25/26/32 worktrees remain untouched; their tasks are not reassigned
 Runtime03: private0.1.16 combined candidate staged and clean-extraction verified;
 no native rebuild, installation or publication. Installed0.1.12 remains unchanged.
 Handoff: handoff/integrations/coordinator-20261029-runtime03/README.md.
+Runtime04 scene06: corrected full placement verified; user still sawblack.591Present
+rows all display-timed,9zero-loss samples; no mod attachment. Game exit0/profiles
+restored within3minutes. Aggregate ETW query failed; exact-owned query proved absence.
+Helper now queries only its own session;4focused checks and review pass. No native
+rebuild/install/XR retry. Handoff: handoff/integrations/coordinator-20261029-runtime04/README.md.
 Stock scenes03/04 confirmed physical black output despite stable menu/D3D11 objects;
 borderless placement and original graphics settings did not resolve it. Both closed
 with exit0 and profiles restored. Scene04 completed within its agreed3minute window.
@@ -22,8 +27,8 @@ Scene05:1775 exact-PID Present rows,532 with display timing;9loss samples allzer
 User sawblack; collector/session retired, game exit0, profiles restored within3minutes.
 Scenes04/05 were partly off-screen due to the legacy placement predicate; this limits
 their visual evidence. Original-graphics position-only containment is corrected;
-17placement/observation and6Present proof fixtures pass plus focused review. Next
-agreed check saves geometry before/after. No installed-runtime claim.
+17placement/observation and6Present proof fixtures pass plus focused review. Scene06
+verified the correction; failed cleanup query prevented its after-window observation.
 
 Runtime02 continuation: desktop-context diagnostic and early window admission;
 33window/3package tests pass; independent review passes. Source push verified:

@@ -37,9 +37,9 @@ The original-graphics route now applies position-only full containment, preservi
 size/style/foreground and refusing changed identity. Seventeen offline geometry,
 state and observation cases pass; six Present proof-order/geometry cases also pass
 after focused review. The recovery helper/default route remain unchanged.
-Next: fresh scene06 with `ObserveWindow -CaptureName before-present` and
-`after-present` bracketing `PresentCheck.ps1 -SceneName scene06`. A new agreed PC
-window is required. No driver or native feature change is justified.
+Scene06 ran in a later agreed window; full placement passed but stock stayed black.
+The [runtime04 result](../coordinator-20261029-runtime04/README.md) records its Present
+evidence and cleanup-query correction. No driver or native feature fix is established.
 The helper also records the first failed identity operand/getter without retry or
 guard relaxation; both prior startup refusals lacked that information. Six identity
 comparison cases and three corrected receipt/preservation cases pass offline.

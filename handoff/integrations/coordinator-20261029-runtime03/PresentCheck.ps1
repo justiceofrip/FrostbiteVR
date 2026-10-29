@@ -57,11 +57,17 @@ function Assert-PresentPlacementProof($identity,$placement,$observation,[long]$n
  if($window.rect.left -lt $window.left_monitor.left -or $window.rect.top -lt $window.left_monitor.top -or
   $window.rect.right -gt $window.left_monitor.right -or $window.rect.bottom -gt $window.left_monitor.bottom){throw 'Fully contained original window required'}
 }
-function Sessions {
+function Confirm-OwnedSessionQuery([int]$ExitCode,[string]$Stdout,[string]$Stderr){
+ # Windows SDK winerror.h: PLA_E_DCS_NOT_FOUND = 0x80300002.
+ # Any other failure leaves absence unconfirmed; preserve both output streams.
+ if($ExitCode -ne 0 -and $ExitCode -ne -2144337918){throw ('Owned ETW query failed ('+$ExitCode+'): '+$Stdout+$Stderr)}
+ return @{exists=($ExitCode -eq 0);exit_code=$ExitCode;stdout=$Stdout;stderr=$Stderr}
+}
+function Read-OwnedSession([ValidatePattern('^FvrStockPresent-[a-f0-9]{32}$')][string]$Name){
  $info=[Diagnostics.ProcessStartInfo]::new($logman)
  $info.UseShellExecute=$false;$info.CreateNoWindow=$true
  $info.RedirectStandardOutput=$true;$info.RedirectStandardError=$true
- $info.ArgumentList.Add('query');$info.ArgumentList.Add('-ets')
+ $info.ArgumentList.Add('query');$info.ArgumentList.Add($Name);$info.ArgumentList.Add('-ets')
  $query=[Diagnostics.Process]::Start($info)
  $stdout=$query.StandardOutput.ReadToEndAsync();$stderr=$query.StandardError.ReadToEndAsync()
  if(-not $query.WaitForExit(3000)){
@@ -70,10 +76,8 @@ function Sessions {
   throw 'ETW query timed out; cleanup state is unconfirmed'
  }
  if(-not [Threading.Tasks.Task]::WaitAll([Threading.Tasks.Task[]]@($stdout,$stderr),1000)){throw 'ETW query output did not finish'}
- if($query.ExitCode -ne 0){throw ('Cannot enumerate ETW sessions: '+$stderr.Result)}
- return @($stdout.Result -split '\r?\n')
+ return Confirm-OwnedSessionQuery $query.ExitCode $stdout.Result $stderr.Result
 }
-function HasSession($lines){@($lines|Where-Object {$_ -match ('^\s*'+[regex]::Escape($session)+'\s')}).Count -gt 0}
 function StartTool([string[]]$arguments,[string]$prefix){
  Start-Process -FilePath $exe -ArgumentList $arguments -WorkingDirectory $output -WindowStyle Hidden -PassThru `
   -RedirectStandardOutput (Join-Path $output ($prefix+'-stdout.txt')) -RedirectStandardError (Join-Path $output ($prefix+'-stderr.txt'))
@@ -97,11 +101,11 @@ if(-not ($principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 $null=Set-FvrProjectTemporaryStorage -RepositoryRoot $repo
 $budget=Assert-FvrStorageBudget -RepositoryRoot $repo -OutputPath $output -Operation Capture -PlannedBytes 16MB -RawCaptureBytes 0 -AdditionalRoots @('G:\Unity\VRMMO\BC2VR-Hotfix018','G:\Unity\VRMMO\bc2vr-task-worktrees')
 $session='FvrStockPresent-'+[Guid]::NewGuid().ToString('N')
-$before=Sessions
-if(HasSession $before){throw 'Unique ETW session already exists'}
+$before=Read-OwnedSession $session
+if($before.exists){throw 'Unique ETW session already exists'}
 [IO.Directory]::CreateDirectory($output)|Out-Null
 Save 'storage.json' $budget
-Save 'sessions-before.json' @{utc=[DateTime]::UtcNow.ToString('o');sessions=$before}
+Save 'sessions-before.json' @{utc=[DateTime]::UtcNow.ToString('o');session=$session;query=$before}
 $arguments=@('--process_id',[string]$identity.pid,'--output_file','presents.csv','--session_name',$session,
  '--timed','10','--terminate_after_timed','--terminate_on_proc_exit','--no_console_stats',
  '--no_track_gpu','--no_track_input','--track_etw_status','--date_time')
@@ -136,19 +140,19 @@ finally{
  }catch{$cleanupFailures.Add($_.Exception.Message)}
  try{
   if($capture -and -not $capture.HasExited){throw 'Collector retirement unconfirmed; session absence cannot be established'}
-  $after=Sessions
-  if(HasSession $after){
+  $after=Read-OwnedSession $session
+  if($after.exists){
    $stop=StartTool @('--session_name',$session,'--terminate_existing_session') 'owned-session-stop'
    if(-not $stop.WaitForExit(3000)){
     $stop.Kill()
     if(-not $stop.WaitForExit(2000)){throw 'Owned session-stop process remains'}
     throw 'Owned ETW stop timed out; absence is unconfirmed'
    }
-   $after=Sessions
+   $after=Read-OwnedSession $session
   }
-  if(($capture -and -not $capture.HasExited) -or (HasSession $after)){throw 'Collector/session remains; cleanup is unconfirmed'}
+  if(($capture -and -not $capture.HasExited) -or $after.exists){throw 'Collector/session remains; cleanup is unconfirmed'}
   $sessionAbsent=$true
-  Save 'sessions-after.json' @{utc=[DateTime]::UtcNow.ToString('o');session=$session;owned_session_absent=$true;owned_collector_exited=$true;sessions=$after}
+  Save 'sessions-after.json' @{utc=[DateTime]::UtcNow.ToString('o');session=$session;owned_session_absent=$true;owned_collector_exited=$true;query=$after}
  }catch{$cleanupFailures.Add($_.Exception.Message)}
  try{
   $finalBytes=(@(Get-ChildItem -LiteralPath $output -File)|Measure-Object Length -Sum).Sum

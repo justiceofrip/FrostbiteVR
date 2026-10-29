@@ -6,9 +6,9 @@ Updated October 29, 2026. This replaces old next-step instructions; prior eviden
 ## Active work
 
 Runtime03 staged and verified a private0.1.16 package from the tested combined
-runtime; it is not installed or published. Stock scenes03-05 were physically black;
-scene05 recorded displayed Present events, but scenes04/05 were partly off-screen.
-All closed normally and restored profiles. [Placement correction and evidence](../handoff/integrations/coordinator-20261029-runtime03/README.md).
+runtime; it is not installed or published. Scene06 verified full placement but the
+stock window stayed black despite displayed Present events; closed normally and
+restored profiles. [Result and owned-session cleanup fix](../handoff/integrations/coordinator-20261029-runtime04/README.md).
 
 Runtime02 adds read-only Windows desktop diagnosis and rejects window operations
 from an unverified input desktop;33window tests and3package checks pass. Stock
