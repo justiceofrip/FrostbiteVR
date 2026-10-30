@@ -1,12 +1,13 @@
-Integration55 — source and private0.1.19 package validated; installation pending
+Integration55 — source pushed and private0.1.19 installed; setup/assets validated
 User authorized integration of wiring54 plus local installation.
 Built source7131871; validated d2acbb1 (test-only corrections after native build).
 Both normal architectures compile.335/335 tests accepted each:333 unchanged passes +2 corrected fixtures, with hash verification.
 Six native binary/symbol pairs match; source closure and264-part cache pinned in receipt.json.
 Prior failures retained; bounded diagnostic storage moved off stack, fixtures made independent of stack/timing.
 Native artifacts were not rebuilt for test-only corrections. No game launch or headset acceptance.
-Package/settings/cache checks passed; installation and setup/assets validation are the next step.
-All agents retired. Root owns both leases, Git and deployment until close.
+Installed101 package files/93 runtime files and264-part cache verified; settings unchanged; automatic logging retained.
+Previous0.1.18 retained for rollback. Integrated source pushed0422d0e; no public release.
+All agents retired. Final status push, coordinator sync and lease release: reports/coordinator-20261030-integration55/close.json.
 Steam: actual unmodified executable remains missing; forward STEAM-REQUEST.txt. Report3 excluded.
 Empty-hand holstering deferred. AN94 live refusal, barrel aim, sight behavior and performance still need headset confirmation.
 Local evidence: reports/coordinator-20261030-integration55; original wiring54 evidence remains applicable where unchanged.

@@ -13,7 +13,8 @@ External CHAT25/26/32 worktrees remain untouched; their tasks are not reassigned
 
 Integration55: wiring54 source plus diagnostic-stack correction validated.
 Normal x86/x64 builds complete;335/335 checks each including hash-verified reused passes.
-Private0.1.19 package and264-record cache verified; installation pending.
+Private0.1.19 installed; setup/assets and264-record cache verified. Settings preserved,0.1.18 rollback retained.
+Integrated source pushed0422d0e; final status push and lease close: reports/coordinator-20261030-integration55/close.json.
 Built7131871/source d6ebf298; full identities in handoff/integrations/coordinator-20261030-integration55/receipt.json.
 No game launch, headset acceptance or public release. Steam executable still unavailable.
 
@@ -24,7 +25,7 @@ LMG firing is misaligned; empty-hand LMG stow is deferred at user's preference.
 Shared ammo/feed/visibility/muzzle and AN94 mode coverage gaps are confirmed in source;
 the exact AN94 reload and XM8 sight refusal remain unknown. C4 was not tested.
 Bug list: docs/archive/2026-10-30-bc2vr-0.1.18-buglist.md; session/native-report limits included.
-Docs/diagnosis only; installed0.1.18 unchanged. Close: reports/coordinator-20261030-feedback53/close.json.
+That run changed docs/diagnosis only. Close: reports/coordinator-20261030-feedback53/close.json.
 
 Headset52: user authorized the firearm source batch for a private0.1.18 test.
 Built source980808d; x86/x64 normal331/331 pass; six binary/PDB pairs verified.

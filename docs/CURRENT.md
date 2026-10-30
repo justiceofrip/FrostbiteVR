@@ -5,27 +5,23 @@ Updated October 30, 2026. This replaces old next-step instructions; prior eviden
 
 ## Active work
 
-Integration55 combines the weapon/ammo/underbarrel batch with depth-target reuse.
-Both normal builds and335 checks per architecture pass; private0.1.19 package/cache
-are verified. [Integration receipt](../handoff/integrations/coordinator-20261030-integration55/receipt.json).
-Local installation is pending; no new game or headset acceptance.
+Integration55 is pushed and private 0.1.19 is installed with weapon/ammo/underbarrel wiring and depth-target reuse; setup/assets validation passes, settings/logging are preserved and 0.1.18 is retained for rollback. [Integration receipt](../handoff/integrations/coordinator-20261030-integration55/receipt.json). No new game/headset acceptance or measured performance gain.
 
 Headset52 integrates firearm roster enrollment: 77 names/181 configurations,
-both normal builds pass331/331; private0.1.18 is installed and setup/assets pass.
+both normal builds pass331/331; private0.1.18 was installed and setup/assets passed.
 [Test candidate receipt](../handoff/integrations/coordinator-20261030-headset52/README.md).
-Source is pushed;0.1.17 rollback/settings are preserved and logging is automatic.
+Source was pushed; settings were preserved and logging is automatic.
 The user's0.1.18 test confirms multiweapon two-hand grips and reliable swaps, but
 reload/ammo, muzzle, empty-hand stow and underbarrel/sight failures remain open.
 [Feedback53](archive/2026-10-30-bc2vr-0.1.18-buglist.md) records shared runtime gaps;
 the weapons job is not complete. C4 was not tested; other earlier bugs remain open.
-Wiring54 stages shared ammo/feed, measured muzzle/underbarrel connections and depth-target reuse;
-20 focused suites per architecture pass. [Source candidate](../handoff/integrations/coordinator-20261030-wiring54/STATUS.txt)
-awaits user-directed integration, normal builds and installation; no new headset acceptance.
+Wiring54's shared ammo/feed, measured muzzle/underbarrel connections and depth-target reuse
+are included in installed 0.1.19. [Original source evidence](../handoff/integrations/coordinator-20261030-wiring54/STATUS.txt).
 
 Private0.1.17 includes the launcher retained-handle image fix;38 identity/43 portable
 checks pass. Its verified package reuses the staged cache, which now passes both
 production CPU consumer tests for all49 parts. [Evidence and package](../handoff/integrations/coordinator-20261029-evidence08/README.md).
-Private0.1.17 is now the retained rollback. [User headset feedback](archive/2026-10-29-bc2vr-0.1.17-buglist.md): C4 progression blocker, severe performance/choppy fire, destruction and cutscene bugs; interactions improved. Acceptance remains open.
+[User headset feedback on 0.1.17](archive/2026-10-29-bc2vr-0.1.17-buglist.md): C4 progression blocker, severe performance/choppy fire, destruction and cutscene bugs; interactions improved. Acceptance remains open.
 Runtime05's stock black captures and cleanup remain in its
 [diagnostic handoff](../handoff/integrations/coordinator-20261029-runtime05/README.md).
 

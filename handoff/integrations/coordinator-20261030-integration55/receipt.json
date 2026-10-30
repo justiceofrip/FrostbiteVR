@@ -23,8 +23,8 @@
   "package_files": 101,
   "runtime_files": 93,
   "asset_recipe_sha256": "eab12dbc842c5dbef02f9dcc6090d351139bd04b528ef3d071c0503903ea3078",
-  "source_pushed": false,
-  "installed": false,
+  "source_pushed": true,
+  "installed": true,
   "previous_version": "0.1.18",
   "game_started": false,
   "headset_accepted": false,
@@ -36,5 +36,20 @@
     "x64-01 feed fixture stack/receiver timing failures"
   ],
   "steam": "Unmodified Steam BFBC2Game.exe still required; existingReport4 andlauncher-last7 sufficient; request inSTEAM-REQUEST.txt.",
-  "deferred": "Empty-hand holstering; reported scene/cinematic bugs remain open."
+  "deferred": "Empty-hand holstering; reported scene/cinematic bugs remain open.",
+  "source_push_commit": "0422d0ec41e8e1e1a779698fd2b6ee88a316c72d",
+  "installed_validation": {
+    "headset_checked": false,
+    "version": "0.1.19",
+    "assets_ready": true,
+    "source_sha256": "d6ebf298a32037edd7eef5ab28a57a0ea6fa83cb1c2da087be527703aaf42695",
+    "openxr_runtime": "SteamVR",
+    "validated": true,
+    "game_started": false
+  },
+  "settings_preserved": true,
+  "settings_sha256": "be6f984f6bd44dcc62aab0a2ac1a63acaa2d3221d2919f2a44a4aeeef2b1f7cf",
+  "cache_verified": true,
+  "installation_receipt": "reports/coordinator-20261030-integration55/installation.json",
+  "close_receipt": "reports/coordinator-20261030-integration55/close.json"
 }
