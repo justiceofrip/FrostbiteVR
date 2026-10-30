@@ -3596,7 +3596,10 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
             Require(fvr::bc2::gameplay::EnableSelectedMeshesObservation(bytes,pe.image,imageBase,true),"Physical reload configured mesh binding unverified");
         else if(!continuous&&config.durationMs<=15000&&(config.flags&0x800u)&&(config.flags&0x14000u)&&
             (passEvidenceEnabled||(config.flags&0x10000u)))
-            Require(fvr::bc2::gameplay::EnableSelectedMeshesObservation(bytes,pe.image,imageBase),"Configured mesh observation binding unverified");
+            // Existing finite PassEvidence opt-in also records the exact authored
+            // M95 zoom mesh. Hands-only and persistent consumers do no zoom reads.
+            Require(fvr::bc2::gameplay::EnableSelectedMeshesObservation(bytes,pe.image,imageBase,false,
+                passEvidenceEnabled?"Objects/Weapons/Handheld/BU_sni_M95/SP_sni_M95":""),"Configured mesh observation binding unverified");
         Require(MH_CreateHook(reinterpret_cast<void*>(imageBase+render->worldRender),WorldHook,reinterpret_cast<void**>(&worldOriginal))==MH_OK,"Create world trace");
         Require(MH_CreateHook(reinterpret_cast<void*>(imageBase+render->prepareView),PrepareHook,reinterpret_cast<void**>(&prepareOriginal))==MH_OK,"Create prepare trace");
         Require(MH_CreateHook(reinterpret_cast<void*>(imageBase+render->drawView),DrawHook,reinterpret_cast<void**>(&drawOriginal))==MH_OK,"Create draw trace");

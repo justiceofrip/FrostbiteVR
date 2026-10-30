@@ -110,11 +110,99 @@ int MaximumArrays(){Fixture f;f.ConfigureMeshes(true,8);
     for(unsigned i=0;i<8;++i){const auto storage=Heap+0xc000+i*32;f.Put(f.states+i*0xc8+0x80+8,8u);f.Put(f.states+i*0xc8+0x80+12,8u);f.Put(f.states+i*0xc8+0x80+16,storage);
         for(unsigned j=0;j<8;++j)f.Put(storage+j*4,Heap+0xb000+(j%2)*0x100);}
     const auto r=f.Run();CHECK(r.snapshot&&r.snapshot->stateCount==8&&r.snapshot->states[7].count==8);CHECK(r.readCalls<=131072&&r.readBytes<=2097152);return 0;}
+constexpr const char* M95Config="Objects/Weapons/Handheld/BU_sni_M95/SP_sni_M95";
+constexpr const char* ScopeMesh="Objects/Weapons/Handheld/Scope/Scope_Mesh";
+constexpr std::uint32_t ZoomMesh=Heap+0xb200;
+void PrepareZoom(Fixture& f,unsigned count=1){
+    f.ConfigureMeshes(false,count);
+    const auto fields=f.Alloc(48),zoomName=f.Text("MeshZoom1p");
+    for(unsigned i=0;i<6;++i){std::uint32_t word=0;std::memcpy(&word,f.Ptr(f.fieldsState+i*4),4);f.Disk(fields+i*4,word);}
+    f.fieldsState=fields;f.Disk(fields+24,zoomName);f.Disk(fields+32,f.meshType);f.Disk(fields+40,0x94u);
+    std::uint32_t metadata=0;std::memcpy(&metadata,f.Ptr(f.stateType+4),4);
+    f.Disk(metadata+13,std::uint8_t{2});f.Disk(metadata+24,fields);
+    f.Object(ZoomMesh,f.meshType);f.Put(ZoomMesh+12,f.Text(ScopeMesh));
+    for(unsigned i=0;i<count;++i)f.Put(f.states+i*0xc8+0x94,ZoomMesh);
+    f.Put(f.data+12,f.Text("M95_sp"));f.Put(f.data+0x40,f.Text(M95Config));
+    f.binding=*DiscoverSelectedMeshes1p(f.file,f.pe);
+}
+SelectedMeshZoomResult Zoom(Fixture& f,std::string_view path=M95Config,bool enabled=true){
+    return ReadSelectedMeshZoom1p({&f,Fixture::Read,nullptr},f.binding,Base,f.owner,path,1,Now,Now+100000000,enabled);
+}
+int IndependentCampaignZoom(){Fixture f;PrepareZoom(f);const auto r=Zoom(f);
+    CHECK(r.status==SelectedMeshesStatus::Observed&&r.snapshot);const auto& s=*r.snapshot;
+    CHECK(s.selected.owner==f.owner&&s.selected.operationBinding==f.binding.operationBinding&&s.selected.stateCount==1);
+    CHECK(s.selected.configurationPathVerified&&std::string_view(s.selected.configurationPath.data())==M95Config);
+    CHECK(s.selected.observedNs==Now&&s.selected.deadlineNs==Now+100000000);
+    CHECK(s.states[0].state==f.states&&s.states[0].field==f.states+0x94&&s.states[0].mesh.address==ZoomMesh);
+    CHECK(s.states[0].mesh.typeInfo==f.meshType&&std::string_view(s.states[0].mesh.assetPath.data())==ScopeMesh);
+    CHECK(s.selected.states[0].count==1&&s.selected.states[0].meshes[0].address!=ZoomMesh);
+    CHECK(!s.activeStateVerified&&!s.adsAcknowledged&&!s.magnifiedSceneVerified&&!s.reticleVerified&&!s.renderSuppressionAllowed);
+    std::uint32_t name=0;std::memcpy(&name,f.Ptr(ZoomMesh+12),4);f.Put(name,std::uint8_t{'x'});
+    CHECK(std::string_view(s.states[0].mesh.assetPath.data())==ScopeMesh);
+    CHECK(r.readCalls>0&&r.readCalls<=131072&&r.readBytes<=2097152);return 0;
+}
+int ZoomNullAndExactConfiguration(){
+    Fixture disabled;CHECK(Zoom(disabled,M95Config,false).status==SelectedMeshesStatus::Disabled&&disabled.callbackCalls==0);
+    Fixture invalid;CHECK(Zoom(invalid,"").status==SelectedMeshesStatus::InvalidArguments&&invalid.callbackCalls==0);
+    Fixture missing;PrepareZoom(missing);missing.Put(missing.data+0x40,0u);CHECK(Zoom(missing).status==SelectedMeshesStatus::ConfigurationMismatch);
+    Fixture other;PrepareZoom(other);CHECK(Zoom(other,"Objects/Weapons/Handheld/BU_sni_M95/SP_sni_M95_acog").status==SelectedMeshesStatus::ConfigurationMismatch);
+    Fixture null;PrepareZoom(null);null.Put(null.states+0x94,0u);const auto r=Zoom(null);
+    CHECK(r.snapshot&&r.snapshot->states[0].field==null.states+0x94&&!r.snapshot->states[0].mesh.address);
+    Fixture noMetadata;noMetadata.Put(noMetadata.data+0x40,noMetadata.Text(M95Config));
+    CHECK(!Zoom(noMetadata).snapshot);noMetadata.triggerCount=0;CHECK(noMetadata.Run().snapshot);return 0;
+}
+int ZoomMetadataAndAssetRejection(){for(unsigned n=0;n<10;++n){Fixture f;PrepareZoom(f);const auto field=f.fieldsState+24;
+    if(n==0)f.Disk(field,f.Text("AnotherMesh"));
+    if(n==1)f.Disk(field+16,0x98u);
+    if(n==2)f.Disk(field+8,f.meshParent);
+    if(n==3)f.Disk(field+12,f.meshType);
+    if(n==4)f.Put(field+4,1u); // live descriptor differs from the file
+    if(n==5)f.Object(ZoomMesh,f.meshParent);
+    if(n==6){std::uint32_t table=0,getter=0;std::memcpy(&table,f.Ptr(ZoomMesh),4);std::memcpy(&getter,f.Ptr(table+8),4);f.Put(getter,std::uint8_t{0x90});}
+    if(n==7)f.Put(ZoomMesh+12,0x20000000u);
+    if(n==8){std::uint32_t metadata=0;std::memcpy(&metadata,f.Ptr(f.stateType+4),4);f.Disk(metadata+13,std::uint8_t{1});}
+    if(n==9){const auto fields=f.Alloc(72);std::uint32_t metadata=0;std::memcpy(&metadata,f.Ptr(f.stateType+4),4);
+        for(unsigned i=0;i<18;++i){std::uint32_t word=0;std::memcpy(&word,f.Ptr(f.fieldsState+(i<12?i:i-6)*4),4);f.Disk(fields+i*4,word);}
+        f.Disk(metadata+13,std::uint8_t{3});f.Disk(metadata+24,fields);}
+    CHECK(!Zoom(f).snapshot);
+    }return 0;
+}
+int ZoomRepeatedIdentity(){for(unsigned n=0;n<8;++n){Fixture f;PrepareZoom(f);if(n==7)f.Put(f.states+0x94,0u);
+    f.mutation=[n](Fixture& x){std::uint32_t name=0;std::memcpy(&name,x.Ptr(ZoomMesh+12),4);
+        if(n==0)x.Put(x.states+0x94,0u);
+        if(n==1)x.Put(ZoomMesh+12,x.Text(ScopeMesh));
+        if(n==2)x.Put(name,std::uint8_t{'x'});
+        if(n==3)x.Object(ZoomMesh,x.meshParent);
+        if(n==4)x.Put(x.data+0x40,x.Text(M95Config));
+        if(n==5)x.Put(x.inventory+0x14c,1u);
+        if(n==6)x.Put(x.fieldsState+24+16,0x98u);
+        if(n==7)x.Put(x.states+0x94,ZoomMesh);};
+    const auto r=Zoom(f);CHECK(r.status==SelectedMeshesStatus::ChangedDuringRead&&!r.snapshot);
+    }return 0;
+}
+int ZoomMultipleAuthoredStates(){Fixture f;PrepareZoom(f,8);f.Put(f.states+7*0xc8+0x94,0u);const auto r=Zoom(f);
+    CHECK(r.snapshot&&r.snapshot->selected.stateCount==8&&!r.snapshot->selected.soleConfiguredArray&&!r.snapshot->activeStateVerified);
+    for(unsigned n=0;n<8;++n){CHECK(r.snapshot->states[n].state==f.states+n*0xc8);CHECK(r.snapshot->states[n].mesh.address==(n==7?0u:ZoomMesh));}
+    CHECK(r.readCalls<=131072&&r.readBytes<=2097152);return 0;
+}
+int ZoomBindingOwnerAndLease(){
+    Fixture f;PrepareZoom(f);
+    const auto expired=ReadSelectedMeshZoom1p({&f,Fixture::Read,nullptr},f.binding,Base,f.owner,M95Config,1,Now,Now+250000001,true);
+    CHECK(expired.status==SelectedMeshesStatus::InvalidArguments&&f.callbackCalls==0);
+    for(unsigned n=0;n<3;++n){Fixture bad;PrepareZoom(bad);
+        if(n==0)++bad.binding.operationBinding.codeFingerprint[0];
+        if(n==1)bad.Put(Base+0x1300,std::uint8_t{0x90});
+        if(n==2)bad.Put(bad.inventory+0x14c,1u);
+        const auto r=Zoom(bad);CHECK(!r.snapshot);
+        CHECK(r.status==(n==2?SelectedMeshesStatus::OwnerMismatch:SelectedMeshesStatus::BindingMismatch));
+    }return 0;
+}
 }
 int main(int argc,char** argv){
     if(argc==2){std::ifstream in(argv[1],std::ios::binary);std::vector<char> raw((std::istreambuf_iterator<char>(in)),{});
         const auto bytes=std::as_bytes(std::span(raw));const auto pe=fvr::engine::InspectPe(bytes);CHECK(pe.valid);const auto b=DiscoverSelectedMeshes1p(bytes,pe.image);CHECK(b);
         std::cout<<"offline discovery passed: context="<<std::hex<<b->context<<" parent_ctor_rva="<<b->code[3].rva<<"\n";return 0;}
-    for(auto test:{GoodSpas,Xm8AndSharedLauncher,DefaultOffAndLease,OwnerRejection,ArrayBounds,GetterAndInheritanceProof,Coherency,UnknownAndAmbiguous,DiscoveryGuards,EmptyAndReadFailure,MaximumArrays})if(test())return 1;
-    std::cout<<"11 selected Meshes1p tests passed\n";return 0;
+    for(auto test:{GoodSpas,Xm8AndSharedLauncher,DefaultOffAndLease,OwnerRejection,ArrayBounds,GetterAndInheritanceProof,Coherency,UnknownAndAmbiguous,DiscoveryGuards,EmptyAndReadFailure,MaximumArrays,
+        IndependentCampaignZoom,ZoomNullAndExactConfiguration,ZoomMetadataAndAssetRejection,ZoomRepeatedIdentity,ZoomMultipleAuthoredStates,ZoomBindingOwnerAndLease})if(test())return 1;
+    std::cout<<"17 selected Meshes1p/MeshZoom1p tests passed\n";return 0;
 }

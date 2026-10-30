@@ -3157,10 +3157,11 @@ bool EnablePlayerGrenades()noexcept {
     return false;
 #endif
 }
-bool EnableSelectedMeshesObservation(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uintptr_t base,bool persistent)noexcept {
+bool EnableSelectedMeshesObservation(std::span<const std::byte> bytes,const engine::PeImage& pe,std::uintptr_t base,bool persistent,
+    std::string_view exactZoomConfigurationPath)noexcept {
     if(enabled.load()||!reloadStateBinding||base!=image||base>UINT32_MAX)return false;
     const ReloadStateMemory memory{nullptr,[](void*,unsigned at,void* dst,std::size_t n){return Read(at,dst,n);},nullptr};
-    return selectedMeshes.Install(bytes,pe,unsigned(base),memory,true,persistent);
+    return selectedMeshes.Install(bytes,pe,unsigned(base),memory,true,persistent,exactZoomConfigurationPath);
 }
 bool EnablePhysicalReloadProbeRepeat()noexcept {
 #ifdef FVR_BC2_PHYSICAL_RELOAD_LIFECYCLE_SCENARIO

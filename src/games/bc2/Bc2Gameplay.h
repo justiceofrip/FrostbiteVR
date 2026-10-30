@@ -49,7 +49,9 @@ bool EnableM95StockShotProbe(unsigned mode=1)noexcept;
 // InputReader is nonblocking and enforces the IPC producer-side 100ms deadline.
 bool Install(std::span<const std::byte>,const engine::PeImage&,std::uintptr_t,InputReader,bool motionAim=false,bool bodyFollow=false,bool observePoses=false,bool rigPulse=false,bool handPoses=false,bool deathProbe=false,bool equipProbe=false,bool muzzleFire=false,bool twoHandGrip=false,bool enableSightFlip=false,bool reloadHoldProbe=false,bool reloadRoundProbe=false,bool reloadRequestProbe=false,bool physicalReload=false,bool physicalReloadProbe=false,unsigned magazineReloadSession=0);
 // Explicit opt-in after Install and before Start; persistent is for the reload consumer.
-bool EnableSelectedMeshesObservation(std::span<const std::byte>,const engine::PeImage&,std::uintptr_t,bool persistent=false)noexcept;
+// An exact zoom path enables historical diagnostics only and forbids persistent mode.
+bool EnableSelectedMeshesObservation(std::span<const std::byte>,const engine::PeImage&,std::uintptr_t,bool persistent=false,
+    std::string_view exactZoomConfigurationPath={})noexcept;
 // Explicit opt-in after Install, before Start. Shoulder switching uses native
 // selection and ordinary rig presentation; weapon hiding is a separate gate.
 bool EnableBodyInventory(interaction::BodyAnchorConfig config={})noexcept;

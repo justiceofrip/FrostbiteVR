@@ -1,0 +1,978 @@
+{
+  "schema": "fvr.bc2.m60_stage_preparation.v1",
+  "evidence_level": "offline_installed_asset_and_executable",
+  "game_process_opened": false,
+  "native_admission": false,
+  "executable_sha256": "3911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258",
+  "executable": "G:\\New folder (2)\\Battlefield Bad Company 2\\BFBC2Game.exe",
+  "archive": "Dist/win32/levels/sp_common/level-00.fbrb",
+  "archive_index_sha256": "57835d6ace174f83eeb46ec8bbfe3acf8a3e7fde5cb8c8e49f084950e975a842",
+  "archive_payload_sha256": "f9e009a4c2a1b98218d8bf59ca83027b38229ee24ad3c50dc715e6ce8c3690cf",
+  "resources": [
+    {
+      "resource": "Animations/Weapons/Handheld/BU_lmg_M60/1P/1P_Reload.dbx",
+      "sha256": "9032250906ed9e4031d4c630b275e3c1d79b8dd33cb40761ad9ffc89b84e3e06",
+      "size": 986
+    },
+    {
+      "resource": "Objects/Weapons/Handheld/BU_lmg_M60/SP_lmg_M60.dbx",
+      "sha256": "3c7b9a1cdba0fe1f3109bfbeafe1d8081f7dabf6aa465c4b430f8b65833bfdea",
+      "size": 14926
+    },
+    {
+      "resource": "Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60_AnimTree1p.dbx",
+      "sha256": "c6b0bfc62de7f9acfe19568d1f70911cb772c6a09cc337cac43ebe4e27ce0e6d",
+      "size": 11473
+    },
+    {
+      "resource": "Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60_Firing.dbx",
+      "sha256": "b28fee4d1224bb062cb5352b57916817ed38e47171b17c065c2798721153928b",
+      "size": 10678
+    }
+  ],
+  "profile_source": "profiles/support312/support-bindings.json",
+  "profile_binding_digest": "047e71e95acf4ef47b15c2f09e12a63abeb4395fcb375dcffca86cb6088080bf",
+  "reload_state_functions": [
+    {
+      "rva": 3039872,
+      "size": 78,
+      "fnv1a64": "d6e5e29dc167db84",
+      "sha256": "15864c6f090e661f5f713b6b72c1abdcc79d0ce6058eaf560c03eb28ab5f9f3f"
+    },
+    {
+      "rva": 3039952,
+      "size": 1732,
+      "fnv1a64": "71118b4d657473d3",
+      "sha256": "122c98fefa4503c8c98688477f9cf5a1bfbbccb47e84ce6b303898c199ad908d"
+    },
+    {
+      "rva": 3041760,
+      "size": 772,
+      "fnv1a64": "7344b32b39a9bd85",
+      "sha256": "03169d95d2323a352f44f0f4868a848e0979fe420766573b629d3ae9b97664e3"
+    },
+    {
+      "rva": 3004064,
+      "size": 163,
+      "fnv1a64": "3cae7f07de53d0f7",
+      "sha256": "266c10e8f1165deb4be7a07757f6a5f3cf2186ae66bf05eb74177642faceded8"
+    },
+    {
+      "rva": 2977600,
+      "size": 254,
+      "fnv1a64": "d83485215d90a16a",
+      "sha256": "1fa3fc0036f39fcdf7a6db01e916d079810fd3ae0b5ac79fdd054b8c84b3966a"
+    },
+    {
+      "rva": 2938176,
+      "size": 44,
+      "fnv1a64": "5b5607034a1b32af",
+      "sha256": "78901c736fb1632c66b644684d3e42ffc0452778d7b1c510c35a95170a2eaa99"
+    }
+  ],
+  "server_reader_binding": {
+    "context": 22440728,
+    "manager_table": 21067392,
+    "controlled_getter": 5690384,
+    "proof": {
+      "context": {
+        "rva": 1342448,
+        "size": 157,
+        "sha256": "11c744eb09e76e0f3299d9a720b96e6e8f720ca4a47b853e6cc09d676632eb12"
+      },
+      "manager": {
+        "rva": 1423408,
+        "size": 57,
+        "sha256": "1bfdc0a259f16d4f3ead5ac7d04ec2f70a5ccbbc68100fd1cd774b2cb5a06812"
+      },
+      "create": {
+        "rva": 1521488,
+        "size": 113,
+        "sha256": "ffe2d48666f9619efe442c2b1d6452bc94386a95e7ee526492c79df69def594c"
+      },
+      "player": {
+        "rva": 3073024,
+        "size": 90,
+        "sha256": "4f5b9a9db661fc5720051683448cea5b503ce01f5b862362ae529334dd1cd637"
+      },
+      "controlled": {
+        "rva": 1496080,
+        "size": 33,
+        "sha256": "d80cb28aa0bac80c9a382e070d386e783299c03d0fc8161d0e6473cc893cc56c"
+      },
+      "item_count": {
+        "rva": 2714560,
+        "size": 16,
+        "sha256": "6f4b7eca25381c986c39ae60bc13b82e1365940b4af67851eaf087cbb5715c61"
+      },
+      "item_getter": {
+        "rva": 2714576,
+        "size": 40,
+        "sha256": "0fa7e6983634a33d3194204f6b8f4d14b853fe95132f39a865f8ee659271e4dc"
+      },
+      "server_player_constructor": {
+        "rva": 1515840,
+        "size": 31,
+        "sha256": "ecf03837a7f2afcaeeb1506113514b3dcd3f207ddd064d6eeb09869ccecb1145"
+      },
+      "server_selected_item_prefix": {
+        "rva": 2776768,
+        "size": 103,
+        "sha256": "1e4b053656a8298c5addb8997952b8b2e33b54a7efe40087e43384bc22f7afe6"
+      },
+      "selected_slot": {
+        "rva": 2943328,
+        "size": 7,
+        "sha256": "d27fde6d47c8d29f030229890acd69e073fd55b4e261cd061d87dbb5b268e00d"
+      }
+    }
+  },
+  "reflection": [
+    {
+      "name": "FireLogicData",
+      "metadata_rva": 25148036,
+      "flags": 41,
+      "size": 140,
+      "table_rva": 25302592,
+      "metadata_sha256": "3a8f578733206b2785d721955d0789d0f95209a02f3c6c7a08d37b254485d55f",
+      "table_sha256": "b7a82384e4d6ca3c8cce64bf8f1efc28e90b4094bf8b1f37516c9a6b285d502c",
+      "fields": [
+        {
+          "name": "HoldAndRelease",
+          "offset_or_enum_value": 36,
+          "type_info_va": 29344404,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "BoltAction",
+          "offset_or_enum_value": 68,
+          "type_info_va": 29344424,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "Recoil",
+          "offset_or_enum_value": 80,
+          "type_info_va": 29344444,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "FireInputAction",
+          "offset_or_enum_value": 64,
+          "type_info_va": 29359976,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "OrderInputAction",
+          "offset_or_enum_value": 116,
+          "type_info_va": 29359976,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "ReloadInputAction",
+          "offset_or_enum_value": 128,
+          "type_info_va": 29359976,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "TriggerPullWeight",
+          "offset_or_enum_value": 132,
+          "type_info_va": 29295588,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "RateOfFire",
+          "offset_or_enum_value": 120,
+          "type_info_va": 29295588,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "ClientFireRateMultiplier",
+          "offset_or_enum_value": 124,
+          "type_info_va": 29295588,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "ReloadDelay",
+          "offset_or_enum_value": 8,
+          "type_info_va": 29295588,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "ReloadTime",
+          "offset_or_enum_value": 12,
+          "type_info_va": 29295588,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "PostReloadSequenceTime",
+          "offset_or_enum_value": 0,
+          "type_info_va": 29295588,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "ReloadThreshold",
+          "offset_or_enum_value": 4,
+          "type_info_va": 29295588,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "PreFireDelay",
+          "offset_or_enum_value": 16,
+          "type_info_va": 29295588,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "ZoomBeforeFireDelay",
+          "offset_or_enum_value": 28,
+          "type_info_va": 29295588,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "WaitForTriggerRelease",
+          "offset_or_enum_value": 136,
+          "type_info_va": 29295444,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "WaitForZoomRelease",
+          "offset_or_enum_value": 137,
+          "type_info_va": 29295444,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "HoldReloadUntilFireRelease",
+          "offset_or_enum_value": 138,
+          "type_info_va": 29295444,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "HoldReloadUntilZoomRelease",
+          "offset_or_enum_value": 139,
+          "type_info_va": 29295444,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "ReloadLogic",
+          "offset_or_enum_value": 32,
+          "type_info_va": 29344512,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "ReloadType",
+          "offset_or_enum_value": 20,
+          "type_info_va": 29344488,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "FireLogicType",
+          "offset_or_enum_value": 24,
+          "type_info_va": 29344464,
+          "element_info_va": 0,
+          "flags": 0
+        }
+      ]
+    },
+    {
+      "name": "BoltActionData",
+      "metadata_rva": 25147896,
+      "flags": 41,
+      "size": 12,
+      "table_rva": 25297720,
+      "metadata_sha256": "41837d38e55282925f77004f9f9e6aca94eba682f28f20ace911fe3bfcc0027d",
+      "table_sha256": "075f1b7567bad9f1385ce831851c76ee74de5050a516684e723a64e82584449d",
+      "fields": [
+        {
+          "name": "BoltActionDelay",
+          "offset_or_enum_value": 4,
+          "type_info_va": 29295588,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "BoltActionTime",
+          "offset_or_enum_value": 0,
+          "type_info_va": 29295588,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "HoldBoltActionUntilFireRelease",
+          "offset_or_enum_value": 9,
+          "type_info_va": 29295444,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "HoldBoltActionUntilZoomRelease",
+          "offset_or_enum_value": 8,
+          "type_info_va": 29295444,
+          "element_info_va": 0,
+          "flags": 0
+        }
+      ]
+    },
+    {
+      "name": "AmmoConfigData",
+      "metadata_rva": 25147464,
+      "flags": 41,
+      "size": 36,
+      "table_rva": 25295320,
+      "metadata_sha256": "87ed70626985e1c8e551537aa51b850e55e6c7dcf54fe92bb761e67c2612c93d",
+      "table_sha256": "3dcb1ab293e25f0d4d15176864010579ef0e5612f084cfc7d87376f72b7a69fd",
+      "fields": [
+        {
+          "name": "MagazineCapacity",
+          "offset_or_enum_value": 20,
+          "type_info_va": 29295540,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "NumberOfMagazines",
+          "offset_or_enum_value": 16,
+          "type_info_va": 29295540,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "TraceFrequency",
+          "offset_or_enum_value": 24,
+          "type_info_va": 29295524,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "AmmoPickupMinAmount",
+          "offset_or_enum_value": 28,
+          "type_info_va": 29295524,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "AmmoPickupMaxAmount",
+          "offset_or_enum_value": 4,
+          "type_info_va": 29295524,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "AutoReplenishMagazine",
+          "offset_or_enum_value": 32,
+          "type_info_va": 29295444,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "AutoReplenishDelay",
+          "offset_or_enum_value": 0,
+          "type_info_va": 29295588,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "AmmoBoxPickupRate",
+          "offset_or_enum_value": 12,
+          "type_info_va": 29295524,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "AmmoBoxPickupAmount",
+          "offset_or_enum_value": 8,
+          "type_info_va": 29295540,
+          "element_info_va": 0,
+          "flags": 0
+        }
+      ]
+    },
+    {
+      "name": "WeaponStateData",
+      "metadata_rva": 25149140,
+      "flags": 41,
+      "size": 200,
+      "table_rva": 25306096,
+      "metadata_sha256": "6b9123f7a8eb7739835211bb60a1fb31184a4771ecb3528ad3f2615e93b10565",
+      "table_sha256": "9e6ab677bb68e7974fce0b9f54841567241e32a891b4ecef45538df0aa8e6f79",
+      "fields": [
+        {
+          "name": "BoneFakePhysics",
+          "offset_or_enum_value": 92,
+          "type_info_va": 29295324,
+          "element_info_va": 29346456,
+          "flags": 72
+        },
+        {
+          "name": "Meshes1p",
+          "offset_or_enum_value": 128,
+          "type_info_va": 29295324,
+          "element_info_va": 29324564,
+          "flags": 72
+        },
+        {
+          "name": "MeshZoom1p",
+          "offset_or_enum_value": 148,
+          "type_info_va": 29324564,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "Meshes3p",
+          "offset_or_enum_value": 152,
+          "type_info_va": 29295324,
+          "element_info_va": 29324564,
+          "flags": 72
+        },
+        {
+          "name": "HiddenBones1p",
+          "offset_or_enum_value": 76,
+          "type_info_va": 29295324,
+          "element_info_va": 29295620,
+          "flags": 72
+        },
+        {
+          "name": "HiddenBones3p",
+          "offset_or_enum_value": 112,
+          "type_info_va": 29295324,
+          "element_info_va": 29295620,
+          "flags": 72
+        },
+        {
+          "name": "AnimTree1p",
+          "offset_or_enum_value": 184,
+          "type_info_va": 29408200,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "AnimTree3p",
+          "offset_or_enum_value": 180,
+          "type_info_va": 29408200,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "ZoomMeshTransitionFactor",
+          "offset_or_enum_value": 176,
+          "type_info_va": 29295588,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "ZoomedScopeFilter",
+          "offset_or_enum_value": 172,
+          "type_info_va": 29322000,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "NonZoomedScopeFilter",
+          "offset_or_enum_value": 188,
+          "type_info_va": 29322000,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "KeepAimingTime",
+          "offset_or_enum_value": 12,
+          "type_info_va": 29295588,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "AltDeployTime",
+          "offset_or_enum_value": 16,
+          "type_info_va": 29295588,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "DeployTime",
+          "offset_or_enum_value": 8,
+          "type_info_va": 29295588,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "UndeployTime",
+          "offset_or_enum_value": 0,
+          "type_info_va": 29295588,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "AlwaysAimHead",
+          "offset_or_enum_value": 194,
+          "type_info_va": 29295444,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "AnimatedFireType",
+          "offset_or_enum_value": 4,
+          "type_info_va": 29346228,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "AnimatedAimingType",
+          "offset_or_enum_value": 20,
+          "type_info_va": 29346252,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "IsOneHanded",
+          "offset_or_enum_value": 195,
+          "type_info_va": 29295444,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "IsPumpAction",
+          "offset_or_enum_value": 192,
+          "type_info_va": 29295444,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "PlayDeployAfterFire",
+          "offset_or_enum_value": 196,
+          "type_info_va": 29295444,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "SkipDeployAnimation",
+          "offset_or_enum_value": 198,
+          "type_info_va": 29295444,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "SkipReloadAnimation",
+          "offset_or_enum_value": 197,
+          "type_info_va": 29295444,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "SkipFireAnimation",
+          "offset_or_enum_value": 193,
+          "type_info_va": 29295444,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "HideProjectileAfterFireTime",
+          "offset_or_enum_value": 60,
+          "type_info_va": 29295588,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "ProjectileBoneName",
+          "offset_or_enum_value": 64,
+          "type_info_va": 29295620,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "Mesh3pTransforms",
+          "offset_or_enum_value": 44,
+          "type_info_va": 29295324,
+          "element_info_va": 22420764,
+          "flags": 72
+        },
+        {
+          "name": "CutsceneWeaponTransforms",
+          "offset_or_enum_value": 24,
+          "type_info_va": 29295324,
+          "element_info_va": 29346296,
+          "flags": 72
+        },
+        {
+          "name": "ReadinessStates",
+          "offset_or_enum_value": 40,
+          "type_info_va": 29346276,
+          "element_info_va": 0,
+          "flags": 0
+        }
+      ]
+    },
+    {
+      "name": "ReloadType",
+      "metadata_rva": 25147980,
+      "flags": 377,
+      "size": 4,
+      "table_rva": 25298152,
+      "metadata_sha256": "27baa489995cc265f1bfe109f6c60b96fe3f388ccdacf58020a9a1559049da98",
+      "table_sha256": "f957a5f4bad5d22171abbd856c12703280acd289c57c109b809529f5b22ec6d9",
+      "fields": [
+        {
+          "name": "rtSingleBullet",
+          "offset_or_enum_value": 0,
+          "type_info_va": 0,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "rtMagazine",
+          "offset_or_enum_value": 1,
+          "type_info_va": 0,
+          "element_info_va": 0,
+          "flags": 0
+        }
+      ]
+    },
+    {
+      "name": "ReloadLogic",
+      "metadata_rva": 25148008,
+      "flags": 377,
+      "size": 4,
+      "table_rva": 25298200,
+      "metadata_sha256": "b7eee1bfe9b27952f2b46db67024a9b27401fd83edb153c15cdbf26f8db097a1",
+      "table_sha256": "c1e5a9ce4b1331efb0ab28d67717ad7056c2642a859339e42ab62ffcca780ad9",
+      "fields": [
+        {
+          "name": "rlWeaponSwitchCancelsUnfinishedReload",
+          "offset_or_enum_value": 0,
+          "type_info_va": 0,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "rlReloadUnaffectedByWeaponSwitch",
+          "offset_or_enum_value": 1,
+          "type_info_va": 0,
+          "element_info_va": 0,
+          "flags": 0
+        }
+      ]
+    },
+    {
+      "name": "FireLogicType",
+      "metadata_rva": 25147952,
+      "flags": 377,
+      "size": 4,
+      "table_rva": 25298032,
+      "metadata_sha256": "65e4574abc7d2f053377345798732758fa03e4f37f74b07bfe3033f2d9f4a8c2",
+      "table_sha256": "9e4b986196f18dc51dc02e17148a56e42e2590e9a9f973d53fd64104e1f470fa",
+      "fields": [
+        {
+          "name": "fltSingleFire",
+          "offset_or_enum_value": 0,
+          "type_info_va": 0,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "fltSingleFireWithBoltAction",
+          "offset_or_enum_value": 1,
+          "type_info_va": 0,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "fltAutomaticFire",
+          "offset_or_enum_value": 2,
+          "type_info_va": 0,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "fltHoldAndRelease",
+          "offset_or_enum_value": 3,
+          "type_info_va": 0,
+          "element_info_va": 0,
+          "flags": 0
+        },
+        {
+          "name": "fltDetonatedFiring",
+          "offset_or_enum_value": 4,
+          "type_info_va": 0,
+          "element_info_va": 0,
+          "flags": 0
+        }
+      ]
+    }
+  ],
+  "authored_reload_animation": {
+    "tree_resource": "Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60_AnimTree1p.dbx",
+    "replacement_reference": "animations/weapons/handheld/bu_lmg_m60/1p/1p_reload/6198601a-8e42-461f-88d5-af80c143b4c2",
+    "resource": "Animations/Weapons/Handheld/BU_lmg_M60/1P/1P_Reload.res",
+    "sha256": "a6b0e5c68340c3ec2211e25a7f682bbce93befc1535e13fc31bd46bf727614f3",
+    "archive": "Dist/win32/async/weapon/sp_lmg_m60-00.fbrb",
+    "archive_index_sha256": "4260b95b2de5e90945e0554bac1e55a5066a121810845b2b40d108d4de4b8b89",
+    "summary": {
+      "duration_seconds": 8.033333778381348,
+      "time_step": 0.008333333767950535,
+      "oversampling": 4.0,
+      "track_group": "grannyRootBone",
+      "tracks": [
+        {
+          "name": "jntWpn_0",
+          "position_curve_type": "D3K16uC16u",
+          "orientation_curve_type": "D4nK16uC15u",
+          "scale_curve_type": "DaIdentity",
+          "payload_decoded": true,
+          "motion_status": "varying_controls_not_mechanism_proof"
+        },
+        {
+          "name": "jntWpn_1",
+          "position_curve_type": "D3Constant32f",
+          "orientation_curve_type": "D4nK16uC15u",
+          "scale_curve_type": "DaIdentity",
+          "payload_decoded": true,
+          "motion_status": "constant_controls"
+        },
+        {
+          "name": "jntWpn_10",
+          "position_curve_type": "D3K8uC8u",
+          "orientation_curve_type": "D4nK16uC15u",
+          "scale_curve_type": "DaIdentity",
+          "payload_decoded": true,
+          "motion_status": "varying_controls_not_mechanism_proof"
+        },
+        {
+          "name": "jntWpn_11",
+          "position_curve_type": "DaIdentity",
+          "orientation_curve_type": "D4nK16uC15u",
+          "scale_curve_type": "DaIdentity",
+          "payload_decoded": true,
+          "motion_status": "constant_controls"
+        },
+        {
+          "name": "jntWpn_12",
+          "position_curve_type": "D3K16uC16u",
+          "orientation_curve_type": "D4nK16uC15u",
+          "scale_curve_type": "DaIdentity",
+          "payload_decoded": true,
+          "motion_status": "varying_controls_not_mechanism_proof"
+        },
+        {
+          "name": "jntWpn_13",
+          "position_curve_type": "D3Constant32f",
+          "orientation_curve_type": "D4nK16uC15u",
+          "scale_curve_type": "DaIdentity",
+          "payload_decoded": true,
+          "motion_status": "varying_controls_not_mechanism_proof"
+        },
+        {
+          "name": "jntWpn_15",
+          "position_curve_type": "D3Constant32f",
+          "orientation_curve_type": "D4nK16uC15u",
+          "scale_curve_type": "DaIdentity",
+          "payload_decoded": true,
+          "motion_status": "varying_controls_not_mechanism_proof"
+        },
+        {
+          "name": "jntWpn_17",
+          "position_curve_type": "DaIdentity",
+          "orientation_curve_type": "D4nK16uC15u",
+          "scale_curve_type": "DaIdentity",
+          "payload_decoded": true,
+          "motion_status": "varying_controls_not_mechanism_proof"
+        },
+        {
+          "name": "jntWpn_18",
+          "position_curve_type": "D3K8uC8u",
+          "orientation_curve_type": "D4nK16uC15u",
+          "scale_curve_type": "DaIdentity",
+          "payload_decoded": true,
+          "motion_status": "varying_controls_not_mechanism_proof"
+        },
+        {
+          "name": "jntWpn_19",
+          "position_curve_type": "DaIdentity",
+          "orientation_curve_type": "D4nK16uC15u",
+          "scale_curve_type": "DaIdentity",
+          "payload_decoded": true,
+          "motion_status": "varying_controls_not_mechanism_proof"
+        },
+        {
+          "name": "jntWpn_2",
+          "position_curve_type": "D3Constant32f",
+          "orientation_curve_type": "D4nK16uC15u",
+          "scale_curve_type": "DaIdentity",
+          "payload_decoded": true,
+          "motion_status": "constant_controls"
+        },
+        {
+          "name": "jntWpn_3",
+          "position_curve_type": "D3Constant32f",
+          "orientation_curve_type": "D4nK16uC15u",
+          "scale_curve_type": "DaIdentity",
+          "payload_decoded": true,
+          "motion_status": "constant_controls"
+        },
+        {
+          "name": "jntWpn_4",
+          "position_curve_type": "D3I1K16uC16u",
+          "orientation_curve_type": "D4nK16uC15u",
+          "scale_curve_type": "DaIdentity",
+          "payload_decoded": true,
+          "motion_status": "varying_controls_not_mechanism_proof"
+        },
+        {
+          "name": "jntWpn_5",
+          "position_curve_type": "D3Constant32f",
+          "orientation_curve_type": "D4nK16uC15u",
+          "scale_curve_type": "DaIdentity",
+          "payload_decoded": true,
+          "motion_status": "constant_controls"
+        },
+        {
+          "name": "jntWpn_6",
+          "position_curve_type": "D3K16uC16u",
+          "orientation_curve_type": "D4nK16uC15u",
+          "scale_curve_type": "DaIdentity",
+          "payload_decoded": true,
+          "motion_status": "varying_controls_not_mechanism_proof"
+        },
+        {
+          "name": "jntWpn_7",
+          "position_curve_type": "D3Constant32f",
+          "orientation_curve_type": "D4nK16uC15u",
+          "scale_curve_type": "DaIdentity",
+          "payload_decoded": true,
+          "motion_status": "varying_controls_not_mechanism_proof"
+        },
+        {
+          "name": "jntWpn_8",
+          "position_curve_type": "D3Constant32f",
+          "orientation_curve_type": "D4nK16uC15u",
+          "scale_curve_type": "DaIdentity",
+          "payload_decoded": true,
+          "motion_status": "varying_controls_not_mechanism_proof"
+        },
+        {
+          "name": "jntWpn_9",
+          "position_curve_type": "D3Constant32f",
+          "orientation_curve_type": "D4nK16uC15u",
+          "scale_curve_type": "DaIdentity",
+          "payload_decoded": true,
+          "motion_status": "varying_controls_not_mechanism_proof"
+        },
+        {
+          "name": "jntWpn_Flash",
+          "position_curve_type": "DaIdentity",
+          "orientation_curve_type": "D4nK16uC15u",
+          "scale_curve_type": "DaIdentity",
+          "payload_decoded": true,
+          "motion_status": "constant_controls"
+        },
+        {
+          "name": "jntWpnwpnJnt_14",
+          "position_curve_type": "D3K8uC8u",
+          "orientation_curve_type": "D4nK16uC15u",
+          "scale_curve_type": "DaIdentity",
+          "payload_decoded": true,
+          "motion_status": "varying_controls_not_mechanism_proof"
+        },
+        {
+          "name": "jntWpnwpnJnt_16",
+          "position_curve_type": "D3K16uC16u",
+          "orientation_curve_type": "D4nK16uC15u",
+          "scale_curve_type": "DaIdentity",
+          "payload_decoded": true,
+          "motion_status": "varying_controls_not_mechanism_proof"
+        }
+      ],
+      "supported_tracks": 72,
+      "unsupported_tracks": {},
+      "curve_formats": {
+        "D3K8uC8u": 4,
+        "D4nK16uC15u": 64,
+        "DaIdentity": 77,
+        "D3Constant32f": 57,
+        "DaK32fC32f": 2,
+        "D4Constant32f": 1,
+        "D4nK8uC7u": 5,
+        "D3K16uC16u": 5,
+        "D3I1K16uC16u": 1
+      },
+      "all_track_payloads_decoded": true,
+      "wrapper_record_semantics_verified": false,
+      "clip_basis_provenance": "not_stored_in_clip; inherited_from_explicitly_paired_skeleton",
+      "clip_skeleton_pairing": "explicit caller-selected skeleton; named-track mapping; not active native mesh proof",
+      "target_runtime_interpolation_verified": false
+    }
+  },
+  "reader_hashes": {
+    "capture_lmg_native.py": "98a8d2949234103806201b353ccc4acbfe0e117d473eb1d63b8aa2280ab7e90e",
+    "capture_reload_state.py": "94db343a4d568c5c6c784aa70b74a508ab936187f63eb95c778359a15294ca88",
+    "capture_reload_server.py": "9da3b354b76a43c11f6884ed03d560fdab73fa97bcf5af7351a02266d0cf587c",
+    "read_bc2.py": "aa03949aaa09f68534498cbc57f174f91f9843fd6a7ce1b3b86ca4127bffd45b",
+    "bc2_weapon_config_pipeline.py": "09667ad3b7939429d7a4546718cc3079d4b8fa3df728c9f40c06f0e5969f60a6",
+    "inspect_bc2_mesh_asset.py": "2fd90f39794dfc4698229b8fb68eff02c0b91de168bf4027a1bb42adee1163bf",
+    "bc2_weapon_animation_pipeline.py": "1e1be1d12389835bc089ead9c172a011797a3c8d5370957b0ade2876ff3cd55b",
+    "bc2_granny_resource.py": "b96444d4e8ba8f62b00604fc7e2e4fc8d7ba484d1320c18578817bb5f3f81dd3",
+    "bc2_granny_curves.py": "02c2d8f1b7537e23ab2b4b2ccf63b32d848848077525cf65255d976749f08e2c"
+  },
+  "reload_state_source_sha256": "1c1591858df9cc5cff66ec9d4028eb4a069cf9cc059b1627455cf0734fdb7547",
+  "stage_contract": [
+    {
+      "stage": "cover/latch/container/feed/charge",
+      "authority": "authored presentation candidates only",
+      "observer": "exact replacement clip and original evaluated named weapon bones; roles remain Unknown until visual correlation",
+      "forbidden_inference": "No cover/feed enum, native operation or acknowledgement follows from a bone, clip time or rtMagazine."
+    },
+    {
+      "stage": "reload begin/wait",
+      "authority": "native sampled phase",
+      "observer": "all three firing copies: current/previous/next 10/11, phaseTimer",
+      "limit": "External polling may miss 10 or 12 within one native update; no event completeness or pose atomicity."
+    },
+    {
+      "stage": "native bulk transfer",
+      "authority": "observed counter transition, not operation receipt",
+      "observer": "all three same-owner copies; loaded increases, reserve decreases equally, totals conserved; retain before/after intervals",
+      "limit": "Prediction/cross-copy skew and concurrent supply changes stay inconclusive; no independent belt/container resource is proved."
+    },
+    {
+      "stage": "return to input processing",
+      "authority": "native phase candidate",
+      "observer": "all three copies current=next=2, positive loaded, stable counts for 2 seconds",
+      "limit": "Does not prove fire permission or chamber state; no fire command is issued. Zero bolt timing does not justify adding a charge step."
+    }
+  ],
+  "capture_bounds": {
+    "seconds": 20,
+    "interval_ms": 20,
+    "max_records": 1100,
+    "max_output_bytes": 8388608,
+    "operator_precondition": "Already partial positive clip and positive reserve; 2 seconds stable before one operator-owned ordinary reload, 2 seconds after; no preparation shot by observer"
+  },
+  "pending": "One exact mounted M60_sp ordinary reload and original-pose/visual correlation; optional native callback event observer needs separate source review.",
+  "authored_presentation": {
+    "readiness_states": {
+      "Relaxed": true,
+      "Alert": true
+    },
+    "skip_reload_animation": false,
+    "play_deploy_after_fire": false,
+    "hidden_bones_1p": [],
+    "readiness_meaning": "Authored Relaxed/Alert presentation selection; not loaded/chamber/fire-ready authority"
+  }
+}

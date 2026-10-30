@@ -1,0 +1,38 @@
+BC2 VR work12 — validated offline source batch; integration/install held for user
+Base:dfc0e507be635769dade167c1d642e3716443835; prior polish11 retained.
+All agents retired; all file ownership returned to root. No active source writer.
+One job per fresh agent. Y means the scoped job, never whole-card/headset acceptance.
+User says offline only: no game/XR/input/focus/profiles/install.
+
+CHAT29 scope_read12 Y: exact-path MeshZoom1p reader; independent review found no issue.
+CHAT29 scope_probe12 Y: existing finite PassEvidence diagnostic records M95 zoom states;
+default/persistent/Hands-only modes add zero zoom native reads. No ADS/render authority.
+CHAT31 launcher_sights12 Y: reject invalid sight-grab geometry before claiming hand.
+CHAT30 grip_alignment12 Y: admit gun wrist before fallback attachment acquisition;
+accepted grip survives tracking gaps. Headset symptom causation not established.
+CHAT14 belt_binding12 Y: exact M60 binding/observer prepared; native stages unproved.
+CHAT16 pistol_readiness12 Y: MP443 observer prepared; chamber/slide admission unknown.
+CHAT17 sniper_combination12 N: simultaneous bolt/magazine use lacks hand contract;
+existing ordered native sequence prepared; custody rules preserved.
+CHAT08 jeep_evidence12 Y: generic paired gunner rows analyzed; exact jeep identity missing.
+CHAT24 prop_contract12 Y: audit found no production-reachable defect; no source edit.
+
+Validation: selected-mesh17, selected-configuration13, observer19, carried-mesh6 groups
+pass on x86/x64; sight and grip suites pass on both architectures (12 executables).
+Sight/grip pre-fix failures retained. Gameplay and NativeProbe normal-feature x86 syntax pass.
+Pistol7 and belt6 offline checks pass at their tracked handoff locations.
+Initial sight link failure and relocated pistol missing-fixture failure are preserved.
+Results: reports/coordinator-20261029-work12; small validation.json pins source/results.
+Only changed source compiled; baseline libraries reused read-only; no shared build mutation.
+Full normal x86/x64 builds and actual-game/headset checks remain for authorized integration.
+
+Root HUD/frame-delivery review found no supported runtime correction:
+HUD already retains fresh same-owner image; cutscene owner identity remains missing.
+Host already polls/queues copies across WaitFrame; tuning needs matched measurements.
+No performance, cutscene, destruction or choppy-fire fix claimed.
+Prior polish11 C4 route and diagnostic retention changes remain staged, not installed.
+All other eligible cards now require their recorded native/asset/headset input;
+CHAT01/03 deferred,02/04/05/06 excluded,25/26/32 ownership untouched.
+Next: on user integration instruction, combine latest canonical source, run normal builds,
+then permitted native/headset checks; install only through validated workflow.
+No canonical merge, source push, game session or installation in this batch.

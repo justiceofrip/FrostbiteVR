@@ -16,6 +16,48 @@ bool Close(math::Vec3 a,math::Vec3 b){return Near(a.x,b.x,.0002f)&&Near(a.y,b.y,
 math::Quaternion Product(math::Quaternion a,math::Quaternion b){return {
  a.w*b.x+a.x*b.w+a.y*b.z-a.z*b.y,a.w*b.y-a.x*b.z+a.y*b.w+a.z*b.x,
  a.w*b.z+a.x*b.y-a.y*b.x+a.z*b.w,a.w*b.w-a.x*b.x-a.y*b.y-a.z*b.z};}
+int RejectedGunHandAttachmentRegression(){
+ TrackedRig rig;TrackedRigOwner owner{701,1,20,4,1};InputFrame input{};
+ input.generation=input.spaceGeneration=1;input.predictedNs=1000000000;input.focused=input.headValid=true;
+ for(auto& hand:input.hands){hand.gripTracked=hand.aimTracked=true;hand.active=Components;hand.grip.position={.2f,-.3f,-.4f};}
+ input.hands[0].grip.position.x=-.2f;
+ const auto body=At(0,1.6f,0),left=At(-.2f,1.3f,.4f),right=At(.2f,1.3f,.4f);
+ const auto transientGun=At(.2f,1.3f,.7f),returnedGun=At(.2f,1.3f,.95f);
+ const std::array<ArmAnchor,2> anchors{ArmAnchor{{-.2f,1.5f,0},{-.1f,-.2f,.1f}},ArmAnchor{{.2f,1.5f,0},{.1f,-.2f,.1f}}};
+ // Cover initial acquisition, native item replacement and pointer-reused equipment.
+ for(unsigned episode=0;episode<3;++episode){
+  if(episode==1)++owner.equipped;
+  if(episode==2)++owner.equipmentGeneration;
+  input.hands[1].grip.position.x=2; // Tracked flag alone does not admit this wrist.
+  ++input.generation;input.predictedNs+=10000000;
+  auto unavailable=rig.Update(owner,input,body,left,right,transientGun,anchors);
+  CHECK(unavailable&&unavailable->tracked[0]&&!unavailable->tracked[1]&&Close(unavailable->weapon,transientGun));
+  ++input.generation;input.predictedNs+=700000000;
+  unavailable=rig.Update(owner,input,body,left,right,transientGun,anchors);
+  CHECK(unavailable&&unavailable->tracked[0]&&!unavailable->tracked[1]);
+  input.hands[1].grip.position.x=.2f;
+  ++input.generation;input.predictedNs+=10000000;
+  const auto returned=rig.Update(owner,input,body,left,right,returnedGun,anchors);
+  CHECK(returned&&returned->tracked[1]&&Close(returned->weapon,returnedGun)&&returned->weaponAttachmentPending);
+  ++input.generation;input.predictedNs+=200000000;
+  const auto settled=rig.Update(owner,input,body,left,right,returnedGun,anchors);
+  CHECK(settled&&!settled->weaponAttachmentPending&&Close(settled->weapon,returnedGun));
+  // After admission, a temporary invalid or untracked wrist must not retire the
+  // accepted grip or relearn the native reload pose on physical hand return.
+  for(bool stillTracked:{true,false}){
+   input.hands[1].gripTracked=stillTracked;input.hands[1].grip.position.x=2;
+   ++input.generation;input.predictedNs+=700000000;
+   unavailable=rig.Update(owner,input,body,left,right,transientGun,anchors);
+   CHECK(unavailable&&unavailable->tracked[0]&&!unavailable->tracked[1]);
+   input.hands[1].gripTracked=true;input.hands[1].grip.position.x=.2f;
+   ++input.generation;input.predictedNs+=10000000;
+   const auto recovered=rig.Update(owner,input,body,left,right,transientGun,anchors);
+   CHECK(recovered&&!recovered->weaponAttachmentPending&&!recovered->calibrated);
+   CHECK(Close(recovered->right,settled->right)&&Close(recovered->weapon,settled->weapon));
+  }
+ }
+ return 0;
+}
 int PhysicalHeadingRegression(){
  constexpr float radians=.017453292519943295f;
  const auto yaw=[](float angle){return math::Quaternion{0,std::sin(angle*.5f),0,std::cos(angle*.5f)};};
@@ -109,6 +151,7 @@ int PhysicalHeadingRegression(){
  return 0;
 }
 int main(){
+ CHECK(RejectedGunHandAttachmentRegression()==0);
  CHECK(PhysicalHeadingRegression()==0);
  TrackedRig rig;TrackedRigOwner owner{1,2,3,4};InputFrame input{};input.generation=1;input.spaceGeneration=2;input.predictedNs=100;input.focused=input.headValid=true;
  for(auto& h:input.hands){h.gripTracked=h.aimTracked=true;h.active=Components;h.grip.position={.2f,-.3f,-.4f};}

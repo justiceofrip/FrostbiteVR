@@ -1,0 +1,25 @@
+Done Y: shared gun-hand attachment admission correction prepared offline.
+Source: src/interaction/TrackedRig.cpp
+Regression: tests/TrackedRigTests.cpp::RejectedGunHandAttachmentRegression
+Analysis: reports/coordinator-20261029-work12/grip/analyze.py and capture-analysis.json
+Defect: fallback acquisition used gripTracked before the 1.5 m head-relative wrist gate.
+A rejected gun wrist could settle a transient native attachment while the left hand remained admitted.
+Its return then retained that stale relation instead of acquiring the current native relation.
+Correction: evaluate fallback acquisition after wrist admission and require out.tracked[1].
+Accepted attachments survive temporary invalid/untracked wrists; explicit authored attachments are unchanged.
+No per-asset offsets, calibration replacements, holster changes or support-claim changes.
+Regression covers first acquisition, new equipped pointer and equipment-generation pointer reuse.
+It also checks accepted attachment continuity across invalid and untracked recovery.
+Root reproduced the pre-fix failure at TrackedRigTests.cpp:41.
+Receipt: reports/coordinator-20261029-work12/grip-x86-before01/test.log
+Root owns post-fix x86/x64 focused checks and normal builds; none claimed here.
+Actual session: BC2VR-Launcher/data/runtime/sessions/20261029-174056-341-41f3c366.
+Audit: 1,214 retained samples / 17 groups / five selected weapon labels; all composed matrices admissible.
+15 support grabs/releases, 17,088 held samples, zero tracked-target rejection and support preservation failures.
+Observed native gun/wrist relation excursions include 0.547 m Garand and 0.423 m XM8 within capture episodes.
+Those native observations justify retaining accepted relations; they do not demonstrate this admission defect occurred.
+Physical reload support-return request=0; physical pump ticks=0 in this session.
+Classification: deterministic source-contract defect, not an established cause of the reported headset symptom.
+Existing authored geometry and accepted calibrations remain authoritative; integration awaits the user.
+Self-review complete; no builds, game/input/install, Git or shared-doc writes performed by this agent.
+Retired after source handoff; root owns integration and subsequent verification.

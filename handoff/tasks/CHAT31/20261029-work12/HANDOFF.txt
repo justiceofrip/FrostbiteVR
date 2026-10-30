@@ -1,0 +1,16 @@
+CHAT31 work12: admitted launcher-sight interaction contact
+Source: Bc2SightAdapter.h and Bc2SightAdapterTests.cpp only; adapter is header-only.
+Exact admitted pairs remain scoped XM8/XM320 and linked unscoped XM8/XM320.
+AEK/GP30 stays disabled. No physical underbarrel reload or knife changes.
+Before: raw rear-ladder measurement was forwarded as interaction contact even
+when the front leaf or captured grasp was unusable. Gameplay could then reserve
+Sight ownership before discovering that its visible grasp could not be built.
+After: adapter requires preview completeness, proper front/raw-hand matrices,
+and a valid grasp binding; standalone measurement semantics remain unchanged.
+Regression: both pairs and both modes reject seven incomplete/malformed cases
+and accept a complete fresh publication afterward. Eligibility flags unchanged.
+Root confirmed prepatch deterministic failure at Bc2SightAdapterTests.cpp:81
+in sight-x86-before02/test.log; before01 runner linkage failure is preserved.
+Source diff whitespace check passed. Root owns postpatch x86/x64 affected tests.
+Actual-game mode/hand return and headset acceptance remain unqualified.
+No builds, Git mutations, game/XR/input, install, or profile changes by this agent.
