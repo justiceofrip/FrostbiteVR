@@ -746,12 +746,23 @@ int CurrentShellHoldSurvivesBoundedFrameHitch()
     CHECK(!expired.Tick(100000000)&&expired.gate.Failure()==ReloadRequestCycleFailure::Control);
     return 0;
 }
-template<class Policy> int ExactTubePredictionReplay()
+template<class Policy> int ExactTubePredictionReplay(const ReloadConfigDescriptor* descriptor=nullptr)
 {
     // Actual260: client1 transferred 7/23->8/22, then immutable Restore
     // native12131 rewound it to 7/23 before server12137 applied the shell.
     for(bool serverFirst:{false,true}){
-        SimulationFor<Policy> s;for(auto& b:s.input.branches){b.loaded=7;b.reserve=23;}
+        SimulationFor<Policy> s;
+        if(descriptor){
+            auto& c=s.input.config;const auto& v=descriptor->values;
+            c.assetName={};c.assetPath={};
+            std::copy(descriptor->assetName.begin(),descriptor->assetName.end(),c.assetName.begin());
+            std::copy(descriptor->assetPath.begin(),descriptor->assetPath.end(),c.assetPath.begin());
+            c.fireLogicType=v.fireLogicType;c.reloadType=v.reloadType;c.fireInputAction=v.fireInputAction;c.reloadInputAction=v.reloadInputAction;
+            c.baseCapacity=v.baseCapacity;c.numberOfMagazines=v.numberOfMagazines;c.reloadDelay=v.reloadDelay;c.reloadTime=v.reloadTime;
+            c.reloadThreshold=v.reloadThreshold;c.postReloadTime=v.postReloadTime;c.boltDelay=v.boltDelay;c.boltTime=v.boltTime;
+            c.holdBoltUntilFireRelease=v.holdBoltUntilFireRelease;c.holdBoltUntilZoomRelease=v.holdBoltUntilZoomRelease;
+        }
+        for(auto& b:s.input.branches){b.loaded=7;b.reserve=23;}
         CHECK(s.Arm());const auto request=s.Request();CHECK(s.gate.Submit(request,s.input.nowNs));
         CHECK(s.Advance(0)&&s.Advance(1));CHECK(s.Tick());
         ReloadPredictionRestore restore{s.input.identity,s.control.cycle,++s.transfers,
@@ -773,6 +784,15 @@ template<class Policy> int ExactTubePredictionReplay()
         CHECK(s.input.branches[0].loaded==8&&s.input.branches[1].loaded==8&&s.input.branches[2].loaded==8);
     }
     return 0;
+}
+int AllRegisteredTubePredictionReplay(){
+    unsigned configurations=0;
+    for(const auto& row:Bc2CycleNativeProfiles)if(row.family==Bc2NativeCycleFamily::Pump){
+        if(ExactTubePredictionReplay<Bc2ReloadRequestCycle>(row.config)||
+           ExactTubePredictionReplay<Bc2ReloadNativePolicy>(row.config))return 1;
+        ++configurations;
+    }
+    CHECK(configurations>1);return 0;
 }
 int PredictionRestoreDoesNotBorrowConfigOrControl(){
     for(unsigned mutation=0;mutation<5;++mutation){
@@ -904,7 +924,7 @@ int main(int argc,char** argv)
     if(CompletedShellsThenPresentationLoss<Bc2ReloadRequestCycle>()||CompletedShellsThenPresentationLoss<Bc2ReloadNativePolicy>())return 1;
     if(CompletedShellStopAcrossPublicationGap<Bc2ReloadRequestCycle>()||CompletedShellStopAcrossPublicationGap<Bc2ReloadNativePolicy>())return 1;
     if(SubmittedShellSurvivesOtherBranchSchedulingGap<Bc2ReloadRequestCycle>()||SubmittedShellSurvivesOtherBranchSchedulingGap<Bc2ReloadNativePolicy>())return 1;
-    if(ExactTubePredictionReplay<Bc2ReloadRequestCycle>()||ExactTubePredictionReplay<Bc2ReloadNativePolicy>()||PredictionRestoreDoesNotBorrowConfigOrControl()||PredictionRestoreDoesNotRestampContext())return 1;
+    if(ExactTubePredictionReplay<Bc2ReloadRequestCycle>()||ExactTubePredictionReplay<Bc2ReloadNativePolicy>()||AllRegisteredTubePredictionReplay()||PredictionRestoreDoesNotBorrowConfigOrControl()||PredictionRestoreDoesNotRestampContext())return 1;
     if(CurrentShellHoldSurvivesBoundedFrameHitch())return 1;
     if (ExplicitRequestOnlyAndTruthfulHold() || RealRequestTwoRoundsAndFinalAck() || QuietCohortAndActualReholds() ||
         NoBorrowedLeaseDuringOriginal() || OwnerControlAndTimingCancel() || DeadmanAndExactDuplicateControl() ||

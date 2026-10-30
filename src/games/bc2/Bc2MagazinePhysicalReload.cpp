@@ -18,8 +18,25 @@ interaction::AmmoSupplyConfig Bc2MagazinePhysicalReload::DefaultPouch()noexcept 
 }
 Bc2MagazinePhysicalReload::Bc2MagazinePhysicalReload(bool enabled,MagazinePhysicalApi api,AmmoSupplyConfig pouch)noexcept
  :supply_(pouch),pouch_(pouch),api_(api),enabled_(enabled){
- if(enabled&&api.resourceRead&&api.resourceSubmit)resource_=std::make_unique<Bc2MagazineResourceReload>(
-     MagazineResourceApi{api.context,api.resourceRead,api.resourceSubmit,api.resourceOutcome,api.resourceReadObserved},pouch);
+ if(enabled&&api.resourceRead&&api.resourceSubmit){
+  // Forward the one existing resource read; telemetry must never perform a
+  // second native read or change whether the backend has typed gap evidence.
+  MagazineResourceApi observed;observed.context=this;
+  observed.read=[](void* context,const ReloadStateOwner& owner,std::int64_t now)noexcept{
+   auto& self=*static_cast<Bc2MagazinePhysicalReload*>(context);
+   auto view=self.api_.resourceRead(self.api_.context,owner,now);
+   self.entryResourceAvailable_=bool(view);
+   self.entryResourceReadReason_=unsigned(view?AmmoResourceReadReason::Available:AmmoResourceReadReason::NoView);return view;};
+  observed.submit=[](void* context,const AmmoResourceRequest& request)noexcept{
+   auto& self=*static_cast<Bc2MagazinePhysicalReload*>(context);return self.api_.resourceSubmit(self.api_.context,request);};
+  if(api.resourceOutcome)observed.outcome=[](void* context,std::uint64_t request,const interaction::AmmoResourceContext& owner)noexcept{
+   auto& self=*static_cast<Bc2MagazinePhysicalReload*>(context);return self.api_.resourceOutcome(self.api_.context,request,owner);};
+  if(api.resourceReadObserved)observed.readObserved=[](void* context,const ReloadStateOwner& owner,std::int64_t now)noexcept{
+   auto& self=*static_cast<Bc2MagazinePhysicalReload*>(context);
+   auto read=self.api_.resourceReadObserved(self.api_.context,owner,now);
+   self.entryResourceAvailable_=bool(read.view);self.entryResourceReadReason_=unsigned(read.reason);return read;};
+  resource_=std::make_unique<Bc2MagazineResourceReload>(observed,pouch);
+ }
  }
 Bc2MagazinePhysicalReload::~Bc2MagazinePhysicalReload()=default;
 MagazineResourceProbeState Bc2MagazinePhysicalReload::ResourceProbeState(std::int64_t now)const noexcept {
@@ -118,14 +135,48 @@ void Bc2MagazinePhysicalReload::Cancel(const HandInteractionSample& in,HandInter
 }
 MagazinePhysicalResult Bc2MagazinePhysicalReload::Tick(const MagazinePhysicalSample& supplied,HandInteraction& hands,
  std::uint64_t& sharedIntent)noexcept {
- if(resource_)return resource_->Tick(supplied,hands,sharedIntent);
+ entryResourceReadReason_=~0u;entryResourceAvailable_=false;
+ if(resource_){auto out=resource_->Tick(supplied,hands,sharedIntent);ObserveEntry(supplied,out,hands);return out;}
  retainedPresentationThisTick_=false;
  auto out=TickImpl(supplied,hands,sharedIntent);
  if(!retainedPresentationThisTick_){
   if(MagazineTargetFresh(out.tracking,Now(supplied.input.nowNs)))emittedPresentation_=EmittedPresentation{out.tracking,last_.phase};
   else emittedPresentation_.reset();
  }
- return out;
+ ObserveEntry(supplied,out,hands);return out;
+}
+void Bc2MagazinePhysicalReload::ObserveEntry(const MagazinePhysicalSample& s,const MagazinePhysicalResult& result,
+ const HandInteraction& hands)noexcept {
+ using Stage=WeaponMagazineEntryStage;
+ const auto profile=s.entryProfileObserved?s.entryProfile:(s.family.verified?s.family.binding.profile:nullptr);
+ const auto stage=[&]()noexcept{
+  const auto now=s.input.nowNs;
+  if(!enabled_)return Stage::Disabled;
+  if(!s.input.focused||!s.input.tracked[0]||!s.input.tracked[1]||!s.input.sequence||s.input.released[1]||
+     s.input.observedNs<=0||s.input.observedNs>now||s.input.deadlineNs<=now||s.input.deadlineNs-s.input.observedNs>100000000)return Stage::Input;
+  if(s.cancel)return Stage::Cancelled;
+  if(!profile)return Stage::ProfileMissing;
+  if(!profile->Ready())return Stage::ProfileUnavailable;
+  if(s.family.binding.profile!=profile||!MagazineFamilyFresh(s.family,s.nativeOwner,s.input.owner,s.weapon,now))return Stage::Family;
+  if(!s.meshes||!MagazineSelected(*s.meshes,s.nativeOwner,s.asset,*profile,now))return Stage::SelectedMesh;
+  if(resource_&&!entryResourceAvailable_)return Stage::ResourceRead;
+  const auto gun=hands.Current(InteractionHand::Right);
+  if(!gun||gun->token.owner!=s.input.owner||gun->token.item!=s.weapon||gun->token.kind!=HandClaimKind::GunHold||
+     gun->inputSequence!=s.input.sequence||gun->deadlineNs<=now)return Stage::GunClaim;
+  // A submitted transaction can be retained without fresh contact. Preserve
+  // that outcome rather than diagnosing its deliberately absent geometry.
+  if(result.interaction.transaction.request)return Stage::Request;
+  if(result.tracking.enabled&&result.interaction.phase!=DetachableMagazinePhase::Attached)return Stage::Active;
+  if(!s.raw.valid)return Stage::RawMissing;
+  if(s.raw.owner!=s.nativeOwner)return Stage::RawOwner;
+  if(s.raw.rigFingerprint!=profile->geometry->rigFingerprint)return Stage::Rig;
+  if(!s.originalHandEvidence||!SameInput(s.raw.inputEvidence,*s.originalHandEvidence)||s.raw.inputEvidence.deadlineNs<=now)return Stage::HandEvidence;
+  if(!Rigid(s.raw.rawLeftWristWorldMeters)||!Rigid(s.raw.weaponWorldMeters))return Stage::Geometry;
+  if(!result.tracking.enabled)return Stage::Consumer;
+  return Stage::Contact;
+ }();
+ entryTelemetry_.Observe({profile,s.asset,stage,s.nativeOwner,s.input.sequence,s.raw.rigFingerprint,s.input.nowNs,
+  unsigned(result.interaction.phase),unsigned(result.interaction.reason),entryResourceReadReason_,s.gripPressed,s.ejectPressed});
 }
 void Bc2MagazinePhysicalReload::RetainDeferredPresentation(MagazinePhysicalResult& out,const MagazinePhysicalSample& s,
  HandInteraction& hands)noexcept {

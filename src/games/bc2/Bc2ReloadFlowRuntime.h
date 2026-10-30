@@ -226,6 +226,8 @@ namespace reloadFlowRuntime {
 // Cached existing owned-Update observation only, no native read or renewal.
 std::optional<ReloadPreholdEntryObservation> ReadPreholdEntry(const ReloadHoldIdentity&,std::uint64_t cycle,std::int64_t now)noexcept;
 // Fresh coherent reserve before Start; no cycle/held state is invented.
+// Coherent read-only ammunition for every registered magazine, tube, feed and
+// fixed-container configuration. Does not select or authorize a reload policy.
 std::optional<Bc2AmmoReserveLease> ReadReserve()noexcept;
 // Pure published copy for rendering. No native reads, policy entry, clock
 // renewal or cancellation. Consumers must validate original identity/expiry.

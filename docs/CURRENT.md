@@ -13,6 +13,9 @@ The user's0.1.18 test confirms multiweapon two-hand grips and reliable swaps, bu
 reload/ammo, muzzle, empty-hand stow and underbarrel/sight failures remain open.
 [Feedback53](archive/2026-10-30-bc2vr-0.1.18-buglist.md) records shared runtime gaps;
 the weapons job is not complete. C4 was not tested; other earlier bugs remain open.
+Wiring54 stages shared ammo/feed, measured muzzle/underbarrel connections and depth-target reuse;
+20 focused suites per architecture pass. [Source candidate](../handoff/integrations/coordinator-20261030-wiring54/STATUS.txt)
+awaits user-directed integration, normal builds and installation; no new headset acceptance.
 
 Private0.1.17 includes the launcher retained-handle image fix;38 identity/43 portable
 checks pass. Its verified package reuses the staged cache, which now passes both

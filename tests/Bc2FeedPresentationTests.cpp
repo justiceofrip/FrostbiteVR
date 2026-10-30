@@ -147,6 +147,21 @@ int RealMechanismClaimAndPairRetentionAreRequired(){
     bad=current;bad.carriedPartsMask=1;CHECK(!Bc2FeedPresentationRetained(p,bad,false,1020000000));
     CHECK(!Bc2FeedPresentationRetained(p,current,true,p.input.deadlineNs));return 0;
 }
+int SupplyHandKeepsItsActualAmmoClaim(){
+    auto p=Physical();const auto config=Bc2FeedSupplyConfig();const auto* row=FindBc2FeedRegistration(p.registrationKey);CHECK(row);
+    AmmoSupplyObject object;object.identity={p.input.owner,p.weapon,{row->key,row->mechanism.revision},{1234,19},p.input.owner.space};
+    object.item={config.itemNamespace,2};object.family=ReloadInsertionFamily::Magazine;object.units=80;
+    object.claim={{55,p.input.owner,InteractionHand::Left,HandClaimKind::AmmoObject,object.item,config.pouch,0},
+        p.input.deadlineNs,p.input.sequence};
+    p.supplyObject=object;p.mechanismClaim=object.claim;p.mechanismWristWorldMeters=Identity();
+    p.operation=FeedPhysicalOperation::AttachContainer;p.targetKind=FeedInteractionTargetKind::Object;
+    CHECK(Bc2FeedMechanismClaimFresh(p,1020000000));
+    auto bad=p;bad.supplyObject.reset();CHECK(!Bc2FeedMechanismClaimFresh(bad,1020000000));
+    bad=p;++bad.supplyObject->item.generation;CHECK(!Bc2FeedMechanismClaimFresh(bad,1020000000));
+    bad=p;bad.operation=FeedPhysicalOperation::OpenCover;CHECK(!Bc2FeedMechanismClaimFresh(bad,1020000000));
+    bad=p;++bad.supplyObject->units;CHECK(!Bc2FeedPresentationRetained(p,bad,false,1020000000));
+    bad=p;bad.input.released[0]=true;CHECK(!Bc2FeedMechanismClaimFresh(bad,1020000000));return 0;
+}
 int CarryMaskSelectsSeparateRetainedWorldBases(){
     auto p=Physical();p.carriedPartsMask=61;p.pouchCarryWeaponWorldMeters=Identity();p.chainCarryWeaponWorldMeters=Identity();
     p.pouchCarryWeaponWorldMeters.values[3][0]=3;p.chainCarryWeaponWorldMeters.values[3][0]=4;
@@ -297,6 +312,7 @@ int main(){
     CHECK(OriginalRawLeaseAndActualHandOwnerRemainRequired()==0);
     CHECK(ExactSelectedConfigurationAndOriginalLeaseAreRequired()==0);
     CHECK(RealMechanismClaimAndPairRetentionAreRequired()==0);
+    CHECK(SupplyHandKeepsItsActualAmmoClaim()==0);
     CHECK(CarryMaskSelectsSeparateRetainedWorldBases()==0);
     CHECK(IndependentSixBoneChainUsesOwnRolesAndCoverFrame()==0);
     CHECK(RigidCoverSiblingsKeepOwnTargetsAndNativeDescendants()==0);

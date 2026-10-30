@@ -1,0 +1,345 @@
+{
+  "coordinate_key": "c9f8c64ed629d3898446801a8261316d4641d5811e58a7e922adc055765d17fd",
+  "primary": "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000",
+  "secondary": "Objects/Weapons/Handheld/BU_rgl_F2000/BU_rgl_F2000",
+  "mesh_path": "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Mesh",
+  "mesh_reference": "objects/weapons/handheld/bu_rif_f2000/bu_rif_f2000_mesh/323f61aa-8f4c-11db-b01f-cbdc572b8236",
+  "mesh_sha256": "b17e8a31cec97fe0e9ca12e61c97c359c3a146f0e0c9eea41e854e9760e00e06",
+  "lod_sha256": "3ee9a75750f5cb31064268259e6f5d9a7ed01d40efbbdbcf1ee040612ba94fae",
+  "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+  "roles": [
+    {
+      "1p_altdeploy": {
+        "resource": "Animations/Weapons/Handheld/BU_rif_F2000/1P/1P_AltDeploy.res",
+        "asset": {
+          "resource": "Animations/Weapons/Handheld/BU_rif_F2000/1P/1P_AltDeploy.dbx",
+          "sha256": "b827bc468b7c817561b5812bd0aa3274d842d17a8b9d850df82cb7854424d78c",
+          "instance_guid": "9f68aa85-cb5a-40c6-8848-dfbf87d9e19b",
+          "type": "Animation.AnimationAsset"
+        },
+        "skeleton_reference": "characters/skeletons/ske01/20a6d9b2-2cd5-4895-a59c-f144e6d3f061"
+      },
+      "handsikpose": {
+        "resource": "Animations/Weapons/Handheld/BU_rif_F2000/1P/HandsIkPose.res",
+        "asset": {
+          "resource": "Animations/Weapons/Handheld/BU_rif_F2000/1P/HandsIkPose.dbx",
+          "sha256": "a7367684048d49e579d94556249cf933bf269ac433f7c642f0e9df8592297b28",
+          "instance_guid": "286d7471-8ea6-4276-b69f-bcae8982b7c9",
+          "type": "Animation.AnimationAsset"
+        },
+        "skeleton_reference": "characters/skeletons/ske01/20a6d9b2-2cd5-4895-a59c-f144e6d3f061"
+      }
+    },
+    {
+      "1p_altdeploy": {
+        "resource": "Animations/Weapons/Handheld/BU_rgl_F2000/1P/1P_AltDeploy.res",
+        "asset": {
+          "resource": "Animations/Weapons/Handheld/BU_rgl_F2000/1P/1P_AltDeploy.dbx",
+          "sha256": "f0e75c13c9160e56fd4a87289e51838d455622eb9cd8e36ba2116309f9fbfd8f",
+          "instance_guid": "4779a658-d36d-40c5-a9a0-130470f3490d",
+          "type": "Animation.AnimationAsset"
+        },
+        "skeleton_reference": "characters/skeletons/ske01/20a6d9b2-2cd5-4895-a59c-f144e6d3f061"
+      },
+      "handsikpose": {
+        "resource": "Animations/Weapons/Handheld/BU_rgl_F2000/1P/HandsIkPose.res",
+        "asset": {
+          "resource": "Animations/Weapons/Handheld/BU_rgl_F2000/1P/HandsIkPose.dbx",
+          "sha256": "f8bc357c899a4b64d411387f1efdf75dcbc80b92b27af08b389be3a82dab262d",
+          "instance_guid": "09cbfa3f-43b1-4cb0-bcc4-e4400ee9cd45",
+          "type": "Animation.AnimationAsset"
+        },
+        "skeleton_reference": "characters/skeletons/ske01/20a6d9b2-2cd5-4895-a59c-f144e6d3f061"
+      }
+    }
+  ],
+  "clip_hashes": [
+    [
+      "f79a112f7d39d262d48157a2022533738e88cd91dd749501a96e9d9556ce217c",
+      "25f48f619f9516d7bd27e31678de0737b2c5e8f515e9d1a19090196cf4f204b2"
+    ],
+    [
+      "7ce59a13cff8713fed352ca84acb297af0c4fef5f22babbc0ef0b201beabd94f",
+      "0400bf570239779957eeb6e1bc70467c4cd51c82186cbeb134a000603e2149f5"
+    ]
+  ],
+  "archives": [
+    {
+      "path": "Dist/win32/async/weapon/bu_rif_f2000-00.fbrb",
+      "index_sha256": "4434ab31a9fac46491cc61ba26b04960e02517d6582ef48c9842ea7e630ca8a1"
+    },
+    {
+      "path": "Dist/win32/async/weapon/bu_rgl_f2000-00.fbrb",
+      "index_sha256": "7037070e9967ac871bcaab856d91fb94e30540fae4461db1c20a2e8c020f1ac3"
+    }
+  ],
+  "candidates": [
+    {
+      "bone_chain": [
+        "jntWpn_7",
+        "jntWpn_1"
+      ],
+      "unskinned_descendants": [],
+      "bone": "jntWpn_7",
+      "weapon": "jntWpn_1",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "bounds_part_m": [
+        [
+          0.001786316744968038,
+          -0.0012814998626708466,
+          -0.01401557028293771
+        ],
+        [
+          0.008976660668835719,
+          0.12045741081237804,
+          -0.0035867244005216895
+        ]
+      ],
+      "triangles": 204,
+      "sections": [
+        {
+          "name": "jntWpn_5_metal",
+          "triangles": 102,
+          "vertices": 160,
+          "vertex_skin_sha256": "84173255e41efd6795ccab419e8e18d3777c9636d6608d8d55deb1681e6dd1aa",
+          "indices_sha256": "f259f225bd69b693b700143581c4b5ecf731edd75560a22d007ac20599ded225",
+          "bone_hash": "f7f9bcd4"
+        },
+        {
+          "name": "jntWpn_17_Ammo_ZOnly",
+          "triangles": 102,
+          "vertices": 48,
+          "vertex_skin_sha256": "011a0631f3bf85ba33afdc955573db5df89e690757928234f8949918f13599b4",
+          "indices_sha256": "0716093c2fd4884723f0401fc1e23f56f69598bf5bb2aabce3b9179d5cba90a0",
+          "bone_hash": "f7f9bcd4"
+        }
+      ],
+      "weapon_from_closed": [
+        1.0000000000000002,
+        -1.345152178583118e-15,
+        2.0529043881212906e-16,
+        0.0,
+        1.9335506960593612e-16,
+        -1.2189044985983757e-16,
+        1.0000000000000013,
+        0.0,
+        -8.646873902761257e-16,
+        -1.0000000000000009,
+        -3.2233275663201373e-16,
+        -0.0,
+        -0.038559384644031656,
+        0.023823074996471075,
+        -0.6048639416694648,
+        1.0
+      ],
+      "weapon_from_open": [
+        1.0000000000000007,
+        -6.227026371559931e-16,
+        2.64384645289391e-16,
+        0.0,
+        -6.227026371559931e-16,
+        1.0000000000000009,
+        3.687798149121482e-17,
+        0.0,
+        2.64384645289391e-16,
+        3.687798149121482e-17,
+        1.0000000000000013,
+        -0.0,
+        -0.03855937346816082,
+        0.023823039606213715,
+        -0.6048639416694648,
+        1.0
+      ],
+      "mechanism": {
+        "axis_part": [
+          -1.0,
+          1.5621409431076548e-16,
+          1.8761238176904838e-15
+        ],
+        "settled_travel_rad": 1.570796326794896,
+        "maximum_travel_rad": 1.5936281557999725,
+        "parent_from_closed": [
+          1.0000000000000004,
+          -1.5853919181004547e-15,
+          4.046165215959467e-16,
+          0.0,
+          3.9268115238975397e-16,
+          -2.1680840606378268e-17,
+          1.0000000000000024,
+          0.0,
+          -6.244476507587902e-16,
+          -1.0000000000000016,
+          -4.225423658854736e-16,
+          0.0,
+          -0.03855938464403179,
+          0.02382307499647113,
+          -0.6048639416694654,
+          1.0
+        ],
+        "parent_from_open": [
+          1.0000000000000013,
+          -1.2454052743119872e-15,
+          5.287692905787825e-16,
+          0.0,
+          -1.2454052743119872e-15,
+          1.0000000000000018,
+          7.375596298242955e-17,
+          0.0,
+          5.287692905787825e-16,
+          7.375596298242955e-17,
+          1.0000000000000027,
+          0.0,
+          -0.03855937346816102,
+          0.023823039606213715,
+          -0.6048639416694656,
+          1.0
+        ],
+        "pivot_residual_m": 6.603858719685293e-08,
+        "opening": {
+          "kind": "hinge_candidate",
+          "max_translation_m": 2.5029126737638212e-15,
+          "max_rotation_rad": 1.5936281557999725,
+          "axis_in_baseline_part": [
+            -0.999999999991439,
+            3.813399471859482e-06,
+            1.6062595381312926e-06
+          ],
+          "peak_sample": 18,
+          "axis_line_residual_m": 0.0,
+          "baseline_parent_from_part": [
+            0.9999999999709172,
+            -5.538546790299784e-13,
+            7.6267987131532396e-06,
+            0.0,
+            -7.62679871319115e-06,
+            -1.4476287229232062e-07,
+            0.9999999999709089,
+            0.0,
+            5.538547018204148e-13,
+            -0.9999999999999917,
+            -1.4476287197588327e-07,
+            0.0,
+            -0.03855938464403158,
+            0.02382307499647141,
+            -0.6048639416694663,
+            1.0
+          ],
+          "peak_parent_from_part": [
+            0.9999999999709046,
+            5.45533554180064e-06,
+            5.332181599565502e-06,
+            0.0,
+            -5.332181599675549e-06,
+            0.9997393684047661,
+            -0.022829700681545984,
+            0.0,
+            -5.455335541949257e-06,
+            0.02282970065244928,
+            0.9997393684047662,
+            0.0,
+            -0.03855938464403146,
+            0.0238230749964715,
+            -0.6048639416694648,
+            1.0
+          ],
+          "baseline_is_native_closed": false,
+          "semantic_role": null
+        },
+        "closing": {
+          "kind": "hinge_candidate",
+          "max_translation_m": 1.617130305644065e-15,
+          "max_rotation_rad": 1.5709025127045895,
+          "axis_in_baseline_part": [
+            0.9999999999914814,
+            -3.813449168496838e-06,
+            -1.5795600844812188e-06
+          ],
+          "peak_sample": 15,
+          "axis_line_residual_m": 0.0,
+          "baseline_parent_from_part": [
+            0.9999999999709159,
+            5.393077358497794e-06,
+            5.392844816330735e-06,
+            0.0,
+            -5.392844816653214e-06,
+            0.9999999990558053,
+            -4.311970263245875e-05,
+            0.0,
+            -5.393077358820291e-06,
+            4.311967354842895e-05,
+            0.999999999055806,
+            0.0,
+            -0.038559399545192795,
+            0.02382309921085842,
+            -0.60486400127411,
+            1.0
+          ],
+          "peak_parent_from_part": [
+            0.9999999999709178,
+            -2.4049729221838386e-10,
+            7.626798713369919e-06,
+            0.0,
+            -7.626798712523352e-06,
+            -6.306623359413067e-05,
+            0.9999999979822437,
+            0.0,
+            2.4049732343088426e-10,
+            -0.9999999980113257,
+            -6.306623359492178e-05,
+            0.0,
+            -0.03855939954519306,
+            0.023823099210858203,
+            -0.6048640012741104,
+            1.0
+          ],
+          "baseline_is_native_closed": false,
+          "semantic_role": null
+        }
+      },
+      "settled_pose_observation": [
+        {
+          "maximum_translation_m": 7.15749512893306e-16,
+          "maximum_rotation_rad": 0.0,
+          "samples": 9,
+          "bone_evaluation_status": {
+            "jntWpn_7": "static_authored_pose",
+            "jntWpn_1": "static_authored_pose"
+          }
+        },
+        {
+          "maximum_translation_m": 9.676523279435734e-16,
+          "maximum_rotation_rad": 0.0,
+          "samples": 9,
+          "bone_evaluation_status": {
+            "jntWpn_7": "static_authored_pose",
+            "jntWpn_1": "static_authored_pose"
+          }
+        }
+      ],
+      "authored_contacts": [
+        {
+          "windows": 0,
+          "pose": null,
+          "kind": "same_frame_authored_contact_candidate",
+          "native_contact_verified": false
+        },
+        {
+          "windows": 0,
+          "pose": null,
+          "kind": "same_frame_authored_contact_candidate",
+          "native_contact_verified": false
+        }
+      ],
+      "grasp_policy": "existing complete bind-derived MechanismGrip; raw controller wrist and distal-knuckle proxy",
+      "authored_contact_available": false,
+      "sample_hz": 30,
+      "runtime_admitted": false,
+      "native_playback_verified": false,
+      "headset_verified": false
+    }
+  ],
+  "rejected": [],
+  "native_accepted": false,
+  "headset_accepted": false,
+  "digest": "df74f4a9a07885f9845f89d9a1a9608ab29e8cae48ef3ab7356c435e422c496e"
+}

@@ -28,7 +28,7 @@ from bc2_asset_resource_identity import profiles_match
 
 SCHEMA = 'fvr.bc2.firearm_cache_completion.v1'
 BASELINE_SHA = '2e420c02ea639cd2b1087e762dca25fc16ae62db6f6cea7e1154e97cf3faf749'
-MAX_ROWS = 256
+MAX_ROWS = 512
 MAX_BYTES = 64 * 1024 * 1024
 
 
@@ -423,7 +423,7 @@ def extract(args):
             if row.get('configured_aliases'):
                 verify_aliases(game, pool, row, record)
     full = ammo.MAGIC+struct.pack('<I',len(rows))+payload[12:]+b''.join(records)
-    require(len(rows) <= MAX_ROWS and len(full) <= MAX_BYTES, 'Complete cache exceeds256rows/64MiB')
+    require(len(rows) <= MAX_ROWS and len(full) <= MAX_BYTES, 'Complete cache exceeds512rows/64MiB')
     require(record_slices(full, rows)[:len(baseline_records)] == baseline_records, 'Baseline record bytes changed')
     catalog = dict(docs['baseline'], profiles=rows)
     write(output/'body-ammo-assets.json', catalog)

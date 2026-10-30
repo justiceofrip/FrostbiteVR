@@ -73,6 +73,7 @@ struct Tracking {
     std::shared_ptr<const Bc2PhysicalPistolSlidePresentation> pistolSlide;
     Bc2FixedContainerTracking fixedContainer{};
     std::optional<BodyAmmoTracking> fixedBodyAmmo;
+    std::optional<BodyAmmoTracking> feedBodyAmmo;
     interaction::InputFrame boltRawInput{}; // Before support-orientation guidance; same original generation.
     std::optional<interaction::AmmoSupplyVisualSample> bodyMagazine;
     ReloadTracking reload{}; // Explicit mode; defaults off, immutable preview.

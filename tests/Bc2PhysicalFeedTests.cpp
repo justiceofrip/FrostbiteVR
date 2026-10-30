@@ -39,7 +39,8 @@ struct Fixture {
         [](void* p,const FeedEquipmentGate& gate)noexcept{auto& f=*static_cast<Fixture*>(p);return f.backend.PublishGate(gate,f.now+1);},
         [](void* p,const AmmoResourceIdentity& resource)noexcept{return static_cast<Fixture*>(p)->backend.ReadGate(resource);},
         [](void* p,std::uint64_t after)noexcept{return static_cast<Fixture*>(p)->backend.Retirement(after);}};}
-    Fixture():physical(Api()){
+    explicit Fixture(const Bc2FeedRegistration* row=nullptr):physical(Api()){
+        if(row)registration=row;
         if(!registration)std::abort();
         native.identity={{0x10000,0x20000,0x30000,0x40000,1,2,3},{0x50000,0x60000,0x70000},0x80000,0x90000,0xa0000};
         native.binding={native.identity.owner,{{0x20000,1,0x40000,19},2,3},0xb0000,0xc0000,0xd0000,0xe0000,now,now+100*Ms};
@@ -66,11 +67,12 @@ struct Fixture {
         sample.raw.weaponWorldMeters=Identity();
     }
     Bc2PhysicalFeedResult Tick(const fvr::math::Matrix4& wrist,bool grip,bool cancel=false){
-        now+=10*Ms;++sequence;native.observedNs=now-1;native.deadlineNs=now+99*Ms;
-        native.binding.observedNs=now-1;native.binding.deadlineNs=now+99*Ms;(void)backend.Publish(native,now);
+        const auto age=(std::min)(100*Ms,registration->mechanism.maxAgeNs);
+        now+=10*Ms;++sequence;native.observedNs=now-1;native.deadlineNs=native.observedNs+age;
+        native.binding.observedNs=native.observedNs;native.binding.deadlineNs=native.deadlineNs;(void)backend.Publish(native,now);
         sample.binding=native.binding;
-        selected->sequence=sequence;selected->observedNs=now-1;selected->deadlineNs=now+99*Ms;
-        sample.input.sequence=sequence;sample.input.observedNs=now;sample.input.deadlineNs=now+100*Ms;sample.input.nowNs=now+1;
+        selected->sequence=sequence;selected->observedNs=native.observedNs;selected->deadlineNs=native.deadlineNs;
+        sample.input.sequence=sequence;sample.input.observedNs=now;sample.input.deadlineNs=now+age;sample.input.nowNs=now+1;
         sample.input.released[0]=!grip;sample.grip=grip;sample.cancel=cancel;
         sample.raw.inputEvidence=sample.input;sample.raw.rawLeftWristWorldMeters=wrist;sample.frameSequence=sequence;
         const HandContactProof gunProof{{1,7},sequence,sample.input.deadlineNs,true};
@@ -79,19 +81,22 @@ struct Fixture {
         else {(void)hands.Update(sample.input);(void)hands.Acquire(sample.input,{sample.input.owner,InteractionHand::Right,
             HandClaimKind::GunHold,sample.weapon,gunProof,++intent,0});}
         result=physical.Tick(sample,hands,intent);
-        if(std::getenv("FVR_FEED_TEST_TRACE"))std::fprintf(stderr,"tick=%llu grip=%d selected=%d blocked=%d owns=%d pending=%d status=%u interaction=%u reload=%u hand=%u angle=%.4f submits=%u\n",
-            static_cast<unsigned long long>(sequence),grip,result.selected,result.blocksFire,result.ownsHand,result.pending,
+        if(std::getenv("FVR_FEED_TEST_TRACE"))std::fprintf(stderr,"profile=%llu tick=%llu grip=%d selected=%d blocked=%d owns=%d pending=%d status=%u interaction=%u reload=%u hand=%u angle=%.4f submits=%u\n",
+            static_cast<unsigned long long>(registration->key),static_cast<unsigned long long>(sequence),grip,result.selected,result.blocksFire,result.ownsHand,result.pending,
             unsigned(result.status),unsigned(result.interactionStatus),unsigned(result.reloadStatus),unsigned(result.handReason),result.presentation?result.presentation->coverRadians:-99.f,submits);
         return result;
     }
     FeedMotionProfile Open()const {return *BuildBc2FeedMotion(registration->geometry,
         FeedPhysicalOperation::OpenCover,registration->interactionPolicy);}
+    unsigned DwellPackets()const {
+        return unsigned(registration->interactionPolicy.endpointDwellNs/(10*Ms))+2;
+    }
     bool OpenCover(){
         using namespace feed_interaction_detail;const auto m=Open();
         const auto start=feed_interaction_detail::Multiply(m.motionFromContact,m.weaponFromMotion);
         Tick(start,false);Tick(start,true);
         for(unsigned step=1;step<=12;++step)Tick(feed_interaction_detail::Multiply(Along(m.motionFromContact,m.kind,m.travel*step/12),m.weaponFromMotion),true);
-        for(unsigned step=0;step<8&&!submitted;++step)Tick(feed_interaction_detail::Multiply(Along(m.motionFromContact,m.kind,m.travel),m.weaponFromMotion),true);
+        for(unsigned step=0;step<DwellPackets()&&!submitted;++step)Tick(feed_interaction_detail::Multiply(Along(m.motionFromContact,m.kind,m.travel),m.weaponFromMotion),true);
         return submitted.has_value();
     }
     bool Callback(unsigned mask=7){
@@ -128,7 +133,16 @@ struct Fixture {
         const auto receipt=backend.Receipt(submitted->command.request.lifetime,submitted->command.request.id);
         return receipt&&receipt->acknowledgement.status==FeedReloadAcknowledgement::Rejected&&receipt->noTransferEntry;
     }
-    bool Place(FeedPhysicalOperation op){
+    bool PickSupply(){
+        auto chest=Identity();const auto config=Bc2FeedSupplyConfig();
+        for(unsigned n=0;n<3;++n)chest.values[3][n]=config.pouchCenterMeters[n];
+        sample.bodyFromHand=chest;Tick(chest,false);Tick(chest,false);Tick(chest,true);
+        const auto hand=hands.Current(InteractionHand::Left);
+        return hand&&hand->token.kind==HandClaimKind::AmmoObject&&result.ownsHand;
+    }
+    bool Place(FeedPhysicalOperation op,bool acquireSupply=true){
+        const bool picked=op==FeedPhysicalOperation::AttachContainer&&acquireSupply;
+        if(picked&&!PickSupply())return false;
         if(!result.presentation)return false;
         const auto retained=result.presentation;auto pose=registration->geometry.poses[unsigned(Bc2FeedPoseId::Resting)];
         pose.chainCount=retained->chainCount;
@@ -140,11 +154,11 @@ struct Fixture {
         if(!motion)return false;submitted.reset();
         const auto contact=[&](const fvr::math::Matrix4& object){return feed_interaction_detail::Multiply(motion->placement.sourceFromGrip,object);};
         const auto start=contact(motion->placement.weaponFromSource);
-        Tick(start,false);Tick(start,false);Tick(start,true);
+        if(!picked){Tick(start,false);Tick(start,false);}Tick(start,true);
         for(unsigned step=1;step<=30;++step)Tick(contact(reload_insertion_detail::BlendRigid(
             motion->placement.weaponFromSource,motion->placement.weaponFromDestination,double(step)/30)),true);
         const auto end=contact(motion->placement.weaponFromDestination);
-        for(unsigned step=0;step<8;++step)Tick(end,true);
+        for(unsigned step=0;step<DwellPackets();++step)Tick(end,true);
         Tick(end,false);return submitted&&submitted->command.authority.operation==op;
     }
     bool Close(){
@@ -153,7 +167,7 @@ struct Fixture {
         const auto start=feed_interaction_detail::Multiply(motion->motionFromContact,motion->weaponFromMotion);
         Tick(start,false);Tick(start,false);Tick(start,true);
         for(unsigned step=1;step<=12;++step)Tick(feed_interaction_detail::Multiply(Along(motion->motionFromContact,motion->kind,motion->travel*step/12),motion->weaponFromMotion),true);
-        for(unsigned step=0;step<8&&!submitted;++step)Tick(feed_interaction_detail::Multiply(Along(motion->motionFromContact,motion->kind,motion->travel),motion->weaponFromMotion),true);
+        for(unsigned step=0;step<DwellPackets()&&!submitted;++step)Tick(feed_interaction_detail::Multiply(Along(motion->motionFromContact,motion->kind,motion->travel),motion->weaponFromMotion),true);
         return submitted&&submitted->command.authority.operation==FeedPhysicalOperation::CloseCover;
     }
     bool BlocksFire()const {return sample.equipment&&physical.BlocksFire(sample.owner,*sample.equipment,sample.binding);}
@@ -269,6 +283,29 @@ int FiveStagesRetainPartialAmmoAndRefillOnlyAtAttachment(){
     CHECK(f.BlocksFire());CHECK(f.Close());CHECK(f.submitted->command.request.id==5);
     CHECK(f.submitted->command.request.lifetime==lifetime);CHECK(f.Reconcile());CHECK(!f.BlocksFire());
     CHECK((f.native.counts==FeedAmmunitionCounts{100,50,100}));CHECK(f.submits==5);return 0;
+}
+int ReattachingWithoutChestSupplyCannotRefill(){
+    Fixture f;CHECK(f.OpenCover());CHECK(f.Reconcile());CHECK(f.Place(FeedPhysicalOperation::DetachContainer));CHECK(f.Reconcile());
+    const auto before=f.native.counts;CHECK(!f.Place(FeedPhysicalOperation::AttachContainer,false));
+    CHECK(f.native.counts==before&&f.BlocksFire());CHECK(!f.result.pending);
+    CHECK(f.Place(FeedPhysicalOperation::AttachContainer));CHECK(f.submitted);
+    CHECK(f.submitted->command.authority.rounds==80);CHECK(f.Reconcile());
+    CHECK((f.native.counts==FeedAmmunitionCounts{100,50,100}));return 0;
+}
+int EveryEnrolledFeedUsesTheSharedChestRefillPath(){
+    unsigned configurations=0;
+    for(const auto& registration:RegisteredBc2FeedProfiles()){
+        Fixture f(&registration);const auto before=f.native.counts;
+        const auto units=(std::min)(before.capacity-before.loaded,before.reserve);
+        CHECK(f.OpenCover());CHECK(f.Reconcile());CHECK(f.Place(FeedPhysicalOperation::DetachContainer));CHECK(f.Reconcile());
+        CHECK(!f.Place(FeedPhysicalOperation::AttachContainer,false));CHECK(f.native.counts==before);
+        CHECK(f.Place(FeedPhysicalOperation::AttachContainer));CHECK(f.submitted->geometry.registrationKey==registration.key);
+        CHECK(f.submitted->command.authority.rounds==units);CHECK(f.Reconcile());
+        CHECK(f.native.counts.loaded==before.loaded+units&&f.native.counts.reserve==before.reserve-units);
+        CHECK(f.Place(FeedPhysicalOperation::SeatFeed));CHECK(f.Reconcile());CHECK(f.Close());CHECK(f.Reconcile());
+        CHECK(!f.BlocksFire());++configurations;
+    }
+    CHECK(configurations>0);std::printf("Physical feed chest/refill configurations: %u\n",configurations);return 0;
 }
 int PartialCoverRequiresFreshRegraspAndPreservesProgress(){
     Fixture f;using namespace feed_interaction_detail;const auto m=f.Open();
@@ -405,10 +442,12 @@ int main(){
     CHECK(OccupiedHandAndExactRigAreRequired()==0);
     CHECK(BackendLifetimesIncreaseAcrossOwners()==0);
     CHECK(FiveStagesRetainPartialAmmoAndRefillOnlyAtAttachment()==0);
+    CHECK(ReattachingWithoutChestSupplyCannotRefill()==0);
+    CHECK(EveryEnrolledFeedUsesTheSharedChestRefillPath()==0);
     CHECK(PartialCoverRequiresFreshRegraspAndPreservesProgress()==0);
     CHECK(LongStowMigratesOnlySamePinnedResource()==0);
     CHECK(SameAddressReplacementDoesNotInheritFeedDebt()==0);
     CHECK(RealNoEntryReceiptRecoversCompletedEndpointWithNewId()==0);
     CHECK(DrainedActorReplacementReclaimsSlotsWithoutInventingAmmunitionSuccess()==0);
-    std::puts("Bc2PhysicalFeedTests: 14 deterministic owner/arbiter/callback compositions; no broader enrollment, game or headset acceptance");
+    std::puts("Bc2PhysicalFeedTests: 16 deterministic owner/arbiter/callback compositions; no game or headset acceptance");
 }

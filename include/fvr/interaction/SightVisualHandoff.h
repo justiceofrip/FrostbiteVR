@@ -49,7 +49,7 @@ public:
         const std::optional<SightVisualHandCapture>& rawCapture={})noexcept {
         using namespace sight_grasp_detail;
         if(!Proper(rearAtGrab)||!Finite(pivot)||!Unit(axis)||!std::isfinite(maxTravelRadians)||
-           maxTravelRadians<=0||maxTravelRadians>1.5707963267948966f||
+           maxTravelRadians<=0||maxTravelRadians>3.141592653589793f||
            (mode!=SightMode::Primary&&mode!=SightMode::Secondary))return {};
         const auto inverse=InverseAnimatedTransform(rearAtGrab);if(!inverse)return {};
         SightVisualHandoff out;out.rear_=rearAtGrab;out.direction_=mode==SightMode::Primary?1.f:-1.f;

@@ -87,7 +87,7 @@ def compact_cache_sections(payload,rows):
  return bytes(out)
 
 def derive_catalog(game, reviewed, resource_content=False):
-    if not reviewed or len(reviewed)>256:raise ValueError('Catalog profile bound')
+    if not reviewed or len(reviewed)>512:raise ValueError('Catalog profile bound')
     exact=[r for r in reviewed if r.get('configuration_path')]
     common=exact[0] if exact else None
     if common:

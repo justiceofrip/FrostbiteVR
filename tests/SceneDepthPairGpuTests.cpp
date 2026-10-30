@@ -15,6 +15,7 @@
 #include <iostream>
 #include <memory>
 #include <sstream>
+#include <string_view>
 #include <thread>
 // Test-only access to force the real local staged gate busy, rather than
 // hoping for a timing race or faking a GPU completion.
@@ -75,6 +76,9 @@ int Run(unsigned samples){ComPtr<ID3D11Device> a,b;ComPtr<ID3D11DeviceContext> a
  SceneDepthViews views;CHECK(reader.Views(ticket,views));
  CHECK(!reader.Views(wrong,views));CHECK(inputsIntact());
  CHECK(reader.Views(ticket,views));CHECK(inputsIntact());
+ std::array<ComPtr<ID3D11ShaderResourceView>,4> retainedViews;
+ for(unsigned i=0;i<4;++i)retainedViews[i]=views.eyes[i/2][i%2];
+ CHECK(reader.ImportStatistics().sourceOpens==4&&reader.ImportStatistics().localCreates==4);
  depth.Acknowledge(ticket,true);color.Acknowledge(ticket,true);
  // Overwrite and fence producer resources for the NEXT frame before drawing
  // with the previous local depth. The old local snapshots must remain stable.
@@ -90,7 +94,20 @@ int Run(unsigned samples){ComPtr<ID3D11Device> a,b;ComPtr<ID3D11DeviceContext> a
  // previously shared allocation while a consumer can still hold it open.
  depth.Acknowledge(second,false);color.Acknowledge(second,false);CHECK(color.Create(a.Get(),32,32,DXGI_FORMAT_R8G8B8A8_UNORM,2,TextureSharing::LegacyFenced)==TransferResult::Ok);
  descriptor=color.Descriptor();CHECK(colorReader.Open(b.Get(),descriptor)==TransferResult::Ok);++frame.frameId;++frame.trackingGeneration;CHECK(capture(true));PairTicket third;CHECK(Publish(color,source,frame,third));SceneDepthFrame attachment3;CHECK(depth.Seal(descriptor,third,false,attachment3));
+ reader.ResetSources();CHECK(!reader.Views(second,views));
+ // A failed import after the epoch change must expose no previous ticket or
+ // views, yet must keep the local allocation available for a verified retry.
+ D3D11PairProducer wrongShape;CHECK(wrongShape.Create(a.Get(),32,32,DXGI_FORMAT_R8G8B8A8_UNORM,99,TextureSharing::LegacyFenced)==TransferResult::Ok);
+ auto malformed=attachment3;malformed.resources[0][0]=LegacyResourceIds(wrongShape.Descriptor())[0];
+ CHECK(!reader.CopyBeforeColor(malformed,descriptor,third));
+ CHECK(!reader.Views(second,views)&&!reader.Views(third,views));
+ CHECK(reader.ImportStatistics().localCreates==4);
+ auto foreignDescriptor=descriptor;auto foreignDepth=attachment3;++foreignDescriptor.adapterLow;++foreignDepth.adapterLow;
+ CHECK(!reader.CopyBeforeColor(foreignDepth,foreignDescriptor,third));CHECK(!reader.Views(third,views));
+ CHECK(!reader.Initialize(a.Get())); // A consumer's device cannot be rebound.
  CHECK(attachment3.resourceGeneration>firstGeneration&&attachment3.resources!=attachment2.resources);CHECK(reader.CopyBeforeColor(attachment3,descriptor,third));CHECK(colorReader.Copy(third,destination)==TransferResult::Ok);
+ CHECK(reader.ImportStatistics().sourceOpens==9&&reader.ImportStatistics().localCreates==4);
+ CHECK(reader.Views(third,views));for(unsigned i=0;i<4;++i)CHECK(views.eyes[i/2][i%2]==retainedViews[i].Get());
  CHECK(reader.Views(third,views));CHECK(compositor.Compose({copied[0].view.Get(),props.view.Get(),propDepthView.Get(),views.eyes[0][0],views.eyes[0][1],output[0].target.Get()}));CHECK(Pixel(b.Get(),bc.Get(),output[0])[2]==255);
  depth.Acknowledge(third,true);color.Acknowledge(third,true);
  // A scene load restarts its native frame number without reopening the channel.
@@ -98,10 +115,20 @@ int Run(unsigned samples){ComPtr<ID3D11Device> a,b;ComPtr<ID3D11DeviceContext> a
  descriptor=color.Descriptor();CHECK(colorReader.Open(b.Get(),descriptor)==TransferResult::Ok);
  frame.frameId=1;++frame.trackingGeneration;CHECK(capture(false));PairTicket restarted;
  CHECK(Publish(color,source,frame,restarted));SceneDepthFrame afterScene;CHECK(depth.Seal(descriptor,restarted,false,afterScene));
+ reader.ResetSources();CHECK(!reader.Views(third,views));
  CHECK(reader.CopyBeforeColor(afterScene,descriptor,restarted));CHECK(colorReader.Copy(restarted,destination)==TransferResult::Ok);
- CHECK(reader.Views(restarted,views));depth.Acknowledge(restarted,true);color.Acknowledge(restarted,true);
- reader.Reset();CHECK(!reader.Views(restarted,views));depth.Close();
- std::cout<<"SceneDepthPair GPU samples="<<samples<<": color fences, both eyes, delayed composition, wrong ACK, discard generation passed\n";return 0;
+ CHECK(reader.Views(restarted,views));for(unsigned i=0;i<4;++i)CHECK(views.eyes[i/2][i%2]==retainedViews[i].Get());
+ CHECK(reader.ImportStatistics().sourceOpens==13&&reader.ImportStatistics().localCreates==4);
+ for(unsigned eye=0;eye<2;++eye){CHECK(compositor.Compose({copied[eye].view.Get(),props.view.Get(),propDepthView.Get(),views.eyes[eye][0],views.eyes[eye][1],output[eye].target.Get()}));CHECK(Pixel(b.Get(),bc.Get(),output[eye])[0]==255);}
+ depth.Acknowledge(restarted,true);color.Acknowledge(restarted,true);
+ reader.Reset();CHECK(!reader.Views(restarted,views));
+ ++frame.frameId;++frame.trackingGeneration;CHECK(capture(true));PairTicket resetTicket;
+ CHECK(Publish(color,source,frame,resetTicket));SceneDepthFrame resetDepth;CHECK(depth.Seal(descriptor,resetTicket,false,resetDepth));
+ CHECK(reader.CopyBeforeColor(resetDepth,descriptor,resetTicket));CHECK(colorReader.Copy(resetTicket,destination)==TransferResult::Ok);
+ CHECK(reader.Views(resetTicket,views));for(unsigned i=0;i<4;++i)CHECK(views.eyes[i/2][i%2]!=retainedViews[i].Get());
+ CHECK(reader.ImportStatistics().sourceOpens==17&&reader.ImportStatistics().localCreates==8);
+ depth.Acknowledge(resetTicket,true);color.Acknowledge(resetTicket,true);depth.Close();
+ std::cout<<"SceneDepthPair GPU samples="<<samples<<": exact cached views and fresh pixels across source epochs, failed import, device gate, full reset passed (4 local creates across 3 epochs; 8 after full reset)\n";return 0;
 }
 }
 int RunAsyncCopy(){
@@ -1014,7 +1041,8 @@ int RunBridgeWorldTransition(bool thirdSource){using namespace fvr;
  bridge.CloseGraphics();host.Close();std::cout<<"World-owner bridge GPU sources="<<(thirdSource?3:2)<<": held/draining rejection, live input, frame-1 fresh resources and exact new pixels passed\n";return 0;
 }
 
-int main(){if(RunTwoSlotBridge()||RunTwoSlotBridge(true)||RunTwoSlotBridge(true,true))return 1;if(RunBridgeWorldTransition(false)||RunBridgeWorldTransition(true))return 1;if(RunAsyncCopy())return 1;for(unsigned samples:{1u,8u})for(bool reversed:{false,true})if(RunOrderedComposition(samples,reversed))return 1;for(unsigned samples:{1u,2u,4u,8u})if(Run(samples))return 1;if(RunBridge()||RunEarlyAdmission())return 1;
+int main(int argc,char** argv){if(argc==2&&std::string_view(argv[1])=="--legacy-depth-cache"){for(unsigned samples:{1u,2u,4u,8u})if(Run(samples))return 1;return 0;}
+ if(RunTwoSlotBridge()||RunTwoSlotBridge(true)||RunTwoSlotBridge(true,true))return 1;if(RunBridgeWorldTransition(false)||RunBridgeWorldTransition(true))return 1;if(RunAsyncCopy())return 1;for(unsigned samples:{1u,8u})for(bool reversed:{false,true})if(RunOrderedComposition(samples,reversed))return 1;for(unsigned samples:{1u,2u,4u,8u})if(Run(samples))return 1;if(RunBridge()||RunEarlyAdmission())return 1;
  if(RunBridgeMirror(FrameSharingPreference::Automatic,1))return 1;
  if(RunBridgeMirror(FrameSharingPreference::LegacyRelay,2))return 1;
  return RunBridgeMirror(FrameSharingPreference::LegacyIpc,3);}

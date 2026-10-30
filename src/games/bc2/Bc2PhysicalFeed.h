@@ -4,6 +4,7 @@
 #include "Bc2ReloadPreview.h"
 #include "Bc2SelectedMeshes1p.h"
 #include "Bc2EquipmentIdentity.h"
+#include "Bc2FeedAmmoSupply.h"
 #include <memory>
 #include <iosfwd>
 
@@ -29,6 +30,7 @@ struct Bc2PhysicalFeedPresentation {
     math::Matrix4 originalWeaponWorldMeters{};
     std::optional<math::Matrix4> mechanismWristWorldMeters;
     std::optional<interaction::HandClaim> mechanismClaim;
+    std::optional<interaction::AmmoSupplyObject> supplyObject;
     interaction::FeedPhysicalOperation operation=interaction::FeedPhysicalOperation::None;
     interaction::FeedInteractionTargetKind targetKind=interaction::FeedInteractionTargetKind::None;
     float coverRadians=0;
@@ -58,6 +60,8 @@ struct Bc2PhysicalFeedSample {
     interaction::HandInteractionKey weapon{};
     std::shared_ptr<const SelectedMeshesSnapshot> selected;
     ReloadRawContact raw{};
+    // Same current controller packet, in the shared recentered body frame.
+    std::optional<math::Matrix4> bodyFromHand;
     // Exact selected authored rig/configuration evidence from the same frame.
     std::string_view asset{},configurationPath{},meshPath{};
     std::uint64_t frameSequence=0,rigFingerprint=0;
@@ -74,6 +78,8 @@ struct Bc2PhysicalFeedResult {
     interaction::FeedReloadStatus reloadStatus{};
     interaction::HandInteractionReason handReason=interaction::HandInteractionReason::None;
     std::shared_ptr<const Bc2PhysicalFeedPresentation> presentation;
+    std::optional<Bc2FeedBodyAmmo> bodyAmmo;
+    std::optional<interaction::AmmoSupplyVisualSample> bodyVisual;
 };
 class Bc2PhysicalFeed {
 public:

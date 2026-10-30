@@ -6,6 +6,7 @@
 #include "Bc2MagazinePresentation.h"
 #include "Bc2ReloadRetirement.h"
 #include "Bc2MagazineStart.h"
+#include "Bc2WeaponRouteTelemetry.h"
 #include "fvr/interaction/ActionPolicy.h"
 #include "fvr/interaction/AmmoSupplyVisual.h"
 #include <ostream>
@@ -45,6 +46,9 @@ struct MagazinePhysicalSample {
  math::Matrix4 bodyFromHand{};bool gripPressed=false,ejectPressed=false,cancel=false;
  std::string_view asset{};std::shared_ptr<const SelectedMeshesSnapshot> meshes;
  MagazineRawContact raw{};std::optional<interaction::HandInteractionSample> originalHandEvidence;
+ // Exact native configuration lookup result, including an observed miss.
+ // Diagnostic only; family/resource readers remain the admission authority.
+ bool entryProfileObserved=false;const MagazineEquipmentProfile* entryProfile=nullptr;
 };
 struct MagazinePhysicalResult {
  MagazineTracking tracking{};interaction::DetachableMagazineResult interaction{};
@@ -123,6 +127,7 @@ public:
   return ResourceBackend()||bodyAmmoFrame_==interaction::SupplyAnchorFrame::RecenteredBody?primary:pouch_.alternateContact.value_or(primary);
  }
  MagazineResourceProbeState ResourceProbeState(std::int64_t now)const noexcept;
+ const WeaponMagazineEntryTelemetry& EntryTelemetry()const noexcept{return entryTelemetry_;}
  void Report(std::ostream&)const;
  void EnableBodyAmmo(bool enabled=true,interaction::SupplyAnchorFrame frame=interaction::SupplyAnchorFrame::HeadYaw)noexcept;
  // Read-only display shared by physical and detached idle routes. Pass the
@@ -135,6 +140,9 @@ public:
    owners_.cycle,lastReserve_,originalReturns_,originalReturning_,originalMagazine_,originalReceipt_,cancelled_,reconciled_};
  }
 private:
+ WeaponMagazineEntryTelemetry entryTelemetry_;
+ unsigned entryResourceReadReason_=~0u;bool entryResourceAvailable_=false;
+ void ObserveEntry(const MagazinePhysicalSample&,const MagazinePhysicalResult&,const interaction::HandInteraction&)noexcept;
  std::unique_ptr<Bc2MagazineResourceReload> resource_;
  MagazinePhysicalResult TickImpl(const MagazinePhysicalSample&,interaction::HandInteraction&,std::uint64_t&)noexcept;
  void RetainDeferredPresentation(MagazinePhysicalResult&,const MagazinePhysicalSample&,interaction::HandInteraction&)noexcept;

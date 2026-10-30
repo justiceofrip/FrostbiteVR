@@ -43,6 +43,14 @@ class ExactRole(unittest.TestCase):
         d,s=docs();d[2].instances[G[2]].attributes['type']='Render.SkinnedMeshAsset'
         with self.assertRaises(ValueError):sight.role(Resolver(d),d[0],s,'1p_altdeploy')
 class MeasuredMotion(unittest.TestCase):
+    def test_explicit_measured_travel_above_ninety(self):
+        angle=1.640066818862119
+        forward=[hinge(angle*n/64) for n in range(65)];reverse=list(reversed(forward))
+        with self.assertRaises(ValueError):sight.hinge_profile(forward[0],forward[-1],forward,reverse)
+        result=sight.hinge_profile(forward[0],forward[-1],forward,reverse,max_travel_radians=math.pi)
+        self.assertAlmostEqual(result['settled_travel_rad'],angle)
+        for bad in (float('nan'),math.pi+.01):
+            with self.assertRaises(ValueError):sight.hinge_profile(*good(),max_travel_radians=bad)
     def test_horizontal_reciprocal(self):
         p=sight.hinge_profile(*good());self.assertAlmostEqual(p['settled_travel_rad'],.718);self.assertLess(m.norm(m.sub(p['axis_part'],[0,-1,0])),1e-8)
     def test_parent_basis_invariance(self):

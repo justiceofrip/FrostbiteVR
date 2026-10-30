@@ -992,7 +992,8 @@ std::optional<BodyAmmoRenderSource> ReadBodyAmmoRenderSource(std::int64_t now)no
             !interaction::ValidInput(input->input)||!Fresh(input->deadline)||
             now>=ReloadNanos(input->deadline)||!EquipmentStillCurrent(input->nativeEquipment)||input->freeRight)return {};
         BodyAmmoTracking source;
-        if(input->fixedBodyAmmo){source=*input->fixedBodyAmmo;
+        if(input->feedBodyAmmo){source=*input->feedBodyAmmo;
+        }else if(input->fixedBodyAmmo){source=*input->fixedBodyAmmo;
         }else if(input->bodyMagazine){
             if(!input->magazine.enabled)return {};
             source.magazine=input->magazine;source.visual=*input->bodyMagazine;
@@ -1003,7 +1004,8 @@ std::optional<BodyAmmoRenderSource> ReadBodyAmmoRenderSource(std::int64_t now)no
             source.shell=*reload.belt;source.visual=reload.belt->visual;
         }
         if(!BodyAmmoFresh(source,now))return {};
-        const auto& nativeOwner=source.magazine?source.magazine->owner:source.shell->owner;
+        const auto& nativeOwner=source.magazine?source.magazine->owner:source.shell?source.shell->owner:
+            source.fixed?source.fixed->binding.owner:source.feed->native.identity.owner;
         const auto& physicalOwner=source.visual.input.owner;
         if(nativeOwner.soldier!=input->soldier||nativeOwner.weak!=input->weak||nativeOwner.weapon!=input->weapon||
             nativeOwner.actorGeneration!=input->ownerGeneration||nativeOwner.space!=input->input.spaceGeneration||
@@ -1160,6 +1162,16 @@ void PublishTracking(const Tracking& source)noexcept {
     }else next.fixedBodyAmmo.reset();
     fixedContainerGuard.store(next.fixedContainer.enabled?std::make_shared<const Bc2FixedContainerTracking>(next.fixedContainer):
         std::shared_ptr<const Bc2FixedContainerTracking>{},std::memory_order_release);
+    if(next.feedBodyAmmo){
+        const auto& source=*next.feedBodyAmmo;
+        const auto* feed=source.feed?&*source.feed:nullptr;
+        if(!feed||!BodyAmmoFresh(source,ReloadNanos())||
+           feed->native.identity.owner.soldier!=next.soldier||feed->native.identity.owner.weak!=next.weak||
+           feed->native.identity.owner.weapon!=next.weapon||feed->native.identity.owner.actorGeneration!=next.ownerGeneration||
+           feed->native.identity.owner.space!=next.input.spaceGeneration||
+           source.visual.input.sequence!=next.input.generation||source.visual.input.deadlineNs>ReloadNanos(next.deadline))
+            next.feedBodyAmmo.reset();
+    }
     const auto& reloadOwner=next.reload.owner;
     if(!interaction::ValidInput(next.input)||!next.input.focused||!next.input.headValid||!next.input.hands[0].gripTracked||!next.input.hands[1].gripTracked||
        !next.input.hands[1].aimTracked||reloadOwner.soldier!=next.soldier||reloadOwner.weak!=next.weak||
@@ -1203,7 +1215,8 @@ std::optional<WeaponShotFrame> ReadWeaponFrame(unsigned soldier,unsigned weak,un
         auto result=pose->frame;
         if(result.muzzleBinding){
             const auto& binding=*result.muzzleBinding;const auto ns=ReloadNanos();
-            const auto selected=binding.authored.selected?gameplay::ReadSelectedMeshes(binding.authored.selected->owner,ns):nullptr;
+            const auto boundSelected=MuzzleBindingSelected(binding);
+            const auto selected=boundSelected?gameplay::ReadSelectedMeshes(boundSelected->owner,ns):nullptr;
             if(!MuzzleBindingCurrent(binding,selected.get(),guard->equipment,
                 {guard->soldier,guard->weak,guard->owner,guard->equipmentGeneration,guard->space,
                  guard->generation,ReloadNanos(guard->deadline)},ns))result.muzzleBinding.reset();
@@ -2191,6 +2204,9 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
 #ifdef FVR_BC2_MUZZLE_ENROLLMENT_HEADER
         if(authored.binding)pose->shot->muzzleBinding=BindAuthoredMuzzle(generated_muzzle::MuzzleEnrollments,
             *authored.binding,pose->shot->trackedWeapon,pose->shot->trackedFlash,input.input.worldUnitsPerMeter,authoredNow);
+        if(!pose->shot->muzzleBinding&&measuredSupport)
+            pose->shot->muzzleBinding=BindAuthoredMuzzle(generated_muzzle::MuzzleEnrollments,
+                *measuredSupport,pose->shot->trackedWeapon,pose->shot->trackedFlash,input.input.worldUnitsPerMeter,authoredNow);
 #endif
     }
     // The native support wrist is authored relative to this evaluated weapon
@@ -2297,14 +2313,17 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
             }
         }
     }
+    const auto sightSelected=input.sightAdapter&&input.sightAdapter->assembly==SightAssemblyKind::Subtree?
+        gameplay::ReadCurrentSelectedMeshes(authoredNow):std::shared_ptr<const SelectedMeshesSnapshot>{};
     if(pose->shot&&handRoleReady&&targets->tracked[0]&&targets->tracked[1]&&input.sightAdapter&&
-       SightAdapterEnabled(*input.sightAdapter)&&input.sightAdapter->assembly==SightAssemblyKind::Subtree&&
-       input.sightAdapter->authored&&input.sightPhysicalItem&&authored.binding&&authored.binding->profile&&
-       authored.binding->profile->meshPath==input.sightAdapter->authored->meshPath){
+       input.sightAdapter->assembly==SightAssemblyKind::Subtree&&input.sightPhysicalItem&&
+       SightAdapterSelectedMesh(*input.sightAdapter,sightSelected.get(),input.nativeEquipment,
+           {input.soldier,input.weak,input.ownerGeneration,input.equipmentGeneration,
+            input.input.spaceGeneration,input.input.generation,ReloadNanos(input.deadline)},rigFingerprint,authoredNow)){
         const auto& p=*input.sightAdapter;
         AuthoredSightObservation observation;
-        observation.selectedMeshPath=authored.binding->profile->meshPath;
-        observation.asset=input.assetName.data();observation.configuration=input.sightSecondary?p.family->secondaryConfiguration:p.family->primaryConfiguration;
+        observation.selectedMeshPath=p.authored->meshPath;
+        observation.asset=input.assetName.data();observation.configuration=authored_grip_detail::Text(sightSelected->configurationPath);
         observation.rigFingerprint=rigFingerprint;observation.generation=input.input.generation;
         LARGE_INTEGER sightClock{};QueryPerformanceCounter(&sightClock);observation.now=sightClock.QuadPart;observation.deadline=input.deadline;observation.names=rig->names;observation.parents=rig->parents;
         observation.native=native;observation.hidden=rig->nativeHiddenLeaves;observation.placedWeapon=placed;

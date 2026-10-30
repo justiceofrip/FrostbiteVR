@@ -48,6 +48,22 @@ struct Fixture {
 };
 }
 int main(){
+    // Every enrolled exact pair uses the same owner/link/reciprocal-route reader.
+    // Shared asset labels and measured geometry never substitute for those checks.
+    for(const auto& profile:bc2::WeaponModeFamilies){
+        Fixture pair;pair.Text(0x16000,profile.primaryAsset.data());pair.Text(0x16100,profile.secondaryAsset.data());
+        pair.Text(0x16200,profile.primaryConfiguration.data());pair.Text(0x16300,profile.secondaryConfiguration.data());
+        pair.Text(0x16400,profile.persistentId.data());const auto untouched=pair.bytes;
+        auto mode=bc2::ResolveWeaponMode(pair.Memory(),pair.soldier,pair.rifle);
+        CHECK(mode&&mode->family==&profile&&mode->action==33&&mode->targetWeapon==pair.launcher&&pair.bytes==untouched);
+        pair.Word(pair.inventory+0x14c,3);mode=bc2::ResolveWeaponMode(pair.Memory(),pair.soldier,pair.launcher);
+        CHECK(mode&&mode->family==&profile&&mode->action==36&&mode->targetWeapon==pair.rifle);
+        pair.Word(pair.map+24+16,33);CHECK(!bc2::ResolveWeaponMode(pair.Memory(),pair.soldier,pair.launcher));
+        pair.Word(pair.map+24+16,36);pair.Word(pair.launcherData+0x64,pair.persistent+4);
+        pair.types[pair.persistent+4]="PersistentWeapon";CHECK(!bc2::ResolveWeaponMode(pair.Memory(),pair.soldier,pair.launcher));
+        pair.Word(pair.launcherData+0x64,pair.persistent);pair.Text(0x16400,"foreign_owner");
+        CHECK(!bc2::ResolveWeaponMode(pair.Memory(),pair.soldier,pair.launcher));
+    }
     Fixture f;const auto original=f.bytes;
     auto command=bc2::ResolveWeaponMode(f.Memory(),f.soldier,f.rifle);
     CHECK(command&&command->action==33&&command->targetSlot==3&&command->targetWeapon==f.launcher);

@@ -1,0 +1,461 @@
+{
+  "schema": "fvr.bc2.feed_supply_cache_receipt.v1",
+  "plan_digest": "75acc7002c949f13158a655c8c649a133c8c467f8993571a4c028a1f64a27b3f",
+  "baseline_cache": {
+    "path": "reports/coordinator-20261030-cache48-enrollment01/body-ammo.fvrprop",
+    "sha256": "d0135f2f44f31322ac5e3971b82b26d665c22c48d9b6a39a04dd489f95b396aa"
+  },
+  "baseline_records_byte_exact": true,
+  "preserved_keys": 252,
+  "added_parts": 12,
+  "total_parts": 264,
+  "cache_bytes": 60784412,
+  "added_bytes": 6502505,
+  "selected_resource_bytes": 4944849,
+  "configuration_joins": [
+    {
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/BU_lmg_MG3/UPG_lmg_MG3_Kobra.dbx",
+        "instance_guid": "9d8cbec8-0903-42f0-9f91-3dcbafb5a437",
+        "sha256": "ef2d20a93c8134b40eea55c04c68a6202308a0b0fb08aeaf047cf90c67c180e6"
+      },
+      "cache_key": [
+        "MG3k",
+        "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Mesh",
+        "jntWpn_6",
+        12101763329092097707
+      ]
+    },
+    {
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Scoped.dbx",
+        "instance_guid": "456734db-b104-420e-a7ca-d65113c2f29a",
+        "sha256": "f24bdbc7dca79f8bbc4026eedf734a7c6b5b3a7e13feac54fe28bfa1b34eafca"
+      },
+      "cache_key": [
+        "MG3",
+        "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Mesh",
+        "jntWpn_6",
+        12101763329092097707
+      ]
+    },
+    {
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/MEC_lmg_QJY88/MEC_lmg_QJY88_Kobra.dbx",
+        "instance_guid": "00734bf6-4a22-4254-80bd-2070a8f5bdbc",
+        "sha256": "23ee1f34d87937f78f420c91e724bc7adba2f1788cbe515711a92251a956ba16"
+      },
+      "cache_key": [
+        "QJU88",
+        "Objects/Weapons/Handheld/MEC_lmg_QJY88/MEC_lmg_QJY88_Mesh",
+        "jntWpn_6",
+        12101763329092097707
+      ]
+    },
+    {
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60.dbx",
+        "instance_guid": "4f0e5980-8009-442e-b3b2-3c60ba50caa7",
+        "sha256": "b403eed0838e83cb4b8aeb5f90732ecc993275ec1b9ca8d1c0ebdb416504d51b"
+      },
+      "cache_key": [
+        "M60",
+        "Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60_Mesh",
+        "jntWpn_6",
+        12101763329092097707
+      ]
+    },
+    {
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60_Kobra.dbx",
+        "instance_guid": "01cf38e3-9bab-450b-85b0-d48053606638",
+        "sha256": "c103568d5cbbfba9ffd20969f02844a77d7d1aa6a886e3171f5459f872934fc4"
+      },
+      "cache_key": [
+        "M60",
+        "Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60_Mesh",
+        "jntWpn_6",
+        12101763329092097707
+      ]
+    },
+    {
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/RU_lmg_PKM/RU_lmg_PKM_Kobra.dbx",
+        "instance_guid": "197aa580-9ec5-4255-b429-b6f010f31129",
+        "sha256": "3a74555345e826bb42b54e9e9691c42537c602c3dfa8269e215934123ef3d39c"
+      },
+      "cache_key": [
+        "PKM",
+        "Objects/Weapons/Handheld/RU_lmg_PKM/RU_lmg_PKM_Mesh",
+        "jntWpn_6",
+        12101763329092097707
+      ]
+    },
+    {
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/BU_lmg_MG3/UPG_lmg_MG3_Scoped.dbx",
+        "instance_guid": "63c43439-b751-491c-83b4-cccc64419832",
+        "sha256": "78f8cb63038841fbf6074cffc1423048f22322e27ab579093b03c118f5d359e4"
+      },
+      "cache_key": [
+        "MG3k",
+        "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Mesh",
+        "jntWpn_6",
+        12101763329092097707
+      ]
+    },
+    {
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Kobra.dbx",
+        "instance_guid": "dd64cb3f-6c32-4549-aad7-27335214da5a",
+        "sha256": "b6eea2dda2aa7854e7256b0004b057de1f305ff0a8a1cec029fcb6be70c9b744"
+      },
+      "cache_key": [
+        "MG3",
+        "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Mesh",
+        "jntWpn_6",
+        12101763329092097707
+      ]
+    },
+    {
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3.dbx",
+        "instance_guid": "de63f2a2-a42d-4726-b87e-4dcfbc763203",
+        "sha256": "ec08bba67ae0ff8b9d327b61c2b066f91881d08b180ceb82e408f926b30a65f2"
+      },
+      "cache_key": [
+        "MG3",
+        "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Mesh",
+        "jntWpn_6",
+        12101763329092097707
+      ]
+    },
+    {
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/MEC_lmg_QJY88/MEC_lmg_QJY88.dbx",
+        "instance_guid": "0f342abf-80ad-4399-8604-bdbd6ae50399",
+        "sha256": "4a5ea65fa3e368c88fec78494ca57764c35a66e68d3beb73d536cecb26b92b80"
+      },
+      "cache_key": [
+        "QJU88",
+        "Objects/Weapons/Handheld/MEC_lmg_QJY88/MEC_lmg_QJY88_Mesh",
+        "jntWpn_6",
+        12101763329092097707
+      ]
+    },
+    {
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/RU_lmg_PKM/RU_lmg_PKM_Scoped.dbx",
+        "instance_guid": "21cc46a6-bdf9-46bd-8a2b-2e4d808af6f3",
+        "sha256": "acf04a74279816ca2c52d0022cda2956256cd2d2e887dcb3cb7ed038c5a4e0fb"
+      },
+      "cache_key": [
+        "PKM",
+        "Objects/Weapons/Handheld/RU_lmg_PKM/RU_lmg_PKM_Mesh",
+        "jntWpn_6",
+        12101763329092097707
+      ]
+    },
+    {
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/UL_lmg_FNMinimi/UL_lmg_FNMinimi.dbx",
+        "instance_guid": "46c1e3c8-85e3-47cf-8fd2-9d55acca92d3",
+        "sha256": "87ce26be3af226195387d0da68df0aeb8046990fc31ff14ce65a250dd01138f3"
+      },
+      "cache_key": [
+        "M249",
+        "Objects/Weapons/Handheld/UL_lmg_FNMinimi/UL_lmg_FNMinimi_Mesh",
+        "jntWpn_6",
+        12101763329092097707
+      ]
+    },
+    {
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/RU_lmg_PKM/RU_lmg_PKM.dbx",
+        "instance_guid": "eccf2b1d-eb98-439d-b5eb-cd8ad428e001",
+        "sha256": "748809a7c23502232ed78def704291c0746804c7e4ffa09349d0d62c67fc5535"
+      },
+      "cache_key": [
+        "PKM",
+        "Objects/Weapons/Handheld/RU_lmg_PKM/RU_lmg_PKM_Mesh",
+        "jntWpn_6",
+        12101763329092097707
+      ]
+    },
+    {
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/MEC_lmg_QJY88/MEC_lmg_QJY88_Scoped.dbx",
+        "instance_guid": "c1621063-3a19-4151-a452-21b347bc66e7",
+        "sha256": "802b49e4efc4361ce70a7a15198244f05cbf32f859b68cdfcf955a70f2189cbc"
+      },
+      "cache_key": [
+        "QJU88",
+        "Objects/Weapons/Handheld/MEC_lmg_QJY88/MEC_lmg_QJY88_Mesh",
+        "jntWpn_6",
+        12101763329092097707
+      ]
+    },
+    {
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/UL_lmg_FNMinimi/UL_lmg_FNMinimi_Kobra.dbx",
+        "instance_guid": "8b208f35-565d-49f3-a884-9b00feacfc68",
+        "sha256": "79bfb7ef3bdd501ce2012119db7d96d5829d0ce5f72bedaf7bd37635ea451422"
+      },
+      "cache_key": [
+        "M249",
+        "Objects/Weapons/Handheld/UL_lmg_FNMinimi/UL_lmg_FNMinimi_Mesh",
+        "jntWpn_6",
+        12101763329092097707
+      ]
+    },
+    {
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/BU_lmg_MG3/UPG_lmg_MG3.dbx",
+        "instance_guid": "b6515bb7-cc4d-44e2-8678-fb6b88f12691",
+        "sha256": "4f09f04186645914906ed3a9b3ba113daebbd6d03bd9e5b8c5c04eac5c075ff6"
+      },
+      "cache_key": [
+        "MG3k",
+        "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Mesh",
+        "jntWpn_6",
+        12101763329092097707
+      ]
+    },
+    {
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/UL_lmg_FNMinimi/UL_lmg_FNMinimi_Scoped.dbx",
+        "instance_guid": "7332b717-0dc5-425e-9894-2c8e730fa765",
+        "sha256": "214ae28886ea18869432d1dac175672bb0c803748b7660b5e4fcc8f7c338861e"
+      },
+      "cache_key": [
+        "M249",
+        "Objects/Weapons/Handheld/UL_lmg_FNMinimi/UL_lmg_FNMinimi_Mesh",
+        "jntWpn_6",
+        12101763329092097707
+      ]
+    },
+    {
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60_Scoped.dbx",
+        "instance_guid": "e5a30f30-a66d-45cc-90f1-7c06b3e9f7d6",
+        "sha256": "d677ece40b17d13c27d1a22aa193a79194e73e63c4eb75fe6df1dfc4e36add19"
+      },
+      "cache_key": [
+        "M60",
+        "Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60_Mesh",
+        "jntWpn_6",
+        12101763329092097707
+      ]
+    },
+    {
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/BU_lmg_MG3/SP_lmg_MG3.dbx",
+        "instance_guid": "8890cba2-69c7-4a13-bfd8-b08e6a0e1de3",
+        "sha256": "e79ec24fd52b5a2d7c336823e563100f10dc3194a15d6e428eb4819ec752fa15"
+      },
+      "cache_key": [
+        "MG3_sp",
+        "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Mesh",
+        "jntWpn_6",
+        12101763329092097707
+      ]
+    },
+    {
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/MEC_lmg_QJY88/SP_lmg_QJY88_Kobra.dbx",
+        "instance_guid": "1975a8f8-24c0-41d5-8f6b-e022090408be",
+        "sha256": "4a7e87055920c76a7c142cce17c5f1e097ac0dc3743d6bc9faeeef8ebda74a9d"
+      },
+      "cache_key": [
+        "QJU88_sp_k",
+        "Objects/Weapons/Handheld/MEC_lmg_QJY88/MEC_lmg_QJY88_Mesh",
+        "jntWpn_6",
+        12101763329092097707
+      ]
+    },
+    {
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/BU_lmg_M60/SP_lmg_M60.dbx",
+        "instance_guid": "bd561a9b-fd48-4254-b4c4-39653213981a",
+        "sha256": "3c7b9a1cdba0fe1f3109bfbeafe1d8081f7dabf6aa465c4b430f8b65833bfdea"
+      },
+      "cache_key": [
+        "M60_sp",
+        "Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60_Mesh",
+        "jntWpn_6",
+        12101763329092097707
+      ]
+    },
+    {
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/BU_lmg_M60/SP_lmg_M60_Scope.dbx",
+        "instance_guid": "c113c0a1-ef2c-4883-9211-2bece0cab38a",
+        "sha256": "caa83622df20545e5e765c2a913da46ecbcbc7a669561740aefef1f6a26c3fa7"
+      },
+      "cache_key": [
+        "M60_sp_s",
+        "Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60_Mesh",
+        "jntWpn_6",
+        12101763329092097707
+      ]
+    },
+    {
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/MEC_lmg_QJY88/SP_lmg_QJY88.dbx",
+        "instance_guid": "5f90d97a-feef-48e8-b1ec-de137cff2a6a",
+        "sha256": "b0391715dd3b2b3e2dc78aa4cc1d82cbf712f732182e7de034c2a6e2fd1807cb"
+      },
+      "cache_key": [
+        "QJU88_sp",
+        "Objects/Weapons/Handheld/MEC_lmg_QJY88/MEC_lmg_QJY88_Mesh",
+        "jntWpn_6",
+        12101763329092097707
+      ]
+    },
+    {
+      "configuration": {
+        "resource": "Objects/Weapons/Handheld/BU_lmg_MG3/SP_lmg_MG3_Kobra.dbx",
+        "instance_guid": "a40c3ac8-c1f2-47db-ac08-0bf52c2d0673",
+        "sha256": "02d9c0b961b297c9856198b530084a340e46af7d8dcda2a7cd68fbf27ef452cf"
+      },
+      "cache_key": [
+        "MG3_sp_k",
+        "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Mesh",
+        "jntWpn_6",
+        12101763329092097707
+      ]
+    }
+  ],
+  "cache_pin": {
+    "path": "reports/coordinator-20261030-wiring54/feed-cache01/body-ammo.fvrprop",
+    "sha256": "7e3d16f5bcc0af74ff7ab3afe2740197b1b4b9ac18dc9f61416325861af8f49e"
+  },
+  "catalog_pin": {
+    "path": "reports/coordinator-20261030-wiring54/feed-cache01/body-ammo-assets.json",
+    "sha256": "cce44a5b1506afd3fc8f82496a06b5aa1fa8a9fe956c3b5d8d2525c4dfafecff"
+  },
+  "additions": [
+    {
+      "cache_key": [
+        "MG3k",
+        "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Mesh",
+        "jntWpn_6",
+        12101763329092097707
+      ],
+      "triangles": 666,
+      "sections": 2
+    },
+    {
+      "cache_key": [
+        "MG3",
+        "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Mesh",
+        "jntWpn_6",
+        12101763329092097707
+      ],
+      "triangles": 666,
+      "sections": 2
+    },
+    {
+      "cache_key": [
+        "QJU88",
+        "Objects/Weapons/Handheld/MEC_lmg_QJY88/MEC_lmg_QJY88_Mesh",
+        "jntWpn_6",
+        12101763329092097707
+      ],
+      "triangles": 988,
+      "sections": 3
+    },
+    {
+      "cache_key": [
+        "M60",
+        "Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60_Mesh",
+        "jntWpn_6",
+        12101763329092097707
+      ],
+      "triangles": 373,
+      "sections": 2
+    },
+    {
+      "cache_key": [
+        "PKM",
+        "Objects/Weapons/Handheld/RU_lmg_PKM/RU_lmg_PKM_Mesh",
+        "jntWpn_6",
+        12101763329092097707
+      ],
+      "triangles": 816,
+      "sections": 2
+    },
+    {
+      "cache_key": [
+        "M249",
+        "Objects/Weapons/Handheld/UL_lmg_FNMinimi/UL_lmg_FNMinimi_Mesh",
+        "jntWpn_6",
+        12101763329092097707
+      ],
+      "triangles": 166,
+      "sections": 1
+    },
+    {
+      "cache_key": [
+        "MG3_sp",
+        "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Mesh",
+        "jntWpn_6",
+        12101763329092097707
+      ],
+      "triangles": 666,
+      "sections": 2
+    },
+    {
+      "cache_key": [
+        "QJU88_sp_k",
+        "Objects/Weapons/Handheld/MEC_lmg_QJY88/MEC_lmg_QJY88_Mesh",
+        "jntWpn_6",
+        12101763329092097707
+      ],
+      "triangles": 988,
+      "sections": 3
+    },
+    {
+      "cache_key": [
+        "M60_sp",
+        "Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60_Mesh",
+        "jntWpn_6",
+        12101763329092097707
+      ],
+      "triangles": 373,
+      "sections": 2
+    },
+    {
+      "cache_key": [
+        "M60_sp_s",
+        "Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60_Mesh",
+        "jntWpn_6",
+        12101763329092097707
+      ],
+      "triangles": 373,
+      "sections": 2
+    },
+    {
+      "cache_key": [
+        "QJU88_sp",
+        "Objects/Weapons/Handheld/MEC_lmg_QJY88/MEC_lmg_QJY88_Mesh",
+        "jntWpn_6",
+        12101763329092097707
+      ],
+      "triangles": 988,
+      "sections": 3
+    },
+    {
+      "cache_key": [
+        "MG3_sp_k",
+        "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Mesh",
+        "jntWpn_6",
+        12101763329092097707
+      ],
+      "triangles": 666,
+      "sections": 2
+    }
+  ],
+  "native_execution": false,
+  "headset_acceptance": false
+}

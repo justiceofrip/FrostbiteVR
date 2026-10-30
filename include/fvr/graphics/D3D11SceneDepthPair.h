@@ -43,6 +43,11 @@ public:
     struct ImportStats {std::uint64_t sourceOpens=0,localCreates=0;};
     ImportStats ImportStatistics()const noexcept;
     bool Views(const PairTicket&,SceneDepthViews&)const;
+    // After releasing/retiring the color-copy lease, invalidate every imported
+    // source and published ticket, retaining only private targets on this
+    // consumer's immutable device. A later copy reuses them only for the same
+    // verified shape; all copies/draws remain ordered on its immediate context.
+    void ResetSources();
     void Reset();
 private:struct Impl;std::unique_ptr<Impl> impl_;
 };

@@ -1,5 +1,6 @@
 #pragma once
 #include "Bc2AuthoredSight.h"
+#include "Bc2AuthoredGrip.h"
 #include "Bc2WeaponModeFamilies.h"
 #include "fvr/interaction/RigPose.h"
 namespace fvr::bc2 {
@@ -14,23 +15,36 @@ struct SightAdapterProfile {
  const OpposedSightGeometry* opposed=nullptr;
  bool sharedGeometryEligible=false;
 };
-inline constexpr std::array<std::string_view,3> Gp30SightChain{"jntWpn_17","jntWpnwpnJnt_16","jntWpn_1"};
-inline const AuthoredSightGeometry Gp30SightGeometry{
- "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Mesh",
- WeaponModeFamilies[1].primaryAsset,WeaponModeFamilies[1].primaryConfiguration,
- WeaponModeFamilies[1].secondaryAsset,WeaponModeFamilies[1].secondaryConfiguration,
- Gp30SightChain,0xa7f219a1426216abull,
- {-.003534470918f,-.006739854813f,-.03502561152f},{.003235569922f,.01918625832f,.002518229187f},
- {-.000007675875633f,-1.f,0.f},.7179032976f};
-inline const std::array<SightAdapterProfile,3> SightAdapterProfiles{{
- {&WeaponModeFamilies[0],SightAssemblyKind::OpposedLeaves,"jntWpn_9","jntWpn_11","jntWpn_1",nullptr,1.570796327f,true,&Xm320OpposedSightGeometry,false},
- {&WeaponModeFamilies[1],SightAssemblyKind::Subtree,"jntWpn_17","","jntWpn_1",&Gp30SightGeometry,.7179032976f,false},
- // Installed mesh, skeleton, HandsIkPose and AltDeploy bytes match the scoped
- // pair. Its observed native acceptance is still false until a retained run.
- {&WeaponModeFamilies[2],SightAssemblyKind::OpposedLeaves,"jntWpn_9","jntWpn_11","jntWpn_1",nullptr,1.570796327f,false,&Xm320OpposedSightGeometry,true},
-}};
+#include "../../../profiles/weapons54-underbarrel/SightAdapters.generated.h"
 inline bool SightAdapterEnabled(const SightAdapterProfile& p)noexcept {
  return p.family&&WeaponModeFamilyEligible(*p.family)&&(p.nativeSightAccepted||p.sharedGeometryEligible);
+}
+// Sight contact depends on the current selected mesh, not availability of an
+// authored gun-grip pose. Underbarrel variants can use their ordinary tracked
+// grip while consuming an independently measured sight on that same mesh.
+inline bool SightAdapterSelectedMesh(const SightAdapterProfile& p,const SelectedMeshesSnapshot* snapshot,
+ const WeaponEquipmentIdentity& equipment,const AuthoredGripOwner& owner,std::uint64_t rigFingerprint,
+ std::int64_t now)noexcept {
+ if(!SightAdapterEnabled(p)||!p.authored||!snapshot||p.authored->rigFingerprint!=rigFingerprint)return false;
+ const auto& s=*snapshot;const auto& o=s.owner;
+ if(!equipment.weapon||!equipment.data||!owner.soldier||!owner.weak||!owner.actorGeneration||
+    !owner.equipmentGeneration||!owner.space||!owner.inputSequence||!o.player||!o.equipGeneration||
+    o.soldier!=owner.soldier||o.weak!=owner.weak||o.weapon!=equipment.weapon||o.actorGeneration!=owner.actorGeneration||
+    o.space!=owner.space||s.weaponData!=equipment.data||authored_grip_detail::Text(s.weaponName)!=equipment.Asset()||
+    !authored_grip_detail::Fresh(s,now)||owner.inputDeadlineNs<=now||s.deadlineNs<owner.inputDeadlineNs||s.sequence>owner.inputSequence||
+    !s.configurationPathVerified||!s.configurationPathPointer)return false;
+ const auto configuration=authored_grip_detail::Text(s.configurationPath);
+ const auto& family=*p.family;
+ if(!((equipment.Asset()==family.primaryAsset&&configuration==family.primaryConfiguration)||
+      (equipment.Asset()==family.secondaryAsset&&configuration==family.secondaryConfiguration)))return false;
+ if(s.stateCount!=1||!s.soleConfiguredArray||s.states[0].array!=s.soleConfiguredArray||!s.states[0].state||
+    !s.states[0].count||s.states[0].count>s.states[0].meshes.size()||!s.stateTypeInfo||!s.meshTypeInfo||!s.inventory)return false;
+ unsigned matches=0;
+ for(unsigned n=0;n<s.states[0].count;++n){const auto& mesh=s.states[0].meshes[n];
+  if(!mesh.address||mesh.typeInfo!=s.meshTypeInfo||!mesh.namePointer||authored_grip_detail::Text(mesh.assetPath).empty())return false;
+  if(authored_grip_detail::Text(mesh.assetPath)==p.authored->meshPath)++matches;
+ }
+ return matches==1;
 }
 inline WeaponSightContact MeasureOpposedSightAdapterContact(const SightAdapterProfile& p,
  const WeaponSightObservation& s,std::string_view configuration)noexcept {
@@ -91,7 +105,9 @@ inline std::optional<std::vector<interaction::BoneWrite>> BuildSightAssemblyWrit
  return std::vector<BoneWrite>{{*rear,rearWorld},{*front,*frontWorld}};
 }
 inline WeaponSightContact MeasureSightAdapterContact(const SightAdapterProfile& p,const AuthoredSightObservation& s)noexcept {
- if(p.assembly!=SightAssemblyKind::Subtree||!p.authored)return {};
+ if(!SightAdapterEnabled(p)||p.assembly!=SightAssemblyKind::Subtree||!p.authored||
+    p.authored->boneChain.empty()||p.rear!=p.authored->boneChain.front()||p.root!=p.authored->boneChain.back()||
+    p.travelRadians!=p.authored->travelRadians)return {};
  auto result=MeasureAuthoredSightContact(*p.authored,s);
  if(result.valid)result.previewValid=true; // Subtree preview; no fabricated front leaf.
  return result;

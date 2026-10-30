@@ -1,0 +1,54 @@
+{
+  "schema": "fvr.bc2.muzzle_input_manifest.v1",
+  "sources": {
+    "roster": {
+      "path": "handoff/tasks/WEAPONS/20261030-roster43/roster.json",
+      "sha256": "deb0bbe2155ad573719846fbd90dd5fbd7b42ef5af37e55785b9047b349dd4e1"
+    },
+    "bodies": {
+      "path": "config/body-ammo-assets.json",
+      "sha256": "f6d69eb5fe9b2758965e935a7391d0355fb206f4be98e70719cd18c5705e97e7"
+    },
+    "catalog": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\manual-reload-catalog-20261003-candidate\\manual-reload-catalog.json",
+      "sha256": "09b72862fbdcfea903d92657675264e94b28238690c5f8b9bbbbe6e6a110cd6e"
+    },
+    "bindings_0": {
+      "path": "profiles/opening426/reference-bindings.json",
+      "sha256": "61331da83be53569732982c1c3c935604c1fccd0f2bf0bd15ebcb87f64baa39b"
+    },
+    "bindings_1": {
+      "path": "profiles/resource-enrollment295-pistol/reference-bindings.json",
+      "sha256": "2d85ab61c52663229c151620c82d9227bfb96eaef2a28a240c3afba872498870"
+    },
+    "bindings_2": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\arsmg-paired-contact-batch-candidate\\all\\grip-bindings.json",
+      "sha256": "9c027340e204ec5b979fe3dc5be1e6501e2e4d2c3b545bcc228d299ed7d22903"
+    },
+    "bindings_3": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\lmg-authored-mechanisms-candidate\\all\\reference-bindings.json",
+      "sha256": "0cbe8ed392eb9cda5feb6f3676bc3881ee4c6638ff287ad85e099fd40c12584e"
+    },
+    "bindings_4": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\pistol-sniper-shotgun-mechanisms-candidate\\batch\\reference-bindings.json",
+      "sha256": "367daddaf86244359245312db8028756b91bf763b34535aa1191253db3981559"
+    },
+    "bindings_5": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\mesh312-research\\reference-bindings.json",
+      "sha256": "3813a763b4640355e699f280a8a8dd9fcc6710ca03f57f7df3afe60c867d1ae7"
+    },
+    "bindings_6": {
+      "path": "handoff/tasks/WEAPONS/20261030-support43/m1-reference-bindings.json",
+      "sha256": "483d867956d179f051d1e5c66c6f212d95d7313ff0aefacdcad67a45f6932f88"
+    },
+    "bindings_7": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight426\\smg\\opening-level-reference-bindings.json",
+      "sha256": "5f08f905cf3547f3c4d763665702838fcb531467ca2a4564a6bef790090eb3c3"
+    },
+    "bindings_8": {
+      "path": "reports/coordinator-20261030-magazines45-policy04/new-bindings.json",
+      "sha256": "62f543dc05d3abb70e1599c19156488ca3b545cbac262e1cbcd64949e178c7ce"
+    }
+  },
+  "support_header": "profiles/weapons43/CombinedSupport.h"
+}

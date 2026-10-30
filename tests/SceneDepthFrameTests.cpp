@@ -74,12 +74,64 @@ int DepthImportCacheCases(){
     ++db.resourceGeneration;db.resources={{{301,302},{303,304}}};
     CHECK(cache.Select(db,b,tb,1,2,selected)&&selected.openSources&&!selected.createLocal&&cache.Commit(selected));
     cache.Reset();CHECK(cache.Select(da,a,ta,0,2,selected)&&selected.createLocal&&selected.resetImports);
-    // v8 keeps its existing reallocation-on-import-change behavior and MSAA support.
+    // v8 reopens changed sources while retaining equal-shape MSAA targets.
     SceneDepthImportPolicy legacy;da.samples=8;
     CHECK(legacy.Select(da,a,ta,0,1,selected)&&selected.openSources&&selected.createLocal&&legacy.Commit(selected));
     ++ta.sequence;da.color=ta;++da.resourceGeneration;
-    CHECK(legacy.Select(da,a,ta,0,1,selected)&&selected.openSources&&selected.createLocal);
+    CHECK(legacy.Select(da,a,ta,0,1,selected)&&selected.openSources&&!selected.createLocal);
     CHECK(!legacy.Select(da,a,ta,1,1,selected));
+    return 0;
+}
+
+int LegacyDepthAllocationCases(){
+    SceneDepthImportPolicy cache;SceneDepthImportPolicy::Selection selected;
+    auto descriptor=Descriptor();auto ticket=Ticket(descriptor);auto depth=MakeDepth(descriptor,ticket);
+    unsigned sourceOpens=0,localCreates=0;
+    // Reproduce forty single-slot source epochs. Resource IDs may be reused by
+    // the driver after retirement; explicit invalidation must still reopen them.
+    for(unsigned epoch=0;epoch<40;++epoch){
+        cache.ResetSources();descriptor.resourceEpoch=epoch+1;ticket=Ticket(descriptor);depth=MakeDepth(descriptor,ticket);
+        CHECK(cache.Select(depth,descriptor,ticket,0,1,selected)&&selected.openSources);
+        CHECK(selected.createLocal==(epoch==0));
+        sourceOpens+=4;localCreates+=selected.createLocal?4:0;CHECK(cache.Commit(selected));
+        CHECK(!cache.Select(depth,descriptor,ticket,0,1,selected));
+    }
+    CHECK(sourceOpens==160&&localCreates==4);
+    ++ticket.sequence;depth.color=ticket;
+    CHECK(cache.Select(depth,descriptor,ticket,0,1,selected));const auto stale=selected;
+    cache.ResetSources();CHECK(!cache.Commit(stale));
+    // A failed replacement cannot authorize its selection or discard the
+    // usable local allocation. No successful import/copy is committed here.
+    auto invalid=depth;invalid.resources[0][0]=0;
+    CHECK(!cache.Select(invalid,descriptor,ticket,0,1,selected));
+    CHECK(cache.Select(depth,descriptor,ticket,0,1,selected)&&selected.openSources&&!selected.createLocal);
+    CHECK(cache.Commit(selected));
+    // Every local-allocation shape field, including adapter identity, must
+    // invalidate reuse. Returning to the old shape before Commit still reuses
+    // the original allocation; a failed attempt never commits a new shape.
+    for(unsigned field=0;field<6;++field){auto changedDescriptor=descriptor;auto changed=depth;auto changedTicket=ticket;
+        ++changedTicket.sequence;changed.color=changedTicket;
+        if(field==0)++changedDescriptor.width;if(field==1)++changedDescriptor.height;
+        if(field==2)changed.samples=4;if(field==3)++changed.quality;
+        if(field==4)++changedDescriptor.adapterLow;if(field==5)++changedDescriptor.adapterHigh;
+        changed.width=changedDescriptor.width;changed.height=changedDescriptor.height;
+        changed.adapterLow=changedDescriptor.adapterLow;changed.adapterHigh=changedDescriptor.adapterHigh;
+        CHECK(cache.Select(changed,changedDescriptor,changedTicket,0,1,selected)&&selected.createLocal);
+    }
+    auto badFormat=depth;badFormat.format=28;CHECK(!cache.Select(badFormat,descriptor,ticket,0,1,selected));
+    ++ticket.sequence;depth.color=ticket;
+    CHECK(cache.Select(depth,descriptor,ticket,0,1,selected)&&!selected.createLocal);
+    ++descriptor.width;depth.width=descriptor.width;
+    CHECK(cache.Select(depth,descriptor,ticket,0,1,selected)&&selected.createLocal&&cache.Commit(selected));
+    ++ticket.sequence;depth.color=ticket;
+    CHECK(cache.Select(depth,descriptor,ticket,0,1,selected)&&!selected.createLocal);
+    --descriptor.width;depth.width=descriptor.width;
+    CHECK(cache.Select(depth,descriptor,ticket,0,1,selected)&&selected.createLocal&&cache.Commit(selected));
+    ++ticket.sequence;depth.color=ticket;
+    CHECK(cache.Select(depth,descriptor,ticket,0,1,selected)&&!selected.createLocal);
+    cache.Reset();CHECK(!cache.Commit(selected));
+    CHECK(cache.Select(depth,descriptor,ticket,0,1,selected)&&selected.createLocal&&cache.Commit(selected));
+    std::cout<<"Legacy depth cache: 40 equal-shape epochs, 160 source opens, 4 local creates (previously 160)\n";
     return 0;
 }
 
@@ -148,4 +200,4 @@ int DeferredDepthAdmissionCases(){
     return 0;
 }
 
-int main(){if(DeferredDepthAdmissionCases()||DepthImportCacheCases())return 1;if(Shape()||Delivery())return 1;std::cout<<"SceneDepthFrame: exact attachment and bounded pre-world-copy admission passed; no GPU/native proof\n";}
+int main(){if(DeferredDepthAdmissionCases()||DepthImportCacheCases()||LegacyDepthAllocationCases())return 1;if(Shape()||Delivery())return 1;std::cout<<"SceneDepthFrame: exact attachment and bounded pre-world-copy admission passed; no GPU/native proof\n";}

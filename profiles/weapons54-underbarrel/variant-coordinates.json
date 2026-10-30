@@ -1,0 +1,1194 @@
+{
+  "schema": "fvr.bc2.underbarrel_variant_coordinates.v1",
+  "rows": [
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_rgl_AN94Abakan_Kobra",
+      "archive": "Dist/win32/async/weapon/bu_rgl_an94abakan_kobra-00.fbrb",
+      "index_sha256": "0f955271bb1577b1a97af23cb48467717331d4cd52841e32ab243427973c53b4",
+      "mesh_sha256": "e6c6a161d83756d69af78db509cdf727538b022e1d2921773080d4f8a3f4513a",
+      "lod_sha256": "6cf707544ad91d5e15e6dd6bdbaf3920077a622b4b31e8e35c00c0cbadb6d2c0",
+      "clip_hashes": [
+        "d0ae45afc98271c7a75e4fb79ae3d272fdd3a0fa55d6badabcca8644e29c771e",
+        "56885aa32a11408253fc969bc81feb96f8e041ad295372ce0528eaedcd2c9dcf"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_rgl_AN94Abakan_Scoped",
+      "archive": "Dist/win32/async/weapon/bu_rgl_an94abakan_scoped-00.fbrb",
+      "index_sha256": "0f955271bb1577b1a97af23cb48467717331d4cd52841e32ab243427973c53b4",
+      "mesh_sha256": "e6c6a161d83756d69af78db509cdf727538b022e1d2921773080d4f8a3f4513a",
+      "lod_sha256": "6cf707544ad91d5e15e6dd6bdbaf3920077a622b4b31e8e35c00c0cbadb6d2c0",
+      "clip_hashes": [
+        "d0ae45afc98271c7a75e4fb79ae3d272fdd3a0fa55d6badabcca8644e29c771e",
+        "56885aa32a11408253fc969bc81feb96f8e041ad295372ce0528eaedcd2c9dcf"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_shg_AN94Abakan_Kobra",
+      "archive": "Dist/win32/async/weapon/bu_shg_an94abakan_kobra-00.fbrb",
+      "index_sha256": "0f955271bb1577b1a97af23cb48467717331d4cd52841e32ab243427973c53b4",
+      "mesh_sha256": "e6c6a161d83756d69af78db509cdf727538b022e1d2921773080d4f8a3f4513a",
+      "lod_sha256": "6cf707544ad91d5e15e6dd6bdbaf3920077a622b4b31e8e35c00c0cbadb6d2c0",
+      "clip_hashes": [
+        "d0ae45afc98271c7a75e4fb79ae3d272fdd3a0fa55d6badabcca8644e29c771e",
+        "56885aa32a11408253fc969bc81feb96f8e041ad295372ce0528eaedcd2c9dcf"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_shg_AN94Abakan_Scoped",
+      "archive": "Dist/win32/async/weapon/bu_shg_an94abakan_scoped-00.fbrb",
+      "index_sha256": "0f955271bb1577b1a97af23cb48467717331d4cd52841e32ab243427973c53b4",
+      "mesh_sha256": "e6c6a161d83756d69af78db509cdf727538b022e1d2921773080d4f8a3f4513a",
+      "lod_sha256": "6cf707544ad91d5e15e6dd6bdbaf3920077a622b4b31e8e35c00c0cbadb6d2c0",
+      "clip_hashes": [
+        "d0ae45afc98271c7a75e4fb79ae3d272fdd3a0fa55d6badabcca8644e29c771e",
+        "56885aa32a11408253fc969bc81feb96f8e041ad295372ce0528eaedcd2c9dcf"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_smk_AN94Abakan_Kobra",
+      "archive": "Dist/win32/async/weapon/bu_smk_an94abakan_kobra-00.fbrb",
+      "index_sha256": "0f955271bb1577b1a97af23cb48467717331d4cd52841e32ab243427973c53b4",
+      "mesh_sha256": "e6c6a161d83756d69af78db509cdf727538b022e1d2921773080d4f8a3f4513a",
+      "lod_sha256": "6cf707544ad91d5e15e6dd6bdbaf3920077a622b4b31e8e35c00c0cbadb6d2c0",
+      "clip_hashes": [
+        "d0ae45afc98271c7a75e4fb79ae3d272fdd3a0fa55d6badabcca8644e29c771e",
+        "56885aa32a11408253fc969bc81feb96f8e041ad295372ce0528eaedcd2c9dcf"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_smk_AN94Abakan_Scoped",
+      "archive": "Dist/win32/async/weapon/bu_smk_an94abakan_scoped-00.fbrb",
+      "index_sha256": "0f955271bb1577b1a97af23cb48467717331d4cd52841e32ab243427973c53b4",
+      "mesh_sha256": "e6c6a161d83756d69af78db509cdf727538b022e1d2921773080d4f8a3f4513a",
+      "lod_sha256": "6cf707544ad91d5e15e6dd6bdbaf3920077a622b4b31e8e35c00c0cbadb6d2c0",
+      "clip_hashes": [
+        "d0ae45afc98271c7a75e4fb79ae3d272fdd3a0fa55d6badabcca8644e29c771e",
+        "56885aa32a11408253fc969bc81feb96f8e041ad295372ce0528eaedcd2c9dcf"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_F2000/BU_rgl_F2000",
+      "archive": "Dist/win32/async/weapon/bu_rgl_f2000-00.fbrb",
+      "index_sha256": "7037070e9967ac871bcaab856d91fb94e30540fae4461db1c20a2e8c020f1ac3",
+      "mesh_sha256": "b17e8a31cec97fe0e9ca12e61c97c359c3a146f0e0c9eea41e854e9760e00e06",
+      "lod_sha256": "3ee9a75750f5cb31064268259e6f5d9a7ed01d40efbbdbcf1ee040612ba94fae",
+      "clip_hashes": [
+        "7ce59a13cff8713fed352ca84acb297af0c4fef5f22babbc0ef0b201beabd94f",
+        "0400bf570239779957eeb6e1bc70467c4cd51c82186cbeb134a000603e2149f5"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_F2000/BU_rgl_F2000_Kobra",
+      "archive": "Dist/win32/async/weapon/bu_rgl_f2000_kobra-00.fbrb",
+      "index_sha256": "7037070e9967ac871bcaab856d91fb94e30540fae4461db1c20a2e8c020f1ac3",
+      "mesh_sha256": "b17e8a31cec97fe0e9ca12e61c97c359c3a146f0e0c9eea41e854e9760e00e06",
+      "lod_sha256": "3ee9a75750f5cb31064268259e6f5d9a7ed01d40efbbdbcf1ee040612ba94fae",
+      "clip_hashes": [
+        "7ce59a13cff8713fed352ca84acb297af0c4fef5f22babbc0ef0b201beabd94f",
+        "0400bf570239779957eeb6e1bc70467c4cd51c82186cbeb134a000603e2149f5"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_F2000/BU_rgl_F2000_Scoped",
+      "archive": "Dist/win32/async/weapon/bu_rgl_f2000_scoped-00.fbrb",
+      "index_sha256": "7037070e9967ac871bcaab856d91fb94e30540fae4461db1c20a2e8c020f1ac3",
+      "mesh_sha256": "b17e8a31cec97fe0e9ca12e61c97c359c3a146f0e0c9eea41e854e9760e00e06",
+      "lod_sha256": "3ee9a75750f5cb31064268259e6f5d9a7ed01d40efbbdbcf1ee040612ba94fae",
+      "clip_hashes": [
+        "7ce59a13cff8713fed352ca84acb297af0c4fef5f22babbc0ef0b201beabd94f",
+        "0400bf570239779957eeb6e1bc70467c4cd51c82186cbeb134a000603e2149f5"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_F2000/BU_shg_F2000",
+      "archive": "Dist/win32/async/weapon/bu_shg_f2000-00.fbrb",
+      "index_sha256": "7037070e9967ac871bcaab856d91fb94e30540fae4461db1c20a2e8c020f1ac3",
+      "mesh_sha256": "b17e8a31cec97fe0e9ca12e61c97c359c3a146f0e0c9eea41e854e9760e00e06",
+      "lod_sha256": "3ee9a75750f5cb31064268259e6f5d9a7ed01d40efbbdbcf1ee040612ba94fae",
+      "clip_hashes": [
+        "7ce59a13cff8713fed352ca84acb297af0c4fef5f22babbc0ef0b201beabd94f",
+        "0400bf570239779957eeb6e1bc70467c4cd51c82186cbeb134a000603e2149f5"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_F2000/BU_shg_F2000_Kobra",
+      "archive": "Dist/win32/async/weapon/bu_shg_f2000_kobra-00.fbrb",
+      "index_sha256": "7037070e9967ac871bcaab856d91fb94e30540fae4461db1c20a2e8c020f1ac3",
+      "mesh_sha256": "b17e8a31cec97fe0e9ca12e61c97c359c3a146f0e0c9eea41e854e9760e00e06",
+      "lod_sha256": "3ee9a75750f5cb31064268259e6f5d9a7ed01d40efbbdbcf1ee040612ba94fae",
+      "clip_hashes": [
+        "7ce59a13cff8713fed352ca84acb297af0c4fef5f22babbc0ef0b201beabd94f",
+        "0400bf570239779957eeb6e1bc70467c4cd51c82186cbeb134a000603e2149f5"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_F2000/BU_shg_F2000_Scoped",
+      "archive": "Dist/win32/async/weapon/bu_shg_f2000_scoped-00.fbrb",
+      "index_sha256": "7037070e9967ac871bcaab856d91fb94e30540fae4461db1c20a2e8c020f1ac3",
+      "mesh_sha256": "b17e8a31cec97fe0e9ca12e61c97c359c3a146f0e0c9eea41e854e9760e00e06",
+      "lod_sha256": "3ee9a75750f5cb31064268259e6f5d9a7ed01d40efbbdbcf1ee040612ba94fae",
+      "clip_hashes": [
+        "7ce59a13cff8713fed352ca84acb297af0c4fef5f22babbc0ef0b201beabd94f",
+        "0400bf570239779957eeb6e1bc70467c4cd51c82186cbeb134a000603e2149f5"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_F2000/BU_smk_F2000",
+      "archive": "Dist/win32/async/weapon/bu_smk_f2000-00.fbrb",
+      "index_sha256": "7037070e9967ac871bcaab856d91fb94e30540fae4461db1c20a2e8c020f1ac3",
+      "mesh_sha256": "b17e8a31cec97fe0e9ca12e61c97c359c3a146f0e0c9eea41e854e9760e00e06",
+      "lod_sha256": "3ee9a75750f5cb31064268259e6f5d9a7ed01d40efbbdbcf1ee040612ba94fae",
+      "clip_hashes": [
+        "7ce59a13cff8713fed352ca84acb297af0c4fef5f22babbc0ef0b201beabd94f",
+        "0400bf570239779957eeb6e1bc70467c4cd51c82186cbeb134a000603e2149f5"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_F2000/BU_smk_F2000_Kobra",
+      "archive": "Dist/win32/async/weapon/bu_smk_f2000_kobra-00.fbrb",
+      "index_sha256": "7037070e9967ac871bcaab856d91fb94e30540fae4461db1c20a2e8c020f1ac3",
+      "mesh_sha256": "b17e8a31cec97fe0e9ca12e61c97c359c3a146f0e0c9eea41e854e9760e00e06",
+      "lod_sha256": "3ee9a75750f5cb31064268259e6f5d9a7ed01d40efbbdbcf1ee040612ba94fae",
+      "clip_hashes": [
+        "7ce59a13cff8713fed352ca84acb297af0c4fef5f22babbc0ef0b201beabd94f",
+        "0400bf570239779957eeb6e1bc70467c4cd51c82186cbeb134a000603e2149f5"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_F2000/BU_smk_F2000_Scoped",
+      "archive": "Dist/win32/async/weapon/bu_smk_f2000_scoped-00.fbrb",
+      "index_sha256": "7037070e9967ac871bcaab856d91fb94e30540fae4461db1c20a2e8c020f1ac3",
+      "mesh_sha256": "b17e8a31cec97fe0e9ca12e61c97c359c3a146f0e0c9eea41e854e9760e00e06",
+      "lod_sha256": "3ee9a75750f5cb31064268259e6f5d9a7ed01d40efbbdbcf1ee040612ba94fae",
+      "clip_hashes": [
+        "7ce59a13cff8713fed352ca84acb297af0c4fef5f22babbc0ef0b201beabd94f",
+        "0400bf570239779957eeb6e1bc70467c4cd51c82186cbeb134a000603e2149f5"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_M16A2/BU_rgl_M16A2",
+      "archive": "Dist/win32/async/weapon/bu_rgl_m16a2-00.fbrb",
+      "index_sha256": "b2cada1847b9d5c243b6f08607b3b620f57c3fa209c23622a9dc78e225f8f1ca",
+      "mesh_sha256": "29348ffee44309206eb8b16059b5f0bddbd67ba06f0e4c00061a12f8ad9408e5",
+      "lod_sha256": "ee856fb28e79eb055c36771f698117c8b757fd4759a73c0eb8f74dbd54c47171",
+      "clip_hashes": [
+        "0f4a63abb8b12ae620197b9d47d89906c49de46509680578c6822d6de51f19ae",
+        "34a49ec0ec074cd7d82a0c46c6a43e1b275861bcc771d6eb9f010fb4b7557c20"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_M16A2/BU_rgl_M16A2_Kobra",
+      "archive": "Dist/win32/async/weapon/bu_rgl_m16a2_kobra-00.fbrb",
+      "index_sha256": "b2cada1847b9d5c243b6f08607b3b620f57c3fa209c23622a9dc78e225f8f1ca",
+      "mesh_sha256": "29348ffee44309206eb8b16059b5f0bddbd67ba06f0e4c00061a12f8ad9408e5",
+      "lod_sha256": "ee856fb28e79eb055c36771f698117c8b757fd4759a73c0eb8f74dbd54c47171",
+      "clip_hashes": [
+        "0f4a63abb8b12ae620197b9d47d89906c49de46509680578c6822d6de51f19ae",
+        "34a49ec0ec074cd7d82a0c46c6a43e1b275861bcc771d6eb9f010fb4b7557c20"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_M16A2/BU_rgl_M16A2_Scoped",
+      "archive": "Dist/win32/async/weapon/bu_rgl_m16a2_scoped-00.fbrb",
+      "index_sha256": "b2cada1847b9d5c243b6f08607b3b620f57c3fa209c23622a9dc78e225f8f1ca",
+      "mesh_sha256": "29348ffee44309206eb8b16059b5f0bddbd67ba06f0e4c00061a12f8ad9408e5",
+      "lod_sha256": "ee856fb28e79eb055c36771f698117c8b757fd4759a73c0eb8f74dbd54c47171",
+      "clip_hashes": [
+        "0f4a63abb8b12ae620197b9d47d89906c49de46509680578c6822d6de51f19ae",
+        "34a49ec0ec074cd7d82a0c46c6a43e1b275861bcc771d6eb9f010fb4b7557c20"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_M16A2/BU_shg_M16A2",
+      "archive": "Dist/win32/async/weapon/bu_shg_m16a2-00.fbrb",
+      "index_sha256": "b2cada1847b9d5c243b6f08607b3b620f57c3fa209c23622a9dc78e225f8f1ca",
+      "mesh_sha256": "29348ffee44309206eb8b16059b5f0bddbd67ba06f0e4c00061a12f8ad9408e5",
+      "lod_sha256": "ee856fb28e79eb055c36771f698117c8b757fd4759a73c0eb8f74dbd54c47171",
+      "clip_hashes": [
+        "0f4a63abb8b12ae620197b9d47d89906c49de46509680578c6822d6de51f19ae",
+        "34a49ec0ec074cd7d82a0c46c6a43e1b275861bcc771d6eb9f010fb4b7557c20"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_M16A2/BU_shg_M16A2_Kobra",
+      "archive": "Dist/win32/async/weapon/bu_shg_m16a2_kobra-00.fbrb",
+      "index_sha256": "b2cada1847b9d5c243b6f08607b3b620f57c3fa209c23622a9dc78e225f8f1ca",
+      "mesh_sha256": "29348ffee44309206eb8b16059b5f0bddbd67ba06f0e4c00061a12f8ad9408e5",
+      "lod_sha256": "ee856fb28e79eb055c36771f698117c8b757fd4759a73c0eb8f74dbd54c47171",
+      "clip_hashes": [
+        "0f4a63abb8b12ae620197b9d47d89906c49de46509680578c6822d6de51f19ae",
+        "34a49ec0ec074cd7d82a0c46c6a43e1b275861bcc771d6eb9f010fb4b7557c20"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_M16A2/BU_shg_M16A2_Scoped",
+      "archive": "Dist/win32/async/weapon/bu_shg_m16a2_scoped-00.fbrb",
+      "index_sha256": "b2cada1847b9d5c243b6f08607b3b620f57c3fa209c23622a9dc78e225f8f1ca",
+      "mesh_sha256": "29348ffee44309206eb8b16059b5f0bddbd67ba06f0e4c00061a12f8ad9408e5",
+      "lod_sha256": "ee856fb28e79eb055c36771f698117c8b757fd4759a73c0eb8f74dbd54c47171",
+      "clip_hashes": [
+        "0f4a63abb8b12ae620197b9d47d89906c49de46509680578c6822d6de51f19ae",
+        "34a49ec0ec074cd7d82a0c46c6a43e1b275861bcc771d6eb9f010fb4b7557c20"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_M16A2/BU_smk_M16A2",
+      "archive": "Dist/win32/async/weapon/bu_smk_m16a2-00.fbrb",
+      "index_sha256": "b2cada1847b9d5c243b6f08607b3b620f57c3fa209c23622a9dc78e225f8f1ca",
+      "mesh_sha256": "29348ffee44309206eb8b16059b5f0bddbd67ba06f0e4c00061a12f8ad9408e5",
+      "lod_sha256": "ee856fb28e79eb055c36771f698117c8b757fd4759a73c0eb8f74dbd54c47171",
+      "clip_hashes": [
+        "0f4a63abb8b12ae620197b9d47d89906c49de46509680578c6822d6de51f19ae",
+        "34a49ec0ec074cd7d82a0c46c6a43e1b275861bcc771d6eb9f010fb4b7557c20"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_M16A2/BU_smk_M16A2_Kobra",
+      "archive": "Dist/win32/async/weapon/bu_smk_m16a2_kobra-00.fbrb",
+      "index_sha256": "b2cada1847b9d5c243b6f08607b3b620f57c3fa209c23622a9dc78e225f8f1ca",
+      "mesh_sha256": "29348ffee44309206eb8b16059b5f0bddbd67ba06f0e4c00061a12f8ad9408e5",
+      "lod_sha256": "ee856fb28e79eb055c36771f698117c8b757fd4759a73c0eb8f74dbd54c47171",
+      "clip_hashes": [
+        "0f4a63abb8b12ae620197b9d47d89906c49de46509680578c6822d6de51f19ae",
+        "34a49ec0ec074cd7d82a0c46c6a43e1b275861bcc771d6eb9f010fb4b7557c20"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_M16A2/BU_smk_M16A2_Scoped",
+      "archive": "Dist/win32/async/weapon/bu_smk_m16a2_scoped-00.fbrb",
+      "index_sha256": "b2cada1847b9d5c243b6f08607b3b620f57c3fa209c23622a9dc78e225f8f1ca",
+      "mesh_sha256": "29348ffee44309206eb8b16059b5f0bddbd67ba06f0e4c00061a12f8ad9408e5",
+      "lod_sha256": "ee856fb28e79eb055c36771f698117c8b757fd4759a73c0eb8f74dbd54c47171",
+      "clip_hashes": [
+        "0f4a63abb8b12ae620197b9d47d89906c49de46509680578c6822d6de51f19ae",
+        "34a49ec0ec074cd7d82a0c46c6a43e1b275861bcc771d6eb9f010fb4b7557c20"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_M16A2/UPG_rgl_M16A2",
+      "archive": "Dist/win32/async/weapon/upg_rgl_m16a2-00.fbrb",
+      "index_sha256": "b2cada1847b9d5c243b6f08607b3b620f57c3fa209c23622a9dc78e225f8f1ca",
+      "mesh_sha256": "29348ffee44309206eb8b16059b5f0bddbd67ba06f0e4c00061a12f8ad9408e5",
+      "lod_sha256": "ee856fb28e79eb055c36771f698117c8b757fd4759a73c0eb8f74dbd54c47171",
+      "clip_hashes": [
+        "0f4a63abb8b12ae620197b9d47d89906c49de46509680578c6822d6de51f19ae",
+        "34a49ec0ec074cd7d82a0c46c6a43e1b275861bcc771d6eb9f010fb4b7557c20"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_M16A2/UPG_rgl_M16A2_Kobra",
+      "archive": "Dist/win32/async/weapon/upg_rgl_m16a2_kobra-00.fbrb",
+      "index_sha256": "b2cada1847b9d5c243b6f08607b3b620f57c3fa209c23622a9dc78e225f8f1ca",
+      "mesh_sha256": "29348ffee44309206eb8b16059b5f0bddbd67ba06f0e4c00061a12f8ad9408e5",
+      "lod_sha256": "ee856fb28e79eb055c36771f698117c8b757fd4759a73c0eb8f74dbd54c47171",
+      "clip_hashes": [
+        "0f4a63abb8b12ae620197b9d47d89906c49de46509680578c6822d6de51f19ae",
+        "34a49ec0ec074cd7d82a0c46c6a43e1b275861bcc771d6eb9f010fb4b7557c20"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_M16A2/UPG_rgl_M16A2_Scoped",
+      "archive": "Dist/win32/async/weapon/upg_rgl_m16a2_scoped-00.fbrb",
+      "index_sha256": "b2cada1847b9d5c243b6f08607b3b620f57c3fa209c23622a9dc78e225f8f1ca",
+      "mesh_sha256": "29348ffee44309206eb8b16059b5f0bddbd67ba06f0e4c00061a12f8ad9408e5",
+      "lod_sha256": "ee856fb28e79eb055c36771f698117c8b757fd4759a73c0eb8f74dbd54c47171",
+      "clip_hashes": [
+        "0f4a63abb8b12ae620197b9d47d89906c49de46509680578c6822d6de51f19ae",
+        "34a49ec0ec074cd7d82a0c46c6a43e1b275861bcc771d6eb9f010fb4b7557c20"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_M16A2/UPG_shg_M16A2",
+      "archive": "Dist/win32/async/weapon/upg_shg_m16a2-00.fbrb",
+      "index_sha256": "b2cada1847b9d5c243b6f08607b3b620f57c3fa209c23622a9dc78e225f8f1ca",
+      "mesh_sha256": "29348ffee44309206eb8b16059b5f0bddbd67ba06f0e4c00061a12f8ad9408e5",
+      "lod_sha256": "ee856fb28e79eb055c36771f698117c8b757fd4759a73c0eb8f74dbd54c47171",
+      "clip_hashes": [
+        "0f4a63abb8b12ae620197b9d47d89906c49de46509680578c6822d6de51f19ae",
+        "34a49ec0ec074cd7d82a0c46c6a43e1b275861bcc771d6eb9f010fb4b7557c20"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_M16A2/UPG_shg_M16A2_Kobra",
+      "archive": "Dist/win32/async/weapon/upg_shg_m16a2_kobra-00.fbrb",
+      "index_sha256": "b2cada1847b9d5c243b6f08607b3b620f57c3fa209c23622a9dc78e225f8f1ca",
+      "mesh_sha256": "29348ffee44309206eb8b16059b5f0bddbd67ba06f0e4c00061a12f8ad9408e5",
+      "lod_sha256": "ee856fb28e79eb055c36771f698117c8b757fd4759a73c0eb8f74dbd54c47171",
+      "clip_hashes": [
+        "0f4a63abb8b12ae620197b9d47d89906c49de46509680578c6822d6de51f19ae",
+        "34a49ec0ec074cd7d82a0c46c6a43e1b275861bcc771d6eb9f010fb4b7557c20"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_M16A2/UPG_shg_M16A2_Scoped",
+      "archive": "Dist/win32/async/weapon/upg_shg_m16a2_scoped-00.fbrb",
+      "index_sha256": "b2cada1847b9d5c243b6f08607b3b620f57c3fa209c23622a9dc78e225f8f1ca",
+      "mesh_sha256": "29348ffee44309206eb8b16059b5f0bddbd67ba06f0e4c00061a12f8ad9408e5",
+      "lod_sha256": "ee856fb28e79eb055c36771f698117c8b757fd4759a73c0eb8f74dbd54c47171",
+      "clip_hashes": [
+        "0f4a63abb8b12ae620197b9d47d89906c49de46509680578c6822d6de51f19ae",
+        "34a49ec0ec074cd7d82a0c46c6a43e1b275861bcc771d6eb9f010fb4b7557c20"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_M16A2/UPG_smk_M16A2",
+      "archive": "Dist/win32/async/weapon/upg_smk_m16a2-00.fbrb",
+      "index_sha256": "b2cada1847b9d5c243b6f08607b3b620f57c3fa209c23622a9dc78e225f8f1ca",
+      "mesh_sha256": "29348ffee44309206eb8b16059b5f0bddbd67ba06f0e4c00061a12f8ad9408e5",
+      "lod_sha256": "ee856fb28e79eb055c36771f698117c8b757fd4759a73c0eb8f74dbd54c47171",
+      "clip_hashes": [
+        "0f4a63abb8b12ae620197b9d47d89906c49de46509680578c6822d6de51f19ae",
+        "34a49ec0ec074cd7d82a0c46c6a43e1b275861bcc771d6eb9f010fb4b7557c20"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_M16A2/UPG_smk_M16A2_Kobra",
+      "archive": "Dist/win32/async/weapon/upg_smk_m16a2_kobra-00.fbrb",
+      "index_sha256": "b2cada1847b9d5c243b6f08607b3b620f57c3fa209c23622a9dc78e225f8f1ca",
+      "mesh_sha256": "29348ffee44309206eb8b16059b5f0bddbd67ba06f0e4c00061a12f8ad9408e5",
+      "lod_sha256": "ee856fb28e79eb055c36771f698117c8b757fd4759a73c0eb8f74dbd54c47171",
+      "clip_hashes": [
+        "0f4a63abb8b12ae620197b9d47d89906c49de46509680578c6822d6de51f19ae",
+        "34a49ec0ec074cd7d82a0c46c6a43e1b275861bcc771d6eb9f010fb4b7557c20"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rgl_M16A2/UPG_smk_M16A2_Scoped",
+      "archive": "Dist/win32/async/weapon/upg_smk_m16a2_scoped-00.fbrb",
+      "index_sha256": "b2cada1847b9d5c243b6f08607b3b620f57c3fa209c23622a9dc78e225f8f1ca",
+      "mesh_sha256": "29348ffee44309206eb8b16059b5f0bddbd67ba06f0e4c00061a12f8ad9408e5",
+      "lod_sha256": "ee856fb28e79eb055c36771f698117c8b757fd4759a73c0eb8f74dbd54c47171",
+      "clip_hashes": [
+        "0f4a63abb8b12ae620197b9d47d89906c49de46509680578c6822d6de51f19ae",
+        "34a49ec0ec074cd7d82a0c46c6a43e1b275861bcc771d6eb9f010fb4b7557c20"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Kobra",
+      "archive": "Dist/win32/async/weapon/bu_rif_an94abakan_kobra-00.fbrb",
+      "index_sha256": "a389e8f65dd0cc9a56e342f123a732d4b3544ba5849b16004c9699dcaa0a6515",
+      "mesh_sha256": "e6c6a161d83756d69af78db509cdf727538b022e1d2921773080d4f8a3f4513a",
+      "lod_sha256": "6cf707544ad91d5e15e6dd6bdbaf3920077a622b4b31e8e35c00c0cbadb6d2c0",
+      "clip_hashes": [
+        "1b7546f4c1008ebf447c67752b436bf45815f1764a6af7f9d4d5983f8256b260",
+        "32366a1f9fccff73894f2f4cb9f379b6ddb8056cbdfa37d41a33f9414f32a79a"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Scoped",
+      "archive": "Dist/win32/async/weapon/bu_rif_an94abakan_scoped-00.fbrb",
+      "index_sha256": "a389e8f65dd0cc9a56e342f123a732d4b3544ba5849b16004c9699dcaa0a6515",
+      "mesh_sha256": "e6c6a161d83756d69af78db509cdf727538b022e1d2921773080d4f8a3f4513a",
+      "lod_sha256": "6cf707544ad91d5e15e6dd6bdbaf3920077a622b4b31e8e35c00c0cbadb6d2c0",
+      "clip_hashes": [
+        "1b7546f4c1008ebf447c67752b436bf45815f1764a6af7f9d4d5983f8256b260",
+        "32366a1f9fccff73894f2f4cb9f379b6ddb8056cbdfa37d41a33f9414f32a79a"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/SP_rgl_AN94Abakan_Kobra",
+      "archive": "Dist/win32/async/weapon/sp_rgl_an94abakan_kobra-00.fbrb",
+      "index_sha256": "0f955271bb1577b1a97af23cb48467717331d4cd52841e32ab243427973c53b4",
+      "mesh_sha256": "e6c6a161d83756d69af78db509cdf727538b022e1d2921773080d4f8a3f4513a",
+      "lod_sha256": "6cf707544ad91d5e15e6dd6bdbaf3920077a622b4b31e8e35c00c0cbadb6d2c0",
+      "clip_hashes": [
+        "d0ae45afc98271c7a75e4fb79ae3d272fdd3a0fa55d6badabcca8644e29c771e",
+        "56885aa32a11408253fc969bc81feb96f8e041ad295372ce0528eaedcd2c9dcf"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/SP_rgl_AN94Abakan_Scoped",
+      "archive": "Dist/win32/async/weapon/sp_rgl_an94abakan_scoped-00.fbrb",
+      "index_sha256": "0f955271bb1577b1a97af23cb48467717331d4cd52841e32ab243427973c53b4",
+      "mesh_sha256": "e6c6a161d83756d69af78db509cdf727538b022e1d2921773080d4f8a3f4513a",
+      "lod_sha256": "6cf707544ad91d5e15e6dd6bdbaf3920077a622b4b31e8e35c00c0cbadb6d2c0",
+      "clip_hashes": [
+        "d0ae45afc98271c7a75e4fb79ae3d272fdd3a0fa55d6badabcca8644e29c771e",
+        "56885aa32a11408253fc969bc81feb96f8e041ad295372ce0528eaedcd2c9dcf"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/SP_rif_AN94_Kobra",
+      "archive": "Dist/win32/async/weapon/sp_rif_an94_kobra-00.fbrb",
+      "index_sha256": "a389e8f65dd0cc9a56e342f123a732d4b3544ba5849b16004c9699dcaa0a6515",
+      "mesh_sha256": "e6c6a161d83756d69af78db509cdf727538b022e1d2921773080d4f8a3f4513a",
+      "lod_sha256": "6cf707544ad91d5e15e6dd6bdbaf3920077a622b4b31e8e35c00c0cbadb6d2c0",
+      "clip_hashes": [
+        "1b7546f4c1008ebf447c67752b436bf45815f1764a6af7f9d4d5983f8256b260",
+        "32366a1f9fccff73894f2f4cb9f379b6ddb8056cbdfa37d41a33f9414f32a79a"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/SP_rif_AN94_Scoped",
+      "archive": "Dist/win32/async/weapon/sp_rif_an94_scoped-00.fbrb",
+      "index_sha256": "a389e8f65dd0cc9a56e342f123a732d4b3544ba5849b16004c9699dcaa0a6515",
+      "mesh_sha256": "e6c6a161d83756d69af78db509cdf727538b022e1d2921773080d4f8a3f4513a",
+      "lod_sha256": "6cf707544ad91d5e15e6dd6bdbaf3920077a622b4b31e8e35c00c0cbadb6d2c0",
+      "clip_hashes": [
+        "1b7546f4c1008ebf447c67752b436bf45815f1764a6af7f9d4d5983f8256b260",
+        "32366a1f9fccff73894f2f4cb9f379b6ddb8056cbdfa37d41a33f9414f32a79a"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000",
+      "archive": "Dist/win32/async/weapon/bu_rif_f2000-00.fbrb",
+      "index_sha256": "4434ab31a9fac46491cc61ba26b04960e02517d6582ef48c9842ea7e630ca8a1",
+      "mesh_sha256": "b17e8a31cec97fe0e9ca12e61c97c359c3a146f0e0c9eea41e854e9760e00e06",
+      "lod_sha256": "3ee9a75750f5cb31064268259e6f5d9a7ed01d40efbbdbcf1ee040612ba94fae",
+      "clip_hashes": [
+        "f79a112f7d39d262d48157a2022533738e88cd91dd749501a96e9d9556ce217c",
+        "25f48f619f9516d7bd27e31678de0737b2c5e8f515e9d1a19090196cf4f204b2"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Kobra",
+      "archive": "Dist/win32/async/weapon/bu_rif_f2000_kobra-00.fbrb",
+      "index_sha256": "47afa9d037b1bf7b499ca018231ea4707b8f052709157efc301477827ab6cf99",
+      "mesh_sha256": "b17e8a31cec97fe0e9ca12e61c97c359c3a146f0e0c9eea41e854e9760e00e06",
+      "lod_sha256": "3ee9a75750f5cb31064268259e6f5d9a7ed01d40efbbdbcf1ee040612ba94fae",
+      "clip_hashes": [
+        "f79a112f7d39d262d48157a2022533738e88cd91dd749501a96e9d9556ce217c",
+        "25f48f619f9516d7bd27e31678de0737b2c5e8f515e9d1a19090196cf4f204b2"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Scoped",
+      "archive": "Dist/win32/async/weapon/bu_rif_f2000_scoped-00.fbrb",
+      "index_sha256": "47afa9d037b1bf7b499ca018231ea4707b8f052709157efc301477827ab6cf99",
+      "mesh_sha256": "b17e8a31cec97fe0e9ca12e61c97c359c3a146f0e0c9eea41e854e9760e00e06",
+      "lod_sha256": "3ee9a75750f5cb31064268259e6f5d9a7ed01d40efbbdbcf1ee040612ba94fae",
+      "clip_hashes": [
+        "f79a112f7d39d262d48157a2022533738e88cd91dd749501a96e9d9556ce217c",
+        "25f48f619f9516d7bd27e31678de0737b2c5e8f515e9d1a19090196cf4f204b2"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rif_F2000/SP_rgl_F2000",
+      "archive": "Dist/win32/async/weapon/sp_rgl_f2000-00.fbrb",
+      "index_sha256": "7037070e9967ac871bcaab856d91fb94e30540fae4461db1c20a2e8c020f1ac3",
+      "mesh_sha256": "b17e8a31cec97fe0e9ca12e61c97c359c3a146f0e0c9eea41e854e9760e00e06",
+      "lod_sha256": "3ee9a75750f5cb31064268259e6f5d9a7ed01d40efbbdbcf1ee040612ba94fae",
+      "clip_hashes": [
+        "7ce59a13cff8713fed352ca84acb297af0c4fef5f22babbc0ef0b201beabd94f",
+        "0400bf570239779957eeb6e1bc70467c4cd51c82186cbeb134a000603e2149f5"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rif_F2000/SP_rgl_F2000_Kobra",
+      "archive": "Dist/win32/async/weapon/sp_rgl_f2000_kobra-00.fbrb",
+      "index_sha256": "7037070e9967ac871bcaab856d91fb94e30540fae4461db1c20a2e8c020f1ac3",
+      "mesh_sha256": "b17e8a31cec97fe0e9ca12e61c97c359c3a146f0e0c9eea41e854e9760e00e06",
+      "lod_sha256": "3ee9a75750f5cb31064268259e6f5d9a7ed01d40efbbdbcf1ee040612ba94fae",
+      "clip_hashes": [
+        "7ce59a13cff8713fed352ca84acb297af0c4fef5f22babbc0ef0b201beabd94f",
+        "0400bf570239779957eeb6e1bc70467c4cd51c82186cbeb134a000603e2149f5"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rif_F2000/SP_rif_F2000",
+      "archive": "Dist/win32/async/weapon/sp_rif_f2000-00.fbrb",
+      "index_sha256": "4434ab31a9fac46491cc61ba26b04960e02517d6582ef48c9842ea7e630ca8a1",
+      "mesh_sha256": "b17e8a31cec97fe0e9ca12e61c97c359c3a146f0e0c9eea41e854e9760e00e06",
+      "lod_sha256": "3ee9a75750f5cb31064268259e6f5d9a7ed01d40efbbdbcf1ee040612ba94fae",
+      "clip_hashes": [
+        "f79a112f7d39d262d48157a2022533738e88cd91dd749501a96e9d9556ce217c",
+        "25f48f619f9516d7bd27e31678de0737b2c5e8f515e9d1a19090196cf4f204b2"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rif_F2000/SP_rif_F2000_Kobra",
+      "archive": "Dist/win32/async/weapon/sp_rif_f2000_kobra-00.fbrb",
+      "index_sha256": "47afa9d037b1bf7b499ca018231ea4707b8f052709157efc301477827ab6cf99",
+      "mesh_sha256": "b17e8a31cec97fe0e9ca12e61c97c359c3a146f0e0c9eea41e854e9760e00e06",
+      "lod_sha256": "3ee9a75750f5cb31064268259e6f5d9a7ed01d40efbbdbcf1ee040612ba94fae",
+      "clip_hashes": [
+        "f79a112f7d39d262d48157a2022533738e88cd91dd749501a96e9d9556ce217c",
+        "25f48f619f9516d7bd27e31678de0737b2c5e8f515e9d1a19090196cf4f204b2"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2",
+      "archive": "Dist/win32/async/weapon/bu_rif_m16a2-00.fbrb",
+      "index_sha256": "7f2cd619e3365e44ca606cd5b20d722092a2839e8fc76e32d14ffefa27a06a34",
+      "mesh_sha256": "29348ffee44309206eb8b16059b5f0bddbd67ba06f0e4c00061a12f8ad9408e5",
+      "lod_sha256": "ee856fb28e79eb055c36771f698117c8b757fd4759a73c0eb8f74dbd54c47171",
+      "clip_hashes": [
+        "0f27aeb3dded8d34b0aff4c296c5b3359323488f6f2b61ec58989586922a2967",
+        "bb5a8d864ee3c535947f7dd432365b2147fbda99f0a55be8c118cd6e0489aec6"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Kobra",
+      "archive": "Dist/win32/async/weapon/bu_rif_m16a2_kobra-00.fbrb",
+      "index_sha256": "7f2cd619e3365e44ca606cd5b20d722092a2839e8fc76e32d14ffefa27a06a34",
+      "mesh_sha256": "29348ffee44309206eb8b16059b5f0bddbd67ba06f0e4c00061a12f8ad9408e5",
+      "lod_sha256": "ee856fb28e79eb055c36771f698117c8b757fd4759a73c0eb8f74dbd54c47171",
+      "clip_hashes": [
+        "0f27aeb3dded8d34b0aff4c296c5b3359323488f6f2b61ec58989586922a2967",
+        "bb5a8d864ee3c535947f7dd432365b2147fbda99f0a55be8c118cd6e0489aec6"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Scoped",
+      "archive": "Dist/win32/async/weapon/bu_rif_m16a2_scoped-00.fbrb",
+      "index_sha256": "7f2cd619e3365e44ca606cd5b20d722092a2839e8fc76e32d14ffefa27a06a34",
+      "mesh_sha256": "29348ffee44309206eb8b16059b5f0bddbd67ba06f0e4c00061a12f8ad9408e5",
+      "lod_sha256": "ee856fb28e79eb055c36771f698117c8b757fd4759a73c0eb8f74dbd54c47171",
+      "clip_hashes": [
+        "0f27aeb3dded8d34b0aff4c296c5b3359323488f6f2b61ec58989586922a2967",
+        "bb5a8d864ee3c535947f7dd432365b2147fbda99f0a55be8c118cd6e0489aec6"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rif_M16A2/UPG_rif_M16A2",
+      "archive": "Dist/win32/async/weapon/upg_rif_m16a2-00.fbrb",
+      "index_sha256": "7f2cd619e3365e44ca606cd5b20d722092a2839e8fc76e32d14ffefa27a06a34",
+      "mesh_sha256": "29348ffee44309206eb8b16059b5f0bddbd67ba06f0e4c00061a12f8ad9408e5",
+      "lod_sha256": "ee856fb28e79eb055c36771f698117c8b757fd4759a73c0eb8f74dbd54c47171",
+      "clip_hashes": [
+        "0f27aeb3dded8d34b0aff4c296c5b3359323488f6f2b61ec58989586922a2967",
+        "bb5a8d864ee3c535947f7dd432365b2147fbda99f0a55be8c118cd6e0489aec6"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rif_M16A2/UPG_rif_M16A2_Kobra",
+      "archive": "Dist/win32/async/weapon/upg_rif_m16a2_kobra-00.fbrb",
+      "index_sha256": "7f2cd619e3365e44ca606cd5b20d722092a2839e8fc76e32d14ffefa27a06a34",
+      "mesh_sha256": "29348ffee44309206eb8b16059b5f0bddbd67ba06f0e4c00061a12f8ad9408e5",
+      "lod_sha256": "ee856fb28e79eb055c36771f698117c8b757fd4759a73c0eb8f74dbd54c47171",
+      "clip_hashes": [
+        "0f27aeb3dded8d34b0aff4c296c5b3359323488f6f2b61ec58989586922a2967",
+        "bb5a8d864ee3c535947f7dd432365b2147fbda99f0a55be8c118cd6e0489aec6"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/BU_rif_M16A2/UPG_rif_M16A2_Scoped",
+      "archive": "Dist/win32/async/weapon/upg_rif_m16a2_scoped-00.fbrb",
+      "index_sha256": "7f2cd619e3365e44ca606cd5b20d722092a2839e8fc76e32d14ffefa27a06a34",
+      "mesh_sha256": "29348ffee44309206eb8b16059b5f0bddbd67ba06f0e4c00061a12f8ad9408e5",
+      "lod_sha256": "ee856fb28e79eb055c36771f698117c8b757fd4759a73c0eb8f74dbd54c47171",
+      "clip_hashes": [
+        "0f27aeb3dded8d34b0aff4c296c5b3359323488f6f2b61ec58989586922a2967",
+        "bb5a8d864ee3c535947f7dd432365b2147fbda99f0a55be8c118cd6e0489aec6"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/MEC_rgl_M203/MEC_rgl_M203",
+      "archive": "Dist/win32/async/weapon/mec_rgl_m203-00.fbrb",
+      "index_sha256": "9959e07dc0ce9e05bae23e4b8f5a67b7af13fda94c7dd650bb66e63d19541dd2",
+      "mesh_sha256": "08e1279358158e69458961c9161c018667e700ed7ecf5af226bc4e71b4c083eb",
+      "lod_sha256": "4ab089fa7b586c4815a7408793c1f18e5fc72592827a5e98e68b7963b31ac582",
+      "clip_hashes": [
+        "1cba3df4cdd453b86a9c72d7f9b562b917407a7653bc09060ccd06138ba1b707",
+        "a036e0964ded15f6241d075161dbb1874e039d51fe8f8b2658f8f361e7fcd884"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/MEC_rgl_M203/MEC_rgl_M203_Kobra",
+      "archive": "Dist/win32/async/weapon/mec_rgl_m203_kobra-00.fbrb",
+      "index_sha256": "9959e07dc0ce9e05bae23e4b8f5a67b7af13fda94c7dd650bb66e63d19541dd2",
+      "mesh_sha256": "08e1279358158e69458961c9161c018667e700ed7ecf5af226bc4e71b4c083eb",
+      "lod_sha256": "4ab089fa7b586c4815a7408793c1f18e5fc72592827a5e98e68b7963b31ac582",
+      "clip_hashes": [
+        "1cba3df4cdd453b86a9c72d7f9b562b917407a7653bc09060ccd06138ba1b707",
+        "a036e0964ded15f6241d075161dbb1874e039d51fe8f8b2658f8f361e7fcd884"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/MEC_rgl_M203/MEC_rgl_M203_Scoped",
+      "archive": "Dist/win32/async/weapon/mec_rgl_m203_scoped-00.fbrb",
+      "index_sha256": "9959e07dc0ce9e05bae23e4b8f5a67b7af13fda94c7dd650bb66e63d19541dd2",
+      "mesh_sha256": "08e1279358158e69458961c9161c018667e700ed7ecf5af226bc4e71b4c083eb",
+      "lod_sha256": "4ab089fa7b586c4815a7408793c1f18e5fc72592827a5e98e68b7963b31ac582",
+      "clip_hashes": [
+        "1cba3df4cdd453b86a9c72d7f9b562b917407a7653bc09060ccd06138ba1b707",
+        "a036e0964ded15f6241d075161dbb1874e039d51fe8f8b2658f8f361e7fcd884"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/MEC_rgl_M203/MEC_shg_M203",
+      "archive": "Dist/win32/async/weapon/mec_shg_m203-00.fbrb",
+      "index_sha256": "9959e07dc0ce9e05bae23e4b8f5a67b7af13fda94c7dd650bb66e63d19541dd2",
+      "mesh_sha256": "08e1279358158e69458961c9161c018667e700ed7ecf5af226bc4e71b4c083eb",
+      "lod_sha256": "4ab089fa7b586c4815a7408793c1f18e5fc72592827a5e98e68b7963b31ac582",
+      "clip_hashes": [
+        "1cba3df4cdd453b86a9c72d7f9b562b917407a7653bc09060ccd06138ba1b707",
+        "a036e0964ded15f6241d075161dbb1874e039d51fe8f8b2658f8f361e7fcd884"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/MEC_rgl_M203/MEC_shg_M203_Kobra",
+      "archive": "Dist/win32/async/weapon/mec_shg_m203_kobra-00.fbrb",
+      "index_sha256": "9959e07dc0ce9e05bae23e4b8f5a67b7af13fda94c7dd650bb66e63d19541dd2",
+      "mesh_sha256": "08e1279358158e69458961c9161c018667e700ed7ecf5af226bc4e71b4c083eb",
+      "lod_sha256": "4ab089fa7b586c4815a7408793c1f18e5fc72592827a5e98e68b7963b31ac582",
+      "clip_hashes": [
+        "1cba3df4cdd453b86a9c72d7f9b562b917407a7653bc09060ccd06138ba1b707",
+        "a036e0964ded15f6241d075161dbb1874e039d51fe8f8b2658f8f361e7fcd884"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/MEC_rgl_M203/MEC_shg_M203_Scoped",
+      "archive": "Dist/win32/async/weapon/mec_shg_m203_scoped-00.fbrb",
+      "index_sha256": "9959e07dc0ce9e05bae23e4b8f5a67b7af13fda94c7dd650bb66e63d19541dd2",
+      "mesh_sha256": "08e1279358158e69458961c9161c018667e700ed7ecf5af226bc4e71b4c083eb",
+      "lod_sha256": "4ab089fa7b586c4815a7408793c1f18e5fc72592827a5e98e68b7963b31ac582",
+      "clip_hashes": [
+        "1cba3df4cdd453b86a9c72d7f9b562b917407a7653bc09060ccd06138ba1b707",
+        "a036e0964ded15f6241d075161dbb1874e039d51fe8f8b2658f8f361e7fcd884"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/MEC_rgl_M203/MEC_smk_M203",
+      "archive": "Dist/win32/async/weapon/mec_smk_m203-00.fbrb",
+      "index_sha256": "9959e07dc0ce9e05bae23e4b8f5a67b7af13fda94c7dd650bb66e63d19541dd2",
+      "mesh_sha256": "08e1279358158e69458961c9161c018667e700ed7ecf5af226bc4e71b4c083eb",
+      "lod_sha256": "4ab089fa7b586c4815a7408793c1f18e5fc72592827a5e98e68b7963b31ac582",
+      "clip_hashes": [
+        "1cba3df4cdd453b86a9c72d7f9b562b917407a7653bc09060ccd06138ba1b707",
+        "a036e0964ded15f6241d075161dbb1874e039d51fe8f8b2658f8f361e7fcd884"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/MEC_rgl_M203/MEC_smk_M203_Kobra",
+      "archive": "Dist/win32/async/weapon/mec_smk_m203_kobra-00.fbrb",
+      "index_sha256": "9959e07dc0ce9e05bae23e4b8f5a67b7af13fda94c7dd650bb66e63d19541dd2",
+      "mesh_sha256": "08e1279358158e69458961c9161c018667e700ed7ecf5af226bc4e71b4c083eb",
+      "lod_sha256": "4ab089fa7b586c4815a7408793c1f18e5fc72592827a5e98e68b7963b31ac582",
+      "clip_hashes": [
+        "1cba3df4cdd453b86a9c72d7f9b562b917407a7653bc09060ccd06138ba1b707",
+        "a036e0964ded15f6241d075161dbb1874e039d51fe8f8b2658f8f361e7fcd884"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/MEC_rgl_M203/MEC_smk_M203_Scoped",
+      "archive": "Dist/win32/async/weapon/mec_smk_m203_scoped-00.fbrb",
+      "index_sha256": "9959e07dc0ce9e05bae23e4b8f5a67b7af13fda94c7dd650bb66e63d19541dd2",
+      "mesh_sha256": "08e1279358158e69458961c9161c018667e700ed7ecf5af226bc4e71b4c083eb",
+      "lod_sha256": "4ab089fa7b586c4815a7408793c1f18e5fc72592827a5e98e68b7963b31ac582",
+      "clip_hashes": [
+        "1cba3df4cdd453b86a9c72d7f9b562b917407a7653bc09060ccd06138ba1b707",
+        "a036e0964ded15f6241d075161dbb1874e039d51fe8f8b2658f8f361e7fcd884"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG",
+      "archive": "Dist/win32/async/weapon/mec_rgl_steyraug-00.fbrb",
+      "index_sha256": "b03681b444e256ad3edad7b27c64c84253d5199bec0ea17023e652295499959c",
+      "mesh_sha256": "08e1279358158e69458961c9161c018667e700ed7ecf5af226bc4e71b4c083eb",
+      "lod_sha256": "4ab089fa7b586c4815a7408793c1f18e5fc72592827a5e98e68b7963b31ac582",
+      "clip_hashes": [
+        "6319e7f83e318e6859c1e0cd7e96ef741b7d3e2e7ea831fc11fec0693d33c6a2",
+        "da145ce4cbd325d09ec01f0d7d5668dfff02f336a53789b7ea1b20901d3003c1"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG_Kobra",
+      "archive": "Dist/win32/async/weapon/mec_rgl_steyraug_kobra-00.fbrb",
+      "index_sha256": "a15b8984f87e26ea2d0f7291cff1efad5054b134af10b2f5c748f1d3a76016a1",
+      "mesh_sha256": "08e1279358158e69458961c9161c018667e700ed7ecf5af226bc4e71b4c083eb",
+      "lod_sha256": "4ab089fa7b586c4815a7408793c1f18e5fc72592827a5e98e68b7963b31ac582",
+      "clip_hashes": [
+        "6319e7f83e318e6859c1e0cd7e96ef741b7d3e2e7ea831fc11fec0693d33c6a2",
+        "da145ce4cbd325d09ec01f0d7d5668dfff02f336a53789b7ea1b20901d3003c1"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG_Scoped",
+      "archive": "Dist/win32/async/weapon/mec_rgl_steyraug_scoped-00.fbrb",
+      "index_sha256": "a15b8984f87e26ea2d0f7291cff1efad5054b134af10b2f5c748f1d3a76016a1",
+      "mesh_sha256": "08e1279358158e69458961c9161c018667e700ed7ecf5af226bc4e71b4c083eb",
+      "lod_sha256": "4ab089fa7b586c4815a7408793c1f18e5fc72592827a5e98e68b7963b31ac582",
+      "clip_hashes": [
+        "6319e7f83e318e6859c1e0cd7e96ef741b7d3e2e7ea831fc11fec0693d33c6a2",
+        "da145ce4cbd325d09ec01f0d7d5668dfff02f336a53789b7ea1b20901d3003c1"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971",
+      "archive": "Dist/win32/async/weapon/ru_rgl_aek971-00.fbrb",
+      "index_sha256": "a00ba9f1f30cf2ccb2ab597307495011ea5139bf9b7c1e94e0fdef9a4fba4d26",
+      "mesh_sha256": "81407448c9b2c7dbc9ff29378d0b6b166cc642c5b33eaefa73fb008077994029",
+      "lod_sha256": "5a808e1e5c7fdc01bec92b9ba7009d93a13b5d6442a86502ea89d2dee0a53756",
+      "clip_hashes": [
+        "962e579a20d6cd6e3c7be67212b7caaee75870af07fa94b9b20958f4ed403663",
+        "63161c0dff32ca9daf13fa6e131678b614ddc275030cf5531cc2d015fc1028e3"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Kobra",
+      "archive": "Dist/win32/async/weapon/ru_rgl_aek971_kobra-00.fbrb",
+      "index_sha256": "9c9555e8d720b16714cc2f2026ff28aa2ca86623509e2e4a0a363c0653e12dc2",
+      "mesh_sha256": "81407448c9b2c7dbc9ff29378d0b6b166cc642c5b33eaefa73fb008077994029",
+      "lod_sha256": "5a808e1e5c7fdc01bec92b9ba7009d93a13b5d6442a86502ea89d2dee0a53756",
+      "clip_hashes": [
+        "962e579a20d6cd6e3c7be67212b7caaee75870af07fa94b9b20958f4ed403663",
+        "63161c0dff32ca9daf13fa6e131678b614ddc275030cf5531cc2d015fc1028e3"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Scoped",
+      "archive": "Dist/win32/async/weapon/ru_rgl_aek971_scoped-00.fbrb",
+      "index_sha256": "9c9555e8d720b16714cc2f2026ff28aa2ca86623509e2e4a0a363c0653e12dc2",
+      "mesh_sha256": "81407448c9b2c7dbc9ff29378d0b6b166cc642c5b33eaefa73fb008077994029",
+      "lod_sha256": "5a808e1e5c7fdc01bec92b9ba7009d93a13b5d6442a86502ea89d2dee0a53756",
+      "clip_hashes": [
+        "962e579a20d6cd6e3c7be67212b7caaee75870af07fa94b9b20958f4ed403663",
+        "63161c0dff32ca9daf13fa6e131678b614ddc275030cf5531cc2d015fc1028e3"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/RU_rgl_AEK971/SP_rgl_AEK971",
+      "archive": "Dist/win32/async/weapon/sp_rgl_aek971-00.fbrb",
+      "index_sha256": "a00ba9f1f30cf2ccb2ab597307495011ea5139bf9b7c1e94e0fdef9a4fba4d26",
+      "mesh_sha256": "81407448c9b2c7dbc9ff29378d0b6b166cc642c5b33eaefa73fb008077994029",
+      "lod_sha256": "5a808e1e5c7fdc01bec92b9ba7009d93a13b5d6442a86502ea89d2dee0a53756",
+      "clip_hashes": [
+        "962e579a20d6cd6e3c7be67212b7caaee75870af07fa94b9b20958f4ed403663",
+        "63161c0dff32ca9daf13fa6e131678b614ddc275030cf5531cc2d015fc1028e3"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/RU_rgl_AEK971/SP_rgl_AEK971_Kobra",
+      "archive": "Dist/win32/async/weapon/sp_rgl_aek971_kobra-00.fbrb",
+      "index_sha256": "9c9555e8d720b16714cc2f2026ff28aa2ca86623509e2e4a0a363c0653e12dc2",
+      "mesh_sha256": "81407448c9b2c7dbc9ff29378d0b6b166cc642c5b33eaefa73fb008077994029",
+      "lod_sha256": "5a808e1e5c7fdc01bec92b9ba7009d93a13b5d6442a86502ea89d2dee0a53756",
+      "clip_hashes": [
+        "962e579a20d6cd6e3c7be67212b7caaee75870af07fa94b9b20958f4ed403663",
+        "63161c0dff32ca9daf13fa6e131678b614ddc275030cf5531cc2d015fc1028e3"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/RU_rgl_AEK971/SP_rgl_GP30",
+      "archive": "Dist/win32/async/weapon/sp_rgl_gp30-00.fbrb",
+      "index_sha256": "745ab566d5fdb7a1c322a1e416d81e990b549a7b3e3468c273a235e5377821e8",
+      "mesh_sha256": "81407448c9b2c7dbc9ff29378d0b6b166cc642c5b33eaefa73fb008077994029",
+      "lod_sha256": "5a808e1e5c7fdc01bec92b9ba7009d93a13b5d6442a86502ea89d2dee0a53756",
+      "clip_hashes": [
+        "dbfa19529dd8fe7eb2038287c556ef3e2ac5472996138fc7110e01022a6f37dd",
+        "5afacab28d061dbf8d6c7d36b1878e6d07bb95f712fd553bfd5d8034a1c92590"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/RU_rgl_AEK971/SP_rgl_GP30_Kobra",
+      "archive": "Dist/win32/async/weapon/sp_rgl_gp30_kobra-00.fbrb",
+      "index_sha256": "745ab566d5fdb7a1c322a1e416d81e990b549a7b3e3468c273a235e5377821e8",
+      "mesh_sha256": "81407448c9b2c7dbc9ff29378d0b6b166cc642c5b33eaefa73fb008077994029",
+      "lod_sha256": "5a808e1e5c7fdc01bec92b9ba7009d93a13b5d6442a86502ea89d2dee0a53756",
+      "clip_hashes": [
+        "dbfa19529dd8fe7eb2038287c556ef3e2ac5472996138fc7110e01022a6f37dd",
+        "5afacab28d061dbf8d6c7d36b1878e6d07bb95f712fd553bfd5d8034a1c92590"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/RU_rgl_GP30/RU_rgl_GP30",
+      "archive": "Dist/win32/async/weapon/ru_rgl_gp30-00.fbrb",
+      "index_sha256": "745ab566d5fdb7a1c322a1e416d81e990b549a7b3e3468c273a235e5377821e8",
+      "mesh_sha256": "81407448c9b2c7dbc9ff29378d0b6b166cc642c5b33eaefa73fb008077994029",
+      "lod_sha256": "5a808e1e5c7fdc01bec92b9ba7009d93a13b5d6442a86502ea89d2dee0a53756",
+      "clip_hashes": [
+        "dbfa19529dd8fe7eb2038287c556ef3e2ac5472996138fc7110e01022a6f37dd",
+        "5afacab28d061dbf8d6c7d36b1878e6d07bb95f712fd553bfd5d8034a1c92590"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/RU_rgl_GP30/RU_rgl_GP30_Kobra",
+      "archive": "Dist/win32/async/weapon/ru_rgl_gp30_kobra-00.fbrb",
+      "index_sha256": "745ab566d5fdb7a1c322a1e416d81e990b549a7b3e3468c273a235e5377821e8",
+      "mesh_sha256": "81407448c9b2c7dbc9ff29378d0b6b166cc642c5b33eaefa73fb008077994029",
+      "lod_sha256": "5a808e1e5c7fdc01bec92b9ba7009d93a13b5d6442a86502ea89d2dee0a53756",
+      "clip_hashes": [
+        "dbfa19529dd8fe7eb2038287c556ef3e2ac5472996138fc7110e01022a6f37dd",
+        "5afacab28d061dbf8d6c7d36b1878e6d07bb95f712fd553bfd5d8034a1c92590"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/RU_rgl_GP30/RU_rgl_GP30_Scoped",
+      "archive": "Dist/win32/async/weapon/ru_rgl_gp30_scoped-00.fbrb",
+      "index_sha256": "745ab566d5fdb7a1c322a1e416d81e990b549a7b3e3468c273a235e5377821e8",
+      "mesh_sha256": "81407448c9b2c7dbc9ff29378d0b6b166cc642c5b33eaefa73fb008077994029",
+      "lod_sha256": "5a808e1e5c7fdc01bec92b9ba7009d93a13b5d6442a86502ea89d2dee0a53756",
+      "clip_hashes": [
+        "dbfa19529dd8fe7eb2038287c556ef3e2ac5472996138fc7110e01022a6f37dd",
+        "5afacab28d061dbf8d6c7d36b1878e6d07bb95f712fd553bfd5d8034a1c92590"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/RU_rgl_GP30/RU_shg_GP30",
+      "archive": "Dist/win32/async/weapon/ru_shg_gp30-00.fbrb",
+      "index_sha256": "745ab566d5fdb7a1c322a1e416d81e990b549a7b3e3468c273a235e5377821e8",
+      "mesh_sha256": "81407448c9b2c7dbc9ff29378d0b6b166cc642c5b33eaefa73fb008077994029",
+      "lod_sha256": "5a808e1e5c7fdc01bec92b9ba7009d93a13b5d6442a86502ea89d2dee0a53756",
+      "clip_hashes": [
+        "dbfa19529dd8fe7eb2038287c556ef3e2ac5472996138fc7110e01022a6f37dd",
+        "5afacab28d061dbf8d6c7d36b1878e6d07bb95f712fd553bfd5d8034a1c92590"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/RU_rgl_GP30/RU_shg_GP30_Kobra",
+      "archive": "Dist/win32/async/weapon/ru_shg_gp30_kobra-00.fbrb",
+      "index_sha256": "745ab566d5fdb7a1c322a1e416d81e990b549a7b3e3468c273a235e5377821e8",
+      "mesh_sha256": "81407448c9b2c7dbc9ff29378d0b6b166cc642c5b33eaefa73fb008077994029",
+      "lod_sha256": "5a808e1e5c7fdc01bec92b9ba7009d93a13b5d6442a86502ea89d2dee0a53756",
+      "clip_hashes": [
+        "dbfa19529dd8fe7eb2038287c556ef3e2ac5472996138fc7110e01022a6f37dd",
+        "5afacab28d061dbf8d6c7d36b1878e6d07bb95f712fd553bfd5d8034a1c92590"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/RU_rgl_GP30/RU_shg_GP30_Scoped",
+      "archive": "Dist/win32/async/weapon/ru_shg_gp30_scoped-00.fbrb",
+      "index_sha256": "745ab566d5fdb7a1c322a1e416d81e990b549a7b3e3468c273a235e5377821e8",
+      "mesh_sha256": "81407448c9b2c7dbc9ff29378d0b6b166cc642c5b33eaefa73fb008077994029",
+      "lod_sha256": "5a808e1e5c7fdc01bec92b9ba7009d93a13b5d6442a86502ea89d2dee0a53756",
+      "clip_hashes": [
+        "dbfa19529dd8fe7eb2038287c556ef3e2ac5472996138fc7110e01022a6f37dd",
+        "5afacab28d061dbf8d6c7d36b1878e6d07bb95f712fd553bfd5d8034a1c92590"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/RU_rgl_GP30/RU_smk_GP30",
+      "archive": "Dist/win32/async/weapon/ru_smk_gp30-00.fbrb",
+      "index_sha256": "745ab566d5fdb7a1c322a1e416d81e990b549a7b3e3468c273a235e5377821e8",
+      "mesh_sha256": "81407448c9b2c7dbc9ff29378d0b6b166cc642c5b33eaefa73fb008077994029",
+      "lod_sha256": "5a808e1e5c7fdc01bec92b9ba7009d93a13b5d6442a86502ea89d2dee0a53756",
+      "clip_hashes": [
+        "dbfa19529dd8fe7eb2038287c556ef3e2ac5472996138fc7110e01022a6f37dd",
+        "5afacab28d061dbf8d6c7d36b1878e6d07bb95f712fd553bfd5d8034a1c92590"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/RU_rgl_GP30/RU_smk_GP30_Kobra",
+      "archive": "Dist/win32/async/weapon/ru_smk_gp30_kobra-00.fbrb",
+      "index_sha256": "745ab566d5fdb7a1c322a1e416d81e990b549a7b3e3468c273a235e5377821e8",
+      "mesh_sha256": "81407448c9b2c7dbc9ff29378d0b6b166cc642c5b33eaefa73fb008077994029",
+      "lod_sha256": "5a808e1e5c7fdc01bec92b9ba7009d93a13b5d6442a86502ea89d2dee0a53756",
+      "clip_hashes": [
+        "dbfa19529dd8fe7eb2038287c556ef3e2ac5472996138fc7110e01022a6f37dd",
+        "5afacab28d061dbf8d6c7d36b1878e6d07bb95f712fd553bfd5d8034a1c92590"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/RU_rgl_GP30/RU_smk_GP30_Scoped",
+      "archive": "Dist/win32/async/weapon/ru_smk_gp30_scoped-00.fbrb",
+      "index_sha256": "745ab566d5fdb7a1c322a1e416d81e990b549a7b3e3468c273a235e5377821e8",
+      "mesh_sha256": "81407448c9b2c7dbc9ff29378d0b6b166cc642c5b33eaefa73fb008077994029",
+      "lod_sha256": "5a808e1e5c7fdc01bec92b9ba7009d93a13b5d6442a86502ea89d2dee0a53756",
+      "clip_hashes": [
+        "dbfa19529dd8fe7eb2038287c556ef3e2ac5472996138fc7110e01022a6f37dd",
+        "5afacab28d061dbf8d6c7d36b1878e6d07bb95f712fd553bfd5d8034a1c92590"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/UL_rgl_HK416/UL_rgl_HK416",
+      "archive": "Dist/win32/async/weapon/ul_rgl_hk416-00.fbrb",
+      "index_sha256": "fae27003405ac15ee916e753228910d0e8559e5964b0033354d162bfdb188508",
+      "mesh_sha256": "d2acc4490d3c585fd6adc6a304f0f08758d066605dfc5fa0cea83a7d85a4b5ac",
+      "lod_sha256": "55a13bb1563c73205a8de3a45865b6e747acf5458b5ccd95ec1dddf9d3855fd7",
+      "clip_hashes": [
+        "9835492cf05f1f4c8448fa8a446de6132f2aceae2defd5b4efe099e81cf916f5",
+        "c518f16542b0e64f4812ff3b033b2a466f366ffd461730a155e938fdc9f504c6"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/UL_rgl_HK416/UL_rgl_HK416_Kobra",
+      "archive": "Dist/win32/async/weapon/ul_rgl_hk416_kobra-00.fbrb",
+      "index_sha256": "fae27003405ac15ee916e753228910d0e8559e5964b0033354d162bfdb188508",
+      "mesh_sha256": "d2acc4490d3c585fd6adc6a304f0f08758d066605dfc5fa0cea83a7d85a4b5ac",
+      "lod_sha256": "55a13bb1563c73205a8de3a45865b6e747acf5458b5ccd95ec1dddf9d3855fd7",
+      "clip_hashes": [
+        "9835492cf05f1f4c8448fa8a446de6132f2aceae2defd5b4efe099e81cf916f5",
+        "c518f16542b0e64f4812ff3b033b2a466f366ffd461730a155e938fdc9f504c6"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/UL_rgl_HK416/UL_rgl_HK416_Scope",
+      "archive": "Dist/win32/async/weapon/ul_rgl_hk416_scope-00.fbrb",
+      "index_sha256": "fae27003405ac15ee916e753228910d0e8559e5964b0033354d162bfdb188508",
+      "mesh_sha256": "d2acc4490d3c585fd6adc6a304f0f08758d066605dfc5fa0cea83a7d85a4b5ac",
+      "lod_sha256": "55a13bb1563c73205a8de3a45865b6e747acf5458b5ccd95ec1dddf9d3855fd7",
+      "clip_hashes": [
+        "9835492cf05f1f4c8448fa8a446de6132f2aceae2defd5b4efe099e81cf916f5",
+        "c518f16542b0e64f4812ff3b033b2a466f366ffd461730a155e938fdc9f504c6"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/UL_rgl_HK416/UL_shg_HK416",
+      "archive": "Dist/win32/async/weapon/ul_shg_hk416-00.fbrb",
+      "index_sha256": "fae27003405ac15ee916e753228910d0e8559e5964b0033354d162bfdb188508",
+      "mesh_sha256": "d2acc4490d3c585fd6adc6a304f0f08758d066605dfc5fa0cea83a7d85a4b5ac",
+      "lod_sha256": "55a13bb1563c73205a8de3a45865b6e747acf5458b5ccd95ec1dddf9d3855fd7",
+      "clip_hashes": [
+        "9835492cf05f1f4c8448fa8a446de6132f2aceae2defd5b4efe099e81cf916f5",
+        "c518f16542b0e64f4812ff3b033b2a466f366ffd461730a155e938fdc9f504c6"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/UL_rgl_HK416/UL_shg_HK416_Kobra",
+      "archive": "Dist/win32/async/weapon/ul_shg_hk416_kobra-00.fbrb",
+      "index_sha256": "fae27003405ac15ee916e753228910d0e8559e5964b0033354d162bfdb188508",
+      "mesh_sha256": "d2acc4490d3c585fd6adc6a304f0f08758d066605dfc5fa0cea83a7d85a4b5ac",
+      "lod_sha256": "55a13bb1563c73205a8de3a45865b6e747acf5458b5ccd95ec1dddf9d3855fd7",
+      "clip_hashes": [
+        "9835492cf05f1f4c8448fa8a446de6132f2aceae2defd5b4efe099e81cf916f5",
+        "c518f16542b0e64f4812ff3b033b2a466f366ffd461730a155e938fdc9f504c6"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/UL_rgl_HK416/UL_shg_HK416_Scope",
+      "archive": "Dist/win32/async/weapon/ul_shg_hk416_scope-00.fbrb",
+      "index_sha256": "fae27003405ac15ee916e753228910d0e8559e5964b0033354d162bfdb188508",
+      "mesh_sha256": "d2acc4490d3c585fd6adc6a304f0f08758d066605dfc5fa0cea83a7d85a4b5ac",
+      "lod_sha256": "55a13bb1563c73205a8de3a45865b6e747acf5458b5ccd95ec1dddf9d3855fd7",
+      "clip_hashes": [
+        "9835492cf05f1f4c8448fa8a446de6132f2aceae2defd5b4efe099e81cf916f5",
+        "c518f16542b0e64f4812ff3b033b2a466f366ffd461730a155e938fdc9f504c6"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/UL_rgl_HK416/UL_smk_HK416",
+      "archive": "Dist/win32/async/weapon/ul_smk_hk416-00.fbrb",
+      "index_sha256": "fae27003405ac15ee916e753228910d0e8559e5964b0033354d162bfdb188508",
+      "mesh_sha256": "d2acc4490d3c585fd6adc6a304f0f08758d066605dfc5fa0cea83a7d85a4b5ac",
+      "lod_sha256": "55a13bb1563c73205a8de3a45865b6e747acf5458b5ccd95ec1dddf9d3855fd7",
+      "clip_hashes": [
+        "9835492cf05f1f4c8448fa8a446de6132f2aceae2defd5b4efe099e81cf916f5",
+        "c518f16542b0e64f4812ff3b033b2a466f366ffd461730a155e938fdc9f504c6"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/UL_rgl_HK416/UL_smk_HK416_Kobra",
+      "archive": "Dist/win32/async/weapon/ul_smk_hk416_kobra-00.fbrb",
+      "index_sha256": "fae27003405ac15ee916e753228910d0e8559e5964b0033354d162bfdb188508",
+      "mesh_sha256": "d2acc4490d3c585fd6adc6a304f0f08758d066605dfc5fa0cea83a7d85a4b5ac",
+      "lod_sha256": "55a13bb1563c73205a8de3a45865b6e747acf5458b5ccd95ec1dddf9d3855fd7",
+      "clip_hashes": [
+        "9835492cf05f1f4c8448fa8a446de6132f2aceae2defd5b4efe099e81cf916f5",
+        "c518f16542b0e64f4812ff3b033b2a466f366ffd461730a155e938fdc9f504c6"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/UL_rgl_HK416/UL_smk_HK416_Scope",
+      "archive": "Dist/win32/async/weapon/ul_smk_hk416_scope-00.fbrb",
+      "index_sha256": "fae27003405ac15ee916e753228910d0e8559e5964b0033354d162bfdb188508",
+      "mesh_sha256": "d2acc4490d3c585fd6adc6a304f0f08758d066605dfc5fa0cea83a7d85a4b5ac",
+      "lod_sha256": "55a13bb1563c73205a8de3a45865b6e747acf5458b5ccd95ec1dddf9d3855fd7",
+      "clip_hashes": [
+        "9835492cf05f1f4c8448fa8a446de6132f2aceae2defd5b4efe099e81cf916f5",
+        "c518f16542b0e64f4812ff3b033b2a466f366ffd461730a155e938fdc9f504c6"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416",
+      "archive": "Dist/win32/async/weapon/ul_rif_hk416-00.fbrb",
+      "index_sha256": "944577465693bf044cc15074d5ff976fc886299dc5bb42e289e802cbf30d35e8",
+      "mesh_sha256": "d2acc4490d3c585fd6adc6a304f0f08758d066605dfc5fa0cea83a7d85a4b5ac",
+      "lod_sha256": "55a13bb1563c73205a8de3a45865b6e747acf5458b5ccd95ec1dddf9d3855fd7",
+      "clip_hashes": [
+        "51490c90b27a0ce26058da872365090af5706a1b2277df9571df83cf5eed91e7",
+        "cb6df046de0407d2195f583131f8a9b10c49c460f7fe89f0bd66391b09b8fe1d"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Kobra",
+      "archive": "Dist/win32/async/weapon/ul_rif_hk416_kobra-00.fbrb",
+      "index_sha256": "36f81c561025bb1f40921c6692742118c5a4966b6edc2a3459b1c6c2fb578bd1",
+      "mesh_sha256": "d2acc4490d3c585fd6adc6a304f0f08758d066605dfc5fa0cea83a7d85a4b5ac",
+      "lod_sha256": "55a13bb1563c73205a8de3a45865b6e747acf5458b5ccd95ec1dddf9d3855fd7",
+      "clip_hashes": [
+        "51490c90b27a0ce26058da872365090af5706a1b2277df9571df83cf5eed91e7",
+        "cb6df046de0407d2195f583131f8a9b10c49c460f7fe89f0bd66391b09b8fe1d"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Scoped",
+      "archive": "Dist/win32/async/weapon/ul_rif_hk416_scoped-00.fbrb",
+      "index_sha256": "36f81c561025bb1f40921c6692742118c5a4966b6edc2a3459b1c6c2fb578bd1",
+      "mesh_sha256": "d2acc4490d3c585fd6adc6a304f0f08758d066605dfc5fa0cea83a7d85a4b5ac",
+      "lod_sha256": "55a13bb1563c73205a8de3a45865b6e747acf5458b5ccd95ec1dddf9d3855fd7",
+      "clip_hashes": [
+        "51490c90b27a0ce26058da872365090af5706a1b2277df9571df83cf5eed91e7",
+        "cb6df046de0407d2195f583131f8a9b10c49c460f7fe89f0bd66391b09b8fe1d"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/US_rgl_XM320/US_rgl_XM320",
+      "archive": "Dist/win32/async/weapon/us_rgl_xm320-00.fbrb",
+      "index_sha256": "2efc05a36bf29f270e41174887504df2b59885f67f3a9d39354e95f973281225",
+      "mesh_sha256": "131824e2e98e32371ca3bcc29d179cb03a5f52cfb701406aee07d6658d43efb0",
+      "lod_sha256": "84f22b14e2727f2bd9b1ef54e66de1c11d1865070e3dd681c50b774043f7b99e",
+      "clip_hashes": [
+        "b744f57777a5cd360e478f6c5e2ae5551b6aae64f4c6d124a65f683b85952faa",
+        "6b7cb7f76380df0e0e2da31421940b1861e6bf5134237a883d13f24d4da6e5d3"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/US_rgl_XM320/US_rgl_XM320_Kobra",
+      "archive": "Dist/win32/async/weapon/us_rgl_xm320_kobra-00.fbrb",
+      "index_sha256": "2efc05a36bf29f270e41174887504df2b59885f67f3a9d39354e95f973281225",
+      "mesh_sha256": "131824e2e98e32371ca3bcc29d179cb03a5f52cfb701406aee07d6658d43efb0",
+      "lod_sha256": "84f22b14e2727f2bd9b1ef54e66de1c11d1865070e3dd681c50b774043f7b99e",
+      "clip_hashes": [
+        "b744f57777a5cd360e478f6c5e2ae5551b6aae64f4c6d124a65f683b85952faa",
+        "6b7cb7f76380df0e0e2da31421940b1861e6bf5134237a883d13f24d4da6e5d3"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/US_rgl_XM320/US_rgl_XM320_Scoped",
+      "archive": "Dist/win32/async/weapon/us_rgl_xm320_scoped-00.fbrb",
+      "index_sha256": "2efc05a36bf29f270e41174887504df2b59885f67f3a9d39354e95f973281225",
+      "mesh_sha256": "131824e2e98e32371ca3bcc29d179cb03a5f52cfb701406aee07d6658d43efb0",
+      "lod_sha256": "84f22b14e2727f2bd9b1ef54e66de1c11d1865070e3dd681c50b774043f7b99e",
+      "clip_hashes": [
+        "b744f57777a5cd360e478f6c5e2ae5551b6aae64f4c6d124a65f683b85952faa",
+        "6b7cb7f76380df0e0e2da31421940b1861e6bf5134237a883d13f24d4da6e5d3"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/US_rgl_XM320/US_shg_XM320",
+      "archive": "Dist/win32/async/weapon/us_shg_xm320-00.fbrb",
+      "index_sha256": "2efc05a36bf29f270e41174887504df2b59885f67f3a9d39354e95f973281225",
+      "mesh_sha256": "131824e2e98e32371ca3bcc29d179cb03a5f52cfb701406aee07d6658d43efb0",
+      "lod_sha256": "84f22b14e2727f2bd9b1ef54e66de1c11d1865070e3dd681c50b774043f7b99e",
+      "clip_hashes": [
+        "b744f57777a5cd360e478f6c5e2ae5551b6aae64f4c6d124a65f683b85952faa",
+        "6b7cb7f76380df0e0e2da31421940b1861e6bf5134237a883d13f24d4da6e5d3"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/US_rgl_XM320/US_shg_XM320_Kobra",
+      "archive": "Dist/win32/async/weapon/us_shg_xm320_kobra-00.fbrb",
+      "index_sha256": "2efc05a36bf29f270e41174887504df2b59885f67f3a9d39354e95f973281225",
+      "mesh_sha256": "131824e2e98e32371ca3bcc29d179cb03a5f52cfb701406aee07d6658d43efb0",
+      "lod_sha256": "84f22b14e2727f2bd9b1ef54e66de1c11d1865070e3dd681c50b774043f7b99e",
+      "clip_hashes": [
+        "b744f57777a5cd360e478f6c5e2ae5551b6aae64f4c6d124a65f683b85952faa",
+        "6b7cb7f76380df0e0e2da31421940b1861e6bf5134237a883d13f24d4da6e5d3"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/US_rgl_XM320/US_shg_XM320_Scoped",
+      "archive": "Dist/win32/async/weapon/us_shg_xm320_scoped-00.fbrb",
+      "index_sha256": "2efc05a36bf29f270e41174887504df2b59885f67f3a9d39354e95f973281225",
+      "mesh_sha256": "131824e2e98e32371ca3bcc29d179cb03a5f52cfb701406aee07d6658d43efb0",
+      "lod_sha256": "84f22b14e2727f2bd9b1ef54e66de1c11d1865070e3dd681c50b774043f7b99e",
+      "clip_hashes": [
+        "b744f57777a5cd360e478f6c5e2ae5551b6aae64f4c6d124a65f683b85952faa",
+        "6b7cb7f76380df0e0e2da31421940b1861e6bf5134237a883d13f24d4da6e5d3"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/US_rgl_XM320/US_smk_XM320",
+      "archive": "Dist/win32/async/weapon/us_smk_xm320-00.fbrb",
+      "index_sha256": "2efc05a36bf29f270e41174887504df2b59885f67f3a9d39354e95f973281225",
+      "mesh_sha256": "131824e2e98e32371ca3bcc29d179cb03a5f52cfb701406aee07d6658d43efb0",
+      "lod_sha256": "84f22b14e2727f2bd9b1ef54e66de1c11d1865070e3dd681c50b774043f7b99e",
+      "clip_hashes": [
+        "b744f57777a5cd360e478f6c5e2ae5551b6aae64f4c6d124a65f683b85952faa",
+        "6b7cb7f76380df0e0e2da31421940b1861e6bf5134237a883d13f24d4da6e5d3"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/US_rgl_XM320/US_smk_XM320_Kobra",
+      "archive": "Dist/win32/async/weapon/us_smk_xm320_kobra-00.fbrb",
+      "index_sha256": "2efc05a36bf29f270e41174887504df2b59885f67f3a9d39354e95f973281225",
+      "mesh_sha256": "131824e2e98e32371ca3bcc29d179cb03a5f52cfb701406aee07d6658d43efb0",
+      "lod_sha256": "84f22b14e2727f2bd9b1ef54e66de1c11d1865070e3dd681c50b774043f7b99e",
+      "clip_hashes": [
+        "b744f57777a5cd360e478f6c5e2ae5551b6aae64f4c6d124a65f683b85952faa",
+        "6b7cb7f76380df0e0e2da31421940b1861e6bf5134237a883d13f24d4da6e5d3"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/US_rgl_XM320/US_smk_XM320_Scoped",
+      "archive": "Dist/win32/async/weapon/us_smk_xm320_scoped-00.fbrb",
+      "index_sha256": "2efc05a36bf29f270e41174887504df2b59885f67f3a9d39354e95f973281225",
+      "mesh_sha256": "131824e2e98e32371ca3bcc29d179cb03a5f52cfb701406aee07d6658d43efb0",
+      "lod_sha256": "84f22b14e2727f2bd9b1ef54e66de1c11d1865070e3dd681c50b774043f7b99e",
+      "clip_hashes": [
+        "b744f57777a5cd360e478f6c5e2ae5551b6aae64f4c6d124a65f683b85952faa",
+        "6b7cb7f76380df0e0e2da31421940b1861e6bf5134237a883d13f24d4da6e5d3"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/US_rgl_XM8/SP_rgl_XM320",
+      "archive": "Dist/win32/async/weapon/sp_rgl_xm320-00.fbrb",
+      "index_sha256": "2efc05a36bf29f270e41174887504df2b59885f67f3a9d39354e95f973281225",
+      "mesh_sha256": "131824e2e98e32371ca3bcc29d179cb03a5f52cfb701406aee07d6658d43efb0",
+      "lod_sha256": "84f22b14e2727f2bd9b1ef54e66de1c11d1865070e3dd681c50b774043f7b99e",
+      "clip_hashes": [
+        "b744f57777a5cd360e478f6c5e2ae5551b6aae64f4c6d124a65f683b85952faa",
+        "6b7cb7f76380df0e0e2da31421940b1861e6bf5134237a883d13f24d4da6e5d3"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/US_rgl_XM8/SP_rgl_XM320_Scoped",
+      "archive": "Dist/win32/async/weapon/sp_rgl_xm320_scoped-00.fbrb",
+      "index_sha256": "2efc05a36bf29f270e41174887504df2b59885f67f3a9d39354e95f973281225",
+      "mesh_sha256": "131824e2e98e32371ca3bcc29d179cb03a5f52cfb701406aee07d6658d43efb0",
+      "lod_sha256": "84f22b14e2727f2bd9b1ef54e66de1c11d1865070e3dd681c50b774043f7b99e",
+      "clip_hashes": [
+        "b744f57777a5cd360e478f6c5e2ae5551b6aae64f4c6d124a65f683b85952faa",
+        "6b7cb7f76380df0e0e2da31421940b1861e6bf5134237a883d13f24d4da6e5d3"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/US_rgl_XM8/SP_rgl_XM8",
+      "archive": "Dist/win32/async/weapon/sp_rgl_xm8-00.fbrb",
+      "index_sha256": "e90bd29e9eade98f78b88b0968c8dff58d8372844b0b89066cb39a4ec7347a3e",
+      "mesh_sha256": "131824e2e98e32371ca3bcc29d179cb03a5f52cfb701406aee07d6658d43efb0",
+      "lod_sha256": "84f22b14e2727f2bd9b1ef54e66de1c11d1865070e3dd681c50b774043f7b99e",
+      "clip_hashes": [
+        "3c00d55c52d8cb99251d5f67e722ab791108fa20195c2a3a84f692b3711c4ef7",
+        "d9e69fa75da3dc11d7cc1f09cd0d338535b1aa9aa8b944004bbd9e6fb0841190"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/US_rgl_XM8/SP_rgl_XM8_Scoped",
+      "archive": "Dist/win32/async/weapon/sp_rgl_xm8_scoped-00.fbrb",
+      "index_sha256": "90a2e2c7be43bd85093b592a4febc9d3bff2e43c5acad6f857905ebf223b864d",
+      "mesh_sha256": "131824e2e98e32371ca3bcc29d179cb03a5f52cfb701406aee07d6658d43efb0",
+      "lod_sha256": "84f22b14e2727f2bd9b1ef54e66de1c11d1865070e3dd681c50b774043f7b99e",
+      "clip_hashes": [
+        "3c00d55c52d8cb99251d5f67e722ab791108fa20195c2a3a84f692b3711c4ef7",
+        "d9e69fa75da3dc11d7cc1f09cd0d338535b1aa9aa8b944004bbd9e6fb0841190"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8",
+      "archive": "Dist/win32/async/weapon/us_rgl_xm8-00.fbrb",
+      "index_sha256": "e90bd29e9eade98f78b88b0968c8dff58d8372844b0b89066cb39a4ec7347a3e",
+      "mesh_sha256": "131824e2e98e32371ca3bcc29d179cb03a5f52cfb701406aee07d6658d43efb0",
+      "lod_sha256": "84f22b14e2727f2bd9b1ef54e66de1c11d1865070e3dd681c50b774043f7b99e",
+      "clip_hashes": [
+        "3c00d55c52d8cb99251d5f67e722ab791108fa20195c2a3a84f692b3711c4ef7",
+        "d9e69fa75da3dc11d7cc1f09cd0d338535b1aa9aa8b944004bbd9e6fb0841190"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Kobra",
+      "archive": "Dist/win32/async/weapon/us_rgl_xm8_kobra-00.fbrb",
+      "index_sha256": "90a2e2c7be43bd85093b592a4febc9d3bff2e43c5acad6f857905ebf223b864d",
+      "mesh_sha256": "131824e2e98e32371ca3bcc29d179cb03a5f52cfb701406aee07d6658d43efb0",
+      "lod_sha256": "84f22b14e2727f2bd9b1ef54e66de1c11d1865070e3dd681c50b774043f7b99e",
+      "clip_hashes": [
+        "3c00d55c52d8cb99251d5f67e722ab791108fa20195c2a3a84f692b3711c4ef7",
+        "d9e69fa75da3dc11d7cc1f09cd0d338535b1aa9aa8b944004bbd9e6fb0841190"
+      ]
+    },
+    {
+      "configuration": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Scoped",
+      "archive": "Dist/win32/async/weapon/us_rgl_xm8_scoped-00.fbrb",
+      "index_sha256": "90a2e2c7be43bd85093b592a4febc9d3bff2e43c5acad6f857905ebf223b864d",
+      "mesh_sha256": "131824e2e98e32371ca3bcc29d179cb03a5f52cfb701406aee07d6658d43efb0",
+      "lod_sha256": "84f22b14e2727f2bd9b1ef54e66de1c11d1865070e3dd681c50b774043f7b99e",
+      "clip_hashes": [
+        "3c00d55c52d8cb99251d5f67e722ab791108fa20195c2a3a84f692b3711c4ef7",
+        "d9e69fa75da3dc11d7cc1f09cd0d338535b1aa9aa8b944004bbd9e6fb0841190"
+      ]
+    }
+  ],
+  "digest": "cadb6e10dca17960f19f1c8a4f75da2631ba3206f482028f6d497e231349cd96"
+}

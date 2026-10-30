@@ -4,6 +4,7 @@
 #include "Bc2MagazinePresentation.h"
 #include "fvr/interaction/AmmoSupplyProp.h"
 #include "Bc2FixedContainerEquipment.h"
+#include "Bc2FeedAmmoSupply.h"
 
 namespace fvr::bc2 {
 // Render-only copy of the SAME source/contact used by the reload consumer.
@@ -13,10 +14,12 @@ struct BodyAmmoTracking {
     std::optional<MagazineTracking> magazine;
     std::optional<BeltAmmoTracking> shell;
     std::optional<FixedContainerBodyAmmo> fixed;
+    std::optional<Bc2FeedBodyAmmo> feed;
 };
 inline bool BodyAmmoFresh(const BodyAmmoTracking& t,std::int64_t now)noexcept {
     using namespace interaction;
-    if(unsigned(bool(t.magazine))+unsigned(bool(t.shell))+unsigned(bool(t.fixed))!=1||!AmmoSupplyVisualFresh(t.visual,now))return false;
+    if(unsigned(bool(t.magazine))+unsigned(bool(t.shell))+unsigned(bool(t.fixed))+unsigned(bool(t.feed))!=1||!AmmoSupplyVisualFresh(t.visual,now))return false;
+    if(t.feed){const auto source=Bc2FeedBodySource(*t.feed,t.visual.input,now);return source&&*source==t.visual.source;}
     if(t.fixed){const auto source=FixedContainerBodySource(*t.fixed,t.visual.input,now);return source&&*source==t.visual.source;}
     if(t.shell)return ShotgunBeltAmmoFresh(*t.shell,now)&&
         AmmoSupplyVisualRetained(t.shell->visual,t.visual,now)&&
@@ -31,7 +34,9 @@ inline bool BodyAmmoFresh(const BodyAmmoTracking& t,std::int64_t now)noexcept {
     return source&&*source==t.visual.source;
 }
 inline bool BodyAmmoRetained(const BodyAmmoTracking& old,const BodyAmmoTracking& current,std::int64_t now)noexcept {
-    if(!BodyAmmoFresh(old,now)||!BodyAmmoFresh(current,now)||bool(old.magazine)!=bool(current.magazine)||bool(old.fixed)!=bool(current.fixed))return false;
+    if(!BodyAmmoFresh(old,now)||!BodyAmmoFresh(current,now)||bool(old.magazine)!=bool(current.magazine)||
+       bool(old.fixed)!=bool(current.fixed)||bool(old.feed)!=bool(current.feed))return false;
+    if(old.feed)return Bc2FeedBodyRetained(*old.feed,*current.feed)&&AmmoSupplyVisualRetained(old.visual,current.visual,now);
     if(old.fixed){const auto& a=*old.fixed;const auto& b=*current.fixed;
         return a.equipment==b.equipment&&a.binding.owner==b.binding.owner&&a.binding.context==b.binding.context&&
             a.binding.inventory==b.binding.inventory&&a.binding.switching==b.binding.switching&&a.binding.data==b.binding.data&&
@@ -86,6 +91,11 @@ inline std::optional<BodyAmmoPose> BuildBodyAmmoPose(const BodyAmmoTracking& sou
         // geometry is extracted into the named magazine bone's local space.
         partFromContact=InverseRigid(g.interaction.insertion.itemFromHand);
         pose.asset=g.asset;pose.mesh=g.mesh;pose.part=g.bones.magazine;pose.rigFingerprint=g.rigFingerprint;
+    }else if(source.feed){
+        const auto* row=FindBc2FeedRegistration(source.feed->registrationKey);if(!row)return {};
+        const auto& g=row->geometry;
+        partFromContact=InverseRigid(g.poses[unsigned(Bc2FeedPoseId::PouchWithdrawn)].sourceFromWrist);
+        pose.asset=g.asset;pose.mesh=g.meshPath;pose.part=g.pouchBone.bone;pose.rigFingerprint=g.rigFingerprint;
     }else if(source.fixed){
         const auto* e=KnownFixedContainerEquipment(source.fixed->equipment);if(!e)return {};
         partFromContact=InverseRigid(e->interaction.geometry[2].motion.placement.sourceFromGrip);

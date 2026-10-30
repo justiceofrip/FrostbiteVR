@@ -118,8 +118,17 @@ std::optional<WeaponModeCommand> ObserveWeaponModeFamily(const WeaponModeMemory&
     return WeaponModeCommand{toLauncher?profile.secondaryAction:profile.primaryAction,target.weapon,target.slot,inventory,rifle->persistent,&profile,!toLauncher};
 }
 std::optional<WeaponModeCommand> ResolveWeaponMode(const WeaponModeMemory& memory,std::uint32_t soldier,std::uint32_t currentWeapon){
+    // The roster has many variants sharing an asset name. Read the exact
+    // selected configuration once to bound full inventory scans to its pairs;
+    // ObserveWeaponModeFamily still independently checks all ownership/routes.
+    Reader r{memory};std::uint32_t data=0;
+    if(!r.U32(std::uint64_t(currentWeapon)+4,data)||!r.Type(data,"SoldierWeaponData"))return {};
+    const auto asset=r.StringAt(data,0xc),configuration=r.StringAt(data,0x40);
+    if(!asset||!configuration)return {};
     std::optional<WeaponModeCommand> found;
     for(const auto& p:WeaponModeFamilies)if(WeaponModeFamilyEligible(p)&&!p.persistentId.empty()){
+        if(!((*asset==p.primaryAsset&&*configuration==p.primaryConfiguration)||
+             (*asset==p.secondaryAsset&&*configuration==p.secondaryConfiguration)))continue;
         const auto candidate=ObserveWeaponModeFamily(memory,soldier,currentWeapon,p);
         if(candidate){if(found)return {};found=candidate;}
     }

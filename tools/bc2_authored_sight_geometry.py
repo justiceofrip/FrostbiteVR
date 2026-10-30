@@ -32,14 +32,15 @@ def role(resolver,origin,state,wanted):
     if len(found)!=1:raise ValueError('Missing/ambiguous exact sight role: '+wanted)
     return found[0]
 
-def hinge_profile(closed,opened,opening,closing):
+def hinge_profile(closed,opened,opening,closing,max_travel_radians=math.pi/2):
     """Parent-local closed/open frames, with reciprocal measured transitions."""
+    if not math.isfinite(max_travel_radians) or not .2<=max_travel_radians<=math.pi:raise ValueError('Measured hinge travel bound')
     for frame in (closed,opened,*opening,*closing):g.matrix(frame)
     forward=classify(opening);reverse=classify(closing)
     if forward['kind']!='hinge_candidate' or reverse['kind']!='hinge_candidate':raise ValueError('Both mode transitions must be rigid hinges')
     delta=m.multiply(opened,m.inverse_rigid(closed))
     axis,angle=axis_angle(delta)
-    if axis is None or not .2<=angle<=math.pi/2 or m.norm(delta[12:15])>.002:raise ValueError('Invalid settled hinge travel')
+    if axis is None or not .2<=angle<=max_travel_radians or m.norm(delta[12:15])>.002:raise ValueError('Invalid settled hinge travel')
     # Each transition must start/end at the opposite authored static poses.
     for actual,expected in ((opening[0],closed),(opening[-1],opened),(closing[0],opened),(closing[-1],closed)):
         distance,rotation=m.grasp_separation(actual,expected)
@@ -55,7 +56,7 @@ def hinge_profile(closed,opened,opening,closing):
             'parent_from_closed':closed,'parent_from_open':opened,'pivot_residual_m':residual,
             'opening':forward,'closing':reverse}
 
-def measure(skeleton,parts,sections,primary_static,secondary_static,opening,closing,bone,weapon):
+def measure(skeleton,parts,sections,primary_static,secondary_static,opening,closing,bone,weapon,max_travel_radians=math.pi/2,max_static_seconds=.1):
     if bone not in parts or weapon not in skeleton.names:raise ValueError('Exact sight/weapon part missing')
     parents={n:skeleton.names[p] if p>=0 else None for n,p in zip(skeleton.names,skeleton.parents)}
     chain=[];at=bone
@@ -85,20 +86,21 @@ def measure(skeleton,parts,sections,primary_static,secondary_static,opening,clos
     relative=lambda s:m.multiply(s['weapon_relative'][bone],m.inverse_rigid(s['weapon_relative'][parent]))
     settled_variation=[]
     for clip,start in zip((primary_static,secondary_static),static):
-        if not 0<clip.duration<=.1:raise ValueError('Static role duration bound')
+        if not math.isfinite(max_static_seconds) or not .1<=max_static_seconds<=15 or not 0<clip.duration<=max_static_seconds:raise ValueError('Static role duration bound')
         # Some HandsIkPose ancestry has tiny nonconstant controls. Retain that
         # fact; bound the decoded parent-local motion rather than calling the
         # entire authored world chain constant or silently using bind defaults.
-        errors=[m.grasp_separation(relative(start),relative(clip.evaluate(skeleton,i*clip.duration/8,names,weapon=weapon))) for i in range(9)]
+        intervals=max(8,math.ceil(clip.duration*30))
+        errors=[m.grasp_separation(relative(start),relative(clip.evaluate(skeleton,i*clip.duration/intervals,names,weapon=weapon))) for i in range(intervals+1)]
         maximum=[max(e[k] for e in errors) for k in range(2)]
         if maximum[0]>.0001 or maximum[1]>.001:raise ValueError('Settled sight pose moves')
         settled_variation.append({'maximum_translation_m':maximum[0],'maximum_rotation_rad':maximum[1],
-            'samples':9,'bone_evaluation_status':{n:start['bone_evaluation_status'][n] for n in (bone,parent)}})
+            'samples':intervals+1,'bone_evaluation_status':{n:start['bone_evaluation_status'][n] for n in (bone,parent)}})
     clips=[]
     for clip in (opening,closing):
         if not .2<=clip.duration<=15:raise ValueError('Sight clip duration bound')
         clips.append([clip.evaluate(skeleton,min(i/30,clip.duration),names,weapon=weapon) for i in range(math.ceil(clip.duration*30)+1)])
-    mechanism=hinge_profile(*[relative(s) for s in static],*[list(map(relative,samples)) for samples in clips])
+    mechanism=hinge_profile(*[relative(s) for s in static],*[list(map(relative,samples)) for samples in clips],max_travel_radians=max_travel_radians)
     contacts=[paired_contacts(samples,bone,part) for samples in clips]
     return {'bone_chain':chain,'unskinned_descendants':descendants,'bone':bone,'weapon':weapon,'rig_fingerprint':skeleton.fingerprint,
         'bounds_part_m':[part['minimum'],part['maximum']],'triangles':part['triangles'],'sections':part['sections'],

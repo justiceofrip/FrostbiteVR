@@ -42,7 +42,7 @@ inline WeaponSightContact MeasureAuthoredSightContact(const AuthoredSightGeometr
        s.names.size()!=s.parents.size()||s.names.size()!=s.native.size()||!s.attachmentReady||
        !s.generation||s.now<=0||s.deadline<=s.now||!std::isfinite(s.unitsPerMetre)||s.unitsPerMetre<=0||
        !Unit(p.axisPart)||!Finite(p.minimumMeters)||!Finite(p.maximumMeters)||!Finite(s.mechanismPointWristMeters)||
-       !std::isfinite(p.travelRadians)||p.travelRadians<=0||p.travelRadians>1.570796327f||
+       !std::isfinite(p.travelRadians)||p.travelRadians<=0||p.travelRadians>3.141592654f||
        !Proper(s.placedWeapon)||!Proper(s.rawAnatomicalWrist))return {};
     const std::array<float,3> lo{p.minimumMeters.x,p.minimumMeters.y,p.minimumMeters.z},
         hi{p.maximumMeters.x,p.maximumMeters.y,p.maximumMeters.z};

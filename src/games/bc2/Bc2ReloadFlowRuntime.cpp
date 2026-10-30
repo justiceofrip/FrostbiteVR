@@ -21,6 +21,7 @@
 #include "Bc2DiagnosticFireReserve.h"
 #include "Bc2M95StockShotConfig.h"
 #include "Bc2ManualPumpConfig.h"
+#include "Bc2WeaponFamilyAmmo.h"
 #include "Bc2FixedContainerNative.h"
 #include "Bc2OwnerPublication.h"
 #include "Bc2ReloadAbort.h"
@@ -2519,8 +2520,8 @@ std::optional<RequestProbeSnapshot> ReadRequestProbeSnapshot()noexcept {
     result.patchFailures=holdPatchFailures.load();result.restoreFailures=holdRestoreFailures.load();
     result.activeCallbacks=active.load()-1;result.revision=callbackRevision.load();return result;
 }
-static ReloadReserveObservation ReadReserveObservedFor(bool diagnostic,bool m95Only=false,std::uint64_t* proofRevision=nullptr,
-                                                     bool feedOnly=false)noexcept {
+enum class ReserveReadRoute {Published,SelectedWeapon,DiagnosticFire,ManualBolt};
+static ReloadReserveObservation ReadReserveObservedFor(ReserveReadRoute route,std::uint64_t* proofRevision=nullptr)noexcept {
     ReserveReadEvidence readEvidence;readEvidence.observedNs=Now();
     const auto reject=[&](unsigned stage,bool deferred=false,bool cohort=false)noexcept->ReloadReserveObservation{
         const auto result=cohort?ReloadObservationResult::CohortGap:deferred?ReloadObservationResult::Deferred:ReloadObservationResult::Rejected;
@@ -2532,8 +2533,9 @@ static ReloadReserveObservation ReadReserveObservedFor(bool diagnostic,bool m95O
     std::optional<Lease> lease;
     {OwnerCopyGate lock;if(!lock.held)return reject(2,true);if(IsCurrent(published,Now())&&published.server)lease=published;}
     if(!lease)return reject(3);
-    const auto configAccepted=[&]()noexcept{return feedOnly?FeedEquipmentReadConfig(lease->snapshot.config):
-        m95Only?ReadManualBoltConfig(memory,lease->snapshot.config):diagnostic?DiagnosticFireReserveConfig(memory,lease->snapshot.config):RequestConfig(lease->snapshot.config);};
+    const auto configAccepted=[&]()noexcept{return route==ReserveReadRoute::ManualBolt?ReadManualBoltConfig(memory,lease->snapshot.config):
+        route==ReserveReadRoute::DiagnosticFire?DiagnosticFireReserveConfig(memory,lease->snapshot.config):
+        ReadWeaponFamilyAmmoConfig(memory,lease->snapshot.config).has_value();};
     if(!configAccepted())return reject(4);
     const auto identity=RoundIdentity(*lease);
     readEvidence.owner={identity.owner.player,identity.owner.soldier,identity.owner.weak,identity.owner.weapon};
@@ -2601,8 +2603,9 @@ static ReloadReserveObservation ReadReserveObservedFor(bool diagnostic,bool m95O
     ++reserveReadStages[9];
     Bc2AmmoReserveLease result{identity,sequence,countObserved,*deadline,first[0].loaded,first[0].reserve,capacities[0],true,
         ReloadReserveInputReady(identity,first,second,capacities,again),ReloadReserveIdle(identity,first,second,capacities,again)};
-    if(!diagnostic&&combinedFamilies&&result.loaded==0&&result.reloadInputReady){
-        bool deferred=false;const bool checked=WithRequest([&]{if(requestCycle.IsMagazine())
+    if(route==ReserveReadRoute::Published&&combinedFamilies&&result.loaded==0&&result.reloadInputReady&&
+       FindMagazineNativeProfile(lease->snapshot.config)){
+        bool deferred=false;const bool checked=WithRequest([&]{if(requestCycle.IsMagazine()&&RequestConfig(lease->snapshot.config))
             if(const auto end=emptyControlReceipts.EmptyDeadline(identity,requestCycle.MagazineProfileId(),lease->revision,result.reserve,Now())){
                 result.deadlineNs=std::min(result.deadlineNs,*end);result.emptyReloadControlled=true;
             }},false,&deferred);
@@ -2619,13 +2622,13 @@ static ReloadReserveObservation ReadReserveObservedFor(bool diagnostic,bool m95O
 ReloadReservePublication publishedReserve;
 ReloadReserveObservation ReadReserveObserved()noexcept {
     const auto epoch=publishedReserve.Begin();
-    const auto result=ReadReserveObservedFor(false);
+    const auto result=ReadReserveObservedFor(ReserveReadRoute::Published);
     publishedReserve.Observe(epoch,result);return result;
 }
 std::optional<Bc2AmmoReserveLease> ReadReserve()noexcept {return ReadReserveObserved().lease;}
 std::optional<Bc2AmmoReserveLease> ReadPublishedReserve()noexcept {return publishedReserve.Read();}
-std::optional<Bc2AmmoReserveLease> ReadDiagnosticFireReserve()noexcept {return ReadReserveObservedFor(true).lease;}
-std::optional<Bc2AmmoReserveLease> ReadM95StockShotReserve()noexcept {return ReadReserveObservedFor(true,true).lease;}
+std::optional<Bc2AmmoReserveLease> ReadDiagnosticFireReserve()noexcept {return ReadReserveObservedFor(ReserveReadRoute::DiagnosticFire).lease;}
+std::optional<Bc2AmmoReserveLease> ReadM95StockShotReserve()noexcept {return ReadReserveObservedFor(ReserveReadRoute::ManualBolt).lease;}
 bool EnableM95EmptyRecording()noexcept {
 #if defined(FVR_BC2_M95_STOCK_SHOT_PROBE)
     return installed&&!started&&!enabled.load()&&requestMode&&!nativePumpCandidate&&
@@ -3231,10 +3234,9 @@ bool RetireAmmoForReplacementActor(const ReloadStateOwner& owner)noexcept {
     std::optional<Lease> lease;
     {OwnerCopyGate gate;if(gate.held&&IsCurrent(published,Now())&&published.server&&published.snapshot.owner==owner)lease=published;}
     if(!lease)return false;
-    const bool feedOnly=FeedEquipmentConfigMatches(lease->snapshot.config);
-    if(!(feedOnly?FeedEquipmentReadConfig(lease->snapshot.config):DiagnosticFireReserveConfig(memory,lease->snapshot.config)))return false;
+    if(!ReadWeaponFamilyAmmoConfig(memory,lease->snapshot.config))return false;
     std::uint64_t proofRevision=0;
-    const auto evidence=ReadReserveObservedFor(true,false,&proofRevision,feedOnly);
+    const auto evidence=ReadReserveObservedFor(ReserveReadRoute::SelectedWeapon,&proofRevision);
     if(!evidence.lease||!evidence.lease->verified||!evidence.lease->allThreeIdle||
         evidence.lease->identity!=RoundIdentity(*lease)||proofRevision>UINT64_MAX-2)return false;
     Active scope;ReloadInvocationExclusion entry(requestEntryGate,active,callbackRevision);
@@ -3350,11 +3352,11 @@ bool RetireNativeCycleForReplacementActor(const ReloadStateOwner& owner)noexcept
     if(!NativeCycleClientActorReplaced(previous->native.owner,owner))return true;
     std::optional<Lease> lease;
     {OwnerCopyGate gate;if(gate.held&&IsCurrent(published,Now())&&published.server&&published.snapshot.owner==owner)lease=published;}
-    if(!lease||!DiagnosticFireReserveConfig(memory,lease->snapshot.config))return false;
+    if(!lease||!ReadWeaponFamilyAmmoConfig(memory,lease->snapshot.config))return false;
     // This read validates the enrolled replacement configuration independently
     // of the currently selected request family, which may still be SpasTube.
     std::uint64_t proofRevision=0;
-    const auto evidence=ReadReserveObservedFor(true,false,&proofRevision);
+    const auto evidence=ReadReserveObservedFor(ReserveReadRoute::SelectedWeapon,&proofRevision);
     if(!evidence.lease||!evidence.lease->verified||!evidence.lease->allThreeIdle||
        evidence.lease->identity!=RoundIdentity(*lease)||proofRevision>UINT64_MAX-2)return false;
     Active activeScope;ReloadInvocationExclusion entry(requestEntryGate,active,callbackRevision);
@@ -3392,7 +3394,7 @@ bool SelectNativeCycleMode(Bc2NativeCycleMode mode,const ReloadStateOwner& owner
        !(mode==Bc2NativeCycleMode::M95?ResolveBoltActionNativeProfile(lease->snapshot.config)!=nullptr:ManualPumpConfig(lease->snapshot.config))||
        !ReadNativeCycleProfile(memory,lease->snapshot.config))return false;
     std::uint64_t proofRevision=0;
-    const auto evidence=ReadReserveObservedFor(true,mode==Bc2NativeCycleMode::M95,&proofRevision);
+    const auto evidence=ReadReserveObservedFor(mode==Bc2NativeCycleMode::M95?ReserveReadRoute::ManualBolt:ReserveReadRoute::DiagnosticFire,&proofRevision);
     if(!evidence.lease||!evidence.lease->verified||!evidence.lease->allThreeIdle||
        evidence.lease->identity!=RoundIdentity(*lease)||proofRevision>UINT64_MAX-2)return false;
     // One revision is the observation scope's exit, one is this scope's entry.

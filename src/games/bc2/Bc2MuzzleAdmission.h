@@ -1,5 +1,6 @@
 #pragma once
 #include "Bc2AuthoredGrip.h"
+#include "Bc2AuthoredSupport.h"
 #include "fvr/interaction/FiringPoseHistory.h"
 
 namespace fvr::bc2 {
@@ -16,10 +17,14 @@ struct MuzzleEnrollmentProfile {
     float inheritedWeaponSpeed=0;
     unsigned bulletsPerShell=0,bulletsPerShot=0;
     bool activeForceSpawnToCamera=false;
+    // Support-backed origin references also pin their exact authored sources.
+    // axisEvidence remains a provenance digest; it never grants aim rotation.
+    std::string_view clipSha256,skeletonSha256;
 };
 struct MuzzleBinding {
     const MuzzleEnrollmentProfile* profile=nullptr;
     AuthoredGripBinding authored{}; // original configuration/input leases
+    std::optional<AuthoredSupportBinding> support;
 };
 namespace muzzle_detail {
 inline bool Profile(const MuzzleEnrollmentProfile& p)noexcept {
@@ -41,6 +46,14 @@ inline bool Descriptor(const MuzzleEnrollmentProfile& p,const AuthoredGripBindin
         p.asset==b.equipment.Asset()&&p.asset==b.profile->assetName&&p.meshPath==b.profile->meshPath&&
         p.bindingDigest==b.profile->bindingDigest&&p.axisEvidence==b.profile->authoredAxisEvidence&&
         p.rigFingerprint==b.profile->rigFingerprint&&Configuration(p,*b.selected);
+}
+inline bool Descriptor(const MuzzleEnrollmentProfile& p,const AuthoredSupportBinding& b)noexcept {
+    return Profile(p)&&b.profile&&b.selected&&
+        p.asset==b.equipment.Asset()&&p.asset==b.profile->assetName&&p.meshPath==b.profile->meshPath&&
+        p.bindingDigest==b.profile->bindingDigest&&p.rigFingerprint==b.profile->rigFingerprint&&
+        authored_grip_detail::Digest(p.clipSha256)&&authored_grip_detail::Digest(p.skeletonSha256)&&
+        p.clipSha256==b.profile->clipSha256&&p.skeletonSha256==b.profile->skeletonSha256&&
+        Configuration(p,*b.selected);
 }
 inline bool Flash(const MuzzleEnrollmentProfile& p,const math::Matrix4& weapon,
                   const math::Matrix4& flash,float units)noexcept {
@@ -66,14 +79,45 @@ inline std::optional<MuzzleBinding> BindAuthoredMuzzle(std::span<const MuzzleEnr
     if(!found||!muzzle_detail::Flash(*found,weapon,flash,units))return {};
     return MuzzleBinding{found,authored};
 }
+inline std::optional<MuzzleBinding> BindAuthoredMuzzle(std::span<const MuzzleEnrollmentProfile> profiles,
+    const AuthoredSupportBinding& support,const math::Matrix4& weapon,const math::Matrix4& flash,
+    float units,std::int64_t now)noexcept {
+    if(!support.selected||!AuthoredSupportCurrent(support,support.selected.get(),support.equipment,support.owner,now))return {};
+    const MuzzleEnrollmentProfile* found=nullptr;
+    for(const auto& p:profiles)if(muzzle_detail::Descriptor(p,support)){
+        if(found)return {};found=&p;
+    }
+    if(!found||!muzzle_detail::Flash(*found,weapon,flash,units))return {};
+    return MuzzleBinding{found,{},support};
+}
+inline const SelectedMeshesSnapshot* MuzzleBindingSelected(const MuzzleBinding& b)noexcept {
+    return b.support?b.support->selected.get():b.authored.selected.get();
+}
 inline bool MuzzleBindingCurrent(const MuzzleBinding& b,const SelectedMeshesSnapshot* current,
     const WeaponEquipmentIdentity& equipment,const AuthoredGripOwner& owner,std::int64_t now)noexcept {
+    if(b.support){const auto& s=*b.support;
+        return b.profile&&current&&!b.authored.profile&&muzzle_detail::Descriptor(*b.profile,s)&&
+            AuthoredSupportCurrent(s,current,equipment,owner,now)&&muzzle_detail::Configuration(*b.profile,*current)&&
+            current->configurationPath==s.selected->configurationPath&&
+            current->configurationPathPointer==s.selected->configurationPathPointer;
+    }
     return b.profile&&current&&muzzle_detail::Descriptor(*b.profile,b.authored)&&
         AuthoredGripCurrent(b.authored,current,equipment,owner,now)&&muzzle_detail::Configuration(*b.profile,*current)&&
         current->configurationPath==b.authored.selected->configurationPath&&
         current->configurationPathPointer==b.authored.selected->configurationPathPointer;
 }
 inline bool SameMuzzleSource(const MuzzleBinding& a,const MuzzleBinding& b)noexcept {
+    if(a.support||b.support){
+        if(!a.profile||a.profile!=b.profile||!a.support||!b.support||a.authored.profile||b.authored.profile)return false;
+        const auto& x=*a.support;const auto& y=*b.support;
+        return x.profile==y.profile&&x.selected&&y.selected&&x.equipment==y.equipment&&
+            x.owner.soldier==y.owner.soldier&&x.owner.weak==y.owner.weak&&
+            x.owner.actorGeneration==y.owner.actorGeneration&&x.owner.equipmentGeneration==y.owner.equipmentGeneration&&
+            x.owner.space==y.owner.space&&x.selected->owner==y.selected->owner&&
+            x.selected->configurationPath==y.selected->configurationPath&&
+            x.selected->configurationPathPointer==y.selected->configurationPathPointer&&
+            x.selected->soleConfiguredArray==y.selected->soleConfiguredArray&&x.selected->states==y.selected->states;
+    }
     if(!a.profile||a.profile!=b.profile||!a.authored.selected||!b.authored.selected)return false;
     const auto& x=a.authored;const auto& y=b.authored;
     return x.equipment==y.equipment&&x.owner.soldier==y.owner.soldier&&x.owner.weak==y.owner.weak&&
@@ -84,9 +128,12 @@ inline bool SameMuzzleSource(const MuzzleBinding& a,const MuzzleBinding& b)noexc
         x.selected->soleConfiguredArray==y.selected->soleConfiguredArray&&x.selected->states==y.selected->states;
 }
 inline std::int64_t MuzzleBindingDeadlineNs(const MuzzleBinding& binding)noexcept {
+    if(binding.support){const auto& s=*binding.support;return s.selected?std::min(s.owner.inputDeadlineNs,s.selected->deadlineNs):0;}
     return binding.authored.selected?std::min(binding.authored.owner.inputDeadlineNs,binding.authored.selected->deadlineNs):0;
 }
 inline bool MuzzleBindingContinues(const MuzzleBinding& captured,const MuzzleBinding& live,std::int64_t now)noexcept {
+    if(live.support)return SameMuzzleSource(captured,live)&&MuzzleBindingCurrent(captured,live.support->selected.get(),
+        live.support->equipment,live.support->owner,now);
     return SameMuzzleSource(captured,live)&&MuzzleBindingCurrent(captured,live.authored.selected.get(),
         live.authored.equipment,live.authored.owner,now);
 }
@@ -127,7 +174,8 @@ inline bool OrdinaryMuzzleConfig(const NativeMuzzleConfig& c)noexcept {
     return !c.cameraFlags[1]&&!c.cameraFlags[2]&&!c.muzzleExplosion;
 }
 inline bool MatchesMuzzleEnrollment(const NativeMuzzleConfig& c,const MuzzleBinding& b)noexcept {
-    if(!b.profile||!muzzle_detail::Descriptor(*b.profile,b.authored)||!OrdinaryMuzzleConfig(c))return false;
+    if(!b.profile||!OrdinaryMuzzleConfig(c)||
+        (b.support?b.authored.profile||!muzzle_detail::Descriptor(*b.profile,*b.support):!muzzle_detail::Descriptor(*b.profile,b.authored)))return false;
     const auto& p=*b.profile;
     return c.speed==p.initialSpeed&&c.direction==p.initialDirection&&c.position==p.initialPosition&&
         c.inheritedSpeed==p.inheritedWeaponSpeed&&c.bulletsPerShell==p.bulletsPerShell&&

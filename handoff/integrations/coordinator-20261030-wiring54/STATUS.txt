@@ -1,0 +1,37 @@
+Wiring54 — ready to integrate as a source candidate
+Base 7ef9f980c00471907ba34b6030cf45df7a0f43ad; campaign/coordinator-20261028-r1.
+User holds integration/installation. Canonical source and installed0.1.18 are unchanged.
+All implementation/check/review agents retired; root owns the completed batch.
+
+DONE IN STAGED SOURCE
+Ammo: selected-family counter publication across128 magazine/25 tube/24 feed/4 fixed configurations.
+Tube reload policy and prediction restoration now use every enrolled tube configuration.
+Feed: real chest pickup, retained supply custody, exact native refill receipts and body rendering.
+Cache:12 missing pouches added;264 parts/60,784,412bytes; all prior252 records preserved.
+Muzzle:181 exact firearm configurations use measured source origin with support-backed admission.
+Underbarrels:127 exact mode/sight pairs; independent selected-mesh gate and measured AN94 travel.
+Magazine entry: all128 ready profiles exercise the normal resource consumer; bounded1Hz refusal log.
+Optimization: same-shape depth targets survive source epochs; ownership/invalidation preserved.
+
+CHECKS
+20 focused C++ suites pass on each architecture; affected production source syntax passes.
+Actual264-part CPU cache consumer passes on x86/x64. Python checks41 total pass/reused.
+GPU1/2/4/8-sample checks prove cached targets receive fresh pixels, failure invalidation and reset.
+One shared-call review found a sight lease issue; fixed and regression passes.
+Prior failed fixture/link checks retained in checks-x86-01/02; final results in receipt.json.
+Normal canonical builds, packaging, installation and headset validation have NOT run for this batch.
+No claim that native AN94 refusal, barrel aim, XM8 flip or frame rate is headset-confirmed fixed.
+Empty-hand holstering remains deferred. Other scene/evidence blockers stay recorded once.
+
+STEAM
+Use Report(4).txt + launcher-last(7).log; Report(3).txt excluded at user's instruction.
+Exact executable SHA22e96001382eb847d3ab0a02b59ec7bb79ba47e04146e74c6c49e38465f38c96 is unavailable.
+User confirms no Steam copy/executable. No more duplicate reports needed; native work parked.
+CHAT32 worktree untouched. No mismatched-layout allowlist or unverified native writes.
+
+NEXT ON USER INTEGRATION INSTRUCTION
+Acquire exclusive leases; integrate this branch into latest checkpoint/436-r56-equipment-rendering.
+Run normal x86/x64 Build.ps1 in canonical trees; preserve existing settings and rollback.
+Verify/reuse staged264-part cache SHA from receipt; update package/install only after required checks.
+Headset test all weapon families, underbarrels and performance; inspect streamed weapon_routes.
+Local reports: reports/coordinator-20261030-wiring54/; evidence levels/details in receipt.json.

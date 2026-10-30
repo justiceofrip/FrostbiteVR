@@ -14,11 +14,11 @@ class Format(unittest.TestCase):
     def test_reviewed_catalog_reproduces_compiled_header(self):
         root=TOOLS.parent;rows=json.loads((root/'config/body-ammo-assets.json').read_text())['profiles']
         self.assertEqual(assets.catalog_header(rows),(root/'src/games/bc2/Bc2BodyAmmoAssetProfiles.h').read_text())
-        self.assertEqual(len(rows),252)
+        self.assertEqual(len(rows),264)
         supplies=[r for r in rows if not r.get('display_only')]
         supply_names={r['asset'] for r in supplies}
-        self.assertEqual(len(supplies),69)
-        self.assertEqual(len(supply_names),65)
+        self.assertEqual(len(supplies),81)
+        self.assertEqual(len(supply_names),77)
         self.assertTrue({'XM8_sp_s','SPAS12_sp','AEK971_sp','XM8C','M416','MG36','XM8 LMG','SCAR_sp','SCAR_sp_s','F2000_sp','MP443_sp','Nambu100'}<=supply_names)
         self.assertTrue({'MP412','Garand','NS2000','870MCS','M24','SV98','GOL','M95'}<=supply_names)
         self.assertEqual(sum(s['part_triangles'] for r in rows if r['asset'] in {'XM8_sp_s','SPAS12_sp','AEK971_sp'} and not r.get('display_only') for s in r['sections']),1146)

@@ -1,6 +1,7 @@
 #pragma once
 #include "Bc2MagazineReloadCycle.h"
 #include "Bc2ReloadFamily.h"
+#include "Bc2ManualPumpConfig.h"
 #include <atomic>
 #include <array>
 #include <optional>
@@ -74,10 +75,10 @@ public:
     bool SelectFamily(ReloadNativeFamily family,bool callbacksDrained,bool priorRetired)noexcept {
         return SelectProfile(family,NativeMagazineProfileId::ScopedXm8,callbacksDrained,priorRetired);
     }
-    // The native reserve reader uses this exact dispatch predicate before its
-    // existing owner, three-copy count, capacity and expiry checks.
+    // Operation admission stays bound to the selected policy. Read-only ammo
+    // publication independently resolves the selected native configuration.
     bool MatchesSelectedConfig(const ReloadObservedConfig& c)const noexcept {
-        return IsMagazine()?MagazineProfile().Matches(c):IsDiagnosticSpasConfig(c);
+        return IsMagazine()?MagazineProfile().Matches(c):ManualPumpConfig(c);
     }
     bool Start(const ReloadCycleControl& c,std::int64_t n)noexcept {CancellationOriginScope cancellation(*this);
         if(magazineMode_||!spas_.Start(c,n))return false;

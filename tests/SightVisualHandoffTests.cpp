@@ -37,6 +37,21 @@ int MonotonicNativeHandoff(){
     }
     return 0;
 }
+int MeasuredTravelBeyondNinety(){
+    constexpr float travel=1.640066819f;
+    for(auto mode:{SightMode::Primary,SightMode::Secondary}){
+        const float sign=mode==SightMode::Primary?1.f:-1.f;
+        const auto start=mode==SightMode::Primary?At():Rotate(At(),travel);
+        const math::Vec3 pivot{start.values[3][0],start.values[3][1],start.values[3][2]};
+        auto handoff=SightVisualHandoff::BeginWithGeometry(start,mode,pivot,{1,0,0},travel);CHECK(handoff);
+        CHECK(handoff->Update(SightFlipPhase::Manipulating,sign*.4f,100));
+        const auto native=handoff->Update(SightFlipPhase::Latched,sign*.4f,100000100,Rotate(start,sign*travel));
+        CHECK(native&&native->nativeObserved&&Near(native->nativeProgressRadians,travel));
+        CHECK(std::abs(native->appliedRadians)<travel); // Retain bounded visual catch-up.
+    }
+    CHECK(!SightVisualHandoff::BeginWithGeometry(At(),SightMode::Primary,{}, {1,0,0},3.2f));
+    return 0;
+}
 int GraspAndNonAxisAlignedGeometry(){
     const auto baseline=*RotateAboutHinge(At(),{0,0,0},{0,1,0},.7f);
     const math::Vec3 pivot{baseline.values[3][0],baseline.values[3][1],baseline.values[3][2]};
@@ -256,5 +271,5 @@ int NativeModeContactSequenceStaysIndependent(){
     return 0;
 }
 }
-int main(){return MonotonicNativeHandoff()||GraspAndNonAxisAlignedGeometry()||RecordedJumpAndClockLimits()||RawContinuationAfterAcknowledgement()||RawSourceFreshnessAndNoVisualFeedback()||InvalidNativeDoesNotManufactureProgress()||
+int main(){return MeasuredTravelBeyondNinety()||MonotonicNativeHandoff()||GraspAndNonAxisAlignedGeometry()||RecordedJumpAndClockLimits()||RawContinuationAfterAcknowledgement()||RawSourceFreshnessAndNoVisualFeedback()||InvalidNativeDoesNotManufactureProgress()||
     CurrentReservationKeepsTokenWithoutContact()||ReservationCancellationAndNoResurrection()||NativeModeContactSequenceStaysIndependent();}

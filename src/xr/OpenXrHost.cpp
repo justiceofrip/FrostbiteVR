@@ -648,7 +648,7 @@ struct Host {
                     accepted=(count==1||((count==2||count==3)&&provider->ReadSourceSlot(ticket,source)))&&
                         sourceImports.Select(count,source,descriptor,ticket,import);
                     if(accepted){
-                        if(import.resetPresentation){retained.Reset();sceneDepth.Reset();sceneDepthSeen=false;if(ammoHud)ammoHud->Reset();}
+                        if(import.resetPresentation){retained.Reset();sceneDepth.ResetSources();sceneDepthSeen=false;if(ammoHud)ammoHud->Reset();}
                         if(import.resetAll)for(auto& entry:consumers)entry.Reset();
                         auto& consumer=consumers[import.index];
                         if(import.open){const auto opened=timed(HostStage::SharedOpen,[&]{return consumer.Open(device.Get(),descriptor);});

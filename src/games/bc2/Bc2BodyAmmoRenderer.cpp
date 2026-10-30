@@ -88,6 +88,10 @@ bool BodyAmmoSourceRetained(const BodyAmmoRenderSource& a,const BodyAmmoRenderSo
         if(s.authority->fixed){const auto* e=KnownFixedContainerEquipment(s.authority->fixed->equipment);
             return e&&s.asset==e->asset&&s.mesh==e->mesh&&s.rigFingerprint==e->rigFingerprint&&
                 (s.assemblyPart?std::any_of(e->parts.begin(),e->parts.end(),[&](const auto& p){return p.supplyPart&&p.bone==s.part;}):s.part==e->supplyRoot);}
+        if(s.authority->feed){const auto* row=FindBc2FeedRegistration(s.authority->feed->registrationKey);
+            return row&&!s.assemblyPart&&s.asset==row->geometry.asset&&s.mesh==row->geometry.meshPath&&
+                s.part==row->geometry.pouchBone.bone&&s.rigFingerprint==row->geometry.rigFingerprint;}
+        if(!s.authority->shell)return false;
         const auto* e=KnownShotgunEquipment(s.authority->shell->equipment);const auto g=ShotgunShellGeometry(e);
         return e&&g&&s.asset==e->native->config->assetName&&s.mesh==e->meshPath&&s.part==g->bone&&s.rigFingerprint==e->rigFingerprint;
     };

@@ -1,0 +1,764 @@
+[
+  {
+    "family_index": 0,
+    "primary": "Objects/Weapons/Handheld/US_rgl_XM8/SP_rgl_XM8_Scoped",
+    "secondary": "Objects/Weapons/Handheld/US_rgl_XM8/SP_rgl_XM320_Scoped",
+    "status": "retained_exact_xm320_coordinate_sources"
+  },
+  {
+    "family_index": 1,
+    "primary": "Objects/Weapons/Handheld/RU_rgl_AEK971/SP_rgl_AEK971",
+    "secondary": "Objects/Weapons/Handheld/RU_rgl_AEK971/SP_rgl_GP30",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 2,
+    "primary": "Objects/Weapons/Handheld/US_rgl_XM8/SP_rgl_XM8",
+    "secondary": "Objects/Weapons/Handheld/US_rgl_XM8/SP_rgl_XM320",
+    "status": "retained_exact_xm320_coordinate_sources"
+  },
+  {
+    "family_index": 3,
+    "primary": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Kobra",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_rgl_AN94Abakan_Kobra",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 4,
+    "primary": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Kobra",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_shg_AN94Abakan_Kobra",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 5,
+    "primary": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Kobra",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_smk_AN94Abakan_Kobra",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 6,
+    "primary": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Kobra",
+    "secondary": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/SP_rgl_AN94Abakan_Kobra",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 7,
+    "primary": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Scoped",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_rgl_AN94Abakan_Scoped",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 8,
+    "primary": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Scoped",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_shg_AN94Abakan_Scoped",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 9,
+    "primary": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Scoped",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_smk_AN94Abakan_Scoped",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 10,
+    "primary": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/BU_rif_AN94Abakan_Scoped",
+    "secondary": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/SP_rgl_AN94Abakan_Scoped",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 11,
+    "primary": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/SP_rif_AN94_Kobra",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_rgl_AN94Abakan_Kobra",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 12,
+    "primary": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/SP_rif_AN94_Kobra",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_shg_AN94Abakan_Kobra",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 13,
+    "primary": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/SP_rif_AN94_Kobra",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_smk_AN94Abakan_Kobra",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 14,
+    "primary": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/SP_rif_AN94_Kobra",
+    "secondary": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/SP_rgl_AN94Abakan_Kobra",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 15,
+    "primary": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/SP_rif_AN94_Scoped",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_rgl_AN94Abakan_Scoped",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 16,
+    "primary": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/SP_rif_AN94_Scoped",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_shg_AN94Abakan_Scoped",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 17,
+    "primary": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/SP_rif_AN94_Scoped",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_AN94Abakan/BU_smk_AN94Abakan_Scoped",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 18,
+    "primary": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/SP_rif_AN94_Scoped",
+    "secondary": "Objects/Weapons/Handheld/BU_rif_AN94Abakan/SP_rgl_AN94Abakan_Scoped",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 19,
+    "primary": "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_F2000/BU_rgl_F2000",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 20,
+    "primary": "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_F2000/BU_shg_F2000",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 21,
+    "primary": "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_F2000/BU_smk_F2000",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 22,
+    "primary": "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000",
+    "secondary": "Objects/Weapons/Handheld/BU_rif_F2000/SP_rgl_F2000",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 23,
+    "primary": "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Kobra",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_F2000/BU_rgl_F2000_Kobra",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 24,
+    "primary": "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Kobra",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_F2000/BU_shg_F2000_Kobra",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 25,
+    "primary": "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Kobra",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_F2000/BU_smk_F2000_Kobra",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 26,
+    "primary": "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Kobra",
+    "secondary": "Objects/Weapons/Handheld/BU_rif_F2000/SP_rgl_F2000_Kobra",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 27,
+    "primary": "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Scoped",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_F2000/BU_rgl_F2000_Scoped",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 28,
+    "primary": "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Scoped",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_F2000/BU_shg_F2000_Scoped",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 29,
+    "primary": "Objects/Weapons/Handheld/BU_rif_F2000/BU_rif_F2000_Scoped",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_F2000/BU_smk_F2000_Scoped",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 30,
+    "primary": "Objects/Weapons/Handheld/BU_rif_F2000/SP_rif_F2000",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_F2000/BU_rgl_F2000",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 31,
+    "primary": "Objects/Weapons/Handheld/BU_rif_F2000/SP_rif_F2000",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_F2000/BU_shg_F2000",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 32,
+    "primary": "Objects/Weapons/Handheld/BU_rif_F2000/SP_rif_F2000",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_F2000/BU_smk_F2000",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 33,
+    "primary": "Objects/Weapons/Handheld/BU_rif_F2000/SP_rif_F2000",
+    "secondary": "Objects/Weapons/Handheld/BU_rif_F2000/SP_rgl_F2000",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 34,
+    "primary": "Objects/Weapons/Handheld/BU_rif_F2000/SP_rif_F2000_Kobra",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_F2000/BU_rgl_F2000_Kobra",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 35,
+    "primary": "Objects/Weapons/Handheld/BU_rif_F2000/SP_rif_F2000_Kobra",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_F2000/BU_shg_F2000_Kobra",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 36,
+    "primary": "Objects/Weapons/Handheld/BU_rif_F2000/SP_rif_F2000_Kobra",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_F2000/BU_smk_F2000_Kobra",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 37,
+    "primary": "Objects/Weapons/Handheld/BU_rif_F2000/SP_rif_F2000_Kobra",
+    "secondary": "Objects/Weapons/Handheld/BU_rif_F2000/SP_rgl_F2000_Kobra",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 38,
+    "primary": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_M16A2/BU_rgl_M16A2",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 39,
+    "primary": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_M16A2/BU_shg_M16A2",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 40,
+    "primary": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_M16A2/BU_smk_M16A2",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 41,
+    "primary": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_M16A2/UPG_rgl_M16A2",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 42,
+    "primary": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_M16A2/UPG_shg_M16A2",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 43,
+    "primary": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_M16A2/UPG_smk_M16A2",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 44,
+    "primary": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Kobra",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_M16A2/BU_rgl_M16A2_Kobra",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 45,
+    "primary": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Kobra",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_M16A2/BU_shg_M16A2_Kobra",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 46,
+    "primary": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Kobra",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_M16A2/BU_smk_M16A2_Kobra",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 47,
+    "primary": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Kobra",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_M16A2/UPG_rgl_M16A2_Kobra",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 48,
+    "primary": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Kobra",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_M16A2/UPG_shg_M16A2_Kobra",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 49,
+    "primary": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Kobra",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_M16A2/UPG_smk_M16A2_Kobra",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 50,
+    "primary": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Scoped",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_M16A2/BU_rgl_M16A2_Scoped",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 51,
+    "primary": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Scoped",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_M16A2/BU_shg_M16A2_Scoped",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 52,
+    "primary": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Scoped",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_M16A2/BU_smk_M16A2_Scoped",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 53,
+    "primary": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Scoped",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_M16A2/UPG_rgl_M16A2_Scoped",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 54,
+    "primary": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Scoped",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_M16A2/UPG_shg_M16A2_Scoped",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 55,
+    "primary": "Objects/Weapons/Handheld/BU_rif_M16A2/BU_rif_M16A2_Scoped",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_M16A2/UPG_smk_M16A2_Scoped",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 56,
+    "primary": "Objects/Weapons/Handheld/BU_rif_M16A2/UPG_rif_M16A2",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_M16A2/BU_rgl_M16A2",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 57,
+    "primary": "Objects/Weapons/Handheld/BU_rif_M16A2/UPG_rif_M16A2",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_M16A2/BU_shg_M16A2",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 58,
+    "primary": "Objects/Weapons/Handheld/BU_rif_M16A2/UPG_rif_M16A2",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_M16A2/BU_smk_M16A2",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 59,
+    "primary": "Objects/Weapons/Handheld/BU_rif_M16A2/UPG_rif_M16A2",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_M16A2/UPG_rgl_M16A2",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 60,
+    "primary": "Objects/Weapons/Handheld/BU_rif_M16A2/UPG_rif_M16A2",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_M16A2/UPG_shg_M16A2",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 61,
+    "primary": "Objects/Weapons/Handheld/BU_rif_M16A2/UPG_rif_M16A2",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_M16A2/UPG_smk_M16A2",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 62,
+    "primary": "Objects/Weapons/Handheld/BU_rif_M16A2/UPG_rif_M16A2_Kobra",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_M16A2/BU_rgl_M16A2_Kobra",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 63,
+    "primary": "Objects/Weapons/Handheld/BU_rif_M16A2/UPG_rif_M16A2_Kobra",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_M16A2/BU_shg_M16A2_Kobra",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 64,
+    "primary": "Objects/Weapons/Handheld/BU_rif_M16A2/UPG_rif_M16A2_Kobra",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_M16A2/BU_smk_M16A2_Kobra",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 65,
+    "primary": "Objects/Weapons/Handheld/BU_rif_M16A2/UPG_rif_M16A2_Kobra",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_M16A2/UPG_rgl_M16A2_Kobra",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 66,
+    "primary": "Objects/Weapons/Handheld/BU_rif_M16A2/UPG_rif_M16A2_Kobra",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_M16A2/UPG_shg_M16A2_Kobra",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 67,
+    "primary": "Objects/Weapons/Handheld/BU_rif_M16A2/UPG_rif_M16A2_Kobra",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_M16A2/UPG_smk_M16A2_Kobra",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 68,
+    "primary": "Objects/Weapons/Handheld/BU_rif_M16A2/UPG_rif_M16A2_Scoped",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_M16A2/BU_rgl_M16A2_Scoped",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 69,
+    "primary": "Objects/Weapons/Handheld/BU_rif_M16A2/UPG_rif_M16A2_Scoped",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_M16A2/BU_shg_M16A2_Scoped",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 70,
+    "primary": "Objects/Weapons/Handheld/BU_rif_M16A2/UPG_rif_M16A2_Scoped",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_M16A2/BU_smk_M16A2_Scoped",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 71,
+    "primary": "Objects/Weapons/Handheld/BU_rif_M16A2/UPG_rif_M16A2_Scoped",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_M16A2/UPG_rgl_M16A2_Scoped",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 72,
+    "primary": "Objects/Weapons/Handheld/BU_rif_M16A2/UPG_rif_M16A2_Scoped",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_M16A2/UPG_shg_M16A2_Scoped",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 73,
+    "primary": "Objects/Weapons/Handheld/BU_rif_M16A2/UPG_rif_M16A2_Scoped",
+    "secondary": "Objects/Weapons/Handheld/BU_rgl_M16A2/UPG_smk_M16A2_Scoped",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 74,
+    "primary": "Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG",
+    "secondary": "Objects/Weapons/Handheld/MEC_rgl_M203/MEC_rgl_M203",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 75,
+    "primary": "Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG",
+    "secondary": "Objects/Weapons/Handheld/MEC_rgl_M203/MEC_shg_M203",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 76,
+    "primary": "Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG",
+    "secondary": "Objects/Weapons/Handheld/MEC_rgl_M203/MEC_smk_M203",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 77,
+    "primary": "Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG_Kobra",
+    "secondary": "Objects/Weapons/Handheld/MEC_rgl_M203/MEC_rgl_M203_Kobra",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 78,
+    "primary": "Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG_Kobra",
+    "secondary": "Objects/Weapons/Handheld/MEC_rgl_M203/MEC_shg_M203_Kobra",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 79,
+    "primary": "Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG_Kobra",
+    "secondary": "Objects/Weapons/Handheld/MEC_rgl_M203/MEC_smk_M203_Kobra",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 80,
+    "primary": "Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG_Scoped",
+    "secondary": "Objects/Weapons/Handheld/MEC_rgl_M203/MEC_rgl_M203_Scoped",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 81,
+    "primary": "Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG_Scoped",
+    "secondary": "Objects/Weapons/Handheld/MEC_rgl_M203/MEC_shg_M203_Scoped",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 82,
+    "primary": "Objects/Weapons/Handheld/MEC_rgl_SteyrAUG/MEC_rgl_SteyrAUG_Scoped",
+    "secondary": "Objects/Weapons/Handheld/MEC_rgl_M203/MEC_smk_M203_Scoped",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 83,
+    "primary": "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971",
+    "secondary": "Objects/Weapons/Handheld/RU_rgl_AEK971/SP_rgl_GP30",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 84,
+    "primary": "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971",
+    "secondary": "Objects/Weapons/Handheld/RU_rgl_GP30/RU_rgl_GP30",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 85,
+    "primary": "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971",
+    "secondary": "Objects/Weapons/Handheld/RU_rgl_GP30/RU_shg_GP30",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 86,
+    "primary": "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971",
+    "secondary": "Objects/Weapons/Handheld/RU_rgl_GP30/RU_smk_GP30",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 87,
+    "primary": "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Kobra",
+    "secondary": "Objects/Weapons/Handheld/RU_rgl_AEK971/SP_rgl_GP30_Kobra",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 88,
+    "primary": "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Kobra",
+    "secondary": "Objects/Weapons/Handheld/RU_rgl_GP30/RU_rgl_GP30_Kobra",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 89,
+    "primary": "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Kobra",
+    "secondary": "Objects/Weapons/Handheld/RU_rgl_GP30/RU_shg_GP30_Kobra",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 90,
+    "primary": "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Kobra",
+    "secondary": "Objects/Weapons/Handheld/RU_rgl_GP30/RU_smk_GP30_Kobra",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 91,
+    "primary": "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Scoped",
+    "secondary": "Objects/Weapons/Handheld/RU_rgl_GP30/RU_rgl_GP30_Scoped",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 92,
+    "primary": "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Scoped",
+    "secondary": "Objects/Weapons/Handheld/RU_rgl_GP30/RU_shg_GP30_Scoped",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 93,
+    "primary": "Objects/Weapons/Handheld/RU_rgl_AEK971/RU_rgl_AEK971_Scoped",
+    "secondary": "Objects/Weapons/Handheld/RU_rgl_GP30/RU_smk_GP30_Scoped",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 94,
+    "primary": "Objects/Weapons/Handheld/RU_rgl_AEK971/SP_rgl_AEK971",
+    "secondary": "Objects/Weapons/Handheld/RU_rgl_GP30/RU_rgl_GP30",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 95,
+    "primary": "Objects/Weapons/Handheld/RU_rgl_AEK971/SP_rgl_AEK971",
+    "secondary": "Objects/Weapons/Handheld/RU_rgl_GP30/RU_shg_GP30",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 96,
+    "primary": "Objects/Weapons/Handheld/RU_rgl_AEK971/SP_rgl_AEK971",
+    "secondary": "Objects/Weapons/Handheld/RU_rgl_GP30/RU_smk_GP30",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 97,
+    "primary": "Objects/Weapons/Handheld/RU_rgl_AEK971/SP_rgl_AEK971_Kobra",
+    "secondary": "Objects/Weapons/Handheld/RU_rgl_AEK971/SP_rgl_GP30_Kobra",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 98,
+    "primary": "Objects/Weapons/Handheld/RU_rgl_AEK971/SP_rgl_AEK971_Kobra",
+    "secondary": "Objects/Weapons/Handheld/RU_rgl_GP30/RU_rgl_GP30_Kobra",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 99,
+    "primary": "Objects/Weapons/Handheld/RU_rgl_AEK971/SP_rgl_AEK971_Kobra",
+    "secondary": "Objects/Weapons/Handheld/RU_rgl_GP30/RU_shg_GP30_Kobra",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 100,
+    "primary": "Objects/Weapons/Handheld/RU_rgl_AEK971/SP_rgl_AEK971_Kobra",
+    "secondary": "Objects/Weapons/Handheld/RU_rgl_GP30/RU_smk_GP30_Kobra",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 101,
+    "primary": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416",
+    "secondary": "Objects/Weapons/Handheld/UL_rgl_HK416/UL_rgl_HK416",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 102,
+    "primary": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416",
+    "secondary": "Objects/Weapons/Handheld/UL_rgl_HK416/UL_shg_HK416",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 103,
+    "primary": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416",
+    "secondary": "Objects/Weapons/Handheld/UL_rgl_HK416/UL_smk_HK416",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 104,
+    "primary": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Kobra",
+    "secondary": "Objects/Weapons/Handheld/UL_rgl_HK416/UL_rgl_HK416_Kobra",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 105,
+    "primary": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Kobra",
+    "secondary": "Objects/Weapons/Handheld/UL_rgl_HK416/UL_shg_HK416_Kobra",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 106,
+    "primary": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Kobra",
+    "secondary": "Objects/Weapons/Handheld/UL_rgl_HK416/UL_smk_HK416_Kobra",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 107,
+    "primary": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Scoped",
+    "secondary": "Objects/Weapons/Handheld/UL_rgl_HK416/UL_rgl_HK416_Scope",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 108,
+    "primary": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Scoped",
+    "secondary": "Objects/Weapons/Handheld/UL_rgl_HK416/UL_shg_HK416_Scope",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 109,
+    "primary": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Scoped",
+    "secondary": "Objects/Weapons/Handheld/UL_rgl_HK416/UL_smk_HK416_Scope",
+    "status": "measured_unique_rigid_mode_hinge"
+  },
+  {
+    "family_index": 110,
+    "primary": "Objects/Weapons/Handheld/US_rgl_XM8/SP_rgl_XM8",
+    "secondary": "Objects/Weapons/Handheld/US_rgl_XM320/US_rgl_XM320",
+    "status": "retained_exact_xm320_coordinate_sources"
+  },
+  {
+    "family_index": 111,
+    "primary": "Objects/Weapons/Handheld/US_rgl_XM8/SP_rgl_XM8",
+    "secondary": "Objects/Weapons/Handheld/US_rgl_XM320/US_shg_XM320",
+    "status": "retained_exact_xm320_coordinate_sources"
+  },
+  {
+    "family_index": 112,
+    "primary": "Objects/Weapons/Handheld/US_rgl_XM8/SP_rgl_XM8",
+    "secondary": "Objects/Weapons/Handheld/US_rgl_XM320/US_smk_XM320",
+    "status": "retained_exact_xm320_coordinate_sources"
+  },
+  {
+    "family_index": 113,
+    "primary": "Objects/Weapons/Handheld/US_rgl_XM8/SP_rgl_XM8_Scoped",
+    "secondary": "Objects/Weapons/Handheld/US_rgl_XM320/US_rgl_XM320_Scoped",
+    "status": "retained_exact_xm320_coordinate_sources"
+  },
+  {
+    "family_index": 114,
+    "primary": "Objects/Weapons/Handheld/US_rgl_XM8/SP_rgl_XM8_Scoped",
+    "secondary": "Objects/Weapons/Handheld/US_rgl_XM320/US_shg_XM320_Scoped",
+    "status": "retained_exact_xm320_coordinate_sources"
+  },
+  {
+    "family_index": 115,
+    "primary": "Objects/Weapons/Handheld/US_rgl_XM8/SP_rgl_XM8_Scoped",
+    "secondary": "Objects/Weapons/Handheld/US_rgl_XM320/US_smk_XM320_Scoped",
+    "status": "retained_exact_xm320_coordinate_sources"
+  },
+  {
+    "family_index": 116,
+    "primary": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8",
+    "secondary": "Objects/Weapons/Handheld/US_rgl_XM320/US_rgl_XM320",
+    "status": "retained_exact_xm320_coordinate_sources"
+  },
+  {
+    "family_index": 117,
+    "primary": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8",
+    "secondary": "Objects/Weapons/Handheld/US_rgl_XM320/US_shg_XM320",
+    "status": "retained_exact_xm320_coordinate_sources"
+  },
+  {
+    "family_index": 118,
+    "primary": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8",
+    "secondary": "Objects/Weapons/Handheld/US_rgl_XM320/US_smk_XM320",
+    "status": "retained_exact_xm320_coordinate_sources"
+  },
+  {
+    "family_index": 119,
+    "primary": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8",
+    "secondary": "Objects/Weapons/Handheld/US_rgl_XM8/SP_rgl_XM320",
+    "status": "retained_exact_xm320_coordinate_sources"
+  },
+  {
+    "family_index": 120,
+    "primary": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Kobra",
+    "secondary": "Objects/Weapons/Handheld/US_rgl_XM320/US_rgl_XM320_Kobra",
+    "status": "retained_exact_xm320_coordinate_sources"
+  },
+  {
+    "family_index": 121,
+    "primary": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Kobra",
+    "secondary": "Objects/Weapons/Handheld/US_rgl_XM320/US_shg_XM320_Kobra",
+    "status": "retained_exact_xm320_coordinate_sources"
+  },
+  {
+    "family_index": 122,
+    "primary": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Kobra",
+    "secondary": "Objects/Weapons/Handheld/US_rgl_XM320/US_smk_XM320_Kobra",
+    "status": "retained_exact_xm320_coordinate_sources"
+  },
+  {
+    "family_index": 123,
+    "primary": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Scoped",
+    "secondary": "Objects/Weapons/Handheld/US_rgl_XM320/US_rgl_XM320_Scoped",
+    "status": "retained_exact_xm320_coordinate_sources"
+  },
+  {
+    "family_index": 124,
+    "primary": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Scoped",
+    "secondary": "Objects/Weapons/Handheld/US_rgl_XM320/US_shg_XM320_Scoped",
+    "status": "retained_exact_xm320_coordinate_sources"
+  },
+  {
+    "family_index": 125,
+    "primary": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Scoped",
+    "secondary": "Objects/Weapons/Handheld/US_rgl_XM320/US_smk_XM320_Scoped",
+    "status": "retained_exact_xm320_coordinate_sources"
+  },
+  {
+    "family_index": 126,
+    "primary": "Objects/Weapons/Handheld/US_rgl_XM8/US_rgl_XM8_Scoped",
+    "secondary": "Objects/Weapons/Handheld/US_rgl_XM8/SP_rgl_XM320_Scoped",
+    "status": "retained_exact_xm320_coordinate_sources"
+  }
+]

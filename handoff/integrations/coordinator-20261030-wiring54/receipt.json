@@ -1,0 +1,375 @@
+{
+  "base": "7ef9f980c00471907ba34b6030cf45df7a0f43ad",
+  "branch": "campaign/coordinator-20261028-r1",
+  "status": "ready_to_integrate_source_candidate",
+  "checks": {
+    "x86": {
+      "passed": 20,
+      "failed": 0,
+      "reports": [
+        "checks-x86-01",
+        "checks-x86-02",
+        "checks-x86-03"
+      ],
+      "suites": {
+        "WeaponFamilyAmmoPublication": {
+          "passed": true,
+          "arguments": [],
+          "suite": "WeaponFamilyAmmoPublication",
+          "compiled": true,
+          "report": "checks-x86-02"
+        },
+        "WeaponFamilyMuzzle": {
+          "arguments": [],
+          "passed": true,
+          "compiled": true,
+          "suite": "WeaponFamilyMuzzle",
+          "report": "checks-x86-01"
+        },
+        "WeaponMagazineEntry": {
+          "arguments": [],
+          "passed": true,
+          "compiled": true,
+          "suite": "WeaponMagazineEntry",
+          "report": "checks-x86-01"
+        },
+        "FeedBodyAmmoIntegration": {
+          "passed": true,
+          "suite": "FeedBodyAmmoIntegration",
+          "arguments": [],
+          "compiled": true,
+          "report": "checks-x86-03"
+        },
+        "Bc2PhysicalFeed": {
+          "passed": true,
+          "arguments": [],
+          "suite": "Bc2PhysicalFeed",
+          "compiled": true,
+          "report": "checks-x86-02"
+        },
+        "Bc2FeedPresentation": {
+          "arguments": [],
+          "passed": true,
+          "compiled": true,
+          "suite": "Bc2FeedPresentation",
+          "report": "checks-x86-01"
+        },
+        "Bc2BodyAmmo": {
+          "arguments": [],
+          "passed": true,
+          "compiled": true,
+          "suite": "Bc2BodyAmmo",
+          "report": "checks-x86-01"
+        },
+        "Bc2BodyAmmoCache": {
+          "arguments": [
+            "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\reports\\coordinator-20261030-wiring54\\feed-cache01\\body-ammo.fvrprop",
+            "264"
+          ],
+          "passed": true,
+          "compiled": true,
+          "suite": "Bc2BodyAmmoCache",
+          "report": "checks-x86-01"
+        },
+        "Bc2ReloadRequestCycle": {
+          "arguments": [],
+          "passed": true,
+          "compiled": true,
+          "suite": "Bc2ReloadRequestCycle",
+          "report": "checks-x86-01"
+        },
+        "Bc2ReloadFamily": {
+          "arguments": [],
+          "passed": true,
+          "compiled": true,
+          "suite": "Bc2ReloadFamily",
+          "report": "checks-x86-01"
+        },
+        "AmmoCounter": {
+          "arguments": [],
+          "passed": true,
+          "compiled": true,
+          "suite": "AmmoCounter",
+          "report": "checks-x86-01"
+        },
+        "Bc2ReserveFinalValidation": {
+          "arguments": [],
+          "passed": true,
+          "compiled": true,
+          "suite": "Bc2ReserveFinalValidation",
+          "report": "checks-x86-01"
+        },
+        "WeaponMode": {
+          "arguments": [],
+          "passed": true,
+          "compiled": true,
+          "suite": "WeaponMode",
+          "report": "checks-x86-01"
+        },
+        "Bc2SightAdapter": {
+          "arguments": [],
+          "passed": true,
+          "compiled": true,
+          "suite": "Bc2SightAdapter",
+          "report": "checks-x86-01"
+        },
+        "Bc2AuthoredSight": {
+          "arguments": [],
+          "passed": true,
+          "compiled": true,
+          "suite": "Bc2AuthoredSight",
+          "report": "checks-x86-01"
+        },
+        "SightGrasp": {
+          "arguments": [],
+          "passed": true,
+          "compiled": true,
+          "suite": "SightGrasp",
+          "report": "checks-x86-01"
+        },
+        "SightVisualHandoff": {
+          "arguments": [],
+          "passed": true,
+          "compiled": true,
+          "suite": "SightVisualHandoff",
+          "report": "checks-x86-01"
+        },
+        "SceneDepthFrame": {
+          "arguments": [],
+          "passed": true,
+          "compiled": true,
+          "suite": "SceneDepthFrame",
+          "report": "checks-x86-01"
+        },
+        "SceneDepthPairGpu": {
+          "arguments": [
+            "--legacy-depth-cache"
+          ],
+          "passed": true,
+          "compiled": true,
+          "suite": "SceneDepthPairGpu",
+          "report": "checks-x86-01"
+        },
+        "HostFrameDiagnostics": {
+          "arguments": [],
+          "passed": true,
+          "compiled": true,
+          "suite": "HostFrameDiagnostics",
+          "report": "checks-x86-01"
+        }
+      }
+    },
+    "x64": {
+      "passed": 20,
+      "failed": 0,
+      "reports": [
+        "checks-x64-01"
+      ],
+      "suites": {
+        "WeaponFamilyAmmoPublication": {
+          "arguments": [],
+          "compiled": true,
+          "passed": true,
+          "suite": "WeaponFamilyAmmoPublication",
+          "report": "checks-x64-01"
+        },
+        "WeaponFamilyMuzzle": {
+          "arguments": [],
+          "compiled": true,
+          "passed": true,
+          "suite": "WeaponFamilyMuzzle",
+          "report": "checks-x64-01"
+        },
+        "WeaponMagazineEntry": {
+          "arguments": [],
+          "compiled": true,
+          "passed": true,
+          "suite": "WeaponMagazineEntry",
+          "report": "checks-x64-01"
+        },
+        "FeedBodyAmmoIntegration": {
+          "arguments": [],
+          "compiled": true,
+          "passed": true,
+          "suite": "FeedBodyAmmoIntegration",
+          "report": "checks-x64-01"
+        },
+        "Bc2PhysicalFeed": {
+          "arguments": [],
+          "compiled": true,
+          "passed": true,
+          "suite": "Bc2PhysicalFeed",
+          "report": "checks-x64-01"
+        },
+        "Bc2FeedPresentation": {
+          "arguments": [],
+          "compiled": true,
+          "passed": true,
+          "suite": "Bc2FeedPresentation",
+          "report": "checks-x64-01"
+        },
+        "Bc2BodyAmmo": {
+          "arguments": [],
+          "compiled": true,
+          "passed": true,
+          "suite": "Bc2BodyAmmo",
+          "report": "checks-x64-01"
+        },
+        "Bc2BodyAmmoCache": {
+          "arguments": [
+            "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\reports\\coordinator-20261030-wiring54\\feed-cache01\\body-ammo.fvrprop",
+            "264"
+          ],
+          "compiled": true,
+          "passed": true,
+          "suite": "Bc2BodyAmmoCache",
+          "report": "checks-x64-01"
+        },
+        "Bc2ReloadRequestCycle": {
+          "arguments": [],
+          "compiled": true,
+          "passed": true,
+          "suite": "Bc2ReloadRequestCycle",
+          "report": "checks-x64-01"
+        },
+        "Bc2ReloadFamily": {
+          "arguments": [],
+          "compiled": true,
+          "passed": true,
+          "suite": "Bc2ReloadFamily",
+          "report": "checks-x64-01"
+        },
+        "AmmoCounter": {
+          "arguments": [],
+          "compiled": true,
+          "passed": true,
+          "suite": "AmmoCounter",
+          "report": "checks-x64-01"
+        },
+        "Bc2ReserveFinalValidation": {
+          "arguments": [],
+          "compiled": true,
+          "passed": true,
+          "suite": "Bc2ReserveFinalValidation",
+          "report": "checks-x64-01"
+        },
+        "WeaponMode": {
+          "arguments": [],
+          "compiled": true,
+          "passed": true,
+          "suite": "WeaponMode",
+          "report": "checks-x64-01"
+        },
+        "Bc2SightAdapter": {
+          "arguments": [],
+          "compiled": true,
+          "passed": true,
+          "suite": "Bc2SightAdapter",
+          "report": "checks-x64-01"
+        },
+        "Bc2AuthoredSight": {
+          "arguments": [],
+          "compiled": true,
+          "passed": true,
+          "suite": "Bc2AuthoredSight",
+          "report": "checks-x64-01"
+        },
+        "SightGrasp": {
+          "arguments": [],
+          "compiled": true,
+          "passed": true,
+          "suite": "SightGrasp",
+          "report": "checks-x64-01"
+        },
+        "SightVisualHandoff": {
+          "arguments": [],
+          "compiled": true,
+          "passed": true,
+          "suite": "SightVisualHandoff",
+          "report": "checks-x64-01"
+        },
+        "SceneDepthFrame": {
+          "arguments": [],
+          "compiled": true,
+          "passed": true,
+          "suite": "SceneDepthFrame",
+          "report": "checks-x64-01"
+        },
+        "SceneDepthPairGpu": {
+          "arguments": [
+            "--legacy-depth-cache"
+          ],
+          "compiled": true,
+          "passed": true,
+          "suite": "SceneDepthPairGpu",
+          "report": "checks-x64-01"
+        },
+        "HostFrameDiagnostics": {
+          "arguments": [],
+          "compiled": true,
+          "passed": true,
+          "suite": "HostFrameDiagnostics",
+          "report": "checks-x64-01"
+        }
+      }
+    }
+  },
+  "production_syntax": {
+    "x86": [
+      "Bc2ReloadFlowRuntime.cpp",
+      "Bc2Gameplay.cpp",
+      "Bc2RigPublication.cpp",
+      "NativeProbe.cpp"
+    ],
+    "x64": [
+      "Bc2ReloadFlowRuntime.cpp",
+      "OpenXrHost.cpp"
+    ],
+    "all_passed": true
+  },
+  "python": {
+    "muzzle_enrollment": 5,
+    "underbarrel_enrollment_and_sight_geometry": 17,
+    "feed_supply_cache": 9,
+    "body_ammo_assets": 3,
+    "firearm_cache_completion": 7,
+    "unchanged_agent_passes_reused": true
+  },
+  "cache": {
+    "path": "reports/coordinator-20261030-wiring54/feed-cache01/body-ammo.fvrprop",
+    "parts": 264,
+    "bytes": 60784412,
+    "sha256": "7e3d16f5bcc0af74ff7ab3afe2740197b1b4b9ac18dc9f61416325861af8f49e",
+    "prior_records_preserved": 252,
+    "cpu_consumer_both_architectures": true
+  },
+  "coverage": {
+    "magazine_entry_profiles": 128,
+    "ammo_dispatch": {
+      "magazine": 128,
+      "tube": 25,
+      "feed": 24,
+      "fixed": 4
+    },
+    "feed_full_cycles": 24,
+    "muzzle_configurations": 181,
+    "underbarrel_pairs": 127
+  },
+  "integration": false,
+  "normal_builds": false,
+  "installed": false,
+  "game_or_headset_tested": false,
+  "agents": "all retired",
+  "limits": [
+    "AN94 exact live refusal not established; shared path corrections and streamed entry telemetry staged.",
+    "Muzzle correction changes supported origin translation; native direction preserved; live barrel alignment pending.",
+    "Depth allocations reused in GPU checks; no FPS gain claimed.",
+    "Steam executable unavailable; no compatible native profile authored.",
+    "Empty-hand holstering deferred by user."
+  ],
+  "retained_failed_runs": [
+    "checks-x86-01",
+    "checks-x86-02"
+  ],
+  "next": "On user integration instruction: integrate this commit into latest canonical source; run required normal x86/x64 builds; verify/reuse exact264 cache; package/install only when required checks pass."
+}

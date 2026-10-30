@@ -88,9 +88,11 @@ D3D11SceneDepthConsumer::~D3D11SceneDepthConsumer(){assert(!impl_||impl_->thread
 bool D3D11SceneDepthConsumer::Initialize(ID3D11Device* device){
     if(impl_||!device)return false;auto next=std::make_unique<Impl>();next->device=device;device->GetImmediateContext(&next->context);impl_=std::move(next);return true;
 }
+void D3D11SceneDepthConsumer::ResetSources(){if(!impl_||impl_->thread!=GetCurrentThreadId())return;auto& p=*impl_;
+    p.copied={};p.haveCopy=false;p.imports.ResetSources();
+    for(auto& set:p.sources)for(auto& t:set)t.Reset();}
 void D3D11SceneDepthConsumer::Reset(){if(!impl_||impl_->thread!=GetCurrentThreadId())return;auto& p=*impl_;
-    for(auto& set:p.sources)for(auto& t:set)t.Reset();for(auto& t:p.local)t.Reset();for(auto& v:p.views)v.Reset();
-    p.imports.Reset();p.copied={};p.haveCopy=false;}
+    ResetSources();for(auto& t:p.local)t.Reset();for(auto& v:p.views)v.Reset();p.imports.Reset();}
 D3D11SceneDepthConsumer::ImportStats D3D11SceneDepthConsumer::ImportStatistics()const noexcept {
     return impl_?impl_->stats:ImportStats{};
 }

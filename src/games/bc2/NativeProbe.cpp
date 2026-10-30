@@ -3909,6 +3909,7 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
                     fvr::bc2::selectedKnife::WriteTelemetry(telemetry,knife);
                     telemetry<<",\"rig_publication\":";
                     fvr::bc2::rigPublication::ReportLiveCounters(telemetry);
+                    telemetry<<",\"weapon_routes\":";fvr::bc2::gameplay::ReportWeaponRoutes(telemetry);
                     telemetry<<"}\n";
                     telemetry.flush();nextSample=now+1000;
                 }

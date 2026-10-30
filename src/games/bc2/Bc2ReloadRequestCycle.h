@@ -1,6 +1,7 @@
 #pragma once
 #include "Bc2ReloadRequestBridge.h"
 #include "Bc2ReloadRoundGate.h"
+#include "Bc2ManualPumpConfig.h"
 
 namespace fvr::bc2
 {
@@ -79,7 +80,7 @@ class Bc2ReloadRequestCycle
     bool KeepAlive(const ReloadCycleControl &, std::int64_t nowNs) noexcept;
     bool ObservePredictionRestore(const ReloadPredictionRestore& e,std::int64_t now)noexcept {
         const bool accepted=Current(now)&&phase_==ReloadRequestCyclePhase::Advancing&&e.branch<2&&!open_[e.branch]&&
-            configured_&&e.config==config_&&IsDiagnosticSpasConfig(e.config)&&
+            configured_&&e.config==config_&&ManualPumpConfig(e.config)&&
             e.cycle==control_.cycle&&e.identity==control_.identity&&e.endNs<=now&&completion_.ObservePredictionRestore(e);
         // The original Update context remains valid only until its ORIGINAL
         // freshness bound. A Restore neither replaces nor renews that evidence.

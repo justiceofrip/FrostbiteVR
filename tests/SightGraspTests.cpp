@@ -139,6 +139,13 @@ int Rejections(){
 }
 }
 int main(){
+    // AN94's independently measured endpoint exceeds 90 degrees. Respect its
+    // authored stop in both directions while retaining the bounded hinge API.
+    constexpr float measured=1.640066819f;
+    const auto measuredGrasp=SightGraspBinding::Begin({}, {0,-1,0},At(),At(0,0,-.1f),{0,0,-.1f},{},measured);
+    CHECK(measuredGrasp);const auto stop=measuredGrasp->Evaluate(3.f,SightMode::Primary);
+    CHECK(stop&&Near(stop->appliedRadians,measured));
+    CHECK(!SightGraspBinding::Begin({}, {0,-1,0},At(),At(),{},{},3.2f));
     if(HingeGeometry()||FixedPalmAndCapturedOrientation()||ReverseAndClamps()||
        WorldComposition()||Rejections())return 1;
     return 0;

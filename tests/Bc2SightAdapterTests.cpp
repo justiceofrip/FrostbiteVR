@@ -85,16 +85,16 @@ int CompleteOpposedGraspRequired(){
   const auto recovered=MeasureOpposedSightAdapterContact(adapter,s,configuration);
   CHECK(recovered.valid&&recovered.previewValid&&recovered.generation==s.generation&&recovered.deadline==s.deadline);
  }
- CHECK(!SightAdapterEnabled(SightAdapterProfiles[1])); // GP30 geometry grants no admission.
+ CHECK(SightAdapterEnabled(SightAdapterProfiles[1])); // Exact source enrollment; native linkage remains required.
  return 0;
 }
 int ExactFamilyAndGate(){
  ModeFixture f;const auto& p=WeaponModeFamilies[1];
  f.Text(0x16000,"AEK971_sp");f.Text(0x16200,"Objects/Weapons/Handheld/RU_rgl_AEK971/SP_rgl_AEK971");
- f.Text(0x16300,"Objects/Weapons/Handheld/RU_rgl_AEK971/SP_rgl_GP30");f.Text(0x16400,"fixture_owned_aek");
+ f.Text(0x16300,"Objects/Weapons/Handheld/RU_rgl_AEK971/SP_rgl_GP30");f.Text(0x16400,p.persistentId.data());
  const auto original=f.bytes;auto mode=ObserveWeaponModeFamily(f.Memory(),f.soldier,f.rifle,p);
  CHECK(mode&&mode->family==&p&&mode->persistent==f.persistent&&!mode->selectedSecondary&&mode->action==33&&f.bytes==original);
- CHECK(!ResolveWeaponMode(f.Memory(),f.soldier,f.rifle)); // Offline evidence is not dispatch admission.
+ CHECK(ResolveWeaponMode(f.Memory(),f.soldier,f.rifle)); // Complete live linked-pair fixture, not native acceptance.
  f.Word(f.inventory+0x14c,3);mode=ObserveWeaponModeFamily(f.Memory(),f.soldier,f.launcher,p);
  CHECK(mode&&mode->selectedSecondary&&mode->action==36&&mode->targetWeapon==f.rifle);
  f.Text(0x16300,"Objects/Weapons/Handheld/Other/SP_rgl_Smoke");CHECK(!ObserveWeaponModeFamily(f.Memory(),f.soldier,f.launcher,p));
@@ -105,7 +105,7 @@ struct AssemblyFixture:AuthoredFixture {
  AuthoredSightGeometry geometry;SightAdapterProfile adapter;
  AssemblyFixture(){
   names[0]="jntWpn_1";names[1]="jntWpnwpnJnt_16";names[2]="jntWpn_17";names[3]="jntWpn_18";
-  geometry=Gp30SightGeometry;geometry.rigFingerprint=SightRigFingerprint(names,parents,inverse);
+  geometry=*SightAdapterProfiles[1].authored;geometry.rigFingerprint=SightRigFingerprint(names,parents,inverse);
   adapter=SightAdapterProfiles[1];adapter.authored=&geometry;
  }
  AuthoredSightObservation Observation(){auto s=Sample();s.asset=geometry.primaryAsset;s.configuration=geometry.primaryConfiguration;
@@ -152,8 +152,71 @@ int InterruptionAndHandHandoff(){
  }
  return 0;
 }
+int EveryMeasuredAssembly(){
+ unsigned an94=0,subtrees=0;
+ for(const auto& family:WeaponModeFamilies){
+  const auto* adapter=SightAdapterForFamily(&family);CHECK(adapter&&SightAdapterEnabled(*adapter));
+  if(adapter->assembly!=SightAssemblyKind::Subtree)continue;
+  ++subtrees;const auto& g=*adapter->authored;
+  std::vector<std::string> names;std::vector<std::int32_t> parents;std::vector<math::Matrix4> native;
+  for(auto i=g.boneChain.rbegin();i!=g.boneChain.rend();++i){names.emplace_back(*i);parents.push_back(names.size()==1?-1:std::int32_t(names.size()-2));native.push_back(At());}
+  native.back()=At(.1f,.2f,.3f);
+  AuthoredSightObservation s;s.asset=family.primaryAsset;s.configuration=family.primaryConfiguration;s.selectedMeshPath=g.meshPath;
+  s.rigFingerprint=g.rigFingerprint;s.generation=12;s.now=10;s.deadline=20;s.attachmentReady=true;
+  s.names=names;s.parents=parents;s.native=native;s.placedWeapon=At();s.rawAnatomicalWrist=At(.1f,.2f,.25f);
+  const auto contact=MeasureSightAdapterContact(*adapter,s);CHECK(contact.valid&&contact.previewValid);
+  auto grasp=SightGraspBinding::Begin(contact.pivotMeters,contact.axis,contact.sightLocalMeters,
+   contact.handLocalFrameMeters,contact.graspPointMeters,contact.palmPointWristMeters,adapter->travelRadians);CHECK(grasp);
+  const auto opened=grasp->Evaluate(4.f,SightMode::Primary);CHECK(opened&&Near(opened->appliedRadians,adapter->travelRadians));
+  CHECK(BuildSightAssemblyWrites(*adapter,names,parents,native,{},opened->sight));
+  const auto closing=SightGraspBinding::Begin(contact.pivotMeters,contact.axis,opened->sight,opened->wrist,
+   opened->graspPoint,contact.palmPointWristMeters,adapter->travelRadians);CHECK(closing);
+  const auto closed=closing->Evaluate(-4.f,SightMode::Secondary);CHECK(closed);
+  for(unsigned r=0;r<4;++r)for(unsigned c=0;c<4;++c)CHECK(Near(closed->sight.values[r][c],contact.sightLocalMeters.values[r][c],.0001f));
+  if(family.primaryAsset.starts_with("AN94")){++an94;CHECK(adapter->travelRadians>1.6f&&adapter->rear=="jntWpn_7");}
+  s.asset=family.secondaryAsset;s.configuration=family.secondaryConfiguration;CHECK(MeasureSightAdapterContact(*adapter,s).valid);
+  s.configuration="foreign_same_mesh";CHECK(!MeasureSightAdapterContact(*adapter,s).valid);
+  s.configuration=family.secondaryConfiguration;++s.rigFingerprint;CHECK(!MeasureSightAdapterContact(*adapter,s).valid);
+ }
+ CHECK(an94>0&&subtrees>an94);return 0;
+}
+int SelectedMeshWithoutGunGrip(){
+ for(const auto& p:SightAdapterProfiles){
+  if(!p.authored)continue;
+  for(bool secondary:{false,true}){
+   const auto& family=*p.family;const auto asset=secondary?family.secondaryAsset:family.primaryAsset;
+   const auto configuration=secondary?family.secondaryConfiguration:family.primaryConfiguration;
+   SelectedMeshesSnapshot s;s.sequence=10;s.observedNs=90;s.deadlineNs=200;s.weaponData=400;
+   s.stateTypeInfo=500;s.meshTypeInfo=600;s.inventory=700;s.soleConfiguredArray=800;s.stateCount=1;
+   s.configurationPathVerified=true;s.configurationPathPointer=900;
+   s.owner.player=1;s.owner.soldier=2;s.owner.weak=3;s.owner.weapon=4;s.owner.actorGeneration=5;s.owner.equipGeneration=6;s.owner.space=7;
+   const auto text=[](auto& dst,std::string_view src){std::fill(dst.begin(),dst.end(),0);std::copy(src.begin(),src.end(),dst.begin());};
+   text(s.weaponName,asset);text(s.configurationPath,configuration);
+   auto& state=s.states[0];state.state=1000;state.array=800;state.count=1;
+   auto& mesh=state.meshes[0];mesh.address=1100;mesh.namePointer=1200;mesh.typeInfo=600;text(mesh.assetPath,p.authored->meshPath);
+   WeaponEquipmentIdentity equipment;equipment.weapon=4;equipment.data=400;text(equipment.asset,asset);
+   AuthoredGripOwner owner{2,3,5,6,7,10,200};
+   CHECK(SightAdapterSelectedMesh(p,&s,equipment,owner,p.authored->rigFingerprint,100));
+   for(unsigned mutation=0;mutation<9;++mutation){
+    auto bad=s;
+    if(mutation==0)bad.configurationPathVerified=false;
+    if(mutation==1)text(bad.configurationPath,"foreign/configuration");
+    if(mutation==2)bad.owner.weapon++;
+    if(mutation==3)bad.deadlineNs=100;
+    if(mutation==4)bad.sequence++;
+    if(mutation==5)text(bad.states[0].meshes[0].assetPath,"foreign/mesh");
+    if(mutation==6){bad.states[0].count=2;bad.states[0].meshes[1]=bad.states[0].meshes[0];}
+    if(mutation==7)bad.owner.actorGeneration++;
+    if(mutation==8)bad.deadlineNs=150; // mesh lease must cover the published contact
+    CHECK(!SightAdapterSelectedMesh(p,&bad,equipment,owner,p.authored->rigFingerprint,100));
+   }
+   CHECK(!SightAdapterSelectedMesh(p,&s,equipment,owner,p.authored->rigFingerprint+1,100));
+  }
+ }
+ return 0;
+}
 }
 int main(int argc,char** argv){
  if(argc==2&&std::string_view(argv[1])=="--variant-only")return MeasuredUnscopedVariant();
- CHECK(!MeasuredUnscopedVariant());CHECK(!CompleteOpposedGraspRequired());CHECK(!ExistingModeTests());CHECK(!ExistingAuthoredTests());CHECK(!ExactFamilyAndGate());CHECK(!ActualAssemblyConsumer());CHECK(!InterruptionAndHandHandoff());
+ CHECK(!MeasuredUnscopedVariant());CHECK(!CompleteOpposedGraspRequired());CHECK(!ExistingModeTests());CHECK(!ExistingAuthoredTests());CHECK(!ExactFamilyAndGate());CHECK(!ActualAssemblyConsumer());CHECK(!InterruptionAndHandHandoff());CHECK(!EveryMeasuredAssembly());CHECK(!SelectedMeshWithoutGunGrip());
  std::puts("Sight adapter: exact family gate, descendant plan and interrupted hand handoff passed; no native admission");return 0;}

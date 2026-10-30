@@ -27,9 +27,11 @@ inline std::optional<graphics::BodyPropInstance> BodyAmmoHostInstance(
             if(m.family.carried)bound(m.family.carried->observedNs,m.family.carried->deadlineNs);
         }else if(a.fixed){const auto& fixed=*a.fixed;
             bound(fixed.binding.observedNs,fixed.binding.deadlineNs);bound(fixed.ammunition.observedNs,fixed.ammunition.deadlineNs);
-        }else{const auto& shell=*a.shell;bound(shell.reserve.observedNs,shell.reserve.deadlineNs);bound(shell.meshes->observedNs,shell.meshes->deadlineNs);
+        }else if(a.feed){const auto& native=a.feed->native;
+            bound(native.observedNs,native.deadlineNs);bound(native.binding.observedNs,native.binding.deadlineNs);
+        }else if(a.shell){const auto& shell=*a.shell;bound(shell.reserve.observedNs,shell.reserve.deadlineNs);bound(shell.meshes->observedNs,shell.meshes->deadlineNs);
             if(shell.heldCycle)bound(shell.heldCycle->observedNs,shell.heldCycle->deadlineNs);
-        }
+        }else return {};
     }
     return graphics::BodyPropFresh(result,now)?std::optional{result}:std::nullopt;
 }

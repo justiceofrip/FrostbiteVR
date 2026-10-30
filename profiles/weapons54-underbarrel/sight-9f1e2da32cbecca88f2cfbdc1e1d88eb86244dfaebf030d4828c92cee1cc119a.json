@@ -1,0 +1,353 @@
+{
+  "coordinate_key": "9f1e2da32cbecca88f2cfbdc1e1d88eb86244dfaebf030d4828c92cee1cc119a",
+  "primary": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416",
+  "secondary": "Objects/Weapons/Handheld/UL_rgl_HK416/UL_rgl_HK416",
+  "mesh_path": "Objects/Weapons/Handheld/UL_rif_HK416/UL_rif_HK416_Mesh",
+  "mesh_reference": "objects/weapons/handheld/ul_rif_hk416/ul_rif_hk416_mesh/2d38fc69-8e6f-11db-8d63-dc48e2dbe34b",
+  "mesh_sha256": "d2acc4490d3c585fd6adc6a304f0f08758d066605dfc5fa0cea83a7d85a4b5ac",
+  "lod_sha256": "55a13bb1563c73205a8de3a45865b6e747acf5458b5ccd95ec1dddf9d3855fd7",
+  "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+  "roles": [
+    {
+      "1p_altdeploy": {
+        "resource": "Animations/Weapons/Handheld/UL_rif_HK416/1P/1P_AltDeploy.res",
+        "asset": {
+          "resource": "Animations/Weapons/Handheld/UL_rif_HK416/1P/1P_AltDeploy.dbx",
+          "sha256": "80745f243002135ec6346d01a09409d9efc3ec824ddc7c7325e510742642d6c9",
+          "instance_guid": "016dcb4c-e993-4bfa-94ef-e088b1d00251",
+          "type": "Animation.AnimationAsset"
+        },
+        "skeleton_reference": "characters/skeletons/ske01/20a6d9b2-2cd5-4895-a59c-f144e6d3f061"
+      },
+      "handsikpose": {
+        "resource": "Animations/Weapons/Handheld/UL_rif_HK416/1P/HandsIKPose.res",
+        "asset": {
+          "resource": "Animations/Weapons/Handheld/UL_rif_HK416/1P/HandsIKPose.dbx",
+          "sha256": "133c95691d5c3c9f6a2ab41b4faadae50332e537d404a469d8432019603b3f3b",
+          "instance_guid": "c8296f74-3a55-437a-af01-9bbccff69f28",
+          "type": "Animation.AnimationAsset"
+        },
+        "skeleton_reference": "characters/skeletons/ske01/20a6d9b2-2cd5-4895-a59c-f144e6d3f061"
+      }
+    },
+    {
+      "1p_altdeploy": {
+        "resource": "Animations/Weapons/Handheld/UL_rgl_HK416/1P/1P_AltDeploy.res",
+        "asset": {
+          "resource": "Animations/Weapons/Handheld/UL_rgl_HK416/1P/1P_AltDeploy.dbx",
+          "sha256": "6e4a8843faca34a319dc662661e2e1d138ea1913d6847c57a535957449f876cc",
+          "instance_guid": "3a9d5653-5ceb-4897-9f0c-931eb07d59ad",
+          "type": "Animation.AnimationAsset"
+        },
+        "skeleton_reference": "characters/skeletons/ske01/20a6d9b2-2cd5-4895-a59c-f144e6d3f061"
+      },
+      "handsikpose": {
+        "resource": "Animations/Weapons/Handheld/UL_rgl_HK416/1P/HandsIKPose.res",
+        "asset": {
+          "resource": "Animations/Weapons/Handheld/UL_rgl_HK416/1P/HandsIKPose.dbx",
+          "sha256": "d781070a33cf409499968e05e8b435ff0146691d7e7977d311051fbba1174744",
+          "instance_guid": "da6960fe-a2d4-44bd-a2ab-e1717dd1c9bb",
+          "type": "Animation.AnimationAsset"
+        },
+        "skeleton_reference": "characters/skeletons/ske01/20a6d9b2-2cd5-4895-a59c-f144e6d3f061"
+      }
+    }
+  ],
+  "clip_hashes": [
+    [
+      "51490c90b27a0ce26058da872365090af5706a1b2277df9571df83cf5eed91e7",
+      "cb6df046de0407d2195f583131f8a9b10c49c460f7fe89f0bd66391b09b8fe1d"
+    ],
+    [
+      "9835492cf05f1f4c8448fa8a446de6132f2aceae2defd5b4efe099e81cf916f5",
+      "c518f16542b0e64f4812ff3b033b2a466f366ffd461730a155e938fdc9f504c6"
+    ]
+  ],
+  "archives": [
+    {
+      "path": "Dist/win32/async/weapon/ul_rif_hk416-00.fbrb",
+      "index_sha256": "944577465693bf044cc15074d5ff976fc886299dc5bb42e289e802cbf30d35e8"
+    },
+    {
+      "path": "Dist/win32/async/weapon/ul_rgl_hk416-00.fbrb",
+      "index_sha256": "fae27003405ac15ee916e753228910d0e8559e5964b0033354d162bfdb188508"
+    }
+  ],
+  "candidates": [
+    {
+      "bone_chain": [
+        "jntWpn_8",
+        "jntWpn_1"
+      ],
+      "unskinned_descendants": [],
+      "bone": "jntWpn_8",
+      "weapon": "jntWpn_1",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "bounds_part_m": [
+        [
+          -0.012268569320455636,
+          -0.007135391235351543,
+          -0.08007491845637699
+        ],
+        [
+          0.012268578633651356,
+          0.007209777832031374,
+          0.00480380654334892
+        ]
+      ],
+      "triangles": 540,
+      "sections": [
+        {
+          "name": "export1p|lod0|UL_rif_HK416_Base|UL_rif_HK416_BaseShape_decal_decal",
+          "triangles": 8,
+          "vertices": 16,
+          "vertex_skin_sha256": "6e2b1728116498bf188031f8e322796b834ec28a36204c6846751b45362bc97f",
+          "indices_sha256": "9e70a9ad411319ae2295983e9da5145649a52ff9d51eb64f57ac09eb0d1dfce0",
+          "bone_hash": "f7f9bcdb"
+        },
+        {
+          "name": "export1p|lod0|UL_rif_HK416_Base|UL_rif_HK416_BaseShape_BrushedMetal",
+          "triangles": 266,
+          "vertices": 450,
+          "vertex_skin_sha256": "ab11c29b566c358cb3dd1a582bca0c34e492fefeb923bb050ac2d2f6aead36ae",
+          "indices_sha256": "65e9b2ece47216c8fffc916ffbcd3e6e438af106e0f51b1d70431aaf785eb6fb",
+          "bone_hash": "f7f9bcdb"
+        },
+        {
+          "name": "export1p|lod0|UL_rif_HK416_Base|UL_rif_HK416_BaseShape_Plastic_ZOnly",
+          "triangles": 266,
+          "vertices": 180,
+          "vertex_skin_sha256": "ce59013aaff2c9b93bf9871210b14074a21d55713276fb5f23c9154724cc2caf",
+          "indices_sha256": "1c3d7124aed5c1025dbaf1db3ec66f30d3148704720c3491778adccd2d6d2c04",
+          "bone_hash": "f7f9bcdb"
+        }
+      ],
+      "weapon_from_closed": [
+        1.0000000000000009,
+        -3.9918968738200666e-16,
+        -4.700016417724662e-17,
+        0.0,
+        -3.9918968738200666e-16,
+        1.0000000000000007,
+        8.847089727481716e-17,
+        0.0,
+        -4.700016417724662e-17,
+        8.847089727481716e-17,
+        1.0000000000000013,
+        -0.0,
+        6.418476861114186e-17,
+        0.0958355963230131,
+        -0.5692559480667121,
+        1.0
+      ],
+      "weapon_from_open": [
+        1.0000000000000009,
+        -9.957312752106873e-16,
+        2.4378285848336567e-16,
+        0.0,
+        2.903493417916181e-16,
+        -1.5916087892087205e-16,
+        1.0000000000000022,
+        0.0,
+        6.302196178115116e-16,
+        -1.000000000000001,
+        -2.8341044788771086e-16,
+        -0.0,
+        -6.853431976268365e-08,
+        0.09583560377359389,
+        -0.5692559480667124,
+        1.0
+      ],
+      "mechanism": {
+        "axis_part": [
+          1.0,
+          9.133183575746305e-16,
+          -1.5365042137921406e-15
+        ],
+        "settled_travel_rad": 1.570796326794895,
+        "maximum_travel_rad": 1.5734410767638838,
+        "parent_from_closed": [
+          1.0000000000000018,
+          -7.983793747640139e-16,
+          -9.400032835449337e-17,
+          0.0,
+          -7.983793747640139e-16,
+          1.0000000000000013,
+          1.7694179454963452e-16,
+          0.0,
+          -9.400032835449337e-17,
+          1.7694179454963452e-16,
+          1.0000000000000027,
+          0.0,
+          6.02727251002983e-17,
+          0.09583559632301317,
+          -0.5692559480667129,
+          1.0
+        ],
+        "parent_from_open": [
+          1.0000000000000018,
+          -1.8109157836482275e-15,
+          5.111471142182918e-16,
+          0.0,
+          5.577135975265445e-16,
+          -9.736135508919854e-17,
+          1.0000000000000042,
+          0.0,
+          1.4454041262490516e-15,
+          -1.000000000000002,
+          -3.4520997171938506e-16,
+          0.0,
+          -6.853432001967748e-08,
+          0.09583560377359393,
+          -0.5692559480667135,
+          1.0
+        ],
+        "pivot_residual_m": 2.8398569122225822e-08,
+        "opening": {
+          "kind": "hinge_candidate",
+          "max_translation_m": 1.8133640628107623e-15,
+          "max_rotation_rad": 1.5734410767638838,
+          "axis_in_baseline_part": [
+            0.9999999999914768,
+            -3.815481447174626e-06,
+            -1.5775278932984842e-06
+          ],
+          "peak_sample": 18,
+          "axis_line_residual_m": 0.0,
+          "baseline_parent_from_part": [
+            0.9999999999709168,
+            5.393077357694224e-06,
+            5.392844816508536e-06,
+            0.0,
+            -5.392844817445033e-06,
+            0.9999999990558064,
+            -4.311970263269372e-05,
+            0.0,
+            -5.393077358641299e-06,
+            4.311967354819285e-05,
+            0.9999999990558069,
+            0.0,
+            -1.7517942948912277e-08,
+            0.09583561867475536,
+            -0.569255948066713,
+            1.0
+          ],
+          "peak_parent_from_part": [
+            0.9999999999709167,
+            -9.921122035016335e-09,
+            7.626845842847318e-06,
+            0.0,
+            -7.62684584267755e-06,
+            -0.0026016273580691217,
+            0.9999966157327353,
+            0.0,
+            9.921122007162497e-09,
+            -0.9999966157618186,
+            -0.0026016273580695883,
+            0.0,
+            -1.751794271368683e-08,
+            0.09583561867475499,
+            -0.5692559480667121,
+            1.0
+          ],
+          "baseline_is_native_closed": false,
+          "semantic_role": null
+        },
+        "closing": {
+          "kind": "hinge_candidate",
+          "max_translation_m": 2.2224357773557077e-15,
+          "max_rotation_rad": 1.5708997333957515,
+          "axis_in_baseline_part": [
+            -0.9999999999914815,
+            3.8133994710896373e-06,
+            1.5796769869226519e-06
+          ],
+          "peak_sample": 26,
+          "axis_line_residual_m": 0.0,
+          "baseline_parent_from_part": [
+            0.9999999999709154,
+            -5.527395078080318e-13,
+            7.626798713706772e-06,
+            0.0,
+            -7.626798712636878e-06,
+            -1.4476287199136847e-07,
+            0.9999999999709059,
+            0.0,
+            5.527347107190201e-13,
+            -0.9999999999999899,
+            -1.447628722762995e-07,
+            0.0,
+            -3.4266280346693824e-16,
+            0.0958355963230135,
+            -0.5692559480667116,
+            1.0
+          ],
+          "peak_parent_from_part": [
+            0.9999999999709155,
+            5.393239556521562e-06,
+            5.392682670314277e-06,
+            0.0,
+            -5.392682669915321e-06,
+            0.9999999946539541,
+            -0.00010326186438697214,
+            0.0,
+            -5.3932395560774826e-06,
+            0.00010326183530325748,
+            0.9999999946539551,
+            0.0,
+            -3.9170019047442465e-16,
+            0.09583559632301318,
+            -0.5692559480667125,
+            1.0
+          ],
+          "baseline_is_native_closed": false,
+          "semantic_role": null
+        }
+      },
+      "settled_pose_observation": [
+        {
+          "maximum_translation_m": 0.0,
+          "maximum_rotation_rad": 0.0,
+          "samples": 9,
+          "bone_evaluation_status": {
+            "jntWpn_8": "static_authored_pose",
+            "jntWpn_1": "static_authored_pose"
+          }
+        },
+        {
+          "maximum_translation_m": 7.022526318478265e-16,
+          "maximum_rotation_rad": 0.0,
+          "samples": 9,
+          "bone_evaluation_status": {
+            "jntWpn_8": "static_authored_pose",
+            "jntWpn_1": "static_authored_pose"
+          }
+        }
+      ],
+      "authored_contacts": [
+        {
+          "windows": 0,
+          "pose": null,
+          "kind": "same_frame_authored_contact_candidate",
+          "native_contact_verified": false
+        },
+        {
+          "windows": 0,
+          "pose": null,
+          "kind": "same_frame_authored_contact_candidate",
+          "native_contact_verified": false
+        }
+      ],
+      "grasp_policy": "existing complete bind-derived MechanismGrip; raw controller wrist and distal-knuckle proxy",
+      "authored_contact_available": false,
+      "sample_hz": 30,
+      "runtime_admitted": false,
+      "native_playback_verified": false,
+      "headset_verified": false
+    }
+  ],
+  "rejected": [],
+  "native_accepted": false,
+  "headset_accepted": false,
+  "digest": "20dad16391b40bf861bfd10f0a74677e936368eeb3ed89df32e3e39d492c1ee8"
+}

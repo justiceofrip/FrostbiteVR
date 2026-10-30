@@ -77,7 +77,7 @@ int RejectIdentityAndGeometry(){
         if(mutation==12)s.mechanismPointWristMeters.x=std::numeric_limits<float>::quiet_NaN();
         if(mutation==13)p.maximumMeters=p.minimumMeters;
         if(mutation==14)p.axisPart={0,0,0};
-        if(mutation==15)p.travelRadians=2;
+        if(mutation==15)p.travelRadians=3.2f;
         if(mutation==16)f.native[1]={};
         if(mutation==17)f.chain[1]="sight";
         CHECK(!MeasureAuthoredSightContact(p,s).valid);
@@ -136,7 +136,7 @@ int CompleteProceduralGrasp(){
 }
 int HandoffRejectionsAndClosure(){
     Fixture f;const auto p=f.Profile();const auto c=MeasureAuthoredSightContact(p,f.Sample());CHECK(c.valid);
-    for(float bad:{0.f,-1.f,2.f,std::numeric_limits<float>::quiet_NaN()}){
+    for(float bad:{0.f,-1.f,3.2f,std::numeric_limits<float>::quiet_NaN()}){
         CHECK(!SightGraspBinding::Begin(c.pivotMeters,c.axis,c.sightLocalMeters,c.handLocalFrameMeters,c.graspPointMeters,c.palmPointWristMeters,bad));
         CHECK(!SightVisualHandoff::BeginWithGeometry(c.sightLocalMeters,SightMode::Primary,c.pivotMeters,c.axis,bad));
     }

@@ -78,7 +78,7 @@ public:
         using namespace sight_grasp_detail;
         if(!Finite(pivotMeters)||!Unit(unitAxis)||!Proper(sightAtGrab)||!Proper(wristAtGrab)||
            !Finite(graspPointWeapon)||!Finite(palmPointWrist)||!std::isfinite(maxTravelRadians)||
-           maxTravelRadians<=0||maxTravelRadians>1.5707963267948966f)return {};
+           maxTravelRadians<=0||maxTravelRadians>3.141592653589793f)return {};
         SightGraspBinding out;
         out.pivot_=pivotMeters;out.axis_=unitAxis;out.sight_=sightAtGrab;out.wrist_=wristAtGrab;
         out.grasp_=graspPointWeapon;out.palm_=palmPointWrist;out.maxTravel_=maxTravelRadians;

@@ -32,7 +32,10 @@ public:
         const bool open=reset||!valid_[slot]||!SameSources(frame,old);
         out.frame=frame;out.descriptor=descriptor;out.slot=slot;out.count=count;out.revision=revision_;
         out.resetImports=reset;out.openSources=open;
-        out.createLocal=reset||!localValid_||!SameShape(frame,local_)||(count==1&&open);
+        // Shared source identities have a shorter lifetime than the private
+        // copy targets. Reopen changed sources without reallocating an equal
+        // shape, including the single-source MSAA transport.
+        out.createLocal=!localValid_||!SameShape(frame,local_);
         return true;
     }
     bool Commit(const Selection& s)noexcept {
@@ -41,7 +44,8 @@ public:
         if(s.resetImports){opened_={};valid_={};}
         count_=s.count;opened_[s.slot]=s.frame;valid_[s.slot]=true;local_=s.frame;localValid_=true;++revision_;return true;
     }
-    void Reset()noexcept {opened_={};valid_={};local_={};localValid_=false;count_=0;++revision_;}
+    void ResetSources()noexcept {opened_={};valid_={};count_=0;++revision_;}
+    void Reset()noexcept {ResetSources();local_={};localValid_=false;}
 private:
     std::array<SceneDepthFrame,Capacity> opened_{};std::array<bool,Capacity> valid_{};
     SceneDepthFrame local_{};bool localValid_=false;unsigned count_=0;std::uint64_t revision_=0;
