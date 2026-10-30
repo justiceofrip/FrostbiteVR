@@ -1,0 +1,32 @@
+{
+  "schema": "fvr.coordinator-headset.v1",
+  "version": "0.1.18",
+  "task_commit": "24b32f6c46415b771518779294d8900747f07e52",
+  "built_source_commit": "980808d43650dd7f02ab0d684d2778b42bf8349a",
+  "source_sha256": "30256bfa58ce1c7a116a9fdaf20e6647cb6c26b0729e6a0d56b8fe1fb16e379a",
+  "normal_build_receipt": {
+    "path": "reports/coordinator-20261030-headset52/normal-runtime/build-receipt.json",
+    "sha256": "a4bb916a5f8242692ae766b89b88e0d7dced8eafda0a7506e5eb032bd224c131"
+  },
+  "normal_checks": {
+    "x86": 331,
+    "x64": 331
+  },
+  "matching_binary_symbol_pairs": 6,
+  "firearm_names": 77,
+  "exact_configurations": 181,
+  "local_cache_parts": 252,
+  "local_cache_sha256": "d0135f2f44f31322ac5e3971b82b26d665c22c48d9b6a39a04dd489f95b396aa",
+  "retained_failures": [
+    "x86-01 storage refusal",
+    "x86-02 eight stale test fixtures"
+  ],
+  "fixture_correction_commit": "980808d43650dd7f02ab0d684d2778b42bf8349a",
+  "package_review": "No concrete blocker; read-only helper review",
+  "source_pushed": false,
+  "installed": false,
+  "game_started": false,
+  "headset_accepted": false,
+  "publicly_released": false,
+  "local_evidence": "reports/coordinator-20261030-headset52"
+}

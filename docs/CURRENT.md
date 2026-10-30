@@ -5,9 +5,10 @@ Updated October 30, 2026. This replaces old next-step instructions; prior eviden
 
 ## Active work
 
-Weapons51 stages complete firearm source coverage for77 names/181 configurations;
-30 focused suites pass per architecture and the252-record cache passes both CPU consumers.
-[Completion receipt](../handoff/tasks/WEAPONS/20261030-roster43/COMPLETE.md). Integration/install held by user; installed0.1.17 is unchanged.
+Headset52 integrates the complete firearm batch: 77 names/181 configurations,
+both normal builds pass331/331, and the private0.1.18 package/cache is verified.
+[Test candidate receipt](../handoff/integrations/coordinator-20261030-headset52/README.md).
+User authorized installation for a headset test;0.1.17 stays selected until the verified update completes.
 
 Private0.1.17 includes the launcher retained-handle image fix;38 identity/43 portable
 checks pass. Its verified package reuses the staged cache, which now passes both
