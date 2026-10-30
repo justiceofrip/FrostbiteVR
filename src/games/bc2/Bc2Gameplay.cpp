@@ -4113,6 +4113,8 @@ void Report(std::ostream& out){out<<"{\"installed\":"<<(hooks[0]&&hooks[1]?"true
 #endif
     if(physicalReloadFixture){out<<",\"physical_reload_probe\":";physicalReloadFixture->Report(out);}
     if(physicalReload){out<<",\"physical_reload\":";physicalReload->Report(out);}
+    if(physicalFeed){out<<",\"physical_feed\":";physicalFeed->Report(out);}
+    if(physicalPistolSlide){out<<",\"physical_pistol_slide\":";physicalPistolSlide->Report(out);}
     if(physicalPump){out<<",\"physical_pump\":";physicalPump->Report(out);
         out<<",\"pump_aim_continuation\":{\"captures\":"<<pumpAimCaptures.load()<<",\"applications\":"<<pumpAimApplications.load()<<",\"rejected\":"<<pumpAimRejected.load()<<'}';}
     if(physicalPumpFixture){out<<",\"physical_pump_probe\":";physicalPumpFixture->Report(out);}

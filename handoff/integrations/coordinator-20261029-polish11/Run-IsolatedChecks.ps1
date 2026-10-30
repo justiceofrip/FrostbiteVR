@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param([ValidateSet('x86','x64')][string]$Architecture,
       [ValidateSet('Anchor','Input','GameplaySyntax','NativeSyntax','ReloadSyntax','RigSyntax','Sight','Scope','Grip','Configuration','Carried','Observation','Muzzle','FeedMechanism','FeedReload','FeedInteraction','FeedReloadSession','FeedAmmunition','FeedEquipmentSession','PhysicalPistolSlide','Bc2FeedEquipmentAdapter','Bc2FeedEquipmentProfile','Bc2PhysicalFeed','Bc2FeedPresentation','PistolAfterFeedPolicy','Bc2PistolSlideProfile','Bc2PistolSlidePresentation','Bc2PistolAfterFeedEvidence','Bc2PistolAfterFeedInput','Bc2PhysicalPistolSlide')][string]$Suite,
-      [ValidateSet('coordinator-20261029-polish11','coordinator-20261029-work12','coordinator-20261029-work13','coordinator-20261030-implementation15','coordinator-20261030-implementation17','coordinator-20261030-implementation18','coordinator-20261030-implementation22')][string]$ReportRun='coordinator-20261029-polish11',
+      [ValidateSet('coordinator-20261029-polish11','coordinator-20261029-work12','coordinator-20261029-work13','coordinator-20261030-implementation15','coordinator-20261030-implementation17','coordinator-20261030-implementation18','coordinator-20261030-implementation22','coordinator-20261030-continuation26')][string]$ReportRun='coordinator-20261029-polish11',
       [Parameter(Mandatory)][string]$OutputPath)
 $ErrorActionPreference='Stop'
 $PSNativeCommandUseErrorActionPreference=$false

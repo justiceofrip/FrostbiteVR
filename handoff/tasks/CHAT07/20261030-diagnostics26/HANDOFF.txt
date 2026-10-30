@@ -1,0 +1,14 @@
+DoneY: M60 feed and MP443 slide on-demand diagnostics are ready for root wiring.
+Owned source: Bc2PhysicalFeed.h/.cpp and Bc2PhysicalPistolSlide.h/.cpp only.
+Both owners expose Report(std::ostream&) const and emit a compact JSON object.
+Ten bounded counters per owner cover ticks, transitions, suppression, pending, claims and relevant refusals.
+Latest exit reason/status and fixed supported asset classification are independent relaxed atomics.
+Last supported-asset issue retains its reason, flags and status across stow/other-weapon ticks.
+Requested supported-asset selection/binding refusals are retained even before successful selection.
+Issue flag names list bits from least significant upward; enum IDs refer to existing policy enums.
+Feed counts are the last observed native view; slide counts are historical admission counts (-1 means unseen).
+Report reads only diagnostics; no mutable equipment traversal, journals, Tick logging/scans or added heap allocation.
+Gameplay decisions, API calls, transaction/hand ownership and result fields remain unchanged.
+No coherent native snapshot, successful native transfer/chamber or headset acceptance is claimed.
+Bounded source review only; no builds/tests/game/XR/input/install/Git actions performed by this worker.
+Root owns Gameplay Report wiring and existing affected owner-suite validation on both architectures.

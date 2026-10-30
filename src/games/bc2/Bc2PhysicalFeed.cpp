@@ -1,6 +1,7 @@
 #include "Bc2PhysicalFeed.h"
 #include <atomic>
 #include <limits>
+#include <ostream>
 
 namespace fvr::bc2 {
 namespace {
@@ -8,6 +9,21 @@ using namespace interaction;
 using namespace feed_interaction_detail;
 using feed_mechanism_detail::Pose;
 constexpr std::uint64_t ProfileId=0x4d363046454544ull;
+enum class FeedExit:unsigned {None,Updated,ApiUnavailable,ViewUnavailable,SelectionOrInput,
+    StorageUnavailable,MigrationUnverified,GunOrRawUnverified,LifetimeExhausted,SessionUnavailable,Blocked,PolicyStatus};
+const char* FeedExitName(FeedExit reason)noexcept {
+    switch(reason){
+    case FeedExit::None:return "none";case FeedExit::Updated:return "updated";
+    case FeedExit::ApiUnavailable:return "api_unavailable";case FeedExit::ViewUnavailable:return "view_unavailable";
+    case FeedExit::SelectionOrInput:return "selection_or_input_unverified";
+    case FeedExit::StorageUnavailable:return "equipment_storage_unavailable";
+    case FeedExit::MigrationUnverified:return "migration_unverified";
+    case FeedExit::GunOrRawUnverified:return "gun_or_raw_unverified";
+    case FeedExit::LifetimeExhausted:return "lifetime_exhausted";
+    case FeedExit::SessionUnavailable:return "session_unavailable";
+    case FeedExit::Blocked:return "mechanism_blocked";case FeedExit::PolicyStatus:return "policy_or_hand_status";}
+    return "unknown";
+}
 std::atomic<std::uint64_t> nextLifetime=0;
 std::atomic<std::shared_ptr<const Bc2PhysicalFeedPresentation>> publication;
 std::uint64_t Lifetime()noexcept {
@@ -83,6 +99,16 @@ std::shared_ptr<const Bc2PhysicalFeedPresentation> ReadBc2PhysicalFeedPresentati
     return p&&p->owner==owner&&Window(p->input,now)?p:nullptr;
 }
 struct Bc2PhysicalFeed::State {
+    // Single Gameplay writer; Report reads only relaxed atomics. These are
+    // independent observations, never a coherent native snapshot or authority.
+    struct Diagnostics {
+        std::atomic<std::uint64_t> ticks=0,transitions=0,blocked=0,pending=0,claims=0,suspends=0;
+        std::atomic<std::uint64_t> submissions=0,submitRefusals=0,receipts=0,gateRefusals=0;
+        std::atomic<FeedExit> reason=FeedExit::None,lastIssue=FeedExit::None;
+        std::atomic<unsigned> flags=0,status=0,asset=0,lastIssueFlags=0,lastIssueStatus=0;
+        std::atomic<bool> selectedBefore=false;
+        std::atomic<int> loaded=-1,reserve=-1,capacity=-1;
+    } diagnostics;
     struct Packet {ReloadStateOwner owner{};HandInteractionSample input{};HandInteractionKey weapon{};
         std::optional<FeedEquipmentNativeView> native;bool grip=false,reload=false;};
     struct Equipment {
@@ -139,7 +165,7 @@ struct Bc2PhysicalFeed::State {
             e.seat!=FeedSeatState::Seated||(e.session&&e.session->State().status!=FeedEquipmentStatus::Complete);
         const FeedEquipmentGate gate{e.original.binding.context.resource,e.lifetime,++e.revision,debt,!debt};
         if(api.publishGate(api.context,gate)){e.gate=gate;e.gateFailed=false;}
-        else e.gateFailed=true; // Contention is not permission to clear old native debt.
+        else {e.gateFailed=true;diagnostics.gateRefusals.fetch_add(1,std::memory_order_relaxed);} // Contention is not permission to clear old native debt.
     }
     static bool SameResource(const Equipment& e,const FeedEquipmentNativeView& v)noexcept {
         return e.original.binding.context.resource==v.binding.context.resource&&
@@ -242,6 +268,7 @@ std::optional<FeedEquipmentGate> Bc2PhysicalFeed::RetainedGate(const ReloadState
 }
 void Bc2PhysicalFeed::Suspend(const HandInteractionSample& input,HandInteraction& hands)noexcept {
     publication.store({},std::memory_order_release);if(!state_)return;
+    state_->diagnostics.suspends.fetch_add(1,std::memory_order_relaxed);
     for(auto& e:state_->equipment)if(e){if(e->claim){(void)hands.Release(input,*e->claim);e->claim.reset();}
         if(e->session)e->motionDirty=true;
         e->neutral.reset();if(e->session){FeedEquipmentSessionSample sample;sample.nowNs=input.nowNs;(void)e->session->Update(sample);}}
@@ -255,8 +282,40 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
     };
     Bc2PhysicalFeedResult out;out.blocksFire=blocksFire();out.blocksEquipment=blocksEquipment();publication.store({},std::memory_order_release);
     if(!state_)return out;auto& state=*state_;const auto now=s.input.nowNs;
+    State::Equipment* e=nullptr;
+    const auto finish=[&](FeedExit reason){
+        auto& d=state.diagnostics;
+        const auto session=e&&e->session?e->session->State():FeedEquipmentSessionResult{};
+        const unsigned flags=unsigned(out.selected)|(unsigned(out.blocksFire||(e&&e->Blocked()))<<1)|
+            (unsigned(out.pending||(e&&e->pending))<<2)|(unsigned(out.ownsHand||(e&&e->claim))<<3)|
+            (unsigned(out.submitRefused||(e&&e->refused))<<4)|(unsigned(e&&e->gateFailed)<<5);
+        const unsigned status=unsigned(out.status==FeedEquipmentStatus::Unbound?session.status:out.status)|
+            (unsigned(out.interactionStatus)<<8)|(unsigned(out.reloadStatus)<<16)|(unsigned(out.handReason)<<24);
+        bool changed=d.reason.exchange(reason,std::memory_order_relaxed)!=reason;
+        changed=(d.flags.exchange(flags,std::memory_order_relaxed)!=flags)||changed;
+        changed=(d.status.exchange(status,std::memory_order_relaxed)!=status)||changed;
+        if(changed)d.transitions.fetch_add(1,std::memory_order_relaxed);
+        const unsigned asset=s.asset.empty()?0:s.asset==bc2_feed_profile_detail::M60Geometry.asset?1:2;
+        d.asset.store(asset,std::memory_order_relaxed);
+        auto issue=reason;
+        if(reason==FeedExit::Updated){
+            if(out.handReason!=HandInteractionReason::None||out.interactionStatus>=FeedInteractionStatus::InvalidProfile)
+                issue=FeedExit::PolicyStatus;
+            else if(flags&2)issue=FeedExit::Blocked;
+        }
+        // Other weapons and absent selection cannot erase the supported asset's
+        // last refusal/debt. Store refusal even before Selected has succeeded.
+        if(asset==1&&issue!=FeedExit::Updated){d.lastIssue.store(issue,std::memory_order_relaxed);
+            d.lastIssueFlags.store(flags,std::memory_order_relaxed);d.lastIssueStatus.store(status,std::memory_order_relaxed);}
+        if(out.selected)d.selectedBefore.store(true,std::memory_order_relaxed);
+        d.ticks.fetch_add(1,std::memory_order_relaxed);
+        if(flags&2)d.blocked.fetch_add(1,std::memory_order_relaxed);
+        if(flags&4)d.pending.fetch_add(1,std::memory_order_relaxed);
+        if(flags&8)d.claims.fetch_add(1,std::memory_order_relaxed);
+        return out;
+    };
     state.RetireActors(s.input,hands);out.blocksFire=blocksFire();
-    if(!state.api.read||!state.api.submit||!state.api.receipt){Suspend(s.input,hands);return out;}
+    if(!state.api.read||!state.api.submit||!state.api.receipt){Suspend(s.input,hands);return finish(FeedExit::ApiUnavailable);}
     // Completion belongs to the original equipment, including while another
     // item is selected or tracking is unavailable. Never wait for a pose to
     // commit an already verified native transfer.
@@ -270,12 +329,16 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         FeedEquipmentSessionSample completed;completed.nowNs=now;completed.receipt=receipt;completed.ammunition=receipt->post;
         completed.snapshot=state.Snapshot(old,receipt->post,s.input);completed.binding=state.Binding(old);
         const auto accepted=old.session->Update(completed);
-        if(accepted.receiptAccepted){old.pending.reset();old.refused=false;old.motionDirty=true;old.recoveryContact.reset();old.presentationSource.reset();++old.revision;}
+        if(accepted.receiptAccepted){state.diagnostics.receipts.fetch_add(1,std::memory_order_relaxed);
+            old.pending.reset();old.refused=false;old.motionDirty=true;old.recoveryContact.reset();old.presentationSource.reset();++old.revision;}
         else {old.cover=cover;old.container=container;old.seat=seat;old.refill=refill;old.carriedPartsMask=carried;}
     }
     for(auto& e:state.equipment)if(e)state.PublishGate(*e);
     out.blocksFire=blocksFire();out.blocksEquipment=blocksEquipment();
     const auto view=state.api.read(state.api.context,s.owner,now);
+    if(view){state.diagnostics.loaded.store(view->counts.loaded,std::memory_order_relaxed);
+        state.diagnostics.reserve.store(view->counts.reserve,std::memory_order_relaxed);
+        state.diagnostics.capacity.store(view->counts.capacity,std::memory_order_relaxed);}
     bool recorded=false;for(const auto& p:state.packets)if(p.owner==s.owner&&p.input.sequence==s.input.sequence){recorded=true;break;}
     if(!recorded){const auto source=state.api.readAt?state.api.readAt(state.api.context,s.owner,s.input.observedNs,now):view;
         const State::Packet* previous=nullptr;
@@ -283,9 +346,9 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
             (!previous||packet.input.sequence>previous->input.sequence))previous=&packet;
         const bool grip=s.grip||(!s.input.released[0]&&previous&&previous->grip);
         state.packets[state.nextPacket]={s.owner,s.input,s.weapon,source,grip,s.reloadPressed};state.nextPacket=(state.nextPacket+1)%state.packets.size();}
-    State::Equipment* e=nullptr;
     if(view)for(auto& p:state.equipment)if(p&&State::SameResource(*p,*view)){e=p.get();break;}
-    if(!view||!Selected(s,*view)||s.cancel||!Window(s.input,now)){Suspend(s.input,hands);return out;}
+    if(!view||!Selected(s,*view)||s.cancel||!Window(s.input,now)){Suspend(s.input,hands);
+        return finish(view?FeedExit::SelectionOrInput:FeedExit::ViewUnavailable);}
     out.selected=true;
     if(!e){for(auto& slot:state.equipment)if(!slot){try{
         slot=std::make_unique<State::Equipment>();e=slot.get();e->original=*view;e->weapon=s.weapon;
@@ -294,8 +357,8 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         e->mechanism={ProfileId,generation};e->motions=BuildBc2M60FeedInteractionProfile(bc2_feed_profile_detail::M60Geometry,
             e->profile.id,e->profile.revision,Bc2M60FeedInteractionPolicy());
         e->lifetime=Lifetime();e->pouchBasis=e->chainBasis=s.raw.weaponWorldMeters;state.PublishGate(*e);
-    }catch(...){return out;}break;}}
-    if(!e){out.blocksFire=true;return out;}
+    }catch(...){return finish(FeedExit::StorageUnavailable);}break;}}
+    if(!e){out.blocksFire=true;return finish(FeedExit::StorageUnavailable);}
     // Keep the old immutable transaction and debt when a different native
     // equip/space lifetime appears. A name/count match cannot migrate it.
     if(e->original.identity!=view->identity||e->weapon!=s.weapon){
@@ -311,7 +374,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
                     nativeObservation(view->binding.context,afterAmmo)};
                 migrated=e->session->MigrateContext(migration,before->snapshot,before->ammunition,after,afterAmmo,now);
             }
-            if(!migrated){out.blocksFire=true;return out;}
+            if(!migrated){out.blocksFire=true;return finish(FeedExit::MigrationUnverified);}
         }else e->session.reset();
         e->original=*view;e->weapon=s.weapon;e->neutral.reset();e->lastInput=0;e->motionDirty=true;
     }
@@ -323,7 +386,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
     const bool raw=source&&source->native&&Window(source->input,now)&&source->input.observedNs>=source->native->observedNs&&
         FeedEquipmentViewFresh(*source->native,now)&&FeedEquipmentSameItem(*source->native,*view)&&
         source->native->counts==view->counts&&hands.HasRecordedEvidence(source->input,InteractionHand::Left);
-    if(!gun||!raw){Suspend(s.input,hands);out.blocksFire=e->Blocked();return out;}
+    if(!gun||!raw){Suspend(s.input,hands);out.blocksFire=e->Blocked();return finish(FeedExit::GunOrRawUnverified);}
     auto sourceInput=source->input;sourceInput.nowNs=now;
     const auto local=feed_interaction_detail::Multiply(s.raw.rawLeftWristWorldMeters,Inverse(s.raw.weaponWorldMeters));
     const auto left=hands.Current(InteractionHand::Left);
@@ -346,10 +409,10 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         if(source->grip&&touch&&available&&e->neutral&&sourceInput.sequence>e->neutral->interaction.contact.inputSequence&&
            view->counts.loaded<view->counts.capacity&&view->counts.reserve>0&&
            now-e->neutral->interaction.contact.observedNs<e->profile.maxAgeNs){
-            const auto lifetime=Lifetime();if(!lifetime){out.blocksFire=true;return out;}
+            const auto lifetime=Lifetime();if(!lifetime){out.blocksFire=true;return finish(FeedExit::LifetimeExhausted);}
             e->lifetime=lifetime;e->refill={FeedRefillState::Required,lifetime,0};e->refused=false;
             try{e->session=std::make_unique<FeedEquipmentSession>(e->profile,e->motions,FeedEquipmentOwner(s.owner),e->mechanism,e->supply,lifetime,
-                e->original.binding.context.resource);}catch(...){out.blocksFire=true;return out;}
+                e->original.binding.context.resource);}catch(...){out.blocksFire=true;return finish(FeedExit::SessionUnavailable);}
             state.PublishGate(*e);
             auto neutral=*e->neutral;neutral.ammunition.lifetime=lifetime;neutral.snapshot=state.Snapshot(*e,neutral.ammunition,sourceInput);
             neutral.snapshot.inputSequence=neutral.interaction.contact.inputSequence;
@@ -440,6 +503,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
            (result.session.interaction.status==FeedInteractionStatus::Interrupted||result.session.interaction.status==FeedInteractionStatus::OffPath||
             result.session.interaction.status==FeedInteractionStatus::MotionJump||result.session.interaction.status==FeedInteractionStatus::Expired))e->motionDirty=true;
         if(result.dispatch){FeedEquipmentSubmission submission;submission.command=*result.dispatch;submission.source=*source->native;
+            state.diagnostics.submissions.fetch_add(1,std::memory_order_relaxed);
             submission.geometry={e->profile,e->motions.operations[unsigned(result.dispatch->authority.operation)],s.rigFingerprint,
                 sourceInput.sequence,sourceInput.observedNs,(std::min)(sourceInput.deadlineNs,source->native->deadlineNs),true};
             e->pending=submission;
@@ -447,6 +511,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
                 e->refused=submitted==FeedEquipmentSubmitResult::RetentionBusy||submitted==FeedEquipmentSubmitResult::Invalid;
                 out.submitRefused=submitted!=FeedEquipmentSubmitResult::Submitted;
             }else {e->refused=!state.api.submit(state.api.context,submission);out.submitRefused=e->refused;}
+            if(out.submitRefused)state.diagnostics.submitRefusals.fetch_add(1,std::memory_order_relaxed);
         }
         if(e->claim&&(!source->grip||result.dispatch||!sample.held)){
             (void)hands.Release(s.input,*e->claim);e->claim.reset();}
@@ -469,6 +534,32 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         p->weaponFromCoverHinge=feed_interaction_detail::Multiply(Along(identity,FeedMotionKind::Hinge,e->coverRadians),bc2_feed_profile_detail::M60Geometry.weaponFromHinge);
         p->blocksFire=out.blocksFire;out.presentation=p;publication.store(std::move(p),std::memory_order_release);
     }catch(...){}
-    return out;
+    return finish(FeedExit::Updated);
+}
+void Bc2PhysicalFeed::Report(std::ostream& out)const {
+    if(!state_){out<<"{\"available\":false}";return;}
+    const auto& d=state_->diagnostics;const auto flags=d.flags.load(std::memory_order_relaxed);
+    const auto status=d.status.load(std::memory_order_relaxed),asset=d.asset.load(std::memory_order_relaxed);
+    const auto issueStatus=d.lastIssueStatus.load(std::memory_order_relaxed);
+    out<<"{\"observations\":\"independent_atomics_not_native_proof\",\"ticks\":"<<d.ticks.load(std::memory_order_relaxed)
+       <<",\"transitions\":"<<d.transitions.load(std::memory_order_relaxed)<<",\"blocked_ticks\":"<<d.blocked.load(std::memory_order_relaxed)
+       <<",\"pending_ticks\":"<<d.pending.load(std::memory_order_relaxed)<<",\"claim_ticks\":"<<d.claims.load(std::memory_order_relaxed)
+       <<",\"suspends\":"<<d.suspends.load(std::memory_order_relaxed)<<",\"submit_attempts\":"<<d.submissions.load(std::memory_order_relaxed)
+       <<",\"submit_refusals\":"<<d.submitRefusals.load(std::memory_order_relaxed)<<",\"receipts_accepted\":"<<d.receipts.load(std::memory_order_relaxed)
+       <<",\"gate_refusals\":"<<d.gateRefusals.load(std::memory_order_relaxed)
+       <<",\"latest_tick\":{\"reason\":\""<<FeedExitName(d.reason.load(std::memory_order_relaxed))
+       <<"\",\"asset_class\":\""<<(asset==1?bc2_feed_profile_detail::M60Geometry.asset:asset==2?std::string_view("other"):std::string_view("none"))
+       <<"\",\"last_selected_asset\":\""<<(d.selectedBefore.load(std::memory_order_relaxed)?bc2_feed_profile_detail::M60Geometry.asset:std::string_view("none"))
+       <<"\",\"selected\":"<<((flags&1)?"true":"false")<<",\"blocked\":"<<((flags&2)?"true":"false")
+       <<",\"pending\":"<<((flags&4)?"true":"false")<<",\"claim\":"<<((flags&8)?"true":"false")
+       <<",\"submit_refused\":"<<((flags&16)?"true":"false")<<",\"gate_failed\":"<<((flags&32)?"true":"false")
+       <<",\"equipment_status_id\":"<<(status&255)<<",\"interaction_status_id\":"<<((status>>8)&255)
+       <<",\"reload_status_id\":"<<((status>>16)&255)<<",\"hand_reason_id\":"<<(status>>24)
+       <<"},\"last_supported_issue\":{\"reason\":\""<<FeedExitName(d.lastIssue.load(std::memory_order_relaxed))
+       <<"\",\"flags_selected_blocked_pending_claim_refused_gate_failed\":"<<d.lastIssueFlags.load(std::memory_order_relaxed)
+       <<",\"equipment_status_id\":"<<(issueStatus&255)<<",\"interaction_status_id\":"<<((issueStatus>>8)&255)
+       <<",\"reload_status_id\":"<<((issueStatus>>16)&255)<<",\"hand_reason_id\":"<<(issueStatus>>24)
+       <<"},\"last_view_counts\":{\"loaded\":"<<d.loaded.load(std::memory_order_relaxed)
+       <<",\"reserve\":"<<d.reserve.load(std::memory_order_relaxed)<<",\"capacity\":"<<d.capacity.load(std::memory_order_relaxed)<<"}}";
 }
 }

@@ -1,10 +1,25 @@
 #include "Bc2PhysicalPistolSlide.h"
 #include <limits>
+#include <atomic>
+#include <ostream>
 
 namespace fvr::bc2 {
 namespace {
 using namespace interaction;
 constexpr std::int64_t EvidenceLifetime=100000000;
+enum class SlideExit:unsigned {None,Updated,ApiUnavailable,SelectionUnverified,OwnerUnavailable,Pending,
+    MigrationUnverified,EvidenceGap,UnsafeInput,SourceUnverified,GeometryUnverified,ClaimConflict,Blocked,MotionFailure};
+const char* SlideExitName(SlideExit reason)noexcept {
+    switch(reason){
+    case SlideExit::None:return "none";case SlideExit::Updated:return "motion_updated";
+    case SlideExit::ApiUnavailable:return "api_unavailable";case SlideExit::SelectionUnverified:return "selection_unverified";
+    case SlideExit::OwnerUnavailable:return "owner_unavailable";case SlideExit::Pending:return "pending";
+    case SlideExit::MigrationUnverified:return "migration_unverified";case SlideExit::EvidenceGap:return "evidence_gap";
+    case SlideExit::UnsafeInput:return "unsafe_input";case SlideExit::SourceUnverified:return "source_unverified";
+    case SlideExit::GeometryUnverified:return "geometry_unverified";case SlideExit::ClaimConflict:return "claim_conflict";
+    case SlideExit::Blocked:return "policy_blocked";case SlideExit::MotionFailure:return "motion_failure";}
+    return "unknown";
+}
 bool SamePacket(const HandInteractionSample& a,const HandInteractionSample& b)noexcept {
     return a.owner==b.owner&&a.sequence==b.sequence&&a.observedNs==b.observedNs&&a.deadlineNs==b.deadlineNs&&
         a.focused==b.focused&&a.tracked==b.tracked&&a.released==b.released;
@@ -48,6 +63,16 @@ bool NativeHand(const Bc2PhysicalPistolSlideSample& s)noexcept {
 math::Matrix4 Identity()noexcept {math::Matrix4 p{};for(unsigned i=0;i<4;++i)p.values[i][i]=1;return p;}
 }
 struct Bc2PhysicalPistolSlide::State {
+    // Gameplay is the sole writer. Report never reads mutable policy/equipment;
+    // relaxed atomic observations are not a coherent native/chamber snapshot.
+    struct Diagnostics {
+        std::atomic<std::uint64_t> ticks=0,transitions=0,blocked=0,debt=0,pending=0,claims=0,gaps=0,suspends=0;
+        std::atomic<std::uint64_t> releaseAttempts=0,releaseRefusals=0,lastEvent=0;
+        std::atomic<SlideExit> reason=SlideExit::None,lastIssue=SlideExit::None;
+        std::atomic<unsigned> flags=0,status=0,lastFailure=0,asset=0,eventKind=0,lastIssueFlags=0,lastIssueStatus=0;
+        std::atomic<bool> selectedBefore=false;
+        std::atomic<int> loaded=-1,reserve=-1,capacity=-1;
+    } diagnostics;
     struct Equipment {
         AmmoResourceBinding original{};
         ReloadHoldIdentity identity{};
@@ -81,6 +106,12 @@ struct Bc2PhysicalPistolSlide::State {
             const auto event=api.event(api.context,lastEvent);if(!event||!event->event||event->event<=lastEvent)break;
             if(event->event!=lastEvent+1){eventGap=true;for(auto& e:equipment)if(e)e->gap=true;}
             lastEvent=event->event;const auto& v=*event;
+            diagnostics.lastEvent.store(v.event,std::memory_order_relaxed);
+            diagnostics.eventKind.store(unsigned(v.kind),std::memory_order_relaxed);
+            if(v.kind==PistolAfterFeedEventKind::Admitted){
+                diagnostics.loaded.store(v.admission.counts.loaded,std::memory_order_relaxed);
+                diagnostics.reserve.store(v.admission.counts.reserve,std::memory_order_relaxed);
+                diagnostics.capacity.store(v.admission.counts.capacity,std::memory_order_relaxed);}
             if(Retired(v.identity)||v.kind==PistolAfterFeedEventKind::ActorRetired)continue;
             auto* e=Find(v.command.context.resource);
             if(!e){for(auto& slot:equipment)if(!slot){try{
@@ -155,7 +186,8 @@ Bc2PhysicalPistolSlide::Bc2PhysicalPistolSlide(Bc2PhysicalPistolSlideApi api)noe
 }
 Bc2PhysicalPistolSlide::~Bc2PhysicalPistolSlide()=default;
 void Bc2PhysicalPistolSlide::Suspend(const HandInteractionSample& input,HandInteraction& hands)noexcept {
-    if(state_)for(auto& e:state_->equipment)if(e)e->policy.Suspend(input,hands);
+    if(state_){state_->diagnostics.suspends.fetch_add(1,std::memory_order_relaxed);
+        for(auto& e:state_->equipment)if(e)e->policy.Suspend(input,hands);}
 }
 bool Bc2PhysicalPistolSlide::BlocksFire(const ReloadStateOwner& owner,const WeaponEquipmentIdentity& equipment,
     const std::optional<AmmoResourceBinding>& binding)const noexcept {
@@ -170,10 +202,40 @@ Bc2PhysicalPistolSlideResult Bc2PhysicalPistolSlide::Tick(const Bc2PhysicalPisto
     if(s.equipment&&s.binding&&Current(s.owner,*s.equipment,*s.binding)){
         e=state.Find(s.binding->context.resource);if(e&&!SameItem(e->original,*s.binding))e=nullptr;
     }
-    const auto finish=[&](){if(e){out.evidenceGap=out.evidenceGap||e->gap;out.blocksFire=e->Blocked()||out.evidenceGap;
+    const auto finish=[&](SlideExit reason){if(e){out.evidenceGap=out.evidenceGap||e->gap;out.blocksFire=e->Blocked()||out.evidenceGap;
         out.pending=e->policy.Pending().has_value()||e->nativePending;out.blocksEquipment=out.pending||out.ownsHand;
-        out.phase=e->policy.Phase();out.releaseRefused=e->releaseRefused;}return out;};
-    if(!state.api.event||!state.api.read||!state.api.release){Suspend(s.input,hands);return finish();}
+        out.phase=e->policy.Phase();out.releaseRefused=e->releaseRefused;}
+        auto& d=state.diagnostics;
+        const unsigned flags=unsigned(out.selected)|(unsigned(out.blocksFire)<<1)|(unsigned(out.pending)<<2)|
+            (unsigned(out.ownsHand)<<3)|(unsigned(out.evidenceGap||state.eventGap)<<4)|
+            (unsigned(out.releaseRefused)<<5)|(unsigned(e&&e->policy.Owed())<<6);
+        const unsigned status=unsigned(out.phase)|(unsigned(out.failure)<<8);
+        bool changed=d.reason.exchange(reason,std::memory_order_relaxed)!=reason;
+        changed=(d.flags.exchange(flags,std::memory_order_relaxed)!=flags)||changed;
+        changed=(d.status.exchange(status,std::memory_order_relaxed)!=status)||changed;
+        if(changed)d.transitions.fetch_add(1,std::memory_order_relaxed);
+        if(out.failure!=PistolSlideFailure::None)d.lastFailure.store(unsigned(out.failure),std::memory_order_relaxed);
+        const unsigned asset=s.asset.empty()?0:s.asset==bc2_pistol_slide_profile_detail::Mp443Geometry.selection.asset?1:2;
+        d.asset.store(asset,std::memory_order_relaxed);
+        auto issue=reason;
+        if(reason==SlideExit::Updated){
+            if(out.failure!=PistolSlideFailure::None)issue=SlideExit::MotionFailure;
+            else if(flags&2)issue=SlideExit::Blocked;
+        }
+        // Preserve the last MP443 refusal/debt across stow and other weapons,
+        // including a refused binding/selection for a requested MP443 asset.
+        if(asset==1&&issue!=SlideExit::Updated){d.lastIssue.store(issue,std::memory_order_relaxed);
+            d.lastIssueFlags.store(flags,std::memory_order_relaxed);d.lastIssueStatus.store(status,std::memory_order_relaxed);}
+        if(out.selected)d.selectedBefore.store(true,std::memory_order_relaxed);
+        d.ticks.fetch_add(1,std::memory_order_relaxed);
+        if(flags&2)d.blocked.fetch_add(1,std::memory_order_relaxed);
+        if(flags&4)d.pending.fetch_add(1,std::memory_order_relaxed);
+        if(flags&8)d.claims.fetch_add(1,std::memory_order_relaxed);
+        if(flags&16)d.gaps.fetch_add(1,std::memory_order_relaxed);
+        if(flags&64)d.debt.fetch_add(1,std::memory_order_relaxed);
+        return out;
+    };
+    if(!state.api.event||!state.api.read||!state.api.release){Suspend(s.input,hands);return finish(SlideExit::ApiUnavailable);}
     // Capture the original Gameplay packet once, before consuming renderer raw
     // geometry. GunHold is the existing arbiter claim, never a synthetic root.
     bool recorded=false;for(const auto& p:state.packets)if(p.owner==s.owner&&p.input.sequence==s.input.sequence)recorded=true;
@@ -181,20 +243,20 @@ Bc2PhysicalPistolSlideResult Bc2PhysicalPistolSlide::Tick(const Bc2PhysicalPisto
         hands.Current(InteractionHand::Right),s.previousLeft,s.lifecycle,s.grip};state.nextPacket=(state.nextPacket+1)%state.packets.size();}
     const auto native=s.binding?state.api.read(state.api.context,s.binding->context.resource,now):std::nullopt;
     if(e&&native&&native->resource==e->original.context.resource){e->nativeBlocked=native->blocksFire;e->nativePending=native->pending;}
-    if(!Selected(s)){Suspend(s.input,hands);if(!e&&native)out.blocksFire=native->blocksFire;return finish();}
+    if(!Selected(s)){Suspend(s.input,hands);if(!e&&native)out.blocksFire=native->blocksFire;return finish(SlideExit::SelectionUnverified);}
     out.selected=true;
     if(!e){if(native){out.blocksFire=native->blocksFire;out.pending=native->pending;out.blocksEquipment=out.pending;
-        out.evidenceGap=state.eventGap||native->blocksFire;}return out;}
+        out.evidenceGap=state.eventGap||native->blocksFire;}return finish(SlideExit::OwnerUnavailable);}
     // A command remains in its original context through stow. Reconcile its
     // original terminal event before migrating the surviving stable resource.
-    if(e->policy.Pending()||e->nativePending){e->policy.Suspend(s.input,hands);return finish();}
+    if(e->policy.Pending()||e->nativePending){e->policy.Suspend(s.input,hands);return finish(SlideExit::Pending);}
     // Context migration comes only from the exact freshly verified current
     // inventory binding. Stable weapon debt survives equip and space epochs.
     if(e->policy.Context()!=s.binding->context){e->policy.Suspend(s.input,hands);
         const PistolAfterFeedMigration migration{e->policy.Context(),s.binding->context,++e->migration,
             s.binding->observedNs,s.binding->deadlineNs,true};
-        if(!e->policy.Migrate(migration,now)){out.evidenceGap=true;return finish();}}
-    if(e->gap){e->policy.Suspend(s.input,hands);return finish();}
+        if(!e->policy.Migrate(migration,now)){out.evidenceGap=true;return finish(SlideExit::MigrationUnverified);}}
+    if(e->gap){e->policy.Suspend(s.input,hands);return finish(SlideExit::EvidenceGap);}
     // Native readiness can clear a tactical policy without any controller
     // gesture. Empty policy consumes it only after a real released full stroke.
     if(native&&native->ready&&native->ready->currentIdentity.owner==s.owner&&
@@ -205,14 +267,16 @@ Bc2PhysicalPistolSlideResult Bc2PhysicalPistolSlide::Tick(const Bc2PhysicalPisto
         if(later)(void)e->policy.ObserveReady(native->ready->semantic,now);
     }
     if(e->nativeBlocked||e->releaseRefused)if(const auto clearance=e->policy.Clearance(now)){
+        state.diagnostics.releaseAttempts.fetch_add(1,std::memory_order_relaxed);
         e->releaseRefused=!state.api.release(state.api.context,{*clearance});
+        if(e->releaseRefused)state.diagnostics.releaseRefusals.fetch_add(1,std::memory_order_relaxed);
         if(!e->releaseRefused)e->nativeBlocked=false;
     }
     for(auto& old:state.equipment)if(old&&old.get()!=e)old->policy.Suspend(s.input,hands);
     if(s.cancel||!Window(s.input,now)||!NativeHand(s)||!s.raw.valid||s.raw.owner!=s.owner||
        s.raw.rig.soldier!=s.owner.soldier||s.raw.rig.weak!=s.owner.weak||!s.raw.rig.count||
        s.raw.rigFingerprint!=s.rigFingerprint||s.frameSequence!=s.raw.inputEvidence.sequence){
-        e->policy.Suspend(s.input,hands);return finish();}
+        e->policy.Suspend(s.input,hands);return finish(SlideExit::UnsafeInput);}
     const State::Packet* source=nullptr;
     for(const auto& p:state.packets)if(p.owner==s.owner&&p.weapon==s.weapon&&SamePacket(p.input,s.raw.inputEvidence))source=&p;
     const auto gun=hands.Current(InteractionHand::Right);
@@ -223,15 +287,15 @@ Bc2PhysicalPistolSlideResult Bc2PhysicalPistolSlide::Tick(const Bc2PhysicalPisto
        !Current(source->owner,*source->equipment,*source->binding)||!SameItem(*source->binding,*s.binding)||
        source->binding->context!=e->policy.Context()||source->binding->observedNs>source->input.nowNs||
        !AmmoResourceBindingFresh(*source->binding,source->owner,now)||!Window(source->input,now)){
-        e->policy.Suspend(s.input,hands);return finish();}
+        e->policy.Suspend(s.input,hands);return finish(SlideExit::SourceUnverified);}
     Bc2PistolSlideSource raw;raw.input=source->input;raw.input.nowNs=now;raw.rig=s.raw.rig;raw.weapon=s.weapon;
     raw.mechanism=e->mechanism;raw.gunClaim=*source->gun;raw.rawSourceWorldMeters=s.raw.rawLeftWristWorldMeters;
     raw.sourceFromWristMeters=Identity();raw.originalWeaponWorldMeters=s.raw.weaponWorldMeters;
-    const auto local=Bc2PistolSlideRawWristInWeapon(raw);if(!local){e->policy.Suspend(s.input,hands);return finish();}
+    const auto local=Bc2PistolSlideRawWristInWeapon(raw);if(!local){e->policy.Suspend(s.input,hands);return finish(SlideExit::GeometryUnverified);}
     const auto left=hands.Current(InteractionHand::Left);
     if(left&&(left->token.kind!=HandClaimKind::Mechanism||left->token.contact!=e->mechanism||
         left->token.item!=s.weapon||left->token.prerequisiteClaim!=gun->token.id)){
-        e->policy.Suspend(s.input,hands);return finish();}
+        e->policy.Suspend(s.input,hands);return finish(SlideExit::ClaimConflict);}
     PistolAfterFeedMotionSample motion;motion.source=raw.input;motion.currentSafety=s.input;
     motion.sourceObservation=PistolAfterFeedHandObservation{source->input,source->beforeMechanism,source->lifecycle,source->gun};
     motion.currentObservation=PistolAfterFeedHandObservation{s.input,s.previousLeft,s.lifecycle,gun};
@@ -255,6 +319,33 @@ Bc2PhysicalPistolSlideResult Bc2PhysicalPistolSlide::Tick(const Bc2PhysicalPisto
             }catch(...){}
         }
     }
-    return finish();
+    return finish(SlideExit::Updated);
+}
+void Bc2PhysicalPistolSlide::Report(std::ostream& out)const {
+    if(!state_){out<<"{\"available\":false}";return;}
+    const auto& d=state_->diagnostics;const auto flags=d.flags.load(std::memory_order_relaxed);
+    const auto status=d.status.load(std::memory_order_relaxed),asset=d.asset.load(std::memory_order_relaxed);
+    const auto issueStatus=d.lastIssueStatus.load(std::memory_order_relaxed);
+    const auto name=bc2_pistol_slide_profile_detail::Mp443Geometry.selection.asset;
+    out<<"{\"observations\":\"independent_atomics_not_native_or_chamber_proof\",\"ticks\":"<<d.ticks.load(std::memory_order_relaxed)
+       <<",\"transitions\":"<<d.transitions.load(std::memory_order_relaxed)<<",\"blocked_ticks\":"<<d.blocked.load(std::memory_order_relaxed)
+       <<",\"owed_ticks\":"<<d.debt.load(std::memory_order_relaxed)<<",\"pending_ticks\":"<<d.pending.load(std::memory_order_relaxed)
+       <<",\"claim_ticks\":"<<d.claims.load(std::memory_order_relaxed)<<",\"evidence_gap_ticks\":"<<d.gaps.load(std::memory_order_relaxed)
+       <<",\"suspends\":"<<d.suspends.load(std::memory_order_relaxed)<<",\"release_attempts\":"<<d.releaseAttempts.load(std::memory_order_relaxed)
+       <<",\"release_refusals\":"<<d.releaseRefusals.load(std::memory_order_relaxed)
+       <<",\"latest_tick\":{\"reason\":\""<<SlideExitName(d.reason.load(std::memory_order_relaxed))
+       <<"\",\"asset_class\":\""<<(asset==1?name:asset==2?std::string_view("other"):std::string_view("none"))
+       <<"\",\"last_selected_asset\":\""<<(d.selectedBefore.load(std::memory_order_relaxed)?name:std::string_view("none"))
+       <<"\",\"selected\":"<<((flags&1)?"true":"false")<<",\"blocked\":"<<((flags&2)?"true":"false")
+       <<",\"pending\":"<<((flags&4)?"true":"false")<<",\"claim\":"<<((flags&8)?"true":"false")
+       <<",\"evidence_gap\":"<<((flags&16)?"true":"false")<<",\"release_refused\":"<<((flags&32)?"true":"false")
+       <<",\"owed\":"<<((flags&64)?"true":"false")<<",\"phase_id\":"<<(status&255)<<",\"failure_id\":"<<(status>>8)
+       <<",\"last_failure_id\":"<<d.lastFailure.load(std::memory_order_relaxed)
+       <<"},\"last_supported_issue\":{\"reason\":\""<<SlideExitName(d.lastIssue.load(std::memory_order_relaxed))
+       <<"\",\"flags_selected_blocked_pending_claim_gap_refused_owed\":"<<d.lastIssueFlags.load(std::memory_order_relaxed)
+       <<",\"phase_id\":"<<(issueStatus&255)<<",\"failure_id\":"<<(issueStatus>>8)
+       <<"},\"last_event\":{\"id\":"<<d.lastEvent.load(std::memory_order_relaxed)<<",\"kind_id\":"<<d.eventKind.load(std::memory_order_relaxed)
+       <<"},\"last_admission_counts\":{\"loaded\":"<<d.loaded.load(std::memory_order_relaxed)
+       <<",\"reserve\":"<<d.reserve.load(std::memory_order_relaxed)<<",\"capacity\":"<<d.capacity.load(std::memory_order_relaxed)<<"}}";
 }
 }

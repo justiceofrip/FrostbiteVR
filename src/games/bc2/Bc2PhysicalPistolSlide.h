@@ -4,6 +4,7 @@
 #include "Bc2EquipmentIdentity.h"
 #include "Bc2ReloadPreview.h"
 #include <memory>
+#include <iosfwd>
 
 namespace fvr::bc2 {
 // Owned by the Gameplay result that consumed source.input. Renderers retain
@@ -60,6 +61,7 @@ public:
     Bc2PhysicalPistolSlide& operator=(const Bc2PhysicalPistolSlide&)=delete;
     Bc2PhysicalPistolSlideResult Tick(const Bc2PhysicalPistolSlideSample&,interaction::HandInteraction&,std::uint64_t& intent)noexcept;
     void Suspend(const interaction::HandInteractionSample&,interaction::HandInteraction&)noexcept;
+    void Report(std::ostream&)const;
     // Suppression only. Exact fresh binding is mandatory; address/name alone
     // cannot transfer an old resource's obligation to a replacement pickup.
     bool BlocksFire(const ReloadStateOwner&,const WeaponEquipmentIdentity&,

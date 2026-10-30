@@ -1,0 +1,583 @@
+{
+  "schema": "chat27.cinematic_queue_static_code.v1",
+  "evidence_level": "Offline file-backed static code; no native execution or headset acceptance.",
+  "executable_sha256": "3911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258",
+  "preferred_base": "0x400000",
+  "script_sha256": "a1eb71e39d61caeaac27efd95f97e4eafa77d096890cb0c46be9fc30f01d3400",
+  "inherited": [
+    {
+      "path": "handoff\\tasks\\CHAT27\\20261030-child21\\proof01.json",
+      "sha256": "c553d972c6fc54623be7e2222ec9426481d66f5e62b6116e1ff132a2cbd6d110"
+    },
+    {
+      "path": "handoff\\tasks\\CHAT27\\20261030-constructor20\\proof01.json",
+      "sha256": "52bc97c398eb5823ad7b29d54c46187de842fb775067a8acb024753d32cdf852"
+    }
+  ],
+  "helper": {
+    "path": "handoff\\tasks\\CHAT27\\20261030-manager18\\cinematic_manager.py",
+    "sha256": "1a6506e11576f290e70f847a65f307cf1cebffab928360120d4fee5e587857fb"
+  },
+  "scope": {
+    "maximum_new_complete_functions": 8,
+    "new_complete_functions": 5,
+    "partial_functions": 0,
+    "new_unique_decoded_bytes": 1097,
+    "maximum_decoded_bytes": 65536,
+    "adjacent_spill_functions": 0,
+    "reused_bytes": 566,
+    "ceiling_met": true,
+    "strategy": "Exact +0x720 displacement candidate search; exact producer/reset/consumer rel32 candidate searches; complete caller proves selected instruction boundaries. Stop after direct record consumer, with original B provenance unresolved."
+  },
+  "units": [
+    {
+      "rva": "0x3b3270",
+      "size": 130,
+      "sha256": "e0162554a5a6b011ece4708e3d8b004ec5019afc69884c1af8099b7927ccc297",
+      "bytes": "8b4424045356578bf133db50899e20070000e829f4ffff8b4e042b0eb893244992f7e903d1c1fa068bcac1e91f33ff03ca7449f30f104424145533ed8d6424008b068a54241c03c588504cf30f11405889584089585c88584d8b4e042b0eb893244992f7e903d1c1fa068bc2c1e81f83c70103c283c5703bf872c55d5f5e5bc20c00",
+      "complete": true,
+      "meaning": "Exact count+0x720 reset and common direct caller with producer."
+    },
+    {
+      "rva": "0x424370",
+      "size": 213,
+      "sha256": "da5468cd4e5a575da4eccaa1cdaf009d6fa351a69fcf5a7b3ef01fdf1b1f8cd1",
+      "bytes": "558bec83e4f081ec3c070000d9450c5683ec08d95c24048bf1d94508d91c24e8fca1ffffd9450c8d4424308bc86a01518bd0d91c2489442428894c241c8d8424380700006a018d4c241c8954241c89442424c784243c07000000000000e89eeef8ffd90520944d018b55188b45146aff518b4d1cd91c24d945106a00515250518b4e54d91c24518d4c2430e830c272008d4c2408e8a7597400d9450c8d54241052518d4c2410d91c24e8028174008d4c2408e8396674008b44241085c0740f3b442420740950e87574bfff83c4045e8be55dc21800",
+      "complete": true,
+      "meaning": "Exact direct caller of reset and inherited producer; stack-local queue."
+    },
+    {
+      "rva": "0xb6c520",
+      "size": 175,
+      "sha256": "462f518ce14a41e4b3369d531ac7c5ea1fa19d66fbafffdc2a0557c05c00342a",
+      "bytes": "558bec83e4f081ec58030000803dd84989010056578bf9751d8b450cd945086a015051d91c24e8b5f5ffff83c40c5f5e8be55dc208006a008d4c2414e8df73acff6844ba4a018d4c2418e85133acffd945088b750c6a008d4c2414516a0056518bcfd91c24e8e6f0ffff8b0d3c2d56018d54241052e8e679acff8d44241050e8fcc759ff8d4c241451e812c759ffd9450883c4048bced91c24e80240feff8d4c2410e82974acff5f5e8be55dc20800",
+      "complete": true,
+      "meaning": "Exact queue consumer edge at0x424419."
+    },
+    {
+      "rva": "0xb505c0",
+      "size": 99,
+      "sha256": "0054cd3b9ce3b4afae3ed4a4c3cb4cca7577892345a081fe02863297a2aee63e",
+      "bytes": "5356578bf98b378b4f042bceb893244992f7e903d1c1fa068bc2c1e81f33db03c2743a5533ed8b4c2e408b492c85c974078b118b4204ffd08b378b4f042bceb893244992f7e903d1c1fa068bcac1e91f83c30103ca83c5703bd972ca5d5f5e5bc20400",
+      "complete": true,
+      "meaning": "Exact queue postprocessing edge at0xb6c5b9."
+    },
+    {
+      "rva": "0xb6bb00",
+      "size": 480,
+      "sha256": "9165e90c019faa9c04d2cde3f5a021825bd2f58b76c015f817f9e3617ac35426",
+      "bytes": "83ec1c538b5c24288b4b042b0bb893244992f7e903d1c1fa065533ed8bc25733ffc1e81f03c2897c2410896c2414896c2418896c2420c644242400896c240c0f848701000056896c24348d9b00000000817c2434000e00000f834001000068e0020000e848a4fcff6a148bd0e8afcefdff03d08bc283c40883e00f74052bd083c210556a1052e805514bff8bf883c40c3bfd8db7e002000074400f57c0892f896f04896f708d8fc000000089afa000000089afa4000000f30f1187a8000000f30f1187ac000000e84454feff89afd002000089afd40200008bef89b5d0020000c785d4020000140000008b3303742434558b46408b48382b483483c034c1f902898dd4020000d946440fb6564d8b4e40525683ec08d95c2404d9442444d91c24e89bfdffff807e4c007438807c24380074318b4e408d44241450e851ccffffd946488b4e548b565051518b4e40d91c24528d4424205081c5c00000005556e83dceffff57e887fb4aff8b4b042b0b8b7424148344243870b893244992f7e903d1c1fa068bcac1e91f83c60103ca83c40433ed3bf1897424100f82b2feffff396c24248b7c241474238b5c24183bfb8bf7740f8b1652e806d3acff83c6043bf375f18b44242450e835faacff5e3bfd740957e8dafb4aff83c4045f5d5b83c41cc3",
+      "complete": true,
+      "meaning": "Exact record consumer at0xb6c546 when the checked global byte is zero."
+    }
+  ],
+  "saved_decodes": [
+    {
+      "rva": "0x3b3270",
+      "size": 130,
+      "sha256": "e0162554a5a6b011ece4708e3d8b004ec5019afc69884c1af8099b7927ccc297",
+      "unit": "0x3b3270",
+      "bytes": "8b4424045356578bf133db50899e20070000e829f4ffff8b4e042b0eb893244992f7e903d1c1fa068bcac1e91f33ff03ca7449f30f104424145533ed8d6424008b068a54241c03c588504cf30f11405889584089585c88584d8b4e042b0eb893244992f7e903d1c1fa068bc2c1e81f83c70103c283c5703bf872c55d5f5e5bc20c00",
+      "decode_sha256": "842cd77f1424047ea882c7d1fd8dc93ee4e93570de5756d76791866866e3d4e8",
+      "instruction_count": 50,
+      "path": "reports\\coordinator-20261030-cinematic-queue25\\decode-003b3270-82.txt"
+    },
+    {
+      "rva": "0x424370",
+      "size": 213,
+      "sha256": "da5468cd4e5a575da4eccaa1cdaf009d6fa351a69fcf5a7b3ef01fdf1b1f8cd1",
+      "unit": "0x424370",
+      "bytes": "558bec83e4f081ec3c070000d9450c5683ec08d95c24048bf1d94508d91c24e8fca1ffffd9450c8d4424308bc86a01518bd0d91c2489442428894c241c8d8424380700006a018d4c241c8954241c89442424c784243c07000000000000e89eeef8ffd90520944d018b55188b45146aff518b4d1cd91c24d945106a00515250518b4e54d91c24518d4c2430e830c272008d4c2408e8a7597400d9450c8d54241052518d4c2410d91c24e8028174008d4c2408e8396674008b44241085c0740f3b442420740950e87574bfff83c4045e8be55dc21800",
+      "decode_sha256": "2a4e22835e8ad4e3efae6f99615f55c765874c631317c214b1ea46d6aa9df1e0",
+      "instruction_count": 69,
+      "path": "reports\\coordinator-20261030-cinematic-queue25\\decode-00424370-d5.txt"
+    },
+    {
+      "rva": "0xb505c0",
+      "size": 99,
+      "sha256": "0054cd3b9ce3b4afae3ed4a4c3cb4cca7577892345a081fe02863297a2aee63e",
+      "unit": "0xb505c0",
+      "bytes": "5356578bf98b378b4f042bceb893244992f7e903d1c1fa068bc2c1e81f33db03c2743a5533ed8b4c2e408b492c85c974078b118b4204ffd08b378b4f042bceb893244992f7e903d1c1fa068bcac1e91f83c30103ca83c5703bd972ca5d5f5e5bc20400",
+      "decode_sha256": "f34d4139aea639c04e6e582102f42f249b7a010d06d1f7fc1fa5fb234fa121dc",
+      "instruction_count": 44,
+      "path": "reports\\coordinator-20261030-cinematic-queue25\\decode-00b505c0-63.txt"
+    },
+    {
+      "rva": "0xb6bb00",
+      "size": 480,
+      "sha256": "9165e90c019faa9c04d2cde3f5a021825bd2f58b76c015f817f9e3617ac35426",
+      "unit": "0xb6bb00",
+      "bytes": "83ec1c538b5c24288b4b042b0bb893244992f7e903d1c1fa065533ed8bc25733ffc1e81f03c2897c2410896c2414896c2418896c2420c644242400896c240c0f848701000056896c24348d9b00000000817c2434000e00000f834001000068e0020000e848a4fcff6a148bd0e8afcefdff03d08bc283c40883e00f74052bd083c210556a1052e805514bff8bf883c40c3bfd8db7e002000074400f57c0892f896f04896f708d8fc000000089afa000000089afa4000000f30f1187a8000000f30f1187ac000000e84454feff89afd002000089afd40200008bef89b5d0020000c785d4020000140000008b3303742434558b46408b48382b483483c034c1f902898dd4020000d946440fb6564d8b4e40525683ec08d95c2404d9442444d91c24e89bfdffff807e4c007438807c24380074318b4e408d44241450e851ccffffd946488b4e548b565051518b4e40d91c24528d4424205081c5c00000005556e83dceffff57e887fb4aff8b4b042b0b8b7424148344243870b893244992f7e903d1c1fa068bcac1e91f83c60103ca83c40433ed3bf1897424100f82b2feffff396c24248b7c241474238b5c24183bfb8bf7740f8b1652e806d3acff83c6043bf375f18b44242450e835faacff5e3bfd740957e8dafb4aff83c4045f5d5b83c41cc3",
+      "decode_sha256": "c1402709014407ee8a5b3a92b7d0b85d01aa9ffc7d0aaac6573e9652db1ee0b2",
+      "instruction_count": 151,
+      "path": "reports\\coordinator-20261030-cinematic-queue25\\decode-00b6bb00-1e0.txt"
+    },
+    {
+      "rva": "0xb6c520",
+      "size": 54,
+      "sha256": "66e7cbcccb06ffc389f9f696f2cb94860c526b5b50a0c3a6b8d3f405197e302b",
+      "unit": "0xb6c520",
+      "bytes": "558bec83e4f081ec58030000803dd84989010056578bf9751d8b450cd945086a015051d91c24e8b5f5ffff83c40c5f5e8be55dc20800",
+      "decode_sha256": "1ebfd49a9099da9b0e2449e786c038dd680916a3c3a64e31bb7c901755699010",
+      "instruction_count": 22,
+      "path": "reports\\coordinator-20261030-cinematic-queue25\\decode-00b6c520-36.txt"
+    },
+    {
+      "rva": "0xb6c556",
+      "size": 121,
+      "sha256": "57071338f8934764fc74aa392dac55dccf8705e6a0ec36f6e72e0ae450348c26",
+      "unit": "0xb6c520",
+      "bytes": "6a008d4c2414e8df73acff6844ba4a018d4c2418e85133acffd945088b750c6a008d4c2414516a0056518bcfd91c24e8e6f0ffff8b0d3c2d56018d54241052e8e679acff8d44241050e8fcc759ff8d4c241451e812c759ffd9450883c4048bced91c24e80240feff8d4c2410e82974acff5f5e8be55dc20800",
+      "decode_sha256": "50f782617c42ae72d573edb36ad724a32ea3672d5bef860d684cac38315d0319",
+      "instruction_count": 39,
+      "path": "reports\\coordinator-20261030-cinematic-queue25\\decode-00b6c556-79.txt"
+    }
+  ],
+  "reused_decodes": [
+    {
+      "rva": "0x41e610",
+      "size": 80,
+      "unit": "0x41e610",
+      "sha256": "fd33f12c52ca30f560ba7d926ee57ae74c7f7e7479cbd8d7da8c5d1eeead00fa",
+      "decode_sha256": "620562c401180813e779c56cc0b040fd0666add3dec432642d6f609475b16cce",
+      "path": "reports\\coordinator-20261030-cinematic-child21\\decode-0041e610-50.txt"
+    },
+    {
+      "rva": "0xb50630",
+      "size": 149,
+      "unit": "0xb50630",
+      "sha256": "5276f5096f96d1682b34985e21ecf846a23b6ece7e144f96edbb24ce11183a0f",
+      "decode_sha256": "cb96186a948778851a0cb0d5ee8c1da1fa7672ddeaf07ff980b63cbcb8000eb1",
+      "path": "reports\\coordinator-20261030-cinematic-child21\\decode-00b50630-95.txt"
+    },
+    {
+      "rva": "0x39cd30",
+      "size": 131,
+      "unit": "0x39cd30",
+      "sha256": "74430c3f82c27bda34c4dd0f2e755835ac03b2607c559583c45750eedfdf0517",
+      "decode_sha256": "dc1b86e06111fff3f15e4352cf40b323e9f2867ffe9095abc2e4ecf4c14e7731",
+      "path": "reports\\coordinator-20261030-constructor20\\decode-0039cd30-83.txt"
+    },
+    {
+      "rva": "0x39cdb3",
+      "size": 78,
+      "unit": "0x39cd30",
+      "sha256": "2c5856b1f3cf3ab2fa3af7184d48ef0f63deae72246d80d3e947b932f487e716",
+      "decode_sha256": "795413e6ccb03c05bb4f536e531607a13ee988687d4365f054922a7022f2ceb8",
+      "path": "reports\\coordinator-20261030-constructor20\\decode-0039cdb3-4e.txt"
+    },
+    {
+      "rva": "0x3b23c0",
+      "size": 44,
+      "unit": "0x3b23c0",
+      "sha256": "28eed5f6f3181791e021e1a08fde81bb21c0947efce0f1c44133ce2a9294a2f2",
+      "decode_sha256": "77bfae2596255944fe64f83921180563316c7e4ccebbaae518d7ead54777b8ad",
+      "path": "reports\\coordinator-20261030-constructor20\\decode-003b23c0-2c.txt"
+    },
+    {
+      "rva": "0x3b23ec",
+      "size": 84,
+      "unit": "0x3b23c0",
+      "sha256": "404d445f63a58011036e4a6dd50d09645364abc821d7a667bc8ce0f8e1891faf",
+      "decode_sha256": "52d75a8d5e8c6168e3aa90f766abb894ae8df98eab9f1d1ff9aed8df50b21671",
+      "path": "reports\\coordinator-20261030-constructor20\\decode-003b23ec-54.txt"
+    }
+  ],
+  "exact_instructions": [
+    {
+      "rva": "0x3b327c",
+      "size": 6,
+      "sha256": "77576d711cf6d28b1fb957cdde15bf2d7a527dbc6844f1773d9e658a5090d083",
+      "bytes": "899e20070000",
+      "meaning": "Verified instruction boundary: zero the same +0x720 insertion index used by b50630."
+    },
+    {
+      "rva": "0x3b3287",
+      "size": 5,
+      "sha256": "82fc7cc06036171a2602397a024dd7791cfbccecde87eaddcb0a3318f37655cc",
+      "bytes": "8b4e042b0e",
+      "meaning": "Reset loop length comes from B.end-B.begin, divided by0x70 by the following instructions."
+    },
+    {
+      "rva": "0x3b32b8",
+      "size": 17,
+      "sha256": "372111058d13e0ec4498e86bde919adc54223e5c1a86bde8949da80c8775180c",
+      "bytes": "88504cf30f11405889584089585c88584d",
+      "meaning": "Reset fills R+0x4c from argument3, +0x58 from argument2, clears +0x40/+0x5c/+0x4d."
+    },
+    {
+      "rva": "0x3b32e4",
+      "size": 3,
+      "sha256": "c85498b87a14a8aa993c92349bf452a0eb6763b933a29471bb5d1b48bd5d8ac5",
+      "bytes": "83c570",
+      "meaning": "Reset record stride is0x70."
+    },
+    {
+      "rva": "0x424397",
+      "size": 4,
+      "sha256": "fee3d263a8e1f5cc82ed774393f4d8a71174af858bd626e705f14514402de4cc",
+      "bytes": "8d442430",
+      "meaning": "At stable post-scalar-call ESP=P, inline storage begins at P+0x30."
+    },
+    {
+      "rva": "0x4243b6",
+      "size": 4,
+      "sha256": "5f36f985776de041e0e6830ad588cd8f77227a9855a98ddf0b4e1546276bace3",
+      "bytes": "8d4c241c",
+      "meaning": "After three reset arguments, ECX=P+0x10=B; B+0x20 is inline storage."
+    },
+    {
+      "rva": "0x4243c2",
+      "size": 11,
+      "sha256": "605a7119631b0472103d1e6c83882e71f6cb5ffa52519f79ac442e569ce72195",
+      "bytes": "c784243c07000000000000",
+      "meaning": "Initialize stack-local B+0x720 to zero."
+    },
+    {
+      "rva": "0x4243f0",
+      "size": 3,
+      "sha256": "b11203af58cc82296f1158780157a28158f1f413ec0306eedd1c38c50a44c42e",
+      "bytes": "8b4e54",
+      "meaning": "Separate caller submits its receiver+0x54 state pointer."
+    },
+    {
+      "rva": "0x4243f7",
+      "size": 4,
+      "sha256": "4c35ab2197cd67584bbb7ca3ce0e26baba63afbc03f16947355c96b5605af875",
+      "bytes": "8d4c2430",
+      "meaning": "After eight append arguments, ECX=P+0x10 is exactly the same stack-local B."
+    },
+    {
+      "rva": "0x42440c",
+      "size": 10,
+      "sha256": "0e9f725392af384c43234682bff342c57325a70be390fb90690ea19ebd8551b2",
+      "bytes": "8d54241052518d4c2410",
+      "meaning": "Consumer receives B=P+0x10 as stack argument2 and separate context E=P+8 in ECX."
+    },
+    {
+      "rva": "0xb6c52c",
+      "size": 7,
+      "sha256": "7c3e28b1877755a24f3ce83ebbbccac55ea0668a1fbcbc2833fe0d8170d212ac",
+      "bytes": "803dd849890100",
+      "meaning": "Global byte at RVA0x14949d8 selects two consumer implementations; runtime value is unknown."
+    },
+    {
+      "rva": "0xb6bb04",
+      "size": 4,
+      "sha256": "2f1ff8c16fe08f809f3c82a1018d9c258d77369c8465c10d0d5a3ddc91ca7934",
+      "bytes": "8b5c2428",
+      "meaning": "Cdecl consumer loads incoming second stack argument B into EBX."
+    },
+    {
+      "rva": "0xb6bb08",
+      "size": 5,
+      "sha256": "7320c4ad1e8c5026f2f51b24c8b99ccc287ca269236993a7606528da997c06e0",
+      "bytes": "8b4b042b0b",
+      "meaning": "Record count derives from B.end-B.begin, not B+0x720."
+    },
+    {
+      "rva": "0xb6bb50",
+      "size": 8,
+      "sha256": "f14a3166c20d6729cbfae1c2e099208c16d593a6324ed6a36d1db4bfd4bd5c34",
+      "bytes": "817c2434000e0000",
+      "meaning": "Direct path stops when byte record offset reaches0xe00, at most32 records."
+    },
+    {
+      "rva": "0xb6bbea",
+      "size": 6,
+      "sha256": "adf0f43fc9f20a38e4185c55602630f19cd56fb68ff3808351abcbce3200991b",
+      "bytes": "8b3303742434",
+      "meaning": "R=B.begin+current byte offset."
+    },
+    {
+      "rva": "0xb6bbf1",
+      "size": 9,
+      "sha256": "523c0100b8082e5535ab7ae04650fd0293dd290fd5ac9a456ca159a48b9da33a",
+      "bytes": "8b46408b48382b4834",
+      "meaning": "Read R+0x40 state and its +0x34/+0x38 pointer span."
+    },
+    {
+      "rva": "0xb6bc06",
+      "size": 10,
+      "sha256": "f64bc4c63eda96922775450987f5f2d04c66d260495f75f024bb8343c62d5b3e",
+      "bytes": "d946440fb6564d8b4e40",
+      "meaning": "Load R+0x44 scalar, R+0x4d flag, and ECX=R+0x40 for the exact processing call."
+    },
+    {
+      "rva": "0xb6bc11",
+      "size": 4,
+      "sha256": "fc30b4c27e60907b7bd1d24653a30c6b732b495a2d3a10ccb9ad3f1da7b33f6b",
+      "bytes": "5683ec08",
+      "meaning": "Pass R itself as third argument to0xb6b9c0; it is not merely a copied state pointer."
+    },
+    {
+      "rva": "0xb6bc25",
+      "size": 4,
+      "sha256": "9dcf6ab4251b0486c2c5d3f26e4baa10ca6ad25e784ff0d500dd5149e21c8568",
+      "bytes": "807e4c00",
+      "meaning": "R+0x4c gates the optional following processing branch."
+    },
+    {
+      "rva": "0xb6bc72",
+      "size": 5,
+      "sha256": "07b41caac3a9d631f0f930a1cd42efdb4986ba59b52c1635ef8459c2eab66d41",
+      "bytes": "8344243870",
+      "meaning": "Advance the direct processing loop by exactly0x70 bytes."
+    },
+    {
+      "rva": "0xb505c5",
+      "size": 7,
+      "sha256": "e7855860da547e70584e088c60590e3f164919ce8800f967bd6385a298ab15b0",
+      "bytes": "8b378b4f042bce",
+      "meaning": "Postprocessing also uses B.begin/B.end."
+    },
+    {
+      "rva": "0xb505e6",
+      "size": 7,
+      "sha256": "b32648a9566b9525d964f76d504ded2a37a1f733f9f3a412bf342a8048e63b9c",
+      "bytes": "8b4c2e408b492c",
+      "meaning": "Postprocessing loads Q=[[R+0x40]+0x2c]; only Q is null-checked."
+    },
+    {
+      "rva": "0xb505f1",
+      "size": 7,
+      "sha256": "bbc13c27d8b97eb1a115da0b4b34ff31634beecb394111acbd3d6638e1a6eb40",
+      "bytes": "8b118b4204ffd0",
+      "meaning": "Invoke Q virtual+4; exact dynamic target remains unresolved."
+    },
+    {
+      "rva": "0xb50615",
+      "size": 3,
+      "sha256": "c85498b87a14a8aa993c92349bf452a0eb6763b933a29471bb5d1b48bd5d8ac5",
+      "bytes": "83c570",
+      "meaning": "Postprocessing record stride is0x70."
+    },
+    {
+      "rva": "0x102c988",
+      "size": 4,
+      "sha256": "85a3b3d4a8867fe4cbfa27d731b49228e502c42e301209280f859a9b3b61ab28",
+      "bytes": "c0237b00",
+      "meaning": "Inherited assigned companion+0x80 vtable+0x14 points to0x3b23c0."
+    }
+  ],
+  "direct_calls": [
+    {
+      "rva": "0x3b2436",
+      "size": 5,
+      "sha256": "da417076ab309099513cc235caf0d6c111cdcaad2423294e67e5eac77236ed68",
+      "bytes": "e8f5a8feff",
+      "target_rva": "0x39cd30",
+      "new_target_decoded": false,
+      "meaning": "Inherited delegate forwards second incoming argument B unchanged; concrete caller-owned B remains unknown."
+    },
+    {
+      "rva": "0x41e657",
+      "size": 5,
+      "sha256": "66ad0a47e70f67d8ed59df63f046b49f4426360e456f2a4263a7d1391109f0f2",
+      "bytes": "e8d41f7300",
+      "target_rva": "0xb50630",
+      "new_target_decoded": false,
+      "meaning": "Inherited cinematic producer uses that original B; not the stack-local B proved below."
+    },
+    {
+      "rva": "0x3b3282",
+      "size": 5,
+      "sha256": "818872b390634b5fd73402cf0bee0477aa6b3d61970806ba79376208224970b3",
+      "bytes": "e829f4ffff",
+      "target_rva": "0x3b26b0",
+      "new_target_decoded": false,
+      "meaning": "Reset/growth helper; body not decoded."
+    },
+    {
+      "rva": "0x42438f",
+      "size": 5,
+      "sha256": "eda1850c077b792b726d47eeb70af3cff8b76a7acb55e485434d6ffe8bd26255",
+      "bytes": "e8fca1ffff",
+      "target_rva": "0x41e590",
+      "new_target_decoded": false,
+      "meaning": "Reused child indexed-state update."
+    },
+    {
+      "rva": "0x4243cd",
+      "size": 5,
+      "sha256": "e26d966a216e3d4d04f27a7765fb7c70d8fba030b9c06cf862cceed47abf7dce",
+      "bytes": "e89eeef8ff",
+      "target_rva": "0x3b3270",
+      "new_target_decoded": true,
+      "meaning": "Reset local B with arguments1,T,1."
+    },
+    {
+      "rva": "0x4243fb",
+      "size": 5,
+      "sha256": "a32bbd4931f91da847e380024211424081104761c82ba38fd14515a3d4df7df9",
+      "bytes": "e830c27200",
+      "target_rva": "0xb50630",
+      "new_target_decoded": false,
+      "meaning": "Append to the same local B using the inherited producer."
+    },
+    {
+      "rva": "0x424404",
+      "size": 5,
+      "sha256": "5408e4297332cafc9b216bccc91c6fcfefcb7e2d0756441971180e39318510f9",
+      "bytes": "e8a7597400",
+      "target_rva": "0xb69db0",
+      "new_target_decoded": false,
+      "meaning": "Initialize separate local consumer context E; body not decoded."
+    },
+    {
+      "rva": "0x424419",
+      "size": 5,
+      "sha256": "3471c0a86d6baeb6a9d43107ffc9ec4f0f3133ccca06739aa6c7bbec8c62fe99",
+      "bytes": "e802817400",
+      "target_rva": "0xb6c520",
+      "new_target_decoded": true,
+      "meaning": "Consume local B with receiver E and arguments(T,B)."
+    },
+    {
+      "rva": "0x424422",
+      "size": 5,
+      "sha256": "819c30f8f6ef5ca4947339f913b0d893dbd354e3427c1fc9694f478dbeeae12d",
+      "bytes": "e839667400",
+      "target_rva": "0xb6aa60",
+      "new_target_decoded": false,
+      "meaning": "Context cleanup; body not decoded."
+    },
+    {
+      "rva": "0xb6c546",
+      "size": 5,
+      "sha256": "4088dbf9bab92d5fbec24b9a5d0a9fc35e437d87898200d992d1a5b9c4c76f2f",
+      "bytes": "e8b5f5ffff",
+      "target_rva": "0xb6bb00",
+      "new_target_decoded": true,
+      "meaning": "When global byte is zero, cdecl process(T,B,1); ECX is not read by this callee."
+    },
+    {
+      "rva": "0xb6c585",
+      "size": 5,
+      "sha256": "752eb0ed8a4aff6f7a6741ecbaa680dd9c8b9239bcc47495eca0d9b3375093f7",
+      "bytes": "e8e6f0ffff",
+      "target_rva": "0xb6b670",
+      "new_target_decoded": false,
+      "meaning": "Nonzero-global branch forwards same B; target not decoded and its processing effects unclaimed."
+    },
+    {
+      "rva": "0xb6c5b9",
+      "size": 5,
+      "sha256": "a8a913385c7f716392aaae63110e85c22e3ec838174dc4b30fc2e964c5d1755f",
+      "bytes": "e80240feff",
+      "target_rva": "0xb505c0",
+      "new_target_decoded": true,
+      "meaning": "After the nonzero-global branch, postprocess same B; scalar argument is not read by this callee."
+    },
+    {
+      "rva": "0xb6bc20",
+      "size": 5,
+      "sha256": "62f83827c1bdf6a4917ccd67a8958579aa64dff0779f5952575beba6e620840b",
+      "bytes": "e89bfdffff",
+      "target_rva": "0xb6b9c0",
+      "new_target_decoded": false,
+      "meaning": "Actual record processor: ECX=[R+0x40], arguments(T,[R+0x44],R,byte[R+0x4d],W); body not decoded."
+    },
+    {
+      "rva": "0xb6bc3a",
+      "size": 5,
+      "sha256": "fddf2d58f30a9e0fa77fa409a1b7d24fc9e29b0b067fd119faf0d2db031c1858",
+      "bytes": "e851ccffff",
+      "target_rva": "0xb68890",
+      "new_target_decoded": false,
+      "meaning": "Conditional per-state processing into local list; body not decoded."
+    },
+    {
+      "rva": "0xb6bc5e",
+      "size": 5,
+      "sha256": "caf4e67055fb343d0dd9785e524906c5d691253a471beb7b44ac69d9dce0537f",
+      "bytes": "e83dceffff",
+      "target_rva": "0xb68aa0",
+      "new_target_decoded": false,
+      "meaning": "Conditional follow-on receives R and work/list/scalar fields; body not decoded."
+    }
+  ],
+  "raw_candidate_searches": [
+    {
+      "path": "reports\\coordinator-20261030-cinematic-queue25\\raw-count720-candidates.json",
+      "sha256": "6b600781dc40279d1c0aabf41b0cda00587122a710ff0a7944710d6ff797c215",
+      "candidate_count": 68,
+      "treatment": "Raw candidates only. Only exact instructions in admitted complete functions support claims."
+    },
+    {
+      "path": "reports\\coordinator-20261030-cinematic-queue25\\raw-rel32-003a8b00.json",
+      "sha256": "73698cfb9c30b6dfe2e862e94272a45740e732344d4c8f0728b2c649a16cf60f",
+      "candidate_count": 0,
+      "treatment": "Raw candidates only. Only exact instructions in admitted complete functions support claims."
+    },
+    {
+      "path": "reports\\coordinator-20261030-cinematic-queue25\\raw-rel32-003aa3f0.json",
+      "sha256": "9f91a49aae88b5593f49947e2aef9debb9c08740e1af4ca08e5e47f61f22830e",
+      "candidate_count": 0,
+      "treatment": "Raw candidates only. Only exact instructions in admitted complete functions support claims."
+    },
+    {
+      "path": "reports\\coordinator-20261030-cinematic-queue25\\raw-rel32-003b3270.json",
+      "sha256": "5e2145fd661837eaf0c276c924e001dd4c5d4d94151c3f348a18c63a4f303c34",
+      "candidate_count": 7,
+      "treatment": "Raw candidates only. Only exact instructions in admitted complete functions support claims."
+    },
+    {
+      "path": "reports\\coordinator-20261030-cinematic-queue25\\raw-rel32-00424370.json",
+      "sha256": "ec06f6242ec4ed605286de5d1b45c05ed9b5278c0c5387fba7a63bb8740ea8a2",
+      "candidate_count": 1,
+      "treatment": "Raw candidates only. Only exact instructions in admitted complete functions support claims."
+    },
+    {
+      "path": "reports\\coordinator-20261030-cinematic-queue25\\raw-rel32-00b50630.json",
+      "sha256": "be9726f70d25c4cd10950c404c258fa9686944d4d729c1a405a679e887c322d9",
+      "candidate_count": 3,
+      "treatment": "Raw candidates only. Only exact instructions in admitted complete functions support claims."
+    },
+    {
+      "path": "reports\\coordinator-20261030-cinematic-queue25\\raw-rel32-00b6c520.json",
+      "sha256": "695612b4a872f1cd0abc0d7cba711cea5470e424438eb6362f8f941276189485",
+      "candidate_count": 1,
+      "treatment": "Raw candidates only. Only exact instructions in admitted complete functions support claims."
+    }
+  ],
+  "abi": {
+    "original": "0x39cd30(A,B,C), reached through0x3b2436, forwards B to child seventh argument and0xb50630 receiver. This incoming B has no newly proven concrete owner.",
+    "separate_caller": "0x424370 is a complete thiscall function with six stack arguments and ret0x18. It owns local B=P+0x10 and E=P+8, with P the stable ESP after0x41e590 returns; B.begin=B.end=B.inline=P+0x30 before reset, B.capacity=P+0x730, and B+0x720=0.",
+    "reset": "0x3b3270(B,1,T,1) resets insertion index, delegates sizing to0x3b26b0, initializes records and returns ret0x0c.",
+    "local_append": "0xb50630(B,[receiver+0x54],arg3,arg4,arg5,arg6,0,-1.0f,-1) consumes eight stack words; its third argument is unused as established by child21.",
+    "consume": "0xb6c520(E,T,B) returns ret8. When global byte RVA0x14949d8 is zero,0xb6bb00(T,B,1) is cdecl and does not read incoming ECX. When nonzero, the other path calls0xb6b670 and then0xb505c0(B,T), whose body does not read T and returns ret4.",
+    "direct_record": "0xb6bb00 computes R=[B]+i*0x70, capped at32 records, and calls0xb6b9c0 with ECX=[R+0x40] and stack arguments(T,[R+0x44],R,byte[R+0x4d],W). The exact target body, its cleanup and its transform effects remain undecoded."
+  },
+  "findings": {
+    "new_count_edge": "0x3b327c is a verified zero write to B+0x720. The complete0x424370 caller passes the same stack-local B to this reset and to inherited producer0xb50630.",
+    "consumer": "0x424419 explicitly passes this same B to0xb6c520. Its zero-global branch0xb6bb00 reads the exact0x70-byte record and state+0x40, then passes R and its state to0xb6b9c0. The nonzero branch has a verified postprocessor0xb505c0 that calls virtual+4 on [[R+0x40]+0x2c].",
+    "loop_boundary": "The checked consumers derive record length from [B+4]-[B], not insertion count+0x720. Exact original queue sizing and record fill remain necessary when joining a different caller.",
+    "provenance_limit": "The consumer is proved for a separate stack-local queue created in0x424370. No evidence equates it with the incoming B in0x39cd30. This closes queue-format and separate-caller consumption, not the original cinematic ownership chain.",
+    "output_limit": "No newly decoded function proves evaluated matrix composition or selected local-player-view consumption. Processing call0xb6b9c0 remains undecoded; state/class semantic names are not inferred.",
+    "acceptance_limit": "No active camera, HUD, cutscene entry/skip/exit, gameplay-return, or continuous head-rotation authority follows. No production correction or API is proposed."
+  },
+  "next_unresolved_edge": {
+    "callsite_rva": "0x3b2436",
+    "target_rva": "0x39cd30",
+    "receiver": "companion+0x80",
+    "argument": "Second stack argument B, forwarded unchanged by0x3b23c0 assigned at vtable RVA0x102c974 slot+0x14.",
+    "required": "Identify the actual incoming B at this exact inherited delegate edge and join that same object to the now-verified record consumer. Do not substitute0x424370 stack-local B for it."
+  },
+  "verification_attempts": "Three early reset-decode attempts rejected an undersized local bound at the final ret0x0c before saving a decode. Exact return end0x3b32f2 corrected the bound. No neighboring function was decoded; the final complete5-function coverage and byte/hash/ABI checks pass.",
+  "execution": {
+    "git": false,
+    "builds": false,
+    "tests": false,
+    "game": false,
+    "game_process_access": false,
+    "input": false,
+    "xr": false,
+    "profiles": false,
+    "installs": false,
+    "packages": false,
+    "subagents": false,
+    "production_writes": false
+  },
+  "frozen": true
+}

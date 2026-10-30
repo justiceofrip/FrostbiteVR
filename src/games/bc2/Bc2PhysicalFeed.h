@@ -5,6 +5,7 @@
 #include "Bc2SelectedMeshes1p.h"
 #include "Bc2EquipmentIdentity.h"
 #include <memory>
+#include <iosfwd>
 
 namespace fvr::bc2 {
 // Mod-owned local poses. This is presentation intent, never native cover,
@@ -83,6 +84,7 @@ public:
     Bc2PhysicalFeed& operator=(const Bc2PhysicalFeed&)=delete;
     Bc2PhysicalFeedResult Tick(const Bc2PhysicalFeedSample&,interaction::HandInteraction&,std::uint64_t& intent)noexcept;
     void Suspend(const interaction::HandInteractionSample&,interaction::HandInteraction&)noexcept;
+    void Report(std::ostream&)const;
     // Suppression only: caller must independently revalidate live native
     // equipment/actor. An expired pose grants no rendering or ammo authority.
     bool BlocksFire(const ReloadStateOwner&,const WeaponEquipmentIdentity&,
