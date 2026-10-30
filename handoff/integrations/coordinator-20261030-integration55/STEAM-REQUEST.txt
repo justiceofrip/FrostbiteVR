@@ -1,0 +1,10 @@
+Please privately share the unmodified BFBC2Game.exe from the Steam copy that produced Report(4).txt and launcher-last(7).log, either as the executable or a ZIP containing only that file.
+
+Find it through Steam Library > Battlefield: Bad Company 2 > Properties > Installed Files > Browse. The file needed is <folder opened by Steam>\BFBC2Game.exe.
+
+Expected file: 19,703,744 bytes
+SHA-256: 22e96001382eb847d3ab0a02b59ec7bb79ba47e04146e74c6c49e38465f38c96
+
+Those existing reports already establish a different executable layout. No new reports are needed. If an existing report includes the Steam build ID, please include that too. Report(3).txt is excluded from this investigation.
+
+We need the actual executable bytes for offline native signature and calling-convention (ABI) mapping. Header metadata alone cannot resolve compatibility, and receiving the file does not establish that this Steam build is supported.
