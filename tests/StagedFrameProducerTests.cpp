@@ -996,8 +996,27 @@ int main(){
     interaction::InputFrame controls{};controls.generation=1;controls.spaceGeneration=1;controls.predictedNs=1000000000;controls.focused=controls.headValid=true;
     CHECK(host.PublishInput(controls)==ipc::ChannelResult::Ok);interaction::InputFrame gotControls{};
     CHECK(producer.ReadInput(gotControls)==ipc::ChannelResult::Ok&&gotControls.generation==1);
-    auto request=[&](bool consume,std::atomic<bool>* delivered=nullptr,unsigned holdMs=0){return std::async(std::launch::async,[&,consume,delivered,holdMs]{graphics::TextureDescriptor d;graphics::PairTicket t;auto result=ipc::ChannelResult::Busy;const auto retryUntil=GetTickCount64()+1000;while(result==ipc::ChannelResult::Busy&&GetTickCount64()<retryUntil){result=host.RequestPair(requirements,tracking,50,d,t);if(result==ipc::ChannelResult::Busy)Sleep(1);}if(result==ipc::ChannelResult::Ok){graphics::BodyPropFrame props;if(host.ReadBodyProps(t,props)&&props.eyes[0].ammo.loaded==24&&props.eyes[1].ammo.loaded==24&&props.eyes[0].ammo.reserve==111&&props.eyes[1].ammo.reserve==111)receivedBodyPair=true;if(delivered)delivered->store(true);if(holdMs)Sleep(holdMs);host.Feedback(t,consume);const auto feedbackUntil=GetTickCount64()+1000;while(host.FlushFeedback()==ipc::ChannelResult::Busy&&GetTickCount64()<feedbackUntil)Sleep(1);}return result;});};
+    auto request=[&](bool consume,std::atomic<bool>* delivered=nullptr,std::shared_future<void> release={}){
+        return std::async(std::launch::async,[&,consume,delivered,release]{
+            graphics::TextureDescriptor d;graphics::PairTicket t;auto result=ipc::ChannelResult::Busy;
+            const auto retryUntil=GetTickCount64()+1000;
+            while(result==ipc::ChannelResult::Busy&&GetTickCount64()<retryUntil){
+                result=host.RequestPair(requirements,tracking,50,d,t);if(result==ipc::ChannelResult::Busy)Sleep(1);
+            }
+            if(result==ipc::ChannelResult::Ok){
+                graphics::BodyPropFrame props;
+                if(host.ReadBodyProps(t,props)&&props.eyes[0].ammo.loaded==24&&props.eyes[1].ammo.loaded==24&&
+                   props.eyes[0].ammo.reserve==111&&props.eyes[1].ammo.reserve==111)receivedBodyPair=true;
+                if(delivered)delivered->store(true);
+                if(release.valid())release.wait();
+                host.Feedback(t,consume);const auto feedbackUntil=GetTickCount64()+1000;
+                while(host.FlushFeedback()==ipc::ChannelResult::Busy&&GetTickCount64()<feedbackUntil)Sleep(1);
+            }
+            return result;
+        });
+    };
     ipc::NativeFrameKey key{0x100000001ULL,0x200000009ULL,0x300000004ULL};
+    std::atomic<bool> delivered=false;
     const auto firstStarted=GetTickCount64();ipc::FrameLease first;auto pending=request(true);
     // Visibility callback runs on a distinct thread. Only owned values cross.
     auto visibility=std::async(std::launch::async,[&]{return Acquire(producer,first,key);});CHECK(visibility.get());
@@ -1043,10 +1062,13 @@ int main(){
     CHECK(producer.Submit(late,d,ticket)==ipc::ChannelResult::Ok);CHECK(WaitFeedback(producer,feedback,1,1));
     CHECK(observed.published==1&&observed.reaped==1); // Expired before publish is not reaped feedback.
     // Once delivered, exceeding the rendezvous deadline must not reclaim GPU use.
-    const auto heldStarted=GetTickCount64();std::atomic<bool> delivered=false;pending=request(true,&delivered,90);++key.frameId;ipc::FrameLease held;CHECK(Acquire(producer,held,key));MakeTicket(held,d,ticket);
+    // Declare after pending so an early CHECK return also releases the waiter
+    // through promise destruction before the async future is joined.
+    std::promise<void> releaseHeld;
+    const auto heldStarted=GetTickCount64();pending=request(true,&delivered,releaseHeld.get_future().share());++key.frameId;ipc::FrameLease held;CHECK(Acquire(producer,held,key));MakeTicket(held,d,ticket);
     const auto heldSubmitted=GetTickCount64();CHECK(producer.Submit(held,d,ticket)==ipc::ChannelResult::Ok);producer.PumpGraphics();
     const auto until=GetTickCount64()+1000;while(!delivered&&GetTickCount64()<until){producer.PumpGraphics();Sleep(1);}
-    if(!delivered){std::fprintf(stderr,"held acquire/submit=%llu total=%llu result=%u consumed=%u discarded=%u\n",heldSubmitted-heldStarted,GetTickCount64()-heldStarted,unsigned(pending.get()),feedback.consumed.load(),feedback.discarded.load());return 1;}
+    if(!delivered){releaseHeld.set_value();std::fprintf(stderr,"held acquire/submit=%llu total=%llu result=%u consumed=%u discarded=%u\n",heldSubmitted-heldStarted,GetTickCount64()-heldStarted,unsigned(pending.get()),feedback.consumed.load(),feedback.discarded.load());return 1;}
     // Suspending new rendering cannot cancel/reclaim a pair already owned by
     // the host, or let a later native frame reuse its GPU allocation.
     auto resumedKey=key;++resumedKey.frameId;
@@ -1056,6 +1078,7 @@ int main(){
     producer.PumpGraphics();CHECK(!producer.TryBegin(resumedKey,other));
     CHECK(feedback.consumed==1&&feedback.discarded==1);
     Sleep(60);producer.PumpGraphics();CHECK(feedback.consumed==1&&feedback.discarded==1);
+    CHECK(pending.wait_for(0ms)==std::future_status::timeout);releaseHeld.set_value();
     CHECK(pending.get()==ipc::ChannelResult::Ok);CHECK(WaitFeedback(producer,feedback,2,1));
     CHECK(observed.published==2&&observed.reaped==2);
     // New channel repeats request IDs; local connection generation blocks ABA.

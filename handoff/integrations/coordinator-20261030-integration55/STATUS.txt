@@ -7,3 +7,6 @@ No game launch or headset acceptance requested/performed during installation.
 Normal x86-02 built;334/335 passed, magazine test hit telemetry-table stack overflow.
 Fix allocates bounded counter storage once at construction; no per-Tick allocation or gameplay-policy change.
 Original failure/source provenance retained; rerun normal builds against the correction.
+x64 normal build completed;333/335 passed, two fixtures corrected (stack history storage, explicit receiver release).
+Only the two corrected tests are rebuilt/rerun on both architectures;333 unchanged passes per architecture are reused with binary hashes.
+Native binary/symbol hashes and source closure must remain identical to built7131871; Fixture-Validation.py verifies this before freeze.

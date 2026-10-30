@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <memory>
 #include <sstream>
 using namespace fvr::bc2;
 using namespace fvr::interaction;
@@ -15,7 +16,10 @@ template<std::size_t N>void Text(std::array<char,N>& out,std::string_view text){
 fvr::math::Matrix4 Identity(){fvr::math::Matrix4 m{};for(unsigned i=0;i<4;++i)m.values[i][i]=1;return m;}
 struct Fixture {
     const Bc2FeedRegistration* registration=FindBc2FeedRegistration(bc2_feed_profile_detail::M60Registration.key);
-    FeedEquipmentAdapter backend;
+    // Production keeps these native histories in static storage. Keep each
+    // fixture's independent backend off the stack even when tests are inlined.
+    std::unique_ptr<FeedEquipmentAdapter> backendStorage=std::make_unique<FeedEquipmentAdapter>();
+    FeedEquipmentAdapter& backend=*backendStorage;
     FeedEquipmentNativeView native{};
     std::shared_ptr<SelectedMeshesSnapshot> selected=std::make_shared<SelectedMeshesSnapshot>();
     HandInteraction hands;
