@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <memory>
+#include <new>
 #include <ostream>
 
 namespace fvr::bc2 {
@@ -51,7 +53,8 @@ public:
  static constexpr auto Capacity=WeaponMagazineEntrySnapshot::Capacity;
  void Observe(const WeaponMagazineEntryObservation& observation)noexcept {
   Guard guard(gate_);if(!guard.held){Drop();return;}
-  auto& rows=data_.rows;auto& count=data_.count;
+  if(!data_){Drop();return;}
+  auto& rows=data_->rows;auto& count=data_->count;
   const auto asset=observation.asset.substr(0,rows[0].asset.size()-1);
   const auto matches=[&](std::size_t n){return rows[n].profile==observation.profile&&std::string_view(rows[n].asset.data())==asset;};
   auto index=lastRow_;
@@ -72,7 +75,8 @@ public:
  }
  std::optional<WeaponMagazineEntrySnapshot> Snapshot()const noexcept {
   Guard guard(gate_);if(!guard.held)return {};
-  auto result=data_;result.dropped=dropped_.load(std::memory_order_relaxed);return result;
+  WeaponMagazineEntrySnapshot result;if(data_)result=*data_;
+  result.dropped=dropped_.load(std::memory_order_relaxed);return result;
  }
  void Report(std::ostream& out)const {
   const auto snapshot=Snapshot();if(!snapshot){out<<"{\"snapshot_busy\":true}";return;}
@@ -102,7 +106,9 @@ private:
   ~Guard(){if(held)gate.clear(std::memory_order_release);}};
  mutable std::atomic_flag gate_=ATOMIC_FLAG_INIT;
  std::atomic<std::uint64_t> dropped_{0};
- WeaponMagazineEntrySnapshot data_{};
+ // Allocate the bounded table once, outside Tick. An unavailable diagnostic
+ // table drops observations without changing the gameplay consumer.
+ std::unique_ptr<WeaponMagazineEntrySnapshot> data_{new(std::nothrow) WeaponMagazineEntrySnapshot};
  void Drop()noexcept{auto n=dropped_.load(std::memory_order_relaxed);if(n!=UINT64_MAX)dropped_.compare_exchange_strong(n,n+1,std::memory_order_relaxed);}
  static void Increment(std::uint64_t& value)noexcept{if(value!=UINT64_MAX)++value;}
  std::size_t lastRow_=Capacity;

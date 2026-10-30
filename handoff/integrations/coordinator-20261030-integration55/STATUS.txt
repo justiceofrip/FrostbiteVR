@@ -4,3 +4,6 @@ Root owns Git, build trees, packaging/install and both leases; all agents retire
 Steam request is in STEAM-REQUEST.txt; actual executable remains unavailable.
 Reuse wiring54 focused passes and264-record cache; do not repeat asset extraction.
 No game launch or headset acceptance requested/performed during installation.
+Normal x86-02 built;334/335 passed, magazine test hit telemetry-table stack overflow.
+Fix allocates bounded counter storage once at construction; no per-Tick allocation or gameplay-policy change.
+Original failure/source provenance retained; rerun normal builds against the correction.

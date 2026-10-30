@@ -16,7 +16,7 @@ $statePath=Join-Path $run 'source-state.json'
 if($Mode -eq 'Prepare'){
  $old=Get-Content -LiteralPath (Join-Path $repo 'reports/coordinator-20261030-headset52/normal-runtime/build-receipt.json') -Raw|ConvertFrom-Json
  foreach($map in @($old.binaries,$old.symbols_by_binary)){foreach($entry in $map.psobject.Properties){if((Sha $entry.Value.path) -ne $entry.Value.sha256){throw 'Fallback artifact changed'}}}
- $proof=Join-Path $run 'provenance';$null=[IO.Directory]::CreateDirectory($proof)
+ $proof=Join-Path $run ("provenance-"+$Attempt);$null=[IO.Directory]::CreateDirectory($proof)
  & py -3 -B $helper source --root $repo --output (Join-Path $proof 'source-without-header.json');if($LASTEXITCODE){throw 'Closure failed'}
  $closure=Get-Content -LiteralPath (Join-Path $proof 'source-without-header.json') -Raw|ConvertFrom-Json
  $text=[IO.File]::ReadAllText($old.reviewed_header.path)
