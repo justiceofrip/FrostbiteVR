@@ -29,7 +29,7 @@
 #include "Bc2ChestKnifeRendering.h"
 #include "Bc2SelectedKnifeRendering.h"
 #endif
-namespace fvr::bc2 {struct Bc2PhysicalFeedPresentation;}
+namespace fvr::bc2 {struct Bc2PhysicalFeedPresentation;struct Bc2PhysicalPistolSlidePresentation;}
 namespace fvr::bc2::rigPublication {
 using WeaponSightContact=bc2::WeaponSightContact;
 using ResolveOwner=bool(*)(unsigned soldier,unsigned& weak)noexcept;
@@ -67,6 +67,7 @@ struct Tracking {
     Bc2BoltTracking bolt{};
     // Same immutable Gameplay packet; never substitute a later global feed pose.
     std::shared_ptr<const Bc2PhysicalFeedPresentation> feed;
+    std::shared_ptr<const Bc2PhysicalPistolSlidePresentation> pistolSlide;
     interaction::InputFrame boltRawInput{}; // Before support-orientation guidance; same original generation.
     std::optional<interaction::AmmoSupplyVisualSample> bodyMagazine;
     ReloadTracking reload{}; // Explicit mode; defaults off, immutable preview.

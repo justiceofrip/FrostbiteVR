@@ -1,0 +1,20 @@
+DoneY: owner23 MP443 physical after-feed owner prepared; source-only evidence.
+Owned: Bc2PhysicalPistolSlide.h/.cpp and Bc2PhysicalPistolSlideTests.cpp.
+Uses backend22 immutable admitted/completed/rejected events and actual clocks.
+One persistent policy per stable resource; no holster/tracking/equip reset.
+Exact current equipment plus inventory binding prevents same-address inheritance.
+Real drained actor retirement reclaims policies, claims and packet histories.
+Unknown dispatch or missing history stays blocked; no invented success.
+Tactical feed needs fresh same-feed own-native readiness, without a stroke.
+Empty/unready policy needs measured full stroke and actual arbiter release.
+Gate release is typed exact policy clearance; native owns persistent fire veto.
+Raw source is pre-IK mapped left wrist with identity wrist offset.
+Current safety and original raw packet/claims/lifecycle remain distinct.
+Presentation returns with consumed Gameplay packet; no global-latest read.
+Fire suppression and active native/hand equipment busy are separate.
+11 deterministic compositions added, including delayed raw and 36 retirements.
+No builds/tests/game/install run; root owns validation and integration.
+Depends on motion_history23 currentSafety/sourceObservation/currentObservation.
+Root wires Gameplay lifecycle/previousLeft, renderer and CMake.
+No native chamber, extra round, actual-game or headset acceptance claimed.
+Owner files frozen; edit ownership returned to root.

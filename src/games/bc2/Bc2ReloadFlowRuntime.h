@@ -18,6 +18,7 @@
 #include "Bc2AmmoResourceBinding.h"
 #include "Bc2AmmoResourceService.h"
 #include "Bc2FeedEquipmentAdapter.h"
+#include "Bc2PistolAfterFeedEvidence.h"
 #include <atomic>
 #include <memory>
 #include <ostream>
@@ -31,6 +32,7 @@ struct ReloadFlowBoundary {
     std::uint8_t branch=0,soldierFlags=0;
     std::uint32_t current=0,previous=0,next=0;
     float timer=0;std::int32_t loaded=0,reserve=0;std::uint8_t flagsA8=0;
+    PistolAfterFeedNativeBits pistol{};bool pistolFiniteAmmo=false;
 };
 bool ReloadReserveCopiesAgree(const ReloadHoldIdentity&,const std::array<ReloadFlowBoundary,3>&,
     const std::array<ReloadFlowBoundary,3>&,const std::array<int,3>&,const std::array<int,3>&)noexcept;
@@ -75,6 +77,7 @@ struct ReloadFlowEventEnd {
     std::array<std::byte,0x30> copiedContext{};bool contextCopied=false;
     ReloadDeltaOverride hold{};bool holdRequested=false;
     NativeCycleInputGuard cycleGuard{};std::uint64_t cycleGuardEpoch=0;unsigned cycleGuardSteps=0,cycleGuardRejected=0;
+    PistolAfterFeedInputReceipt pistolInput{};
 };
 // True only for a fully captured owner-retained restore whose output matches
 // the captured source fields and whose source bytes did not change. No authority
@@ -340,6 +343,14 @@ std::optional<AmmoResourceView> ReadAmmoResourceView(const ReloadStateOwner&,std
 AmmoResourceRead ReadAmmoResourceObserved(const ReloadStateOwner&,std::int64_t now)noexcept;
 bool SubmitAmmoResourceRequest(const AmmoResourceRequest&)noexcept;
 std::optional<AmmoResourceOutcome> ReadAmmoResourceOutcome(std::uint64_t,const interaction::AmmoResourceContext&)noexcept;
+// Durable MP443 admission/terminal lineage and per-resource veto. Reading a
+// state never renews a receipt or supplies missing own-Update evidence.
+// Opt in only when the normal physical owner is constructed, before Start.
+bool EnablePistolAfterFeedPolicy()noexcept;
+std::optional<PistolAfterFeedEvent> ReadPistolAfterFeedEvent(std::uint64_t afterEvent)noexcept;
+std::optional<PistolAfterFeedResourceState> ReadPistolAfterFeedState(const interaction::AmmoResourceIdentity&,std::int64_t now)noexcept;
+bool ReleasePistolAfterFeedGate(const PistolAfterFeedRelease&)noexcept;
+std::optional<PistolAfterFeedActorRetirement> ReadPistolAfterFeedActorRetirement(std::uint64_t afterEvent)noexcept;
 // Separate belt backend. A native view grants counts/identity only; callers
 // must supply the exact selected physical profile and original input evidence.
 // A false submit has not queued/called native work and supplies no fake receipt.

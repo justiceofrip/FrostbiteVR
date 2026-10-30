@@ -248,7 +248,12 @@ void Bc2PhysicalFeed::Suspend(const HandInteractionSample& input,HandInteraction
 }
 Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandInteraction& hands,std::uint64_t& intent)noexcept {
     const auto blocksFire=[&](){return s.equipment&&BlocksFire(s.owner,*s.equipment,s.binding);};
-    Bc2PhysicalFeedResult out;out.blocksFire=blocksFire();publication.store({},std::memory_order_release);
+    const auto blocksEquipment=[&](){
+        if(state_&&s.equipment)for(const auto& e:state_->equipment)
+            if(e&&CurrentEquipment(e->original,s.owner,*s.equipment,s.binding)&&(e->pending||e->claim))return true;
+        return false;
+    };
+    Bc2PhysicalFeedResult out;out.blocksFire=blocksFire();out.blocksEquipment=blocksEquipment();publication.store({},std::memory_order_release);
     if(!state_)return out;auto& state=*state_;const auto now=s.input.nowNs;
     state.RetireActors(s.input,hands);out.blocksFire=blocksFire();
     if(!state.api.read||!state.api.submit||!state.api.receipt){Suspend(s.input,hands);return out;}
@@ -269,7 +274,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         else {old.cover=cover;old.container=container;old.seat=seat;old.refill=refill;old.carriedPartsMask=carried;}
     }
     for(auto& e:state.equipment)if(e)state.PublishGate(*e);
-    out.blocksFire=blocksFire();
+    out.blocksFire=blocksFire();out.blocksEquipment=blocksEquipment();
     const auto view=state.api.read(state.api.context,s.owner,now);
     bool recorded=false;for(const auto& p:state.packets)if(p.owner==s.owner&&p.input.sequence==s.input.sequence){recorded=true;break;}
     if(!recorded){const auto source=state.api.readAt?state.api.readAt(state.api.context,s.owner,s.input.observedNs,now):view;
@@ -448,7 +453,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         }else out.status=e->session->State().status;
         out.pending=e->pending.has_value();out.ownsHand=e->claim.has_value();
     }
-    state.PublishGate(*e);out.blocksFire=e->Blocked();
+    state.PublishGate(*e);out.blocksFire=e->Blocked();out.blocksEquipment=e->pending.has_value()||e->claim.has_value();
     if(const auto pose=ComposeBc2M60FeedPresentation(e->supply,e->pose))try{
         auto p=std::make_shared<Bc2PhysicalFeedPresentation>();p->owner=s.owner;p->rig=s.raw.rig;p->input=sourceInput;p->weapon=s.weapon;
         p->supply=e->supply;p->lifetime=e->lifetime;p->revision=++e->revision;p->rigFingerprint=s.rigFingerprint;

@@ -1,0 +1,20 @@
+DoneY: normal MP443 slide rendering prepared; source-only evidence.
+Changed: Bc2RigPublication.cpp, Bc2PistolSlidePresentation.h, Bc2PistolSlidePresentationTests.cpp.
+Bc2RigPublication.h retains root's paired Tracking.pistolSlide pointer unchanged.
+PistolSlideTrackingFresh joins the paired actual safety/GunHold/Mechanism captures.
+PistolSlideCurrent retains original leases across newer monotonic source/safety packets.
+Release, claim/feed/resource/selection/rig changes reject the old slide palette.
+Exact configured MP443 selector and full measured topology/fingerprint bind leaf30.
+ComposeBc2PistolSlideWorldFrames explicitly receives the placed held-weapon basis.
+Gesture raw source remains immutable; completed world translations scale once.
+RetargetWeapon writes only the slide leaf plus optional real MechanismGrip wrist.
+Unreachable/unavailable wrist leaves the ordinary hand and still permits owned leaf.
+PublishedPose/Scope carry a separate pre-slide fallback and original selected lease.
+Both Pack callbacks check full native source bytes and current slide ownership.
+Final publication checks full source bytes; lost slide authority uses pre-slide fallback.
+Active slide excludes ordinary recovery and competing palette overrides.
+Existing feed/magazine/pump/bolt/sight/body/knife restoration remains separate.
+10 focused test groups prepared, including placed basis, target continuity and selection.
+No tests/builds/game/install/captures run; root owns all validation.
+No native chamber, actual-game, headset or visual acceptance claimed.
+Files frozen; ownership returned to root. No unresolved source blocker identified.

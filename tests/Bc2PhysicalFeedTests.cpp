@@ -222,7 +222,9 @@ int PartialCoverRequiresFreshRegraspAndPreservesProgress(){
 }
 int LongStowMigratesOnlySamePinnedResource(){
     Fixture f;CHECK(f.OpenCover());const auto lifetime=f.submitted->command.request.lifetime;
+    CHECK(f.result.blocksFire&&f.result.blocksEquipment&&f.result.pending);
     const auto supply=f.submitted->command.before.loadedSupply;CHECK(f.Reconcile());
+    CHECK(f.result.blocksFire&&!f.result.blocksEquipment&&!f.result.ownsHand&&!f.result.pending);
     f.Tick(f.sample.raw.rawLeftWristWorldMeters,false,true);f.now+=1000*Ms;
     ++f.native.identity.owner.equipGeneration;++f.native.identity.owner.space;
     f.native.binding.owner=f.native.identity.owner;f.native.binding.context.equipGeneration=f.native.identity.owner.equipGeneration;
@@ -233,6 +235,7 @@ int LongStowMigratesOnlySamePinnedResource(){
     CHECK(f.result.presentation&&f.result.presentation->supply==supply);CHECK(f.result.presentation->lifetime==lifetime);
     CHECK(f.Place(FeedPhysicalOperation::DetachContainer));CHECK(f.submitted->command.request.lifetime==lifetime);
     CHECK(f.submitted->command.request.id==2&&f.submitted->command.before.loadedSupply==supply);
+    CHECK(f.result.blocksFire&&f.result.blocksEquipment&&f.result.pending);
     CHECK(f.submitted->source.identity.owner==f.sample.owner);return 0;
 }
 int SameAddressReplacementDoesNotInheritFeedDebt(){

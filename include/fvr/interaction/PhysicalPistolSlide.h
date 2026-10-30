@@ -117,6 +117,48 @@ inline float Angle(const math::Matrix4& a,const math::Matrix4& b)noexcept {
     double trace=0;for(unsigned row=0;row<3;++row)for(unsigned k=0;k<3;++k)trace+=double(a.values[row][k])*b.values[row][k];
     return float(std::acos(std::clamp((trace-1)*.5,-1.0,1.0)));
 }
+// Shared measured-motion kernel. It grants neither native chamber knowledge nor
+// policy readiness; each caller supplies its own typed authority and custody.
+inline std::optional<float> Travel(const PistolSlideProfile& p,const math::Matrix4& raw)noexcept {
+    using namespace weapon_cycle_detail;
+    if(!feed_mechanism_detail::Pose(raw)||Angle(raw,p.closedContact)>p.rotationTolerance)return {};
+    const auto delta=Sub(Position(raw),Position(p.closedContact));
+    const float travel=float(Dot(delta,p.axis));
+    const double lateral=std::max(0.0,Dot(delta,delta)-double(travel)*travel);
+    if(!std::isfinite(travel)||lateral>double(p.lateralTolerance)*p.lateralTolerance||
+       travel<-(p.frontTolerance+p.hysteresis)||travel>p.stroke+p.rearTolerance+p.hysteresis)return {};
+    return travel;
+}
+class MeasuredStroke {
+public:
+    void Start(float travel,std::int64_t observed)noexcept {started_=observed;endpoint_=0;last_=travel;}
+    bool Expired(const PistolSlideProfile& p,std::int64_t observed)const noexcept {
+        return observed-started_>p.maximumStrokeNs;
+    }
+    bool Step(const PistolSlideProfile& p,float travel)noexcept {
+        if(std::abs(travel-last_)>p.maxStepMeters)return false;last_=travel;return true;
+    }
+    bool Release(const PistolSlideProfile& p,PistolSlidePhase phase,float travel,bool realRelease)const noexcept {
+        return phase==PistolSlidePhase::AwaitingRelease&&std::abs(travel)<=p.frontTolerance&&realRelease;
+    }
+    void Advance(const PistolSlideProfile& p,PistolSlidePhase& phase,float travel,std::int64_t observed)noexcept {
+        if(phase==PistolSlidePhase::Pull){
+            if(travel>=p.stroke-p.rearTolerance){
+                if(!endpoint_)endpoint_=observed;
+                else if(observed-endpoint_>=p.endpointDwellNs){phase=PistolSlidePhase::Return;endpoint_=0;}
+            }else if(travel<p.stroke-p.rearTolerance-p.hysteresis)endpoint_=0;
+        }else if(phase==PistolSlidePhase::Return){
+            if(std::abs(travel)<=p.frontTolerance){
+                if(!endpoint_)endpoint_=observed;
+                else if(observed-endpoint_>=p.endpointDwellNs){phase=PistolSlidePhase::AwaitingRelease;endpoint_=0;}
+            }else if(std::abs(travel)>p.frontTolerance+p.hysteresis)endpoint_=0;
+        }else if(phase==PistolSlidePhase::AwaitingRelease&&std::abs(travel)>p.frontTolerance+p.hysteresis){
+            phase=PistolSlidePhase::Return;endpoint_=0;
+        }
+    }
+private:
+    std::int64_t started_=0,endpoint_=0;float last_=0;
+};
 }
 
 // One serialized instance per interaction domain. It must see a real release
@@ -145,7 +187,7 @@ public:
            authority.identity.feedTransaction<=identity_.feedTransaction)return false;
         profile_=profile;identity_=authority.identity;latest_=authority;lastGrant_=identity_.grant;
         phase_=PistolSlidePhase::AwaitingGrip;failure_=PistolSlideFailure::None;
-        neutral_=false;lastInput_=0;lastObserved_=0;lastNow_=now;endpointSince_=0;strokeStarted_=0;
+        neutral_=false;lastInput_=0;lastObserved_=0;lastNow_=now;motion_={};
         return true;
     }
     bool ObserveReady(const PistolSlideReady& ready,std::int64_t now)noexcept {
@@ -198,15 +240,9 @@ public:
             sample.gun.kind==HandClaimKind::GunHold&&sample.gun.hand==profile_.hands.gun&&sample.gun.item==identity_.item&&
             gun->inputSequence==s.sequence&&gun->deadlineNs>s.nowNs&&gun->deadlineNs<=s.deadlineNs;
         if(!gunOkay)return fail(PistolSlideFailure::Custody);
-        if(!feed_mechanism_detail::Pose(sample.rawContact)||
-           pistol_slide_detail::Angle(sample.rawContact,profile_.closedContact)>profile_.rotationTolerance)
-            return fail(PistolSlideFailure::Geometry);
-        const auto delta=Sub(Position(sample.rawContact),Position(profile_.closedContact));
-        const float travel=float(Dot(delta,profile_.axis));
-        const double lateral=std::max(0.0,Dot(delta,delta)-double(travel)*travel);
-        if(!std::isfinite(travel)||lateral>double(profile_.lateralTolerance)*profile_.lateralTolerance||
-           travel<-(profile_.frontTolerance+profile_.hysteresis)||travel>profile_.stroke+profile_.rearTolerance+profile_.hysteresis)
-            return fail(PistolSlideFailure::Geometry);
+        const auto measured=pistol_slide_detail::Travel(profile_,sample.rawContact);
+        if(!measured)return fail(PistolSlideFailure::Geometry);
+        const float travel=*measured;
         if(phase_==PistolSlidePhase::AwaitingGrip){
             if(!sample.grip){neutral_=true;return Output(s.nowNs,hands);}
             const bool press=neutral_;neutral_=false;
@@ -218,18 +254,17 @@ public:
                 sample.contact,sample.acquireIntent,sample.gun.id});
             if(!acquired.accepted||!acquired.claim)return fail(PistolSlideFailure::Custody);
             mechanism_=acquired.claim->token;gun_=sample.gun;phase_=PistolSlidePhase::Pull;
-            strokeStarted_=s.observedNs;endpointSince_=0;lastTravel_=travel;failure_=PistolSlideFailure::None;
+            motion_.Start(travel,s.observedNs);failure_=PistolSlideFailure::None;
             return WithTarget(sample,hands,travel);
         }
-        if(s.observedNs-strokeStarted_>profile_.maximumStrokeNs)return fail(PistolSlideFailure::Expired);
+        if(motion_.Expired(profile_,s.observedNs))return fail(PistolSlideFailure::Expired);
         if(!mechanism_||gun_!=sample.gun||!before||before->token!=*mechanism_||before->deadlineNs<=s.nowNs||
            before->token.prerequisiteClaim!=sample.gun.id)return fail(PistolSlideFailure::Custody);
-        if(std::abs(travel-lastTravel_)>profile_.maxStepMeters)return fail(PistolSlideFailure::Geometry);
-        lastTravel_=travel;
+        if(!motion_.Step(profile_,travel))return fail(PistolSlideFailure::Geometry);
         if(!sample.grip){
             bool released=false;for(const auto& event:safety.lifecycle.released)
                 released|=event&&event->token==*mechanism_&&event->reason==HandInteractionReason::Released;
-            if(phase_!=PistolSlidePhase::AwaitingRelease||std::abs(travel)>profile_.frontTolerance||!released||
+            if(!motion_.Release(profile_,phase_,travel,released)||
                nextRequest_==std::numeric_limits<std::uint64_t>::max())return fail(PistolSlideFailure::Interrupted);
             const auto token=*mechanism_;
             const auto deadline=std::min({s.deadlineNs,a.deadlineNs,gun->deadlineNs});
@@ -240,19 +275,7 @@ public:
         const auto current=hands.Current(profile_.hands.mechanism);
         if(!current||current->token!=*mechanism_||!hands.Renew(s,*mechanism_,
             {identity_.mechanism,s.sequence,std::min(s.deadlineNs,a.deadlineNs),true}).accepted)return fail(PistolSlideFailure::Custody);
-        if(phase_==PistolSlidePhase::Pull){
-            if(travel>=profile_.stroke-profile_.rearTolerance){
-                if(!endpointSince_)endpointSince_=s.observedNs;
-                else if(s.observedNs-endpointSince_>=profile_.endpointDwellNs){phase_=PistolSlidePhase::Return;endpointSince_=0;}
-            }else if(travel<profile_.stroke-profile_.rearTolerance-profile_.hysteresis)endpointSince_=0;
-        }else if(phase_==PistolSlidePhase::Return){
-            if(std::abs(travel)<=profile_.frontTolerance){
-                if(!endpointSince_)endpointSince_=s.observedNs;
-                else if(s.observedNs-endpointSince_>=profile_.endpointDwellNs){phase_=PistolSlidePhase::AwaitingRelease;endpointSince_=0;}
-            }else if(std::abs(travel)>profile_.frontTolerance+profile_.hysteresis)endpointSince_=0;
-        }else if(phase_==PistolSlidePhase::AwaitingRelease&&std::abs(travel)>profile_.frontTolerance+profile_.hysteresis){
-            phase_=PistolSlidePhase::Return;endpointSince_=0;
-        }
+        motion_.Advance(profile_,phase_,travel,s.observedNs);
         return WithTarget(sample,hands,travel);
     }
     PistolSlidePhase Phase()const noexcept{return phase_;}
@@ -263,7 +286,7 @@ private:
             now>=lastNow_&&weapon_cycle_detail::Window(observed,deadline,now);
     }
     void Restart(PistolSlideFailure reason)noexcept {
-        phase_=PistolSlidePhase::AwaitingGrip;failure_=reason;neutral_=false;endpointSince_=0;strokeStarted_=0;
+        phase_=PistolSlidePhase::AwaitingGrip;failure_=reason;neutral_=false;motion_={};
     }
     void Drop(const HandInteractionSample& s,HandInteraction& hands)noexcept {
         if(mechanism_){const auto held=hands.Current(mechanism_->hand);if(held&&held->token==*mechanism_)hands.Release(s,*mechanism_);}
@@ -287,7 +310,7 @@ private:
     std::optional<HandClaimToken> mechanism_;HandClaimToken gun_{};
     std::optional<PistolSlideRequest> pending_;
     std::uint64_t nextRequest_=0,lastGrant_=0,lastInput_=0;
-    std::int64_t lastObserved_=0,lastNow_=0,endpointSince_=0,strokeStarted_=0;
-    float lastTravel_=0;bool neutral_=false;
+    std::int64_t lastObserved_=0,lastNow_=0;
+    pistol_slide_detail::MeasuredStroke motion_{};bool neutral_=false;
 };
 }

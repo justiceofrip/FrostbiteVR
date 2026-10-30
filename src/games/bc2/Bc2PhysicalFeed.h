@@ -64,6 +64,9 @@ struct Bc2PhysicalFeedSample {
 };
 struct Bc2PhysicalFeedResult {
     bool selected=false,blocksFire=false,ownsHand=false,pending=false,submitRefused=false;
+    // An idle unfinished mechanism may be stowed. Only a live hand operation
+    // or an unresolved native request prevents an equipment transition.
+    bool blocksEquipment=false;
     interaction::FeedEquipmentStatus status=interaction::FeedEquipmentStatus::Unbound;
     interaction::FeedInteractionStatus interactionStatus{};
     interaction::FeedReloadStatus reloadStatus{};
