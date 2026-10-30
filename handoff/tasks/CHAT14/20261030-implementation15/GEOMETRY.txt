@@ -1,0 +1,25 @@
+CHAT14 implementation15: exact M60_sp authored mechanism geometry; offline measurement only.
+Inputs: work12 proof.json/jobs.json; exact unscoped SP_lmg_M60; no configuration/metadata resurvey.
+Rig: ske01 SHA d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09; fingerprint fnv1a64:a7f219a1426216ab.
+Clip: pinned 1P_Reload SHA a6b0e5c6...; 72 tracks, 21 weapon tracks, duration8.0333337784s.
+Mesh/LOD SHA:76111c128ce0365d6df6263bfa87cf6329979283d62dc95c95806d5b8eec4446 / bff83bba14b87b2833321648d5d3ef738496896e173b20a73bf638aecb4440d9.
+Basis: canonical reflected-Z row-vector metres relative to jntWpn_1; clip t0 is baseline, not a proved native closed state.
+14 mesh-weighted parts; all vertices single-weight, zero cross-part triangles; 8501 visible triangles plus8501 depth duplicates.
+jntWpn_9/index34/parent10:751 visible triangles; fixed pivot=(0.0000000263,0.0745346174,-0.4183450341), positive-opening axis=(-1,0,0).
+Panel9 local bounds=[(-.0234069824,-.0216372013,-.0057985783),(.0499572754,.0135190487,.3301389217)]m.
+Panel9 sampled angle[-.0060629497,1.5888015577]rad; near pi/2 at1.5-5s; control-hull X-angle[-.0061718852,1.5893876575]rad.
+Panel9 same-frame wrist contact window.733333-.933333s; representative.833333s; max drift.637654mm/.00161188rad; finger drift.000195268rad.
+Panel9 representative knuckle centroid local=(.000703,.0259076157,.191754995); nearest mesh vertex=(.0007791519,.0027768612,.190002203); gap23.1972mm.
+jntWpn_4/index43/parent10:114 visible triangles; constant orientation; baseline origin=(-.0517479445,.0121865959,-.4085690691); rail axis=(0,0,1).
+Slider4 analytic decoded travel.2335956691m; projection[-.0020137391,.2315819301]m at6.5104431047/6.730160063s; transverse control hull44.5nm.
+Slider4 local bounds=[(.0062904358,-.0060122013,-.0048830509),(.0490112305,.0047299862,.2515256405)]m; no qualifying sustained left grip.
+jntWpn_6/index41/parent10:373 visible triangles, Fabrics+metal; local extent(.1089782715,.1240234375,.1049804688)m; general carry motion, not a rail.
+Part6 baseline origin=(.1052855052,-.0216212654,-.3782466588); nearest sampled left knuckle/vertex gap7.1964mm at2.1s; no strict sustained grip window.
+Ammo material confirms presentation chain12(index38)->13(100)->wpnJnt_14(114)->15(116); 280/160/320/320 visible triangles; articulated, not one rigid part.
+Tracks0,10,16,17,18,19,Flash have no weighted mesh geometry;7/8 vary only~7.6microrad and classify static;15 varying-control count is not15 mechanisms.
+All5 root-rendered frames reviewed:9 is top-cover presentation;6 is fabric ammunition pouch;12->15 are linked-round belt;4 is side-pull actuator with charge semantics unassigned.
+geometry-evidence.json retains exact hashes, bounds, parent frames, wrist frames, quantitative contact limits and all21 track classifications.
+measure_geometry.py exact checks passed; both scripts AST syntax passed; no Git/build/package/process/game/input/install/profile changes or asset exports.
+Root-only render_geometry.py:5x1280x720 PNGs(each<4MiB)+receipt;21MiB storage admission; reports/coordinator-20261030-implementation15/m60-geometry.
+Root command:py -3.12 -B handoff/tasks/CHAT14/20261030-implementation15/render_geometry.py --output reports/coordinator-20261030-implementation15/m60-geometry --admitted-by-root
+role-review.json pins rendered evidence and exact limits: latch/feed socket/charge semantics/native stages unsupported; no automatic role/profile population or gameplay enabling.

@@ -131,6 +131,11 @@ if(BUILD_TESTING)
   add_executable(WeaponMechanismTests tests/WeaponMechanismTests.cpp)
   target_link_libraries(WeaponMechanismTests PRIVATE FvrCore)
   add_test(NAME WeaponMechanism COMMAND WeaponMechanismTests)
+  foreach(name FeedReload FeedInteraction FeedReloadSession)
+    add_executable(${name}Tests tests/${name}Tests.cpp)
+    target_link_libraries(${name}Tests PRIVATE FvrCore)
+    add_test(NAME ${name} COMMAND ${name}Tests)
+  endforeach()
   # The explicit no-header build remains tested even when a private experimental
   # registry is selected for the main adapter. No generated definition is inherited.
   add_executable(Bc2ExperimentalMagazineDefaultTests tests/Bc2ExperimentalMagazineTests.cpp src/games/bc2/Bc2MagazineGeometryProfile.cpp)

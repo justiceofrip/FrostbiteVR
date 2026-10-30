@@ -1,0 +1,30 @@
+BC2 VR implementation15 — implement missing feed components; full LMG feature still OPEN
+Baseb5a28c61db8bd128dfd83c34e7f612e4e9349a99; one coordinator branch/worktree.
+User correction: finish feature implementation, stop substituting diagnostic assignments.
+Offline-only and integration/install holds remain; no native capability invented.
+
+Exclusive writers:
+feed_transactions15 retired Done Y: FeedReload.h + 22 tests; root x86/x64 passed.
+feed_gestures15 retired Done Y: FeedInteraction.h + 25 tests; root x86/x64 passed.
+m60_geometry15 retired Done Y: exact cover/pouch/belt geometry; no native-role claim.
+feed_session15 retired Done Y: combined FeedReloadSession + 17 tests; root x86/x64 passed.
+feed_review15 retired Done Y: focused review, no actionable findings.
+Root: CMakeLists.txt, isolated runner registration, shared API coordination, validation/Git.
+No shared-file edits by multiple agents. Native/GamePlay source remains unchanged.
+
+Frozen receipt API supplied by transaction owner:
+FeedPhysicalCompletion{id,inputSequence,completedNs,FeedPhysicalCandidate candidate};
+completion uses current authoritative snapshot/input sequence; monotonic nonzero id.
+FeedReloadRequest{id,lifetime,FeedKey binding,FeedPhysicalCompletion completion,requestedNs};
+FeedReloadAck{exact request,status None/Applied/Rejected,snapshotSequence,observedNs}.
+Applied receipt remains pending until fresh post-operation authoritative state agrees.
+Geometry completion is intent only; neither contact nor typed receipt grants native authority.
+Physical controller uses measured linear/hinge profiles, neutral rearm, rigid metre frames,
+and preserves operation/resource identity across fresh snapshots; no M60 dimensions guessed.
+Pending native effects survive gesture/tracking/stow interruption; no fake rollback/completion.
+
+All writers stopped. All three new suites pass on both architectures; failed checks retained.
+Next: actual BC2 stage/resource/transfer observation from precise CHAT14 prerequisite,
+then implement the game adapter against that evidence; offline-only instruction blocks launch.
+Full normal builds, integration, push and installation remain held by user instruction.
+Portable component completion does not mean manual LMG works in BC2.
