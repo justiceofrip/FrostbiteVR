@@ -1,0 +1,83 @@
+{
+  "schema": "fvr.bc2.authored_aim_mesh_reviews.v1",
+  "review_date": "2026-10-30",
+  "reviewer": "feedback56_aim_enrollment direct visual inspection",
+  "review_level": "authored_geometry_reviewed",
+  "native_verified": false,
+  "headset_accepted": false,
+  "coordinate_convention": "canonical reflected-Z row-vector metres; named bone relative to jntWpn_1",
+  "projection": "render_previews.py render(): image horizontal = 0.62 X - Z; image up = 0.24 X + Y + 0.12 Z",
+  "scope": "Explicit per-mesh visual axis reviews. No inferred class default and no muzzle-origin or firing capability. Preview missing-triangle counts are retained in enrollment provenance.",
+  "meshes": [
+    {
+      "family": "MG3",
+      "mesh_path": "Objects/Weapons/Handheld/BU_lmg_MG3/BU_lmg_MG3_Mesh",
+      "mesh_sha256": "fcd3afe0139905ea4abd6e7503e289f4554863d303df23dde2ec55ba9ec1cd50",
+      "lod_sha256": "d065ea0f4880423b3053437feb8bce7c11b116ed2f95c4518bec9cde84d2ca8c",
+      "preview": "MG3k-parts.png",
+      "preview_sha256": "6ac3cd2beb58eb5433ca3d9d25016aff963aade4b921e2c45edb68e7457185bc",
+      "model_forward": [0, 0, -1], "model_up": [0, 1, 0],
+      "observation": "At authored t=0 the perforated barrel shroud extends from the stock/receiver toward image right (canonical -Z); the front sight is above the shroud and pistol grip/bipod extend below (+Y is up)."
+    },
+    {
+      "family": "MG36",
+      "mesh_path": "Objects/Weapons/Handheld/BU_lmg_MG36/BU_lmg_MG36_Mesh",
+      "mesh_sha256": "de8980c038159fe89f4a7d16d41aa662652c2cd1938a08d4fbc83c50728e64b5",
+      "lod_sha256": "16e2e4ed8fc8050574ac7e29bff114b8e1c82693394701515f1f80fff3ba8195",
+      "preview": "MG36-parts.png",
+      "preview_sha256": "0ba6143c50f8fccb51b769618e2ce6193ee56b9b3f407fb7ea487239eb7f12cc",
+      "model_forward": [0, 0, -1], "model_up": [0, 1, 0],
+      "observation": "At authored t=0 the barrel exits the long handguard toward image right (canonical -Z); the carry handle/sight sits above it and drum/grip/bipod below (+Y is up)."
+    },
+    {
+      "family": "QJU88",
+      "mesh_path": "Objects/Weapons/Handheld/MEC_lmg_QJY88/MEC_lmg_QJY88_Mesh",
+      "mesh_sha256": "5ea0b426ba49ee270bfcdd9e777127c4ba1af2c0f085df0652f76b366e9c9909",
+      "lod_sha256": "e72e6c498e5a98386e8758f14cb97745ba76f1301512f84bf0de2a8f55fab65c",
+      "preview": "QJU88-parts.png",
+      "preview_sha256": "4c8fb2466cd1947948f25902f13083ef1df691c4cd321348a8ce5a446e584128",
+      "model_forward": [0, 0, -1], "model_up": [0, 1, 0],
+      "observation": "At authored t=0 the long barrel runs from the stock/receiver toward image right (canonical -Z); the front sight rises above the barrel while the ammunition box and bipod hang below (+Y is up)."
+    },
+    {
+      "family": "M60",
+      "mesh_path": "Objects/Weapons/Handheld/BU_lmg_M60/BU_lmg_M60_Mesh",
+      "mesh_sha256": "76111c128ce0365d6df6263bfa87cf6329979283d62dc95c95806d5b8eec4446",
+      "lod_sha256": "bff83bba14b87b2833321648d5d3ef738496896e173b20a73bf638aecb4440d9",
+      "preview": "M60-parts.png",
+      "preview_sha256": "367ffa81601884f87358c19c9b2818b0319bb810be03ca21a9db12de2dca2b8d",
+      "model_forward": [0, 0, -1], "model_up": [0, 1, 0],
+      "observation": "At authored t=0 the barrel/front sight extends beyond the handguard toward image right (canonical -Z); sight is above barrel and pistol grip/bipod below (+Y is up). The detached static flash in the older fleet audit is not used as an origin or direction estimator."
+    },
+    {
+      "family": "XM8 LMG",
+      "mesh_path": "Objects/Weapons/Handheld/US_rif_XM8lmg/US_rif_XM8lmg_Mesh",
+      "mesh_sha256": "b019321d9a47bb078997b98e6c9174396e955b0d82f6ee02af6884086d97a7c8",
+      "lod_sha256": "1ef5f57dfc88e70ffcaedec39822d9475ba0577b7556917d01078ca91b2de5ef",
+      "preview": "XM8_LMG-parts.png",
+      "preview_sha256": "62fc679713fe7b3bf750f3694cef7ca04446f48a82ed4322a58166c4d22bce52",
+      "model_forward": [0, 0, -1], "model_up": [0, 1, 0],
+      "observation": "At authored t=0 the thin barrel projects past the front sight toward image right (canonical -Z); the upper sight rail is above the receiver and drum/grip/bipod below (+Y is up)."
+    },
+    {
+      "family": "PKM",
+      "mesh_path": "Objects/Weapons/Handheld/RU_lmg_PKM/RU_lmg_PKM_Mesh",
+      "mesh_sha256": "b25014513770815b6fa8c45bee4aff6d3a33556812a64531589d952e65b657e9",
+      "lod_sha256": "3d3f8c5952097bde3e5245fadd65f35c7589e5a5052f5d7a831df462867e33bb",
+      "preview": "PKM-parts.png",
+      "preview_sha256": "ad34c3ac0ee4dd066452cc143c75033bb9f493250c1c1cfabae9dc3d68572747",
+      "model_forward": [0, 0, -1], "model_up": [0, 1, 0],
+      "observation": "At authored t=0 the barrel and muzzle extend beyond the gas tube toward image right (canonical -Z); front sight and receiver cover are above while box/grip/bipod are below (+Y is up)."
+    },
+    {
+      "family": "M249",
+      "mesh_path": "Objects/Weapons/Handheld/UL_lmg_FNMinimi/UL_lmg_FNMinimi_Mesh",
+      "mesh_sha256": "b12ef487eba40a7f40862a1d90b345156a04e832b13012567ca7200d00e187eb",
+      "lod_sha256": "e5a9c249ecabc518fedf991772a14ceba7c4dcbbdea37eec53a68b2bf082f357",
+      "preview": "M249-parts.png",
+      "preview_sha256": "1a09b26a48ae7cf3be4ad0d748f0f791d63383886fad1291b08e4085a8321a19",
+      "model_forward": [0, 0, -1], "model_up": [0, 1, 0],
+      "observation": "At authored t=0 the barrel and muzzle extend beyond the handguard toward image right (canonical -Z); front/rear sights and carrying handle are above the receiver while box/grip/bipod extend below (+Y is up)."
+    }
+  ]
+}

@@ -3738,7 +3738,13 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
         Require(opticStarted,"Enable bounded native lens-filter observer");
         Require(workerStarted,"Enable bounded palette worker observation");
         graphicsRuntimeReady.store(true,std::memory_order_release);
-        sampling.store(true,std::memory_order_release);fvr::bc2::menu::Start();if(config.flags&0x800u)fvr::bc2::gameplay::Start();
+        sampling.store(true,std::memory_order_release);fvr::bc2::menu::Start();
+        if(config.flags&0x800u){
+            // Allocate once before gameplay callbacks; failure only disables
+            // diagnostic recording, never input or native weapon behavior.
+            (void)fvr::bc2::gameplay::EnableFireRouteTelemetry();
+            fvr::bc2::gameplay::Start();
+        }
         sceneTrace::Writer sceneWriter(output.parent_path()/L"scene-milestones.jsonl");
         bool cycleFailureSaved=false,originObservationSaved=false;
 #ifdef FVR_BC2_PUMP_RECEIVER_GAP_PROBE
@@ -3875,8 +3881,8 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
         // sessions. Snapshot readers never wait for a gameplay transaction.
         std::ofstream telemetry(output.parent_path()/L"session-telemetry.jsonl");
         const auto sessionStarted=GetTickCount64();auto nextSample=sessionStarted;
-        const auto persistSessionTelemetry=[&]{
-                const auto now=GetTickCount64();if(now>=nextSample){
+        const auto persistSessionTelemetry=[&](bool force=false){
+                const auto now=GetTickCount64();if(force||now>=nextSample){
                     FILETIME ft{};GetSystemTimeAsFileTime(&ft);const auto utc=(std::uint64_t(ft.dwHighDateTime)<<32)|ft.dwLowDateTime;
                     const auto emptyGate=fvr::bc2::reloadFlowRuntime::ReadMagazineEmptyControlCounters();
                     // Flush presentation evidence during play: a game crash
@@ -3910,6 +3916,7 @@ extern "C" DWORD WINAPI FvrRunNativeProbe(void* raw){
                     telemetry<<",\"rig_publication\":";
                     fvr::bc2::rigPublication::ReportLiveCounters(telemetry);
                     telemetry<<",\"weapon_routes\":";fvr::bc2::gameplay::ReportWeaponRoutes(telemetry);
+                    telemetry<<",\"fire_routes\":";fvr::bc2::gameplay::ReportFireRouteTelemetry(telemetry);
                     telemetry<<"}\n";
                     telemetry.flush();nextSample=now+1000;
                 }
@@ -3970,6 +3977,7 @@ Sleep(DWORD(std::min<std::uint64_t>((toolFixture||config.ordinaryGrenadeInput==4
         if(stereoMode){for(unsigned attempt=0;attempt<200;++attempt){const auto state=stereoExperiment.stage.load(std::memory_order_acquire);if(state!=StereoExperiment::Armed&&state!=StereoExperiment::Retiring)break;Sleep(5);}}
         for(unsigned attempt=0;attempt<200&&workPool.stage.load(std::memory_order_acquire)==1;++attempt)Sleep(5);
         disabled=DisableProbeHooks();hooksEnabled=false;
+        persistSessionTelemetry(true);
         if(graphicsProvenanceEnabled)fvr::graphics::callProvenance::Flush(output.parent_path()/L"graphics-call-provenance.jsonl");
         // Both capture-producing hook bodies must have returned. Sealing also
         // makes a delayed callback delegate directly to its native original.

@@ -37,11 +37,39 @@ bool MagazineTargetFresh(const MagazineTracking&,std::int64_t now)noexcept;
 // Visual-only admission. Never use for raw contact, supply, or native work.
 bool MagazinePaletteTargetFresh(const MagazineTracking&,std::int64_t now)noexcept;
 bool MagazineTargetRetained(const MagazineTracking& original,const MagazineTracking& current,std::int64_t now)noexcept;
+// Diagnostic only. A reason never grants contact or extends a source lifetime.
+// Publication/getter refusals share this bounded vocabulary so a failed builder
+// packet is not silently replaced with an unexplained empty contact.
+enum class MagazineRawContactReason:unsigned {
+ NotProduced,Accepted,HandRoleUnavailable,RetainedVisualSuppression,TrackingNotFresh,
+ AssetMismatch,RigBindingUnavailable,RigFingerprintMismatch,RigOwnerMismatch,
+ InvalidUnits,WristNotRigid,WeaponNotRigid,MagazineHidden,MagazineNotRigid,
+ MagazineInverseUnavailable,ChildHidden,ChildNotRigid,ChildPositionMismatch,ChildAngleMismatch,
+ GuardMissing,GuardOwnerMismatch,GuardNotFresh,FrameUnavailable,ContactOwnerMismatch,
+ FrameInputMismatch,InputNewerThanGuard,InputInFuture,InputExpired,GuardChanged,Count
+};
+inline constexpr std::array<const char*,unsigned(MagazineRawContactReason::Count)> MagazineRawContactReasonNames{
+ "not_produced","accepted","hand_role_unavailable","retained_visual_suppression","tracking_not_fresh",
+ "asset_mismatch","rig_binding_unavailable","rig_fingerprint_mismatch","rig_owner_mismatch",
+ "invalid_units","wrist_not_rigid","weapon_not_rigid","magazine_hidden","magazine_not_rigid",
+ "magazine_inverse_unavailable","child_hidden","child_not_rigid","child_position_mismatch","child_angle_mismatch",
+ "guard_missing","guard_owner_mismatch","guard_not_fresh","frame_unavailable","contact_owner_mismatch",
+ "frame_input_mismatch","input_newer_than_guard","input_in_future","input_expired","guard_changed"};
+struct MagazineRawContactEvidence {
+ MagazineRawContactReason reason=MagazineRawContactReason::NotProduced;
+ std::uint32_t magazineBone=~0u,childBone=~0u;
+ // Only calculations already required by the rigid-assembly gate are retained.
+ std::optional<float> relativeDistanceMeters,relativeAngleRadians;
+};
 struct MagazineRawContact:ReloadRawContact {
  bool nativeMagazineAttached=false;
  // Reachable measured support contact, using this packet's anatomical wrist.
  std::optional<float> supportContactDistanceMeters;
+ MagazineRawContactEvidence evidence{};
 };
+inline MagazineRawContact RejectedMagazineRawContact(MagazineRawContactReason reason)noexcept {
+ MagazineRawContact out;out.evidence.reason=reason;return out;
+}
 // Free carry only: retain the basis of the exact raw packet that produced the target.
 std::optional<MagazineCarryFrame> MagazineRemovalFrame(const MagazineTracking&,const MagazineRawContact&)noexcept;
 MagazineRawContact BuildMagazineRawContact(const MagazineTracking&,const RigSnapshot&,std::string_view asset,

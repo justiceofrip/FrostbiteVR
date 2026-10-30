@@ -2,6 +2,19 @@
 #include <memory>
 
 namespace fvr::xr {
+// One nonblocking opportunity before composition. A newly submitted normal
+// copy may already be ready; a Busy result keeps its exact lease for later.
+// The private bounded service shares polled so it never gets an extra poll.
+// Newly submitted GPU-ordered copies retain their existing composition path.
+template<class Pending,class Poll>
+bool ServiceUncomposedCopyBeforePresentation(std::unique_ptr<Pending>& pending,
+    bool submitted,bool& polled,Poll&& poll){
+    if(!pending||!pending->Copying()||pending->Composed()||polled||
+       (submitted&&pending->gpuOrdered))return false;
+    polled=true;
+    poll(); // May complete or retire this lease, never replace it.
+    return true;
+}
 enum class ComposedCopyServiceResult {Skipped,Pending,Completed,Retired,ArchiveFailed};
 // Called after current input/menu/reference cancellation, before the one provider
 // admission. poll operates only on this held lease: it may complete or retire it,

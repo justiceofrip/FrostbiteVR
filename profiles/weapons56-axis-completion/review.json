@@ -1,0 +1,858 @@
+{
+  "schema": "fvr.bc2.authored_axis_batch_review.v1",
+  "review_date": "2026-10-30",
+  "reviewer": "feedback56_aim_gaps; direct view_image inspection of all four generated side/top previews",
+  "review_level": "authored_geometry_reviewed",
+  "evidence_level": "source_only_asset_review",
+  "coordinate_convention": "canonical reflected-Z row-vector metres; named bone relative to jntWpn_1",
+  "scope": "Only the eleven missing G3/Garand/Type5/Thompson configurations. Existing 182 configurations and 40 reviewed meshes are untouched.",
+  "native_verified": false,
+  "headset_accepted": false,
+  "sources": {
+    "new_bindings": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\reports\\coordinator-20261030-magazines45-policy04\\new-bindings.json",
+      "sha256": "62f543dc05d3abb70e1599c19156488ca3b545cbac262e1cbcd64949e178c7ce"
+    },
+    "m1_bindings": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\tasks\\WEAPONS\\20261030-support43\\m1-reference-bindings.json",
+      "sha256": "483d867956d179f051d1e5c66c6f212d95d7313ff0aefacdcad67a45f6932f88"
+    },
+    "opening_bindings": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight426\\smg\\opening-level-reference-bindings.json",
+      "sha256": "5f08f905cf3547f3c4d763665702838fcb531467ca2a4564a6bef790090eb3c3"
+    },
+    "preview_receipt": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\reports\\coordinator-20261030-feedback56\\axis-completion\\preview-receipt.json",
+      "sha256": "483dc8eddabe0b9ce1ad45eab2f3eedfa464685dce2bbc8cef159d7c57c07133"
+    },
+    "muzzle_metadata": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\profiles\\weapons54-muzzle\\enrollment.json",
+      "sha256": "ac613f2268740a9fa4a8c30f08517ff6b42997b6fa8742b6698f6efbd13061f4"
+    },
+    "frozen_enrollment": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\profiles\\weapons56-aim\\enrollment.json",
+      "sha256": "728539e9ebd5432704cd7a67a09b3a8029627dfc0f6a29d39141bb2989edfb77"
+    },
+    "fleet_audit": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\authored-axes371-fleet\\audit.json",
+      "sha256": "4e0fb5d9da37fbb7fb1c7bc623ae2d6f059074ae042019e04aa583dd91f3edea"
+    },
+    "fleet_typed_firing": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\authored-axes371-fleet\\firing.json",
+      "sha256": "64c38e35fc7311196d01cd2d04946aac3cc82e10dac92d197256652c57849a4e"
+    },
+    "roster": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\tasks\\WEAPONS\\20261030-roster43\\roster.json",
+      "sha256": "deb0bbe2155ad573719846fbd90dd5fbd7b42ef5af37e55785b9047b349dd4e1"
+    },
+    "type5_mesh_proof": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-recovery\\overnight426\\smg\\opening-level-mesh-bindings.json",
+      "sha256": "25b3e7546efe34666cc61abfcb9a783709e9a06c6f63a6dba83f0baa19d7e673"
+    },
+    "m1_source_derivation": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\handoff\\tasks\\WEAPONS\\20261030-support43\\derivation.json",
+      "sha256": "46d27c1952fc257a05fb5686bc1d9b56e43caecce95c21b7dc9ae7ef1598ae0b"
+    },
+    "g3_source_packet": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\reports\\coordinator-20261030-magazines45-policy04\\ccc088ce53d98699\\source.json",
+      "sha256": "7039909c6b526be10833f0df0408a2bbaa3dac5dab6377d0ab3512b271f358fb"
+    },
+    "thompson_source_packet": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\reports\\coordinator-20261030-magazines45-policy04\\77c108fdfdaac1ba\\source.json",
+      "sha256": "af42c718ed96eb2e4d719627dc16dcaec1ce8578f3d13698ca53632fa49fd968"
+    },
+    "storage_admission": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\reports\\coordinator-20261030-feedback56\\axis-completion\\storage.json",
+      "sha256": "4011489644efff428c189da07816f7bed7b7dd5e918dd0412ff866d5a850ae5d"
+    },
+    "failed_incomplete_storage_receipt": {
+      "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\reports\\coordinator-20261030-weapons56-axis-completion\\storage.json",
+      "sha256": "1885e6612629bf74cd52f2675664c1852b9eac252b4f51e81b5daa7a5adb3e59"
+    }
+  },
+  "meshes": [
+    {
+      "mesh_sha256": "1865203835057bad8b212ce2aece2a5d9d3dc018a6f8b7d33fa87431dfa0ea80",
+      "lod_sha256": "ab66c360149c5ebddc9887ae6929f2415b61585564e214bf868cbe9d650b6c3d",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "weapon_bone": "jntWpn_1",
+      "coordinate_convention": "canonical reflected-Z row-vector metres; named bone relative to jntWpn_1",
+      "mesh_path": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Mesh",
+      "family": "G3",
+      "model_forward": [
+        0,
+        0,
+        -1
+      ],
+      "model_up": [
+        0,
+        1,
+        0
+      ],
+      "pose_gallery_indices": [
+        1
+      ],
+      "observation": "In the upper Z/Y view the barrel/muzzle and front sight are left of the handguard and receiver; the buttstock extends right. The front sight rises above the barrel and the pistol grip/magazine descend below. The lower Z/X view confirms the long barrel follows Z with no transverse bend. Thus this exact mesh has -Z forward and +Y up.",
+      "review_level": "authored_geometry_reviewed",
+      "preview_receipt_source": "preview_receipt",
+      "preview_receipt_poses_index": 0,
+      "rendered_rigid_triangles": 13276,
+      "omitted_triangles": 0,
+      "scope": "Exact mesh visual orientation only; no origin, grip, feed, firing or native acceptance."
+    },
+    {
+      "mesh_sha256": "9de88c5ebe694bbe65d5c38813027bfc78183884758dbeda666266fd5a1b3c54",
+      "lod_sha256": "a176d2a2fa51231228aba278e3f7333119ba7c66f4ff5b8638c7b7318c05f782",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "weapon_bone": "jntWpn_1",
+      "coordinate_convention": "canonical reflected-Z row-vector metres; named bone relative to jntWpn_1",
+      "mesh_path": "Objects/Weapons/Handheld/Beach/Thompson/thompson_Mesh",
+      "family": "Thompson",
+      "model_forward": [
+        0,
+        0,
+        -1
+      ],
+      "model_up": [
+        0,
+        1,
+        0
+      ],
+      "pose_gallery_indices": [
+        2
+      ],
+      "observation": "In the upper Z/Y view the straight barrel and front sight extend left of the box receiver, while the buttstock extends right; the rear sight projects above the receiver and the pistol grip and magazine descend below. The lower Z/X view corroborates the barrel centreline along Z. Thus this exact mesh has -Z forward and +Y up.",
+      "review_level": "authored_geometry_reviewed",
+      "preview_receipt_source": "preview_receipt",
+      "preview_receipt_poses_index": 1,
+      "rendered_rigid_triangles": 8910,
+      "omitted_triangles": 0,
+      "scope": "Exact mesh visual orientation only; no origin, grip, feed, firing or native acceptance."
+    },
+    {
+      "mesh_sha256": "b41fe39886444763ab02e562e2fe429d4289461871a0f1ab1c913d56322b190c",
+      "lod_sha256": "6cbb612e03b33c3e9ce9acd10ecce129be56bb17677936931c0a9a7431c53258",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "weapon_bone": "jntWpn_1",
+      "coordinate_convention": "canonical reflected-Z row-vector metres; named bone relative to jntWpn_1",
+      "mesh_path": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Mesh",
+      "family": "M1Garand",
+      "model_forward": [
+        0,
+        0,
+        -1
+      ],
+      "model_up": [
+        0,
+        1,
+        0
+      ],
+      "pose_gallery_indices": [
+        3
+      ],
+      "observation": "In the upper Z/Y view the muzzle and raised front sight sit at the left end of the long barrel/fore-end; the receiver and stock continue right. The rear sight rises above the receiver while the trigger guard and stock wrist are below. The lower Z/X view confirms the long bore/fore-end along Z. Thus this exact mesh has -Z forward and +Y up; displaced small auxiliary points are not treated as a muzzle origin.",
+      "review_level": "authored_geometry_reviewed",
+      "preview_receipt_source": "preview_receipt",
+      "preview_receipt_poses_index": 2,
+      "rendered_rigid_triangles": 11682,
+      "omitted_triangles": 0,
+      "scope": "Exact mesh visual orientation only; no origin, grip, feed, firing or native acceptance."
+    },
+    {
+      "mesh_sha256": "959d6b9ffdd542616c0fa1e2df389eae11aec4223ed0e72d3e157133b03dbe3b",
+      "lod_sha256": "3a28d8d0b0b64571ecaffc28278c98a6eaa66af4c71d39425f9743df24c2452f",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "weapon_bone": "jntWpn_1",
+      "coordinate_convention": "canonical reflected-Z row-vector metres; named bone relative to jntWpn_1",
+      "mesh_path": "Objects/Weapons/Handheld/Beach/Jap_Type5/Jap_Type5_Mesh",
+      "family": "Type5",
+      "model_forward": [
+        0,
+        0,
+        -1
+      ],
+      "model_up": [
+        0,
+        1,
+        0
+      ],
+      "pose_gallery_indices": [
+        4
+      ],
+      "observation": "In the upper Z/Y view the muzzle and front sight are left of the long fore-end and receiver, with the stock extending right. Front/rear sights are above the barrel/receiver and the trigger guard and stock wrist are below. The lower Z/X view confirms the barrel/fore-end along Z. Thus this exact mesh has -Z forward and +Y up; displaced auxiliary points are not direction or origin evidence.",
+      "review_level": "authored_geometry_reviewed",
+      "preview_receipt_source": "preview_receipt",
+      "preview_receipt_poses_index": 3,
+      "rendered_rigid_triangles": 9500,
+      "omitted_triangles": 0,
+      "scope": "Exact mesh visual orientation only; no origin, grip, feed, firing or native acceptance."
+    }
+  ],
+  "poses": [
+    {
+      "gallery_index": 1,
+      "family": "G3",
+      "geometry_image": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\reports\\coordinator-20261030-feedback56\\axis-completion\\G3.png",
+        "sha256": "2f99c3459d0ae33c5d5d10a52208d32425595b3bb42f0fd97bfa68f3cafad9a8"
+      },
+      "preview_receipt_source": "preview_receipt",
+      "preview_receipt_poses_index": 0,
+      "source_binding_digest": "21825e712cf3807cca7cc4c0cc061918d45c2b68bd5b3602a3f1801e82b39fa7",
+      "observation": "In the upper Z/Y view the barrel/muzzle and front sight are left of the handguard and receiver; the buttstock extends right. The front sight rises above the barrel and the pistol grip/magazine descend below. The lower Z/X view confirms the long barrel follows Z with no transverse bend. Thus this exact mesh has -Z forward and +Y up.",
+      "model_forward": [
+        0,
+        0,
+        -1
+      ],
+      "model_up": [
+        0,
+        1,
+        0
+      ],
+      "projection": "Upper: horizontal canonical +Z right and +Y up. Lower: canonical +Z right and +X up."
+    },
+    {
+      "gallery_index": 2,
+      "family": "Thompson",
+      "geometry_image": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\reports\\coordinator-20261030-feedback56\\axis-completion\\Thompson.png",
+        "sha256": "5586ba84ae9d589a52e260f24ba963c96bc8bc631f07a564e4c743f769b1e580"
+      },
+      "preview_receipt_source": "preview_receipt",
+      "preview_receipt_poses_index": 1,
+      "source_binding_digest": "2e6738e43fd717dd29ccdff4156243889a4573008cc20132cdfcc1b7a2f5af07",
+      "observation": "In the upper Z/Y view the straight barrel and front sight extend left of the box receiver, while the buttstock extends right; the rear sight projects above the receiver and the pistol grip and magazine descend below. The lower Z/X view corroborates the barrel centreline along Z. Thus this exact mesh has -Z forward and +Y up.",
+      "model_forward": [
+        0,
+        0,
+        -1
+      ],
+      "model_up": [
+        0,
+        1,
+        0
+      ],
+      "projection": "Upper: horizontal canonical +Z right and +Y up. Lower: canonical +Z right and +X up."
+    },
+    {
+      "gallery_index": 3,
+      "family": "M1Garand",
+      "geometry_image": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\reports\\coordinator-20261030-feedback56\\axis-completion\\M1Garand.png",
+        "sha256": "c4ee2630f7a202afbf00d15e6ca47a4795dc3f581c53aeaf584b2d3fe8e029df"
+      },
+      "preview_receipt_source": "preview_receipt",
+      "preview_receipt_poses_index": 2,
+      "source_binding_digest": "d4b16c8f248edbcd5bf512291da794aed704330c9bbc254651a8d876ebe0d1c8",
+      "observation": "In the upper Z/Y view the muzzle and raised front sight sit at the left end of the long barrel/fore-end; the receiver and stock continue right. The rear sight rises above the receiver while the trigger guard and stock wrist are below. The lower Z/X view confirms the long bore/fore-end along Z. Thus this exact mesh has -Z forward and +Y up; displaced small auxiliary points are not treated as a muzzle origin.",
+      "model_forward": [
+        0,
+        0,
+        -1
+      ],
+      "model_up": [
+        0,
+        1,
+        0
+      ],
+      "projection": "Upper: horizontal canonical +Z right and +Y up. Lower: canonical +Z right and +X up."
+    },
+    {
+      "gallery_index": 4,
+      "family": "Type5",
+      "geometry_image": {
+        "path": "G:\\Unity\\VRMMO\\bc2vr-task-worktrees\\campaign-coordinator-20261028-r1\\reports\\coordinator-20261030-feedback56\\axis-completion\\Type5.png",
+        "sha256": "e0776367ebd445180ff7e7e65563677bc802e1813a07d28e24b09b1fa2ca7f2f"
+      },
+      "preview_receipt_source": "preview_receipt",
+      "preview_receipt_poses_index": 3,
+      "source_binding_digest": "80f80917217519ccf30f8d1deaad800f822d601ffbb57f565d86f615bf95f9f3",
+      "observation": "In the upper Z/Y view the muzzle and front sight are left of the long fore-end and receiver, with the stock extending right. Front/rear sights are above the barrel/receiver and the trigger guard and stock wrist are below. The lower Z/X view confirms the barrel/fore-end along Z. Thus this exact mesh has -Z forward and +Y up; displaced auxiliary points are not direction or origin evidence.",
+      "model_forward": [
+        0,
+        0,
+        -1
+      ],
+      "model_up": [
+        0,
+        1,
+        0
+      ],
+      "projection": "Upper: horizontal canonical +Z right and +Y up. Lower: canonical +Z right and +X up."
+    }
+  ],
+  "profiles": [
+    {
+      "mesh_sha256": "1865203835057bad8b212ce2aece2a5d9d3dc018a6f8b7d33fa87431dfa0ea80",
+      "lod_sha256": "ab66c360149c5ebddc9887ae6929f2415b61585564e214bf868cbe9d650b6c3d",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "model_forward": [
+        0,
+        0,
+        -1
+      ],
+      "model_up": [
+        0,
+        1,
+        0
+      ],
+      "pose_gallery_indices": [
+        1
+      ],
+      "native_asset_name": "G3",
+      "configuration_path": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3",
+      "configured_mesh_path": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Mesh",
+      "binding_digest": "21825e712cf3807cca7cc4c0cc061918d45c2b68bd5b3602a3f1801e82b39fa7",
+      "source_binding_refs": [
+        {
+          "source_id": "new_bindings",
+          "profiles_index": 0,
+          "binding_digest": "21825e712cf3807cca7cc4c0cc061918d45c2b68bd5b3602a3f1801e82b39fa7",
+          "clip_sha256": "715ce05b56d0bcf64636f900bc0f60ff6cea5c7c831aba05abbc51de3be96b85",
+          "configuration_sha256": "ed83d82965d34c95c43f1e60aec350219711a5784d623d6ccfb816432b7624bb",
+          "configuration_guid": "363b537f-734c-4af9-8e53-3c15564595e2",
+          "weapon_bone": "jntWpn_1",
+          "coordinate_convention": "canonical reflected-Z row-vector metres; named bone relative to jntWpn_1",
+          "state_count": 1,
+          "state_index": 0
+        }
+      ],
+      "muzzle_metadata_join": {
+        "profile_digest": "c047079bda9be01f7b67a54fcfaf769b696906faae35fde06aba56eb63b227a8",
+        "direction_source": false,
+        "status": "exact_origin_only_typed_metadata_join"
+      },
+      "axis_evidence_scope": "exact_mesh_lod_skeleton_rig_root_visual_axis",
+      "native_verified": false,
+      "headset_accepted": false,
+      "runtime_enabled_by_this_review": false
+    },
+    {
+      "mesh_sha256": "1865203835057bad8b212ce2aece2a5d9d3dc018a6f8b7d33fa87431dfa0ea80",
+      "lod_sha256": "ab66c360149c5ebddc9887ae6929f2415b61585564e214bf868cbe9d650b6c3d",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "model_forward": [
+        0,
+        0,
+        -1
+      ],
+      "model_up": [
+        0,
+        1,
+        0
+      ],
+      "pose_gallery_indices": [
+        1
+      ],
+      "native_asset_name": "G3",
+      "configuration_path": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Assault",
+      "configured_mesh_path": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Mesh",
+      "binding_digest": "98836bf46f44e105980f2fed238c89953673c013203c21bc6b9f72747d917965",
+      "source_binding_refs": [
+        {
+          "source_id": "new_bindings",
+          "profiles_index": 1,
+          "binding_digest": "98836bf46f44e105980f2fed238c89953673c013203c21bc6b9f72747d917965",
+          "clip_sha256": "715ce05b56d0bcf64636f900bc0f60ff6cea5c7c831aba05abbc51de3be96b85",
+          "configuration_sha256": "dcaefd902cc37f1a49706ff3f9e13b39ad1a57e46e257b800318e66f4ba9bc0c",
+          "configuration_guid": "9997cbef-6c5a-4cb2-a2ec-f28b07ee08db",
+          "weapon_bone": "jntWpn_1",
+          "coordinate_convention": "canonical reflected-Z row-vector metres; named bone relative to jntWpn_1",
+          "state_count": 1,
+          "state_index": 0
+        }
+      ],
+      "muzzle_metadata_join": {
+        "profile_digest": "b300bbdbd48f5eedd3380f36a2cf44d6c202cfdeda5d8ef523c25465097af405",
+        "direction_source": false,
+        "status": "exact_origin_only_typed_metadata_join"
+      },
+      "axis_evidence_scope": "exact_mesh_lod_skeleton_rig_root_visual_axis",
+      "native_verified": false,
+      "headset_accepted": false,
+      "runtime_enabled_by_this_review": false
+    },
+    {
+      "mesh_sha256": "1865203835057bad8b212ce2aece2a5d9d3dc018a6f8b7d33fa87431dfa0ea80",
+      "lod_sha256": "ab66c360149c5ebddc9887ae6929f2415b61585564e214bf868cbe9d650b6c3d",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "model_forward": [
+        0,
+        0,
+        -1
+      ],
+      "model_up": [
+        0,
+        1,
+        0
+      ],
+      "pose_gallery_indices": [
+        1
+      ],
+      "native_asset_name": "G3",
+      "configuration_path": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Assault_Scoped",
+      "configured_mesh_path": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Mesh",
+      "binding_digest": "4015d4a2d347259ae4ca14b967481c735958ad1a7dd5bcf1f6ffd7a08a333bb8",
+      "source_binding_refs": [
+        {
+          "source_id": "new_bindings",
+          "profiles_index": 2,
+          "binding_digest": "4015d4a2d347259ae4ca14b967481c735958ad1a7dd5bcf1f6ffd7a08a333bb8",
+          "clip_sha256": "715ce05b56d0bcf64636f900bc0f60ff6cea5c7c831aba05abbc51de3be96b85",
+          "configuration_sha256": "5258aecd0beceec2afc69e63ceccd45325be52173ccbdfa499ac25a5c770340a",
+          "configuration_guid": "5f40b246-3ae8-42ff-b6e8-33ad09b70cd7",
+          "weapon_bone": "jntWpn_1",
+          "coordinate_convention": "canonical reflected-Z row-vector metres; named bone relative to jntWpn_1",
+          "state_count": 1,
+          "state_index": 0
+        }
+      ],
+      "muzzle_metadata_join": {
+        "profile_digest": "f44771c3c674c071e23f6562ff32e9c40f731b0d230befc8ba13fdc7bab607ba",
+        "direction_source": false,
+        "status": "exact_origin_only_typed_metadata_join"
+      },
+      "axis_evidence_scope": "exact_mesh_lod_skeleton_rig_root_visual_axis",
+      "native_verified": false,
+      "headset_accepted": false,
+      "runtime_enabled_by_this_review": false
+    },
+    {
+      "mesh_sha256": "9de88c5ebe694bbe65d5c38813027bfc78183884758dbeda666266fd5a1b3c54",
+      "lod_sha256": "a176d2a2fa51231228aba278e3f7333119ba7c66f4ff5b8638c7b7318c05f782",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "model_forward": [
+        0,
+        0,
+        -1
+      ],
+      "model_up": [
+        0,
+        1,
+        0
+      ],
+      "pose_gallery_indices": [
+        2
+      ],
+      "native_asset_name": "M1A1 Thompson",
+      "configuration_path": "Objects/Weapons/Handheld/Beach/Thompson/Thompson_Assault",
+      "configured_mesh_path": "Objects/Weapons/Handheld/Beach/Thompson/thompson_Mesh",
+      "binding_digest": "5107ee04a996b4c4c9da5f549d56c4d7c659f0b2121070965bfb676a9b0e464a",
+      "source_binding_refs": [
+        {
+          "source_id": "new_bindings",
+          "profiles_index": 3,
+          "binding_digest": "5107ee04a996b4c4c9da5f549d56c4d7c659f0b2121070965bfb676a9b0e464a",
+          "clip_sha256": "f9fbcf318dda15bb101845efef8c09d4f2231a3ef4a908c0521c37d3ae33a76d",
+          "configuration_sha256": "b2207c1afcf2b976401228b2a564885f0b69ef981ed4ddbc358e378b04963ec1",
+          "configuration_guid": "980051ae-97e5-4bdf-a203-6eef9e16ab92",
+          "weapon_bone": "jntWpn_1",
+          "coordinate_convention": "canonical reflected-Z row-vector metres; named bone relative to jntWpn_1",
+          "state_count": 1,
+          "state_index": 0
+        }
+      ],
+      "muzzle_metadata_join": {
+        "profile_digest": "d6993ef6436e6ec190d538c3ed664326fc13cc720681aade7c0e59fe266ba286",
+        "direction_source": false,
+        "status": "exact_origin_only_typed_metadata_join"
+      },
+      "axis_evidence_scope": "exact_mesh_lod_skeleton_rig_root_visual_axis",
+      "native_verified": false,
+      "headset_accepted": false,
+      "runtime_enabled_by_this_review": false
+    },
+    {
+      "mesh_sha256": "9de88c5ebe694bbe65d5c38813027bfc78183884758dbeda666266fd5a1b3c54",
+      "lod_sha256": "a176d2a2fa51231228aba278e3f7333119ba7c66f4ff5b8638c7b7318c05f782",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "model_forward": [
+        0,
+        0,
+        -1
+      ],
+      "model_up": [
+        0,
+        1,
+        0
+      ],
+      "pose_gallery_indices": [
+        2
+      ],
+      "native_asset_name": "M1A1 Thompson",
+      "configuration_path": "Objects/Weapons/Handheld/Beach/Thompson/Thompson",
+      "configured_mesh_path": "Objects/Weapons/Handheld/Beach/Thompson/thompson_Mesh",
+      "binding_digest": "2e6738e43fd717dd29ccdff4156243889a4573008cc20132cdfcc1b7a2f5af07",
+      "source_binding_refs": [
+        {
+          "source_id": "new_bindings",
+          "profiles_index": 4,
+          "binding_digest": "2e6738e43fd717dd29ccdff4156243889a4573008cc20132cdfcc1b7a2f5af07",
+          "clip_sha256": "f9fbcf318dda15bb101845efef8c09d4f2231a3ef4a908c0521c37d3ae33a76d",
+          "configuration_sha256": "1fddcb8da6dd1e3746c30293b5c901c94242d2c581c3c2255e8c9f44e7e98c1b",
+          "configuration_guid": "207cffd9-8285-4407-ab2a-4c3a650f1f99",
+          "weapon_bone": "jntWpn_1",
+          "coordinate_convention": "canonical reflected-Z row-vector metres; named bone relative to jntWpn_1",
+          "state_count": 1,
+          "state_index": 0
+        }
+      ],
+      "muzzle_metadata_join": {
+        "profile_digest": "548614f864d64bbf4706d10a7b2d7236c7812fe70a066756cd47ffcfb35b991d",
+        "direction_source": false,
+        "status": "exact_origin_only_typed_metadata_join"
+      },
+      "axis_evidence_scope": "exact_mesh_lod_skeleton_rig_root_visual_axis",
+      "native_verified": false,
+      "headset_accepted": false,
+      "runtime_enabled_by_this_review": false
+    },
+    {
+      "mesh_sha256": "1865203835057bad8b212ce2aece2a5d9d3dc018a6f8b7d33fa87431dfa0ea80",
+      "lod_sha256": "ab66c360149c5ebddc9887ae6929f2415b61585564e214bf868cbe9d650b6c3d",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "model_forward": [
+        0,
+        0,
+        -1
+      ],
+      "model_up": [
+        0,
+        1,
+        0
+      ],
+      "pose_gallery_indices": [
+        1
+      ],
+      "native_asset_name": "G3",
+      "configuration_path": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Kobra",
+      "configured_mesh_path": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Mesh",
+      "binding_digest": "2eaa8da9decf1a6a90763d541aaae8cf2909bd298d9796b0bb20a21b164d1baa",
+      "source_binding_refs": [
+        {
+          "source_id": "new_bindings",
+          "profiles_index": 5,
+          "binding_digest": "2eaa8da9decf1a6a90763d541aaae8cf2909bd298d9796b0bb20a21b164d1baa",
+          "clip_sha256": "715ce05b56d0bcf64636f900bc0f60ff6cea5c7c831aba05abbc51de3be96b85",
+          "configuration_sha256": "0b2ff642336693562b2156b80e899aabf0a14009f56b6b33322281bbc52650e0",
+          "configuration_guid": "ff2e0e14-e07a-46de-858c-5f1337b7b8cb",
+          "weapon_bone": "jntWpn_1",
+          "coordinate_convention": "canonical reflected-Z row-vector metres; named bone relative to jntWpn_1",
+          "state_count": 1,
+          "state_index": 0
+        }
+      ],
+      "muzzle_metadata_join": {
+        "profile_digest": "61865ce6361436fe9003e0108b54d945e3c04713731097d403562d1e213e5b87",
+        "direction_source": false,
+        "status": "exact_origin_only_typed_metadata_join"
+      },
+      "axis_evidence_scope": "exact_mesh_lod_skeleton_rig_root_visual_axis",
+      "native_verified": false,
+      "headset_accepted": false,
+      "runtime_enabled_by_this_review": false
+    },
+    {
+      "mesh_sha256": "1865203835057bad8b212ce2aece2a5d9d3dc018a6f8b7d33fa87431dfa0ea80",
+      "lod_sha256": "ab66c360149c5ebddc9887ae6929f2415b61585564e214bf868cbe9d650b6c3d",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "model_forward": [
+        0,
+        0,
+        -1
+      ],
+      "model_up": [
+        0,
+        1,
+        0
+      ],
+      "pose_gallery_indices": [
+        1
+      ],
+      "native_asset_name": "G3",
+      "configuration_path": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Assault_Kobra",
+      "configured_mesh_path": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Mesh",
+      "binding_digest": "d653bf4a86da185b04ed0f2299cdc00770f45cfd0702fd53e3638c70c907fefd",
+      "source_binding_refs": [
+        {
+          "source_id": "new_bindings",
+          "profiles_index": 6,
+          "binding_digest": "d653bf4a86da185b04ed0f2299cdc00770f45cfd0702fd53e3638c70c907fefd",
+          "clip_sha256": "715ce05b56d0bcf64636f900bc0f60ff6cea5c7c831aba05abbc51de3be96b85",
+          "configuration_sha256": "aeb5ff4e3b0ff63dca1f000af9b065b2f400473997d79afbd3e8a520b72109eb",
+          "configuration_guid": "10dcc986-0eb3-4176-a242-2d6558a5b187",
+          "weapon_bone": "jntWpn_1",
+          "coordinate_convention": "canonical reflected-Z row-vector metres; named bone relative to jntWpn_1",
+          "state_count": 1,
+          "state_index": 0
+        }
+      ],
+      "muzzle_metadata_join": {
+        "profile_digest": "113c0e3e11298c01496777ceaf735b81ed0c1121ee94f6caf6668354432fcb92",
+        "direction_source": false,
+        "status": "exact_origin_only_typed_metadata_join"
+      },
+      "axis_evidence_scope": "exact_mesh_lod_skeleton_rig_root_visual_axis",
+      "native_verified": false,
+      "headset_accepted": false,
+      "runtime_enabled_by_this_review": false
+    },
+    {
+      "mesh_sha256": "1865203835057bad8b212ce2aece2a5d9d3dc018a6f8b7d33fa87431dfa0ea80",
+      "lod_sha256": "ab66c360149c5ebddc9887ae6929f2415b61585564e214bf868cbe9d650b6c3d",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "model_forward": [
+        0,
+        0,
+        -1
+      ],
+      "model_up": [
+        0,
+        1,
+        0
+      ],
+      "pose_gallery_indices": [
+        1
+      ],
+      "native_asset_name": "G3",
+      "configuration_path": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Scoped",
+      "configured_mesh_path": "Objects/Weapons/Handheld/BU_rif_G3/BU_rif_G3_Mesh",
+      "binding_digest": "281385ec8bf687c1e1856338b8c7d46b2c95eb9c7815ff9e04935ee1a1e6f068",
+      "source_binding_refs": [
+        {
+          "source_id": "new_bindings",
+          "profiles_index": 7,
+          "binding_digest": "281385ec8bf687c1e1856338b8c7d46b2c95eb9c7815ff9e04935ee1a1e6f068",
+          "clip_sha256": "715ce05b56d0bcf64636f900bc0f60ff6cea5c7c831aba05abbc51de3be96b85",
+          "configuration_sha256": "6cc5013a4b9988d358b1e5e6bb97057b41e0e16c61a2ccf24a31b17f1bdaf188",
+          "configuration_guid": "03c53a2d-428e-4666-a912-25d1e9264ff5",
+          "weapon_bone": "jntWpn_1",
+          "coordinate_convention": "canonical reflected-Z row-vector metres; named bone relative to jntWpn_1",
+          "state_count": 1,
+          "state_index": 0
+        }
+      ],
+      "muzzle_metadata_join": {
+        "profile_digest": "bbc0745729a065234725133dc203fd886293b4d7af3f14e64c8e40e1b0cfb301",
+        "direction_source": false,
+        "status": "exact_origin_only_typed_metadata_join"
+      },
+      "axis_evidence_scope": "exact_mesh_lod_skeleton_rig_root_visual_axis",
+      "native_verified": false,
+      "headset_accepted": false,
+      "runtime_enabled_by_this_review": false
+    },
+    {
+      "mesh_sha256": "b41fe39886444763ab02e562e2fe429d4289461871a0f1ab1c913d56322b190c",
+      "lod_sha256": "6cbb612e03b33c3e9ce9acd10ecce129be56bb17677936931c0a9a7431c53258",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "model_forward": [
+        0,
+        0,
+        -1
+      ],
+      "model_up": [
+        0,
+        1,
+        0
+      ],
+      "pose_gallery_indices": [
+        3
+      ],
+      "native_asset_name": "Garand",
+      "configuration_path": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Assault",
+      "configured_mesh_path": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Mesh",
+      "binding_digest": "0eee70c5f89aa8f07a9d33c2461d11844cd34545a7eade3328aa85aa994154da",
+      "source_binding_refs": [
+        {
+          "source_id": "m1_bindings",
+          "profiles_index": 0,
+          "binding_digest": "0eee70c5f89aa8f07a9d33c2461d11844cd34545a7eade3328aa85aa994154da",
+          "clip_sha256": "5af5de7e8fdd5f45080553d97805575d8227488ac865d43d751fc7c6ff282d85",
+          "configuration_sha256": "a41b2e7bb7f7e8af83521a60106fa23fbec462dd740fbac2230898a1519cb83b",
+          "configuration_guid": "4bc8d46c-cc7b-4993-8bbe-09e708bef4fa",
+          "weapon_bone": "jntWpn_1",
+          "coordinate_convention": "canonical reflected-Z row-vector metres; named bone relative to jntWpn_1",
+          "state_count": 1,
+          "state_index": 0
+        }
+      ],
+      "muzzle_metadata_join": {
+        "profile_digest": "ae76cb7bccd7d5c4d26f6f62d7092787e956aee5057f90db391a344d154fcf4f",
+        "direction_source": false,
+        "status": "exact_origin_only_typed_metadata_join"
+      },
+      "axis_evidence_scope": "exact_mesh_lod_skeleton_rig_root_visual_axis",
+      "native_verified": false,
+      "headset_accepted": false,
+      "runtime_enabled_by_this_review": false
+    },
+    {
+      "mesh_sha256": "b41fe39886444763ab02e562e2fe429d4289461871a0f1ab1c913d56322b190c",
+      "lod_sha256": "6cbb612e03b33c3e9ce9acd10ecce129be56bb17677936931c0a9a7431c53258",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "model_forward": [
+        0,
+        0,
+        -1
+      ],
+      "model_up": [
+        0,
+        1,
+        0
+      ],
+      "pose_gallery_indices": [
+        3
+      ],
+      "native_asset_name": "Garand",
+      "configuration_path": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand",
+      "configured_mesh_path": "Objects/Weapons/Handheld/Beach/M1Garand/M1Garand_Mesh",
+      "binding_digest": "d4b16c8f248edbcd5bf512291da794aed704330c9bbc254651a8d876ebe0d1c8",
+      "source_binding_refs": [
+        {
+          "source_id": "m1_bindings",
+          "profiles_index": 1,
+          "binding_digest": "d4b16c8f248edbcd5bf512291da794aed704330c9bbc254651a8d876ebe0d1c8",
+          "clip_sha256": "5af5de7e8fdd5f45080553d97805575d8227488ac865d43d751fc7c6ff282d85",
+          "configuration_sha256": "db8d551f626a593e10848381c00983c7a4999e1096a91deb1ded60d49a8e101d",
+          "configuration_guid": "d77b3602-e594-465d-87fa-8c193660522b",
+          "weapon_bone": "jntWpn_1",
+          "coordinate_convention": "canonical reflected-Z row-vector metres; named bone relative to jntWpn_1",
+          "state_count": 1,
+          "state_index": 0
+        }
+      ],
+      "muzzle_metadata_join": {
+        "profile_digest": "0b74bc00dc41d360e1dfb2a0eb38d906efaf3f7e461ba98ecfcb185a8d00e99c",
+        "direction_source": false,
+        "status": "exact_origin_only_typed_metadata_join"
+      },
+      "axis_evidence_scope": "exact_mesh_lod_skeleton_rig_root_visual_axis",
+      "native_verified": false,
+      "headset_accepted": false,
+      "runtime_enabled_by_this_review": false
+    },
+    {
+      "mesh_sha256": "959d6b9ffdd542616c0fa1e2df389eae11aec4223ed0e72d3e157133b03dbe3b",
+      "lod_sha256": "3a28d8d0b0b64571ecaffc28278c98a6eaa66af4c71d39425f9743df24c2452f",
+      "skeleton_sha256": "d1d713cc7301bc5ae2b011a0991ca03c2fcbb26c1187900f6fd129533d173c09",
+      "rig_fingerprint": "fnv1a64:a7f219a1426216ab",
+      "model_forward": [
+        0,
+        0,
+        -1
+      ],
+      "model_up": [
+        0,
+        1,
+        0
+      ],
+      "pose_gallery_indices": [
+        4
+      ],
+      "native_asset_name": "Garand",
+      "configuration_path": "Objects/Weapons/Handheld/Beach/Jap_Type5/Type5",
+      "configured_mesh_path": "Objects/Weapons/Handheld/Beach/Jap_Type5/Jap_Type5_Mesh",
+      "binding_digest": "80f80917217519ccf30f8d1deaad800f822d601ffbb57f565d86f615bf95f9f3",
+      "source_binding_refs": [
+        {
+          "source_id": "opening_bindings",
+          "profiles_index": 6,
+          "binding_digest": "80f80917217519ccf30f8d1deaad800f822d601ffbb57f565d86f615bf95f9f3",
+          "clip_sha256": "7e994888f010a2e729cfc5fc3153e954cac0aab51289963a841b4445d3312cc7",
+          "configuration_sha256": "e314479c35ea6819e5c662f35c4fca5af56cab3a1c1fe0a3b373efa05e153bd2",
+          "configuration_guid": "e66520c7-7b62-4d35-9274-72a762f0c35d",
+          "weapon_bone": "jntWpn_1",
+          "coordinate_convention": "canonical reflected-Z row-vector metres; named bone relative to jntWpn_1",
+          "state_count": 1,
+          "state_index": 0
+        }
+      ],
+      "muzzle_metadata_join": {
+        "profile_digest": "0af5700922adea6addbf57b0e2d8d6e84b7fa066767b38784d5513fc4711a759",
+        "direction_source": false,
+        "status": "exact_origin_only_typed_metadata_join"
+      },
+      "axis_evidence_scope": "exact_mesh_lod_skeleton_rig_root_visual_axis",
+      "native_verified": false,
+      "headset_accepted": false,
+      "runtime_enabled_by_this_review": false
+    }
+  ],
+  "additional_configuration_bindings": [],
+  "summary": {
+    "reviewed_geometry_images": 4,
+    "reviewed_mesh_contents": 4,
+    "exact_configurations": 11,
+    "g3": 6,
+    "m1_garand": 2,
+    "type5": 1,
+    "thompson": 2,
+    "geometry_pose_gaps": 0,
+    "omitted_triangles": 0,
+    "native_admissions": 0,
+    "frozen_configurations_preserved": 182,
+    "potential_matching_origin_configurations_after_merge": 180,
+    "total_origin_configurations": 181
+  },
+  "method": [
+    "Exact LOD0 mesh, skeleton and authored clip bytes were read from pinned local archives; no raw game bytes were written.",
+    "All four actual CPU point-cloud PNGs were directly inspected with signed Z/Y and Z/X orthographic projections.",
+    "Barrel versus stock and sights versus lower grip/trigger features establish axes separately for each mesh; no class or universal-axis inference.",
+    "Every configuration independently matches mesh/LOD, skeleton, rig, jntWpn_1 root convention, exact config hash/GUID and typed firing metadata.",
+    "Typed firing raw +Z only corroborates the reflected coordinate convention; origin-only metadata remains direction_claim none.",
+    "The existing append_reviewed_batch function is executed in memory to validate this packet without changing frozen generator outputs."
+  ],
+  "preparation_failures_retained": [
+    {
+      "stage": "storage scan in sandbox",
+      "result": "refused_incomplete_scan",
+      "reason": "Access denied to reports/coordinator-20261030-weapons50-python/tmphgzm1zkl",
+      "receipt_source": "failed_incomplete_storage_receipt",
+      "generated_receipt_field": null,
+      "preview_generated": false,
+      "resolution": "Elevated scan passed with actual recovery tree added; original incomplete receipt is not admission."
+    },
+    {
+      "stage": "optional Pillow imports",
+      "result": "ModuleNotFoundError in available Python runtimes",
+      "preview_generated": false,
+      "resolution": "Standalone standard-library PNG renderer; no install/download."
+    },
+    {
+      "stage": "first exact-source attempt",
+      "result": "FileNotFoundError for G:/bc2/Dist/win32/levels/mp_common/level-00.fbrb",
+      "preview_generated": false,
+      "resolution": "Existing Type5 source inspection identified G:/New folder (2)/Battlefield Bad Company 2; fresh StorageBudget passed before rerun."
+    }
+  ],
+  "preserved_existing_alignment": [
+    {
+      "asset": "Nambu100",
+      "configuration_path": "Objects/Weapons/Handheld/Beach/Nambu100/Nambu100",
+      "mesh_path": "Objects/Weapons/Handheld/Beach/Nambu100/Nambu100_Mesh",
+      "action": "leave_existing_authored_alignment_unchanged",
+      "axis_review_added": false
+    }
+  ],
+  "unresolved_rows": [],
+  "limitations": [
+    "This review grants visual orientation only; native firing direction/accuracy, submitted-mesh alignment and headset acceptance remain unqualified.",
+    "Four authored t=0 point-cloud views do not qualify native animation, grip/support, mechanisms, muzzle origins or every runtime pose."
+  ]
+}

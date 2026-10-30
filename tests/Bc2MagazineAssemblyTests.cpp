@@ -79,13 +79,24 @@ int CompletePoseAndHidePreserveUnrelatedBytes(){AssemblyFixture f;CHECK(f.Insert
 int NativeChildMotionAndVisibilityCannotBeOverwritten(){AssemblyFixture f;CHECK(f.Insert());auto rig=AssemblyRig(AssemblyGeometry());
  rig.identity.soldier=f.s.nativeOwner.soldier;rig.identity.weak=f.s.nativeOwner.weak;
  const auto binding=magazine_presentation_detail::Derive(rig,AssemblyGeometry());CHECK(binding);
- CHECK(BuildMagazineRawContact(f.result.tracking,rig,f.s.asset,Pose(),Pose(),1,f.now).valid);
- for(unsigned bad=0;bad<4;++bad){auto changed=rig;
+ const auto accepted=BuildMagazineRawContact(f.result.tracking,rig,f.s.asset,Pose(),Pose(),1,f.now);
+ CHECK(accepted.valid&&accepted.evidence.reason==MagazineRawContactReason::Accepted);
+ const std::array reasons{MagazineRawContactReason::ChildPositionMismatch,MagazineRawContactReason::ChildHidden,
+  MagazineRawContactReason::ChildNotRigid,MagazineRawContactReason::MagazineHidden,MagazineRawContactReason::ChildAngleMismatch};
+ for(unsigned bad=0;bad<reasons.size();++bad){auto changed=rig;
   if(bad==0)changed.evaluatedWorld[20].values[3][1]+=.002f;
   if(bad==1)changed.nativeHiddenLeaves={22};
   if(bad==2)changed.evaluatedWorld[21].values[0][0]=2;
   if(bad==3)changed.nativeHiddenLeaves={4};
-  CHECK(!BuildMagazineRawContact(f.result.tracking,changed,f.s.asset,Pose(),Pose(),1,f.now).valid);
+  if(bad==4){auto& m=changed.evaluatedWorld[20];m.values[0][0]=m.values[1][1]=std::cos(.02f);
+   m.values[0][1]=std::sin(.02f);m.values[1][0]=-std::sin(.02f);}
+  const auto rejected=BuildMagazineRawContact(f.result.tracking,changed,f.s.asset,Pose(),Pose(),1,f.now);
+  CHECK(!rejected.valid&&rejected.evidence.reason==reasons[bad]&&rejected.evidence.magazineBone==4);
+  CHECK(rejected.evidence.childBone==(bad==0||bad==4?20:bad==1?22:bad==2?21:~0u));
+  if(bad==0)CHECK(rejected.evidence.relativeDistanceMeters&&*rejected.evidence.relativeDistanceMeters>.001f&&!rejected.evidence.relativeAngleRadians);
+  if(bad==4)CHECK(rejected.evidence.relativeDistanceMeters&&*rejected.evidence.relativeDistanceMeters<=.001f&&
+   rejected.evidence.relativeAngleRadians&&*rejected.evidence.relativeAngleRadians>.01f);
+  if(bad>0&&bad<4)CHECK(!rejected.evidence.relativeDistanceMeters&&!rejected.evidence.relativeAngleRadians);
   CHECK(!BuildMagazinePresentation(changed,*binding,f.result.tracking,Pose(),1,f.now).binding);
  }return 0;
 }

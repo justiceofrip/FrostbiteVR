@@ -1,0 +1,20 @@
+Feedback56: actual private0.1.19 headset failure, not an old-version assumption.
+User: LMG ammo counter now visible; other reloads still fail; XM8 fire still feels bursty.
+Session20261030-183739-725-5389f0d4: observed host0.1.19, source d6ebf298; native session copy matches0.1.19.
+Native loaded-module identity not independently attested; native-trace is empty.
+Actual named weapons: XM8_sp_s, AN94_sp_k/Kobra and QJU88_sp. Do not infer PKM.
+AN94:2373 raw_missing may be secondary to consumer cancellation; zero contact/active/request.
+QJU88 magazine-profile absence is not a feed diagnosis. Counter improvement is separately confirmed.
+No firing-cadence correction was included in0.1.19; depth-target reuse has no measured FPS claim.
+Source: feed contacts now use anatomical wrist mapping; reviewed visual aim covers193 exact configs.
+Source: normal host gets one nonblocking same-frame copy poll; no measured cadence/FPS claim.
+Diagnostics: typed raw-contact and primary consumer-cancel reasons; bounded joined Fire/cache/count events.
+No speculative AN94 gate relaxation; its child-bone controls and reload bootstrap did not show a defect.
+Initial13 focused suites passed x86/x64; changed consumer suites passed3/3 again on each architecture.
+Normal native syntax passed both architectures. Actual-GPU/emulated-runtime presentation suite passed.
+Host GPU test stack overflow reproduced twice; heap-owned fixture reports fix it in host-checks03.
+No game launch/install yet. One headset availability probe failed; reuse shared blocker, no retry per card.
+Headset-free native observation route found; bounded menu observation is next after combined validation.
+Destruction remains open: old uncorrected callers lack draw/ABI association; no guessed hook enrollment.
+Evidence summary: reports/coordinator-20261030-feedback56/session-summary.json.
+Empty-hand stow remains deferred. Steam waits for executable; old reports remain sufficient.

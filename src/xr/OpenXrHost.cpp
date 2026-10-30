@@ -693,6 +693,7 @@ struct Host {
         // A short, opt-in opportunity to release THIS source set before the
         // next xrWaitFrame. The current frame already published input/menu
         // state. Expiry keeps the ordinary asynchronous copy path unchanged.
+        bool copyPolledAfterSubmit=false;
         if(report.privateHostCopyService.budgetMs&&report.privateHostCopyService.available&&
            submittedCopy&&!carriedCopy&&worldAllowed&&pendingCopy&&pendingCopy->Copying()&&
            pendingCopy->importIndex<HostSourceImportCache::Capacity&&pendingCopy->descriptor.sharing==graphics::TextureSharing::LegacyFenced&&
@@ -713,7 +714,7 @@ struct Host {
                     (pendingCopy->Ready()||consumer.HasPendingCopy());
             };
             const auto pending=[&]()noexcept {return pendingCopy&&pendingCopy->Copying();};
-            const auto pump=[&]()noexcept {pollCopy(false);};
+            const auto pump=[&]()noexcept {copyPolledAfterSubmit=true;pollCopy(false);};
             const auto clock=[]()noexcept {LARGE_INTEGER q{};return QueryPerformanceCounter(&q)&&q.QuadPart>0?std::uint64_t(q.QuadPart):0;};
             const auto pause=[&]()noexcept {return copyServiceWait.Pause();};
             const auto serviced=ServiceBoundedHostCopy(report.privateHostCopyService.BudgetTicks(),admitted,pending,pump,clock,pause);
@@ -723,10 +724,11 @@ struct Host {
             if(provider)timed(HostStage::Feedback,[&]{provider->ServiceFeedback();});
         }
         if(pendingCopy){
-            // Ready was acknowledged before WaitFrame and must not be polled or
-            // cancelled as a GPU operation again. Busy may receive one normal
-            // post-input poll, preserving existing input responsiveness.
-            if(!submittedCopy&&!pendingCopy->Composed())pollCopy(false);
+            // Give a newly submitted normal copy one nonblocking completion
+            // query before composition, unless the private service polled it.
+            // Busy retains the exact source; only query success makes it Ready.
+            ServiceUncomposedCopyBeforePresentation(pendingCopy,submittedCopy,
+                copyPolledAfterSubmit,[&]{pollCopy(false);});
             observeCopy();
             if(pendingCopy&&!pendingCopy->Composed()&&(pendingCopy->Ready()||
                (pendingCopy->gpuOrdered&&pendingCopy->Copying()&&pendingCopy->importIndex<HostSourceImportCache::Capacity&&consumers[pendingCopy->importIndex].HasPendingCopy()))){

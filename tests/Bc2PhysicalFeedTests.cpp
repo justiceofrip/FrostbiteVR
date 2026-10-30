@@ -1,4 +1,5 @@
 #include "Bc2PhysicalFeed.h"
+#include "Bc2SupportControllerMapping.h"
 #include "Test.h"
 #include <cmath>
 #include <cstdio>
@@ -26,6 +27,7 @@ struct Fixture {
     std::uint64_t intent=0,sequence=0,invocation=10;
     std::int64_t now=1000*Ms;
     Bc2PhysicalFeedSample sample{};
+    std::optional<fvr::math::Matrix4> wristCalibration;
     Bc2PhysicalFeedResult result{};
     std::optional<FeedEquipmentSubmission> submitted;
     bool refuse=false;unsigned submits=0;
@@ -79,6 +81,13 @@ struct Fixture {
         sample.input.sequence=sequence;sample.input.observedNs=now;sample.input.deadlineNs=now+age;sample.input.nowNs=now+1;
         sample.input.released[0]=!grip;sample.grip=grip;sample.cancel=cancel;
         sample.raw.inputEvidence=sample.input;sample.raw.rawLeftWristWorldMeters=wrist;sample.frameSequence=sequence;
+        if(wristCalibration){
+            InputFrame input;input.generation=sequence;input.spaceGeneration=sample.owner.space;input.predictedNs=now;
+            input.focused=input.headValid=true;for(auto& hand:input.hands)hand.gripTracked=hand.aimTracked=true;
+            auto rig=sample.raw.rig;rig.pose=0x110000;rig.skeleton=0x120000;
+            sample.raw=BuildSupportControllerMapping(sample.owner,sample.input,input,rig,sample.rigFingerprint,
+                feed_interaction_detail::Multiply(*wristCalibration,wrist),Identity(),Identity(),1,sample.input.nowNs);
+        }
         const HandContactProof gunProof{{1,7},sequence,sample.input.deadlineNs,true};
         const auto gun=hands.Current(InteractionHand::Right);
         if(gun)(void)hands.UpdateAndRenewGunHold(sample.input,gun->token,gunProof);
@@ -311,6 +320,30 @@ int EveryEnrolledFeedUsesTheSharedChestRefillPath(){
     }
     CHECK(configurations>0);std::printf("Physical feed chest/refill configurations: %u\n",configurations);return 0;
 }
+int EveryEnrolledFeedUsesAnatomicalControllerMapping(){
+    for(const auto& registration:RegisteredBc2FeedProfiles()){
+        Fixture anatomical(&registration),support(&registration);
+        anatomical.wristCalibration=Identity();support.wristCalibration=Identity();
+        support.wristCalibration->values[1][1]=support.wristCalibration->values[2][2]=-1;
+        // The same controller position can carry different native support and
+        // anatomical wrist orientations. Exercise publication mapping through
+        // real feed acquisition and completion, including its orientation gate.
+        CHECK(anatomical.OpenCover());CHECK(!support.OpenCover());
+        CHECK(anatomical.sample.raw.valid&&support.sample.raw.valid);
+        const auto& a=anatomical.sample.raw;const auto& s=support.sample.raw;
+        CHECK(feed_interaction_detail::Distance(a.rawLeftWristWorldMeters,s.rawLeftWristWorldMeters)<.00001f);
+        CHECK(feed_interaction_detail::Angle(a.rawLeftWristWorldMeters,s.rawLeftWristWorldMeters)>
+            registration.mechanism.contacts[unsigned(FeedPart::Cover)].maxAngleRadians);
+        CHECK(a.owner==anatomical.sample.owner&&a.rigFingerprint==registration.geometry.rigFingerprint);
+        CHECK(a.inputEvidence.sequence==anatomical.sample.input.sequence);
+        CHECK(a.inputEvidence.observedNs==anatomical.sample.input.observedNs&&
+            a.inputEvidence.deadlineNs==anatomical.sample.input.deadlineNs);
+        CHECK(anatomical.result.pending&&anatomical.submits==1);
+        CHECK(anatomical.submitted->command.authority.operation==FeedPhysicalOperation::OpenCover);
+        CHECK(support.result.selected&&!support.result.ownsHand&&!support.result.pending&&!support.result.blocksFire&&support.submits==0);
+    }
+    return 0;
+}
 int PartialCoverRequiresFreshRegraspAndPreservesProgress(){
     Fixture f;using namespace feed_interaction_detail;const auto m=f.Open();
     const auto pose=[&](double t){return feed_interaction_detail::Multiply(Along(m.motionFromContact,m.kind,m.travel*t),m.weaponFromMotion);};
@@ -448,10 +481,11 @@ int main(){
     CHECK(FiveStagesRetainPartialAmmoAndRefillOnlyAtAttachment()==0);
     CHECK(ReattachingWithoutChestSupplyCannotRefill()==0);
     CHECK(EveryEnrolledFeedUsesTheSharedChestRefillPath()==0);
+    CHECK(EveryEnrolledFeedUsesAnatomicalControllerMapping()==0);
     CHECK(PartialCoverRequiresFreshRegraspAndPreservesProgress()==0);
     CHECK(LongStowMigratesOnlySamePinnedResource()==0);
     CHECK(SameAddressReplacementDoesNotInheritFeedDebt()==0);
     CHECK(RealNoEntryReceiptRecoversCompletedEndpointWithNewId()==0);
     CHECK(DrainedActorReplacementReclaimsSlotsWithoutInventingAmmunitionSuccess()==0);
-    std::puts("Bc2PhysicalFeedTests: 16 deterministic owner/arbiter/callback compositions; no game or headset acceptance");
+    std::puts("Bc2PhysicalFeedTests: 17 deterministic owner/arbiter/callback compositions; no game or headset acceptance");
 }

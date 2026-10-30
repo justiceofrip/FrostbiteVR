@@ -1,5 +1,7 @@
 #include "Test.h"
 #include "fvr/xr/OpenXrHost.h"
+#include "fvr/xr/HostComposedCopyService.h"
+#include "fvr/xr/HostCopyLease.h"
 #include "fvr/graphics/D3D11SharedPair.h"
 #include "fvr/graphics/D3D11SceneDepthPair.h"
 #include <fstream>
@@ -14,6 +16,68 @@
 #include <memory>
 using Microsoft::WRL::ComPtr;
 using namespace fvr;
+std::unique_ptr<xr::HostReport> RunHostOnHeap(const xr::HostOptions& options){
+    // Each report owns a large diagnostic ring. Construct the return value
+    // directly in heap storage so nested GPU checks leave stack for D3DCompile.
+    // make_unique(RunOpenXrHost(...)) would first materialize a stack temporary.
+    return std::unique_ptr<xr::HostReport>(new xr::HostReport(xr::RunOpenXrHost(options)));
+}
+int NormalCopyPollRegression(){
+    struct Provider final:runtime::IFrameProvider {
+        graphics::PairTicket expected{};unsigned positive=0,negative=0,suspended=0;bool wrong=false;
+        bool TryGetPair(const runtime::PresentationRequirements&,const runtime::TrackingFrame&,
+            graphics::TextureDescriptor&,graphics::PairTicket&)noexcept override{return false;}
+        void PairConsumed(const graphics::PairTicket& ticket,bool okay)noexcept override {
+            wrong|=std::memcmp(&ticket,&expected,sizeof(ticket))!=0;
+            if(okay)++positive;else ++negative;
+        }
+        void Suspend()noexcept override{++suspended;}
+    };
+    struct Pending final:xr::HostCopyLease {
+        using HostCopyLease::HostCopyLease;
+        bool gpuOrdered=false;
+    };
+    for(const auto outcome:{graphics::TransferResult::Ok,graphics::TransferResult::Busy,graphics::TransferResult::Faulted}){
+        Provider provider;provider.expected.sequence=17;provider.expected.frameId=23;
+        auto pending=std::make_unique<Pending>(provider,provider.expected);
+        bool polled=false;unsigned polls=0;
+        const auto poll=[&]{++polls;
+            if(outcome==graphics::TransferResult::Ok)pending->Complete();
+            else if(outcome==graphics::TransferResult::Faulted)pending.reset();
+        };
+        CHECK(xr::ServiceUncomposedCopyBeforePresentation(pending,true,polled,poll));
+        CHECK(polled&&polls==1&&!provider.wrong);
+        CHECK(!xr::ServiceUncomposedCopyBeforePresentation(pending,true,polled,poll)&&polls==1);
+        if(outcome==graphics::TransferResult::Ok){
+            // Query success makes this same-frame image eligible for presentation.
+            CHECK(pending&&pending->Ready()&&!pending->Cancelled()&&provider.positive==1&&provider.negative==0);
+            CHECK(!pending->Complete());
+            polled=false;
+            CHECK(!xr::ServiceUncomposedCopyBeforePresentation(pending,false,polled,poll)&&polls==1);
+        }else if(outcome==graphics::TransferResult::Busy){
+            CHECK(pending&&pending->Copying()&&provider.positive==0&&provider.negative==0);
+            CHECK(std::memcmp(&pending->ticket,&provider.expected,sizeof(provider.expected))==0);
+            // Cancellation suppresses presentation, never GPU ownership retirement.
+            pending->CancelPresentation();CHECK(provider.suspended==1&&pending->Copying());
+            polled=false; // A later frame may observe the same query's success.
+            CHECK(xr::ServiceUncomposedCopyBeforePresentation(pending,false,polled,[&]{++polls;pending->Complete();}));
+            CHECK(polls==2&&pending->Ready()&&pending->Cancelled()&&!pending->MarkComposed());
+            CHECK(provider.positive==1&&provider.negative==0);
+        }else CHECK(!pending&&provider.positive==0&&provider.negative==1);
+        pending.reset();CHECK(!provider.wrong&&provider.positive+provider.negative==1);
+    }
+    Provider provider;provider.expected.sequence=19;
+    auto pending=std::make_unique<Pending>(provider,provider.expected);unsigned polls=0;
+    bool polled=true; // The opt-in private service already polled this submission.
+    CHECK(!xr::ServiceUncomposedCopyBeforePresentation(pending,true,polled,[&]{++polls;}));
+    CHECK(polls==0&&pending->Copying()&&provider.positive==0&&provider.negative==0);
+    polled=false;pending->gpuOrdered=true;
+    CHECK(!xr::ServiceUncomposedCopyBeforePresentation(pending,true,polled,[&]{++polls;}));
+    CHECK(polls==0&&!polled&&pending->Copying());
+    pending.reset();CHECK(provider.negative==1&&provider.positive==0&&!provider.wrong);
+    std::cout<<"Normal pre-composition poll: same-frame readiness, Busy retention, cancellation, fault retirement and no duplicate poll/ACK passed\n";
+    return 0;
+}
 struct Delayed final:runtime::IFrameProvider {
     ComPtr<ID3D11Device> device;ComPtr<ID3D11DeviceContext> context;std::array<ComPtr<ID3D11Texture2D>,2> images;
     graphics::D3D11PairProducer producer;runtime::TrackingFrame pending{};unsigned consumed=0,discarded=0;std::uint64_t epoch=0;
@@ -67,7 +131,7 @@ struct InputObserver final:runtime::IFrameProvider {
 };
 // Exercise the actual host with legacy shared textures and real GPU fences.
 // Deliver just before the fake runtime's existing discontinuities. SubmitCopy
-// defers legacy completion; the host may observe it before the next XR wait.
+// queues legacy completion; the host may observe it in this frame or later.
 struct LegacyAsync final:runtime::IFrameProvider {
     static constexpr std::array<unsigned,7> DeliveryFrames{10,30,50,69,74,84,100};
     ComPtr<ID3D11Device> device;ComPtr<ID3D11DeviceContext> context;
@@ -142,42 +206,63 @@ struct LegacyAsync final:runtime::IFrameProvider {
 };
 int LegacyAsyncHostRegression(const std::filesystem::path& path,unsigned(*runtimeErrors)()){
     LegacyAsync provider;xr::HostOptions options;options.loaderPath=path;options.probeOnly=false;options.seconds=3;options.provider=&provider;
-    const auto report=xr::RunOpenXrHost(options);
+    const auto reportStorage=RunHostOnHeap(options);const auto& report=*reportStorage;
     if(!report.okay||!provider.error.empty())std::cerr<<"legacy host: "<<report.error<<" fixture: "<<provider.error<<'\n';
     CHECK(report.okay&&runtimeErrors()==0&&provider.errors==0&&provider.error.empty());
     CHECK(report.endedFrames==100&&provider.inputs==101&&report.inputFrames==100);
     CHECK(provider.next==LegacyAsync::DeliveryFrames.size()&&!provider.outstanding&&provider.queriesWhileHeld==0);
+    unsigned positives=0;
     for(unsigned n=0;n<LegacyAsync::DeliveryFrames.size();++n){
         CHECK(provider.acknowledgements[n]==1);
         if(n+1<LegacyAsync::DeliveryFrames.size()){
             CHECK(provider.consumed[n]&&provider.ackFrames[n]>=LegacyAsync::DeliveryFrames[n]);
-        }else CHECK(!provider.consumed[n]&&provider.ackFrames[n]==100);
+        }else CHECK(provider.ackFrames[n]==100); // Same-frame query success may release the final source.
+        positives+=unsigned(provider.consumed[n]);
     }
     // Completion may precede the next input's invalidation. Successful GPU
     // ownership and local presentation cancellation are deliberately separate;
     // suspension need not happen while the provider still owns those pixels.
-    CHECK(provider.suspendsWhileHeld[1]>0); // Focus event is processed pre-wait.
-    unsigned completedRows=0;
+    unsigned completedRows=0,presentedRows=0,rejectedRows=0,sameFrameCompleted=0,busySubmissions=0;
+    std::array<unsigned,7> submitted{},completed{},presented{},sameFrame{};
     for(unsigned i=0;i<report.frameDiagnostics.count;++i){const auto& row=report.frameDiagnostics.Row(i);
         if(row.copyPending&&!row.copySubmitted)
             CHECK(row.inputAttempted&&row.inputGeneration&&row.inputReturnedNs>=row.inputStartedNs);
-        if(!row.copyCompleted)continue;++completedRows;
-        CHECK(!row.providerQueried&&!row.newPair&&!row.copySubmitted);
+        if(!row.copyTicket.sequence)continue;
+        unsigned index=unsigned(provider.deliveredTickets.size());
+        for(unsigned n=0;n<provider.deliveredTickets.size();++n)
+            if(std::memcmp(&row.copyTicket,&provider.deliveredTickets[n],sizeof(row.copyTicket))==0){index=n;break;}
+        CHECK(index<provider.deliveredTickets.size());
+        if(row.copySubmitted){++submitted[index];CHECK(row.frame==LegacyAsync::DeliveryFrames[index]&&row.providerQueried&&row.newPair);
+            if(row.copyPending){++busySubmissions;CHECK(!row.copyCompleted&&row.copyResult==std::uint32_t(graphics::TransferResult::Busy));
+                if(index==1)CHECK(provider.suspendsWhileHeld[index]>0);}}
+        if(!row.copyCompleted)continue;++completedRows;++completed[index];
+        CHECK(provider.consumed[index]);
+        if(row.copySubmitted){++sameFrameCompleted;++sameFrame[index];CHECK(!row.copyPreWaitCompleted&&!row.copyPending);}
+        else CHECK(!row.providerQueried&&!row.newPair&&row.frame>LegacyAsync::DeliveryFrames[index]);
         CHECK(row.copySubmittedNs>0&&row.copyCompletedNs>=row.copySubmittedNs);
         CHECK(row.copyTicket.sequence&&row.copyTicket.predictedNs>0&&!row.copyRetired);
         if(row.copyPreWaitCompleted){CHECK(row.copyPreWaitPolled);
             CHECK(row.copyCompletedNs<=row.inputStartedNs);}
+        else CHECK(row.copyCompletedNs>=row.inputReturnedNs);
+        if(row.pairRejected){++rejectedRows;CHECK(row.copyCancelled);}
+        else {++presentedRows;++presented[index];CHECK(row.worldLayer&&row.endSucceeded&&!row.copyCancelled);
+            CHECK(row.retainedGeneration==row.copyTicket.trackingGeneration&&row.retainedPredictedNs==row.copyTicket.predictedNs);}
     }
-    CHECK(completedRows==6);
-    CHECK(report.submittedPairs==2&&report.rejectedPairs==4);
-    CHECK(report.frameDiagnostics.copySubmittedFrames==7&&report.frameDiagnostics.copyCompletedFrames==6);
-    CHECK(report.frameDiagnostics.copyPendingFrames>=7&&report.frameDiagnostics.copyCancelledFrames>=4);
+    for(unsigned n=0;n<submitted.size();++n){CHECK(submitted[n]==1&&completed[n]==unsigned(provider.consumed[n]));
+        if(n>=1&&n<=4)CHECK(presented[n]==sameFrame[n]);}
+    CHECK(presented[0]==1&&presented[5]==1&&presented[6]==unsigned(provider.consumed[6]));
+    CHECK(completedRows==positives&&positives==6+unsigned(provider.consumed[6]));
+    CHECK(report.submittedPairs==presentedRows&&report.rejectedPairs==rejectedRows);
+    CHECK(report.frameDiagnostics.copySubmittedFrames==7&&report.frameDiagnostics.copyCompletedFrames==positives);
+    CHECK(sameFrameCompleted+busySubmissions==7&&report.frameDiagnostics.copyPendingFrames>=busySubmissions);
+    CHECK(report.frameDiagnostics.copyCancelledFrames>=rejectedRows);
     CHECK(report.maxRetainedAgeNs<=runtime::RetainedPresentation::MaxAgeNs);
-    std::cout<<"Legacy async actual-host GPU check: 7 exact acknowledgements, 6 completed reads, 4 presentation cancellations, shutdown retirement, continuing input, original render poses and no pending-provider requery passed\n";
+    std::cout<<"Legacy async actual-host GPU check: 7 exact acknowledgements, "<<sameFrameCompleted<<" same-frame completions, "
+             <<busySubmissions<<" Busy submissions, "<<rejectedRows<<" presentation cancellations; continuing input and original poses passed\n";
     return 0;
 }
-// Private R29 source extension: the existing default-off regression above is
-// kept unchanged. This scope restores process-local opt-ins on every CHECK exit.
+// Private R29 source extension: the regression above remains default-off.
+// This scope restores process-local opt-ins on every CHECK exit.
 struct OrderedPresentEnvironment {
     struct Value {const wchar_t* name;std::wstring old;bool existed=false;};
     std::array<Value,2> values{{{L"FVR_PRIVATE_GPU_ORDERED_PRESENT"},{L"FVR_PRIVATE_HOST_COPY_SERVICE_MS"}}};
@@ -198,7 +283,7 @@ struct OrderedPresentEnvironment {
 int GpuOrderedActualHostRegression(const std::filesystem::path& path,unsigned(*runtimeErrors)()){
     OrderedPresentEnvironment environment;CHECK(environment.okay);
     LegacyAsync provider;xr::HostOptions options;options.loaderPath=path;options.probeOnly=false;options.seconds=3;options.provider=&provider;
-    const auto report=xr::RunOpenXrHost(options);
+    const auto reportStorage=RunHostOnHeap(options);const auto& report=*reportStorage;
     if(!report.okay||!provider.error.empty())std::cerr<<"ordered host: "<<report.error<<" fixture: "<<provider.error<<'\n';
     CHECK(report.okay&&runtimeErrors()==0&&provider.errors==0&&provider.error.empty());
     CHECK(report.endedFrames==100&&provider.inputs==101&&report.inputFrames==100);
@@ -473,7 +558,7 @@ int TwoSourceActualHostRegression(const std::filesystem::path& path,unsigned(*ru
     OrderedPresentEnvironment environment(ordered);CHECK(environment.okay);
     SourceImportLog log;CHECK(!log.directory.empty());Provider provider;provider.depthFault=fault;
     xr::HostOptions options;options.loaderPath=path;options.probeOnly=false;options.seconds=3;options.provider=&provider;options.readyPath=log.directory/L"ready.json";
-    const auto report=xr::RunOpenXrHost(options);
+    const auto reportStorage=RunHostOnHeap(options);const auto& report=*reportStorage;
     if(!report.okay||!provider.error.empty())std::cerr<<"two-source host: "<<report.error<<" fixture: "<<provider.error<<'\n';
     CHECK(report.okay&&runtimeErrors()==0&&provider.errors==0&&provider.error.empty());
     CHECK(report.endedFrames==100&&provider.inputs==101&&report.inputFrames==100);
@@ -506,7 +591,7 @@ int TwoSourceActualHostRegression(const std::filesystem::path& path,unsigned(*ru
     CHECK(report.sceneDepthReceived==(fault==Provider::DepthFault::Missing?8u:9u));
     CHECK(report.sceneDepthCopied==8&&report.sceneDepthOmitted==2);
     CHECK(report.privateHostCopyService.budgetMs==0&&report.privateGpuOrderedPresent.configured==ordered);
-    CHECK(report.submittedPairs==(ordered?10u:6u)&&report.rejectedPairs==(ordered?1u:4u));
+    if(ordered)CHECK(report.submittedPairs==10&&report.rejectedPairs==1);
     if(ordered)CHECK(report.privateGpuOrderedPresent.composed==10&&report.privateGpuOrderedPresent.drained&&
         !report.privateGpuOrderedPresent.drainError&&!report.privateGpuOrderedPresent.retainedUntilProcessExit);
     unsigned positives=0;
@@ -515,7 +600,7 @@ int TwoSourceActualHostRegression(const std::filesystem::path& path,unsigned(*ru
         CHECK(provider.slotReads[n]==1&&provider.depthReads[n]==1);
         if(n==provider.BadDepth)CHECK(!provider.consumed[n]&&provider.ackFrames[n]==30);
         else if(n+1<provider.DeliveryFrames.size())CHECK(provider.consumed[n]);
-        if(!ordered&&n+1==provider.DeliveryFrames.size())CHECK(!provider.consumed[n]&&provider.ackFrames[n]==100);
+        if(n+1==provider.DeliveryFrames.size())CHECK(provider.ackFrames[n]==100);
         positives+=unsigned(provider.consumed[n]);
     }
     // Exact per-slot allocations survive A/B[/C]/A reuse. Only rejected B advances.
@@ -535,12 +620,19 @@ int TwoSourceActualHostRegression(const std::filesystem::path& path,unsigned(*ru
     CHECK(provider.attachments[4].resourceGeneration>provider.attachments[3].resourceGeneration&&provider.attachments[4].resources!=provider.attachments[3].resources);
     CHECK(std::memcmp(&provider.descriptors[0],&provider.descriptors[5],sizeof(graphics::TextureDescriptor))==0);
     std::array<unsigned,11> submitted{},completed{},composed{};
+    unsigned normalPresented=0,normalRejected=0;
     const auto inspect=[&](const xr::HostCopyObservation& copy,const xr::HostFrameObservation& frame)->int {
         if(!copy.copyTicket.sequence)return 0;unsigned index=unsigned(provider.tickets.size());
         for(unsigned n=0;n<provider.tickets.size();++n)if(std::memcmp(&copy.copyTicket,&provider.tickets[n],sizeof(copy.copyTicket))==0){index=n;break;}
         CHECK(index<provider.tickets.size());
         if(copy.copySubmitted){++submitted[index];CHECK(frame.frame==provider.DeliveryFrames[index]);}
-        if(copy.copyCompleted){++completed[index];CHECK(provider.consumed[index]&&copy.copyCompletedNs>=copy.copySubmittedNs);}
+        if(copy.copyCompleted){++completed[index];CHECK(provider.consumed[index]&&copy.copyCompletedNs>=copy.copySubmittedNs);
+            if(!ordered){
+                if(frame.pairRejected){++normalRejected;CHECK(copy.copyCancelled);}
+                else {++normalPresented;CHECK(frame.worldLayer&&frame.endSucceeded&&!copy.copyCancelled);
+                    CHECK(frame.retainedGeneration==copy.copyTicket.trackingGeneration&&frame.retainedPredictedNs==copy.copyTicket.predictedNs);}
+                if(copy.copySubmitted)CHECK(frame.frame==provider.DeliveryFrames[index]&&!copy.copyPending&&!copy.copyPreWaitCompleted);
+            }}
         if(copy.copyComposed&&frame.frame==provider.DeliveryFrames[index]){++composed[index];CHECK(ordered&&frame.worldLayer&&frame.endSucceeded);}
         return 0;
     };
@@ -549,6 +641,7 @@ int TwoSourceActualHostRegression(const std::filesystem::path& path,unsigned(*ru
     for(unsigned n=0;n<provider.tickets.size();++n){CHECK(submitted[n]==unsigned(n!=provider.BadDepth));
         CHECK(completed[n]==unsigned(provider.consumed[n]));if(ordered)CHECK(composed[n]==unsigned(n!=provider.BadDepth));}
     CHECK(report.frameDiagnostics.copyCompletedObservations==positives&&report.frameDiagnostics.copySubmittedFrames==10);
+    if(!ordered)CHECK(report.submittedPairs==normalPresented&&report.rejectedPairs==normalRejected+1);
     const auto snapshot=log.Snapshot();CHECK(!snapshot.empty());
     CHECK(SourceImportCounter(snapshot,"source_slots",SourceCount));
     CHECK(SourceImportCounter(snapshot,"color_open_attempts",SourceCount+1)&&SourceImportCounter(snapshot,"color_cache_hits",10-SourceCount));
@@ -561,9 +654,13 @@ int TwoSourceActualHostRegression(const std::filesystem::path& path,unsigned(*ru
     return 0;
 }
 
-int wmain(int argc,wchar_t** argv){if(argc==2&&std::wstring(argv[1])==L"--lifetime-child"){Sleep(1000);return 0;}CHECK(argc==2);const auto path=std::filesystem::absolute(argv[1]);HMODULE runtime=LoadLibraryExW(path.c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_SYSTEM32);CHECK(runtime);
+int wmain(int argc,wchar_t** argv){
+    if(argc==2&&std::wstring(argv[1])==L"--normal-copy-poll")return NormalCopyPollRegression();
+    if(argc==2&&std::wstring(argv[1])==L"--lifetime-child"){Sleep(1000);return 0;}CHECK(argc==2);const auto path=std::filesystem::absolute(argv[1]);HMODULE runtime=LoadLibraryExW(path.c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_SYSTEM32);CHECK(runtime);
+    CHECK(NormalCopyPollRegression()==0);
     Delayed provider;xr::HostOptions options;options.loaderPath=path;options.probeOnly=false;options.seconds=3;options.provider=&provider;
-    const auto report=xr::RunOpenXrHost(options);if(!report.okay)std::cerr<<report.error<<'\n';CHECK(report.okay);
+    const auto reportStorage=RunHostOnHeap(options);const auto& report=*reportStorage;
+    if(!report.okay)std::cerr<<report.error<<'\n';CHECK(report.okay);
     const auto errors=reinterpret_cast<unsigned(*)()>(GetProcAddress(runtime,"FakeXrErrors"));
     const auto reuses=reinterpret_cast<unsigned(*)()>(GetProcAddress(runtime,"FakeXrReuses"));
     const auto layers=reinterpret_cast<unsigned(*)()>(GetProcAddress(runtime,"FakeXrLayers"));CHECK(errors&&reuses&&layers);
@@ -584,15 +681,17 @@ int wmain(int argc,wchar_t** argv){if(argc==2&&std::wstring(argv[1])==L"--lifeti
     CHECK(diagnostic.count<=xr::HostFrameDiagnostics::Capacity);
     // Unlimited mode must have a stop source, and must exit when it signals.
     xr::HostOptions continuous;continuous.loaderPath=path;continuous.probeOnly=false;continuous.seconds=0;
-    const auto invalid=xr::RunOpenXrHost(continuous);CHECK(!invalid.okay&&!invalid.instanceCreated);
+    const auto invalidStorage=RunHostOnHeap(continuous);const auto& invalid=*invalidStorage;
+    CHECK(!invalid.okay&&!invalid.instanceCreated);
     unsigned polls=0;continuous.stopRequested=[&]{return ++polls>=10;};
-    const auto stopped=xr::RunOpenXrHost(continuous);CHECK(stopped.okay&&stopped.endedFrames>0&&stopped.endedFrames<20);CHECK(errors()==0);
-    wchar_t executable[32768]{};CHECK(GetModuleFileNameW(nullptr,executable,32768));
-    const auto filename=std::filesystem::path(executable).filename().wstring();
+    const auto stoppedStorage=RunHostOnHeap(continuous);const auto& stopped=*stoppedStorage;
+    CHECK(stopped.okay&&stopped.endedFrames>0&&stopped.endedFrames<20);CHECK(errors()==0);
+    const auto executable=std::make_unique<wchar_t[]>(32768);CHECK(GetModuleFileNameW(nullptr,executable.get(),32768));
+    const auto filename=std::filesystem::path(executable.get()).filename().wstring();
     platform::ProcessLifetime wrong;CHECK(!wrong.Open(GetCurrentProcessId(),L"not-the-process.exe"));
     platform::ProcessLifetime own;CHECK(own.Open(GetCurrentProcessId(),filename.c_str())&&!own.Ended());
     STARTUPINFOW startup{};startup.cb=sizeof(startup);PROCESS_INFORMATION child{};
-    auto command=std::wstring(L"\"")+executable+L"\" --lifetime-child";
+    auto command=std::wstring(L"\"")+executable.get()+L"\" --lifetime-child";
     CHECK(CreateProcessW(nullptr,command.data(),nullptr,nullptr,FALSE,CREATE_NO_WINDOW,nullptr,nullptr,&startup,&child));
     platform::ProcessLifetime lifetime;CHECK(lifetime.Open(child.dwProcessId,filename.c_str())&&!lifetime.Ended());
     CHECK(WaitForSingleObject(child.hProcess,5000)==WAIT_OBJECT_0&&lifetime.Ended());CloseHandle(child.hThread);CloseHandle(child.hProcess);
@@ -601,7 +700,8 @@ int wmain(int argc,wchar_t** argv){if(argc==2&&std::wstring(argv[1])==L"--lifeti
     for(bool floor:{true,false}){
         stage(floor);InputObserver input;xr::HostOptions control;control.loaderPath=path;control.probeOnly=false;control.seconds=3;control.provider=&input;
         control.controllers=control.roomscale=true;control.worldUnitsPerMeter=2.5f;
-        const auto observed=xr::RunOpenXrHost(control);if(!observed.okay)std::cerr<<observed.error<<'\n';
+        const auto observedStorage=RunHostOnHeap(control);const auto& observed=*observedStorage;
+        if(!observed.okay)std::cerr<<observed.error<<'\n';
         CHECK(observed.okay&&observed.controllersEnabled&&observed.controllerProfiles==3&&observed.floorRelative==floor);
         CHECK(input.invalid==0&&input.samples==101&&input.released>=5&&input.tracked>80&&input.floor==floor);
         CHECK(input.sawUntracked&&input.sawInactive&&input.sawBadStick&&input.sawValidPose&&errors()==0);

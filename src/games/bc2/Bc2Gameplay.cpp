@@ -105,6 +105,7 @@ static_assert(FVR_BC2_PHYSICAL_RELOAD_LIFECYCLE_SCENARIO>=1&&FVR_BC2_PHYSICAL_RE
 #include "fvr/interaction/FiringPoseHistory.h"
 #include "Bc2ProjectileLaunch.h"
 #include "Bc2ServerFireObservation.h"
+#include "Bc2FireRouteTelemetry.h"
 namespace fvr::bc2::gameplay {
 namespace {
 using UpdateFn=void(__thiscall*)(void*,float);using GatherFn=void(__thiscall*)(void*,void*);
@@ -136,6 +137,8 @@ ProjectileContextFn projectileContextOriginal=nullptr;ProjectileLaunchBinding pr
 std::atomic<std::uint64_t> shotInvocationSerial=0;
 FeedbackWriter writeFeedback=nullptr;unsigned feedbackSent=0,feedbackDropped=0;
 std::atomic<bool> enabled=false;std::atomic<unsigned> active=0,inputThread=0;
+bool fireRouteTelemetryEnabled=false;
+FireRouteTelemetry fireRouteTelemetry;
 std::atomic<unsigned> updates=0,localUpdates=0,gathers=0,onFoot=0,vehicle=0,stale=0,applied=0,committed=0,nativeInactive=0,mismatches=0,turnUnavailable=0,turns=0,moving=0,buttons=0;
 #ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
 std::unique_ptr<Bc2ChestKnifeCoordinator> chestKnife;
@@ -1542,6 +1545,26 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     if(!fresh||!input.focused||vehicleShotSpace!=input.spaceGeneration){vehicleShotObserver.Invalidate();boatReticle.Invalidate();}
     vehicleShotSpace=input.spaceGeneration;
     const auto& owner=scope->owner;
+    struct FireRouteGatherScope {
+        FireRouteRecord record{};bool observing=false;
+        ~FireRouteGatherScope(){if(observing){LARGE_INTEGER now{};
+            if(QueryPerformanceCounter(&now))record.sampledNs=HandNanos(now.QuadPart);
+            fireRouteTelemetry.Observe(record);}}
+    } fireTrace;
+    fireTrace.observing=fireRouteTelemetryEnabled;
+    if(fireTrace.observing){auto& r=fireTrace.record;
+        r.owner={owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,cachedInput.spaceGeneration};
+        r.equipment=owner.equipment;r.input=cachedInput.generation;r.inputEpoch=inputEpoch;r.cache=owner.cache;
+        r.gatherNs=r.sampledNs=HandNanos(clock.QuadPart);r.inputPresent=cachedInput.generation!=0;r.inputFresh=fresh;r.onFoot=owner.foot;
+        r.rightAimTracked=input.hands[1].aimTracked;
+        r.inputObservedNs=inputDeadline>0?HandNanos(inputDeadline-handFrequency/10):0;r.inputDeadlineNs=HandNanos(inputDeadline);
+        r.requested=r.inputPresent&&cachedInput.hands[1].trigger>=.75f;
+        if(!fresh)r.reasons|=FireRouteStaleInput;
+        if(!owner.foot)r.reasons|=FireRouteNotOnFoot;
+        if(fresh&&!interaction::ValidInput(input))r.reasons|=FireRouteInvalidInput;
+        if(fresh&&!input.focused)r.reasons|=FireRouteFocusLost;
+        if(fresh&&!input.headValid)r.reasons|=FireRouteHeadMissing;
+    }
     std::optional<FeedEquipmentGate> retainedFeedGate;
     std::optional<WeaponEquipmentIdentity> feedEquipment;
     std::optional<AmmoResourceBinding> feedResourceBinding;
@@ -1618,6 +1641,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     const auto allowed=U32(owner.cache+0x98);
     const bool vehicleInteraction=!owner.foot&&Type(owner.controlled,"ClientVehicleEntity")&&(allowed&0x11u)==0x11u;
     bool nativePlaying=owner.foot?(allowed&0x103u)==0x103u:vehicleInteraction;
+    if(!nativePlaying)fireTrace.record.reasons|=FireRouteNativeInactive;
     interact.playing=nativePlaying;
     if(owner.foot&&!nativePlaying)++nativeInactive;
     if(!owner.foot){
@@ -1793,6 +1817,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     const bool deferActions=(holsterFireFixture||pumpFireFixture||physicalBoltFixture.has_value()||ordinaryBoltInputFixture.has_value()||resourceInventoryFixture.has_value())&&fresh&&nativePlaying&&
         interaction::ValidInput(input)&&input.focused&&input.headValid;
     auto out=deferActions?interaction::ActionOutput{}:actions.Update(actionInput,{owner.soldier,inputEpoch,nativePlaying,true,rigEpoch},input.predictedNs,HandNanos(clock.QuadPart));
+    fireTrace.record.mapped=(out.held&interaction::Fire)!=0;
     if(m95StockShotFixture&&actionInput.hands[1].trigger<.75f){out.held&=~interaction::Fire;out.pressed&=~interaction::Fire;}
     if(!fresh||!nativePlaying||!interaction::ValidInput(input)||!input.focused||!input.headValid){ClearReloadOwner(ReloadOwnerLoss::PresentationUnavailable);CancelSight();weaponModeHeld=true;ResetSupportGrip(!fresh?"stale_input":!nativePlaying?"native_inactive":!interaction::ValidInput(input)?"invalid_input":!input.focused?"focus_loss":"head_untracked");ResetHandOwnership("input_unavailable"); {std::lock_guard lock(shotPoseMutex);shotHistory.Reset();} rigPublication::PublishTracking({});roomscale.Suspend();
 #ifdef FVR_BC2_SHELL_FOCUS_LOSS_PROBE
@@ -1811,6 +1836,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     if(!out.active||out.owner!=owner.soldier){out={};out.owner=owner.soldier;}
     Owner check{};const bool ownerResolved=Resolve(check);
     if(!ownerResolved||check!=owner||!Writable(owner.cache,InputBytes)){
+        fireTrace.record.reasons|=FireRouteOwnerUnavailable;
         ClearReloadOwner(ownerResolved&&check!=owner?ReloadOwnerLoss::LifetimeEnded:ReloadOwnerLoss::PresentationUnavailable);
         CancelSight();ResetSupportGrip("owner_unavailable");ResetHandOwnership("owner_unavailable",!ownerResolved||check==owner);rigPublication::PublishTracking({});return;}
     const auto aimer=U32(owner.aim+8);
@@ -1830,6 +1856,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
             {owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,input.spaceGeneration},input.generation,reloadSourceNowNs);
         ++reloadStatuses[std::size_t(observed.status)];
         if(observed.snapshot){
+            if(fireTrace.observing)ObserveFireRouteConfiguration(fireTrace.record,*observed.snapshot);
             const auto publication=reloadFlowRuntime::PublishOwnerObserved(*observed.snapshot,observed.snapshot->observedNs+200000000);
             ++reloadPublicationStatuses[unsigned(publication.status)];++reloadPublicationReasons[unsigned(publication.reason)];
             // Deferred serialization supplies no new native lease. Do not turn it
@@ -2004,6 +2031,9 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     }
     PhysicalReloadResult physicalResult;MagazinePhysicalResult magazineResult;Bc2PhysicalPumpResult pumpResult;Bc2PhysicalBoltResult boltResult;
     Bc2PhysicalFeedResult feedResult;
+    // Deferred diagnostic mappings are now complete; this precedes all ordinary
+    // magazine/feed/pump/sight filters and never changes the ActionOutput.
+    fireTrace.record.mapped=(out.held&interaction::Fire)!=0;
     Bc2PhysicalPistolSlideResult pistolSlideResult;
     Bc2PhysicalFixedContainerResult fixedResult;
     Bc2BoltControllerContact boltContact;
@@ -2063,7 +2093,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
             ((out.pressed|out.held)&(interaction::Use|interaction::NextWeapon|interaction::PreviousWeapon));
         const auto frame=rigPublication::ReadBodyWeaponFrame(owner.soldier,owner.weak,owner.weapon);
         if(frame&&frame->aimEvidence){const auto& proof=*frame->aimEvidence;
-            sample.raw=frame->controllerMapping;sample.frameSequence=frame->generation;sample.rigFingerprint=proof.rigFingerprint;
+            sample.raw=frame->mechanismControllerMapping;sample.frameSequence=frame->generation;sample.rigFingerprint=proof.rigFingerprint;
             const auto end=std::find(proof.configurationPath.begin(),proof.configurationPath.end(),'\0');
             if(end!=proof.configurationPath.end())sample.configurationPath={proof.configurationPath.data(),std::size_t(end-proof.configurationPath.begin())};
             sample.meshPath=proof.meshPath;
@@ -2742,7 +2772,8 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         }
         // Reading the router must not extend the input deadline or carry a
         // command across pickup/seat/actor replacement while resolving it.
-        Owner current{};if(!QueryPerformanceCounter(&clock)||clock.QuadPart>=inputDeadline||!Resolve(current)||current!=owner||!Writable(owner.cache,InputBytes))return;
+        Owner current{};if(!QueryPerformanceCounter(&clock)||clock.QuadPart>=inputDeadline||!Resolve(current)||current!=owner||!Writable(owner.cache,InputBytes)){
+            fireTrace.record.reasons|=FireRouteContextRecheck;return;}
     }
 #if defined(FVR_BC2_ORDINARY_GRENADE_PROBE) || defined(FVR_BC2_PLAYER_GRENADE)
     std::optional<private_grenade::Request> ordinaryGrenadeRequest;
@@ -2898,7 +2929,7 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         }
 #endif
         if(route)verifiedFireAction=*route;
-        else{out.held&=~interaction::Fire;out.pressed&=~interaction::Fire;}
+        else{out.held&=~interaction::Fire;out.pressed&=~interaction::Fire;fireTrace.record.reasons|=FireRouteSelectedRoute;}
     }
     if(resourceInventoryFixture)resourceInventoryFixture->FilterCancelledFire(out);
     if(pistolSlideResult.blocksFire){constexpr auto mask=interaction::Fire|interaction::AlternateFire;
@@ -2908,8 +2939,27 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     // loss; retained physical debt, never loaded-count-only readiness.
     if(fixedResult.blocksFire||feedResult.blocksFire||(retainedFeedGate&&retainedFeedGate->blocksFire)||
        (physicalFeed&&feedEquipment&&physicalFeed->BlocksFire(magazineOwner,*feedEquipment,feedResourceBinding))){
+        fireTrace.record.reasons|=fixedResult.blocksFire?FireRouteFixedContainer:FireRouteFeed;
         constexpr auto mask=interaction::Fire|interaction::AlternateFire|interaction::Reload;
         out.held&=~mask;out.pressed&=~mask;grenade=false;
+    }
+    if(fireTrace.observing){auto& r=fireTrace.record;r.reasons&=~FireRouteIncomplete;
+        r.effective=(out.held&interaction::Fire)!=0;r.nativeAction=unsigned(verifiedFireAction);r.actionActive=out.active;
+        if(r.requested&&!r.mapped)r.reasons|=r.rightAimTracked?FireRouteSemanticGate:FireRouteRightAimMissing;
+        if(r.mapped&&!r.effective){
+            if(bodyDraw.blockFire)r.reasons|=FireRouteBodyDraw;
+            if(magazineResult.blocksWeaponActions)r.reasons|=FireRouteMagazine;
+            if(pumpDebt||pumpResult.blocksFire)r.reasons|=FireRoutePump;
+            if(boltResult.blocksFire)r.reasons|=FireRouteBolt;
+            if(sightOwnsHand)r.reasons|=FireRouteSight;
+            if(weaponVisibilityProbe||equipProbe||resourceInventoryFixture)r.reasons|=FireRouteFixture;
+            if(pistolSlideResult.blocksFire)r.reasons|=FireRoutePistolSlide;
+            if(feedResult.blocksFire)r.reasons|=FireRouteFeed;
+            if(fixedResult.blocksFire)r.reasons|=FireRouteFixedContainer;
+            if(!r.reasons)r.reasons|=FireRouteOtherFilter;
+        }
+        // Default before Apply also records its explicit refusal branch below.
+        r.write=FireRouteWrite::Refused;
     }
     if(scope->patch.Apply({reinterpret_cast<std::byte*>(owner.cache),InputBytes},out,grenade,cycle,weaponMode,contextUseVehicleAlias,verifiedFireAction)){++applied;if(out.pressed&interaction::NextWeapon)++nextWeaponCommands;if(out.pressed&interaction::PreviousWeapon)++previousWeaponCommands;if(out.forward||out.strafe)++moving;if(out.held)++buttons;
         // Do not restore at the end of player update: BC2 also consumes this
@@ -2947,6 +2997,11 @@ void __fastcall GatherHook(void* self,void*,void* cache){
             LARGE_INTEGER stamp{};QueryPerformanceCounter(&stamp);detachedCommittedNs=HandNanos(stamp.QuadPart);
         }}
         scope->patch.Commit();++committed;interact.committed=true;
+        if(fireTrace.observing){auto& r=fireTrace.record;r.write=FireRouteWrite::Applied;
+            if(holsterReceipt){r.effective=false;r.reasons|=FireRouteHolsterSuppression;}
+            if(detachedSuppression){r.effective=false;r.reasons|=FireRouteDetachedSuppression;}
+            LARGE_INTEGER stamp{};if(QueryPerformanceCounter(&stamp))r.writeNs=HandNanos(stamp.QuadPart);
+        }
         // An ordinary shoulder request is issued only after the exact routed
         // edge reached the committed cache. Pending creation is not dispatch.
         if(bodyInventory&&bodyHolster&&bodyHolster->Phase()==BodyHolsterPhase::Held&&holsterBodySample&&
@@ -3139,7 +3194,11 @@ void __fastcall GatherHook(void* self,void*,void* cache){
         if(heldGun)hud.deadlineNs=(std::min)(hud.deadlineNs,heldGun->deadlineNs);
         // The selected family supplies its own exact native ammo view on the
         // input thread, independently of any retained reload operation.
-        if(hud.alive&&hud.onFoot&&hud.held)(void)reloadFlowRuntime::ReadReserveObserved();
+        if(hud.alive&&hud.onFoot&&hud.held){
+            const auto observedAmmo=reloadFlowRuntime::ReadReserveObserved();
+            if(fireTrace.observing){LARGE_INTEGER stamp{};QueryPerformanceCounter(&stamp);
+                ObserveFireRouteAmmo(fireTrace.record,observedAmmo.lease,HandNanos(stamp.QuadPart));}
+        }
         try{ammoCounterOwner.store(std::make_shared<const AmmoCounterOwner>(hud),std::memory_order_release);}
         catch(...){ammoCounterOwner.store({},std::memory_order_release);}
 #if defined(FVR_BC2_ORDINARY_GRENADE_PROBE) || defined(FVR_BC2_PLAYER_GRENADE)
@@ -3147,6 +3206,8 @@ void __fastcall GatherHook(void* self,void*,void* cache){
 #endif
     }
     else{
+        if(fireTrace.observing){fireTrace.record.reasons|=FireRouteApplyRefused;
+            LARGE_INTEGER stamp{};if(QueryPerformanceCounter(&stamp))fireTrace.record.writeNs=HandNanos(stamp.QuadPart);}
 #if defined(FVR_BC2_ORDINARY_GRENADE_PROBE) || defined(FVR_BC2_PLAYER_GRENADE)
         // A staged request that never reached Apply is spent. Only a new
         // neutral sample and deliberate gesture may create another request.
@@ -4046,6 +4107,15 @@ void ReportVehicleCameraEvidence(std::ostream& out){
 }
 bool SetFeedbackWriter(FeedbackWriter writer)noexcept {
     if(!hooks[0]||enabled.load(std::memory_order_acquire)||writeFeedback||!writer)return false;writeFeedback=writer;return true;
+}
+bool EnableFireRouteTelemetry()noexcept {
+    if(enabled.load(std::memory_order_acquire)||!hooks[0])return false;
+    fireRouteTelemetryEnabled=true;return true;
+}
+void ReportFireRouteTelemetry(std::ostream& out) {
+    FireRouteTelemetryBatch batch;
+    if(!fireRouteTelemetry.TryDrain(batch)){out<<"{\"schema\":1,\"snapshot_available\":false}";return;}
+    WriteFireRouteTelemetry(out,batch);
 }
 void Start()noexcept {
 #ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN

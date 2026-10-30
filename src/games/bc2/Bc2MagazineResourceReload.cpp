@@ -60,6 +60,7 @@ void Bc2MagazineResourceReload::Carry(MagazineTracking& t,const MagazinePhysical
     if(target.role==MagazinePropRole::Removed)t.removalFrame=carry_;else if(target.role==MagazinePropRole::Replacement)t.replacementFrame=carry_;
 }
 MagazinePhysicalResult Bc2MagazineResourceReload::Tick(const MagazinePhysicalSample& s,HandInteraction& hands,std::uint64_t& intent)noexcept {
+    currentCancellation_.reset();
     latestResult_=TickImpl(s,hands,intent);return latestResult_;
 }
 bool Bc2MagazineResourceReload::RecoverTerminal(const AmmoResourceOutcome& outcome,const HandInteractionSample& in,HandInteraction& hands)noexcept {
@@ -397,6 +398,7 @@ MagazinePhysicalResult Bc2MagazineResourceReload::TickImpl(const MagazinePhysica
 void Bc2MagazineResourceReload::NoteCancel(CancelCause cause,const HandInteractionSample& in)noexcept {
     auto& count=cancelCounts_[unsigned(cause)];if(count!=UINT64_MAX)++count;
     const CancelEvent event{cause,in.nowNs,in.sequence,event_,cycle_,unsigned(last_.phase),unsigned(last_.reason),unsigned(last_.nativeFailureCheck),pending_,diagnosticReadReason_,diagnosticSameOwner_};
+    currentCancellation_=WeaponMagazineConsumerCancellation{cause,event.request,event.cycle,event.pending,event.phase,event.reason,event.nativeCheck};
     if(!firstCancel_)firstCancel_=event;
     if(!firstActiveCancel_&&(pending_||cycle_||reservation_))firstActiveCancel_=event;
     if(!firstCancelByCause_[unsigned(cause)])firstCancelByCause_[unsigned(cause)]=event;
@@ -407,7 +409,9 @@ void Bc2MagazineResourceReload::Report(std::ostream& out)const {
        <<",\"suspended_original\":"<<suspendedOriginal_<<",\"suspended_input\":"<<suspendedSequence_
        <<",\"idle_view_waits\":"<<idleViewWaits_<<",\"active_view_waits\":"<<activeViewWaits_
        <<",\"removal_admission_retries\":"<<removalAdmissionRetries_;
-    out<<",\"cancel_cause_names\":[\"other\",\"input\",\"api\",\"view\",\"mapping\",\"gun\",\"terminal\",\"reconciliation\",\"restore\",\"owner\",\"receipt\",\"supply\",\"counter\",\"interaction\",\"submit\"],\"cancel_counts\":[";
+    out<<",\"cancel_cause_names\":[";
+    for(unsigned n=0;n<WeaponMagazineConsumerCancelCauseNames.size();++n){if(n)out<<',';out<<'"'<<WeaponMagazineConsumerCancelCauseNames[n]<<'"';}
+    out<<"],\"cancel_counts\":[";
     for(std::size_t n=0;n<cancelCounts_.size();++n){if(n)out<<',';out<<cancelCounts_[n];}out<<']';
     const auto event=[&](const std::optional<CancelEvent>& e){if(!e){out<<"null";return;}
         out<<"{\"cause\":"<<unsigned(e->cause)<<",\"now_ns\":"<<e->now<<",\"input\":"<<e->input<<",\"request\":"<<e->request

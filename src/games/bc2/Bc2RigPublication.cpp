@@ -22,6 +22,10 @@
 #include FVR_BC2_AUTHORED_SUPPORT_HEADER
 #endif
 #include "Bc2AuthoredGrip.h"
+#include "Bc2AuthoredAim.h"
+#ifdef FVR_BC2_AUTHORED_AIM_HEADER
+#include FVR_BC2_AUTHORED_AIM_HEADER
+#endif
 #include "Bc2Gameplay.h"
 #include "Bc2BodyAmmo.h"
 #include "Bc2ReticleDrawObservation.h"
@@ -117,19 +121,19 @@ struct FixedContainerPalette {
     std::shared_ptr<const Bc2FixedContainerTracking> fixedContainer;
     std::optional<FixedContainerRenderSource> fixedProps;
 };
-struct PublishedPose : FeedPalette, PistolSlidePalette, FixedContainerPalette {std::optional<AuthoredGripBinding> authoredGrip;std::optional<AuthoredSupportBinding> authoredSupport;std::optional<OrdinaryEquipmentRequest> ordinaryRecovery;WeaponEquipmentIdentity equipment{};std::shared_ptr<const BeltAmmoPalette> belt;ReloadPackedSource drawSource{};RigIdentity identity;unsigned weapon=0;std::uint64_t generation=0,space=0,ownerGeneration=0,equipmentGeneration=0;std::int64_t deadline=0,reloadDeadlineNs=0;std::vector<std::array<std::byte,64>> before,posed,previewBase,reloadBase;std::uint64_t previewToken=0;std::shared_ptr<const MagazineTracking> magazine;std::vector<std::array<std::byte,64>> magazineBase;std::shared_ptr<const ReloadPreview> reloadPreview;std::shared_ptr<const ReloadShellHidePlan> shellHide;std::shared_ptr<const WeaponVisibilityPlan> visibility;std::shared_ptr<const BodyFreeRightEvidence> freeRight;std::shared_ptr<const Bc2PumpTracking> pump;std::vector<std::array<std::byte,64>> pumpBase;bool pumpUnreachableHand=false,pumpExtendedHand=false;float pumpExtendedErrorM=0,pumpExtendedScale=1;std::shared_ptr<const Bc2BoltTracking> bolt;std::vector<std::array<std::byte,64>> boltBase;std::optional<WeaponShotFrame> shot;
+struct PublishedPose : FeedPalette, PistolSlidePalette, FixedContainerPalette {std::optional<AuthoredGripBinding> authoredGrip;std::optional<AuthoredSupportBinding> authoredSupport;std::optional<AuthoredAimBinding> authoredAim;std::optional<OrdinaryEquipmentRequest> ordinaryRecovery;WeaponEquipmentIdentity equipment{};std::shared_ptr<const BeltAmmoPalette> belt;ReloadPackedSource drawSource{};RigIdentity identity;unsigned weapon=0;std::uint64_t generation=0,space=0,ownerGeneration=0,equipmentGeneration=0;std::int64_t deadline=0,reloadDeadlineNs=0;std::vector<std::array<std::byte,64>> before,posed,previewBase,reloadBase;std::uint64_t previewToken=0;std::shared_ptr<const MagazineTracking> magazine;std::vector<std::array<std::byte,64>> magazineBase;std::shared_ptr<const ReloadPreview> reloadPreview;std::shared_ptr<const ReloadShellHidePlan> shellHide;std::shared_ptr<const WeaponVisibilityPlan> visibility;std::shared_ptr<const BodyFreeRightEvidence> freeRight;std::shared_ptr<const Bc2PumpTracking> pump;std::vector<std::array<std::byte,64>> pumpBase;bool pumpUnreachableHand=false,pumpExtendedHand=false;float pumpExtendedErrorM=0,pumpExtendedScale=1;std::shared_ptr<const Bc2BoltTracking> bolt;std::vector<std::array<std::byte,64>> boltBase;std::optional<WeaponShotFrame> shot;
 #ifdef FVR_BC2_ORDINARY_RESOURCE_INSPECTION_PROBE
 std::shared_ptr<const PumpVisualSource> pumpVisual;
 #endif
 };
 std::atomic<std::shared_ptr<const PublishedPose>> published;
 struct ShotGuard {unsigned soldier=0,weak=0,weapon=0;std::uint64_t owner=0,space=0,generation=0;std::int64_t deadline=0;bool valid=false,leftTracked=false;std::uint64_t previewToken=0;bool weaponActionsBlocked=false;std::uint64_t equipmentGeneration=0;WeaponEquipmentIdentity equipment{};std::int64_t previewDeadline=0;};
-struct ShotPublication {WeaponShotFrame frame;ShotGuard identity;std::optional<AuthoredGripBinding> authoredGrip;std::optional<AuthoredSupportBinding> authoredSupport;};
+struct ShotPublication {WeaponShotFrame frame;ShotGuard identity;std::optional<AuthoredGripBinding> authoredGrip;std::optional<AuthoredSupportBinding> authoredSupport;std::optional<AuthoredAimBinding> authoredAim;};
 std::atomic<std::shared_ptr<const ShotGuard>> shotGuard;
 std::atomic<std::shared_ptr<const ShotPublication>> shotPublication;
 #ifdef FVR_BC2_CONTEXTUAL_TOOLS
 struct ToolAttachmentPublication {ContextualToolAttachment frame;ShotGuard identity;
-    std::optional<AuthoredGripBinding> authoredGrip;std::optional<AuthoredSupportBinding> authoredSupport;};
+    std::optional<AuthoredGripBinding> authoredGrip;std::optional<AuthoredSupportBinding> authoredSupport;std::optional<AuthoredAimBinding> authoredAim;};
 std::atomic<std::shared_ptr<const ToolAttachmentPublication>> toolAttachmentPublication;
 #endif
 std::atomic<std::shared_ptr<const ReloadTracking>> reloadGuard;
@@ -242,6 +246,13 @@ std::span<const AuthoredGripProfile> AuthoredGripProfiles()noexcept {
     return {};
 #endif
 }
+std::span<const AuthoredAimProfile> AuthoredAimProfiles()noexcept {
+#ifdef FVR_BC2_AUTHORED_AIM_HEADER
+    return generated::AuthoredAims;
+#else
+    return {};
+#endif
+}
 std::atomic<unsigned> trackedPoses=0,trackingRejected=0,trackingUnavailable=0,weaponOutputs=0,calibrations=0,poseMisses=0;
 constexpr const char* rejectionNames[]={"owner","rig_snapshot","weapon_output","eye_base","physical_torso","head_bone","bind_landmarks","bind_frame","inverse_bind_frame","bind_arms","bind_torso","tracked_targets","torso_subtree","arm_solve","weapon_subtree","palette_plan","output_deadline"};
 std::array<std::atomic<unsigned>,17> rejectionCounts{};
@@ -326,6 +337,15 @@ bool SupportCurrent(const std::optional<AuthoredSupportBinding>& binding)noexcep
         {current->soldier,current->weak,current->owner,current->equipmentGeneration,current->space,
          current->generation,ReloadNanos(current->deadline)},ns);
 }
+bool AimCurrent(const std::optional<AuthoredAimBinding>& binding)noexcept {
+    if(!binding)return true;
+    const auto current=shotGuard.load(std::memory_order_acquire);const auto ns=ReloadNanos();
+    if(!current||!current->valid||!Fresh(current->deadline)||!binding->selected||!binding->profile)return false;
+    const auto selected=gameplay::ReadSelectedMeshes(binding->selected->owner,ns);
+    return AuthoredAimCurrent(*binding,selected.get(),current->equipment,
+        {current->soldier,current->weak,current->owner,current->equipmentGeneration,current->space,
+         current->generation,ReloadNanos(current->deadline)},binding->profile->rigFingerprint,ns);
+}
 bool FreeRightCurrent(const BodyFreeRightEvidence& source)noexcept {
     const auto current=freeRightGuard.load(std::memory_order_acquire);const auto ns=ReloadNanos();
     const auto visibility=visibilityGuard.load(std::memory_order_acquire);
@@ -334,7 +354,7 @@ bool FreeRightCurrent(const BodyFreeRightEvidence& source)noexcept {
 std::atomic<unsigned> owners=0,copies=0,changedCopies=0,rejected=0,sourceChanges=0,packingFailures=0,pairedCopies=0;
 std::atomic<std::uint64_t> drawPackSerial=0;
 std::atomic<unsigned> copyBoundaryRejected=0;
-struct Scope : FeedPalette, PistolSlidePalette, FixedContainerPalette {RigPaletteCopyState paletteCopy{};std::vector<RigPaletteBone> copyScratch;std::optional<AuthoredGripBinding> authoredGrip;std::optional<AuthoredSupportBinding> authoredSupport;std::optional<OrdinaryEquipmentRequest> ordinaryRecovery;RigIdentity ordinaryRig{};unsigned ordinaryMask=0;std::int64_t ordinaryDeadlineNs=0;std::shared_ptr<const BeltAmmoPalette> belt;unsigned beltMask=0;bool beltVisible=false;ReloadPackedSource drawSource{};std::uint64_t drawSerial=0;unsigned soldier=0,weak=0,sourceA=0,sourceB=0,count=0;int reloadPack=-1;unsigned visibilityMask=0,freeRightMask=0,shellHideMask=0,magazineMask=0,pumpMask=0,boltMask=0;std::shared_ptr<const MagazineTracking> magazine;std::vector<std::array<std::byte,64>> magazineBase;bool shellHidden=false;std::shared_ptr<const ReloadShellHidePlan> shellHide;std::shared_ptr<const WeaponVisibilityPlan> visibility;std::shared_ptr<const BodyFreeRightEvidence> freeRight;std::shared_ptr<const Bc2PumpTracking> pump;std::vector<std::array<std::byte,64>> pumpBase;bool pumpUnreachableHand=false,pumpExtendedHand=false;float pumpExtendedErrorM=0,pumpExtendedScale=1;std::shared_ptr<const Bc2BoltTracking> bolt;std::vector<std::array<std::byte,64>> boltBase;bool changed=false;std::uint64_t equipmentGeneration=0;WeaponEquipmentIdentity equipment{};std::vector<std::array<std::byte,64>> before,posed;
+struct Scope : FeedPalette, PistolSlidePalette, FixedContainerPalette {RigPaletteCopyState paletteCopy{};std::vector<RigPaletteBone> copyScratch;std::optional<AuthoredGripBinding> authoredGrip;std::optional<AuthoredSupportBinding> authoredSupport;std::optional<AuthoredAimBinding> authoredAim;std::optional<OrdinaryEquipmentRequest> ordinaryRecovery;RigIdentity ordinaryRig{};unsigned ordinaryMask=0;std::int64_t ordinaryDeadlineNs=0;std::shared_ptr<const BeltAmmoPalette> belt;unsigned beltMask=0;bool beltVisible=false;ReloadPackedSource drawSource{};std::uint64_t drawSerial=0;unsigned soldier=0,weak=0,sourceA=0,sourceB=0,count=0;int reloadPack=-1;unsigned visibilityMask=0,freeRightMask=0,shellHideMask=0,magazineMask=0,pumpMask=0,boltMask=0;std::shared_ptr<const MagazineTracking> magazine;std::vector<std::array<std::byte,64>> magazineBase;bool shellHidden=false;std::shared_ptr<const ReloadShellHidePlan> shellHide;std::shared_ptr<const WeaponVisibilityPlan> visibility;std::shared_ptr<const BodyFreeRightEvidence> freeRight;std::shared_ptr<const Bc2PumpTracking> pump;std::vector<std::array<std::byte,64>> pumpBase;bool pumpUnreachableHand=false,pumpExtendedHand=false;float pumpExtendedErrorM=0,pumpExtendedScale=1;std::shared_ptr<const Bc2BoltTracking> bolt;std::vector<std::array<std::byte,64>> boltBase;bool changed=false;std::uint64_t equipmentGeneration=0;WeaponEquipmentIdentity equipment{};std::vector<std::array<std::byte,64>> before,posed;
 #ifdef FVR_BC2_ORDINARY_RESOURCE_INSPECTION_PROBE
 std::shared_ptr<const PumpVisualSource> pumpVisual;bool pumpVisualAdmitted=false;
 #endif
@@ -479,7 +499,7 @@ std::uintptr_t __cdecl PackHook(const void* source,void* destination,unsigned co
             currentGuard->weapon==pose->weapon&&currentGuard->soldier==scope.soldier&&currentGuard->weak==scope.weak&&
             currentGuard->owner==pose->ownerGeneration&&currentGuard->space==pose->space&&
             currentGuard->equipmentGeneration==pose->equipmentGeneration&&Fresh(currentGuard->deadline);
-        if(pose&&currentGuard&&currentGuard->valid&&currentGuard->weapon==pose->weapon&&currentGuard->owner==pose->ownerGeneration&&currentGuard->space==pose->space&&currentGuard->equipmentGeneration==pose->equipmentGeneration&&currentGuard->equipment==pose->equipment&&EquipmentStillCurrent(pose->equipment)&&pose->identity.soldier==scope.soldier&&pose->identity.weak==scope.weak&&pose->identity.evaluatedMatrices==scope.sourceA&&scope.sourceA==scope.sourceB&&pose->identity.count==count&&Fresh(pose->deadline)&&AuthoredCurrent(pose->authoredGrip)&&SupportCurrent(pose->authoredSupport)&&(!pose->freeRight||FreeRightCurrent(*pose->freeRight))){
+        if(pose&&currentGuard&&currentGuard->valid&&currentGuard->weapon==pose->weapon&&currentGuard->owner==pose->ownerGeneration&&currentGuard->space==pose->space&&currentGuard->equipmentGeneration==pose->equipmentGeneration&&currentGuard->equipment==pose->equipment&&EquipmentStillCurrent(pose->equipment)&&pose->identity.soldier==scope.soldier&&pose->identity.weak==scope.weak&&pose->identity.evaluatedMatrices==scope.sourceA&&scope.sourceA==scope.sourceB&&pose->identity.count==count&&Fresh(pose->deadline)&&AuthoredCurrent(pose->authoredGrip)&&SupportCurrent(pose->authoredSupport)&&AimCurrent(pose->authoredAim)&&(!pose->freeRight||FreeRightCurrent(*pose->freeRight))){
             std::vector<std::array<std::byte,64>> current(count);
             if(Read(scope.sourceA,current.data(),count*64)&&current==pose->before){
 #ifdef FVR_BC2_ORDINARY_RESOURCE_INSPECTION_PROBE
@@ -487,7 +507,7 @@ std::uintptr_t __cdecl PackHook(const void* source,void* destination,unsigned co
 #endif
                 scope.paletteCopy={{pose->identity.soldier,pose->identity.weak,pose->weapon,
                     pose->ownerGeneration,pose->equipmentGeneration,pose->space},pose->generation,pose->deadline,true};
-                scope.before=pose->before;scope.authoredGrip=pose->authoredGrip;scope.authoredSupport=pose->authoredSupport;scope.drawSource=pose->drawSource;scope.freeRight=pose->freeRight;scope.equipment=currentGuard->equipment;scope.equipmentGeneration=currentGuard->equipmentGeneration;
+                scope.before=pose->before;scope.authoredGrip=pose->authoredGrip;scope.authoredSupport=pose->authoredSupport;scope.authoredAim=pose->authoredAim;scope.drawSource=pose->drawSource;scope.freeRight=pose->freeRight;scope.equipment=currentGuard->equipment;scope.equipmentGeneration=currentGuard->equipmentGeneration;
                 const bool fallback=pose->previewToken&&!previewAllowed&&pose->previewBase.size()==count;
                 const auto reload=reloadGuard.load(std::memory_order_acquire);
                 const auto reloadNow=ReloadNanos();
@@ -551,8 +571,8 @@ std::uintptr_t __cdecl PackHook(const void* source,void* destination,unsigned co
     // any old private pose, claim or paired receipt, even before the next Gather.
     if(scope.changed&&hands){const auto current=shotGuard.load(std::memory_order_acquire);
         if(!current||!current->valid||current->equipmentGeneration!=scope.equipmentGeneration||
-           current->equipment!=scope.equipment||!EquipmentStillCurrent(scope.equipment)||!AuthoredCurrent(scope.authoredGrip)||!SupportCurrent(scope.authoredSupport)){
-            scope.changed=false;scope.pump.reset();scope.pumpMask=0;scope.authoredGrip.reset();scope.authoredSupport.reset();scope.visibility.reset();scope.freeRight.reset();scope.shellHide.reset();scope.magazine.reset();
+           current->equipment!=scope.equipment||!EquipmentStillCurrent(scope.equipment)||!AuthoredCurrent(scope.authoredGrip)||!SupportCurrent(scope.authoredSupport)||!AimCurrent(scope.authoredAim)){
+            scope.changed=false;scope.pump.reset();scope.pumpMask=0;scope.authoredGrip.reset();scope.authoredSupport.reset();scope.authoredAim.reset();scope.visibility.reset();scope.freeRight.reset();scope.shellHide.reset();scope.magazine.reset();
             scope.belt.reset();scope.beltMask=0;scope.beltVisible=false;
             scope.visibilityMask=scope.freeRightMask=scope.shellHideMask=scope.magazineMask=0;scope.reloadPack=-1;
         }}
@@ -768,7 +788,7 @@ std::uintptr_t __cdecl PackHook(const void* source,void* destination,unsigned co
         if(!unchanged)++sourceChanges;
         const auto afterGuard=shotGuard.load(std::memory_order_acquire);
         const bool equipmentRetained=!hands||(afterGuard&&afterGuard->valid&&afterGuard->equipmentGeneration==scope.equipmentGeneration&&
-            afterGuard->equipment==scope.equipment&&EquipmentStillCurrent(scope.equipment)&&AuthoredCurrent(scope.authoredGrip)&&SupportCurrent(scope.authoredSupport));
+            afterGuard->equipment==scope.equipment&&EquipmentStillCurrent(scope.equipment)&&AuthoredCurrent(scope.authoredGrip)&&SupportCurrent(scope.authoredSupport)&&AimCurrent(scope.authoredAim));
         std::vector<std::byte> packed(count*48);bool match=equipmentRetained&&Read(reinterpret_cast<unsigned>(destination),packed.data(),packed.size());
 #ifdef FVR_BC2_ORDINARY_RESOURCE_INSPECTION_PROBE
         // Reuse only the successful existing destination read. No new native
@@ -1206,7 +1226,7 @@ std::optional<WeaponShotFrame> ReadWeaponFrame(unsigned soldier,unsigned weak,un
         const auto guard=shotGuard.load(std::memory_order_acquire);const auto pose=shotPublication.load(std::memory_order_acquire);
         if(!guard||!pose||!WeaponFrameAdmitted(*guard,pose->identity,soldier,weak,weapon,use)){++shotFrameUnavailable;return {};}
         const unsigned expired=!Fresh(guard->deadline)?0:!Fresh(pose->frame.deadline)?1:
-            !EquipmentStillCurrent(guard->equipment)?2:(!AuthoredCurrent(pose->authoredGrip)||!SupportCurrent(pose->authoredSupport))?3:4;
+            !EquipmentStillCurrent(guard->equipment)?2:(!AuthoredCurrent(pose->authoredGrip)||!SupportCurrent(pose->authoredSupport)||!AimCurrent(pose->authoredAim))?3:4;
         if(expired<4){++shotFrameExpired;++shotFrameExpiryCauses[expired];
             std::uint64_t unset=0;shotFrameExpiryFirstInput[expired].compare_exchange_strong(unset,guard->generation);
             return {};}
@@ -1236,7 +1256,7 @@ std::optional<ContextualToolAttachment> ReadContextualToolAttachment(const Reloa
         if(!guard||!pose||pose->frame.owner!=owner||guard->equipment!=pose->frame.equipment||
            !WeaponFrameAdmitted(*guard,pose->identity,owner.soldier,owner.weak,owner.weapon,WeaponFrameUse::BodyObservation)||
            !Fresh(guard->deadline)||!Fresh(pose->identity.deadline)||!EquipmentStillCurrent(guard->equipment)||
-           !AuthoredCurrent(pose->authoredGrip)||!SupportCurrent(pose->authoredSupport))return {};
+           !AuthoredCurrent(pose->authoredGrip)||!SupportCurrent(pose->authoredSupport)||!AimCurrent(pose->authoredAim))return {};
         if(shotGuard.load(std::memory_order_acquire)!=guard)continue;
         return pose->frame;
     }
@@ -1256,17 +1276,26 @@ std::optional<WeaponSupportFrame> ReadWeaponSupportFrame(unsigned soldier,unsign
 MagazineRawContact ReadMagazineContact(const ReloadStateOwner& owner)noexcept {
     for(unsigned attempt=0;attempt<3;++attempt){
         const auto guard=magazineGuard.load(std::memory_order_acquire);const auto now=ReloadNanos();
-        if(!guard||guard->owner!=owner||!MagazineTrackingFresh(*guard,now))return {};
+        if(!guard)return RejectedMagazineRawContact(MagazineRawContactReason::GuardMissing);
+        if(guard->owner!=owner)return RejectedMagazineRawContact(MagazineRawContactReason::GuardOwnerMismatch);
+        if(!MagazineTrackingFresh(*guard,now))return RejectedMagazineRawContact(MagazineRawContactReason::GuardNotFresh);
         // Suppressed Fire does not suppress raw reload contact. This getter is
         // private to magazine interaction and never grants a firing pose.
         const auto shot=ReadWeaponFrame(owner.soldier,owner.weak,owner.weapon,WeaponFrameUse::BodyObservation);
-        if(!shot||!shot->magazine.valid||shot->magazine.owner!=owner||
-           shot->magazine.inputEvidence.sequence!=shot->generation||
-           shot->magazine.inputEvidence.sequence>guard->inputEvidence.sequence||
-           shot->magazine.inputEvidence.observedNs>now||shot->magazine.inputEvidence.deadlineNs<=now)return {};
+        if(!shot)return RejectedMagazineRawContact(MagazineRawContactReason::FrameUnavailable);
+        // Failed builder packets carry diagnostics only; their authority fields
+        // deliberately remain empty. The admitted body frame and stable guard
+        // identify this observation without turning it into usable contact.
+        if(shot->magazine.valid){
+            if(shot->magazine.owner!=owner)return RejectedMagazineRawContact(MagazineRawContactReason::ContactOwnerMismatch);
+            if(shot->magazine.inputEvidence.sequence!=shot->generation)return RejectedMagazineRawContact(MagazineRawContactReason::FrameInputMismatch);
+            if(shot->magazine.inputEvidence.sequence>guard->inputEvidence.sequence)return RejectedMagazineRawContact(MagazineRawContactReason::InputNewerThanGuard);
+            if(shot->magazine.inputEvidence.observedNs>now)return RejectedMagazineRawContact(MagazineRawContactReason::InputInFuture);
+            if(shot->magazine.inputEvidence.deadlineNs<=now)return RejectedMagazineRawContact(MagazineRawContactReason::InputExpired);
+        }
         if(magazineGuard.load(std::memory_order_acquire)!=guard)continue;
         return shot->magazine;
-    }return {};
+    }return RejectedMagazineRawContact(MagazineRawContactReason::GuardChanged);
 }
 Bc2PumpPackCounters ReadPumpPackCounters()noexcept {
     return {pumpContacts.load(),pumpPoses.load(),pumpCopies.load(),pumpPairs.load(),pumpFallbacks.load(),
@@ -1317,7 +1346,7 @@ WeaponSightContact ReadSightContact(unsigned soldier,unsigned weak,unsigned weap
            pose->identity.soldier!=soldier||pose->identity.weak!=weak||pose->identity.weapon!=weapon||
            pose->identity.owner!=owner||pose->identity.space!=space||pose->identity.equipmentGeneration!=guard->equipmentGeneration||pose->identity.generation>guard->generation||
            pose->frame.sight.generation!=pose->identity.generation||pose->frame.sight.deadline!=pose->frame.deadline||
-           !Fresh(guard->deadline)||!Fresh(pose->frame.sight.deadline)||!AuthoredCurrent(pose->authoredGrip)||!SupportCurrent(pose->authoredSupport))return {};
+           !Fresh(guard->deadline)||!Fresh(pose->frame.sight.deadline)||!AuthoredCurrent(pose->authoredGrip)||!SupportCurrent(pose->authoredSupport)||!AimCurrent(pose->authoredAim))return {};
         if(shotGuard.load(std::memory_order_acquire)!=guard||!EquipmentStillCurrent(guard->equipment))continue;
         return pose->frame.sight;
     }
@@ -1565,6 +1594,21 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
         weaponOrientation=aim?AuthoredWeaponAimFrame(*authored.binding,*aim):std::nullopt;
         if(!weaponOrientation){RejectTracking(11);published.store({},std::memory_order_release);shotPublication.store({},std::memory_order_release);return;}
     }
+    std::optional<AuthoredAimBinding> authoredAim;
+    // Preserve established alignment and attachments. Reviewed axes supply the
+    // missing absolute orientation only; they grant no native firing capability.
+    if(!weaponOrientation&&input.input.hands[1].gripTracked&&input.input.hands[1].aimTracked){
+        const auto ns=ReloadNanos();
+        const auto alignment=BindAuthoredAim(AuthoredAimProfiles(),gameplay::ReadCurrentSelectedMeshes(ns),
+            input.nativeEquipment,{input.soldier,input.weak,input.ownerGeneration,input.equipmentGeneration,
+            input.input.spaceGeneration,input.input.generation,ReloadNanos(input.deadline)},rigFingerprint,ns);
+        if(alignment.status!=AuthoredAimStatus::NoProfile){
+            const auto aim=alignment.binding?interaction::TrackedAimFrame(input.input,*body):std::nullopt;
+            weaponOrientation=aim?AuthoredWeaponAimFrame(*alignment.binding,*aim):std::nullopt;
+            if(!weaponOrientation){RejectTracking(11);published.store({},std::memory_order_release);shotPublication.store({},std::memory_order_release);return;}
+            authoredAim=alignment.binding;
+        }
+    }
     const auto explicitGrip=authored.binding?std::optional<interaction::AuthoredGripAttachment>{{authored.binding->profile->rightInWeapon}}:std::nullopt;
     const auto targets=calibratedRig.Update(owner,input.input,*body,native[rig->left.wrist],native[rig->right.wrist],weapon,{*leftAnchor,*rightAnchor},anatomy,restTorso,weaponOrientation,explicitGrip);
 #ifdef FVR_BC2_ORDINARY_RESOURCE_INSPECTION_PROBE
@@ -1678,7 +1722,8 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
     const auto fixedContact=handRoleReady?BuildFixedContainerRawContact(input.fixedContainer,*rig,freeLeft,placed,
         input.input.worldUnitsPerMeter,ReloadNanos()):Bc2FixedContainerRawContact{};
     auto magazineContact=handRoleReady?
-        BuildMagazineRawContact(input.magazine,*rig,input.assetName.data(),freeLeft,placed,input.input.worldUnitsPerMeter,ReloadNanos(),&*body):MagazineRawContact{};
+        BuildMagazineRawContact(input.magazine,*rig,input.assetName.data(),freeLeft,placed,input.input.worldUnitsPerMeter,ReloadNanos(),&*body):
+        RejectedMagazineRawContact(MagazineRawContactReason::HandRoleUnavailable);
     const auto pumpContact=handRoleReady?BuildPumpRawContact(input.pump,*rig,freeLeft,placed,
         handBinding->mechanismPointWristMeters,input.input.worldUnitsPerMeter,ReloadNanos(),&*body):Bc2PumpRawContact{};
     if(pumpContact.valid)++pumpContacts;
@@ -2088,7 +2133,7 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
         if(!plan){published.store({},std::memory_order_release);return;}
         fixedPresentation=fixed;
     }
-    auto pose=std::make_shared<PublishedPose>();pose->authoredGrip=authored.binding;pose->authoredSupport=measuredSupport;pose->equipment=input.nativeEquipment;pose->identity=rig->identity;pose->weapon=input.weapon;pose->generation=input.input.generation;pose->ownerGeneration=input.ownerGeneration;pose->equipmentGeneration=input.equipmentGeneration;pose->space=input.input.spaceGeneration;pose->deadline=input.deadline;pose->before=rig->nativeEvaluated;pose->posed=pose->before;
+    auto pose=std::make_shared<PublishedPose>();pose->authoredGrip=authored.binding;pose->authoredSupport=measuredSupport;pose->authoredAim=authoredAim;pose->equipment=input.nativeEquipment;pose->identity=rig->identity;pose->weapon=input.weapon;pose->generation=input.input.generation;pose->ownerGeneration=input.ownerGeneration;pose->equipmentGeneration=input.equipmentGeneration;pose->space=input.input.spaceGeneration;pose->deadline=input.deadline;pose->before=rig->nativeEvaluated;pose->posed=pose->before;
     // Diagnostic metadata travels WITH the immutable palette actually packed.
     // No selected Meshes1p association is invented from the item display name.
     if(ReloadProducerBinding().Enabled()){
@@ -2208,6 +2253,13 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
             pose->shot->muzzleBinding=BindAuthoredMuzzle(generated_muzzle::MuzzleEnrollments,
                 *measuredSupport,pose->shot->trackedWeapon,pose->shot->trackedFlash,input.input.worldUnitsPerMeter,authoredNow);
 #endif
+    }
+    if(pose->shot&&handRoleReady&&targets->tracked[0]&&targets->tracked[1]){
+        // Feed contact must follow the same anatomical wrist as the displayed
+        // free/mechanism hand, independently of long-gun support calibration.
+        pose->shot->mechanismControllerMapping=BuildSupportControllerMapping(input.controllerOwner,
+            input.controllerEvidence,input.input,rig->identity,rigFingerprint,freeLeft,
+            placed,*body,input.input.worldUnitsPerMeter,ReloadNanos());
     }
     // The native support wrist is authored relative to this evaluated weapon
     // root. Contact always uses the independent tracked target, including while
@@ -2340,7 +2392,7 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
     if(pose->shot&&boltContact.raw.valid)pose->shot->bolt=boltContact;
     if(pose->shot&&fixedContact.valid)pose->shot->fixedContainer=fixedContact;
     if(pose->shot&&pumpContact.valid)pose->shot->pump=pumpContact;
-    if(pose->shot&&magazineContact.valid){pose->shot->magazine=magazineContact;++magazineContacts;}
+    if(pose->shot){pose->shot->magazine=magazineContact;if(magazineContact.valid)++magazineContacts;}
     if(pose->shot&&reloadContact.valid){pose->shot->reload=reloadContact;++reloadRawContacts;
         if(reloadContact.nativeShellVisible)++reloadNativeVisibleContacts;else ++reloadNativeHiddenContacts;
     }
@@ -2366,14 +2418,14 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
                 input.input.generation,input.deadline,true,targets->tracked[0],0,input.weaponActionsBlocked,
                 input.equipmentGeneration,input.nativeEquipment};
             preparedToolAttachment=std::make_shared<const ToolAttachmentPublication>(
-                ToolAttachmentPublication{attachment,identity,authored.binding,measuredSupport});
+                ToolAttachmentPublication{attachment,identity,authored.binding,measuredSupport,authoredAim});
         }
     }
 #endif
     std::shared_ptr<const ShotPublication> preparedShot;
     if(pose->shot){
         const ShotGuard identity{input.soldier,input.weak,input.weapon,input.ownerGeneration,input.input.spaceGeneration,input.input.generation,input.deadline,true,targets->tracked[0],0,input.weaponActionsBlocked,input.equipmentGeneration,input.nativeEquipment};
-        preparedShot=std::make_shared<const ShotPublication>(ShotPublication{*pose->shot,identity,authored.binding,measuredSupport});
+        preparedShot=std::make_shared<const ShotPublication>(ShotPublication{*pose->shot,identity,authored.binding,measuredSupport,authoredAim});
     }
     if(const auto requested=visibilityGuard.load(std::memory_order_acquire);requested&&requested->enabled&&
         requested->input.sequence==input.input.generation&&requested->nativeOwner.soldier==input.soldier&&requested->nativeOwner.weak==input.weak&&
@@ -2446,7 +2498,7 @@ void RetargetWeapon(unsigned animation,void* destination)noexcept {
         std::array<std::byte,64> current{};
         if(!currentRig||*currentRig!=rig->identity||!Read(at,current.data(),64)||current!=original||
            !EquipmentStillCurrent(input.nativeEquipment)||!AuthoredCurrent(authored.binding)||
-           !SupportCurrent(measuredSupport)||!FeedCurrent(*pose,input.nativeEquipment))return false;
+           !SupportCurrent(measuredSupport)||!AimCurrent(authoredAim)||!FeedCurrent(*pose,input.nativeEquipment))return false;
         if(pose->pistolSlide){
             // Slide admission also pins the complete original animation bytes
             // at commit. Only a still-owned slide reaches the private pose;

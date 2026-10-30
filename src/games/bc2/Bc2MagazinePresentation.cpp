@@ -9,16 +9,29 @@ using namespace interaction;using namespace reload_insertion_detail;
 math::Matrix4 Units(math::Matrix4 m,float units)noexcept{for(unsigned n=0;n<3;++n)m.values[3][n]*=units;return m;}
 // Native animation may change a declared child outside the authored reload.
 // Reject that packet instead of making a rigid assembly erase native motion.
-bool AssemblyVisibleRigid(const RigSnapshot& rig,const MagazinePresentationBinding& b,float units)noexcept{
+bool AssemblyVisibleRigid(const RigSnapshot& rig,const MagazinePresentationBinding& b,float units,
+ MagazineRawContactEvidence* evidence=nullptr)noexcept{
  if(!b.assemblyCount)return true;
+ const auto reject=[&](MagazineRawContactReason reason){if(evidence)evidence->reason=reason;return false;};
+ if(evidence)evidence->magazineBone=b.magazine;
  const auto hidden=[&](unsigned n){return std::find(rig.nativeHiddenLeaves.begin(),rig.nativeHiddenLeaves.end(),n)!=rig.nativeHiddenLeaves.end();};
- if(hidden(b.magazine)||!Rigid(rig.evaluatedWorld[b.magazine]))return false;
- const auto inverse=InverseRigid(rig.evaluatedWorld[b.magazine]);if(!inverse)return false;
+ if(hidden(b.magazine))return reject(MagazineRawContactReason::MagazineHidden);
+ if(!Rigid(rig.evaluatedWorld[b.magazine]))return reject(MagazineRawContactReason::MagazineNotRigid);
+ const auto inverse=InverseRigid(rig.evaluatedWorld[b.magazine]);if(!inverse)return reject(MagazineRawContactReason::MagazineInverseUnavailable);
  for(unsigned n=0;n<b.assemblyCount;++n){const auto bone=b.assembly[n];
-  if(hidden(bone)||!Rigid(rig.evaluatedWorld[bone]))return false;
+  if(evidence){evidence->childBone=bone;evidence->relativeDistanceMeters.reset();evidence->relativeAngleRadians.reset();}
+  if(hidden(bone))return reject(MagazineRawContactReason::ChildHidden);
+  if(!Rigid(rig.evaluatedWorld[bone]))return reject(MagazineRawContactReason::ChildNotRigid);
   const auto relative=Units(Multiply(rig.evaluatedWorld[bone],*inverse),1/units);
-  if(Distance(relative,b.geometry->assembly[n].itemFromBone)>.001f||Angle(relative,b.geometry->assembly[n].itemFromBone)>.01f)return false;
- }return true;
+  const auto distance=Distance(relative,b.geometry->assembly[n].itemFromBone);
+  if(evidence)evidence->relativeDistanceMeters=distance;
+  if(distance>.001f)return reject(MagazineRawContactReason::ChildPositionMismatch);
+  const auto angle=Angle(relative,b.geometry->assembly[n].itemFromBone);
+  if(evidence)evidence->relativeAngleRadians=angle;
+  if(angle>.01f)return reject(MagazineRawContactReason::ChildAngleMismatch);
+ }
+ if(evidence){evidence->childBone=~0u;evidence->relativeDistanceMeters.reset();evidence->relativeAngleRadians.reset();}
+ return true;
 }
 }
 namespace {
@@ -158,11 +171,22 @@ std::optional<MagazinePresentationBinding> BindMagazinePresentation(const RigSna
 }
 MagazineRawContact BuildMagazineRawContact(const MagazineTracking& t,const RigSnapshot& rig,std::string_view asset,
  const math::Matrix4& wrist,const math::Matrix4& weapon,float units,std::int64_t now,const math::Matrix4* trackingBody){
- MagazineRawContact out;if(t.retainedVisualSuppression||!MagazineTrackingFresh(t,now))return out;
+ MagazineRawContact out;
+ const auto reject=[&](MagazineRawContactReason reason){out.evidence.reason=reason;return out;};
+ if(t.retainedVisualSuppression)return reject(MagazineRawContactReason::RetainedVisualSuppression);
+ if(!MagazineTrackingFresh(t,now))return reject(MagazineRawContactReason::TrackingNotFresh);
  const auto& geometry=*t.family.binding.profile->geometry;
  const auto binding=magazine_presentation_detail::Derive(rig,geometry);
- if(asset!=geometry.asset||!binding||binding->fingerprint!=geometry.rigFingerprint||rig.identity.soldier!=t.owner.soldier||rig.identity.weak!=t.owner.weak||
- !std::isfinite(units)||units<=0||!Rigid(wrist)||!Rigid(weapon)||!AssemblyVisibleRigid(rig,*binding,units))return out;
+ if(asset!=geometry.asset)return reject(MagazineRawContactReason::AssetMismatch);
+ if(!binding)return reject(MagazineRawContactReason::RigBindingUnavailable);
+ out.evidence.magazineBone=binding->magazine;
+ if(binding->fingerprint!=geometry.rigFingerprint)return reject(MagazineRawContactReason::RigFingerprintMismatch);
+ if(rig.identity.soldier!=t.owner.soldier||rig.identity.weak!=t.owner.weak)return reject(MagazineRawContactReason::RigOwnerMismatch);
+ if(!std::isfinite(units)||units<=0)return reject(MagazineRawContactReason::InvalidUnits);
+ if(!Rigid(wrist))return reject(MagazineRawContactReason::WristNotRigid);
+ if(!Rigid(weapon))return reject(MagazineRawContactReason::WeaponNotRigid);
+ if(!AssemblyVisibleRigid(rig,*binding,units,&out.evidence))return out;
+ out.evidence.reason=MagazineRawContactReason::Accepted;
  out.valid=true;out.owner=t.owner;out.rig=rig.identity;out.rigFingerprint=binding->fingerprint;out.inputEvidence=t.inputEvidence;
  out.rawLeftWristWorldMeters=Units(wrist,1/units);out.weaponWorldMeters=Units(weapon,1/units);
  if(trackingBody&&Rigid(*trackingBody))out.trackingBodyWorldMeters=Units(*trackingBody,1/units);

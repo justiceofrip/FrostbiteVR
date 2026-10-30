@@ -26,14 +26,16 @@ public:
     void EnableBodyAmmo(bool enabled=true,interaction::SupplyAnchorFrame frame=interaction::SupplyAnchorFrame::HeadYaw)noexcept {bodyAmmo_=enabled;frame_=frame;}
     void Report(std::ostream&)const;
     MagazineResourceProbeState ProbeState(std::int64_t now)const noexcept;
+    const std::optional<WeaponMagazineConsumerCancellation>& CurrentCancellation()const noexcept{return currentCancellation_;}
 private:
-    enum class CancelCause:unsigned {Other,Input,Api,View,Mapping,Gun,Terminal,Reconciliation,Restore,Owner,Receipt,Supply,Counter,Interaction,Submit,Count};
+    using CancelCause=WeaponMagazineConsumerCancelCause;
     struct CancelEvent {CancelCause cause{};std::int64_t now=0;std::uint64_t input=0,request=0,cycle=0;
         unsigned phase=0,reason=0,nativeCheck=0;bool pending=false;
         unsigned resourceReadReason=~0u;bool sameOwner=false;};
     void NoteCancel(CancelCause,const interaction::HandInteractionSample&)noexcept;
     std::array<std::uint64_t,unsigned(CancelCause::Count)> cancelCounts_{};
     std::optional<CancelEvent> firstCancel_,firstActiveCancel_;
+    std::optional<WeaponMagazineConsumerCancellation> currentCancellation_;
     std::array<std::optional<CancelEvent>,unsigned(CancelCause::Count)> firstCancelByCause_{};
     unsigned diagnosticReadReason_=~0u;bool diagnosticSameOwner_=false;
     MagazinePhysicalResult TickImpl(const MagazinePhysicalSample&,interaction::HandInteraction&,std::uint64_t&)noexcept;

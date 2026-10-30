@@ -1,0 +1,8 @@
+DONE: non-LMG authored axis source review; 36 viewed images, 33 exact meshes, 69 audited profiles.
+Each reviewed pose supports model forward [0,0,-1], up [0,1,0] from barrel/sight geometry and signed image/source coordinates.
+115 additional exact root-geometry configurations joined; 83 also join exact typed muzzle metadata; remaining joins are explicitly unresolved.
+Existing AEK971_sp, XM8_sp_s, SCAR_sp and Nambu100 axis reviews preserved without duplicate runtime rework.
+GAPS: original AN94 own-pose assembly failures retained; unbound configurations and missing UGL typed enrollment joins listed in review.json.
+LIMIT: source-only visual orientation; no native firing/writes, grip, holster, live submitted-mesh or headset acceptance.
+Changed only review.json and STATUS.txt; no builds, game sessions, Git operations or runtime source edits.
+review.json SHA256 aa7d6e5a79299ab1a161a26eee1dd4503e9a485ce03f931e7b55237444d34aa2

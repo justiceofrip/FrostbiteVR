@@ -146,6 +146,9 @@ struct WeaponShotFrame {
  // input/owner/pose lifetime; this cannot grant support or native authority.
  ReloadRawContact controllerMapping{};
  math::Matrix4 targetWristWorldMeters{};
+ // Independent pre-IK anatomical wrist used by free/mechanism hand poses.
+ // Keeps the original owner, rig and input lease; never support-calibrated.
+ ReloadRawContact mechanismControllerMapping{};
 #ifdef FVR_BC2_CHEST_KNIFE_DRAW_RETURN
  std::optional<ChestKnifeRenderReceipt> chestKnife;
  std::optional<SelectedKnifeRenderReceipt> selectedKnife;

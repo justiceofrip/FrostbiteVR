@@ -1,9 +1,11 @@
 #pragma once
 #include "Bc2MagazineEquipmentProfile.h"
+#include "Bc2MagazinePresentation.h"
 #include "Bc2AmmoResourceReadEvidence.h"
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cmath>
 #include <memory>
 #include <new>
 #include <ostream>
@@ -21,6 +23,19 @@ inline constexpr std::array<const char*,unsigned(WeaponMagazineEntryStage::Count
  "disabled","input","cancelled","profile_missing","profile_unavailable","family","selected_mesh",
  "resource_read","raw_missing","raw_owner","rig","hand_evidence","geometry","gun_claim","consumer",
  "contact","active","request"};
+enum class WeaponMagazineConsumerCancelCause:unsigned {
+ Other,Input,Api,View,Mapping,Gun,Terminal,Reconciliation,Restore,Owner,Receipt,Supply,Counter,Interaction,Submit,Count
+};
+inline constexpr std::array<const char*,unsigned(WeaponMagazineConsumerCancelCause::Count)> WeaponMagazineConsumerCancelCauseNames{
+ "other","input","api","view","mapping","gun","terminal","reconciliation","restore","owner","receipt","supply","counter","interaction","submit"};
+// Exact refusal observed during this Tick, captured before cancellation changes
+// the interaction result. Absence never inherits an earlier Tick's cause.
+struct WeaponMagazineConsumerCancellation {
+ WeaponMagazineConsumerCancelCause cause{};
+ std::uint64_t request=0,cycle=0;
+ bool pending=false;
+ unsigned phase=0,reason=0,nativeCheck=0;
+};
 struct WeaponMagazineEntryObservation {
  const MagazineEquipmentProfile* profile=nullptr;
  std::string_view asset;
@@ -30,17 +45,25 @@ struct WeaponMagazineEntryObservation {
  std::int64_t nowNs=0;
  unsigned phase=0,interactionReason=0,resourceReadReason=~0u;
  bool grip=false,eject=false;
+ MagazineRawContactEvidence raw{};
+ std::optional<WeaponMagazineConsumerCancellation> consumerCancellation;
 };
 struct WeaponMagazineEntryRow {
  const MagazineEquipmentProfile* profile=nullptr;
  std::array<char,64> asset{};
  std::array<std::uint64_t,unsigned(WeaponMagazineEntryStage::Count)> stages{};
  std::array<std::uint64_t,unsigned(AmmoResourceReadReason::Invalid)+1> resourceReads{};
+ std::array<std::uint64_t,unsigned(MagazineRawContactReason::Count)> rawReasons{};
  WeaponMagazineEntryStage first=WeaponMagazineEntryStage::Disabled,last=WeaponMagazineEntryStage::Disabled;
  ReloadStateOwner owner{};
  std::uint64_t samples=0,gripSamples=0,ejectSamples=0,input=0,rig=0;
  std::int64_t firstNs=0,lastNs=0;
  unsigned phase=0,interactionReason=0,resourceReadReason=~0u;
+ MagazineRawContactEvidence raw{};
+ std::uint64_t rawFailureInput=0;
+ std::int64_t rawFailureNs=0;
+ bool rawFailureObserved=false;
+ std::optional<WeaponMagazineConsumerCancellation> consumerCancellation;
 };
 struct WeaponMagazineEntrySnapshot {
  static constexpr std::size_t Capacity=MaxGeneratedMagazineProfiles+18;
@@ -71,7 +94,14 @@ public:
   row.last=observation.stage;row.lastNs=observation.nowNs;row.owner=observation.owner;
   row.input=observation.input;row.rig=observation.rig;row.phase=observation.phase;
   row.interactionReason=observation.interactionReason;row.resourceReadReason=observation.resourceReadReason;
+  row.consumerCancellation=observation.consumerCancellation;
   if(observation.resourceReadReason<row.resourceReads.size())Increment(row.resourceReads[observation.resourceReadReason]);
+  // Only raw-missing entry attempts count as raw rejections. Active custody or
+  // an earlier family/resource refusal may deliberately have no raw packet.
+  if(observation.stage==WeaponMagazineEntryStage::RawMissing){
+   row.raw=observation.raw;row.rawFailureInput=observation.input;row.rawFailureNs=observation.nowNs;row.rawFailureObserved=true;
+   if(unsigned(observation.raw.reason)<row.rawReasons.size())Increment(row.rawReasons[unsigned(observation.raw.reason)]);
+  }
  }
  std::optional<WeaponMagazineEntrySnapshot> Snapshot()const noexcept {
   Guard guard(gate_);if(!guard.held)return {};
@@ -85,6 +115,10 @@ public:
    if(c=='"'||c=='\\')out<<'\\'<<char(c);else if(c<32)out<<'?';else out<<char(c);}out<<'"';};
   out<<"{\"dropped\":"<<snapshot->dropped<<",\"stage_names\":[";
   for(unsigned n=0;n<WeaponMagazineEntryStageNames.size();++n){if(n)out<<',';quoted(WeaponMagazineEntryStageNames[n]);}
+  out<<"],\"raw_reason_names\":[";
+  for(unsigned n=0;n<MagazineRawContactReasonNames.size();++n){if(n)out<<',';quoted(MagazineRawContactReasonNames[n]);}
+  out<<"],\"consumer_cancel_cause_names\":[";
+  for(unsigned n=0;n<WeaponMagazineConsumerCancelCauseNames.size();++n){if(n)out<<',';quoted(WeaponMagazineConsumerCancelCauseNames[n]);}
   out<<"],\"rows\":[";
   for(std::size_t n=0;n<count;++n){if(n)out<<',';const auto& row=rows[n];
    out<<"{\"profile\":";if(row.profile)out<<std::uint64_t(row.profile->nativeId);else out<<"null";
@@ -97,7 +131,20 @@ public:
       <<",\"space\":"<<row.owner.space<<",\"rig\":"<<row.rig<<",\"phase\":"<<row.phase
       <<",\"interaction_reason\":"<<row.interactionReason<<",\"resource_read_reason\":"<<row.resourceReadReason<<",\"stages\":[";
    for(unsigned i=0;i<row.stages.size();++i){if(i)out<<',';out<<row.stages[i];}out<<"],\"resource_reads\":[";
-   for(unsigned i=0;i<row.resourceReads.size();++i){if(i)out<<',';out<<row.resourceReads[i];}out<<"]}";
+   for(unsigned i=0;i<row.resourceReads.size();++i){if(i)out<<',';out<<row.resourceReads[i];}out<<"],\"raw_reasons\":[";
+   for(unsigned i=0;i<row.rawReasons.size();++i){if(i)out<<',';out<<row.rawReasons[i];}
+   out<<"],\"consumer_cancel\":";
+   if(const auto& c=row.consumerCancellation)out<<"{\"cause\":"<<unsigned(c->cause)<<",\"request\":"<<c->request
+    <<",\"cycle\":"<<c->cycle<<",\"pending\":"<<c->pending<<",\"phase\":"<<c->phase<<",\"reason\":"<<c->reason<<",\"native_check\":"<<c->nativeCheck<<'}';
+   else out<<"null";
+   out<<",\"last_raw_failure\":";
+   if(!row.rawFailureObserved){out<<"null}";continue;}
+   out<<"{\"reason\":"<<unsigned(row.raw.reason)<<",\"input\":"<<row.rawFailureInput<<",\"now_ns\":"<<row.rawFailureNs<<",\"magazine_bone\":";
+   if(row.raw.magazineBone!=~0u)out<<row.raw.magazineBone;else out<<"null";
+   out<<",\"child_bone\":";if(row.raw.childBone!=~0u)out<<row.raw.childBone;else out<<"null";
+   out<<",\"relative_distance_m\":";if(row.raw.relativeDistanceMeters&&std::isfinite(*row.raw.relativeDistanceMeters))out<<*row.raw.relativeDistanceMeters;else out<<"null";
+   out<<",\"relative_angle_rad\":";if(row.raw.relativeAngleRadians&&std::isfinite(*row.raw.relativeAngleRadians))out<<*row.raw.relativeAngleRadians;else out<<"null";
+   out<<"}}";
   }out<<"]}";
  }
 private:

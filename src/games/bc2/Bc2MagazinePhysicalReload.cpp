@@ -167,16 +167,19 @@ void Bc2MagazinePhysicalReload::ObserveEntry(const MagazinePhysicalSample& s,con
   // that outcome rather than diagnosing its deliberately absent geometry.
   if(result.interaction.transaction.request)return Stage::Request;
   if(result.tracking.enabled&&result.interaction.phase!=DetachableMagazinePhase::Attached)return Stage::Active;
+  // Consumer refusal can itself prevent raw publication. Diagnose that
+  // refusal before attributing absent contact to the raw builder.
+  if(!result.tracking.enabled)return Stage::Consumer;
   if(!s.raw.valid)return Stage::RawMissing;
   if(s.raw.owner!=s.nativeOwner)return Stage::RawOwner;
   if(s.raw.rigFingerprint!=profile->geometry->rigFingerprint)return Stage::Rig;
   if(!s.originalHandEvidence||!SameInput(s.raw.inputEvidence,*s.originalHandEvidence)||s.raw.inputEvidence.deadlineNs<=now)return Stage::HandEvidence;
   if(!Rigid(s.raw.rawLeftWristWorldMeters)||!Rigid(s.raw.weaponWorldMeters))return Stage::Geometry;
-  if(!result.tracking.enabled)return Stage::Consumer;
   return Stage::Contact;
  }();
  entryTelemetry_.Observe({profile,s.asset,stage,s.nativeOwner,s.input.sequence,s.raw.rigFingerprint,s.input.nowNs,
-  unsigned(result.interaction.phase),unsigned(result.interaction.reason),entryResourceReadReason_,s.gripPressed,s.ejectPressed});
+  unsigned(result.interaction.phase),unsigned(result.interaction.reason),entryResourceReadReason_,s.gripPressed,s.ejectPressed,s.raw.evidence,
+  resource_?resource_->CurrentCancellation():std::nullopt});
 }
 void Bc2MagazinePhysicalReload::RetainDeferredPresentation(MagazinePhysicalResult& out,const MagazinePhysicalSample& s,
  HandInteraction& hands)noexcept {

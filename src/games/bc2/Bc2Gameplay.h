@@ -26,6 +26,10 @@ using FeedbackWriter=bool(*)(const interaction::FeedbackEvent&)noexcept;
 // Optional one-way notification, configured after Install and before Start.
 // A failed nonblocking send is dropped; feedback never changes native reload.
 bool SetFeedbackWriter(FeedbackWriter)noexcept;
+// Existing session writer opt-in, after Install and before Start. The report
+// drains bounded transition records; no native reads or stream work in Gather.
+bool EnableFireRouteTelemetry()noexcept;
+void ReportFireRouteTelemetry(std::ostream&);
 // Explicit driver-only native head-aim/camera opt-in, after Install before Start.
 // Fire can remain disabled for the bounded signed-axis response diagnostic.
 bool EnableBoatHeadAim(bool enableFire=false)noexcept;
