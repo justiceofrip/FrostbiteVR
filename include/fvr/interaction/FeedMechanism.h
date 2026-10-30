@@ -51,6 +51,7 @@ enum class FeedPhysicalOperation:std::uint8_t {
 struct FeedContactBinding {
     std::uint32_t role=0;
     float radiusMeters=0,maxAngleRadians=0;
+    bool operator==(const FeedContactBinding&)const=default;
 };
 // Replacement remains the default. Replenishment and coupled pouch/feed
 // removal are explicit policy choices, never inferred from a gun name.
@@ -63,6 +64,7 @@ struct FeedMechanismProfile {
     std::int64_t maxAgeNs=0;
     std::array<FeedContactBinding,static_cast<unsigned>(FeedPart::Count)> contacts{};
     bool sameContainerReplenishment=false,coupledContainerDetach=false;
+    bool operator==(const FeedMechanismProfile&)const=default;
 };
 struct FeedObservedContact {
     std::uint32_t role=0;

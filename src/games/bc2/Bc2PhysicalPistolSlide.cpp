@@ -8,7 +8,7 @@ namespace {
 using namespace interaction;
 constexpr std::int64_t EvidenceLifetime=100000000;
 enum class SlideExit:unsigned {None,Updated,ApiUnavailable,SelectionUnverified,OwnerUnavailable,Pending,
-    MigrationUnverified,EvidenceGap,UnsafeInput,SourceUnverified,GeometryUnverified,ClaimConflict,Blocked,MotionFailure};
+    MigrationUnverified,EvidenceGap,UnsafeInput,SourceUnverified,GeometryUnverified,ClaimConflict,Blocked,MotionFailure,ProfileUnverified};
 const char* SlideExitName(SlideExit reason)noexcept {
     switch(reason){
     case SlideExit::None:return "none";case SlideExit::Updated:return "motion_updated";
@@ -17,7 +17,8 @@ const char* SlideExitName(SlideExit reason)noexcept {
     case SlideExit::MigrationUnverified:return "migration_unverified";case SlideExit::EvidenceGap:return "evidence_gap";
     case SlideExit::UnsafeInput:return "unsafe_input";case SlideExit::SourceUnverified:return "source_unverified";
     case SlideExit::GeometryUnverified:return "geometry_unverified";case SlideExit::ClaimConflict:return "claim_conflict";
-    case SlideExit::Blocked:return "policy_blocked";case SlideExit::MotionFailure:return "motion_failure";}
+    case SlideExit::Blocked:return "policy_blocked";case SlideExit::MotionFailure:return "motion_failure";
+    case SlideExit::ProfileUnverified:return "profile_unverified";}
     return "unknown";
 }
 bool SamePacket(const HandInteractionSample& a,const HandInteractionSample& b)noexcept {
@@ -34,26 +35,45 @@ bool SameItem(const AmmoResourceBinding& a,const AmmoResourceBinding& b)noexcept
         a.owner.weak==b.owner.weak&&a.owner.actorGeneration==b.owner.actorGeneration&&a.owner.weapon==b.owner.weapon&&
         a.inventory==b.inventory&&a.switching==b.switching&&a.data==b.data&&a.persistence==b.persistence;
 }
-bool Current(const ReloadStateOwner& owner,const WeaponEquipmentIdentity& equipment,const AmmoResourceBinding& binding)noexcept {
+bool Current(const ReloadStateOwner& owner,const WeaponEquipmentIdentity& equipment,const AmmoResourceBinding& binding,
+    const Bc2PistolSlideRegistration& row)noexcept {
     return binding.owner==owner&&equipment.weapon==owner.weapon&&equipment.data==binding.data&&
-        equipment.persistence==binding.persistence&&equipment.Asset()==bc2_pistol_slide_profile_detail::Mp443Geometry.selection.asset&&
+        equipment.persistence==binding.persistence&&equipment.Asset()==row.configuration.assetName&&
+        equipment.Asset()==row.geometry->selection.asset&&
         AmmoResourceBindingFresh(binding,owner,binding.observedNs);
 }
-bool Selected(const Bc2PhysicalPistolSlideSample& s)noexcept {
-    const auto& g=bc2_pistol_slide_profile_detail::Mp443Geometry.selection;
+const Bc2PistolSlideRegistration* Selection(const Bc2PhysicalPistolSlideSample& s)noexcept {
+    for(const auto& row:RegisteredBc2PistolSlideProfiles())if(row.geometry){const auto& g=row.geometry->selection;
+        if(s.asset==row.configuration.assetName&&s.configurationPath==row.configuration.assetPath&&
+           s.asset==g.asset&&s.configurationPath==g.configurationPath&&s.meshPath==g.meshPath&&s.rigFingerprint==g.rigFingerprint)
+            return ResolveBc2PistolSlideRegistration(row.key);
+    }return nullptr;
+}
+bool SupportedAsset(std::string_view asset)noexcept {
+    for(const auto& row:RegisteredBc2PistolSlideProfiles())if(row.configuration.assetName==asset&&
+        ResolveBc2PistolSlideRegistration(row.key))return true;return false;
+}
+bool Selected(const Bc2PhysicalPistolSlideSample& s,const Bc2PistolSlideRegistration& row)noexcept {
+    const auto& g=row.geometry->selection;
     if(s.asset!=g.asset||s.configurationPath!=g.configurationPath||s.meshPath!=g.meshPath||s.rigFingerprint!=g.rigFingerprint||
-       !s.selectedRigVerified||!s.selected||!s.equipment||!s.binding||!Current(s.owner,*s.equipment,*s.binding)||
+       s.asset!=row.configuration.assetName||s.configurationPath!=row.configuration.assetPath||
+       !s.selectedRigVerified||!s.selected||!s.equipment||!s.binding||!Current(s.owner,*s.equipment,*s.binding,row)||
        !AmmoResourceBindingFresh(*s.binding,s.owner,s.input.nowNs))return false;
     const auto& m=*s.selected;
-    if(m.owner!=s.owner||!m.sequence||!m.configurationPathVerified||!m.configurationPathPointer||
-       !ReloadDescriptorText(m.configurationPath,g.configurationPath)||!ReloadDescriptorText(m.weaponName,g.asset)||
-       m.weaponData!=s.binding->data||m.inventory!=s.binding->inventory||m.observedNs<=0||
-       s.input.nowNs<m.observedNs||s.input.nowNs>=m.deadlineNs||m.stateCount!=1||!m.soleConfiguredArray)return false;
-    const auto& state=m.states[0];
-    if(state.array!=m.soleConfiguredArray||!state.count||state.count>state.meshes.size())return false;
-    unsigned matches=0;for(unsigned i=0;i<state.count;++i)
-        if(ReloadDescriptorText(state.meshes[i].assetPath,g.meshPath)&&state.meshes[i].address>=0x10000)++matches;
-    return matches==1;
+    return ReloadDescriptorText(m.configurationPath,row.configuration.assetPath)&&
+        ReloadDescriptorText(m.weaponName,row.configuration.assetName)&&m.inventory==s.binding->inventory&&
+        Bc2PistolSlideSelected(m,s.owner,row,*s.equipment,s.input.sequence,s.input.nowNs);
+}
+bool NativeProfile(const PistolAfterFeedResourceState& native,const AmmoResourceBinding& binding,
+    const Bc2PistolSlideRegistration& row)noexcept {
+    const auto capacity=row.configuration.values.baseCapacity;
+    if(native.profileKey!=row.key||native.resource!=binding.context.resource||!SameItem(native.request.binding,binding)||
+       native.request.binding.owner!=native.admittedIdentity.owner||native.request.binding.context!=native.command.context||
+       !PistolAfterFeedContextMatches(native.command.context,native.admittedIdentity)||
+       native.admission.context!=native.command.context||native.admission.counts.capacity!=capacity||
+       native.command.before.capacity!=capacity||native.command.after.capacity!=capacity)return false;
+    if(native.ready)for(const auto& branch:native.ready->branches)if(branch.profileKey!=row.key)return false;
+    return true;
 }
 bool NativeHand(const Bc2PhysicalPistolSlideSample& s)noexcept {
     return s.input.owner.actor==((std::uint64_t(s.owner.weak)<<32)|s.owner.soldier)&&
@@ -67,13 +87,14 @@ struct Bc2PhysicalPistolSlide::State {
     // relaxed atomic observations are not a coherent native/chamber snapshot.
     struct Diagnostics {
         std::atomic<std::uint64_t> ticks=0,transitions=0,blocked=0,debt=0,pending=0,claims=0,gaps=0,suspends=0;
-        std::atomic<std::uint64_t> releaseAttempts=0,releaseRefusals=0,lastEvent=0;
+        std::atomic<std::uint64_t> releaseAttempts=0,releaseRefusals=0,lastEvent=0,registrationKey=0,lastSelectedKey=0;
         std::atomic<SlideExit> reason=SlideExit::None,lastIssue=SlideExit::None;
         std::atomic<unsigned> flags=0,status=0,lastFailure=0,asset=0,eventKind=0,lastIssueFlags=0,lastIssueStatus=0;
-        std::atomic<bool> selectedBefore=false;
         std::atomic<int> loaded=-1,reserve=-1,capacity=-1;
     } diagnostics;
     struct Equipment {
+        explicit Equipment(const Bc2PistolSlideRegistration& row)noexcept:registration(row){}
+        const Bc2PistolSlideRegistration& registration;
         AmmoResourceBinding original{};
         ReloadHoldIdentity identity{};
         PistolAfterFeedPolicy policy;
@@ -114,10 +135,15 @@ struct Bc2PhysicalPistolSlide::State {
                 diagnostics.capacity.store(v.admission.counts.capacity,std::memory_order_relaxed);}
             if(Retired(v.identity)||v.kind==PistolAfterFeedEventKind::ActorRetired)continue;
             auto* e=Find(v.command.context.resource);
+            const auto* row=ResolveBc2PistolSlideRegistration(v.profileKey);
+            if(!row||(e&&e->registration.key!=row->key)||
+               v.admission.counts.capacity!=row->configuration.values.baseCapacity||
+               v.command.before.capacity!=row->configuration.values.baseCapacity||
+               v.command.after.capacity!=row->configuration.values.baseCapacity){if(e)e->gap=true;continue;}
             if(!e){for(auto& slot:equipment)if(!slot){try{
-                slot=std::make_unique<Equipment>();e=slot.get();e->original=v.request.binding;e->identity=v.identity;
-                e->mechanism={bc2_pistol_slide_profile_detail::Mp443ModPolicy.id,v.command.context.resource.weaponGeneration};
-                const auto profile=BuildBc2Mp443ModSlideProfile(bc2_pistol_slide_profile_detail::Mp443Geometry.selection);
+                slot=std::make_unique<Equipment>(*row);e=slot.get();e->original=v.request.binding;e->identity=v.identity;
+                e->mechanism={row->interaction->id,v.command.context.resource.weaponGeneration};
+                const auto profile=BuildBc2PistolSlideProfile(*row);
                 e->gap=eventGap||v.kind!=PistolAfterFeedEventKind::Admitted||!profile||
                     !PistolAfterFeedContextMatches(v.command.context,v.identity)||v.request.binding.context!=v.command.context||
                     !e->policy.Bind({v.admission,v.initialPolicyReadyVerified},v.admission.observedNs)||
@@ -191,17 +217,20 @@ void Bc2PhysicalPistolSlide::Suspend(const HandInteractionSample& input,HandInte
 }
 bool Bc2PhysicalPistolSlide::BlocksFire(const ReloadStateOwner& owner,const WeaponEquipmentIdentity& equipment,
     const std::optional<AmmoResourceBinding>& binding)const noexcept {
-    if(!state_||!binding||!Current(owner,equipment,*binding))return false;
-    for(const auto& e:state_->equipment)if(e&&SameItem(e->original,*binding))return e->Blocked();return false;
+    if(!state_||!binding)return false;
+    for(const auto& e:state_->equipment)if(e&&SameItem(e->original,*binding)&&
+        Current(owner,equipment,*binding,e->registration))return e->Blocked();return false;
 }
 Bc2PhysicalPistolSlideResult Bc2PhysicalPistolSlide::Tick(const Bc2PhysicalPistolSlideSample& s,
     HandInteraction& hands,std::uint64_t& intent)noexcept {
     Bc2PhysicalPistolSlideResult out;if(!state_)return out;auto& state=*state_;const auto now=s.input.nowNs;
     state.Events(s.input,hands);state.Retirements(s.input,hands);
     State::Equipment* e=nullptr;
-    if(s.equipment&&s.binding&&Current(s.owner,*s.equipment,*s.binding)){
-        e=state.Find(s.binding->context.resource);if(e&&!SameItem(e->original,*s.binding))e=nullptr;
+    if(s.equipment&&s.binding){
+        e=state.Find(s.binding->context.resource);
+        if(e&&(!SameItem(e->original,*s.binding)||!Current(s.owner,*s.equipment,*s.binding,e->registration)))e=nullptr;
     }
+    const auto* registration=e?&e->registration:Selection(s);
     const auto finish=[&](SlideExit reason){if(e){out.evidenceGap=out.evidenceGap||e->gap;out.blocksFire=e->Blocked()||out.evidenceGap;
         out.pending=e->policy.Pending().has_value()||e->nativePending;out.blocksEquipment=out.pending||out.ownsHand;
         out.phase=e->policy.Phase();out.releaseRefused=e->releaseRefused;}
@@ -215,18 +244,19 @@ Bc2PhysicalPistolSlideResult Bc2PhysicalPistolSlide::Tick(const Bc2PhysicalPisto
         changed=(d.status.exchange(status,std::memory_order_relaxed)!=status)||changed;
         if(changed)d.transitions.fetch_add(1,std::memory_order_relaxed);
         if(out.failure!=PistolSlideFailure::None)d.lastFailure.store(unsigned(out.failure),std::memory_order_relaxed);
-        const unsigned asset=s.asset.empty()?0:s.asset==bc2_pistol_slide_profile_detail::Mp443Geometry.selection.asset?1:2;
+        const unsigned asset=s.asset.empty()?0:SupportedAsset(s.asset)?1:2;
         d.asset.store(asset,std::memory_order_relaxed);
+        d.registrationKey.store(registration?registration->key:0,std::memory_order_relaxed);
         auto issue=reason;
         if(reason==SlideExit::Updated){
             if(out.failure!=PistolSlideFailure::None)issue=SlideExit::MotionFailure;
             else if(flags&2)issue=SlideExit::Blocked;
         }
-        // Preserve the last MP443 refusal/debt across stow and other weapons,
-        // including a refused binding/selection for a requested MP443 asset.
+        // Preserve supported-profile refusal/debt across stow and other weapons,
+        // including a refused binding/selection for a registered asset.
         if(asset==1&&issue!=SlideExit::Updated){d.lastIssue.store(issue,std::memory_order_relaxed);
             d.lastIssueFlags.store(flags,std::memory_order_relaxed);d.lastIssueStatus.store(status,std::memory_order_relaxed);}
-        if(out.selected)d.selectedBefore.store(true,std::memory_order_relaxed);
+        if(out.selected&&registration)d.lastSelectedKey.store(registration->key,std::memory_order_relaxed);
         d.ticks.fetch_add(1,std::memory_order_relaxed);
         if(flags&2)d.blocked.fetch_add(1,std::memory_order_relaxed);
         if(flags&4)d.pending.fetch_add(1,std::memory_order_relaxed);
@@ -242,8 +272,13 @@ Bc2PhysicalPistolSlideResult Bc2PhysicalPistolSlide::Tick(const Bc2PhysicalPisto
     if(!recorded&&s.input.sequence){state.packets[state.nextPacket]={s.owner,s.input,s.weapon,s.binding,s.equipment,
         hands.Current(InteractionHand::Right),s.previousLeft,s.lifecycle,s.grip};state.nextPacket=(state.nextPacket+1)%state.packets.size();}
     const auto native=s.binding?state.api.read(state.api.context,s.binding->context.resource,now):std::nullopt;
-    if(e&&native&&native->resource==e->original.context.resource){e->nativeBlocked=native->blocksFire;e->nativePending=native->pending;}
-    if(!Selected(s)){Suspend(s.input,hands);if(!e&&native)out.blocksFire=native->blocksFire;return finish(SlideExit::SelectionUnverified);}
+    if(native&&registration&&!NativeProfile(*native,*s.binding,*registration)){
+        if(e)e->gap=true;Suspend(s.input,hands);out.blocksFire=true;out.evidenceGap=true;
+        return finish(SlideExit::ProfileUnverified);
+    }
+    if(e&&native){e->nativeBlocked=native->blocksFire;e->nativePending=native->pending;}
+    if(!registration||!Selected(s,*registration)){
+        Suspend(s.input,hands);if(!e&&native)out.blocksFire=native->blocksFire;return finish(SlideExit::SelectionUnverified);}
     out.selected=true;
     if(!e){if(native){out.blocksFire=native->blocksFire;out.pending=native->pending;out.blocksEquipment=out.pending;
         out.evidenceGap=state.eventGap||native->blocksFire;}return finish(SlideExit::OwnerUnavailable);}
@@ -284,7 +319,7 @@ Bc2PhysicalPistolSlideResult Bc2PhysicalPistolSlide::Tick(const Bc2PhysicalPisto
        source->gun->token!=gun->token||gun->token.kind!=HandClaimKind::GunHold||gun->token.hand!=InteractionHand::Right||
        gun->token.owner!=s.input.owner||gun->token.item!=s.weapon||gun->token.prerequisiteClaim||gun->deadlineNs<=now||
        source->gun->inputSequence!=source->input.sequence||source->gun->deadlineNs<=now||
-       !Current(source->owner,*source->equipment,*source->binding)||!SameItem(*source->binding,*s.binding)||
+       !Current(source->owner,*source->equipment,*source->binding,e->registration)||!SameItem(*source->binding,*s.binding)||
        source->binding->context!=e->policy.Context()||source->binding->observedNs>source->input.nowNs||
        !AmmoResourceBindingFresh(*source->binding,source->owner,now)||!Window(source->input,now)){
         e->policy.Suspend(s.input,hands);return finish(SlideExit::SourceUnverified);}
@@ -313,8 +348,9 @@ Bc2PhysicalPistolSlideResult Bc2PhysicalPistolSlide::Tick(const Bc2PhysicalPisto
             if(Bc2PistolSlideSourceFresh(raw,raw.input,raw.gunClaim,raw.mechanismClaim,raw.rig,now))try{
                 auto p=std::make_shared<Bc2PhysicalPistolSlidePresentation>();p->owner=s.owner;p->source=raw;
                 p->currentSafety=s.input;p->currentGun=*currentGun;p->currentMechanism=*mechanism;
-                p->selection=bc2_pistol_slide_profile_detail::Mp443Geometry.selection;p->target=*result.target;p->revision=++e->revision;
-                p->signedDisplacementMeters=bc2_pistol_slide_profile_detail::Mp443ModPolicy.sourceDisplacementMeters+result.target->travel;
+                p->selection=e->registration.geometry->selection;p->registrationKey=e->registration.key;
+                p->target=*result.target;p->revision=++e->revision;
+                p->signedDisplacementMeters=e->registration.interaction->sourceDisplacementMeters+result.target->travel;
                 p->blocksFire=e->Blocked();out.presentation=std::move(p);
             }catch(...){}
         }
@@ -326,7 +362,7 @@ void Bc2PhysicalPistolSlide::Report(std::ostream& out)const {
     const auto& d=state_->diagnostics;const auto flags=d.flags.load(std::memory_order_relaxed);
     const auto status=d.status.load(std::memory_order_relaxed),asset=d.asset.load(std::memory_order_relaxed);
     const auto issueStatus=d.lastIssueStatus.load(std::memory_order_relaxed);
-    const auto name=bc2_pistol_slide_profile_detail::Mp443Geometry.selection.asset;
+    const auto lastSelectedKey=d.lastSelectedKey.load(std::memory_order_relaxed);
     out<<"{\"observations\":\"independent_atomics_not_native_or_chamber_proof\",\"ticks\":"<<d.ticks.load(std::memory_order_relaxed)
        <<",\"transitions\":"<<d.transitions.load(std::memory_order_relaxed)<<",\"blocked_ticks\":"<<d.blocked.load(std::memory_order_relaxed)
        <<",\"owed_ticks\":"<<d.debt.load(std::memory_order_relaxed)<<",\"pending_ticks\":"<<d.pending.load(std::memory_order_relaxed)
@@ -334,9 +370,11 @@ void Bc2PhysicalPistolSlide::Report(std::ostream& out)const {
        <<",\"suspends\":"<<d.suspends.load(std::memory_order_relaxed)<<",\"release_attempts\":"<<d.releaseAttempts.load(std::memory_order_relaxed)
        <<",\"release_refusals\":"<<d.releaseRefusals.load(std::memory_order_relaxed)
        <<",\"latest_tick\":{\"reason\":\""<<SlideExitName(d.reason.load(std::memory_order_relaxed))
-       <<"\",\"asset_class\":\""<<(asset==1?name:asset==2?std::string_view("other"):std::string_view("none"))
-       <<"\",\"last_selected_asset\":\""<<(d.selectedBefore.load(std::memory_order_relaxed)?name:std::string_view("none"))
-       <<"\",\"selected\":"<<((flags&1)?"true":"false")<<",\"blocked\":"<<((flags&2)?"true":"false")
+       <<"\",\"asset_class\":\""<<(asset==1?"registered_slide":asset==2?"other":"none")
+       <<"\",\"registration_key\":"<<d.registrationKey.load(std::memory_order_relaxed)
+       <<",\"last_selected_asset\":\""<<(lastSelectedKey?"registered_slide":"none")
+       <<"\",\"last_selected_registration_key\":"<<lastSelectedKey
+       <<",\"selected\":"<<((flags&1)?"true":"false")<<",\"blocked\":"<<((flags&2)?"true":"false")
        <<",\"pending\":"<<((flags&4)?"true":"false")<<",\"claim\":"<<((flags&8)?"true":"false")
        <<",\"evidence_gap\":"<<((flags&16)?"true":"false")<<",\"release_refused\":"<<((flags&32)?"true":"false")
        <<",\"owed\":"<<((flags&64)?"true":"false")<<",\"phase_id\":"<<(status&255)<<",\"failure_id\":"<<(status>>8)

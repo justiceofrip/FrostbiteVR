@@ -9,21 +9,22 @@
 
 namespace fvr::bc2 {
 // Mod-owned local poses. This is presentation intent, never native cover,
-// chamber, ammunition, or firing-state evidence. All four belt bones remain
-// independently articulated; the pouch is a separate object.
+// chamber, ammunition, or firing-state evidence. Each selected chain bone
+// remains independently articulated; the pouch is a separate object.
 struct Bc2PhysicalFeedPresentation {
     ReloadStateOwner owner{};
     RigIdentity rig{};
     interaction::HandInteractionSample input{};
     interaction::HandInteractionKey weapon{};
     interaction::FeedSupplyKey supply{};
-    std::uint64_t lifetime=0,revision=0,rigFingerprint=0;
+    std::uint64_t lifetime=0,revision=0,rigFingerprint=0,registrationKey=0;
     math::Matrix4 weaponFromPouch{},weaponFromCoverHinge{};
-    std::array<math::Matrix4,4> weaponFromChain{};
-    // Bits: pouch=1, cover=2, chain0..3=4,8,16,32. Cover is always attached.
+    std::array<math::Matrix4,MaxBc2FeedChainBones> weaponFromChain{};
+    unsigned chainCount=0;
+    // Bits: pouch=1, cover=2, then active chain bones. Cover is always attached.
     // Carried parts use their retained original basis; attached parts use the
     // current placed weapon. Neither release nor a pending receipt erases it.
-    std::uint8_t carriedPartsMask=0;
+    std::uint16_t carriedPartsMask=0;
     math::Matrix4 pouchCarryWeaponWorldMeters{},chainCarryWeaponWorldMeters{};
     math::Matrix4 originalWeaponWorldMeters{};
     std::optional<math::Matrix4> mechanismWristWorldMeters;
@@ -74,8 +75,6 @@ struct Bc2PhysicalFeedResult {
     interaction::HandInteractionReason handReason=interaction::HandInteractionReason::None;
     std::shared_ptr<const Bc2PhysicalFeedPresentation> presentation;
 };
-// Explicit M60 interaction-policy tolerances, not measured authored tolerances.
-Bc2FeedInteractionPolicy Bc2M60FeedInteractionPolicy()noexcept;
 class Bc2PhysicalFeed {
 public:
     explicit Bc2PhysicalFeed(Bc2PhysicalFeedApi api={})noexcept;

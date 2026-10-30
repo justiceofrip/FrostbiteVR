@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param([ValidateSet('x86','x64')][string]$Architecture,
-      [ValidateSet('Anchor','Input','GameplaySyntax','NativeSyntax','ReloadSyntax','RigSyntax','Sight','Scope','Grip','Configuration','Carried','Observation','Muzzle','FeedMechanism','FeedReload','FeedInteraction','FeedReloadSession','FeedAmmunition','FeedEquipmentSession','PhysicalPistolSlide','Bc2FeedEquipmentAdapter','Bc2FeedEquipmentProfile','Bc2PhysicalFeed','Bc2FeedPresentation','PistolAfterFeedPolicy','Bc2PistolSlideProfile','Bc2PistolSlidePresentation','Bc2PistolAfterFeedEvidence','Bc2PistolAfterFeedInput','Bc2PhysicalPistolSlide')][string]$Suite,
-      [ValidateSet('coordinator-20261029-polish11','coordinator-20261029-work12','coordinator-20261029-work13','coordinator-20261030-implementation15','coordinator-20261030-implementation17','coordinator-20261030-implementation18','coordinator-20261030-implementation22','coordinator-20261030-continuation26')][string]$ReportRun='coordinator-20261029-polish11',
+      [ValidateSet('Anchor','Input','GameplaySyntax','NativeSyntax','ReloadSyntax','RigSyntax','Sight','Scope','Grip','Configuration','Carried','Observation','Muzzle','FeedMechanism','FeedReload','FeedInteraction','FeedReloadSession','FeedAmmunition','FeedEquipmentSession','PhysicalPistolSlide','Bc2FeedEquipmentAdapter','Bc2FeedEquipmentProfile','Bc2PhysicalFeed','Bc2FeedPresentation','PistolAfterFeedPolicy','Bc2PistolSlideProfile','Bc2PistolSlidePresentation','Bc2PistolAfterFeedEvidence','Bc2PistolAfterFeedInput','Bc2PhysicalPistolSlide','MechanismRegistryGenerated','MechanismFamilyData')][string]$Suite,
+      [ValidateSet('coordinator-20261029-polish11','coordinator-20261029-work12','coordinator-20261029-work13','coordinator-20261030-implementation15','coordinator-20261030-implementation17','coordinator-20261030-implementation18','coordinator-20261030-implementation22','coordinator-20261030-continuation26','coordinator-20261030-pipeline34')][string]$ReportRun='coordinator-20261029-polish11',
       [Parameter(Mandatory)][string]$OutputPath)
 $ErrorActionPreference='Stop'
 $PSNativeCommandUseErrorActionPreference=$false
@@ -42,12 +42,32 @@ if($Suite -in @('GameplaySyntax','NativeSyntax','ReloadSyntax','RigSyntax')) {
 } else {
     $test=switch($Suite){'Anchor'{'TrackedBodyAnchorTests'}'Input'{'Bc2InputBindingTests'}'Sight'{'Bc2SightAdapterTests'}'Scope'{'Bc2SelectedMeshes1pTests'}'Grip'{'TrackedRigTests'}'Configuration'{'Bc2SelectedConfigurationPathTests'}'Carried'{'Bc2CarriedMeshesTests'}'Observation'{'Bc2SelectedMeshesObservationTests'}'Muzzle'{'Bc2MuzzleAdmissionTests'}default{$Suite+'Tests'}}
     $inputs.Add((Join-Path $work ('tests/'+$test+'.cpp')))
+    if($Suite -eq 'MechanismRegistryGenerated'){
+        $inputs.Clear()
+        $fixture=Join-Path $reportRoot 'generated-fixture'
+        $inputs.Add((Join-Path $fixture 'consumer.cpp'))
+        $inputs.Add((Join-Path $work 'src/games/bc2/Bc2FeedRegistry.cpp'))
+        $inputs.Add((Join-Path $work 'src/games/bc2/Bc2PistolSlideRegistry.cpp'))
+        $arguments+=@('/DFVR_BC2_FEED_REGISTRY_HEADER="Feed.generated.h"','/DFVR_BC2_PISTOL_SLIDE_REGISTRY_HEADER="Slide.generated.h"',('/I'+$fixture))
+    }
+    if($Suite -eq 'MechanismFamilyData'){
+        $inputs.Clear()
+        $fixture=Join-Path $reportRoot 'family-batch'
+        $inputs.Add((Join-Path $fixture 'consumer.cpp'))
+        $arguments+=('/I'+$fixture)
+    }
     if($Suite -eq 'Input'){$inputs.Add((Join-Path $work 'src/games/bc2/Bc2InputBinding.cpp'))}
     if($Suite -in @('Scope','Configuration','Carried','Observation')){$inputs.Add((Join-Path $work 'src/games/bc2/Bc2SelectedMeshes1p.cpp'))}
     if($Suite -in @('Carried','Observation')){$inputs.Add((Join-Path $work 'src/games/bc2/Bc2SelectedMeshesObservation.cpp'))}
     if($Suite -eq 'Grip'){$inputs.Add((Join-Path $work 'src/interaction/TrackedRig.cpp'))}
     if($Suite -eq 'Bc2PhysicalFeed'){$inputs.Add((Join-Path $work 'src/games/bc2/Bc2PhysicalFeed.cpp'))}
     if($Suite -eq 'Bc2PhysicalPistolSlide'){$inputs.Add((Join-Path $work 'src/games/bc2/Bc2PhysicalPistolSlide.cpp'))}
+    if($Suite -in @('Bc2FeedEquipmentAdapter','Bc2FeedEquipmentProfile','Bc2PhysicalFeed','Bc2FeedPresentation')){
+        $inputs.Add((Join-Path $work 'src/games/bc2/Bc2FeedRegistry.cpp'))
+    }
+    if($Suite -in @('Bc2PistolSlideProfile','Bc2PistolSlidePresentation','Bc2PistolAfterFeedEvidence','Bc2PistolAfterFeedInput','Bc2PhysicalPistolSlide')){
+        $inputs.Add((Join-Path $work 'src/games/bc2/Bc2PistolSlideRegistry.cpp'))
+    }
     $arguments+=$inputs.ToArray()+@('/Fe:check.exe','/link')
     foreach($library in @('FvrCore.lib','BC2Camera.lib','BC2Profile.lib','FrostbiteDiscovery.lib','FrostbiteCamera.lib')){
         $arguments+=(Join-Path $canonical ('build/'+$Architecture+'/'+$library))
@@ -67,6 +87,12 @@ if($Suite -in @('FeedMechanism','FeedReload','FeedInteraction','FeedReloadSessio
     }
 }
 $dependencies=@($dependencyNames|ForEach-Object {$path=Join-Path $work $_;@{path=$path;sha256=(Get-FileHash -LiteralPath $path).Hash.ToLowerInvariant()}})
+if($Suite -eq 'MechanismRegistryGenerated'){
+    $dependencies=@('src/games/bc2/Bc2FeedEquipmentProfile.h','src/games/bc2/Bc2PistolSlideProfile.h','reports/coordinator-20261030-pipeline34/generated-fixture/Feed.generated.h','reports/coordinator-20261030-pipeline34/generated-fixture/Slide.generated.h'|ForEach-Object {$path=Join-Path $work $_;@{path=$path;sha256=(Get-FileHash -LiteralPath $path).Hash.ToLowerInvariant()}})
+}
+if($Suite -eq 'MechanismFamilyData'){
+    $dependencies=@('src/games/bc2/Bc2FeedEquipmentProfile.h','src/games/bc2/Bc2PistolSlideProfile.h','reports/coordinator-20261030-pipeline34/family-batch/Feed.candidates.h','reports/coordinator-20261030-pipeline34/family-batch/Slide.candidates.h'|ForEach-Object {$path=Join-Path $work $_;@{path=$path;sha256=(Get-FileHash -LiteralPath $path).Hash.ToLowerInvariant()}})
+}
 if($Suite -eq 'PhysicalPistolSlide') {
     $dependencies=@('include/fvr/interaction/PhysicalPistolSlide.h','include/fvr/interaction/WeaponMechanism.h','include/fvr/interaction/HandInteraction.h','tests/Test.h'|ForEach-Object {$path=Join-Path $work $_;@{path=$path;sha256=(Get-FileHash -LiteralPath $path).Hash.ToLowerInvariant()}})
 }

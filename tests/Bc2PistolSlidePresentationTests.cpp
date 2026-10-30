@@ -121,31 +121,31 @@ int NonRigidSourcesAndInvalidNativeScaleFailClosed(){
 }
 int StructuralFixtureNeverGrantsProductionBinding(){
     using namespace bc2_pistol_slide_presentation_detail;
-    auto r=Rig();CHECK(Topology(r));CHECK(!BindBc2PistolSlide(r,Geometry().selection));
+    auto r=Rig();CHECK(Topology(r,Geometry()));CHECK(!BindBc2PistolSlide(r,Geometry().selection));
     const Bc2PistolSlideBinding forged{r.identity,Geometry().selection.rigFingerprint,30};
     CHECK(!BuildBc2PistolSlideWrite(forged,r,Identity()));
-    r.parents[30]=0;CHECK(!Topology(r));r=Rig();
-    r.parents[31]=30;CHECK(!Topology(r));r=Rig();
-    r.names[31]="jntWpn_3";CHECK(!Topology(r));r=Rig();
-    r.names[31]="jntWpn_1";CHECK(!Topology(r));r=Rig();
-    r.nativeHiddenLeaves={30};CHECK(!Topology(r));r=Rig();
-    r.parents[50]=51;r.parents[51]=50;CHECK(!Topology(r));r=Rig();
-    r.parents[50]=171;CHECK(!Topology(r));r=Rig();
-    r.inverseBind.pop_back();CHECK(!Topology(r));return 0;
+    r.parents[30]=0;CHECK(!Topology(r,Geometry()));r=Rig();
+    r.parents[31]=30;CHECK(!Topology(r,Geometry()));r=Rig();
+    r.names[31]="jntWpn_3";CHECK(!Topology(r,Geometry()));r=Rig();
+    r.names[31]="jntWpn_1";CHECK(!Topology(r,Geometry()));r=Rig();
+    r.nativeHiddenLeaves={30};CHECK(!Topology(r,Geometry()));r=Rig();
+    r.parents[50]=51;r.parents[51]=50;CHECK(!Topology(r,Geometry()));r=Rig();
+    r.parents[50]=171;CHECK(!Topology(r,Geometry()));r=Rig();
+    r.inverseBind.pop_back();CHECK(!Topology(r,Geometry()));return 0;
 }
 int LeafTargetIsIndependentOfPreviousOverrides(){
     using namespace bc2_pistol_slide_presentation_detail;
     auto r=Rig();r.evaluatedWorld[10].values[3][0]=8;r.evaluatedWorld[42].values[3][2]=.7f;
     const auto source=Source();const auto frames=ComposeBc2PistolSlideWorldFrames(Geometry().selection,source,source.originalWeaponWorldMeters,.04f,1,source.input.nowNs);
     CHECK(frames);const auto before=r.evaluatedWorld;
-    const auto first=LeafWrite(r,frames->slide);CHECK(first&&first->index==30&&Same(first->transform,frames->slide));
+    const auto first=LeafWrite(r,Geometry(),frames->slide);CHECK(first&&first->index==30&&Same(first->transform,frames->slide));
     for(unsigned i=0;i<before.size();++i)CHECK(Same(before[i],r.evaluatedWorld[i]));
     // A dirty prior leaf, changed native recoil and unrelated animation do not
     // feed back into the absolute accepted target. This is not a restore test.
     r.evaluatedWorld[30]={};r.evaluatedWorld[10].values[3][0]=20;r.evaluatedWorld[42].values[3][2]=-.4f;
-    const auto second=LeafWrite(r,frames->slide);CHECK(second&&Same(first->transform,second->transform));
+    const auto second=LeafWrite(r,Geometry(),frames->slide);CHECK(second&&Same(first->transform,second->transform));
     CHECK(r.evaluatedWorld[10].values[3][0]==20&&r.evaluatedWorld[42].values[3][2]==-.4f);
-    auto nonrigid=frames->slide;nonrigid.values[1][1]=2;CHECK(!LeafWrite(r,nonrigid));return 0;
+    auto nonrigid=frames->slide;nonrigid.values[1][1]=2;CHECK(!LeafWrite(r,Geometry(),nonrigid));return 0;
 }
 int PlacedWeaponMovesAttachedSlideWithoutChangingGestureSource(){
     const auto source=Source();const auto raw=Bc2PistolSlideRawWristInWeapon(source);CHECK(raw);
@@ -232,6 +232,66 @@ int SelectedConfigurationAndOriginalLeaseMustSurvive(){
     ++current.configurationPathPointer;
     CHECK(!Bc2PistolSlideSelectedRetained(selected,current,owner,selection,equipment,21,source.input.nowNs));return 0;
 }
+int SyntheticRowOwnsAxisWristTopologyAndBindingKey(){
+    // Artificial geometry proves the shared code consumes the selected row.
+    // None of these names, positions or native values enroll a real weapon.
+    auto rig=Rig();rig.identity.count=6;rig.weaponBone=2;
+    rig.names={"fixture0","fixture1","fixtureRoot","fixture3","fixtureSlide","fixture5"};
+    rig.parents={-1,0,0,0,2,0};rig.evaluatedWorld.assign(6,Identity());rig.inverseBind.assign(6,Identity());
+    Bc2PistolSlideGeometry geometry{
+        {"SyntheticPistol2","fixture/pistol/second","22222222-2222-2222-2222-222222222222",
+         "2222222222222222222222222222222222222222222222222222222222222222","fixture/mesh/second",
+         SightRigFingerprint(rig.names,rig.parents,rig.inverseBind)},
+        "fixture/geometry","3333333333333333333333333333333333333333333333333333333333333333",
+        "fixture/roles","4444444444444444444444444444444444444444444444444444444444444444",
+        "fixtureRoot","fixtureSlide",2,4,
+        bc2_pistol_slide_profile_detail::Frame({1,0,0,0,0,1,0,0,0,0,1,0,.2f,.1f,-.3f,1}),
+        bc2_pistol_slide_profile_detail::Frame({1,0,0,0,0,1,0,0,0,0,1,0,.01f,.02f,.03f,1}),
+        {1,0,0},{-.1f,-.1f,-.1f},{.1f,.1f,.1f},{.01f,0,0},{0,0,0},-.005,.055,1.5,.01,false,false,false};
+    const Bc2PistolSlideInteractionPolicy policy{
+        "Synthetic second policy","fixture/contact",0x53594e5448455432ull,2,
+        .002f,.04f,.001f,.002f,.0005f,.02f,.015f,.25f,.02f,20000000,5000000000ll};
+    const std::array<ReloadTimingWord,6> timing{{{0x10,std::bit_cast<std::uint32_t>(.4f)},{0x14,0},
+        {0x18,std::bit_cast<std::uint32_t>(2.f)},{0x20,1},{0x24,0},{0x2c,0}}};
+    const Bc2PistolSlideRegistration row{
+        0x2222222222222222ull,"2222222222222222222222222222222222222222222222222222222222222222",
+        &geometry,&policy,{"SyntheticPistol2","fixture/pistol/second",{0,1,8,29,9,2,0,2,.4f,0,0,0,false,false},
+            timing,ReloadDescriptorAdmission::ReviewedNative},Bc2PistolSlideNativeClass::SingleFireMagazineZeroBolt,true,true};
+    const std::array rows{bc2_pistol_slide_profile_detail::Mp443Registration,row};
+    const auto* selected=FindBc2PistolSlideRegistration(rows,geometry.selection);CHECK(selected==&rows[1]);
+    const auto profile=BuildBc2PistolSlideProfile(*selected);CHECK(profile);
+    auto source=Source();source.rig=rig.identity;source.mechanism.id=profile->id;
+    source.mechanismClaim.token.contact=source.mechanism;source.rawSourceWorldMeters=profile->closedContact;
+    const auto originalRaw=source.rawSourceWorldMeters;
+    CHECK(Fresh(source));const auto binding=BindBc2PistolSlide(rig,*selected);CHECK(binding);
+    CHECK(binding->leaf==4&&binding->profileKey==row.key&&binding->fingerprint==geometry.selection.rigFingerprint);
+    CHECK(!BindBc2PistolSlide(rig,Geometry().selection));
+    auto placed=Identity();placed.values[3][0]=2;placed.values[3][1]=3;placed.values[3][2]=4;
+    const auto frames=ComposeBc2PistolSlideWorldFrames(*selected,source,placed,.032f,100,source.input.nowNs);CHECK(frames);
+    CHECK(Near(frames->slide.values[3][0],223.2f,.0001f)&&Near(frames->slide.values[3][1],310.f,.0001f)&&
+        Near(frames->slide.values[3][2],370.f,.0001f));
+    CHECK(Near(frames->authoredWrist.values[3][0],224.2f,.0001f)&&Near(frames->authoredWrist.values[3][1],312.f,.0001f)&&
+        Near(frames->authoredWrist.values[3][2],373.f,.0001f));
+    CHECK(Same(source.rawSourceWorldMeters,originalRaw));
+    const auto before=rig.evaluatedWorld;const auto write=BuildBc2PistolSlideWrite(*selected,*binding,rig,frames->slide);
+    CHECK(write&&write->index==4&&Same(write->transform,frames->slide));
+    for(std::size_t i=0;i<before.size();++i)CHECK(Same(before[i],rig.evaluatedWorld[i]));
+    CHECK(!BuildBc2PistolSlideWrite(rows[0],*binding,rig,frames->slide));
+    // The production resolver cannot silently enroll this fixture's key.
+    CHECK(!BuildBc2PistolSlideWrite(*binding,rig,frames->slide));
+    auto changed=*binding;++changed.profileKey;CHECK(!BuildBc2PistolSlideWrite(*selected,changed,rig,frames->slide));
+    const auto owner=Owner(source);PistolAfterFeedTarget target;
+    target.context={{owner.soldier,owner.actorGeneration,owner.weapon,source.mechanism.generation},owner.equipGeneration,owner.space};
+    target.feedRequest=50;target.inputSequence=source.input.sequence;target.mechanism=source.mechanismClaim.token;
+    target.gun=source.gunClaim.token;target.contact=profile->closedContact;target.travel=.03f;target.contact.values[3][0]+=.03f;
+    target.observedNs=source.input.observedNs;target.deadlineNs=source.input.deadlineNs;
+    const float displacement=policy.sourceDisplacementMeters+target.travel;
+    CHECK(Bc2PistolSlideTargetFresh(source,owner,*selected,target,displacement,source.input.nowNs));
+    CHECK(!Bc2PistolSlideTargetFresh(source,owner,rows[0],target,displacement,source.input.nowNs));
+    CHECK(!Bc2PistolSlideTargetFresh(source,owner,*selected,target,target.travel,source.input.nowNs));
+    rig.parents[4]=0;CHECK(!BindBc2PistolSlide(rig,*selected));
+    CHECK(!BuildBc2PistolSlideWrite(*selected,*binding,rig,frames->slide));return 0;
+}
 }
 int main(){
     CHECK(OriginalInputAndClaimsCannotBeRenewedByNewPackets()==0);
@@ -244,5 +304,6 @@ int main(){
     CHECK(NewSourceConfirmsOriginalLeaseWithoutRestampingIt()==0);
     CHECK(TypedTargetCannotBorrowAnotherFeedClaimOrGeometry()==0);
     CHECK(SelectedConfigurationAndOriginalLeaseMustSurvive()==0);
-    std::puts("Bc2PistolSlidePresentationTests: 10 source/custody/selection/geometry/scale/leaf groups; no native/headset acceptance");
+    CHECK(SyntheticRowOwnsAxisWristTopologyAndBindingKey()==0);
+    std::puts("Bc2PistolSlidePresentationTests: 11 source/custody/selection/geometry/scale/leaf groups; synthetic fixture is not enrollment; no native/headset acceptance");
 }

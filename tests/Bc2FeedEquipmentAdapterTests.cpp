@@ -44,8 +44,8 @@ struct Fixture {
         if(!adapter.PublishGate({source->binding.context.resource,10,1,false,true},now))return false;
         submission.source=*source;
         auto& g=submission.geometry;auto& p=g.profile;
-        p.family=FeedFamily::Belt;p.id=11;p.revision=2;p.ammunitionKind=3;p.maxAgeNs=100*Ms;
-        p.cover=p.container=true;p.contacts[0]={10,.03f,.1f};p.contacts[2]={12,.03f,.1f};p.contacts[3]={13,.03f,.1f};
+        const auto* registration=FindBc2FeedRegistration(config);if(!registration)return false;
+        p=registration->mechanism;g.registrationKey=registration->key;
         g.rigFingerprint=FeedEquipmentM60RigFingerprint;g.inputSequence=50;g.observedNs=now;g.deadlineNs=now+90*Ms;g.selectedRigVerified=true;
         auto& motion=g.motion;motion.operation=operation;motion.kind=FeedMotionKind::Hinge;motion.measured=true;
         motion.weaponFromMotion=Pose();motion.motionFromContact=Pose(.2f);motion.travel=-1.5f;
@@ -123,6 +123,8 @@ int AttachmentRefillKeepsTheExactPartialSupply(){
 int UnsupportedAndWrongProvenanceStayUnavailable(){
     Fixture f;CHECK(f.Setup());const auto original=f.submission;
     auto bad=original;bad.geometry.selectedRigVerified=false;CHECK(!f.adapter.Submit(bad,f.now));
+    bad=original;bad.geometry.registrationKey^=1;CHECK(!f.adapter.Submit(bad,f.now));
+    bad=original;bad.geometry.profile.maxAgeNs++;CHECK(!f.adapter.Submit(bad,f.now));
     bad=original;bad.geometry.rigFingerprint^=1;CHECK(!f.adapter.Submit(bad,f.now));
     bad=original;bad.geometry.inputSequence++;CHECK(!f.adapter.Submit(bad,f.now));
     bad=original;bad.geometry.motion.measured=false;CHECK(!f.adapter.Submit(bad,f.now));

@@ -15,6 +15,7 @@ struct Bc2PhysicalPistolSlidePresentation {
     interaction::HandInteractionSample currentSafety{};
     interaction::HandClaim currentGun{},currentMechanism{};
     Bc2PistolSlideSelection selection{};
+    std::uint64_t registrationKey=0;
     interaction::PistolAfterFeedTarget target{};
     std::uint64_t revision=0;
     float signedDisplacementMeters=0;

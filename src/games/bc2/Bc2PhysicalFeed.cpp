@@ -8,7 +8,6 @@ namespace {
 using namespace interaction;
 using namespace feed_interaction_detail;
 using feed_mechanism_detail::Pose;
-constexpr std::uint64_t ProfileId=0x4d363046454544ull;
 enum class FeedExit:unsigned {None,Updated,ApiUnavailable,ViewUnavailable,SelectionOrInput,
     StorageUnavailable,MigrationUnverified,GunOrRawUnverified,LifetimeExhausted,SessionUnavailable,Blocked,PolicyStatus};
 const char* FeedExitName(FeedExit reason)noexcept {
@@ -31,14 +30,15 @@ std::uint64_t Lifetime()noexcept {
     while(old!=UINT64_MAX)if(nextLifetime.compare_exchange_weak(old,old+1))return old+1;
     return 0;
 }
-FeedMechanismProfile Mechanism()noexcept {
-    FeedMechanismProfile p;p.family=FeedFamily::Belt;p.id=ProfileId;p.revision=1;p.ammunitionKind=1;
-    p.cover=p.container=p.containerNeedsOpen=p.feedNeedsOpen=true;
-    p.sameContainerReplenishment=p.coupledContainerDetach=true;p.maxAgeNs=100000000;
-    // Named interaction policy: 8cm anatomical reach, 0.65rad grasp alignment.
-    p.contacts[unsigned(FeedPart::Cover)]={1,.08f,.65f};
-    p.contacts[unsigned(FeedPart::Container)]={2,.08f,.65f};
-    p.contacts[unsigned(FeedPart::Feed)]={3,.08f,.65f};return p;
+bool SupportedAsset(std::string_view asset)noexcept {
+    for(const auto& row:RegisteredBc2FeedProfiles())if(row.geometry.asset==asset&&FindBc2FeedRegistration(row.key)==&row)return true;
+    return false;
+}
+std::uint16_t ChainMask(unsigned count)noexcept {
+    return count&&count<=MaxBc2FeedChainBones?std::uint16_t(((1u<<count)-1u)<<2):0;
+}
+std::uint64_t PartKey(std::uint64_t key,unsigned part)noexcept {
+    return key>UINT64_MAX-part?key-(UINT64_MAX-part):key+part;
 }
 bool SamePacket(const HandInteractionSample& a,const HandInteractionSample& b)noexcept {
     return a.owner==b.owner&&a.sequence==b.sequence&&a.observedNs==b.observedNs&&a.deadlineNs==b.deadlineNs&&
@@ -54,44 +54,41 @@ bool NativeHand(const Bc2PhysicalFeedSample& s)noexcept {
         s.weapon.id==s.owner.weapon&&s.weapon.generation==s.input.owner.equipGeneration;
 }
 bool CurrentEquipment(const FeedEquipmentNativeView& original,const ReloadStateOwner& owner,
-    const WeaponEquipmentIdentity& equipment,const std::optional<AmmoResourceBinding>& binding)noexcept {
+    const WeaponEquipmentIdentity& equipment,const std::optional<AmmoResourceBinding>& binding,
+    const Bc2FeedRegistration& row)noexcept {
     const auto& o=original.identity.owner;
     return equipment.weapon==owner.weapon&&o.player==owner.player&&o.soldier==owner.soldier&&o.weak==owner.weak&&
         o.actorGeneration==owner.actorGeneration&&o.weapon==owner.weapon&&original.binding.data==equipment.data&&
-        original.binding.persistence==equipment.persistence&&equipment.Asset()==bc2_feed_profile_detail::M60Geometry.asset&&
+        original.binding.persistence==equipment.persistence&&equipment.Asset()==row.geometry.asset&&
         (!binding||(binding->owner==owner&&binding->context.resource==original.binding.context.resource&&
             binding->data==equipment.data&&binding->persistence==equipment.persistence&&
             binding->inventory==original.binding.inventory&&binding->switching==original.binding.switching));
 }
-bool Selected(const Bc2PhysicalFeedSample& s,const FeedEquipmentNativeView& v)noexcept {
-    const auto* g=FindBc2M60FeedGeometry(s.asset,s.configurationPath,s.meshPath,s.rigFingerprint);
-    if(!g||!s.equipment||!CurrentEquipment(v,s.owner,*s.equipment,s.binding)||
+bool Selected(const Bc2PhysicalFeedSample& s,const FeedEquipmentNativeView& v,const Bc2FeedRegistration& row)noexcept {
+    const auto& g=row.geometry;
+    if(FindBc2FeedRegistration(row.key,v.config,s.asset,s.configurationPath,s.meshPath,s.rigFingerprint)!=&row||
+       !s.equipment||!CurrentEquipment(v,s.owner,*s.equipment,s.binding,row)||
        (s.binding&&!AmmoResourceBindingFresh(*s.binding,s.owner,s.input.nowNs))||
        !s.selectedRigVerified||!s.selected||!NativeHand(s)||!s.raw.valid||s.raw.owner!=s.owner||
        s.raw.rig.soldier!=s.owner.soldier||s.raw.rig.weak!=s.owner.weak||
-       s.raw.rigFingerprint!=g->rigFingerprint||s.frameSequence!=s.raw.inputEvidence.sequence||
+       s.raw.rigFingerprint!=g.rigFingerprint||s.frameSequence!=s.raw.inputEvidence.sequence||
        !Pose(s.raw.rawLeftWristWorldMeters)||!Pose(s.raw.weaponWorldMeters)||
        !FeedEquipmentViewFresh(v,s.input.nowNs)||v.identity.owner!=s.owner)return false;
     const auto& m=*s.selected;
     if(m.owner!=s.owner||!m.sequence||!m.configurationPathVerified||!m.configurationPathPointer||
-       !ReloadDescriptorText(m.configurationPath,g->configurationPath)||!ReloadDescriptorText(m.weaponName,g->asset)||
+       !ReloadDescriptorText(m.configurationPath,g.configurationPath)||!ReloadDescriptorText(m.weaponName,g.asset)||
        m.weaponData!=v.binding.data||m.inventory!=v.binding.inventory||
        m.observedNs<=0||s.input.nowNs<m.observedNs||s.input.nowNs>=m.deadlineNs||
        m.stateCount!=1||!m.soleConfiguredArray)return false;
     unsigned matches=0;const auto& state=m.states[0];
     if(state.array!=m.soleConfiguredArray||!state.count||state.count>state.meshes.size())return false;
-    for(unsigned i=0;i<state.count;++i)if(ReloadDescriptorText(state.meshes[i].assetPath,g->meshPath)&&state.meshes[i].address>=0x10000)++matches;
+    for(unsigned i=0;i<state.count;++i)if(ReloadDescriptorText(state.meshes[i].assetPath,g.meshPath)&&state.meshes[i].address>=0x10000)++matches;
     return matches==1;
 }
 math::Matrix4 BlendRigid(const math::Matrix4& a,const math::Matrix4& b,float t)noexcept {
     if(t<=0)return a;if(t>=1)return b;
     return reload_insertion_detail::BlendRigid(a,b,t);
 }
-}
-Bc2FeedInteractionPolicy Bc2M60FeedInteractionPolicy()noexcept {
-    // 95% hinge travel; 2cm/0.18rad placement acceptance; bounded 8cm/0.35rad
-    // interpacket motion; 60ms endpoint dwell, 10s gesture, 100ms source gap.
-    return {.95f,.15f,.02f,.18f,.08f,.35f,60000000,10000000000ll,100000000};
 }
 std::shared_ptr<const Bc2PhysicalFeedPresentation> ReadBc2PhysicalFeedPresentation(
     const ReloadStateOwner& owner,std::int64_t now)noexcept {
@@ -106,17 +103,19 @@ struct Bc2PhysicalFeed::State {
         std::atomic<std::uint64_t> submissions=0,submitRefusals=0,receipts=0,gateRefusals=0;
         std::atomic<FeedExit> reason=FeedExit::None,lastIssue=FeedExit::None;
         std::atomic<unsigned> flags=0,status=0,asset=0,lastIssueFlags=0,lastIssueStatus=0;
-        std::atomic<bool> selectedBefore=false;
+        std::atomic<std::uint64_t> registrationKey=0,lastSelectedKey=0;
         std::atomic<int> loaded=-1,reserve=-1,capacity=-1;
     } diagnostics;
     struct Packet {ReloadStateOwner owner{};HandInteractionSample input{};HandInteractionKey weapon{};
         std::optional<FeedEquipmentNativeView> native;bool grip=false,reload=false;};
     struct Equipment {
+        explicit Equipment(const Bc2FeedRegistration& row)noexcept
+            :registration(row),pose(row.geometry.poses[unsigned(Bc2FeedPoseId::Resting)]){}
+        const Bc2FeedRegistration& registration;
         FeedEquipmentNativeView original{};
         HandInteractionKey weapon{};FeedSupplyKey supply{};FeedKey mechanism{};
-        FeedMechanismProfile profile=Mechanism();FeedInteractionProfile motions{};
-        Bc2M60FeedPose pose=bc2_feed_profile_detail::M60Geometry.poses[0];
-        Bc2M60FeedPose gestureStart{};
+        FeedInteractionProfile motions{};
+        Bc2FeedPose pose{},gestureStart{};
         FeedCoverState cover=FeedCoverState::Closed;FeedContainerState container=FeedContainerState::Attached;
         FeedSeatState seat=FeedSeatState::Seated;FeedRefillObservation refill{FeedRefillState::NotRequired,0,0};
         float coverRadians=0,gestureCoverRadians=0;std::uint64_t lifetime=0,revision=0,lastInput=0;
@@ -127,7 +126,7 @@ struct Bc2PhysicalFeed::State {
         std::optional<math::Matrix4> presentationSource;
         std::optional<FeedEquipmentGate> gate;
         math::Matrix4 pouchBasis{},chainBasis{};
-        std::uint8_t carriedPartsMask=0;
+        std::uint16_t carriedPartsMask=0;
         bool gateFailed=false;
         bool refused=false,motionDirty=false;
         FeedPhysicalOperation activeOperation=FeedPhysicalOperation::None;
@@ -172,18 +171,19 @@ struct Bc2PhysicalFeed::State {
             e.original.binding.data==v.binding.data&&e.original.binding.persistence==v.binding.persistence;
     }
     FeedMechanismSnapshot Snapshot(Equipment& e,const FeedAmmunitionSnapshot& a,const HandInteractionSample& input)noexcept {
-        FeedMechanismSnapshot s;s.owner=a.owner;s.mechanism=e.mechanism;s.profileId=e.profile.id;s.profileRevision=e.profile.revision;
+        const auto& profile=e.registration.mechanism;
+        FeedMechanismSnapshot s;s.owner=a.owner;s.mechanism=e.mechanism;s.profileId=profile.id;s.profileRevision=profile.revision;
         s.sequence=a.sequence;s.inputSequence=input.sequence;s.observedNs=a.observedNs;s.reconciled=true;
         s.cover=e.cover;s.latch=FeedLatchState::Absent;s.container=e.container;s.feed=e.seat;s.cycle=FeedCycleState::Absent;
         s.attached=e.container==FeedContainerState::Attached?e.supply:FeedSupplyKey{};
         s.seated=e.seat==FeedSeatState::Seated?e.supply:FeedSupplyKey{};
-        s.supply={e.supply,e.profile.ammunitionKind,FeedSupplyState::Usable};s.refill=e.refill;
+        s.supply={e.supply,profile.ammunitionKind,FeedSupplyState::Usable};s.refill=e.refill;
         // Contacts are frozen gesture sources, never the guided hand pose.
         for(auto op:{FeedPhysicalOperation::OpenCover,FeedPhysicalOperation::DetachContainer,FeedPhysicalOperation::SeatFeed}){
             if(op==FeedPhysicalOperation::OpenCover&&e.cover==FeedCoverState::Open)op=FeedPhysicalOperation::CloseCover;
             if(op==FeedPhysicalOperation::DetachContainer&&e.container==FeedContainerState::Detached)op=FeedPhysicalOperation::AttachContainer;
             const auto& motion=e.motions.operations[unsigned(op)];const auto part=unsigned(feed_mechanism_detail::OperationPart(op));
-            s.contacts[part]={e.profile.contacts[part].role,motion.kind==FeedMotionKind::FreePlacement?
+            s.contacts[part]={profile.contacts[part].role,motion.kind==FeedMotionKind::FreePlacement?
                 feed_interaction_detail::Multiply(motion.placement.sourceFromGrip,motion.placement.weaponFromSource):feed_interaction_detail::Multiply(motion.motionFromContact,motion.weaponFromMotion)};
         }
         if(e.recoveryContact){const auto part=unsigned(feed_mechanism_detail::OperationPart(e.activeOperation));
@@ -194,15 +194,16 @@ struct Bc2PhysicalFeed::State {
         return {FeedEquipmentOwner(v.identity.owner),e.mechanism,e.lifetime,v.sequence,v.observedNs,v.deadlineNs,v.counts,e.supply,true};
     }
     FeedReloadBinding Binding(const Equipment& e)noexcept {
-        FeedReloadBinding b;b.key={ProfileId,e.original.binding.context.resource.weaponGeneration};
-        b.owner=FeedEquipmentOwner(e.original.identity.owner);b.mechanism=e.mechanism;b.profileId=e.profile.id;b.profileRevision=e.profile.revision;b.verified=true;
+        const auto& profile=e.registration.mechanism;
+        FeedReloadBinding b;b.key={e.registration.key,e.original.binding.context.resource.weaponGeneration};
+        b.owner=FeedEquipmentOwner(e.original.identity.owner);b.mechanism=e.mechanism;b.profileId=profile.id;b.profileRevision=profile.revision;b.verified=true;
         for(auto op:{FeedPhysicalOperation::OpenCover,FeedPhysicalOperation::DetachContainer,FeedPhysicalOperation::AttachContainer,
             FeedPhysicalOperation::SeatFeed,FeedPhysicalOperation::CloseCover})b.operations[unsigned(op)]=true;return b;
     }
     FeedAmmunitionAuthority Authority(const Equipment& e,const FeedAmmunitionSnapshot& a,FeedPhysicalOperation op)noexcept {
         const auto binding=Binding(e);FeedAmmunitionAuthority x;
-        x.key={ProfileId+unsigned(op),e.lifetime};x.binding=binding.key;x.owner=a.owner;x.mechanism=e.mechanism;
-        x.lifetime=e.lifetime;x.profileId=e.profile.id;x.profileRevision=e.profile.revision;x.operation=op;x.verified=true;
+        x.key={PartKey(e.registration.key,unsigned(op)),e.lifetime};x.binding=binding.key;x.owner=a.owner;x.mechanism=e.mechanism;
+        x.lifetime=e.lifetime;x.profileId=e.registration.mechanism.id;x.profileRevision=e.registration.mechanism.revision;x.operation=op;x.verified=true;
         x.effect=FeedAmmunitionEffect::PhysicalOnly;
         if(op==FeedPhysicalOperation::AttachContainer){x.effect=FeedAmmunitionEffect::RefillLoaded;x.supply=e.supply;
             x.rounds=(std::min)(a.counts.capacity-a.counts.loaded,a.counts.reserve);}
@@ -211,29 +212,30 @@ struct Bc2PhysicalFeed::State {
     void ReprojectCarry(Equipment& e,const math::Matrix4& currentWeapon)noexcept {
         const auto inverse=Inverse(currentWeapon);
         if(e.carriedPartsMask&1){e.pose.weaponFromPouch=feed_interaction_detail::Multiply(feed_interaction_detail::Multiply(e.pose.weaponFromPouch,e.pouchBasis),inverse);e.pouchBasis=currentWeapon;}
-        if(e.carriedPartsMask&60){e.pose.weaponFromFeedRoot=feed_interaction_detail::Multiply(feed_interaction_detail::Multiply(e.pose.weaponFromFeedRoot,e.chainBasis),inverse);e.chainBasis=currentWeapon;}
+        if(e.carriedPartsMask&ChainMask(e.registration.geometry.chainCount)){e.pose.weaponFromFeedRoot=feed_interaction_detail::Multiply(feed_interaction_detail::Multiply(e.pose.weaponFromFeedRoot,e.chainBasis),inverse);e.chainBasis=currentWeapon;}
     }
     void PoseTarget(Equipment& e,const FeedInteractionResult& r,const math::Matrix4& weaponWorld)noexcept {
-        if(!r.target)return;const auto& g=bc2_feed_profile_detail::M60Geometry;const auto op=e.activeOperation;
+        if(!r.target)return;const auto& g=e.registration.geometry;const auto op=e.activeOperation;
         if(op==FeedPhysicalOperation::OpenCover||op==FeedPhysicalOperation::CloseCover){
             const float direction=op==FeedPhysicalOperation::OpenCover?1.f:-1.f;
-            e.coverRadians=std::clamp(e.gestureCoverRadians+direction*float(r.progress)*g.coverTravelRadians,0.f,g.coverTravelRadians);return;}
+            e.coverRadians=std::clamp(e.gestureCoverRadians+direction*float(r.progress)*g.coverTravelRadians,
+                (std::min)(0.f,g.coverTravelRadians),(std::max)(0.f,g.coverTravelRadians));return;}
         if(r.targetKind!=FeedInteractionTargetKind::Object)return;
-        const auto destination=op==FeedPhysicalOperation::DetachContainer?Bc2M60FeedPoseId::PouchWithdrawn:
-            op==FeedPhysicalOperation::AttachContainer?Bc2M60FeedPoseId::PouchAttachedFeedUnseated:Bc2M60FeedPoseId::FeedSeated;
+        const auto destination=op==FeedPhysicalOperation::DetachContainer?Bc2FeedPoseId::PouchWithdrawn:
+            op==FeedPhysicalOperation::AttachContainer?Bc2FeedPoseId::PouchAttachedFeedUnseated:Bc2FeedPoseId::FeedSeated;
         const auto& end=g.poses[unsigned(destination)];const auto& motion=e.motions.operations[unsigned(op)];
         const auto total=Distance(e.presentationSource.value_or(motion.placement.weaponFromSource),motion.placement.weaponFromDestination);
         const auto remaining=Distance(*r.target,motion.placement.weaponFromDestination);
         const float t=total>1e-5?float(std::clamp(1-remaining/total,0.,1.)):0.f;
         auto articulation=e.gestureStart;
-        for(unsigned i=0;i<3;++i)articulation.parentFromChainChild[i]=BlendRigid(e.gestureStart.parentFromChainChild[i],end.parentFromChainChild[i],t);
+        for(unsigned i=0;i+1<g.chainCount;++i)articulation.parentFromChainChild[i]=BlendRigid(e.gestureStart.parentFromChainChild[i],end.parentFromChainChild[i],t);
         articulation.weaponFromFeedRoot=BlendRigid(e.gestureStart.weaponFromFeedRoot,end.weaponFromFeedRoot,t);
         articulation.weaponFromPouch=op==FeedPhysicalOperation::SeatFeed?e.pose.weaponFromPouch:
             BlendRigid(e.gestureStart.weaponFromPouch,end.weaponFromPouch,t);
-        const auto p=op==FeedPhysicalOperation::SeatFeed?PlaceBc2M60FeedTerminal(e.supply,articulation,*r.target):
-            PlaceBc2M60FeedPouch(e.supply,articulation,*r.target);
+        const auto p=op==FeedPhysicalOperation::SeatFeed?PlaceBc2FeedTerminal(e.supply,articulation,*r.target):
+            PlaceBc2FeedPouch(e.supply,articulation,*r.target);
         if(p){e.pose=articulation;e.pose.weaponFromPouch=p->weaponFromPouch;e.pose.weaponFromFeedRoot=p->weaponFromChain[0];
-            e.chainBasis=weaponWorld;e.carriedPartsMask=60;
+            e.chainBasis=weaponWorld;e.carriedPartsMask=ChainMask(g.chainCount);
             if(op!=FeedPhysicalOperation::SeatFeed){e.pouchBasis=weaponWorld;e.carriedPartsMask|=1;}}
     }
     void Applied(Equipment& e,const FeedAmmunitionReceipt& r)noexcept {
@@ -253,14 +255,14 @@ Bc2PhysicalFeed::~Bc2PhysicalFeed()=default;
 bool Bc2PhysicalFeed::BlocksFire(const ReloadStateOwner& owner,const WeaponEquipmentIdentity& equipment,
     const std::optional<AmmoResourceBinding>& binding)const noexcept {
     if(!state_)return false;
-    for(const auto& e:state_->equipment)if(e&&CurrentEquipment(e->original,owner,equipment,binding)&&e->Blocked())return true;
+    for(const auto& e:state_->equipment)if(e&&CurrentEquipment(e->original,owner,equipment,binding,e->registration)&&e->Blocked())return true;
     return false;
 }
 std::optional<FeedEquipmentGate> Bc2PhysicalFeed::RetainedGate(const ReloadStateOwner& owner,const WeaponEquipmentIdentity& equipment,
     const std::optional<AmmoResourceBinding>& binding)const noexcept {
     if(!state_)return {};
     for(const auto& e:state_->equipment)if(e){const auto& original=e->original;
-        if(!CurrentEquipment(original,owner,equipment,binding))continue;
+        if(!CurrentEquipment(original,owner,equipment,binding,e->registration))continue;
         auto retained=e->gate;
         if(state_->api.readGate)if(const auto current=state_->api.readGate(state_->api.context,original.binding.context.resource))retained=current;
         if(retained){retained->blocksFire=retained->blocksFire||e->Blocked();return retained;}
@@ -277,12 +279,13 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
     const auto blocksFire=[&](){return s.equipment&&BlocksFire(s.owner,*s.equipment,s.binding);};
     const auto blocksEquipment=[&](){
         if(state_&&s.equipment)for(const auto& e:state_->equipment)
-            if(e&&CurrentEquipment(e->original,s.owner,*s.equipment,s.binding)&&(e->pending||e->claim))return true;
+            if(e&&CurrentEquipment(e->original,s.owner,*s.equipment,s.binding,e->registration)&&(e->pending||e->claim))return true;
         return false;
     };
     Bc2PhysicalFeedResult out;out.blocksFire=blocksFire();out.blocksEquipment=blocksEquipment();publication.store({},std::memory_order_release);
     if(!state_)return out;auto& state=*state_;const auto now=s.input.nowNs;
     State::Equipment* e=nullptr;
+    const Bc2FeedRegistration* registration=nullptr;
     const auto finish=[&](FeedExit reason){
         auto& d=state.diagnostics;
         const auto session=e&&e->session?e->session->State():FeedEquipmentSessionResult{};
@@ -295,8 +298,9 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         changed=(d.flags.exchange(flags,std::memory_order_relaxed)!=flags)||changed;
         changed=(d.status.exchange(status,std::memory_order_relaxed)!=status)||changed;
         if(changed)d.transitions.fetch_add(1,std::memory_order_relaxed);
-        const unsigned asset=s.asset.empty()?0:s.asset==bc2_feed_profile_detail::M60Geometry.asset?1:2;
+        const unsigned asset=s.asset.empty()?0:SupportedAsset(s.asset)?1:2;
         d.asset.store(asset,std::memory_order_relaxed);
+        d.registrationKey.store(registration?registration->key:0,std::memory_order_relaxed);
         auto issue=reason;
         if(reason==FeedExit::Updated){
             if(out.handReason!=HandInteractionReason::None||out.interactionStatus>=FeedInteractionStatus::InvalidProfile)
@@ -307,7 +311,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         // last refusal/debt. Store refusal even before Selected has succeeded.
         if(asset==1&&issue!=FeedExit::Updated){d.lastIssue.store(issue,std::memory_order_relaxed);
             d.lastIssueFlags.store(flags,std::memory_order_relaxed);d.lastIssueStatus.store(status,std::memory_order_relaxed);}
-        if(out.selected)d.selectedBefore.store(true,std::memory_order_relaxed);
+        if(out.selected&&registration)d.lastSelectedKey.store(registration->key,std::memory_order_relaxed);
         d.ticks.fetch_add(1,std::memory_order_relaxed);
         if(flags&2)d.blocked.fetch_add(1,std::memory_order_relaxed);
         if(flags&4)d.pending.fetch_add(1,std::memory_order_relaxed);
@@ -336,6 +340,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
     for(auto& e:state.equipment)if(e)state.PublishGate(*e);
     out.blocksFire=blocksFire();out.blocksEquipment=blocksEquipment();
     const auto view=state.api.read(state.api.context,s.owner,now);
+    if(view)registration=FindBc2FeedRegistration(view->config);
     if(view){state.diagnostics.loaded.store(view->counts.loaded,std::memory_order_relaxed);
         state.diagnostics.reserve.store(view->counts.reserve,std::memory_order_relaxed);
         state.diagnostics.capacity.store(view->counts.capacity,std::memory_order_relaxed);}
@@ -347,18 +352,19 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         const bool grip=s.grip||(!s.input.released[0]&&previous&&previous->grip);
         state.packets[state.nextPacket]={s.owner,s.input,s.weapon,source,grip,s.reloadPressed};state.nextPacket=(state.nextPacket+1)%state.packets.size();}
     if(view)for(auto& p:state.equipment)if(p&&State::SameResource(*p,*view)){e=p.get();break;}
-    if(!view||!Selected(s,*view)||s.cancel||!Window(s.input,now)){Suspend(s.input,hands);
+    if(!view||!registration||(e&& &e->registration!=registration)||!Selected(s,*view,*registration)||s.cancel||!Window(s.input,now)){Suspend(s.input,hands);
         return finish(view?FeedExit::SelectionOrInput:FeedExit::ViewUnavailable);}
     out.selected=true;
     if(!e){for(auto& slot:state.equipment)if(!slot){try{
-        slot=std::make_unique<State::Equipment>();e=slot.get();e->original=*view;e->weapon=s.weapon;
+        slot=std::make_unique<State::Equipment>(*registration);e=slot.get();e->original=*view;e->weapon=s.weapon;
         const auto generation=view->binding.context.resource.weaponGeneration;
         e->supply={{view->binding.data,generation},{view->identity.owner.weapon,generation}};
-        e->mechanism={ProfileId,generation};e->motions=BuildBc2M60FeedInteractionProfile(bc2_feed_profile_detail::M60Geometry,
-            e->profile.id,e->profile.revision,Bc2M60FeedInteractionPolicy());
+        e->mechanism={registration->key,generation};e->motions=BuildBc2FeedInteractionProfile(registration->geometry,
+            registration->mechanism.id,registration->mechanism.revision,registration->interactionPolicy);
         e->lifetime=Lifetime();e->pouchBasis=e->chainBasis=s.raw.weaponWorldMeters;state.PublishGate(*e);
     }catch(...){return finish(FeedExit::StorageUnavailable);}break;}}
     if(!e){out.blocksFire=true;return finish(FeedExit::StorageUnavailable);}
+    const auto& profile=e->registration.mechanism;
     // Keep the old immutable transaction and debt when a different native
     // equip/space lifetime appears. A name/count match cannot migrate it.
     if(e->original.identity!=view->identity||e->weapon!=s.weapon){
@@ -398,7 +404,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
     if(idle){
         const auto& m=e->motions.operations[unsigned(FeedPhysicalOperation::OpenCover)];
         const auto contact=feed_interaction_detail::Multiply(m.motionFromContact,m.weaponFromMotion);
-        const auto& policy=e->profile.contacts[unsigned(FeedPart::Cover)];
+        const auto& policy=profile.contacts[unsigned(FeedPart::Cover)];
         const bool touch=Distance(local,contact)<=policy.radiusMeters&&Angle(local,contact)<=policy.maxAngleRadians;
         if(!source->grip&&sourceInput.released[0]&&available&&touch&&sourceInput.sequence>e->lastInput){
             FeedEquipmentSessionSample neutral;neutral.interaction.contact.weaponFromHandContact=local;
@@ -408,10 +414,10 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         }
         if(source->grip&&touch&&available&&e->neutral&&sourceInput.sequence>e->neutral->interaction.contact.inputSequence&&
            view->counts.loaded<view->counts.capacity&&view->counts.reserve>0&&
-           now-e->neutral->interaction.contact.observedNs<e->profile.maxAgeNs){
+           now-e->neutral->interaction.contact.observedNs<profile.maxAgeNs){
             const auto lifetime=Lifetime();if(!lifetime){out.blocksFire=true;return finish(FeedExit::LifetimeExhausted);}
             e->lifetime=lifetime;e->refill={FeedRefillState::Required,lifetime,0};e->refused=false;
-            try{e->session=std::make_unique<FeedEquipmentSession>(e->profile,e->motions,FeedEquipmentOwner(s.owner),e->mechanism,e->supply,lifetime,
+            try{e->session=std::make_unique<FeedEquipmentSession>(profile,e->motions,FeedEquipmentOwner(s.owner),e->mechanism,e->supply,lifetime,
                 e->original.binding.context.resource);}catch(...){out.blocksFire=true;return finish(FeedExit::SessionUnavailable);}
             state.PublishGate(*e);
             auto neutral=*e->neutral;neutral.ammunition.lifetime=lifetime;neutral.snapshot=state.Snapshot(*e,neutral.ammunition,sourceInput);
@@ -430,7 +436,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         sample.nowNs=now;sample.binding=state.Binding(*e);
         const auto prior=e->session->State();
         bool recoveryEstablished=false;
-        const auto query=EvaluateFeedMechanism(e->profile,sample.snapshot,e->supply,now);
+        const auto query=EvaluateFeedMechanism(profile,sample.snapshot,e->supply,now);
         if(query.candidate){const auto op=query.candidate->operation;
             const auto recovery=e->session->RecoveryMotion();
             const bool recoverable=recovery&&Same(recovery->Candidate(),*query.candidate);
@@ -451,7 +457,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
                 }
             }else if(e->motionDirty&&op!=FeedPhysicalOperation::OpenCover&&op!=FeedPhysicalOperation::CloseCover){
                 state.ReprojectCarry(*e,s.raw.weaponWorldMeters);
-                const auto motion=BuildBc2M60FeedMotionFromRetainedPose(bc2_feed_profile_detail::M60Geometry,op,Bc2M60FeedInteractionPolicy(),e->pose);
+                const auto motion=BuildBc2FeedMotionFromRetainedPose(e->registration.geometry,op,e->registration.interactionPolicy,e->pose);
                 auto rebased=sample.snapshot;
                 if(motion)rebased.contacts[unsigned(query.candidate->part)].weaponFromContact=
                     feed_interaction_detail::Multiply(motion->placement.sourceFromGrip,motion->placement.weaponFromSource);
@@ -481,10 +487,10 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
             sample.acknowledgement=ack; // Fresh exact native-count corroboration, original receipt unchanged.
         }
         if(source->grip&&sample.held&&query.candidate&&!prior.ammunition.pending&&!prior.session.reload.pending){
-            const auto contact=EvaluateFeedContact(e->profile,sample.snapshot,e->supply,*query.candidate,sample.interaction.contact,now);
+            const auto contact=EvaluateFeedContact(profile,sample.snapshot,e->supply,*query.candidate,sample.interaction.contact,now);
             // AcquireFrom/RenewFrom preserve the exact recorded raw packet.
             // Native authority has its own independently checked deadline.
-            const HandContactProof proof{{ProfileId+unsigned(query.candidate->part),e->lifetime},sourceInput.sequence,
+            const HandContactProof proof{{PartKey(e->registration.key,unsigned(query.candidate->part)),e->lifetime},sourceInput.sequence,
                 sourceInput.deadlineNs,true};
             if(e->claim){const auto renewed=hands.RenewFrom(s.input,sourceInput,*e->claim,proof);out.handReason=renewed.reason;
                 if(!renewed.accepted){e->claim.reset();sample.held=false;}}
@@ -504,8 +510,8 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
             result.session.interaction.status==FeedInteractionStatus::MotionJump||result.session.interaction.status==FeedInteractionStatus::Expired))e->motionDirty=true;
         if(result.dispatch){FeedEquipmentSubmission submission;submission.command=*result.dispatch;submission.source=*source->native;
             state.diagnostics.submissions.fetch_add(1,std::memory_order_relaxed);
-            submission.geometry={e->profile,e->motions.operations[unsigned(result.dispatch->authority.operation)],s.rigFingerprint,
-                sourceInput.sequence,sourceInput.observedNs,(std::min)(sourceInput.deadlineNs,source->native->deadlineNs),true};
+            submission.geometry={profile,e->motions.operations[unsigned(result.dispatch->authority.operation)],s.rigFingerprint,
+                sourceInput.sequence,sourceInput.observedNs,(std::min)(sourceInput.deadlineNs,source->native->deadlineNs),true,e->registration.key};
             e->pending=submission;
             if(state.api.submitObserved){const auto submitted=state.api.submitObserved(state.api.context,submission,false);
                 e->refused=submitted==FeedEquipmentSubmitResult::RetentionBusy||submitted==FeedEquipmentSubmitResult::Invalid;
@@ -519,9 +525,10 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         out.pending=e->pending.has_value();out.ownsHand=e->claim.has_value();
     }
     state.PublishGate(*e);out.blocksFire=e->Blocked();out.blocksEquipment=e->pending.has_value()||e->claim.has_value();
-    if(const auto pose=ComposeBc2M60FeedPresentation(e->supply,e->pose))try{
+    if(const auto pose=ComposeBc2FeedPresentation(e->supply,e->pose))try{
         auto p=std::make_shared<Bc2PhysicalFeedPresentation>();p->owner=s.owner;p->rig=s.raw.rig;p->input=sourceInput;p->weapon=s.weapon;
         p->supply=e->supply;p->lifetime=e->lifetime;p->revision=++e->revision;p->rigFingerprint=s.rigFingerprint;
+        p->registrationKey=e->registration.key;p->chainCount=pose->chainCount;
         p->weaponFromPouch=pose->weaponFromPouch;p->weaponFromChain=pose->weaponFromChain;p->coverRadians=e->coverRadians;
         p->carriedPartsMask=e->carriedPartsMask;p->pouchCarryWeaponWorldMeters=e->pouchBasis;p->chainCarryWeaponWorldMeters=e->chainBasis;
         p->originalWeaponWorldMeters=s.raw.weaponWorldMeters;p->operation=e->activeOperation;
@@ -531,7 +538,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
                 p->targetKind=e->motions.operations[unsigned(e->activeOperation)].kind==FeedMotionKind::FreePlacement?
                     FeedInteractionTargetKind::Object:FeedInteractionTargetKind::Contact;}}
         math::Matrix4 identity{};for(unsigned i=0;i<4;++i)identity.values[i][i]=1;
-        p->weaponFromCoverHinge=feed_interaction_detail::Multiply(Along(identity,FeedMotionKind::Hinge,e->coverRadians),bc2_feed_profile_detail::M60Geometry.weaponFromHinge);
+        p->weaponFromCoverHinge=feed_interaction_detail::Multiply(Along(identity,FeedMotionKind::Hinge,e->coverRadians),e->registration.geometry.weaponFromHinge);
         p->blocksFire=out.blocksFire;out.presentation=p;publication.store(std::move(p),std::memory_order_release);
     }catch(...){}
     return finish(FeedExit::Updated);
@@ -541,6 +548,7 @@ void Bc2PhysicalFeed::Report(std::ostream& out)const {
     const auto& d=state_->diagnostics;const auto flags=d.flags.load(std::memory_order_relaxed);
     const auto status=d.status.load(std::memory_order_relaxed),asset=d.asset.load(std::memory_order_relaxed);
     const auto issueStatus=d.lastIssueStatus.load(std::memory_order_relaxed);
+    const auto lastSelectedKey=d.lastSelectedKey.load(std::memory_order_relaxed);
     out<<"{\"observations\":\"independent_atomics_not_native_proof\",\"ticks\":"<<d.ticks.load(std::memory_order_relaxed)
        <<",\"transitions\":"<<d.transitions.load(std::memory_order_relaxed)<<",\"blocked_ticks\":"<<d.blocked.load(std::memory_order_relaxed)
        <<",\"pending_ticks\":"<<d.pending.load(std::memory_order_relaxed)<<",\"claim_ticks\":"<<d.claims.load(std::memory_order_relaxed)
@@ -548,9 +556,11 @@ void Bc2PhysicalFeed::Report(std::ostream& out)const {
        <<",\"submit_refusals\":"<<d.submitRefusals.load(std::memory_order_relaxed)<<",\"receipts_accepted\":"<<d.receipts.load(std::memory_order_relaxed)
        <<",\"gate_refusals\":"<<d.gateRefusals.load(std::memory_order_relaxed)
        <<",\"latest_tick\":{\"reason\":\""<<FeedExitName(d.reason.load(std::memory_order_relaxed))
-       <<"\",\"asset_class\":\""<<(asset==1?bc2_feed_profile_detail::M60Geometry.asset:asset==2?std::string_view("other"):std::string_view("none"))
-       <<"\",\"last_selected_asset\":\""<<(d.selectedBefore.load(std::memory_order_relaxed)?bc2_feed_profile_detail::M60Geometry.asset:std::string_view("none"))
-       <<"\",\"selected\":"<<((flags&1)?"true":"false")<<",\"blocked\":"<<((flags&2)?"true":"false")
+       <<"\",\"asset_class\":\""<<(asset==1?"registered_feed":asset==2?"other":"none")
+       <<"\",\"registration_key\":"<<d.registrationKey.load(std::memory_order_relaxed)
+       <<",\"last_selected_asset\":\""<<(lastSelectedKey?"registered_feed":"none")
+       <<"\",\"last_selected_registration_key\":"<<lastSelectedKey
+       <<",\"selected\":"<<((flags&1)?"true":"false")<<",\"blocked\":"<<((flags&2)?"true":"false")
        <<",\"pending\":"<<((flags&4)?"true":"false")<<",\"claim\":"<<((flags&8)?"true":"false")
        <<",\"submit_refused\":"<<((flags&16)?"true":"false")<<",\"gate_failed\":"<<((flags&32)?"true":"false")
        <<",\"equipment_status_id\":"<<(status&255)<<",\"interaction_status_id\":"<<((status>>8)&255)

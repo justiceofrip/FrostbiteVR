@@ -20,9 +20,10 @@ struct Episode {
         command.original=request.intent.original=original;outcome.request=request;outcome.receipt->command=command;
     }
 };
-bool Admit(PistolAfterFeedEvidence& evidence,const Episode& e){return evidence.Admit(e.request,e.command,e.identity,e.sample,e.command.before.loaded>0);}
+bool Admit(PistolAfterFeedEvidence& evidence,const Episode& e){return evidence.Admit(e.request,e.command,e.identity,e.sample,e.command.before.loaded>0,bc2_pistol_slide_profile_detail::Mp443Registration.key);}
 fvr::bc2::PistolAfterFeedOwnUpdate Row(const Episode& feed,unsigned branch,std::int64_t at=Now+2000000){
     fvr::bc2::PistolAfterFeedOwnUpdate r;r.identity=feed.identity;r.context=feed.command.context;r.own.beforeOwner=r.own.afterOwner=r.identity.owner;
+    r.profileKey=bc2_pistol_slide_profile_detail::Mp443Registration.key;
     r.own.firing=r.beforeFiring=r.identity.firing[branch];r.own.branch=branch;r.own.depth=1;
     if(branch==2){r.own.serverPlayer=r.beforeServerPlayer=r.identity.serverPlayer;r.own.serverSoldier=r.beforeServerSoldier=r.identity.serverSoldier;
         r.own.serverItem=r.beforeServerItem=r.identity.serverItem;}
@@ -33,7 +34,7 @@ fvr::bc2::PistolAfterFeedOwnUpdate Row(const Episode& feed,unsigned branch,std::
     r.before.verified=r.after.verified=r.effectiveContextVerified=r.finiteAmmoVerified=true;return r;
 }
 int ExactLaterOwnUpdates(){
-    for(unsigned failure=0;failure<18;++failure){PistolAfterFeedEvidence evidence;
+    for(unsigned failure=0;failure<19;++failure){PistolAfterFeedEvidence evidence;
         Episode remove{1,AmmunitionOperation::RemoveMagazine,0,0,85,85,Now};
         Episode feed{2,AmmunitionOperation::RefillMagazine,0,17,85,68,Now+1000000};
         CHECK(Admit(evidence,remove)&&evidence.Blocks(remove.command.context.resource)&&evidence.Outcome(remove.outcome));
@@ -56,6 +57,7 @@ int ExactLaterOwnUpdates(){
             if(failure==15)r.own.timer=.01f;
             if(failure==16)r.effectiveContextVerified=false;
             if(failure==17)r.finiteAmmoVerified=false;
+            if(failure==18)r.profileKey^=1;
         }evidence.Observe(r);}
         const auto state=evidence.Read(feed.command.context.resource,Now+2000100);CHECK(state&&state->emptyDebt&&state->blocksFire);
         CHECK(bool(state->ready)==(failure==0));
@@ -122,15 +124,16 @@ int NoEntryRejectionAndActorRetirement(){
 }
 PistolAfterFeedStroke Stroke(const PistolAfterFeedReadiness& ready){
     PistolAfterFeedStroke s;s.feed=ready.semantic.feed;s.context=ready.semantic.context;
-    s.request=11;s.profile=12;s.revision=13;s.inputSequence=14;s.observedNs=Now+1500000;s.deadlineNs=s.observedNs+100000000;
+    const auto& policy=*bc2_pistol_slide_profile_detail::Mp443Registration.interaction;
+    s.request=11;s.profile=policy.id;s.revision=policy.revision;s.inputSequence=14;s.observedNs=Now+1500000;s.deadlineNs=s.observedNs+100000000;
     const auto actor=(std::uint64_t(ready.feedIdentity.owner.weak)<<32)|ready.feedIdentity.owner.soldier;
     const auto handEquip=s.context.equipGeneration+70;
     s.gun={1,{actor,s.context.resource.actorGeneration,handEquip,s.context.space},InteractionHand::Right,HandClaimKind::GunHold,
         {s.context.resource.weapon,handEquip},{60,2},0};
-    s.mechanism={2,s.gun.owner,InteractionHand::Left,HandClaimKind::Mechanism,s.gun.item,{70,2},s.gun.id};return s;
+    s.mechanism={2,s.gun.owner,InteractionHand::Left,HandClaimKind::Mechanism,s.gun.item,{policy.id,s.context.resource.weaponGeneration},s.gun.id};return s;
 }
 int EmptyReleaseRequiresExactPhysicalAndFreshNative(){
-    for(unsigned mode=0;mode<7;++mode){PistolAfterFeedEvidence evidence;
+    for(unsigned mode=0;mode<11;++mode){PistolAfterFeedEvidence evidence;
         Episode remove{1,AmmunitionOperation::RemoveMagazine,0,0,85,85,Now};
         Episode feed{2,AmmunitionOperation::RefillMagazine,0,17,85,68,Now+1000000};
         CHECK(Admit(evidence,remove)&&evidence.Outcome(remove.outcome)&&Admit(evidence,feed)&&evidence.Outcome(feed.outcome));
@@ -142,6 +145,10 @@ int EmptyReleaseRequiresExactPhysicalAndFreshNative(){
         if(mode==3)release.clearance.stroke->observedNs=Now+2000050;
         if(mode==4)release.clearance.stroke->mechanism.prerequisiteClaim=0;
         if(mode==5)++release.clearance.nativeReady.updates[0].invocation;
+        if(mode==7)++release.clearance.stroke->profile;
+        if(mode==8)++release.clearance.stroke->revision;
+        if(mode==9)++release.clearance.stroke->mechanism.contact.id;
+        if(mode==10)++release.clearance.stroke->mechanism.contact.generation;
         if(mode==6){auto contradictory=Row(feed,2);contradictory.own.invocation=contradictory.nativeInvocation=contradictory.nativeUpdate=10020;
             contradictory.own.endNs++;contradictory.after.releaseA5=1;CHECK(!evidence.Observe(contradictory));}
         CHECK(evidence.Release(release,Now+2000100)==(mode==0));
@@ -169,6 +176,24 @@ int ReleaseLatchesDoNotInventAnInitialSlideObligation(){
     CHECK(!PistolAfterFeedInitialPolicyReady(latches,false,2,2,0,7,34,loaded));
     CHECK(!PistolAfterFeedInitialPolicyReady({},true,2,2,0,7,34,loaded));return 0;
 }
-int main(){if(ReleaseLatchesDoNotInventAnInitialSlideObligation()||ExactLaterOwnUpdates()||ExactOutcomeAndHistoricalJournal()||TacticalAndEmptyReturnStayDistinct()||
+int ProfileIdentityCannotBeSubstituted(){
+    PistolAfterFeedEvidence evidence;
+    Episode remove{1,AmmunitionOperation::RemoveMagazine,0,0,85,85,Now};
+    const auto key=bc2_pistol_slide_profile_detail::Mp443Registration.key;
+    CHECK(!evidence.Admit(remove.request,remove.command,remove.identity,remove.sample,false,key^1));
+    CHECK(!evidence.Event(0));
+    CHECK(Admit(evidence,remove)&&evidence.Outcome(remove.outcome));
+    Episode feed{2,AmmunitionOperation::RefillMagazine,0,17,85,68,Now+1000000};
+    CHECK(Admit(evidence,feed)&&evidence.Outcome(feed.outcome));
+    for(unsigned branch=0;branch<3;++branch)CHECK(evidence.Observe(Row(feed,branch)));
+    const auto before=evidence.Read(feed.command.context.resource,Now+2000100);
+    CHECK(before&&before->ready&&before->profileKey==key);
+    auto wrong=Row(feed,2,Now+2000200);wrong.profileKey^=1;
+    wrong.own.invocation=wrong.nativeInvocation=wrong.nativeUpdate=10020;
+    CHECK(!evidence.Observe(wrong));
+    const auto after=evidence.Read(feed.command.context.resource,Now+2000300);
+    CHECK(after&&!after->ready&&after->blocksFire);return 0;
+}
+int main(){if(ProfileIdentityCannotBeSubstituted()||ReleaseLatchesDoNotInventAnInitialSlideObligation()||ExactLaterOwnUpdates()||ExactOutcomeAndHistoricalJournal()||TacticalAndEmptyReturnStayDistinct()||
     StowMigrationAndExpiryRetainDebt()||NoEntryRejectionAndActorRetirement()||EmptyReleaseRequiresExactPhysicalAndFreshNative()||OldDebtSurvivesLoadedRemoval())return 1;
-    std::puts("8 pistol evidence groups passed; exact receipts/own Updates, durable gate, typed release, actor drain.");}
+    std::puts("9 pistol evidence groups passed; exact receipts/own Updates/profile, durable gate, typed release, actor drain.");}

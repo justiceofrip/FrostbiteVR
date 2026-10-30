@@ -1,16 +1,21 @@
 #include "Bc2PhysicalPistolSlide.h"
 #include "Test.h"
 #include <cstring>
+#include <sstream>
 using namespace fvr::bc2;
 using namespace fvr::interaction;
 namespace {
 constexpr std::int64_t Ms=1000000;
+constexpr auto ProfileKey=bc2_pistol_slide_profile_detail::Mp443Registration.key;
 template<std::size_t N>void Text(std::array<char,N>& dst,std::string_view value){
     dst={};std::memcpy(dst.data(),value.data(),std::min(value.size(),N-1));
 }
 fvr::math::Matrix4 Identity(){fvr::math::Matrix4 m{};for(unsigned i=0;i<4;++i)m.values[i][i]=1;return m;}
 struct Fixture {
-    PistolAfterFeedEvidence backend;
+    // Multiple independent native journals in one scenario exceed the small
+    // default executable stack; production stores this journal persistently.
+    std::unique_ptr<PistolAfterFeedEvidence> backendStorage=std::make_unique<PistolAfterFeedEvidence>();
+    PistolAfterFeedEvidence& backend=*backendStorage;
     std::unique_ptr<AmmunitionLedger> ledger=std::make_unique<AmmunitionLedger>();
     ReloadHoldIdentity identity{{0x10000,0x20000,0x30000,0x40000,1,2,3},{0x50000,0x60000,0x70000},0x80000,0x90000,0xa0000};
     AmmoResourceBinding binding{identity.owner,{{0x20000,1,0x40000,19},2,3},0xb0000,0xc0000,0xd0000,0xe0000,0,0};
@@ -19,14 +24,22 @@ struct Fixture {
     std::shared_ptr<SelectedMeshesSnapshot> selected=std::make_shared<SelectedMeshesSnapshot>();
     HandInteraction hands;std::uint64_t intent=0,sequence=0,snapshot=0,requestId=0,invocation=100;
     std::int64_t now=1000*Ms;bool initialReady=true,releaseAllowed=true,skipEvents=false;
+    std::optional<std::uint64_t> eventProfileKey,nativeProfileKey,readyProfileKey;
+    bool wrongNativeCapacity=false;
     unsigned releases=0;std::optional<PistolAfterFeedRelease> cleared;
     Bc2PhysicalPistolSlideSample sample{};Bc2PhysicalPistolSlideResult result{};
     ReloadRawContact previousRaw{};bool delayedRaw=false;
     Bc2PhysicalPistolSlide physical;
     Bc2PhysicalPistolSlideApi Api(){return {this,
         [](void* p,std::uint64_t after)noexcept{auto& f=*static_cast<Fixture*>(p);
-            return f.skipEvents?std::optional<PistolAfterFeedEvent>{}:f.backend.Event(after);},
-        [](void* p,const AmmoResourceIdentity& r,std::int64_t at)noexcept{return static_cast<Fixture*>(p)->backend.Read(r,at);},
+            auto event=f.skipEvents?std::optional<PistolAfterFeedEvent>{}:f.backend.Event(after);
+            if(event&&f.eventProfileKey)event->profileKey=*f.eventProfileKey;return event;},
+        [](void* p,const AmmoResourceIdentity& r,std::int64_t at)noexcept{auto& f=*static_cast<Fixture*>(p);
+            auto state=f.backend.Read(r,at);if(state){
+                if(f.nativeProfileKey)state->profileKey=*f.nativeProfileKey;
+                if(f.readyProfileKey&&state->ready)state->ready->branches[1].profileKey=*f.readyProfileKey;
+                if(f.wrongNativeCapacity)++state->admission.counts.capacity;
+            }return state;},
         [](void* p,const PistolAfterFeedRelease& release)noexcept{auto& f=*static_cast<Fixture*>(p);
             if(!f.releaseAllowed||!f.backend.Release(release,f.sample.input.nowNs))return false;
             ++f.releases;f.cleared=release;return true;},
@@ -37,8 +50,11 @@ struct Fixture {
         sample.rigFingerprint=g.rigFingerprint;sample.selectedRigVerified=true;sample.selected=selected;
         Text(selected->weaponName,g.asset);Text(selected->configurationPath,g.configurationPath);
         selected->configurationPathVerified=true;selected->configurationPathPointer=0xf1000;selected->stateCount=1;
+        selected->stateTypeInfo=0xf4000;selected->meshTypeInfo=0xf5000;
         selected->soleConfiguredArray=0xf2000;selected->states[0].array=0xf2000;selected->states[0].count=1;
-        selected->states[0].meshes[0].address=0xf3000;Text(selected->states[0].meshes[0].assetPath,g.meshPath);
+        selected->states[0].state=0xf6000;selected->states[0].meshes[0].address=0xf3000;
+        selected->states[0].meshes[0].typeInfo=0xf5000;selected->states[0].meshes[0].namePointer=0xf7000;
+        Text(selected->states[0].meshes[0].assetPath,g.meshPath);
         sample.raw.valid=true;sample.raw.rig.count=170;sample.raw.rigFingerprint=g.rigFingerprint;
         sample.raw.weaponWorldMeters=Identity();Sync();
     }
@@ -57,7 +73,7 @@ struct Fixture {
         const auto original=operation==AmmunitionOperation::ReturnMagazine?ledger->Original():std::optional<RemovedMagazineResource>{};
         request={binding,{binding.context,++requestId,now-1,now+99*Ms,operation,original},false,{}};
         const auto queued=ledger->Queue(operation,admission,now,original);if(!queued)return false;command=*queued;
-        return backend.Admit(request,command,identity,admission,initialReady);
+        return backend.Admit(request,command,identity,admission,initialReady,ProfileKey);
     }
     bool Complete(){
         if(!ledger->Dispatch(admission,now))return false;
@@ -76,6 +92,7 @@ struct Fixture {
     bool Ready(){
         for(unsigned branch=0;branch<3;++branch){
             fvr::bc2::PistolAfterFeedOwnUpdate r;r.context=binding.context;r.identity=identity;
+            r.profileKey=ProfileKey;
             r.before.verified=r.after.verified=true;r.effectiveContextVerified=r.finiteAmmoVerified=true;
             auto& u=r.own;u.beforeOwner=u.afterOwner=identity.owner;u.branch=branch;u.depth=1;u.invocation=++invocation;
             r.nativeInvocation=r.nativeUpdate=u.invocation;
@@ -117,6 +134,7 @@ int EmptyRequiresMeasuredStrokeReleaseAndLaterOwnCohort(){Fixture f;CHECK(f.Feed
     CHECK(f.Tick().selected&&f.result.blocksFire&&!f.result.pending&&!f.result.blocksEquipment);
     CHECK(f.Grip()&&f.result.presentation&&f.result.blocksEquipment);
     const auto p=f.result.presentation;CHECK(p->source.rawSourceWorldMeters.values[3][0]==f.sample.raw.rawLeftWristWorldMeters.values[3][0]);
+    CHECK(p->registrationKey==ProfileKey&&p->selection==bc2_pistol_slide_profile_detail::Mp443Registration.geometry->selection);
     CHECK(p->source.weapon.generation==f.sample.input.owner.equipGeneration);
     CHECK(p->source.weapon.generation!=f.binding.context.resource.weaponGeneration);
     f.Stroke();CHECK(f.result.blocksFire&&!f.result.ownsHand&&!f.result.blocksEquipment&&f.releases==0);
@@ -187,6 +205,50 @@ int DrainedActorRetirementReclaimsPendingSlots(){Fixture f(7);
         f.ledger=std::make_unique<AmmunitionLedger>();f.Sync();f.Tick();CHECK(!f.result.pending&&!f.result.blocksFire);
     }return 0;
 }
+int UnknownOrChangedEventProfileCannotCreateOrReplacePolicy(){
+    for(const auto key:{std::uint64_t(0),ProfileKey^1}){Fixture f;CHECK(f.Feed());f.eventProfileKey=key;
+        f.Tick();CHECK(f.result.selected&&f.result.blocksFire&&!f.result.ownsHand&&!f.result.presentation);
+        CHECK(!f.Grip()&&!f.cleared);
+    }
+    Fixture f;CHECK(f.Feed());CHECK(f.Grip());const auto original=f.result.presentation;
+    CHECK(original&&original->registrationKey==ProfileKey);CHECK(f.Feed(false));f.eventProfileKey=ProfileKey^1;
+    f.Tick(0,true);CHECK(f.result.evidenceGap&&f.result.blocksFire&&!f.result.ownsHand&&!f.result.presentation&&!f.cleared);
+    f.eventProfileKey.reset();f.Tick();CHECK(f.result.evidenceGap&&f.result.blocksFire);
+    CHECK(original->registrationKey==ProfileKey&&original->selection==bc2_pistol_slide_profile_detail::Mp443Registration.geometry->selection);
+    return 0;
+}
+int NativeProfileAndCapacityMismatchCannotClearDebt(){
+    for(unsigned mismatch=0;mismatch<4;++mismatch){Fixture f(7);CHECK(f.Feed(false));CHECK(f.Ready());
+        if(mismatch==0)f.nativeProfileKey=0;
+        else if(mismatch==1)f.nativeProfileKey=ProfileKey^1;
+        else if(mismatch==2)f.readyProfileKey=ProfileKey^1;
+        else f.wrongNativeCapacity=true;
+        f.Tick();CHECK(f.result.blocksFire&&f.result.evidenceGap&&!f.result.ownsHand&&!f.result.presentation&&!f.cleared);
+        f.nativeProfileKey.reset();f.readyProfileKey.reset();f.wrongNativeCapacity=false;
+        f.Tick();CHECK(f.result.evidenceGap&&f.result.blocksFire&&!f.cleared);
+    }return 0;
+}
+int ConfigurationAndGeometrySelectionAreIndependent(){
+    for(unsigned mismatch=0;mismatch<5;++mismatch){Fixture f;CHECK(f.Feed());
+        if(mismatch==0)Text(f.sample.equipment->asset,"unregistered_fixture");
+        else if(mismatch==1)Text(f.selected->configurationPath,"unregistered/configuration");
+        else if(mismatch==2)f.sample.configurationPath="unregistered/configuration";
+        else if(mismatch==3)f.sample.meshPath="unregistered/mesh";
+        else f.sample.rigFingerprint^=1;
+        f.Tick();CHECK(!f.result.selected&&f.result.blocksFire&&!f.result.ownsHand&&!f.result.presentation&&!f.cleared);
+    }return 0;
+}
+int DiagnosticRegistrationSurvivesStowWithoutReadingEquipment(){Fixture f;CHECK(f.Feed());CHECK(f.Grip());
+    std::ostringstream selected;f.physical.Report(selected);
+    CHECK(selected.str().find("\"asset_class\":\"registered_slide\"")!=std::string::npos);
+    const auto key=std::to_string(ProfileKey);
+    CHECK(selected.str().find("\"registration_key\":"+key)!=std::string::npos);
+    f.sample.asset="unregistered_fixture";f.sample.selectedRigVerified=false;f.Tick();
+    std::ostringstream stowed;f.physical.Report(stowed);
+    CHECK(stowed.str().find("\"asset_class\":\"other\"")!=std::string::npos);
+    CHECK(stowed.str().find("\"last_selected_registration_key\":"+key)!=std::string::npos);
+    return 0;
+}
 }
 int main(){
     CHECK(EmptyRequiresMeasuredStrokeReleaseAndLaterOwnCohort()==0);
@@ -200,5 +262,9 @@ int main(){
     CHECK(RefusedNativeReleaseKeepsFireVeto()==0);
     CHECK(DelayedRawContactRetainsItsOriginalPacket()==0);
     CHECK(DrainedActorRetirementReclaimsPendingSlots()==0);
-    std::puts("Bc2PhysicalPistolSlideTests: 11 deterministic event/policy/arbiter/gate compositions; no native or headset acceptance");
+    CHECK(UnknownOrChangedEventProfileCannotCreateOrReplacePolicy()==0);
+    CHECK(NativeProfileAndCapacityMismatchCannotClearDebt()==0);
+    CHECK(ConfigurationAndGeometrySelectionAreIndependent()==0);
+    CHECK(DiagnosticRegistrationSurvivesStowWithoutReadingEquipment()==0);
+    std::puts("Bc2PhysicalPistolSlideTests: 15 deterministic event/policy/arbiter/profile/gate compositions; no native or headset acceptance");
 }

@@ -10,7 +10,7 @@ bool Same(const math::Matrix4& a,const math::Matrix4& b,float tolerance=.00001f)
 }
 const auto& Geometry(){return bc2_feed_profile_detail::M60Geometry;}
 Bc2M60FeedPresentation Rest(){return *ComposeBc2M60FeedPresentation({{1,2},{3,4}},Geometry().poses[0]);}
-std::array<math::Matrix4,6> Bases(){std::array<math::Matrix4,6> a;for(auto& m:a)m=Identity();return a;}
+Bc2FeedPartFrames Bases(){Bc2FeedPartFrames a;for(auto& m:a)m=Identity();return a;}
 RigSnapshot Rig(){
     RigSnapshot r;r.identity.soldier=0x10000;r.identity.weak=0x11000;r.identity.count=170;
     r.names.resize(170);r.parents.resize(170,0);r.parents[0]=-1;r.weaponBone=10;
@@ -31,6 +31,7 @@ Bc2PhysicalFeedPresentation Physical(){
     p.input.sequence=20;p.input.observedNs=1000000000;p.input.deadlineNs=1100000000;p.input.nowNs=1020000000;
     p.input.focused=true;p.input.tracked={true,true};p.weapon={p.owner.weapon,11};
     p.supply=Rest().supply;p.lifetime=30;p.revision=1;p.rigFingerprint=Geometry().rigFingerprint;
+    p.registrationKey=bc2_feed_profile_detail::M60Registration.key;p.chainCount=Geometry().chainCount;
     p.weaponFromPouch=Rest().weaponFromPouch;p.weaponFromChain=Rest().weaponFromChain;
     p.weaponFromCoverHinge=Geometry().weaponFromHinge;p.originalWeaponWorldMeters=Identity();return p;
 }
@@ -158,6 +159,134 @@ int CarryMaskSelectsSeparateRetainedWorldBases(){
     p.carriedPartsMask=2;CHECK(!Bc2FeedWorldBases(p,placed));p.carriedPartsMask=128;CHECK(!Bc2FeedWorldBases(p,placed));
     p.carriedPartsMask=1;p.pouchCarryWeaponWorldMeters={};CHECK(!Bc2FeedWorldBases(p,placed));return 0;
 }
+struct IndependentPresentationFixture {
+    Bc2FeedGeometry geometry{};RigSnapshot rig{};
+    IndependentPresentationFixture(){
+    auto& g=geometry;g.asset="SyntheticPresentation";g.configurationPath="Fixture/Presentation/Config";
+    g.meshPath="Fixture/Presentation/Mesh";g.rigFingerprint=123;g.chainCount=6;
+    g.rootBone={"ownRoot","",3,0};g.pouchBone={"ownBox","ownRoot",9,3};g.coverBone={"ownCover","ownRoot",14,3};
+    g.chain={{{"first","ownRoot",2,3},{"second","first",6,2},{"third","second",11,6},
+        {"fourth","third",17,11},{"fifth","fourth",21,17},{"sixth","fifth",27,21}}};
+    g.weaponFromHinge=g.hingeFromOpeningContact=g.hingeFromClosingContact=g.weaponFromCoverReference=Identity();
+    g.weaponFromHinge.values[3][0]=.05f;g.weaponFromCoverReference.values[3][0]=.16f;g.coverTravelRadians=.75f;
+    for(auto& pose:g.poses){pose.chainCount=g.chainCount;pose.weaponFromPouch=pose.weaponFromFeedRoot=pose.sourceFromWrist=Identity();
+        pose.weaponFromPouch.values[3][1]=-.12f;pose.weaponFromFeedRoot.values[3][1]=.03f;
+        for(unsigned i=0;i+1<g.chainCount;++i){pose.parentFromChainChild[i]=Identity();pose.parentFromChainChild[i].values[3][0]=.02f;}
+    }
+    rig.identity.count=35;rig.names.resize(35);rig.parents.assign(35,3);
+    rig.parents[3]=-1;rig.weaponBone=3;rig.evaluatedWorld.assign(35,Identity());rig.inverseBind.assign(35,Identity());
+    for(unsigned i=0;i<35;++i)rig.names[i]="other"+std::to_string(i);
+    rig.names[3]="ownRoot";
+    const auto assign=[&](const Bc2FeedChainBone& b){rig.names[b.index]=b.bone;rig.parents[b.index]=std::int32_t(b.parentIndex);};
+    assign(g.pouchBone);assign(g.coverBone);for(unsigned i=0;i<g.chainCount;++i)assign(g.chain[i]);
+    rig.parents[30]=27;rig.evaluatedWorld[30].values[3][2]=.04f;
+    }
+};
+int IndependentSixBoneChainUsesOwnRolesAndCoverFrame(){
+    IndependentPresentationFixture fixture;const auto& g=fixture.geometry;const auto& rig=fixture.rig;
+    const auto binding=feed_presentation_detail::Derive(rig,g);CHECK(binding&&binding->partCount==8);
+    CHECK(binding->parts[0]==9&&binding->parts[1]==14&&binding->parts[7]==27);
+    CHECK(!BindBc2FeedParts(rig,g.asset,g.configurationPath,g.meshPath)); // Structural fixture is never enrollment.
+    const auto pose=ComposeBc2FeedPresentation({{1,2},{3,4}},g.poses[0]);CHECK(pose&&pose->chainCount==6);
+    const auto frames=Bc2FeedPartWorldFrames(g,*pose,g.weaponFromHinge,Bases(),100);CHECK(frames);
+    CHECK(Near((*frames)[1].values[3][0],16.f));CHECK(Near((*frames)[7].values[3][0],10.f));
+    const auto writes=BuildBc2FeedPartWrites(*binding,rig,*frames);CHECK(writes&&writes->size()==9);
+    for(unsigned i=0;i<binding->partCount;++i){
+        const auto w=std::find_if(writes->begin(),writes->end(),[&](const auto& x){return x.index==binding->parts[i];});
+        CHECK(w!=writes->end()&&Same(w->transform,(*frames)[i]));
+    }
+    CHECK(std::none_of(writes->begin(),writes->end(),[](const auto& w){return w.index==3||w.index==34;}));
+    const auto child=std::find_if(writes->begin(),writes->end(),[](const auto& w){return w.index==30;});CHECK(child!=writes->end());
+    CHECK(Near(child->transform.values[3][2],.04f));
+    auto changed=*pose;changed.chainCount=4;CHECK(!Bc2FeedPartWorldFrames(g,changed,g.weaponFromHinge,Bases(),1));
+    auto badRig=rig;badRig.parents[21]=3;CHECK(!BuildBc2FeedPartWrites(*binding,badRig,*frames));
+    badRig=rig;badRig.names[34]="sixth";CHECK(!feed_presentation_detail::Derive(badRig,g));
+    CHECK(feed_presentation_detail::CarryMask(6)==253&&feed_presentation_detail::CarryMask(8)==1021);
+    CHECK(feed_presentation_detail::CarryMask(0)==0&&feed_presentation_detail::CarryMask(9)==0);return 0;
+}
+int RigidCoverSiblingsKeepOwnTargetsAndNativeDescendants(){
+    IndependentPresentationFixture fixture;auto& g=fixture.geometry;auto& rig=fixture.rig;
+    g.coverCompanionCount=4;
+    g.coverCompanions={{{{"sideA","ownRoot",4,3},Identity()},{{"sideB","ownRoot",13,3},Identity()},
+        {{"sideC","ownRoot",23,3},Identity()},{{"sideD","ownRoot",31,3},Identity()}}};
+    for(unsigned i=0;i<g.coverCompanionCount;++i){
+        auto& companion=g.coverCompanions[i];companion.weaponFromReference=feed_interaction_detail::Along(Identity(),FeedMotionKind::Hinge,.37);
+        companion.weaponFromReference.values[3]={.25f+.01f*i,.2f,.07f,1};
+        const auto& b=companion.bone;rig.names[b.index]=b.bone;rig.parents[b.index]=std::int32_t(b.parentIndex);
+        // Native animation is intentionally different from the measured pose.
+        // Retargeting only the primary cover delta would leave this drift.
+        rig.evaluatedWorld[b.index]=feed_interaction_detail::Along(Identity(),FeedMotionKind::Hinge,-.6);
+        rig.evaluatedWorld[b.index].values[3]={-.4f,.5f,-.2f,1};
+    }
+    auto childLocal=feed_interaction_detail::Along(Identity(),FeedMotionKind::Hinge,.52);
+    childLocal.values[3][2]=.03f;
+    rig.parents[5]=4;rig.evaluatedWorld[5]=feed_interaction_detail::Multiply(childLocal,rig.evaluatedWorld[4]);
+    rig.parents[16]=14;rig.evaluatedWorld[16]=feed_interaction_detail::Multiply(childLocal,rig.evaluatedWorld[14]);
+    rig.parents[32]=34;rig.evaluatedWorld[32]=childLocal;
+    const auto originalWorld=rig.evaluatedWorld;
+    const auto binding=feed_presentation_detail::Derive(rig,g);CHECK(binding&&binding->partCount==12);
+    CHECK(binding->parts[7]==27&&binding->parts[8]==4&&binding->parts[11]==31);
+    auto p=Physical();p.chainCount=g.chainCount;p.carriedPartsMask=feed_presentation_detail::CarryMask(g.chainCount);
+    p.pouchCarryWeaponWorldMeters=p.chainCarryWeaponWorldMeters=Identity();
+    p.pouchCarryWeaponWorldMeters.values[3][0]=5;p.chainCarryWeaponWorldMeters.values[3][0]=6;
+    auto placed=Identity();placed.values[3][0]=2;placed.values[3][1]=3;
+    const auto bases=feed_presentation_detail::WorldBases(g,p,placed);CHECK(bases);
+    CHECK((*bases)[0].values[3][0]==5&&(*bases)[2].values[3][0]==6);
+    for(unsigned i=8;i<12;++i)CHECK(Same((*bases)[i],placed));
+    auto bad=p;bad.carriedPartsMask|=1u<<8;CHECK(!feed_presentation_detail::WorldBases(g,bad,placed));
+    const auto pose=ComposeBc2FeedPresentation(p.supply,g.poses[0]);CHECK(pose);
+    const auto closed=Bc2FeedPartWorldFrames(g,*pose,g.weaponFromHinge,*bases,100);CHECK(closed);
+    CHECK(Near((*closed)[8].values[3][0],225.f)&&Near((*closed)[8].values[3][1],320.f));
+    const auto opened=feed_interaction_detail::Multiply(
+        feed_interaction_detail::Along(Identity(),FeedMotionKind::Hinge,1.5707963267948966),g.weaponFromHinge);
+    const auto frames=Bc2FeedPartWorldFrames(g,*pose,opened,*bases,100);CHECK(frames);
+    // Quarter turn about (.05,0,0): (.25,.2,.07) becomes (-.15,.2,.07).
+    CHECK(Near((*frames)[8].values[3][0],185.f)&&Near((*frames)[8].values[3][1],320.f));
+    CHECK(Near((*frames)[8].values[3][2],7.f));
+    CHECK(Near((*frames)[8].values[0][0],-std::sin(.37f))&&Near((*frames)[8].values[0][1],std::cos(.37f)));
+    const auto writes=BuildBc2FeedPartWrites(*binding,rig,*frames);CHECK(writes&&writes->size()==15);
+    for(unsigned i=0;i<binding->partCount;++i){
+        const auto w=std::find_if(writes->begin(),writes->end(),[&](const auto& x){return x.index==binding->parts[i];});
+        CHECK(w!=writes->end()&&Same(w->transform,(*frames)[i]));
+    }
+    for(const auto indices:{std::array<unsigned,2>{5,8},std::array<unsigned,2>{16,1}}){
+        const auto w=std::find_if(writes->begin(),writes->end(),[&](const auto& x){return x.index==indices[0];});
+        CHECK(w!=writes->end());
+        const auto relative=feed_interaction_detail::Multiply(w->transform,feed_interaction_detail::Inverse((*frames)[indices[1]]));
+        // Inverting float world coordinates near300 native units loses about
+        // 1.1e-5 units here; retain sub-micrometre precision in metres.
+        CHECK(Same(relative,childLocal,.00002f));
+    }
+    CHECK(std::none_of(writes->begin(),writes->end(),[](const auto& w){return w.index==3||w.index==32||w.index==34;}));
+    for(unsigned i=0;i<rig.evaluatedWorld.size();++i)CHECK(rig.evaluatedWorld[i].values==originalWorld[i].values);
+    auto badRig=rig;badRig.parents[4]=9;CHECK(!BuildBc2FeedPartWrites(*binding,badRig,*frames));
+    badRig=rig;badRig.names[34]="sideA";CHECK(!feed_presentation_detail::Derive(badRig,g));
+    badRig=rig;badRig.nativeHiddenLeaves={4};CHECK(!feed_presentation_detail::Derive(badRig,g));
+    auto badTargets=*frames;badTargets[11]={};CHECK(!BuildBc2FeedPartWrites(*binding,rig,badTargets));
+    auto nested=g;nested.coverBone.parent="sideA";nested.coverBone.parentIndex=4;
+    auto nestedRig=rig;nestedRig.parents[14]=4;
+    const auto nestedBinding=feed_presentation_detail::Derive(nestedRig,nested);CHECK(nestedBinding);
+    const auto nestedWrites=BuildBc2FeedPartWrites(*nestedBinding,nestedRig,*frames);CHECK(nestedWrites);
+    const auto nestedCover=std::find_if(nestedWrites->begin(),nestedWrites->end(),[](const auto& w){return w.index==14;});
+    CHECK(nestedCover!=nestedWrites->end()&&Same(nestedCover->transform,(*frames)[1]));
+    // A later companion in part order is applied before its earlier owned
+    // descendant; the primary cover still gets its own exact target.
+    auto disconnected=g;disconnected.pouchBone.parent="other34";disconnected.pouchBone.parentIndex=34;
+    badRig=rig;badRig.parents[9]=34;badRig.parents[34]=-1;
+    CHECK(!feed_presentation_detail::Derive(badRig,disconnected));
+    badRig.parents[34]=9;CHECK(!feed_presentation_detail::Derive(badRig,disconnected));
+    return 0;
+}
+int RegistrationAndChainIdentitySurvivePairRetention(){
+    auto p=Physical();auto current=p.input;current.sequence++;
+    auto bad=p;bad.registrationKey++;CHECK(!Bc2FeedSourceFresh(bad,p.owner,current,Equipment(),p.rig,1020000000));
+    CHECK(!Bc2FeedSelected(Selected(),bad,Equipment(),21,1020000000));
+    CHECK(!Bc2FeedWorldBases(bad,Identity()));CHECK(!Bc2FeedPresentationRetained(p,bad,false,1020000000));
+    bad=p;bad.chainCount=6;CHECK(!Bc2FeedSourceFresh(bad,p.owner,current,Equipment(),p.rig,1020000000));
+    CHECK(!Bc2FeedWorldBases(bad,Identity()));CHECK(!Bc2FeedSelected(Selected(),bad,Equipment(),21,1020000000));
+    CHECK(!Bc2FeedPresentationRetained(p,bad,false,1020000000));
+    bad=p;bad.carriedPartsMask=1u<<8;CHECK(!Bc2FeedWorldBases(bad,Identity()));return 0;
+}
 }
 int main(){
     CHECK(MeasuredCoverFrameIsNotTheHingeFrame()==0);
@@ -169,5 +298,8 @@ int main(){
     CHECK(ExactSelectedConfigurationAndOriginalLeaseAreRequired()==0);
     CHECK(RealMechanismClaimAndPairRetentionAreRequired()==0);
     CHECK(CarryMaskSelectsSeparateRetainedWorldBases()==0);
-    std::puts("Bc2FeedPresentationTests: 9 geometry/lease/selector/claim/carry groups; no native/headset acceptance");
+    CHECK(IndependentSixBoneChainUsesOwnRolesAndCoverFrame()==0);
+    CHECK(RigidCoverSiblingsKeepOwnTargetsAndNativeDescendants()==0);
+    CHECK(RegistrationAndChainIdentitySurvivePairRetention()==0);
+    std::puts("Bc2FeedPresentationTests: 12 geometry/lease/selector/claim/carry groups; no native/headset acceptance");
 }

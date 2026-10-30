@@ -1,0 +1,197 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fvr:bc2:mechanism-registry:v1",
+  "title": "Private reviewed mechanism registry annotations",
+  "description": "Offline exact-key join with existing magazine descriptor jobs. Geometry is read from source-hash-pinned authored outputs through JSON pointers. Roles and interaction policy require explicit review. Native-family review and physical/native mechanism admission are independent inputs. This schema does not grant runtime admission.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "sources", "profiles"],
+  "properties": {
+    "schema": {"const": "fvr.bc2.mechanism_registry_annotations.v1"},
+    "sources": {
+      "type": "object", "minProperties": 1, "maxProperties": 512,
+      "propertyNames": {"type": "string", "minLength": 1, "maxLength": 127},
+      "additionalProperties": {"$ref": "#/$defs/source"}
+    },
+    "profiles": {"type": "array", "maxItems": 256, "items": {"$ref": "#/$defs/profile"}}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "source": {
+      "type": "object", "additionalProperties": false, "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1, "maxLength": 1023, "description": "Canonical relative POSIX path under --evidence-root (default annotations parent). No traversal, absolute paths, duplicate paths or backslashes."},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "reference": {
+      "type": "object", "additionalProperties": false, "required": ["source", "pointer"],
+      "properties": {
+        "source": {"type": "string", "minLength": 1},
+        "pointer": {"type": "string", "pattern": "^(|/.*)$", "description": "RFC 6901 JSON pointer into the exact hashed JSON bytes. Empty selects the whole document."}
+      }
+    },
+    "measured": {
+      "description": "A source reference, or an assembly of source references. Inline measured scalar values are forbidden. Referenced bundles retain their existing output shape; assemble named members when the original output uses other field names.",
+      "oneOf": [
+        {"$ref": "#/$defs/reference"},
+        {"type": "array", "items": {"$ref": "#/$defs/measured"}},
+        {"type": "object", "not": {"anyOf": [{"required": ["source"]}, {"required": ["pointer"]}]}, "additionalProperties": {"$ref": "#/$defs/measured"}}
+      ]
+    },
+    "positive": {"type": "number", "exclusiveMinimum": 0, "maximum": 10},
+    "nanoseconds": {"type": "integer", "minimum": 1, "maximum": 10000000000},
+    "revision": {"type": "integer", "minimum": 1, "maximum": 18446744073709551615},
+    "feedPolicy": {
+      "type": "object", "additionalProperties": false,
+      "required": ["completeFraction", "releaseFraction", "pathToleranceMeters", "orientationToleranceRadians", "maxStepMeters", "maxStepRadians", "endpointDwellNs", "maximumGestureNs", "maxInputGapNs"],
+      "properties": {
+        "completeFraction": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+        "releaseFraction": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+        "pathToleranceMeters": {"$ref": "#/$defs/positive"},
+        "orientationToleranceRadians": {"$ref": "#/$defs/positive"},
+        "maxStepMeters": {"$ref": "#/$defs/positive"},
+        "maxStepRadians": {"$ref": "#/$defs/positive"},
+        "endpointDwellNs": {"$ref": "#/$defs/nanoseconds"},
+        "maximumGestureNs": {"$ref": "#/$defs/nanoseconds"},
+        "maxInputGapNs": {"type": "integer", "minimum": 1, "maximum": 100000000}
+      }
+    },
+    "slidePolicy": {
+      "type": "object", "additionalProperties": false,
+      "required": ["name", "sourceReference", "revision", "sourceDisplacementMeters", "strokeMeters", "frontToleranceMeters", "rearToleranceMeters", "hysteresisMeters", "contactRadiusMeters", "lateralToleranceMeters", "rotationToleranceRadians", "maxStepMeters", "endpointDwellNs", "maximumStrokeNs"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1, "maxLength": 255},
+        "sourceReference": {"type": "string", "minLength": 1, "maxLength": 1023},
+        "revision": {"$ref": "#/$defs/revision"},
+        "sourceDisplacementMeters": {"type": "number", "minimum": -1, "maximum": 10},
+        "strokeMeters": {"type": "number", "minimum": 0.01, "maximum": 0.15},
+        "frontToleranceMeters": {"$ref": "#/$defs/positive"},
+        "rearToleranceMeters": {"$ref": "#/$defs/positive"},
+        "hysteresisMeters": {"$ref": "#/$defs/positive"},
+        "contactRadiusMeters": {"type": "number", "exclusiveMinimum": 0, "maximum": 0.15},
+        "lateralToleranceMeters": {"type": "number", "exclusiveMinimum": 0, "maximum": 0.1},
+        "rotationToleranceRadians": {"type": "number", "exclusiveMinimum": 0, "maximum": 0.5},
+        "maxStepMeters": {"$ref": "#/$defs/positive"},
+        "endpointDwellNs": {"type": "integer", "minimum": 5000000, "maximum": 250000000},
+        "maximumStrokeNs": {"$ref": "#/$defs/nanoseconds"}
+      }
+    },
+    "contact": {
+      "type": "object", "additionalProperties": false, "required": ["role", "radiusMeters", "maxAngleRadians"],
+      "properties": {
+        "role": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+        "radiusMeters": {"type": "number", "minimum": 0.0001, "maximum": 0.5},
+        "maxAngleRadians": {"type": "number", "minimum": 0.0001, "maximum": 3.141592653589793}
+      }
+    },
+    "feedMechanism": {
+      "description": "Explicit requirements for the currently supported same-container coupled feed class. Latch, separate withdrawal and charge remain unsupported; no curve analysis fills them in.",
+      "type": "object", "additionalProperties": false,
+      "required": ["revision", "maxAgeNs", "ammunitionKind", "cover", "latch", "container", "charge", "containerNeedsOpen", "feedNeedsOpen", "detachNeedsUnseated", "sameContainerReplenishment", "coupledContainerDetach", "contacts"],
+      "properties": {
+        "revision": {"$ref": "#/$defs/revision"},
+        "maxAgeNs": {"type": "integer", "minimum": 1, "maximum": 100000000},
+        "ammunitionKind": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+        "cover": {"const": true}, "latch": {"const": false}, "container": {"const": true}, "charge": {"const": false},
+        "containerNeedsOpen": {"const": true}, "feedNeedsOpen": {"const": true}, "detachNeedsUnseated": {"const": false},
+        "sameContainerReplenishment": {"const": true}, "coupledContainerDetach": {"const": true},
+        "contacts": {
+          "type": "object", "additionalProperties": false, "required": ["Cover", "Container", "Feed"],
+          "properties": {"Cover": {"$ref": "#/$defs/contact"}, "Container": {"$ref": "#/$defs/contact"}, "Feed": {"$ref": "#/$defs/contact"}}
+        }
+      }
+    },
+    "profile": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "descriptor_key", "descriptor_digest", "native_class", "configuration", "asset", "meshPath", "rigFingerprint", "roles", "geometry", "geometry_evidence", "role_review", "reviewer", "roles_reviewed", "policy_reviewed", "interaction_policy", "enabled"],
+      "properties": {
+        "kind": {"enum": ["feed", "pistol_slide"]},
+        "descriptor_key": {"type": "string", "pattern": "^bc2:magazine-descriptor:[0-9a-f]{64}$"},
+        "descriptor_digest": {"$ref": "#/$defs/sha256"},
+        "native_class": {"enum": ["AutomaticMagazineZeroBoltTransfer", "SingleFireMagazineZeroBolt"]},
+        "configuration": {"$ref": "#/$defs/reference", "description": "Resolves existing {resource,sha256,guid|instance_guid}. Must equal the exact descriptor weapon identity."},
+        "asset": {"$ref": "#/$defs/reference"},
+        "meshPath": {"$ref": "#/$defs/reference"},
+        "rigFingerprint": {"$ref": "#/$defs/reference"},
+        "roles": {"$ref": "#/$defs/measured", "description": "Feed resolves {root,pouch,cover,feed_chain[1..8]}; slide resolves {root,slide}. Root is {bone,index}; every child is {bone,index,parent,parentIndex}. Names/indices and actual-parent topology must agree; unknown/missing roles are rejected."},
+        "geometry": {"$ref": "#/$defs/measured", "description": "Exact public geometry member names, supplied through source references; see feedGeometry and slideGeometry definitions for resolved shapes. Transforms use canonical reflected-Z row-vector metres."},
+        "geometry_evidence": {"$ref": "#/$defs/reference", "description": "Required exact identity anchor: an existing authored record containing configuration resource/GUID/hash, asset name, configured mesh path and rig fingerprint. Existing pipeline aliases weapon_configuration/weapon, asset/native_asset_name/asset_name, configured_mesh/configured_mesh_path and rig_fingerprint are accepted. Numeric references also check enclosing source records so a different configuration cannot be hidden behind a pointer."},
+        "role_review": {"$ref": "#/$defs/reference"},
+        "reviewer": {"type": "string", "minLength": 1, "maxLength": 127},
+        "roles_reviewed": {"const": true}, "policy_reviewed": {"const": true},
+        "interaction_policy": {"type": "object"},
+        "mechanism": {"$ref": "#/$defs/feedMechanism"},
+        "enabled": {"type": "boolean", "description": "A request only. True is rejected unless independent native descriptor review and exact profile-digest mechanism admission both match."}
+      },
+      "allOf": [{
+        "if": {"properties": {"kind": {"const": "feed"}}},
+        "then": {"required": ["mechanism"], "properties": {"native_class": {"const": "AutomaticMagazineZeroBoltTransfer"}, "interaction_policy": {"$ref": "#/$defs/feedPolicy"}}},
+        "else": {"not": {"required": ["mechanism"]}, "properties": {"native_class": {"const": "SingleFireMagazineZeroBolt"}, "interaction_policy": {"$ref": "#/$defs/slidePolicy"}}}
+      }]
+    },
+    "matrix": {"type": "array", "minItems": 16, "maxItems": 16, "items": {"type": "number"}, "description": "Finite proper rigid affine row-vector transform. No scale, reflection or perspective."},
+    "vector": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "number"}},
+    "feedPose": {
+      "type": "object", "additionalProperties": false,
+      "required": ["authoredSeconds", "weaponFromPouch", "weaponFromFeedRoot", "parentFromChainChild", "sourceFromWrist"],
+      "properties": {
+        "authoredSeconds": {"type": "number", "minimum": 0, "maximum": 15},
+        "weaponFromPouch": {"$ref": "#/$defs/matrix"}, "weaponFromFeedRoot": {"$ref": "#/$defs/matrix"},
+        "parentFromChainChild": {"type": "array", "maxItems": 7, "items": {"$ref": "#/$defs/matrix"}},
+        "sourceFromWrist": {"$ref": "#/$defs/matrix"}
+      }
+    },
+    "feedGeometry": {
+      "type": "object", "additionalProperties": false,
+      "required": ["meshSha256", "lodSha256", "skeletonSha256", "clipSha256", "weaponFromHinge", "hingeFromOpeningContact", "hingeFromClosingContact", "weaponFromCoverReference", "coverTravelRadians", "poses"],
+      "properties": {
+        "meshSha256": {"$ref": "#/$defs/sha256"}, "lodSha256": {"$ref": "#/$defs/sha256"},
+        "skeletonSha256": {"$ref": "#/$defs/sha256"}, "clipSha256": {"$ref": "#/$defs/sha256"},
+        "weaponFromHinge": {"$ref": "#/$defs/matrix"}, "hingeFromOpeningContact": {"$ref": "#/$defs/matrix"},
+        "hingeFromClosingContact": {"$ref": "#/$defs/matrix"}, "weaponFromCoverReference": {"$ref": "#/$defs/matrix"},
+        "coverTravelRadians": {"type": "number", "exclusiveMinimum": -3.141592653589793, "exclusiveMaximum": 3.141592653589793, "description": "Signed hinge travel; absolute magnitude must be at least0.001."},
+        "coverCompanions": {"type": "array", "maxItems": 4, "items": {
+          "type": "object", "additionalProperties": false,
+          "required": ["bone", "index", "parent", "parentIndex", "weaponFromReference"],
+          "properties": {"bone": {"type": "string", "minLength": 1}, "index": {"type": "integer", "minimum": 0, "maximum": 4095},
+            "parent": {"type": "string", "minLength": 1}, "parentIndex": {"type": "integer", "minimum": 0, "maximum": 4095},
+            "weaponFromReference": {"$ref": "#/$defs/matrix"}}
+        }, "description": "Measured rigid root siblings of primary cover; independent articulation must remain outside this rigid role."},
+        "poses": {"type": "array", "minItems": 7, "maxItems": 7, "items": {"$ref": "#/$defs/feedPose"}, "description": "Explicit slots: Resting, PouchDetachSource, PouchWithdrawn, PouchAttachSource, PouchAttachedFeedUnseated, FeedSeatSource, FeedSeated. Every active local chain has role chain count minus one transforms."}
+      }
+    },
+    "slideGeometry": {
+      "type": "object", "additionalProperties": false,
+      "required": ["weaponFromStaticSlide", "slideFromAuthoredWrist", "rearward", "partBoundsMin", "partBoundsMax", "ring3Part", "nearestVertexPart", "minimumDisplacementMeters", "maximumDisplacementMeters", "authoredLandmarkSeconds", "ring3VertexDistanceMeters", "linearHelperSha256"],
+      "properties": {
+        "weaponFromStaticSlide": {"$ref": "#/$defs/matrix"}, "slideFromAuthoredWrist": {"$ref": "#/$defs/matrix"},
+        "rearward": {"$ref": "#/$defs/vector"}, "partBoundsMin": {"$ref": "#/$defs/vector"}, "partBoundsMax": {"$ref": "#/$defs/vector"},
+        "ring3Part": {"$ref": "#/$defs/vector"}, "nearestVertexPart": {"$ref": "#/$defs/vector"},
+        "minimumDisplacementMeters": {"type": "number"}, "maximumDisplacementMeters": {"type": "number"},
+        "authoredLandmarkSeconds": {"type": "number", "minimum": 0}, "ring3VertexDistanceMeters": {"type": "number", "minimum": 0},
+        "linearHelperSha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "admissions": {
+      "description": "Separate --admissions JSON document. Export a disabled candidate first, review its profile digest and native/physical prerequisites, then supply an exact admission record. Native review still uses the existing --reviewed magazine family format. No flags are inferred from sampled geometry.",
+      "type": "object", "additionalProperties": false, "required": ["schema", "reviews"],
+      "properties": {
+        "schema": {"const": "fvr.bc2.mechanism_admission_reviews.v1"},
+        "reviews": {"type": "array", "maxItems": 256, "items": {
+          "type": "object", "additionalProperties": false,
+          "required": ["profile_digest", "descriptor_key", "descriptor_digest", "native_class", "physical_reviewed", "native_reviewed", "reviewer", "evidence"],
+          "properties": {
+            "profile_digest": {"$ref": "#/$defs/sha256"},
+            "descriptor_key": {"type": "string", "pattern": "^bc2:magazine-descriptor:[0-9a-f]{64}$"},
+            "descriptor_digest": {"$ref": "#/$defs/sha256"},
+            "native_class": {"enum": ["AutomaticMagazineZeroBoltTransfer", "SingleFireMagazineZeroBolt"]},
+            "physical_reviewed": {"const": true}, "native_reviewed": {"const": true},
+            "reviewer": {"type": "string", "minLength": 1, "maxLength": 127},
+            "evidence": {"$ref": "#/$defs/reference"}
+          }
+        }}
+      }
+    }
+  }
+}

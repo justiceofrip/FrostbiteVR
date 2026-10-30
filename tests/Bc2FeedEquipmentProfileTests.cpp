@@ -18,7 +18,7 @@ bool SamePose(const math::Matrix4& a,const math::Matrix4& b){
     return feed_interaction_detail::Distance(a,b)<1e-6&&feed_interaction_detail::Angle(a,b)<.001;
 }
 int ExactSelectorAndNoFallback(){
-    const auto& g=Geometry();CHECK(g.chain.size()==4&&g.chain[0].index==38&&g.chain[3].index==116);
+    const auto& g=Geometry();CHECK(g.chainCount==4&&g.chain[0].index==38&&g.chain[3].index==116);
     CHECK(g.chain[0].parentIndex==10&&g.chain[1].parentIndex==38&&
         g.chain[2].parentIndex==100&&g.chain[3].parentIndex==114);
     for(const auto name:{"M60","m60_sp","M60_sp_s","M60_sp_extra","PKM_sp",""})
@@ -220,12 +220,178 @@ int ReplacementPreciselyStopsAtUnmeasuredWithdrawal(){
     CHECK(EvaluateFeedMechanism(f.mechanism,f.snapshot,f.supply,f.now).status==FeedMechanismStatus::UnknownState);
     CHECK(f.snapshot.cycle==FeedCycleState::Unknown);return 0;
 }
+// Independent synthetic evidence: no M60 transform, role or topology is copied.
+// These local rows exercise pure spans and are never part of the live registry.
+Bc2FeedGeometry SyntheticGeometry(unsigned count){
+    Bc2FeedGeometry g;g.asset="SyntheticFeed";g.configurationPath="Fixture/Feed/Configuration";
+    g.meshPath="Fixture/Feed/Mesh";g.rigFingerprint=0x76543210;g.chainCount=count;
+    g.meshSha256=g.lodSha256=g.skeletonSha256=g.clipSha256=
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    g.rootBone={"fixtureRoot","",2,0};g.pouchBone={"fixtureBox","fixtureRoot",5,2};
+    g.coverBone={"fixtureLid","fixtureRoot",7,2};
+    g.chain={{{"c0","fixtureRoot",11,2},{"c1","c0",13,11},{"c2","c1",15,13},
+        {"c3","c2",17,15},{"c4","c3",19,17},{"c5","c4",21,19},
+        {"c6","c5",23,21},{"c7","c6",25,23}}};
+    const auto identity=bc2_feed_profile_detail::MeasuredFrame({1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1});
+    g.weaponFromHinge=g.hingeFromOpeningContact=g.hingeFromClosingContact=g.weaponFromCoverReference=identity;
+    g.weaponFromHinge.values[3][0]=.31f;g.weaponFromCoverReference.values[3][1]=.27f;
+    g.hingeFromOpeningContact.values[3][0]=.06f;g.coverTravelRadians=.9f;
+    g.hingeFromClosingContact=feed_interaction_detail::Along(g.hingeFromOpeningContact,FeedMotionKind::Hinge,g.coverTravelRadians);
+    for(unsigned n=0;n<g.poses.size();++n){auto& p=g.poses[n];p.authoredSeconds=n*.25;p.chainCount=count;
+        p.weaponFromPouch=p.weaponFromFeedRoot=p.sourceFromWrist=identity;
+        p.weaponFromPouch.values[3][0]=.2f+.09f*n;p.weaponFromFeedRoot.values[3][1]=-.3f+.07f*n;
+        p.sourceFromWrist.values[3][2]=.02f;
+        for(unsigned i=0;i+1<count&&i<p.parentFromChainChild.size();++i){
+            p.parentFromChainChild[i]=identity;p.parentFromChainChild[i].values[3][0]=.01f*(i+1);
+        }
+    }
+    return g;
+}
+Bc2FeedRegistration SyntheticRegistration(){
+    static constexpr std::array<ReloadTimingWord,6> timing{{
+        {0x10,std::bit_cast<std::uint32_t>(.5f)},{0x14,0},{0x18,std::bit_cast<std::uint32_t>(3.25f)},
+        {0x20,1},{0x24,2},{0x2c,0}}};
+    Bc2FeedRegistration row;row.key=0x123456789abcdef0ull;
+    row.profileDigest="123456789abcdef0000000000000000000000000000000000000000000000000";
+    row.geometry=SyntheticGeometry(2);row.interactionPolicy=Policy();
+    auto& p=row.mechanism;p.family=FeedFamily::Belt;p.id=0x654321;p.revision=3;p.ammunitionKind=11;
+    p.cover=p.container=p.containerNeedsOpen=p.feedNeedsOpen=p.sameContainerReplenishment=p.coupledContainerDetach=true;
+    p.maxAgeNs=100000000;p.contacts[0]={31,.04f,.3f};p.contacts[2]={32,.04f,.3f};p.contacts[3]={33,.04f,.3f};
+    row.config={row.geometry.asset,row.geometry.configurationPath,{2,1,8,29,60,3,0,3.25f,.5f,0,0,0,false,false},
+        timing,ReloadDescriptorAdmission::ReviewedNative};
+    row.nativeClass=Bc2FeedNativeClass::AutomaticMagazineZeroBoltTransfer;row.enabled=row.reviewed=true;return row;
+}
+ReloadObservedConfig Observed(const Bc2FeedRegistration& row){
+    ReloadObservedConfig c;const auto& d=row.config;const auto& v=d.values;
+    std::copy(d.assetName.begin(),d.assetName.end(),c.assetName.begin());
+    std::copy(d.assetPath.begin(),d.assetPath.end(),c.assetPath.begin());
+    c.weaponData=0x10000;c.firingData=0x20000;c.primaryFire=0x30000;c.ammoAddress=c.primaryFire+0x170;
+    c.fireLogicType=v.fireLogicType;c.reloadType=v.reloadType;c.fireInputAction=v.fireInputAction;c.reloadInputAction=v.reloadInputAction;
+    c.baseCapacity=v.baseCapacity;c.numberOfMagazines=v.numberOfMagazines;c.reloadDelay=v.reloadDelay;
+    c.reloadTime=v.reloadTime;c.reloadThreshold=v.reloadThreshold;c.postReloadTime=v.postReloadTime;
+    c.boltDelay=v.boltDelay;c.boltTime=v.boltTime;c.holdBoltUntilFireRelease=v.holdBoltUntilFireRelease;
+    c.holdBoltUntilZoomRelease=v.holdBoltUntilZoomRelease;return c;
+}
+int RegistryPinsExactIndependentConfiguration(){
+    const auto& builtin=bc2_feed_profile_detail::M60Registration;CHECK(ValidateBc2FeedRegistration(builtin));
+    const auto* live=FindBc2FeedRegistration(builtin.key);CHECK(live&&live->mechanism.id==builtin.mechanism.id);
+    CHECK(FindBc2FeedRegistration(Observed(builtin))==live);
+    CHECK(FindBc2FeedRegistration(builtin.key,Observed(builtin),Geometry().asset,Geometry().configurationPath,
+        Geometry().meshPath,Geometry().rigFingerprint)==live);
+    const std::array<Bc2FeedRegistration,2> rows{builtin,SyntheticRegistration()};const auto& g=rows[1].geometry;
+    CHECK(SelectBc2FeedRegistration(rows,rows[1].key)==&rows[1]);
+    CHECK(SelectBc2FeedRegistration(rows,Observed(rows[1]))==&rows[1]);
+    CHECK(SelectBc2FeedRegistration(rows,g.asset,g.configurationPath,g.meshPath,g.rigFingerprint)==&rows[1]);
+    CHECK(!FindBc2FeedRegistration(rows[1].key)); // The fixture did not enroll anything.
+    auto c=Observed(rows[1]);c.baseCapacity=100;CHECK(!SelectBc2FeedRegistration(rows,c));
+    c=Observed(rows[1]);c.reloadTime=7.8f;CHECK(!SelectBc2FeedRegistration(rows,c));
+    c=Observed(rows[1]);c.ammoAddress++;CHECK(!SelectBc2FeedRegistration(rows,c));
+    CHECK(!SelectBc2FeedRegistration(rows,g.asset,g.configurationPath,Geometry().meshPath,g.rigFingerprint));
+    CHECK(!SelectBc2FeedRegistration(rows,g.asset,Geometry().configurationPath,g.meshPath,g.rigFingerprint));
+    CHECK(!SelectBc2FeedRegistration(rows,g.asset,g.configurationPath,g.meshPath,g.rigFingerprint+1));
+    CHECK(!SelectBc2FeedRegistration(rows,"syntheticfeed",g.configurationPath,g.meshPath,g.rigFingerprint));return 0;
+}
+int RegistryRejectsCollisionsUnreviewedAndInvalidRows(){
+    const auto good=SyntheticRegistration();CHECK(ValidateBc2FeedRegistration(good));
+    const auto rejects=[&](Bc2FeedRegistration bad){const std::array<Bc2FeedRegistration,1> rows{bad};
+        return !ValidateBc2FeedRegistration(bad)&&!SelectBc2FeedRegistration(rows,bad.key);};
+    auto bad=good;bad.key=0;CHECK(rejects(bad));bad=good;bad.key++;CHECK(rejects(bad));
+    bad=good;bad.profileDigest="1234";CHECK(rejects(bad));
+    bad=good;bad.enabled=false;CHECK(rejects(bad));bad=good;bad.reviewed=false;CHECK(rejects(bad));
+    bad=good;bad.nativeClass=Bc2FeedNativeClass::Unsupported;CHECK(rejects(bad));
+    bad=good;bad.config.admission=ReloadDescriptorAdmission::Candidate;CHECK(rejects(bad));
+    bad=good;bad.config.values.boltTime=.1f;CHECK(rejects(bad));
+    bad=good;bad.config.values.fireLogicType=0;CHECK(rejects(bad));
+    bad=good;bad.config.assetPath="Fixture/Other";CHECK(rejects(bad));
+    bad=good;bad.config.values.reloadTime=std::numeric_limits<float>::quiet_NaN();CHECK(rejects(bad));
+    bad=good;bad.config.values.baseCapacity=0;CHECK(rejects(bad));
+    bad=good;bad.mechanism.coupledContainerDetach=false;CHECK(rejects(bad));
+    bad=good;bad.interactionPolicy={};CHECK(rejects(bad));
+    bad=good;bad.geometry.meshSha256="unmeasured";CHECK(rejects(bad));
+    bad=good;bad.geometry.poses[2].chainCount++;CHECK(rejects(bad));
+    bad=good;bad.geometry.chain[1].parentIndex=2;CHECK(rejects(bad));
+    bad=good;bad.geometry.coverBone=bad.geometry.pouchBone;CHECK(rejects(bad));
+    auto timing=std::array<ReloadTimingWord,6>{};std::copy(good.config.timing.begin(),good.config.timing.end(),timing.begin());
+    timing[0].expected=std::bit_cast<std::uint32_t>(.7f);bad=good;bad.config.timing=timing;CHECK(rejects(bad));
+    std::array<Bc2FeedRegistration,2> duplicate{good,good};CHECK(!SelectBc2FeedRegistration(duplicate,good.key));
+    CHECK(!SelectBc2FeedRegistration(duplicate,Observed(good)));
+    duplicate[1].key=0x223456789abcdef0ull;
+    duplicate[1].profileDigest="223456789abcdef0000000000000000000000000000000000000000000000000";
+    duplicate[1].geometry.meshPath="Fixture/AlternativeMesh"; // Same config is still ambiguous.
+    CHECK(!SelectBc2FeedRegistration(duplicate,good.key));
+    CHECK(!SelectBc2FeedRegistration(duplicate,duplicate[1].key));
+    duplicate[1].geometry.asset="Other";duplicate[1].config.assetName="Other";
+    duplicate[1].profileDigest=good.profileDigest;CHECK(!SelectBc2FeedRegistration(duplicate,good.key));
+    duplicate[1].profileDigest="223456789abcdef0000000000000000000000000000000000000000000000000";
+    duplicate[1].config.assetName=good.config.assetName; // Invalid row still conflicts in native config identity.
+    CHECK(!SelectBc2FeedRegistration(duplicate,good.key));return 0;
+}
+int IndependentGeometryAndVariableChainDriveMotion(){
+    const FeedSupplyKey supply{{8,1},{9,1}};
+    for(unsigned count:{1u,2u,6u,MaxBc2FeedChainBones}){
+        const auto g=SyntheticGeometry(count);CHECK(ValidateBc2FeedGeometry(g));
+        const auto motion=BuildBc2FeedMotion(g,Op::SeatFeed,Policy());CHECK(motion);
+        const auto& source=g.poses[unsigned(Bc2FeedPoseId::PouchAttachedFeedUnseated)];
+        const auto p=ComposeBc2FeedPresentation(supply,source);CHECK(p&&p->chainCount==count);
+        CHECK(SamePose(motion->placement.weaponFromSource,p->weaponFromChain[count-1]));
+        CHECK(Near(p->weaponFromChain[count-1].values[3][0],.005f*count*(count-1)));
+        CHECK(Near(motion->placement.weaponFromDestination.values[3][1],.12f));
+        const auto open=BuildBc2FeedMotion(g,Op::OpenCover,Policy());CHECK(open&&Near(open->travel,.9f));
+        CHECK(Near(open->weaponFromMotion.values[3][0],.31f));
+        auto target=p->weaponFromChain[count-1];target.values[3][2]+=.12f;
+        const auto carried=PlaceBc2FeedTerminal(supply,source,target);CHECK(carried);
+        CHECK(SamePose(carried->weaponFromChain[count-1],target));
+        CHECK(SamePose(carried->weaponFromPouch,source.weaponFromPouch));
+        auto retained=source;retained.weaponFromFeedRoot.values[3][2]+=.003f;
+        const auto next=BuildBc2FeedMotionFromRetainedPose(g,Op::SeatFeed,Policy(),retained);CHECK(next);
+        CHECK(Near(next->placement.weaponFromSource.values[3][2],.003f));
+        CHECK(SamePose(next->placement.weaponFromDestination,motion->placement.weaponFromDestination));
+    }
+    auto g=SyntheticGeometry(2);g.chainCount=0;CHECK(!BuildBc2FeedMotion(g,Op::SeatFeed,Policy()));
+    g=SyntheticGeometry(2);g.poses[0].parentFromChainChild.back().values[0][0]=std::numeric_limits<float>::quiet_NaN();
+    CHECK(ValidateBc2FeedGeometry(g)&&ComposeBc2FeedPresentation(supply,g.poses[0])); // Inactive capacity is never consumed.
+    g=SyntheticGeometry(2);g.chainCount=MaxBc2FeedChainBones+1;CHECK(!ValidateBc2FeedGeometry(g));
+    auto p=SyntheticGeometry(2).poses[0];p.chainCount=MaxBc2FeedChainBones+1;
+    CHECK(!ComposeBc2FeedPresentation(supply,p));CHECK(!PlaceBc2FeedTerminal(supply,p,p.weaponFromFeedRoot));return 0;
+}
+int RigidCoverCompanionsRequireMeasuredUniqueRootRoles(){
+    CHECK(MaxBc2FeedParts==14&&MaxBc2FeedCoverCompanions==4);
+    CHECK(Geometry().coverCompanionCount==0&&Bc2FeedPartCount(Geometry())==6);
+    auto good=SyntheticRegistration();auto& g=good.geometry;
+    g.coverCompanionCount=4;
+    g.coverCompanions={{{{"side0","fixtureRoot",29,2},g.weaponFromCoverReference},
+        {{"side1","fixtureRoot",31,2},g.weaponFromCoverReference},
+        {{"side2","fixtureRoot",33,2},g.weaponFromCoverReference},
+        {{"side3","fixtureRoot",35,2},g.weaponFromCoverReference}}};
+    for(unsigned i=0;i<g.coverCompanionCount;++i)g.coverCompanions[i].weaponFromReference.values[3][0]=.03f*(i+1);
+    CHECK(ValidateBc2FeedRegistration(good)&&Bc2FeedPartCount(g)==8);
+    const auto rejects=[](Bc2FeedRegistration row){return !ValidateBc2FeedGeometry(row.geometry)&&
+        !ValidateBc2FeedRegistration(row)&&!BuildBc2FeedMotion(row.geometry,Op::OpenCover,Policy());};
+    auto bad=good;bad.geometry.coverCompanionCount=5;CHECK(rejects(bad));
+    bad=good;bad.geometry.coverCompanions[0].weaponFromReference={};CHECK(rejects(bad));
+    bad=good;bad.geometry.coverCompanions[0].weaponFromReference.values[3][0]=std::numeric_limits<float>::quiet_NaN();CHECK(rejects(bad));
+    bad=good;bad.geometry.coverCompanions[0].bone.bone={};CHECK(rejects(bad));
+    bad=good;bad.geometry.coverCompanions[0].bone.index=4096;CHECK(rejects(bad));
+    bad=good;bad.geometry.coverCompanions[0].bone.parentIndex=7;CHECK(rejects(bad));
+    bad=good;bad.geometry.coverCompanions[0].bone.parent="fixtureLid";CHECK(rejects(bad));
+    for(const auto role:{g.rootBone,g.pouchBone,g.coverBone,g.chain[0],g.chain[1],g.coverCompanions[1].bone}){
+        bad=good;bad.geometry.coverCompanions[0].bone.bone=role.bone;CHECK(rejects(bad));
+        bad=good;bad.geometry.coverCompanions[0].bone.index=role.index;CHECK(rejects(bad));
+    }
+    bad=good;bad.geometry.coverCompanionCount=0;bad.geometry.coverCompanions={};
+    CHECK(ValidateBc2FeedRegistration(bad)&&Bc2FeedPartCount(bad.geometry)==4);
+    auto maximum=SyntheticGeometry(MaxBc2FeedChainBones);maximum.coverCompanions=g.coverCompanions;
+    maximum.coverCompanionCount=4;CHECK(ValidateBc2FeedGeometry(maximum)&&Bc2FeedPartCount(maximum)==MaxBc2FeedParts);
+    return 0;
+}
 }
 int main(){
     if(ExactSelectorAndNoFallback()||MeasuredFramesComposeInMetres()||ExplicitSourceDestinationAndOperationTypes()||
        UnknownOperationsDoNotBecomeAbsenceOrReverseSeat()||PolicyMustBeExplicitAndCannotRelabelOtherGeometry()||
        RetainedSourcesDoNotSnapToCanonicalEndpoints()||
        ArticulatedChildrenAndSeparatePouchStayDistinct()||MeasuredSeatAllowsActualGripOffsetAndNeedsFreshDwellRelease()||
-       ReplacementPreciselyStopsAtUnmeasuredWithdrawal())return 1;
-    std::puts("Bc2FeedEquipmentProfile: 9 deterministic cases passed; offline geometry, no native/headset acceptance.");return 0;
+       ReplacementPreciselyStopsAtUnmeasuredWithdrawal()||RegistryPinsExactIndependentConfiguration()||
+       RegistryRejectsCollisionsUnreviewedAndInvalidRows()||IndependentGeometryAndVariableChainDriveMotion()||
+       RigidCoverCompanionsRequireMeasuredUniqueRootRoles())return 1;
+    std::puts("Bc2FeedEquipmentProfile: 13 deterministic cases passed; offline geometry, no native/headset acceptance.");return 0;
 }

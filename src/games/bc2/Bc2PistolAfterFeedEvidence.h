@@ -2,18 +2,16 @@
 #include "Bc2AmmoResourceService.h"
 #include "Bc2PistolAfterFeedInput.h"
 #include "Bc2ReloadConfigDescriptor.h"
+#include "Bc2PistolSlideProfile.h"
 #include "fvr/interaction/PistolAfterFeedPolicy.h"
 #include <array>
 
 namespace fvr::bc2 {
 // Native20 proof01 SHA7877e01f24a8e9d374f0109119bdd210083acecb7eeded1bf519eef4e9b67561.
-// This descriptor only selects the sidecar. Existing native admission must
-// still verify code, live timing/configuration, finite ammo and ownership.
-inline constexpr ReloadConfigDescriptor PistolAfterFeedDescriptor{
-    "MP443_sp","Objects/Weapons/Handheld/RU_hg_MP443Grach/SP_hg_MP443Grach",
-    {0,1,8,29,17,3,0,3.75f,.5f,0,0,0,false,false},{},ReloadDescriptorAdmission::ReviewedNative};
+// The exact reviewed registry selects the sidecar. Native admission separately
+// verifies code, current timing/configuration, finite ammo and ownership.
 inline bool PistolAfterFeedConfigMatches(const ReloadObservedConfig& c)noexcept {
-    return MatchesReloadDescriptor(c,PistolAfterFeedDescriptor);
+    return FindBc2PistolSlideRegistration(c)!=nullptr;
 }
 struct PistolAfterFeedNativeBits {
     std::uint8_t inhibit8a=0,releaseA4=0,releaseA5=0;
@@ -26,7 +24,7 @@ struct PistolAfterFeedNativeBits {
 // stroke. They remain mandatory in the separate post-feed firing witness.
 inline bool PistolAfterFeedInitialPolicyReady(const PistolAfterFeedNativeBits& bits,bool finite,
     unsigned current,unsigned next,float timer,int loaded,int reserve,const interaction::AmmunitionCounts& expected)noexcept {
-    return bits.verified&&finite&&current==2&&next==2&&timer==0&&expected.capacity==17&&
+    return bits.verified&&finite&&current==2&&next==2&&timer==0&&expected.capacity>0&&
         expected.loaded>0&&expected.loaded<=expected.capacity&&expected.reserve>=0&&loaded==expected.loaded&&reserve==expected.reserve;
 }
 struct PistolAfterFeedOwnUpdate {
@@ -38,6 +36,7 @@ struct PistolAfterFeedOwnUpdate {
     std::uint64_t nativeInvocation=0,nativeParent=0,nativeUpdate=0;
     PistolAfterFeedInputReceipt input{};
     bool effectiveContextVerified=false,finiteAmmoVerified=false;
+    std::uint64_t profileKey=0;
     bool operator==(const PistolAfterFeedOwnUpdate&)const=default;
 };
 struct PistolAfterFeedReadiness {
@@ -58,6 +57,7 @@ struct PistolAfterFeedEvent {
     interaction::AmmunitionSnapshot admission{};
     bool initialPolicyReadyVerified=false;
     std::optional<AmmoResourceOutcome> outcome;
+    std::uint64_t profileKey=0;
 };
 struct PistolAfterFeedActorRetirement {
     std::uint64_t event=0,callbackRevision=0,lifetimeEndEpoch=0;
@@ -76,6 +76,7 @@ struct PistolAfterFeedResourceState {
     std::optional<AmmoResourceOutcome> removal,feed;
     std::optional<PistolAfterFeedReadiness> ready;
     bool blocksFire=true,emptyDebt=false,pending=false;
+    std::uint64_t profileKey=0;
 };
 inline bool PistolAfterFeedIdentityValid(const ReloadHoldIdentity& i)noexcept {
     const auto& o=i.owner;
@@ -115,8 +116,9 @@ class PistolAfterFeedEvidence {
     };
 public:
     bool Admit(const AmmoResourceRequest& r,const interaction::AmmunitionCommand& c,const ReloadHoldIdentity& identity,
-        const interaction::AmmunitionSnapshot& admission,bool initialPolicyReadyVerified)noexcept {
+        const interaction::AmmunitionSnapshot& admission,bool initialPolicyReadyVerified,std::uint64_t profileKey)noexcept {
         using interaction::AmmunitionOperation;
+        const auto* profile=ResolveBc2PistolSlideRegistration(profileKey);if(!profile)return false;
         AmmoResourceCompletion commandValidator;
         if(r.discard||!r.intent.id||!c.id||!c.sourceSequence||r.intent.context!=c.context||
            r.intent.operation!=c.operation||r.intent.original!=c.original||r.binding.context!=c.context||r.binding.owner!=identity.owner||
@@ -125,14 +127,14 @@ public:
            !PistolAfterFeedContextMatches(c.context,identity)||admission.context!=c.context||admission.sequence!=c.sourceSequence||
            admission.counts!=c.before||!admission.coherentIdleVerified||admission.observedNs<=0||
            admission.observedNs>c.requestedNs||admission.deadlineNs<=c.requestedNs||
-           c.before.capacity!=17||c.after.capacity!=17||
+           c.before.capacity!=profile->configuration.values.baseCapacity||c.after.capacity!=c.before.capacity||
            c.before.loaded<0||c.before.reserve<0||c.after.loaded<0||c.after.reserve<0||
            (c.operation!=AmmunitionOperation::RemoveMagazine&&c.operation!=AmmunitionOperation::ReturnMagazine&&
             c.operation!=AmmunitionOperation::RefillMagazine))return false;
         auto* slot=Find(c.context.resource);
         if(!slot){for(auto& candidate:slots_)if(!candidate.occupied){slot=&candidate;slot->occupied=true;
-            slot->state.resource=c.context.resource;slot->state.blocksFire=false;break;}}
-        if(!slot||slot->state.pending||r.intent.id<=slot->lastOutcome)return false;
+            slot->state.resource=c.context.resource;slot->state.profileKey=profileKey;slot->state.blocksFire=false;break;}}
+        if(!slot||slot->state.profileKey!=profileKey||slot->state.pending||r.intent.id<=slot->lastOutcome)return false;
         slot->previousBlocked=slot->state.blocksFire;slot->state.request=r;slot->state.command=c;
         slot->state.admittedIdentity=identity;slot->state.pending=true;slot->state.blocksFire=true;
         slot->state.admission=admission;slot->state.initialPolicyReadyVerified=initialPolicyReadyVerified;
@@ -166,7 +168,8 @@ public:
         Append(PistolAfterFeedEventKind::Completed,*slot,o);return true;
     }
     bool Observe(const PistolAfterFeedOwnUpdate& r)noexcept {
-        auto* slot=Find(r.context.resource);if(!slot||!slot->state.feed||slot->state.pending)return false;
+        auto* slot=Find(r.context.resource);
+        if(!slot||!slot->state.feed||slot->state.pending)return false;
         auto& s=slot->state;const auto& feed=*s.feed->receipt;const auto& u=r.own;
         if(!PistolAfterFeedContextMatches(r.context,r.identity)||!AmmoResourceSameNativeActor(r.identity,slot->feedIdentity)||
            r.identity.owner.actorGeneration!=slot->feedIdentity.owner.actorGeneration||
@@ -179,7 +182,7 @@ public:
         }
         if(slot->rows[u.branch]&&u.endNs<slot->rows[u.branch]->own.endNs)return false;
         slot->rows[u.branch].reset();s.ready.reset();
-        if(!u.invocation||u.invocation==feed.authorityInvocation||r.nativeInvocation!=u.invocation||r.nativeParent||r.nativeUpdate!=u.invocation||
+        if(r.profileKey!=s.profileKey||!u.invocation||u.invocation==feed.authorityInvocation||r.nativeInvocation!=u.invocation||r.nativeParent||r.nativeUpdate!=u.invocation||
            u.beginNs<feed.completedNs||u.endNs<u.beginNs||
            u.depth!=1||!u.finished||!u.identityRetained||!u.neutralContext||u.animationHold||
            !r.effectiveContextVerified||!r.finiteAmmoVerified||!r.before.verified||!r.after.Ready()||
@@ -209,10 +212,15 @@ public:
         bool issued=false;for(const auto& witness:slot->issued)issued=issued||(witness&&*witness==clearance.nativeReady);
         if(!current||!issued||clearance.nativeReady.context!=current->semantic.context||
            now<clearance.nativeReady.observedNs||now>=clearance.nativeReady.deadlineNs)return false;
-        if(slot->state.emptyDebt){
-            if(!clearance.stroke)return false;const auto& stroke=*clearance.stroke;
-            if(stroke.feed!=feed||stroke.context.resource!=slot->state.resource||
-               !stroke.request||!stroke.profile||!stroke.revision||!stroke.inputSequence||
+        if(slot->state.emptyDebt&&!clearance.stroke)return false;
+        if(clearance.stroke){
+            const auto* registration=ResolveBc2PistolSlideRegistration(slot->state.profileKey);
+            if(!registration)return false;const auto& stroke=*clearance.stroke;
+            if(stroke.profile!=registration->interaction->id||stroke.revision!=registration->interaction->revision||
+               stroke.mechanism.contact.id!=registration->interaction->id||
+               stroke.mechanism.contact.generation!=slot->state.resource.weaponGeneration||
+               stroke.feed!=feed||stroke.context.resource!=slot->state.resource||
+               !stroke.request||!stroke.inputSequence||
                stroke.observedNs<feed.receipt.completedNs||stroke.deadlineNs<=stroke.observedNs||
                !stroke.mechanism.id||!stroke.gun.id||stroke.mechanism.kind!=interaction::HandClaimKind::Mechanism||
                stroke.gun.kind!=interaction::HandClaimKind::GunHold||stroke.mechanism.prerequisiteClaim!=stroke.gun.id||
@@ -222,7 +230,7 @@ public:
                !stroke.gun.owner.equipGeneration||stroke.gun.item.id!=stroke.context.resource.weapon||
                stroke.gun.item.generation!=stroke.gun.owner.equipGeneration||stroke.gun.owner.space!=stroke.context.space)return false;
             for(const auto& row:clearance.nativeReady.updates)if(row.beganNs<stroke.observedNs)return false;
-        }else if(!clearance.retainedPolicyReady&&!clearance.stroke)return false;
+        }else if(!clearance.retainedPolicyReady)return false;
         slot->state.blocksFire=false;slot->state.emptyDebt=false;return true;
     }
     bool Blocks(const interaction::AmmoResourceIdentity& resource)const noexcept {
@@ -272,7 +280,7 @@ private:
     void Append(PistolAfterFeedEventKind kind,const Slot& slot,std::optional<AmmoResourceOutcome> outcome)noexcept {
         if(eventSequence_==UINT64_MAX)return;const auto event=++eventSequence_;
         events_[(event-1)%events_.size()]={event,kind,slot.state.request,slot.state.command,slot.state.admittedIdentity,
-            slot.state.admission,slot.state.initialPolicyReadyVerified,outcome};
+            slot.state.admission,slot.state.initialPolicyReadyVerified,outcome,slot.state.profileKey};
     }
     std::array<Slot,32> slots_{};
     std::array<PistolAfterFeedEvent,128> events_{};

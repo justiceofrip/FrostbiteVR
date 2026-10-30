@@ -23,6 +23,7 @@ struct Bc2PistolSlideBinding {
     RigIdentity rig{};
     std::uint64_t fingerprint=0;
     std::uint32_t leaf=0;
+    std::uint64_t profileKey=0;
 };
 struct Bc2PistolSlideWorldFrames {
     // Only these completed world-frame translations are converted to native
@@ -58,12 +59,11 @@ inline bool Claims(const Bc2PistolSlideSource& p,const interaction::HandInteract
         mechanism.token.id!=gun.token.id;
 }
 // Structural fixture helper; production must ALSO verify the complete rig
-// fingerprint and exact selector. The measured MP443 part is a direct leaf.
-inline bool Topology(const RigSnapshot& rig)noexcept {
-    const auto& g=bc2_pistol_slide_profile_detail::Mp443Geometry;
+// fingerprint and exact selector. Reviewed slide geometry requires a direct leaf.
+inline bool Topology(const RigSnapshot& rig,const Bc2PistolSlideGeometry& g)noexcept {
     if(rig.identity.count!=rig.names.size()||rig.names.size()!=rig.parents.size()||
        rig.names.size()!=rig.evaluatedWorld.size()||rig.names.size()!=rig.inverseBind.size()||
-       rig.names.size()<=g.slideIndex||rig.names.size()>1024||rig.weaponBone!=g.rootIndex||
+       rig.names.size()<=g.slideIndex||rig.names.size()<=g.rootIndex||rig.names.size()>1024||rig.weaponBone!=g.rootIndex||
        rig.names[g.rootIndex]!=g.root||rig.names[g.slideIndex]!=g.slide||
        rig.parents[g.slideIndex]!=std::int32_t(g.rootIndex)||
        std::count(rig.names.begin(),rig.names.end(),g.root)!=1||
@@ -81,11 +81,12 @@ inline bool Topology(const RigSnapshot& rig)noexcept {
     }
     return true;
 }
-inline std::optional<interaction::BoneWrite> LeafWrite(const RigSnapshot& rig,const math::Matrix4& target)noexcept {
-    if(!Topology(rig)||!interaction::feed_mechanism_detail::Pose(target))return {};
+inline std::optional<interaction::BoneWrite> LeafWrite(const RigSnapshot& rig,
+    const Bc2PistolSlideGeometry& geometry,const math::Matrix4& target)noexcept {
+    if(!Topology(rig,geometry)||!interaction::feed_mechanism_detail::Pose(target))return {};
     // Absolute leaf target, independent of the old palette or restoration.
     // No inverse of a previous mod write can become input gesture geometry.
-    return interaction::BoneWrite{bc2_pistol_slide_profile_detail::Mp443Geometry.slideIndex,target};
+    return interaction::BoneWrite{geometry.slideIndex,target};
 }
 inline math::Matrix4 ScaleTranslation(math::Matrix4 frame,float units)noexcept {
     for(unsigned i=0;i<3;++i)frame.values[3][i]*=units;return frame;
@@ -135,9 +136,9 @@ inline math::Matrix4 ScaleTranslation(math::Matrix4 frame,float units)noexcept {
 // Typed policy output must still describe this exact source packet and actual
 // claim pair. Geometry does not manufacture a target or native readiness.
 [[nodiscard]] inline bool Bc2PistolSlideTargetFresh(const Bc2PistolSlideSource& source,
-    const ReloadStateOwner& owner,const Bc2PistolSlideSelection& selection,
+    const ReloadStateOwner& owner,const Bc2PistolSlideRegistration& row,
     const interaction::PistolAfterFeedTarget& target,float displacement,std::int64_t now)noexcept {
-    const auto profile=BuildBc2Mp443ModSlideProfile(selection);
+    const auto profile=BuildBc2PistolSlideProfile(row);
     const auto& context=target.context;const auto& resource=context.resource;
     if(!profile||!target.feedRequest||target.inputSequence!=source.input.sequence||
        target.observedNs!=source.input.observedNs||now<target.observedNs||now>=target.deadlineNs||
@@ -149,10 +150,16 @@ inline math::Matrix4 ScaleTranslation(math::Matrix4 frame,float units)noexcept {
        resource.weapon!=owner.weapon||!resource.weaponGeneration||resource.weaponGeneration!=source.mechanism.generation||
        context.equipGeneration!=owner.equipGeneration||context.space!=owner.space||
        !std::isfinite(target.travel)||target.travel<0||target.travel>profile->stroke||
-       displacement!=bc2_pistol_slide_profile_detail::Mp443ModPolicy.sourceDisplacementMeters+target.travel)return false;
+       displacement!=row.interaction->sourceDisplacementMeters+target.travel)return false;
     auto expected=profile->closedContact;
     for(unsigned axis=0;axis<3;++axis)expected.values[3][axis]+=profile->axis[axis]*target.travel;
     return target.contact.values==expected.values&&interaction::feed_mechanism_detail::Pose(target.contact);
+}
+[[nodiscard]] inline bool Bc2PistolSlideTargetFresh(const Bc2PistolSlideSource& source,
+    const ReloadStateOwner& owner,const Bc2PistolSlideSelection& selection,
+    const interaction::PistolAfterFeedTarget& target,float displacement,std::int64_t now)noexcept {
+    const auto* row=FindBc2PistolSlideRegistration(selection);
+    return row&&Bc2PistolSlideTargetFresh(source,owner,*row,target,displacement,now);
 }
 [[nodiscard]] inline bool Bc2PistolSlideTargetRetained(const interaction::PistolAfterFeedTarget& original,
     const interaction::PistolAfterFeedTarget& current)noexcept {
@@ -163,10 +170,12 @@ inline math::Matrix4 ScaleTranslation(math::Matrix4 frame,float units)noexcept {
         current.inputSequence>=original.inputSequence&&current.observedNs>=original.observedNs;
 }
 [[nodiscard]] inline bool Bc2PistolSlideSelected(const SelectedMeshesSnapshot& s,const ReloadStateOwner& owner,
-    const Bc2PistolSlideSelection& selection,const WeaponEquipmentIdentity& equipment,
+    const Bc2PistolSlideRegistration& row,const WeaponEquipmentIdentity& equipment,
     std::uint64_t sequence,std::int64_t now)noexcept {
     using namespace bc2_pistol_slide_presentation_detail;
-    if(!FindBc2Mp443SlideGeometry(selection)||s.owner!=owner||equipment.weapon!=owner.weapon||
+    if(!Bc2PistolSlideRegistrationValid(row))return false;
+    const auto& selection=row.geometry->selection;
+    if(s.owner!=owner||equipment.weapon!=owner.weapon||
        equipment.Asset()!=selection.asset||!equipment.data||!s.sequence||s.sequence>sequence||
        s.observedNs<=0||now<s.observedNs||now>=s.deadlineNs||s.deadlineNs-s.observedNs>250000000||
        s.weaponData!=equipment.data||!s.inventory||!s.stateTypeInfo||!s.meshTypeInfo||
@@ -181,19 +190,31 @@ inline math::Matrix4 ScaleTranslation(math::Matrix4 frame,float units)noexcept {
     }
     return matches==1;
 }
+[[nodiscard]] inline bool Bc2PistolSlideSelected(const SelectedMeshesSnapshot& s,const ReloadStateOwner& owner,
+    const Bc2PistolSlideSelection& selection,const WeaponEquipmentIdentity& equipment,
+    std::uint64_t sequence,std::int64_t now)noexcept {
+    const auto* row=FindBc2PistolSlideRegistration(selection);
+    return row&&Bc2PistolSlideSelected(s,owner,*row,equipment,sequence,now);
+}
 // A newer selected read confirms object/configuration identity, never extends
 // the original selected lease retained with the prepared private palette.
 [[nodiscard]] inline bool Bc2PistolSlideSelectedRetained(const SelectedMeshesSnapshot& original,
-    const SelectedMeshesSnapshot& current,const ReloadStateOwner& owner,const Bc2PistolSlideSelection& selection,
+    const SelectedMeshesSnapshot& current,const ReloadStateOwner& owner,const Bc2PistolSlideRegistration& row,
     const WeaponEquipmentIdentity& equipment,std::uint64_t sequence,std::int64_t now)noexcept {
-    return Bc2PistolSlideSelected(original,owner,selection,equipment,sequence,now)&&
-        Bc2PistolSlideSelected(current,owner,selection,equipment,sequence,now)&&
+    return Bc2PistolSlideSelected(original,owner,row,equipment,sequence,now)&&
+        Bc2PistolSlideSelected(current,owner,row,equipment,sequence,now)&&
         current.sequence>=original.sequence&&current.observedNs>=original.observedNs&&
         current.weaponData==original.weaponData&&current.inventory==original.inventory&&current.selectedSlot==original.selectedSlot&&
         current.stateTypeInfo==original.stateTypeInfo&&current.meshTypeInfo==original.meshTypeInfo&&
         current.soleConfiguredArray==original.soleConfiguredArray&&current.states==original.states&&
         current.configurationPath==original.configurationPath&&current.configurationPathPointer==original.configurationPathPointer&&
         current.weaponName==original.weaponName;
+}
+[[nodiscard]] inline bool Bc2PistolSlideSelectedRetained(const SelectedMeshesSnapshot& original,
+    const SelectedMeshesSnapshot& current,const ReloadStateOwner& owner,const Bc2PistolSlideSelection& selection,
+    const WeaponEquipmentIdentity& equipment,std::uint64_t sequence,std::int64_t now)noexcept {
+    const auto* row=FindBc2PistolSlideRegistration(selection);
+    return row&&Bc2PistolSlideSelectedRetained(original,current,owner,*row,equipment,sequence,now);
 }
 // Recognizer input only. No evaluated/rendered hand or newly placed weapon is
 // accepted; the three raw source frames belong to one immutable input packet.
@@ -208,40 +229,58 @@ inline math::Matrix4 ScaleTranslation(math::Matrix4 frame,float units)noexcept {
     return feed_mechanism_detail::Pose(local)?std::optional<math::Matrix4>{local}:std::nullopt;
 }
 [[nodiscard]] inline std::optional<Bc2PistolSlideBinding> BindBc2PistolSlide(
-    const RigSnapshot& rig,const Bc2PistolSlideSelection& selection)noexcept {
-    const auto* geometry=FindBc2Mp443SlideGeometry(selection);
-    if(!geometry||!bc2_pistol_slide_presentation_detail::Topology(rig))return {};
+    const RigSnapshot& rig,const Bc2PistolSlideRegistration& row)noexcept {
+    if(!Bc2PistolSlideRegistrationValid(row))return {};
+    const auto* geometry=row.geometry;
+    if(!bc2_pistol_slide_presentation_detail::Topology(rig,*geometry))return {};
     const auto fingerprint=SightRigFingerprint(rig.names,rig.parents,rig.inverseBind);
     if(fingerprint!=geometry->selection.rigFingerprint)return {};
-    return Bc2PistolSlideBinding{rig.identity,fingerprint,geometry->slideIndex};
+    return Bc2PistolSlideBinding{rig.identity,fingerprint,geometry->slideIndex,row.key};
+}
+[[nodiscard]] inline std::optional<Bc2PistolSlideBinding> BindBc2PistolSlide(
+    const RigSnapshot& rig,const Bc2PistolSlideSelection& selection)noexcept {
+    const auto* row=FindBc2PistolSlideRegistration(selection);return row?BindBc2PistolSlide(rig,*row):std::nullopt;
 }
 // This is pure presentation math for an already accepted displacement. It does
 // not recognize a gesture, establish a hand claim, authorize writes or resolve
 // slide debt. The attached slide follows the currently placed held weapon;
 // that separate render basis never changes the immutable gesture source.
 [[nodiscard]] inline std::optional<Bc2PistolSlideWorldFrames> ComposeBc2PistolSlideWorldFrames(
-    const Bc2PistolSlideSelection& selection,const Bc2PistolSlideSource& source,
+    const Bc2PistolSlideRegistration& row,const Bc2PistolSlideSource& source,
     const math::Matrix4& placedWeaponWorldMeters,float signedDisplacementMeters,float unitsPerMetre,std::int64_t now)noexcept {
     using namespace interaction;
     if(!std::isfinite(unitsPerMetre)||unitsPerMetre<=0||!feed_mechanism_detail::Pose(placedWeaponWorldMeters)||
        !Bc2PistolSlideSourceFresh(source,source.input,source.gunClaim,source.mechanismClaim,source.rig,now))return {};
-    const auto local=Bc2Mp443SlideLocalFrame(selection,signedDisplacementMeters);if(!local)return {};
+    const auto local=Bc2PistolSlideLocalFrame(row,signedDisplacementMeters);if(!local)return {};
     const auto slide=feed_interaction_detail::Multiply(*local,placedWeaponWorldMeters);
     const auto wrist=feed_interaction_detail::Multiply(
-        bc2_pistol_slide_profile_detail::Mp443Geometry.slideFromAuthoredWrist,slide);
+        row.geometry->slideFromAuthoredWrist,slide);
     Bc2PistolSlideWorldFrames out{
         bc2_pistol_slide_presentation_detail::ScaleTranslation(slide,unitsPerMetre),
         bc2_pistol_slide_presentation_detail::ScaleTranslation(wrist,unitsPerMetre)};
     if(!feed_mechanism_detail::Pose(out.slide)||!feed_mechanism_detail::Pose(out.authoredWrist))return {};
     return out;
 }
+[[nodiscard]] inline std::optional<Bc2PistolSlideWorldFrames> ComposeBc2PistolSlideWorldFrames(
+    const Bc2PistolSlideSelection& selection,const Bc2PistolSlideSource& source,
+    const math::Matrix4& placedWeaponWorldMeters,float signedDisplacementMeters,float unitsPerMetre,std::int64_t now)noexcept {
+    const auto* row=FindBc2PistolSlideRegistration(selection);
+    return row?ComposeBc2PistolSlideWorldFrames(*row,source,placedWeaponWorldMeters,signedDisplacementMeters,unitsPerMetre,now):std::nullopt;
+}
 // One candidate leaf write; all other native animation remains untouched.
 // The caller owns exact-write restoration and native publication authority.
 [[nodiscard]] inline std::optional<interaction::BoneWrite> BuildBc2PistolSlideWrite(
-    const Bc2PistolSlideBinding& binding,const RigSnapshot& rig,const math::Matrix4& target)noexcept {
-    const auto& g=bc2_pistol_slide_profile_detail::Mp443Geometry;
-    if(binding.rig!=rig.identity||binding.leaf!=g.slideIndex||binding.fingerprint!=g.selection.rigFingerprint||
+    const Bc2PistolSlideRegistration& row,const Bc2PistolSlideBinding& binding,
+    const RigSnapshot& rig,const math::Matrix4& target)noexcept {
+    if(!Bc2PistolSlideRegistrationValid(row))return {};
+    const auto& g=*row.geometry;
+    if(binding.profileKey!=row.key||binding.rig!=rig.identity||binding.leaf!=g.slideIndex||binding.fingerprint!=g.selection.rigFingerprint||
        SightRigFingerprint(rig.names,rig.parents,rig.inverseBind)!=binding.fingerprint)return {};
-    return bc2_pistol_slide_presentation_detail::LeafWrite(rig,target);
+    return bc2_pistol_slide_presentation_detail::LeafWrite(rig,g,target);
+}
+[[nodiscard]] inline std::optional<interaction::BoneWrite> BuildBc2PistolSlideWrite(
+    const Bc2PistolSlideBinding& binding,const RigSnapshot& rig,const math::Matrix4& target)noexcept {
+    const auto* row=ResolveBc2PistolSlideRegistration(binding.profileKey);
+    return row?BuildBc2PistolSlideWrite(*row,binding,rig,target):std::nullopt;
 }
 }

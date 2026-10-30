@@ -1,8 +1,10 @@
 #include "Bc2PhysicalFeed.h"
 #include "Test.h"
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <sstream>
 using namespace fvr::bc2;
 using namespace fvr::interaction;
 namespace {
@@ -12,6 +14,7 @@ template<std::size_t N>void Text(std::array<char,N>& out,std::string_view text){
 }
 fvr::math::Matrix4 Identity(){fvr::math::Matrix4 m{};for(unsigned i=0;i<4;++i)m.values[i][i]=1;return m;}
 struct Fixture {
+    const Bc2FeedRegistration* registration=FindBc2FeedRegistration(bc2_feed_profile_detail::M60Registration.key);
     FeedEquipmentAdapter backend;
     FeedEquipmentNativeView native{};
     std::shared_ptr<SelectedMeshesSnapshot> selected=std::make_shared<SelectedMeshesSnapshot>();
@@ -37,12 +40,17 @@ struct Fixture {
         [](void* p,const AmmoResourceIdentity& resource)noexcept{return static_cast<Fixture*>(p)->backend.ReadGate(resource);},
         [](void* p,std::uint64_t after)noexcept{return static_cast<Fixture*>(p)->backend.Retirement(after);}};}
     Fixture():physical(Api()){
+        if(!registration)std::abort();
         native.identity={{0x10000,0x20000,0x30000,0x40000,1,2,3},{0x50000,0x60000,0x70000},0x80000,0x90000,0xa0000};
         native.binding={native.identity.owner,{{0x20000,1,0x40000,19},2,3},0xb0000,0xc0000,0xd0000,0xe0000,now,now+100*Ms};
         auto& c=native.config;c.weaponData=0xd0000;c.firingData=0xf0000;c.primaryFire=0x100000;c.ammoAddress=c.primaryFire+0x170;
-        const auto& g=bc2_feed_profile_detail::M60Geometry;Text(c.assetName,g.asset);Text(c.assetPath,g.configurationPath);
-        c.fireLogicType=2;c.reloadType=1;c.fireInputAction=8;c.reloadInputAction=29;c.baseCapacity=100;c.numberOfMagazines=2;
-        c.reloadTime=7.8f;c.reloadThreshold=.7f;native.counts={20,130,100};
+        const auto& g=registration->geometry;Text(c.assetName,g.asset);Text(c.assetPath,g.configurationPath);
+        const auto& v=registration->config.values;
+        c.fireLogicType=v.fireLogicType;c.reloadType=v.reloadType;c.fireInputAction=v.fireInputAction;c.reloadInputAction=v.reloadInputAction;
+        c.baseCapacity=v.baseCapacity;c.numberOfMagazines=v.numberOfMagazines;c.reloadDelay=v.reloadDelay;
+        c.reloadTime=v.reloadTime;c.reloadThreshold=v.reloadThreshold;c.postReloadTime=v.postReloadTime;
+        c.boltDelay=v.boltDelay;c.boltTime=v.boltTime;c.holdBoltUntilFireRelease=v.holdBoltUntilFireRelease;
+        c.holdBoltUntilZoomRelease=v.holdBoltUntilZoomRelease;native.counts={20,130,v.baseCapacity};
         sample.owner=native.identity.owner;sample.weapon={sample.owner.weapon,7};sample.asset=g.asset;sample.configurationPath=g.configurationPath;
         sample.equipment=WeaponEquipmentIdentity{sample.owner.weapon,native.binding.data,native.binding.persistence,c.assetName};
         sample.meshPath=g.meshPath;sample.rigFingerprint=g.rigFingerprint;sample.selectedRigVerified=true;
@@ -76,8 +84,8 @@ struct Fixture {
             unsigned(result.status),unsigned(result.interactionStatus),unsigned(result.reloadStatus),unsigned(result.handReason),result.presentation?result.presentation->coverRadians:-99.f,submits);
         return result;
     }
-    FeedMotionProfile Open()const {return *BuildBc2M60FeedMotion(bc2_feed_profile_detail::M60Geometry,
-        FeedPhysicalOperation::OpenCover,Bc2M60FeedInteractionPolicy());}
+    FeedMotionProfile Open()const {return *BuildBc2FeedMotion(registration->geometry,
+        FeedPhysicalOperation::OpenCover,registration->interactionPolicy);}
     bool OpenCover(){
         using namespace feed_interaction_detail;const auto m=Open();
         const auto start=feed_interaction_detail::Multiply(m.motionFromContact,m.weaponFromMotion);
@@ -122,11 +130,13 @@ struct Fixture {
     }
     bool Place(FeedPhysicalOperation op){
         if(!result.presentation)return false;
-        const auto retained=result.presentation;Bc2M60FeedPose pose;
+        const auto retained=result.presentation;auto pose=registration->geometry.poses[unsigned(Bc2FeedPoseId::Resting)];
+        pose.chainCount=retained->chainCount;
+        if(retained->registrationKey!=registration->key||pose.chainCount!=registration->geometry.chainCount)return false;
         pose.weaponFromPouch=retained->weaponFromPouch;pose.weaponFromFeedRoot=retained->weaponFromChain[0];
-        for(unsigned i=0;i<3;++i)pose.parentFromChainChild[i]=feed_interaction_detail::Multiply(
+        for(unsigned i=0;i+1<pose.chainCount;++i)pose.parentFromChainChild[i]=feed_interaction_detail::Multiply(
             retained->weaponFromChain[i+1],feed_interaction_detail::Inverse(retained->weaponFromChain[i]));
-        const auto motion=BuildBc2M60FeedMotionFromRetainedPose(bc2_feed_profile_detail::M60Geometry,op,Bc2M60FeedInteractionPolicy(),pose);
+        const auto motion=BuildBc2FeedMotionFromRetainedPose(registration->geometry,op,registration->interactionPolicy,pose);
         if(!motion)return false;submitted.reset();
         const auto contact=[&](const fvr::math::Matrix4& object){return feed_interaction_detail::Multiply(motion->placement.sourceFromGrip,object);};
         const auto start=contact(motion->placement.weaponFromSource);
@@ -138,7 +148,7 @@ struct Fixture {
         Tick(end,false);return submitted&&submitted->command.authority.operation==op;
     }
     bool Close(){
-        const auto motion=BuildBc2M60FeedMotion(bc2_feed_profile_detail::M60Geometry,FeedPhysicalOperation::CloseCover,Bc2M60FeedInteractionPolicy());
+        const auto motion=BuildBc2FeedMotion(registration->geometry,FeedPhysicalOperation::CloseCover,registration->interactionPolicy);
         if(!motion)return false;submitted.reset();using namespace feed_interaction_detail;
         const auto start=feed_interaction_detail::Multiply(motion->motionFromContact,motion->weaponFromMotion);
         Tick(start,false);Tick(start,false);Tick(start,true);
@@ -150,6 +160,10 @@ struct Fixture {
 };
 int ExactSelectedJoinAndPhysicalOwner(){
     Fixture f;CHECK(f.OpenCover());CHECK(f.submits==1);CHECK(f.result.blocksFire&&f.result.pending);
+    CHECK(FindBc2FeedRegistration(f.submitted->source.config)==f.registration);
+    CHECK(f.submitted->geometry.registrationKey==f.registration->key);
+    CHECK(f.submitted->geometry.profile==f.registration->mechanism);
+    CHECK(f.submitted->geometry.rigFingerprint==f.registration->geometry.rigFingerprint);
     CHECK(f.submitted->command.authority.effect==FeedAmmunitionEffect::PhysicalOnly);
     CHECK(f.submitted->command.before.counts.loaded==20&&f.submitted->command.after.loaded==20);
     CHECK(f.submitted->command.before.loadedSupply==f.submitted->command.loadedSupplyAfter);
@@ -157,8 +171,58 @@ int ExactSelectedJoinAndPhysicalOwner(){
     CHECK(f.Callback());const auto supply=f.submitted->command.loadedSupplyAfter;
     auto m=f.Open();auto wrist=feed_interaction_detail::Multiply(feed_interaction_detail::Along(m.motionFromContact,m.kind,m.travel),m.weaponFromMotion);
     f.Tick(wrist,false);CHECK(f.result.blocksFire&&!f.result.pending);CHECK(f.result.presentation);
+    CHECK(f.result.presentation->registrationKey==f.registration->key);
+    CHECK(f.result.presentation->chainCount==f.registration->geometry.chainCount);
     CHECK(f.result.presentation->supply==supply);CHECK(f.result.presentation->coverRadians>1.4f);
     CHECK(f.native.counts.loaded==20&&f.native.counts.reserve==130);return 0;
+}
+int WrongRegistrationCannotBorrowValidAuthority(){
+    Fixture f;CHECK(f.OpenCover());const auto valid=*f.submitted;
+    CHECK(FeedEquipmentSubmissionValid(valid,f.now+1));
+    auto wrong=valid;wrong.geometry.registrationKey^=1;
+    CHECK(!FeedEquipmentSubmissionValid(wrong,f.now+1));
+    CHECK(f.backend.SubmitResult(wrong,f.now+1)==FeedEquipmentSubmitResult::Invalid);
+    wrong=valid;wrong.geometry.registrationKey=0;
+    CHECK(!FeedEquipmentSubmissionValid(wrong,f.now+1));
+    wrong=valid;++wrong.geometry.profile.revision;
+    CHECK(!FeedEquipmentSubmissionValid(wrong,f.now+1));
+    wrong=valid;++wrong.geometry.rigFingerprint;
+    CHECK(!FeedEquipmentSubmissionValid(wrong,f.now+1));
+    CHECK(f.backend.Pending()&&f.backend.Pending()->command==valid.command);
+    CHECK(f.result.blocksFire&&f.result.pending&&f.BlocksFire());
+    CHECK(f.submits==1);CHECK(f.Reconcile());return 0;
+}
+int ExactNativeConfigurationAndGeometryAreBothRequired(){
+    Fixture config;config.native.config.reloadTime=std::nextafter(config.native.config.reloadTime,100.f);
+    CHECK(!FindBc2FeedRegistration(config.native.config));CHECK(!config.OpenCover());
+    CHECK(!config.result.selected&&!config.result.presentation&&config.submits==0);
+    Fixture geometry;CHECK(FindBc2FeedRegistration(geometry.native.config)==geometry.registration);
+    geometry.sample.meshPath="fixture/unregistered_feed_mesh";
+    CHECK(!geometry.OpenCover());CHECK(!geometry.result.selected&&!geometry.result.presentation&&geometry.submits==0);
+    // Loss of the exact selector suspends geometry, retaining the same item's
+    // completed cover state and inventory debt for its eventual return.
+    Fixture retained;CHECK(retained.OpenCover());CHECK(retained.Reconcile());
+    const auto original=retained.result.presentation;const auto path=retained.sample.configurationPath;
+    retained.sample.configurationPath="fixture/unregistered_feed_configuration";retained.Tick(Identity(),false);
+    CHECK(!retained.result.selected&&!retained.result.presentation&&retained.BlocksFire());
+    CHECK(!retained.result.blocksEquipment);
+    retained.sample.configurationPath=path;retained.Tick(Identity(),false);
+    CHECK(retained.result.selected&&retained.result.presentation&&retained.BlocksFire());
+    CHECK(retained.result.presentation->registrationKey==original->registrationKey);
+    CHECK(retained.result.presentation->lifetime==original->lifetime&&retained.result.presentation->supply==original->supply);
+    CHECK(retained.result.presentation->coverRadians==original->coverRadians);return 0;
+}
+int DiagnosticsIdentifyRegisteredProfileAndRetainSelection(){
+    Fixture f;CHECK(f.OpenCover());std::ostringstream first;f.physical.Report(first);
+    const auto key=std::to_string(f.registration->key);
+    CHECK(first.str().find("\"asset_class\":\"registered_feed\"")!=std::string::npos);
+    CHECK(first.str().find("\"registration_key\":"+key)!=std::string::npos);
+    CHECK(first.str().find("\"last_selected_registration_key\":"+key)!=std::string::npos);
+    f.sample.asset="fixture/unregistered_feed_asset";f.Tick(Identity(),false,true);
+    std::ostringstream stowed;f.physical.Report(stowed);
+    CHECK(stowed.str().find("\"asset_class\":\"other\"")!=std::string::npos);
+    CHECK(stowed.str().find("\"last_selected_registration_key\":"+key)!=std::string::npos);
+    CHECK(f.BlocksFire());return 0;
 }
 int MissingCallbackAndTrackingPreserveDebt(){
     Fixture f;CHECK(f.OpenCover());CHECK(!f.Callback(5));CHECK(f.backend.Pending());
@@ -333,6 +397,9 @@ int DrainedActorReplacementReclaimsSlotsWithoutInventingAmmunitionSuccess(){
 }
 int main(){
     CHECK(ExactSelectedJoinAndPhysicalOwner()==0);
+    CHECK(WrongRegistrationCannotBorrowValidAuthority()==0);
+    CHECK(ExactNativeConfigurationAndGeometryAreBothRequired()==0);
+    CHECK(DiagnosticsIdentifyRegisteredProfileAndRetainSelection()==0);
     CHECK(MissingCallbackAndTrackingPreserveDebt()==0);
     CHECK(RefusedSubmitIsNeverAnAcknowledgement()==0);
     CHECK(OccupiedHandAndExactRigAreRequired()==0);
@@ -343,5 +410,5 @@ int main(){
     CHECK(SameAddressReplacementDoesNotInheritFeedDebt()==0);
     CHECK(RealNoEntryReceiptRecoversCompletedEndpointWithNewId()==0);
     CHECK(DrainedActorReplacementReclaimsSlotsWithoutInventingAmmunitionSuccess()==0);
-    std::puts("Bc2PhysicalFeedTests: 11 deterministic owner/arbiter/callback compositions; no game or headset acceptance");
+    std::puts("Bc2PhysicalFeedTests: 14 deterministic owner/arbiter/callback compositions; no broader enrollment, game or headset acceptance");
 }

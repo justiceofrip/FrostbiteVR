@@ -98,13 +98,14 @@ bool SameIdentity(const ReloadFlowBoundary& a,const ReloadFlowBoundary& b)noexce
     return a.owner==b.owner&&a.firing==b.firing&&a.branch==b.branch&&a.wrapperOffset==b.wrapperOffset&&a.serverPlayer==b.serverPlayer&&a.serverSoldier==b.serverSoldier&&a.serverItem==b.serverItem;
 }
 void PistolBoundaryBits(ReloadFlowBoundary& out,const ReloadObservedConfig& config,const std::array<std::byte,0xb0>& raw)noexcept {
-    if(!PistolAfterFeedConfigMatches(config))return;
+    const auto* profile=FindBc2PistolSlideRegistration(config);if(!profile)return;
+    const auto capacity=profile->configuration.values.baseCapacity;
     out.pistol={Word<std::uint8_t>(raw.data(),0x8a),Word<std::uint8_t>(raw.data(),0xa4),Word<std::uint8_t>(raw.data(),0xa5),true};
     const auto capacityMultiplier=Word<float>(raw.data(),0x74),reserveMultiplier=Word<float>(raw.data(),0x78);
     const auto capacityOverride=Word<int>(raw.data(),0x98);
-    out.pistolFiniteAmmo=!(out.flagsA8&(8|16))&&out.loaded>=0&&out.loaded<=17&&out.reserve>=0&&
+    out.pistolFiniteAmmo=!(out.flagsA8&(8|16))&&out.loaded>=0&&out.loaded<=capacity&&out.reserve>=0&&
         NativeAmmoRefillFiniteReserve(config.numberOfMagazines,reserveMultiplier)&&
-        (capacityOverride==17||(capacityOverride==-1&&capacityMultiplier==1.f));
+        (capacityOverride==capacity||(capacityOverride==-1&&capacityMultiplier==1.f));
 }
 }
 bool ReloadReserveCopiesAgree(const ReloadHoldIdentity& identity,const std::array<ReloadFlowBoundary,3>& first,
@@ -1022,6 +1023,7 @@ std::optional<PistolAfterFeedOwnUpdate> PistolOwnRow(const ReloadFlowRecord& com
         PistolAfterFeedEffectiveContext(completed.entry.copiedContext,completed.exit.copiedContext,completed.exit.pistolInput,effective);
     const auto context=exact?DecodeReloadUpdateContext(effective):std::nullopt;
     PistolAfterFeedOwnUpdate row;row.own=AmmoResourceRow(completed);row.identity=RoundIdentity(lease);row.context=resource->context;
+    row.profileKey=FindBc2PistolSlideRegistration(lease.snapshot.config)->key;
     row.own.neutralContext=context&&!context->inputFlags&&!context->flags24Through28[4];
     const auto& before=completed.entry.boundary;const auto& after=*completed.exit.boundary;
     row.before=before.pistol;row.after=after.pistol;row.beforeFiring=before.firing;
@@ -1054,14 +1056,8 @@ bool RequestConfig(const ReloadObservedConfig& c)noexcept {
     return requestCycle.MatchesSelectedConfig(c);
 }
 bool FeedEquipmentReadConfig(const ReloadObservedConfig& config)noexcept {
-    if(!FeedEquipmentConfigMatches(config))return false;
-    const Reader reader{memory};
-    constexpr std::array<std::pair<unsigned,unsigned>,6> timing{{
-        {0x10,std::bit_cast<unsigned>(.7f)},{0x14,0},{0x18,std::bit_cast<unsigned>(7.8f)},
-        {0x20,1},{0x24,2},{0x2c,0}}};
-    for(unsigned pass=0;pass<2;++pass)for(const auto& word:timing)
-        if(!reader.Equals(std::uint64_t(config.primaryFire)+word.first,word.second))return false;
-    return true;
+    const auto* profile=FindBc2FeedRegistration(config);
+    return profile&&ReadReloadDescriptorTiming(memory,config,profile->config);
 }
 bool RequestTiming(const ReloadObservedConfig& c)noexcept {
     return requestCycle.IsMagazine()?requestCycle.MagazineProfile().ReadTiming(memory,c):ReadReloadRoundTiming(memory,c);
@@ -1237,7 +1233,9 @@ void TryFeedEquipment(const Observation& observation,const ReloadHoldInput& in,v
     // Completion of the actual coherent component reads, never publication
     // or consumer time. A later inventory binding cannot be backdated.
     view.observedNs=std::max({in.contextObservedNs,in.nowNs,resource->observedNs});
-    view.deadlineNs=std::min({in.leaseDeadlineNs,resource->deadlineNs,view.observedNs+100000000ll});
+    const auto* registration=FindBc2FeedRegistration(in.config);if(!registration)return;
+    view.deadlineNs=std::min({in.leaseDeadlineNs,resource->deadlineNs,
+        view.observedNs+std::min(registration->mechanism.maxAgeNs,100000000ll)});
     if(!feedEquipment.Publish(view,now))return;
     const auto adjacentView=feedEquipment.Read(in.identity.owner,Now());
     if(!adjacentView||!feedEquipment.Pending()||feedEquipment.Invoked()||!feedEquipment.Current(*adjacentView,Now()))return;
@@ -1358,7 +1356,8 @@ void TryAmmoResourceHands(const Observation& observation,const ReloadHoldInput& 
             initialReady=initialReady&&sidecar&&PistolAfterFeedInitialPolicyReady(sidecar->pistol,sidecar->pistolFiniteAmmo,
                 sidecar->current,sidecar->next,sidecar->timer,sidecar->loaded,sidecar->reserve,command->before);
         }
-        if(!pistolAfterFeed.Admit(*request,*command,in.identity,snapshot,initialReady)){reject();return;}
+        const auto* profile=FindBc2PistolSlideRegistration(in.config);
+        if(!profile||!pistolAfterFeed.Admit(*request,*command,in.identity,snapshot,initialReady,profile->key)){reject();return;}
         PublishPistolVeto(command->context.resource,true);
     }
     if(!ammoPlayerService.InvokeNative(snapshot,[]()noexcept{return Now();},[&](std::int64_t began)noexcept {

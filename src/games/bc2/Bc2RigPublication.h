@@ -66,6 +66,8 @@ struct Tracking {
     Bc2PumpTracking pump{};
     Bc2BoltTracking bolt{};
     // Same immutable Gameplay packet; never substitute a later global feed pose.
+    // Family keys resolve immutable rows; render admission separately checks
+    // the actual selected configuration, native equipment and measured rig.
     std::shared_ptr<const Bc2PhysicalFeedPresentation> feed;
     std::shared_ptr<const Bc2PhysicalPistolSlidePresentation> pistolSlide;
     interaction::InputFrame boltRawInput{}; // Before support-orientation guidance; same original generation.

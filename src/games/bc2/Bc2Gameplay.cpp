@@ -1513,12 +1513,14 @@ void __fastcall GatherHook(void* self,void*,void* cache){
                 if(suppression.Apply({reinterpret_cast<std::byte*>(owner.cache),InputBytes},demand,{nullptr,HolsterCacheCurrent}))
                     (void)suppression.Commit();
             }
-            if(physicalPistolSlide&&feedResourceBinding&&equipment->Asset()=="MP443_sp"&&
+            if(physicalPistolSlide&&feedResourceBinding&&
                feedResourceBinding->owner==selected&&feedResourceBinding->data==equipment->data&&
                feedResourceBinding->persistence==equipment->persistence){
                 const auto now=HandNanos(clock.QuadPart);
                 const auto debt=reloadFlowRuntime::ReadPistolAfterFeedState(feedResourceBinding->context.resource,now);
-                if(debt&&debt->blocksFire&&debt->request.intent.id&&AmmoResourceBindingFresh(*feedResourceBinding,selected,now)){
+                const auto* profile=debt?ResolveBc2PistolSlideRegistration(debt->profileKey):nullptr;
+                if(profile&&equipment->Asset()==profile->configuration.assetName&&debt->blocksFire&&
+                   debt->request.intent.id&&AmmoResourceBindingFresh(*feedResourceBinding,selected,now)){
                     auto safety=handSample;safety.nowNs=now;
                     const HolsterSuppressionRequest demand{selected,safety,debt->request.intent.id,scope->nativeTick,owner.cache};
                     HolsterInputOverride suppression;

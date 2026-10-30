@@ -4,21 +4,14 @@
 #include "Bc2AmmoActorRetirement.h"
 #include "Bc2ReloadConfigDescriptor.h"
 #include "fvr/interaction/FeedEquipmentSession.h"
+#include "Bc2FeedEquipmentProfile.h"
 #include <memory>
 
 namespace fvr::bc2 {
-// This is the exact work12 M60 configuration, not a magazine-profile grant.
-// The shared Transfer implementation is independently proved; this predicate
-// grants neither a native reload cycle nor chamber/fire readiness.
+// An exact reviewed feed row selects the existing shared transfer adapter.
+// Geometry, live native authority and completion remain separate checks.
 inline bool FeedEquipmentConfigMatches(const ReloadObservedConfig& c)noexcept {
-    return ReloadDescriptorText(c.assetName,"M60_sp")&&
-        ReloadDescriptorText(c.assetPath,"Objects/Weapons/Handheld/BU_lmg_M60/SP_lmg_M60")&&
-        c.weaponData>=0x10000&&c.firingData>=0x10000&&c.primaryFire>=0x10000&&
-        std::uint64_t(c.primaryFire)+0x170==c.ammoAddress&&
-        c.fireLogicType==2&&c.reloadType==1&&c.fireInputAction==8&&c.reloadInputAction==29&&
-        c.baseCapacity==100&&c.numberOfMagazines==2&&c.reloadDelay==0&&c.reloadTime==7.8f&&
-        c.reloadThreshold==.7f&&c.postReloadTime==0&&c.boltDelay==0&&c.boltTime==0&&
-        !c.holdBoltUntilFireRelease&&!c.holdBoltUntilZoomRelease;
+    return FindBc2FeedRegistration(c)!=nullptr;
 }
 inline constexpr std::uint64_t FeedEquipmentM60RigFingerprint=0xa7f219a1426216abull;
 class FeedEquipmentIssuedSource;
@@ -54,6 +47,7 @@ struct FeedEquipmentGeometryProof {
     std::uint64_t rigFingerprint=0,inputSequence=0;
     std::int64_t observedNs=0,deadlineNs=0;
     bool selectedRigVerified=false;
+    std::uint64_t registrationKey=0;
 };
 struct FeedEquipmentSubmission {
     interaction::FeedAmmunitionCommand command{};
@@ -122,8 +116,10 @@ inline bool FeedEquipmentSubmissionValid(const FeedEquipmentSubmission& s,std::i
     using namespace interaction;using namespace feed_mechanism_detail;
     const auto& c=s.command;const auto& r=c.request;const auto& a=c.authority;const auto& b=c.before;
     const auto& candidate=r.completion.candidate;const auto& g=s.geometry;const auto& p=g.profile;
-    if(!FeedEquipmentViewFresh(s.source,r.requestedNs)||!ValidateFeedMechanismProfile(p)||p.maxAgeNs>100000000||
-       !g.selectedRigVerified||g.rigFingerprint!=FeedEquipmentM60RigFingerprint||
+    const auto* registration=FindBc2FeedRegistration(s.source.config);
+    if(!registration||g.registrationKey!=registration->key||p!=registration->mechanism||
+       !FeedEquipmentViewFresh(s.source,r.requestedNs)||!ValidateFeedMechanismProfile(p)||p.maxAgeNs>100000000||
+       !g.selectedRigVerified||g.rigFingerprint!=registration->geometry.rigFingerprint||
        !g.inputSequence||g.inputSequence!=r.completion.inputSequence||g.observedNs<=0||
        g.observedNs>r.completion.completedNs||g.deadlineNs<=now||g.deadlineNs-g.observedNs>p.maxAgeNs||
        !feed_interaction_detail::Motion(g.motion)||g.motion.operation!=candidate.operation||
@@ -145,7 +141,7 @@ inline bool FeedEquipmentSubmissionValid(const FeedEquipmentSubmission& s,std::i
     case FeedPhysicalOperation::WithdrawFeed:case FeedPhysicalOperation::DetachContainer:
     case FeedPhysicalOperation::AttachContainer:case FeedPhysicalOperation::SeatFeed:
         if(g.motion.kind!=FeedMotionKind::FreePlacement||!Supply(candidate.supply,p.container))return false;break;
-    default:return false; // No latch/charge semantics have been proved for M60.
+    default:return false; // Other operation classes require their own verified native contract.
     }
     if(a.effect==FeedAmmunitionEffect::PhysicalOnly)
         return a.rounds==0&&Empty(a.supply)&&!c.mutationRequired&&c.after==b.counts&&c.loadedSupplyAfter==b.loadedSupply;
