@@ -6,15 +6,14 @@ Updated October 30, 2026. This replaces old next-step instructions; prior eviden
 ## Active work
 
 Headset52 integrates the complete firearm batch: 77 names/181 configurations,
-both normal builds pass331/331, and the private0.1.18 package/cache is verified.
+both normal builds pass331/331; private0.1.18 is installed and setup/assets pass.
 [Test candidate receipt](../handoff/integrations/coordinator-20261030-headset52/README.md).
-User authorized installation for a headset test;0.1.17 stays selected until the verified update completes.
+Source is pushed;0.1.17 rollback/settings are preserved and logging is automatic. User headset acceptance remains pending.
 
 Private0.1.17 includes the launcher retained-handle image fix;38 identity/43 portable
 checks pass. Its verified package reuses the staged cache, which now passes both
 production CPU consumer tests for all49 parts. [Evidence and package](../handoff/integrations/coordinator-20261029-evidence08/README.md).
-Private0.1.17 is installed for the user's test;0.1.12 rollback/settings are preserved.
-Installed setup/assets pass; logging is automatic. [User headset feedback](archive/2026-10-29-bc2vr-0.1.17-buglist.md): C4 progression blocker, severe performance/choppy fire, destruction and cutscene bugs; interactions improved. Acceptance remains open.
+Private0.1.17 is now the retained rollback. [User headset feedback](archive/2026-10-29-bc2vr-0.1.17-buglist.md): C4 progression blocker, severe performance/choppy fire, destruction and cutscene bugs; interactions improved. Acceptance remains open.
 Runtime05's stock black captures and cleanup remain in its
 [diagnostic handoff](../handoff/integrations/coordinator-20261029-runtime05/README.md).
 

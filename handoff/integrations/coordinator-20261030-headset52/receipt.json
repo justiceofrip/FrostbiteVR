@@ -23,10 +23,27 @@
   ],
   "fixture_correction_commit": "980808d43650dd7f02ab0d684d2778b42bf8349a",
   "package_review": "No concrete blocker; read-only helper review",
-  "source_pushed": false,
-  "installed": false,
+  "source_pushed": true,
+  "installed": true,
   "game_started": false,
   "headset_accepted": false,
   "publicly_released": false,
-  "local_evidence": "reports/coordinator-20261030-headset52"
+  "local_evidence": "reports/coordinator-20261030-headset52",
+  "source_push_commit": "b441d5701a90d564966c01f3b97b74a1a4e9348e",
+  "previous_version": "0.1.17",
+  "settings_preserved": true,
+  "installed_validation": {
+    "headset_checked": false,
+    "game_started": false,
+    "version": "0.1.18",
+    "source_sha256": "30256bfa58ce1c7a116a9fdaf20e6647cb6c26b0729e6a0d56b8fe1fb16e379a",
+    "validated": true,
+    "assets_ready": true,
+    "openxr_runtime": "SteamVR"
+  },
+  "package_sha256": "d8cc077b428ff8bca50131a66e40cd9ce8410fb8d8eeb5a552e0fb09a0816555",
+  "package_files": 101,
+  "runtime_files": 93,
+  "asset_recipe_sha256": "5a5ffa58b9028e30d678a3fc6ab2a22fd513e037b24ee3bfca8e50bf382d0eda",
+  "automatic_logging": true
 }

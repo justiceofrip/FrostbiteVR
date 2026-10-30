@@ -13,6 +13,9 @@ audio cache files are reused; game-derived assets remain local and outside the d
 Storage headroom was recovered through bounded lossless compression, with matching hashes and no deletion.
 The first x86 normal run compiled successfully but exposed eight stale enrollment/body fixtures;
 its failed result is retained as x86-02. Corrections retain exact configuration and rejection checks.
+Both normal builds now pass 331/331. Source is pushed; private 0.1.18 is installed,
+and installed setup/assets validation passes. Settings and 0.1.17 rollback are preserved.
+The game was not launched; headset acceptance is pending the user's test.
 
 Player test after successful installation:
 1. Close/reopen the normal launcher, confirm 0.1.18, connect the headset, and select Play.
@@ -24,5 +27,5 @@ Player test after successful installation:
 
 Normal launch logs automatically to BC2VR-Launcher/data/runtime/sessions/<UTC timestamp-id>/.
 Record weapon name, mission and action for each problem; there is no need to test every configuration.
-This handoff describes the candidate. Actual build/push/install results belong in receipt.json;
+Exact build/push/install results are in receipt.json;
 the local reports/coordinator-20261030-headset52 receipts retain failures and exact hashes.

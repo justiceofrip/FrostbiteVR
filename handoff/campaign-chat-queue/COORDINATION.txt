@@ -13,9 +13,11 @@ External CHAT25/26/32 worktrees remain untouched; their tasks are not reassigned
 
 Headset52: user authorized the complete firearm batch for a private0.1.18 test.
 Built source980808d; x86/x64 normal331/331 pass; six binary/PDB pairs verified.
-Package and local252-record cache verified; installed0.1.17 awaits activation.
+Source pushed/verified b441d57. Installed0.1.18 with local252-record cache verified;
+installed setup/assets pass,0.1.17 rollback and byte-identical settings preserved.
 Source/runtime/deployment identities: handoff/integrations/coordinator-20261030-headset52/receipt.json.
 No game launch, input takeover, headset acceptance or public release.
+Final status push/lease close: reports/coordinator-20261030-headset52/close.json.
 
 Historical entries below retain earlier installation and diagnostic outcomes.
 Feedback10: user reports seven open0.1.17 symptoms, including Mission1 C4 throwing
