@@ -4,8 +4,11 @@
 // request1 to resume-request.txt (SINGLEPLAYER tab, raster 420,166). After the
 // fresh singleplayer.rgba/singleplayer-image.json is reviewed, atomically
 // replace that file with request2 X Y for the visible campaign Resume item.
+// If fresh Menu persists 1500 ms after Resume release, inspect the ONE saved
+// post-resume.rgba/post-resume-image.json before optionally replacing the file
+// with request3 X Y for a visible campaign confirmation. Root alone decides.
 // X/Y are canonical unsigned decimal raster pixels, X<1024 and Y<768.
-// Either request permits one trailing LF/CRLF only. No other navigation exists.
+// Each request permits one trailing LF/CRLF only. No other navigation exists.
 // MenuState has no frontEnd bit: that review is external.
 // Normal NativeProbe stream startup independently verifies frontEnd && entered
 // when no world exists. There is no invented allowFrontEnd switch or offset here.
@@ -32,7 +35,7 @@ constexpr ULONGLONG LifetimeMs=120000,WorkMs=119000;
 constexpr unsigned MenuWidth=1024,MenuHeight=768,WorldWidth=1920,WorldHeight=1080;
 constexpr unsigned MenuLogicalWidth=1280,MenuLogicalHeight=720;
 constexpr unsigned SingleplayerX=420,SingleplayerY=166;
-constexpr std::uint64_t MaximumRawBytes=4ull*(2ull*MenuWidth*MenuHeight+2ull*WorldWidth*WorldHeight);
+constexpr std::uint64_t MaximumRawBytes=4ull*(3ull*MenuWidth*MenuHeight+2ull*WorldWidth*WorldHeight);
 std::int64_t Qpc(){LARGE_INTEGER q{};return QueryPerformanceCounter(&q)?q.QuadPart:0;}
 std::int64_t QpcNs(){LARGE_INTEGER f{};const auto q=Qpc();if(q<=0||!QueryPerformanceFrequency(&f)||f.QuadPart<=0)return 0;
     return (q/f.QuadPart)*1000000000+(q%f.QuadPart)*1000000000/f.QuadPart;}
@@ -200,7 +203,7 @@ bool Save(ID3D11Device* device,ID3D11DeviceContext* context,ID3D11Texture2D* tex
     }
     context->Unmap(stage.Get(),0);raw.close();return trackingCurrent&&bool(raw);
 }
-enum class Request {Absent,First,Second,Invalid};
+enum class Request {Absent,First,Second,Third,Invalid};
 Request ReadRequest(const fs::path& file,unsigned& x,unsigned& y){
     std::error_code ec;if(!fs::exists(file,ec))return ec?Request::Invalid:Request::Absent;
     const auto size=fs::file_size(file,ec);if(ec||size<8||size>19)return Request::Invalid;
@@ -210,7 +213,9 @@ Request ReadRequest(const fs::path& file,unsigned& x,unsigned& y){
     std::string text(buffer.data(),std::size_t(count));
     if(!text.empty()&&text.back()=='\n'){text.pop_back();if(!text.empty()&&text.back()=='\r')text.pop_back();}
     if(text=="request1")return Request::First;
-    if(text.compare(0,9,"request2 "))return Request::Invalid;
+    const auto request=!text.compare(0,9,"request2 ")?Request::Second:
+        !text.compare(0,9,"request3 ")?Request::Third:Request::Invalid;
+    if(request==Request::Invalid)return request;
     std::size_t at=9;
     const auto integer=[&](unsigned limit,unsigned& value){
         const auto begin=at;value=0;
@@ -219,14 +224,16 @@ Request ReadRequest(const fs::path& file,unsigned& x,unsigned& y){
         return at>begin&&(at==begin+1||text[begin]!='0');
     };
     if(!integer(MenuWidth,x)||at>=text.size()||text[at++]!=' '||!integer(MenuHeight,y)||at!=text.size())return Request::Invalid;
-    return Request::Second;
+    return request;
 }
-enum class Phase {MainCapture,MainReview,SingleplayerClick,SingleplayerSettle,SingleplayerReview,ResumeClick,AwaitWorld};
+enum class Phase {MainCapture,MainReview,SingleplayerClick,SingleplayerSettle,SingleplayerReview,ResumeClick,AwaitWorld,
+    PostResumeSettle,PostResumeReview,ConfirmationClick};
 struct NavigationStep {
     fvr::ipc::MenuSurface pin{};fvr::ipc::MenuState state{};
     bool saved=false,accepted=false;unsigned x=0,y=0;
     ULONGLONG requestAt=0,pressAt=0,releaseAt=0;
     std::uint64_t releaseSurfaceSequence=0,releaseStateSequence=0;
+    std::uint64_t neutralGeneration=0;
 };
 struct Retirement {
     fvr::ipc::RemoteFrameProvider& frames;fvr::ipc::MenuChannel& menu;
@@ -291,12 +298,27 @@ int wmain(int argc,wchar_t** argv){try{
     std::uint64_t generation=0,lastMenuSequence=0,lastWorldFrame=0,settledEpoch=0;
     std::array<ULONGLONG,64> trackingTimes{};
     ULONGLONG connectedAt=0,lastInputAt=0,lastStateAt=0,lastSurfaceAt=0,gameplayAt=0,nextTelemetry=0,settledAt=0;
-    bool worldCaptureAttempted=false,worldSaved=false;
-    std::array<NavigationStep,2> steps{};steps[0].x=SingleplayerX;steps[0].y=SingleplayerY;
+    bool worldCaptureAttempted=false,worldSaved=false,postResumeSkipped=false;
+    std::array<NavigationStep,3> steps{};steps[0].x=SingleplayerX;steps[0].y=SingleplayerY;
     Phase phase=Phase::MainCapture;
-    const auto stepIndex=[&](){return phase==Phase::SingleplayerReview||phase==Phase::ResumeClick||phase==Phase::AwaitWorld?1u:0u;};
+    const auto stepIndex=[&](){
+        if(phase==Phase::PostResumeSettle||phase==Phase::PostResumeReview||phase==Phase::ConfirmationClick)return 2u;
+        if(phase==Phase::AwaitWorld)return steps[2].accepted?2u:1u;
+        return phase==Phase::SingleplayerReview||phase==Phase::ResumeClick?1u:0u;};
     const auto pinned=[&](){return phase==Phase::MainReview||phase==Phase::SingleplayerClick||
-        phase==Phase::SingleplayerReview||phase==Phase::ResumeClick;};
+        phase==Phase::SingleplayerReview||phase==Phase::ResumeClick||phase==Phase::PostResumeReview||phase==Phase::ConfirmationClick;};
+    const auto skipPostResume=[&](const fvr::ipc::MenuState& observed){
+        if(phase==Phase::PostResumeSettle&&fvr::ipc::ValidMenuState(observed)&&observed.deadlineQpc>Qpc()&&
+            (observed.mode==fvr::ipc::MenuMode::Passive||observed.mode==fvr::ipc::MenuMode::Gameplay)){
+            postResumeSkipped=true;phase=Phase::AwaitWorld;settledAt=0;
+            std::ostringstream details;StateIdentity(details,observed);
+            event("post_resume_capture_skipped_loading_or_gameplay",details.str());}
+    };
+    // Menu tickets carry native menu epoch/sequence, not emulated input IDs.
+    const auto menuTrackingMatches=[](const fvr::ipc::MenuSurface& observed){
+        return observed.ticket.spaceGeneration==observed.state.epoch&&
+            observed.ticket.trackingGeneration==observed.state.sequence&&observed.ticket.predictedNs==1;
+    };
     fvr::ipc::MenuSurface lastSurface{};fvr::ipc::MenuState lastState{};
     fvr::graphics::PairTicket lastWorldTicket{};fvr::graphics::BodyPropFrame lastBody{};bool bodyAvailable=false;
     std::int64_t bodySampleNs=0;
@@ -310,7 +332,9 @@ int wmain(int argc,wchar_t** argv){try{
             <<",\"state_ready\":"<<(Ready(actualState)?"true":"false")
             <<",\"surface_state_ready\":"<<(Ready(actualSurface.state)?"true":"false")
             <<",\"last_surface_age_ms\":"<<(lastSurfaceAt?at-lastSurfaceAt:UINT64_MAX)
-            <<",\"last_input_age_ms\":"<<(lastInputAt?at-lastInputAt:UINT64_MAX)<<'}';
+            <<",\"last_input_age_ms\":"<<(lastInputAt?at-lastInputAt:UINT64_MAX)
+            <<",\"capture_neutral_generation\":"<<expected.neutralGeneration<<",\"current_neutral_generation\":"<<generation
+            <<",\"menu_ticket_tracking_matches_state\":"<<(menuTrackingMatches(actualSurface)?"true":"false")<<'}';
         fail(why,details.str());
     };
     event("created_neutral_waiting_for_front_menu");
@@ -344,15 +368,18 @@ int wmain(int argc,wchar_t** argv){try{
         fvr::ipc::MenuState state{};const auto stateResult=menu.ReadState(state);readStateResults.Record(stateResult);
         if(stateResult==fvr::ipc::ChannelResult::Ok){
             if(!connectedAt)connectedAt=now;lastStateAt=now;lastState=state;
+            skipPostResume(state);
             if(phase!=Phase::AwaitWorld&&state.mode==fvr::ipc::MenuMode::Gameplay){
-                refuseMenu("unexpected_gameplay_before_authorized_resume_release",state,lastSurface);break;}
-            if(pinned()&&(!Ready(state)||state.epoch!=steps[stepIndex()].pin.state.epoch)){
+                refuseMenu(stepIndex()==2?"reviewed_post_resume_menu_changed":"unexpected_gameplay_before_authorized_resume_release",state,lastSurface);break;}
+            if(pinned()&&(!Ready(state)||state.epoch!=steps[stepIndex()].pin.state.epoch||
+                (stepIndex()==2&&state.sequence<steps[2].state.sequence))){
                 refuseMenu("reviewed_menu_identity_changed",state,lastSurface);break;}
         }else if(connectedAt&&(stateResult==fvr::ipc::ChannelResult::Closed||stateResult==fvr::ipc::ChannelResult::Invalid)){
             fail("menu_channel_closed_or_invalid");break;
         }
         if(connectedAt&&now-lastStateAt>=250){fail("menu_state_lease_lost");break;}
         if(phase==Phase::SingleplayerSettle&&lastSurfaceAt&&now-lastSurfaceAt>=250)settledAt=0;
+        if(phase==Phase::PostResumeSettle&&(!Ready(state)||!lastSurfaceAt||now-lastSurfaceAt>=100))settledAt=0;
         if(retirement.menuAck){const auto ack=menu.SurfaceConsumed(retirement.menuTicket,retirement.menuConsumed);
             if(ack!=fvr::ipc::ChannelResult::Busy){retirement.menuAck=false;if(ack!=fvr::ipc::ChannelResult::Ok)fail("menu_ack_failed");}}
         fvr::ipc::MenuSurface surface{};
@@ -361,10 +388,14 @@ int wmain(int argc,wchar_t** argv){try{
         if(takeSurfaceCalled)takeSurfaceResults.Record(surfaceResult);
         if(takeSurfaceCalled&&surfaceResult==fvr::ipc::ChannelResult::Ok){
             retirement.menuTicket=surface.ticket;retirement.menuAck=true;retirement.menuConsumed=false;
+            skipPostResume(surface.state);
             const auto& d=surface.descriptor;
             const bool identity=fvr::ipc::ValidMenuSurface(surface)&&d.width==MenuWidth&&d.height==MenuHeight&&
                 d.adapterLow==requirements.adapterLow&&d.adapterHigh==requirements.adapterHigh&&
-                (!pinned()||(Same(d,steps[stepIndex()].pin.descriptor)&&surface.state.epoch==steps[stepIndex()].pin.state.epoch));
+                (!pinned()||(Same(d,steps[stepIndex()].pin.descriptor)&&surface.state.epoch==steps[stepIndex()].pin.state.epoch))&&
+                (!(pinned()&&stepIndex()==2)||
+                    (Ready(surface.state)&&menuTrackingMatches(surface)&&surface.ticket.sequence>=steps[2].pin.ticket.sequence&&
+                     surface.state.sequence>=steps[2].pin.state.sequence));
             if(!identity)refuseMenu("menu_surface_identity_mismatch",state,surface);
             else {
                 auto copied=fvr::graphics::TransferResult::Faulted;
@@ -385,7 +416,7 @@ int wmain(int argc,wchar_t** argv){try{
                 else if(retirement.menuConsumed){++menuPairs;lastSurface=surface;lastSurfaceAt=GetTickCount64();lastMenuSequence=surface.ticket.sequence;
                     const bool coherent=Ready(surface.state)&&Ready(state)&&surface.state.epoch==state.epoch;
                     bool captureMain=phase==Phase::MainCapture&&connectedAt&&now-connectedAt>=6000&&coherent;
-                    bool captureSingleplayer=false;
+                    bool captureSingleplayer=false,capturePostResume=false;
                     if(phase==Phase::SingleplayerSettle){
                         const auto& tab=steps[0];
                         const bool afterRelease=tab.releaseAt&&surface.ticket.sequence>tab.releaseSurfaceSequence&&
@@ -397,29 +428,45 @@ int wmain(int argc,wchar_t** argv){try{
                             captureSingleplayer=GetTickCount64()-settledAt>=750&&GetTickCount64()-tab.releaseAt>=750;
                         }
                     }
-                    if(captureMain||captureSingleplayer){
-                        const unsigned index=captureMain?0u:1u;auto& step=steps[index];unsigned x=0,y=0;
-                        const auto expectedRequest=captureMain?Request::Absent:Request::First;
+                    if(phase==Phase::PostResumeSettle){
+                        const auto& resume=steps[1];
+                        const bool afterRelease=resume.releaseAt&&surface.ticket.sequence>resume.releaseSurfaceSequence&&
+                            surface.state.sequence>resume.releaseStateSequence&&state.sequence>resume.releaseStateSequence;
+                        if(!coherent||!afterRelease||!menuTrackingMatches(surface)||!published.known||!published.succeeded||
+                            !lastInputAt||GetTickCount64()-lastInputAt>=100)settledAt=0;
+                        else{
+                            if(!settledAt||settledEpoch!=state.epoch||!Same(settledMenu,d)){
+                                settledAt=GetTickCount64();settledEpoch=state.epoch;settledMenu=d;}
+                            capturePostResume=GetTickCount64()-settledAt>=1500&&GetTickCount64()-resume.releaseAt>=1500;
+                        }
+                    }
+                    if(captureMain||captureSingleplayer||capturePostResume){
+                        const unsigned index=captureMain?0u:captureSingleplayer?1u:2u;auto& step=steps[index];unsigned x=0,y=0;
+                        const auto expectedRequest=captureMain?Request::Absent:captureSingleplayer?Request::First:Request::Second;
                         if(ReadRequest(requestFile,x,y)!=expectedRequest)fail("request_precedes_capture_review");
                         else if(!Save(device.Get(),context.Get(),menuScratch[0].Get(),0,
-                            folder/(captureMain?L"menu.rgba":L"singleplayer.rgba"),deadline,pulseNeutral))fail("menu_capture_failed");
-                        else{step.pin=surface;step.state=state;
-                            std::ofstream report(folder/(captureMain?L"image.json":L"singleplayer-image.json"));
-                            report<<"{\"kind\":\""<<(captureMain?"main_menu_before_singleplayer":"singleplayer_menu_before_campaign_resume")
+                            folder/(captureMain?L"menu.rgba":captureSingleplayer?L"singleplayer.rgba":L"post-resume.rgba"),deadline,pulseNeutral))fail("menu_capture_failed");
+                        else{step.pin=surface;step.state=state;step.neutralGeneration=generation;
+                            std::ofstream report(folder/(captureMain?L"image.json":captureSingleplayer?L"singleplayer-image.json":L"post-resume-image.json"));
+                            report<<"{\"kind\":\""<<(captureMain?"main_menu_before_singleplayer":captureSingleplayer?"singleplayer_menu_before_campaign_resume":"post_resume_menu_before_optional_campaign_confirmation")
                                   <<"\",\"elapsed_ms\":"<<GetTickCount64()-start
                                   <<",\"width\":"<<d.width<<",\"height\":"<<d.height<<",\"format\":"<<d.format
                                   <<",\"menu_epoch\":"<<state.epoch<<",\"state_sequence\":"<<state.sequence
                                   <<",\"state_deadline_qpc\":"<<state.deadlineQpc<<",\"surface_deadline_qpc\":"<<surface.state.deadlineQpc
                                   <<",\"logical_width\":1280,\"logical_height\":720,\"navigation_step\":"<<index+1
-                                  <<",\"request_protocol\":\""<<(captureMain?"request1":"request2 X Y")<<'"';
+                                  <<",\"request_protocol\":\""<<(captureMain?"request1":captureSingleplayer?"request2 X Y":"request3 X Y")<<'"';
                             if(captureMain)report<<",\"singleplayer_x\":"<<SingleplayerX<<",\"singleplayer_y\":"<<SingleplayerY;
-                            else report<<",\"singleplayer_tab_release_elapsed_ms\":"<<steps[0].releaseAt-start
+                            else if(captureSingleplayer)report<<",\"singleplayer_tab_release_elapsed_ms\":"<<steps[0].releaseAt-start
                                 <<",\"settled_ms\":"<<GetTickCount64()-settledAt<<",\"resume_coordinates_require_root_review\":true";
+                            else report<<",\"campaign_resume_release_elapsed_ms\":"<<steps[1].releaseAt-start
+                                <<",\"settled_ms\":"<<GetTickCount64()-settledAt<<",\"neutral_generation\":"<<step.neutralGeneration
+                                <<",\"neutral_space\":1,\"optional_confirmation_requires_root_visual_review\":true";
                             report<<",\"native_front_end_bit_available\":false,\"review_required\":true,\"identity\":";
                             Identity(report,d,surface.ticket);report<<'}';report.close();
                             if(!report)fail("menu_report_failed");else{
-                                step.saved=true;phase=captureMain?Phase::MainReview:Phase::SingleplayerReview;
-                                event(captureMain?"menu_saved_await_root_review_and_request1":"singleplayer_saved_await_root_review_and_request2");}
+                                step.saved=true;phase=captureMain?Phase::MainReview:captureSingleplayer?Phase::SingleplayerReview:Phase::PostResumeReview;
+                                event(captureMain?"menu_saved_await_root_review_and_request1":captureSingleplayer?
+                                    "singleplayer_saved_await_root_review_and_request2":"post_resume_saved_await_root_review_and_optional_request3");}
                         }
                     }
                 }
@@ -431,40 +478,58 @@ int wmain(int argc,wchar_t** argv){try{
         // Re-read after capture/copy. A formerly fresh state is not a new lease.
         fvr::ipc::MenuState current{};const auto currentStateResult=menu.ReadState(current);
         currentReadStateResults.Record(currentStateResult);const bool currentRead=currentStateResult==fvr::ipc::ChannelResult::Ok;
+        if(currentRead)skipPostResume(current);
+        if(phase==Phase::PostResumeSettle&&currentRead&&(!Ready(current)||current.epoch!=settledEpoch))settledAt=0;
         if(currentRead&&phase!=Phase::AwaitWorld&&current.mode==fvr::ipc::MenuMode::Gameplay){
-            refuseMenu("unexpected_gameplay_before_authorized_resume_release",current,lastSurface);break;}
-        if(pinned()&&currentRead&&(!Ready(current)||current.epoch!=steps[stepIndex()].pin.state.epoch)){
+            refuseMenu(stepIndex()==2?"reviewed_post_resume_menu_changed":"unexpected_gameplay_before_authorized_resume_release",current,lastSurface);break;}
+        if(pinned()&&currentRead&&(!Ready(current)||current.epoch!=steps[stepIndex()].pin.state.epoch||
+            (stepIndex()==2&&current.sequence<steps[2].state.sequence))){
             refuseMenu("reviewed_menu_identity_changed_after_copy",current,lastSurface);break;}
         const auto& pin=steps[stepIndex()].pin;
         const bool menuGuard=pinned()&&currentRead&&Ready(current)&&current.epoch==pin.state.epoch&&
             Ready(lastSurface.state)&&lastSurface.state.epoch==pin.state.epoch&&Same(lastSurface.descriptor,pin.descriptor)&&
-            lastSurfaceAt&&GetTickCount64()-lastSurfaceAt<100&&published.known&&published.succeeded&&lastInputAt&&GetTickCount64()-lastInputAt<100;
+            lastSurfaceAt&&GetTickCount64()-lastSurfaceAt<100&&published.known&&published.succeeded&&lastInputAt&&GetTickCount64()-lastInputAt<100&&
+            (stepIndex()!=2||(steps[2].saved&&menuTrackingMatches(lastSurface)&&
+                lastSurface.ticket.sequence>=pin.ticket.sequence&&lastSurface.state.sequence>=pin.state.sequence&&
+                current.sequence>=steps[2].state.sequence&&generation>=steps[2].neutralGeneration));
         unsigned requestedX=0,requestedY=0;
         const auto request=ReadRequest(requestFile,requestedX,requestedY);
         if(phase==Phase::MainCapture&&request!=Request::Absent)fail("request_precedes_capture_review");
         else if((phase==Phase::SingleplayerClick||phase==Phase::SingleplayerSettle)&&request!=Request::First)
             fail("request2_precedes_singleplayer_capture_review");
-        else if(phase==Phase::MainReview||phase==Phase::SingleplayerReview){
-            const unsigned index=stepIndex();const auto waiting=index?Request::First:Request::Absent;
-            const auto expected=index?Request::Second:Request::First;
+        else if((phase==Phase::ResumeClick||phase==Phase::PostResumeSettle)&&request!=Request::Second)
+            fail("request3_precedes_post_resume_capture_review");
+        else if(phase==Phase::ConfirmationClick&&request!=Request::Third)fail("request3_changed_during_confirmation_click");
+        else if(phase==Phase::AwaitWorld&&request!=(steps[2].accepted?Request::Third:Request::Second))
+            fail("request_changed_after_navigation_finished");
+        else if(phase==Phase::MainReview||phase==Phase::SingleplayerReview||phase==Phase::PostResumeReview){
+            const unsigned index=stepIndex();const auto waiting=index==2?Request::Second:index?Request::First:Request::Absent;
+            const auto expected=index==2?Request::Third:index?Request::Second:Request::First;
             if(request!=waiting){
                 if(request!=expected)fail("invalid_or_early_request");
                 else if(!menuGuard||GetTickCount64()-start>WorkMs-2000)refuseMenu("request_identity_or_lease_rejected",current,lastSurface);
                 else{auto& step=steps[index];step.accepted=true;step.requestAt=GetTickCount64();
                     if(index){step.x=requestedX;step.y=requestedY;}
-                    phase=index?Phase::ResumeClick:Phase::SingleplayerClick;
+                    phase=index==2?Phase::ConfirmationClick:index?Phase::ResumeClick:Phase::SingleplayerClick;
                     std::ostringstream details;details<<"{\"raster_x\":"<<step.x<<",\"raster_y\":"<<step.y
                         <<",\"u\":"<<float(step.x)/MenuWidth<<",\"v\":"<<float(step.y)/MenuHeight<<'}';
-                    event(index?"request2_accepted_root_reviewed_campaign_resume":"request1_accepted_root_reviewed_singleplayer_tab",details.str());}
+                    event(index==2?"request3_accepted_root_reviewed_campaign_confirmation":index?
+                        "request2_accepted_root_reviewed_campaign_resume":"request1_accepted_root_reviewed_singleplayer_tab",details.str());}
             }
         }
         control.flags=0;control.menuEpoch=currentRead?current.epoch:0;
-        if((phase==Phase::MainCapture||phase==Phase::MainReview||phase==Phase::SingleplayerReview)&&currentRead&&Ready(current)){
+        if((phase==Phase::MainCapture||phase==Phase::MainReview)&&currentRead&&Ready(current)){
             control.flags=fvr::ipc::MenuFocused|fvr::ipc::MenuPoint;control.u=control.v=.5f;}
+        // Keep the displayed widget hovered through settling and visual review.
+        if((phase==Phase::SingleplayerSettle||phase==Phase::SingleplayerReview||
+            phase==Phase::PostResumeSettle||phase==Phase::PostResumeReview)&&currentRead&&Ready(current)){
+            const auto& hovered=steps[phase==Phase::SingleplayerSettle||phase==Phase::SingleplayerReview?0u:1u];
+            control.flags=fvr::ipc::MenuFocused|fvr::ipc::MenuPoint;
+            control.u=float(hovered.x)/MenuWidth;control.v=float(hovered.y)/MenuHeight;}
         // An initial neutral point arms the native pointer. A continuous 150 ms
         // down interval is ONE press, refreshed below the native 100 ms lease.
         // No controller MenuClick, native cancel/toggle, Fire or gameplay action.
-        const bool clicking=phase==Phase::SingleplayerClick||phase==Phase::ResumeClick;
+        const bool clicking=phase==Phase::SingleplayerClick||phase==Phase::ResumeClick||phase==Phase::ConfirmationClick;
         if(clicking&&!failure){auto& step=steps[stepIndex()];
             if(!menuGuard)refuseMenu("menu_or_tracking_guard_lost_during_click",current,lastSurface);
             else{control.u=float(step.x)/MenuWidth;control.v=float(step.y)/MenuHeight;control.flags=fvr::ipc::MenuFocused|fvr::ipc::MenuPoint;
@@ -475,16 +540,16 @@ int wmain(int argc,wchar_t** argv){try{
         control.sequence=++sequence;const auto sent=menu.PublishControl(control);publishControlResults.Record(sent);
         if(sent==fvr::ipc::ChannelResult::Ok&&clicking){const unsigned index=stepIndex();auto& step=steps[index];
             if((control.flags&fvr::ipc::MenuDown)&&!step.pressAt){step.pressAt=GetTickCount64();++pressEpisodes;
-                event(index?"campaign_resume_press_published":"singleplayer_tab_press_published");}
+                event(index==2?"campaign_confirmation_press_published":index?"campaign_resume_press_published":"singleplayer_tab_press_published");}
             if(step.pressAt&&!(control.flags&fvr::ipc::MenuDown)&&!step.releaseAt){
                 step.releaseAt=GetTickCount64();++releaseEpisodes;step.releaseSurfaceSequence=lastSurface.ticket.sequence;
                 step.releaseStateSequence=(std::max)(current.sequence,lastSurface.state.sequence);
-                phase=index?Phase::AwaitWorld:Phase::SingleplayerSettle;
-                event(index?"campaign_resume_release_published":"singleplayer_tab_release_published");}
+                phase=index==2?Phase::AwaitWorld:index?Phase::PostResumeSettle:Phase::SingleplayerSettle;settledAt=0;
+                event(index==2?"campaign_confirmation_release_published":index?"campaign_resume_release_published":"singleplayer_tab_release_published");}
         }else if(sent!=fvr::ipc::ChannelResult::Ok&&sent!=fvr::ipc::ChannelResult::Busy&&connectedAt){fail("control_publication_failed");break;}
-        // A native transition after the normal up is expected. There are never
-        // additional clicks or menu toggles to repair a different screen.
-        if(phase==Phase::AwaitWorld&&GetTickCount64()-steps[1].releaseAt>=150&&currentRead&&current.mode==fvr::ipc::MenuMode::Gameplay){
+        // After Resume, only the separately reviewed optional confirmation can
+        // add one click. Loading/gameplay before that capture bypasses the gate.
+        if(phase==Phase::AwaitWorld&&GetTickCount64()-steps[stepIndex()].releaseAt>=150&&currentRead&&current.mode==fvr::ipc::MenuMode::Gameplay){
             if(!gameplayAt){gameplayAt=GetTickCount64();event("gameplay_observed");}
             fvr::runtime::TrackingFrame rendered{};fvr::graphics::TextureDescriptor d{};fvr::graphics::PairTicket ticket{};
             if(frames.TryGetCompletedPair(requirements,tracking,rendered,d,ticket)){
@@ -564,25 +629,31 @@ int wmain(int argc,wchar_t** argv){try{
         telemetry<<",\"publish_control\":";publishControlResults.Write(telemetry);
         telemetry<<",\"take_surface\":";takeSurfaceResults.Write(telemetry);telemetry<<"}}\n";telemetry.flush();
     }
+    const unsigned expectedEpisodes=steps[2].accepted?3u:2u;
     const bool okay=!failure&&steps[0].saved&&steps[1].saved&&steps[0].accepted&&steps[1].accepted&&
-        pressEpisodes==2&&releaseEpisodes==2&&worldSaved;
+        (!steps[2].accepted||steps[2].saved)&&pressEpisodes==expectedEpisodes&&releaseEpisodes==expectedEpisodes&&worldSaved;
     std::ofstream result(folder/L"result.json");
     result<<"{\"passed_observation\":"<<(okay?"true":"false")<<",\"failure\":\""<<(failure?failure:"")
           <<"\",\"failure_details\":"<<failureDetails<<",\"lifetime_limit_ms\":"<<LifetimeMs<<",\"elapsed_ms\":"<<GetTickCount64()-start
           <<",\"menu_saved\":"<<(steps[0].saved?"true":"false")<<",\"singleplayer_saved\":"<<(steps[1].saved?"true":"false")
+          <<",\"post_resume_saved\":"<<(steps[2].saved?"true":"false")<<",\"post_resume_skipped_loading_or_gameplay\":"<<(postResumeSkipped?"true":"false")
           <<",\"world_pair_saved\":"<<(worldSaved?"true":"false")
           <<",\"root_request1_accepted\":"<<(steps[0].accepted?"true":"false")<<",\"root_request2_accepted\":"<<(steps[1].accepted?"true":"false")
+          <<",\"root_request3_accepted\":"<<(steps[2].accepted?"true":"false")
+          <<",\"campaign_confirmation_x\":"<<steps[2].x<<",\"campaign_confirmation_y\":"<<steps[2].y
           <<",\"campaign_resume_x\":"<<steps[1].x<<",\"campaign_resume_y\":"<<steps[1].y<<",\"published_press_episodes\":"<<pressEpisodes
           <<",\"published_release_episodes\":"<<releaseEpisodes<<",\"native_down_up_counts_require_trace\":true"
           <<",\"menu_epoch\":"<<steps[0].pin.state.epoch<<",\"singleplayer_menu_epoch\":"<<steps[1].pin.state.epoch
+          <<",\"post_resume_menu_epoch\":"<<steps[2].pin.state.epoch<<",\"post_resume_neutral_generation\":"<<steps[2].neutralGeneration
           <<",\"menu_pairs\":"<<menuPairs<<",\"world_pairs\":"<<worldPairs<<",\"menu_copy_busy\":"<<menuCopyBusy<<",\"world_copy_busy\":"<<worldCopyBusy
           <<",\"telemetry_rows\":"<<telemetryRows<<",\"neutral_input_samples\":"<<generation
           <<",\"retirement_neutral_publications\":"<<retirement.neutralPublications
           <<",\"menu_feedback_drained\":"<<(retirement.menuAckFinished?"true":"false")
           <<",\"world_feedback_drained\":"<<(retirement.frameFeedbackFinished?"true":"false")
-          <<",\"raw_image_limit\":4,\"maximum_raw_bytes\":"<<MaximumRawBytes
+          <<",\"raw_image_limit\":5,\"maximum_raw_bytes\":"<<MaximumRawBytes
           <<",\"root_review_attested_by_request1\":"<<(steps[0].accepted?"true":"false")
           <<",\"root_review_attested_by_request2\":"<<(steps[1].accepted?"true":"false")
+          <<",\"root_review_attested_by_request3\":"<<(steps[2].accepted?"true":"false")
           <<",\"front_end_proof_contract\":\"root_reviewed_main_and_singleplayer_images_and_normal_trace\",\"headset_tested\":false"
           <<",\"native_reload_ready_claimed\":false,\"reload_success_claimed\":false}";
     result.close();return okay&&result?0:2;

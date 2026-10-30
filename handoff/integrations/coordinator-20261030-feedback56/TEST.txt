@@ -1,5 +1,5 @@
 Private0.1.20 test candidate
-Check STATUS.txt/receipt.json for installation status; packaging alone is not installation.
+Installed and validated;0.1.19 retained for rollback. Settings/logging preserved.
 
 What changed since0.1.19:
 - LMG feed-mechanism contacts use the free hand's anatomical wrist coordinates.
@@ -21,3 +21,5 @@ Logging remains automatic. Stop VR, then use Report feedback after the session.
 Empty-hand holstering stays deferred. Steam still needs the external executable,
 not another duplicate report. Full live manual reload support and firing smoothness
 are not established by the offline tests.
+Cutscene cameras, specific vehicle/seat scenes and the parked rare-weapon/optic cases
+also remain open; their missing evidence is tracked once in COORDINATOR-STATE.txt.

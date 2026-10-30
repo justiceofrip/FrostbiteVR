@@ -16,9 +16,10 @@ Host GPU test stack overflow reproduced twice; heap-owned fixture reports fix it
 Normal89c1e2d/source5922943d builds pass337/337 on x86 and x64; frozen0.1.20 package verifies101 files/93 runtime files.
 One headset availability probe failed; reuse shared blocker, no retry per card.
 Native menu capture/input readiness verified without a headset. Campaign05 reached reviewed Singleplayer/Resume clicks: native2downs/2ups,0rejections; no loaded campaign/world pair.
+Campaign06 post-Resume image exposed private review-hover behavior; corrected helper retains dropdown hover. Campaign07 then withdrew review on GPU surface replacement1->2 before input. Park this shared observation blocker; no unchanged retry.
 All bounded native attempts retain results; game/helpers exited and all three exact original profiles restored. Inventory read refused absent local player; no reload success claimed.
 Destruction: static ABI/consumer recovery supports two omitted skin-decal/soot paths; candidate adds exact signature-gated projection correction. DESTRUCTION.txt retains evidence and scene/headset limits.
 Evidence summary: reports/coordinator-20261030-feedback56/session-summary.json.
 Empty-hand stow remains deferred. Steam waits for executable; old reports remain sufficient.
 FIRE-PACING.txt records the new producer-wait audit and exact unresolved cadence evidence.
-Private0.1.20 is prepared, not yet installed; receipt.json and TEST.txt distinguish actual changes from open gameplay checks.
+Combined source pushed0e20d77; private0.1.20 installed and setup/assets validation passed. Settings/logging preserved,0.1.19 rollback retained; receipt.json/TEST.txt distinguish changes from open gameplay checks.

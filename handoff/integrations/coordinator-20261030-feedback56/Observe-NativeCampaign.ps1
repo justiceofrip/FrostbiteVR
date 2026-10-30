@@ -1,7 +1,7 @@
 #requires -Version 7.5
 <#
 One root-owned, headset-free saved-campaign observation. Root reviews its menu image before request1. Never installs or selects an arbitrary
-checkpoint, changes graphics, activates a window, or force-terminates. One reviewed Singleplayer-tab click and one reviewed campaign Resume click are allowed.
+checkpoint, changes graphics, activates a window, or force-terminates. Reviewed Singleplayer/Resume clicks and an optional reviewed campaign confirmation are allowed.
 Root must freeze the new normal runtime and separately attest its menu helper:
   schema: fvr.feedback56.campaign-helper-build.v1
   build_receipt, executable, menu_source, x64_build_result: {path,bytes,sha256}
@@ -23,7 +23,7 @@ $repo='G:\Unity\VRMMO\FrostbiteVR'
 $parent=Join-Path $repo 'reports/coordinator-20261030-feedback56'
 $run=Join-Path $parent $RunName
 $buildPath=Join-Path $parent 'normal-runtime/build-receipt.json'
-$menuExe=Join-Path $parent 'campaign-helper04/NativeCampaignObserve.exe'
+$menuExe=Join-Path $parent 'campaign-helper06/NativeCampaignObserve.exe'
 $gameDirectory='G:\New folder (2)\Battlefield Bad Company 2'
 $gameExe=Join-Path $gameDirectory 'BFBC2Game.exe'
 $gameSha='3911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258'
@@ -35,7 +35,7 @@ $rawLimit=1920L*1080L*4L
 # Normal native output can retain three bounded world images plus five desktop
 # images. Original graphics are checked below and never enlarged by this helper.
 $nativeRawLimit=3L*4096L*4096L*4L+5L*$rawLimit
-$allRawLimit=$nativeRawLimit+4L*$rawLimit
+$allRawLimit=$nativeRawLimit+5L*$rawLimit
 $pins=[Collections.Generic.List[object]]::new()
 $locks=[Collections.Generic.List[IDisposable]]::new()
 $owned=[Collections.Generic.List[object]]::new()
@@ -352,7 +352,7 @@ public static class Feedback56Process {
    $launcherPreserved=($launcherFiles.Count -eq 2);Save 'launcher-after.json' @{unchanged=$launcherPreserved;files=$launcherAfter}
   }catch{$cleanupFailures.Add($_.Exception.Message)}
   $processOutcomes=@(foreach($entry in $owned){try{$entry.process.Refresh();@{identity=$entry.identity;name=$entry.name;has_exited=$entry.process.HasExited;exit_code=$(if($entry.process.HasExited){$entry.process.ExitCode}else{$null});forced_termination=$false}}catch{@{identity=$entry.identity;name=$entry.name;observation_error=$_.Exception.Message}}})
-  try{Save 'outcome.json' @{schema='fvr.feedback56.native-campaign-observation.v1';run=$run;passed=($observationPassed -and -not $failure -and $cleanupFailures.Count -eq 0 -and $close.normal_close_observed -and $restored -and $launcherPreserved);failure=$failure;cleanup_failures=$cleanupFailures.ToArray();native_retirement_proven=$retired;close=$close;processes=$processOutcomes;exact_three_profiles_restored=$restored;launcher_active_settings_preserved=$launcherPreserved;profile_backups=$profiles;launcher_backups=$launcherFiles;native_trace_attempted=$traceAttempted;menu_result=$menuResult;maximum_native_seconds=60;maximum_observation_ms=200000;normal_close_wait_ms=10000;maximum_menu_images=2;maximum_world_images=2;maximum_native_images=8;maximum_images=12;elapsed_ms=$(if($clock){$clock.ElapsedMilliseconds}else{0});maximum_raw_image_bytes=$allRawLimit;stock_launch=$true;original_graphics=$true;checkpoint_changed=$false;gameplay_or_desktop_input_sent=$false;singleplayer_then_resume_pointer_presses_authorized=$true;neutral_hover_published=[bool]$menu;native_environment_overrides_applied=$false;forced_termination=$false;headset_accepted=$false;visual_acceptance=$false;utc=[DateTime]::UtcNow.ToString('o')}}catch{$cleanupFailures.Add('Outcome receipt: '+$_.Exception.Message)}
+  try{Save 'outcome.json' @{schema='fvr.feedback56.native-campaign-observation.v1';run=$run;passed=($observationPassed -and -not $failure -and $cleanupFailures.Count -eq 0 -and $close.normal_close_observed -and $restored -and $launcherPreserved);failure=$failure;cleanup_failures=$cleanupFailures.ToArray();native_retirement_proven=$retired;close=$close;processes=$processOutcomes;exact_three_profiles_restored=$restored;launcher_active_settings_preserved=$launcherPreserved;profile_backups=$profiles;launcher_backups=$launcherFiles;native_trace_attempted=$traceAttempted;menu_result=$menuResult;maximum_native_seconds=60;maximum_observation_ms=200000;normal_close_wait_ms=10000;maximum_menu_images=3;maximum_world_images=2;maximum_native_images=8;maximum_images=13;elapsed_ms=$(if($clock){$clock.ElapsedMilliseconds}else{0});maximum_raw_image_bytes=$allRawLimit;stock_launch=$true;original_graphics=$true;checkpoint_changed=$false;gameplay_or_desktop_input_sent=$false;singleplayer_resume_optional_confirmation_authorized=$true;neutral_hover_published=[bool]$menu;native_environment_overrides_applied=$false;forced_termination=$false;headset_accepted=$false;visual_acceptance=$false;utc=[DateTime]::UtcNow.ToString('o')}}catch{$cleanupFailures.Add('Outcome receipt: '+$_.Exception.Message)}
  }elseif($failure){
   # Tiny refusal evidence survives even a storage refusal; no session is started.
   try{NoLinks $parent;if(Test-Path -LiteralPath $parent -PathType Container){$path=Join-Path $parent ($RunName+'-refusal-'+[Guid]::NewGuid().ToString('N')+'.json');[IO.File]::WriteAllText($path,($failure|ConvertTo-Json),[Text.UTF8Encoding]::new($false))}}catch{Write-Warning ('Refusal receipt could not be preserved: '+$_.Exception.Message)}
