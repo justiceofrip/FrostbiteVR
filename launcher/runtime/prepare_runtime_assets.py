@@ -147,8 +147,8 @@ def prepare_assets(args, runtime):
                'pump/mechanism-audio.json','shell/spas-shell-insert.wav','shell/shell-reload-audio.json')
         files=[{'path':name,'sha256':hashlib.sha256((output/name).read_bytes()).hexdigest(),
                 'bytes':(output/name).stat().st_size} for name in names]
-        if sum(row['bytes'] for row in files)>32*1024*1024:
-            raise ValueError('Derived runtime asset size exceeded 32 MiB')
+        if sum(row['bytes'] for row in files)>64*1024*1024:
+            raise ValueError('Derived runtime asset size exceeded 64 MiB')
         receipt={'schema':'bc2vr.local-assets.v1','recipe_sha256':args.recipe,
                  'game_sha256':args.game_sha256,'files':files,'redistributable':False}
         temporary=output/'assets.json.tmp'
