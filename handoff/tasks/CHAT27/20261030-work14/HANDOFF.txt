@@ -1,0 +1,24 @@
+DoneY: bounded NEW native code follow-up complete; active cinematic owner remains UNPROVEN.
+Assigned worktree campaign-coordinator-20261028-r1; supplied HEAD08dfca04ecfc34ee4400c2aa7a3b52df6d886971 (no Git queried).
+Source READONLY; only this directory written; no build/process/game/XR/input/profile/install/archive/subagent work.
+Exact installed EXE SHA2563911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258 verified.
+Reused BUG017-02-04/work13 preparation01.json; no repeated type/field inventory.
+Files: cinematic_owner.py and proof01.json (6975 bytes), plus this handoff.
+Proof SHA256b5db47e429185f0a5ebe9d37986fe7ec4c4cb40de746bcd9f974f482147101d3.
+Evidence: static file-backed code only; eight selected units: two getters, two table prefixes, four setup/cleanup functions.
+Camera getter RVA0x477e80 -> table RVA0x1036550 slot+8; entity getter0x477ef0 -> table0x10366c8 slot+8.
+Each getter has one exact absolute table reference and zero direct-call byte candidates.
+Each table has two exact code assignments to [this]; hashes and all instruction RVAs retained.
+Camera setup/cleanup RVA0x4b4340/0x4a32e0; entity setup/cleanup0x4af7d0/0x4a3400.
+NEW proven shared anchor: entity setup calls admitted context getter0x3ff060, loads [context+0x40],
+passes this+0x98 to direct callee0x826900; helper semantics/reverse lookup remain unknown.
+Both cleanup paths load [context+0x18], dispatch vtable+0x10 with (0x1f,this+0xdc); entity also uses0x12.
+This proves shared context service interactions, not active-player/view ownership or selection.
+Setup argument Camera/PeekAround-shaped reads and unidentified member cleanup are recorded without semantic promotion.
+Missing edge: admitted local player or active view/request -> exact live cinematic entity -> currently selected camera/sequence.
+Authored metadata, native selected instance, and lifetime/authority remain separate; no runtime chain/signature admitted.
+Local-player scope, blend authority, generation, synchronization and entry/exit/skip evidence remain absent.
+Stopped at eight units; no opaque helper, service target, additional table slot or external caller walk.
+Check passed: py -3.12 -B cinematic_owner.py --exe <exact EXE> --output <new JSON beside script>.
+Existing dumpbin /RANGE used file-only; exact SHA/reference/assignment/call/instruction checks pass. No native/headset claim.
+Runtime admission remains disabled. Root owns any further scope/integration; approval was not granted. Retired.

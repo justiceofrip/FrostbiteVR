@@ -1,0 +1,24 @@
+BC2 VR work14 — bounded static camera-owner follow-up; FEATURE LIST NOT COMPLETE
+Base08dfca04ecfc34ee4400c2aa7a3b52df6d886971; existing offline passes remain valid.
+User asked whether all tasks/LMG reload are done: answer NO.
+Conditional integration approval depended on completion; condition is false, so hold remains.
+No game/XR/input/install; source integration question is not an authorization.
+
+cinematic_owner14 DoneY for bounded static work, retired; saved handoff/tasks/CHAT27/20261030-work14 and
+reports/coordinator-20261030-work14/cinematic-owner scratch; all source read-only.
+New work uses work13 exact TypeInfo/getter proof to trace eight bounded code/table units.
+No repeated type inventory/archive survey or normal build.
+Static service registration/cleanup links are not an active player/view owner proof.
+Root verified script/proof identity and unchanged runtime source; no builds repeated.
+
+LMG feature status (not worker-job status):
+CHAT13 magazine-fed campaign LMG validation remains open; exact MG36 campaign/live join missing.
+CHAT14 M60 static metadata + observer ready; real staged transfer/readiness/pose evidence missing.
+CHAT15 physical belt-fed runtime mechanism not implemented/accepted; waits on CHAT14 contract.
+The existing portable FeedMechanism and passing tests do not constitute a working game feature.
+No new LMG audit assigned: exact runtime prerequisite is already recorded, unchanged.
+Actual feature acceptance requires iterative candidate builds/native/headset checks.
+Eight-unit proof: b5db47e429185f0a5ebe9d37986fe7ec4c4cb40de746bcd9f974f482147101d3.
+Existing context getter links to opaque services; no selected camera/read chain admitted.
+Runtime source remains08dfca0; this batch records preparation and open feature status only.
+All agent ownership returned to root. No game, native capability, source push or installation.

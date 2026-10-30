@@ -1,0 +1,141 @@
+{
+  "schema": "chat27.cinematic_owner_static_code.v1",
+  "evidence_level": "offline file-backed code",
+  "executable_sha256": "3911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258",
+  "preferred_base": "0x400000",
+  "prior_proof_sha256": "5e077a868ad1eb55d7c3a35d2110a9b936f036b3564d27f47c39e821ca54eaef",
+  "script_sha256": "52b467f7573685e22aed059d1e37a71b3ea67607a539b437a639addead588c32",
+  "source_sha256": {
+    "src\\games\\bc2\\Bc2Profile.cpp": "160fada6334677d6a50c5f0e5bbb3e6cc03e1a3466b2a823f85a8e357f34099c",
+    "src\\games\\bc2\\Bc2Profile.h": "0c014f858cf8787517f84048380dfaa68f934628def85a805e6989f1a329a5ae",
+    "src\\games\\bc2\\Bc2Gameplay.cpp": "da8cbc453b1b66605be81c802a3625fb67dff253dcb865dc44fa3cf64afd5ce6"
+  },
+  "selected_cone_units": 8,
+  "families": [
+    {
+      "name": "ClientCutsceneCameraEntity",
+      "type_info_storage_rva": "0x17f4cf8",
+      "getter": {
+        "rva": "0x477e80",
+        "size": 6,
+        "sha256": "e0c1fa8bf03108463e7f9eea94bf7f104f6c3e7c708cdd28080eff62ee8ab483",
+        "executable": true,
+        "writable": false
+      },
+      "table_prefix": {
+        "rva": "0x1036550",
+        "size": 16,
+        "sha256": "29eb1ab1593d560bec2324644e18a1e8ddd882a6288a0378dfc6bc3959d69e5e",
+        "executable": false,
+        "writable": false
+      },
+      "table_prefix_function_rvas": [
+        "0xbf98e0",
+        "0xbf98f0",
+        "0x477e80",
+        "0x4af7b0"
+      ],
+      "exact_getter_reference_rva": "0x1036558",
+      "direct_getter_call_candidates": 0,
+      "setup": {
+        "rva": "0x4b4340",
+        "size": 280,
+        "sha256": "f55f0a4383abf562545f840fd82a8274cf570552174416cf0699ba5bd1b80b60",
+        "executable": true,
+        "writable": false
+      },
+      "cleanup": {
+        "rva": "0x4a32e0",
+        "size": 138,
+        "sha256": "5265b3e36c18290a086e658225529fd31d2a1920eda09646f6f7854b6691805d",
+        "executable": true,
+        "writable": false
+      },
+      "primary_table_write_instruction_rvas": [
+        "0x4b437b",
+        "0x4a32f1"
+      ],
+      "exact_context_call_instruction_rvas": [
+        "0x4a3325"
+      ]
+    },
+    {
+      "name": "ClientCutsceneEntity",
+      "type_info_storage_rva": "0x17f4d30",
+      "getter": {
+        "rva": "0x477ef0",
+        "size": 6,
+        "sha256": "a72508625e7ce550fe2850583b1942016fc8e9dfc3d58bde9d172efe4865cb66",
+        "executable": true,
+        "writable": false
+      },
+      "table_prefix": {
+        "rva": "0x10366c8",
+        "size": 16,
+        "sha256": "a47157f00b2f5a2d9d226320a5806d6eb18ceff942f61560d18d7ea188750f11",
+        "executable": false,
+        "writable": false
+      },
+      "table_prefix_function_rvas": [
+        "0xbf98e0",
+        "0xbf98f0",
+        "0x477ef0",
+        "0x4af960"
+      ],
+      "exact_getter_reference_rva": "0x10366d0",
+      "direct_getter_call_candidates": 0,
+      "setup": {
+        "rva": "0x4af7d0",
+        "size": 394,
+        "sha256": "4485de0fb19a2d7469132dc783d7c3550d80f6ef5f966b036ca7e7e0b4745bcf",
+        "executable": true,
+        "writable": false
+      },
+      "cleanup": {
+        "rva": "0x4a3400",
+        "size": 311,
+        "sha256": "5bd0e1dded02124b06d4abd7c3dc6936585b4336bfacb8743ebb0b0cddd53a11",
+        "executable": true,
+        "writable": false
+      },
+      "primary_table_write_instruction_rvas": [
+        "0x4af853",
+        "0x4a3416"
+      ],
+      "exact_context_call_instruction_rvas": [
+        "0x4af8f9",
+        "0x4a3440",
+        "0x4a3452"
+      ]
+    }
+  ],
+  "existing_context_anchor": {
+    "source": "Bc2Profile.cpp DiscoverGameplay existing unique signature and return check",
+    "getter_rva": "0x3ff060",
+    "storage_rva": "0x11713d8",
+    "note": "Existing admitted source anchor revalidated; no new callee-body walk."
+  },
+  "exact_static_edges": [
+    "Both table-writing functions in each family assign this[0] to that family's table; table+8 is the saved TypeInfo getter. This is code-backed type association, not a selected-instance proof.",
+    "Entity setup RVA0x4af7d0: ECX entry is this; at0x4af7fc EDI=this+0x98; call0x4af8f9 returns existing context; 0x4af8fe loads receiver=[context+0x40]; 0x4af901 pushes EDI; 0x4af902 directly calls RVA0x826900. Callee semantics and reverse registry lookup are unproved.",
+    "Camera cleanup RVA0x4a32e0 and entity cleanup RVA0x4a3400 form EDI=this+0xdc; call existing context getter; load receiver=[context+0x18]; call [receiver.vtable+0x10] with stack arguments (0x1f,this+0xdc). Entity cleanup repeats with (0x12,this+0xdc). Dispatch target/meaning is unproved.",
+    "Camera setup consumes original second stack argument P: at0x4b43c6 Q=[P+0xe0], then reads float[Q+0x94] and float[Q+0x90]. These numerically match prior Camera/PeekAround metadata, but caller/resource type and current selection are not established by this cone.",
+    "Entity setup copies [second argument+0x98] into [this+0xe0] and zeros [this+0xe8]; cleanup0x4a348d tests [this+0xe8], dispatches its vtable+4 and +8, then clears it. This demonstrates teardown behavior of an unidentified member; no camera identity, live selection, or complete lifetime is asserted."
+  ],
+  "admitted_roots": {
+    "gameplay": "Bc2Gameplay.cpp Resolve: context+8 -> manager -> localPlayerOffset0xb4; validates player, soldier ownership, controlled entry and input cache.",
+    "view": "Bc2Profile.cpp DiscoverViewLayout: view object+0x70 request owner; four RenderView blocks and active byte. The selected functions do not establish a static chain to those admitted roots."
+  },
+  "read_chain_status": "No runtime read chain or new admission signature prepared. The exact context service argument chains above start from an already-supplied entity this; they do not discover a currently selected entity from an admitted player/view root.",
+  "resource_selected_lifetime": {
+    "resource": "Previous authored fields retained as metadata only; constructor argument shape is consistency evidence, not type/selection proof.",
+    "selected_instance": "Unproved: no local-player or active view/request -> exact live cinematic entity -> current camera/sequence join.",
+    "lifetime_authority": "Partial native initialization/cleanup instructions only; live generation, local-player scope, blend authority, entry/exit/skip and synchronization are unproved."
+  },
+  "stop_reason": "Eight-unit cone reached. Missing edge is admitted local player or active view/request -> exact currently selected cinematic instance. Shared context services do not establish that edge. Opaque callee0x826900, service dispatches, table slots and external callers remain unwalked.",
+  "process_access": false,
+  "archives_read": 0,
+  "source_modified": false,
+  "runtime_admission_enabled": false,
+  "verification": "All exact hashes, reference uniqueness, table assignments, call destinations and listed instruction relationships checked against the required executable. No build/game/XR/headset check."
+}
