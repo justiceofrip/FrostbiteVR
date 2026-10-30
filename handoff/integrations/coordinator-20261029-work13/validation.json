@@ -1,0 +1,47 @@
+{
+  "integrated": false,
+  "crash_recovery": "reports/coordinator-20261029-work13/crash-recovery.json",
+  "installed": false,
+  "run": "coordinator-20261029-work13",
+  "static_cinematic_fields": 31,
+  "static_proof_sha256": "5e077a868ad1eb55d7c3a35d2110a9b936f036b3564d27f47c39e821ca54eaef",
+  "independent_review": "handoff/tasks/BUG017-06/20261029-work13/REVIEW.txt",
+  "base": "08300e6d53575b39598c67e602ac2e2d3bd2af63",
+  "static_cinematic_classes": 7,
+  "full_normal_build": false,
+  "checks": [
+    {
+      "suite": "Muzzle",
+      "passed": true,
+      "architecture": "x86",
+      "result": "reports/coordinator-20261029-work13/muzzle-x86-check01/result.json"
+    },
+    {
+      "suite": "Muzzle",
+      "passed": true,
+      "architecture": "x64",
+      "result": "reports/coordinator-20261029-work13/muzzle-x64-check01/result.json"
+    },
+    {
+      "suite": "GameplaySyntax",
+      "passed": true,
+      "architecture": "x86",
+      "result": "reports/coordinator-20261029-work13/gameplay-syntax01/result.json"
+    }
+  ],
+  "sources": [
+    {
+      "path": "src/games/bc2/Bc2Gameplay.cpp",
+      "sha256": "da8cbc453b1b66605be81c802a3625fb67dff253dcb865dc44fa3cf64afd5ce6"
+    },
+    {
+      "path": "src/games/bc2/Bc2ServerFireObservation.h",
+      "sha256": "4b11a9d21a93171680cc105978203c2635f577a654d754f0e0ac7aab06cf7224"
+    },
+    {
+      "path": "tests/Bc2MuzzleAdmissionTests.cpp",
+      "sha256": "f867d10cbd241094030c45dd29f2902275d1ad3b3dfe0f7f9b5f25c003db3a19"
+    }
+  ],
+  "native_checked": false
+}

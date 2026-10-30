@@ -99,6 +99,7 @@ static_assert(FVR_BC2_PHYSICAL_RELOAD_LIFECYCLE_SCENARIO>=1&&FVR_BC2_PHYSICAL_RE
 #include <mutex>
 #include "fvr/interaction/FiringPoseHistory.h"
 #include "Bc2ProjectileLaunch.h"
+#include "Bc2ServerFireObservation.h"
 namespace fvr::bc2::gameplay {
 namespace {
 using UpdateFn=void(__thiscall*)(void*,float);using GatherFn=void(__thiscall*)(void*,void*);
@@ -1176,7 +1177,7 @@ std::uintptr_t __fastcall FireOriginHook(void* self,void*,void* matrix){
 }
 struct ShotScope {Owner owner;unsigned effects=0,serverPlayer=0,serverSoldier=0;bool supported=false;std::optional<rigPublication::WeaponShotFrame> shot;unsigned shotToken=0;bool tokenValid=false;
     unsigned configuration=0;std::optional<NativeMuzzleConfig> nativeConfig;
-    std::uint64_t invocation=0;unsigned launchOrdinal=0;
+    std::uint64_t invocation=0,observedHelperCallbacks=0;unsigned launchOrdinal=0;
     std::optional<std::array<float,16>> composedOutput;bool compositionWritten=false;
     std::optional<interaction::FiringPoseSample> eventPose;
 };
@@ -1196,6 +1197,26 @@ std::atomic<unsigned> projectileLaunchCount=0,projectileLaunchCalls=0,projectile
     projectileLaunchDropped=0,projectileLaunchBusy=0,projectileLaunchReturnUnrecorded=0;
 std::atomic_flag projectileLaunchGate=ATOMIC_FLAG_INIT;
 bool projectileLaunchHookRemoved=false;
+ServerFireObservation serverFireObservation;
+std::atomic_flag serverFireObservationGate=ATOMIC_FLAG_INIT;
+std::atomic<std::uint64_t> serverFireScopeStarts=0,serverFireScopeReturns=0,serverFireObservationBusy=0;
+void ObserveServerFireReturned(const ShotScope& scope,std::int64_t begin,std::int64_t end,std::uint64_t returnedOrdinal)noexcept {
+    // The scope already owns these copies. Do not add native reads after the
+    // detailed launch prefix fills or infer input/shot success from this event.
+    ServerFireObservationSample row;auto& k=row.key;
+    k.player=scope.owner.player;k.soldier=scope.owner.soldier;k.weak=scope.owner.weak;
+    k.serverPlayer=scope.serverPlayer;k.serverSoldier=scope.serverSoldier;k.effects=scope.effects;k.configuration=scope.configuration;
+    k.equipment=scope.owner.equipment;k.candidatePresent=scope.shot.has_value();
+    row.invocation=scope.invocation;row.returnedOrdinal=returnedOrdinal;row.helperCallbacks=scope.observedHelperCallbacks;
+    row.beginQpc=begin;row.endQpc=end;row.beginNs=HandNanos(begin);row.token=scope.shotToken;row.tokenValid=scope.tokenValid;
+    row.muzzleSupported=scope.supported;row.compositionWritten=scope.compositionWritten;row.eventPresent=scope.eventPose.has_value();
+    if(scope.eventPose){row.eventGeneration=scope.eventPose->generation;row.eventDeadlineQpc=scope.eventPose->deadline;}
+    if(scope.shot){const auto& shot=*scope.shot;k.candidateOwnerGeneration=shot.ownerGeneration;k.space=shot.space;
+        row.candidateGeneration=shot.generation;row.candidateDeadlineQpc=shot.deadline;row.controllerPresent=shot.controllerMapping.valid;
+        if(row.controllerPresent)row.controller=shot.controllerMapping.inputEvidence;}
+    if(serverFireObservationGate.test_and_set(std::memory_order_acquire)){++serverFireObservationBusy;return;}
+    serverFireObservation.Observe(row);serverFireObservationGate.clear(std::memory_order_release);
+}
 void MarkServerShootReturned(std::uint64_t invocation)noexcept {
     if(!invocation)return;
     if(projectileLaunchGate.test_and_set(std::memory_order_acquire)){++projectileLaunchReturnUnrecorded;return;}
@@ -1231,6 +1252,7 @@ std::uintptr_t __fastcall ProjectileContextHook(void* self,void*,void* output){
     if(!enabled.load(std::memory_order_acquire)||!projectileLaunchBinding.verified||!current||
        caller!=projectileLaunchBinding.helperReturn||reinterpret_cast<unsigned>(self)!=current->effects)return original();
     ++projectileLaunchCalls;
+    ++current->observedHelperCallbacks;
     if(projectileLaunchCount.load(std::memory_order_relaxed)>=projectileLaunchRecords.size()||current->launchOrdinal==UINT32_MAX){++projectileLaunchDropped;return original();}
     const auto returnSlot=reinterpret_cast<unsigned>(_AddressOfReturnAddress());
     const auto* tib=reinterpret_cast<const NT_TIB*>(NtCurrentTeb());
@@ -1281,7 +1303,11 @@ std::uintptr_t __fastcall ServerShootHook(void* self,void*,void* config,float dt
     local.supported=SupportedMuzzleShot(owner,effects,local.configuration,local.shot,local.nativeConfig);
     local.tokenValid=Read(reinterpret_cast<unsigned>(context)+0x1c,&local.shotToken,4);
     auto* previous=serverShotScope;serverShotScope=&local;struct Restore {ShotScope* previous;~Restore(){serverShotScope=previous;}} restore{previous};
-    const auto result=passthrough();MarkServerShootReturned(local.invocation);return result;
+    ++serverFireScopeStarts;
+    LARGE_INTEGER begin{},end{};if(!QueryPerformanceCounter(&begin))begin.QuadPart=0;
+    const auto result=passthrough();if(!QueryPerformanceCounter(&end))end.QuadPart=0;
+    const auto returnedOrdinal=serverFireScopeReturns.fetch_add(1,std::memory_order_relaxed)+1;
+    MarkServerShootReturned(local.invocation);ObserveServerFireReturned(local,begin.QuadPart,end.QuadPart,returnedOrdinal);return result;
 }
 std::uintptr_t __fastcall ClientShootHook(void* self,void*,void* config,float dt,unsigned primary,void* context){
     Callback callback;Owner owner{};const auto effects=reinterpret_cast<unsigned>(self);
@@ -4171,5 +4197,21 @@ void Report(std::ostream& out){out<<"{\"installed\":"<<(hooks[0]&&hooks[1]?"true
         out<<",\"event_generation\":"<<(r.eventPose?r.eventPose->generation:0)<<",\"event_deadline_qpc\":"<<(r.eventPose?r.eventPose->deadline:0)
            <<",\"before_helper\":";launchArguments(r.before);out<<",\"after_helper\":";launchArguments(r.after);out<<'}';
     }
-    out<<"]},\"rig_publication\":";out.precision(firePrecision);rigPublication::Report(out);ReportAttached(out);out<<'}';}
+    out<<"],\"server_fire_context\":{\"read_only\":true,\"complete_session_coverage\":false,\"shot_acknowledgement\":false,\"hit_acknowledgement\":false"
+       <<",\"scope\":\"already_matched_on_foot_server_scopes_normal_returns_only\""
+       <<",\"context_scope\":\"entry_candidate_and_final_nested_context_copies\""
+       <<",\"native_lifetime_continuity_verified\":false,\"trigger_state_available\":false,\"trigger_continuity_verified\":false"
+       <<",\"retention\":\"16_recent_observed_identity_cohorts_counts_since_admission\""
+       <<",\"span_scope\":\"original_server_call_including_existing_nested_observers\""
+       <<",\"gap_scope\":\"adjacent_retained_same_cohort_returns_begin_to_begin_not_fire_cadence\""
+       <<",\"controller_scope\":\"copied_candidate_controller_mapping_original_input_not_trigger_state\""
+       <<",\"detailed_argument_read_capacity_unchanged\":"<<projectileLaunchRecords.size()
+       <<",\"scope_starts\":"<<serverFireScopeStarts.load()<<",\"scope_returns\":"<<serverFireScopeReturns.load()
+       <<",\"busy_unrecorded_returns\":"<<serverFireObservationBusy.load()<<",\"callbacks_drained\":"<<!active.load()
+       <<",\"counters_and_snapshot_atomic\":false,\"snapshot_available\":";
+    ServerFireObservation fireSnapshot;
+    const bool fireSnapshotAvailable=!serverFireObservationGate.test_and_set(std::memory_order_acquire);
+    if(fireSnapshotAvailable){fireSnapshot=serverFireObservation;serverFireObservationGate.clear(std::memory_order_release);}
+    out<<fireSnapshotAvailable<<",\"snapshot\":";if(fireSnapshotAvailable)fireSnapshot.Report(out);else out<<"null";
+    out<<"}},\"rig_publication\":";out.precision(firePrecision);rigPublication::Report(out);ReportAttached(out);out<<'}';}
 }

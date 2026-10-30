@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param([ValidateSet('x86','x64')][string]$Architecture,
-      [ValidateSet('Anchor','Input','GameplaySyntax','NativeSyntax','Sight','Scope','Grip','Configuration','Carried','Observation')][string]$Suite,
-      [ValidateSet('coordinator-20261029-polish11','coordinator-20261029-work12')][string]$ReportRun='coordinator-20261029-polish11',
+      [ValidateSet('Anchor','Input','GameplaySyntax','NativeSyntax','Sight','Scope','Grip','Configuration','Carried','Observation','Muzzle')][string]$Suite,
+      [ValidateSet('coordinator-20261029-polish11','coordinator-20261029-work12','coordinator-20261029-work13')][string]$ReportRun='coordinator-20261029-polish11',
       [Parameter(Mandatory)][string]$OutputPath)
 $ErrorActionPreference='Stop'
 $PSNativeCommandUseErrorActionPreference=$false
@@ -34,7 +34,7 @@ if($Suite -in @('GameplaySyntax','NativeSyntax')) {
     $inputs.Add((Join-Path $work ('src/games/bc2/'+$source)))
     $arguments+=@('/Zs','/DWIN32','/D_WINDOWS','/DWIN32_LEAN_AND_MEAN',('/I'+(Join-Path $canonical 'build/x86/generated/bc2-operation')),('/I'+(Join-Path $work 'third_party/minhook-1.3.4/include'))) + $defines + $inputs.ToArray()
 } else {
-    $test=switch($Suite){'Anchor'{'TrackedBodyAnchorTests'}'Input'{'Bc2InputBindingTests'}'Sight'{'Bc2SightAdapterTests'}'Scope'{'Bc2SelectedMeshes1pTests'}'Grip'{'TrackedRigTests'}'Configuration'{'Bc2SelectedConfigurationPathTests'}'Carried'{'Bc2CarriedMeshesTests'}'Observation'{'Bc2SelectedMeshesObservationTests'}}
+    $test=switch($Suite){'Anchor'{'TrackedBodyAnchorTests'}'Input'{'Bc2InputBindingTests'}'Sight'{'Bc2SightAdapterTests'}'Scope'{'Bc2SelectedMeshes1pTests'}'Grip'{'TrackedRigTests'}'Configuration'{'Bc2SelectedConfigurationPathTests'}'Carried'{'Bc2CarriedMeshesTests'}'Observation'{'Bc2SelectedMeshesObservationTests'}'Muzzle'{'Bc2MuzzleAdmissionTests'}}
     $inputs.Add((Join-Path $work ('tests/'+$test+'.cpp')))
     if($Suite -eq 'Input'){$inputs.Add((Join-Path $work 'src/games/bc2/Bc2InputBinding.cpp'))}
     if($Suite -in @('Scope','Configuration','Carried','Observation')){$inputs.Add((Join-Path $work 'src/games/bc2/Bc2SelectedMeshes1p.cpp'))}

@@ -1,0 +1,25 @@
+BUG017-06 work13 - bounded later-weapon server callback evidence; source frozen 2026-10-30.
+Root supplied base HEAD08300e6d53575b39598c67e602ac2e2d3bd2af63; no agent Git commands.
+Exclusive source: src/games/bc2/Bc2Gameplay.cpp, src/games/bc2/Bc2ServerFireObservation.h, tests/Bc2MuzzleAdmissionTests.cpp.
+Root owns lease, integration, builds and execution; user offline-only/integration-held restrictions remain.
+Preserved failure: ended0.1.17 retained64/252 projectile events (Garand8,Nambu10056), dropped188; no identified m8/XM8 episode.
+Earlier source: handoff/tasks/BUG017-06-07/20261029-polish11/HANDOFF.txt; no historical receipt overwritten.
+Existing detailed64 records, launchOrdinal, argument-read cap and rejected/busy counters remain unchanged.
+Separate scope counter counts matched helper callbacks even after the detailed prefix fills; no new native-memory reads.
+Two QPC stamps bracket the original server call including its existing nested observers; failed clocks become zero.
+Only already matched on-foot server scopes that return normally enter the16-cohort bounded value-copy observer.
+Key: verified owner addresses/weak, equipment including copied asset/persistence, effects/config and available candidate owner generation/space.
+Keys describe observed identities; native lifetime continuity remains explicitly unproved.
+Copies available candidate controllerMapping original input owner/sequence/timestamps/focus/tracked/released; no trigger-state inference.
+Retains cohort counts, first/last valid time, latest return, adjacent retained gap pairs and worst gap; global latest timed/worst span/gap survive eviction.
+Expired/absent/invalid input and invalid/out-of-order clocks remain counted; invalid clocks do not replace valid time extrema.
+Reports counts since cohort admission, evicted cohorts/returns, busy omissions, starts/returns and non-atomic snapshot coverage.
+No complete-session, shot/hit acknowledgement, trigger continuity or automatic-fire cadence claim; gaps include unknown user pauses.
+One nonblocking try gate protects fixed state; no callback allocation, extra hook/offset, native write, fire-policy change, polling or per-frame log.
+Synthetic regressions:252 returns with188 late-m8 fixture events, >16 identities/eviction/reentry, lifetime-key separation, expired/absent/invalid time and JSON retention.
+These fixtures do not identify the missing native XM8 episode and are not headset acceptance or a fire fix.
+Crash preserved header/Gameplay edits but lost pending test edit; stale cell confirmed, missing test patch alone reapplied after recovery.
+Check: manual source review of cap/order/snapshot/clock handling completed; no agent build/test/game/XR/process/input/profile/install actions.
+Root must run Muzzle x86/x64 and GameplaySyntax, review changes and retain integration hold; no validation pass is claimed here.
+Static review summary: reports/coordinator-20261029-work13/fire/review.json.
+Source job done Y; fire fix N; native/headset acceptance N; root execution checks pending.
