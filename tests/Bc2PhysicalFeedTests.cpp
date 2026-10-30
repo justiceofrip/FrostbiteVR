@@ -44,6 +44,7 @@ struct Fixture {
         c.fireLogicType=2;c.reloadType=1;c.fireInputAction=8;c.reloadInputAction=29;c.baseCapacity=100;c.numberOfMagazines=2;
         c.reloadTime=7.8f;c.reloadThreshold=.7f;native.counts={20,130,100};
         sample.owner=native.identity.owner;sample.weapon={sample.owner.weapon,7};sample.asset=g.asset;sample.configurationPath=g.configurationPath;
+        sample.equipment=WeaponEquipmentIdentity{sample.owner.weapon,native.binding.data,native.binding.persistence,c.assetName};
         sample.meshPath=g.meshPath;sample.rigFingerprint=g.rigFingerprint;sample.selectedRigVerified=true;
         sample.input.owner={(std::uint64_t(sample.owner.weak)<<32)|sample.owner.soldier,1,7,3};
         sample.input.focused=true;sample.input.tracked={true,true};
@@ -59,6 +60,7 @@ struct Fixture {
     Bc2PhysicalFeedResult Tick(const fvr::math::Matrix4& wrist,bool grip,bool cancel=false){
         now+=10*Ms;++sequence;native.observedNs=now-1;native.deadlineNs=now+99*Ms;
         native.binding.observedNs=now-1;native.binding.deadlineNs=now+99*Ms;(void)backend.Publish(native,now);
+        sample.binding=native.binding;
         selected->sequence=sequence;selected->observedNs=now-1;selected->deadlineNs=now+99*Ms;
         sample.input.sequence=sequence;sample.input.observedNs=now;sample.input.deadlineNs=now+100*Ms;sample.input.nowNs=now+1;
         sample.input.released[0]=!grip;sample.grip=grip;sample.cancel=cancel;
@@ -144,6 +146,7 @@ struct Fixture {
         for(unsigned step=0;step<8&&!submitted;++step)Tick(feed_interaction_detail::Multiply(Along(motion->motionFromContact,motion->kind,motion->travel),motion->weaponFromMotion),true);
         return submitted&&submitted->command.authority.operation==FeedPhysicalOperation::CloseCover;
     }
+    bool BlocksFire()const {return sample.equipment&&physical.BlocksFire(sample.owner,*sample.equipment,sample.binding);}
 };
 int ExactSelectedJoinAndPhysicalOwner(){
     Fixture f;CHECK(f.OpenCover());CHECK(f.submits==1);CHECK(f.result.blocksFire&&f.result.pending);
@@ -160,14 +163,14 @@ int ExactSelectedJoinAndPhysicalOwner(){
 int MissingCallbackAndTrackingPreserveDebt(){
     Fixture f;CHECK(f.OpenCover());CHECK(!f.Callback(5));CHECK(f.backend.Pending());
     const auto life=f.submitted->command.request.lifetime;
-    f.Tick(Identity(),false,true);CHECK(f.physical.BlocksFire(f.sample.owner));CHECK(!f.result.presentation);
+    f.Tick(Identity(),false,true);CHECK(f.BlocksFire());CHECK(!f.result.presentation);
     CHECK(f.backend.Pending()->command.request.lifetime==life);CHECK(f.submits==1);return 0;
 }
 int RefusedSubmitIsNeverAnAcknowledgement(){
     Fixture f;f.refuse=true;CHECK(f.OpenCover());CHECK(f.result.submitRefused);CHECK(!f.backend.Pending());
-    CHECK(f.physical.BlocksFire(f.sample.owner));
+    CHECK(f.BlocksFire());
     for(unsigned n=0;n<4;++n)f.Tick(Identity(),false,true);
-    CHECK(f.submits==1&&f.physical.BlocksFire(f.sample.owner));
+    CHECK(f.submits==1&&f.BlocksFire());
     CHECK(!f.backend.Receipt(f.submitted->command.request.lifetime,f.submitted->command.request.id));return 0;
 }
 int OccupiedHandAndExactRigAreRequired(){
@@ -178,7 +181,7 @@ int OccupiedHandAndExactRigAreRequired(){
     const auto knife=f.hands.Acquire(f.sample.input,{f.sample.input.owner,InteractionHand::Left,HandClaimKind::BodyInventory,
         {999,1},{{998,1},f.sequence,f.sample.input.deadlineNs,true},++f.intent,0});CHECK(!knife.accepted);
     CHECK(f.submits==0);f.sample.selectedRigVerified=false;f.Tick(wrist,true);CHECK(f.submits==0);
-    CHECK(f.physical.BlocksFire(f.sample.owner));CHECK(!f.result.presentation);
+    CHECK(f.BlocksFire());CHECK(!f.result.presentation);
     Fixture wrong;wrong.sample.configurationPath="Objects/Weapons/Handheld/BU_lmg_M60/other";
     CHECK(!wrong.OpenCover());CHECK(wrong.submits==0);return 0;
 }
@@ -192,15 +195,15 @@ int FiveStagesRetainPartialAmmoAndRefillOnlyAtAttachment(){
     const auto lifetime=f.submitted->command.request.lifetime;CHECK(f.Reconcile());
     CHECK(f.Place(FeedPhysicalOperation::DetachContainer));CHECK((f.submitted->command.after==FeedAmmunitionCounts{20,130,100}));
     CHECK(f.result.presentation&&f.result.presentation->carriedPartsMask==61);
-    CHECK(f.submitted->command.loadedSupplyAfter==supply);CHECK(f.Reconcile());CHECK(f.physical.BlocksFire(f.sample.owner));
+    CHECK(f.submitted->command.loadedSupplyAfter==supply);CHECK(f.Reconcile());CHECK(f.BlocksFire());
     CHECK(f.Place(FeedPhysicalOperation::AttachContainer));CHECK(f.submitted->command.authority.effect==FeedAmmunitionEffect::RefillLoaded);
     CHECK((f.submitted->command.after==FeedAmmunitionCounts{100,50,100}));CHECK(f.submitted->command.loadedSupplyAfter==supply);
-    CHECK(f.Reconcile());CHECK(f.physical.BlocksFire(f.sample.owner));CHECK(f.result.presentation->carriedPartsMask==0);
+    CHECK(f.Reconcile());CHECK(f.BlocksFire());CHECK(f.result.presentation->carriedPartsMask==0);
     CHECK(f.Place(FeedPhysicalOperation::SeatFeed));CHECK(f.submitted->command.authority.effect==FeedAmmunitionEffect::PhysicalOnly);
     CHECK(f.result.presentation->carriedPartsMask==60);
     CHECK(f.submitted->command.request.completion.candidate.refill.requestId==3);CHECK(f.Reconcile());
-    CHECK(f.physical.BlocksFire(f.sample.owner));CHECK(f.Close());CHECK(f.submitted->command.request.id==5);
-    CHECK(f.submitted->command.request.lifetime==lifetime);CHECK(f.Reconcile());CHECK(!f.physical.BlocksFire(f.sample.owner));
+    CHECK(f.BlocksFire());CHECK(f.Close());CHECK(f.submitted->command.request.id==5);
+    CHECK(f.submitted->command.request.lifetime==lifetime);CHECK(f.Reconcile());CHECK(!f.BlocksFire());
     CHECK((f.native.counts==FeedAmmunitionCounts{100,50,100}));CHECK(f.submits==5);return 0;
 }
 int PartialCoverRequiresFreshRegraspAndPreservesProgress(){
@@ -209,7 +212,7 @@ int PartialCoverRequiresFreshRegraspAndPreservesProgress(){
     f.Tick(pose(0),false);f.Tick(pose(0),true);
     for(unsigned step=1;step<=6;++step)f.Tick(pose(double(step)/12),true);
     CHECK(!f.submitted);CHECK(f.result.presentation&&f.result.presentation->coverRadians>.7f);
-    f.Tick(pose(.5),false,true);CHECK(f.physical.BlocksFire(f.sample.owner));
+    f.Tick(pose(.5),false,true);CHECK(f.BlocksFire());
     f.Tick(pose(.5),false);f.Tick(pose(.5),false);f.Tick(pose(.5),true);
     for(unsigned step=7;step<=12;++step)f.Tick(pose(double(step)/12),true);
     for(unsigned step=0;step<8;++step)f.Tick(pose(1),true);
@@ -231,6 +234,54 @@ int LongStowMigratesOnlySamePinnedResource(){
     CHECK(f.Place(FeedPhysicalOperation::DetachContainer));CHECK(f.submitted->command.request.lifetime==lifetime);
     CHECK(f.submitted->command.request.id==2&&f.submitted->command.before.loadedSupply==supply);
     CHECK(f.submitted->source.identity.owner==f.sample.owner);return 0;
+}
+int SameAddressReplacementDoesNotInheritFeedDebt(){
+    Fixture f;CHECK(f.OpenCover());CHECK(f.Reconcile());
+    const auto original=f.native;const auto equipment=*f.sample.equipment;
+    const auto lifetime=f.result.presentation->lifetime;const auto supply=f.result.presentation->supply;
+    const auto selects=[&](){
+        f.sample.owner=f.native.identity.owner;f.sample.raw.owner=f.sample.owner;f.selected->owner=f.sample.owner;
+        f.sample.equipment=WeaponEquipmentIdentity{f.sample.owner.weapon,f.native.binding.data,f.native.binding.persistence,f.native.config.assetName};
+        f.sample.asset=f.sample.equipment->Asset();
+        ++f.sample.weapon.generation;++f.sample.input.owner.equipGeneration;(void)f.hands.Reset();
+    };
+    // A failed identity read cannot enroll or override a guessed item.
+    f.sample.equipment.reset();f.Tick(Identity(),false);
+    CHECK(!f.result.selected&&!f.result.blocksFire&&!f.result.presentation&&!f.result.ownsHand);
+    CHECK(f.physical.BlocksFire(original.identity.owner,equipment,original.binding));
+    // Ordinary ground pickup may replace the data at the same weapon address.
+    ++f.native.identity.owner.equipGeneration;f.native.binding.owner=f.native.identity.owner;
+    ++f.native.binding.context.equipGeneration;++f.native.binding.context.resource.weaponGeneration;
+    ++f.native.binding.data;++f.native.binding.persistence;f.native.config.weaponData=f.native.binding.data;
+    Text(f.native.config.assetName,"MP443_sp");selects();f.Tick(Identity(),false);
+    CHECK(!f.result.selected&&!f.result.blocksFire&&!f.BlocksFire()&&!f.result.presentation);
+    CHECK(!f.physical.BlocksFire(f.sample.owner,*f.sample.equipment));
+    CHECK(!f.physical.RetainedGate(f.sample.owner,*f.sample.equipment));
+    CHECK(!f.physical.RetainedGate(f.sample.owner,*f.sample.equipment,f.sample.binding));
+    f.Tick(Identity(),true); // Support acquisition requires a held, fresh left-hand packet.
+    const auto gun=f.hands.Current(InteractionHand::Right);CHECK(gun);
+    const auto support=f.hands.Acquire(f.sample.input,{f.sample.input.owner,InteractionHand::Left,HandClaimKind::WeaponSupport,
+        f.sample.weapon,{{2,f.sample.weapon.id},f.sequence,f.sample.input.deadlineNs,true},++f.intent,gun->token.id});
+    CHECK(support.claim);f.Tick(Identity(),true);
+    const auto held=f.hands.Current(InteractionHand::Left);CHECK(held&&held->token==support.claim->token);
+    CHECK(!f.result.blocksFire&&!f.result.ownsHand&&f.submits==1);
+    // Identical native metadata still cannot borrow another inventory lifetime.
+    const auto nextEquip=f.native.identity.owner.equipGeneration+1;
+    f.native=original;f.native.identity.owner.equipGeneration=nextEquip;f.native.binding.owner=f.native.identity.owner;
+    f.native.binding.context.equipGeneration=nextEquip;++f.native.binding.context.resource.weaponGeneration;
+    selects();f.Tick(Identity(),false);
+    CHECK(f.result.selected&&!f.result.blocksFire&&!f.BlocksFire()&&f.result.presentation);
+    CHECK(f.result.presentation->lifetime!=lifetime&&f.result.presentation->supply!=supply);
+    const auto replacementGate=f.physical.RetainedGate(f.sample.owner,*f.sample.equipment,f.sample.binding);
+    CHECK(replacementGate&&!replacementGate->blocksFire);
+    // Returning with the original pinned resource resumes only its retained debt.
+    f.native=original;f.native.identity.owner.equipGeneration=nextEquip+1;f.native.binding.owner=f.native.identity.owner;
+    f.native.binding.context.equipGeneration=nextEquip+1;selects();
+    f.Tick(f.sample.raw.rawLeftWristWorldMeters,false);f.Tick(f.sample.raw.rawLeftWristWorldMeters,false);
+    CHECK(f.result.selected&&f.result.blocksFire&&f.BlocksFire()&&f.result.presentation);
+    CHECK(f.result.presentation->lifetime==lifetime&&f.result.presentation->supply==supply);
+    CHECK(f.Place(FeedPhysicalOperation::DetachContainer));
+    CHECK(f.submitted->command.request.lifetime==lifetime&&f.submitted->command.request.id==2);return 0;
 }
 int RealNoEntryReceiptRecoversCompletedEndpointWithNewId(){
     Fixture f;f.refuse=true;CHECK(f.OpenCover());CHECK(f.submits==1&&!f.backend.Pending());
@@ -256,7 +307,7 @@ int DrainedActorReplacementReclaimsSlotsWithoutInventingAmmunitionSuccess(){
         lease.verified=lease.allThreeIdle=true;
         FeedEquipmentActorDrain drain{previous,++f.invocation,replacementIndex+1,f.now+2,f.now+99*Ms,false};
         CHECK(!f.backend.RetireForReplacementActor(lease,f.now+3,drain));
-        CHECK(f.physical.BlocksFire(f.sample.owner)&&f.backend.Pending());
+        CHECK(f.BlocksFire()&&f.backend.Pending());
         drain.callbacksDrained=true;CHECK(f.backend.RetireForReplacementActor(lease,f.now+3,drain));
         const auto retired=f.backend.Retirement(replacementIndex);
         CHECK(retired&&retired->pending==oldCommand&&!retired->nativeDispatched);
@@ -271,7 +322,7 @@ int DrainedActorReplacementReclaimsSlotsWithoutInventingAmmunitionSuccess(){
         (void)f.hands.Reset();f.submitted.reset();
         const auto start=feed_interaction_detail::Multiply(f.Open().motionFromContact,f.Open().weaponFromMotion);
         f.Tick(start,false);
-        CHECK(!f.physical.BlocksFire(previous.owner));CHECK(f.result.selected&&!f.result.blocksFire&&f.result.presentation);
+        CHECK(!f.physical.BlocksFire(previous.owner,*f.sample.equipment));CHECK(f.result.selected&&!f.result.blocksFire&&f.result.presentation);
         CHECK((f.native.counts==FeedAmmunitionCounts{20,130,100}));
     }
     return 0;
@@ -286,7 +337,8 @@ int main(){
     CHECK(FiveStagesRetainPartialAmmoAndRefillOnlyAtAttachment()==0);
     CHECK(PartialCoverRequiresFreshRegraspAndPreservesProgress()==0);
     CHECK(LongStowMigratesOnlySamePinnedResource()==0);
+    CHECK(SameAddressReplacementDoesNotInheritFeedDebt()==0);
     CHECK(RealNoEntryReceiptRecoversCompletedEndpointWithNewId()==0);
     CHECK(DrainedActorReplacementReclaimsSlotsWithoutInventingAmmunitionSuccess()==0);
-    std::puts("Bc2PhysicalFeedTests: 10 deterministic owner/arbiter/callback compositions; no game or headset acceptance");
+    std::puts("Bc2PhysicalFeedTests: 11 deterministic owner/arbiter/callback compositions; no game or headset acceptance");
 }

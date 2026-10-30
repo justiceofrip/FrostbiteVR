@@ -1,0 +1,44 @@
+{
+  "base": "828f554f7dd292969bfae15926d90486e825f997",
+  "source": [
+    {
+      "path": "src/games/bc2/Bc2Gameplay.cpp",
+      "sha256": "cbaf8d37a7699683c75dec0808212b2effade89a4790fb64af3c1cfc36248959"
+    },
+    {
+      "path": "src/games/bc2/Bc2PhysicalFeed.cpp",
+      "sha256": "ef4172b6dad58606288837451d21c48c2a3c37c181a94ec3d7070ce454b4d677"
+    },
+    {
+      "path": "src/games/bc2/Bc2PhysicalFeed.h",
+      "sha256": "fccde94c7134d798095bf9b86009836d55106247cb36de5741509fc579bfebf1"
+    },
+    {
+      "path": "tests/Bc2PhysicalFeedTests.cpp",
+      "sha256": "1406e4ef57bf30a0b834274ab92c648c0fa0835c90ae49ad08d9b3fa3adbdb88"
+    }
+  ],
+  "checks": [
+    {
+      "path": "reports\\coordinator-20261030-implementation18\\bc2physicalfeed-x86-check09",
+      "passed": true,
+      "command_sha256": "35352013dc56586d07e0e9c7e963f8f56e5d652d3bbc88e6dc686457589755ed",
+      "result_sha256": "973fca9237ef0c75b4c0e50c9c3107b75026b067f673aac2a2fe3f636724f030"
+    },
+    {
+      "path": "reports\\coordinator-20261030-implementation18\\bc2physicalfeed-x64-check06",
+      "passed": true,
+      "command_sha256": "ef43f945104e03ed715b6fe223f76c83baa166e997a3c562c2a64ff440a0b77f",
+      "result_sha256": "082a6ef22d728095070d08deb1d17440cfb174011bbee0ce0256b6e8032173de"
+    },
+    {
+      "path": "reports\\coordinator-20261030-implementation18\\gameplaysyntax-x86-check03",
+      "passed": true,
+      "command_sha256": "2b6ea52a0a65697a06309e1585c1197ccabb49e9005a1133b61bb91e15d75be7",
+      "result_sha256": "18eb96eb797112822eeb892eaca152e3b5dc88b7cdbbb97f741975e5b5d8cdd7"
+    }
+  ],
+  "full_normal_build": false,
+  "installed": false,
+  "native_game": false
+}

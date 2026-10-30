@@ -48,6 +48,10 @@ struct Bc2PhysicalFeedApi {
 };
 struct Bc2PhysicalFeedSample {
     ReloadStateOwner owner{};
+    // Current native identity is separate from the reusable weapon address.
+    // Missing identity suspends interaction; a fresh binding also pins custody.
+    std::optional<WeaponEquipmentIdentity> equipment;
+    std::optional<AmmoResourceBinding> binding;
     interaction::HandInteractionSample input{};
     interaction::HandInteractionKey weapon{};
     std::shared_ptr<const SelectedMeshesSnapshot> selected;
@@ -76,9 +80,10 @@ public:
     Bc2PhysicalFeed& operator=(const Bc2PhysicalFeed&)=delete;
     Bc2PhysicalFeedResult Tick(const Bc2PhysicalFeedSample&,interaction::HandInteraction&,std::uint64_t& intent)noexcept;
     void Suspend(const interaction::HandInteractionSample&,interaction::HandInteraction&)noexcept;
-    bool BlocksFire(const ReloadStateOwner&)const noexcept;
     // Suppression only: caller must independently revalidate live native
     // equipment/actor. An expired pose grants no rendering or ammo authority.
+    bool BlocksFire(const ReloadStateOwner&,const WeaponEquipmentIdentity&,
+        const std::optional<AmmoResourceBinding>& freshBinding={})const noexcept;
     std::optional<FeedEquipmentGate> RetainedGate(const ReloadStateOwner&,const WeaponEquipmentIdentity&,
         const std::optional<AmmoResourceBinding>& freshBinding={})const noexcept;
 private:

@@ -37,9 +37,21 @@ bool NativeHand(const Bc2PhysicalFeedSample& s)noexcept {
         s.input.owner.actorGeneration==s.owner.actorGeneration&&s.input.owner.space==s.owner.space&&
         s.weapon.id==s.owner.weapon&&s.weapon.generation==s.input.owner.equipGeneration;
 }
+bool CurrentEquipment(const FeedEquipmentNativeView& original,const ReloadStateOwner& owner,
+    const WeaponEquipmentIdentity& equipment,const std::optional<AmmoResourceBinding>& binding)noexcept {
+    const auto& o=original.identity.owner;
+    return equipment.weapon==owner.weapon&&o.player==owner.player&&o.soldier==owner.soldier&&o.weak==owner.weak&&
+        o.actorGeneration==owner.actorGeneration&&o.weapon==owner.weapon&&original.binding.data==equipment.data&&
+        original.binding.persistence==equipment.persistence&&equipment.Asset()==bc2_feed_profile_detail::M60Geometry.asset&&
+        (!binding||(binding->owner==owner&&binding->context.resource==original.binding.context.resource&&
+            binding->data==equipment.data&&binding->persistence==equipment.persistence&&
+            binding->inventory==original.binding.inventory&&binding->switching==original.binding.switching));
+}
 bool Selected(const Bc2PhysicalFeedSample& s,const FeedEquipmentNativeView& v)noexcept {
     const auto* g=FindBc2M60FeedGeometry(s.asset,s.configurationPath,s.meshPath,s.rigFingerprint);
-    if(!g||!s.selectedRigVerified||!s.selected||!NativeHand(s)||!s.raw.valid||s.raw.owner!=s.owner||
+    if(!g||!s.equipment||!CurrentEquipment(v,s.owner,*s.equipment,s.binding)||
+       (s.binding&&!AmmoResourceBindingFresh(*s.binding,s.owner,s.input.nowNs))||
+       !s.selectedRigVerified||!s.selected||!NativeHand(s)||!s.raw.valid||s.raw.owner!=s.owner||
        s.raw.rig.soldier!=s.owner.soldier||s.raw.rig.weak!=s.owner.weak||
        s.raw.rigFingerprint!=g->rigFingerprint||s.frameSequence!=s.raw.inputEvidence.sequence||
        !Pose(s.raw.rawLeftWristWorldMeters)||!Pose(s.raw.weaponWorldMeters)||
@@ -212,21 +224,17 @@ struct Bc2PhysicalFeed::State {
 };
 Bc2PhysicalFeed::Bc2PhysicalFeed(Bc2PhysicalFeedApi api)noexcept {try{state_=std::make_unique<State>(api);}catch(...){}}
 Bc2PhysicalFeed::~Bc2PhysicalFeed()=default;
-bool Bc2PhysicalFeed::BlocksFire(const ReloadStateOwner& owner)const noexcept {
+bool Bc2PhysicalFeed::BlocksFire(const ReloadStateOwner& owner,const WeaponEquipmentIdentity& equipment,
+    const std::optional<AmmoResourceBinding>& binding)const noexcept {
     if(!state_)return false;
-    for(const auto& e:state_->equipment)if(e&&e->original.identity.owner.soldier==owner.soldier&&
-        e->original.identity.owner.actorGeneration==owner.actorGeneration&&e->original.identity.owner.weapon==owner.weapon&&e->Blocked())return true;
+    for(const auto& e:state_->equipment)if(e&&CurrentEquipment(e->original,owner,equipment,binding)&&e->Blocked())return true;
     return false;
 }
 std::optional<FeedEquipmentGate> Bc2PhysicalFeed::RetainedGate(const ReloadStateOwner& owner,const WeaponEquipmentIdentity& equipment,
     const std::optional<AmmoResourceBinding>& binding)const noexcept {
-    if(!state_||equipment.weapon!=owner.weapon)return {};
+    if(!state_)return {};
     for(const auto& e:state_->equipment)if(e){const auto& original=e->original;
-        const auto& o=original.identity.owner;
-        if(o.player!=owner.player||o.soldier!=owner.soldier||o.weak!=owner.weak||o.actorGeneration!=owner.actorGeneration||
-           o.weapon!=owner.weapon||original.binding.data!=equipment.data||original.binding.persistence!=equipment.persistence||
-           equipment.Asset()!=bc2_feed_profile_detail::M60Geometry.asset||
-           (binding&&binding->context.resource!=original.binding.context.resource))continue;
+        if(!CurrentEquipment(original,owner,equipment,binding))continue;
         auto retained=e->gate;
         if(state_->api.readGate)if(const auto current=state_->api.readGate(state_->api.context,original.binding.context.resource))retained=current;
         if(retained){retained->blocksFire=retained->blocksFire||e->Blocked();return retained;}
@@ -239,9 +247,10 @@ void Bc2PhysicalFeed::Suspend(const HandInteractionSample& input,HandInteraction
         e->neutral.reset();if(e->session){FeedEquipmentSessionSample sample;sample.nowNs=input.nowNs;(void)e->session->Update(sample);}}
 }
 Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandInteraction& hands,std::uint64_t& intent)noexcept {
-    Bc2PhysicalFeedResult out;out.blocksFire=BlocksFire(s.owner);publication.store({},std::memory_order_release);
+    const auto blocksFire=[&](){return s.equipment&&BlocksFire(s.owner,*s.equipment,s.binding);};
+    Bc2PhysicalFeedResult out;out.blocksFire=blocksFire();publication.store({},std::memory_order_release);
     if(!state_)return out;auto& state=*state_;const auto now=s.input.nowNs;
-    state.RetireActors(s.input,hands);out.blocksFire=BlocksFire(s.owner);
+    state.RetireActors(s.input,hands);out.blocksFire=blocksFire();
     if(!state.api.read||!state.api.submit||!state.api.receipt){Suspend(s.input,hands);return out;}
     // Completion belongs to the original equipment, including while another
     // item is selected or tracking is unavailable. Never wait for a pose to
@@ -260,7 +269,7 @@ Bc2PhysicalFeedResult Bc2PhysicalFeed::Tick(const Bc2PhysicalFeedSample& s,HandI
         else {old.cover=cover;old.container=container;old.seat=seat;old.refill=refill;old.carriedPartsMask=carried;}
     }
     for(auto& e:state.equipment)if(e)state.PublishGate(*e);
-    out.blocksFire=BlocksFire(s.owner);
+    out.blocksFire=blocksFire();
     const auto view=state.api.read(state.api.context,s.owner,now);
     bool recorded=false;for(const auto& p:state.packets)if(p.owner==s.owner&&p.input.sequence==s.input.sequence){recorded=true;break;}
     if(!recorded){const auto source=state.api.readAt?state.api.readAt(state.api.context,s.owner,s.input.observedNs,now):view;

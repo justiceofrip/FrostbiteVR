@@ -1,0 +1,13 @@
+CHAT07 feed20: DoneY, source frozen; root owns validation and integration.
+Focused connected Gameplay coexistence review on base828f554; no backend/renderer reaudit.
+Found same-address pickup leakage: old M60 debt matched soldier/actor/weapon only.
+Gameplay advanced equipment identity but its final unscoped BlocksFire still gated the replacement.
+Bc2PhysicalFeed.h/.cpp now scope selected admission, retained gates and fire debt to verified native equipment.
+Available current ammunition binding additionally pins the exact inventory resource; original debt stays retained.
+Missing equipment identity suspends feed claims/presentation and grants no guessed-item override.
+Bc2Gameplay.cpp carries the reread equipment identity and current binding through Tick and final Fire/Reload gating.
+Bc2PhysicalFeedTests.cpp adds one replacement/return regression: missing identity, ordinary same-address pickup,
+preserved support claim, identical native metadata with a different resource, and original-resource continuation.
+All four source files retain LF endings; no other source or normal interaction policy changed.
+No tests/builds/Git/game/install run by this agent; root must validate the 11-case suite and normal builds.
+Source correction and deterministic regression preparation are not native or headset acceptance.

@@ -1487,14 +1487,17 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     vehicleShotSpace=input.spaceGeneration;
     const auto& owner=scope->owner;
     std::optional<FeedEquipmentGate> retainedFeedGate;
+    std::optional<WeaponEquipmentIdentity> feedEquipment;
+    std::optional<AmmoResourceBinding> feedResourceBinding;
     if(physicalFeed&&owner.foot){
         const WeaponModeMemory memory{nullptr,[](void*,unsigned at,void* dst,std::size_t n){return Read(at,dst,n);},
             [](void*,unsigned at,const char* type){return Type(at,type);}};
         const auto equipment=ReadWeaponEquipmentIdentity(memory,owner.weapon);
         const ReloadStateOwner selected{owner.player,owner.soldier,owner.weak,owner.weapon,rigEpoch,epoch,handSample.owner.space};
         if(equipment&&*equipment==owner.equipment){
-            retainedFeedGate=physicalFeed->RetainedGate(selected,*equipment,bodyInventory?
-                bodyInventory->ResourceBinding(selected,HandNanos(clock.QuadPart)):std::nullopt);
+            feedEquipment=equipment;
+            feedResourceBinding=bodyInventory?bodyInventory->ResourceBinding(selected,HandNanos(clock.QuadPart)):std::nullopt;
+            retainedFeedGate=physicalFeed->RetainedGate(selected,*feedEquipment,feedResourceBinding);
             if(retainedFeedGate){
                 auto safety=handSample;safety.nowNs=HandNanos(clock.QuadPart);
                 const HolsterSuppressionRequest demand{selected,safety,retainedFeedGate->lifetime,scope->nativeTick,owner.cache};
@@ -1942,6 +1945,8 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     const auto magazineProfile=magazineProfileId?FindMagazineEquipment(*magazineProfileId):nullptr;
     if(physicalFeed){
         Bc2PhysicalFeedSample sample;sample.owner=magazineOwner;sample.input=handSample;sample.weapon=handItem;
+        feedResourceBinding=bodyInventory?bodyInventory->ResourceBinding(magazineOwner,handSample.nowNs):std::nullopt;
+        sample.equipment=feedEquipment;sample.binding=feedResourceBinding;
         sample.asset=asset;sample.grip=input.hands[0].squeeze>=.7f;sample.reloadPressed=(out.pressed&interaction::Reload)!=0;
         sample.selected=selectedMeshes.Read(magazineOwner,handSample.nowNs);
         sample.cancel=!aimValid||!out.active||pumpDebt||sightPhase!=interaction::SightFlipPhase::Idle||
@@ -2766,7 +2771,8 @@ void __fastcall GatherHook(void* self,void*,void* cache){
     if(feedResult.selected||retainedFeedGate){out.held&=~interaction::Reload;out.pressed&=~interaction::Reload;}
     // Final gate survives later normal tool/grenade/support routing and input
     // loss; retained physical debt, never loaded-count-only readiness.
-    if(feedResult.blocksFire||(retainedFeedGate&&retainedFeedGate->blocksFire)||(physicalFeed&&physicalFeed->BlocksFire(magazineOwner))){
+    if(feedResult.blocksFire||(retainedFeedGate&&retainedFeedGate->blocksFire)||
+       (physicalFeed&&feedEquipment&&physicalFeed->BlocksFire(magazineOwner,*feedEquipment,feedResourceBinding))){
         constexpr auto mask=interaction::Fire|interaction::AlternateFire|interaction::Reload;
         out.held&=~mask;out.pressed&=~mask;grenade=false;
     }

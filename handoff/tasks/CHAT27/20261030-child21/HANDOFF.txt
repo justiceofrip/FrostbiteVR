@@ -1,0 +1,12 @@
+DoneY: bounded offline child-update job complete. SourcefixN: no transform composition or selected-view ownership proved.
+Worktree campaign-coordinator-20261028-r1; supplied base828f554; root alone owns Git/build/game/install; no Git queried.
+EXE SHA2563911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258 verified file-only.
+Owned HANDOFF.txt, cinematic_child.py, proof01.json; scratch reports/coordinator-20261030-cinematic-child21; proof SHA256c553d972c6fc54623be7e2222ec9426481d66f5e62b6116e1ff132a2cbd6d110.
+Four NEW complete units/415 bytes:41e610,41e590,b50630,2ca490; reused39cd30/209 bytes; zero adjacent spill; stopped before eight-unit ceiling at queue ownership boundary.
+ABI refinement:2ca490 reads only its TLS+0c receiver and returns without stack cleanup; it does not compute from the prepared matrix/arguments.41e610 receives seven arguments(A,T,0.0,C,M,0,B), not just two scalars.
+41e590 stores A/T in indexed child state when child+84/descriptors permit, and drains pending entries via undecoded40ff80; deeper pending-entry effects remain unclaimed.
+41e657 ->b50630(B,[child+54],0.0,C,M,0,0,-1.0,-1) appends R=[B]+old_[B+720]*70 and increments count; copies twelve padded matrix floats from M to R and child+54 to R+40.
+M is inherited optional parent-owner matrix, not companion relative+90..c8 or base+10..48. No decoded new function composes those transforms; no active camera/HUD/entry/skip/exit/return authority follows.
+ONE unresolved edge: this exact submitted record R -> its consumer/evaluated transform -> actual selected local-player view. Consumer address and concrete B ownership remain unidentified; no speculative target supplied.
+Proof pins exact hashes/bytes/calls/constants/coverage and corrected ABI; initial constant-check refusal is preserved. No source files/API proposal is supported.
+No production writes, Git, builds/tests, game/process access, input/XR, profiles, installs/packages or subagents. Frozen and retired.

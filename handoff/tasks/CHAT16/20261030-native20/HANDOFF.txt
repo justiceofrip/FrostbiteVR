@@ -1,0 +1,17 @@
+DoneY: bounded native readiness trace; supported after-feed policy proposal, no production edits.
+Base828f554; exact EXE SHA3911fcc8914b0158c434cee36f19295316e715d4c9a0e70c857e8c39e3d54258.
+Eight complete functions3485 bytes;3649 total bounded bytes with reused thunk/tables.
+proof01.json SHA7877e01f24a8e9d374f0109119bdd210083acecb7eeded1bf519eef4e9b67561.
+Query2d6eb0 is ammo availability, NOT chamber; genuine Update2e9000 has separate phase/release readiness.
+MP443 type0 selects5->6->1, bypassing bolt7/8; stock magazine reload12->1->2 remains separate.
+Manual feed may stay2->2; no fake stock transition is needed or permitted.
+Supported route: distinct mod-owned empty-feed slide debt + real acknowledged feed + later own neutral Updates.
+Pre-removal lineage distinguishes tactical/empty; seat-before.loaded0 cannot distinguish them.
+Publish actual three-branch invocation evidence; copiesVerified alone cannot supply missing IDs.
+Input veto must preserve one original Update, ammo observers, timing and exact restoration.
+Do not use copyInput early return or NativeCycleInputGuard context+28=1/stock Abort.
+PLAN.txt records implementation boundaries; proof pins exact source/bytes/ABI and preserved parser failures.
+Implementation17 geometry/motion and work12 reflected metadata reused; no repeated survey.
+Extended source map retained in reports/coordinator-20261030-pistol-native20/extended-handoff.txt.
+Actual-game all-three-copy veto, tactical/empty/interrupt behavior and headset acceptance remain open.
+No production edits, Git/build/tests/game/process/XR/input/install/subagents. Frozen and retired.
